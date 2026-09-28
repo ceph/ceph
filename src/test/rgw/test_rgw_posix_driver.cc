@@ -14,6 +14,7 @@
 
 #include "rgw_sal_posix.h"
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <iostream>
 #include <filesystem>
 #include "common/common_init.h"
@@ -37,6 +38,7 @@ std::vector<const char*> args;
 class Environment : public ::testing::Environment {
 public:
   boost::intrusive_ptr<CephContext> cct;
+  std::unique_ptr<DoutPrefix> dp;
   DoutPrefixProvider* dpp{nullptr};
 
   Environment() {}
@@ -56,8 +58,12 @@ public:
                       CODE_ENVIRONMENT_UTILITY,
                       CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
-    dpp = nullptr;
-    //dpp = new NoDoutPrefix(cct.get(), 1);
+    /* A real prefix provider.  POSIXAtomicWriter::process() reads
+     * configuration through dpp->get_cct() to decide whether to use the
+     * io_uring backend, so a null one faults on every write. */
+    dp = std::make_unique<DoutPrefix>(cct.get(), ceph_subsys_rgw,
+				      "posix unittest: ");
+    dpp = dp.get();
 
     root = std::make_unique<Directory>(base_path, nullptr, cct.get());
     ASSERT_EQ(root->open(dpp), 0);
@@ -1105,6 +1111,14 @@ public:
     bucket_cache.reset(new BucketCache(
         this, base_path, cache_base, 100, 3, 3, 3));
 
+    /* Small, like the bucket cache above:  the configured defaults are
+     * large enough that nothing is ever evicted, and eviction is what
+     * runs the stabilize callback.  Without a cache at all,
+     * POSIXMultipartUpload::list_parts() returns -ENOENT and every
+     * completion reports NoSuchUpload. */
+    init_multipart_cache(dpp, 16, 2, 2, 64,
+			 file::listing::MultipartCachePolicy::writeback);
+
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
     return 0;
   }
@@ -1241,7 +1255,11 @@ TEST_F(POSIXDriverTest, BucketCreate)
   EXPECT_EQ(bucket->get_name(), testname);
   EXPECT_EQ(bucket->get_key().name, testname);
   EXPECT_EQ(bucket->get_key().tenant, "");
-  EXPECT_EQ(bucket->get_key().bucket_id, "");
+  /* create() with no caller-supplied marker generates one as
+   * `<name>.<random>` and sets bucket_id from it. */
+  EXPECT_EQ(bucket->get_key().bucket_id, bucket->get_info().bucket.marker);
+  EXPECT_THAT(bucket->get_key().bucket_id,
+	      ::testing::StartsWith(testname + "."));
   EXPECT_FALSE(bucket_exists);
 
   sf::path tp{bp / "root" / testname};
@@ -1528,8 +1546,11 @@ TEST_F(POSIXObjectTest, ObjectCopy)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   /* mod_ptr and unmod_ptr:  an unconditional copy.  They used to
+	    * be &mtime, which since 6d7b413fdb2 means "modified since the
+	    * epoch and unmodified since the epoch" and fails. */
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
@@ -1561,10 +1582,11 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   bufferlist origbl;
   encode(ATTR1, origbl);
 
-  // POSIXDriver adds attributes ("POSIX-Owner", and "POSIX-Object-Type")
-  EXPECT_EQ(object->get_attrs().size(), 3);
+  /* POSIXDriver adds POSIX-Object-Type.  It no longer writes
+   * POSIX-Owner:  ownership is read from the ACL. */
+  EXPECT_EQ(object->get_attrs().size(), 2);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
-  EXPECT_TRUE(object->get_attrs().contains("POSIX-Owner"));
+  EXPECT_FALSE(object->get_attrs().contains("POSIX-Owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 
   std::string addattr{"AddAttrO"};
@@ -1574,17 +1596,15 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   ret = object->modify_obj_attrs(addattr.c_str(), addbl, null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
 
-  EXPECT_EQ(object->get_attrs().size(), 4);
+  EXPECT_EQ(object->get_attrs().size(), 3);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
-  EXPECT_TRUE(object->get_attrs().contains("POSIX-Owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 
   ret = object->delete_obj_attrs(env->dpp, ATTR1.c_str(), null_yield);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(object->get_attrs().size(), 3);
+  EXPECT_EQ(object->get_attrs().size(), 2);
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
-  EXPECT_TRUE(object->get_attrs().contains("POSIX-Owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 }
 
@@ -1837,8 +1857,11 @@ TEST_F(POSIXMPObjectTest, MPUploadCopy)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   /* mod_ptr and unmod_ptr:  an unconditional copy.  They used to
+	    * be &mtime, which since 6d7b413fdb2 means "modified since the
+	    * epoch and unmodified since the epoch" and fails. */
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
@@ -2288,8 +2311,11 @@ TEST_F(POSIXVerObjectTest, ObjectCopy)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   /* mod_ptr and unmod_ptr:  an unconditional copy.  They used to
+	    * be &mtime, which since 6d7b413fdb2 means "modified since the
+	    * epoch and unmodified since the epoch" and fails. */
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
@@ -2366,8 +2392,11 @@ TEST_F(POSIXVerObjectTest, CopyVersion)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   /* mod_ptr and unmod_ptr:  an unconditional copy.  They used to
+	    * be &mtime, which since 6d7b413fdb2 means "modified since the
+	    * epoch and unmodified since the epoch" and fails. */
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,

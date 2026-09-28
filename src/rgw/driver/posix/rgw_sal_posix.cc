@@ -2260,39 +2260,21 @@ int POSIXLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yie
   return -ENOENT;
 }
 
-int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+/* Build the multipart part cache.
+ *
+ * Sizing is the caller's, not the configuration's.  The sizes decide
+ * whether eviction ever happens, and eviction is what runs the
+ * stabilize callback below, so a caller which wants that path reachable
+ * has to be able to ask for it -- the defaults are large enough that it
+ * never fires.  What is shared here is the structure:  the policy, the
+ * callback, and how they are wired.
+ */
+void POSIXDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
+				       uint64_t mp_max, uint64_t mp_lanes,
+				       uint64_t mp_parts,
+				       uint64_t mp_max_parts,
+				       file::listing::MultipartCachePolicy mp_policy)
 {
-  int ret = -1;
-  base_path = g_conf().get_val<std::string>("rgw_posix_base_path");
-
-  ldpp_dout(dpp, 20) << "Initializing POSIX driver: " << base_path << dendl;
-
-  /* ordered listing cache */
-  bucket_cache.reset(
-    new BucketCache(
-      this, base_path,
-      g_conf().get_val<std::string>("rgw_posix_database_root"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_max_buckets"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_lanes"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_partitions"),
-      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count"),
-      g_conf().get_val<bool>("rgw_posix_inotify")));
-
-  /* multipart upload cache */
-  {
-    auto mp_max = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max");
-    auto mp_lanes = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_lanes");
-    auto mp_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_partitions");
-    auto mp_max_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max_parts");
-    auto mp_pol_str = g_conf().get_val<std::string>("rgw_posix_multipart_cache_policy");
-
-    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
-    if (mp_pol_str == "writeback") {
-      mp_policy = file::listing::MultipartCachePolicy::writeback;
-    } else if (mp_pol_str == "volatile") {
-      mp_policy = file::listing::MultipartCachePolicy::volatile_;
-    }
-
     file::listing::stabilize_fn_t stabilize;
     if (mp_policy == file::listing::MultipartCachePolicy::writeback) {
       stabilize = [this](const file::listing::MultipartCacheKey& key,
@@ -2329,6 +2311,43 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       new posix::MultipartCache(
 	mp_max, mp_lanes, mp_parts, mp_max_parts,
 	mp_policy, std::move(stabilize)));
+}
+
+int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+{
+  int ret = -1;
+  base_path = g_conf().get_val<std::string>("rgw_posix_base_path");
+
+  ldpp_dout(dpp, 20) << "Initializing POSIX driver: " << base_path << dendl;
+
+  /* ordered listing cache */
+  bucket_cache.reset(
+    new BucketCache(
+      this, base_path,
+      g_conf().get_val<std::string>("rgw_posix_database_root"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_max_buckets"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_lanes"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_partitions"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count"),
+      g_conf().get_val<bool>("rgw_posix_inotify")));
+
+  /* multipart upload cache */
+  {
+    auto mp_pol_str =
+      g_conf().get_val<std::string>("rgw_posix_multipart_cache_policy");
+    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
+    if (mp_pol_str == "writeback") {
+      mp_policy = file::listing::MultipartCachePolicy::writeback;
+    } else if (mp_pol_str == "volatile") {
+      mp_policy = file::listing::MultipartCachePolicy::volatile_;
+    }
+    init_multipart_cache(
+      dpp,
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_lanes"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_partitions"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max_parts"),
+      mp_policy);
   }
 
   /* user info cache */
