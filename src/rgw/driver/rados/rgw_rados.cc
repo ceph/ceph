@@ -3702,6 +3702,12 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     bool add_log = log_op && store->svc.zone->need_to_log_data();
     r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, add_log,
                        false, link_cond.type == cls_rgw_link_olh_cond::NONE ? nullptr : &link_cond);
+    if (r == -ERR_PRECONDITION_FAILED && link_cond.type != cls_rgw_link_olh_cond::NONE) {
+      // the condition held when it was checked above; a concurrent write or
+      // delete made another version current before this one was linked. S3
+      // answers a conflicting operation during a conditional write 409
+      r = -ERR_CONDITIONAL_REQUEST_CONFLICT;
+    }
     if (r < 0) {
       return r;
     }
@@ -7083,6 +7089,11 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
                              &meta, params.olh_epoch, params.unmod_since, params.high_precision_time,
                              y, params.zones_trace, add_log, skip_olh_obj_update,
                              link_cond.type == cls_rgw_link_olh_cond::NONE ? nullptr : &link_cond);
+      if (r == -ERR_PRECONDITION_FAILED && link_cond.type != cls_rgw_link_olh_cond::NONE) {
+        // the conditions held when they were checked; a concurrent write or
+        // delete changed the current version since. S3 answers 409
+        r = -ERR_CONDITIONAL_REQUEST_CONFLICT;
+      }
       if (r < 0) {
         return r;
       }
