@@ -494,6 +494,7 @@ options:
     concurrency of lifecycle maintenance, as shards can be processed in parallel. Do not
     change this value after deployment unless `radosgw-admin lc list` is empty.
   default: 32
+  min: 1
   services:
   - rgw
   with_legacy: true
@@ -1858,6 +1859,7 @@ options:
     empty or is not cleared. Set it consistently across the cluster with ``ceph config
     set global rgw_usage_max_shards <N>``, or pass ``--rgw-usage-max-shards`` to ``radosgw-admin``.
   default: 32
+  min: 1
   services:
   - rgw
   see_also:
@@ -2036,6 +2038,7 @@ options:
     initial deployment, but must not be decreased without first ensuring all GC data
     shards are completely empty.
   default: 32
+  min: 1
   services:
   - rgw
   see_also:
