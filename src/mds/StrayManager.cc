@@ -156,15 +156,16 @@ void StrayManager::purge(CDentry *dn)
         this, dn, false));
 }
 
-class C_PurgeStrayLogged : public StrayManagerLogContext {
-  CDentry *dn;
-  version_t pdv;
+class C_PurgeStraysLogged : public StrayManagerLogContext {
+  CDir *dir;
+  std::vector<StrayManager::PurgedStray> strays;
   MutationRef mut;
 public:
-  C_PurgeStrayLogged(StrayManager *sm_, CDentry *d, version_t v, MutationRef& m) :
-    StrayManagerLogContext(sm_), dn(d), pdv(v), mut(m) { }
+  C_PurgeStraysLogged(StrayManager *sm_, CDir *d,
+		      std::vector<StrayManager::PurgedStray>&& s, MutationRef& m) :
+    StrayManagerLogContext(sm_), dir(d), strays(std::move(s)), mut(m) { }
   void finish(int r) override {
-    sm->_purge_stray_logged(dn, pdv, mut);
+    sm->_purge_strays_logged(dir, strays, mut);
   }
 };
 
@@ -228,75 +229,139 @@ void StrayManager::_purge_stray_purged(
       ceph_abort_msg("rogue reference to purging inode");
     }
 
-    MutationRef mut(new MutationImpl());
-    mut->ls = mds->mdlog->get_current_segment();
-
-    // kill dentry.
-    version_t pdv = dn->pre_dirty();
-    dn->push_projected_linkage(); // NULL
-
-    EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
-
-    // update dirfrag fragstat, rstat
+    /*
+     * Journal the removal together with the other strays of this dirfrag
+     * purged meanwhile.  Nothing waits for it but the cache, so a short
+     * delay costs nothing, while journaling each purge on its own costs
+     * the MDS an event per unlinked file.
+     */
+    static constexpr size_t max_batch = 64;
+    static constexpr double max_delay = 0.01;
     CDir *dir = dn->get_dir();
-    auto pf = dir->project_fnode(mut);
-    pf->version = dir->pre_dirty();
-    if (in->is_dir())
-      pf->fragstat.nsubdirs--;
-    else
-      pf->fragstat.nfiles--;
-    pf->rstat.sub(in->get_inode()->accounted_rstat);
-
-    le->metablob.add_dir_context(dn->dir);
-    auto& dl = le->metablob.add_dir(dn->dir, true);
-    le->metablob.add_null_dentry(dl, dn, true);
-    le->metablob.add_destroyed_inode(in->ino());
-
-    mds->mdlog->submit_entry(le, new C_PurgeStrayLogged(this, dn, pdv, mut));
+    auto& dns = purged_strays[dir];
+    dns.push_back(dn);
+    // A stopping rank caps its log once its strays are journaled; do not
+    // hold any back for a timer that may fire after that.
+    if (dns.size() >= max_batch || mds->is_stopping()) {
+      auto batch = std::move(dns);
+      purged_strays.erase(dir);
+      _journal_purged_strays(dir, batch);
+    } else if (!purged_strays_timer) {
+      purged_strays_timer = mds->timer.add_event_after(
+	max_delay, new LambdaContext([this](int) {
+	  purged_strays_timer = nullptr;
+	  _journal_purged_strays();
+	}));
+    }
   }
 }
 
-void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, MutationRef& mut)
+bool StrayManager::flush_purged_strays()
 {
-  CInode *in = dn->get_linkage()->get_inode();
-  CDir *dir = dn->get_dir();
-  dout(10) << "_purge_stray_logged " << *dn << " " << *in << dendl;
+  if (purged_strays_timer) {
+    mds->timer.cancel_event(purged_strays_timer);
+    purged_strays_timer = nullptr;
+  }
+  const bool idle = purged_strays.empty() && num_strays_enqueuing == 0;
+  _journal_purged_strays();
+  return idle;
+}
 
-  ceph_assert(!in->state_test(CInode::STATE_RECOVERING));
+void StrayManager::_journal_purged_strays()
+{
+  auto all = std::move(purged_strays);
+  purged_strays.clear();
+  for (auto& [dir, dns] : all)
+    _journal_purged_strays(dir, dns);
+}
+
+void StrayManager::_journal_purged_strays(CDir *dir,
+					  const std::vector<CDentry*>& dns)
+{
+  dout(10) << __func__ << " " << dns.size() << " in " << *dir << dendl;
+
+  MutationRef mut(new MutationImpl());
+  mut->ls = mds->mdlog->get_current_segment();
+
+  // kill dentries.
+  std::vector<PurgedStray> strays;
+  strays.reserve(dns.size());
+  for (auto dn : dns) {
+    CInode *in = dn->get_projected_linkage()->get_inode();
+    version_t pdv = dn->pre_dirty();
+    dn->push_projected_linkage(); // NULL
+    strays.push_back({dn, in, pdv});
+  }
+
+  EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
+
+  // update dirfrag fragstat, rstat
+  auto pf = dir->project_fnode(mut);
+  pf->version = dir->pre_dirty();
+  le->metablob.add_dir_context(dir);
+  auto& dl = le->metablob.add_dir(dir, true);
+  for (const auto& s : strays) {
+    if (s.in->is_dir())
+      pf->fragstat.nsubdirs--;
+    else
+      pf->fragstat.nfiles--;
+    pf->rstat.sub(s.in->get_inode()->accounted_rstat);
+    le->metablob.add_null_dentry(dl, s.dn, true);
+    le->metablob.add_destroyed_inode(s.in->ino());
+  }
+
+  mds->mdlog->submit_entry(le, new C_PurgeStraysLogged(this, dir, std::move(strays), mut));
+}
+
+void StrayManager::_purge_strays_logged(CDir *dir, std::vector<PurgedStray>& strays,
+					MutationRef& mut)
+{
+  dout(10) << "_purge_strays_logged " << strays.size() << " in " << *dir << dendl;
   ceph_assert(!dir->is_frozen_dir());
 
-  bool new_dn = dn->is_new();
-
   // unlink
-  ceph_assert(dn->get_projected_linkage()->is_null());
-  dir->unlink_inode(dn, !new_dn);
-  dn->pop_projected_linkage();
-  dn->mark_dirty(pdv, mut->ls);
+  std::vector<bool> new_dns;
+  new_dns.reserve(strays.size());
+  for (const auto& s : strays) {
+    dout(20) << " " << *s.dn << " " << *s.in << dendl;
+    ceph_assert(!s.in->state_test(CInode::STATE_RECOVERING));
+    ceph_assert(s.dn->get_dir() == dir);
+    bool new_dn = s.dn->is_new();
+    new_dns.push_back(new_dn);
+    ceph_assert(s.dn->get_projected_linkage()->is_null());
+    dir->unlink_inode(s.dn, !new_dn);
+    s.dn->pop_projected_linkage();
+    s.dn->mark_dirty(s.pdv, mut->ls);
+  }
 
   mut->apply();
 
-  in->state_clear(CInode::STATE_ORPHAN);
-  dn->state_clear(CDentry::STATE_PURGING | CDentry::STATE_PURGINGPINNED);
-  dn->put(CDentry::PIN_PURGING);
+  for (size_t i = 0; i < strays.size(); i++) {
+    CDentry *dn = strays[i].dn;
+    CInode *in = strays[i].in;
 
+    in->state_clear(CInode::STATE_ORPHAN);
+    dn->state_clear(CDentry::STATE_PURGING | CDentry::STATE_PURGINGPINNED);
+    dn->put(CDentry::PIN_PURGING);
 
-  // drop dentry?
-  if (new_dn) {
-    dout(20) << " dn is new, removing" << dendl;
-    dn->mark_clean();
-    dir->remove_dentry(dn);
+    // drop dentry?
+    if (new_dns[i]) {
+      dout(20) << " dn is new, removing" << dendl;
+      dn->mark_clean();
+      dir->remove_dentry(dn);
+    }
+
+    // drop inode
+    inodeno_t ino = in->ino();
+    if (in->is_dirty())
+      in->mark_clean();
+    mds->mdcache->remove_inode(in);
+
+    dir->auth_unpin(this);
+
+    if (mds->is_stopping())
+      mds->mdcache->shutdown_export_stray_finish(ino);
   }
-
-  // drop inode
-  inodeno_t ino = in->ino();
-  if (in->is_dirty())
-    in->mark_clean();
-  mds->mdcache->remove_inode(in);
-
-  dir->auth_unpin(this);
-
-  if (mds->is_stopping())
-    mds->mdcache->shutdown_export_stray_finish(ino);
 }
 
 void StrayManager::enqueue(CDentry *dn, bool trunc)
