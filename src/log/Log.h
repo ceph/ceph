@@ -85,8 +85,8 @@ public:
   /**
    * Set a hook to get the log prefix (replaces thread ID in log output).
    *
-   * @note Not thread-safe. Must be called once during startup before any
-   *       logging occurs. Designed for single-threaded unit test harnesses only.
+   * @note Designed for unit test harnesses. May be set or cleared while the
+   *       log thread is running.
    */
   static void set_prefix_hook(prefix_hook_t hook);
 
