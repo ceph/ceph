@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { of, BehaviorSubject, combineLatest } from 'rxjs';
+import { of, BehaviorSubject, combineLatest, NEVER } from 'rxjs';
 import { RgwOverviewDashboardComponent } from './rgw-overview-dashboard.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -12,6 +12,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { CommonModule } from '@angular/common';
@@ -28,6 +29,7 @@ describe('RgwOverviewDashboardComponent', () => {
   let fetchAndTransformBucketsSpy: jest.SpyInstance;
   let totalBucketsAndUsersSpy: jest.SpyInstance;
   let params: Record<string, any>;
+  let selectedDaemonSubject: BehaviorSubject<RgwDaemon>;
 
   const totalNumObjectsSubject = new BehaviorSubject<number>(290);
   const totalUsedCapacitySubject = new BehaviorSubject<number>(9338880);
@@ -46,6 +48,12 @@ describe('RgwOverviewDashboardComponent', () => {
     default: true,
     port: 80
   };
+  const otherDaemon: RgwDaemon = {
+    ...daemon,
+    id: '8001',
+    service_map_id: '4804',
+    default: false
+  };
 
   const realmList = {
     default_info: '20f61d29-7e45-4418-8e19-b7e962e4860b',
@@ -62,7 +70,14 @@ describe('RgwOverviewDashboardComponent', () => {
     zones: ['zone4', 'zone5', 'zone6', 'zone7']
   };
 
+  const syncStatus = {
+    dataSyncInfo: [{ name: 'zone2' }],
+    metadataSyncInfo: {},
+    primaryZoneData: ['realm1', 'zg1-realm1', 'zone1-zg1-realm1']
+  };
+
   beforeEach(() => {
+    selectedDaemonSubject = new BehaviorSubject<RgwDaemon>(daemon);
     TestBed.configureTestingModule({
       declarations: [
         RgwOverviewDashboardComponent,
@@ -72,7 +87,13 @@ describe('RgwOverviewDashboardComponent', () => {
       ],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [
-        { provide: RgwDaemonService, useValue: { list: jest.fn() } },
+        {
+          provide: RgwDaemonService,
+          useValue: {
+            list: jest.fn(),
+            selectedDaemon$: selectedDaemonSubject.asObservable()
+          }
+        },
         { provide: RgwRealmService, useValue: { list: jest.fn() } },
         { provide: RgwZonegroupService, useValue: { list: jest.fn() } },
         { provide: RgwZoneService, useValue: { list: jest.fn() } },
@@ -84,6 +105,12 @@ describe('RgwOverviewDashboardComponent', () => {
             totalUsedCapacity$: totalUsedCapacitySubject.asObservable(),
             averageObjectSize$: averageObjectSizeSubject.asObservable(),
             getTotalBucketsAndUsersLength: jest.fn()
+          }
+        },
+        {
+          provide: RgwMultisiteService,
+          useValue: {
+            getSyncStatus: jest.fn().mockReturnValue(of(syncStatus))
           }
         },
         {
@@ -224,4 +251,32 @@ describe('RgwOverviewDashboardComponent', () => {
     expect(component.rgwBucketCount).toEqual(bucketsCount);
     expect(component.UserCount).toEqual(usersCount);
   }));
+
+  describe('Object Gateway daemon selection loading', () => {
+    it('should not enable loading for the initial daemon selection', () => {
+      expect(component.loading).toBe(false);
+    });
+
+    it('should not enable loading when the same daemon is re-emitted', () => {
+      const getSyncStatusSpy = jest.spyOn(component, 'getSyncStatus');
+      getSyncStatusSpy.mockClear();
+
+      selectedDaemonSubject.next({ ...daemon });
+
+      expect(component.loading).toBe(false);
+      expect(getSyncStatusSpy).not.toHaveBeenCalled();
+    });
+
+    it('should enable loading and refresh sync status when daemon changes', () => {
+      const getSyncStatusSpy = jest.spyOn(component, 'getSyncStatus');
+      getSyncStatusSpy.mockClear();
+      // Keep the request pending so loading is not cleared by the response.
+      jest.spyOn(TestBed.inject(RgwMultisiteService), 'getSyncStatus').mockReturnValue(NEVER);
+
+      selectedDaemonSubject.next(otherDaemon);
+
+      expect(component.loading).toBe(true);
+      expect(getSyncStatusSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

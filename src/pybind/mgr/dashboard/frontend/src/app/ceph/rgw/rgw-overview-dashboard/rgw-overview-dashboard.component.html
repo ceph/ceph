@@ -208,12 +208,35 @@
     >
       <cd-productive-card [applyShadow]="false">
         <ng-template #header>
-          <h2
-            class="cds--type-heading-compact-02"
-            i18n
+          <div
+            cdsGrid
+            [fullWidth]="true"
+            [narrow]="true"
+            [condensed]="true"
+            class="multisite-sync__header"
           >
-            Multi-Site Sync Status
-          </h2>
+            <div cdsRow>
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 16 }"
+              >
+                <cd-context [forceShow]="true"></cd-context>
+              </div>
+            </div>
+            <div cdsRow>
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 16 }"
+              >
+                <h2
+                  class="cds--type-heading-compact-02 cds-mt-4"
+                  i18n
+                >
+                  Multi-Site Sync Status
+                </h2>
+              </div>
+            </div>
+          </div>
         </ng-template>
         <ng-template #notConfigured>
           <cd-alert-panel

@@ -30,8 +30,7 @@ describe('ContextComponent', () => {
   const daemonList = RgwHelper.getDaemonList();
 
   configureTestBed({
-    declarations: [ContextComponent],
-    imports: [HttpClientTestingModule, RouterTestingModule, TagModule]
+    imports: [HttpClientTestingModule, RouterTestingModule, TagModule, ContextComponent]
   });
 
   beforeEach(() => {
@@ -61,6 +60,21 @@ describe('ContextComponent', () => {
     component.isRgwRoute = false;
     expect(fixture.debugElement.nativeElement.textContent).toEqual('');
   });
+
+  it('should show info when forceShow is set even if not in RGW route', fakeAsync(() => {
+    component.isRgwRoute = false;
+    component.forceShow = true;
+    fixture.detectChanges();
+    tick();
+    const req = httpTesting.expectOne('api/rgw/daemon');
+    req.flush(daemonList);
+    fixture.detectChanges();
+    const selectedDaemon = fixture.debugElement.nativeElement.querySelector(
+      '.ctx-bar-selected-rgw-daemon'
+    );
+    expect(selectedDaemon.textContent).toEqual(' daemon2 zonegroup2');
+    component.ngOnDestroy();
+  }));
 
   it('should select the default daemon', fakeAsync(() => {
     component.isRgwRoute = true;

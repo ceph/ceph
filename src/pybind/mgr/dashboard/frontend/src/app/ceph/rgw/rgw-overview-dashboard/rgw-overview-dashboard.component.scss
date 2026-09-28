@@ -12,6 +12,11 @@
 }
 
 .multisite-sync {
+  // Keep header content full-width inside productive-card's flex header.
+  &__header {
+    width: 100%;
+  }
+
   &__loading {
     display: flex;
     justify-content: center;
