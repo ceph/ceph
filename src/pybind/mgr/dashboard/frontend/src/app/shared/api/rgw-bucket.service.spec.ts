@@ -145,6 +145,16 @@ describe('RgwBucketService', () => {
     expect(result).toBe(true);
   });
 
+  it('should return false when bucket does not exist', () => {
+    let result;
+    service.exists('missing').subscribe((resp) => {
+      result = resp;
+    });
+    const req = httpTesting.expectOne(`api/rgw/bucket/missing?${RgwHelper.DAEMON_QUERY_PARAM}`);
+    req.flush({ detail: 'NoSuchBucket' }, { status: 404, statusText: 'Not Found' });
+    expect(result).toBe(false);
+  });
+
   it('should convert lock retention period to days', () => {
     expect(service.getLockDays({ lock_retention_period_years: 1000 })).toBe(365242);
     expect(service.getLockDays({ lock_retention_period_days: 5 })).toBe(5);

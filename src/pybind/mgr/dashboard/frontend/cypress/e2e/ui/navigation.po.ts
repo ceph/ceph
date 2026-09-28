@@ -41,7 +41,8 @@ export class NavigationPageHelper extends PageHelper {
         { menu: 'Users', component: 'cd-rgw-user-list' },
         { menu: 'Multi-site', component: 'cd-rgw-multisite-details' },
         { menu: 'Gateways', component: 'cd-rgw-daemon-list' },
-        { menu: 'NFS', component: 'cd-error' }
+        { menu: 'NFS', component: 'cd-error' },
+        { menu: 'SMB', component: 'cd-smb-cluster-list' }
       ]
     },
     {
