@@ -557,6 +557,15 @@ public:
    * want the rest of initialization.  base_path must be set first. */
   void init_strategies(const DoutPrefixProvider* dpp);
 
+  /* Construct the multipart part cache.  Sizing is the caller's, because
+   * it decides whether eviction -- and so the stabilize callback -- is
+   * ever reached;  initialize() passes the configured values and a test
+   * driver passes its own. */
+  void init_multipart_cache(const DoutPrefixProvider* dpp,
+			    uint64_t mp_max, uint64_t mp_lanes,
+			    uint64_t mp_parts, uint64_t mp_max_parts,
+			    file::listing::MultipartCachePolicy mp_policy);
+
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp);
   virtual const std::string get_name() const override { return "nsfs"; }
   virtual std::string get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y) override { return "PLACEHOLDER"; };

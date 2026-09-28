@@ -3018,41 +3018,20 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp)
 
 }
 
-int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+/* Build the multipart part cache.
+ *
+ * Sizing is the caller's, not the configuration's.  The sizes decide
+ * whether eviction ever happens, and eviction is what runs the
+ * stabilize callback below, so a caller which wants that path reachable
+ * has to be able to ask for it -- the defaults are large enough that it
+ * never fires.  What is shared here is the structure:  the policy, the
+ * callback, and how they are wired.
+ */
+void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
+				      uint64_t mp_max, uint64_t mp_lanes,
+				      uint64_t mp_parts, uint64_t mp_max_parts,
+				      file::listing::MultipartCachePolicy mp_policy)
 {
-  int ret = -1;
-  base_path = g_conf().get_val<std::string>("rgw_nsfs_base_path");
-
-  ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path << dendl;
-
-  init_strategies(dpp);
-
-  /* ordered listing cache */
-  bucket_cache.reset(
-    new BucketCache(
-      this, base_path,
-      g_conf().get_val<std::string>("rgw_nsfs_database_root"),
-      g_conf().get_val<int64_t>("rgw_nsfs_cache_max_buckets"),
-      g_conf().get_val<int64_t>("rgw_nsfs_cache_lanes"),
-      g_conf().get_val<int64_t>("rgw_nsfs_cache_partitions"),
-      g_conf().get_val<int64_t>("rgw_nsfs_cache_lmdb_count"),
-      g_conf().get_val<bool>("rgw_nsfs_inotify")));
-
-  /* multipart upload cache */
-  {
-    auto mp_max = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max");
-    auto mp_lanes = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_lanes");
-    auto mp_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_partitions");
-    auto mp_max_parts = g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max_parts");
-    auto mp_pol_str = g_conf().get_val<std::string>("rgw_posix_multipart_cache_policy");
-
-    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
-    if (mp_pol_str == "writeback") {
-      mp_policy = file::listing::MultipartCachePolicy::writeback;
-    } else if (mp_pol_str == "volatile") {
-      mp_policy = file::listing::MultipartCachePolicy::volatile_;
-    }
-
     file::listing::stabilize_fn_t stabilize;
     if (mp_policy == file::listing::MultipartCachePolicy::writeback) {
       stabilize = [this](const file::listing::MultipartCacheKey& key,
@@ -3092,6 +3071,45 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
       new nsfs::MultipartCache(
 	mp_max, mp_lanes, mp_parts, mp_max_parts,
 	mp_policy, std::move(stabilize)));
+}
+
+int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
+{
+  int ret = -1;
+  base_path = g_conf().get_val<std::string>("rgw_nsfs_base_path");
+
+  ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path << dendl;
+
+  init_strategies(dpp);
+
+  /* ordered listing cache */
+  bucket_cache.reset(
+    new BucketCache(
+      this, base_path,
+      g_conf().get_val<std::string>("rgw_nsfs_database_root"),
+      g_conf().get_val<int64_t>("rgw_nsfs_cache_max_buckets"),
+      g_conf().get_val<int64_t>("rgw_nsfs_cache_lanes"),
+      g_conf().get_val<int64_t>("rgw_nsfs_cache_partitions"),
+      g_conf().get_val<int64_t>("rgw_nsfs_cache_lmdb_count"),
+      g_conf().get_val<bool>("rgw_nsfs_inotify")));
+
+  /* multipart upload cache */
+  {
+    auto mp_pol_str =
+      g_conf().get_val<std::string>("rgw_posix_multipart_cache_policy");
+    auto mp_policy = file::listing::MultipartCachePolicy::writethrough;
+    if (mp_pol_str == "writeback") {
+      mp_policy = file::listing::MultipartCachePolicy::writeback;
+    } else if (mp_pol_str == "volatile") {
+      mp_policy = file::listing::MultipartCachePolicy::volatile_;
+    }
+    init_multipart_cache(
+      dpp,
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_lanes"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_partitions"),
+      g_conf().get_val<uint64_t>("rgw_posix_multipart_cache_max_parts"),
+      mp_policy);
   }
 
   /* user info cache */
@@ -10058,6 +10076,19 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     dem_bde.meta.category = RGWObjCategory::Main;
     dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
     bcache->add_entry(rctx.dpp, b->get_name(), dem_bde);
+  }
+
+  /* The object's cached size is stale the moment the file changes, and
+   * this is the point where it stopped being so:  link_temp_file() has
+   * just opened and stat()ed the published file, so the on-disk size is
+   * already in hand and costs no syscall.  load_obj_state() computes
+   * state.size the same way.
+   *
+   * NSFSMultipartUpload::complete() has always done this for the object
+   * it completes into.  An ordinary write left the caller holding a
+   * size from before it. */
+  if (auto* ent = obj->get_fsent(); ent) {
+    obj->set_obj_size(ent->get_stx().stx_size);
   }
 
   driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),

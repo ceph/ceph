@@ -14,6 +14,7 @@
 
 #include "rgw_sal_nsfs.h"
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -281,7 +282,10 @@ TEST(FSEnt, DirBase)
   attrs.clear();
   ret = testdir->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(attrs.size(), 4);
+  /* the three written here.  object_type was removed in 4cd543aa56c:
+   * it answered one question, staging directory or ordinary, which the
+   * directory's name already settles. */
+  EXPECT_EQ(attrs.size(), 3);
   std::string val;
   bool success = decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
@@ -292,10 +296,6 @@ TEST(FSEnt, DirBase)
   success = decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
-  nsfs::ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
-  EXPECT_TRUE(success);
-  EXPECT_EQ(type.type, nsfs::ObjectType::DIRECTORY);
 
   ret = testdir->close();
   EXPECT_EQ(ret, 0);
@@ -334,7 +334,7 @@ TEST(FSEnt, DirBase)
   attrs.clear();
   ret = copydir->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(attrs.size(), 4);
+  EXPECT_EQ(attrs.size(), 3);
   success = decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
@@ -484,7 +484,8 @@ TEST(FSEnt, FileBase)
   attrs.clear();
   ret = testfile->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(attrs.size(), 4);
+  /* see FSEnt.DirBase:  object_type went in 4cd543aa56c */
+  EXPECT_EQ(attrs.size(), 3);
   std::string val;
   bool success = decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
@@ -495,10 +496,6 @@ TEST(FSEnt, FileBase)
   success = decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
-  nsfs::ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
-  EXPECT_TRUE(success);
-  EXPECT_EQ(type.type, nsfs::ObjectType::FILE);
 
   ret = testfile->close();
   EXPECT_EQ(ret, 0);
@@ -598,6 +595,13 @@ public:
     quota_handler = RGWQuotaHandler::generate_handler(env->dpp, this, false);
     bucket_cache.reset(new nsfs::BucketCache(
         this, base_path, cache_base, 100, 3, 3, 3));
+
+    /* Small, like the bucket cache above:  the configured defaults are
+     * large enough that nothing is ever evicted, and eviction is what
+     * runs the stabilize callback.  writeback is the policy that has
+     * one, so it is the policy worth testing against. */
+    init_multipart_cache(dpp, 16, 2, 2, 64,
+			 file::listing::MultipartCachePolicy::writeback);
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
     return 0;
@@ -740,7 +744,12 @@ TEST_F(NSFSDriverTest, BucketCreate)
   EXPECT_EQ(bucket->get_name(), testname);
   EXPECT_EQ(bucket->get_key().name, testname);
   EXPECT_EQ(bucket->get_key().tenant, "");
-  EXPECT_EQ(bucket->get_key().bucket_id, "");
+  /* create() generates marker and bucket_id as `<name>.<random>` when
+   * the caller supplies no marker, and sets the id from the marker.
+   * The posix driver does the same, and its own test carries the same
+   * stale expectation of "". */
+  EXPECT_EQ(bucket->get_key().bucket_id, bucket->get_info().bucket.marker);
+  EXPECT_THAT(bucket->get_key().bucket_id, ::testing::StartsWith(testname + "."));
   EXPECT_FALSE(bucket_exists);
 
   sf::path tp{bp / "root" / testname};
@@ -1070,12 +1079,14 @@ TEST_F(NSFSObjectTest, ObjectAttrs)
   bufferlist origbl;
   encode(ATTR1, origbl);
 
-  // attr1 + owner + object_type + synthesized etag
-  EXPECT_EQ(object->get_attrs().size(), 4);
+  /* attr1 and the synthesized etag.  object_type went in 4cd543aa56c,
+   * and there is no `owner` attribute:  ownership is read from the ACL,
+   * which XattrStrategy::object_owner() takes from RGW_ATTR_ACL. */
+  EXPECT_EQ(object->get_attrs().size(), 2);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
-  EXPECT_TRUE(object->get_attrs().contains("owner"));
-  EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
   EXPECT_TRUE(object->get_attrs().contains(RGW_ATTR_ETAG));
+  EXPECT_FALSE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
+  EXPECT_FALSE(object->get_attrs().contains("owner"));
 }
 
 TEST_F(NSFSObjectTest, XattrOnDisk)
@@ -1101,9 +1112,11 @@ TEST_F(NSFSObjectTest, XattrOnDisk)
     }
   }
 
-  // nsfs-specific attrs use user.nsfs.* prefix
-  EXPECT_TRUE(xattr_names.contains("user.nsfs.object_type"));
-  EXPECT_TRUE(xattr_names.contains("user.nsfs.owner"));
+  /* neither is written any more -- see NSFSObjectTest.ObjectAttrs.
+   * Asserted absent rather than dropped, because their reappearance
+   * would mean something started writing them again. */
+  EXPECT_FALSE(xattr_names.contains("user.nsfs.object_type"));
+  EXPECT_FALSE(xattr_names.contains("user.nsfs.owner"));
 
   // user-supplied attrs use user.nsfs.* prefix
   EXPECT_TRUE(xattr_names.contains("user.nsfs." + ATTR1));
