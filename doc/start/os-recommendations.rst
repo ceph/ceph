@@ -5,11 +5,11 @@
 ====================
 
 .. meta::
-   :description: The operating systems, kernels, and container hosts that each Ceph release is built and tested on.
+   :description: The operating systems, kernels, and container hosts on which each Ceph release is built and tested.
    :ceph-page-type: reference
 
-The Linux distributions, kernels, and container hosts that each Ceph release
-is built and tested on.
+The Linux distributions, kernels, and container hosts on which each Ceph
+release is built and tested.
 
 .. _start-platforms:
 

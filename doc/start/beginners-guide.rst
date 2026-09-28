@@ -6,9 +6,9 @@
    :description: A plain-language explanation of what Ceph is and what its components do.
    :ceph-page-type: concept
 
-Ceph is software that stores data on several servers and keeps extra copies of
-it over the network. In a cluster set up as recommended, the loss of one disk
-or one server loses nothing.
+Ceph is software that redundantly stores data across multiple servers. Clients
+access data via the network. In a cluster set up as recommended, the loss of
+one disk or one server loses nothing.
 
 What the Words Mean
 ===================

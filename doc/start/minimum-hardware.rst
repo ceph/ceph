@@ -28,7 +28,7 @@ when hyperthreading is enabled. Production clusters need more; see
 |              |                | more OSDs.                               |
 |              +----------------+------------------------------------------+
 |              | DB/WAL offload |  1x SSD partition per HDD OSD            |
-|              | (optional)     |  4-5x HDD OSDs per DB/WAL SATA SSD       |
+|              | (optional)     |  4-5x HDD OSDs per DB/WAL SAS or SATA SSD|
 |              |                |  <= 15 HDD OSDs per DB/WAL NVMe SSD      |
 |              +----------------+------------------------------------------+
 |              | Network        | 1 Gb/s minimum; 10 Gb/s recommended      |

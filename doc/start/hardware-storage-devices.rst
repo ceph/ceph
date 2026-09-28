@@ -21,17 +21,23 @@ Drive Layout
    * - Rule
      - Detail
    * - One OSD per drive
-     - Provision a single :term:`OSD` on any media, other than perhaps SSDs
-       larger than 30 TB. Do not host multiple OSDs on a single SAS or SATA
-       HDD.
+     - One :term:`OSD` per HDD, and one per SAS or SATA SSD. Most NVMe SSD
+       deployments since Quincy do well with one OSD per device; very large
+       QLC NVMe SSDs, or exceptional RocksDB demands, may benefit from two.
    * - A dedicated OS drive
      - Use a dedicated, ideally mirrored, drive for the operating system.
        Running the OS and OSDs on one drive is a common cause of "slow OSD"
-       problems.
-   * - A separate WAL+DB drive for HDD OSDs
-     - Put the :term:`BlueStore` WAL+DB (write-ahead log and metadata
-       database) of each HDD OSD on an SSD; this cuts write latency. See
-       :ref:`block and block.db <bluestore-mixed-device-config>`.
+       problems, and reimaging the OS then takes the OSD data with it.
+   * - WAL+DB placement
+     - SSD OSDs keep the :term:`BlueStore` WAL+DB (write-ahead log and
+       metadata database) on the same device; offloading it gains nothing.
+       HDD OSDs, other than the deepest archives, benefit from moving WAL+DB
+       to a shared SSD: at most 5 HDD OSDs per SAS or SATA offload SSD, and
+       at most 15 per PCIe Gen 4 or newer NVMe offload SSD. Size each offload
+       partition or logical volume for the workload; RBD gets by with less
+       than CephFS or RGW. Since Squid, the minimum suggestion is 2.5 percent
+       of the bulk device. See :ref:`block and block.db
+       <bluestore-mixed-device-config>`.
    * - No OSD on a Monitor, Manager, or MDS drive
      - No exceptions.
    * - Minimum OSD size 1 TiB
@@ -80,8 +86,8 @@ Drives have two write cache modes:
   non-volatile cache is written synchronously.
 
 Disabling the volatile cache often raises OSD IOPS and lowers commit
-latency, especially on HDDs. Benchmark both settings with ``fio``, then
-persist the better one.
+latency on HDDs. Do this only on HDDs. Benchmark both settings with ``fio``,
+then persist the better one.
 
 Query and change the cache setting, which ``sdparm`` calls WCE (write cache
 enable), with any of these tools:
@@ -188,7 +194,7 @@ Choosing Between HDD and SSD
      - Higher price per terabyte, but the amortized drive cost for a given
        number of IOPS is much lower.
    * - Suitability
-     - Bulk OSD data. Offload WAL+DB onto an SSD.
+     - Bulk OSD data. Offload WAL+DB onto an SSD; see Drive Layout.
      - The metadata pools listed under Drive Layout, and any pool where
        performance matters.
 
@@ -196,7 +202,7 @@ Chassis and interface considerations for HDDs:
 
 - Consider not only the interface of a single drive but the system as a
   whole. Chassis with SAS or SATA ports connect drives through a backplane,
-  and chassis that house more than 8 such drives add expanders. In dense
+  and chassis that house more than 8 such drives require expanders. In dense
   chassis, where 24, 36, or even 100 drives contend for these shared paths,
   backplanes and expanders are shared bottlenecks. NVMe drives avoid them.
 - A chassis built for LFF (3.5") drives is space-inefficient when SFF
@@ -256,7 +262,8 @@ Disk controllers (HBAs) can have a significant impact on write throughput.
    * - RAID HBA (IR mode, RAID-on-Chip)
      - May exhibit higher latency than a plain HBA. A RAID HBA with cache
        and battery adds purchase cost and yearly support cost. Software
-       mirroring (Linux MD or ZFS) is enough for boot volumes. Many RAID
+       mirroring (Linux MD or ZFS) is enough for boot volumes. RAID HBAs are
+       also fussy and flaky, and almost nobody monitors them well. Many RAID
        HBAs can be configured with an IT-mode "personality" or "JBOD mode"
        for streamlined operation.
    * - Plain HBA (IT or JBOD mode)

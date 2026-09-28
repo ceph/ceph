@@ -5,14 +5,13 @@
 =============================
 
 .. meta::
-   :description: The daemons that make up a Ceph cluster, what each one does, and how many of each a cluster needs.
+   :description: The daemons in a Ceph cluster, what each does, and how many a cluster needs.
    :ceph-page-type: concept
 
 A Ceph cluster is a set of daemons (background programs) that run on one or
-more hosts. Three kinds
-are always present: Monitors, Managers, and OSDs. Two more are added for
-specific storage interfaces: Metadata Servers for CephFS, and Object Gateways
-for object storage.
+more hosts. Three kinds are always present: Monitors, Managers, and OSDs. Two
+more are added for specific storage interfaces: Metadata Servers for CephFS,
+and Object Gateways for object storage.
 
 .. list-table::
    :header-rows: 1
@@ -37,16 +36,16 @@ for object storage.
        (deploying daemons, through ``ceph orch``), the :ref:`Dashboard
        <mgr-dashboard>`, data balancing, and access for non-native clients
        such as NFS.
-     - Two for high availability, ideally one per Monitor; with one, a
-       Manager restart pauses the Dashboard and modules. One is enough for a
-       test cluster.
+     - At least two for high availability, ideally one per Monitor; with
+       one, a Manager restart pauses the Dashboard and modules. One is enough
+       for a test cluster.
    * - :term:`OSD <Ceph OSD>`
      - ``ceph-osd``
-     - Manages one storage device, usually one disk. Stores data as objects,
-       replicates, recovers, and rebalances it, and reports OSDs that stop
-       answering heartbeat checks.
-     - At least as many as the number of copies of each object (or of
-       chunks, for erasure coding); below that, pools cannot become healthy.
+     - Manages one unit of underlying storage, usually an entire HDD or SSD.
+       Stores data as objects, replicates, recovers, and rebalances it, and
+       reports OSDs that stop answering heartbeat checks.
+     - At least as many as the number of object replicas or shards; below
+       that, pools cannot become healthy.
        Three for redundancy in production.
    * - :term:`Metadata Server <Ceph Metadata Server>`
      - ``ceph-mds``

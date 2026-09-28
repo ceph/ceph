@@ -6,7 +6,7 @@ Scalability and High Availability
 =================================
 
 .. meta::
-   :description: How CRUSH, the cluster map, Monitor quorum, cephx authentication, and intelligent daemons let Ceph scale without a single point of failure.
+   :description: How CRUSH, the cluster map, Monitor quorum, CephX authentication, and intelligent daemons let Ceph scale without a single point of failure.
    :ceph-page-type: concept
 
 In traditional architectures, clients talk to a centralized component. This
@@ -417,7 +417,7 @@ Additional Resources
 ~~~~~~~~~~~~~~~~~~~~
 
 - :ref:`CRUSH Maps <rados-crush-map>`
-- :ref:`Cephx Config Reference <rados-cephx-config-ref>`
+- :ref:`CephX Config Reference <rados-cephx-config-ref>`
 - :doc:`/architecture/dynamic-cluster-management`
 
 
