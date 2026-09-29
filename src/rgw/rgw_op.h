@@ -2125,6 +2125,8 @@ public:
   void complete() override;
 
   virtual int get_params(optional_yield y) = 0;
+  virtual int verify_encryption(std::map<std::string, bufferlist>& attrs,
+                                rgw::cksum::Type cksum_type) { return 0; }
   void send_response() override = 0;
   const char* name() const override { return "complete_multipart"; }
   std::string canonical_name() const override { return fmt::format("REST.{}.UPLOAD", s->info.method); }
