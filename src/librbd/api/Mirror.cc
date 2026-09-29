@@ -2453,7 +2453,8 @@ template <typename I>
 int Mirror<I>::group_image_add(IoCtx &group_ioctx,
                                const std::string &group_id,
                                IoCtx &image_ioctx,
-                               const std::string &image_id) {
+                               const std::string &image_id,
+                               const cls::rbd::MirrorImage &mirror_image) {
   CephContext *cct = reinterpret_cast<CephContext *>(group_ioctx.cct());
   ldout(cct, 20) << "group io_ctx=" << &group_ioctx
                  << ", group_id=" << group_id
@@ -2493,10 +2494,8 @@ int Mirror<I>::group_image_add(IoCtx &group_ioctx,
 
   C_SaferCond cond;
   auto req = mirror::GroupAddImageRequest<>::create(
-      group_ioctx, group_id, image_id, internal_flags,
-      static_cast<cls::rbd::MirrorImageMode>(RBD_MIRROR_IMAGE_MODE_SNAPSHOT),
-      mirror_group, &cond);
-
+      group_ioctx, group_id, image_id, internal_flags, mirror_group,
+      mirror_image, &cond);
   req->send();
   r = cond.wait();
   if (r < 0) {

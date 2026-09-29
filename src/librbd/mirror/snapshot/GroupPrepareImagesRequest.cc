@@ -198,16 +198,20 @@ void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
         }
 
         if (r == -ENOENT) {
-          // image is disabled for mirroring as required
           r = 0;
         } else if (r == 0) {
-          // Allow retrying OP_ENABLE for images that are already enabled.
-          // This handles the case where a previous OP_ENABLE partially
-          // completed.
-          if (!(m_operation == OP_ENABLE &&
-                mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED)) {
+          bool valid = false;
+          if (m_operation == OP_ENABLE) {
+            valid = (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
+          } else if (m_operation == OP_ADD_IMAGE) {
+            valid =
+              (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED &&
+                mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT &&
+                mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE);
+          }
+          if (!valid) {
             lderr(m_cct) << "image_id=" << m_images[i].spec.image_id
-                         << " is not disabled for mirroring" << dendl;
+                         << " has incompatible mirroring metadata" << dendl;
             r = -EINVAL;
           }
         } else {
@@ -218,7 +222,6 @@ void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
 
         new_sub_ctx->complete(r);
       });
-
     auto comp = create_rados_callback(on_mirror_image_get);
 
     int r = m_group_ioctx.aio_operate(RBD_MIRRORING, comp, &op,
@@ -306,7 +309,7 @@ void GroupPrepareImagesRequest<I>::handle_open_group_images(int r) {
     return;
   }
 
-  if (m_operation == OP_ENABLE || m_operation == OP_ADD_IMAGE) {
+  if (m_operation == OP_ENABLE) {
     finish(0);
   } else if (m_operation == OP_DISABLE) {
     check_images_mirror_mode();
@@ -385,30 +388,39 @@ void GroupPrepareImagesRequest<I>::handle_check_images_mirror_mode(int r) {
 template <typename I>
 void GroupPrepareImagesRequest<I>::get_images_mirror_info() {
   ldout(m_cct, 10) << dendl;
-  auto ctx = create_context_callback<
-    GroupPrepareImagesRequest<I>,
+
+  auto ctx = create_context_callback<GroupPrepareImagesRequest<I>,
     &GroupPrepareImagesRequest<I>::handle_get_images_mirror_info>(this);
+
   auto gather_ctx = new C_Gather(m_cct, ctx);
 
+  // Keep mirror_images indexed exactly the same as m_images.
   m_mirror_images->resize(m_images.size());
   m_images_promotion_states.resize(m_images.size());
   m_images_primary_mirror_uuids.resize(m_images.size());
 
-  for (size_t i = 0; i < m_images.size(); i++) {
-    auto info_ctx = new LambdaContext(
-      [this, i, new_sub_ctx=gather_ctx->new_sub()](int r) {
-        CephContext *image_cct = m_image_ctxs[i]->cct;
+  for (size_t i = 0; i < m_images.size(); ++i) {
+    auto req = GetInfoRequest<I>::create(*m_image_ctxs[i],
+      &(*m_mirror_images)[i], &m_images_promotion_states[i],
+      &m_images_primary_mirror_uuids[i],
+      new LambdaContext([this, i, new_sub_ctx = gather_ctx->new_sub()](int r) {
+        CephContext* image_cct = m_image_ctxs[i]->cct;
+
         if (r < 0 && r != -ENOENT) {
-          lderr(image_cct) << "image_id=" << m_images[i].spec.image_id
-                           << " failed to retrieve mirroring state: " << cpp_strerror(r)
-                           << dendl;
+          lderr(image_cct) << "failed to retrieve mirror info for "
+                           << m_images[i].spec.image_id << ": "
+                           << cpp_strerror(r) << dendl;
           new_sub_ctx->complete(r);
           return;
         } else if (r == -ENOENT) {
-          lderr(image_cct) << "image_id=" << m_images[i].spec.image_id
-                           << " mirroring is disabled for this image" << dendl;
-          if (m_operation == OP_DISABLE) {
+          if (m_operation == OP_DISABLE ||
+              (m_operation == OP_ADD_IMAGE &&
+                m_images[i].spec.image_id == m_image_id_to_add)) {
             r = 0;
+          } else {
+            lderr(image_cct)
+              << "image_id=" << m_images[i].spec.image_id
+              << " mirroring is disabled for this image" << dendl;
           }
           new_sub_ctx->complete(r);
           return;
@@ -444,13 +456,9 @@ void GroupPrepareImagesRequest<I>::get_images_mirror_info() {
           }
         }
 
-        new_sub_ctx->complete(0);
-      });
-    auto req = GetInfoRequest<I>::create(*m_image_ctxs[i], &(*m_mirror_images)[i],
-                                         &m_images_promotion_states[i],
-                                         &m_images_primary_mirror_uuids[i], info_ctx);
+        new_sub_ctx->complete(r);
+      }));
     req->send();
-
   }
   gather_ctx->activate();
 }
@@ -467,7 +475,8 @@ void GroupPrepareImagesRequest<I>::handle_get_images_mirror_info(int r) {
     return;
   }
 
-  if (m_operation == OP_CREATE_PRIMARY || m_operation == OP_REMOVE_IMAGE) {
+  if (m_operation == OP_CREATE_PRIMARY || m_operation == OP_ADD_IMAGE ||
+      m_operation == OP_REMOVE_IMAGE) {
     finish(0);
   } else if (m_operation == OP_DISABLE) {
     check_images_child_mirroring();
