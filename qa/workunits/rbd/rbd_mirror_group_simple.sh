@@ -43,6 +43,24 @@
 export RBD_MIRROR_NOCLEANUP=1
 export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
 
+dynamic_groups_enabled()
+{
+  [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS:-}" ] &&
+    [ "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" != '0' ]
+}
+
+skip_without_dynamic_groups()
+{
+  local test_name=$1
+
+  if dynamic_groups_enabled; then
+    return 1
+  fi
+
+  testlog "SKIP:${test_name} requires dynamic mirror group support"
+  return 0
+}
+
 group0=test-group0
 group1=test-group1
 pool0=mirror
@@ -108,6 +126,11 @@ if [ "${RBD_MIRROR_PRINT_TESTS}" != 'true' ]; then
   echo "Scenario number: $scenario_number"
   echo "Test name: $test_name"
   echo "Features: $RBD_IMAGE_FEATURES"
+  if dynamic_groups_enabled; then
+    echo "Dynamic mirror groups: enabled"
+  else
+    echo "Dynamic mirror groups: disabled"
+  fi
 fi
 
 RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-1}
@@ -975,6 +998,12 @@ test_create_group_mirror_then_add_images_scenarios=1
 
 test_create_group_mirror_then_add_images()
 {
+  # Test sequence:
+  # 1. Enable mirroring on an empty group and create standalone images.
+  # 2. Keep snapshots pending for one mirrored image, then add all images.
+  # 3. Restart the replayer and check the group and original global image ID.
+  # Expected result: standalone snapshots are processed before the first group
+  # snapshot, and attaching the image does not change its mirror identity.
   local primary_cluster=$1 ; shift
   local secondary_cluster=$1 ; shift
   local pool=$1 ; shift
@@ -994,7 +1023,25 @@ test_create_group_mirror_then_add_images()
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+stopped' 0
 
   images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+
+  local standalone_global_id
+  if dynamic_groups_enabled; then
+    # Preserve a standalone image's existing global ID and snapshot history
+    # when it joins the mirrored group.
+    enable_mirror "${primary_cluster}" "${pool}" "${image_prefix}0" snapshot
+    stop_mirrors "${secondary_cluster}"
+    write_image "${primary_cluster}" "${pool}" "${image_prefix}0" 16 4096
+    mirror_image_snapshot "${primary_cluster}" "${pool}" "${image_prefix}0"
+    write_image "${primary_cluster}" "${pool}" "${image_prefix}0" 16 4096
+    mirror_image_snapshot "${primary_cluster}" "${pool}" "${image_prefix}0"
+    get_image_mirroring_global_id "${primary_cluster}" \
+      "${pool}/${image_prefix}0" standalone_global_id
+  fi
+
   group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
+  if dynamic_groups_enabled; then
+    start_mirrors "${secondary_cluster}"
+  fi
 
   get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group}" group_snap_id
   wait_for_test_group_snap_present "${secondary_cluster}" "${pool}/${group}" "${group_snap_id}" 1
@@ -1003,6 +1050,10 @@ test_create_group_mirror_then_add_images()
   wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group}" "${image_count}"
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' "${image_count}"
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'up+stopped' "${image_count}"
+  if dynamic_groups_enabled; then
+    test_image_with_global_id_present "${secondary_cluster}" "${pool}" \
+      "${image_prefix}0" "${standalone_global_id}"
+  fi
 
   # tidy up
   mirror_group_disable "${primary_cluster}" "${pool}/${group}"
@@ -1749,6 +1800,12 @@ test_create_group_with_large_image_scenarios=1
 
 test_create_group_with_large_image()
 {
+  # Test sequence:
+  # 1. Create a mirrored group with one small image.
+  # 2. Attach a 4 GiB image and write across its complete object range.
+  # 3. Create a group snapshot and verify both images on the secondary.
+  # Expected result: the membership change completes only after all image data
+  # is copied and the group snapshot becomes complete.
   local primary_cluster=$1
   local secondary_cluster=$2
   local pool0=$3
@@ -1771,7 +1828,7 @@ test_create_group_with_large_image()
   big_image=test-image-big
   image_create "${primary_cluster}" "${pool0}/${big_image}" 4G
 
-  if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
+  if dynamic_groups_enabled; then
     group_image_add "${primary_cluster}" "${pool0}/${group}" "${pool0}/${big_image}"
 
     if [ -n "${RBD_MIRROR_NEW_IMPLICIT_BEHAVIOUR}" ]; then
@@ -1798,7 +1855,7 @@ test_create_group_with_large_image()
   # Check all images in the group and confirms that they are synced
   test_group_synced_image_status "${secondary_cluster}" "${pool0}/${group}" "${group_snap_id}" 2
 
-  if [ -n "${RBD_MIRROR_SUPPORT_DYNAMIC_GROUPS}" ]; then
+  if dynamic_groups_enabled; then
     group_image_remove "${primary_cluster}" "${pool0}/${group}" "${pool0}/${big_image}"
 
     if [ -n "${RBD_MIRROR_NEW_IMPLICIT_BEHAVIOUR}" ]; then
