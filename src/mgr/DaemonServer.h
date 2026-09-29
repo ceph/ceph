@@ -249,6 +249,7 @@ private:
   void tick();
   void maybe_adjust_stats_period();
   void schedule_tick_locked(double delay_sec);
+  std::atomic<bool> shutting_down = false;
 
   class OSDPerfMetricCollectorListener : public MetricListener {
   public:
@@ -318,11 +319,12 @@ public:
 
   DaemonServer(MonClient *monc_,
                Finisher &finisher_,
-	       DaemonStateIndex &daemon_state_,
-	       ClusterState &cluster_state_,
-	       PyModuleRegistry &py_modules_,
-	       LogChannelRef cl,
-	       LogChannelRef auditcl);
+        DaemonStateIndex &daemon_state_,
+        ClusterState &cluster_state_,
+        PyModuleRegistry &py_modules_,
+        LogChannelRef cl,
+        LogChannelRef auditcl);
+  void shutdown();
   ~DaemonServer() override;
 
   Dispatcher::dispatch_result_t ms_dispatch2(const ceph::ref_t<Message>& m) override;
