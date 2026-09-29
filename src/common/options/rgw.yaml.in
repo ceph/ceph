@@ -4711,13 +4711,16 @@ options:
 - name: rgw_nsfs_noobaa_config_root
   type: str
   level: advanced
-  desc: Path to a NooBaa configuration store to read bucket state from
-  long_desc: Address of a NooBaa shared root, whose buckets/ directory holds one
-    JSON record per bucket.  Read only, and only for a bucket in the base profile
-    that carries no state of ours.  Empty means do not consult one.  NooBaa resolves
-    this itself from /etc/noobaa.conf.d, optionally redirected by a config_dir_redirect
-    file;  we hold the address instead, because the store lives on the shared
-    filesystem with the data and survives NooBaa's removal while that pointer may not.
+  desc: Path to a NooBaa configuration directory to read bucket state from
+  long_desc: Address of a NooBaa configuration directory, whose buckets/ subdirectory
+    holds one JSON record per bucket.  That subdirectory is the only part of it this
+    driver reads, and it is read only, and only for a bucket in the base profile that
+    carries no state of ours.  Empty means do not consult one.  This names the
+    resolved directory, not the well-known path NooBaa starts from.  Theirs is
+    /etc/noobaa.conf.d, which is the configuration directory itself unless it holds a
+    config_dir_redirect file naming another one.  We hold the resolved address instead
+    of repeating that lookup, because a deployment can remove NooBaa and take the
+    well-known path with it.
   services:
   - rgw
 - name: rgw_nsfs_extensions

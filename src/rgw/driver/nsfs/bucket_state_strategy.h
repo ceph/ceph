@@ -108,14 +108,24 @@ public:
  * exists for -- the thing `bucket_info_key()` structurally could not
  * name.
  *
- * WHERE THE ADDRESS COMES FROM.  `rgw_nsfs_noobaa_config_root`, held by
- * us rather than resolved the way NooBaa resolves it.  Theirs comes from
- * `/etc/noobaa.conf.d`, optionally redirected by a `config_dir_redirect`
- * file inside it (`config.js`, `_get_config_root()`).  The store itself
- * sits on the shared filesystem beside the data and survives their
- * package being removed;  that pointer in `/etc` need not, and a
- * bucket's retention settings must not depend on a step of the cutover
- * that nobody thinks of as data.
+ * WHERE THE ADDRESS COMES FROM.  `rgw_nsfs_noobaa_config_root`, which
+ * names the *resolved* directory.  NooBaa starts at `/etc/noobaa.conf.d`,
+ * which is the configuration directory itself unless it holds a
+ * `config_dir_redirect` file naming another one (`config.js`,
+ * `_get_config_root()`;  their `Configuration.md`).  We hold the resolved
+ * address rather than repeating that lookup, because an upgrade that
+ * removes their package removes the well-known path -- and in an
+ * un-redirected deployment removes the directory itself, since the RPM
+ * created it.  A bucket's retention settings must not depend on a step
+ * of the cutover that nobody thinks of as data.
+ *
+ * WE READ ONE SUBDIRECTORY OF IT.  `buckets/`, and nothing else.  Of the
+ * eight entries a configuration directory holds, `system.json`,
+ * `config.json` and `certificates/` are their service's own and mean
+ * nothing here;  `identities/`, `accounts_by_name/`, `access_keys/` and
+ * `master_keys.json` are an account import's business and not the
+ * request path's.  We are not a NooBaa, and most of what they keep
+ * there describes their deployment rather than the data.
  *
  * WE NEVER WRITE IT.  Not a preference:  Madhu, 2026-09-29 -- NooBaa
  * owns the shared root entirely and nothing populates it from outside.
