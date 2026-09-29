@@ -67,6 +67,9 @@ void MDSRank::command_quarantine_dir(const cmdmap_t& cmdmap, asok_finisher on_fi
 	auto ino = qtine_mgr->get_qtine_ino();
 	if (ino) {
 	  unregister_quarantine_mgr(ino);
+	  if (r < 0) {
+	    mdcache->abort_quarantine_op(ino, op);
+	  }
 	}
 	std::string_view op_str{(op == QUARANTINE_ADD ? "enable" : "disable")};
 	ceph::bufferlist bl;

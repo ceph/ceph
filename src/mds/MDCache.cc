@@ -15023,6 +15023,28 @@ void MDCache::schedule_quarantine_cleanup(const MDRequestRef& mdr)
   }));
 }
 
+/*
+ * Undo the in-memory effects of a failed quarantine operation: clear the
+ * in-progress state of the subvolume root (unless journaling the op already
+ * cleared it) and wake up requests parked on it (see
+ * Server::check_quarantine_block()), so that they re-evaluate against the
+ * persisted quarantine state instead of waiting for a disable.
+ */
+void MDCache::abort_quarantine_op(inodeno_t qtine_root_ino, unsigned qtine_op)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+
+  CInode *in = get_inode(qtine_root_ino);
+  if (!in) {
+    return;
+  }
+  dout(10) << __func__ << " op " << qtine_op << " on " << *in << dendl;
+  if (in->quarantine_op == qtine_op) {
+    in->clear_being_quarantined();
+  }
+  in->finish_waiting(CInode::WAIT_QUARANTINE);
+}
+
 void MDCache::start_quarantine_inode_work(CInode *qtine_root_in, unsigned qtine_op, QtineMgrRef qtine_mgr)
 {
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_QUARANTINEDIR_WORK);
