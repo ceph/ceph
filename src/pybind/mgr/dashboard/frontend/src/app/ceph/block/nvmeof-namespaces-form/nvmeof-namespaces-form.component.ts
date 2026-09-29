@@ -10,6 +10,7 @@ import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import {
+  RadosNamespace,
   NvmeofSubsystem,
   NvmeofSubsystemInitiator,
   NvmeofSubsystemNamespace
@@ -48,6 +49,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
   subsystems: NvmeofSubsystem[] | null = null;
   rbdPools: Array<Pool> = null;
   rbdImages: any[] = [];
+  radosNamespaces: RadosNamespace[] | null = null;
   initiatorCandidates: { content: string; selected: boolean }[] = [];
 
   nsid: string;
@@ -146,17 +148,46 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     }
   }
 
-  // Stores all RBD images fetched for the selected pool
+  // Stores all RBD images fetched for the selected pool + RADOS namespace.
   private allRbdImages: { name: string; size: number }[] = [];
-  // Maps pool name to a Set of used image names for O(1) lookup
+  // Maps "pool:radosNamespace" composite key to used image names.
   private usedRbdImages: Map<string, Set<string>> = new Map();
 
   onPoolChange(): void {
     const pool = this.nsForm.getValue('pool');
     if (!pool) return;
 
+    this.radosNamespaces = null;
+    this.nsForm.get('rados_namespace').setValue(null, { emitEvent: false });
+
+    this.rbdService.listNamespaces(pool).subscribe({
+      next: (namespaces) => {
+        this.radosNamespaces = namespaces as RadosNamespace[];
+      },
+      error: () => {
+        this.radosNamespaces = [];
+      }
+    });
+
+    this.fetchImagesForCurrentSelection(pool, null);
+  }
+
+  private onRadosNamespaceChange(): void {
+    const pool = this.nsForm.getValue('pool');
+    if (!pool) return;
+
+    const radosNs = this.nsForm.getValue('rados_namespace') as string | null;
+    this.fetchImagesForCurrentSelection(pool, radosNs);
+  }
+
+  private fetchImagesForCurrentSelection(pool: string, radosNs: string | null): void {
+    const params: Record<string, string> = { pool_name: pool, offset: '0', limit: '-1' };
+    if (radosNs) {
+      params['namespace'] = radosNs;
+    }
+
     this.rbdService
-      .list({ pool_name: pool, offset: '0', limit: '-1' })
+      .list(params)
       .subscribe((pools: { pool_name: string; value: { name: string; size: number }[] }[]) => {
         const selectedPool = pools.find((p) => p.pool_name === pool);
         this.allRbdImages = selectedPool?.value ?? [];
@@ -180,10 +211,11 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         ? response
         : response?.namespaces ?? [];
       this.usedRbdImages = namespaces.reduce((map, ns) => {
-        if (!map.has(ns.rbd_pool_name)) {
-          map.set(ns.rbd_pool_name, new Set<string>());
+        const key = this.usedImagesKey(ns.rbd_pool_name, ns.rados_namespace_name ?? '');
+        if (!map.has(key)) {
+          map.set(key, new Set<string>());
         }
-        map.get(ns.rbd_pool_name)!.add(ns.rbd_image_name);
+        map.get(key)!.add(ns.rbd_image_name);
         return map;
       }, new Map<string, Set<string>>());
       this.filterImages();
@@ -219,10 +251,15 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       this.rbdImages = [];
       return;
     }
-    const usedInPool = this.usedRbdImages.get(pool);
-    this.rbdImages = usedInPool
-      ? this.allRbdImages.filter((img) => !usedInPool.has(img.name))
+    const radosNs = (this.nsForm.getValue('rados_namespace') as string | null) ?? '';
+    const usedInScope = this.usedRbdImages.get(this.usedImagesKey(pool, radosNs));
+    this.rbdImages = usedInScope
+      ? this.allRbdImages.filter((img) => !usedInScope.has(img.name))
       : [...this.allRbdImages];
+  }
+
+  private usedImagesKey(pool: string, radosNs: string): string {
+    return `${pool}\x00${radosNs}`;
   }
 
   createForm() {
@@ -230,6 +267,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
       pool: new UntypedFormControl('', {
         validators: [Validators.required]
       }),
+      rados_namespace: new UntypedFormControl(null),
       subsystem: new UntypedFormControl('', {
         validators: [Validators.required]
       }),
@@ -256,6 +294,10 @@ export class NvmeofNamespacesFormComponent implements OnInit {
 
     this.nsForm.get('pool').valueChanges.subscribe(() => {
       this.onPoolChange();
+    });
+
+    this.nsForm.get('rados_namespace').valueChanges.subscribe(() => {
+      this.onRadosNamespaceChange();
     });
 
     this.nsForm.get('nsCount').valueChanges.subscribe((count: number) => {
@@ -324,6 +366,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     noAutoVisible: boolean
   ): Observable<HttpResponse<Object>>[] {
     const pool = this.nsForm.getValue('pool');
+    const radosNs = this.nsForm.getValue('rados_namespace') as string | null;
     const requests: Observable<HttpResponse<Object>>[] = [];
     const creationMode = this.nsForm.getValue('rbd_image_creation');
     const isGatewayProvisioned = creationMode === 'gateway_provisioned';
@@ -340,6 +383,9 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         no_auto_visible: noAutoVisible
       };
 
+      if (radosNs) {
+        request.rados_namespace = radosNs;
+      }
       if (blockSize) {
         request.block_size = blockSize;
       }

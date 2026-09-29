@@ -7,13 +7,13 @@ import {
   NvmeofSubsystem,
   NvmeofSubsystemData,
   NvmeofSubsystemInitiator,
+  NvmeofSubsystemAuthType,
   getSubsystemAuthStatus
 } from '~/app/shared/models/nvmeof';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 import { ICON_TYPE, EMPTY_STATE_IMAGE } from '~/app/shared/enum/icons.enum';
-import { NvmeofSubsystemAuthType } from '~/app/shared/enum/nvmeof.enum';
 
 @Component({
   selector: 'cd-nvmeof-gateway-subsystem',
