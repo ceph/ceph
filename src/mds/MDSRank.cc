@@ -512,9 +512,14 @@ MDSRank::MDSRank(
   purge_queue.update_op_limit(*mdsmap);
 
   objecter->unset_honor_pool_full();
+  // Bound inflight OSD ops (tracker #71136). Blocking waits must not run on
+  // ms_dispatch or the MDS completion finisher — see objecter_finisher /
+  // queue_objecter(); those threads must keep processing OSD replies that
+  // free the throttle.
   objecter->set_balanced_budget();
 
   finisher = new Finisher(cct, "MDSRank", "mds-rank-fin");
+  objecter_finisher = new Finisher(cct, "MDSRankObjecter", "mds-obj-fin");
 
   mdcache = new MDCache(this, purge_queue);
   mdlog = new MDLog(this);
@@ -577,6 +582,8 @@ MDSRank::~MDSRank()
 
   delete finisher;
   finisher = NULL;
+  delete objecter_finisher;
+  objecter_finisher = nullptr;
 
   delete suicide_hook;
   suicide_hook = NULL;
@@ -607,6 +614,7 @@ void MDSRankDispatcher::init()
   purge_queue.init();
 
   finisher->start();
+  objecter_finisher->start();
 }
 
 void MDSRank::update_targets()
@@ -836,6 +844,7 @@ void MDSRankDispatcher::shutdown()
 
   mds_lock.unlock();
   finisher->stop(); // no flushing
+  objecter_finisher->stop();
   mds_lock.lock();
 
   if (objecter->initialized)

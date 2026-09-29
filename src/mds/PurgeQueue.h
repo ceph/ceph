@@ -199,6 +199,8 @@ private:
 
   void _go_readonly(int r);
 
+  void _delayed_flush(Context* c);
+
   CephContext *cct;
   const mds_rank_t rank;
   ceph::mutex lock = ceph::make_mutex("PurgeQueue");

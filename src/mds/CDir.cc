@@ -1817,8 +1817,14 @@ void CDir::_omap_fetch(std::set<string> *keys, MDSContext *c)
     fin->ret3 = -ECANCELED;
   }
 
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
-			     new C_OnFinisher(fin, mdcache->mds->finisher));
+  // Objecter may block in _throttle_op. Never submit from ms_dispatch —
+  // OSD replies that free the throttle are handled on that thread.
+  Context* onfin = new C_OnFinisher(fin, mdcache->mds->finisher);
+  mdcache->mds->queue_objecter(
+      new LambdaContext([objecter = mdcache->mds->objecter, oid, oloc,
+                         rd = std::move(rd), onfin](int) mutable {
+        objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, onfin);
+      }));
 }
 
 void CDir::_omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
@@ -1837,8 +1843,14 @@ void CDir::_omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
 		   &fin->omap_more,
 		   &fin->more,
 		   &fin->ret);
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
-			     new C_OnFinisher(fin, mdcache->mds->finisher));
+  // Same as _omap_fetch: submit on objecter_finisher so ms_dispatch never
+  // blocks in Objecter::_throttle_op.
+  Context* onfin = new C_OnFinisher(fin, mdcache->mds->finisher);
+  mdcache->mds->queue_objecter(
+      new LambdaContext([objecter = mdcache->mds->objecter, oid, oloc,
+                         rd = std::move(rd), onfin](int) mutable {
+        objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, onfin);
+      }));
 }
 
 CDentry *CDir::_load_dentry(
@@ -2700,7 +2712,8 @@ void CDir::_omap_commit(int op_prio)
   auto c = new C_IO_Dir_Commit_Ops(this, op_prio, std::move(to_set), std::move(dfts),
                                    std::move(to_remove), std::move(stale_items));
   stale_items.clear(); /* in CDir */
-  mdcache->mds->finisher->queue(c);
+  // Runs Objecter::mutate (may block in _throttle_op); keep off completion finisher.
+  mdcache->mds->queue_objecter(c);
 }
 
 void CDir::_parse_dentry(CDentry *dn, dentry_commit_item &item,

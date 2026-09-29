@@ -154,6 +154,7 @@ class Objecter;
 class MonClient;
 class MgrClient;
 class Finisher;
+class Context;
 class Server;
 class ScrubStack;
 class C_ExecAndReply;
@@ -454,6 +455,23 @@ class MDSRank {
     std::shared_ptr<QuiesceAgent> quiesce_agent;
 
     Finisher *finisher;
+    /**
+     * Dedicated finisher for Objecter submits that may block in
+     * Objecter::_throttle_op (keep_balanced_budget).
+     *
+     * OSD replies that free throttle budget are handled on ms_dispatch.
+     * Never block ms_dispatch or the MDS completion finisher in the
+     * throttle wait, or the MDS deadlocks.
+     */
+    Finisher* objecter_finisher = nullptr;
+
+    /** Queue work that may block in Objecter::_throttle_op. */
+    void
+    queue_objecter(Context* c)
+    {
+      objecter_finisher->queue(c);
+    }
+
   protected:
     typedef enum {
       // The MDSMap is available, configure default layouts and structures

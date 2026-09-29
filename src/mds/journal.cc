@@ -300,7 +300,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   }
 
   for (auto& [pool_id, ops_vec] : ops_vec_map) {
-    mds->finisher->queue(new BatchCommitBacktrace(mds, gather_bld.new_sub(), std::move(ops_vec)));
+    // BatchCommitBacktrace submits Objecter mutates (may block in throttle).
+    mds->queue_objecter(new BatchCommitBacktrace(
+        mds, gather_bld.new_sub(), std::move(ops_vec)));
   }
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);

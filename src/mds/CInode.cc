@@ -1275,7 +1275,6 @@ void CInode::store(MDSContext *fin)
   encode_store(bl, mdcache->mds->mdsmap->get_up_features());
 
   // write it.
-  SnapContext snapc;
   ObjectOperation m;
   m.write_full(bl);
 
@@ -1285,9 +1284,14 @@ void CInode::store(MDSContext *fin)
   Context *newfin =
     new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
 		     mdcache->mds->finisher);
-  mdcache->mds->objecter->mutate(oid, oloc, m, snapc,
-				 ceph::real_clock::now(), 0,
-				 newfin);
+  // Objecter may block in _throttle_op; submit on objecter_finisher.
+  mdcache->mds->queue_objecter(
+      new LambdaContext([objecter = mdcache->mds->objecter, oid, oloc,
+                         m = std::move(m), newfin](int) mutable {
+        SnapContext snapc;
+        objecter->mutate(
+            oid, oloc, m, snapc, ceph::real_clock::now(), 0, newfin);
+      }));
 }
 
 void CInode::_stored(int r, version_t v, Context *fin)
@@ -1360,11 +1364,17 @@ void CInode::fetch(MDSContext *fin)
   // Old on-disk format: inode stored in xattr of a dirfrag
   ObjectOperation rd;
   rd.getxattr("inode", &c->bl, NULL);
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, gather.new_sub());
-
-  // Current on-disk format: inode stored in a .inode object
+  Context* sub1 = gather.new_sub();
+  Context* sub2 = gather.new_sub();
   object_t oid2 = CInode::get_object_name(ino(), frag_t(), ".inode");
-  mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather.new_sub());
+
+  // Objecter may block in _throttle_op; submit on objecter_finisher.
+  mdcache->mds->queue_objecter(
+      new LambdaContext([objecter = mdcache->mds->objecter, oid, oloc,
+                         rd = std::move(rd), oid2, sub1, sub2, c](int) mutable {
+        objecter->read(oid, oloc, rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, sub1);
+        objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, sub2);
+      }));
 
   gather.activate();
 }
@@ -1455,6 +1465,9 @@ void CInode::_commit_ops(int r, C_GatherBuilder &gather_bld,
   SnapContext snapc;
   object_t oid = get_object_name(ino(), frag_t(), "");
 
+  // Caller must not hold mds_lock: Objecter may block in _throttle_op.
+  // store_backtrace() drops the lock around this; BatchCommitBacktrace
+  // already runs unlocked on the finisher.
   for (auto &op : ops_vec) {
     ObjectOperation obj_op;
     object_locator_t oloc(op.get_pool());
@@ -1513,13 +1526,18 @@ void CInode::store_backtrace(MDSContext *fin, int op_prio)
 
   _store_backtrace(ops_vec, bt, op_prio, false);
 
-  C_GatherBuilder gather(g_ceph_context,
-			 new C_OnFinisher(
-			   new C_IO_Inode_StoredBacktrace(this, version, fin),
-			   mdcache->mds->finisher));
-  _commit_ops(0, gather, ops_vec, bt);
-  ceph_assert(gather.has_subs());
-  gather.activate();
+  auto gather = std::make_unique<C_GatherBuilder>(
+      g_ceph_context, new C_OnFinisher(
+                          new C_IO_Inode_StoredBacktrace(this, version, fin),
+                          mdcache->mds->finisher));
+  // Objecter may block in _throttle_op; submit on objecter_finisher.
+  mdcache->mds->queue_objecter(new LambdaContext(
+      [this, gather = std::move(gather), ops_vec = std::move(ops_vec),
+       bt = std::move(bt)](int) mutable {
+        _commit_ops(0, *gather, ops_vec, bt);
+        ceph_assert(gather->has_subs());
+        gather->activate();
+      }));
 }
 
 void CInode::store_backtrace(CInodeCommitOperations &op, int op_prio,

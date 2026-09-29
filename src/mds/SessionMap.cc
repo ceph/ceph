@@ -441,6 +441,7 @@ bool SessionMap::validate_and_encode_session(MDSRank *mds, Session *session, buf
 
 void SessionMap::save(MDSContext *onsave, version_t needv)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
   dout(10) << __func__ << ": needv " << needv << ", v " << version << dendl;
  
   if (needv && committing >= needv) {
@@ -449,7 +450,18 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
     return;
   }
 
-  commit_waiters[version].push_back(onsave);
+  // Prior mutate may still be in flight (mds_lock is dropped around Objecter
+  // submit below). Do not start another RADOS write until it completes.
+  if (committing > committed) {
+    dout(10) << __func__ << ": deferring, write in flight for " << committing
+             << dendl;
+    if (onsave)
+      commit_waiters[version].push_back(onsave);
+    return;
+  }
+
+  if (onsave)
+    commit_waiters[version].push_back(onsave);
 
   committing = version;
   SnapContext snapc;
@@ -527,22 +539,34 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
   dirty_sessions.clear();
   null_sessions.clear();
 
-  mds->objecter->mutate(oid, oloc, op, snapc,
-			ceph::real_clock::now(),
-			0,
-			new C_OnFinisher(new C_IO_SM_Save(this, version),
-					 mds->finisher));
+  version_t write_version = version;
+  Context* fin =
+      new C_OnFinisher(new C_IO_SM_Save(this, write_version), mds->finisher);
+
+  // Objecter may block in _throttle_op; submit on objecter_finisher.
+  mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid, oloc,
+                                         op = std::move(op), snapc,
+                                         fin](int) mutable {
+    objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+  }));
+
   apply_blocklist(to_blocklist);
   logger->inc(l_mdssm_metadata_threshold_sessions_evicted, to_blocklist.size());
 }
 
 void SessionMap::_save_finish(version_t v)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
   dout(10) << "_save_finish v" << v << dendl;
-  committed = v;
+  if (v >= committed)
+    committed = v;
 
   finish_contexts(g_ceph_context, commit_waiters[v]);
   commit_waiters.erase(v);
+
+  if (version > committed) {
+    save(nullptr, version);
+  }
 }
 
 
@@ -991,11 +1015,14 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
       object_t oid = get_object_name();
       object_locator_t oloc(mds->get_metadata_pool());
       MDSContext *on_safe = gather_bld->new_sub();
-      mds->objecter->mutate(oid, oloc, op, snapc,
-			    ceph::real_clock::now(), 0,
-			    new C_OnFinisher(
-			      new C_IO_SM_Save_One(this, on_safe),
-			      mds->finisher));
+      Context* fin =
+          new C_OnFinisher(new C_IO_SM_Save_One(this, on_safe), mds->finisher);
+      // Objecter may block in _throttle_op; submit on objecter_finisher.
+      mds->queue_objecter(new LambdaContext([objecter = mds->objecter, oid,
+                                             oloc, op = std::move(op), snapc,
+                                             fin](int) mutable {
+        objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0, fin);
+      }));
     }
     ++i;
   }
