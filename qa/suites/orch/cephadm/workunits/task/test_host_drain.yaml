@@ -54,7 +54,7 @@ tasks:
         ceph orch apply -i mon_adjusted.yaml
         # wait for all OSDs on HOST_C to exist before proceeding to drain
         ceph orch ps --refresh
-        timeout 300 bash -c "while ! ceph orch ps --hostname $HOST_C --daemon_type osd --format json | jq -e ". | length == 2"; do sleep 5; done"
+        timeout 300 bash -c "while ! ceph orch ps --hostname $HOST_C --daemon_type osd --format json | jq -e '. | length == 2'; do sleep 5; done"
         # now drain that host
         ceph orch host drain $HOST_C --zap-osd-devices
         # wait for drain to complete
