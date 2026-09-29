@@ -28,6 +28,7 @@
 #include "global/global_init.h"
 #include "rgw_mime.h"
 #include "rgw_tag.h"
+#include "rgw_lc.h"
 #include "rgw_object_lock.h"
 #include "rgw_iam_policy.h"
 #include "rgw_public_access.h"
@@ -3893,6 +3894,129 @@ TEST_F(NSFSNooBaaStateTest, AKeylessTagFailsClosed)
 {
   forget_our_state();
   their_record("ENABLED", R"(,"tag":[{"key":"","value":"orphan"}])");
+
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+}
+
+/* Their lifecycle rules reach the attribute map, through the same
+ * parser PutBucketLifecycle uses. */
+TEST_F(NSFSNooBaaStateTest, LifecycleComesFromTheirRecord)
+{
+  forget_our_state();
+
+  /* the control:  no rules in their record, no attribute */
+  their_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_LC),
+	    bucket->get_attrs().end());
+
+  their_record("ENABLED",
+	       R"(,"lifecycle_configuration_rules":[{)"
+	       R"("id":"expire-logs","status":"Enabled",)"
+	       R"("filter":{"prefix":"logs/"},)"
+	       R"("expiration":{"days":30}}])");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto i = bucket->get_attrs().find(RGW_ATTR_LC);
+  ASSERT_NE(i, bucket->get_attrs().end());
+
+  RGWLifecycleConfiguration lc(env->cct.get());
+  auto bi = i->second.cbegin();
+  ASSERT_NO_THROW(decode(lc, bi));
+  const auto& rules = lc.get_rule_map();
+  ASSERT_EQ(rules.size(), 1u);
+  const auto& rule = rules.begin()->second;
+  EXPECT_EQ(rule.get_id(), "expire-logs");
+  EXPECT_EQ(rule.get_status(), "Enabled");
+  EXPECT_EQ(rule.get_filter().get_prefix(), "logs/");
+  EXPECT_EQ(rule.get_expiration().get_days(), 30);
+}
+
+/* A multi-condition filter keeps its conditions.
+ *
+ * Their `and` flag records that the original XML wrapped them, and
+ * LCFilter_S3 looks for that element first, so reproducing it is what
+ * makes a prefix-and-tag filter read back as one. */
+TEST_F(NSFSNooBaaStateTest, LifecycleFilterWithPrefixAndTag)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"lifecycle_configuration_rules":[{)"
+	       R"("id":"cold","status":"Enabled",)"
+	       R"("filter":{"and":true,"prefix":"data/",)"
+	       R"("tags":[{"key":"class","value":"cold"}]},)"
+	       R"("expiration":{"days":90}}])");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto i = bucket->get_attrs().find(RGW_ATTR_LC);
+  ASSERT_NE(i, bucket->get_attrs().end());
+
+  RGWLifecycleConfiguration lc(env->cct.get());
+  auto bi = i->second.cbegin();
+  ASSERT_NO_THROW(decode(lc, bi));
+  ASSERT_EQ(lc.get_rule_map().size(), 1u);
+  const auto& flt = lc.get_rule_map().begin()->second.get_filter();
+  EXPECT_EQ(flt.get_prefix(), "data/");
+  const auto& tags = flt.get_tags().get_tags();
+  ASSERT_EQ(tags.size(), 1u);
+  ASSERT_NE(tags.find("class"), tags.end());
+  EXPECT_EQ(tags.find("class")->second, "cold");
+}
+
+/* A date-based expiration lands on the day they meant.
+ *
+ * Their dates are epoch milliseconds and RGW's are ISO 8601 strings
+ * that check_date() requires to be exact midnight UTC.  Nothing else
+ * in this file proves the conversion is right rather than merely
+ * present, and it decides which day objects are deleted.
+ * 1767225600000 is 2026-01-01T00:00:00Z. */
+TEST_F(NSFSNooBaaStateTest, ALifecycleDateKeepsItsDay)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"lifecycle_configuration_rules":[{)"
+	       R"("id":"newyear","status":"Enabled","filter":{},)"
+	       R"("expiration":{"date":1767225600000}}])");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0)
+      << "a midnight date was refused";
+
+  auto i = bucket->get_attrs().find(RGW_ATTR_LC);
+  ASSERT_NE(i, bucket->get_attrs().end());
+  RGWLifecycleConfiguration lc(env->cct.get());
+  auto bi = i->second.cbegin();
+  ASSERT_NO_THROW(decode(lc, bi));
+  ASSERT_EQ(lc.get_rule_map().size(), 1u);
+
+  const std::string date =
+    lc.get_rule_map().begin()->second.get_expiration().get_date();
+  EXPECT_EQ(date.substr(0, 10), "2026-01-01") << "stored date: " << date;
+}
+
+/* A rule their schema allows and PutBucketLifecycle refuses fails the
+ * bucket closed.
+ *
+ * Their expiration may carry days and a date together;
+ * LCExpiration_S3 requires exactly one, and guessing which wins
+ * deletes objects on the wrong day. */
+TEST_F(NSFSNooBaaStateTest, ALifecycleRuleRgwWouldRefuseFailsClosed)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"lifecycle_configuration_rules":[{)"
+	       R"("id":"both","status":"Enabled","filter":{},)"
+	       R"("expiration":{"days":30,"date":1767225600000}}])");
+
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+}
+
+/* A rule with no action at all is one RGW refuses too. */
+TEST_F(NSFSNooBaaStateTest, ALifecycleRuleWithNoActionFailsClosed)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"lifecycle_configuration_rules":[{)"
+	       R"("id":"empty","status":"Enabled","filter":{}}])");
 
   EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
 }

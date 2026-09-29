@@ -23,6 +23,10 @@
 #include "rgw_website.h"
 #include "rgw_bucket_encryption.h"
 #include "rgw_tag.h"
+#include "rgw_lc.h"
+#include "rgw_lc_s3.h"
+#include "rgw_xml.h"
+#include "common/XMLFormatter.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -487,6 +491,225 @@ int from_noobaa_tags(const DoutPrefixProvider* dpp, JSONObj* tagging,
   return 0;
 }
 
+/* Their dates are epoch milliseconds;  RGW's are ISO 8601 strings that
+ * check_date() additionally requires to be exact midnight UTC.  The
+ * conversion is here;  the midnight rule is not, because the parser
+ * enforces it and a date that breaks it is a rule PutBucketLifecycle
+ * would refuse. */
+bool idate_iso8601(JSONObj* parent, const char* name, std::string& out)
+{
+  int64_t ms = 0;
+  if (!JSONDecoder::decode_json(name, ms, parent)) {
+    return false;
+  }
+  using namespace std::chrono;
+  out = ceph::to_iso_8601(
+    ceph::real_clock::time_point(duration_cast<ceph::timespan>(
+      milliseconds(ms))));
+  return true;
+}
+
+/* lifecycle_configuration_rules.
+ *
+ * WHAT WE ACCEPT IS WHAT PutBucketLifecycle ACCEPTS, by construction:
+ * their record is rendered as the XML that request carries and handed
+ * to the same parser, decoder and rebuild().  Matt, 2026-09-29 --
+ * "accept only what our XML parser can handle."
+ *
+ * That is worth the render rather than reimplementing the rules,
+ * because the rules are many and the cost of getting one wrong is
+ * deletion.  Their schema is looser than S3's in several places at
+ * once:  an expiration may carry days, a date and a delete-marker flag
+ * together where LCExpiration_S3 requires exactly one;  a rule may mix
+ * days and date across its expiration and transitions where
+ * LCRule::valid() forbids it;  a date need not be midnight UTC where
+ * check_date() insists.  Each of those is a rule of theirs that RGW
+ * cannot express, and none has a safe reading -- guessing which of
+ * days or date wins deletes objects on the wrong day -- so the parser
+ * refusing it fails the bucket closed.
+ *
+ * Transitions are rendered like everything else.  The parser takes
+ * them, so we take them;  whether this driver has anywhere to
+ * transition to is lifecycle processing's question and not this
+ * reader's. */
+int from_noobaa_lifecycle(const DoutPrefixProvider* dpp, CephContext* cct,
+			  JSONObj* rules, const std::string& bucket_name,
+			  Attrs& attrs)
+{
+  XMLFormatter f;
+  f.open_object_section("LifecycleConfiguration");
+
+  size_t count = 0;
+  for (auto ri = rules->find_first(); !ri.end(); ++ri) {
+    JSONObj* r = *ri;
+    ++count;
+    f.open_object_section("Rule");
+
+    std::string id, status;
+    JSONDecoder::decode_json("id", id, r);
+    JSONDecoder::decode_json("status", status, r);
+    encode_xml("ID", id, &f);
+    encode_xml("Status", status, &f);
+
+    /* Their `and` flag records whether the original XML wrapped the
+     * conditions in <And>, which is how they rebuild it themselves.
+     * LCFilter_S3 looks for that element first and falls back to the
+     * filter itself, so reproducing it keeps a multi-condition filter
+     * reading the way it was written. */
+    if (JSONObj* flt = r->find_obj("filter"); flt) {
+      bool conjunction = false;
+      JSONDecoder::decode_json("and", conjunction, flt);
+      f.open_object_section("Filter");
+      if (conjunction) {
+	f.open_object_section("And");
+      }
+
+      std::string prefix;
+      if (JSONDecoder::decode_json("prefix", prefix, flt)) {
+	encode_xml("Prefix", prefix, &f);
+      }
+      int64_t sz = 0;
+      if (JSONDecoder::decode_json("object_size_greater_than", sz, flt)) {
+	encode_xml("ObjectSizeGreaterThan", sz, &f);
+      }
+      if (JSONDecoder::decode_json("object_size_less_than", sz, flt)) {
+	encode_xml("ObjectSizeLessThan", sz, &f);
+      }
+      if (JSONObj* tags = flt->find_obj("tags"); tags) {
+	for (auto ti = tags->find_first(); !ti.end(); ++ti) {
+	  std::string k, v;
+	  JSONDecoder::decode_json("key", k, *ti);
+	  JSONDecoder::decode_json("value", v, *ti);
+	  f.open_object_section("Tag");
+	  encode_xml("Key", k, &f);
+	  encode_xml("Value", v, &f);
+	  f.close_section();
+	}
+      }
+
+      if (conjunction) {
+	f.close_section();
+      }
+      f.close_section();
+    }
+
+    if (JSONObj* exp = r->find_obj("expiration"); exp) {
+      f.open_object_section("Expiration");
+      int64_t days = 0;
+      std::string date;
+      if (JSONDecoder::decode_json("days", days, exp)) {
+	encode_xml("Days", days, &f);
+      }
+      if (idate_iso8601(exp, "date", date)) {
+	encode_xml("Date", date, &f);
+      }
+      bool dm = false;
+      if (JSONDecoder::decode_json("expired_object_delete_marker", dm, exp)) {
+	encode_xml("ExpiredObjectDeleteMarker", dm, &f);
+      }
+      f.close_section();
+    }
+
+    if (JSONObj* nce = r->find_obj("noncurrent_version_expiration"); nce) {
+      f.open_object_section("NoncurrentVersionExpiration");
+      int64_t v = 0;
+      if (JSONDecoder::decode_json("noncurrent_days", v, nce)) {
+	encode_xml("NoncurrentDays", v, &f);
+      }
+      if (JSONDecoder::decode_json("newer_noncurrent_versions", v, nce)) {
+	encode_xml("NewerNoncurrentVersions", v, &f);
+      }
+      f.close_section();
+    }
+
+    if (JSONObj* mp = r->find_obj("abort_incomplete_multipart_upload"); mp) {
+      f.open_object_section("AbortIncompleteMultipartUpload");
+      int64_t v = 0;
+      if (JSONDecoder::decode_json("days_after_initiation", v, mp)) {
+	encode_xml("DaysAfterInitiation", v, &f);
+      }
+      f.close_section();
+    }
+
+    if (JSONObj* trs = r->find_obj("transitions"); trs) {
+      for (auto ti = trs->find_first(); !ti.end(); ++ti) {
+	f.open_object_section("Transition");
+	int64_t days = 0;
+	std::string date, sc;
+	if (JSONDecoder::decode_json("days", days, *ti)) {
+	  encode_xml("Days", days, &f);
+	}
+	if (idate_iso8601(*ti, "date", date)) {
+	  encode_xml("Date", date, &f);
+	}
+	JSONDecoder::decode_json("storage_class", sc, *ti);
+	encode_xml("StorageClass", sc, &f);
+	f.close_section();
+      }
+    }
+
+    if (JSONObj* nts = r->find_obj("noncurrent_version_transitions"); nts) {
+      for (auto ti = nts->find_first(); !ti.end(); ++ti) {
+	f.open_object_section("NoncurrentVersionTransition");
+	int64_t v = 0;
+	std::string sc;
+	if (JSONDecoder::decode_json("noncurrent_days", v, *ti)) {
+	  encode_xml("NoncurrentDays", v, &f);
+	}
+	if (JSONDecoder::decode_json("newer_noncurrent_versions", v, *ti)) {
+	  encode_xml("NewerNoncurrentVersions", v, &f);
+	}
+	JSONDecoder::decode_json("storage_class", sc, *ti);
+	encode_xml("StorageClass", sc, &f);
+	f.close_section();
+      }
+    }
+
+    f.close_section();
+  }
+  f.close_section();
+
+  if (count == 0) {
+    return 0;
+  }
+
+  bufferlist xml;
+  f.flush(xml);
+
+  RGWXMLParser parser;
+  if (!parser.init()) {
+    return -EIO;
+  }
+  if (!parser.parse(xml.c_str(), xml.length(), 1)) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << ": their "
+      << "lifecycle rules did not render as parsable XML" << dendl;
+    return -EBADMSG;
+  }
+
+  RGWLifecycleConfiguration_S3 config(cct);
+  try {
+    RGWXMLDecoder::decode_xml("LifecycleConfiguration", config, &parser);
+  } catch (RGWXMLDecoder::err& e) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has a "
+      << "lifecycle rule PutBucketLifecycle would refuse: "
+      << e.what() << dendl;
+    return -EBADMSG;
+  }
+
+  RGWLifecycleConfiguration dest(cct);
+  if (int r = config.rebuild(dest); r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has a "
+      << "lifecycle configuration RGW will not rebuild: "
+      << cpp_strerror(-r) << dendl;
+    return -EBADMSG;
+  }
+
+  bufferlist bl;
+  dest.encode(bl);
+  attrs[RGW_ATTR_LC] = std::move(bl);
+  return 0;
+}
+
 } // namespace
 
 int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
@@ -605,6 +828,14 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
    * use;  which one it is follows from what carries it. */
   if (JSONObj* tg = p.find_obj("tag"); tg) {
     ret = from_noobaa_tags(dpp, tg, bucket_name, attrs);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  /* Lifecycle.  The attribute map. */
+  if (JSONObj* lc = p.find_obj("lifecycle_configuration_rules"); lc) {
+    ret = from_noobaa_lifecycle(dpp, dpp->get_cct(), lc, bucket_name, attrs);
     if (ret < 0) {
       return ret;
     }
