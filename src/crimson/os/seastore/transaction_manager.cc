@@ -1707,6 +1707,7 @@ TransactionManager::demote_region(
       auto extent = co_await relocate_shadow_extent(t, it);
       if (!extent) {
         DEBUGT("{} can't be demoted", t, it);
+        it = co_await it.next();
         continue;
       }
       ret.demoted_size += extent->get_length();
