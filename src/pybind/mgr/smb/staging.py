@@ -383,6 +383,9 @@ def _check_share_resource(
             and cluster.external_ceph_cluster.ref
         )
 
+        # Variable to store the valid user_id for bucket validation
+        valid_user_id = ''
+
         # If credential_ref is not provided, auto-create credential
         if not share.rgw.credential_ref:
             # For external clusters, require explicit credential_ref
@@ -406,14 +409,17 @@ def _check_share_resource(
                     share.rgw.bucket,
                     share.rgw.user_id or '',
                 )
+                # Store the fetched user_id for bucket validation
+                valid_user_id = fetched_user_id
             except ValueError as e:
                 raise ErrorResult(
                     share,
                     msg=f"Failed to fetch RGW credentials: {str(e)}",
                 )
 
-            # Create credential resource automatically
-            # Use user_id as credential_id (linked to cluster via linked_to_cluster field)
+            # Create credential resource automatically.
+            # Use the full fetched_user_id (which may be "tenant$user" or just "user")
+            # as the credential_id to ensure uniqueness across tenants.
             credential_id = fetched_user_id
 
             # Check if credential already exists
@@ -453,6 +459,8 @@ def _check_share_resource(
             # Validate existing credential_ref
             try:
                 cred = staging.get_rgw_credential(share.rgw.credential_ref)
+                # Get user_id from the credential for bucket validation
+                valid_user_id = cred.user_id
             except KeyError:
                 raise ErrorResult(
                     share,
@@ -475,7 +483,9 @@ def _check_share_resource(
         # Validate bucket exists (skip for external clusters)
         if not is_external_cluster:
             if not rgw.validate_rgw_bucket(
-                staging._tool_execer, share.rgw.bucket
+                staging._tool_execer,
+                share.rgw.bucket,
+                valid_user_id,
             ):
                 raise ErrorResult(
                     share,

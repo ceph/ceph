@@ -15,6 +15,11 @@ import ceph.smb.constants
 # combined with the hostname for a virtual hostname for the container.
 _name_re = re.compile('^[a-zA-Z0-9]($|[a-zA-Z0-9-]{,16}[a-zA-Z0-9]$)')
 
+# RGW credential IDs allow the '$' character to support tenant$user format.
+_rgw_credential_id_re = re.compile(
+    r'^[_a-zA-Z0-9][a-zA-Z0-9_-]*(\$[a-zA-Z0-9][a-zA-Z0-9_-]*)?$'
+)
+
 # We might want to open up share names to non-special unicode chars too.
 # but as above it's easier to start strict.
 _share_re = re.compile('^[a-zA-Z0-9_][a-zA-Z0-9. _-]{,63}$')
@@ -33,6 +38,17 @@ def check_id(value: str) -> None:
     """Raise ValueError if value is not a valid ID."""
     if not valid_id(value):
         raise ValueError(f"{value!r} is not a valid ID")
+
+
+def valid_rgw_credential_id(value: str) -> bool:
+    """Return true if value is a valid RGW credential ID (allows tenant$user format)."""
+    return bool(_rgw_credential_id_re.match(value))
+
+
+def check_rgw_credential_id(value: str) -> None:
+    """Raise ValueError if value is not a valid RGW credential ID."""
+    if not valid_rgw_credential_id(value):
+        raise ValueError(f"{value!r} is not a valid RGW credential ID")
 
 
 def valid_share_name(value: str) -> bool:
