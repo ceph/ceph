@@ -30,6 +30,7 @@
 #include "rgw_tag.h"
 #include "rgw_object_lock.h"
 #include "rgw_iam_policy.h"
+#include "rgw_public_access.h"
 #include "common/ceph_json.h"
 
 using namespace rgw::sal;
@@ -3596,6 +3597,74 @@ TEST_F(NSFSNooBaaStateTest, AnUnparsablePolicyFailsClosed)
   their_record("ENABLED",
 	       R"(,"s3_policy":{"Version":"2012-10-17",)"
 	       R"("Statement":[{"Effect":"Perhaps"}]})");
+
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+}
+
+/* Their public access block reaches the attribute map.
+ *
+ * Four booleans, the same four, snake_case against PascalCase. */
+TEST_F(NSFSNooBaaStateTest, PublicAccessBlockComesFromTheirRecord)
+{
+  forget_our_state();
+
+  /* the control:  no block in their record, none in the attributes */
+  their_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_PUBLIC_ACCESS),
+	    bucket->get_attrs().end());
+
+  their_record("ENABLED",
+	       R"(,"public_access_block":{"block_public_acls":true,)"
+	       R"("ignore_public_acls":false,"block_public_policy":true,)"
+	       R"("restrict_public_buckets":false})");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto i = bucket->get_attrs().find(RGW_ATTR_PUBLIC_ACCESS);
+  ASSERT_NE(i, bucket->get_attrs().end());
+
+  PublicAccessBlockConfiguration conf;
+  auto bi = i->second.cbegin();
+  ASSERT_NO_THROW(decode(conf, bi));
+  EXPECT_TRUE(conf.BlockPublicAcls);
+  EXPECT_FALSE(conf.IgnorePublicAcls);
+  EXPECT_TRUE(conf.BlockPublicPolicy);
+  EXPECT_FALSE(conf.RestrictPublicBuckets);
+}
+
+/* A field they omit stays false, the way S3 leaves one a client did
+ * not send. */
+TEST_F(NSFSNooBaaStateTest, AnOmittedPublicAccessFieldIsFalse)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"public_access_block":{"restrict_public_buckets":true})");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto i = bucket->get_attrs().find(RGW_ATTR_PUBLIC_ACCESS);
+  ASSERT_NE(i, bucket->get_attrs().end());
+
+  PublicAccessBlockConfiguration conf;
+  auto bi = i->second.cbegin();
+  ASSERT_NO_THROW(decode(conf, bi));
+  EXPECT_TRUE(conf.RestrictPublicBuckets);
+  EXPECT_FALSE(conf.BlockPublicAcls);
+}
+
+/* A field of the wrong shape fails the bucket closed rather than
+ * throwing out of load_bucket().
+ *
+ * JSONDecoder::decode_json() throws on a value it cannot decode, and
+ * every field here comes from a file on disk, so without a boundary
+ * that exception reaches RGW from the request path. */
+TEST_F(NSFSNooBaaStateTest, AMisshapenFieldFailsClosed)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"object_lock_configuration":{)"
+	       R"("object_lock_enabled":"Enabled",)"
+	       R"("rule":{"default_retention":{"days":"ten",)"
+	       R"("mode":"GOVERNANCE"}}})");
 
   EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
 }

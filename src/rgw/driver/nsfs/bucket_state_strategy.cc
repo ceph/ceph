@@ -19,6 +19,7 @@
 #include "common/ceph_json.h"
 #include "rgw_object_lock.h"
 #include "rgw_iam_policy.h"
+#include "rgw_public_access.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -249,6 +250,35 @@ int from_noobaa_bucket_policy(const DoutPrefixProvider* dpp, JSONObj* pol,
   return 0;
 }
 
+/* public_access_block.
+ *
+ * Four booleans, the same four, spelled snake_case by them and
+ * PascalCase by RGW.  PublicAccessBlockConfiguration is a plain struct
+ * with public members, so there is nothing to build and nothing to
+ * hand to a decoder.
+ *
+ * A field they omit stays false, which is what S3 does:
+ * PutPublicAccessBlock takes whatever subset the client sends and the
+ * rest are off.  The attribute is written whenever they carry the key
+ * at all, including an all-false block, because a block they set is a
+ * fact about the bucket even when it blocks nothing. */
+int from_noobaa_public_access(const DoutPrefixProvider* dpp, JSONObj* pab,
+			      Attrs& attrs)
+{
+  PublicAccessBlockConfiguration conf;
+  JSONDecoder::decode_json("block_public_acls", conf.BlockPublicAcls, pab);
+  JSONDecoder::decode_json("ignore_public_acls", conf.IgnorePublicAcls, pab);
+  JSONDecoder::decode_json("block_public_policy", conf.BlockPublicPolicy,
+			   pab);
+  JSONDecoder::decode_json("restrict_public_buckets",
+			   conf.RestrictPublicBuckets, pab);
+
+  bufferlist bl;
+  conf.encode(bl);
+  attrs[RGW_ATTR_PUBLIC_ACCESS] = std::move(bl);
+  return 0;
+}
+
 } // namespace
 
 int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
@@ -280,6 +310,15 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     ldpp_dout(dpp, 0) << "ERROR: " << path << " is not JSON" << dendl;
     return -EBADMSG;
   }
+
+  /* Everything below decodes fields out of a file we found on disk,
+   * and JSONDecoder::decode_json() throws JSONDecoder::err on a value
+   * of the wrong shape -- "days": "ten" and the like.  Caught here
+   * rather than per field, so that a feature added later is covered
+   * by having been written inside this boundary.  A record we cannot
+   * decode is state that is there and unreadable, which is -EBADMSG
+   * and fails the bucket closed. */
+  try {
 
   /* Versioning.  Their enum is the whole of it:  DISABLED, SUSPENDED,
    * ENABLED.  RGW keeps a suspended bucket versioned and marks it
@@ -330,9 +369,23 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     }
   }
 
+  /* Public access block.  Also the attribute map, same reason. */
+  if (JSONObj* pab = p.find_obj("public_access_block"); pab) {
+    ret = from_noobaa_public_access(dpp, pab, attrs);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   ldpp_dout(dpp, 10) << "nsfs: bucket " << bucket_name
     << " took versioning from " << path << ": "
     << (versioning.empty() ? "unset" : versioning) << dendl;
+
+  } catch (const JSONDecoder::err& e) {
+    ldpp_dout(dpp, 0) << "ERROR: " << path << " has a field this gateway "
+      << "cannot decode: " << e.what() << dendl;
+    return -EBADMSG;
+  }
 
   return 0;
 }
