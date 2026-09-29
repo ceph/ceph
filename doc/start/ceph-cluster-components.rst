@@ -54,7 +54,7 @@ and Object Gateways for object storage.
        :ref:`orchestrator-cli-cephfs` and :ref:`arch-cephfs`.
      - At least one active per file system, plus a standby.
    * - :term:`Object Gateway <Ceph Object Gateway>`
-     - ``ceph-radosgw``
+     - ``radosgw``
      - An HTTP gateway that provides S3-compatible and Swift-compatible APIs.
        Needed only if you use object storage.
      - One, or more behind a load balancer.

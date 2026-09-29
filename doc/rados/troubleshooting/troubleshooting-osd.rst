@@ -321,7 +321,7 @@ archives <https://lists.ceph.io/hyperkitty/list/dev@ceph.io/>`_, and the
 `ceph-users mailing list archives
 <https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/>`_.  If there is no
 clear fix or existing bug, then :ref:`report the problem to the ceph-devel
-email list <Get Involved>`.
+email list <get-involved>`.
 
 
 .. _no-free-drive-space:
