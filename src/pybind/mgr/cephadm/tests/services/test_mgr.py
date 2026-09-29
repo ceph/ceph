@@ -1,3 +1,4 @@
+import json
 from unittest import mock
 
 from cephadm.module import CephadmOrchestrator
@@ -13,8 +14,8 @@ class TestMgrService:
                  carried_over_ports: list) -> CephadmDaemonDeploySpec:
         """Build a daemon_spec that mimics rehydration from the persisted
         DaemonDescription (which copies `ports=dd.ports`), then call
-        MgrService.prepare_create with `mgr services` returning the supplied
-        payload.
+        MgrService.prepare_create with mgr_map returning the supplied
+        services payload.
         """
         svc = MgrService(cephadm_module)
         daemon_spec = CephadmDaemonDeploySpec(
@@ -24,9 +25,9 @@ class TestMgrService:
             daemon_type='mgr',
             ports=list(carried_over_ports),
         )
-        with mock.patch.object(cephadm_module, 'check_mon_command',
-                               return_value=(0, mgr_services_payload, '')), \
-             mock.patch.object(svc, 'get_keyring_with_caps',
+        services = json.loads(mgr_services_payload) if mgr_services_payload else {}
+        cephadm_module.mock_store_set('_ceph_get', 'mgr_map', {'services': services})
+        with mock.patch.object(svc, 'get_keyring_with_caps',
                                return_value='[mgr.ceph-1.xyz]\n\tkey = X\n'), \
              mock.patch.object(svc, 'generate_config',
                                return_value=({}, [])):
@@ -65,3 +66,25 @@ class TestMgrService:
             carried,
         )
         assert out.ports == [9283, cephadm_module.service_discovery_port]
+
+    def test_get_dependencies_changes_when_module_enabled(
+            self, cephadm_module: CephadmOrchestrator):
+        # Verify that get_dependencies reflects the current active modules.
+        # This is the mechanism that causes the serve loop to detect port
+        # changes and trigger a reconfig when modules are enabled/disabled.
+
+        # Before: no modules enabled
+        cephadm_module.mock_store_set('_ceph_get', 'mgr_map', {'services': {}})
+        deps_before = MgrService.get_dependencies(cephadm_module)
+        assert deps_before == [f'sd_port:{cephadm_module.service_discovery_port}']
+
+        # After: prometheus enabled
+        cephadm_module.mock_store_set('_ceph_get', 'mgr_map', {
+            'services': {'prometheus': 'http://192.0.2.10:9283/'}
+        })
+        deps_after = MgrService.get_dependencies(cephadm_module)
+        assert deps_after == ['port:9283', f'sd_port:{cephadm_module.service_discovery_port}']
+
+        # The difference between deps_before and deps_after is what the serve
+        # loop detects -- this is what triggers the reconfig
+        assert deps_before != deps_after
