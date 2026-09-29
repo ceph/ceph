@@ -91,25 +91,30 @@ function cleanup() {
 	[ ! "${ID_MAX_DIR}" ] && return
 	local id
 	local image
+	local status=0
 
-	# Unmap mapped devices
+	# Unmap only images created by this workunit.
 	for id in $(rbd_ids); do
 		image=$(cat "/sys/bus/rbd/devices/${id}/name")
-		rbd_unmap_image "${id}"
-		rbd_destroy_image "${image}"
+		if [ -f "${NAMES_DIR}/${image}" ]; then
+			rbd_unmap_image "${id}" || status=2
+			rbd_destroy_image "${image}" || status=2
+		fi
 	done
-	# Get any leftover images
-	for image in $(rbd ls 2>/dev/null); do
-		rbd_destroy_image "${image}"
+	# Retry only images this workunit created, not every image in the pool.
+	for image in "${NAMES_DIR}"/image.*; do
+		[ -f "${image}" ] || continue
+		rbd_destroy_image "${image##*/}" || status=2
 	done
-	wait
 	sync
 	rm -f "${SOURCE_DATA}"
+	rm -f "${NAMES_DIR}"/image.*
 	[ -d "${NAMES_DIR}" ] && rmdir "${NAMES_DIR}"
 	echo "Max concurrent rbd image count was $(get_max "${ID_COUNT_DIR}")"
 	rm -rf "${ID_COUNT_DIR}"
 	echo "Max rbd image id was $(get_max "${ID_MAX_DIR}")"
 	rm -rf "${ID_MAX_DIR}"
+	return "${status}"
 }
 
 function get_max() {
@@ -240,7 +245,7 @@ function rbd_create_image() {
 	[ $# -eq 0 ] || exit 99
 	local image=$(basename $(mktemp "${NAMES_DIR}/image.XXXXXX"))
 
-	rbd create "${image}" --size=1024
+	rbd create "${image}" --size=1024 || return 2
 	echo "${image}"
 }
 
@@ -258,9 +263,10 @@ function rbd_map_image() {
 	local id
 
 	sudo rbd map "${image}" --user "${CEPH_ID}" ${SECRET_ARGS} \
-		> /dev/null 2>&1
+		> /dev/null 2>&1 || return 2
 
 	id=$(rbd_image_id "${image}")
+	[ -n "${id}" ] || return 2
 	echo "${id}"
 }
 
@@ -295,8 +301,10 @@ function rbd_read_image() {
 		> /dev/null 2>&1
 	# Read the data at offset 2015 * 2048 bytes (where it was
 	# written) and make sure it matches the original data.
-	cmp --quiet "${SOURCE_DATA}" "/dev/rbd${id}" 0 4126720 ||
-		echo "MISMATCH!!!"
+	cmp --quiet "${SOURCE_DATA}" "/dev/rbd${id}" 0 4126720 || {
+		echo "MISMATCH!!!" >&2
+		return 2
+	}
 	# Now read starting within the pre-written data, but ending
 	# beyond it.  The rbd client zero-fills the unwritten
 	# portion at the end of a read.
@@ -325,8 +333,11 @@ function rbd_destroy_image() {
 	[ $# -eq 1 ] || exit 99
 	local image="$1"
 
-	# Don't wait for it to complete, to increase concurrency
 	rbd rm "${image}" >/dev/null 2>&1 &
+	wait "$!" || {
+		echo "failed to remove rbd image ${image}" >&2
+		return 2
+	}
 	rm -f "${NAMES_DIR}/${image}"
 }
 
@@ -337,11 +348,11 @@ function one_pass() {
 	local ids
 	local i
 
-	image=$(rbd_create_image)
-	id=$(rbd_map_image "${image}")
+	image=$(rbd_create_image) || return 2
+	id=$(rbd_map_image "${image}") || return 2
 	ids=$(rbd_ids)
 	update_maxes "${ids}"
-	for i in ${rbd_ids}; do
+	for i in ${ids}; do
 		if [ "${i}" -eq "${id}" ]; then
 			rbd_write_image "${i}"
 		else
@@ -358,9 +369,11 @@ parseargs "$@"
 
 setup
 
+pids=()
 for iter in $(seq 1 "${ITER}"); do
 	for count in $(seq 1 "${COUNT}"); do
 		one_pass &
+		pids+=("$!")
 	done
 	# Sleep longer at first, overlap iterations more later.
 	# Use awk to get sub-second granularity (see sleep(1)).
@@ -368,8 +381,11 @@ for iter in $(seq 1 "${ITER}"); do
 		awk '{ printf("%.2f\n", $1 - $1 * $2 / $3);}')
 
 done
-wait
+result=0
+for pid in "${pids[@]}"; do
+	wait "$pid" || result=2
+done
 
 cleanup
 
-exit 0
+exit "$result"
