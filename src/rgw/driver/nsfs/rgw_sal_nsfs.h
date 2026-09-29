@@ -583,7 +583,6 @@ protected:
   nsfs::ReservedNames reserved_names;
   std::string base_path;
   std::unique_ptr<nsfs::Directory> root_dir;
-  int root_fd;
   RGWSyncModuleInstanceRef sync_module;
   RGWQuotaHandler* quota_handler{nullptr};
   RGWLC* lc{nullptr};

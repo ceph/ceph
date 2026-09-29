@@ -3228,33 +3228,114 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
       stabilize = [this](const file::listing::MultipartCacheKey& key,
 	  const boost::container::flat_map<uint32_t,
 	    file::listing::MultipartPartInfo>& parts) {
-	std::optional<std::string> ns{mp_ns};
-	auto staging_name =
-	  path_strategy->bucket_dir_name(key.upload_meta, ns);
-	int dir_fd = ::openat(root_fd, (key.bucket_name + "/" +
-	  staging_name).c_str(), O_RDONLY | O_DIRECTORY);
-	if (dir_fd < 0) {
+	/* Eviction is the only thing that writes these records under
+	 * this policy, so whatever it cannot find is lost. */
+	/* ctx() and not the cct member:  eviction can run from anywhere
+	 * and a driver whose cct was never set -- the unit test's is one
+	 * -- would dereference null here rather than log. */
+	const DoutPrefix dp{ctx(), dout_subsys,
+			    "nsfs multipart stabilize: "};
+
+	/* get_root_fd(), not the root_fd member:  that member is
+	 * declared and never assigned, and this was its only reader.
+	 * An openat from an uninitialised descriptor is whatever
+	 * integer happened to be there, so the callback could not have
+	 * worked -- which is why the two defects above it had never
+	 * been seen. */
+	int bfd = ::openat(get_root_fd(), key.bucket_name.c_str(),
+			   O_RDONLY | O_DIRECTORY);
+	if (bfd < 0) {
 	  return;
 	}
-	for (auto& [num, pi] : parts) {
-	  auto fname = mpu_strategy->part_name(num);
-	  int pfd = ::openat(dir_fd, fname.c_str(), O_RDWR);
-	  if (pfd < 0) continue;
-	  NSFSUploadPartInfo upi;
-	  upi.num = pi.num;
-	  upi.size = pi.size;
-	  upi.etag = pi.etag;
-	  upi.mtime = pi.mtime;
-	  upi.cksum = pi.cksum;
-	  bufferlist bl;
-	  encode(upi, bl);
-	  std::string xn = xattr_strategy->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
-	  std::string xv = attr_on_disk(xattr_strategy.get(),
-					RGW_NSFS_ATTR_MPUPLOAD, bl);
-	  ::fsetxattr(pfd, xn.c_str(), xv.data(), xv.size(), 0);
-	  ::close(pfd);
+	auto close_bfd = make_scope_guard([bfd] { ::close(bfd); });
+
+	/* Which layout staged this upload, found rather than assumed.
+	 *
+	 * The callback has a bucket name and nothing else:  it runs
+	 * from an eviction, and resolving the bucket's profile there
+	 * would mean load_bucket() and its I/O underneath the cache.
+	 * So each layout is asked where it stages and the one whose
+	 * directory is there is the one that wrote the parts --
+	 * recognition, chained, as everywhere else.
+	 *
+	 * Before this the driver's own strategies were used
+	 * unconditionally.  A base bucket stages somewhere they do not
+	 * name, so the openat failed, the callback returned, and the
+	 * records it existed to persist went with the entry. */
+	nsfs::MPUStrategy* layouts[2] = { mpu_strategy.get(),
+					  nb_mpu_strategy.get() };
+	nsfs::XattrStrategy* xattrs[2] = { xattr_strategy.get(),
+					   nb_xattr_strategy.get() };
+
+	for (int i = 0; i < 2; ++i) {
+	  auto* mpu = layouts[i];
+	  auto* xs = xattrs[i];
+	  auto root = mpu->staging_root(&dp, bfd);
+	  if (!root) {
+	    continue;
+	  }
+	  std::string path = mpu->staging_dir_name(key.upload_meta);
+	  if (*root != ".") {
+	    path = *root + "/" + path;
+	  }
+	  int dir_fd = ::openat(bfd, path.c_str(), O_RDONLY | O_DIRECTORY);
+	  if (dir_fd < 0) {
+	    continue;
+	  }
+	  auto close_dir = make_scope_guard([dir_fd] { ::close(dir_fd); });
+
+	  for (auto& [num, pi] : parts) {
+	    auto fname = mpu->part_name(num);
+	    int pfd = ::openat(dir_fd, fname.c_str(), O_RDWR);
+	    if (pfd < 0) continue;
+	    auto close_pfd = make_scope_guard([pfd] { ::close(pfd); });
+
+	    NSFSUploadPartInfo upi;
+	    upi.num = pi.num;
+	    upi.size = pi.size;
+	    upi.etag = pi.etag;
+	    upi.mtime = pi.mtime;
+	    upi.cksum = pi.cksum;
+	    /* Where the bytes are, which the record is the only source
+	     * for once part 1 has been linked to the shared file.
+	     * Dropping these defaulted them to "its own file, offset
+	     * zero, nothing stored", so assembly read a shared part
+	     * out of the empty record file and the completed object
+	     * lost its bytes -- with the length right, because `size`
+	     * was copied and only the placement was not. */
+	    upi.shared = pi.shared;
+	    upi.offset = pi.offset;
+	    upi.stored = pi.stored;
+
+	    bufferlist bl;
+	    encode(upi, bl);
+	    std::string xn = xs->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
+	    std::string xv = attr_on_disk(xs, RGW_NSFS_ATTR_MPUPLOAD, bl);
+	    if (::fsetxattr(pfd, xn.c_str(), xv.data(), xv.size(), 0) < 0) {
+	      ldpp_dout(&dp, 0) << "ERROR: could not write the record for "
+		<< "part " << num << " of " << key.upload_meta << ": "
+		<< cpp_strerror(errno) << ";  it is lost" << dendl;
+	      continue;
+	    }
+
+	    /* and whatever the layout records for itself.  Ours is the
+	     * attribute just written;  theirs is their three. */
+	    nsfs::MPUStrategy::PartRecord rec;
+	    rec.size = upi.size;
+	    rec.stored = upi.stored;
+	    rec.offset = upi.offset;
+	    rec.shared = upi.shared;
+	    rec.etag = upi.etag;
+	    rec.mtime = upi.mtime;
+	    rec.cksum = upi.cksum;
+	    (void) mpu->write_part_record(&dp, dir_fd, fname, rec);
+	  }
+	  return;
 	}
-	::close(dir_fd);
+
+	ldpp_dout(&dp, 4) << "no staging directory for " << key.upload_meta
+	  << " in bucket " << key.bucket_name << ";  its part records are "
+	  << "not written" << dendl;
       };
     }
 

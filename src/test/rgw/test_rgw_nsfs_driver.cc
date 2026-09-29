@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include <algorithm>
+#include <array>
 #include <set>
 #include <iostream>
 #include <fstream>
@@ -569,7 +570,9 @@ public:
   int init(const DoutPrefixProvider* dpp,
 	   std::optional<bool> shares_extents = std::nullopt,
 	   file::listing::MultipartCachePolicy mp_policy =
-	     file::listing::MultipartCachePolicy::writethrough)
+	     file::listing::MultipartCachePolicy::writethrough,
+	   uint64_t mp_entries = 16, uint64_t mp_lanes = 2,
+	   uint64_t mp_parts = 2, uint64_t mp_budget = 64)
   {
     std::string cache_base = driver_base + "/cache";
     base_path = driver_base + "/root";
@@ -613,7 +616,8 @@ public:
      * large enough that nothing is ever evicted, and eviction is what
      * runs the stabilize callback.  writeback is the policy that has
      * one, so it is the policy worth testing against. */
-    init_multipart_cache(dpp, 16, 2, 2, 64, mp_policy);
+    init_multipart_cache(dpp, mp_entries, mp_lanes, mp_parts, mp_budget,
+			 mp_policy);
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
     return 0;
@@ -706,13 +710,25 @@ class NSFSDriverTest : public ::testing::Test {
       return file::listing::MultipartCachePolicy::writethrough;
     }
 
+    /* max entries, lanes, partitions, parts budget.
+     *
+     * Large enough that nothing is evicted, which is what a
+     * deployment gets.  A fixture that means to reach the eviction
+     * path -- the only thing that writes a record under writeback --
+     * shrinks it until a second upload displaces the first. */
+    virtual std::array<uint64_t, 4> mp_cache_sizes() const {
+      return {16, 2, 2, 64};
+    }
+
     void SetUp() {
       testname = get_test_name();
       bp = sf::path{sf::absolute(sf::path{base_path / testname})};
       sf::create_directories(bp / "cache");
       sf::create_directories(bp / "root");
       driver = std::make_unique<TestDriver>(bp);
-      int ret = driver->init(env->dpp, shares_extents(), mp_cache_policy());
+      const auto sz = mp_cache_sizes();
+      int ret = driver->init(env->dpp, shares_extents(), mp_cache_policy(),
+			     sz[0], sz[1], sz[2], sz[3]);
       EXPECT_EQ(ret, 0);
 
       rgw_user uid{"tenant", testname};
@@ -3060,6 +3076,93 @@ TEST_F(NSFSStridedBucketTest, ShortFinalPartStaysInTheStrideFile)
 			   ".11111111-2222-4333-8444-555555555555")));
 }
 
+/* The writeback cache, small enough to evict.
+ *
+ * Eviction is the only thing that writes a part's record under this
+ * policy, so it is the only thing that can get it wrong -- and with
+ * the configured sizes nothing is ever evicted, which is why the
+ * existing writeback test never reached it.  One entry, so a second
+ * upload displaces the first.
+ */
+class NSFSStridedEvictingBucketTest : public NSFSStridedBucketTest {
+public:
+  file::listing::MultipartCachePolicy mp_cache_policy() const override {
+    return file::listing::MultipartCachePolicy::writeback;
+  }
+  std::array<uint64_t, 4> mp_cache_sizes() const override {
+    return {1, 1, 1, 8};
+  }
+};
+
+/* An evicted part's record says where its bytes are.
+ *
+ * Under the strided layout a part lives in the shared file at an
+ * offset, and once part 1 is linked to that file the record is the
+ * only source for the placement -- a stat reports the whole upload.
+ * The eviction path copied num, size, etag, mtime and cksum and
+ * stopped, so `shared`, `offset` and `stored` defaulted to "its own
+ * file, offset zero, nothing stored".  Assembly then read a shared
+ * part out of the empty record file:  the object came back the right
+ * length, because `size` was copied, with another part's absence
+ * inside it.
+ */
+TEST_F(NSFSStridedEvictingBucketTest, AnEvictedPartRecordsItsPlacement)
+{
+  const std::string objname = "evicted.bin";
+  const std::string upload_id = "c0ffee";
+  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t stride = 64;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    std::string payload(stride, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  /* a second upload, which displaces the first and stabilises it.
+   *
+   * One is enough:  the entry reaches the evictable queue when its
+   * last reference goes, and the release that puts the second one
+   * there is what finds the queue over its high-water mark. */
+  {
+    auto other = bucket->get_multipart_upload("other.bin", "beef42");
+    ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
+			  attrs), 0);
+    write_mp_part(other.get(), acl_owner, &placement, 1,
+		  std::string(stride, 'z'));
+  }
+
+  /* the records are on disk now, and they have to say the parts are
+   * in the shared file rather than in their own */
+  const sf::path staging{bp / "root" / testname /
+			 (".multipart_" + objname + "." + upload_id)};
+  ASSERT_TRUE(sf::is_directory(staging)) << staging;
+  for (int i = 2; i <= 3; ++i) {
+    const sf::path rec{staging / fmt::format("part-{:0>5}", i)};
+    ASSERT_TRUE(sf::exists(rec)) << rec;
+    EXPECT_EQ(sf::file_size(rec), 0u)
+	<< "a shared part's record file holds no bytes, which is why its "
+	   "record has to say so";
+  }
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+  const sf::path obj{bp / "root" / testname / objname};
+  ASSERT_TRUE(sf::is_regular_file(obj)) << obj;
+  EXPECT_EQ(sf::file_size(obj), expected.size());
+  EXPECT_EQ(read_all(obj), expected)
+      << "the object was assembled from the record files rather than from "
+	 "the shared file";
+}
+
 /* A bucket in NooBaa's format, served by the driver.
  *
  * The bucket is created marked -- every bucket this gateway makes is
@@ -3588,6 +3691,88 @@ TEST_F(NSFSConvertingBucketTest, WritingPrunesTheForeignSpelling)
   EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type"));
   EXPECT_FALSE(names.contains("user.noobaa.content_type"))
       << "the object carries both spellings of its content type";
+}
+
+/* And the same, on a bucket in their format.
+ *
+ * The callback computed the staging directory with the driver's own
+ * path strategy, which names ours.  A base bucket stages under
+ * `.noobaa-nsfs_<id>/multipart-uploads/`, so the openat failed and it
+ * returned having written nothing:  under writeback the records lived
+ * only in the cache, and eviction -- the one thing that was supposed
+ * to persist them -- dropped them instead.
+ */
+class NSFSNooBaaEvictingBucketTest : public NSFSNooBaaBucketTest {
+public:
+  file::listing::MultipartCachePolicy mp_cache_policy() const override {
+    return file::listing::MultipartCachePolicy::writeback;
+  }
+  std::array<uint64_t, 4> mp_cache_sizes() const override {
+    return {1, 1, 1, 8};
+  }
+};
+
+TEST_F(NSFSNooBaaEvictingBucketTest, AnEvictedPartReachesTheirStaging)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
+
+  const std::string objname = "written/by/us.bin";
+  const std::string upload_id = "11111111-2222-4333-8444-555555555555";
+  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t stride = 64;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    std::string payload(stride, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  {
+    auto other = bucket->get_multipart_upload(
+	"other.bin", "22222222-3333-4444-8555-666666666666");
+    ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
+			  attrs), 0);
+    write_mp_part(other.get(), acl_owner, &placement, 1,
+		  std::string(stride, 'z'));
+  }
+
+  /* the records are on disk, in their staging and in both formats:
+   * ours because it is what our reader decodes, theirs because it is
+   * what their gateway reads */
+  sf::path staging;
+  for (auto& e : sf::directory_iterator(bucket_path())) {
+    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
+      staging = e.path() / "multipart-uploads" / upload_id;
+    }
+  }
+  ASSERT_TRUE(sf::is_directory(staging)) << staging;
+
+  for (int i = 1; i <= 3; ++i) {
+    const sf::path rec{staging / ("part-" + std::to_string(i))};
+    ASSERT_TRUE(sf::exists(rec)) << rec;
+    char buf[8192];
+    ssize_t len = ::listxattr(rec.c_str(), buf, sizeof(buf));
+    ASSERT_GT(len, 0) << rec << " carries no record at all";
+    std::set<std::string> names;
+    for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
+      names.insert(q);
+    }
+    EXPECT_TRUE(names.contains("user.nsfs.mp_upload")) << i;
+    EXPECT_TRUE(names.contains("user.noobaa.part_size")) << i;
+  }
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+  EXPECT_EQ(read_all(bucket_path() / objname), expected);
 }
 
 /* The upgrade:  a bucket in NooBaa's format moved to one of ours,
