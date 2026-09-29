@@ -12,6 +12,8 @@ from mgr_module import NFS_POOL_NAME as POOL_NAME
 
 from rados import Rados, LIBRADOS_ALL_NSPACES, ObjectNotFound
 
+from .exception import NFSInvalidOperation
+
 if TYPE_CHECKING:
     from nfs.module import Module
 
@@ -19,6 +21,7 @@ EXPORT_PREFIX: str = "export-"
 CONF_PREFIX: str = "conf-nfs."
 USER_CONF_PREFIX: str = "userconf-nfs."
 QOS_CONF_PREFIX: str = "qosconf-nfs."
+CEPH_USERS_CONF_PREFIX: str = "ceph-users-nfs."
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +50,22 @@ class ManualRestartRequired(NonFatalError):
         super().__init__(" ".join((msg, "(Manual Restart of NFS Pods required)")))
 
 
+def normalize_auth_entity(entity: str) -> str:
+    """Return a full auth entity name (client.<user_id>)."""
+    entity = entity.strip()
+    if not entity:
+        raise NFSInvalidOperation("empty auth entity")
+    if entity.startswith('client.'):
+        return entity
+    return f'client.{entity}'
+
+
+def entity_belongs_to_nfs_cluster(entity: str, cluster_id: str) -> bool:
+    """True if entity is the cluster key or any key under that NFS cluster."""
+    prefix = f'client.nfs.{cluster_id}'
+    return entity == prefix or entity.startswith(prefix + '.')
+
+
 def export_obj_name(export_id: int) -> str:
     """Return a rados object name for the export."""
     return f"{EXPORT_PREFIX}{export_id}"
@@ -65,6 +84,11 @@ def user_conf_obj_name(cluster_id: str) -> str:
 def qos_conf_obj_name(cluster_id: str) -> str:
     """Return a rados object name for the qos config."""
     return f"{QOS_CONF_PREFIX}{cluster_id}"
+
+
+def ceph_users_obj_name(cluster_id: str) -> str:
+    """Return a rados object name for the CEPH_USERS (client pool) config."""
+    return f"{CEPH_USERS_CONF_PREFIX}{cluster_id}"
 
 
 def available_clusters(mgr: 'Module') -> List[str]:
@@ -126,6 +150,15 @@ def restart_nfs_service(mgr: 'Module', cluster_id: str) -> None:
     This methods restarts the nfs daemons
     '''
     completion = mgr.service_action(action='restart',
+                                    service_name='nfs.' + cluster_id)
+    orchestrator.raise_if_exception(completion)
+
+
+def redeploy_nfs_service(mgr: 'Module', cluster_id: str) -> None:
+    '''
+    Redeploy NFS daemons so they pick up rotated daemon keyrings.
+    '''
+    completion = mgr.service_action(action='redeploy',
                                     service_name='nfs.' + cluster_id)
     orchestrator.raise_if_exception(completion)
 
