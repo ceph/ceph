@@ -14,6 +14,11 @@ export class CdTableFetchDataContext {
    * reset the data table to the correct state.
    */
   error: Function;
+  /**
+   * Props of the columns that are currently visible in the table. Lets the
+   * consumer skip fetching data that is only needed by hidden columns.
+   */
+  visibleColumns: Array<string | number> = [];
   pageInfo: PageInfo = new PageInfo();
   search = '';
   sort = '+name';
