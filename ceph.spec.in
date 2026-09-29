@@ -1730,6 +1730,15 @@ gRPC API as a client.
 %autosetup -p1 -n @TARBALL_BASENAME@
 
 %build
+# ppc64le + gcc14 + LTO causes boost::context vector register corruption
+# leading to RGW crash. See: https://tracker.ceph.com/issues/80958
+%ifarch ppc64le
+%if 0%{?fedora} >= 40 || 0%{?rhel} >= 10
+# Disable LTO on ppc64le for gcc14
+%define _lto_cflags %{nil}
+%endif
+%endif
+
 
 %if 0%{with cephfs_java}
 # Find jni.h
