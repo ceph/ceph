@@ -25,6 +25,8 @@
 #include "rgw_tag.h"
 #include "rgw_lc.h"
 #include "rgw_lc_s3.h"
+#include "rgw_cors.h"
+#include "rgw_cors_s3.h"
 #include "rgw_xml.h"
 #include "common/XMLFormatter.h"
 #include "common/errno.h"
@@ -710,6 +712,101 @@ int from_noobaa_lifecycle(const DoutPrefixProvider* dpp, CephContext* cct,
   return 0;
 }
 
+/* cors_configuration_rules.
+ *
+ * Rendered and handed to RGW's CORS parser, for the reason lifecycle
+ * is:  what we accept is what PutBucketCors accepts, rather than a
+ * second copy of its rules.  Theirs requires allowed_methods and
+ * allowed_origins and constrains neither, while RGWCORSRule_S3
+ * rejects a method outside GET, POST, DELETE, HEAD, PUT and COPY, an
+ * id over 255 characters, a rule with no origin, an origin or header
+ * failing validate_name_string(), and a non-integer max age.
+ *
+ * The rule-count limit is the op's rather than the parser's, and is
+ * applied here too:  a configuration past it is one PutBucketCors
+ * refuses, and CORS decides which origins a browser may reach. */
+int from_noobaa_cors(const DoutPrefixProvider* dpp, CephContext* cct,
+		     JSONObj* rules, const std::string& bucket_name,
+		     Attrs& attrs)
+{
+  XMLFormatter f;
+  f.open_object_section("CORSConfiguration");
+
+  size_t count = 0;
+  for (auto ri = rules->find_first(); !ri.end(); ++ri) {
+    JSONObj* r = *ri;
+    ++count;
+    f.open_object_section("CORSRule");
+
+    std::string id;
+    if (JSONDecoder::decode_json("id", id, r)) {
+      encode_xml("ID", id, &f);
+    }
+
+    static constexpr std::pair<const char*, const char*> lists[] = {
+      { "allowed_methods", "AllowedMethod" },
+      { "allowed_origins", "AllowedOrigin" },
+      { "allowed_headers", "AllowedHeader" },
+      { "expose_headers",  "ExposeHeader" },
+    };
+    for (const auto& [theirs, ours] : lists) {
+      if (JSONObj* a = r->find_obj(theirs); a) {
+	for (auto vi = a->find_first(); !vi.end(); ++vi) {
+	  encode_xml(ours, (*vi)->get_data(), &f);
+	}
+      }
+    }
+
+    int64_t max_age = 0;
+    if (JSONDecoder::decode_json("max_age_seconds", max_age, r)) {
+      encode_xml("MaxAgeSeconds", max_age, &f);
+    }
+
+    f.close_section();
+  }
+  f.close_section();
+
+  if (count == 0) {
+    return 0;
+  }
+
+  int max_num = cct->_conf->rgw_cors_rules_max_num;
+  if (max_num < 0) {
+    max_num = 100;
+  }
+  if (count > static_cast<size_t>(max_num)) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has " << count
+      << " CORS rules, more than PutBucketCors accepts" << dendl;
+    return -EBADMSG;
+  }
+
+  bufferlist xml;
+  f.flush(xml);
+
+  RGWCORSXMLParser_S3 parser(dpp, cct);
+  if (!parser.init()) {
+    return -EIO;
+  }
+  if (!parser.parse(xml.c_str(), xml.length(), 1)) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << " has a CORS "
+      << "rule PutBucketCors would refuse" << dendl;
+    return -EBADMSG;
+  }
+
+  auto* config = static_cast<RGWCORSConfiguration_S3*>(
+    parser.find_first("CORSConfiguration"));
+  if (!config) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name << ": their CORS "
+      << "rules did not render as a configuration" << dendl;
+    return -EBADMSG;
+  }
+
+  bufferlist bl;
+  config->encode(bl);
+  attrs[RGW_ATTR_CORS] = std::move(bl);
+  return 0;
+}
+
 } // namespace
 
 int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
@@ -836,6 +933,14 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
   /* Lifecycle.  The attribute map. */
   if (JSONObj* lc = p.find_obj("lifecycle_configuration_rules"); lc) {
     ret = from_noobaa_lifecycle(dpp, dpp->get_cct(), lc, bucket_name, attrs);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  /* CORS.  The attribute map. */
+  if (JSONObj* cors = p.find_obj("cors_configuration_rules"); cors) {
+    ret = from_noobaa_cors(dpp, dpp->get_cct(), cors, bucket_name, attrs);
     if (ret < 0) {
       return ret;
     }

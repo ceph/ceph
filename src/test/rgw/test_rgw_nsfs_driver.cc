@@ -29,6 +29,7 @@
 #include "rgw_mime.h"
 #include "rgw_tag.h"
 #include "rgw_lc.h"
+#include "rgw_cors.h"
 #include "rgw_object_lock.h"
 #include "rgw_iam_policy.h"
 #include "rgw_public_access.h"
@@ -4017,6 +4018,71 @@ TEST_F(NSFSNooBaaStateTest, ALifecycleRuleWithNoActionFailsClosed)
   their_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"empty","status":"Enabled","filter":{}}])");
+
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+}
+
+/* Their CORS rules reach the attribute map, through the same parser
+ * PutBucketCors uses. */
+TEST_F(NSFSNooBaaStateTest, CorsComesFromTheirRecord)
+{
+  forget_our_state();
+
+  /* the control:  no rules in their record, no attribute */
+  their_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_CORS),
+	    bucket->get_attrs().end());
+
+  their_record("ENABLED",
+	       R"(,"cors_configuration_rules":[{"id":"web",)"
+	       R"("allowed_methods":["GET","PUT"],)"
+	       R"("allowed_origins":["https://example.com"],)"
+	       R"("allowed_headers":["x-amz-date"],)"
+	       R"("expose_headers":["ETag"],)"
+	       R"("max_age_seconds":3000}])");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto i = bucket->get_attrs().find(RGW_ATTR_CORS);
+  ASSERT_NE(i, bucket->get_attrs().end());
+
+  RGWCORSConfiguration cors;
+  auto bi = i->second.cbegin();
+  ASSERT_NO_THROW(decode(cors, bi));
+  ASSERT_EQ(cors.get_rules().size(), 1u);
+
+  RGWCORSRule* rule = cors.host_name_rule("https://example.com");
+  ASSERT_NE(rule, nullptr) << "the origin did not survive";
+  EXPECT_EQ(rule->get_max_age(), 3000u);
+  EXPECT_TRUE(rule->is_header_allowed("x-amz-date", strlen("x-amz-date")));
+}
+
+/* A method outside the set RGW knows fails the bucket closed.
+ *
+ * Their schema constrains allowed_methods to nothing at all, while
+ * RGWCORSRule_S3 refuses anything but GET, POST, DELETE, HEAD, PUT
+ * and COPY -- and a CORS rule decides which origins a browser may
+ * reach. */
+TEST_F(NSFSNooBaaStateTest, AnUnknownCorsMethodFailsClosed)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"cors_configuration_rules":[{)"
+	       R"("allowed_methods":["TRACE"],)"
+	       R"("allowed_origins":["https://example.com"]}])");
+
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+}
+
+/* A rule with no origin is one their own schema requires and RGW
+ * refuses, so an empty list fails closed rather than becoming a rule
+ * that matches nothing. */
+TEST_F(NSFSNooBaaStateTest, ACorsRuleWithNoOriginFailsClosed)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"cors_configuration_rules":[{)"
+	       R"("allowed_methods":["GET"],"allowed_origins":[]}])");
 
   EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
 }
