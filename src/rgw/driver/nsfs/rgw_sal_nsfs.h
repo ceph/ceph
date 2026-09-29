@@ -1167,7 +1167,20 @@ public:
   /* Test support:  point a bucket at a profile the driver does not
    * hold, so the selection can be shown choosing between two formats
    * while only one real one exists.  The caller owns the profile. */
-  void set_profile_for_test(const nsfs::BucketProfile* p) { profile = p; }
+  void set_profile_for_test(const nsfs::BucketProfile* p) {
+    profile = p;
+    apply_format();
+  }
+
+  /* Point the bucket's directory at the format's strategies.
+   *
+   * An FSEnt carries its own and every child inherits its parent's, so
+   * seeding the bucket's directory is what puts a whole subtree in the
+   * bucket's format.  Called wherever `profile` changes.  Without it
+   * the subtree keeps the driver's, which are seeded on the root at
+   * initialize() and are ours -- the wrong format for every object
+   * read and written through an FSEnt in a base bucket. */
+  void apply_format();
 
   /* The strategies this bucket's format selects.
    *
@@ -1286,6 +1299,15 @@ private:
   std::string dm_version_id;
 
 public:
+  /* The strategies this object's bucket is in.
+   *
+   * Through the bucket, not the driver:  the driver's are ours, and a
+   * base bucket's objects are in NooBaa's format.  They fall back to
+   * the driver's for an object with no bucket, which is what a few
+   * internal paths construct. */
+  nsfs::XattrStrategy* xattr_strategy() const;
+  nsfs::PathStrategy* path_strategy() const;
+
   struct NSFSReadOp : ReadOp {
     NSFSObject* source;
     int64_t part_ofs{0};
@@ -1703,6 +1725,11 @@ private:
    * the bucket rather than the driver, because which layout a tree
    * stages in is a property of its format. */
   nsfs::MPUStrategy* mpu_strategy() const;
+  /* and the other two, for the same reason:  the object this upload
+   * completes into is written in the bucket's format, not the
+   * driver's */
+  nsfs::XattrStrategy* xattr_strategy() const;
+  nsfs::PathStrategy* path_strategy() const;
 
   /* The directory holding staging directories, where the format keeps
    * them somewhere other than the bucket.  Held because the staging

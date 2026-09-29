@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include <algorithm>
+#include <set>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -3293,6 +3294,117 @@ TEST_F(NSFSNooBaaBucketTest, RecordsWhatTheirCompletionReads)
   EXPECT_EQ(field("bucket"), bucket->get_name());
   EXPECT_EQ(parser.find_obj("upload_id"), nullptr) << text;
   EXPECT_EQ(parser.find_obj("lock_settings"), nullptr) << text;
+}
+
+/* An ordinary object in a base bucket is written in their names.
+ *
+ * Not multipart:  the multipart paths were converted when they moved
+ * onto NSFSBucket::mpu_strategy(), and the object paths were not,
+ * because an FSEnt carries the strategies it inherited from the
+ * driver's root.  So a bucket whose profile was base, whose format was
+ * noobaa and whose staging layout was theirs still wrote
+ * `user.nsfs.rgw.etag` where their reader wants `user.content_md5`.
+ *
+ * The names are asserted on disk rather than through the driver.
+ * Reading back through the same strategy that wrote would agree with
+ * itself whichever format it used, which is the tautology this has to
+ * avoid;  their gateway reads the names.
+ */
+TEST_F(NSFSNooBaaBucketTest, ObjectsAreWrittenInTheirNames)
+{
+  const std::string objname = "plain.bin";
+  auto obj = bucket->get_object(rgw_obj_key(objname));
+  ASSERT_NE(obj.get(), nullptr);
+
+  auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					  acl_owner, nullptr, 0, testname);
+  ASSERT_EQ(writer->prepare(null_yield), 0);
+  bufferlist bl;
+  bl.append("some bytes");
+  const int len = bl.length();
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, len), 0);
+
+  Attrs attrs;
+  bufferlist ct;
+  ct.append("text/plain");
+  attrs[RGW_ATTR_CONTENT_TYPE] = ct;
+  bufferlist meta;
+  meta.append("green");
+  attrs[std::string(RGW_ATTR_META_PREFIX) + "colour"] = meta;
+
+  ceph::real_time mtime;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  ASSERT_EQ(writer->complete(len, etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), 0);
+
+  const sf::path p{bucket_path() / objname};
+  ASSERT_TRUE(sf::is_regular_file(p)) << p;
+
+  char buf[8192];
+  ssize_t nlen = ::listxattr(p.c_str(), buf, sizeof(buf));
+  ASSERT_GT(nlen, 0);
+  std::set<std::string> names;
+  for (const char* q = buf; q < buf + nlen; q += strlen(q) + 1) {
+    names.insert(q);
+  }
+
+  EXPECT_TRUE(names.contains("user.noobaa.content_type")) << "content type";
+  EXPECT_TRUE(names.contains("user.colour")) << "user metadata";
+  EXPECT_FALSE(names.contains("user.nsfs.rgw.content_type"));
+  EXPECT_FALSE(names.contains("user.nsfs.user.rgw.x-amz-meta-colour"));
+
+  /* and reading it back gives the logical keys, through their parser */
+  auto rd = bucket->get_object(rgw_obj_key(objname));
+  ASSERT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
+  auto& got = rd->get_attrs();
+  auto it = got.find(RGW_ATTR_CONTENT_TYPE);
+  ASSERT_NE(it, got.end()) << "content type did not come back";
+  EXPECT_EQ(it->second.to_str(), "text/plain");
+}
+
+/* The control:  the same write in a strong bucket keeps our names.
+ *
+ * Without it the test above passes for a driver that writes NooBaa's
+ * names everywhere, which is the other half of the same defect. */
+TEST_F(NSFSBucketTest, ObjectsInAMarkedBucketKeepOurNames)
+{
+  const std::string objname = "plain.bin";
+  auto obj = bucket->get_object(rgw_obj_key(objname));
+  auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					  acl_owner, nullptr, 0, testname);
+  ASSERT_EQ(writer->prepare(null_yield), 0);
+  bufferlist bl;
+  bl.append("some bytes");
+  const int len = bl.length();
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, len), 0);
+
+  Attrs attrs;
+  bufferlist ct;
+  ct.append("text/plain");
+  attrs[RGW_ATTR_CONTENT_TYPE] = ct;
+
+  ceph::real_time mtime;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  ASSERT_EQ(writer->complete(len, etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), 0);
+
+  char buf[8192];
+  const sf::path p{bp / "root" / testname / objname};
+  ssize_t nlen = ::listxattr(p.c_str(), buf, sizeof(buf));
+  ASSERT_GT(nlen, 0);
+  std::set<std::string> names;
+  for (const char* q = buf; q < buf + nlen; q += strlen(q) + 1) {
+    names.insert(q);
+  }
+  EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type"));
+  EXPECT_FALSE(names.contains("user.noobaa.content_type"));
 }
 
 /* Theirs does move one, because their file IS the size.
