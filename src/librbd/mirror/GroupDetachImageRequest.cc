@@ -98,23 +98,13 @@ void GroupDetachImageRequest<I>::handle_prepare_group_images(int r) {
     return;
   }
 
-  validate_image();
-}
-
-template <typename I>
-void GroupDetachImageRequest<I>::validate_image() {
-  ldout(m_cct, 10) << dendl;
-
   ceph_assert(m_detach_image_index >= 0);
   auto& mirror_image = m_mirror_images[m_detach_image_index];
   m_original_mirror_image = mirror_image;
 
-  if (mirror_image.type != cls::rbd::MIRROR_IMAGE_TYPE_GROUP) {
-    lderr(m_cct) << "invalid mirror image type: " << mirror_image.type
-                 << dendl;
-
-    m_ret_val = -EINVAL;
-    close_images();
+  if (mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE) {
+    ldout(m_cct, 10) << "resuming a partially completed image detach" << dendl;
+    create_primary_group_snapshot();
     return;
   }
 

@@ -50,11 +50,14 @@ private:
    *                               v                         (on error)   *   *
    *                            VALIDATE_IMAGES * * * * * * * * * * * * * *   *
    *                               |                                      *   *
-   *                               V                         (on error)   *   *
+   *                               v                         (on error)   *   *
+   *                            LIST_GROUP_SNAPSHOTS  * * * * * * * * * * *   *
+   *                               |                                      *   *
+   *                               v                         (on error)   *   *
    *                            SET_MIRROR_GROUP_ENABLING * * * * * * * * *   *
    *                               |                                      *   *
-   *  (complete snapshot present)  v                         (on error)   *   *
-   *        < - - - - - - - - - CHECK_PRIMARY_GROUP_SNAP_COMPLETE * * * * *   *
+   *  (complete snapshot present)  v                                      *   *
+   *        / - - - - - - - - - CHECK_PRIMARY_GROUP_SNAP_COMPLETE         *   *
    *        |                      | (complete snapshot absent)           *   *
    *        |                      |                                      *   *
    *        v                      v (incomplete)            (on error)   *   *
@@ -74,6 +77,9 @@ private:
    *        *                      |                                      *   *
    *        *                      v                                      *   *
    *        *                   GROUP_UNLINK_PEER                         *   *
+   *        *                      |                                      *   *
+   *        *                      v                                      *   *
+   *        *                   NOTIFY_GROUP_MEMBERSHIPS_UPDATED          *   *
    *        *                      |                                      *   *
    *        *                      v                                      *   *
    *        *                   NOTIFY_MIRRORING_WATCHER                  *   *
@@ -122,11 +128,15 @@ private:
 
   void validate_images();
 
+  void list_group_snapshots();
+  void handle_list_group_snapshots(int r);
+
+  int validate_snapshot_dependencies();
+
   void set_mirror_group_enabling();
   void handle_set_mirror_group_enabling(int r);
 
   void check_primary_group_snap_complete();
-  void handle_check_primary_group_snap_complete(int r);
 
   void fetch_global_image_ids();
 
@@ -147,6 +157,9 @@ private:
 
   void group_unlink_peer();
   void handle_group_unlink_peer(int r);
+
+  void notify_group_memberships_updated();
+  void handle_notify_group_memberships_updated(int r);
 
   void notify_mirroring_watcher();
   void handle_notify_mirroring_watcher(int r);
