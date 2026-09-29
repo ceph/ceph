@@ -132,6 +132,24 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_info(int r) {
     move_to_trash();
     return;
   } else if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
+    if (m_mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_GROUP) {
+      cls::rbd::GroupSpec group_spec;
+      r = librbd::cls_client::image_group_get(
+        &m_io_ctx, librbd::util::header_name(m_local_image_id), &group_spec);
+      if (r < 0) {
+        derr << "failed to read group membership: " << cpp_strerror(r) << dendl;
+        finish(r);
+        return;
+      }
+      if (!group_spec.is_valid()) {
+        // An unattached image can be left half removed by competing image
+        // creation. Finish removing it before retrying. An image that still
+        // belongs to a group must keep the normal disable path.
+        move_to_trash();
+        return;
+      }
+    }
+
     dout(5) << "local image mirroring is in disabling state" << dendl;
     finish(-ERESTART);
     return;
@@ -180,7 +198,9 @@ template <typename I>
 void PrepareLocalImageRequest<I>::handle_move_to_trash(int r) {
   dout(10) << ": r=" << r << dendl;
 
-  finish(-ENOENT);
+  // Continue creation only after removal succeeded. A lock or I/O error
+  // must leave bootstrap retrying instead of creating over the old image.
+  finish(r == 0 ? -ENOENT : r);
 }
 
 template <typename I>

@@ -67,12 +67,15 @@ private:
    *    v
    * GET_MIRROR_INFO
    *    |
-   *    | (if the image mirror state is CREATING)
-   *    v
-   * TRASH_MOVE
-   *    |
-   *    v
-   * <finish>
+   *    + -- standalone CREATING --------------------------> TRASH_MOVE
+   *    |                                                        |
+   *    + -- GROUP DISABLING --> READ_GROUP_MEMBERSHIP           |
+   *    |                              |                         |
+   *    |                              + -- no group ----------> +
+   *    |                              |                         |
+   *    |                              | linked or read error    |
+   *    |                              v                         v
+   *    + ------------------------> <finish> <------------------ +
    *
    * @endverbatim
    */

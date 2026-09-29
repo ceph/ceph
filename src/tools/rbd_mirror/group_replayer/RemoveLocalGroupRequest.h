@@ -8,6 +8,8 @@
 #include "include/rados/librados_fwd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/mirror/Types.h"
+#include <deque>
+#include <map>
 #include <string>
 
 struct Context;
@@ -35,7 +37,8 @@ public:
       librbd::asio::ContextWQ *work_queue,
       Context *on_finish) {
     return new RemoveLocalGroupRequest(io_ctx, global_group_id,
-                                       resync, work_queue, on_finish);
+                                       resync, work_queue,
+                                       on_finish);
   }
 
   RemoveLocalGroupRequest(
@@ -71,9 +74,11 @@ private:
    *    v
    * REMOVE_IMAGE_FROM_GROUP <--
    *    |                      |
-   *    v                      |
-   * IMAGE_TRASH_MOVE ----------
-   *    |
+   *    v                      |  fail
+   * IMAGE_TRASH_MOVE -------- + --------> RESTORE_IMAGE_TO_GROUP
+   *    |                                          |
+   *    |                                          v
+   *    |                                       <finish>
    *    v
    * REMOVE_LOCAL_GROUP
    *    |
@@ -101,9 +106,11 @@ private:
   std::string m_group_id;
   std::string m_group_name;
   uint64_t m_num_images;
+  int m_ret_val = 0;
 
   bufferlist m_out_bl;
   std::list<cls::rbd::GroupImageStatus> m_images;
+  std::deque<std::pair<int64_t, std::string>> m_retained_images;
 
   cls::rbd::MirrorGroup m_mirror_group;
   librbd::mirror::PromotionState m_promotion_state;
@@ -129,11 +136,17 @@ private:
   void get_mirror_images();
   void handle_get_mirror_images(int r);
 
+  void detach_retained_image();
+  void handle_detach_retained_image(int r);
+
   void remove_image_from_group();
   void handle_remove_image_from_group(int r);
 
   void move_image_to_trash();
   void handle_move_image_to_trash(int r);
+
+  void restore_image_to_group();
+  void handle_restore_image_to_group(int r);
 
   void remove_local_group();
   void handle_remove_local_group(int r);

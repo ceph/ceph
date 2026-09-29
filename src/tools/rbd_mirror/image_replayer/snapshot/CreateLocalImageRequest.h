@@ -78,12 +78,13 @@ private:
    * DISABLE_MIRROR_IMAGE < * * * * * *
    *    |                             *
    *    v                             *
-   * REMOVE_MIRROR_IMAGE              *
+   * REMOVE_MIRROR_IMAGE * * > <finish> (create failed)
    *    |                             *
    *    v                             *
    * ADD_MIRROR_IMAGE                 *
    *    |                             *
-   *    v               (id exists)   *
+   *    |          (id exists or error)*
+   *    v                             *
    * CREATE_LOCAL_IMAGE * * * * * * * *
    *    |
    *    v
@@ -100,6 +101,7 @@ private:
   PoolMetaCache* m_pool_meta_cache;
   ProgressContext* m_progress_ctx;
   StateBuilder<ImageCtxT>* m_state_builder;
+  int m_ret_val = 0;
 
   void disable_mirror_image();
   void handle_disable_mirror_image(int r);
