@@ -102,4 +102,50 @@ public:
   const char* name() const override { return "rgw"; }
 };
 
+/* NooBaa's:  one JSON record per bucket in a store outside the tree.
+ *
+ * `<config_root>/buckets/<name>.json`.  This is the reader the interface
+ * exists for -- the thing `bucket_info_key()` structurally could not
+ * name.
+ *
+ * WHERE THE ADDRESS COMES FROM.  `rgw_nsfs_noobaa_config_root`, held by
+ * us rather than resolved the way NooBaa resolves it.  Theirs comes from
+ * `/etc/noobaa.conf.d`, optionally redirected by a `config_dir_redirect`
+ * file inside it (`config.js`, `_get_config_root()`).  The store itself
+ * sits on the shared filesystem beside the data and survives their
+ * package being removed;  that pointer in `/etc` need not, and a
+ * bucket's retention settings must not depend on a step of the cutover
+ * that nobody thinks of as data.
+ *
+ * WE NEVER WRITE IT.  Not a preference:  Madhu, 2026-09-29 -- NooBaa
+ * owns the shared root entirely and nothing populates it from outside.
+ *
+ * WHAT IS MAPPED, AND WHAT IS NOT.  Versioning and the creation date,
+ * which is what a base bucket loses today and what silently costs
+ * versions:  a bucket that reads as unversioned takes a PUT in place
+ * instead of demoting the current version into `.versions/`.
+ *
+ * `owner_account` is read and not applied.  It is an account id in
+ * their store, and turning one into an `rgw_owner` needs the account
+ * import;  a base bucket's owner is already whatever load_bucket()
+ * seeds.  `path` likewise -- placement is a path and the fileset is
+ * observed, not stored (ACCOUNT_METADATA.md 8.1), but nothing consumes
+ * it here yet.  Their optional features -- policy, lifecycle, CORS,
+ * encryption, website, public access block, object lock, tags -- are
+ * each a shape translation into the attribute map and are the step
+ * after this one. */
+class NooBaaBucketStateStrategy : public BucketStateStrategy {
+  std::string config_root;
+
+public:
+  explicit NooBaaBucketStateStrategy(std::string root)
+    : config_root(std::move(root)) {}
+
+  int load(const DoutPrefixProvider* dpp, int dir_fd,
+	   const std::string& bucket_name,
+	   Attrs& attrs, RGWBucketInfo& info) const override;
+
+  const char* name() const override { return "noobaa"; }
+};
+
 }}} // namespace rgw::sal::nsfs

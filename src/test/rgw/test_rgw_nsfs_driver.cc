@@ -3355,6 +3355,115 @@ public:
   sf::path bucket_path() const { return bp / "root" / testname; }
 };
 
+/* A base bucket whose state is where NooBaa keeps it.
+ *
+ * The config root is set before the driver is built, because that is
+ * when the reader is constructed:  an address we were not given means
+ * do not consult a store. */
+class NSFSNooBaaStateTest : public NSFSNooBaaBucketTest {
+public:
+  sf::path conf_root() const {
+    return sf::absolute(sf::path{base_path / get_test_name()}) / "noobaa-conf";
+  }
+
+  void SetUp() override {
+    sf::create_directories(conf_root() / "buckets");
+    g_conf().set_val("rgw_nsfs_noobaa_config_root", conf_root().string());
+    g_conf().apply_changes(nullptr);
+    NSFSNooBaaBucketTest::SetUp();
+  }
+
+  void TearDown() override {
+    NSFSNooBaaBucketTest::TearDown();
+    g_conf().set_val("rgw_nsfs_noobaa_config_root", "");
+    g_conf().apply_changes(nullptr);
+  }
+
+  /* A tree we did not write.  The fixture creates its bucket through
+   * the SAL, which is the only way to get a Bucket, and that writes our
+   * attribute;  a bucket NooBaa made carries no such thing. */
+  void forget_our_state() {
+    ASSERT_EQ(::removexattr((bp / "root" / testname).c_str(),
+			    "user.nsfs.bucket_info"), 0);
+  }
+
+  void their_record(const char* versioning, const char* created =
+		    "2026-01-02T03:04:05.000Z") {
+    std::string doc = std::string(
+      "{\"_id\":\"6560e1f1c0ffee0000000001\",\"name\":\"") + testname +
+      "\",\"owner_account\":\"6560e1f1c0ffee0000000002\""
+      ",\"versioning\":\"" + versioning + "\""
+      ",\"path\":\"/ibm/gpfs/noobaadata/" + testname + "\""
+      ",\"should_create_underlying_storage\":true"
+      ",\"creation_date\":\"" + created + "\"}";
+    write_file(conf_root() / "buckets" / (testname + ".json"), doc);
+  }
+};
+
+/* Their versioning reaches RGW, which is what a base bucket loses today.
+ *
+ * A bucket that reads as unversioned takes a PUT in place instead of
+ * demoting the current version into .versions/, so this is the silent
+ * data loss and not a missing feature. */
+TEST_F(NSFSNooBaaStateTest, VersioningComesFromTheirRecord)
+{
+  forget_our_state();
+
+  /* the control:  with no record it is unversioned, so the assertion
+   * below can fail */
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_FALSE(bucket->get_info().versioned())
+      << "unversioned without a record is the premise of this test";
+
+  their_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_TRUE(bucket->get_info().versioned());
+  EXPECT_TRUE(bucket->get_info().versioning_enabled());
+}
+
+/* Suspended is versioned and suspended, not unversioned:  the bucket
+ * still holds versions. */
+TEST_F(NSFSNooBaaStateTest, SuspendedIsVersionedAndSuspended)
+{
+  forget_our_state();
+  their_record("SUSPENDED");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_TRUE(bucket->get_info().versioned());
+  EXPECT_FALSE(bucket->get_info().versioning_enabled());
+}
+
+/* Ours wins where it exists.
+ *
+ * The chain runs the opposite way to the object chain:  a base
+ * bucket's objects are in their format, but its state is in ours
+ * wherever we have written any. */
+TEST_F(NSFSNooBaaStateTest, OurStateWinsOverTheirs)
+{
+  their_record("ENABLED");
+
+  /* our attribute is still there, from create(), and says nothing
+   * about versioning */
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_FALSE(bucket->get_info().versioned())
+      << "their record was consulted for a bucket that has state of ours";
+}
+
+/* A record we cannot make sense of fails the bucket closed, the same
+ * as unreadable state of our own. */
+TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
+{
+  forget_our_state();
+
+  write_file(conf_root() / "buckets" / (testname + ".json"),
+	     "this is not JSON");
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+
+  their_record("PERHAPS");
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG)
+      << "a versioning value that is none of theirs was accepted";
+}
+
 /* An upload NooBaa started, enumerated by us.
  *
  * The tree is written by hand in their shape -- not through their

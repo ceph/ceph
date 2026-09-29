@@ -3233,6 +3233,20 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   path_strategy = std::make_unique<nsfs::SentinelPathStrategy>();
   bucket_state_strategy = std::make_unique<nsfs::RgwBucketStateStrategy>();
 
+  /* Their bucket records, if we were given the address of a store.
+   * Unset means do not consult one, which is every deployment that is
+   * not reading a NooBaa tree. */
+  {
+    const auto& nb_root =
+      g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+    if (!nb_root.empty()) {
+      nb_bucket_state_strategy =
+	std::make_unique<nsfs::NooBaaBucketStateStrategy>(nb_root);
+      ldpp_dout(dpp, 1) << "nsfs: reading NooBaa bucket state from "
+	<< nb_root << dendl;
+    }
+  }
+
   nb_xattr_strategy = std::make_unique<nsfs::NooBaaXattrStrategy>();
   nb_path_strategy = std::make_unique<nsfs::NooBaaPathStrategy>();
   nb_mpu_strategy = std::make_unique<nsfs::NooBaaMPUStrategy>();
@@ -5259,6 +5273,17 @@ nsfs::BucketStateStrategy* NSFSBucket::bucket_state_strategy() const
 					 : driver->get_bucket_state_strategy();
 }
 
+nsfs::BucketStateStrategy* NSFSBucket::bucket_state_fallback() const
+{
+  /* only a base bucket has anything in their store to fall back to;
+   * a marked tree is one we wrote */
+  const auto* p = get_profile();
+  if (p && (p->extensions != nsfs::EXTENSIONS_NONE)) {
+    return nullptr;
+  }
+  return driver->get_noobaa_bucket_state_strategy();
+}
+
 nsfs::PathStrategy* NSFSBucket::path_strategy() const
 {
   auto* f = get_format();
@@ -6405,6 +6430,16 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   RGWBucketInfo bak_info = info;
   ret = bucket_state_strategy()->load(dpp, dir->get_fd(), get_name(),
 				      attrs, info);
+  if (ret == -ENOENT) {
+    /* Nothing of ours.  A base bucket may still have a record in
+     * NooBaa's store, and that is where its versioning lives.  When
+     * the chain is consulted is decided here and not inside either
+     * strategy, so that authoritative-with-ours-as-cache and
+     * recovery-only remain reachable without redesign. */
+    auto* theirs = bucket_state_fallback();
+    ret = theirs ? theirs->load(dpp, dir->get_fd(), get_name(), attrs, info)
+		 : -ENOENT;
+  }
   if (ret == -ENOENT) {
     // TODO dang: fake info up (UID to owner conversion?)
     info = bak_info;

@@ -570,6 +570,8 @@ protected:
    * because which format a bucket is in is not known until it is
    * loaded, and constructing a strategy costs nothing. */
   std::unique_ptr<nsfs::BucketStateStrategy> bucket_state_strategy;
+  /* null unless rgw_nsfs_noobaa_config_root names a store */
+  std::unique_ptr<nsfs::BucketStateStrategy> nb_bucket_state_strategy;
   std::unique_ptr<nsfs::XattrStrategy> nb_xattr_strategy;
   std::unique_ptr<nsfs::PathStrategy> nb_path_strategy;
   std::unique_ptr<nsfs::MPUStrategy> nb_mpu_strategy;
@@ -1068,6 +1070,9 @@ public:
   nsfs::BucketStateStrategy* get_bucket_state_strategy() {
     return bucket_state_strategy.get();
   }
+  nsfs::BucketStateStrategy* get_noobaa_bucket_state_strategy() {
+    return nb_bucket_state_strategy.get();
+  }
   nsfs::XattrStrategy* get_noobaa_xattr_strategy() {
     return nb_xattr_strategy.get();
   }
@@ -1383,6 +1388,15 @@ public:
   nsfs::PathStrategy* path_strategy() const;
   nsfs::MPUStrategy* mpu_strategy() const;
   nsfs::BucketStateStrategy* bucket_state_strategy() const;
+  /* The other end of the bucket-state chain, or null.
+   *
+   * Runs the opposite way to the object chain, and deliberately.  A
+   * base bucket's *objects* are in NooBaa's format, so theirs is the
+   * primary there.  A base bucket's *state* is ours where it exists,
+   * because bucket configuration is the one thing written in our form
+   * while a bucket is still base -- so ours is the primary here and
+   * their store answers only for a bucket that has none. */
+  nsfs::BucketStateStrategy* bucket_state_fallback() const;
 
   /* The other end of the read chain, or null.
    *
