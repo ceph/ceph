@@ -16,6 +16,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -118,6 +119,28 @@ public:
   struct StagedUpload {
     std::string key;
     std::string upload_id;
+    std::string bucket;
+
+    /* What a format records about the upload beyond its identity.
+     *
+     * Read rather than invented:  NooBaa's completion path takes
+     * content_type, content_encoding, xattr, storage_class and
+     * lock_settings out of their meta file and puts them on the
+     * finished object (`namespace_fs.js:2024`), so an upload we start
+     * and their gateway finishes loses each of these if we do not
+     * write it.  The reader half does not fill them in;  nothing asks
+     * yet.
+     *
+     * Object lock is flat here and nested where a format writes it.
+     * Keeping RGWObjectRetention out of this interface costs three
+     * strings, and the strategies deal in what is on disk. */
+    std::string content_type;
+    std::string content_encoding;
+    std::string storage_class;
+    std::map<std::string, std::string> xattr;  /* user metadata, unprefixed */
+    std::string retention_mode;                /* GOVERNANCE | COMPLIANCE */
+    std::string retain_until;                  /* ISO 8601 */
+    std::string legal_hold;                    /* ON | OFF */
   };
 
   virtual bool staged_upload(const DoutPrefixProvider* dpp, int root_fd,
@@ -217,6 +240,26 @@ public:
   virtual std::optional<PartTarget> part_target(
       uint32_t part_num, std::optional<uint64_t> stride) const = 0;
 
+  /* Where a part has to move to, once its true length is known.
+   *
+   * part_target() is asked before the body has been read and answers
+   * from the upload's stride, so a part which turns out to be a
+   * different length is not necessarily where this layout can read it
+   * from.  Ours can:  the stride's file holds every shared part at the
+   * offset its record gives, and a short part simply does not fill its
+   * slot.  NooBaa's file IS the size -- `parts-size-N` holds N-sized
+   * parts at N * (num - 1) -- so a part which is not the stride is in
+   * the wrong file, and their reader would open one that does not
+   * exist.
+   *
+   * Nothing means the part stays where it was written, which is the
+   * answer whenever `stored` equals the stride.  S3 requires every
+   * part but the last to be equal, so at most one part per upload
+   * moves. */
+  virtual std::optional<PartTarget> relocation_target(
+      uint32_t part_num, uint64_t stored,
+      std::optional<uint64_t> stride) const = 0;
+
   /* What a part's record says about it.
    *
    * Read per format, because the record is the staging layout's and
@@ -250,6 +293,31 @@ public:
   virtual bool part_record(const DoutPrefixProvider* dpp, int dir_fd,
 			   std::string_view pname, const Attrs& attrs,
 			   PartRecord& out) const = 0;
+
+  /* Record an upload, and record a part:  the write halves of
+   * staged_upload() and part_record().
+   *
+   * Each format writes what its own reader reads.  Ours keeps both
+   * records in one ceph-encoded attribute which the caller writes
+   * through the bucket's XattrStrategy, so these do nothing and the
+   * meta file stays empty.  NooBaa keeps the key in the meta file's
+   * content and a part's size and offset in attributes of their own,
+   * and neither is anything an XattrStrategy renders -- so theirs
+   * write directly, on the same fd and name the reader opens.
+   *
+   * The caller writes its own attribute either way.  A base bucket
+   * therefore carries both records:  theirs, which their gateway and
+   * our listing read, and ours under `user.nsfs.`, which is inert to
+   * them and is where the checksum lives.  S3 requires a checksum
+   * agreed at CreateMultipartUpload to reach CompleteMultipartUpload,
+   * and their file has nowhere to put one.
+   *
+   * `dir_fd` is the upload's staging directory. */
+  virtual int write_staged_upload(const DoutPrefixProvider* dpp, int dir_fd,
+				  const StagedUpload& su) const = 0;
+  virtual int write_part_record(const DoutPrefixProvider* dpp, int dir_fd,
+				std::string_view pname,
+				const PartRecord& rec) const = 0;
 
   /* A part as assembly sees it:  which part, where its bytes are, and
    * how many.  Read from the part records by the caller, which owns the
@@ -326,12 +394,20 @@ public:
   bool part_record(const DoutPrefixProvider* dpp, int dir_fd,
 		   std::string_view pname, const Attrs& attrs,
 		   PartRecord& out) const override;
+  int write_staged_upload(const DoutPrefixProvider* dpp, int dir_fd,
+			  const StagedUpload& su) const override;
+  int write_part_record(const DoutPrefixProvider* dpp, int dir_fd,
+			std::string_view pname,
+			const PartRecord& rec) const override;
 
   std::string part_name(uint32_t part_num) const override;
   std::optional<uint32_t> part_number(std::string_view name) const override;
 
   std::optional<PartTarget> part_target(
       uint32_t part_num, std::optional<uint64_t> stride) const override;
+  std::optional<PartTarget> relocation_target(
+      uint32_t part_num, uint64_t stored,
+      std::optional<uint64_t> stride) const override;
 
   std::string meta_name() const override;
   std::string assembled_name() const override;
@@ -373,6 +449,9 @@ class StridedMPUStrategy : public PerPartMPUStrategy {
 public:
   std::optional<PartTarget> part_target(
       uint32_t part_num, std::optional<uint64_t> stride) const override;
+  std::optional<PartTarget> relocation_target(
+      uint32_t part_num, uint64_t stored,
+      std::optional<uint64_t> stride) const override;
 
   const ReservedNames& reserved_names() const override;
 
@@ -419,6 +498,11 @@ public:
   bool part_record(const DoutPrefixProvider* dpp, int dir_fd,
 		   std::string_view pname, const Attrs& attrs,
 		   PartRecord& out) const override;
+  int write_staged_upload(const DoutPrefixProvider* dpp, int dir_fd,
+			  const StagedUpload& su) const override;
+  int write_part_record(const DoutPrefixProvider* dpp, int dir_fd,
+			std::string_view pname,
+			const PartRecord& rec) const override;
   bool upload_owner(const DoutPrefixProvider* dpp, int root_fd,
 		    std::string_view dname, ACLOwner& out) const override;
   std::optional<std::string> staging_root(const DoutPrefixProvider* dpp,
@@ -431,6 +515,9 @@ public:
 
   std::optional<PartTarget> part_target(
       uint32_t part_num, std::optional<uint64_t> stride) const override;
+  std::optional<PartTarget> relocation_target(
+      uint32_t part_num, uint64_t stored,
+      std::optional<uint64_t> stride) const override;
 
   std::string meta_name() const override;
   std::string assembled_name() const override;

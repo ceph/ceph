@@ -15,6 +15,7 @@
 #include "rgw_sal_nsfs.h"
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -24,6 +25,7 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 #include "rgw_mime.h"
+#include "common/ceph_json.h"
 
 using namespace rgw::sal;
 
@@ -213,7 +215,14 @@ std::string get_test_name()
   std::string testname =
       testing::UnitTest::GetInstance()->current_test_info()->name();
 
-  return suitename + testname;
+  /* A parameterised test's name carries the instantiation as
+   * `Suite/Fixture.Test/param`, and the result is used as a directory
+   * name.  Flatten it rather than create the intermediate levels:  the
+   * bucket is named from this too, and a bucket name with a slash in
+   * it is a hierarchy, not a bucket. */
+  std::string name = suitename + testname;
+  std::replace(name.begin(), name.end(), '/', '-');
+  return name;
 }
 
 
@@ -2979,6 +2988,69 @@ TEST_F(NSFSStridedWritebackBucketTest, StrideSurvivesWriteback)
   EXPECT_EQ(read_all(bp / "root" / testname / objname), expected);
 }
 
+namespace {
+
+std::string str_xattr(const sf::path& p, const char* name)
+{
+  char buf[64];
+  ssize_t len = ::getxattr(p.c_str(), name, buf, sizeof(buf));
+  return (len > 0) ? std::string(buf, len) : std::string{};
+}
+
+/* an upload of three parts, the last one short, through the SAL */
+void short_tail_upload(rgw::sal::Bucket* bucket, ACLOwner& acl_owner,
+		       const rgw_owner& owner, const std::string& objname,
+		       size_t part_size, size_t tail_size,
+		       std::string& expected)
+{
+  auto upload = bucket->get_multipart_upload(
+      objname, "11111111-2222-4333-8444-555555555555");
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    const size_t len = (i == 3) ? tail_size : part_size;
+    std::string payload(len, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+  ASSERT_EQ(complete_mp(bucket, upload.get(), owner, objname, part_etags), 0);
+}
+
+} /* anonymous namespace */
+
+/* Ours does not move a short part.
+ *
+ * Assembly reads every shared part out of the file the stride names,
+ * at the offset in its record, so the part is already where it can be
+ * read from and a second file would only cost a copy.  The negative
+ * case for the test below it.
+ */
+TEST_F(NSFSStridedBucketTest, ShortFinalPartStaysInTheStrideFile)
+{
+  const std::string objname = "short-tail.bin";
+  const size_t stride = 64;
+  const size_t tail = 17;
+  std::string expected;
+  short_tail_upload(bucket.get(), acl_owner, owner, objname, stride, tail,
+		    expected);
+
+  EXPECT_EQ(read_all(bp / "root" / testname / objname), expected);
+
+  /* the staging directory is gone, so what is asserted is the absence
+   * of the second file while it existed -- the upload completed, which
+   * it could not have done had the bytes been moved somewhere this
+   * layout's assembly does not read */
+  EXPECT_FALSE(sf::exists(bp / "root" / testname /
+			  (".multipart_" + objname +
+			   ".11111111-2222-4333-8444-555555555555")));
+}
+
 /* A bucket in NooBaa's format, served by the driver.
  *
  * The bucket is created marked -- every bucket this gateway makes is
@@ -3145,6 +3217,159 @@ TEST_F(NSFSNooBaaBucketTest, CreatesAnUploadOnAQuiescentTree)
   EXPECT_EQ(read_all(bucket_path() / objname), expected);
 }
 
+/* What their completion path reads out of the meta file.
+ *
+ * `complete_object_upload` takes content_type, content_encoding,
+ * xattr, storage_class and lock_settings out of create_object_upload
+ * and puts them on the finished object (`namespace_fs.js:2024`), so
+ * an upload we start and their gateway finishes loses each of these
+ * if we do not write it.  Nothing of ours reads them back, which is
+ * why they need a test of their own.
+ *
+ * The absences are asserted too.  Their document is JSON.stringify of
+ * the request parameters and stringify omits what is undefined, so a
+ * field the request did not carry must be missing rather than empty --
+ * an empty content_type would become the object's content type.
+ */
+TEST_F(NSFSNooBaaBucketTest, RecordsWhatTheirCompletionReads)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
+
+  const std::string upload_id = "11111111-2222-4333-8444-555555555555";
+  const std::string key = "meta/data.bin";
+  auto upload = bucket->get_multipart_upload(key, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  auto bl_of = [](const char* v) {
+    bufferlist bl;
+    bl.append(v);
+    return bl;
+  };
+
+  rgw_placement_rule placement;
+  placement.storage_class = "STANDARD";
+  Attrs attrs;
+  attrs[RGW_ATTR_CONTENT_TYPE] = bl_of("text/plain");
+  attrs[RGW_ATTR_CONTENT_ENC] = bl_of("gzip");
+  attrs[std::string(RGW_ATTR_META_PREFIX) + "colour"] = bl_of("green");
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  sf::path doc;
+  for (auto& e : sf::directory_iterator(bucket_path())) {
+    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
+      doc = e.path() / "multipart-uploads" / upload_id /
+	    "create_object_upload";
+    }
+  }
+  ASSERT_FALSE(doc.empty());
+  ASSERT_TRUE(sf::exists(doc)) << doc;
+
+  const std::string text = read_all(doc);
+  JSONParser parser;
+  ASSERT_TRUE(parser.parse(text.data(), text.size())) << text;
+
+  auto field = [&parser](const char* n) -> std::string {
+    JSONObj* o = parser.find_obj(n);
+    return o ? o->get_data() : std::string{"<absent>"};
+  };
+  EXPECT_EQ(field("key"), key);
+  EXPECT_EQ(field("content_type"), "text/plain");
+  EXPECT_EQ(field("content_encoding"), "gzip");
+  EXPECT_EQ(field("storage_class"), "STANDARD");
+
+  JSONObj* xattr = parser.find_obj("xattr");
+  ASSERT_NE(xattr, nullptr) << text;
+  JSONObj* colour = xattr->find_obj("colour");
+  ASSERT_NE(colour, nullptr) << text;
+  EXPECT_EQ(colour->get_data(), "green");
+  /* stored under the bare name, as theirs is:  `user.<key>` on disk,
+   * and `x-amz-meta-` belongs to the protocol */
+  EXPECT_EQ(xattr->find_obj("x-amz-meta-colour"), nullptr);
+
+  /* their spelling of the upload id, which their ListMultipartUploads
+   * reports as UploadId;  under that name and not ours */
+  EXPECT_EQ(field("obj_id"), upload_id);
+  EXPECT_EQ(field("bucket"), bucket->get_name());
+  EXPECT_EQ(parser.find_obj("upload_id"), nullptr) << text;
+  EXPECT_EQ(parser.find_obj("lock_settings"), nullptr) << text;
+}
+
+/* Theirs does move one, because their file IS the size.
+ *
+ * `parts-size-17` at 17 * (num - 1) is the only place their reader
+ * looks for a 17-byte part -- it derives the name from the part's own
+ * record -- so a short final part left in the stride's file is one
+ * their gateway cannot read, and one our own assembly cannot either,
+ * since it implements their scheme.
+ *
+ * The record is asserted as well as the bytes.  The two together are
+ * what makes the tree theirs;  bytes in the right file with a record
+ * pointing at the wrong offset reads as zeros.
+ */
+TEST_F(NSFSNooBaaBucketTest, ShortFinalPartMovesToItsOwnSizeFile)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
+
+  const std::string objname = "short-tail.bin";
+  const size_t stride = 64;
+  const size_t tail = 17;
+
+  /* the staging directory before it is cleaned up, so the layout can
+   * be looked at:  the upload is driven by hand rather than through
+   * the helper, which completes it */
+  const std::string upload_id = "11111111-2222-4333-8444-555555555555";
+  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    const size_t len = (i == 3) ? tail : stride;
+    std::string payload(len, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  sf::path staging;
+  for (auto& e : sf::directory_iterator(bucket_path())) {
+    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
+      staging = e.path() / "multipart-uploads" / upload_id;
+    }
+  }
+  ASSERT_TRUE(sf::is_directory(staging)) << staging;
+
+  const sf::path tail_file{staging / ("parts-size-" + std::to_string(tail))};
+  ASSERT_TRUE(sf::exists(tail_file)) << "the short part was left in the "
+				     << "stride's file";
+  /* 17 * (3 - 1) = 34, and the part is the 17 bytes after it */
+  const uint64_t tail_offset = tail * 2;
+  ASSERT_EQ(sf::file_size(tail_file), tail_offset + tail);
+  EXPECT_EQ(read_all(tail_file).substr(tail_offset, tail),
+	    std::string(tail, 'd'));
+
+  const sf::path rec{staging / ("part-" + std::to_string(3))};
+  EXPECT_EQ(str_xattr(rec, "user.noobaa.part_size"), std::to_string(tail));
+  EXPECT_EQ(str_xattr(rec, "user.noobaa.part_offset"),
+	    std::to_string(tail_offset));
+
+  /* and the two uniform parts are still in the stride's file */
+  const sf::path body{staging / ("parts-size-" + std::to_string(stride))};
+  ASSERT_TRUE(sf::exists(body)) << body;
+  EXPECT_EQ(str_xattr(staging / "part-2", "user.noobaa.part_offset"),
+	    std::to_string(stride));
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+  EXPECT_EQ(read_all(bucket_path() / objname), expected);
+}
+
 /* A tree with no temp directory at all:  one is created, because
  * there is nothing to conflict with. */
 TEST_F(NSFSNooBaaBucketTest, CreatesATempDirectoryWhenThereIsNone)
@@ -3188,6 +3413,197 @@ TEST_F(NSFSNooBaaBucketTest, RefusesAnAmbiguousTree)
   }
   EXPECT_EQ(n, 2) << "a third temp directory was created";
 }
+
+/* The same upload, in each format and staging layout the driver
+ * serves.
+ *
+ * Three instantiations:  our format on a filesystem whose extents can
+ * be shared, so parts land in their own files;  our format where they
+ * cannot, so parts are placed in one file by stride;  and NooBaa's
+ * format, whose staging layout comes with it.  The body is one body.
+ * It does not branch on its parameter -- a branch written from the
+ * implementation is checked by nothing -- so it asserts only what
+ * holds of all three, and the spellings that differ are asserted in
+ * the tests that name a format.
+ *
+ * What holds of all three is the contract:  an upload that is listed
+ * while it is in flight, parts that report the sizes they were
+ * written with, an object with the bytes in order, and staging gone
+ * afterwards.
+ *
+ * The control is the first assertion in each body.  A case that
+ * silently ran with another layout -- the probe override stuck, a
+ * profile that did not take -- fails there rather than passing as a
+ * duplicate of its neighbour.
+ */
+struct FormatCase {
+  const char* label;
+  std::optional<bool> shares_extents;
+  uint32_t extensions;
+  const char* mpu_name;
+  make_tree_fn_t make_tree;
+};
+
+/* so a failure names the case rather than dumping the bytes */
+void PrintTo(const FormatCase& c, std::ostream* os) { *os << c.label; }
+
+class NSFSFormatTest : public NSFSBucketTest,
+		       public ::testing::WithParamInterface<FormatCase> {
+public:
+  std::optional<bool> shares_extents() const override {
+    return GetParam().shares_extents;
+  }
+
+  void SetUp() override {
+    NSFSBucketTest::SetUp();
+
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+    ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+    ASSERT_EQ(b->set_profile(env->dpp, null_yield, GetParam().extensions), 0);
+
+    /* Quiescent:  written to, no upload.  Ours has no such state and
+     * says so by doing nothing, so this starts every case from the
+     * most furnished tree its format has without an upload in it. */
+    TestTree tree;
+    GetParam().make_tree(bucket_path(), TreeShape::quiescent, tree);
+  }
+
+  sf::path bucket_path() const { return bp / "root" / testname; }
+
+  size_t uploads_listed() {
+    std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+    std::string marker;
+    bool truncated = false;
+    EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
+				      nullptr, &truncated, null_yield), 0);
+    EXPECT_FALSE(truncated);
+    return uploads.size();
+  }
+};
+
+/* uuid-shaped, and used by every case:  neither layout parses an
+ * upload id -- ours url-encodes `<key>.<id>` into a directory name,
+ * theirs names the directory for the id alone -- so one id serves all
+ * three without saying anything untrue about either */
+static const std::string uniform_upload_id{
+  "11111111-2222-4333-8444-555555555555"};
+
+TEST_P(NSFSFormatTest, MultipartRoundTrip)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_STREQ(b->mpu_strategy()->name(), GetParam().mpu_name);
+
+  const std::string objname = "written/by/us.bin";
+  auto upload = bucket->get_multipart_upload(objname, uniform_upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t part_size = 64;
+  const int parts = 3;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= parts; ++i) {
+    std::string payload(part_size, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  EXPECT_EQ(uploads_listed(), 1u) << "in flight and not listed";
+
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0);
+  ASSERT_EQ(upload->get_parts().size(), static_cast<size_t>(parts));
+  for (auto& [num, part] : upload->get_parts()) {
+    EXPECT_EQ(part->get_size(), part_size) << "part " << num;
+  }
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+
+  const sf::path obj{bucket_path() / objname};
+  ASSERT_TRUE(sf::is_regular_file(obj)) << obj;
+  EXPECT_EQ(read_all(obj), expected);
+
+  EXPECT_EQ(uploads_listed(), 0u) << "staging outlived the upload";
+}
+
+/* A final part shorter than the others.
+ *
+ * Every layout has a case for it and they are different cases:  parts
+ * in their own files do not care, the strided layout cannot place a
+ * part whose size is not the stride, and NooBaa keys the file by the
+ * size, so a short part is in a second file that assembly has to copy
+ * from rather than link.  Uniform here, and what distinguishes them is
+ * only the cost.
+ *
+ * It is also where `parts-size-<n>` -- the one name both layouts spell
+ * the same -- is read by whichever layout did not write it.
+ */
+TEST_P(NSFSFormatTest, MultipartShortFinalPart)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_STREQ(b->mpu_strategy()->name(), GetParam().mpu_name);
+
+  const std::string objname = "short/tail.bin";
+  auto upload = bucket->get_multipart_upload(objname, uniform_upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  const size_t part_size = 64;
+  const size_t tail_size = 17;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    const size_t len = (i == 3) ? tail_size : part_size;
+    std::string payload(len, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0);
+  const auto& got = upload->get_parts();
+  ASSERT_EQ(got.size(), 3u);
+  ASSERT_NE(got.find(3), got.end());
+  EXPECT_EQ(got.at(3)->get_size(), tail_size)
+      << "the short part was reported at the others' size";
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+
+  const sf::path obj{bucket_path() / objname};
+  ASSERT_TRUE(sf::is_regular_file(obj)) << obj;
+  EXPECT_EQ(sf::file_size(obj), expected.size());
+  EXPECT_EQ(read_all(obj), expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Formats, NSFSFormatTest,
+    ::testing::Values(
+	FormatCase{"rgw", true, nsfs::EXTENSIONS_STRONG, "rgw",
+		   make_nsfs_tree},
+	FormatCase{"rgwstrided", false, nsfs::EXTENSIONS_STRONG,
+		   "rgw-strided", make_nsfs_tree},
+	/* the format names the layout, so the probe does not reach it;
+	 * forced true all the same, so the case does not vary with the
+	 * filesystem the build directory is on */
+	FormatCase{"noobaa", true, nsfs::EXTENSIONS_BASE, "noobaa",
+		   make_noobaa_tree}),
+    [](const ::testing::TestParamInfo<FormatCase>& i) {
+      return std::string(i.param.label);
+    });
 
 int main(int argc, char *argv[]) {
   auto args = argv_to_vec(argc, argv);

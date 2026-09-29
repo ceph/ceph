@@ -156,6 +156,17 @@ PerPartMPUStrategy::part_target(uint32_t part_num,
   return PartTarget{part_name(part_num), 0, std::nullopt, false};
 }
 
+/* Never.  A part lives where its record says, in the file the upload's
+ * stride names, and a part shorter than the stride leaves the rest of
+ * its slot unread.  This layout gives every part its own file in any
+ * case. */
+std::optional<MPUStrategy::PartTarget>
+PerPartMPUStrategy::relocation_target(uint32_t part_num, uint64_t stored,
+				      std::optional<uint64_t> stride) const
+{
+  return std::nullopt;
+}
+
 /* Our record is one ceph-encoded blob, written and read through the
  * bucket's XattrStrategy, so it arrives already decoded in `attrs` and
  * the fd is not needed. */
@@ -184,6 +195,24 @@ bool PerPartMPUStrategy::part_record(const DoutPrefixProvider* dpp,
   out.mtime = upi.mtime;
   out.cksum = std::move(upi.cksum);
   return true;
+}
+
+/* Nothing.  The record is the ceph-encoded attribute the caller writes
+ * through the bucket's XattrStrategy, and the meta file's content is
+ * unused -- part_record() and staged_upload() read that attribute and
+ * the staging directory's name, neither of which is written here. */
+int PerPartMPUStrategy::write_staged_upload(const DoutPrefixProvider* dpp,
+					    int dir_fd,
+					    const StagedUpload& su) const
+{
+  return 0;
+}
+
+int PerPartMPUStrategy::write_part_record(const DoutPrefixProvider* dpp,
+					  int dir_fd, std::string_view pname,
+					  const PartRecord& rec) const
+{
+  return 0;
 }
 
 std::string PerPartMPUStrategy::meta_name() const
@@ -258,6 +287,17 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
   }
 
   return 0;
+}
+
+/* Never, for the same reason as the per-part layout:  assembly reads
+ * every shared part out of the one file the stride names, at the
+ * offset in its record.  A part which is not the stride is either
+ * shorter than its slot or was diverted while it was being written. */
+std::optional<MPUStrategy::PartTarget>
+StridedMPUStrategy::relocation_target(uint32_t part_num, uint64_t stored,
+				      std::optional<uint64_t> stride) const
+{
+  return std::nullopt;
 }
 
 std::optional<MPUStrategy::PartTarget>
@@ -768,6 +808,24 @@ std::string base36(uint64_t v)
 
 } /* anonymous namespace */
 
+/* Whenever the part is not the stride.
+ *
+ * Their file is named for the size it holds and their reader derives
+ * the name from the part's own record, so `parts-size-17` is where a
+ * 17-byte part must be, at 17 * (num - 1) within it.  The stride's
+ * file keeps the bytes it was given;  truncating it back is not safe,
+ * because a later part may already have written past this one, and
+ * assembly does not read beyond the sum of the records. */
+std::optional<MPUStrategy::PartTarget>
+NooBaaMPUStrategy::relocation_target(uint32_t part_num, uint64_t stored,
+				     std::optional<uint64_t> stride) const
+{
+  if (stride && (*stride == stored)) {
+    return std::nullopt;
+  }
+  return part_target(part_num, stored);
+}
+
 /* Their record is three plain attributes of their own, which our
  * XattrStrategy drops as foreign, so this reads them off the file.
  *
@@ -789,6 +847,29 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
 				    const Attrs& attrs,
 				    PartRecord& out) const
 {
+  /* Our record first, where there is one.  A part we wrote carries
+   * both:  theirs, which their gateway reads, and ours, which is the
+   * only one of the two with a checksum in it.  Theirs alone is what a
+   * part they wrote has. */
+  auto i = attrs.find(RGW_NSFS_ATTR_MPUPLOAD);
+  if (i != attrs.end()) {
+    NSFSUploadPartInfo upi;
+    try {
+      auto bufit = i->second.cbegin();
+      decode(upi, bufit);
+      out.size = upi.size;
+      out.stored = upi.stored;
+      out.offset = upi.offset;
+      out.shared = upi.shared;
+      out.etag = std::move(upi.etag);
+      out.mtime = upi.mtime;
+      out.cksum = std::move(upi.cksum);
+      return true;
+    } catch (buffer::error&) {
+      /* fall through to theirs */
+    }
+  }
+
   int part_fd = ::openat(dir_fd, std::string(pname).c_str(), O_RDONLY);
   if (part_fd < 0) {
     return false;
@@ -827,6 +908,140 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
   }
 
   return true;
+}
+
+/* Their create_object_upload, which is where the key lives.
+ *
+ * Their gateway writes a JSON dump of the CreateMultipartUpload
+ * parameters and reads back only the keys it wants, so an object with
+ * `key` in it is one they can serve.  Written with the fields
+ * their own readers consume:  the key, which their list_multiparts
+ * compares against the request's, and what their completion path puts
+ * on the finished object.  The rest of what we know about the upload
+ * goes in our attribute, which they ignore.
+ *
+ * Their reader takes the first `key` it finds and nothing else is
+ * required, so this is deliberately the smallest document that is one
+ * of theirs rather than a re-encoding of ours in JSON.
+ */
+int NooBaaMPUStrategy::write_staged_upload(const DoutPrefixProvider* dpp,
+					   int dir_fd,
+					   const StagedUpload& su) const
+{
+  /* Their own document is JSON.stringify of the request parameters,
+   * and stringify drops what is undefined, so a field the request did
+   * not carry is absent rather than null.  Emitted the same way:  a
+   * present-but-empty content_type would become the object's content
+   * type on their completion path. */
+  JSONFormatter f;
+  f.open_object_section("create_object_upload");
+  encode_json("key", su.key, &f);
+  encode_json("bucket", su.bucket, &f);
+  /* their name for the upload id, and what their ListMultipartUploads
+   * reports as UploadId (`_get_mpu_info`, `namespace_fs.js:3028`).
+   * The directory is named for it as well, and their readers use
+   * whichever is at hand. */
+  encode_json("obj_id", su.upload_id, &f);
+  if (!su.content_type.empty()) {
+    encode_json("content_type", su.content_type, &f);
+  }
+  if (!su.content_encoding.empty()) {
+    encode_json("content_encoding", su.content_encoding, &f);
+  }
+  if (!su.storage_class.empty()) {
+    encode_json("storage_class", su.storage_class, &f);
+  }
+  if (!su.xattr.empty()) {
+    f.open_object_section("xattr");
+    for (const auto& [k, v] : su.xattr) {
+      encode_json(k.c_str(), v, &f);
+    }
+    f.close_section();
+  }
+  if (!su.retention_mode.empty() || !su.legal_hold.empty()) {
+    f.open_object_section("lock_settings");
+    if (!su.retention_mode.empty()) {
+      f.open_object_section("retention");
+      encode_json("mode", su.retention_mode, &f);
+      encode_json("retain_until_date", su.retain_until, &f);
+      f.close_section();
+    }
+    if (!su.legal_hold.empty()) {
+      f.open_object_section("legal_hold");
+      encode_json("status", su.legal_hold, &f);
+      f.close_section();
+    }
+    f.close_section();
+  }
+  f.close_section();
+
+  std::ostringstream os;
+  f.flush(os);
+  const std::string doc = os.str();
+
+  int fd = ::openat(dir_fd, NB_CREATE_NAME.c_str(),
+		    O_WRONLY | O_CREAT | O_TRUNC, 0600);
+  if (fd < 0) {
+    int ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: creating " << NB_CREATE_NAME << ": "
+		      << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  auto close_fd = make_scope_guard([fd] { ::close(fd); });
+
+  ssize_t w = ::pwrite(fd, doc.data(), doc.size(), 0);
+  if (w < 0) {
+    int ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: writing " << NB_CREATE_NAME << ": "
+		      << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  if (static_cast<size_t>(w) != doc.size()) {
+    ldpp_dout(dpp, 0) << "ERROR: short write of " << NB_CREATE_NAME
+		      << " (" << w << " of " << doc.size() << ")" << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+/* Their part attributes:  the bytes on disk and where they begin.
+ *
+ * `stored` rather than `size`:  theirs describes the file, and the two
+ * differ whenever a filter between the op layer and the writer changed
+ * the byte count.  Their assembly slices the size-keyed file by these
+ * two numbers, so a value that is not the length on disk produces a
+ * wrong object rather than a wrong report.
+ *
+ * No etag.  Theirs is `user.content_md5`, an MD5 of the part's bytes,
+ * and what we hold at this point is an RGW etag, which for a part is
+ * the same MD5 -- but only when no filter ran.  Their reader falls
+ * back to the stat-derived form when it is absent, which is right, so
+ * absent is better than wrong.
+ */
+int NooBaaMPUStrategy::write_part_record(const DoutPrefixProvider* dpp,
+					 int dir_fd, std::string_view pname,
+					 const PartRecord& rec) const
+{
+  int fd = ::openat(dir_fd, std::string(pname).c_str(), O_RDONLY);
+  if (fd < 0) {
+    int ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: opening part " << pname << ": "
+		      << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  auto close_fd = make_scope_guard([fd] { ::close(fd); });
+
+  const std::string size = std::to_string(rec.stored);
+  const std::string offset = std::to_string(rec.offset);
+  if ((::fsetxattr(fd, NB_XATTR_PART_SIZE, size.data(), size.size(), 0) < 0) ||
+      (::fsetxattr(fd, NB_XATTR_PART_OFFSET, offset.data(), offset.size(),
+		   0) < 0)) {
+    int ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: writing part attributes on " << pname
+		      << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  return 0;
 }
 
 /* The staging directory's uid.  They record no owner with an upload --

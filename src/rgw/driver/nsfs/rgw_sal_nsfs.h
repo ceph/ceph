@@ -1798,6 +1798,12 @@ private:
    * damage is invisible afterwards:  each record still describes where
    * its part was meant to go. */
   int divert(uint64_t written);
+  /* Move this part into the file its own length belongs in.
+   *
+   * Asked of the layout, which is the only thing that knows whether a
+   * file's identity depends on the size it holds;  see
+   * MPUStrategy::relocation_target().  A no-op for ours. */
+  int relocate();
   /* the upload this part belongs to, as the client knows it.  The
    * injection map is keyed by this rather than by the internal meta,
    * so a test can arm exactly the upload it created. */

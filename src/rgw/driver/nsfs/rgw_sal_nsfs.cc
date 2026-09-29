@@ -9082,7 +9082,57 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   attrs[RGW_NSFS_ATTR_MPUPLOAD] = bl;
 
-  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  ret = meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* and whatever the format records for itself.  Ours is the attribute
+   * just written;  NooBaa's is the key, in the meta file's content,
+   * which is where their gateway and our own listing look for it. */
+  nsfs::MPUStrategy::StagedUpload su;
+  su.key = mp_obj.oid;
+  su.upload_id = mp_obj.upload_id;
+  su.bucket = bucket->get_name();
+  su.storage_class = dest_placement.storage_class;
+
+  auto str_attr = [&attrs](const char* name) -> std::string {
+    auto i = attrs.find(name);
+    if (i == attrs.end()) {
+      return {};
+    }
+    std::string v = i->second.to_str();
+    /* the attribute is stored counted, trailing NUL included */
+    while (!v.empty() && (v.back() == '\0')) {
+      v.pop_back();
+    }
+    return v;
+  };
+  su.content_type = str_attr(RGW_ATTR_CONTENT_TYPE);
+  su.content_encoding = str_attr(RGW_ATTR_CONTENT_ENC);
+
+  static const std::string meta_prefix{RGW_ATTR_META_PREFIX};
+  for (const auto& [k, v] : attrs) {
+    if (k.starts_with(meta_prefix)) {
+      std::string val = v.to_str();
+      while (!val.empty() && (val.back() == '\0')) {
+	val.pop_back();
+      }
+      su.xattr[k.substr(meta_prefix.size())] = std::move(val);
+    }
+  }
+
+  if (mp_obj.upload_info.obj_retention_exist) {
+    su.retention_mode = mp_obj.upload_info.obj_retention.get_mode();
+    rgw_to_iso8601(mp_obj.upload_info.obj_retention.get_retain_until_date(),
+		   &su.retain_until);
+  }
+  if (mp_obj.upload_info.obj_legal_hold_exist) {
+    su.legal_hold = mp_obj.upload_info.obj_legal_hold.get_status();
+  }
+
+  return mpu_strategy()->write_staged_upload(dpp, shadow->get_dir()->get_fd(),
+					     su);
 }
 
 int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
@@ -9577,7 +9627,12 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     mc->remove({bucket->get_name(), mp_obj.meta});
   }
   shadow->get_dir()->close();
-  delete_directory(pb->get_dir()->get_fd(),
+  /* under the staging root, which is the bucket directory only where
+   * the format stages there.  Removing `<bucket>/<name>` left NooBaa's
+   * staging in place, and the upload was still listed after it had
+   * completed. */
+  delete_directory(staging_root_dir ? staging_root_dir->get_fd()
+				    : pb->get_dir()->get_fd(),
                    get_fname().c_str(), true, dpp,
                    driver->get_reserved_names());
 
@@ -9840,6 +9895,71 @@ int NSFSMultipartWriter::divert(uint64_t written)
   return 0;
 }
 
+/* Put this part where its length says it belongs.
+ *
+ * The file was chosen before the body was read, from the stride part 1
+ * established.  A layout whose shared file is named for the size it
+ * holds cannot read a part of another size out of it, so the part
+ * moves;  a layout which reads a part at the offset in its record
+ * answers nothing here and this does not run.  S3 requires every part
+ * but the last to be equal, so at most one part per upload moves.
+ */
+int NSFSMultipartWriter::relocate()
+{
+  if (!shared_file || !shared_target || (high_water == 0)) {
+    return 0;
+  }
+  auto tgt = mpu_strat->relocation_target(part_num, high_water, extent);
+  if (!tgt || !tgt->shared) {
+    return 0;
+  }
+  if ((tgt->name == shared_file->get_name()) && (tgt->offset == base_offset)) {
+    return 0;
+  }
+
+  /* everything queued must reach the shared file before it is copied
+   * out of it, and the window is bound to that fd in any case */
+  int ret = uring_write ? uring_write->drain() : pending_write.drain();
+  if (ret < 0) {
+    return ret;
+  }
+  uring_write.reset();
+
+  auto dst = std::make_unique<nsfs::File>(tgt->name, upload_dir.get(),
+					  driver->ctx());
+  /* create() opens O_CREAT|O_RDWR without truncating, which is what a
+   * shared file needs:  another part of this size may already be in
+   * it */
+  ret = dst->create(dpp, /*existed=*/nullptr, /*tempfile=*/false);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = dst->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = driver->get_fs_strategy()->copy_range(dpp, shared_file->get_fd(),
+					      base_offset, dst->get_fd(),
+					      tgt->offset, high_water);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not move part " << part_num
+		      << " into " << tgt->name << ": " << cpp_strerror(-ret)
+		      << dendl;
+    return ret;
+  }
+
+  ldpp_dout(dpp, 10) << "NSFSMultipartWriter::relocate: part " << part_num
+		     << " is " << high_water << " bytes and the stride is "
+		     << (extent ? *extent : 0) << ";  moved to "
+		     << tgt->name << " at " << tgt->offset << dendl;
+
+  shared_file->close();
+  shared_file = std::move(dst);
+  base_offset = tgt->offset;
+  return 0;
+}
+
 int NSFSMultipartWriter::process(bufferlist&& data, uint64_t offset)
 {
   /* counted before rebasing, so this is the part's own length:  each
@@ -9961,6 +10081,14 @@ int NSFSMultipartWriter::complete(
     }
   }
 
+  /* The part's true length is known now, and the file it was written
+   * into was chosen from the stride.  Where those disagree and the
+   * layout cares, the bytes move before the record is written. */
+  ret = relocate();
+  if (ret < 0) {
+    return ret;
+  }
+
   /* Establishment.  Part 1, and only part 1, may set the upload's
    * stride -- which is why no lock is needed and none exists
    * (MPNSFSSerializer::try_lock only checks existence).  Exactly one
@@ -10039,6 +10167,20 @@ int NSFSMultipartWriter::complete(
     ret = part_file->write_attrs(rctx.dpp, rctx.y, attrs, /*extra_attrs=*/nullptr);
     if (ret < 0) {
       ldpp_dout(rctx.dpp, 20) << "ERROR: failed writing attrs for " << part_file->get_name() << dendl;
+      return ret;
+    }
+
+    nsfs::MPUStrategy::PartRecord rec;
+    rec.size = info.size;
+    rec.stored = info.stored;
+    rec.offset = info.offset;
+    rec.shared = info.shared;
+    rec.etag = info.etag;
+    rec.mtime = info.mtime;
+    rec.cksum = info.cksum;
+    ret = mpu_strat->write_part_record(rctx.dpp, upload_dir->get_fd(),
+				       part_file->get_name(), rec);
+    if (ret < 0) {
       return ret;
     }
   }
