@@ -2000,10 +2000,10 @@ class TestMirroring(CephFSTestCase):
                     # verify via asok
                     res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
                                                      'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
-                    if not 'state' in res:
-                        return
+                    if 'state' not in res:
+                        continue
                     self.assertTrue(res['state'] == "failed")
-                    return True
+                    break
                 except:
                     pass
 
@@ -2038,10 +2038,10 @@ class TestMirroring(CephFSTestCase):
                     # verify via asok
                     res = self.mirror_daemon_command(f'mirror status for fs: {self.primary_fs_name}',
                                                      'fs', 'mirror', 'status', f'{self.primary_fs_name}@{self.primary_fs_id}')
-                    if not 'state' in res:
-                        return
+                    if 'state' not in res:
+                        continue
                     self.assertTrue(res['state'] == "failed")
-                    return True
+                    break
                 except:
                     pass
 
