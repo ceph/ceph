@@ -1,6 +1,7 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 import { of } from 'rxjs';
 
@@ -28,7 +29,8 @@ describe('RgwAccountRolesListComponent', () => {
             getPermissions: () => ({ rgw: { create: true, update: true, delete: true } })
           }
         }
-      ]
+      ],
+      schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwAccountRolesListComponent);
@@ -68,4 +70,11 @@ describe('RgwAccountRolesListComponent', () => {
     expect(notificationService.show).toHaveBeenCalled();
     expect(component.loadRoles).toHaveBeenCalled();
   });
+
+  it('should open policy side panel for a specific policy', fakeAsync(() => {
+    component.openPolicyPanel('test-role', 'policy-2');
+    tick();
+    expect(component.policyPanelOpen).toBe(true);
+    expect(component.selectedPolicyName).toBe('policy-2');
+  }));
 });
