@@ -178,7 +178,8 @@ struct MockReplayer : public Replayer {
   MOCK_CONST_METHOD0(get_error_code, int());
   MOCK_CONST_METHOD0(get_error_description, std::string());
   MOCK_METHOD1(prune_snapshot, void(uint64_t snapshot_id));
-  MOCK_METHOD1(set_remote_snap_id_end_limit, void(uint64_t snapshot_id));
+  MOCK_METHOD2(set_remote_snap_id_end_limit,
+    void(uint64_t snapshot_id, const cls::rbd::GroupSpec& local_group_spec));
   MOCK_METHOD0(get_remote_snap_id_end_limit, uint64_t());
 };
 
@@ -539,6 +540,46 @@ TEST_F(TestMockImageReplayer, BootstrapRemoteDeleted) {
   expect_close(mock_state_builder, 0);
 
   expect_trash_move(mock_image_deleter, "global image id", false, 0);
+  expect_mirror_image_status_exists(false);
+
+  create_image_replayer(mock_threads);
+
+  C_SaferCond start_ctx;
+  m_image_replayer->start(&start_ctx);
+  ASSERT_EQ(0, start_ctx.wait());
+}
+
+TEST_F(TestMockImageReplayer, BootstrapRemoteDeletedTrashMoveRetry) {
+  // Return EROFS from the first trash move after remote deletion, then verify
+  // that ImageReplayer retries successfully after the previous group replayer
+  // has released its exclusive lock.
+  create_local_image();
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+  expect_add_event_after_repeatedly(mock_threads);
+
+  MockImageDeleter mock_image_deleter;
+
+  expect_set_mirror_image_status_repeatedly();
+
+  InSequence seq;
+
+  MockBootstrapRequest mock_bootstrap_request;
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_bootstrap_request, mock_state_builder, mock_local_image_ctx,
+    false, false, -ENOLINK);
+
+  expect_close(mock_state_builder, 0);
+
+  EXPECT_CALL(mock_image_deleter, trash_move("global image id", false, _))
+    .WillOnce(WithArg<2>(Invoke([this](Context* ctx) {
+      m_threads->work_queue->queue(ctx, -EROFS);
+    })))
+    .WillOnce(WithArg<2>(Invoke([this](Context* ctx) {
+      m_threads->work_queue->queue(ctx, 0);
+    })));
   expect_mirror_image_status_exists(false);
 
   create_image_replayer(mock_threads);

@@ -92,6 +92,7 @@ private:
   librbd::mirror::PromotionState m_promotion_state;
   std::list<cls::rbd::GroupImageStatus> m_images;
   std::map<std::string /*global-id*/, std::pair<int64_t /*pool_id*/, std::string /*image_id*/>> m_local_images;
+  std::vector<cls::rbd::GroupImageSpec> m_local_images_without_mirror_metadata;
 
   void get_local_group_id();
   void handle_get_local_group_id(int r);
@@ -122,4 +123,3 @@ private:
 extern template class rbd::mirror::group_replayer::PrepareLocalGroupRequest<librbd::ImageCtx>;
 
 #endif // RBD_MIRROR_GROUP_REPLAYER_PREPARE_LOCAL_GROUP_REQUEST_H
-
