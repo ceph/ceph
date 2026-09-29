@@ -155,6 +155,29 @@ public:
     return std::string{"."};
   }
 
+  /* Where staging WOULD go, creating what is missing.
+   *
+   * A different question from staging_root(), which must not name a
+   * directory that is not there -- a bucket with no uploads lists
+   * empty rather than pointing an enumeration at nothing.  This one
+   * is asked when an upload is about to be placed, and may create.
+   *
+   * For NooBaa that means the bucket temp directory, whose name
+   * carries a bucket id from their config store.  An existing one is
+   * used, always:  the id is then theirs, and an upload we start is
+   * one their gateway can find.  One is created only where the tree
+   * has none, because there is nothing to conflict with;  and more
+   * than one is still refused, because which holds the uploads is not
+   * decidable.
+   *
+   * The residual risk is narrow and named:  a tree with no temp
+   * directory which we write to and NooBaa later serves ends up with
+   * two, ours orphaned. */
+  virtual std::optional<std::string> staging_root_for_write(
+      const DoutPrefixProvider* dpp, int bucket_fd) const {
+    return staging_root(dpp, bucket_fd);
+  }
+
   virtual std::string part_name(uint32_t part_num) const = 0;
   virtual std::optional<uint32_t> part_number(std::string_view name) const = 0;
 
@@ -400,6 +423,8 @@ public:
 		    std::string_view dname, ACLOwner& out) const override;
   std::optional<std::string> staging_root(const DoutPrefixProvider* dpp,
 					  int bucket_fd) const override;
+  std::optional<std::string> staging_root_for_write(
+      const DoutPrefixProvider* dpp, int bucket_fd) const override;
 
   std::string part_name(uint32_t part_num) const override;
   std::optional<uint32_t> part_number(std::string_view name) const override;

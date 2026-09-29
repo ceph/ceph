@@ -34,6 +34,7 @@
 
 #include "fs_strategy.h"
 #include "rgw_common.h"
+#include "include/uuid.h"
 #include "common/ceph_json.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -529,10 +530,92 @@ bool NooBaaMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
   return !out.key.empty();
 }
 
+/* The bucket's NooBaa temp directory, or nothing when there is none or
+ * more than one.  `ambiguous` distinguishes those two, which matters
+ * only to the write side:  a tree with none may be created into, a
+ * tree with several may not. */
+static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
+						 int bucket_fd,
+						 bool* ambiguous);
+static std::optional<std::string> nb_tmpdir(const DoutPrefixProvider* dpp,
+					    int bucket_fd);
+static bool nb_tmpdir_ambiguous(const DoutPrefixProvider* dpp, int bucket_fd);
+
+/* A bucket id of our own, when the tree has none.  They use
+ * crypto.randomUUID(), so this is one too -- the shape is what a
+ * NooBaa gateway would expect to find, even though this particular id
+ * is not in their config store. */
+static std::string gen_uuid()
+{
+  uuid_d u;
+  u.generate_random();
+  return u.to_string();
+}
+
 std::optional<std::string>
 NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
 				int bucket_fd) const
 {
+  auto found = nb_tmpdir(dpp, bucket_fd);
+  if (!found) {
+    return std::nullopt;
+  }
+
+  /* The temp directory is not enough.  NooBaa creates it for ordinary
+   * object writes too (`namespace_fs.js:1303`, `:1569`) and only
+   * creates multipart-uploads/ beneath it at the first
+   * create_object_upload, so a bucket which has been written to and
+   * never uploaded to has the one and not the other.  Answering with
+   * a path that does not exist would send an enumeration at it. */
+  const std::string root = *found + "/" + NB_MPU_ROOT;
+  if (::faccessat(bucket_fd, root.c_str(), F_OK, 0) != 0) {
+    return std::nullopt;
+  }
+  return root;
+}
+
+/* Use the temp directory that is there;  create one only where the
+ * tree has none;  refuse more than one.  See the header. */
+std::optional<std::string>
+NooBaaMPUStrategy::staging_root_for_write(const DoutPrefixProvider* dpp,
+					  int bucket_fd) const
+{
+  auto found = nb_tmpdir(dpp, bucket_fd);
+  if (!found) {
+    /* nb_tmpdir() reports nothing both for "none" and for "more than
+     * one";  only the first may be created into, and it has said so
+     * by not logging */
+    if (nb_tmpdir_ambiguous(dpp, bucket_fd)) {
+      return std::nullopt;
+    }
+    std::string name = std::string(NB_TMPDIR_PREFIX) + gen_uuid();
+    if ((::mkdirat(bucket_fd, name.c_str(), 0755) < 0) &&
+	(errno != EEXIST)) {
+      int ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not create " << name << ": "
+			<< cpp_strerror(ret) << dendl;
+      return std::nullopt;
+    }
+    found = name;
+  }
+
+  const std::string root = *found + "/" + NB_MPU_ROOT;
+  if ((::mkdirat(bucket_fd, root.c_str(), 0755) < 0) &&
+      (errno != EEXIST)) {
+    int ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not create " << root << ": "
+		      << cpp_strerror(ret) << dendl;
+    return std::nullopt;
+  }
+  return root;
+}
+
+static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
+						 int bucket_fd, bool* ambiguous)
+{
+  if (ambiguous) {
+    *ambiguous = false;
+  }
   int fd = ::openat(bucket_fd, ".", O_RDONLY | O_DIRECTORY);
   if (fd < 0) {
     return std::nullopt;
@@ -554,11 +637,14 @@ NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
     if (!found.empty()) {
       /* Two temp directories means two bucket ids have written here.
        * Which one holds the uploads is not decidable from the tree, so
-       * refuse rather than pick. */
+       * refuse rather than pick -- and do not create a third. */
       ldpp_dout(dpp, 0) << "ERROR: bucket holds more than one "
 			<< NB_TMPDIR_PREFIX << "* directory (" << found
 			<< ", " << n << ");  refusing to guess which holds "
 			<< "multipart uploads" << dendl;
+      if (ambiguous) {
+	*ambiguous = true;
+      }
       return std::nullopt;
     }
     found = n;
@@ -567,18 +653,20 @@ NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
   if (found.empty()) {
     return std::nullopt;
   }
+  return found;
+}
 
-  /* The temp directory is not enough.  NooBaa creates it for ordinary
-   * object writes too (`namespace_fs.js:1303`, `:1569`) and only
-   * creates multipart-uploads/ beneath it at the first
-   * create_object_upload, so a bucket which has been written to and
-   * never uploaded to has the one and not the other.  Answering with
-   * a path that does not exist would send an enumeration at it. */
-  const std::string root = found + "/" + NB_MPU_ROOT;
-  if (::faccessat(bucket_fd, root.c_str(), F_OK, 0) != 0) {
-    return std::nullopt;
-  }
-  return root;
+static std::optional<std::string> nb_tmpdir(const DoutPrefixProvider* dpp,
+					    int bucket_fd)
+{
+  return nb_scan_tmpdir(dpp, bucket_fd, nullptr);
+}
+
+static bool nb_tmpdir_ambiguous(const DoutPrefixProvider* dpp, int bucket_fd)
+{
+  bool ambiguous = false;
+  (void) nb_scan_tmpdir(dpp, bucket_fd, &ambiguous);
+  return ambiguous;
 }
 
 std::string NooBaaMPUStrategy::part_name(uint32_t part_num) const

@@ -3097,6 +3097,98 @@ TEST_F(NSFSNooBaaBucketTest, CompletesAnUploadTheyStarted)
   EXPECT_EQ(read_all(obj), tree.payload);
 }
 
+/* Base can start an upload, not only finish one of theirs.
+ *
+ * The staging root is two questions.  Reading asks where staging IS,
+ * and must not name a directory that is absent -- a bucket with no
+ * uploads lists empty.  Writing asks where it WOULD go, and may
+ * create the intermediate directory, because the bucket id is already
+ * on disk and `multipart-uploads/` beneath it is what their own
+ * create_object_upload makes.
+ */
+TEST_F(NSFSNooBaaBucketTest, CreatesAnUploadOnAQuiescentTree)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
+
+  const std::string objname = "written/by/us.bin";
+  const std::string upload_id = "11111111-2222-4333-8444-555555555555";
+  auto upload = bucket->get_multipart_upload(objname, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  /* under their temp directory, which we did not invent */
+  std::vector<sf::path> tmpdirs;
+  for (auto& e : sf::directory_iterator(bucket_path())) {
+    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
+      tmpdirs.push_back(e.path());
+    }
+  }
+  ASSERT_EQ(tmpdirs.size(), 1u) << "a second temp directory was created";
+  EXPECT_TRUE(sf::is_directory(tmpdirs[0] / "multipart-uploads" / upload_id));
+
+  const size_t stride = 64;
+  std::string expected;
+  std::map<int, std::string> part_etags;
+  for (int i = 1; i <= 3; ++i) {
+    std::string payload(stride, static_cast<char>('a' + i));
+    part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+				  payload);
+    expected += payload;
+  }
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
+			part_etags), 0);
+  EXPECT_EQ(read_all(bucket_path() / objname), expected);
+}
+
+/* A tree with no temp directory at all:  one is created, because
+ * there is nothing to conflict with. */
+TEST_F(NSFSNooBaaBucketTest, CreatesATempDirectoryWhenThereIsNone)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::empty, tree);
+
+  auto upload = bucket->get_multipart_upload("k", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  int n = 0;
+  for (auto& e : sf::directory_iterator(bucket_path())) {
+    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
+      ++n;
+    }
+  }
+  EXPECT_EQ(n, 1);
+}
+
+/* Two temp directories means two bucket ids have written here, and
+ * which holds the uploads is not decidable.  Refused rather than
+ * guessed -- and no third is created. */
+TEST_F(NSFSNooBaaBucketTest, RefusesAnAmbiguousTree)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
+  sf::create_directories(bucket_path() / ".noobaa-nsfs_someone-else");
+
+  auto upload = bucket->get_multipart_upload("k", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
+  rgw_placement_rule placement;
+  Attrs attrs;
+  EXPECT_LT(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  int n = 0;
+  for (auto& e : sf::directory_iterator(bucket_path())) {
+    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
+      ++n;
+    }
+  }
+  EXPECT_EQ(n, 2) << "a third temp directory was created";
+}
+
 int main(int argc, char *argv[]) {
   auto args = argv_to_vec(argc, argv);
   env_to_vec(args);

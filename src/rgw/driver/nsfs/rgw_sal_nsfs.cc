@@ -8961,7 +8961,13 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
      * store -- so it is found and never invented.  Nothing gives us
      * that id, so a format which wants a root and has none is refused
      * rather than served somewhere else. */
-    auto root = mpu_strategy()->staging_root(dpp, pb->get_dir()->get_fd());
+    /* Placing an upload asks where staging WOULD go, which may create
+     * the intermediate directory;  reading asks where it IS, which
+     * must not name one that is absent. */
+    auto root = create
+	? mpu_strategy()->staging_root_for_write(dpp,
+						 pb->get_dir()->get_fd())
+	: mpu_strategy()->staging_root(dpp, pb->get_dir()->get_fd());
     if (!root) {
       ldpp_dout(dpp, 4) << "no staging root for bucket " << pb->get_name()
 			<< " in format " << pb->profile_name()
