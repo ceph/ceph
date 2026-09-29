@@ -22,7 +22,7 @@ SimplePolicy::SimplePolicy(librados::IoCtx &ioctx)
 }
 
 size_t SimplePolicy::calc_entity_weight_per_instance(const InstanceToImageMap& map,
-                                              size_t image_count) {
+                                              size_t entity_weight) {
   size_t nr_instances = 0;
   for (auto const &it : map) {
     if (!Policy::is_dead_instance(it.first)) {
@@ -31,7 +31,7 @@ size_t SimplePolicy::calc_entity_weight_per_instance(const InstanceToImageMap& m
   }
   ceph_assert(nr_instances > 0);
 
-  size_t entity_weight_per_instance = image_count / nr_instances;
+  size_t entity_weight_per_instance = entity_weight / nr_instances;
   if (entity_weight_per_instance == 0) {
     ++entity_weight_per_instance;
   }
@@ -40,10 +40,10 @@ size_t SimplePolicy::calc_entity_weight_per_instance(const InstanceToImageMap& m
 }
 
 void SimplePolicy::do_shuffle_add_instances(
-    const InstanceToImageMap& map, size_t image_count,
+    const InstanceToImageMap& map, size_t entity_weight,
     GlobalIds *remap_global_ids) {
-  uint64_t entity_weight_per_instance = calc_entity_weight_per_instance(map, image_count);
-  dout(5) << "images per instance=" << entity_weight_per_instance << dendl;
+  uint64_t entity_weight_per_instance = calc_entity_weight_per_instance(map, entity_weight);
+  dout(5) << "entity weight per instance=" << entity_weight_per_instance << dendl;
 
   for (auto const &instance : map) {
     uint64_t instance_entity_weight =
@@ -63,6 +63,10 @@ void SimplePolicy::do_shuffle_add_instances(
     // TODO: improve for weight > 1: find the best entity(ies) to cut off
     while (it != instance.second.end() && cut_off > 0) {
       auto weight = get_weight(*it);
+      if (it->type == MIRROR_ENTITY_TYPE_IMAGE && weight == 0) {
+        ++it;
+        continue;
+      }
       if (weight <= cut_off) {
         if (Policy::is_entity_shuffling(*it)) {
           cut_off -= weight;
@@ -85,14 +89,14 @@ std::string SimplePolicy::do_map(const InstanceToImageMap& map,
     if (Policy::is_dead_instance(it->first)) {
       continue;
     }
-    uint64_t image_count =
+    uint64_t entity_weight =
       std::accumulate(it->second.begin(), it->second.end(), 0,
                       [this](uint64_t count, const GlobalId &global_id) {
                         return count + get_weight(global_id);
                       });
-    if (image_count < min_entity_weight) {
+    if (entity_weight < min_entity_weight) {
       min_it = it;
-      min_entity_weight = image_count;
+      min_entity_weight = entity_weight;
     }
   }
 

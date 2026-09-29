@@ -94,6 +94,50 @@ void GroupUpdatedPayload::dump(Formatter *f) const {
   f->dump_unsigned("image_count", image_count);
 }
 
+void GroupMembershipUpdatedPayload::encode(bufferlist &bl) const {
+  using ceph::encode;
+
+  encode(image_id, bl);
+  encode(global_image_id, bl);
+
+  encode(group_id, bl);
+  encode(global_group_id, bl);
+
+  encode(group_image_count, bl);
+
+  encode(static_cast<uint32_t>(action), bl);
+}
+
+void GroupMembershipUpdatedPayload::decode(__u8 version,
+  bufferlist::const_iterator &iter) {
+
+  using ceph::decode;
+
+  decode(image_id, iter);
+  decode(global_image_id, iter);
+
+  decode(group_id, iter);
+  decode(global_group_id, iter);
+
+  decode(group_image_count, iter);
+
+  uint32_t action_value;
+  decode(action_value, iter);
+  action = static_cast<GroupMembershipAction>(action_value);
+}
+
+void GroupMembershipUpdatedPayload::dump(Formatter *f) const {
+  f->dump_string("image_id", image_id);
+  f->dump_string("global_image_id", global_image_id);
+
+  f->dump_string("group_id", group_id);
+  f->dump_string("global_group_id", global_group_id);
+
+  f->dump_unsigned("group_image_count", group_image_count);
+
+  f->dump_stream("action") << action;
+}
+
 void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
@@ -127,6 +171,9 @@ void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   case NOTIFY_OP_GROUP_UPDATED:
     payload = GroupUpdatedPayload();
     break;
+  case NOTIFY_OP_GROUP_MEMBERSHIP_UPDATED:
+    payload = GroupMembershipUpdatedPayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -147,6 +194,9 @@ std::list<NotifyMessage> NotifyMessage::generate_test_instances() {
 					       "image id", "global image id")));
   o.push_back(NotifyMessage(GroupUpdatedPayload(cls::rbd::MIRROR_GROUP_STATE_DISABLING,
                                                 "group id", "global group id", 2)));
+  o.push_back(NotifyMessage(GroupMembershipUpdatedPayload(
+    "image id", "global image id", "group id", "global group id", 5,
+    GROUP_MEMBERSHIP_DETACH)));
   return o;
 }
 
@@ -160,6 +210,9 @@ std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {
     break;
   case NOTIFY_OP_GROUP_UPDATED:
     out << "GroupUpdated";
+    break;
+  case NOTIFY_OP_GROUP_MEMBERSHIP_UPDATED:
+    out << "GroupMembershipUpdated";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";

@@ -161,10 +161,12 @@ private:
 
     void handle_update(const std::string &mirror_uuid,
                        MirrorEntities &&added_entities,
-                       MirrorEntities &&removed_entities) override {
+                       MirrorEntities &&removed_entities,
+                       MirrorEntities &&modified_entities) override {
       namespace_replayer->handle_update((local ? "" : mirror_uuid),
                                         std::move(added_entities),
-                                        std::move(removed_entities));
+                                        std::move(removed_entities),
+                                        std::move(modified_entities));
     }
   };
 
@@ -222,7 +224,8 @@ private:
 
   void handle_update(const std::string &mirror_uuid,
                      MirrorEntities &&added_entities,
-                     MirrorEntities &&removed_entities);
+                     MirrorEntities &&removed_entities,
+                     MirrorEntities &&modified_entities);
 
   int init_rados(const std::string &cluster_name,
                  const std::string &client_name,

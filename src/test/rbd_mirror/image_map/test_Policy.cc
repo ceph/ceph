@@ -101,6 +101,23 @@ TEST_F(TestImageMapPolicy, Init) {
   ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
 }
 
+// Test sequence:
+// 1. Store a mapped image with weight zero.
+// 2. Initialize the policy from that stored data.
+// Expected: Lookup keeps its assigned instance and zero weight.
+TEST_F(TestImageMapPolicy, InitZeroWeightImage) {
+  auto global_id = image_map::GlobalId(MIRROR_ENTITY_TYPE_IMAGE,
+                                       "global id 1");
+  bufferlist data;
+  encode(PolicyData(0, PolicyMetaNone{}), data);
+
+  m_policy->init({{global_id, {"9876", {}, data}}});
+
+  auto info = m_policy->lookup(global_id);
+  ASSERT_EQ("9876", info.instance_id);
+  ASSERT_EQ(0U, info.weight);
+}
+
 TEST_F(TestImageMapPolicy, MapImage) {
   const std::string global_image_id = "global id 1";
 
@@ -126,6 +143,82 @@ TEST_F(TestImageMapPolicy, UnmapImage) {
 
   info = m_policy->lookup({MIRROR_ENTITY_TYPE_IMAGE, global_image_id});
   ASSERT_TRUE(info.instance_id == UNMAPPED_INSTANCE_ID);
+}
+
+// Test sequence:
+// 1. Map and acquire a group with weight two.
+// 2. Decrease to one, increase to two, then force a restart while decreasing.
+// Expected: Normal decrease updates in place; increase and forced restart
+//   release and reacquire the group with the requested weight.
+TEST_F(TestImageMapPolicy, ModifyEntityWeight) {
+  auto global_id = image_map::GlobalId(MIRROR_ENTITY_TYPE_GROUP,
+    "global group id 1");
+
+  ASSERT_TRUE(m_policy->add_entity(global_id, 2));
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_id));
+  ASSERT_TRUE(m_policy->finish_action(global_id, 0));
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_id));
+  ASSERT_FALSE(m_policy->finish_action(global_id, 0));
+
+  auto original_info = m_policy->lookup(global_id);
+  ASSERT_TRUE(m_policy->modify_entity(global_id, 1));
+
+  // A decreasing group weight must persist the new policy data without
+  // releasing and reacquiring the running group replayer.
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_id));
+  ASSERT_FALSE(m_policy->finish_action(global_id, 0));
+
+  auto updated_info = m_policy->lookup(global_id);
+  ASSERT_EQ(original_info.instance_id, updated_info.instance_id);
+  ASSERT_EQ(original_info.mapped_time, updated_info.mapped_time);
+  ASSERT_EQ(1U, updated_info.weight);
+
+  // Increasing the weight or explicitly restarting must reacquire ownership.
+  for (auto [weight, restart] : {std::pair{2U, false}, std::pair{1U, true}}) {
+    ASSERT_TRUE(m_policy->modify_entity(global_id, weight, restart));
+    ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_id));
+    ASSERT_TRUE(m_policy->finish_action(global_id, 0));
+    ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_id));
+    ASSERT_TRUE(m_policy->finish_action(global_id, 0));
+    ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_id));
+    ASSERT_FALSE(m_policy->finish_action(global_id, 0));
+    ASSERT_EQ(weight, m_policy->lookup(global_id).weight);
+  }
+}
+
+// Test sequence:
+// 1. Add a group-owned image with weight zero.
+// 2. Change it to standalone weight one, return it to zero, then remove it.
+// Expected: Only weight one acquires a replayer; zero keeps the mapping until
+//   removal.
+TEST_F(TestImageMapPolicy, ZeroWeightImage) {
+  auto global_id = image_map::GlobalId(MIRROR_ENTITY_TYPE_IMAGE,
+                                       "global image id");
+
+  ASSERT_TRUE(m_policy->add_entity(global_id, 0));
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_id));
+  ASSERT_FALSE(m_policy->finish_action(global_id, 0));
+
+  auto info = m_policy->lookup(global_id);
+  ASSERT_NE(UNMAPPED_INSTANCE_ID, info.instance_id);
+  ASSERT_EQ(0U, info.weight);
+
+  ASSERT_TRUE(m_policy->modify_entity(global_id, 1));
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_id));
+  ASSERT_TRUE(m_policy->finish_action(global_id, 0));
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_id));
+  ASSERT_FALSE(m_policy->finish_action(global_id, 0));
+
+  ASSERT_TRUE(m_policy->modify_entity(global_id, 0));
+  ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_id));
+  ASSERT_TRUE(m_policy->finish_action(global_id, 0));
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_id));
+  ASSERT_FALSE(m_policy->finish_action(global_id, 0));
+
+  ASSERT_TRUE(m_policy->remove_entity(global_id));
+  ASSERT_EQ(ACTION_TYPE_MAP_REMOVE, m_policy->start_action(global_id));
+  ASSERT_FALSE(m_policy->finish_action(global_id, 0));
+  ASSERT_EQ(UNMAPPED_INSTANCE_ID, m_policy->lookup(global_id).instance_id);
 }
 
 TEST_F(TestImageMapPolicy, ShuffleImageAddInstance) {

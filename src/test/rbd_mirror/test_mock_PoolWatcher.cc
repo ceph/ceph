@@ -69,6 +69,11 @@ struct MirroringWatcher<MockTestImageCtx> {
                                     const std::string &remote_group_id,
                                     const std::string &global_group_id,
                                     size_t image_count) = 0;
+  virtual void handle_group_membership_updated(const std::string &image_id,
+    const std::string &global_image_id,
+    const std::string &group_id, const std::string &global_group_id,
+    size_t group_image_count,
+    mirroring_watcher::GroupMembershipAction action) = 0;
 
   bool is_unregistered() const {
     return MockMirroringWatcher::get_instance().is_unregistered();
@@ -152,6 +157,7 @@ using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
 using ::testing::ReturnArg;
+using ::testing::SaveArg;
 using ::testing::StrEq;
 using ::testing::WithArg;
 using ::testing::WithoutArgs;
@@ -170,13 +176,16 @@ public:
     MockListener(TestMockPoolWatcher *test) : test(test) {
     }
 
-    MOCK_METHOD3(mock_handle_update, void(const std::string &,
+    MOCK_METHOD4(mock_handle_update, void(const std::string &,
+                                          const MirrorEntities &,
                                           const MirrorEntities &,
                                           const MirrorEntities &));
     void handle_update(const std::string &mirror_uuid,
                        MirrorEntities &&added_entities,
-                       MirrorEntities &&removed_entities) override {
-      mock_handle_update(mirror_uuid, added_entities, removed_entities);
+                       MirrorEntities &&removed_entities,
+                       MirrorEntities &&modified_entities) override {
+      mock_handle_update(mirror_uuid, added_entities, removed_entities,
+                         modified_entities);
     }
   };
 
@@ -220,9 +229,11 @@ public:
   void expect_listener_handle_update(MockListener &mock_listener,
                                      const std::string &mirror_uuid,
                                      const MirrorEntities &added_entities,
-                                     const MirrorEntities &removed_entities) {
+                                     const MirrorEntities &removed_entities,
+                                     const MirrorEntities &modified_entities = {}) {
     EXPECT_CALL(mock_listener, mock_handle_update(mirror_uuid, added_entities,
-                                                  removed_entities))
+                                                  removed_entities,
+                                                  modified_entities))
       .WillOnce(WithoutArgs(Invoke([this]() {
           std::lock_guard locker{m_lock};
           ++m_update_count;
@@ -330,6 +341,206 @@ TEST_F(TestMockPoolWatcher, NonEmptyPool) {
   ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
 }
 
+// Test sequence:
+// 1. Start watching an empty mirrored pool.
+// 2. Send group enable and disable notifications.
+// Expected: The listener receives the group addition and removal.
+TEST_F(TestMockPoolWatcher, GroupEnableDisableUsesEntityUpdates) {
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  InSequence seq;
+  MockMirroringWatcher mock_mirroring_watcher;
+  expect_mirroring_watcher_is_unregistered(mock_mirroring_watcher, true);
+  expect_mirroring_watcher_register(mock_mirroring_watcher, 0);
+
+  MockRefreshEntitiesRequest mock_refresh_entities_request;
+  expect_refresh_entities(mock_refresh_entities_request, {}, 0);
+
+  MirrorEntity group_entity{
+    MIRROR_ENTITY_TYPE_GROUP, "global group id", 2};
+  MockListener mock_listener(this);
+  expect_listener_handle_update(mock_listener, "remote uuid", {}, {});
+  expect_listener_handle_update(mock_listener, "remote uuid",
+                                {group_entity}, {});
+  expect_listener_handle_update(mock_listener, "remote uuid", {},
+                                {group_entity});
+
+  MockPoolWatcher mock_pool_watcher(&mock_threads, m_remote_io_ctx,
+                                    "remote uuid", mock_listener);
+  C_SaferCond ctx;
+  mock_pool_watcher.init(&ctx);
+  ASSERT_EQ(0, ctx.wait());
+  ASSERT_TRUE(wait_for_update(1));
+
+  MirroringWatcher::get_instance().handle_group_updated(
+    cls::rbd::MIRROR_GROUP_STATE_ENABLED, "group id", "global group id", 2);
+  ASSERT_TRUE(wait_for_update(1));
+
+  MirroringWatcher::get_instance().handle_group_updated(
+    cls::rbd::MIRROR_GROUP_STATE_DISABLING, "group id", "global group id", 2);
+  ASSERT_TRUE(wait_for_update(1));
+
+  expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);
+  ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
+}
+
+// Test sequence:
+// 1. Load a standalone image and its mirror group.
+// 2. Send attach and detach membership notifications.
+// Expected: The listener receives image weights zero and one and the changed
+//   group sizes.
+TEST_F(TestMockPoolWatcher, GroupMembershipUpdatesWeights) {
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  InSequence seq;
+  MockMirroringWatcher mock_mirroring_watcher;
+  expect_mirroring_watcher_is_unregistered(mock_mirroring_watcher, true);
+  expect_mirroring_watcher_register(mock_mirroring_watcher, 0);
+
+  std::map<MirrorEntity, std::string> entities{
+    {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 1}, "image id"},
+    {{MIRROR_ENTITY_TYPE_GROUP, "global group id", 1}, "group id"}};
+  MockRefreshEntitiesRequest mock_refresh_entities_request;
+  expect_refresh_entities(mock_refresh_entities_request, entities, 0);
+
+  MockListener mock_listener(this);
+  expect_listener_handle_update(mock_listener, "remote uuid",
+                                get_keys(entities), {});
+  expect_listener_handle_update(
+    mock_listener, "remote uuid", {}, {},
+    {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 0},
+     {MIRROR_ENTITY_TYPE_GROUP, "global group id", 2}});
+  expect_listener_handle_update(
+    mock_listener, "remote uuid", {}, {},
+    {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 1},
+     {MIRROR_ENTITY_TYPE_GROUP, "global group id", 1}});
+
+  MockPoolWatcher mock_pool_watcher(&mock_threads, m_remote_io_ctx,
+                                    "remote uuid", mock_listener);
+  C_SaferCond ctx;
+  mock_pool_watcher.init(&ctx);
+  ASSERT_EQ(0, ctx.wait());
+  ASSERT_TRUE(wait_for_update(1));
+
+  MirroringWatcher::get_instance().handle_group_membership_updated(
+    "image id", "global image id", "group id", "global group id", 2,
+    librbd::mirroring_watcher::GROUP_MEMBERSHIP_ATTACH);
+  ASSERT_TRUE(wait_for_update(1));
+
+  MirroringWatcher::get_instance().handle_group_membership_updated(
+    "image id", "global image id", "group id", "global group id", 1,
+    librbd::mirroring_watcher::GROUP_MEMBERSHIP_DETACH);
+  ASSERT_TRUE(wait_for_update(1));
+
+  expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);
+  ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
+}
+
+// Test sequence:
+// 1. Load cached image and group weights that already match a membership
+//   update.
+// 2. Send that membership notification again.
+// Expected: The listener still receives it because ImageMap may hold the other
+//   site's weights.
+TEST_F(TestMockPoolWatcher, GroupMembershipUnchangedWeights) {
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  InSequence seq;
+  MockMirroringWatcher mock_mirroring_watcher;
+  expect_mirroring_watcher_is_unregistered(mock_mirroring_watcher, true);
+  expect_mirroring_watcher_register(mock_mirroring_watcher, 0);
+
+  std::map<MirrorEntity, std::string> entities{
+    {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 1}, "image id"},
+    {{MIRROR_ENTITY_TYPE_GROUP, "global group id", 1}, "group id"}};
+  MockRefreshEntitiesRequest mock_refresh_entities_request;
+  expect_refresh_entities(mock_refresh_entities_request, entities, 0);
+
+  MockListener mock_listener(this);
+  expect_listener_handle_update(mock_listener, "remote uuid",
+                                get_keys(entities), {});
+  expect_listener_handle_update(
+    mock_listener, "remote uuid", {}, {},
+    {{MIRROR_ENTITY_TYPE_IMAGE, "global image id", 1},
+     {MIRROR_ENTITY_TYPE_GROUP, "global group id", 1}});
+
+  MockPoolWatcher mock_pool_watcher(&mock_threads, m_remote_io_ctx,
+                                    "remote uuid", mock_listener);
+  C_SaferCond ctx;
+  mock_pool_watcher.init(&ctx);
+  ASSERT_EQ(0, ctx.wait());
+  ASSERT_TRUE(wait_for_update(1));
+
+  MirroringWatcher::get_instance().handle_group_membership_updated(
+    "image id", "global image id", "group id", "global group id", 1,
+    librbd::mirroring_watcher::GROUP_MEMBERSHIP_DETACH);
+  ASSERT_TRUE(wait_for_update(1));
+
+  expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);
+  ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
+}
+
+// Test sequence:
+// 1. Start with an empty watched pool.
+// 2. Queue standalone enable and group attach before delivering the listener
+//   update.
+// Expected: Deliver the final group-owned image weight rather than the earlier
+//   standalone weight.
+TEST_F(TestMockPoolWatcher, StandaloneEnableAndGroupAttachAreMerged) {
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  InSequence seq;
+  MockMirroringWatcher mock_mirroring_watcher;
+  expect_mirroring_watcher_is_unregistered(mock_mirroring_watcher, true);
+  expect_mirroring_watcher_register(mock_mirroring_watcher, 0);
+
+  MockRefreshEntitiesRequest mock_refresh_entities_request;
+  expect_refresh_entities(mock_refresh_entities_request, {}, 0);
+
+  MockListener mock_listener(this);
+  expect_listener_handle_update(mock_listener, "remote uuid", {}, {});
+
+  MockPoolWatcher mock_pool_watcher(&mock_threads, m_remote_io_ctx,
+                                    "remote uuid", mock_listener);
+  C_SaferCond ctx;
+  mock_pool_watcher.init(&ctx);
+  ASSERT_EQ(0, ctx.wait());
+  ASSERT_TRUE(wait_for_update(1));
+
+  testing::Mock::VerifyAndClearExpectations(mock_threads.work_queue);
+  Context *notify_ctx = nullptr;
+  EXPECT_CALL(*mock_threads.work_queue, queue(_, _))
+    .WillOnce(DoAll(SaveArg<0>(&notify_ctx), Return()));
+
+  MirrorEntity image_entity{
+    MIRROR_ENTITY_TYPE_IMAGE, "global image id", 0};
+  MirrorEntity group_entity{
+    MIRROR_ENTITY_TYPE_GROUP, "global group id", 1};
+  expect_listener_handle_update(mock_listener, "remote uuid",
+                                {image_entity, group_entity}, {});
+
+  MirroringWatcher::get_instance().handle_image_updated(
+    cls::rbd::MIRROR_IMAGE_STATE_ENABLED, "image id", "global image id");
+  MirroringWatcher::get_instance().handle_group_membership_updated(
+    "image id", "global image id", "group id", "global group id", 1,
+    librbd::mirroring_watcher::GROUP_MEMBERSHIP_ATTACH);
+
+  ASSERT_NE(nullptr, notify_ctx);
+  notify_ctx->complete(0);
+  ASSERT_TRUE(wait_for_update(1));
+
+  expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);
+  ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
+}
+
+// Test sequence:
+// 1. Pause a full pool refresh.
+// 2. Deliver a notification before completing that refresh.
+// Expected: The listener eventually receives the resulting entity update.
 TEST_F(TestMockPoolWatcher, NotifyDuringRefresh) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
@@ -360,7 +571,8 @@ TEST_F(TestMockPoolWatcher, NotifyDuringRefresh) {
     {{MIRROR_ENTITY_TYPE_IMAGE, "global id 1", 1}, "remote id 1a"},
     {{MIRROR_ENTITY_TYPE_IMAGE, "global id 3", 1}, "remote id 3"}};
   expect_listener_handle_update(mock_listener, "remote uuid",
-                                get_keys(entities), {});
+                                get_keys(entities),
+                                {{MIRROR_ENTITY_TYPE_IMAGE, "global id 2", 1}});
 
   MockPoolWatcher mock_pool_watcher(&mock_threads, m_remote_io_ctx,
                                     "remote uuid", mock_listener);

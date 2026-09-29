@@ -17,6 +17,7 @@
 #include <boost/functional/hash.hpp>
 #include <boost/optional.hpp>
 #include "include/ceph_assert.h"
+#include "librbd/mirroring_watcher/Types.h"
 #include "tools/rbd_mirror/pool_watcher/Types.h"
 
 namespace librbd { struct ImageCtx; }
@@ -114,6 +115,8 @@ private:
   std::map<MirrorEntity, std::string> m_pending_entities;
   std::map<MirrorEntity, std::string> m_pending_added_entities;
   std::map<MirrorEntity, std::string> m_pending_removed_entities;
+  std::map<MirrorEntity, std::string> m_pending_modified_entities;
+  MirrorEntities m_pending_membership_entities;
 
   MirroringWatcher *m_mirroring_watcher;
 
@@ -143,6 +146,12 @@ private:
   void handle_group_updated(const std::string &group_id,
                             const std::string &global_group_id,
                             bool enabled, size_t image_count);
+  void handle_group_membership_updated(const std::string &image_id,
+                                       const std::string &global_image_id,
+                                       const std::string &group_id,
+                                       const std::string &global_group_id,
+                                       size_t group_image_count,
+                                       librbd::mirroring_watcher::GroupMembershipAction action);
 
   void schedule_listener();
   void notify_listener();

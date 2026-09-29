@@ -17,7 +17,8 @@ struct Listener {
 
   virtual void handle_update(const std::string &mirror_uuid,
                              MirrorEntities &&added_entities,
-                             MirrorEntities &&removed_entities) = 0;
+                             MirrorEntities &&removed_entities,
+                             MirrorEntities &&modified_entities) = 0;
 };
 
 } // namespace pool_watcher

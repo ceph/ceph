@@ -52,7 +52,8 @@ public:
       .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
                                           *out_bl = bl;
                                         })),
-                      Return(r)));
+                      Return(r)))
+      .RetiresOnSaturation();
   }
 
   void expect_mirror_group_list(
@@ -86,8 +87,13 @@ public:
   }
 };
 
+// Test sequence:
+// 1. List one mirrored image and an enabled group with three members.
+// 2. Refresh the pool entity list.
+// Expected: The image has weight one and the group has weight three.
 TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, Success) {
   InSequence seq;
+  expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
   cls::rbd::MirrorGroup mirror_group =
     {"global id", cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
@@ -109,6 +115,41 @@ TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, Success) {
   ASSERT_EQ(expected_entities, entities);
 }
 
+// Test sequence:
+// 1. List a standalone image and a group-owned image.
+// 2. Refresh mirrored image entries.
+// Expected: The standalone image has weight one and the group member has
+//   weight zero.
+TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, GroupImageHasZeroWeight) {
+  InSequence seq;
+  expect_mirror_image_list(
+    m_remote_io_ctx, {{"standalone id", "standalone global id"}}, 0);
+  expect_mirror_image_list(
+    m_remote_io_ctx,
+    {{"group image id", "group image global id"},
+     {"standalone id", "standalone global id"}}, 0);
+  expect_mirror_group_list(m_remote_io_ctx, {}, 0);
+
+  C_SaferCond ctx;
+  std::map<MirrorEntity, std::string> entities;
+  MockRefreshEntitiesRequest *req = new MockRefreshEntitiesRequest(
+    m_remote_io_ctx, &entities, &ctx);
+
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  std::map<MirrorEntity, std::string> expected_entities =
+    {{{MIRROR_ENTITY_TYPE_IMAGE, "standalone global id", 1},
+      "standalone id"},
+     {{MIRROR_ENTITY_TYPE_IMAGE, "group image global id", 0},
+      "group image id"}};
+  ASSERT_EQ(expected_entities, entities);
+}
+
+// Test sequence:
+// 1. Fill image and group directories to the page limit and add another page.
+// 2. Refresh every page and retrieve group member counts.
+// Expected: All images and groups are returned with their expected weights.
 TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, LargeDirectory) {
   InSequence seq;
   std::map<std::string, std::string> mirror_image_list;
@@ -121,6 +162,8 @@ TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, LargeDirectory) {
        "local id " + stringify(idx)});
   }
 
+  expect_mirror_image_list(m_remote_io_ctx, mirror_image_list, 0);
+  expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
   expect_mirror_image_list(m_remote_io_ctx, mirror_image_list, 0);
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
 
