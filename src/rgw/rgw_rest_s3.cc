@@ -4035,6 +4035,20 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
     need_to_check_storage_class = true;
   }
 
+  /*
+   * This runs after the self-copy check, so a bucket default does not make
+   * a copy onto itself legal. A copy from another zone is written verbatim,
+   * so the default does not apply to it.
+   */
+  if (source_zone.empty()) {
+    int ret = get_encryption_defaults(s);
+    if (ret < 0) {
+      ldpp_dout(this, 5)
+        << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+      return ret;
+    }
+  }
+
   return 0;
 }
 
