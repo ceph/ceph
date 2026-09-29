@@ -21,6 +21,7 @@
 #include <sys/xattr.h>
 
 #include "common/dout.h"
+#include "common/errno.h"
 #include "include/scope_guard.h"
 
 namespace rgw { namespace sal { namespace nsfs {
@@ -101,6 +102,14 @@ bool SentinelPathStrategy::directory_object(const DoutPrefixProvider* dpp,
 					    DirectoryObject& out) const
 {
   return false;
+}
+
+/* Nothing:  our marker is the sentinel file, and removing that is a
+ * delete of the object rather than a change of format. */
+int SentinelPathStrategy::clear_directory_object(const DoutPrefixProvider* dpp,
+						 int dir_fd) const
+{
+  return 0;
 }
 
 const ReservedNames& SentinelPathStrategy::reserved_names() const
@@ -204,6 +213,19 @@ bool NooBaaPathStrategy::directory_object(const DoutPrefixProvider* dpp,
   out.size = static_cast<uint64_t>(v);
   out.content_in_sentinel = (out.size != 0);
   return true;
+}
+
+int NooBaaPathStrategy::clear_directory_object(const DoutPrefixProvider* dpp,
+					       int dir_fd) const
+{
+  if ((::fremovexattr(dir_fd, NB_XATTR_DIR_CONTENT) < 0) &&
+      (errno != ENODATA)) {
+    int ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: removing " << NB_XATTR_DIR_CONTENT << ": "
+		      << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  return 0;
 }
 
 const ReservedNames& NooBaaPathStrategy::reserved_names() const

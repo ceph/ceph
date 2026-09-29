@@ -3183,6 +3183,17 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
     };
     add(path_strategy->reserved_names());
     add(mpu_strategy->reserved_names());
+    /* Theirs too, and unconditionally.
+     *
+     * The aggregate exists so that no strategy is consulted per
+     * directory entry, which means it cannot depend on the bucket --
+     * and a base bucket's scaffolding is theirs.  Without this a
+     * bucket in their format listed `.noobaa-nsfs_<id>/...` as
+     * objects, and an upgraded one would list whatever the conversion
+     * left behind.  The cost is a few more comparisons per entry,
+     * which is what an aggregate is for. */
+    add(nb_path_strategy->reserved_names());
+    add(nb_mpu_strategy->reserved_names());
     reserved_names.prefixes.emplace_back(nsfs::TMP_LINK_PREFIX);
     reserved_names.prefixes.emplace_back(nsfs::UNLINK_TMP_PREFIX);
     reserved_names.prefixes.emplace_back(nsfs::CLONE_PARENT_PREFIX);
@@ -5075,8 +5086,15 @@ nsfs::PathStrategy* NSFSBucket::path_fallback() const
   return converting ? driver->get_noobaa_path_strategy() : nullptr;
 }
 
+nsfs::MPUStrategy* NSFSBucket::mpu_fallback() const
+{
+  return converting ? driver->get_noobaa_mpu_strategy() : nullptr;
+}
+
 int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
-			    uint32_t target)
+			    uint32_t target,
+			    nsfs::convert_cb_t* cb,
+			    nsfs::ConvertProgress* progress)
 {
   if (! nsfs::is_named_profile(target)) {
     ldpp_dout(dpp, 0) << "ERROR: refusing to set bucket " << get_name()
@@ -5135,8 +5153,717 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
 
-  return (target == nsfs::EXTENSIONS_BASE) ? unmark_extensions(dpp)
-					   : mark_extensions(dpp, target);
+  if (target == nsfs::EXTENSIONS_BASE) {
+    return unmark_extensions(dpp);
+  }
+
+  if (current != nsfs::EXTENSIONS_BASE) {
+    /* Between two of ours.  Both formats are rgw-meta, so nothing in
+     * the tree is in the wrong one and there is nothing to convert --
+     * only the mask changes, and what the dropped extensions owned was
+     * removed above. */
+    return mark_extensions(dpp, target);
+  }
+
+  /* Leaving base:  the upgrade.
+   *
+   * The marker goes down before the mask, and the order is the crash
+   * order.  Marked with no marker is a bucket in our format full of
+   * objects in theirs, with no reader that can see them;  the marker
+   * with no mask is a base bucket carrying an attribute base does not
+   * consult, which is nothing.  So the harmless one is written first.
+   */
+  ret = mark_converting(dpp, true);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = mark_extensions(dpp, target);
+  if (ret < 0) {
+    /* the marker is inert on a base bucket;  leaving it costs a
+     * read of one attribute on the next resolve */
+    return ret;
+  }
+
+  return convert_tree(dpp, y, cb, progress);
+}
+
+const char* nsfs::to_string(nsfs::ConvertEvent::Kind k)
+{
+  switch (k) {
+  case nsfs::ConvertEvent::Kind::object:           return "object";
+  case nsfs::ConvertEvent::Kind::directory_object: return "directory object";
+  case nsfs::ConvertEvent::Kind::upload:           return "upload";
+  case nsfs::ConvertEvent::Kind::part:             return "part";
+  }
+  return "?";
+}
+
+const char* nsfs::to_string(nsfs::ConvertEvent::Phase p)
+{
+  switch (p) {
+  case nsfs::ConvertEvent::Phase::before:  return "before";
+  case nsfs::ConvertEvent::Phase::written: return "written";
+  case nsfs::ConvertEvent::Phase::pruned:  return "pruned";
+  }
+  return "?";
+}
+
+/* Rewrite one file's attributes into the bucket's format.
+ *
+ * Not through FSEnt::write_attrs(), which does the write and the prune
+ * in one call.  The phases have to be separable:  `written` -- both
+ * spellings on disk -- is the only state the conversion creates that
+ * did not exist before, and a caller that cannot be held there cannot
+ * observe it.
+ *
+ * `fd` is the file carrying the attributes, which for a directory
+ * object of ours is the sentinel and of theirs is the directory.
+ */
+static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
+			 int fd, const std::string& display,
+			 nsfs::FSStrategy* fs,
+			 const nsfs::XattrStrategy* ours,
+			 const nsfs::XattrStrategy* theirs,
+			 nsfs::convert_cb_t* cb,
+			 const nsfs::ConvertEvent& base_ev)
+{
+  Attrs attrs;
+  int ret = get_x_attrs(y, dpp, fd, attrs, display, ours, theirs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  nsfs::xattr_map_t to_write;
+  std::vector<std::string> to_remove;
+  for (const auto& [key, bl] : attrs) {
+    const std::string mine = ours->disk_name(key);
+    const std::string foreign = theirs->disk_name(key);
+    if (!mine.empty()) {
+      to_write.try_emplace(mine, attr_on_disk(ours, key, bl));
+    }
+    if (!foreign.empty() && (foreign != mine)) {
+      to_remove.push_back(foreign);
+    }
+  }
+
+  if (cb) {
+    nsfs::ConvertEvent ev = base_ev;
+    ev.phase = nsfs::ConvertEvent::Phase::before;
+    ret = (*cb)(dpp, ev);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  if (!to_write.empty()) {
+    ret = fs->set_xattrs(dpp, fd, to_write);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  if (cb) {
+    nsfs::ConvertEvent ev = base_ev;
+    ev.phase = nsfs::ConvertEvent::Phase::written;
+    ret = (*cb)(dpp, ev);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  if (!to_remove.empty()) {
+    ret = fs->remove_xattrs(dpp, fd, to_remove);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  if (cb) {
+    nsfs::ConvertEvent ev = base_ev;
+    ev.phase = nsfs::ConvertEvent::Phase::pruned;
+    ret = (*cb)(dpp, ev);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  return 0;
+}
+
+/* One directory of the tree, and everything under it.
+ *
+ * Depth first, and the order within a directory is readdir's, so a
+ * caller sequencing against this gets whatever the filesystem gives.
+ * Nothing here depends on the order:  each item is converted on its
+ * own and a run that stops leaves the rest for the next one.
+ */
+static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
+			     nsfs::Directory* d, CephContext* cct,
+			     const std::string& prefix,
+			     nsfs::FSStrategy* fs,
+			     const nsfs::XattrStrategy* ours,
+			     const nsfs::XattrStrategy* theirs,
+			     const nsfs::PathStrategy* their_paths,
+			     const nsfs::ReservedNames& rn,
+			     nsfs::convert_cb_t* cb,
+			     nsfs::ConvertProgress& progress)
+{
+  int ret = d->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* The sentinel first, where there is one:  it carries this
+   * directory's object attributes in our format, and converting it
+   * before recursing keeps the whole of one object in one step. */
+  std::vector<std::string> subdirs;
+  std::vector<std::string> files;
+
+  ret = d->for_each(dpp, [&](const char* name) {
+    std::string_view n(name);
+    if ((n == ".") || (n == "..")) {
+      return 0;
+    }
+    /* Scaffolding is skipped, the sentinel included.  A directory
+     * object of theirs keeps its attributes on the directory whether
+     * or not it has a sentinel, so the sentinel is never where the
+     * conversion has to look -- the directory branch below owns the
+     * whole of that case.  Treating it as an object here converted
+     * nothing and counted the same directory object twice. */
+    if (is_reserved_name(name, rn)) {
+      return 0;
+    }
+    struct statx stx;
+    if (statx(d->get_fd(), name, AT_SYMLINK_NOFOLLOW, STATX_MODE, &stx) < 0) {
+      return 0;
+    }
+    if (S_ISDIR(stx.stx_mode)) {
+      subdirs.emplace_back(name);
+    } else if (S_ISREG(stx.stx_mode)) {
+      files.emplace_back(name);
+    }
+    return 0;
+  });
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (const auto& name : files) {
+    int fd = ::openat(d->get_fd(), name.c_str(), O_RDONLY);
+    if (fd < 0) {
+      /* deleted under us;  one object, not a failed conversion */
+      continue;
+    }
+    auto close_fd = make_scope_guard([fd] { ::close(fd); });
+
+    nsfs::ConvertEvent ev{};
+    ev.kind = nsfs::ConvertEvent::Kind::object;
+    ev.key = prefix + name;
+    ev.index = progress.objects + progress.directory_objects;
+
+    ret = convert_attrs(dpp, y, fd, ev.key, fs, ours, theirs, cb, ev);
+    if (ret != 0) {
+      return ret;
+    }
+    ++progress.objects;
+  }
+
+  for (const auto& name : subdirs) {
+    nsfs::Directory sub(name, d, cct);
+    ret = sub.open(dpp);
+    if (ret < 0) {
+      continue;
+    }
+
+    /* A directory object of theirs.
+     *
+     * Their fact is user.noobaa.dir_content on the directory and ours
+     * is the sentinel file, and the attributes move with it:  theirs
+     * live on the directory, ours on `.folder`.  So converting one is
+     * a move, not a rename of an attribute -- create the sentinel if
+     * the object was empty, carry the attributes across, and drop
+     * dir_content.
+     *
+     * The sentinel is created before the attributes are written, so a
+     * reader that arrives between the two sees an empty object rather
+     * than none.  A partial conversion is visible either way;  this is
+     * the ordering that makes it visible as the object it is. */
+    nsfs::PathStrategy::DirectoryObject dobj{};
+    if (their_paths->directory_object(dpp, sub.get_fd(), dobj)) {
+      const std::string sname = their_paths->folder_object_name();
+      int sfd = ::openat(sub.get_fd(), sname.c_str(),
+			 O_RDONLY | O_CREAT, S_IRUSR | S_IWUSR);
+      if (sfd < 0) {
+	ret = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: creating " << sname << " under "
+			  << prefix << name << ": " << cpp_strerror(-ret)
+			  << dendl;
+	return ret;
+      }
+      auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
+
+      nsfs::ConvertEvent ev{};
+      ev.kind = nsfs::ConvertEvent::Kind::directory_object;
+      ev.key = prefix + name + "/";
+      ev.index = progress.objects + progress.directory_objects;
+
+      Attrs dattrs;
+      ret = get_x_attrs(y, dpp, sub.get_fd(), dattrs, ev.key, ours, theirs);
+      if (ret < 0) {
+	return ret;
+      }
+
+      if (cb) {
+	nsfs::ConvertEvent b = ev;
+	b.phase = nsfs::ConvertEvent::Phase::before;
+	ret = (*cb)(dpp, b);
+	if (ret != 0) {
+	  return ret;
+	}
+      }
+
+      nsfs::xattr_map_t to_write;
+      for (const auto& [key, bl] : dattrs) {
+	const std::string mine = ours->disk_name(key);
+	if (!mine.empty()) {
+	  to_write.try_emplace(mine, attr_on_disk(ours, key, bl));
+	}
+      }
+      if (!to_write.empty()) {
+	ret = fs->set_xattrs(dpp, sfd, to_write);
+	if (ret < 0) {
+	  return ret;
+	}
+      }
+
+      if (cb) {
+	nsfs::ConvertEvent w = ev;
+	w.phase = nsfs::ConvertEvent::Phase::written;
+	ret = (*cb)(dpp, w);
+	if (ret != 0) {
+	  return ret;
+	}
+      }
+
+      /* dir_content last:  while it is there the directory is still an
+       * object to their reader, and removing it before the sentinel
+       * exists would make the object vanish for the length of a
+       * syscall. */
+      std::vector<std::string> gone;
+      for (const auto& [key, bl] : dattrs) {
+	const std::string foreign = theirs->disk_name(key);
+	if (!foreign.empty()) {
+	  gone.push_back(foreign);
+	}
+      }
+      if (!gone.empty()) {
+	ret = fs->remove_xattrs(dpp, sub.get_fd(), gone);
+	if (ret < 0) {
+	  return ret;
+	}
+      }
+      ret = their_paths->clear_directory_object(dpp, sub.get_fd());
+      if (ret < 0) {
+	return ret;
+      }
+
+      if (cb) {
+	nsfs::ConvertEvent pr = ev;
+	pr.phase = nsfs::ConvertEvent::Phase::pruned;
+	ret = (*cb)(dpp, pr);
+	if (ret != 0) {
+	  return ret;
+	}
+      }
+      ++progress.directory_objects;
+    }
+
+    ret = convert_directory(dpp, y, &sub, cct, prefix + name + "/", fs,
+			    ours, theirs, their_paths, rn, cb, progress);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  return 0;
+}
+
+/* Re-stage an upload the other format started.
+ *
+ * S3 lets a multipart upload stay open indefinitely, so the drain that
+ * precedes an upgrade cannot wait for one:  UploadPart terminates, the
+ * upload it belongs to does not.  A tree therefore arrives at the
+ * conversion with staging in the old layout, and leaving it is the one
+ * thing that would keep the bucket mixed after the walk had finished
+ * -- for three operations that would then be reading the wrong layout,
+ * which is worse than a fallback because it is a lie rather than a
+ * chain.  Aborting is the alternative and throws away work the client
+ * already did.
+ *
+ * Re-staged one file per part, whatever our layout is.  The stride
+ * exists because parts arrive one at a time and a writer can place
+ * them as they come;  here every part is already on disk and there is
+ * nothing to gain by reconstructing it.  A record saying the bytes are
+ * in the part's own file is what our assembly reads for a diverted
+ * part, so both of our layouts complete it.
+ */
+int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
+				optional_yield y,
+				nsfs::convert_cb_t* cb,
+				nsfs::ConvertProgress& progress)
+{
+  auto* theirs = mpu_fallback();
+  auto* ours = mpu_strategy();
+  if (!theirs || !ours) {
+    return 0;
+  }
+
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto their_root = theirs->staging_root(dpp, dir->get_fd());
+  if (!their_root) {
+    return 0;   /* they never took an upload here */
+  }
+
+  nsfs::Directory root(*their_root, dir.get(), driver->ctx());
+  ret = root.open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::vector<std::string> dnames;
+  ret = root.for_each(dpp, [&dnames](const char* name) {
+    std::string_view n(name);
+    if ((n != ".") && (n != "..")) {
+      dnames.emplace_back(name);
+    }
+    return 0;
+  });
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto* fs = driver->get_fs_strategy();
+
+  for (const auto& dname : dnames) {
+    nsfs::MPUStrategy::StagedUpload su;
+    if (!theirs->staged_upload(dpp, root.get_fd(), dname, su)) {
+      continue;   /* not an upload of theirs */
+    }
+
+    nsfs::ConvertEvent ev{};
+    ev.kind = nsfs::ConvertEvent::Kind::upload;
+    ev.key = su.key;
+    ev.upload_id = su.upload_id;
+    ev.index = progress.uploads;
+    if (cb) {
+      nsfs::ConvertEvent b = ev;
+      b.phase = nsfs::ConvertEvent::Phase::before;
+      ret = (*cb)(dpp, b);
+      if (ret != 0) {
+	return ret;
+      }
+    }
+
+    nsfs::Directory theirdir(dname, &root, driver->ctx());
+    ret = theirdir.open(dpp);
+    if (ret < 0) {
+      continue;
+    }
+
+    /* ours, beside it.  Their staging is two levels down and ours is
+     * the bucket directory, so this is not a rename. */
+    const std::string meta = su.key + "." + su.upload_id;
+    nsfs::Directory ourdir(ours->staging_dir_name(meta), dir.get(),
+			   driver->ctx());
+    bool existed = false;
+    ret = ourdir.create(dpp, &existed);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = ourdir.open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+
+    /* the upload's own record, in our format */
+    {
+      const std::string mname = ours->meta_name();
+      int mfd = ::openat(ourdir.get_fd(), mname.c_str(),
+			 O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+      if (mfd < 0) {
+	ret = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: creating " << mname << " for "
+			  << meta << ": " << cpp_strerror(-ret) << dendl;
+	return ret;
+      }
+      auto close_mfd = make_scope_guard([mfd] { ::close(mfd); });
+
+      ACLOwner mp_owner;
+      /* The bucket's owner, not theirs.  Their staging carries none --
+       * upload_owner() answers from the directory's uid, which is a
+       * number and not an RGW identity -- and the upload is becoming
+       * ours, so the owner S3 will report for the finished object is
+       * the right answer to record now. */
+      mp_owner.id = get_owner();
+      NSFSMPObj mp(driver, su.key, su.upload_id, mp_owner);
+
+      bufferlist bl;
+      encode(mp, bl);
+      const std::string xn = xattr_strategy()->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
+      const std::string xv = attr_on_disk(xattr_strategy(),
+					  RGW_NSFS_ATTR_MPUPLOAD, bl);
+      if (::fsetxattr(mfd, xn.c_str(), xv.data(), xv.size(), 0) < 0) {
+	ret = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: writing the upload record for " << meta
+			  << ": " << cpp_strerror(-ret) << dendl;
+	return ret;
+      }
+      ret = ours->write_staged_upload(dpp, ourdir.get_fd(), su);
+      if (ret < 0) {
+	return ret;
+      }
+    }
+
+    /* the parts */
+    std::vector<std::string> pnames;
+    ret = theirdir.for_each(dpp, [&](const char* name) {
+      if (theirs->part_number(name)) {
+	pnames.emplace_back(name);
+      }
+      return 0;
+    });
+    if (ret < 0) {
+      return ret;
+    }
+
+    for (const auto& pname : pnames) {
+      auto num = theirs->part_number(pname);
+      if (!num) {
+	continue;
+      }
+
+      Attrs pattrs;
+      int pfd = ::openat(theirdir.get_fd(), pname.c_str(), O_RDONLY);
+      if (pfd >= 0) {
+	get_x_attrs(y, dpp, pfd, pattrs, pname, xattr_strategy(),
+		    xattr_fallback());
+	::close(pfd);
+      }
+
+      nsfs::MPUStrategy::PartRecord rec{};
+      if (!theirs->part_record(dpp, theirdir.get_fd(), pname, pattrs, rec)) {
+	ldpp_dout(dpp, 4) << "no record for " << pname << " of " << meta
+			  << ";  skipping it" << dendl;
+	continue;
+      }
+
+      nsfs::ConvertEvent pev{};
+      pev.kind = nsfs::ConvertEvent::Kind::part;
+      pev.key = su.key;
+      pev.upload_id = su.upload_id;
+      pev.part = *num;
+      pev.index = progress.parts;
+      if (cb) {
+	nsfs::ConvertEvent b = pev;
+	b.phase = nsfs::ConvertEvent::Phase::before;
+	ret = (*cb)(dpp, b);
+	if (ret != 0) {
+	  return ret;
+	}
+      }
+
+      /* where their bytes are:  the size-keyed file when the record
+       * says the part shares one, the part's own file otherwise */
+      std::string sname = pname;
+      if (rec.shared) {
+	auto sn = theirs->shared_name(rec.stored);
+	if (!sn) {
+	  ldpp_dout(dpp, 0) << "ERROR: " << pname << " of " << meta
+			    << " says it shares a file the layout does not "
+			    << "name" << dendl;
+	  return -EIO;
+	}
+	sname = *sn;
+      }
+      int sfd = ::openat(theirdir.get_fd(), sname.c_str(), O_RDONLY);
+      if (sfd < 0) {
+	ret = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: opening " << sname << " for " << pname
+			  << " of " << meta << ": " << cpp_strerror(-ret)
+			  << dendl;
+	return ret;
+      }
+      auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
+
+      const std::string ourname = ours->part_name(*num);
+      int dfd = ::openat(ourdir.get_fd(), ourname.c_str(),
+			 O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+      if (dfd < 0) {
+	ret = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: creating " << ourname << " for " << meta
+			  << ": " << cpp_strerror(-ret) << dendl;
+	return ret;
+      }
+      auto close_dfd = make_scope_guard([dfd] { ::close(dfd); });
+
+      if (rec.stored > 0) {
+	ret = fs->copy_range(dpp, sfd, rec.offset, dfd, 0, rec.stored);
+	if (ret < 0) {
+	  ldpp_dout(dpp, 0) << "ERROR: copying part " << *num << " of "
+			    << meta << ": " << cpp_strerror(-ret) << dendl;
+	  return ret;
+	}
+      }
+
+      if (cb) {
+	nsfs::ConvertEvent w = pev;
+	w.phase = nsfs::ConvertEvent::Phase::written;
+	ret = (*cb)(dpp, w);
+	if (ret != 0) {
+	  return ret;
+	}
+      }
+
+      NSFSUploadPartInfo upi;
+      upi.num = *num;
+      upi.size = rec.size;
+      upi.etag = rec.etag;
+      upi.mtime = rec.mtime;
+      upi.cksum = rec.cksum;
+      /* its own file now, whatever it was in */
+      upi.shared = false;
+      upi.offset = 0;
+      upi.stored = rec.stored;
+
+      bufferlist pbl;
+      encode(upi, pbl);
+      const std::string pxn =
+	  xattr_strategy()->disk_name(RGW_NSFS_ATTR_MPUPLOAD);
+      const std::string pxv = attr_on_disk(xattr_strategy(),
+					   RGW_NSFS_ATTR_MPUPLOAD, pbl);
+      if (::fsetxattr(dfd, pxn.c_str(), pxv.data(), pxv.size(), 0) < 0) {
+	ret = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: writing the record for part " << *num
+			  << " of " << meta << ": " << cpp_strerror(-ret)
+			  << dendl;
+	return ret;
+      }
+      nsfs::MPUStrategy::PartRecord outrec = rec;
+      outrec.shared = false;
+      outrec.offset = 0;
+      ret = ours->write_part_record(dpp, ourdir.get_fd(), ourname, outrec);
+      if (ret < 0) {
+	return ret;
+      }
+
+      if (cb) {
+	nsfs::ConvertEvent pr = pev;
+	pr.phase = nsfs::ConvertEvent::Phase::pruned;
+	ret = (*cb)(dpp, pr);
+	if (ret != 0) {
+	  return ret;
+	}
+      }
+      ++progress.parts;
+    }
+
+    if (cb) {
+      nsfs::ConvertEvent w = ev;
+      w.phase = nsfs::ConvertEvent::Phase::written;
+      ret = (*cb)(dpp, w);
+      if (ret != 0) {
+	return ret;
+      }
+    }
+
+    /* Their staging goes last.  Until it does the upload exists twice,
+     * which a listing that scans one root at a time reports once;
+     * removing it first would lose the parts if anything below
+     * failed. */
+    theirdir.close();
+    ret = delete_directory(root.get_fd(), dname.c_str(), true, dpp,
+			   driver->get_reserved_names());
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: removing their staging for " << meta
+			<< ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    if (cb) {
+      nsfs::ConvertEvent pr = ev;
+      pr.phase = nsfs::ConvertEvent::Phase::pruned;
+      ret = (*cb)(dpp, pr);
+      if (ret != 0) {
+	return ret;
+      }
+    }
+    ++progress.uploads;
+  }
+
+  return 0;
+}
+
+/* Rewrite whatever in this tree is still in the other format.
+ *
+ * Runs with the bucket already marked -- so writes go in our format
+ * and the read chain is on -- and clears the marker when it gets to
+ * the end.  A run that stops leaves the marker, which is what makes
+ * it resumable:  the state on disk is "some of this is still theirs",
+ * and that is exactly what the marker says.
+ *
+ * Idempotent.  An item already converted reads through our own
+ * strategy, writes back the same bytes under the same names, and
+ * prunes a foreign spelling that is not there.
+ */
+int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
+			     nsfs::convert_cb_t* cb,
+			     nsfs::ConvertProgress* progress)
+{
+  nsfs::ConvertProgress local;
+  nsfs::ConvertProgress& prog = progress ? *progress : local;
+
+  auto* theirs = xattr_fallback();
+  auto* their_paths = path_fallback();
+  if (!theirs || !their_paths) {
+    /* Not converting, so there is nothing in another format to find.
+     * Reached when a caller resumes a bucket whose marker is already
+     * gone, which is a no-op and not an error. */
+    prog.complete = true;
+    return 0;
+  }
+
+  int ret = convert_directory(dpp, y, dir.get(), driver->ctx(),
+			      std::string(), driver->get_fs_strategy(),
+			      xattr_strategy(), theirs, their_paths,
+			      driver->get_reserved_names(), cb, prog);
+  if (ret == 0) {
+    ret = convert_uploads(dpp, y, cb, prog);
+  }
+  if (ret != 0) {
+    ldpp_dout(dpp, 1) << "nsfs: converting bucket " << get_name()
+      << " stopped after " << prog.objects << " objects, "
+      << prog.directory_objects << " directory objects and "
+      << prog.uploads << " uploads: "
+      << cpp_strerror(-ret) << ";  the marker stays and a later run "
+      << "resumes" << dendl;
+    return ret;
+  }
+
+  ret = mark_converting(dpp, false);
+  if (ret < 0) {
+    return ret;
+  }
+  prog.complete = true;
+
+  ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name() << " converted: "
+    << prog.objects << " objects, " << prog.directory_objects
+    << " directory objects, " << prog.uploads << " uploads ("
+    << prog.parts << " parts)" << dendl;
+  return 0;
 }
 
 int NSFSBucket::mark_extensions(const DoutPrefixProvider* dpp,
@@ -5451,6 +6178,12 @@ struct UploadEnt {
   std::string key;
   std::string upload_id;
   std::string dname;
+  /* which root it was found in, and which layout reads it.  A bucket
+   * mid-upgrade has staging in both, and an entry has to remember
+   * which one answered so the owner and the mtime are read from the
+   * right place. */
+  nsfs::Directory* src{nullptr};
+  nsfs::MPUStrategy* mpu{nullptr};
 
   bool operator<(const UploadEnt& o) const {
     return key != o.key ? key < o.key : upload_id < o.upload_id;
@@ -5532,13 +6265,19 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 
   UploadEntries ents(max_uploads);
   std::map<std::string, bool> prefixes;
+  /* One upload, once.
+   *
+   * The re-stage writes ours before removing theirs, so for the
+   * length of one upload's conversion the same key and id are in both
+   * roots.  Ours is scanned first and wins, which is also the right
+   * preference:  it is the copy that is complete. */
+  std::set<std::pair<std::string, std::string>> seen;
 
   /* Where this format keeps staging directories.  None means no upload
    * has ever been started here, which is an empty listing and not an
    * error:  NooBaa creates multipart-uploads/ at the first
    * CreateMultipartUpload, and ours is the bucket directory, which
    * always exists. */
-  auto* mpu = mpu_strategy();
   /* the fd, before anything asks the format about it:  for_each()
    * opens the directory itself, and staging_root() is now asked
    * first */
@@ -5546,27 +6285,43 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
   if (oret < 0) {
     return oret;
   }
-  auto root = mpu->staging_root(dpp, dir->get_fd());
-  if (!root) {
-    if (is_truncated) {
-      *is_truncated = false;
-    }
-    return 0;
-  }
 
-  nsfs::Directory* scan = dir.get();
-  std::unique_ptr<nsfs::Directory> root_dir;
-  if (*root != ".") {
-    root_dir = std::make_unique<nsfs::Directory>(*root, dir.get(),
-						 driver->ctx());
-    int rret = root_dir->open(dpp);
-    if (rret < 0) {
-      return rret;
-    }
-    scan = root_dir.get();
-  }
+  /* Both layouts, where the bucket is mid-upgrade.
+   *
+   * The conversion re-stages one upload at a time, so during it some
+   * are in our root and the rest are still in theirs.  Scanning one
+   * would report half the uploads in flight and call the listing
+   * complete, which is worse than the cost of the second scan:  a
+   * staging_root() that answers nothing, on every bucket that is not
+   * converting. */
+  nsfs::MPUStrategy* layouts[2] = { mpu_strategy(), mpu_fallback() };
+  std::unique_ptr<nsfs::Directory> roots[2];
+  nsfs::Directory* scans[2] = { nullptr, nullptr };
+  int ret = 0;
 
-  int ret = scan->for_each(dpp, [&] (const char* name) {
+  for (int i = 0; i < 2; ++i) {
+    auto* mpu = layouts[i];
+    if (!mpu) {
+      continue;
+    }
+    auto root = mpu->staging_root(dpp, dir->get_fd());
+    if (!root) {
+      continue;
+    }
+
+    nsfs::Directory* scan = dir.get();
+    if (*root != ".") {
+      roots[i] = std::make_unique<nsfs::Directory>(*root, dir.get(),
+						   driver->ctx());
+      int rret = roots[i]->open(dpp);
+      if (rret < 0) {
+	return rret;
+      }
+      scan = roots[i].get();
+    }
+    scans[i] = scan;
+
+    ret = scan->for_each(dpp, [&, mpu, scan] (const char* name) {
     /* What upload is here, if any.  Ours answers from the name;
      * NooBaa's opens the directory's metadata, because that is where
      * they keep the key. */
@@ -5575,10 +6330,16 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
       return 0;
     }
 
+    if (!seen.emplace(su.key, su.upload_id).second) {
+      return 0;
+    }
+
     UploadEnt ent;
     ent.key = std::move(su.key);
     ent.upload_id = std::move(su.upload_id);
     ent.dname = name;
+    ent.src = scan;
+    ent.mpu = mpu;
 
     if (!prefix.empty() && !ent.key.starts_with(prefix)) {
       return 0;
@@ -5601,9 +6362,10 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 
     ents.add(std::move(ent));
     return 0;
-  });
-  if (ret < 0) {
-    return ret;
+    });
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   if (is_truncated) {
@@ -5615,7 +6377,7 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 
   for (auto& ent : ents.sorted()) {
     struct statx stx;
-    if (statx(scan->get_fd(), ent.dname.c_str(), AT_SYMLINK_NOFOLLOW,
+    if (statx(ent.src->get_fd(), ent.dname.c_str(), AT_SYMLINK_NOFOLLOW,
 	      STATX_MTIME, &stx) < 0) {
       continue;
     }
@@ -5626,7 +6388,7 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
      * is a read per upload RETURNED, not per entry examined. */
     ACLOwner owner;
     const bool from_format =
-	mpu->upload_owner(dpp, scan->get_fd(), ent.dname, owner);
+	ent.mpu->upload_owner(dpp, ent.src->get_fd(), ent.dname, owner);
 
     auto upload = std::make_unique<NSFSMultipartUpload>(
 	driver, this, ent.key, ent.upload_id, owner,

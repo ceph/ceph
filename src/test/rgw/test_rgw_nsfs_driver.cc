@@ -3590,6 +3590,461 @@ TEST_F(NSFSConvertingBucketTest, WritingPrunesTheForeignSpelling)
       << "the object carries both spellings of its content type";
 }
 
+/* The upgrade:  a bucket in NooBaa's format moved to one of ours,
+ * with its tree rewritten.
+ *
+ * Starts from base, which is what a tree we adopted is, and asks for
+ * strong -- which is what set_profile() does for an operator through
+ * /admin/nsfs/profile.
+ */
+class NSFSUpgradeTest : public NSFSNooBaaBucketTest {
+public:
+  /* an object of theirs, by hand:  their names, nothing of ours */
+  void their_object(const std::string& name, const char* ctype) {
+    const sf::path p{bucket_path() / name};
+    sf::create_directories(p.parent_path());
+    write_file(p, "their bytes");
+    const std::string ct{ctype};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
+			 ct.data(), ct.size(), 0), 0);
+    const std::string md5{"0123456789abcdef0123456789abcdef"};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.content_md5",
+			 md5.data(), md5.size(), 0), 0);
+  }
+
+  /* an empty directory object of theirs:  no sentinel, the fact is on
+   * the directory */
+  void their_folder(const std::string& name, const char* ctype) {
+    const sf::path p{bucket_path() / name};
+    sf::create_directories(p);
+    set_u64_xattr(p, "user.noobaa.dir_content", 0);
+    const std::string ct{ctype};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
+			 ct.data(), ct.size(), 0), 0);
+  }
+
+  /* RGW stores several string attributes as counted strings, so a
+   * value read back through our own strategy carries the terminator
+   * and one read through theirs does not -- theirs is not a counted
+   * format.  The conversion is not supposed to change the value, and
+   * the byte is how RGW represents it rather than part of it. */
+  static std::string unterminated(const bufferlist& bl) {
+    std::string v = bl.to_str();
+    while (!v.empty() && (v.back() == '\0')) {
+      v.pop_back();
+    }
+    return v;
+  }
+
+  static std::set<std::string> xattr_names(const sf::path& p) {
+    char buf[8192];
+    std::set<std::string> names;
+    ssize_t len = ::listxattr(p.c_str(), buf, sizeof(buf));
+    if (len <= 0) {
+      return names;
+    }
+    for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
+      names.insert(q);
+    }
+    return names;
+  }
+
+  int upgrade(nsfs::convert_cb_t* cb, nsfs::ConvertProgress* progress) {
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+    return b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_STRONG,
+			  cb, progress);
+  }
+};
+
+/* Everything in the tree ends up in our names, and the marker is gone. */
+TEST_F(NSFSUpgradeTest, ConvertsTheTree)
+{
+  their_object("flat.bin", "text/plain");
+  their_object("deep/nested.bin", "application/json");
+  their_folder("photos", "application/directory");
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.objects, 2u);
+  EXPECT_EQ(prog.directory_objects, 1u);
+  EXPECT_TRUE(prog.complete);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_STREQ(b->profile_name(), "strong");
+  EXPECT_FALSE(b->is_converting());
+
+  for (const char* k : {"flat.bin", "deep/nested.bin"}) {
+    auto names = xattr_names(bucket_path() / k);
+    EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type")) << k;
+    EXPECT_TRUE(names.contains("user.nsfs.rgw.etag")) << k;
+    EXPECT_FALSE(names.contains("user.noobaa.content_type")) << k;
+    EXPECT_FALSE(names.contains("user.content_md5")) << k;
+  }
+
+  /* the folder's fact moved:  their attribute on the directory, ours
+   * in the sentinel beside it */
+  EXPECT_TRUE(sf::is_regular_file(bucket_path() / "photos" / ".folder"));
+  EXPECT_FALSE(xattr_names(bucket_path() / "photos")
+		   .contains("user.noobaa.dir_content"));
+  EXPECT_TRUE(xattr_names(bucket_path() / "photos" / ".folder")
+		  .contains("user.nsfs.rgw.content_type"));
+
+  /* and the values survived the move */
+  auto obj = bucket->get_object(rgw_obj_key("flat.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  auto& attrs = obj->get_attrs();
+  ASSERT_NE(attrs.find(RGW_ATTR_CONTENT_TYPE), attrs.end());
+  EXPECT_EQ(unterminated(attrs[RGW_ATTR_CONTENT_TYPE]), "text/plain");
+  EXPECT_EQ(unterminated(attrs[RGW_ATTR_ETAG]),
+	    "0123456789abcdef0123456789abcdef");
+}
+
+/* Every phase is reported, in order, for every item. */
+TEST_F(NSFSUpgradeTest, ReportsEachPhase)
+{
+  their_object("a.bin", "text/plain");
+  their_object("b.bin", "text/plain");
+
+  std::vector<std::string> seen;
+  nsfs::convert_cb_t cb =
+    [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      seen.push_back(std::string(nsfs::to_string(ev.phase)) + ":" + ev.key);
+      return 0;
+    };
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(&cb, &prog), 0);
+  ASSERT_EQ(seen.size(), 6u) << "three phases for each of two objects";
+
+  /* readdir order is the filesystem's, so what is asserted is that
+   * each object's three phases arrive together and in order */
+  for (size_t i = 0; i < seen.size(); i += 3) {
+    const std::string key = seen[i].substr(seen[i].find(':') + 1);
+    EXPECT_EQ(seen[i], "before:" + key);
+    EXPECT_EQ(seen[i + 1], "written:" + key);
+    EXPECT_EQ(seen[i + 2], "pruned:" + key);
+  }
+}
+
+/* A reader held at `written` sees the new value, not the old.
+ *
+ * That instant is the only state the conversion creates which did not
+ * exist before -- both spellings on the file at once -- and it is
+ * where "ours first" in the read chain stops being incidental.  The
+ * callback is what makes it reachable:  without a hold there is no
+ * way to arrive inside one item's conversion.
+ */
+TEST_F(NSFSUpgradeTest, AReaderHeldAtWrittenSeesTheNewValue)
+{
+  their_object("held.bin", "text/plain");
+
+  std::string seen_ct, seen_etag;
+  nsfs::convert_cb_t cb =
+    [&](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if ((ev.phase != nsfs::ConvertEvent::Phase::written) ||
+	  (ev.key != "held.bin")) {
+	return 0;
+      }
+      /* both spellings are on the file right now */
+      auto names = xattr_names(bucket_path() / "held.bin");
+      EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type"));
+      EXPECT_TRUE(names.contains("user.noobaa.content_type"));
+
+      auto rd = bucket->get_object(rgw_obj_key("held.bin"));
+      EXPECT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
+      EXPECT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
+      auto& a = rd->get_attrs();
+      auto ct = a.find(RGW_ATTR_CONTENT_TYPE);
+      if (ct != a.end()) {
+	seen_ct = ct->second.to_str();
+      }
+      auto et = a.find(RGW_ATTR_ETAG);
+      if (et != a.end()) {
+	seen_etag = et->second.to_str();
+      }
+      return 0;
+    };
+
+  ASSERT_EQ(upgrade(&cb, nullptr), 0);
+  EXPECT_EQ(seen_ct, "text/plain");
+  EXPECT_EQ(seen_etag, "0123456789abcdef0123456789abcdef");
+}
+
+/* Stopping leaves the marker, and a second run finishes the job.
+ *
+ * The control the resumability claim needs:  the abort has to leave a
+ * tree that is genuinely half-converted, and the restart has to be
+ * able to tell which half is which -- which is what the marker and
+ * the chain are for.
+ */
+TEST_F(NSFSUpgradeTest, StopsAndResumes)
+{
+  for (int i = 0; i < 4; ++i) {
+    their_object("obj-" + std::to_string(i) + ".bin", "text/plain");
+  }
+
+  int seen = 0;
+  nsfs::convert_cb_t stop =
+    [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if (ev.phase != nsfs::ConvertEvent::Phase::pruned) {
+	return 0;
+      }
+      return (++seen == 2) ? -EINTR : 0;
+    };
+
+  nsfs::ConvertProgress first;
+  EXPECT_EQ(upgrade(&stop, &first), -EINTR);
+  EXPECT_FALSE(first.complete);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_STREQ(b->profile_name(), "strong")
+      << "the mask went down before the walk, so a stopped run is still "
+	 "marked";
+  EXPECT_TRUE(b->is_converting()) << "the marker was cleared by a run that "
+				     "did not finish";
+
+  /* half the tree is ours and half is theirs, and both read */
+  int ours = 0, theirs = 0;
+  for (int i = 0; i < 4; ++i) {
+    auto names = xattr_names(bucket_path() /
+			     ("obj-" + std::to_string(i) + ".bin"));
+    if (names.contains("user.noobaa.content_type")) {
+      ++theirs;
+    } else {
+      ++ours;
+    }
+    auto obj = bucket->get_object(
+	rgw_obj_key("obj-" + std::to_string(i) + ".bin"));
+    ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+    ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+    EXPECT_EQ(unterminated(obj->get_attrs()[RGW_ATTR_ETAG]),
+	      "0123456789abcdef0123456789abcdef")
+	<< "obj-" << i << " unreadable mid-conversion";
+  }
+  EXPECT_EQ(ours, 2);
+  EXPECT_EQ(theirs, 2);
+
+  /* and the rest of it converts */
+  nsfs::ConvertProgress second;
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, &second), 0);
+  EXPECT_TRUE(second.complete);
+  EXPECT_FALSE(b->is_converting());
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_FALSE(xattr_names(bucket_path() /
+			     ("obj-" + std::to_string(i) + ".bin"))
+		     .contains("user.noobaa.content_type"));
+  }
+}
+
+/* Converting a tree that is already ours changes nothing.
+ *
+ * Resumption reruns items it already did, so the pass has to be
+ * idempotent or a restart corrupts what the first run finished. */
+TEST_F(NSFSUpgradeTest, ConvertingTwiceIsTheSameAsOnce)
+{
+  their_object("once.bin", "text/plain");
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+  const auto after_one = xattr_names(bucket_path() / "once.bin");
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->mark_converting(env->dpp, true), 0);
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, &prog), 0);
+  EXPECT_TRUE(prog.complete);
+
+  EXPECT_EQ(xattr_names(bucket_path() / "once.bin"), after_one);
+  auto obj = bucket->get_object(rgw_obj_key("once.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  EXPECT_EQ(unterminated(obj->get_attrs()[RGW_ATTR_CONTENT_TYPE]),
+	    "text/plain");
+}
+
+/* An upload in flight crosses the upgrade.
+ *
+ * It cannot be drained:  UploadPart terminates, the upload it belongs
+ * to does not, so the tree arrives at the conversion with staging in
+ * their layout.  The alternative is aborting it, which throws away
+ * work the client already did.
+ */
+TEST_F(NSFSUpgradeTest, ReStagesAnUploadInFlight)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  their_object("beside.bin", "text/plain");
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.uploads, 1u);
+  EXPECT_EQ(prog.parts, tree.parts);
+  EXPECT_TRUE(prog.complete);
+
+  /* their staging is gone */
+  EXPECT_FALSE(sf::exists(tree.staging)) << tree.staging;
+
+  /* and ours is there, named as we name one */
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const std::string meta = tree.key + "." + tree.upload_id;
+  const sf::path ours{bucket_path() / b->mpu_strategy()->staging_dir_name(meta)};
+  ASSERT_TRUE(sf::is_directory(ours)) << ours;
+
+  /* the upload lists, through our layout */
+  std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  std::string marker;
+  bool truncated = false;
+  ASSERT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
+				    nullptr, &truncated, null_yield), 0);
+  ASSERT_EQ(uploads.size(), 1u);
+  EXPECT_EQ(uploads[0]->get_key(), tree.key);
+  EXPECT_EQ(uploads[0]->get_upload_id(), tree.upload_id);
+
+  /* its parts report the sizes they were staged with */
+  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  int next = 0;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0);
+  const auto& parts = upload->get_parts();
+  ASSERT_EQ(parts.size(), tree.parts);
+  for (uint32_t k = 1; k <= tree.parts; ++k) {
+    ASSERT_NE(parts.find(k), parts.end()) << k;
+    EXPECT_EQ(parts.at(k)->get_size(), tree.part_size) << k;
+  }
+
+  /* and it completes, into the object the client asked for */
+  std::map<int, std::string> etags;
+  for (auto& [num, part] : upload->get_parts()) {
+    etags[num] = part->get_etag();
+  }
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, tree.key,
+			etags), 0);
+  EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload);
+}
+
+/* Every part is reported, and a stop inside one leaves the rest. */
+TEST_F(NSFSUpgradeTest, ReportsPartsAndStopsInsideAnUpload)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  std::vector<std::string> seen;
+  nsfs::convert_cb_t record =
+    [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if ((ev.kind == nsfs::ConvertEvent::Kind::upload) ||
+	  (ev.kind == nsfs::ConvertEvent::Kind::part)) {
+	seen.push_back(std::string(nsfs::to_string(ev.kind)) + ":" +
+		       std::string(nsfs::to_string(ev.phase)) + ":" +
+		       std::to_string(ev.part));
+      }
+      return 0;
+    };
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(&record, &prog), 0);
+
+  /* the upload brackets its parts */
+  ASSERT_FALSE(seen.empty());
+  EXPECT_EQ(seen.front(), "upload:before:0");
+  EXPECT_EQ(seen.back(), "upload:pruned:0");
+  size_t part_phases = 0;
+  for (auto& e : seen) {
+    if (e.rfind("part:", 0) == 0) {
+      ++part_phases;
+    }
+  }
+  EXPECT_EQ(part_phases, tree.parts * 3);
+}
+
+/* Stopping between parts leaves their staging in place.
+ *
+ * Their directory is removed last for exactly this reason:  a run that
+ * dies partway has copied some parts and must leave the source where
+ * the next run can find it. */
+TEST_F(NSFSUpgradeTest, StoppingMidUploadKeepsTheirStaging)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if ((ev.kind == nsfs::ConvertEvent::Kind::part) && (ev.part == 2) &&
+	  (ev.phase == nsfs::ConvertEvent::Phase::written)) {
+	return -EINTR;
+      }
+      return 0;
+    };
+  nsfs::ConvertProgress first;
+  EXPECT_EQ(upgrade(&stop, &first), -EINTR);
+  EXPECT_FALSE(first.complete);
+  EXPECT_TRUE(sf::exists(tree.staging)) << "the source went before the copy "
+					   "had finished";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_TRUE(b->is_converting());
+
+  nsfs::ConvertProgress second;
+  ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, &second), 0);
+  EXPECT_TRUE(second.complete);
+  EXPECT_FALSE(sf::exists(tree.staging));
+
+  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0);
+  EXPECT_EQ(upload->get_parts().size(), tree.parts);
+  std::map<int, std::string> etags;
+  for (auto& [num, part] : upload->get_parts()) {
+    etags[num] = part->get_etag();
+  }
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, tree.key,
+			etags), 0);
+  EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload);
+}
+
+/* An upload is listed throughout the conversion, not only at its
+ * ends.
+ *
+ * The re-stage moves one upload at a time, so mid-run some are in our
+ * root and the rest are still in theirs.  A listing that scanned one
+ * root would report half the uploads in flight and call itself
+ * complete.  Held at the moment their staging still exists and ours
+ * already does, the same upload must be reported once -- not twice,
+ * which is what a naive union of the two roots would give.
+ */
+TEST_F(NSFSUpgradeTest, AnUploadIsListedThroughoutTheConversion)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  std::vector<size_t> counts;
+  nsfs::convert_cb_t watch =
+    [&](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if (ev.kind != nsfs::ConvertEvent::Kind::upload) {
+	return 0;
+      }
+      std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+      std::string marker;
+      bool truncated = false;
+      EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100,
+					uploads, nullptr, &truncated,
+					null_yield), 0);
+      counts.push_back(uploads.size());
+      for (auto& u : uploads) {
+	EXPECT_EQ(u->get_key(), tree.key);
+	EXPECT_EQ(u->get_upload_id(), tree.upload_id);
+      }
+      return 0;
+    };
+
+  ASSERT_EQ(upgrade(&watch, nullptr), 0);
+  ASSERT_EQ(counts.size(), 3u) << "three phases for the upload";
+  /* before:  only theirs exists.  written:  both do, and it is one
+   * upload either way.  pruned:  only ours. */
+  EXPECT_EQ(counts[0], 1u) << "invisible before it was moved";
+  EXPECT_EQ(counts[1], 1u) << "reported twice while both roots hold it";
+  EXPECT_EQ(counts[2], 1u);
+}
+
 /* Theirs does move one, because their file IS the size.
  *
  * `parts-size-17` at 17 * (num - 1) is the only place their reader

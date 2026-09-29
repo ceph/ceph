@@ -46,6 +46,51 @@ class NSFSObject;
 
 namespace nsfs {
 
+/* What the upgrade is doing, at the moment it calls back.
+ *
+ * A bucket moving from base to a named profile rewrites every object
+ * in the tree, and the callback is how a caller follows that:  for
+ * progress and checkpointing in a deployment, and in a test for
+ * sequencing a concurrent reader against the exact instant it wants.
+ *
+ * Three phases, because the interesting state is inside an item and
+ * not between two of them.  `before` is the old format, which the read
+ * chain's fallback serves.  `written` is the only genuinely new state
+ * -- the target format is on disk and the old spelling has not gone --
+ * and it is where "ours first" in the chain stops being incidental.
+ * `pruned` is one spelling left, and the item is native.
+ *
+ * A non-zero return stops the conversion with the marker still set, so
+ * the same hook that sequences a reader injects a failure and leaves a
+ * tree for a restart to finish. */
+struct ConvertEvent {
+  enum class Kind { object, directory_object, upload, part };
+  enum class Phase { before, written, pruned };
+
+  Kind kind;
+  Phase phase;
+  std::string key;         /* the object, or the upload's object */
+  std::string upload_id;   /* empty unless kind is upload or part */
+  uint32_t part{0};
+  uint64_t index{0};       /* items reached so far, this run */
+};
+
+const char* to_string(ConvertEvent::Kind k);
+const char* to_string(ConvertEvent::Phase p);
+
+using convert_cb_t =
+  const fu2::unique_function<int(const DoutPrefixProvider*,
+				 const ConvertEvent&) const>;
+
+/* What a conversion run did, whether or not it finished. */
+struct ConvertProgress {
+  uint64_t objects{0};
+  uint64_t directory_objects{0};
+  uint64_t uploads{0};
+  uint64_t parts{0};
+  bool complete{false};    /* nothing foreign left;  the marker is gone */
+};
+
 using BucketCache = file::listing::BucketCache<NSFSDriver, NSFSBucket>;
 using MultipartCache = file::listing::MultipartCache<>;
 
@@ -953,6 +998,9 @@ public:
   nsfs::PathStrategy* get_noobaa_path_strategy() {
     return nb_path_strategy.get();
   }
+  nsfs::MPUStrategy* get_noobaa_mpu_strategy() {
+    return nb_mpu_strategy.get();
+  }
   const nsfs::ReservedNames& get_reserved_names() const { return reserved_names; }
 
   /* The profile an extension set selects, or nullptr for a bucket this
@@ -1236,14 +1284,38 @@ public:
    * in every case but this one. */
   nsfs::XattrStrategy* xattr_fallback() const;
   nsfs::PathStrategy* path_fallback() const;
+  nsfs::MPUStrategy* mpu_fallback() const;
   bool is_converting() const { return converting; }
 
   /* Move the bucket to a profile.  The one way a bucket's profile
    * changes:  adding extensions is a write, dropping them requires the
    * bucket to hold no content and removes the scaffolding the dropped
-   * extensions own. */
+   * extensions own.
+   *
+   * Leaving base is the upgrade, and it rewrites the tree.  `cb`, when
+   * given, is called for each item and phase;  see ConvertEvent.  The
+   * REST path passes none.  `progress`, when given, is filled in
+   * whether the run finished or stopped. */
   int set_profile(const DoutPrefixProvider* dpp, optional_yield y,
-		  uint32_t target);
+		  uint32_t target,
+		  nsfs::convert_cb_t* cb = nullptr,
+		  nsfs::ConvertProgress* progress = nullptr);
+
+  /* Rewrite what is still in the other format.  Reached through
+   * set_profile();  separate so a stopped run can be resumed without
+   * touching the marker again. */
+  int convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
+		   nsfs::convert_cb_t* cb,
+		   nsfs::ConvertProgress* progress);
+
+private:
+  /* Re-stage the uploads still in the other format.  Part of
+   * convert_tree();  separate because staging is a different shape
+   * from the object tree and shares nothing with the walk. */
+  int convert_uploads(const DoutPrefixProvider* dpp, optional_yield y,
+		      nsfs::convert_cb_t* cb,
+		      nsfs::ConvertProgress& progress);
+public:
 
   /* Write the extensions attribute.  Reached through set_profile(),
    * and directly at creation. */

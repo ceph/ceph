@@ -120,6 +120,17 @@ public:
 				int dir_fd,
 				DirectoryObject& out) const = 0;
 
+  /* Stop this directory being an object in this format.
+   *
+   * The counterpart of directory_object(), for the upgrade:  a
+   * directory carried across to another format must stop answering in
+   * the one it came from, and which attribute says so is the format's
+   * business and not the converter's.  Ours has nothing to clear --
+   * the sentinel file is the marker and removing it is a delete, not a
+   * conversion -- so ours does nothing. */
+  virtual int clear_directory_object(const DoutPrefixProvider* dpp,
+				     int dir_fd) const = 0;
+
   /* names this layout creates which are not objects.  Contributed to the
    * driver's aggregate;  the listing paths match against that, so no
    * strategy is consulted per directory entry. */
@@ -161,6 +172,8 @@ public:
   bool names_directory_object(std::string_view entry) const override;
   bool directory_object(const DoutPrefixProvider* dpp, int dir_fd,
 			DirectoryObject& out) const override;
+  int clear_directory_object(const DoutPrefixProvider* dpp,
+			     int dir_fd) const override;
   const ReservedNames& reserved_names() const override;
 
   const char* name() const override { return "rgw"; }
@@ -203,6 +216,8 @@ public:
   bool names_directory_object(std::string_view entry) const override;
   bool directory_object(const DoutPrefixProvider* dpp, int dir_fd,
 			DirectoryObject& out) const override;
+  int clear_directory_object(const DoutPrefixProvider* dpp,
+			     int dir_fd) const override;
   const ReservedNames& reserved_names() const override;
 
   const char* name() const override { return "noobaa"; }
