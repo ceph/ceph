@@ -27,6 +27,7 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 #include "rgw_mime.h"
+#include "rgw_tag.h"
 #include "common/ceph_json.h"
 
 using namespace rgw::sal;
@@ -4005,6 +4006,195 @@ TEST_F(NSFSNooBaaEvictingBucketTest, AnEvictedPartReachesTheirStaging)
   ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
 			part_etags), 0);
   EXPECT_EQ(read_all(bucket_path() / objname), expected);
+}
+
+/* Object tags, which are one attribute per tag in their format and
+ * one encoded RGWObjTags in ours.
+ *
+ * The first attribute whose SHAPE differs rather than its name, so
+ * disk_name()/parse_disk_name() cannot express it -- they rename a
+ * key and let the bytes through.  It has to work through the
+ * attribute map because that is how rgw_op.cc reads and writes tags
+ * (`attrs.find(RGW_ATTR_TAGS)`, `modify_obj_attrs`,
+ * `delete_obj_attrs`), which is generic code we do not control.
+ */
+class NSFSTagTest : public NSFSNooBaaBucketTest {
+public:
+  static std::set<std::string> xattr_names(const sf::path& p) {
+    char buf[8192];
+    std::set<std::string> names;
+    ssize_t len = ::listxattr(p.c_str(), buf, sizeof(buf));
+    if (len <= 0) {
+      return names;
+    }
+    for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
+      names.insert(q);
+    }
+    return names;
+  }
+
+  static std::string xattr(const sf::path& p, const char* n) {
+    char buf[1024];
+    ssize_t len = ::getxattr(p.c_str(), n, buf, sizeof(buf));
+    return (len > 0) ? std::string(buf, len) : std::string{};
+  }
+
+  /* an object of theirs with tags, laid down by hand */
+  void their_tagged_object(const std::string& name,
+			   const std::map<std::string, std::string>& tags) {
+    const sf::path p{bucket_path() / name};
+    sf::create_directories(p.parent_path());
+    write_file(p, "bytes");
+    for (const auto& [k, v] : tags) {
+      const std::string n = "user.noobaa.tag." + k;
+      ASSERT_EQ(::setxattr(p.c_str(), n.c_str(), v.data(), v.size(), 0), 0)
+	  << n;
+    }
+  }
+
+  static RGWObjTags decode_tags(const Attrs& attrs) {
+    RGWObjTags t;
+    auto i = attrs.find(RGW_ATTR_TAGS);
+    if (i != attrs.end()) {
+      auto bufit = i->second.cbegin();
+      t.decode(bufit);
+    }
+    return t;
+  }
+};
+
+/* Their tags are read as ours. */
+TEST_F(NSFSTagTest, ReadsTheirTags)
+{
+  their_tagged_object("tagged.bin", {{"colour", "green"}, {"size", "large"}});
+
+  auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+
+  auto tags = decode_tags(obj->get_attrs());
+  ASSERT_EQ(tags.get_tags().size(), 2u) << "their tags were not read";
+  EXPECT_EQ(tags.get_tags().find("colour")->second, "green");
+  EXPECT_EQ(tags.get_tags().find("size")->second, "large");
+}
+
+/* And ours are written as theirs. */
+TEST_F(NSFSTagTest, WritesTagsInTheirShape)
+{
+  const sf::path p{bucket_path() / "mine.bin"};
+  write_file(p, "bytes");
+
+  auto obj = bucket->get_object(rgw_obj_key("mine.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+
+  RGWObjTags tags;
+  tags.add_tag("colour", "blue");
+  tags.add_tag("shape", "round");
+  bufferlist bl;
+  tags.encode(bl);
+  Attrs set;
+  set[RGW_ATTR_TAGS] = bl;
+  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
+			       rgw::sal::FLAG_LOG_OP), 0);
+
+  auto names = xattr_names(p);
+  EXPECT_TRUE(names.contains("user.noobaa.tag.colour"));
+  EXPECT_TRUE(names.contains("user.noobaa.tag.shape"));
+  EXPECT_EQ(xattr(p, "user.noobaa.tag.colour"), "blue");
+  EXPECT_EQ(xattr(p, "user.noobaa.tag.shape"), "round");
+  /* and not as one blob of ours */
+  for (const auto& n : names) {
+    EXPECT_EQ(n.find("x-amz-tagging"), std::string::npos)
+	<< "wrote our encoded tag set on their tree: " << n;
+  }
+
+  /* read back through the driver, which is the round trip */
+  auto rd = bucket->get_object(rgw_obj_key("mine.bin"));
+  ASSERT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
+  EXPECT_EQ(decode_tags(rd->get_attrs()).get_tags().size(), 2u);
+}
+
+/* Writing the set replaces it, which is S3's contract and theirs. */
+TEST_F(NSFSTagTest, WritingTheSetReplacesIt)
+{
+  their_tagged_object("tagged.bin", {{"old", "1"}, {"stale", "2"}});
+
+  auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  RGWObjTags tags;
+  tags.add_tag("fresh", "3");
+  bufferlist bl;
+  tags.encode(bl);
+  Attrs set;
+  set[RGW_ATTR_TAGS] = bl;
+  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
+			       rgw::sal::FLAG_LOG_OP), 0);
+
+  auto names = xattr_names(bucket_path() / "tagged.bin");
+  EXPECT_TRUE(names.contains("user.noobaa.tag.fresh"));
+  EXPECT_FALSE(names.contains("user.noobaa.tag.old"))
+      << "the replaced set was merged rather than replaced";
+  EXPECT_FALSE(names.contains("user.noobaa.tag.stale"));
+}
+
+/* DeleteObjectTagging removes all of them, not one name of ours. */
+TEST_F(NSFSTagTest, DeletingTagsRemovesTheirAttributes)
+{
+  their_tagged_object("tagged.bin", {{"a", "1"}, {"b", "2"}});
+  const sf::path p{bucket_path() / "tagged.bin"};
+
+  auto obj = bucket->get_object(rgw_obj_key("tagged.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->delete_obj_attrs(env->dpp, RGW_ATTR_TAGS, null_yield), 0);
+
+  auto names = xattr_names(p);
+  EXPECT_FALSE(names.contains("user.noobaa.tag.a"));
+  EXPECT_FALSE(names.contains("user.noobaa.tag.b"));
+
+  auto rd = bucket->get_object(rgw_obj_key("tagged.bin"));
+  ASSERT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
+  EXPECT_EQ(rd->get_attrs().find(RGW_ATTR_TAGS), rd->get_attrs().end());
+}
+
+/* The control:  a marked bucket still keeps one encoded set.
+ *
+ * Without it the tests above pass for a driver that writes NooBaa's
+ * tag shape everywhere, which would be the same defect in the other
+ * direction. */
+TEST_F(NSFSBucketTest, TagsInAMarkedBucketAreOneAttribute)
+{
+  const sf::path p{bp / "root" / testname / "mine.bin"};
+  write_file(p, "bytes");
+
+  auto obj = bucket->get_object(rgw_obj_key("mine.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  RGWObjTags tags;
+  tags.add_tag("colour", "blue");
+  bufferlist bl;
+  tags.encode(bl);
+  Attrs set;
+  set[RGW_ATTR_TAGS] = bl;
+  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
+			       rgw::sal::FLAG_LOG_OP), 0);
+
+  char buf[8192];
+  ssize_t len = ::listxattr(p.c_str(), buf, sizeof(buf));
+  ASSERT_GT(len, 0);
+  std::set<std::string> names;
+  for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
+    names.insert(q);
+  }
+  EXPECT_FALSE(names.contains("user.noobaa.tag.colour"))
+      << "wrote their tag shape in a bucket of ours";
+  bool ours = false;
+  for (const auto& n : names) {
+    if (n.find("x-amz-tagging") != std::string::npos) {
+      ours = true;
+    }
+  }
+  EXPECT_TRUE(ours) << "our encoded tag set was not written";
 }
 
 /* The upgrade:  a bucket in NooBaa's format moved to one of ours,

@@ -15,6 +15,11 @@
 
 #include "xattr_strategy.h"
 
+#include <sys/xattr.h>
+
+#include "common/errno.h"
+#include "rgw_tag.h"
+
 #include <cerrno>
 
 #define dout_subsys ceph_subsys_rgw
@@ -224,6 +229,118 @@ int NooBaaXattrStrategy::object_owner(const Attrs& attrs,
  * append;  nothing in their tree carries one, and restoring a byte they
  * never wrote would corrupt the value.  See
  * docs/RGW_COUNTED_STRING_ATTRS.md. */
+/* Their tag attribute prefix.  One attribute per tag, the key after
+ * the prefix, the value raw (`namespace_fs.js:85`, `:1443`, `:2251`).
+ * Hardcoded a second time in their GPFS ILM policy generator
+ * (`nc_lifecycle.js:1359`), which is a second writer on our own
+ * platform. */
+static const std::string NB_TAG_PREFIX = "user.noobaa.tag.";
+
+/* Is this on-disk name one of their tags?
+ *
+ * Their reader tests with String.includes() -- a SUBSTRING match, not
+ * a prefix one (`namespace_fs.js:316`) -- and strips with
+ * .replace(prefix,''), which removes only the first occurrence.  Their
+ * own clear path uses startsWith instead (`fs_napi.cpp:551`), so the
+ * two disagree;  a name that merely contains the prefix is reported as
+ * a tag and not removed by DeleteObjectTagging.
+ *
+ * We follow their reader, because it is what decides what a client
+ * sees.  The consequence is theirs and is reproduced deliberately:  a
+ * PUT header `x-amz-meta-noobaa.tag.colour` becomes the on-disk name
+ * `user.noobaa.tag.colour` (their user metadata is `user.` + the key
+ * with `x-amz-meta-` stripped) and comes back as a tag rather than as
+ * metadata. */
+static bool nb_tag_name(const std::string& disk, std::string& key)
+{
+  const auto at = disk.find(NB_TAG_PREFIX);
+  if (at == std::string::npos) {
+    return false;
+  }
+  key = disk.substr(0, at) + disk.substr(at + NB_TAG_PREFIX.size());
+  return !key.empty();
+}
+
+void NooBaaXattrStrategy::parse_disk_attrs(
+    const DoutPrefixProvider* dpp, int fd,
+    const std::vector<std::string>& unclaimed, Attrs& out) const
+{
+  if (out.contains(RGW_ATTR_TAGS)) {
+    /* ours is already there, from the per-name pass on a converting
+     * object;  it is the later word */
+    return;
+  }
+
+  RGWObjTags tags;
+  bool any = false;
+  for (const auto& disk : unclaimed) {
+    std::string key;
+    if (!nb_tag_name(disk, key)) {
+      continue;
+    }
+    char buf[1024];
+    const ssize_t len = ::fgetxattr(fd, disk.c_str(), buf, sizeof(buf));
+    if (len < 0) {
+      /* raced with a delete, or longer than any tag may be -- their
+       * own limit is far below this.  One tag, not the set. */
+      ldpp_dout(dpp, 4) << "could not read " << disk << ": "
+			<< cpp_strerror(errno) << ";  skipping it" << dendl;
+      continue;
+    }
+    tags.add_tag(key, std::string(buf, len));
+    any = true;
+  }
+
+  if (!any) {
+    return;
+  }
+  bufferlist bl;
+  tags.encode(bl);
+  out.emplace(RGW_ATTR_TAGS, std::move(bl));
+}
+
+bool NooBaaXattrStrategy::disk_attrs(const std::string& key,
+				     const bufferlist& val,
+				     const std::vector<std::string>& current,
+				     xattr_map_t& to_write,
+				     std::vector<std::string>& to_remove) const
+{
+  if (key != RGW_ATTR_TAGS) {
+    return false;
+  }
+
+  RGWObjTags tags;
+  if (val.length() > 0) {
+    try {
+      auto bufit = val.cbegin();
+      tags.decode(bufit);
+    } catch (buffer::error&) {
+      /* An unreadable tag set is not a reason to write half of one,
+       * and not a reason to leave the old one either:  claimed, with
+       * nothing written, so the supersede below clears it.  No dpp
+       * here to say so -- the caller has one and sees an object whose
+       * tags went away, which is the same information. */
+      tags.get_tags().clear();
+    }
+  }
+
+  for (const auto& [k, v] : tags.get_tags()) {
+    to_write.insert_or_assign(NB_TAG_PREFIX + k, v);
+  }
+
+  /* The set replaces, it does not merge -- which is S3's contract for
+   * PutObjectTagging and what their own path does, clearing the whole
+   * prefix before writing (`namespace_fs.js:2258`).  Anything on disk
+   * this write does not name goes. */
+  for (const auto& disk : current) {
+    std::string tk;
+    if (nb_tag_name(disk, tk) && !to_write.contains(disk)) {
+      to_remove.push_back(disk);
+    }
+  }
+  return true;
+}
+
 bool NooBaaXattrStrategy::counted_string_value(const std::string& key) const
 {
   return false;

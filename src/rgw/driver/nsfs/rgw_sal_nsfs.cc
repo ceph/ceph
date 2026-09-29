@@ -1306,6 +1306,7 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
     return -ret;
   }
 
+  std::vector<std::string> unclaimed;
   char *keyptr = namebuf;
   while (buflen > 0) {
     std::string value;
@@ -1319,6 +1320,13 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
     const nsfs::XattrStrategy* owner = xs;
     if (!xs->parse_disk_name(xattr_name, key)) {
       if (!alt || !alt->parse_disk_name(xattr_name, key)) {
+	/* Neither format places this name.  Kept rather than
+	 * forgotten:  a one-to-many attribute -- object tags, which
+	 * are one per tag on their side -- cannot be placed a name at
+	 * a time, and parse_disk_attrs() is given these to make what
+	 * they encode.  The value is not read here;  the format reads
+	 * the ones it claims. */
+	unclaimed.emplace_back(std::move(xattr_name));
 	buflen -= keylen;
 	keyptr += keylen;
 	continue;
@@ -1374,6 +1382,20 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 
     buflen -= keylen;
     keyptr += keylen;
+  }
+
+  /* What the per-name pass could not place.
+   *
+   * Ours first here too, and for the same reason the chain reads that
+   * way:  an attribute a converting object carries in our format is
+   * the later word.  In practice ours claims nothing at this stage --
+   * every logical attribute of ours is one attribute on disk -- so
+   * this costs a virtual call and no syscall on a tree of ours. */
+  if (!unclaimed.empty()) {
+    xs->parse_disk_attrs(dpp, fd, unclaimed, attrs);
+    if (alt) {
+      alt->parse_disk_attrs(dpp, fd, unclaimed, attrs);
+    }
   }
 
   return 0;
@@ -1435,9 +1457,38 @@ static int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd,
 static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
                          int fd, const std::string &key,
                          const std::string &display,
-                         const nsfs::XattrStrategy* xs)
+                         const nsfs::XattrStrategy* xs,
+                         nsfs::FSStrategy* fs = nullptr)
 {
   int ret;
+
+  /* A key one format spreads over several names cannot be removed by
+   * naming one.  Object tags are one attribute per tag on their side,
+   * so DeleteObjectTagging has to remove all of them -- asked of the
+   * format the same way a write is, with nothing to write. */
+  if (fs) {
+    nsfs::xattr_map_t raw;
+    if (fs->get_xattrs(dpp, fd, raw) >= 0) {
+      std::vector<std::string> current;
+      current.reserve(raw.size());
+      for (auto& [n, _] : raw) {
+	current.emplace_back(n);
+      }
+      nsfs::xattr_map_t none_to_write;
+      std::vector<std::string> spread;
+      bufferlist none;
+      if (xs->disk_attrs(key, none, current, none_to_write, spread)) {
+	if (spread.empty()) {
+	  /* nothing of this key is on the file;  removing what is not
+	   * there is not a failure, and their own DeleteObjectTagging
+	   * swallows it too (`namespace_fs.js:2794`) */
+	  return 0;
+	}
+	return fs->remove_xattrs(dpp, fd, spread);
+      }
+    }
+  }
+
   std::string attrname{xs->disk_name(key)};
   if (attrname.empty()) {
     /* this format keeps the attribute nowhere, so there is nothing to
@@ -1612,11 +1663,44 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
   if (fs_strategy) {
     nsfs::xattr_map_t to_write;
+    std::vector<std::string> to_remove;
+
+    /* The names already on the file, for the formats that need them.
+     *
+     * A one-to-many attribute -- object tags, one per tag on their
+     * side -- has to remove what it supersedes, and which names those
+     * are is only knowable from the disk, because the tag keys are in
+     * the names.  Read once and lazily:  nothing asks for it unless a
+     * format's disk_attrs() does, so a tree of ours pays nothing. */
+    std::vector<std::string> current;
+    bool have_current = false;
+    auto disk_names = [&]() -> const std::vector<std::string>& {
+      if (!have_current) {
+	have_current = true;
+	nsfs::xattr_map_t raw;
+	if (fs_strategy->get_xattrs(dpp, get_fd(), raw) >= 0) {
+	  current.reserve(raw.size());
+	  for (auto& [n, _] : raw) {
+	    current.emplace_back(n);
+	  }
+	}
+      }
+      return current;
+    };
+
     /* An empty disk name means this format keeps the attribute
      * nowhere -- an S3 ACL on a NooBaa tree, where their own gateway
      * also accepts the request and stores nothing.  Skipped rather
      * than written under a name neither format owns. */
     auto place = [&](const std::string& key, const bufferlist& bl) {
+      /* the widened pair first:  a key one format spreads over
+       * several names cannot be placed by disk_name(), which returns
+       * one.  False means this format does not spread this key, which
+       * is every key for us today. */
+      if (xattr_strategy->disk_attrs(key, bl, disk_names(), to_write,
+				     to_remove)) {
+	return;
+      }
       std::string dname = xattr_strategy->disk_name(key);
       if (dname.empty()) {
 	return;
@@ -1640,7 +1724,6 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       place(key, bl);
     }
 
-    std::vector<std::string> to_remove;
     if (mode == AttrWriteMode::REPLACE_ALL) {
       nsfs::xattr_map_t old_raw;
       fs_strategy->get_xattrs(dpp, fd, old_raw);
@@ -1670,6 +1753,17 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       }
     } else if (rmattrs) {
       for (auto& key : *rmattrs) {
+        /* The same translation, with nothing to write.  A key one
+         * format spreads over several names is removed by naming
+         * none of them:  disk_attrs() supersedes whatever is on disk
+         * and is not in to_write, which with an empty value is all of
+         * it.  DeleteObjectTagging arrives here, and without this it
+         * removed our one name and left their tags. */
+        bufferlist none;
+        if (xattr_strategy->disk_attrs(key, none, disk_names(), to_write,
+                                       to_remove)) {
+          continue;
+        }
         std::string disk_name{xattr_strategy->disk_name(key)};
         if (to_write.find(disk_name) == to_write.end()) {
           to_remove.push_back(std::move(disk_name));
@@ -8578,7 +8672,8 @@ int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
     return ret;
   }
 
-  ret = remove_x_attr(dpp, y, ent->get_fd(), attr_name, get_name(), xattr_strategy());
+  ret = remove_x_attr(dpp, y, ent->get_fd(), attr_name, get_name(),
+		      xattr_strategy(), driver->get_fs_strategy());
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not remover attribute " << attr_name << " for " << get_name() << ": " << cpp_strerror(ret) << dendl;

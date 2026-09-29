@@ -22,6 +22,10 @@
 #include "rgw_acl.h"
 #include "rgw_sal.h"
 
+/* for xattr_map_t:  the on-disk view, full names to raw values, which
+ * the widened pair below deals in */
+#include "fs_strategy.h"
+
 namespace rgw { namespace sal { namespace nsfs {
 
 /* Where an object's metadata lives on disk, and what it is called.
@@ -44,6 +48,53 @@ public:
   virtual std::string disk_name(const std::string& key) const = 0;
   virtual bool parse_disk_name(const std::string& disk,
 			       std::string& key) const = 0;
+
+  /* The same pair, widened from one name to a set of whole attributes.
+   *
+   * disk_name()/parse_disk_name() rename a key and let the bytes
+   * through, which is all a format needs when one logical attribute is
+   * one attribute on disk.  Where it is not, they can say nothing:
+   * object tags are one ceph-encoded RGWObjTags for us and one
+   * attribute per tag for NooBaa, so the mapping is one-to-many in
+   * both directions and the value has to be built rather than copied.
+   *
+   * These have to be the mechanism rather than a question like
+   * object_owner(), because the consumer is not ours.  rgw_op.cc reads
+   * and writes tags through the attribute map -- `attrs.find(
+   * RGW_ATTR_TAGS)` in six places, modify_obj_attrs() for
+   * PutObjectTagging, delete_obj_attrs() for the delete -- and that is
+   * generic code shared with every driver.  A method on this interface
+   * would never be called.  So RGW_ATTR_TAGS must appear in the map,
+   * assembled from what is on disk, and fan back out when written.
+   *
+   * Both take the on-disk NAMES and an fd, not a map of values.  The
+   * caller has the names already -- one flistxattr it was doing
+   * anyway -- and reading every value to hand over would buy an
+   * fgetxattr per object for attributes no format wants;  on our own
+   * trees the unclaimed set is `security.selinux` and nothing else.
+   * So each format reads what it claims and nothing else, and a
+   * format that claims nothing issues no syscall at all.
+   *
+   * parse_disk_attrs() runs after the per-name pass and is given the
+   * names that pass could not place.  It adds the logical attributes
+   * they encode.
+   *
+   * disk_attrs() translates one logical attribute the other way.  It
+   * is given the names currently on the file because a one-to-many
+   * write has to remove what it supersedes, and which names those are
+   * is only knowable from the disk -- the tag keys are IN the names.
+   * Returns false for a key it does not handle, which is the signal to
+   * fall back to disk_name(). */
+  virtual void parse_disk_attrs(const DoutPrefixProvider* dpp, int fd,
+				const std::vector<std::string>& unclaimed,
+				Attrs& out) const {}
+
+  virtual bool disk_attrs(const std::string& key, const bufferlist& val,
+			  const std::vector<std::string>& current,
+			  xattr_map_t& to_write,
+			  std::vector<std::string>& to_remove) const {
+    return false;
+  }
 
   /* Who owns this object.
    *
@@ -183,6 +234,16 @@ public:
   std::string disk_name(const std::string& key) const override;
   bool parse_disk_name(const std::string& disk,
 		       std::string& key) const override;
+
+  /* object tags, which are one attribute per tag in their format and
+   * one encoded RGWObjTags in ours */
+  void parse_disk_attrs(const DoutPrefixProvider* dpp, int fd,
+			const std::vector<std::string>& unclaimed,
+			Attrs& out) const override;
+  bool disk_attrs(const std::string& key, const bufferlist& val,
+		  const std::vector<std::string>& current,
+		  xattr_map_t& to_write,
+		  std::vector<std::string>& to_remove) const override;
 
   int object_owner(const Attrs& attrs, const struct statx* stx,
 		   ACLOwner& owner) const override;
