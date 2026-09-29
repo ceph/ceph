@@ -24,6 +24,20 @@ from tasks.thrasher import ThrasherGreenlet
 
 log = logging.getLogger(__name__)
 
+# exit status of timeout(1) when the command timed out
+TIMEOUT_EXIT_STATUS = 124
+
+
+class QuarantineOpTimeout(Exception):
+    """
+    A quarantine enable/disable did not complete within command_timeout.
+
+    Not retried: this points at a hung quarantine operation rather than a
+    transient failure, and since mgr/volumes handles commands serially,
+    retrying would only queue up more commands behind the hung one.
+    """
+    pass
+
 
 class QuarantineThrasher(ThrasherGreenlet):
     """
@@ -96,6 +110,9 @@ class QuarantineThrasher(ThrasherGreenlet):
         self.subvolume = subvolume
         self.subvolume_group = subvolume_group
         self.quarantine_enabled = False
+        # set when an enable/disable timed out: the operation may have (partly)
+        # taken effect, so the quarantine state of the subvolume is unknown.
+        self.quarantine_state_unknown = False
 
         self.logger.info("Target subvolume %s/%s (group %s)",
                          self.volname, self.subvolume,
@@ -123,13 +140,28 @@ class QuarantineThrasher(ThrasherGreenlet):
         return args
 
     def _rcinfo(self, rc):
+        if rc == TIMEOUT_EXIT_STATUS:
+            return "%d (command timed out)" % rc
         return "%d (%s)" % (rc, errno.errorcode.get(rc, 'Unknown'))
+
+    def _dump_blocked_ops(self):
+        """Log blocked ops of all MDS ranks to help debugging a hang."""
+        try:
+            for info in self.fs.get_ranks():
+                rank = info['rank']
+                rc, out = self._run_ceph_cmd(
+                    'tell', 'mds.%s:%d' % (self.fs.id, rank), 'dump_blocked_ops')
+                self.logger.error("mds rank %d blocked ops (rc=%s):\n%s",
+                                  rank, self._rcinfo(rc), out)
+        except Exception as e:
+            self.logger.warning("Could not dump MDS blocked ops: %s", e)
 
     # -- Cleanup --------------------------------------------------------------
 
     def _cleanup(self):
-        """Lift quarantine if we left it enabled. Do not remove the subvolume."""
-        if not self.quarantine_enabled:
+        """Lift quarantine if we left it enabled (or may have). Do not remove
+        the subvolume."""
+        if not self.quarantine_enabled and not self.quarantine_state_unknown:
             return
         try:
             # the thrasher is already stopped here, so skip the stop checks
@@ -163,9 +195,19 @@ class QuarantineThrasher(ThrasherGreenlet):
 
             if rc == 0:
                 self.quarantine_enabled = (op == "enable")
+                self.quarantine_state_unknown = False
                 self.logger.info("quarantine %s succeeded (attempt %d)",
                                  op, attempt)
                 return
+
+            if rc == TIMEOUT_EXIT_STATUS:
+                self.quarantine_state_unknown = True
+                self.logger.error("quarantine %s did not complete within %ds",
+                                  op, self.command_timeout)
+                self._dump_blocked_ops()
+                raise QuarantineOpTimeout(
+                    "quarantine %s did not complete within %ds"
+                    % (op, self.command_timeout))
 
             if rc in transient:
                 self.logger.info("quarantine %s got %s (attempt %d/%d), "
