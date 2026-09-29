@@ -48,6 +48,7 @@ void MDSRank::command_quarantine_dir(const cmdmap_t& cmdmap, asok_finisher on_fi
   std::string path;
   cmd_getval(cmdmap, "path", path);
 
+  std::lock_guard l(mds_lock);
   MDRequestRef mdr = mdcache->request_start_internal(CEPH_MDS_OP_QUARANTINEDIR_AUTH);
   mdr->no_early_reply = true;
   mdr->set_filepath(filepath(path));
@@ -86,7 +87,6 @@ void MDSRank::command_quarantine_dir(const cmdmap_t& cmdmap, asok_finisher on_fi
 	bl.append(oss.str());
 	on_finish(r, "", bl);
       }));
-  std::lock_guard l(mds_lock);
   mdcache->dispatch_request(mdr);
 }
 
