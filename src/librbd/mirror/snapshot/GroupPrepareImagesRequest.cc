@@ -174,6 +174,10 @@ template <typename I>
 void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
   ldout(m_cct, 10) << dendl;
 
+  if (m_mirror_images != nullptr) {
+    m_mirror_images->resize(m_images.size());
+  }
+
   auto ctx = create_context_callback<
     GroupPrepareImagesRequest<I>,
     &GroupPrepareImagesRequest<I>::handle_check_mirror_images_disabled>(this);
@@ -196,14 +200,20 @@ void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
           // image is disabled for mirroring as required
           r = 0;
         } else if (r == 0) {
-          // Allow retrying OP_ENABLE for images that are already enabled.
-          // This handles the case where a previous OP_ENABLE partially
-          // completed.
-          if (!(m_operation == OP_ENABLE &&
-                mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED)) {
+          bool valid = false;
+          if (m_operation == OP_ENABLE) {
+            valid =
+              (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED &&
+                mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT &&
+                (mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE ||
+                  mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_GROUP));
+          }
+          if (!valid) {
             lderr(m_cct) << "image_id=" << m_images[i].spec.image_id
                          << " is not disabled for mirroring" << dendl;
             r = -EINVAL;
+          } else if (m_mirror_images != nullptr) {
+            (*m_mirror_images)[i] = mirror_image;
           }
         } else {
           lderr(m_cct) << "failed to get mirror image info for image_id="
@@ -380,7 +390,8 @@ void GroupPrepareImagesRequest<I>::handle_check_images_mirror_mode(int r) {
 template <typename I>
 void GroupPrepareImagesRequest<I>::get_images_mirror_info() {
   ldout(m_cct, 10) << dendl;
-  auto ctx = create_context_callback<GroupPrepareImagesRequest<I>,
+  auto ctx = create_context_callback<
+    GroupPrepareImagesRequest<I>,
     &GroupPrepareImagesRequest<I>::handle_get_images_mirror_info>(this);
   auto gather_ctx = new C_Gather(m_cct, ctx);
 
@@ -394,8 +405,8 @@ void GroupPrepareImagesRequest<I>::get_images_mirror_info() {
         CephContext *image_cct = m_image_ctxs[i]->cct;
         if (r < 0 && r != -ENOENT) {
           lderr(image_cct) << "image_id=" << m_images[i].spec.image_id
-                           << " failed to retrieve mirroring state: " << cpp_strerror(r)
-                           << dendl;
+                           << " failed to retrieve mirroring state: "
+                           << cpp_strerror(r) << dendl;
           new_sub_ctx->complete(r);
           return;
         } else if (r == -ENOENT) {

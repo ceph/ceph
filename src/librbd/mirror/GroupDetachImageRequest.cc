@@ -108,6 +108,12 @@ void GroupDetachImageRequest<I>::validate_image() {
   auto& mirror_image = m_mirror_images[m_detach_image_index];
   m_original_mirror_image = mirror_image;
 
+  if (mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE) {
+    ldout(m_cct, 10) << "resuming a partially completed image detach" << dendl;
+    create_primary_group_snapshot();
+    return;
+  }
+
   if (mirror_image.type != cls::rbd::MIRROR_IMAGE_TYPE_GROUP) {
     lderr(m_cct) << "invalid mirror image type: " << mirror_image.type
                  << dendl;
