@@ -527,6 +527,73 @@ class TestMisc(CephFSTestCase):
             self.run_ceph_cmd('tell', 'cephfs.c', 'something')
         self.assertEqual(ce.exception.exitstatus, 1)
 
+    def test_ctime_bump_on_matching_atime(self):
+        """
+        Ensure ctime is advanced during a setattr(atime) operation
+        even if the requested atime matches the file's current atime value under
+        multi-client SHARED capability scenarios.
+        """
+        test_dir = "test_ctime_noop_dir"
+        test_file = f"{test_dir}/target.bin"
+
+        # Use Client 1 (mount_a) to create the base test file
+        self.mount_a.run_shell(["mkdir", "-p", test_dir])
+        self.mount_a.touch(test_file)
+
+        # Force Client 1 to downgrade from EXCL to SHARED caps by reading from Client 2
+        log.info("Opening file on client_b to force cap downgrade on client_a")
+        proc_b = self.mount_b.run_shell(["cat", test_file], wait=False)
+
+        # Fetch the absolute remote path on the node
+        remote_path = f"{self.mount_a.mountpoint}/{test_file}"
+
+        # Gather the baseline ctime down to the exact nanosecond integer natively
+        log.info("Gathering high-precision baseline ctime natively on client_a")
+        initial_ctime = self.mount_a.run_shell([
+            "python3", "-c",
+            f"import os; print(os.stat('{remote_path}').st_ctime_ns)"
+        ]).stdout.getvalue().strip()
+
+        # Trigger a native explicit setattr (atime) using an absolute nanosecond
+        # value-equality match. This copies the current exact VFS nanosecond
+        # values directly into os.utime, guaranteeing a perfect identity match
+        # to validate the Client.cc changes.
+        log.info("Executing value-equality setattr using native Python system calls")
+        self.mount_a.run_shell([
+            "python3", "-c",
+            f"import os; st = os.stat('{remote_path}'); "
+            f"os.utime('{remote_path}', ns=(st.st_atime_ns, st.st_mtime_ns))"
+        ])
+
+        # Allow the MDS a small window (up to 5 seconds) to asynchronously
+        # propagate the metadata change over the network to Client 1's SHARED cap layer.
+        log.info("Waiting for ctime update to propagate from MDS...")
+        post_ctime = initial_ctime
+        for _ in range(50):  # Retry up to 50 times (5 seconds max)
+            current_check = self.mount_a.run_shell([
+                "python3", "-c",
+                f"import os; print(os.stat('{remote_path}').st_ctime_ns)"
+            ]).stdout.getvalue().strip()
+
+            if current_check != initial_ctime:
+                post_ctime = current_check
+                break
+            time.sleep(0.1)
+
+        # Clean up background process contexts safely with a maximum 30-second timeout
+        try:
+            proc_b.wait(timeout=30)
+        except Exception as e:
+            log.warning(f"Background proc_b did not exit cleanly within timeout: {e}")
+        self.mount_a.run_shell(["rm", "-rf", test_dir])
+
+        # Final Assertion Checklist
+        log.info(f"Initial ctime (ns): {initial_ctime} | Post ctime (ns): {post_ctime}")
+
+        self.assertNotEqual(initial_ctime, post_ctime,
+            "REGRESSION DETECTED: "
+            "The client stripped CEPH_SETATTR_ATIME from the mask, "
+            "causing the MDS to skip advancing ctime during value-equality matches.")
 
 @classhook('_add_session_client_evictions')
 class TestSessionClientEvict(CephFSTestCase):
