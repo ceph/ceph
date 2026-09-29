@@ -23,14 +23,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
   let fixtureHelper: FixtureHelper;
   let data: { plugins: string[]; names: string[]; nodes: CrushNode[] };
 
-  const expectTechnique = (current: string) =>
-    expect(component.form.getValue('technique')).toBe(current);
-
-  const expectTechniques = (techniques: string[], current: string) => {
-    expect(component.techniques).toEqual(techniques);
-    expectTechnique(current);
-  };
-
   const expectRequiredControls = (controlNames: string[]) => {
     controlNames.forEach((name) => {
       const value = component.form.getValue(name);
@@ -167,7 +159,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       const showDefaults = (plugin: string) => {
         formHelper.setValue('plugin', plugin);
         fixtureHelper.expectIdElementsVisible(
-          ['name', 'plugin', 'k', 'm', 'crushFailureDomain', 'crushDeviceClass', 'directory'],
+          ['name', 'plugin', 'k', 'm', 'crushFailureDomain', 'crushDeviceClass'],
           true
         );
       };
@@ -177,18 +169,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       showDefaults('isa');
     });
 
-    it('should change technique to default if not available in other plugin', () => {
-      formHelper.setValue('plugin', 'jerasure');
-      expectTechnique('reed_sol_van');
-      formHelper.setValue('technique', 'blaum_roth');
-      expectTechnique('blaum_roth');
-      formHelper.setValue('plugin', 'isa');
-      expectTechnique('reed_sol_van');
-      formHelper.setValue('plugin', 'clay');
-      formHelper.expectValidChange('scalar_mds', 'shec');
-      expectTechnique('single');
-    });
-
     describe(`for 'jerasure' plugin (default)`, () => {
       beforeEach(() => {
         formHelper.setValue('plugin', 'jerasure');
@@ -196,27 +176,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
 
       it(`requires 'm' and 'k'`, () => {
         expectRequiredControls(['k', 'm']);
-      });
-
-      it(`should show 'packetSize' and 'technique'`, () => {
-        fixture.detectChanges();
-        expect(component.form.get('packetSize')).toBeTruthy();
-        expect(component.form.get('technique')).toBeTruthy();
-      });
-
-      it('should show available techniques', () => {
-        expectTechniques(
-          [
-            'reed_sol_van',
-            'reed_sol_r6_op',
-            'cauchy_orig',
-            'cauchy_good',
-            'liberation',
-            'blaum_roth',
-            'liber8tion'
-          ],
-          'reed_sol_van'
-        );
       });
 
       it(`should not show any other plugin specific form control`, () => {
@@ -244,18 +203,9 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         expectRequiredControls(['k', 'm']);
       });
 
-      it(`should show 'technique'`, () => {
-        fixture.detectChanges();
-        expect(component.form.get('technique')).toBeTruthy();
-      });
-
-      it('should show available techniques', () => {
-        expectTechniques(['reed_sol_van', 'cauchy'], 'reed_sol_van');
-      });
-
       it(`should not show any other plugin specific form control`, () => {
         fixtureHelper.expectIdElementsVisible(
-          ['c', 'l', 'crushLocality', 'packetSize', 'd', 'scalar_mds'],
+          ['c', 'l', 'crushLocality', 'd', 'scalar_mds'],
           false
         );
       });
@@ -291,7 +241,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       it(`should not show any other plugin specific form control`, () => {
         fixture.detectChanges();
         // Be tolerant to layout differences; verify core LRC-hidden fields
-        ['c', 'packetSize', 'd', 'scalar_mds'].forEach((id) => {
+        ['c', 'd', 'scalar_mds'].forEach((id) => {
           expect(fixture.debugElement.query(By.css(`#${id}`))).toBeNull();
         });
       });
@@ -434,8 +384,8 @@ describe('ErasureCodeProfileFormModalComponent', () => {
 
       it(`should not show any other plugin specific form control`, () => {
         fixture.detectChanges();
-        // Technique can be present in some layouts; focus on SHEC-specific hidden fields
-        ['l', 'crushLocality', 'packetSize', 'd', 'scalar_mds'].forEach((id) => {
+        // Focus on SHEC-specific hidden fields
+        ['l', 'crushLocality', 'd', 'scalar_mds'].forEach((id) => {
           expect(fixture.debugElement.query(By.css(`#${id}`))).toBeNull();
         });
       });
@@ -502,7 +452,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
 
       it(`should not show any other plugin specific form control`, () => {
-        fixtureHelper.expectIdElementsVisible(['l', 'crushLocality', 'packetSize', 'c'], false);
+        fixtureHelper.expectIdElementsVisible(['l', 'crushLocality', 'c'], false);
       });
 
       it('should show default values for d and scalar_mds', () => {
@@ -520,23 +470,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         expect(component.form.getValue('d')).toBe(
           component.form.getValue('k') + component.form.getValue('m') - 1
         );
-      });
-
-      it('should have specific techniques for scalar_mds jerasure', () => {
-        expectTechniques(
-          ['reed_sol_van', 'reed_sol_r6_op', 'cauchy_orig', 'cauchy_good', 'liber8tion'],
-          'reed_sol_van'
-        );
-      });
-
-      it('should have specific techniques for scalar_mds isa', () => {
-        formHelper.expectValidChange('scalar_mds', 'isa');
-        expectTechniques(['reed_sol_van', 'cauchy'], 'reed_sol_van');
-      });
-
-      it('should have specific techniques for scalar_mds shec', () => {
-        formHelper.expectValidChange('scalar_mds', 'shec');
-        expectTechniques(['single', 'multiple'], 'single');
       });
 
       describe('Validity of d', () => {
@@ -647,10 +580,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     beforeEach(() => {
       ecp = new ErasureCodeProfile();
       submittedEcp = new ErasureCodeProfile();
-      submittedEcp['crush-root'] = 'default';
       submittedEcp['crush-failure-domain'] = CrushFailureDomains.Host;
-      submittedEcp['packetsize'] = 2048;
-      submittedEcp['technique'] = 'reed_sol_van';
 
       const taskWrapper = TestBed.inject(TaskWrapperService);
       spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
@@ -678,15 +608,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         expect(ecpService.create).not.toHaveBeenCalled();
       });
 
-      it('should be able to create a profile with m, k, name, directory and packetSize', () => {
-        ecpChange('m', 3);
-        ecpChange('directory', '/different/ecp/path');
-        formHelper.setMultipleValues(ecp, true);
-        formHelper.setValue('packetSize', 8192, true);
-        ecpChange('packetsize', 8192);
-        testCreation();
-      });
-
       it('should not send the profile with unsupported fields', () => {
         formHelper.setMultipleValues(ecp, true);
         formHelper.setValue('crushLocality', 'osd', true);
@@ -700,7 +621,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         ecpChange('plugin', 'isa');
         submittedEcp.k = 7;
         submittedEcp.m = 3;
-        delete submittedEcp.packetsize;
       });
 
       it('should be able to create a profile with only plugin and name', () => {
@@ -708,19 +628,12 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         testCreation();
       });
 
-      it('should send profile with plugin, name, failure domain and technique only', () => {
-        ecpChange('technique', 'cauchy');
+      it('should send profile with plugin, name and failure domain only', () => {
         formHelper.setMultipleValues(ecp, true);
         formHelper.setValue('crushFailureDomain', 'osd', true);
         formHelper.setValue('crushDeviceClass', 'ssd', true);
         submittedEcp['crush-failure-domain'] = 'osd';
         submittedEcp['crush-device-class'] = 'ssd';
-        testCreation();
-      });
-
-      it('should not send the profile with unsupported fields', () => {
-        formHelper.setMultipleValues(ecp, true);
-        formHelper.setValue('packetSize', 'osd', true);
         testCreation();
       });
     });
@@ -732,8 +645,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         submittedEcp.k = 4;
         submittedEcp.m = 2;
         submittedEcp.l = 3;
-        delete submittedEcp.packetsize;
-        delete submittedEcp.technique;
       });
 
       it('should be able to create a profile with only required fields', () => {
@@ -741,15 +652,10 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         testCreation();
       });
 
-      it('should send profile with all required fields and crush root and locality', () => {
+      it('should send profile with all required fields and crush locality', () => {
         ecpChange('l', '6');
         formHelper.setMultipleValues(ecp, true);
-        formHelper.setValue(
-          'crushRoot',
-          component.buckets.find((bucket) => bucket.name === 'mix-host'),
-          true
-        );
-        submittedEcp['crush-root'] = 'mix-host';
+        formHelper.setValue('crushFailureDomain', 'osd-rack', true);
         submittedEcp['crush-failure-domain'] = 'osd-rack';
         formHelper.setValue('crushLocality', 'osd-rack', true);
         submittedEcp['crush-locality'] = 'osd-rack';
@@ -770,8 +676,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         submittedEcp.k = 4;
         submittedEcp.m = 3;
         submittedEcp.c = 2;
-        delete submittedEcp.packetsize;
-        delete submittedEcp.technique;
       });
 
       it('should be able to create a profile with only plugin and name', () => {
@@ -803,7 +707,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         submittedEcp.m = 2;
         submittedEcp.d = 5;
         submittedEcp.scalar_mds = 'jerasure';
-        delete submittedEcp.packetsize;
       });
 
       it('should be able to create a profile with only plugin and name', () => {
@@ -835,7 +738,6 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         ecpChange('scalar_mds', 'shec');
         formHelper.setMultipleValues(ecp, true);
         submittedEcp.scalar_mds = 'shec';
-        submittedEcp.technique = 'single';
         testCreation();
       });
 
