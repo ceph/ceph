@@ -26,6 +26,10 @@
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
 >=20.2.6
 
+* RGW: CopyObject now applies the destination bucket's default encryption
+  when the request carries no encryption headers. Like PutObject, it also
+  rejects SSE-C combined with SSE-KMS or SSE-S3 headers, and SSE-KMS
+  headers sent without ``x-amz-server-side-encryption: aws:kms``.
 * RGW: A CopyObject request whose source and destination are the same object
   is now accepted when it changes the object's encryption type, key or
   algorithm, so an existing object can be re-encrypted in place without
