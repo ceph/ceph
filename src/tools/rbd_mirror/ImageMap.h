@@ -40,10 +40,11 @@ public:
   // shut down map operations
   void shut_down(Context *on_finish);
 
-  // update mirrored entities
+  // update (add/remove/change) entities
   void update_entities(const std::string &mirror_uuid,
                      MirrorEntities &&added_entities,
-                     MirrorEntities &&removed_entities);
+                     MirrorEntities &&removed_entities,
+                     MirrorEntities &&modified_entities);
 
   // add/remove instances
   void update_instances_added(const std::vector<std::string> &instances);
@@ -144,7 +145,7 @@ private:
   // current action.
   void continue_action(const image_map::GlobalIds &global_id, int r);
 
-  // schedule an image for update
+  // schedule an entity for update
   void schedule_action(const image_map::GlobalId &global_id);
 
   void schedule_update_task();
@@ -166,6 +167,8 @@ private:
                            const MirrorEntities &entities);
   void update_entities_removed(const std::string &mirror_uuid,
                              const MirrorEntities &entities);
+  void update_entities_modified(const std::string &mirror_uuid,
+    const MirrorEntities &entities);
 
   void filter_instance_ids(const std::vector<std::string> &instance_ids,
                            std::vector<std::string> *filtered_instance_ids,
