@@ -36,6 +36,11 @@ namespace rgw { namespace sal { namespace nsfs {
 inline constexpr std::string_view VERSIONS_DIR = ".versions";
 inline constexpr std::string_view SHADOW_DIR = ".shadow";
 inline constexpr std::string_view VERSIONS_LOCK = ".lock";
+/* Ours.  Borrowed from NooBaa by `61de07d3bf2` and kept as a decision
+ * rather than a default:  a sentinel inside the directory costs the
+ * listing walk nothing, because it sees the entry anyway.  Their name
+ * for the same thing is a separate constant in path_strategy.cc, and
+ * is a default they can change. */
 inline constexpr std::string_view FOLDER_OBJECT = ".folder";
 
 /* What an object is called on disk, and what a name on disk means.

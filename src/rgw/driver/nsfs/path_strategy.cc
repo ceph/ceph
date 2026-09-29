@@ -129,6 +129,28 @@ const ReservedNames& SentinelPathStrategy::reserved_names() const
 static const std::string NB_TMPDIR_PREFIX_PATH = ".noobaa-nsfs_";
 static const char* NB_XATTR_DIR_CONTENT = "user.noobaa.dir_content";
 
+/* Their directory-object content file.
+ *
+ * Deliberately NOT the constant our own format uses, although the two
+ * strings are equal today.  They are equal because `61de07d3bf2` took
+ * `.folder` from them -- its message says "matching the noobaa nsfs
+ * specification" -- at a time when this driver was meant to implement
+ * their model;  posix, which predates all of it, has no such name.  So
+ * the agreement is an inheritance, not a convention the two formats
+ * arrived at, and either side may move without the other.
+ *
+ * Theirs in particular is not even fixed for them:
+ * `config.NSFS_FOLDER_OBJECT_NAME` is a default (noobaa-core
+ * `config.js:848`), so a deployment can change it and ours must not
+ * follow.  One symbol for both made that impossible to express, and
+ * would have made a change to our name silently change what we look
+ * for in their trees.
+ *
+ * Reading their configuration is the way to track it properly and is
+ * not done here;  this makes the two facts separable, which is what
+ * had to happen first. */
+static const std::string NB_FOLDER_OBJECT_NAME{FOLDER_OBJECT};
+
 /* Their key-to-path rules are ours:  verbatim, with `.folder` for a
  * key ending in '/'.  Shared rather than copied by coincidence --
  * `7f0c721ab56` adopted the verbatim spelling in every profile. */
@@ -151,7 +173,7 @@ std::string NooBaaPathStrategy::object_name(const rgw_obj_key& key,
   }
 
   if (!fname.empty() && (fname.back() == '/')) {
-    fname += RGW_FOLDER_OBJECT_NAME;
+    fname += NB_FOLDER_OBJECT_NAME;
   }
   return fname;
 }
@@ -174,14 +196,14 @@ std::string NooBaaPathStrategy::bucket_dir_name(
 
 std::string NooBaaPathStrategy::folder_object_name() const
 {
-  return RGW_FOLDER_OBJECT_NAME;
+  return NB_FOLDER_OBJECT_NAME;
 }
 
 /* They write the same sentinel we do when a directory object has
  * content;  it is the empty one that has none. */
 bool NooBaaPathStrategy::names_directory_object(std::string_view entry) const
 {
-  return entry == RGW_FOLDER_OBJECT_NAME;
+  return entry == NB_FOLDER_OBJECT_NAME;
 }
 
 /* user.noobaa.dir_content on the directory, whose value is the content
@@ -234,10 +256,10 @@ const ReservedNames& NooBaaPathStrategy::reserved_names() const
    * would hide a directory a user is entitled to create.  The temp
    * directory is a prefix because its name carries a bucket id. */
   static const ReservedNames names{
-    .exact = { RGW_VERSIONS_DIR, RGW_FOLDER_OBJECT_NAME },
+    .exact = { RGW_VERSIONS_DIR, NB_FOLDER_OBJECT_NAME },
     .prefixes = { NB_TMPDIR_PREFIX_PATH },
     .staging_prefixes = {},
-    .content_exact = { RGW_FOLDER_OBJECT_NAME },
+    .content_exact = { NB_FOLDER_OBJECT_NAME },
   };
   return names;
 }

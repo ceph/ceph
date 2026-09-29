@@ -2627,9 +2627,18 @@ TEST(NooBaaPath, KeyConventionsMatchOurs)
     EXPECT_EQ(nb.object_name(key, false), ours.object_name(key, false)) << k;
   }
 
+  /* The two formats' directory-object file names are equal, and since
+   * they stopped being one constant that is a comparison rather than
+   * a tautology.  They are equal by inheritance -- `61de07d3bf2` took
+   * `.folder` from NooBaa, and posix has no such name -- so this
+   * asserts an agreement that either side may end, not an invariant.
+   * If it ever fails, the question to ask is which side moved and
+   * whether the other should. */
+  EXPECT_EQ(nb.folder_object_name(), ours.folder_object_name());
   EXPECT_EQ(nb.folder_object_name(), ".folder");
   EXPECT_EQ(nb.object_name(rgw_obj_key{"photos/"}, false), "photos/.folder");
   EXPECT_TRUE(nb.names_directory_object(".folder"));
+  EXPECT_TRUE(ours.names_directory_object(".folder"));
   EXPECT_EQ(nb.key_from_name("some/key").name, "some/key");
 }
 
