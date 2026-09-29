@@ -1625,6 +1625,56 @@ class CephFSMountBase(object):
         proc = self._run_python(pyscript)
         proc.wait()
 
+    def compare_trees(self, src, dst):
+        """
+        Compare two directory trees. Compare based on file names and contents.
+
+        :param src:
+        :param dst:
+        :return:
+        """
+        pyscript = dedent("""
+            import os
+            import errno
+
+            def _md5hash_file(self, file):
+                md5 = hashlib.md5()
+                contents = ''
+                with open(file, 'r') as f:
+                    contents = f.read()
+                md5.update(contents)
+                return md5.hexdigest()
+
+            files = os.listdir('{src}')
+            for file in files:
+                src_file = '{src}/' + file
+                dst_file = '{dst}/' + file
+
+                exists = os.path.exists(dst_file)
+                lexists = os.path.lexists(dst_file)
+                if not exists and not lexists:
+                    log.debug('path_dne:=' + dst_file)
+                    raise
+
+                if os.path.islink('{src}'):
+                    #do link check
+                    if os.readlink(src_file) != os.readlink(dst_file):
+                        raise
+                elif os.path.isfile('{src}'):
+                    #check reported size
+                    rsize_match = os.path.getsize(src_file) == os.path.getsize(dst_file)
+                    if not rsize_match:
+                        raise
+
+                    #check contents
+                    src_hash = self._md5hash_file(src_file)
+                    dest_hash = self._md5hash_file(dst_file)
+                    if src_hash != dest_hash:
+                        raise
+            """).format(src=src, dst=dst)
+        proc = self._run_python(pyscript)
+        proc.wait()
+
     def touch_os(self, fs_path):
         """
         Create a dentry if it doesn't already exist. Uses the open method in the os module.
