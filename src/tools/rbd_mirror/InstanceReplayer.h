@@ -69,6 +69,10 @@ public:
   void remove_peer_image(const std::string &global_image_id,
                          const std::string &peer_mirror_uuid,
                          Context *on_finish);
+  bool prune_image_snapshot(int64_t local_pool_id,
+    const std::string &local_image_id, uint64_t snap_id);
+  bool set_image_replayer_limit(const std::string &global_image_id,
+    uint64_t snap_id, const cls::rbd::GroupSpec &local_group_spec);
 
   void acquire_group(InstanceWatcher<ImageCtxT> *instance_watcher,
                      const std::string &global_group_id, Context *on_finish);

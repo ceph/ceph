@@ -5,14 +5,17 @@
 #define RBD_MIRROR_GROUP_REPLAYER_BOOTSTRAP_REQUEST_H
 
 #include "include/rados/librados.hpp"
+#include "common/snap_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "tools/rbd_mirror/CancelableRequest.h"
 #include "tools/rbd_mirror/group_replayer/Types.h"
 
 #include <atomic>
 #include <list>
+#include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 
 class Context;
@@ -55,9 +58,10 @@ public:
       Context *on_finish) {
     return new BootstrapRequest(
       threads, local_io_ctx, remote_io_ctx, global_group_id, local_mirror_uuid,
-      instance_watcher, local_status_updater, remote_status_updater,
-      cache_manager_handler, pool_meta_cache, resync_requested,
-      local_group_ctx, image_replayers, state_builder, on_finish);
+      instance_watcher, local_status_updater,
+      remote_status_updater, cache_manager_handler, pool_meta_cache,
+      resync_requested, local_group_ctx, image_replayers, state_builder,
+      on_finish);
   }
 
   BootstrapRequest(
@@ -77,6 +81,8 @@ public:
       GroupStateBuilder<ImageCtxT> **state_builder,
       Context* on_finish);
 
+  int get_local_image_id(const std::string &global_image_id,
+    std::string *image_id);
   void send() override;
   void cancel() override;
 
@@ -84,26 +90,99 @@ private:
   /**
    * @verbatim
    *
-   * <start>
-   *    |
-   *    v                           (error)
-   * PREPARE_LOCAL_GROUP  * * * * * * * * * * *
-   *    |                                     *
-   *    v                            (error)  *
-   * PREPARE_REMOTE_GROUP_NAME  * * * * * * * *
-   *    |                                     *
-   *    | (remote dne)                        *
-   *    \------------> REMOVE_LOCAL_GROUP * * *
-   *    |             (if local non-primary)  *
-   *    |                                     *
-   *    | (local dne)                         *
-   *    \------------> CREATE_LOCAL_GROUP * * *
-   *    |              (if remote primary)    *
-   *    v                       |             *
-   * CREATE_IMAGE_REPLAYERS <---/             *
-   *    |                                     *
-   *    v                                     *
-   * <finish> < * * * * * * * * * * * * * * * *
+   *  PREPARATION PATH
+   *  ================
+   *
+   *                         <start>
+   *                            |
+   *                            v
+   *                  PREPARE_LOCAL_GROUP
+   *                            | error, except -ENOENT
+   *                            + -----------------------------> FINISH(error)
+   *                            |
+   *                            v
+   *                  PREPARE_REMOTE_GROUP
+   *                            |
+   *                            v
+   *                 HANDLE_REMOTE_GROUP_RESULT
+   *                            |
+   *                            | remove local group
+   *                            + -------------------> REMOVE_LOCAL_GROUP -----> FINISH(r)
+   *                            |
+   *                            | create local group
+   *                            + -------------------> CREATE_LOCAL_GROUP -----> FINISH(r)
+   *                            |
+   *                            | existing local secondary
+   *                            + -------------------> GET_LOCAL_GROUP_META
+   *                            |                              | resync requested?
+   *                            |                false         v         true
+   *                            |        + <------------------ + ---------------> +
+   *                            |        |                                        |
+   *                            |        v                                        v
+   *                            |     FINISH(0)                         REMOVE_LOCAL_GROUP
+   *                            |                                                 |
+   *                            |                                                 v
+   *                            + ------------------------------------------> FINISH(r)
+   *
+   *  HANDLE_REMOTE_GROUP_RESULT also calls FINISH directly when the local
+   *  group is primary, both groups are missing, the peers are not linked, or
+   *  an error prevents bootstrap from continuing.
+   *
+   *
+   *  FINISH PATH
+   *  ===========
+   *
+   *                           FINISH(r)
+   *                              |
+   *                              + -- error or canceled ---> COMPLETE(r)
+   *                              |
+   *                              + -- local group removed --> COMPLETE(-ENOENT)
+   *                              |
+   *                              + -- local primary
+   *                              |              |
+   *                              |              v
+   *                              |       CREATE_REPLAYERS
+   *                              |              |
+   *                              |              v
+   *                              |         COMPLETE(r)
+   *                              |
+   *                              + -- existing local secondary
+   *                                             |
+   *                                             v
+   *                                 LOAD_LOCAL_GROUP_SNAPSHOTS
+   *                                             |
+   *                                             v
+   *                                 LOAD_REMOTE_GROUP_SNAPSHOTS
+   *                                             |
+   *                                             v
+   *                               SELECT_TARGET_GROUP_MEMBERSHIP
+   *                                             |
+   *                                             v
+   *                               RECONCILE_LOCAL_GROUP_MEMBERS
+   *                                             |
+   *                                             v
+   *                                      CREATE_REPLAYERS
+   *                                             |
+   *                                             v
+   *                                        COMPLETE(r)
+   *                                             |
+   *                                             v
+   *                                          <finish>
+   *
+   *
+   *  TARGET MEMBERSHIP ERROR PATHS
+   *  =============================
+   *
+   *      SELECT_TARGET_GROUP_MEMBERSHIP
+   *                    |
+   *                    | latest local snapshot missing from remote history
+   *                    + ---------------> CREATE_REPLAYERS (status only)
+   *                    |                             |
+   *                    |                             v
+   *                    |                      COMPLETE(-EEXIST)
+   *                    |
+   *                    | other error
+   *                    + ---------------> COMPLETE(error)
    *
    * @endverbatim
    */
@@ -121,6 +200,12 @@ private:
   bool *m_resync_requested;
   GroupCtx *m_local_group_ctx;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *m_image_replayers;
+  std::deque<cls::rbd::GroupImageSpec> m_remove_group_images;
+  std::deque<cls::rbd::GroupImageSpec> m_add_group_images;
+  std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
+  std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
+  std::map<std::string, std::pair<int64_t, std::string>> m_target_remote_images;
+  const cls::rbd::GroupSnapshot *m_target_remote_snap = nullptr;
   GroupStateBuilder<ImageCtxT> **m_state_builder = nullptr;
   Context *m_on_finish;
 
@@ -149,6 +234,22 @@ private:
   void remove_local_group();
   void handle_remove_local_group(int r);
 
+  void load_local_group_snapshots();
+  void handle_load_local_group_snapshots(int r);
+  void load_remote_group_snapshots();
+  void handle_load_remote_group_snapshots(int r);
+  int select_target_group_membership();
+
+  void reconcile_local_group_members();
+  void remove_next_group_member();
+  void handle_remove_group_member(int r);
+  void add_next_group_member();
+  void handle_add_group_member(int r);
+
+  void complete_reconcile();
+  int update_local_mirror_images(const std::set<std::string>& group_images,
+    std::vector<std::pair<std::string, std::string>>* attached_images,
+    std::vector<std::pair<std::string, std::string>>* detached_images);
   int create_replayers();
 
   void finish(int r);

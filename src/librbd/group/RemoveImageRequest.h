@@ -24,19 +24,20 @@ public:
                                     const std::string &group_id,
                                     librados::IoCtx &image_io_ctx,
                                     const std::string &image_id,
-                                    Context *on_finish) {
+                                    Context *on_finish,
+                                    bool non_primary_only = false) {
     return new RemoveImageRequest(group_io_ctx, group_id, image_io_ctx,
-                                  image_id, on_finish);
+                                  image_id, on_finish, non_primary_only);
   }
 
   RemoveImageRequest(librados::IoCtx &group_io_ctx,
                      const std::string &group_id,
                      librados::IoCtx &image_io_ctx,
                      const std::string &image_id,
-                     Context *on_finish)
+                     Context *on_finish, bool non_primary_only = false)
     : m_group_io_ctx(group_io_ctx), m_group_id(group_id),
       m_image_io_ctx(image_io_ctx), m_image_id(image_id),
-      m_on_finish(on_finish) {
+      m_on_finish(on_finish), m_non_primary_only(non_primary_only) {
   }
 
   void send();
@@ -54,7 +55,7 @@ private:
    *    |
    *    v
    *  REMOVE_GROUP
-   *    | error
+   *    | error other than -ENOENT
    *    +------> RESTORE_GROUP_IMAGE --> <finish>
    *    |
    *    v
@@ -66,6 +67,8 @@ private:
    *  <finish>
    *
    * @endverbatim
+   * Replay holds the group lock and checks that the group is non-primary
+   * before PRE_UNLINK. The lock covers cleanup as well.
    */
 
   librados::IoCtx &m_group_io_ctx;
@@ -73,6 +76,7 @@ private:
   librados::IoCtx &m_image_io_ctx;
   const std::string m_image_id;
   Context *m_on_finish;
+  bool m_non_primary_only;
   int m_ret_val = 0;
 
   void pre_unlink();

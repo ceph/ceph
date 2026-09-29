@@ -91,7 +91,8 @@ private:
   librbd::mirror::PromotionState m_promotion_state;
 
   std::list<cls::rbd::GroupImageStatus> m_images;
-  std::set<GlobalImageId> m_remote_images;
+  std::map<std::string /*global-id*/, std::pair<int64_t /*pool_id*/,
+    std::string /*image_id*/>> m_remote_images;
 
   void get_remote_group_id();
   void handle_get_remote_group_id(int r);

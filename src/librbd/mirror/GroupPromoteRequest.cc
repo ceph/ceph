@@ -14,6 +14,7 @@
 #include "librbd/group/RemoveImageRequest.h"
 #include "librbd/mirror/snapshot/Utils.h"
 #include "librbd/group/ListSnapshotsRequest.h"
+#include "librbd/group/MutationLock.h"
 #include "librbd/mirror/snapshot/CreateNonPrimaryRequest.h"
 #include "librbd/mirror/snapshot/GroupUnlinkPeerRequest.h"
 #include "librbd/mirror/snapshot/GroupImageCreatePrimaryRequest.h"
@@ -37,7 +38,15 @@ using util::create_rados_callback;
 
 template <typename I>
 void GroupPromoteRequest<I>::send() {
-  get_mirror_group();
+  group::execute_mutation(m_group_ioctx, m_group_id, false, true,
+    [this](int r, Context* on_finish) {
+      m_on_finish = on_finish;
+      if (r < 0) {
+        finish(r);
+      } else {
+        get_mirror_group();
+      }
+    }, m_on_finish);
 }
 
 template <typename I>

@@ -8,6 +8,9 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/api/Group.h"
 #include "librbd/group/AddImageRequest.h"
+#include "librbd/group/MutationLock.h"
+#include "librbd/group/RemoveImageRequest.h"
+#include "librbd/mirror/GroupPromoteRequest.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 
@@ -22,7 +25,7 @@ void register_test_groups() {
 
 class TestGroup : public TestFixture {
 protected:
-  void check_force_promote_members(bool add_extra_member);
+  void check_force_promote_members(bool overlap);
 };
 
 TEST_F(TestGroup, group_create)
@@ -1002,7 +1005,7 @@ TEST_F(TestGroup, mirrorAddSecondaryImageToPrimaryGroupPP) {
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
 }
 
-void TestGroup::check_force_promote_members(bool add_extra_member) {
+void TestGroup::check_force_promote_members(bool overlap) {
   REQUIRE_FORMAT_V2();
 
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
@@ -1033,8 +1036,11 @@ void TestGroup::check_force_promote_members(bool add_extra_member) {
     &m_ioctx, image_id, mirror_image));
 
   std::string extra_image_id;
+  C_SaferCond promote_done;
+  C_SaferCond mutation_done;
+  Context* finish_mutation = nullptr;
   const auto extra_image_name = m_image_name + "_extra";
-  if (add_extra_member) {
+  if (overlap) {
     ASSERT_EQ(0, create_image_pp(
       m_rbd, m_ioctx, extra_image_name.c_str(), m_image_size));
     librbd::Image extra_image;
@@ -1046,15 +1052,51 @@ void TestGroup::check_force_promote_members(bool add_extra_member) {
     ASSERT_EQ(0, extra_image.get_id(&extra_image_id));
     std::string group_id;
     ASSERT_EQ(0, m_rbd.group_get_id(m_ioctx, group_name, &group_id));
+    C_SaferCond locked;
+    librbd::group::execute_mutation(m_ioctx, group_id, true, false,
+      [&](int r, Context* on_finish) {
+        finish_mutation = on_finish;
+        locked.complete(r);
+      }, &mutation_done);
+    int r = locked.wait();
+    if (r < 0) {
+      finish_mutation->complete(r);
+      mutation_done.wait();
+    }
+    ASSERT_EQ(0, r);
+
+    auto promote = librbd::mirror::GroupPromoteRequest<>::create(
+      m_ioctx, group_id, group_name, true, &promote_done);
+    promote->send();
+    EXPECT_EQ(ETIMEDOUT, promote_done.wait_for(0.05));
     // Bootstrap updates live membership before saving the next snapshot.
     C_SaferCond cond;
     auto req = librbd::group::AddImageRequest<>::create(
       m_ioctx, group_id, m_ioctx, extra_image_id, &cond);
     req->send();
-    ASSERT_EQ(0, cond.wait());
+    r = cond.wait();
+    finish_mutation->complete(r);
+    ASSERT_EQ(0, mutation_done.wait());
+    ASSERT_EQ(0, promote_done.wait_for(30));
+    ASSERT_EQ(0, r);
   }
 
-  ASSERT_EQ(0, m_rbd.mirror_group_promote(m_ioctx, group_name, true));
+  if (!overlap) {
+    ASSERT_EQ(0, m_rbd.mirror_group_promote(m_ioctx, group_name, true));
+  } else {
+    std::string group_id;
+    ASSERT_EQ(0, m_rbd.group_get_id(m_ioctx, group_name, &group_id));
+    C_SaferCond add_done;
+    auto add = librbd::group::AddImageRequest<>::create(
+      m_ioctx, group_id, m_ioctx, extra_image_id, &add_done, true);
+    add->send();
+    ASSERT_EQ(-EAGAIN, add_done.wait());
+    C_SaferCond remove_done;
+    auto remove = librbd::group::RemoveImageRequest<>::create(
+      m_ioctx, group_id, m_ioctx, image_id, &remove_done, true);
+    remove->send();
+    ASSERT_EQ(-EAGAIN, remove_done.wait());
+  }
   std::vector<librbd::group_image_info_t> members;
   ASSERT_EQ(0, m_rbd.group_image_list(m_ioctx, group_name, &members,
                                       sizeof(members[0])));
@@ -1064,7 +1106,7 @@ void TestGroup::check_force_promote_members(bool add_extra_member) {
     &m_ioctx, image_id, &mirror_image));
   ASSERT_EQ(cls::rbd::MIRROR_IMAGE_TYPE_GROUP, mirror_image.type);
   ASSERT_EQ(global_image_id, mirror_image.global_image_id);
-  if (add_extra_member) {
+  if (overlap) {
     ASSERT_EQ(0, librbd::cls_client::mirror_image_get(
       &m_ioctx, extra_image_id, &mirror_image));
     ASSERT_EQ(cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE, mirror_image.type);
@@ -1072,7 +1114,7 @@ void TestGroup::check_force_promote_members(bool add_extra_member) {
 
   ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, group_name, false));
   ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group_name));
-  if (add_extra_member) {
+  if (overlap) {
     librbd::Image extra_image;
     ASSERT_EQ(0, m_rbd.open(m_ioctx, extra_image,
                             extra_image_name.c_str()));
@@ -1092,11 +1134,12 @@ TEST_F(TestGroup, mirrorForcePromoteRepairsMemberTypePP) {
 }
 
 // Test sequence:
-// 1. Demote a mirrored group and leave its member with standalone mirror type.
-// 2. Add another live member without a new group snapshot, then force-promote.
-// Expected: Promotion restores the saved membership and GROUP mirror type,
-//   keeps the global image ID, and leaves the excluded image standalone.
-TEST_F(TestGroup, mirrorForcePromoteReconcilesMembersPP) {
+// 1. Hold an active replay mutation and start force promotion.
+// 2. Finish its member add, then release the mutation for promotion to continue.
+// 3. Try queued replay adds and removals after the group becomes primary.
+// Expected: Promotion waits, repairs member types and saved membership, and
+//   rejects late writes.
+TEST_F(TestGroup, mirrorForcePromoteWaitsForMembershipPP) {
   check_force_promote_members(true);
 }
 

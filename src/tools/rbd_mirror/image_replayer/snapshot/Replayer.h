@@ -113,10 +113,12 @@ public:
     handle_image_update_notify();
   }
 
-  void set_remote_snap_id_end_limit(uint64_t snap_id) {
+  void set_remote_snap_id_end_limit(uint64_t snap_id,
+    const cls::rbd::GroupSpec& local_group_spec) override {
     {
       std::unique_lock locker(m_lock);
       m_remote_group_image_snap_id = snap_id;
+      m_local_group_spec = local_group_spec;
       if (m_state != STATE_IDLE) {
         return;
       }
@@ -277,9 +279,7 @@ private:
   uint64_t m_remote_group_image_snap_id = CEPH_NOSNAP;
   cls::rbd::MirrorSnapshotNamespace m_remote_mirror_snap_ns;
 
-  int64_t m_local_group_pool_id = -1;
-  std::string m_local_group_id;
-  std::string m_local_group_snap_id;
+  cls::rbd::GroupSpec m_local_group_spec;
 
   librbd::mirror::snapshot::ImageState m_image_state;
   DeepCopyHandler* m_deep_copy_handler = nullptr;

@@ -14,6 +14,7 @@
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/group/AddImageRequest.h"
+#include "librbd/group/MutationLock.h"
 #include "librbd/group/RemoveImageRequest.h"
 #include "librbd/image/Types.h"
 #include "librbd/image/ValidatePoolRequest.h"
@@ -370,7 +371,21 @@ void CreateRequest<I>::handle_validate_group(int r) {
     return;
   }
 
-  add_image_to_directory();
+  if (m_non_primary_global_image_id.empty()) {
+    add_image_to_directory();
+    return;
+  }
+  // Keep creation and its error cleanup together. Promotion must not remove
+  // membership while a failed create is still rolling back its local image.
+  group::execute_mutation(m_group_io_ctx, m_group_id, true, false,
+    [this](int ret, Context* on_finish) {
+      m_on_finish = on_finish;
+      if (ret < 0) {
+        complete(ret);
+      } else {
+        add_image_to_directory();
+      }
+    }, m_on_finish);
 }
 
 template<typename I>

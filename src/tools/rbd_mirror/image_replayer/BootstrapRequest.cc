@@ -215,14 +215,17 @@ void BootstrapRequest<I>::handle_prepare_remote_image(int r) {
                << dendl;
       finish(-EREMOTEIO);
       return;
-    } else if (!state_builder->is_linked()) {
+    } else if (!state_builder->is_linked() && m_local_group_ctx == nullptr) {
       dout(10) << "local image is unlinked and remote image is not primary"
                << dendl;
       finish(-EREMOTEIO);
       return;
     }
-    // if the local image is linked to the remote image, we ignore that
-    // the remote image is not primary so that we can replay demotion
+    // If the local image is linked to the remote image, or is owned by a
+    // linked group, ignore that the remote image is not primary so that the
+    // replayer can process demotion. A group image can already be ORPHAN after
+    // its part of the demotion snapshot completes while other members are
+    // still syncing.
   }
 
   open_remote_image();

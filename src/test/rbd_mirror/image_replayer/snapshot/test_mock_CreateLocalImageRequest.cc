@@ -253,6 +253,9 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, AddMirrorImageError
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
+// Test sequence: Fail image creation after saving mirror metadata and return
+// the error with the local image-id intact. Retry and verify the request removes
+// that metadata before creating the image again.
 TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, CreateImageError) {
   InSequence seq;
 
@@ -272,6 +275,62 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, CreateImageError) {
     mock_threads, mock_state_builder, "global image id", &ctx);
   request->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
+  ASSERT_EQ("local image id", mock_state_builder.local_image_id);
+
+  expect_mirror_image_set("local image id",
+                          {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+                           "global image id", {},
+                           cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
+  expect_mirror_image_remove("local image id", 0);
+  expect_mirror_image_set("local image id",
+                          {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+                           "global image id", {},
+                           cls::rbd::MIRROR_IMAGE_STATE_CREATING}, 0);
+  expect_create_image(mock_create_image_request, "local image id", 0);
+
+  C_SaferCond retry_ctx;
+  request = create_request(
+    mock_threads, mock_state_builder, "global image id", &retry_ctx);
+  request->send();
+  ASSERT_EQ(0, retry_ctx.wait());
+}
+
+// Test sequence: Fail group-image creation with mutation-lock contention.
+// Remove its mirror metadata before returning the original error, without
+// starting another create. Keep the image-id if metadata cleanup fails.
+TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest,
+       GroupCreateImageError) {
+  for (int cleanup_error : {0, -EINVAL}) {
+    InSequence seq;
+
+    librbd::util::s_image_id = "local image id";
+    expect_mirror_image_set("local image id",
+                            {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+                             "global image id",
+                             cls::rbd::MIRROR_IMAGE_TYPE_GROUP,
+                             cls::rbd::MIRROR_IMAGE_STATE_CREATING}, 0);
+
+    MockCreateImageRequest mock_create_image_request;
+    expect_create_image(mock_create_image_request, "local image id", -EAGAIN);
+    expect_mirror_image_set("local image id",
+                            {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+                             "global image id",
+                             cls::rbd::MIRROR_IMAGE_TYPE_GROUP,
+                             cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
+    expect_mirror_image_remove("local image id", cleanup_error);
+
+    C_SaferCond ctx;
+    MockThreads mock_threads(m_threads);
+    MockStateBuilder mock_state_builder;
+    GroupCtx group_ctx;
+    auto request = new MockCreateLocalImageRequest(
+      &mock_threads, m_local_io_ctx, &group_ctx, m_mock_remote_image_ctx,
+      "global image id", &m_pool_meta_cache, nullptr, &mock_state_builder, &ctx);
+    request->send();
+    ASSERT_EQ(-EAGAIN, ctx.wait());
+    ASSERT_EQ(cleanup_error == 0 ? "" : "local image id",
+              mock_state_builder.local_image_id);
+  }
 }
 
 TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, CreateImageDuplicate) {

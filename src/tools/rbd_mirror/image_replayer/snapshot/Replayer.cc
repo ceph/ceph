@@ -540,6 +540,9 @@ void Replayer<I>::scan_local_mirror_snapshots(
           m_prune_snap_ids.insert(local_snap_id);
           break;
         }
+        // Resume the snapshot with the ID still referenced by the group.
+        m_local_snap_id_end = local_snap_id;
+        break;
       } else {
         // start snap will be last complete mirror snapshot or initial
         // image revision
@@ -549,10 +552,11 @@ void Replayer<I>::scan_local_mirror_snapshots(
     } else if (mirror_ns->is_primary()) {
       if (mirror_ns->complete) {
         const auto& peer_uuids = mirror_ns->mirror_peer_uuids;
-        if (peer_uuids.empty() ||
+        if ((peer_uuids.empty() ||
             (mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED &&
              peer_uuids.size() == 1 &&
-             peer_uuids.count(m_local_mirror_peer_uuid) == 1)) {
+             peer_uuids.count(m_local_mirror_peer_uuid) == 1)) &&
+            !mirror_ns->group_spec.is_valid()) {
           // After relocation, the primary snapshots on the new secondary become
           // obsolete snapshots. They can be pruned if they are already unlinked.
           // Additionally, in this case, a demoted primary snapshot that is linked
@@ -771,6 +775,29 @@ void Replayer<I>::scan_remote_mirror_snapshots(
                << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
                << "remote_snap_ns=" << m_remote_mirror_snap_ns << dendl;
       if (m_remote_mirror_snap_ns.complete) {
+        if (m_local_snap_id_end != CEPH_NOSNAP &&
+            !m_local_mirror_snap_ns.complete &&
+            m_remote_mirror_snap_ns.group_spec.is_valid() &&
+            (m_remote_group_image_snap_id == CEPH_NOSNAP ||
+             m_remote_group_image_snap_id < m_remote_snap_id_end)) {
+          // A daemon restart can leave a group-linked image snapshot without
+          // its saved image state. Resuming it would return -ENOENT and stop
+          // group recovery. Wait for the group replayer to remove unfinished
+          // snapshots or allow this snapshot to resume by setting its limit.
+          // This keeps snapshot cleanup under group control.
+          dout(10) << "waiting for group snapshot limit before resuming"
+                   << dendl;
+          if (m_image_updated || !m_prune_snap_ids_by_gr.empty()) {
+            locker->unlock();
+            load_local_image_meta();
+          } else {
+            ceph_assert(m_state == STATE_REPLAYING);
+            m_state = STATE_IDLE;
+            notify_status_updated();
+          }
+          return;
+        }
+
         locker->unlock();
 
         if (m_local_snap_id_end != CEPH_NOSNAP &&
@@ -794,6 +821,10 @@ void Replayer<I>::scan_remote_mirror_snapshots(
           dout(10) << "idling waiting for change in snapshot limits" << dendl;
           {
             std::unique_lock locker{m_lock};
+            // Shutdown can run while the scan is unlocked.
+            if (is_replay_interrupted(&locker)) {
+              return;
+            }
             ceph_assert(m_state == STATE_REPLAYING);
             m_state = STATE_IDLE;
             notify_status_updated();
@@ -994,6 +1025,17 @@ template <typename I>
 void Replayer<I>::create_non_primary_snapshot() {
   auto local_image_ctx = m_state_builder->local_image_ctx;
 
+  cls::rbd::GroupSpec local_group_spec;
+  {
+    std::unique_lock locker{m_lock};
+    // A historical member can already be detached from the live group, so
+    // ImageCtx::group_spec is no longer usable. Preserve the local group
+    // identity supplied with this group snapshot.
+    if (m_remote_group_image_snap_id == m_remote_snap_id_end) {
+      local_group_spec = m_local_group_spec;
+    }
+  }
+
   if (m_local_snap_id_start > 0) {
     std::shared_lock local_image_locker{local_image_ctx->image_lock};
 
@@ -1068,7 +1110,8 @@ void Replayer<I>::create_non_primary_snapshot() {
     local_image_ctx, m_remote_mirror_snap_ns.is_demoted(),
     m_remote_mirror_snap_ns.group_snap_id,
     m_state_builder->remote_mirror_uuid, m_remote_snap_id_end,
-    m_local_mirror_snap_ns.snap_seqs, m_image_state, &m_local_snap_id_end, ctx);
+    m_local_mirror_snap_ns.snap_seqs, m_image_state, &m_local_snap_id_end, ctx,
+    local_group_spec);
   req->send();
 }
 
@@ -1182,12 +1225,14 @@ void Replayer<I>::copy_image() {
   m_deep_copy_handler = new DeepCopyHandler(this);
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_copy_image>(this);
+  // Saved progress is a completed-object count. Deep copy expects the last
+  // completed object's zero-based index and resumes at the next object.
   auto req = librbd::deep_copy::ImageCopyRequest<I>::create(
     m_state_builder->remote_image_ctx,  m_state_builder->local_image_ctx,
     m_remote_snap_id_start, m_remote_snap_id_end, m_local_snap_id_start, false,
     (m_local_mirror_snap_ns.last_copied_object_number > 0 ?
       librbd::deep_copy::ObjectNumber{
-        m_local_mirror_snap_ns.last_copied_object_number} :
+        m_local_mirror_snap_ns.last_copied_object_number - 1} :
       librbd::deep_copy::ObjectNumber{}),
     m_local_mirror_snap_ns.snap_seqs, m_deep_copy_handler, ctx);
   req->send();

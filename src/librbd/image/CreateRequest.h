@@ -94,6 +94,8 @@ private:
    * |_____________>__________________<finish>. . . . . < . . . .
    *
    * @endverbatim
+   * Creating a non-primary group image holds the group lock from group
+   * validation through completion, including cleanup after an error.
    */
 
   CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
