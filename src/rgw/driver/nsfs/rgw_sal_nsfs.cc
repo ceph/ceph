@@ -28,6 +28,7 @@
 #include <sys/uio.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <optional>
@@ -5413,6 +5414,7 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 const char* nsfs::to_string(nsfs::ConvertEvent::Kind k)
 {
   switch (k) {
+  case nsfs::ConvertEvent::Kind::bucket:           return "bucket";
   case nsfs::ConvertEvent::Kind::object:           return "object";
   case nsfs::ConvertEvent::Kind::directory_object: return "directory object";
   case nsfs::ConvertEvent::Kind::upload:           return "upload";
@@ -5448,7 +5450,8 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			 const nsfs::XattrStrategy* ours,
 			 const nsfs::XattrStrategy* theirs,
 			 nsfs::convert_cb_t* cb,
-			 const nsfs::ConvertEvent& base_ev)
+			 const nsfs::ConvertEvent& base_ev,
+			 const std::vector<std::string>* leave_alone = nullptr)
 {
   Attrs attrs;
   int ret = get_x_attrs(y, dpp, fd, attrs, display, ours, theirs);
@@ -5459,6 +5462,11 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
   nsfs::xattr_map_t to_write;
   std::vector<std::string> to_remove;
   for (const auto& [key, bl] : attrs) {
+    if (leave_alone &&
+	(std::find(leave_alone->begin(), leave_alone->end(), key)
+	 != leave_alone->end())) {
+      continue;
+    }
     const std::string mine = ours->disk_name(key);
     const std::string foreign = theirs->disk_name(key);
     if (!mine.empty()) {
@@ -6201,6 +6209,47 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
   auto reopen = make_scope_guard(
       [this] { driver->gate_open(get_name()); });
 
+  /* The bucket's own state, before its contents.
+   *
+   * Bucket configuration is the one thing written in our form while
+   * the bucket is still base, so on disk it carries the base
+   * spelling -- RGW_ATTR_IAM_POLICY as user.nsfs.user.rgw.iam-policy
+   * rather than user.nsfs.rgw.iam-policy, because their mapping
+   * prefixes without stripping ours.  An attribute write merges, so
+   * leaving it would let a later write add the second name and leave
+   * the reader choosing between two spellings of one key.
+   *
+   * The profile markers are left alone.  They are not bucket state --
+   * they are the record of which format the bucket is in, which is why
+   * load_bucket erases the mask rather than surfacing it. */
+  std::vector<std::string> markers;
+  {
+    std::string k;
+    if (xattr_strategy()->parse_disk_name(nsfs::EXTENSIONS_XATTR, k)) {
+      markers.push_back(k);
+    }
+    if (xattr_strategy()->parse_disk_name(nsfs::CONVERTING_XATTR, k)) {
+      markers.push_back(k);
+    }
+  }
+
+  ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  {
+    nsfs::ConvertEvent ev{};
+    ev.kind = nsfs::ConvertEvent::Kind::bucket;
+    ev.key = get_name();
+
+    ret = convert_attrs(dpp, y, dir->get_fd(), get_name(),
+			driver->get_fs_strategy(), xattr_strategy(), theirs,
+			cb, ev, &markers);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
   ret = convert_directory(dpp, y, dir.get(), driver->ctx(),
 			  std::string(), driver->get_fs_strategy(),
 			  xattr_strategy(), theirs, their_paths,
@@ -6305,15 +6354,14 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
     return ret;
   }
 
-  /* The marker lives under user.nsfs. so it parses as one of ours and
-   * arrives here as an ordinary attribute.  It is not bucket metadata --
-   * it is what decided how to read this bucket -- and surfacing it would
-   * put it in the S3 attribute set.  Same reason bucket_info is erased
-   * below. */
-  {
+  /* The markers live under user.nsfs. so they parse as ours and arrive
+   * here as ordinary attributes.  Neither is bucket metadata -- one is
+   * what decided how to read this bucket, the other says the tree is
+   * still being rewritten -- and surfacing either would put it in the
+   * S3 attribute set.  Same reason bucket_info is erased below. */
+  for (const char* m : { nsfs::EXTENSIONS_XATTR, nsfs::CONVERTING_XATTR }) {
     std::string marker_key;
-    if (xattr_strategy()->parse_disk_name(
-	  nsfs::EXTENSIONS_XATTR, marker_key)) {
+    if (xattr_strategy()->parse_disk_name(m, marker_key)) {
       attrs.erase(marker_key);
     }
   }

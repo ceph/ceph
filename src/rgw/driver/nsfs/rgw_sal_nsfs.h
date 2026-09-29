@@ -64,12 +64,13 @@ namespace nsfs {
  * the same hook that sequences a reader injects a failure and leaves a
  * tree for a restart to finish. */
 struct ConvertEvent {
-  enum class Kind { object, directory_object, upload, part };
+  enum class Kind { bucket, object, directory_object, upload, part };
   enum class Phase { before, written, pruned };
 
   Kind kind;
   Phase phase;
-  std::string key;         /* the object, or the upload's object */
+  std::string key;         /* the object, or the upload's object;
+                            * the bucket name when kind is bucket */
   std::string upload_id;   /* empty unless kind is upload or part */
   uint32_t part{0};
   uint64_t index{0};       /* items reached so far, this run */

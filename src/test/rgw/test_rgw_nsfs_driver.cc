@@ -4482,6 +4482,73 @@ public:
   }
 };
 
+/* The bucket's own attributes are converted with its tree.
+ *
+ * Bucket configuration is the one thing written in our form while the
+ * bucket is still base, so it lands under the base spelling.  An
+ * attribute write merges rather than replaces, so a base spelling left
+ * behind would be joined by ours on the next write and the reader
+ * would have two names for one key. */
+TEST_F(NSFSUpgradeTest, ConvertsTheBucketsOwnAttributes)
+{
+  static constexpr const char* base_name = "user.nsfs.user.rgw.iam-policy";
+  static constexpr const char* our_name = "user.nsfs.rgw.iam-policy";
+  const std::string policy{"{\"Version\":\"2012-10-17\"}"};
+
+  bufferlist bl;
+  bl.append(policy);
+  rgw::sal::Attrs add;
+  add[RGW_ATTR_IAM_POLICY] = bl;
+  ASSERT_EQ(bucket->merge_and_store_attrs(env->dpp, add, null_yield), 0);
+
+  /* the control:  base has to have written the base spelling, or the
+   * assertion after the upgrade cannot fail */
+  auto before = xattr_names(bucket_path());
+  ASSERT_TRUE(before.contains(base_name))
+      << "base did not write the base spelling, so this test proves nothing";
+  ASSERT_FALSE(before.contains(our_name));
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  ASSERT_TRUE(prog.complete);
+
+  auto after = xattr_names(bucket_path());
+  EXPECT_FALSE(after.contains(base_name))
+      << "the base spelling survived the upgrade;  a later write would "
+      << "add ours beside it";
+  EXPECT_TRUE(after.contains(our_name));
+  EXPECT_EQ(str_xattr(bucket_path(), our_name), policy);
+
+  /* the profile markers are not bucket state and the pass leaves them
+   * alone;  the mask is still there and still says strong */
+  EXPECT_TRUE(after.contains(nsfs::EXTENSIONS_XATTR));
+  EXPECT_FALSE(after.contains(nsfs::CONVERTING_XATTR));
+}
+
+/* Neither marker is bucket metadata, so neither reaches the S3
+ * attribute set -- including while a conversion is in flight, which is
+ * the only time the converting marker exists. */
+TEST_F(NSFSUpgradeTest, TheMarkersAreNotBucketAttributes)
+{
+  their_object("flat.bin", "text/plain");
+
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      return (ev.kind == nsfs::ConvertEvent::Kind::object) ? -EIO : 0;
+    };
+  nsfs::ConvertProgress prog;
+  ASSERT_NE(upgrade(&stop, &prog), 0);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_TRUE(b->is_converting())
+      << "nothing to check:  the conversion did not stop";
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  const auto& attrs = bucket->get_attrs();
+  EXPECT_EQ(attrs.find("converting"), attrs.end());
+  EXPECT_EQ(attrs.find("extensions"), attrs.end());
+}
+
 /* Everything in the tree ends up in our names, and the marker is gone. */
 TEST_F(NSFSUpgradeTest, ConvertsTheTree)
 {
@@ -4541,7 +4608,8 @@ TEST_F(NSFSUpgradeTest, ReportsEachPhase)
 
   nsfs::ConvertProgress prog;
   ASSERT_EQ(upgrade(&cb, &prog), 0);
-  ASSERT_EQ(seen.size(), 6u) << "three phases for each of two objects";
+  ASSERT_EQ(seen.size(), 9u)
+      << "three phases for the bucket and for each of two objects";
 
   /* readdir order is the filesystem's, so what is asserted is that
    * each object's three phases arrive together and in order */
@@ -4613,7 +4681,8 @@ TEST_F(NSFSUpgradeTest, StopsAndResumes)
   int seen = 0;
   nsfs::convert_cb_t stop =
     [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
-      if (ev.phase != nsfs::ConvertEvent::Phase::pruned) {
+      if ((ev.kind != nsfs::ConvertEvent::Kind::object) ||
+	  (ev.phase != nsfs::ConvertEvent::Phase::pruned)) {
 	return 0;
       }
       return (++seen == 2) ? -EINTR : 0;
