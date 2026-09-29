@@ -41,9 +41,9 @@ describe('Create Cluster Review page', () => {
 
       onboarding.getDataTableHeaders().contains('Cores');
 
-      onboarding.getDataTableHeaders().contains('Total Memory');
+      onboarding.getDataTableHeaders().contains('Total memory');
 
-      onboarding.getDataTableHeaders().contains('Raw Capacity');
+      onboarding.getDataTableHeaders().contains('Raw capacity');
 
       onboarding.getDataTableHeaders().contains('HDDs');
 

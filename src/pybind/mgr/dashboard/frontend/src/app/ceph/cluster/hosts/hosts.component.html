@@ -24,6 +24,7 @@
         [maxLimit]="25"
         (setExpandedRow)="setExpandedRow($event)"
         (updateSelection)="updateSelection($event)"
+        (columnVisibilityChange)="onColumnVisibilityChange($event)"
         [toolHeader]="!hideToolHeader"
       >
         <div class="table-actions">
@@ -91,7 +92,7 @@
     <cd-label
       [key]="service['type']"
       [value]="service['count']"
-      class="me-1"
+      class="cds-mr-1"
     ></cd-label>
   </span>
 </ng-template>
