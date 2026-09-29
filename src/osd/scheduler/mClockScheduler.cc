@@ -73,43 +73,93 @@ void mClockScheduler::dump(ceph::Formatter &f) const
   f.close_section();
 }
 
+scheduler_op_type_t
+mClockScheduler::get_scheduler_op_type(const OpSchedulerItem &item)
+{
+  if (item.is_peering()) {
+    return scheduler_op_type_t::peering_op;
+  }
+
+  const auto op = item.maybe_get_op();
+  if (!op.has_value() || !(*op) || !(*op)->get_req()) {
+    return scheduler_op_type_t::unknown;
+  }
+
+  scheduler_op_type_t sch_op_type = scheduler_op_type_t::unknown;
+  const auto op_type = (*op)->get_req()->get_type();
+  const auto id = get_scheduler_id(item);
+  switch (id.class_id) {
+  case SchedulerClass::immediate: {
+    if (op_type == MSG_OSD_EC_READ) {
+      sch_op_type = scheduler_op_type_t::ec_read_op;
+    } else if (op_type == MSG_OSD_EC_WRITE) {
+      sch_op_type = scheduler_op_type_t::ec_write_op;
+    }
+    break;
+  }
+  case SchedulerClass::background_best_effort: {
+    if (op_type == MSG_OSD_EC_READ) {
+      sch_op_type = scheduler_op_type_t::ec_rec_read_op;
+    }
+    break;
+  }
+  default:
+    break;
+  }
+
+  return sch_op_type;
+}
+
 void mClockScheduler::enqueue(OpSchedulerItem&& item)
 {
   auto id = get_scheduler_id(item);
   unsigned priority = item.get_priority();
-  
+  scheduler_op_type_t sch_op_type = get_scheduler_op_type(item);
+  auto item_cost = item.get_cost();
+
   // TODO: move this check into OpSchedulerItem, handle backwards compat
   if (SchedulerClass::immediate == id.class_id) {
     enqueue_high(immediate_class_priority, std::move(item));
   } else if (priority >= cutoff_priority) {
     enqueue_high(priority, std::move(item));
   } else {
-    auto cost = calc_scaled_cost(item.get_cost());
-    item.set_qos_cost(cost);
+    auto qos_cost = calc_scaled_cost(item_cost);
+    item.set_qos_cost(qos_cost);
     dout(20) << __func__ << " " << id
-             << " item_cost: " << item.get_cost()
-             << " scaled_cost: " << cost
+             << " item_cost: " << item_cost
+             << " scaled_cost: " << qos_cost
              << dendl;
+
+    // trigger perf counter calculations first
+    mclock_conf.get_mclock_counter(id, sch_op_type, item_cost);
 
     // Add item to scheduler queue
     scheduler.add_request(
       std::move(item),
       id,
-      cost);
-    mclock_conf.get_mclock_counter(id);
+      qos_cost);
   }
 
- dout(20) << __func__ << " client_count: " << scheduler.client_count()
-          << " queue_sizes: [ "
-	  << " high_priority_queue: " << high_priority.size()
-          << " sched: " << scheduler.request_count() << " ]"
-          << dendl;
- dout(30) << __func__ << " mClockClients: "
-          << scheduler
-          << dendl;
- dout(30) << __func__ << " mClockQueues: { "
-          << display_queues() << " }"
-          << dendl;
+  dout(20) << __func__ << ": sched client_count: " << scheduler.client_count()
+           << " sched queue size: " << scheduler.request_count()
+           << dendl;
+
+  auto fmt_prio = [this](priority_t p) -> std::string {
+    return (p == immediate_class_priority) ? "MAX" : std::to_string(p);
+  };
+
+  dout(20) << __func__ << " high_priority queues: " << high_priority.size();
+  for (const auto& [prio, queue] : high_priority) {
+    *_dout << ", priority " << fmt_prio(prio) << ": " << queue.size();
+  }
+  *_dout << dendl;
+
+  dout(30) << __func__ << " mClockClients: "
+           << scheduler
+           << dendl;
+  dout(30) << __func__ << " mClockQueues: { "
+           << display_queues() << " }"
+           << dendl;
 }
 
 void mClockScheduler::enqueue_front(OpSchedulerItem&& item)
@@ -132,17 +182,20 @@ void mClockScheduler::enqueue_high(unsigned priority,
                                    OpSchedulerItem&& item,
 				   bool front)
 {
+  scheduler_op_type_t sch_op_type = get_scheduler_op_type(item);
+  scheduler_id_t id = scheduler_id_t {
+    SchedulerClass::immediate,
+    client_profile_id_t()
+  };
+
+  // trigger perf counter calculations first
+  mclock_conf.get_mclock_counter(id, sch_op_type, item.get_cost());
+
   if (front) {
     high_priority[priority].push_back(std::move(item));
   } else {
     high_priority[priority].push_front(std::move(item));
   }
-
-  scheduler_id_t id = scheduler_id_t {
-    SchedulerClass::immediate,
-    client_profile_id_t()
-  };
-  mclock_conf.get_mclock_counter(id);
 }
 
 WorkItem mClockScheduler::dequeue()
@@ -157,13 +210,15 @@ WorkItem mClockScheduler::dequeue()
       // maintain invariant, high priority entries are never empty
       high_priority.erase(iter);
     }
-    ceph_assert(std::get_if<OpSchedulerItem>(&ret));
+    auto *item_ptr = std::get_if<OpSchedulerItem>(&ret);
+    ceph_assert(item_ptr);
 
     scheduler_id_t id = scheduler_id_t {
       SchedulerClass::immediate,
       client_profile_id_t()
     };
-    mclock_conf.put_mclock_counter(id);
+    scheduler_op_type_t op_type = get_scheduler_op_type(*item_ptr);
+    mclock_conf.put_mclock_counter(id, op_type, item_ptr->get_time_queued());
     return ret;
   } else {
     mclock_queue_t::PullReq result = scheduler.pull_request();
@@ -177,7 +232,16 @@ WorkItem mClockScheduler::dequeue()
       ceph_assert(result.is_retn());
 
       auto &retn = result.get_retn();
-      mclock_conf.put_mclock_counter(retn.client);
+
+      // update perf counters
+      scheduler_op_type_t op_type = scheduler_op_type_t::unknown;
+      utime_t time_queued = utime_t();
+      if (retn.request) {
+        op_type = get_scheduler_op_type(*retn.request);
+        time_queued = retn.request->get_time_queued();
+      }
+      mclock_conf.put_mclock_counter(retn.client, op_type, time_queued);
+
       return std::move(*retn.request);
     }
   }
