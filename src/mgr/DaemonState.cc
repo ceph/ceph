@@ -22,7 +22,7 @@
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/Formatter.h"
-#include "common/strtol.h" // for strict_strtof()
+#include "common/strtol.h"
 #include "messages/MMgrReport.h"
 
 #define dout_context g_ceph_context
