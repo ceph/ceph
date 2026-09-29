@@ -839,6 +839,191 @@ class TestQuarantineMgrOps(QuarantineTestBase):
 
 
 # ---------------------------------------------------------------------------
+# Mgr async jobs (clone / purge) on quarantined subvolumes
+# ---------------------------------------------------------------------------
+@unittest.skipUnless(QUARANTINE_FEATURE_READY, "Quarantine not ready")
+class TestQuarantineMgrAsyncJobs(QuarantineTestBase):
+    """
+    Test that mgr/volumes async jobs blocked by quarantine are deferred
+    (with a backoff) rather than failed or lost, and resume once quarantine
+    is lifted.
+
+    Jobs are queued with the respective async job machinery paused, then
+    quarantine is enabled, then the machinery is resumed -- this makes the
+    job hit the quarantine deterministically.
+
+    Quarantine is held for HOLD_SECS, by when the job has been deferred a few
+    times and its backoff (5s, 10s, 20s, 40s, ...) has grown past
+    RESUME_TIMEOUT. The job completing within RESUME_TIMEOUT after
+    "quarantine disable" thus verifies that disable makes deferred jobs
+    eligible right away rather than after the backoff expires.
+    """
+    CLIENTS_REQUIRED = 1
+    SUBVOLUME_NAME = "quarantine_async_subvol"
+    CLONE_NAME = "quarantine_async_clone"
+    SNAPSHOT_NAME = "snap1"
+    TEST_FILE = "asyncjob_test.txt"
+    TEST_DATA = "Async job test data."
+
+    HOLD_SECS = 50
+    RESUME_TIMEOUT = 20
+
+    def setUp(self):
+        super().setUp()
+        self._create_test_file()
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname,
+                     self.SUBVOLUME_NAME, self.SNAPSHOT_NAME)
+        # do not reject clones since cloner threads are paused in tests
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', False)
+
+    def tearDown(self):
+        for name in (self.CLONE_NAME, self.SUBVOLUME_NAME):
+            try:
+                self._quarantine_disable(subvol_name=name)
+            except Exception:
+                pass
+        self.config_set('mgr', 'mgr/volumes/pause_cloning', False)
+        self.config_set('mgr', 'mgr/volumes/pause_purging', False)
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, self.CLONE_NAME,
+                         "--force")
+        except Exception:
+            pass
+        try:
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname,
+                         self.SUBVOLUME_NAME, self.SNAPSHOT_NAME, "--force")
+        except Exception:
+            pass
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', True)
+        super().tearDown()
+
+    # -- helpers -------------------------------------------------------------
+
+    def _ls(self, rel_path):
+        """List a directory via mount_a; [] if it does not exist."""
+        p = self.mount_a.run_shell(
+            ["sh", "-c", "ls -1 %s 2>/dev/null || true" % rel_path])
+        return [e for e in p.stdout.getvalue().split() if e]
+
+    def _clone_index_entries(self):
+        return self._ls("volumes/_index/clone")
+
+    def _trash_entries(self):
+        return self._ls("volumes/_deleting")
+
+    def _clone_status(self):
+        out = self._fs_cmd("clone", "status", self.volname, self.CLONE_NAME)
+        return json.loads(out)["status"]
+
+    def _wait_for(self, cond, timeout, msg, interval=1):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if cond():
+                return
+            time.sleep(interval)
+        self.fail(msg)
+
+    def _hold_quarantine(self, still_blocked, msg):
+        """Keep quarantine on for HOLD_SECS, checking the job stays blocked."""
+        deadline = time.time() + self.HOLD_SECS
+        while time.time() < deadline:
+            self.assertTrue(still_blocked(), msg)
+            time.sleep(5)
+
+    # -- tests ---------------------------------------------------------------
+
+    def test_purge_of_quarantined_trash_is_deferred(self):
+        """
+        The trash of a subvolume removed with --retain-snapshots lives inside
+        the subvolume. Purging it while the subvolume is quarantined must be
+        deferred, keeping the trash entry, and complete after disable.
+        """
+        self.config_set('mgr', 'mgr/volumes/pause_purging', True)
+        self._fs_cmd("subvolume", "rm", self.volname, self.SUBVOLUME_NAME,
+                     "--retain-snapshots")
+        trash = self._trash_entries()
+        self.assertEqual(len(trash), 1, "expected one trash entry: %s" % trash)
+
+        self.enable_and_wait()
+        self.config_set('mgr', 'mgr/volumes/pause_purging', False)
+
+        # the trash link must survive: dropping it would orphan the data
+        # left inside the subvolume
+        self._hold_quarantine(lambda: self._trash_entries() == trash,
+                              "trash entry was dropped while quarantined")
+
+        self._quarantine_disable()
+        self._wait_for(lambda: self._trash_entries() == [],
+                       self.RESUME_TIMEOUT,
+                       "trash not purged after quarantine was lifted")
+
+    def test_clone_from_quarantined_source_fails_and_detaches(self):
+        """
+        A clone whose source is quarantined fails with a clear reason. Its
+        detach from the source snapshot is deferred and done after disable,
+        after which the snapshot can be removed.
+        """
+        self.config_set('mgr', 'mgr/volumes/pause_cloning', True)
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname,
+                     self.SUBVOLUME_NAME, self.SNAPSHOT_NAME, self.CLONE_NAME)
+        self.assertEqual(self._clone_status()["state"], "pending")
+        index = self._clone_index_entries()
+        self.assertEqual(len(index), 1, "expected one clone index entry: %s" % index)
+
+        self.enable_and_wait()
+        self.config_set('mgr', 'mgr/volumes/pause_cloning', False)
+
+        self._wait_for(lambda: self._clone_status()["state"] == "failed", 30,
+                       "clone did not fail on quarantined source")
+        status = self._clone_status()
+        log.info("clone status: %s", status)
+        self.assertEqual(status["failure"]["error_msg"],
+                         "source subvolume is quarantined")
+
+        # detaching from the (quarantined) source is deferred -- the index
+        # entry stays
+        self._hold_quarantine(lambda: self._clone_index_entries() == index,
+                              "clone index entry dropped while quarantined")
+
+        self._quarantine_disable()
+        self._wait_for(lambda: self._clone_index_entries() == [],
+                       self.RESUME_TIMEOUT,
+                       "clone not detached after quarantine was lifted")
+        # no pending clones anymore on the source snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname,
+                     self.SUBVOLUME_NAME, self.SNAPSHOT_NAME)
+
+    def test_clone_to_quarantined_target_resumes(self):
+        """
+        A clone whose target (the clone itself) is quarantined cannot have
+        its state read or updated. It is deferred, and completes after
+        disable.
+        """
+        self.config_set('mgr', 'mgr/volumes/pause_cloning', True)
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname,
+                     self.SUBVOLUME_NAME, self.SNAPSHOT_NAME, self.CLONE_NAME)
+        index = self._clone_index_entries()
+        self.assertEqual(len(index), 1, "expected one clone index entry: %s" % index)
+
+        self.enable_and_wait(subvol_name=self.CLONE_NAME)
+        self.config_set('mgr', 'mgr/volumes/pause_cloning', False)
+
+        self._hold_quarantine(lambda: self._clone_index_entries() == index,
+                              "clone index entry dropped while quarantined")
+
+        self._quarantine_disable(subvol_name=self.CLONE_NAME)
+        self._wait_for(lambda: self._clone_status()["state"] == "complete",
+                       self.RESUME_TIMEOUT,
+                       "clone did not complete after quarantine was lifted")
+        self.assertEqual(self._clone_index_entries(), [])
+
+        clone_path = self._get_subvolume_path(self.CLONE_NAME)
+        self.assertEqual(
+            self.mount_a.read_file(self._get_test_file_path(clone_path)),
+            self.TEST_DATA)
+
+
+# ---------------------------------------------------------------------------
 # Subvolume group quarantine
 # ---------------------------------------------------------------------------
 @unittest.skipUnless(QUARANTINE_FEATURE_READY, "Quarantine not ready")
