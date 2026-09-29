@@ -2915,12 +2915,7 @@ struct ClaimRangeStressThread : public Thread {
     ceph::condition_variable cond;
     ceph::mutex lock = ceph::make_mutex("Bluestore::ClaimRangeStressThread::lock");
     bool stop = false;
-    struct held_claim {
-      PExtentVector exts;
-      uint64_t bytes;
-    };
-    std::deque<held_claim> pool;
-    uint64_t held = 0, claimed_total = 0, released_total = 0;
+    
     // bluestore_debug_claim_range_stress_*, read by init() at every mount
     uint64_t max_claims = 0, claim_len = 0, free_p = 0, min_free = 0;
     double interval = 0;
@@ -2944,7 +2939,7 @@ struct ClaimRangeStressThread : public Thread {
       interval = conf.get_val<double>(
         "bluestore_debug_claim_range_stress_interval");
       // claim_range() asserts on a misaligned length;
-      ceph_assert(claim_len % store->block_size == 0);
+      ceph_assert(claim_len % store->alloc->get_block_size() == 0);
       ceph_assert(claim_len <= store->bdev->get_size());
       ceph_assert(!stop);
       create("bstore_claim_st");

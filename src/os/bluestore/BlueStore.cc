@@ -5806,6 +5806,75 @@ void BlueStore::MempoolThread::_update_cache_settings()
                 << dendl;
 }
 
+// =======================================================
+
+// ClaimRangeStressThread
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.ClaimRangeStressThread "
+#undef dout_context
+#define dout_context store->cct
+
+void *BlueStore::ClaimRangeStressThread::entry()
+{
+  std::unique_lock l{lock};
+
+  struct held_claim {
+      PExtentVector exts;
+      uint64_t bytes;
+  };
+  std::deque<held_claim> pool;
+  uint64_t held = 0, claimed_total = 0, released_total = 0;
+  const uint64_t bs = store->block_size;
+  bufferlist sentinel;
+  sentinel.append(std::string(bs, char(0xAb))); 
+
+
+  auto release_front = [&] {
+    auto &claimed_range = pool.front();
+    store->alloc->release(claimed_range.exts);
+    released_total += claimed_range.bytes;
+    held -= claimed_range.bytes;
+    pool.pop_front();
+  };
+
+  while (!stop) {
+    if (pool.size() == max_claims) {
+      release_front();
+    }
+    uint64_t free = store->alloc->get_free();
+
+    if ((held + claim_len <= free_p * (held + free)/100) && (free - claim_len >= min_free )) {
+      // pick a whole claim_len slot, so [off, off + claim_len) never runs
+      // past the allocator's capacity
+      uint64_t slots = store->alloc->get_capacity() / claim_len;
+      uint64_t off = ceph::util::generate_random_number<uint64_t>(0, slots - 1) * claim_len;
+      PExtentVector exts;
+      auto n = store->alloc->claim_range(off, claim_len, &exts);
+      // write sentinel to the first and the last block of the extent
+      for (auto& e: exts){
+        store->bdev->write(e.offset, sentinel, false);
+        store->bdev->write(e.offset + e.length - bs, sentinel, false);
+      }
+      claimed_total += n;
+      held += n;
+      pool.push_back({std::move(exts), n});
+    }
+    cond.wait_for(l, ceph::make_timespan(interval));
+  }
+
+  // Thread stopped, release all claims
+  while (!pool.empty()){
+    release_front();
+  }
+
+  ceph_assert(held == 0);
+  ceph_assert(claimed_total == released_total);
+  stop = false;
+  return nullptr;
+}
+
+
 // =====================================
 
 #undef dout_prefix
