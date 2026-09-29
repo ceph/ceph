@@ -858,6 +858,7 @@ class ServiceSpec(object):
         'container',
         'crash',
         'elasticsearch',
+        'fcm-dedup',
         'grafana',
         'ingress',
         'mgmt-gateway',
@@ -934,6 +935,7 @@ class ServiceSpec(object):
     @classmethod
     def _cls(cls: Type[ServiceSpecT], service_type: str) -> Type[ServiceSpecT]:
         from ceph.deployment.drive_group import DriveGroupSpec
+        from ceph.deployment.service_spec import FcmDedupSpec as _FcmDedupSpec
 
         ret = {
             'mon': MONSpec,
@@ -964,6 +966,7 @@ class ServiceSpec(object):
             'jaeger-tracing': TracingSpec,
             'node-proxy': NodeProxySpec,
             SMBSpec.service_type: SMBSpec,
+            'fcm-dedup': _FcmDedupSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise SpecValidationError('Spec needs a "service_type" key.')
@@ -4556,3 +4559,33 @@ class NodeProxySpec(ServiceSpec):
 
 yaml.add_representer(NodeProxySpec, ServiceSpec.yaml_representer)
 yaml.add_representer(SMBSpec, ServiceSpec.yaml_representer)
+
+
+class FcmDedupSpec(ServiceSpec):
+    def __init__(
+        self,
+        service_type: str = 'fcm-dedup',
+        service_id: Optional[str] = None,
+        placement: Optional[PlacementSpec] = None,
+        unmanaged: bool = False,
+        preview_only: bool = False,
+        config: Optional[Dict[str, str]] = None,
+        extra_container_args: Optional[GeneralArgList] = None,
+        extra_entrypoint_args: Optional[GeneralArgList] = None,
+        custom_configs: Optional[List[CustomConfig]] = None,
+    ) -> None:
+        assert service_type == 'fcm-dedup'
+        super(FcmDedupSpec, self).__init__(
+            'fcm-dedup',
+            service_id=service_id,
+            placement=placement,
+            unmanaged=unmanaged,
+            preview_only=preview_only,
+            config=config,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs,
+        )
+
+
+yaml.add_representer(FcmDedupSpec, ServiceSpec.yaml_representer)

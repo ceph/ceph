@@ -651,6 +651,7 @@ class Orchestrator(object):
             'smb': self.apply_smb,
             'mgmt-gateway': self.apply_mgmt_gateway,
             'oauth2-proxy': self.apply_oauth2_proxy,
+            'fcm-dedup': self.apply_fcm_dedup,
         }
 
         def merge(l: OrchResult[List[str]], r: OrchResult[str]) -> OrchResult[List[str]]:  # noqa: E741
@@ -938,6 +939,10 @@ class Orchestrator(object):
         """Update a smb gateway service"""
         raise NotImplementedError()
 
+    def apply_fcm_dedup(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Apply an fcm-dedup service spec"""
+        raise NotImplementedError()
+
     def apply_tuned_profiles(self, specs: List[TunedProfileSpec], no_overwrite: bool) -> OrchResult[str]:
         """Add or update an existing tuned profile"""
         raise NotImplementedError()
@@ -1054,6 +1059,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'jaeger-collector': 'jaeger-collector',
         'jaeger-query': 'jaeger-query',
         'smb': 'smb',
+        'fcm-dedup': 'fcm-dedup',
     }
     return mapping[dtype]
 
@@ -1093,6 +1099,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'jaeger-query': ['jaeger-query'],
         'jaeger-tracing': ['elasticsearch', 'jaeger-query', 'jaeger-collector', 'jaeger-agent'],
         'smb': ['smb'],
+        'fcm-dedup': ['fcm-dedup'],
     }
     return mapping[stype]
 
