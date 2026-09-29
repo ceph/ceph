@@ -172,11 +172,25 @@ int from_noobaa_object_lock(const DoutPrefixProvider* dpp, JSONObj* cfg,
     }
   }
 
-  /* their schema requires one of days or years with a mode, and RGW
-   * requires exactly one of the two as well -- retention_period_valid()
-   * says so.  A rule that satisfies neither is a rule we cannot honour,
-   * and honouring it wrongly is a retention failure. */
   const bool has_rule = !mode.empty();
+
+  /* Neither RGW's JSON decoder nor ours would otherwise check the
+   * mode -- only RGW's XML path does -- so an arbitrary string would
+   * reach info.obj_lock and be reported as the retention mode of a
+   * locked bucket. */
+  if (has_rule && (mode != "GOVERNANCE") && (mode != "COMPLIANCE")) {
+    ldpp_dout(dpp, 0) << "ERROR: default_retention names mode \"" << mode
+      << "\", which is neither of theirs" << dendl;
+    return -EBADMSG;
+  }
+
+  /* Their schema requires exactly one of days or years, and so does
+   * RGW:  rgw_op.cc:9707 rejects anything else with
+   * ERR_INVALID_RETENTION_PERIOD.  It matters because
+   * get_lock_until_date() takes days when days > 0 and years
+   * otherwise -- so both set silently discards the years, and neither
+   * set yields mtime + years(0), a retention that expires the instant
+   * the object is written. */
   if (has_rule && ((years > 0) == (days > 0))) {
     ldpp_dout(dpp, 0) << "ERROR: default_retention names "
       << (days > 0 ? "both days and years" : "neither days nor years")
@@ -368,14 +382,20 @@ int from_noobaa_website(const DoutPrefixProvider* dpp, JSONObj* web,
  * and whether a bucket key is in use.  RGWBucketEncryptionConfig takes
  * exactly those, so there is nothing to build.
  *
- * An empty or absent algorithm configures nothing and is not a
- * failure -- their schema requires none of the three, so `{}` is a
- * valid record that says nothing.  A value that is neither of their
- * two is a failure, though.  The string becomes the
- * x-amz-server-side-encryption header value on every PUT into the
- * bucket, so an algorithm we do not recognise would surface as a
- * request-time error on every write rather than here, and a bucket
- * meant to encrypt is the wrong place to be lenient. */
+ * An empty or absent algorithm configures nothing -- their schema
+ * requires none of the three, so `{}` is a valid record that says
+ * nothing.
+ *
+ * An algorithm that is neither of theirs is stored anyway, and that is
+ * deliberate.  The string becomes the x-amz-server-side-encryption
+ * header value on every PUT (rgw_rest_s3.cc, get_encryption_defaults),
+ * so RGW already refuses writes into a bucket configured with one it
+ * does not know.  That is fail-closed at the granularity the gap
+ * actually has.  Failing the bucket at load instead would also deny
+ * reads of objects sitting there perfectly readable, which the gap
+ * does not justify -- unlike versioning, where there is no safe
+ * default, or a retention period, where RGW itself refuses the same
+ * input. */
 int from_noobaa_encryption(const DoutPrefixProvider* dpp, JSONObj* enc,
 			   Attrs& attrs)
 {
@@ -385,9 +405,12 @@ int from_noobaa_encryption(const DoutPrefixProvider* dpp, JSONObj* enc,
     return 0;
   }
   if ((algorithm != "AES256") && (algorithm != "aws:kms")) {
-    ldpp_dout(dpp, 0) << "ERROR: bucket encryption names algorithm \""
-      << algorithm << "\", which is neither of theirs" << dendl;
-    return -EBADMSG;
+    /* warned on every load of this bucket, on purpose:  writes into it
+     * will fail and the reason should be findable without reading the
+     * record by hand */
+    ldpp_dout(dpp, 1) << "nsfs: bucket encryption names algorithm \""
+      << algorithm << "\", which is neither of theirs;  RGW will refuse "
+      << "writes into this bucket" << dendl;
   }
 
   std::string key_id;

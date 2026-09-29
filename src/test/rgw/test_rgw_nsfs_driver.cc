@@ -3485,6 +3485,24 @@ TEST_F(NSFSNooBaaStateTest, ObjectLockComesFromTheirRecord)
   EXPECT_EQ(info.obj_lock.get_years(), 0);
 }
 
+/* A retention mode that is neither of theirs fails the bucket closed.
+ *
+ * Nothing else checks it:  RGW validates the mode on its XML path and
+ * not in DefaultRetention::decode_json(), so without this an
+ * arbitrary string would be reported as a locked bucket's retention
+ * mode. */
+TEST_F(NSFSNooBaaStateTest, AnUnknownRetentionModeFailsClosed)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"object_lock_configuration":{)"
+	       R"("object_lock_enabled":"Enabled",)"
+	       R"("rule":{"default_retention":{"days":10,)"
+	       R"("mode":"ADVISORY"}}})");
+
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+}
+
 /* Years rather than days, and the other mode. */
 TEST_F(NSFSNooBaaStateTest, ObjectLockInYearsAndCompliance)
 {
@@ -3786,17 +3804,27 @@ TEST_F(NSFSNooBaaStateTest, AnEmptyEncryptionRecordConfiguresNothing)
 	    bucket->get_attrs().end());
 }
 
-/* An algorithm that is neither of theirs fails the bucket closed.
+/* An algorithm that is neither of theirs is kept, not refused.
  *
  * The string becomes the x-amz-server-side-encryption header value on
- * every PUT, so accepting it would move the failure to every write
- * into a bucket that is meant to encrypt. */
-TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmFailsClosed)
+ * every PUT, so RGW already refuses writes into a bucket configured
+ * with one it does not know -- fail-closed at the granularity the gap
+ * has.  Refusing the bucket at load would also deny reads of objects
+ * that are sitting there perfectly readable. */
+TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsKeptNotRefused)
 {
   forget_our_state();
   their_record("ENABLED", R"(,"encryption":{"algorithm":"rot13"})");
 
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0)
+      << "the bucket was refused over an algorithm that only affects writes";
+
+  auto i = bucket->get_attrs().find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+  ASSERT_NE(i, bucket->get_attrs().end());
+  RGWBucketEncryptionConfig conf;
+  auto bi = i->second.cbegin();
+  ASSERT_NO_THROW(decode(conf, bi));
+  EXPECT_EQ(conf.sse_algorithm(), "rot13");
 }
 
 /* A record we cannot make sense of fails the bucket closed, the same
