@@ -22,7 +22,8 @@ See cls/refcount/cls_refcount_client*
 
   Atomically increments the refcount with specified tag ::
 
-    void cls_refcount_get(librados::ObjectWriteOperation& op, const string& tag, bool implicit_ref = false);
+    void cls_refcount_get(librados::ObjectWriteOperation& op, const string& tag, bool implicit_ref = false,
+                          const string& src_tag = {}, bool unique = false);
 
 * cls_refcount_put
 
