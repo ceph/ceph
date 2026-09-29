@@ -6,6 +6,7 @@
 #include "include/rbd/librbd.h"
 #include "include/rbd/librbd.hpp"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/internal.h"
 #include "librbd/api/Group.h"
 #include "librbd/group/AddImageRequest.h"
 #include "test/librados/test.h"
@@ -22,7 +23,7 @@ void register_test_groups() {
 
 class TestGroup : public TestFixture {
 protected:
-  void check_force_promote_members(bool add_extra_member);
+  void check_force_promote_members(bool extra_member);
 };
 
 TEST_F(TestGroup, group_create)
@@ -1002,7 +1003,7 @@ TEST_F(TestGroup, mirrorAddSecondaryImageToPrimaryGroupPP) {
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
 }
 
-void TestGroup::check_force_promote_members(bool add_extra_member) {
+void TestGroup::check_force_promote_members(bool extra_member) {
   REQUIRE_FORMAT_V2();
 
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
@@ -1034,7 +1035,7 @@ void TestGroup::check_force_promote_members(bool add_extra_member) {
 
   std::string extra_image_id;
   const auto extra_image_name = m_image_name + "_extra";
-  if (add_extra_member) {
+  if (extra_member) {
     ASSERT_EQ(0, create_image_pp(
       m_rbd, m_ioctx, extra_image_name.c_str(), m_image_size));
     librbd::Image extra_image;
@@ -1046,12 +1047,11 @@ void TestGroup::check_force_promote_members(bool add_extra_member) {
     ASSERT_EQ(0, extra_image.get_id(&extra_image_id));
     std::string group_id;
     ASSERT_EQ(0, m_rbd.group_get_id(m_ioctx, group_name, &group_id));
-    // Bootstrap updates live membership before saving the next snapshot.
-    C_SaferCond cond;
+    C_SaferCond added;
     auto req = librbd::group::AddImageRequest<>::create(
-      m_ioctx, group_id, m_ioctx, extra_image_id, &cond);
+      m_ioctx, group_id, m_ioctx, extra_image_id, &added);
     req->send();
-    ASSERT_EQ(0, cond.wait());
+    ASSERT_EQ(0, added.wait());
   }
 
   ASSERT_EQ(0, m_rbd.mirror_group_promote(m_ioctx, group_name, true));
@@ -1064,7 +1064,7 @@ void TestGroup::check_force_promote_members(bool add_extra_member) {
     &m_ioctx, image_id, &mirror_image));
   ASSERT_EQ(cls::rbd::MIRROR_IMAGE_TYPE_GROUP, mirror_image.type);
   ASSERT_EQ(global_image_id, mirror_image.global_image_id);
-  if (add_extra_member) {
+  if (extra_member) {
     ASSERT_EQ(0, librbd::cls_client::mirror_image_get(
       &m_ioctx, extra_image_id, &mirror_image));
     ASSERT_EQ(cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE, mirror_image.type);
@@ -1072,7 +1072,7 @@ void TestGroup::check_force_promote_members(bool add_extra_member) {
 
   ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, group_name, false));
   ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group_name));
-  if (add_extra_member) {
+  if (extra_member) {
     librbd::Image extra_image;
     ASSERT_EQ(0, m_rbd.open(m_ioctx, extra_image,
                             extra_image_name.c_str()));
@@ -1085,18 +1085,18 @@ void TestGroup::check_force_promote_members(bool add_extra_member) {
 
 // Test sequence:
 // 1. Demote a mirrored group and leave its member with standalone mirror type.
-// 2. Force-promote it without any incomplete group snapshot.
+// 2. Force-promote it with no mirror daemon or incomplete group snapshot.
 // Expected: The saved member regains GROUP type and keeps its global image ID.
 TEST_F(TestGroup, mirrorForcePromoteRepairsMemberTypePP) {
   check_force_promote_members(false);
 }
 
 // Test sequence:
-// 1. Demote a mirrored group and leave its member with standalone mirror type.
-// 2. Add another live member without a new group snapshot, then force-promote.
-// Expected: Promotion restores the saved membership and GROUP mirror type,
-//   keeps the global image ID, and leaves the excluded image standalone.
-TEST_F(TestGroup, mirrorForcePromoteReconcilesMembersPP) {
+// 1. With no mirror daemon running, add a member to the demoted local group
+//   without saving a new snapshot, as an interrupted bootstrap can leave it.
+// 2. Force-promote the group and restore the saved membership.
+// Expected: The saved member is GROUP and the extra member becomes standalone.
+TEST_F(TestGroup, mirrorForcePromoteRestoresSavedMembershipPP) {
   check_force_promote_members(true);
 }
 

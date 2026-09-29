@@ -50,6 +50,9 @@ private:
    *             <start>
    *                |
    *                v
+   *        ACQUIRE_GROUP_LOCK
+   *                |
+   *                v
    *         GET_MIRROR_GROUP
    *                |
    *                v
@@ -127,6 +130,9 @@ private:
    *                |
    *                v
    *            CLOSE_IMAGES
+   *                |
+   *                v
+   *         RELEASE_GROUP_LOCK
    *                |
    *                v
    *             <finish>

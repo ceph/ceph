@@ -54,7 +54,7 @@ private:
    *    |
    *    v
    *  REMOVE_GROUP
-   *    | error
+   *    | error other than -ENOENT
    *    +------> RESTORE_GROUP_IMAGE --> <finish>
    *    |
    *    v
