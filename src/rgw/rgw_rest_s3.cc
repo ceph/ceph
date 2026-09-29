@@ -12,6 +12,7 @@
 #include "common/ceph_crypto.h"
 #include "common/dout.h"
 #include "common/split.h"
+#include "common/strtol.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
@@ -6156,12 +6157,11 @@ void update_attribute_map(const std::string& input, AttributeMap& map) {
   }
   ++token;
 
-  unsigned idx;
-  try {
-    idx = std::stoul(*token);
-  } catch (const std::invalid_argument&) {
+  const auto parsed = ceph::parse<unsigned>(*token);
+  if (!parsed) {
     return;
   }
+  const unsigned idx = *parsed;
   ++token;
 
   std::string key_or_value = "";
