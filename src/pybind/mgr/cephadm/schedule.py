@@ -325,6 +325,43 @@ class HostAssignment(object):
 
         return slots, to_add, to_remove
 
+    def place_per_osd_daemons(
+            self,
+    ) -> Tuple[List[DaemonPlacement], List[DaemonPlacement], List[orchestrator.DaemonDescription]]:
+        target_slots = [
+            DaemonPlacement(
+                daemon_type=self.primary_daemon_type,
+                hostname=osd.hostname,
+                name=osd.daemon_id,
+            )
+            for osd in (self.related_service_daemons or [])
+            if osd.hostname and osd.daemon_id
+        ]
+        existing = [
+            d for d in self.daemons if d.daemon_type == self.primary_daemon_type
+        ]
+        existing_slots: List[DaemonPlacement] = []
+        to_add: List[DaemonPlacement] = []
+        to_remove: List[orchestrator.DaemonDescription] = []
+
+        for dd in existing:
+            found = False
+            for p in target_slots:
+                if p.matches_daemon(dd, self.upgrade_in_progress):
+                    target_slots.remove(p)
+                    existing_slots.append(p)
+                    found = True
+                    break
+            if not found:
+                to_remove.append(dd)
+
+        to_add = target_slots
+        to_remove = [
+            d for d in to_remove
+            if d.hostname not in [h.hostname for h in self.unreachable_hosts]
+        ]
+        return existing_slots + to_add, to_add, to_remove
+
     def place(self):
         # type: () -> Tuple[List[DaemonPlacement], List[DaemonPlacement], List[orchestrator.DaemonDescription]]
         """
@@ -337,6 +374,9 @@ class HostAssignment(object):
         """
 
         self.validate()
+
+        if self.primary_daemon_type == 'fcm-dedup':
+            return self.place_per_osd_daemons()
 
         count = self.spec.placement.count
 

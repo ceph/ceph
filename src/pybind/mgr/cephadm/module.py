@@ -1073,7 +1073,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'mon', 'crash', 'ceph-exporter', 'node-proxy',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'agent', 'snmp-gateway', 'loki', 'promtail', 'alloy',
-            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query', 'mgmt-gateway', 'oauth2-proxy'
+            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query', 'mgmt-gateway', 'oauth2-proxy',
+            'fcm-dedup'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -4911,6 +4912,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_nfs(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_fcm_dedup(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     def _get_dashboard_url(self):

@@ -1532,7 +1532,9 @@ class HostCache():
         return list(dd for dd in self._get_daemons() if dd.service_name() == service_name)
 
     def get_related_service_daemons(self, service_spec: ServiceSpec) -> Optional[List[orchestrator.DaemonDescription]]:
-        if service_spec.service_type == 'ingress':
+        if service_spec.service_type == 'fcm-dedup':
+            return self.get_daemons_by_type('osd')
+        elif service_spec.service_type == 'ingress':
             dds = list(dd for dd in self._get_daemons() if dd.service_name() == cast(IngressSpec, service_spec).backend_service)
             dds += list(dd for dd in self._get_tmp_daemons() if dd.service_name() == cast(IngressSpec, service_spec).backend_service)
             logger.debug(f'Found related daemons {dds} for service {service_spec.service_name()}')
