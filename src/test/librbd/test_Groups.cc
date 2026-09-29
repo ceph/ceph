@@ -969,6 +969,100 @@ TEST_F(TestGroup, snap_list_internal)
   ASSERT_EQ(0, rbd.group_remove(ioctx, group_name));
 }
 
+TEST_F(TestGroup, mirrorAddEnabledImageToDisabledGroupPP) {
+  REQUIRE_FORMAT_V2();
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+
+  const char *group_name = "mirror_disabled_group";
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, group_name));
+
+  librbd::Image image;
+  ASSERT_EQ(0, m_rbd.open(m_ioctx, image, m_image_name.c_str()));
+  ASSERT_EQ(0,
+    image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+
+  librbd::mirror_image_info_t mirror_info;
+  ASSERT_EQ(0, image.mirror_image_get_info(&mirror_info, sizeof(mirror_info)));
+  ASSERT_EQ(RBD_MIRROR_IMAGE_ENABLED, mirror_info.state);
+
+  ASSERT_EQ(-EINVAL, m_rbd.group_image_add(
+    m_ioctx, group_name, m_ioctx, m_image_name.c_str()));
+
+  std::vector<librbd::group_image_info_t> images;
+  ASSERT_EQ(0, m_rbd.group_image_list(m_ioctx, group_name, &images,
+                                      sizeof(librbd::group_image_info_t)));
+  ASSERT_TRUE(images.empty());
+
+  ASSERT_EQ(0, image.mirror_image_disable(false));
+  image.close();
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group_name));
+}
+
+TEST_F(TestGroup, mirrorAddDisabledImageToEnabledGroupPP) {
+  REQUIRE_FORMAT_V2();
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+
+  std::string peer_uuid;
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_add(
+    m_ioctx, &peer_uuid, RBD_MIRROR_PEER_DIRECTION_RX_TX, "cluster",
+    "client"));
+
+  const char *group_name = "mirror_enabled_group";
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, group_name));
+  ASSERT_EQ(0, m_rbd.mirror_group_enable(
+    m_ioctx, group_name, RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+
+  ASSERT_EQ(-EINVAL, m_rbd.group_image_add(
+    m_ioctx, group_name, m_ioctx, m_image_name.c_str()));
+
+  std::vector<librbd::group_image_info_t> images;
+  ASSERT_EQ(0, m_rbd.group_image_list(m_ioctx, group_name, &images,
+                                      sizeof(librbd::group_image_info_t)));
+  ASSERT_TRUE(images.empty());
+
+  ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, group_name, false));
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group_name));
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
+}
+
+TEST_F(TestGroup, mirrorAddSecondaryImageToPrimaryGroupPP) {
+  REQUIRE_FORMAT_V2();
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+
+  std::string peer_uuid;
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_add(
+    m_ioctx, &peer_uuid, RBD_MIRROR_PEER_DIRECTION_RX_TX, "cluster",
+    "client"));
+
+  const char *group_name = "mirror_primary_group";
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, group_name));
+  ASSERT_EQ(0, m_rbd.mirror_group_enable(
+    m_ioctx, group_name, RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+
+  librbd::Image image;
+  ASSERT_EQ(0, m_rbd.open(m_ioctx, image, m_image_name.c_str()));
+  ASSERT_EQ(0,
+    image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+  ASSERT_EQ(0, image.mirror_image_demote());
+
+  ASSERT_EQ(-EINVAL, m_rbd.group_image_add(
+    m_ioctx, group_name, m_ioctx, m_image_name.c_str()));
+
+  std::vector<librbd::group_image_info_t> images;
+  ASSERT_EQ(0, m_rbd.group_image_list(m_ioctx, group_name, &images,
+                                      sizeof(librbd::group_image_info_t)));
+  ASSERT_TRUE(images.empty());
+
+  ASSERT_EQ(0, image.mirror_image_disable(true));
+  image.close();
+  ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, group_name, false));
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group_name));
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
+}
+
 TEST_F(TestGroup, mirrorPP)
 {
   REQUIRE_FORMAT_V2();
