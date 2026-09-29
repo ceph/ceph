@@ -17,6 +17,7 @@
 
 #include "BlueStore.h"
 #include "BlueStore_objects.h"
+#include "bluestore_types.h"
 
 inline bluestore::SharedBlobRef bluestore::SharedBlobSet::lookup(uint64_t sbid) {
   std::lock_guard l(lock);
@@ -88,6 +89,40 @@ inline void BlueStore::_buffer_cache_write(
   unsigned flags) {
   onode->bc.write(onode->c->cache,
                   txc, offset, bl, flags);
+}
+
+// volatile_statfs
+inline void volatile_statfs::publish(store_statfs_t* buf) const
+{
+  buf->allocated = allocated();
+  buf->data_stored = stored();
+  buf->data_compressed = compressed();
+  buf->data_compressed_original = compressed_original();
+  buf->data_compressed_allocated = compressed_allocated();
+}
+
+inline volatile_statfs& volatile_statfs::operator=(const store_statfs_t& st) {
+  values[STATFS_ALLOCATED] = st.allocated;
+  values[STATFS_STORED] = st.data_stored;
+  values[STATFS_COMPRESSED_ORIGINAL] = st.data_compressed_original;
+  values[STATFS_COMPRESSED] = st.data_compressed;
+  values[STATFS_COMPRESSED_ALLOCATED] = st.data_compressed_allocated;
+  return *this;
+}
+
+inline std::ostream& operator<<(std::ostream& out, const volatile_statfs& s)
+{
+  return out
+    << " allocated:"
+    << s.values[volatile_statfs::STATFS_ALLOCATED]
+    << " stored:"
+    << s.values[volatile_statfs::STATFS_STORED]
+    << " compressed:"
+    << s.values[volatile_statfs::STATFS_COMPRESSED]
+    << " compressed_orig:"
+    << s.values[volatile_statfs::STATFS_COMPRESSED_ORIGINAL]
+    << " compressed_alloc:"
+    << s.values[volatile_statfs::STATFS_COMPRESSED_ALLOCATED];
 }
 
 #endif
