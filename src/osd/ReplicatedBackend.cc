@@ -264,6 +264,21 @@ void ReplicatedBackend::clear_recovery_state()
   pull_from_peer.clear();
 }
 
+void ReplicatedBackend::cancel_recovery_op(const hobject_t &soid)
+{
+  auto pull_it = pulling.find(soid);
+  if (pull_it != pulling.end()) {
+    clear_pull(pull_it);
+  }
+  auto push_it = pushing.find(soid);
+  if (push_it != pushing.end()) {
+    for (auto &&j : push_it->second) {
+      get_parent()->release_locks(j.second.lock_manager);
+    }
+    pushing.erase(push_it);
+  }
+}
+
 void ReplicatedBackend::on_change()
 {
   dout(10) << __func__ << dendl;

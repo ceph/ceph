@@ -66,6 +66,7 @@ public:
 
   void on_change() override;
   void clear_recovery_state() override;
+  void cancel_recovery_op(const hobject_t &soid) override;
 
   class RPCRecPred : public IsPGRecoverablePredicate {
   public:

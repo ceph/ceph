@@ -1515,6 +1515,11 @@ struct RecoveryReadCompleter : ECCommon::ReadCompleter {
       const hobject_t &hoid,
       ECCommon::read_result_t &&res,
       ECCommon::read_request_t &req) override {
+    // The op may have been cancelled (e.g. by pool-migration cleanup) while its
+    // recovery read was in flight; both paths below assume the op still exists.
+    if (!backend.recovery_ops.contains(hoid)) {
+      return;
+    }
     if (!(res.r == 0 && res.errors.empty())) {
       backend._failed_push(hoid, res);
       return;

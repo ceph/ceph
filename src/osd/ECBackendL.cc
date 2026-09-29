@@ -472,6 +472,11 @@ struct RecoveryReadCompleter : ECCommonL::ReadCompleter {
     list<ec_align_t>,
     set<int> wanted_to_read) override
   {
+    // The op may have been cancelled (e.g. by pool-migration cleanup) while its
+    // recovery read was in flight; both paths below assume the op still exists.
+    if (!backend.recovery_ops.count(hoid)) {
+      return;
+    }
     if (!(res.r == 0 && res.errors.empty())) {
       backend._failed_push(hoid, res);
       return;
@@ -1423,6 +1428,11 @@ void ECBackendL::on_change()
 void ECBackendL::clear_recovery_state()
 {
   recovery_backend.recovery_ops.clear();
+}
+
+void ECBackendL::cancel_recovery_op(const hobject_t &soid)
+{
+  recovery_backend.recovery_ops.erase(soid);
 }
 
 void ECBackendL::dump_recovery_info(Formatter *f) const

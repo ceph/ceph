@@ -15843,6 +15843,7 @@ struct C_Migrate : public Context {
       if (oid.is_snap()) {
         // Abandon migrating head object as well
         auto head = oid.get_head();
+        pg->pgbackend->cancel_recovery_op(head);
         pg->recovering.erase(head);
         pg->pool_migrations_in_flight.erase(head);
         // handle_pool_migration_copy_failure already checked for quiesce
@@ -16276,6 +16277,7 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
       // Clean up recovering state for pending deletes
       auto i = recovering.find(pending_oid);
       ceph_assert(i != recovering.end());
+      pgbackend->cancel_recovery_op(pending_oid);
       recovering.erase(i);
       finish_recovery_op(pending_oid);
       dout(20) << __func__ << " flushed pending delete for " << pending_oid << dendl;
@@ -16322,6 +16324,7 @@ void PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
   // Must remove from recovering and call finish_recovery_op to balance start_recovery_op
   auto i = recovering.find(oid);
   if (i != recovering.end()) {
+    pgbackend->cancel_recovery_op(oid);
     recovering.erase(i);
     finish_recovery_op(oid);
   }

@@ -1091,6 +1091,10 @@ void ECBackend::clear_recovery_state() {
   recovery_backend.recovery_ops.clear();
 }
 
+void ECBackend::cancel_recovery_op(const hobject_t &soid) {
+  recovery_backend.recovery_ops.erase(soid);
+}
+
 void ECBackend::dump_recovery_info(Formatter *f) const {
   f->open_array_section("recovery_ops");
   for (map<hobject_t, RecoveryBackend::RecoveryOp>::const_iterator i =

@@ -431,6 +431,12 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
     */
    virtual void on_change() = 0;
    virtual void clear_recovery_state() = 0;
+   /**
+    * Cancel any in-flight backend recovery op for soid.  Safe no-op if
+    * the object has no in-flight op.  Must be called before erasing soid
+    * from PrimaryLogPG::recovering to keep the two maps in sync.
+    */
+   virtual void cancel_recovery_op(const hobject_t &soid) = 0;
 
    virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() const = 0;
    virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
