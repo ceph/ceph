@@ -316,7 +316,7 @@ void GroupAddImageRequest<I>::attach_existing_mirror_image() {
 
   auto req = ImageStateUpdateRequest<I>::create(m_add_image_ctx->md_ctx,
       m_add_image_ctx->id, cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-      mirror_image, ctx);
+      mirror_image, ctx, true);
 
   req->send();
 }
@@ -429,7 +429,7 @@ void GroupAddImageRequest<I>::restore_mirror_image() {
 
   auto req = ImageStateUpdateRequest<I>::create(m_add_image_ctx->md_ctx,
       m_add_image_ctx->id, cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-      mirror_image, ctx);
+      mirror_image, ctx, true);
 
   req->send();
 }

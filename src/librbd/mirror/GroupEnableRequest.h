@@ -76,6 +76,9 @@ private:
    *        *                   GROUP_UNLINK_PEER                         *   *
    *        *                      |                                      *   *
    *        *                      v                                      *   *
+   *        *                   NOTIFY_GROUP_MEMBERSHIPS_UPDATED          *   *
+   *        *                      |                                      *   *
+   *        *                      v                                      *   *
    *        *                   NOTIFY_MIRRORING_WATCHER                  *   *
    *        *                      |                                      *   *
    *        *  (on error)          v                                      *   *
@@ -122,6 +125,8 @@ private:
 
   void validate_images();
 
+  int validate_snapshot_dependencies();
+
   void set_mirror_group_enabling();
   void handle_set_mirror_group_enabling(int r);
 
@@ -147,6 +152,9 @@ private:
 
   void group_unlink_peer();
   void handle_group_unlink_peer(int r);
+
+  void notify_group_memberships_updated();
+  void handle_notify_group_memberships_updated(int r);
 
   void notify_mirroring_watcher();
   void handle_notify_mirroring_watcher(int r);

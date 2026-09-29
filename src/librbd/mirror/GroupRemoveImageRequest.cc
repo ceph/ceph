@@ -76,7 +76,11 @@ void GroupRemoveImageRequest<I>::handle_get_mirror_info(int r) {
     return;
   }
 
-  promote_image();
+  // This request is used while force-promoting a group to its last complete
+  // snapshot. An image added after that snapshot has no older mirror snapshot
+  // to roll back to, so promoting it is both unnecessary and invalid. It will
+  // be removed after its group and mirror metadata are detached.
+  set_mirror_image_disabling();
 }
 
 template <typename I>
@@ -184,7 +188,7 @@ void GroupRemoveImageRequest<I>::handle_get_mirror_peer_list(int r) {
   m_mirror_peer_uuids.clear();
 
   for (auto& peer : peers) {
-    // same logic as GroupPrepareImagesRequest
+    // Receive-only peers do not own snapshots that must be unlinked.
     if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
       continue;
     }
@@ -278,7 +282,10 @@ void GroupRemoveImageRequest<I>::handle_remove_global_mirror_image_entry(int r) 
     return;
   }
 
-  close_image();
+  // m_image_ctx is borrowed from GroupPromoteRequest. Leave it open so the
+  // owner can close all removed-image contexts exactly once before deleting
+  // the underlying images.
+  finish(0);
 }
 
 template <typename I>
