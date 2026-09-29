@@ -53,6 +53,16 @@ public:
                                    const std::string &global_group_id,
                                    size_t image_count,
                                    Context *on_finish);
+  static int notify_group_membership_updated(librados::IoCtx &io_ctx,
+    cls::rbd::MirrorImageState mirror_image_state, const std::string &image_id,
+    const std::string &global_image_id, const std::string &group_id,
+    const std::string &global_group_id, size_t group_image_count,
+    mirroring_watcher::GroupMembershipAction action);
+  static void notify_group_membership_updated(librados::IoCtx &io_ctx,
+    cls::rbd::MirrorImageState mirror_image_state, const std::string &image_id,
+    const std::string &global_image_id, const std::string &group_id,
+    const std::string &global_group_id, size_t group_image_count,
+    mirroring_watcher::GroupMembershipAction action, Context *on_finish);
 
   virtual void handle_mode_updated(cls::rbd::MirrorMode mirror_mode) = 0;
   virtual void handle_image_updated(cls::rbd::MirrorImageState state,
@@ -62,6 +72,11 @@ public:
                                     const std::string &group_id,
                                     const std::string &global_group_id,
                                     size_t image_count) = 0;
+  virtual void handle_group_membership_updated(cls::rbd::MirrorImageState state,
+    const std::string &image_id, const std::string &global_image_id,
+    const std::string &group_id, const std::string &global_group_id,
+    size_t group_image_count,
+    mirroring_watcher::GroupMembershipAction action) = 0;
 
 private:
   bool handle_payload(const mirroring_watcher::ModeUpdatedPayload &payload,
@@ -70,6 +85,9 @@ private:
                       Context *on_notify_ack);
   bool handle_payload(const mirroring_watcher::GroupUpdatedPayload &payload,
                       Context *on_notify_ack);
+  bool handle_payload(
+    const mirroring_watcher::GroupMembershipUpdatedPayload &payload,
+    Context *on_notify_ack);
   bool handle_payload(const mirroring_watcher::UnknownPayload &payload,
                       Context *on_notify_ack);
 

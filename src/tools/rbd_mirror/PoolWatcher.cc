@@ -74,6 +74,19 @@ public:
                                          image_count);
   }
 
+  void handle_group_membership_updated(cls::rbd::MirrorImageState state,
+                                       const std::string &image_id,
+                                       const std::string &global_image_id,
+                                       const std::string &group_id,
+                                       const std::string &global_group_id,
+                                       size_t group_image_count,
+                                       librbd::mirroring_watcher::GroupMembershipAction action) override {
+    m_pool_watcher->handle_group_membership_updated(state, image_id,
+                                                    global_image_id, group_id,
+                                                    global_group_id,
+                                                    group_image_count, action);
+  }
+
 private:
   PoolWatcher *m_pool_watcher;
 };
@@ -248,6 +261,7 @@ void PoolWatcher<I>::refresh_entities() {
     // a full entity list refresh
     m_pending_added_entities.clear();
     m_pending_removed_entities.clear();
+    m_pending_modified_entities.clear();
   }
 
   m_async_op_tracker.start_op();
@@ -397,6 +411,51 @@ void PoolWatcher<I>::handle_group_updated(const std::string &id,
 }
 
 template <typename I>
+void PoolWatcher<I>::handle_group_membership_updated(
+    cls::rbd::MirrorImageState state, const std::string &image_id,
+    const std::string &global_image_id, const std::string &group_id,
+    const std::string &global_group_id, size_t group_image_count,
+    librbd::mirroring_watcher::GroupMembershipAction action) {
+  dout(10) << "image_id=" << image_id << ", "
+           << "global_image_id=" << global_image_id << ", "
+           << "state=" << state << ", "
+           << "group_id=" << group_id << ", "
+           << "global_group_id=" << global_group_id << ", "
+           << "group_image_count=" << group_image_count << ", "
+           << "action=" << action << dendl;
+
+  std::lock_guard locker{m_lock};
+
+  size_t image_count;
+  if (action == librbd::mirroring_watcher::GROUP_MEMBERSHIP_ATTACH) {
+    image_count = 0;
+  } else if (action ==
+             librbd::mirroring_watcher::GROUP_MEMBERSHIP_DETACH) {
+    image_count = 1;
+  } else {
+    ceph_abort_msg("unknown group membership action");
+  }
+
+  // A group member stays in the image map with weight zero. This keeps
+  // membership changes separate from mirror enable and disable updates.
+  MirrorEntity image_entity(MIRROR_ENTITY_TYPE_IMAGE, global_image_id,
+                            image_count);
+  m_pending_added_entities.erase(image_entity);
+  m_pending_removed_entities.erase(image_entity);
+  m_pending_modified_entities.erase(image_entity);
+  m_pending_modified_entities.emplace(image_entity, image_id);
+
+  MirrorEntity group_entity(MIRROR_ENTITY_TYPE_GROUP, global_group_id,
+                            group_image_count);
+  m_pending_added_entities.erase(group_entity);
+  m_pending_removed_entities.erase(group_entity);
+  m_pending_modified_entities.erase(group_entity);
+  m_pending_modified_entities.emplace(group_entity, group_id);
+
+  schedule_listener();
+}
+
+template <typename I>
 void PoolWatcher<I>::process_refresh_entities() {
   ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
   ceph_assert(m_timer_ctx != nullptr);
@@ -442,72 +501,91 @@ template <typename I>
 void PoolWatcher<I>::notify_listener() {
   dout(10) << dendl;
 
-  std::string mirror_uuid;
   MirrorEntities added_entities;
   MirrorEntities removed_entities;
+  MirrorEntities modified_entities;
+  bool reschedule = false;
+
   {
     std::lock_guard locker{m_lock};
     ceph_assert(m_notify_listener_in_progress);
 
-    // if the watch failed while we didn't own the lock, we are going
-    // to need to perform a full refresh
     if (m_entities_invalid) {
+      // Drop all pending incremental updates. A full reload will rebuild
+      // the complete entity state.
+      m_pending_added_entities.clear();
+      m_pending_removed_entities.clear();
+      m_pending_modified_entities.clear();
+      m_pending_updates = false;
       m_notify_listener_in_progress = false;
       return;
     }
 
-    // merge add/remove notifications into pending set (a given entity
-    // can only be in one set or another)
-    for (auto &[entity, id] : m_pending_removed_entities) {
+    // Collect removed entities.
+    for (const auto &[entity, id] : m_pending_removed_entities) {
       dout(20) << "removed pending entity={" << entity << "}" << dendl;
+      removed_entities.insert(entity);
       m_pending_entities.erase(entity);
-      auto it = m_entities.find(entity);
-      if (it != m_entities.end()) {
-        m_entities.erase(entity);
-        m_entities.insert({entity, id});
-      }
     }
     m_pending_removed_entities.clear();
 
-    for (auto &[entity, id] : m_pending_added_entities) {
+    // Collect added entities.
+    for (const auto &[entity, id] : m_pending_added_entities) {
       dout(20) << "added pending entity={" << entity << "}" << dendl;
       m_pending_entities.erase(entity);
-      m_pending_entities.insert({entity, id});
+      m_pending_entities.emplace(entity, id);
     }
     m_pending_added_entities.clear();
 
-    // compute added/removed images
-    for (auto &[entity, id] : m_entities) {
+    // Apply modifications last so an attach can replace a pending standalone
+    // image add with the final group-owned weight.
+    for (const auto &[entity, id] : m_pending_modified_entities) {
+      dout(20) << "modified pending entity={" << entity << "}" << dendl;
+      m_pending_entities.erase(entity);
+      m_pending_entities.emplace(entity, id);
+    }
+    m_pending_modified_entities.clear();
+
+    // Compute the transition from the last published state. This also handles
+    // full refreshes, where only m_pending_entities is populated.
+    for (const auto &[entity, id] : m_entities) {
       auto it = m_pending_entities.find(entity);
-      // If previous entity is not there in current set of entities or if
-      // their id's don't match then consider its removed
-      if (it == m_pending_entities.end() || it->second != id ||
-          it->first.count != entity.count) {
+      if (it == m_pending_entities.end() || it->second != id) {
         removed_entities.insert(entity);
       }
     }
-    for (auto &[entity, id] : m_pending_entities) {
+    for (const auto &[entity, id] : m_pending_entities) {
       auto it = m_entities.find(entity);
-      // If current entity is not there in previous set of entities or if
-      // their id's don't match then consider its added
-      if (it == m_entities.end() || it->second != id ||
-          it->first.count != entity.count) {
+      if (it == m_entities.end() || it->second != id) {
         added_entities.insert(entity);
+      } else if (it->first.count != entity.count) {
+        modified_entities.insert(entity);
       }
     }
 
-    m_pending_updates = false;
+    // Keep the cached entity map synchronized with the pending state.
     m_entities = m_pending_entities;
+
+    m_pending_updates = false;
   }
 
+  dout(10) << "added_count=" << added_entities.size()
+           << ", removed_count=" << removed_entities.size()
+           << ", modified_count=" << modified_entities.size() << dendl;
+
   m_listener.handle_update(m_mirror_uuid, std::move(added_entities),
-                           std::move(removed_entities));
+                           std::move(removed_entities),
+                           std::move(modified_entities));
+
   {
     std::lock_guard locker{m_lock};
     m_notify_listener_in_progress = false;
-    if (m_pending_updates) {
-      schedule_listener();
-    }
+    reschedule = m_pending_updates;
+  }
+
+  if (reschedule) {
+    std::lock_guard locker{m_lock};
+    schedule_listener();
   }
 }
 
