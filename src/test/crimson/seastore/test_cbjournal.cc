@@ -266,7 +266,8 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   }
 
   auto mkfs() {
-    device_config_t config = get_rbm_ephemeral_device_config(0, 1);
+    device_config_t config = get_rbm_ephemeral_device_config(
+      0, device_set_t{}, device_set_t{}, true);
     return device->mkfs(config
     ).safe_then([this]() {
       return device->mount(
@@ -330,7 +331,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 
   seastar::future<> set_up_fut() final {
     device = random_block_device::create_test_ephemeral(
-     random_block_device::DEFAULT_TEST_CBJOURNAL_SIZE, 0);
+     0, random_block_device::DEFAULT_TEST_CBJOURNAL_SIZE, 0);
     cbj.reset(new CircularBoundedJournal(0, *this, device.get(), std::string()));
     block_size = device->get_block_size();
     cbj->set_write_pipeline(&pipeline);

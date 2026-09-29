@@ -1250,12 +1250,6 @@ device_type_t string_to_device_type(std::string type) {
   if (type == "ZBD") {
     return device_type_t::ZBD;
   }
-  if (type == "RANDOM_BLOCK_SSD") {
-    return device_type_t::RANDOM_BLOCK_SSD;
-  }
-  if (type == "RANDOM_BLOCK_HDD") {
-    return device_type_t::RANDOM_BLOCK_HDD;
-  }
   return device_type_t::NONE;
 }
 
@@ -1274,12 +1268,6 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
     return out << "EPHEMERAL_COLD";
   case device_type_t::EPHEMERAL_MAIN:
     return out << "EPHEMERAL_MAIN";
-  case device_type_t::RANDOM_BLOCK_SSD:
-    return out << "RANDOM_BLOCK_SSD";
-  case device_type_t::RANDOM_BLOCK_EPHEMERAL:
-    return out << "RANDOM_BLOCK_EPHEMERAL";
-  case device_type_t::RANDOM_BLOCK_HDD:
-    return out << "RANDOM_BLOCK_HDD";
   default:
     return out << "INVALID_DEVICE_TYPE!";
   }
@@ -1488,6 +1476,26 @@ std::ostream& operator<<(std::ostream& out, const omap_type_t& t)
   default:
     return out << "INVALID_OMAP_TYPE!";
   }
+}
+
+std::optional<device_id_t> parse_device_id(
+  const seastar::sstring &name,
+  device_id_t base)
+{
+  if (name == "block") {
+    return base;
+  }
+  auto prefix_len = sizeof("block.") - 1;
+  if (name.starts_with("block.") && name.length() > prefix_len) {
+    int id = 0;
+    std::string id_str = name.substr(prefix_len);
+    std::istringstream iss(id_str);
+    iss >> id;
+    assert(id < std::numeric_limits<uint8_t>::max());
+    ceph_assert(id > 0);
+    return std::make_optional<device_id_t>(base + id);
+  }
+  return std::nullopt;
 }
 
 } // namespace crimson::os::seastore
