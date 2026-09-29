@@ -4011,6 +4011,16 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
     }
   }
 
+  // a copy from another zone is written verbatim, so the default does not apply
+  if (source_zone.empty()) {
+    int ret = get_encryption_defaults(s);
+    if (ret < 0) {
+      ldpp_dout(this, 5)
+        << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+      return ret;
+    }
+  }
+
   if (source_zone.empty() &&
       (s->bucket->get_tenant() == s->src_tenant_name) &&
       (s->bucket->get_name() == s->src_bucket_name) &&
