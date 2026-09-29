@@ -4045,6 +4045,211 @@ TEST_F(NSFSUpgradeTest, AnUploadIsListedThroughoutTheConversion)
   EXPECT_EQ(counts[2], 1u);
 }
 
+/* Mutations are held off while the tree is rewritten, and reads are
+ * not.
+ *
+ * The conversion reads an object's attributes and writes them back, so
+ * a write landing between those two is lost.  Rados has the same
+ * problem during a reshard and answers it the same way:  hold the
+ * mutation server-side for a bound, then let a retryable error reach
+ * the client.
+ */
+TEST_F(NSFSUpgradeTest, HoldsOffMutationsAndNotReads)
+{
+  /* the refusal is what is under test, not how long it takes to
+   * arrive;  the production wait would put five seconds in the suite */
+  driver->set_gate_waits(std::chrono::milliseconds(20),
+			 std::chrono::milliseconds(60000));
+  their_object("gated.bin", "text/plain");
+
+  bool checked = false;
+  nsfs::convert_cb_t probe =
+    [&](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if ((ev.phase != nsfs::ConvertEvent::Phase::written) || checked) {
+	return 0;
+      }
+      checked = true;
+
+      EXPECT_TRUE(driver->gate_is_closed(testname));
+
+      /* a read goes through */
+      auto rd = bucket->get_object(rgw_obj_key("gated.bin"));
+      EXPECT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
+      EXPECT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
+
+      /* a write does not.  Not -EBUSY:  503 is what a client retries,
+       * and the operation will succeed once the rewrite is done. */
+      auto wr = bucket->get_object(rgw_obj_key("gated.bin"));
+      EXPECT_EQ(wr->load_obj_state(env->dpp, null_yield), 0);
+      Attrs a;
+      bufferlist v;
+      v.append("text/html");
+      a[RGW_ATTR_CONTENT_TYPE] = v;
+      EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
+				  rgw::sal::FLAG_LOG_OP),
+		-ERR_SERVICE_UNAVAILABLE);
+      return 0;
+    };
+
+  ASSERT_EQ(upgrade(&probe, nullptr), 0);
+  EXPECT_TRUE(checked) << "the probe never ran, so nothing was asserted";
+
+  /* and the gate is open again afterwards */
+  EXPECT_FALSE(driver->gate_is_closed(testname));
+  auto wr = bucket->get_object(rgw_obj_key("gated.bin"));
+  ASSERT_EQ(wr->load_obj_state(env->dpp, null_yield), 0);
+  Attrs a;
+  bufferlist v;
+  v.append("text/html");
+  a[RGW_ATTR_CONTENT_TYPE] = v;
+  EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
+			      rgw::sal::FLAG_LOG_OP), 0);
+}
+
+/* A stopped conversion reopens the gate.
+ *
+ * The bucket stays marked and half-converted, which is a state it can
+ * be served in -- so leaving mutations held off until somebody
+ * resumes would turn a partial conversion into an outage. */
+TEST_F(NSFSUpgradeTest, AStoppedConversionReopensTheGate)
+{
+  their_object("a.bin", "text/plain");
+  their_object("b.bin", "text/plain");
+
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      return (ev.phase == nsfs::ConvertEvent::Phase::pruned) ? -EINTR : 0;
+    };
+  EXPECT_EQ(upgrade(&stop, nullptr), -EINTR);
+
+  EXPECT_FALSE(driver->gate_is_closed(testname));
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_TRUE(b->is_converting());
+
+  auto wr = bucket->get_object(rgw_obj_key("b.bin"));
+  ASSERT_EQ(wr->load_obj_state(env->dpp, null_yield), 0);
+  Attrs a;
+  bufferlist v;
+  v.append("text/html");
+  a[RGW_ATTR_CONTENT_TYPE] = v;
+  EXPECT_EQ(wr->set_obj_attrs(env->dpp, &a, nullptr, null_yield,
+			      rgw::sal::FLAG_LOG_OP), 0);
+}
+
+/* Two conversions of one bucket do not run together.
+ *
+ * Each would read what the other had half written.  The second is
+ * refused rather than queued:  it has nothing to wait for that the
+ * first is not already doing. */
+TEST_F(NSFSUpgradeTest, RefusesASecondConversion)
+{
+  their_object("a.bin", "text/plain");
+
+  int inner = 0;
+  nsfs::convert_cb_t reenter =
+    [&](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if (ev.phase != nsfs::ConvertEvent::Phase::written) {
+	return 0;
+      }
+      auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+      nsfs::ConvertProgress p;
+      inner = b->convert_tree(env->dpp, null_yield, nullptr, &p);
+      return 0;
+    };
+
+  ASSERT_EQ(upgrade(&reenter, nullptr), 0);
+  EXPECT_EQ(inner, -EBUSY);
+}
+
+/* An FSIO write handle is a mutation for as long as it is open.
+ *
+ * It is not a request:  it is opened once and written through many
+ * times, and those writes are parts of one mutation rather than
+ * separate ones.  So opening one to write takes the slot and
+ * releasing it gives the slot back, and a bucket drains as its write
+ * handles are released.  A conversion cannot start while one is open,
+ * which is the point -- converting under an open writer is what the
+ * gate exists to prevent.
+ *
+ * Strong rather than the upgrade fixture:  FSIO needs EXT_SHADOW,
+ * which base does not have and an upgrade to strong only acquires at
+ * its end.
+ */
+TEST_F(NSFSBucketTest, AWriteHandleHoldsTheGateOpen)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  ASSERT_TRUE(b->has_extension(nsfs::EXT_SHADOW));
+  driver->set_gate_waits(std::chrono::milliseconds(20),
+			 std::chrono::milliseconds(20));
+
+  auto obj = bucket->get_object(rgw_obj_key("handle.bin"));
+  auto [rc, hdl] = obj->get_fsio_handle(
+      env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+		rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+  ASSERT_EQ(rc, 0) << "could not open a write handle";
+  ASSERT_NE(hdl.get(), nullptr);
+
+  /* the gate will not close while it is open */
+  EXPECT_EQ(driver->gate_close(env->dpp, testname), -ETIMEDOUT);
+  /* and having failed, it left the gate open rather than half shut */
+  EXPECT_FALSE(driver->gate_is_closed(testname));
+
+  hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+  hdl.reset();
+
+  /* released, so the bucket has drained */
+  EXPECT_EQ(driver->gate_close(env->dpp, testname), 0);
+  driver->gate_open(testname);
+}
+
+/* And a closed gate refuses a new write handle while serving a read
+ * one. */
+TEST_F(NSFSBucketTest, AClosedGateRefusesAWriteHandle)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  driver->set_gate_waits(std::chrono::milliseconds(20),
+			 std::chrono::milliseconds(20));
+
+  /* an object to read;  a read handle binds to the published object */
+  {
+    auto obj = bucket->get_object(rgw_obj_key("there.bin"));
+    auto [rc, hdl] = obj->get_fsio_handle(
+	env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+		  rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+    ASSERT_EQ(rc, 0);
+    ASSERT_EQ(hdl->commit(env->dpp,
+			  rgw::sal::Object::FSIOObject::COMMIT_FLAG_NONE), 0);
+    ASSERT_EQ(hdl->publish(env->dpp,
+			   rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE), 0);
+    hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+  }
+
+  ASSERT_EQ(driver->gate_close(env->dpp, testname), 0);
+
+  {
+    auto obj = bucket->get_object(rgw_obj_key("refused.bin"));
+    auto [rc, hdl] = obj->get_fsio_handle(
+	env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+		  rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+    EXPECT_EQ(rc, -ERR_SERVICE_UNAVAILABLE);
+    EXPECT_EQ(hdl.get(), nullptr) << "a refused open left a handle behind";
+  }
+
+  {
+    auto obj = bucket->get_object(rgw_obj_key("there.bin"));
+    auto [rc, hdl] = obj->get_fsio_handle(
+	env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_NONE);
+    EXPECT_EQ(rc, 0) << "a read handle was refused";
+    if (hdl) {
+      hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+    }
+  }
+
+  driver->gate_open(testname);
+}
+
 /* Theirs does move one, because their file IS the size.
  *
  * `parts-size-17` at 17 * (num - 1) is the only place their reader

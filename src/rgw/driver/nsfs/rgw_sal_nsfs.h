@@ -520,6 +520,36 @@ protected:
   NSFSZone zone;
   std::unique_ptr<nsfs::BucketCache> bucket_cache;
   std::unique_ptr<nsfs::MultipartCache> multipart_cache;
+
+  /* Buckets whose mutations are held off, and how many are still
+   * running in each.
+   *
+   * An upgrade rewrites a tree, and a write arriving in the middle of
+   * one object's conversion can be lost:  the converter read the
+   * attributes before the write and writes them back after it.  So
+   * the upgrade closes the gate, waits for what is already running to
+   * finish -- every operation terminates, which is what makes the
+   * wait bounded -- and converts.
+   *
+   * Reads are not gated.  A half-converted tree is readable through
+   * the chain, which is why the chain exists, and blocking reads for
+   * the length of a conversion is the cost we set out to avoid.
+   *
+   * Per process.  A gate one gateway closes is invisible to the one
+   * beside it until the invalidate upcall exists;  today that is not a
+   * gap in practice, because the per-instance cache already prevents
+   * two of them serving one root, but it is a gap in principle and
+   * the upcall is what closes it. */
+  ceph::mutex gate_lock = ceph::make_mutex("NSFSDriver::gate_lock");
+  ceph::condition_variable gate_cond;
+  struct BucketGate {
+    bool closed{false};
+    uint64_t inflight{0};
+  };
+  std::map<std::string, BucketGate, std::less<>> bucket_gates;
+  /* the two waits;  see the constants they are seeded from */
+  std::chrono::milliseconds mutation_gate_wait{5000};
+  std::chrono::milliseconds gate_drain_wait{60000};
   std::unique_ptr<rgw::posix::SyncFsThread> syncfs_thread;
   UserCache user_cache;
   std::unique_ptr<nsfs::FSStrategy> fs_strategy;
@@ -946,6 +976,39 @@ public:
   virtual void register_admin_apis(RGWRESTMgr* mgr) override;
   void get_features(std::map<std::string, std::string>& features) override;
 
+  /* Take a slot for a mutation on this bucket.
+   *
+   * Waits while the gate is closed and gives up rather than waiting
+   * out a whole conversion, which is the shape resharding already
+   * uses:  guard_reshard() blocks for a bound and then lets a
+   * retryable error reach the client.  -ERR_SERVICE_UNAVAILABLE is
+   * 503 ServiceUnavailable, which every SDK retries.
+   *
+   * Paired with mutation_leave(), or held through NSFSMutationGuard. */
+  int mutation_enter(const DoutPrefixProvider* dpp,
+		     const std::string& bucket);
+  void mutation_leave(const std::string& bucket);
+
+  /* Hold mutations off, and wait for the ones already running.
+   *
+   * Returns once the bucket has none in flight, which is what makes
+   * it safe to rewrite the tree.  -ETIMEDOUT if something is still
+   * running after the bound, and the gate is left open again -- a
+   * conversion that cannot start is better than one that starts
+   * beside a writer. */
+  int gate_close(const DoutPrefixProvider* dpp, const std::string& bucket);
+  void gate_open(const std::string& bucket);
+  bool gate_is_closed(const std::string& bucket);
+
+  /* Test support.  A test which means to observe a refused mutation
+   * would otherwise wait out the production timeout, and shortening
+   * the constant would shorten it for a deployment too. */
+  void set_gate_waits(std::chrono::milliseconds mutation,
+		      std::chrono::milliseconds drain) {
+    mutation_gate_wait = mutation;
+    gate_drain_wait = drain;
+  }
+
   int driver_hint(const DoutPrefixProvider* dpp,
 		  const std::string& hint,
 		  const std::map<std::string, std::string>& params,
@@ -1140,6 +1203,42 @@ public:
   int list_groups(const DoutPrefixProvider* dpp, optional_yield y,
                   std::string_view marker, uint32_t max_items,
                   GroupList& listing) override;
+};
+
+/* A mutation's slot, held for the length of the operation.
+ *
+ * Constructed at the top of a mutating SAL method;  the caller checks
+ * result() and returns it if it is negative.  Nothing is held when it
+ * is, so the destructor has nothing to release. */
+class NSFSMutationGuard {
+  NSFSDriver* driver;
+  std::string bucket;
+  int rc;
+
+public:
+  NSFSMutationGuard(const DoutPrefixProvider* dpp, NSFSDriver* _driver,
+		    const std::string& _bucket)
+    : driver(_driver), bucket(_bucket),
+      rc(_driver ? _driver->mutation_enter(dpp, _bucket) : 0)
+  { }
+  ~NSFSMutationGuard() {
+    if ((rc == 0) && driver) {
+      driver->mutation_leave(bucket);
+    }
+  }
+  NSFSMutationGuard(const NSFSMutationGuard&) = delete;
+  NSFSMutationGuard& operator=(const NSFSMutationGuard&) = delete;
+
+  /* Movable, because a slot outlives the scope that took it when the
+   * mutation is an open write handle rather than a request:  see
+   * NSFSObject::get_fsio_handle().  The moved-from guard releases
+   * nothing. */
+  NSFSMutationGuard(NSFSMutationGuard&& o) noexcept
+    : driver(o.driver), bucket(std::move(o.bucket)), rc(o.rc) {
+    o.driver = nullptr;
+  }
+
+  int result() const { return rc; }
 };
 
 class NSFSBucket : public StoreBucket {
@@ -1613,12 +1712,22 @@ public:
    std::string leaf_name;
    bool ephemeral{false};
    std::vector<std::unique_ptr<nsfs::Directory>> dir_chain;
+   /* A write handle's slot, held for the handle's whole life.
+    *
+    * Opening one is the mutation;  the writes through it are parts of
+    * that mutation and not separate ones, and releasing the handle is
+    * what retires it.  So the gate is entered at open and left at
+    * destruction, and a bucket drains as its write handles are
+    * released.  Empty on a read handle, which mutates nothing. */
+   std::optional<NSFSMutationGuard> gate;
 
    friend class NSFSObject;
 
   protected:
-   NSFSFSIOObject(NSFSObject* _obj, NSFSDriver* _drv, bool _ephemeral)
-     : src_obj(_obj), driver(_drv), ephemeral(_ephemeral) {}
+   NSFSFSIOObject(NSFSObject* _obj, NSFSDriver* _drv, bool _ephemeral,
+		  std::optional<NSFSMutationGuard>&& _gate = std::nullopt)
+     : src_obj(_obj), driver(_drv), ephemeral(_ephemeral),
+       gate(std::move(_gate)) {}
 
   public:
     virtual int preadv(const struct iovec* iov, int iovcnt,

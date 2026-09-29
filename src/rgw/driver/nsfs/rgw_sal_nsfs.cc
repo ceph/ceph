@@ -2524,8 +2524,16 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
                   AT_SYMLINK_NOFOLLOW, STATX_ALL, &nstx);
   if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << " in dir "
-                        << get_name() << " : " << cpp_strerror(ret) << dendl;
+      /* Absence is an answer here, not a failure.  This is the "does
+       * this object exist" path -- a HEAD of something that is not
+       * there, a GET before a PUT, and get_fsio_handle() statting an
+       * object it is about to create, which discards the result for
+       * exactly that reason.  Logging it at 0 put an ERROR in the log
+       * for every such request. */
+      ldpp_dout(dpp, (ret == ENOENT) ? 15 : 0)
+          << ((ret == ENOENT) ? "no object " : "ERROR: could not stat object ")
+          << name << " in dir " << get_name() << " : " << cpp_strerror(ret)
+          << dendl;
       return -ret;
   }
   if (S_ISREG(nstx.stx_mode)) {
@@ -4805,6 +4813,12 @@ if (max <= 0) {
 int NSFSBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 					Attrs& new_attrs, optional_yield y)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   for (auto& it : new_attrs) {
 	  attrs[it.first] = it.second;
   }
@@ -4816,6 +4830,12 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
 			optional_yield y)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   int ret = dir->remove(dpp, y, delete_children);
   if (ret < 0) {
     return ret;
@@ -5819,6 +5839,135 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
  * strategy, writes back the same bytes under the same names, and
  * prunes a foreign spelling that is not there.
  */
+/* How long a mutation waits on a closed gate before giving up, and how
+ * long an upgrade waits for the mutations already running.
+ *
+ * Not configurable, and the two are different questions.  A mutation
+ * must not wait out a whole conversion -- that is unbounded, and a
+ * client holding a connection open for it is worse than a retry -- so
+ * it waits about as long as a request may reasonably stall.  The
+ * upgrade's wait is bounded by what is running when it arrives, and
+ * every operation terminates, so this only has to be longer than the
+ * slowest single operation rather than longer than any queue.
+ */
+/* Seeded in the header, where the members are declared.  A mutation
+ * waits about as long as a request may reasonably stall;  the drain
+ * only has to outlast the slowest single operation, because every
+ * operation terminates. */
+
+
+/* What the gate covers.
+ *
+ * There is no single choke point.  Rados has one -- every mutation
+ * reaches the bucket index, which is where guard_reshard() sits -- and
+ * a filesystem tree has none, so the guard is taken at each mutating
+ * SAL entry point by name:
+ *
+ *   NSFSObject::set_obj_attrs, delete_obj_attrs, copy_object, rename
+ *   NSFSObject::NSFSDeleteOp::delete_obj
+ *   NSFSAtomicWriter::complete          (PUT)
+ *   NSFSMultipartWriter::complete       (UploadPart)
+ *   NSFSMultipartUpload::init, complete, abort
+ *   NSFSBucket::merge_and_store_attrs, remove, set_acl
+ *
+ * The FSIO path -- how librgw and the NFS gateway write -- passes
+ * through none of them, because its unit is not a request.  A handle
+ * is opened once and written through many times, so opening one to
+ * write is the mutation and releasing it is what retires it:  the
+ * slot is taken in get_fsio_handle() and held for the handle's life.
+ * A bucket with an NFS client holding a write handle open therefore
+ * does not drain until that handle is released, and the conversion
+ * refuses to start rather than running beside it.  That is the
+ * answer, not a shortcoming:  converting under an open write handle
+ * is the thing being prevented.
+ */
+
+int NSFSDriver::mutation_enter(const DoutPrefixProvider* dpp,
+			       const std::string& bucket)
+{
+  std::unique_lock l{gate_lock};
+  auto& g = bucket_gates[bucket];
+  if (g.closed) {
+    const bool opened = gate_cond.wait_for(l, mutation_gate_wait,
+					   [&g] { return !g.closed; });
+    if (!opened) {
+      ldpp_dout(dpp, 4) << "nsfs: bucket " << bucket << " is being rewritten;"
+	<< "  refusing a mutation after waiting "
+	<< mutation_gate_wait.count() << "ms" << dendl;
+      return -ERR_SERVICE_UNAVAILABLE;
+    }
+  }
+  ++g.inflight;
+  return 0;
+}
+
+void NSFSDriver::mutation_leave(const std::string& bucket)
+{
+  std::lock_guard l{gate_lock};
+  auto i = bucket_gates.find(bucket);
+  if (i == bucket_gates.end()) {
+    return;
+  }
+  if (i->second.inflight > 0) {
+    --i->second.inflight;
+  }
+  /* The drain is waiting on this, and an entry with nothing in flight
+   * and an open gate is not worth a map slot. */
+  if ((i->second.inflight == 0) && !i->second.closed) {
+    bucket_gates.erase(i);
+  }
+  gate_cond.notify_all();
+}
+
+int NSFSDriver::gate_close(const DoutPrefixProvider* dpp,
+			   const std::string& bucket)
+{
+  std::unique_lock l{gate_lock};
+  auto& g = bucket_gates[bucket];
+  if (g.closed) {
+    /* Somebody else is already rewriting this tree.  Two conversions
+     * at once would each read what the other had half written. */
+    return -EBUSY;
+  }
+  g.closed = true;
+
+  if (g.inflight > 0) {
+    const bool drained = gate_cond.wait_for(l, gate_drain_wait,
+					    [&g] { return g.inflight == 0; });
+    if (!drained) {
+      g.closed = false;
+      gate_cond.notify_all();
+      ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket << " still had "
+	<< g.inflight << " mutations running after "
+	<< gate_drain_wait.count() << "ms;  not starting the rewrite"
+	<< dendl;
+      return -ETIMEDOUT;
+    }
+  }
+  return 0;
+}
+
+void NSFSDriver::gate_open(const std::string& bucket)
+{
+  std::lock_guard l{gate_lock};
+  auto i = bucket_gates.find(bucket);
+  if (i == bucket_gates.end()) {
+    return;
+  }
+  i->second.closed = false;
+  if (i->second.inflight == 0) {
+    bucket_gates.erase(i);
+  }
+  gate_cond.notify_all();
+}
+
+bool NSFSDriver::gate_is_closed(const std::string& bucket)
+{
+  std::lock_guard l{gate_lock};
+  auto i = bucket_gates.find(bucket);
+  return (i != bucket_gates.end()) && i->second.closed;
+}
+
 int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
 			     nsfs::convert_cb_t* cb,
 			     nsfs::ConvertProgress* progress)
@@ -5836,10 +5985,23 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
     return 0;
   }
 
-  int ret = convert_directory(dpp, y, dir.get(), driver->ctx(),
-			      std::string(), driver->get_fs_strategy(),
-			      xattr_strategy(), theirs, their_paths,
-			      driver->get_reserved_names(), cb, prog);
+  /* Mutations are held off for the length of the rewrite, and the
+   * ones already running are waited for.  A write arriving between an
+   * object's `before` and its `written` is lost:  the converter read
+   * the attributes before it and writes them back after.  Reads are
+   * not held -- a half-converted tree reads through the chain, which
+   * is the whole reason the chain exists. */
+  int ret = driver->gate_close(dpp, get_name());
+  if (ret < 0) {
+    return ret;
+  }
+  auto reopen = make_scope_guard(
+      [this] { driver->gate_open(get_name()); });
+
+  ret = convert_directory(dpp, y, dir.get(), driver->ctx(),
+			  std::string(), driver->get_fs_strategy(),
+			  xattr_strategy(), theirs, their_paths,
+			  driver->get_reserved_names(), cb, prog);
   if (ret == 0) {
     ret = convert_uploads(dpp, y, cb, prog);
   }
@@ -5970,6 +6132,12 @@ int NSFSBucket::set_acl(const DoutPrefixProvider* dpp,
 			 RGWAccessControlPolicy& acl,
 			 optional_yield y)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   bufferlist aclbl;
 
   acls = acl;
@@ -6543,6 +6711,26 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
     return -EINVAL;
   }
 
+  /* both trees:  a rename moves a name out of one bucket and into
+   * another, and either may be mid-rewrite.  Ordered by name so two
+   * renames crossing in opposite directions cannot each hold the
+   * gate the other wants. */
+  const std::string& first = (sb->get_name() < db->get_name())
+      ? sb->get_name() : db->get_name();
+  const std::string& second = (sb->get_name() < db->get_name())
+      ? db->get_name() : sb->get_name();
+  NSFSMutationGuard mg1(dpp, driver, first);
+  if (mg1.result() < 0) {
+    return mg1.result();
+  }
+  std::optional<NSFSMutationGuard> mg2;
+  if (first != second) {
+    mg2.emplace(dpp, driver, second);
+    if (mg2->result() < 0) {
+      return mg2->result();
+    }
+  }
+
   int ret = stat(dpp);
   if (ret < 0) {
     return ret;
@@ -6860,6 +7048,22 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
+  /* both trees, ordered by name;  see NSFSObject::rename() */
+  const std::string& cfirst = (src_bucket->get_name() < dest_bucket->get_name())
+      ? src_bucket->get_name() : dest_bucket->get_name();
+  const std::string& csecond = (src_bucket->get_name() < dest_bucket->get_name())
+      ? dest_bucket->get_name() : src_bucket->get_name();
+  NSFSMutationGuard cg1(dpp, driver, cfirst);
+  if (cg1.result() < 0) {
+    return cg1.result();
+  }
+  std::optional<NSFSMutationGuard> cg2;
+  if (cfirst != csecond) {
+    cg2.emplace(dpp, driver, csecond);
+    if (cg2->result() < 0) {
+      return cg2->result();
+    }
+  }
   int ret;
   NSFSBucket *db = static_cast<NSFSBucket*>(dest_bucket);
   NSFSBucket *sb = static_cast<NSFSBucket*>(src_bucket);
@@ -7395,6 +7599,26 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     return FSIOResult{aret, nullptr};
   }
 
+  /* Opening to write is the mutation.
+   *
+   * An FSIO handle is not a request:  it is opened once and written
+   * through many times, and the writes are parts of one mutation
+   * rather than separate ones.  So the slot is taken here and held
+   * until the handle is destroyed, and a bucket drains as its write
+   * handles are released.
+   *
+   * Taken before anything is resolved or created, so a refusal costs
+   * nothing and leaves nothing behind.  A read handle takes none --
+   * reads are served throughout a conversion, which is what the read
+   * chain is for. */
+  std::optional<NSFSMutationGuard> gate;
+  if (flags & FSIOObject::OPEN_FLAG_WRITE) {
+    gate.emplace(dpp, driver, get_bucket()->get_name());
+    if (gate->result() < 0) {
+      return FSIOResult{gate->result(), nullptr};
+    }
+  }
+
   if (!ent) {
     (void) stat(dpp);
   }
@@ -7428,7 +7652,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   bool for_write = (flags & FSIOObject::OPEN_FLAG_WRITE) != 0;
 
   auto hdl = std::unique_ptr<NSFSFSIOObject>(
-    new NSFSFSIOObject(this, driver, ephemeral));
+    new NSFSFSIOObject(this, driver, ephemeral, std::move(gate)));
   hdl->parent_fd = parent_fd;
   hdl->leaf_name = leaf;
   hdl->dir_chain = std::move(resolved_dirs);
@@ -8163,6 +8387,12 @@ int NSFSObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, 
 int NSFSObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, get_bucket()->get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   std::vector<std::string> rmattrs;
   if (delattrs) {
     for (auto& it : *delattrs) {
@@ -8226,6 +8456,12 @@ int NSFSObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
 int NSFSObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
                                optional_yield y)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, get_bucket()->get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   state.attrset.erase(attr_name);
 
   int ret = open(dpp);
@@ -9298,6 +9534,12 @@ static void cache_promoted_current(NSFSDriver* driver,
 int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, source->driver, source->get_bucket()->get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   bool has_cond = params.if_match ||
     !real_clock::is_zero(params.last_mod_time_match) ||
     params.size_match.has_value();
@@ -10054,6 +10296,12 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 				ACLOwner& owner, rgw_placement_rule& dest_placement,
 				rgw::sal::Attrs& attrs)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, bucket->get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   int ret;
 
   /* Create the shadow bucket */
@@ -10244,6 +10492,12 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 
 int NSFSMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, bucket->get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   int ret;
 
   ret = load(dpp);
@@ -10274,6 +10528,12 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
             const char *if_match,
             const char *if_nomatch)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, bucket->get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
@@ -11045,6 +11305,12 @@ int NSFSMultipartWriter::complete(
                        const req_context& rctx,
                        uint32_t flags)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(rctx.dpp, driver, mp_cache_key.bucket_name);
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   int ret = 0;
   if (uring_write) {
     ret = uring_write->drain();
@@ -11272,6 +11538,12 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(rctx.dpp, driver, obj->get_bucket()->get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
   int ret = 0;
   if (uring_write) {
     ret = uring_write->drain();
