@@ -296,10 +296,12 @@ bool MDSAuthCaps::is_capable(string_view fs_name,
 
     if (grant.match.match(fs_name, inode_path, caller_uid, caller_gid, caller_gid_list) &&
 	grant.spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
+      // a grant without q/Q cannot reach a quarantined inode; try the
+      // remaining grants since one of them may carry quarantine access.
       if (check_quarantine_access &&
           !grant.spec.allow_qtine_access() &&
           !grant.spec.allow_qtine_prime_access()) {
-        return false;
+        continue;
       }
       if (grant.match.root_squash && ((caller_uid == 0) || (caller_gid == 0)) &&
           (mask & MAY_WRITE)) {
@@ -339,11 +341,6 @@ bool MDSAuthCaps::is_capable(string_view fs_name,
 
       // check unix permissions?
       if (grant.match.uid == MDSCapMatch::MDS_AUTH_UID_ANY) {
-        if (check_quarantine_access &&
-            !grant.spec.allow_qtine_access() &&
-            !grant.spec.allow_qtine_prime_access()) {
-          return false;
-        }
         return true;
       }
 
@@ -367,11 +364,6 @@ bool MDSAuthCaps::is_capable(string_view fs_name,
         if ((!(mask & MAY_READ) || (inode_mode & S_IRUSR)) &&
 	    (!(mask & MAY_WRITE) || (inode_mode & S_IWUSR)) &&
 	    (!(mask & MAY_EXECUTE) || (inode_mode & S_IXUSR))) {
-          if (check_quarantine_access &&
-              !grant.spec.allow_qtine_access() &&
-              !grant.spec.allow_qtine_prime_access()) {
-            return false;
-          }
           return true;
         }
       } else if (std::find(gids.begin(), gids.end(),
@@ -379,22 +371,12 @@ bool MDSAuthCaps::is_capable(string_view fs_name,
         if ((!(mask & MAY_READ) || (inode_mode & S_IRGRP)) &&
 	    (!(mask & MAY_WRITE) || (inode_mode & S_IWGRP)) &&
 	    (!(mask & MAY_EXECUTE) || (inode_mode & S_IXGRP))) {
-          if (check_quarantine_access &&
-              !grant.spec.allow_qtine_access() &&
-              !grant.spec.allow_qtine_prime_access()) {
-            return false;
-          }
           return true;
         }
       } else {
         if ((!(mask & MAY_READ) || (inode_mode & S_IROTH)) &&
 	    (!(mask & MAY_WRITE) || (inode_mode & S_IWOTH)) &&
 	    (!(mask & MAY_EXECUTE) || (inode_mode & S_IXOTH))) {
-          if (check_quarantine_access &&
-              !grant.spec.allow_qtine_access() &&
-              !grant.spec.allow_qtine_prime_access()) {
-            return false;
-          }
           return true;
         }
       }

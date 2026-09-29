@@ -496,6 +496,21 @@ TEST(MDSAuthCaps, QuarantineMultipleGrants) {
   ASSERT_TRUE(cap.quarantine_access_in_caps(fsname, "quarantined/file"));
 }
 
+TEST(MDSAuthCaps, QuarantineIsCapableLaterGrant) {
+  // A broad grant without q must not shadow a later grant that has q.
+  MDSAuthCaps cap;
+  ASSERT_TRUE(cap.parse("allow rw, allow rwq path=/volumes/subvol1", NULL));
+
+  ASSERT_TRUE(cap.is_capable(fsname, "volumes/subvol1/file", 0, 0, 0777, 0, 0, NULL,
+                             MAY_READ | MAY_WRITE, 0, 0, addr, "volumes/subvol1/file", true));
+  // outside the q-granted path, quarantine access is still denied
+  ASSERT_FALSE(cap.is_capable(fsname, "volumes/subvol2/file", 0, 0, 0777, 0, 0, NULL,
+                              MAY_READ, 0, 0, addr, "volumes/subvol2/file", true));
+  // non-quarantined access is unaffected
+  ASSERT_TRUE(cap.is_capable(fsname, "volumes/subvol2/file", 0, 0, 0777, 0, 0, NULL,
+                             MAY_READ, 0, 0, addr, "volumes/subvol2/file", false));
+}
+
 TEST(MDSAuthCaps, QuarantineOutputParsed) {
   // Test that quarantine flags are correctly output when stringified
   struct CapsTest {
