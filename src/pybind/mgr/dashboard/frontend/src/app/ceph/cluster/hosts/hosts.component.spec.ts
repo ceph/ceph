@@ -183,7 +183,7 @@ describe('HostsComponent', () => {
     fixture.detectChanges();
 
     const spans = fixture.debugElement.nativeElement.querySelectorAll('[cdstabledata] span');
-    expect(spans[7].textContent).toBe('-');
+    expect(spans[8].textContent).toBe('-');
   });
 
   it('should test if host facts are unavailable if get_facts orch feature is not available', () => {
@@ -208,7 +208,7 @@ describe('HostsComponent', () => {
     fixture.detectChanges();
 
     const spans = fixture.debugElement.nativeElement.querySelectorAll('[cdstabledata] span');
-    expect(spans[7].textContent).toBe('-');
+    expect(spans[8].textContent).toBe('-');
   });
 
   it('should test if memory/raw capacity columns shows N/A if facts are available but in fetching state', () => {
@@ -288,6 +288,21 @@ describe('HostsComponent', () => {
 
     expect(showSpy).toHaveBeenCalled();
     expect(showSpy.calls.mostRecent().args[1].submitButtonText).toBe('Save changes');
+  });
+
+  it('should include service_instances column', () => {
+    OrchestratorHelper.mockStatus(false);
+    fixture.detectChanges();
+    const colProps = component.columns.map((c: any) => c.prop);
+    expect(colProps).toContain('service_instances');
+  });
+
+  it('should always pass include_service_instances=true to host list', () => {
+    OrchestratorHelper.mockStatus(false);
+    fixture.detectChanges();
+    hostListSpy.and.callFake(() => of([]));
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    expect(hostListSpy).toHaveBeenCalledWith(jasmine.anything(), jasmine.any(String), true);
   });
 
   describe('table actions', () => {
