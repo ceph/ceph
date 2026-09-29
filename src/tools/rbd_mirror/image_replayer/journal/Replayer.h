@@ -100,8 +100,8 @@ public:
   void prune_snapshot(uint64_t snap_id) {
   }
 
-  void set_remote_snap_id_end_limit(uint64_t snap_id) {
-  }
+  void set_remote_snap_id_end_limit(uint64_t snap_id,
+    const cls::rbd::GroupSpec& local_group_spec) override {}
 
   uint64_t get_remote_snap_id_end_limit() {
     std::unique_lock locker(m_lock);
