@@ -314,7 +314,7 @@ options:
   level: dev
   desc: Device type of the data devices, valid values are HDD, SSD and ZBD.
         It selects the driver within seastore_data_backend_type.
-  default: HDD
+  default: SSD
   enum_values:
   - HDD
   - SSD
