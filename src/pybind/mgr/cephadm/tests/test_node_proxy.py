@@ -5,6 +5,7 @@ from _pytest.monkeypatch import MonkeyPatch
 from urllib.error import URLError
 from cherrypy.test import helper
 from cephadm.agent import NodeProxyEndpoint
+from cephadm.agent_metrics import AgentMetadataStats
 from unittest.mock import MagicMock, call, patch
 from cephadm.inventory import AgentCache, NodeProxyCache, Inventory
 from cephadm.ssl_certs import SSLCerts
@@ -49,6 +50,7 @@ class FakeMgr:
         self.http_server.agent.ssl_certs = SSLCerts("59d1b32e-xxxx-11ef-xxxx-52540060267a")
         self.http_server.agent.ssl_certs.generate_root_cert(addr=self.get_mgr_ip())
         self.cert_mgr = FakeCertMgr()
+        self.agent_metadata_stats = AgentMetadataStats()
 
     def get_mgr_ip(self) -> str:
         return '0.0.0.0'
@@ -67,8 +69,17 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
 
     @classmethod
     def setup_server(cls):
-        # cherrypy.tree.mount(NodeProxyEndpoint(TestNodeProxyEndpoint.mgr))
-        cherrypy.tree.mount(TestNodeProxyEndpoint.app)
+        stats_config = {
+            '/': {
+                'tools.cephadm_agent_stats_start.on': True,
+                'tools.cephadm_agent_stats_start.mgr': cls.mgr,
+                'tools.cephadm_agent_stats_start.endpoint': 'node-proxy',
+                'tools.cephadm_agent_stats_end.on': True,
+                'tools.cephadm_agent_stats_end.mgr': cls.mgr,
+                'tools.cephadm_agent_stats_end.endpoint': 'node-proxy',
+            }
+        }
+        cherrypy.tree.mount(TestNodeProxyEndpoint.app, config=stats_config)
         cherrypy.config.update({'global': {
             'server.socket_host': '127.0.0.1',
             'server.socket_port': PORT}})
@@ -76,6 +87,7 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
     def setUp(self):
         self.PORT = PORT
         self.monkeypatch = MonkeyPatch()
+        self.mgr.agent_metadata_stats.reset()
 
     def test_oob_data_misses_cephx_field(self):
         data = '{}'
@@ -118,6 +130,8 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
         self.getPage("/data", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                  ('Content-Length', str(len(data)))])
         self.assertStatus('400 Bad Request')
+        stats = self.mgr.agent_metadata_stats.snapshot('mgr.a')
+        assert stats['http_pool']['node_proxy_requests'] == 1
 
     def test_data_raises_alert(self):
         patch = node_proxy_data.full_set_with_critical
