@@ -1159,6 +1159,9 @@ int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
   }
   if (path.length())
     path = path.substr(1);    // drop leading /
+  // is_capable() logs this at level 10
+  if (g_conf()->subsys.should_gather<ceph_subsys_mds, 10>())
+    trimmed_path = get_trimmed_path_str(path);
 
   const auto& inode = in->get_inode();
   if (in->is_dir() &&
