@@ -40,6 +40,7 @@
 #include "os/kv.h"
 #include "include/compat.h"
 #include "include/intarith.h"
+#include "include/random.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
 #include "include/util.h"
@@ -5820,15 +5821,16 @@ void *BlueStore::ClaimRangeStressThread::entry()
   std::unique_lock l{lock};
 
   struct held_claim {
-      PExtentVector exts;
-      uint64_t bytes;
+    PExtentVector exts;
+    uint64_t bytes;
   };
   std::deque<held_claim> pool;
   uint64_t held = 0, claimed_total = 0, released_total = 0;
+  // claim_range() calls made
+  uint64_t claims = 0;
   const uint64_t bs = store->block_size;
   bufferlist sentinel;
-  sentinel.append(std::string(bs, char(0xAb))); 
-
+  sentinel.append(std::string(bs, char(0xAB)));
 
   auto release_front = [&] {
     auto &claimed_range = pool.front();
@@ -5844,36 +5846,47 @@ void *BlueStore::ClaimRangeStressThread::entry()
     }
     uint64_t free = store->alloc->get_free();
 
-    if ((held + claim_len <= free_p * (held + free)/100) && (free - claim_len >= min_free )) {
+    if (held + claim_len <= free_p * (held + free) / 100 &&
+        free >= min_free + claim_len) {
       // pick a whole claim_len slot, so [off, off + claim_len) never runs
       // past the allocator's capacity
       uint64_t slots = store->alloc->get_capacity() / claim_len;
-      uint64_t off = ceph::util::generate_random_number<uint64_t>(0, slots - 1) * claim_len;
+      uint64_t off =
+        ceph::util::generate_random_number<uint64_t>(0, slots - 1) * claim_len;
       PExtentVector exts;
-      auto n = store->alloc->claim_range(off, claim_len, &exts);
-      // write sentinel to the first and the last block of the extent
-      for (auto& e: exts){
-        store->bdev->write(e.offset, sentinel, false);
-        store->bdev->write(e.offset + e.length - bs, sentinel, false);
+      uint64_t n = store->alloc->claim_range(off, claim_len, &exts);
+      dout(20) << __func__ << " claimed 0x" << std::hex << n << " of 0x"
+               << off << "~" << claim_len << std::dec << dendl;
+      ++claims;
+      if (n > 0) {
+        // write sentinel to the first and the last block of the extent
+        for (auto& e : exts) {
+          int r = store->bdev->write(e.offset, sentinel, false);
+          ceph_assert(r == 0);
+          r = store->bdev->write(e.offset + e.length - bs, sentinel, false);
+          ceph_assert(r == 0);
+        }
+        claimed_total += n;
+        held += n;
+        pool.push_back({std::move(exts), n});
       }
-      claimed_total += n;
-      held += n;
-      pool.push_back({std::move(exts), n});
     }
     cond.wait_for(l, ceph::make_timespan(interval));
   }
 
   // Thread stopped, release all claims
-  while (!pool.empty()){
+  while (!pool.empty()) {
     release_front();
   }
 
+  dout(1) << __func__ << " claims " << claims
+          << " claimed 0x" << std::hex << claimed_total
+          << " released 0x" << released_total << std::dec << dendl;
   ceph_assert(held == 0);
   ceph_assert(claimed_total == released_total);
   stop = false;
   return nullptr;
 }
-
 
 // =====================================
 
