@@ -48,6 +48,20 @@ class TestPgRecoveryEvent(object):
         assert self.test_event._progress == 1.0
 
 
+class TestRemoteEvent(object):
+
+    def setup_method(self):
+        module._module = mock.Mock() # just so Event._refresh() works
+        self.test_event = module.RemoteEvent("id", "message", [], True)
+
+    def test_set_progress_clamped(self):
+        # A module can report more work done than it expected in total
+        self.test_event.set_progress(30000.0)
+        assert self.test_event.progress == 1.0
+        self.test_event.set_progress(-1.0)
+        assert self.test_event.progress == 0.0
+
+
 class OSDMap: 
     
     # This is an artificial class to help
