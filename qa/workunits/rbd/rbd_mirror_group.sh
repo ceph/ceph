@@ -476,6 +476,14 @@ wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+replaying' 1
 compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 
 testlog "TEST: split-brain"
+# Test sequence:
+# 1. Wait for a complete group snapshot on the secondary.
+# 2. Stop the replayer, force-promote the secondary, and create split-brain.
+# 3. Resync the old primary and verify that the replayer recovers.
+# Expected result: promotion uses a recorded rollback point and resync restores
+# a healthy mirrored group.
+get_newest_complete_mirror_group_snapshot_id ${CLUSTER2} ${POOL}/${group} group_snap_id
+wait_for_group_snap_sync_complete ${CLUSTER1} ${POOL}/${group} ${group_snap_id}
 stop_mirrors ${CLUSTER1}
 mirror_group_promote ${CLUSTER1} ${POOL}/${group} --force
 start_mirrors ${CLUSTER1}

@@ -153,6 +153,7 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
   std::string primary_mirror_uuid;
   uint64_t primary_snap_id;
   SnapSeqs snap_seqs;
+  cls::rbd::GroupSpec group_spec;
   uint64_t* snap_id = nullptr;
 
   static CreateNonPrimaryRequest* s_instance;
@@ -164,12 +165,14 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
                                          const SnapSeqs& snap_seqs,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
-                                         Context *on_finish){
+                                         Context *on_finish,
+                                         const cls::rbd::GroupSpec &group_spec = {}) {
     ceph_assert(s_instance != nullptr);
     s_instance->demoted = demoted;
     s_instance->primary_mirror_uuid = primary_mirror_uuid;
     s_instance->primary_snap_id = primary_snap_id;
     s_instance->snap_seqs = snap_seqs;
+    s_instance->group_spec = group_spec;
     s_instance->snap_id = snap_id;
     s_instance->on_finish = on_finish;
     return s_instance;
