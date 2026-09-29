@@ -5603,6 +5603,73 @@ options:
     hence causing full recovery. Intended primarily for testing.
   default: 0
   with_legacy: true
+- name: bluestore_debug_claim_range_stress
+  type: bool
+  level: dev
+  desc: For testing only. Run a background thread that claims random ranges of
+    the main device with Allocator::claim_range() while BlueStore is mounted.
+  long_desc: The thread writes a sentinel into every extent it claims, bypassing
+    checksums, so a claim_range() that returns space which was already allocated
+    corrupts live data and is caught by reads and deep fsck. Everything claimed
+    is released at umount. Read at mount.
+  default: false
+  with_legacy: false
+  see_also:
+  - bluestore_debug_claim_range_stress_max_claims
+  - bluestore_debug_claim_range_stress_claim_length
+  - bluestore_debug_claim_range_stress_max_free_percent
+  - bluestore_debug_claim_range_stress_min_free
+  - bluestore_debug_claim_range_stress_interval
+- name: bluestore_debug_claim_range_stress_max_claims
+  type: uint
+  level: dev
+  desc: Number of claims the claim_range stress thread holds at once. When the
+    pool is full, the oldest claim is released before a new one is made.
+  default: 16
+  min: 1
+  with_legacy: false
+  see_also:
+  - bluestore_debug_claim_range_stress
+- name: bluestore_debug_claim_range_stress_claim_length
+  type: size
+  level: dev
+  desc: Length of each range passed to claim_range() by the stress thread. Must
+    be a multiple of the device block size.
+  default: 64_M
+  min: 4096
+  with_legacy: false
+  see_also:
+  - bluestore_debug_claim_range_stress
+- name: bluestore_debug_claim_range_stress_max_free_percent
+  type: uint
+  level: dev
+  desc: Upper bound on bytes held by the claim_range stress thread, as a
+    percentage of free space, counting the bytes it holds as free.
+  default: 70
+  min: 0
+  max: 100
+  with_legacy: false
+  see_also:
+  - bluestore_debug_claim_range_stress
+- name: bluestore_debug_claim_range_stress_min_free
+  type: size
+  level: dev
+  desc: The claim_range stress thread makes no new claim that would leave less
+    than this much free space, so BlueFS never runs out because of it.
+  default: 2_G
+  with_legacy: false
+  see_also:
+  - bluestore_debug_claim_range_stress
+- name: bluestore_debug_claim_range_stress_interval
+  type: float
+  level: dev
+  desc: Seconds the claim_range stress thread sleeps between claims. Each claim
+    is held for roughly max_claims times this interval.
+  default: 0.1
+  min: 0
+  with_legacy: false
+  see_also:
+  - bluestore_debug_claim_range_stress
 - name: bluestore_fsck_on_umount_deep
   type: bool
   level: dev

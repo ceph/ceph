@@ -2909,6 +2909,58 @@ private:
     mono_clock::time_point last_fragmentation_check;
   } mempool_thread;
 
+struct ClaimRangeStressThread : public Thread {
+  public:
+    BlueStore *store;
+    ceph::condition_variable cond;
+    ceph::mutex lock = ceph::make_mutex("Bluestore::ClaimRangeStressThread::lock");
+    bool stop = false;
+    struct held_claim {
+      PExtentVector exts;
+      uint64_t bytes;
+    };
+    std::deque<held_claim> pool;
+    uint64_t held = 0, claimed_total = 0, released_total = 0;
+    // bluestore_debug_claim_range_stress_*, read by init() at every mount
+    uint64_t max_claims = 0, claim_len = 0, free_p = 0, min_free = 0;
+    double interval = 0;
+
+    explicit ClaimRangeStressThread(BlueStore *s) : store(s) {}
+
+    void *entry() override;
+    void init() {
+      auto& conf = store->cct->_conf;
+      if (!conf.get_val<bool>("bluestore_debug_claim_range_stress")) {
+        return;
+      }
+      max_claims = conf.get_val<uint64_t>(
+        "bluestore_debug_claim_range_stress_max_claims");
+      claim_len = conf.get_val<Option::size_t>(
+        "bluestore_debug_claim_range_stress_claim_length");
+      free_p = conf.get_val<uint64_t>(
+        "bluestore_debug_claim_range_stress_max_free_percent");
+      min_free = conf.get_val<Option::size_t>(
+        "bluestore_debug_claim_range_stress_min_free");
+      interval = conf.get_val<double>(
+        "bluestore_debug_claim_range_stress_interval");
+      // claim_range() asserts on a misaligned length;
+      ceph_assert(claim_len % store->block_size == 0);
+      ceph_assert(claim_len <= store->bdev->get_size());
+      ceph_assert(!stop);
+      create("bstore_claim_st");
+    }
+    void shutdown() {
+      if (!is_started()) {
+        return;
+      }
+      lock.lock();
+      stop = true;
+      cond.notify_all();
+      lock.unlock();
+      join();
+    }
+} claim_range_stress_thread;
+
 #ifdef WITH_BLKIN
   ZTracer::Endpoint trace_endpoint {"0.0.0.0", 0, "BlueStore"};
 #endif

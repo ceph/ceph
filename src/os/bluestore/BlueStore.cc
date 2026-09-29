@@ -5848,7 +5848,8 @@ BlueStore::BlueStore(CephContext *cct,
     kv_finalize_thread(this),
     min_alloc_size(_min_alloc_size),
     min_alloc_size_order(std::countr_zero(_min_alloc_size)),
-    mempool_thread(this)
+    mempool_thread(this),
+    claim_range_stress_thread(this)
 {
   _init_logger();
   cct->_conf.add_observer(this);
@@ -9824,6 +9825,8 @@ int BlueStore::_mount()
     bluefs->spillover_cleaner_start();
   }
 
+  claim_range_stress_thread.init();
+
   mounted = true;
   return 0;
 }
@@ -9832,6 +9835,7 @@ int BlueStore::umount()
 {
   dout(5) << __func__ << dendl;
   ceph_assert(_kv_only || mounted);
+  claim_range_stress_thread.shutdown();
   _osr_drain_all();
 
   if (bluefs) {
