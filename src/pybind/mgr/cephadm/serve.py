@@ -112,6 +112,8 @@ class CephadmServe:
                     if self.mgr.migration.is_migration_ongoing():
                         continue
 
+                    self._ensure_fcm_dedup_services()
+
                     if self._apply_all_services():
                         continue  # did something, refresh
 
@@ -660,6 +662,20 @@ class CephadmServe:
                 except OrchestratorError as ex:
                     self.mgr.events.from_orch_error(ex)
                     logger.exception(f'failed to remove duplicated daemon {e}')
+
+    def _ensure_fcm_dedup_services(self) -> None:
+        """Auto-create a FcmDedupSpec for every OSD that is running but has no
+        corresponding fcm-dedup spec in the spec store yet.  Called once per
+        serve-loop iteration before _apply_all_services()."""
+        from ceph.deployment.service_spec import FcmDedupSpec
+        osd_daemons = self.mgr.cache.get_daemons_by_type('osd')
+        if not osd_daemons:
+            return
+        if 'fcm-dedup' in self.mgr.spec_store:
+            return
+        spec = FcmDedupSpec(placement=PlacementSpec(host_pattern='*'))
+        self.mgr.spec_store.save(spec)
+        self.mgr._kick_serve_loop()
 
     def _apply_all_services(self) -> bool:
         self.log.debug('_apply_all_services')
