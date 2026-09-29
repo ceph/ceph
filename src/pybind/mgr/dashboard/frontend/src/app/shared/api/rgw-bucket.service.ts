@@ -280,14 +280,23 @@ export class RgwBucketService extends ApiClient {
       return this.http.get(`${this.url}/lifecycle`, { params: params });
     });
   }
+
   updateBucketRateLimit(bid: string, bucketRateLimitArgs: RgwRateLimitConfig) {
-    return this.http.put(`${this.url}/${bid}/ratelimit`, bucketRateLimitArgs);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.put(`${this.url}/${bid}/ratelimit`, bucketRateLimitArgs, { params });
+    });
   }
+
   getBucketRateLimit(uid: string) {
-    return this.http.get(`${this.url}/${uid}/ratelimit`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/${uid}/ratelimit`, { params });
+    });
   }
+
   getGlobalBucketRateLimit() {
-    return this.http.get(`${this.url}/ratelimit`);
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`${this.url}/ratelimit`, { params });
+    });
   }
 
   listNotification(bucket_name: string) {
