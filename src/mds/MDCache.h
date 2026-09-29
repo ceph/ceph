@@ -126,6 +126,8 @@ enum {
   l_mdc_uninline_succeeded,
   l_mdc_uninline_write_failed,
 
+  l_mdc_cache_trim_throttle,
+
   l_mdc_last,
 };
 
