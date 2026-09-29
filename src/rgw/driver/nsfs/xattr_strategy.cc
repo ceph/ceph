@@ -135,6 +135,13 @@ static const NBKeyMap NB_KEYS[] = {
   { "version_id",             "user.noobaa.version_id" },
   { "delete_marker",          "user.noobaa.delete_marker" },
   { "non_current_timestamp",  "user.noobaa.non_current_timestamp" },
+  /* Not under user.noobaa., and the only name their own reader
+   * excludes from user metadata -- XATTR_METADATA_IGNORE_LIST holds
+   * this and nothing else (`namespace_fs.js:111`, `:281`).  Without
+   * the mapping it fell through to the metadata rule below and came
+   * back as `x-amz-meta-storage_class`, which is a key no client set
+   * and their gateway does not report. */
+  { RGW_ATTR_STORAGE_CLASS,   "user.storage_class" },
 };
 
 /* Three answers, not two.

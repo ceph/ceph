@@ -4008,6 +4008,69 @@ TEST_F(NSFSNooBaaEvictingBucketTest, AnEvictedPartReachesTheirStaging)
   EXPECT_EQ(read_all(bucket_path() / objname), expected);
 }
 
+/* Storage class:  a plain rename that was missed, and a bogus
+ * metadata key with it.
+ *
+ * Theirs is `user.storage_class` (`glacier.js:48`) and is not under
+ * `user.noobaa.`, so before the mapping existed it fell through to
+ * "what is left under user. is user metadata" and came back as
+ * `x-amz-meta-storage_class` -- a key no client ever set and one
+ * their own gateway does not report, because it is the sole member of
+ * XATTR_METADATA_IGNORE_LIST (`namespace_fs.js:111`).
+ */
+TEST_F(NSFSNooBaaBucketTest, ReadsTheirStorageClass)
+{
+  const sf::path p{bucket_path() / "cold.bin"};
+  write_file(p, "bytes");
+  const std::string sc{"GLACIER"};
+  ASSERT_EQ(::setxattr(p.c_str(), "user.storage_class",
+		       sc.data(), sc.size(), 0), 0);
+
+  auto obj = bucket->get_object(rgw_obj_key("cold.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+
+  auto& attrs = obj->get_attrs();
+  auto i = attrs.find(RGW_ATTR_STORAGE_CLASS);
+  ASSERT_NE(i, attrs.end()) << "their storage class was not read";
+  EXPECT_EQ(i->second.to_str(), "GLACIER");
+
+  /* and not as metadata a client never set */
+  EXPECT_EQ(attrs.find(std::string(RGW_ATTR_META_PREFIX) + "storage_class"),
+	    attrs.end())
+      << "their storage class surfaced as user metadata";
+}
+
+/* And ours is written under their name. */
+TEST_F(NSFSNooBaaBucketTest, WritesStorageClassUnderTheirName)
+{
+  const sf::path p{bucket_path() / "warm.bin"};
+  write_file(p, "bytes");
+
+  auto obj = bucket->get_object(rgw_obj_key("warm.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  Attrs set;
+  bufferlist bl;
+  bl.append("GLACIER");
+  set[RGW_ATTR_STORAGE_CLASS] = bl;
+  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
+			       rgw::sal::FLAG_LOG_OP), 0);
+
+  char buf[256];
+  ssize_t len = ::getxattr(p.c_str(), "user.storage_class", buf, sizeof(buf));
+  ASSERT_GT(len, 0) << "not written under their name";
+  EXPECT_EQ(std::string(buf, len), "GLACIER");
+
+  char nb[8192];
+  ssize_t nlen = ::listxattr(p.c_str(), nb, sizeof(nb));
+  ASSERT_GT(nlen, 0);
+  for (const char* q = nb; q < nb + nlen; q += strlen(q) + 1) {
+    EXPECT_EQ(std::string(q).find("nsfs.rgw.storage_class"),
+	      std::string::npos)
+	<< "also wrote our name: " << q;
+  }
+}
+
 /* Object tags, which are one attribute per tag in their format and
  * one encoded RGWObjTags in ours.
  *
