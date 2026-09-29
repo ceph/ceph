@@ -664,15 +664,29 @@ void MetricAggregator::remove_metrics_for_rank(const entity_inst_t &client,
   dout(20) << ": client=" << client << ", rank=" << rank << dendl;
 
   if (remove) {
-    auto &p = clients_by_rank.at(rank);
-    bool rm = p.erase(client) != 0;
-    ceph_assert(rm);
+    // During max_mds / failover churn, UPDATE_TYPE_REMOVE can arrive for a
+    // client that was never tracked or was already culled when the rank was
+    // recycled. Treat that as an idempotent no-op.
+    auto rank_it = clients_by_rank.find(rank);
+    if (rank_it == clients_by_rank.end() ||
+        rank_it->second.erase(client) == 0) {
+      dout(5) << ": client=" << client << " not tracked for rank=" << rank
+               << ", ignoring remove" << dendl;
+      return;
+    }
+    auto &p = rank_it->second;
     dout(20) << ": rank=" << rank << " has " << p.size() << " connected"
              << " client(s)" << dendl;
     auto crpair = std::make_pair(client, rank);
-    m_cct->get_perfcounters_collection()->remove(client_perf_counters[crpair]);
-    delete client_perf_counters[crpair];
-    client_perf_counters.erase(crpair);
+    auto perf_it = client_perf_counters.find(crpair);
+    if (perf_it != client_perf_counters.end()) {
+      m_cct->get_perfcounters_collection()->remove(perf_it->second);
+      delete perf_it->second;
+      client_perf_counters.erase(perf_it);
+    } else {
+      dout(5) << ": missing perf counters for client=" << client
+              << " rank=" << rank << dendl;
+    }
   }
   if (m_perf_counters) {
     m_perf_counters->dec(l_mds_client_metrics_num_clients);
