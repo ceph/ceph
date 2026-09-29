@@ -1425,6 +1425,29 @@ options:
   - osd_mclock_max_capacity_iops_ssd
   flags:
   - runtime
+- name: osd_mclock_max_starve_time_hdd
+  type: float
+  level: advanced
+  desc: Maximum time (seconds) the mclock-managed queue is allowed to be
+    starved by the immediate-class queue and other high-priority traffic (raw
+    priority at or above the scheduler's cutoff) before a forced dequeue
+    attempt yields it one turn, on rotational media. Bounds worst-case
+    starvation of mclock-managed classes under sustained high-priority load.
+  long_desc: The default (0.25s) is a starting-point value reasoned from
+    rotational media's own multi-millisecond natural per-op service time.
+    Bounded to a narrow range around that default. Too low erodes the
+    low-latency treatment immediate-class and other high-priority traffic (e.g.
+    client-driven EC subop I/O, peering) depends on; too high silently
+    re-opens the starvation this bound exists to prevent.
+  fmt_desc: Maximum time (seconds) the mclock-managed queue may be starved
+    by the immediate-class and high-priority queues before a forced
+    dequeue attempt, on rotational media.
+  default: 0.25
+  min: 0.1
+  max: 0.5
+  see_also:
+  - osd_op_queue
+  - osd_mclock_profile
 # Set to true for testing.  Users should NOT set this.
 # If set to true even after reading enough shards to
 # decode the object, any error will be reported.
