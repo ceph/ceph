@@ -81,6 +81,21 @@ add_ceph_unittest(unittest_mgr_map_cache)
 target_link_libraries(unittest_mgr_map_cache ceph-common
   Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
 
+# unittest_mgr_perfcounterinstance
+# NOTE: scaffolding (this target and test_perfcounterinstance.cc) cherry-picked
+# from ceph/ceph PR #71237 as a temporary measure until that PR merges; reconcile
+# when it lands. PR #71237 wires this via OBJECT libraries; here it links the
+# PerfCounterInstance.cc source directly to stay self-contained on the base branch.
+add_executable(unittest_mgr_perfcounterinstance
+  test_perfcounterinstance.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PerfCounterInstance.cc
+)
+add_ceph_unittest(unittest_mgr_perfcounterinstance)
+target_link_libraries(unittest_mgr_perfcounterinstance
+  ceph-common
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
