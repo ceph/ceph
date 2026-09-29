@@ -496,3 +496,39 @@ class TestRGWService:
             # Inline certs must still be present — the service is still running on host2
             assert cm.get_cert(rgw_svc.cert_name, service_name=svc_name) is not None
             assert cm.get_key(rgw_svc.key_name, service_name=svc_name) is not None
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_zonegroup_hostnames_are_passed_as_custom_sans(
+            self, cephadm_module: CephadmOrchestrator):
+        """RGW zonegroup hostnames must be passed as custom DNS SANs.
+
+        Verifies that zonegroup hostnames are routed to get_certificates() as
+        the custom_sans keyword argument, so that values like s3.example.com
+        and *.s3.example.com are registered as DNS SANs on the generated
+        certificate.
+        """
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(
+                service_id='foo',
+                ssl=True,
+                zonegroup_hostnames=['s3.example.com'],
+                wildcard_enabled=True,
+                rgw_frontend_type='beast',
+            )
+            rgw_svc = service_registry.get_service('rgw')
+            tls_creds = TLSCredentials(
+                cert=ceph_generated_cert,
+                key=ceph_generated_key,
+            )
+            with patch.object(rgw_svc, 'get_certificates',
+                              return_value=tls_creds) as get_certificates:
+                with with_service(cephadm_module, s):
+                    # The serve loop may invoke get_certificates more than once;
+                    # assert on the arguments of every call, not the count.
+                    get_certificates.assert_called()
+                    for args, kwargs in get_certificates.call_args_list:
+                        # custom_sans must be a kwarg, never the positional ips arg
+                        assert len(args) == 1
+                        assert kwargs == {
+                            'custom_sans': ['s3.example.com', '*.s3.example.com'],
+                        }
