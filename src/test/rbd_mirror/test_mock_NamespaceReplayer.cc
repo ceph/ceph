@@ -74,13 +74,15 @@ struct ImageMap<librbd::MockTestImageCtx> {
   MOCK_METHOD1(update_instances_added, void(const std::vector<std::string>&));
   MOCK_METHOD1(update_instances_removed, void(const std::vector<std::string>&));
 
-  MOCK_METHOD3(update_entities_mock, void(const std::string&,
+  MOCK_METHOD4(update_entities_mock, void(const std::string&,
+                                        const MirrorEntities&,
                                         const MirrorEntities&,
                                         const MirrorEntities&));
   void update_entities(const std::string& mirror_uuid,
                      MirrorEntities &&added,
-                     MirrorEntities &&removed) {
-    update_entities_mock(mirror_uuid, added, removed);
+                     MirrorEntities &&removed,
+                     MirrorEntities &&modified) {
+    update_entities_mock(mirror_uuid, added, removed, modified);
   }
 
   ImageMap() {

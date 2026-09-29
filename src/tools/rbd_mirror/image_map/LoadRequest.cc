@@ -100,7 +100,7 @@ void LoadRequest<I>::mirror_image_list() {
 
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_image_list_start(&op, m_start_after, MAX_RETURN,
-                                              false);
+                                              true);
 
   m_out_bl.clear();
   librados::AioCompletion *aio_comp = create_rados_callback<
@@ -128,7 +128,7 @@ void LoadRequest<I>::handle_mirror_image_list(int r) {
   }
 
   for (auto &id : ids) {
-    m_global_image_ids.emplace(id.second);
+    m_global_image_ids.emplace(MIRROR_ENTITY_TYPE_IMAGE, id.second);
   }
 
   if (ids.size() == MAX_RETURN) {

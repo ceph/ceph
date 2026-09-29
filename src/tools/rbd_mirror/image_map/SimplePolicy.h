@@ -23,12 +23,12 @@ protected:
                      const GlobalId &global_id) override;
 
   void do_shuffle_add_instances(
-      const InstanceToImageMap& map, size_t image_count,
+      const InstanceToImageMap& map, size_t entity_weight,
       GlobalIds *remap_global_ids) override;
 
 private:
   size_t calc_entity_weight_per_instance(const InstanceToImageMap& map,
-                                  size_t image_count);
+                                  size_t entity_weight);
 
 };
 
