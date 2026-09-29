@@ -1,0 +1,46 @@
+rule_files:
+  - ../prometheus_alerts.yml
+evaluation_interval: 15s
+fuzzy_compare: true
+tests:
+  - name: busy seconds averaged across poll threads and gateways
+    interval: 15s
+    input_series:
+      - series: 'ceph_nvmeof_reactor_seconds_total{cluster="mycluster",instance="gw-a:10008",name="poll-0",mode="busy"}'
+        values: '0+13.5x80'
+      - series: 'ceph_nvmeof_reactor_seconds_total{cluster="mycluster",instance="gw-a:10008",name="poll-1",mode="busy"}'
+        values: '0+13.5x80'
+      - series: 'ceph_nvmeof_reactor_seconds_total{cluster="mycluster",instance="gw-b:10008",name="poll-0",mode="busy"}'
+        values: '0+7.5x80'
+    promql_expr_test:
+      - expr: '100 * label_replace(avg by(instance, cluster) (rate(ceph_nvmeof_reactor_seconds_total{mode="busy"}[1m])),"instance","$1","instance","(.*):.*")'
+        eval_time: 15m
+        exp_samples:
+          - labels: '{cluster="mycluster",instance="gw-a"}'
+            value: 90
+          - labels: '{cluster="mycluster",instance="gw-b"}'
+            value: 50
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: NVMeoFHighGatewayCPU
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: NVMeoFHighGatewayCPU
+        exp_alerts:
+          - exp_labels:
+              cluster: mycluster
+              instance: gw-a
+              severity: warning
+              type: ceph_default
+            exp_annotations:
+              summary: CPU used by gw-a NVMe-oF Gateway is high on cluster mycluster
+              description: Typically, high CPU may indicate degraded performance. Consider increasing the number of reactor cores
+  - name: exactly 80 percent stays below strict threshold
+    interval: 15s
+    input_series:
+      - series: 'ceph_nvmeof_reactor_seconds_total{cluster="mycluster",instance="gw-c:10008",name="poll-0",mode="busy"}'
+        values: '0+12x80'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NVMeoFHighGatewayCPU
+        exp_alerts: []
