@@ -208,3 +208,107 @@ async fn test_base_bucket_still_serves_s3() {
         .bucket(&bucket).send().await.expect("list on a base bucket");
     assert_eq!(listed.contents().len(), 1);
 }
+
+/// Upgrading a base bucket rewrites what is in it, and says how much.
+///
+/// The whole thing through the two interfaces an operator has:  S3 to
+/// put the objects there, and the profile endpoint to move the bucket.
+/// A base bucket's objects are written in NooBaa's format by the
+/// driver, so this needs no tree laid down by hand -- the suite makes
+/// the before state with ordinary PUTs.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_upgrade_reports_what_it_converted() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    if nsfs_set_profile(&bucket, "base").await.is_none() {
+        eprintln!("profile endpoint unavailable;  nothing to check");
+        return;
+    }
+
+    for k in ["flat.bin", "deep/nested.bin", "deep/other.bin"] {
+        client.put_object()
+            .bucket(&bucket).key(k)
+            .content_type("text/plain")
+            .body(aws_sdk_s3::primitives::ByteStream::from_static(b"payload"))
+            .send().await.expect("put on a base bucket");
+    }
+
+    let before = nsfs_get_profile(&bucket).await.expect("profile read");
+    assert_eq!(before.get("profile").map(String::as_str), Some("base"));
+    assert_eq!(before.get("converting").map(String::as_str), Some("false"),
+        "a base bucket is not converting;  it is simply in their format");
+
+    let up = nsfs_set_profile(&bucket, "strong").await
+        .expect("upgrading a base bucket");
+    assert_eq!(up.get("had_profile").map(String::as_str), Some("base"));
+    assert_eq!(up.get("profile").map(String::as_str), Some("strong"));
+    assert_eq!(up.get("converting").map(String::as_str), Some("false"),
+        "the upgrade did not report itself finished");
+    assert_eq!(up.get("converted.objects").map(String::as_str), Some("3"),
+        "the three objects were not counted");
+
+    let after = nsfs_get_profile(&bucket).await.expect("profile read");
+    assert_eq!(after.get("profile").map(String::as_str), Some("strong"));
+    assert_eq!(after.get("converting").map(String::as_str), Some("false"));
+
+    /* and the objects survived the rewrite, content type included */
+    for k in ["flat.bin", "deep/nested.bin", "deep/other.bin"] {
+        let got = client.get_object()
+            .bucket(&bucket).key(k)
+            .send().await.unwrap_or_else(|e| panic!("get {k} after upgrade: {e}"));
+        assert_eq!(got.content_type(), Some("text/plain"),
+            "{k} lost its content type in the rewrite");
+        let body = got.body.collect().await.unwrap().into_bytes();
+        assert_eq!(&body[..], b"payload", "{k}");
+    }
+
+    let listed = client.list_objects_v2()
+        .bucket(&bucket).send().await.expect("list after upgrade");
+    assert_eq!(listed.contents().len(), 3);
+}
+
+/// Asking for the profile a bucket is already in changes nothing, and
+/// reports nothing converted.
+///
+/// The no-op leg of the resume path:  the same call finishes a stopped
+/// rewrite, so it has to be harmless on a bucket with nothing left to
+/// do.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_reissuing_the_profile_is_a_no_op() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    if nsfs_set_profile(&bucket, "base").await.is_none() {
+        eprintln!("profile endpoint unavailable;  nothing to check");
+        return;
+    }
+    client.put_object()
+        .bucket(&bucket).key("obj")
+        .body(aws_sdk_s3::primitives::ByteStream::from_static(b"payload"))
+        .send().await.expect("put on a base bucket");
+
+    let first = nsfs_set_profile(&bucket, "strong").await.expect("upgrade");
+    assert_eq!(first.get("converted.objects").map(String::as_str), Some("1"));
+
+    let again = nsfs_set_profile(&bucket, "strong").await
+        .expect("asking for the profile it is already in");
+    assert_eq!(again.get("had_profile").map(String::as_str), Some("strong"));
+    assert_eq!(again.get("converting").map(String::as_str), Some("false"));
+    assert_eq!(again.get("converted.objects").map(String::as_str), Some("0"),
+        "a settled bucket was walked again");
+}

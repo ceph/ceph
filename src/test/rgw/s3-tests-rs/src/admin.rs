@@ -107,13 +107,52 @@ pub async fn driver_hint(hint: &str, params: &[(&str, &str)]) -> RawResponse {
     admin_request(reqwest::Method::DELETE, "/admin/driver/hint", &query, None).await
 }
 
-/// `PUT /admin/nsfs/adopt?bucket=<name>` -- mark an existing bucket as
-/// carrying the nsfs extensions.
+/// A JSON object as strings, one level of nesting flattened with dotted
+/// keys.
+///
+/// The profile endpoints answer with scalars and one nested object --
+/// `converted`, which an upgrade fills in -- and a test wants
+/// `converted.objects` rather than a blob of JSON to re-parse.  Deeper
+/// nesting stringifies, which nothing here produces.
+fn flatten_json(body: &str) -> Option<HashMap<String, String>> {
+    fn scalar(v: &serde_json::Value) -> String {
+        match v {
+            serde_json::Value::Bool(b) => b.to_string(),
+            serde_json::Value::String(s) => s.clone(),
+            other => other.to_string(),
+        }
+    }
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    let map = v.as_object()?;
+    let mut out = HashMap::new();
+    for (k, val) in map {
+        match val {
+            serde_json::Value::Object(inner) => {
+                for (ik, iv) in inner {
+                    out.insert(format!("{k}.{ik}"), scalar(iv));
+                }
+            }
+            other => {
+                out.insert(k.clone(), scalar(other));
+            }
+        }
+    }
+    Some(out)
+}
+
+/// `PUT /admin/nsfs/profile?bucket=<name>&profile=<name>` -- move a
+/// bucket to a profile.
 ///
 /// A function point rather than a hint:  it is what an operator runs once
 /// against a tree that came from NooBaa, so it has its own resource and
 /// its own capability instead of riding the dev-gated hint endpoint.
 /// `None` when the deployment does not offer it.
+///
+/// Leaving `base` rewrites the tree, so the answer carries
+/// `converting` and a `converted` count.  `converting` true means the
+/// rewrite stopped partway and this call may be issued again to
+/// resume;  the profile itself changed either way, which is why the
+/// request still succeeded.
 pub async fn nsfs_set_profile(bucket: &str, profile: &str)
     -> Option<HashMap<String, String>> {
     let resp = admin_request(
@@ -122,18 +161,7 @@ pub async fn nsfs_set_profile(bucket: &str, profile: &str)
     if resp.status != 200 {
         return None;
     }
-    let v: serde_json::Value = serde_json::from_str(&resp.body).ok()?;
-    let map = v.as_object()?;
-    let mut out = HashMap::new();
-    for (k, val) in map {
-        let s = match val {
-            serde_json::Value::Bool(b) => b.to_string(),
-            serde_json::Value::String(s) => s.clone(),
-            other => other.to_string(),
-        };
-        out.insert(k.clone(), s);
-    }
-    Some(out)
+    flatten_json(&resp.body)
 }
 
 /// Which profile a bucket is in, without changing it.
@@ -144,18 +172,7 @@ pub async fn nsfs_get_profile(bucket: &str) -> Option<HashMap<String, String>> {
     if resp.status != 200 {
         return None;
     }
-    let v: serde_json::Value = serde_json::from_str(&resp.body).ok()?;
-    let map = v.as_object()?;
-    let mut out = HashMap::new();
-    for (k, val) in map {
-        let s = match val {
-            serde_json::Value::Bool(b) => b.to_string(),
-            serde_json::Value::String(s) => s.clone(),
-            other => other.to_string(),
-        };
-        out.insert(k.clone(), s);
-    }
-    Some(out)
+    flatten_json(&resp.body)
 }
 
 /// The `results` a hint reported, or `None` if it did not report any.
