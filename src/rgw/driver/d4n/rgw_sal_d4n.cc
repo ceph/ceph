@@ -1202,7 +1202,7 @@ int D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, opt
 int D4NFilterObject::set_attr_crypt_parts(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs)
 {
   if (attrs.count(RGW_ATTR_CRYPT_MODE)) {
-    std::vector<size_t> parts_len;
+    std::vector<uint64_t> parts_len;
     uint64_t obj_size = this->get_size();
     uint64_t obj_max_chunk_size = dpp->get_cct()->_conf->rgw_max_chunk_size;
     uint64_t num_parts = (obj_size%obj_max_chunk_size) == 0 ? obj_size/obj_max_chunk_size : (obj_size/obj_max_chunk_size) + 1;

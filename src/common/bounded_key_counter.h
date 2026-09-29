@@ -81,6 +81,30 @@ class BoundedKeyCounter {
     reference operator*() const {
       return &map_type::const_iterator::operator*();
     }
+
+    // The inherited increment and decrement return the base iterator, but the
+    // C++20 iterator concepts require them to return this type - see
+    // weakly_incrementable's "{ ++i } -> same_as<I&>" - so respell them.
+    // libstdc++'s std::vector::assign never checked; libc++ dispatches through
+    // ranges::copy_n, which does, and rejects the iterator outright.
+    const_pointer_iterator& operator++() {
+      map_type::const_iterator::operator++();
+      return *this;
+    }
+    const_pointer_iterator operator++(int) {
+      const_pointer_iterator tmp{*this};
+      map_type::const_iterator::operator++();
+      return tmp;
+    }
+    const_pointer_iterator& operator--() {
+      map_type::const_iterator::operator--();
+      return *this;
+    }
+    const_pointer_iterator operator--(int) {
+      const_pointer_iterator tmp{*this};
+      map_type::const_iterator::operator--();
+      return tmp;
+    }
   };
 
  protected:
