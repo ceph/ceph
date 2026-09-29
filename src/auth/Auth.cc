@@ -126,8 +126,7 @@ void AuthTicket::decode(ceph::buffer::list::const_iterator& bl) {
   decode(name, bl);
   decode(global_id, bl);
   if (struct_v >= 2) {
-    uint64_t old_auid;
-    decode(old_auid, bl);
+    decode(auid, bl);
   }
   decode(created, bl);
   decode(expires, bl);
