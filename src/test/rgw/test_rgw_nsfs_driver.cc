@@ -28,6 +28,7 @@
 #include "global/global_init.h"
 #include "rgw_mime.h"
 #include "rgw_tag.h"
+#include "rgw_object_lock.h"
 #include "common/ceph_json.h"
 
 using namespace rgw::sal;
@@ -4006,6 +4007,161 @@ TEST_F(NSFSNooBaaEvictingBucketTest, AnEvictedPartReachesTheirStaging)
   ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, objname,
 			part_etags), 0);
   EXPECT_EQ(read_all(bucket_path() / objname), expected);
+}
+
+/* Object lock:  three plain attributes of theirs, two encoded ones of
+ * ours.
+ *
+ * Legal hold is one-to-one and still needs the widened pair, because
+ * the shapes differ -- theirs is the literal `ON` and ours is an
+ * encoded RGWObjectLegalHold.  Retention is two-to-one, and is both
+ * attributes or neither:  their reader returns undefined unless mode
+ * and date are both present (`namespace_fs.js:2890`).
+ */
+TEST_F(NSFSNooBaaBucketTest, ReadsTheirObjectLock)
+{
+  const sf::path p{bucket_path() / "locked.bin"};
+  write_file(p, "bytes");
+  auto set = [&p](const char* n, const std::string& v) {
+    ASSERT_EQ(::setxattr(p.c_str(), n, v.data(), v.size(), 0), 0) << n;
+  };
+  set("user.noobaa.legal_hold", "ON");
+  set("user.noobaa.retention_mode", "COMPLIANCE");
+  set("user.noobaa.retention_date", "2030-01-01T00:00:00.000Z");
+
+  auto obj = bucket->get_object(rgw_obj_key("locked.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  auto& attrs = obj->get_attrs();
+
+  auto lh = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+  ASSERT_NE(lh, attrs.end()) << "their legal hold was not read";
+  RGWObjectLegalHold hold;
+  auto hi = lh->second.cbegin();
+  hold.decode(hi);
+  EXPECT_EQ(hold.get_status(), "ON");
+
+  auto rt = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+  ASSERT_NE(rt, attrs.end()) << "their retention was not read";
+  RGWObjectRetention ret;
+  auto ri = rt->second.cbegin();
+  ret.decode(ri);
+  EXPECT_EQ(ret.get_mode(), "COMPLIANCE");
+  /* the date survived the ISO 8601 round trip, which is the part that
+   * could silently produce the epoch */
+  std::string iso;
+  rgw_to_iso8601(ret.get_retain_until_date(), &iso);
+  EXPECT_EQ(iso.substr(0, 10), "2030-01-01") << "got " << iso;
+}
+
+/* A retention with only one of its two attributes is no retention.
+ *
+ * Their rule, and the safe one:  a retention holding the epoch
+ * because a field was missing reads as expired, which is the one
+ * wrong answer object lock must never give. */
+TEST_F(NSFSNooBaaBucketTest, AHalfWrittenRetentionIsNoRetention)
+{
+  const sf::path p{bucket_path() / "half.bin"};
+  write_file(p, "bytes");
+  const std::string mode{"GOVERNANCE"};
+  ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.retention_mode",
+		       mode.data(), mode.size(), 0), 0);
+
+  auto obj = bucket->get_object(rgw_obj_key("half.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  EXPECT_EQ(obj->get_attrs().find(RGW_ATTR_OBJECT_RETENTION),
+	    obj->get_attrs().end());
+
+  /* and a date this gateway cannot parse is the same answer */
+  const sf::path q{bucket_path() / "bad.bin"};
+  write_file(q, "bytes");
+  ASSERT_EQ(::setxattr(q.c_str(), "user.noobaa.retention_mode",
+		       mode.data(), mode.size(), 0), 0);
+  const std::string bad{"not-a-date"};
+  ASSERT_EQ(::setxattr(q.c_str(), "user.noobaa.retention_date",
+		       bad.data(), bad.size(), 0), 0);
+  auto b = bucket->get_object(rgw_obj_key("bad.bin"));
+  ASSERT_EQ(b->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(b->get_obj_attrs(null_yield, env->dpp), 0);
+  EXPECT_EQ(b->get_attrs().find(RGW_ATTR_OBJECT_RETENTION),
+	    b->get_attrs().end())
+      << "an unparseable date became a retention, which would read as "
+	 "expired";
+}
+
+/* And ours is written in their three attributes. */
+TEST_F(NSFSNooBaaBucketTest, WritesObjectLockInTheirShape)
+{
+  const sf::path p{bucket_path() / "mine.bin"};
+  write_file(p, "bytes");
+
+  auto obj = bucket->get_object(rgw_obj_key("mine.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+
+  ceph::real_time until;
+  ASSERT_EQ(parse_time("2031-06-15T12:00:00.000Z", &until), 0);
+  RGWObjectRetention ret("GOVERNANCE", until);
+  RGWObjectLegalHold hold("OFF");
+  Attrs set;
+  bufferlist rb, hb;
+  ret.encode(rb);
+  hold.encode(hb);
+  set[RGW_ATTR_OBJECT_RETENTION] = rb;
+  set[RGW_ATTR_OBJECT_LEGAL_HOLD] = hb;
+  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
+			       rgw::sal::FLAG_LOG_OP), 0);
+
+  auto xattr = [&p](const char* n) {
+    char buf[256];
+    ssize_t len = ::getxattr(p.c_str(), n, buf, sizeof(buf));
+    return (len > 0) ? std::string(buf, len) : std::string{};
+  };
+  EXPECT_EQ(xattr("user.noobaa.legal_hold"), "OFF");
+  EXPECT_EQ(xattr("user.noobaa.retention_mode"), "GOVERNANCE");
+  EXPECT_EQ(xattr("user.noobaa.retention_date").substr(0, 10), "2031-06-15")
+      << "got " << xattr("user.noobaa.retention_date");
+
+  /* read back through the driver:  the round trip is what a
+   * converting bucket depends on */
+  auto rd = bucket->get_object(rgw_obj_key("mine.bin"));
+  ASSERT_EQ(rd->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(rd->get_obj_attrs(null_yield, env->dpp), 0);
+  auto i = rd->get_attrs().find(RGW_ATTR_OBJECT_RETENTION);
+  ASSERT_NE(i, rd->get_attrs().end());
+  RGWObjectRetention back;
+  auto bi = i->second.cbegin();
+  back.decode(bi);
+  EXPECT_EQ(back.get_mode(), "GOVERNANCE");
+  EXPECT_EQ(back.get_retain_until_date(), until);
+}
+
+/* The control:  a marked bucket keeps ours encoded. */
+TEST_F(NSFSBucketTest, ObjectLockInAMarkedBucketStaysEncoded)
+{
+  const sf::path p{bp / "root" / testname / "mine.bin"};
+  write_file(p, "bytes");
+
+  auto obj = bucket->get_object(rgw_obj_key("mine.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  RGWObjectLegalHold hold("ON");
+  Attrs set;
+  bufferlist hb;
+  hold.encode(hb);
+  set[RGW_ATTR_OBJECT_LEGAL_HOLD] = hb;
+  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &set, nullptr, null_yield,
+			       rgw::sal::FLAG_LOG_OP), 0);
+
+  char buf[8192];
+  ssize_t len = ::listxattr(p.c_str(), buf, sizeof(buf));
+  ASSERT_GT(len, 0);
+  std::set<std::string> names;
+  for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
+    names.insert(q);
+  }
+  EXPECT_FALSE(names.contains("user.noobaa.legal_hold"))
+      << "wrote their shape in a bucket of ours";
+  EXPECT_TRUE(names.contains("user.nsfs.rgw.object-legal-hold"));
 }
 
 /* Storage class:  a plain rename that was missed, and a bogus

@@ -149,6 +149,22 @@ inline constexpr uint32_t EXT_POSITIONAL  = 0x4;  /* positional IO layout --
  * be a value somebody can read back. */
 inline constexpr uint32_t EXT_RGW_META    = 0x8;
 
+/* WHAT EARNS A BIT.
+ *
+ * Not "a feature we implemented".  The two bits above it are the
+ * pattern:  EXT_SHADOW marks a STRUCTURE, a subtree that is in the
+ * tree or is not, and EXT_ACLS marks a fact NooBaa has no concept of
+ * -- they store no ACL, so ours is not their thing under another name,
+ * it is something extra.
+ *
+ * An attribute both formats keep, differing only in spelling or
+ * packing, needs no bit:  EXT_RGW_META already says which spelling
+ * this tree is in.  Object tags were mapped without one and object
+ * lock will be.  An earlier comment here expected them to "move into
+ * shared" by defining bits;  that was written when neither had any
+ * representation in this driver, and mapping them put them in shared
+ * on their own. */
+
 /* The bits this build can serve.  The refusal test, and the reason a
  * declared-but-unbuilt extension must stay out of it:  accepting a bit
  * we cannot honour is exactly the corruption the rule exists to
@@ -161,10 +177,11 @@ inline constexpr uint32_t EXTENSIONS_KNOWN =
  * base    -- no attribute at all.  Read and written as NooBaa does, and
  *            nothing of ours is added.  It is an absence and not a
  *            value, so it is the one profile with no mask.
- * shared  -- RGW's metadata representation on NooBaa's layout, and
- *            whatever features move in later;  the candidates are object
- *            tagging and object lock, and neither has landed.  It exists
- *            so that S5 has somewhere to put them that is not `strong`.
+ * shared  -- RGW's metadata representation on NooBaa's layout.  One
+ *            bit, and that is the whole of it:  an attribute whose
+ *            spelling differs is covered by EXT_RGW_META, so a feature
+ *            both formats have needs nothing added when it is mapped.
+ *            Object tags landed that way and so will object lock.
  * strong  -- everything this build can serve.  Not everything named:
  *            POSITIONAL is declared and unbuilt, so it is not here, and
  *            a bucket must never be marked with an extension the writer

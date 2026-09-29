@@ -18,6 +18,7 @@
 #include <sys/xattr.h>
 
 #include "common/errno.h"
+#include "rgw_object_lock.h"
 #include "rgw_tag.h"
 
 #include <cerrno>
@@ -243,6 +244,27 @@ int NooBaaXattrStrategy::object_owner(const Attrs& attrs,
  * platform. */
 static const std::string NB_TAG_PREFIX = "user.noobaa.tag.";
 
+/* The object-lock family:  three plain attributes of theirs against
+ * two ceph-encoded ones of ours (`namespace_fs.js:86-88`).  Legal
+ * hold is one-to-one and still needs the widened pair, because the
+ * shapes differ -- theirs is the literal `ON` or `OFF` and ours is an
+ * encoded RGWObjectLegalHold.  Retention is two-to-one. */
+static const std::string NB_LEGAL_HOLD = "user.noobaa.legal_hold";
+static const std::string NB_RETENTION_MODE = "user.noobaa.retention_mode";
+static const std::string NB_RETENTION_DATE = "user.noobaa.retention_date";
+
+/* one of their plain attributes, or nothing */
+static std::optional<std::string> nb_read(const DoutPrefixProvider* dpp,
+					  int fd, const std::string& name)
+{
+  char buf[512];
+  const ssize_t len = ::fgetxattr(fd, name.c_str(), buf, sizeof(buf));
+  if (len < 0) {
+    return std::nullopt;
+  }
+  return std::string(buf, len);
+}
+
 /* Is this on-disk name one of their tags?
  *
  * Their reader tests with String.includes() -- a SUBSTRING match, not
@@ -298,12 +320,55 @@ void NooBaaXattrStrategy::parse_disk_attrs(
     any = true;
   }
 
-  if (!any) {
-    return;
+  if (any) {
+    bufferlist bl;
+    tags.encode(bl);
+    out.emplace(RGW_ATTR_TAGS, std::move(bl));
   }
-  bufferlist bl;
-  tags.encode(bl);
-  out.emplace(RGW_ATTR_TAGS, std::move(bl));
+
+  /* The object-lock family.
+   *
+   * Retention is both attributes or neither, which is their rule too:
+   * their reader returns undefined unless mode AND date are present
+   * (`namespace_fs.js:2890`).  A half-written pair is not a retention
+   * with a missing field, it is no retention -- and a retention
+   * carrying the epoch because a date would not parse reads as
+   * expired, which is the one wrong answer object lock must never
+   * give. */
+  bool has_hold = false, has_mode = false, has_date = false;
+  for (const auto& disk : unclaimed) {
+    has_hold |= (disk == NB_LEGAL_HOLD);
+    has_mode |= (disk == NB_RETENTION_MODE);
+    has_date |= (disk == NB_RETENTION_DATE);
+  }
+
+  if (has_hold && !out.contains(RGW_ATTR_OBJECT_LEGAL_HOLD)) {
+    if (auto v = nb_read(dpp, fd, NB_LEGAL_HOLD)) {
+      RGWObjectLegalHold lh;
+      lh.set_status(*v);
+      bufferlist bl;
+      lh.encode(bl);
+      out.emplace(RGW_ATTR_OBJECT_LEGAL_HOLD, std::move(bl));
+    }
+  }
+
+  if (has_mode && has_date && !out.contains(RGW_ATTR_OBJECT_RETENTION)) {
+    auto mode = nb_read(dpp, fd, NB_RETENTION_MODE);
+    auto date = nb_read(dpp, fd, NB_RETENTION_DATE);
+    ceph::real_time until;
+    if (mode && date && (parse_time(date->c_str(), &until) == 0)) {
+      RGWObjectRetention r;
+      r.set_mode(*mode);
+      r.set_retain_until_date(until);
+      bufferlist bl;
+      r.encode(bl);
+      out.emplace(RGW_ATTR_OBJECT_RETENTION, std::move(bl));
+    } else if (mode && date) {
+      ldpp_dout(dpp, 0) << "ERROR: object carries a retention date this "
+	<< "gateway cannot parse (\"" << *date << "\");  reporting no "
+	<< "retention rather than one that reads as expired" << dendl;
+    }
+  }
 }
 
 bool NooBaaXattrStrategy::disk_attrs(const std::string& key,
@@ -312,6 +377,46 @@ bool NooBaaXattrStrategy::disk_attrs(const std::string& key,
 				     xattr_map_t& to_write,
 				     std::vector<std::string>& to_remove) const
 {
+  if (key == RGW_ATTR_OBJECT_LEGAL_HOLD) {
+    if (val.length() == 0) {
+      to_remove.push_back(NB_LEGAL_HOLD);
+      return true;
+    }
+    RGWObjectLegalHold lh;
+    try {
+      auto bufit = val.cbegin();
+      lh.decode(bufit);
+    } catch (buffer::error&) {
+      to_remove.push_back(NB_LEGAL_HOLD);
+      return true;
+    }
+    to_write.insert_or_assign(NB_LEGAL_HOLD, lh.get_status());
+    return true;
+  }
+
+  if (key == RGW_ATTR_OBJECT_RETENTION) {
+    /* both or neither, the way their reader takes it */
+    if (val.length() == 0) {
+      to_remove.push_back(NB_RETENTION_MODE);
+      to_remove.push_back(NB_RETENTION_DATE);
+      return true;
+    }
+    RGWObjectRetention r;
+    try {
+      auto bufit = val.cbegin();
+      r.decode(bufit);
+    } catch (buffer::error&) {
+      to_remove.push_back(NB_RETENTION_MODE);
+      to_remove.push_back(NB_RETENTION_DATE);
+      return true;
+    }
+    std::string iso;
+    rgw_to_iso8601(r.get_retain_until_date(), &iso);
+    to_write.insert_or_assign(NB_RETENTION_MODE, r.get_mode());
+    to_write.insert_or_assign(NB_RETENTION_DATE, iso);
+    return true;
+  }
+
   if (key != RGW_ATTR_TAGS) {
     return false;
   }
