@@ -47,76 +47,95 @@ private:
   /**
    * @verbatim
    *
-   * <start>
-   *    |
-   *    v
-   * GET_MIRROR_GROUP
-   *    |
-   *    v
-   * CHECK_GROUP_PRIMARY_STATE
-   *    |
-   *    v
-   * REMOVE_RESYNC_KEY
-   *    |
-   *    v
-   * PREPARE_GROUP_IMAGES
-   *    |
-   *    v         (if force promote else skip)
-   * CHECK_ROLL_BACK_NEEDED
-   *    |
-   *    v          (regular group promote)
-   * PREPARE_GROUP_PROMOTION--------------------------->|
-   *    |                                               |
-   *    v (incomplete)                                  |
-   * CREATE_GROUP_ORPHAN_SNAPSHOT                       |
-   *    |                                               |
-   *    v                                               |
-   * CREATE_IMAGES_ORPHAN_SNAPSHOTS                     |
-   *    |                                               |
-   *    v                                               |
-   * MARK_GROUP_ORPHAN_SNAPSHOT_COMPLETE                |
-   *    |                                               |
-   *    v                                               |
-   * DRAIN_IMAGES_WATCHERS                              |
-   *    |                                               |
-   *    v                       (no rollback needed)    |
-   * ACQUIRE_EXCLUSIVE_LOCKS ---------------------------|
-   *    |                                               |
-   *    v  (skip if not needed)                         |
-   * REMOVE_IMAGES_FROM_GROUP                           |
-   *    |                                               |
-   *    v                                               |
-   * ROLLBACK                                           |
-   *    |                                               |
-   *    v  (incomplete)                                 |
-   * CREATE_PRIMARY_GROUP_SNAPSHOT <--------------------|
-   *    |
-   *    v  (skip if group is empty)    (on error)
-   * CREATE_IMAGES_PRIMARY_SNAPSHOTS -----------------------------\
-   *    |                                                         |
-   *    v  (skip if group is empty)    (on error)                 |
-   * DISABLE_NON_PRIMARY_FEATURES -----------------------\        |
-   *    |                                                |        |
-   *    v  (complete)                  (on error)        |        |
-   * UPDATE_PRIMARY_GROUP_SNAPSHOT ----------------------|        |
-   *    |                                                |        |
-   *    v                                                v        |
-   * GROUP_UNLINK_PEER               ENABLE_NON_PRIMARY_FEATURES  |
-   *    |                                                |        |
-   *    v  (skip if not required)                        |        |
-   * DISABLE_REMOVED_IMAGES                              |        |
-   *    |                                                |        |
-   *    v  (skip if not required)                        |        |
-   * REMOVE_NON_MEMBER_IMAGES                            |        |
-   *    |                                                |        |
-   *    v  (skip if not needed)                          v        v
-   * RELEASE_EXCLUSIVE_LOCKS <-------------REMOVE_PRIMARY_GROUP_SNAPSHOT
-   *    |
-   *    v
-   * CLOSE_IMAGES
-   *    |
-   *    v
-   * <finish>
+   *             <start>
+   *                |
+   *                v
+   *         GET_MIRROR_GROUP
+   *                |
+   *                v
+   *      CHECK_GROUP_PRIMARY_STATE
+   *                |
+   *                v
+   *         REMOVE_RESYNC_KEY
+   *                |
+   *                v
+   *      PREPARE_GROUP_IMAGES <---------------------------+
+   *                |                                      |
+   *                v                                      |
+   *      CHECK_ROLLBACK_NEEDED                            |
+   *                |                                      |
+   *                | force, membership not reconciled     |
+   *                +--> RECONCILE_ROLLBACK_MEMBERSHIP     |
+   *                |                |                     |
+   *                +<-- no changes -+                     |
+   *                |                | changes             |
+   *                |                v                     |
+   *                |       CONVERT_MEMBER_IMAGES          |
+   *                |                |                     |
+   *                |                v                     |
+   *                |       NOTIFY_GROUP_MEMBERSHIPS       |
+   *                |                |                     |
+   *                |                v                     |
+   *                |       REFRESH_GROUP_IMAGES ----------+
+   *                |
+   *                | regular, or membership reconciled
+   *                v
+   *        PREPARE_GROUP_PROMOTION
+   *                |
+   *                | orphan not required
+   *                +--------------------------------------+
+   *                |                                      |
+   *                | orphan required                      |
+   *                v                                      |
+   *      CREATE_GROUP_ORPHAN_SNAPSHOT                     |
+   *                |                                      |
+   *                v                                      |
+   *     CREATE_IMAGES_ORPHAN_SNAPSHOTS                    |
+   *                |                                      |
+   *                v                                      |
+   *   MARK_GROUP_ORPHAN_SNAPSHOT_COMPLETE                 |
+   *                |                                      |
+   *                v                                      |
+   *         DRAIN_IMAGES_WATCHERS                         |
+   *                |                                      |
+   *                v                                      |
+   *        ACQUIRE_EXCLUSIVE_LOCKS                        |
+   *                |                                      |
+   *                v                                      |
+   *       ROLLBACK (skip if not needed)                   |
+   *                |                                      |
+   *                v                                      |
+   *      CREATE_PRIMARY_GROUP_SNAPSHOT <------------------+
+   *                |
+   *                v
+   *    CREATE_IMAGES_PRIMARY_SNAPSHOTS (skip if group is empty)
+   *                |
+   *                v
+   *     DISABLE_NON_PRIMARY_FEATURES (skip if group is empty)
+   *                |
+   *                v
+   *      UPDATE_PRIMARY_GROUP_SNAPSHOT
+   *                |
+   *                v
+   *           GROUP_UNLINK_PEER
+   *                |
+   *                v
+   *      CLOSE_REMOVED_IMAGES (skip if none)
+   *                |
+   *                v
+   *       RELEASE_EXCLUSIVE_LOCKS
+   *                |
+   *                v
+   *            CLOSE_IMAGES
+   *                |
+   *                v
+   *             <finish>
+   *
+   * Errors before images are prepared go directly to <finish>. Later errors
+   * before lock acquisition follow CLOSE_IMAGES -> <finish>. Errors after
+   * lock acquisition follow RELEASE_EXCLUSIVE_LOCKS -> CLOSE_IMAGES ->
+   * <finish>. If primary snapshot creation changed image features, cleanup
+   * first runs ENABLE_NON_PRIMARY_FEATURES and REMOVE_PRIMARY_GROUP_SNAPSHOT.
    *
    * @endverbatim
    */
@@ -138,19 +157,22 @@ private:
   std::vector<cls::rbd::GroupImageStatus> m_images;
   std::vector<ImageCtxT *> m_image_ctxs;
   std::vector<ImageCtxT *> m_image_ctxs_old_membership;
-  std::vector<librados::IoCtx> m_remove_ioctxs;
+  std::vector<ImageCtxT *> m_unlink_image_ctxs;
   ceph::bufferlist m_out_bl;
   cls::rbd::GroupImageSpec m_start_after;
   bool m_excl_locks_acquire = false;
 
   int m_ret_val = 0;
   bool m_need_rollback = false;
+  bool m_membership_reconciled = false;
   std::vector<uint64_t> m_rollback_snap_ids;
   cls::rbd::GroupSnapshot m_rollback_group_snap;
   cls::rbd::GroupSnapshot m_orphan_group_snap;
   cls::rbd::GroupSnapshot m_group_snap;
 
   std::vector<cls::rbd::MirrorImage> m_mirror_images;
+  std::vector<std::string> m_added_global_image_ids;
+  std::vector<std::string> m_removed_global_image_ids;
   std::vector<uint64_t> m_snap_ids;
   std::vector<uint64_t> m_orphan_snap_ids;
   std::vector<std::string> m_global_image_ids;
@@ -170,6 +192,17 @@ private:
   void handle_prepare_group_images(int r);
 
   void check_rollback_needed();
+
+  void reconcile_rollback_membership();
+  void handle_reconcile_rollback_membership(int r);
+  void convert_added_images();
+  void handle_convert_added_images(int r);
+  void convert_removed_images();
+  void handle_convert_removed_images(int r);
+  void notify_group_memberships_updated();
+  void handle_notify_group_memberships_updated(int r);
+  void refresh_group_images();
+  void handle_refresh_group_images(int r);
 
   void prepare_group_promotion();
 
@@ -191,9 +224,6 @@ private:
   void acquire_exclusive_locks();
   void handle_acquire_exclusive_locks(int r);
 
-  void remove_images_from_group();
-  void handle_remove_images_from_group(int r);
-
   void rollback();
   void handle_rollback(int r);
 
@@ -212,11 +242,8 @@ private:
   void group_unlink_peer();
   void handle_group_unlink_peer(int r);
 
-  void disable_removed_images();
-  void handle_disable_removed_images(int r);
-
-  void remove_non_member_images();
-  void handle_remove_non_member_images(int r);
+  void close_removed_images();
+  void handle_close_removed_images(int r);
 
   void release_exclusive_locks();
   void handle_release_exclusive_locks(int r);

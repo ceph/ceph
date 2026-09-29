@@ -5,7 +5,9 @@
 #include "test/librbd/test_support.h"
 #include "include/rbd/librbd.h"
 #include "include/rbd/librbd.hpp"
+#include "cls/rbd/cls_rbd_client.h"
 #include "librbd/api/Group.h"
+#include "librbd/group/AddImageRequest.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 
@@ -19,7 +21,8 @@ void register_test_groups() {
 }
 
 class TestGroup : public TestFixture {
-
+protected:
+  void check_force_promote_members(bool add_extra_member);
 };
 
 TEST_F(TestGroup, group_create)
@@ -996,6 +999,158 @@ TEST_F(TestGroup, mirrorAddSecondaryImageToPrimaryGroupPP) {
   image.close();
   ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, group_name, false));
   ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group_name));
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
+}
+
+void TestGroup::check_force_promote_members(bool add_extra_member) {
+  REQUIRE_FORMAT_V2();
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+  std::string peer_uuid;
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_add(
+    m_ioctx, &peer_uuid, RBD_MIRROR_PEER_DIRECTION_RX_TX, "cluster", "client"));
+
+  const char* group_name = "force_promote_members";
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, group_name));
+  ASSERT_EQ(0, m_rbd.group_image_add(
+    m_ioctx, group_name, m_ioctx, m_image_name.c_str()));
+  ASSERT_EQ(0, m_rbd.mirror_group_enable(
+    m_ioctx, group_name, RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+  ASSERT_EQ(0, m_rbd.mirror_group_demote(m_ioctx, group_name));
+
+  librbd::Image image;
+  ASSERT_EQ(0, m_rbd.open(m_ioctx, image, m_image_name.c_str()));
+  std::string image_id;
+  ASSERT_EQ(0, image.get_id(&image_id));
+  cls::rbd::MirrorImage mirror_image;
+  ASSERT_EQ(0, librbd::cls_client::mirror_image_get(
+    &m_ioctx, image_id, &mirror_image));
+  const auto global_image_id = mirror_image.global_image_id;
+  // An image replayed standalone can join the secondary's live membership
+  // before its mirror type changes to GROUP.
+  mirror_image.type = cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE;
+  ASSERT_EQ(0, librbd::cls_client::mirror_image_set(
+    &m_ioctx, image_id, mirror_image));
+
+  std::string extra_image_id;
+  const auto extra_image_name = m_image_name + "_extra";
+  if (add_extra_member) {
+    ASSERT_EQ(0, create_image_pp(
+      m_rbd, m_ioctx, extra_image_name.c_str(), m_image_size));
+    librbd::Image extra_image;
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, extra_image,
+                            extra_image_name.c_str()));
+    ASSERT_EQ(0, extra_image.mirror_image_enable2(
+      RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+    ASSERT_EQ(0, extra_image.mirror_image_demote());
+    ASSERT_EQ(0, extra_image.get_id(&extra_image_id));
+    std::string group_id;
+    ASSERT_EQ(0, m_rbd.group_get_id(m_ioctx, group_name, &group_id));
+    // Bootstrap updates live membership before saving the next snapshot.
+    C_SaferCond cond;
+    auto req = librbd::group::AddImageRequest<>::create(
+      m_ioctx, group_id, m_ioctx, extra_image_id, &cond);
+    req->send();
+    ASSERT_EQ(0, cond.wait());
+  }
+
+  ASSERT_EQ(0, m_rbd.mirror_group_promote(m_ioctx, group_name, true));
+  std::vector<librbd::group_image_info_t> members;
+  ASSERT_EQ(0, m_rbd.group_image_list(m_ioctx, group_name, &members,
+                                      sizeof(members[0])));
+  ASSERT_EQ(1U, members.size());
+  ASSERT_EQ(m_image_name, members[0].name);
+  ASSERT_EQ(0, librbd::cls_client::mirror_image_get(
+    &m_ioctx, image_id, &mirror_image));
+  ASSERT_EQ(cls::rbd::MIRROR_IMAGE_TYPE_GROUP, mirror_image.type);
+  ASSERT_EQ(global_image_id, mirror_image.global_image_id);
+  if (add_extra_member) {
+    ASSERT_EQ(0, librbd::cls_client::mirror_image_get(
+      &m_ioctx, extra_image_id, &mirror_image));
+    ASSERT_EQ(cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE, mirror_image.type);
+  }
+
+  ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, group_name, false));
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group_name));
+  if (add_extra_member) {
+    librbd::Image extra_image;
+    ASSERT_EQ(0, m_rbd.open(m_ioctx, extra_image,
+                            extra_image_name.c_str()));
+    ASSERT_EQ(0, extra_image.mirror_image_disable(true));
+    ASSERT_EQ(0, extra_image.close());
+    ASSERT_EQ(0, m_rbd.remove(m_ioctx, extra_image_name.c_str()));
+  }
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
+}
+
+// Test sequence:
+// 1. Demote a mirrored group and leave its member with standalone mirror type.
+// 2. Force-promote it without any incomplete group snapshot.
+// Expected: The saved member regains GROUP type and keeps its global image ID.
+TEST_F(TestGroup, mirrorForcePromoteRepairsMemberTypePP) {
+  check_force_promote_members(false);
+}
+
+// Test sequence:
+// 1. Demote a mirrored group and leave its member with standalone mirror type.
+// 2. Add another live member without a new group snapshot, then force-promote.
+// Expected: Promotion restores the saved membership and GROUP mirror type,
+//   keeps the global image ID, and leaves the excluded image standalone.
+TEST_F(TestGroup, mirrorForcePromoteReconcilesMembersPP) {
+  check_force_promote_members(true);
+}
+
+
+// Test sequence:
+// 1. Create grp1 with two images and a user group snapshot.
+// 2. Move one image to non-mirrored grp2 and create grp2's own user snapshot.
+// 3. Try enabling mirroring on both groups while grp1's snapshot remains.
+// 4. Remove grp1's snapshot and retry enabling mirroring on both groups.
+// Expected: The move succeeds. Both enables return -EINVAL until grp1's
+//   snapshot is removed. A group's own user snapshots do not block enable.
+TEST_F(TestGroup, mirrorGroupEnableRejectsForeignUserGroupSnapshotsPP) {
+  REQUIRE_FORMAT_V2();
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+  std::string peer_uuid;
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_add(
+    m_ioctx, &peer_uuid, RBD_MIRROR_PEER_DIRECTION_RX_TX, "cluster", "client"));
+
+  const char* source = "grp1";
+  const char* target = "grp2";
+  const auto moved_image_name = m_image_name + "_moved";
+  ASSERT_EQ(0, create_image_pp(
+    m_rbd, m_ioctx, moved_image_name.c_str(), m_image_size));
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, source));
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, target));
+  ASSERT_EQ(0, m_rbd.group_image_add(
+    m_ioctx, source, m_ioctx, m_image_name.c_str()));
+  ASSERT_EQ(0, m_rbd.group_image_add(
+    m_ioctx, source, m_ioctx, moved_image_name.c_str()));
+  ASSERT_EQ(0, m_rbd.group_snap_create(m_ioctx, source, "snap1"));
+  ASSERT_EQ(0, m_rbd.group_image_remove(
+    m_ioctx, source, m_ioctx, moved_image_name.c_str()));
+  ASSERT_EQ(0, m_rbd.group_image_add(
+    m_ioctx, target, m_ioctx, moved_image_name.c_str()));
+  ASSERT_EQ(0, m_rbd.group_snap_create(m_ioctx, target, "snap2"));
+
+  ASSERT_EQ(-EINVAL, m_rbd.mirror_group_enable(
+    m_ioctx, source, RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+  ASSERT_EQ(-EINVAL, m_rbd.mirror_group_enable(
+    m_ioctx, target, RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+
+  ASSERT_EQ(0, m_rbd.group_snap_remove(m_ioctx, source, "snap1"));
+  ASSERT_EQ(0, m_rbd.mirror_group_enable(
+    m_ioctx, source, RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+  ASSERT_EQ(0, m_rbd.mirror_group_enable(
+    m_ioctx, target, RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+
+  ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, target, false));
+  ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, source, false));
+  ASSERT_EQ(0, m_rbd.group_snap_remove(m_ioctx, target, "snap2"));
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, target));
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, source));
+  ASSERT_EQ(0, m_rbd.remove(m_ioctx, moved_image_name.c_str()));
   ASSERT_EQ(0, m_rbd.mirror_peer_site_remove(m_ioctx, peer_uuid));
 }
 
