@@ -80,6 +80,7 @@ set(librbd_internal_srcs
   exclusive_lock/StandardPolicy.cc
   group/ListSnapshotsRequest.cc
   group/AddImageRequest.cc
+  group/MutationLock.cc
   group/RemoveImageRequest.cc
   image/AttachChildRequest.cc
   image/AttachParentRequest.cc

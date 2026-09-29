@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/group/AddImageRequest.h"
+#include "librbd/group/MutationLock.h"
 #include "include/ceph_assert.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -21,7 +22,19 @@ using util::create_rados_callback;
 
 template <typename I>
 void AddImageRequest<I>::send() {
-  pre_link();
+  if (!m_non_primary_only) {
+    pre_link();
+    return;
+  }
+  execute_mutation(m_group_io_ctx, m_group_id, true, false,
+    [this](int r, Context* on_finish) {
+      m_on_finish = on_finish;
+      if (r < 0) {
+        finish(r);
+      } else {
+        pre_link();
+      }
+    }, m_on_finish);
 }
 
 template <typename I>

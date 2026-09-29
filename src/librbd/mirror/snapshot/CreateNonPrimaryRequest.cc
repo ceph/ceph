@@ -32,9 +32,10 @@ CreateNonPrimaryRequest<I>::CreateNonPrimaryRequest(
     I* image_ctx, bool demoted, const std::string group_snap_id,
     const std::string &primary_mirror_uuid,
     uint64_t primary_snap_id, const SnapSeqs& snap_seqs,
-    const ImageState &image_state, uint64_t *snap_id, Context *on_finish)
+    const ImageState &image_state, uint64_t *snap_id, Context *on_finish,
+    const cls::rbd::GroupSpec &group_spec)
   : m_image_ctx(image_ctx), m_demoted(demoted), m_group_snap_id(group_snap_id),
-    m_primary_mirror_uuid(primary_mirror_uuid),
+    m_group_spec(group_spec), m_primary_mirror_uuid(primary_mirror_uuid),
     m_primary_snap_id(primary_snap_id), m_snap_seqs(snap_seqs),
     m_image_state(image_state), m_snap_id(snap_id), m_on_finish(on_finish) {
   m_default_ns_ctx.dup(m_image_ctx->md_ctx);
@@ -124,8 +125,9 @@ void CreateNonPrimaryRequest<I>::handle_get_mirror_image(int r) {
   std::stringstream ss;
   ss << ".mirror.non_primary." << mirror_image.global_image_id << ".";
   if (!m_group_snap_id.empty()) {
-    ss << m_image_ctx->group_spec.pool_id << "_"
-       << m_image_ctx->group_spec.group_id << "_"
+    const auto &group_spec =
+      (m_group_spec.is_valid() ? m_group_spec : m_image_ctx->group_spec);
+    ss << group_spec.pool_id << "_" << group_spec.group_id << "_"
        << m_group_snap_id;
   } else {
     uuid_d uuid_gen;
@@ -199,7 +201,8 @@ void CreateNonPrimaryRequest<I>::create_snapshot() {
     ns.mirror_peer_uuids = m_mirror_peer_uuids;
   }
   if (!m_group_snap_id.empty()) {
-    ns.group_spec = m_image_ctx->group_spec;
+    ns.group_spec = (m_group_spec.is_valid() ? m_group_spec
+                                             : m_image_ctx->group_spec);
     ns.group_snap_id = m_group_snap_id;
   }
   ns.snap_seqs = m_snap_seqs;

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/group/RemoveImageRequest.h"
+#include "librbd/group/MutationLock.h"
 #include "include/ceph_assert.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -21,7 +22,19 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void RemoveImageRequest<I>::send() {
-  pre_unlink();
+  if (!m_non_primary_only) {
+    pre_unlink();
+    return;
+  }
+  execute_mutation(m_group_io_ctx, m_group_id, true, false,
+    [this](int r, Context* on_finish) {
+      m_on_finish = on_finish;
+      if (r < 0) {
+        finish(r);
+      } else {
+        pre_unlink();
+      }
+    }, m_on_finish);
 }
 
 template <typename I>
@@ -77,7 +90,7 @@ void RemoveImageRequest<I>::handle_remove_group(int r) {
   CephContext *cct = (CephContext *)m_image_io_ctx.cct();
   ldout(cct, 10) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to remove image group: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     // pre_unlink already marked the group entry INCOMPLETE. Restore it.
@@ -85,6 +98,8 @@ void RemoveImageRequest<I>::handle_remove_group(int r) {
     return;
   }
 
+  // The image or its group reference may already be gone. Still remove the
+  // membership entry from the group header.
   post_unlink();
 }
 

@@ -29,6 +29,8 @@ add_executable(unittest_rbd_mirror
   test_mock_PoolReplayer.cc
   test_mock_PoolWatcher.cc
   test_mock_Throttler.cc
+  group_replayer/test_mock_RemoveImageSnapshotRequest.cc
+  group_replayer/test_Replayer.cc
   image_deleter/test_mock_SnapshotPurgeRequest.cc
   image_deleter/test_mock_TrashMoveRequest.cc
   image_deleter/test_mock_TrashRemoveRequest.cc

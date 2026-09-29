@@ -25,6 +25,7 @@ GroupStateBuilder<I>::GroupStateBuilder(const std::string& global_group_id)
 template <typename I>
 GroupStateBuilder<I>::~GroupStateBuilder() {
   local_images.clear();
+  local_images_without_mirror_metadata.clear();
   remote_images.clear();
 }
 

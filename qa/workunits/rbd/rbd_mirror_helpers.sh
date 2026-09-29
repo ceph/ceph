@@ -2446,6 +2446,29 @@ group_image_add()
     run_cmd "rbd --cluster ${cluster} group image add ${group_spec} ${image_spec}"
 }
 
+wait_for_group_image_add()
+{
+    local cluster=$1
+    local group_spec=$2
+    local image_spec=$3
+    local delay
+
+    for delay in 0.1 0.2 0.4 0.8 1 1 2 2 4 4 8 8 16 16 32 32; do
+        if try_cmd "rbd --cluster ${cluster} group image add ${group_spec} ${image_spec}"; then
+            return 0
+        fi
+        if ! grep -q "cannot attach image while group snapshots remain" "${CMD_STDERR}"; then
+            cat "${CMD_STDERR}" >&2
+            fail "unexpected failure attaching ${image_spec} to ${group_spec}"
+            return 1
+        fi
+        sleep "${delay}"
+    done
+
+    fail "group snapshots still prevent attaching ${image_spec} to ${group_spec}"
+    return 1
+}
+
 group_images_add()
 {
     local cluster=$1

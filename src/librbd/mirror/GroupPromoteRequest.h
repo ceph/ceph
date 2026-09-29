@@ -50,6 +50,9 @@ private:
    *             <start>
    *                |
    *                v
+   *        ACQUIRE_GROUP_LOCK
+   *                |
+   *                v
    *         GET_MIRROR_GROUP
    *                |
    *                v
@@ -129,6 +132,9 @@ private:
    *            CLOSE_IMAGES
    *                |
    *                v
+   *         RELEASE_GROUP_LOCK
+   *                |
+   *                v
    *             <finish>
    *
    * Errors before images are prepared go directly to <finish>. Later errors
@@ -136,6 +142,7 @@ private:
    * lock acquisition follow RELEASE_EXCLUSIVE_LOCKS -> CLOSE_IMAGES ->
    * <finish>. If primary snapshot creation changed image features, cleanup
    * first runs ENABLE_NON_PRIMARY_FEATURES and REMOVE_PRIMARY_GROUP_SNAPSHOT.
+   * Completion releases the group lock on both success and failure.
    *
    * @endverbatim
    */
