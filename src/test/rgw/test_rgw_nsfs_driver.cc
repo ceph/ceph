@@ -2979,6 +2979,124 @@ TEST_F(NSFSStridedWritebackBucketTest, StrideSurvivesWriteback)
   EXPECT_EQ(read_all(bp / "root" / testname / objname), expected);
 }
 
+/* A bucket in NooBaa's format, served by the driver.
+ *
+ * The bucket is created marked -- every bucket this gateway makes is
+ * -- and then reduced to base while it is still empty, which is the
+ * only transition the profile rules allow into their format.  From
+ * there every strategy the bucket uses is theirs. */
+class NSFSNooBaaBucketTest : public NSFSBucketTest {
+public:
+  void SetUp() override {
+    NSFSBucketTest::SetUp();
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+    ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+    ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_BASE), 0);
+    ASSERT_STREQ(b->profile_name(), "base");
+    ASSERT_STREQ(b->get_format()->name(), "noobaa");
+  }
+
+  sf::path bucket_path() const { return bp / "root" / testname; }
+};
+
+/* An upload NooBaa started, enumerated by us.
+ *
+ * The tree is written by hand in their shape -- not through their
+ * strategy -- so agreement between the two is a comparison rather
+ * than a tautology.  This is the S5 gate for the multipart step:  a
+ * tree in their shape which nsfs then reads correctly. */
+TEST_F(NSFSNooBaaBucketTest, ListsAnUploadTheyStarted)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  std::string marker;
+  bool truncated = false;
+  ASSERT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
+				    nullptr, &truncated, null_yield), 0);
+
+  ASSERT_EQ(uploads.size(), 1u);
+  EXPECT_EQ(uploads[0]->get_key(), tree.key);
+  EXPECT_EQ(uploads[0]->get_upload_id(), tree.upload_id);
+  EXPECT_FALSE(truncated);
+}
+
+/* A bucket of theirs which has never taken an upload has no
+ * multipart-uploads/ directory, and that is an empty listing rather
+ * than an error. */
+TEST_F(NSFSNooBaaBucketTest, ListsNothingBeforeAnyUpload)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
+
+  std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  std::string marker;
+  bool truncated = false;
+  EXPECT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
+				    nullptr, &truncated, null_yield), 0);
+  EXPECT_TRUE(uploads.empty());
+  EXPECT_FALSE(truncated);
+}
+
+/* Their parts, read through their record:  size and offset from
+ * user.noobaa.part_size and part_offset, and an etag derived from the
+ * stat because the fixture computed no digest -- which is what their
+ * own _get_etag() falls back to. */
+TEST_F(NSFSNooBaaBucketTest, ListsThePartsOfTheirUpload)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0);
+
+  const auto& parts = upload->get_parts();
+  ASSERT_EQ(parts.size(), tree.parts);
+  for (uint32_t k = 1; k <= tree.parts; ++k) {
+    auto it = parts.find(k);
+    ASSERT_NE(it, parts.end()) << k;
+    EXPECT_EQ(it->second->get_size(), tree.part_size) << k;
+    EXPECT_FALSE(it->second->get_etag().empty()) << k;
+  }
+}
+
+/* And completing one.  The object is assembled from their staging and
+ * written in their format, which is what makes this a round trip
+ * rather than a read. */
+TEST_F(NSFSNooBaaBucketTest, CompletesAnUploadTheyStarted)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0);
+
+  /* complete with the etags the listing reported, as a client would */
+  std::map<int, std::string> part_etags;
+  for (auto& [num, part] : upload->get_parts()) {
+    part_etags[num] = part->get_etag();
+  }
+  ASSERT_EQ(part_etags.size(), tree.parts);
+
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, tree.key,
+			part_etags), 0);
+
+  const sf::path obj{bucket_path() / tree.key};
+  ASSERT_TRUE(sf::is_regular_file(obj)) << obj;
+  EXPECT_EQ(read_all(obj), tree.payload);
+}
+
 int main(int argc, char *argv[]) {
   auto args = argv_to_vec(argc, argv);
   env_to_vec(args);

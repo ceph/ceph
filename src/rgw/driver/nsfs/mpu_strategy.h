@@ -24,6 +24,7 @@
 #include <sys/types.h>
 
 #include "rgw_sal_fwd.h"
+#include "rgw_acl.h"
 
 #include "part_info.h"
 #include "fs_strategy.h"
@@ -122,6 +123,21 @@ public:
   virtual bool staged_upload(const DoutPrefixProvider* dpp, int root_fd,
 			     std::string_view dname,
 			     StagedUpload& out) const = 0;
+
+  /* Who owns this upload, where the format can say.
+   *
+   * Asked only for the uploads a listing returns, not for every entry
+   * examined -- it is a read, and S3 wants an owner in the response.
+   *
+   * False means the format keeps the answer with the upload's own
+   * record, and the caller reads that as it always has.  Ours does.
+   * NooBaa records no owner anywhere, so the staging directory's uid
+   * is the answer, as it is for an object;  answering here is what
+   * stops their uploads being dropped for want of a record of ours. */
+  virtual bool upload_owner(const DoutPrefixProvider* dpp, int root_fd,
+			    std::string_view dname, ACLOwner& out) const {
+    return false;
+  }
 
   /* The directory holding staging directories, relative to the bucket.
    *
@@ -380,6 +396,8 @@ public:
   bool part_record(const DoutPrefixProvider* dpp, int dir_fd,
 		   std::string_view pname, const Attrs& attrs,
 		   PartRecord& out) const override;
+  bool upload_owner(const DoutPrefixProvider* dpp, int root_fd,
+		    std::string_view dname, ACLOwner& out) const override;
   std::optional<std::string> staging_root(const DoutPrefixProvider* dpp,
 					  int bucket_fd) const override;
 

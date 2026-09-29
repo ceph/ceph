@@ -5309,6 +5309,13 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
    * CreateMultipartUpload, and ours is the bucket directory, which
    * always exists. */
   auto* mpu = mpu_strategy();
+  /* the fd, before anything asks the format about it:  for_each()
+   * opens the directory itself, and staging_root() is now asked
+   * first */
+  int oret = dir->open(dpp);
+  if (oret < 0) {
+    return oret;
+  }
   auto root = mpu->staging_root(dpp, dir->get_fd());
   if (!root) {
     if (is_truncated) {
@@ -5382,14 +5389,24 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
 	      STATX_MTIME, &stx) < 0) {
       continue;
     }
+    /* S3 reports an owner, so one has to be found -- and where it
+     * lives is the format's business.  Ours keeps it with the
+     * upload's own record, which get_info() reads;  NooBaa keeps none
+     * anywhere, and answers from the staging directory's uid.  This
+     * is a read per upload RETURNED, not per entry examined. */
     ACLOwner owner;
+    const bool from_format =
+	mpu->upload_owner(dpp, scan->get_fd(), ent.dname, owner);
+
     auto upload = std::make_unique<NSFSMultipartUpload>(
 	driver, this, ent.key, ent.upload_id, owner,
 	from_statx_timestamp(stx.stx_mtime));
-    /* the owner the response reports lives in the upload's metadata */
-    rgw_placement_rule* rule{nullptr};
-    if (upload->get_info(dpp, y, &rule, nullptr) < 0) {
-      continue;
+
+    if (!from_format) {
+      rgw_placement_rule* rule{nullptr};
+      if (upload->get_info(dpp, y, &rule, nullptr) < 0) {
+	continue;
+      }
     }
     uploads.emplace_back(std::move(upload));
   }

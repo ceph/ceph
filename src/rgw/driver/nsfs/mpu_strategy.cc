@@ -741,6 +741,26 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
   return true;
 }
 
+/* The staging directory's uid.  They record no owner with an upload --
+ * create_object_upload is a dump of the request parameters and carries
+ * none -- and the directory was created under the account's identity,
+ * which is the same answer their object ownership gives. */
+bool NooBaaMPUStrategy::upload_owner(const DoutPrefixProvider* dpp,
+				     int root_fd, std::string_view dname,
+				     ACLOwner& out) const
+{
+  struct statx stx;
+  if (statx(root_fd, std::string(dname).c_str(), AT_SYMLINK_NOFOLLOW,
+	    STATX_UID, &stx) < 0) {
+    return false;
+  }
+  if (!(stx.stx_mask & STATX_UID)) {
+    return false;
+  }
+  out.id = rgw_user(std::to_string(stx.stx_uid));
+  return true;
+}
+
 const ReservedNames& NooBaaMPUStrategy::reserved_names() const
 {
   static const ReservedNames names{
