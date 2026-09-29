@@ -666,11 +666,14 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
     group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
   request->send();
   r = ctx.wait();
+  bool mirror_group_enabled = false;
   if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
     lderr(cct) << "failed to get mirror group info: "
                << cpp_strerror(r) << dendl;
     return r;
   } else if (r == 0) {
+    mirror_group_enabled = mirror_group.state ==
+                           cls::rbd::MIRROR_GROUP_STATE_ENABLED;
     if (promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
       lderr(cct) << "group is not primary, cannot add image" << dendl;
       return -EINVAL;
@@ -691,17 +694,31 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   }
 
   cls::rbd::MirrorImage mirror_image;
+  bool mirror_image_exists = false;
+
   r = cls_client::mirror_image_get(&image_ioctx, image_id, &mirror_image);
-  if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
-    lderr(cct) << "failed to retrieve mirroring state of image: " << cpp_strerror(r)
-               << dendl;
+  if (r == 0) {
+    mirror_image_exists = true;
+  } else if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve mirroring state of image: "
+               << cpp_strerror(r) << dendl;
     return r;
-  } else if (r == 0 &&
-             mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_DISABLED) {
-    lderr(cct) << "cannot add mirror enabled image to group" << dendl;
+  }
+
+  if (!mirror_group_enabled && mirror_image_exists &&
+      mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_DISABLED) {
+    lderr(cct) << "cannot add mirror-enabled image to non-mirrored group"
+               << dendl;
     return -EINVAL;
   }
 
+  if (mirror_group_enabled &&
+      (!mirror_image_exists ||
+       mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED)) {
+    lderr(cct) << "cannot add a mirror-disabled image to a group that is "
+               << "enabled for mirroring" << dendl;
+    return -EINVAL;
+  }
   string image_header_oid = librbd::util::header_name(image_id);
 
   ldout(cct, 20) << "adding image " << image_name
@@ -732,20 +749,20 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   }
   ImageWatcher<>::notify_header_update(image_ioctx, image_header_oid);
 
-  r = Mirror<I>::group_image_add(group_ioctx, group_id, image_ioctx, image_id);
+  r = cls_client::group_image_set(&group_ioctx, group_header_oid, attached_st);
   if (r < 0) {
-    lderr(cct) << "error adding image to mirror group: "
-               << cpp_strerror(r) << dendl;
-    // Mirror layer is responsible for its own cleanup, only metadata
-    // references are cleaned up here.
+    lderr(cct) << "error updating image reference to group: " << cpp_strerror(r)
+               << dendl;
     goto cleanup_image_group_ref;
   }
 
-  r = cls_client::group_image_set(&group_ioctx, group_header_oid,
-				  attached_st);
+  r = Mirror<I>::group_image_add(group_ioctx, group_id, image_ioctx, image_id,
+                                 mirror_image);
   if (r < 0) {
-    lderr(cct) << "error updating image reference to group: "
-	       << cpp_strerror(r) << dendl;
+    lderr(cct) << "error adding image to mirror group: " << cpp_strerror(r)
+               << dendl;
+    // Mirror layer is responsible for its own cleanup, only metadata
+    // references are cleaned up here.
     goto cleanup_image_group_ref;
   }
 

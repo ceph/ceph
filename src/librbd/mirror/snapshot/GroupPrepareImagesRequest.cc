@@ -163,7 +163,7 @@ void GroupPrepareImagesRequest<I>::handle_list_group_images(int r) {
     finish(0);
     return;
   }
-  if (m_operation == OP_ENABLE || m_operation == OP_ADD_IMAGE) {
+  if (m_operation == OP_ENABLE) {
     check_mirror_images_disabled();
   } else {
     open_group_images();
@@ -181,11 +181,6 @@ void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
 
   m_out_bls.resize(m_images.size());
   for (size_t i = 0; i < m_images.size(); i++) {
-    if (m_operation == OP_ADD_IMAGE &&
-        m_images[i].spec.image_id != m_image_id_to_add) {
-      continue;
-    }
-
     librados::ObjectReadOperation op;
     cls_client::mirror_image_get_start(&op, m_images[i].spec.image_id);
 
@@ -306,7 +301,7 @@ void GroupPrepareImagesRequest<I>::handle_open_group_images(int r) {
     return;
   }
 
-  if (m_operation == OP_ENABLE || m_operation == OP_ADD_IMAGE) {
+  if (m_operation == OP_ENABLE) {
     finish(0);
   } else if (m_operation == OP_DISABLE) {
     check_images_mirror_mode();
@@ -385,8 +380,7 @@ void GroupPrepareImagesRequest<I>::handle_check_images_mirror_mode(int r) {
 template <typename I>
 void GroupPrepareImagesRequest<I>::get_images_mirror_info() {
   ldout(m_cct, 10) << dendl;
-  auto ctx = create_context_callback<
-    GroupPrepareImagesRequest<I>,
+  auto ctx = create_context_callback<GroupPrepareImagesRequest<I>,
     &GroupPrepareImagesRequest<I>::handle_get_images_mirror_info>(this);
   auto gather_ctx = new C_Gather(m_cct, ctx);
 
@@ -467,7 +461,8 @@ void GroupPrepareImagesRequest<I>::handle_get_images_mirror_info(int r) {
     return;
   }
 
-  if (m_operation == OP_CREATE_PRIMARY || m_operation == OP_REMOVE_IMAGE) {
+  if (m_operation == OP_CREATE_PRIMARY || m_operation == OP_ADD_IMAGE ||
+      m_operation == OP_REMOVE_IMAGE) {
     finish(0);
   } else if (m_operation == OP_DISABLE) {
     check_images_child_mirroring();
