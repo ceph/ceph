@@ -50,9 +50,6 @@ private:
    *    v
    * PREPARE_GROUP_IMAGES
    *    |
-   *    v
-   * VALIDATE_IMAGE
-   *    |
    *    | group mirrored
    *    + --------------------> CREATE_DETACHED_IMAGE_SNAPSHOT
    *    |                             |
@@ -112,8 +109,6 @@ private:
 
   void prepare_group_images();
   void handle_prepare_group_images(int r);
-
-  void validate_image();
 
   void create_detached_image_snapshot();
   void handle_create_detached_image_snapshot(int r);
