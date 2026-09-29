@@ -21,6 +21,7 @@
 #include "rgw_iam_policy.h"
 #include "rgw_public_access.h"
 #include "rgw_website.h"
+#include "rgw_bucket_encryption.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -361,6 +362,46 @@ int from_noobaa_website(const DoutPrefixProvider* dpp, JSONObj* web,
   return 0;
 }
 
+/* bucket_encryption.
+ *
+ * Three fields onto a three-argument constructor:  algorithm, key id,
+ * and whether a bucket key is in use.  RGWBucketEncryptionConfig takes
+ * exactly those, so there is nothing to build.
+ *
+ * An empty or absent algorithm configures nothing and is not a
+ * failure -- their schema requires none of the three, so `{}` is a
+ * valid record that says nothing.  A value that is neither of their
+ * two is a failure, though.  The string becomes the
+ * x-amz-server-side-encryption header value on every PUT into the
+ * bucket, so an algorithm we do not recognise would surface as a
+ * request-time error on every write rather than here, and a bucket
+ * meant to encrypt is the wrong place to be lenient. */
+int from_noobaa_encryption(const DoutPrefixProvider* dpp, JSONObj* enc,
+			   Attrs& attrs)
+{
+  std::string algorithm;
+  JSONDecoder::decode_json("algorithm", algorithm, enc);
+  if (algorithm.empty()) {
+    return 0;
+  }
+  if ((algorithm != "AES256") && (algorithm != "aws:kms")) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket encryption names algorithm \""
+      << algorithm << "\", which is neither of theirs" << dendl;
+    return -EBADMSG;
+  }
+
+  std::string key_id;
+  bool bucket_key = false;
+  JSONDecoder::decode_json("kms_key_id", key_id, enc);
+  JSONDecoder::decode_json("bucket_key_enabled", bucket_key, enc);
+
+  RGWBucketEncryptionConfig conf(algorithm, key_id, bucket_key);
+  bufferlist bl;
+  conf.encode(bl);
+  attrs[RGW_ATTR_BUCKET_ENCRYPTION_POLICY] = std::move(bl);
+  return 0;
+}
+
 } // namespace
 
 int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
@@ -462,6 +503,14 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
   /* Website.  Onto the info, which is where RGW keeps it. */
   if (JSONObj* web = p.find_obj("website"); web) {
     ret = from_noobaa_website(dpp, web, info);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  /* Default encryption.  The attribute map. */
+  if (JSONObj* enc = p.find_obj("encryption"); enc) {
+    ret = from_noobaa_encryption(dpp, enc, attrs);
     if (ret < 0) {
       return ret;
     }

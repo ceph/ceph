@@ -32,6 +32,7 @@
 #include "rgw_iam_policy.h"
 #include "rgw_public_access.h"
 #include "rgw_website.h"
+#include "rgw_bucket_encryption.h"
 #include "common/ceph_json.h"
 
 using namespace rgw::sal;
@@ -3741,6 +3742,59 @@ TEST_F(NSFSNooBaaStateTest, ANonNumericRedirectCodeFailsClosed)
 	       R"("index_document":{"suffix":"index.html"},)"
 	       R"("routing_rules":[{"redirect":{)"
 	       R"("http_redirect_code":"moved"}}]}})");
+
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+}
+
+/* Their default encryption reaches the attribute map. */
+TEST_F(NSFSNooBaaStateTest, EncryptionComesFromTheirRecord)
+{
+  forget_our_state();
+
+  /* the control:  no encryption in their record, none in the attrs */
+  their_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY),
+	    bucket->get_attrs().end());
+
+  their_record("ENABLED",
+	       R"(,"encryption":{"algorithm":"aws:kms",)"
+	       R"("kms_key_id":"key-1234","bucket_key_enabled":true})");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto i = bucket->get_attrs().find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+  ASSERT_NE(i, bucket->get_attrs().end());
+
+  RGWBucketEncryptionConfig conf;
+  auto bi = i->second.cbegin();
+  ASSERT_NO_THROW(decode(conf, bi));
+  ASSERT_TRUE(conf.has_rule());
+  EXPECT_EQ(conf.sse_algorithm(), "aws:kms");
+  EXPECT_EQ(conf.kms_master_key_id(), "key-1234");
+  EXPECT_TRUE(conf.bucket_key_enabled());
+}
+
+/* Their schema requires none of the three, so a record that names no
+ * algorithm configures nothing.  That is not a failure. */
+TEST_F(NSFSNooBaaStateTest, AnEmptyEncryptionRecordConfiguresNothing)
+{
+  forget_our_state();
+  their_record("ENABLED", R"(,"encryption":{})");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_EQ(bucket->get_attrs().find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY),
+	    bucket->get_attrs().end());
+}
+
+/* An algorithm that is neither of theirs fails the bucket closed.
+ *
+ * The string becomes the x-amz-server-side-encryption header value on
+ * every PUT, so accepting it would move the failure to every write
+ * into a bucket that is meant to encrypt. */
+TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmFailsClosed)
+{
+  forget_our_state();
+  their_record("ENABLED", R"(,"encryption":{"algorithm":"rot13"})");
 
   EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
 }
