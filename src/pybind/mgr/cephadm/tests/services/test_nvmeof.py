@@ -153,6 +153,9 @@ force_tls = False
 max_message_length_in_mb = 4
 io_stats_enabled = True
 degrade_namespace_on_kmip_error = True
+fail_io_for_degraded_namespace = True
+resize_degraded_namespace = True
+verify_image_encryption_settings = True
 
 [gateway-logs]
 log_level = INFO
@@ -407,6 +410,9 @@ force_tls = False
 max_message_length_in_mb = 4
 io_stats_enabled = True
 degrade_namespace_on_kmip_error = True
+fail_io_for_degraded_namespace = True
+resize_degraded_namespace = True
+verify_image_encryption_settings = True
 
 [gateway-logs]
 log_level = INFO
@@ -603,6 +609,9 @@ force_tls = False
 max_message_length_in_mb = 4
 io_stats_enabled = True
 degrade_namespace_on_kmip_error = True
+fail_io_for_degraded_namespace = True
+resize_degraded_namespace = True
+verify_image_encryption_settings = True
 
 [gateway-logs]
 log_level = INFO

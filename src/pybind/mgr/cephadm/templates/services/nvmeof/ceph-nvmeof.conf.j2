@@ -56,6 +56,9 @@ force_tls = {{ spec.force_tls }}
 max_message_length_in_mb = {{ spec.max_message_length_in_mb }}
 io_stats_enabled = {{ spec.io_stats_enabled }}
 degrade_namespace_on_kmip_error = {{ spec.degrade_namespace_on_kmip_error }}
+fail_io_for_degraded_namespace = {{ spec.fail_io_for_degraded_namespace }}
+resize_degraded_namespace = {{ spec.resize_degraded_namespace }}
+verify_image_encryption_settings = {{ spec.verify_image_encryption_settings }}
 
 [gateway-logs]
 log_level = {{ spec.log_level }}
