@@ -3387,15 +3387,16 @@ public:
 			    "user.nsfs.bucket_info"), 0);
   }
 
-  void their_record(const char* versioning, const char* created =
-		    "2026-01-02T03:04:05.000Z") {
+  void their_record(const char* versioning, const char* extra = nullptr,
+		    const char* created = "2026-01-02T03:04:05.000Z") {
     std::string doc = std::string(
       "{\"_id\":\"6560e1f1c0ffee0000000001\",\"name\":\"") + testname +
       "\",\"owner_account\":\"6560e1f1c0ffee0000000002\""
       ",\"versioning\":\"" + versioning + "\""
       ",\"path\":\"/ibm/gpfs/noobaadata/" + testname + "\""
       ",\"should_create_underlying_storage\":true"
-      ",\"creation_date\":\"" + created + "\"}";
+      ",\"creation_date\":\"" + created + "\"" +
+      (extra ? extra : "") + "}";
     write_file(conf_root() / "buckets" / (testname + ".json"), doc);
   }
 };
@@ -3447,6 +3448,108 @@ TEST_F(NSFSNooBaaStateTest, OurStateWinsOverTheirs)
   ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
   EXPECT_FALSE(bucket->get_info().versioned())
       << "their record was consulted for a bucket that has state of ours";
+}
+
+/* Object lock reaches RGW.
+ *
+ * The one whose absence is a compliance breach rather than a missing
+ * feature:  a WORM bucket that reads as unlocked accepts overwrite and
+ * delete. */
+TEST_F(NSFSNooBaaStateTest, ObjectLockComesFromTheirRecord)
+{
+  forget_our_state();
+
+  /* the control:  their record without a lock leaves the bucket
+   * unlocked, so the assertion below can fail */
+  their_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_FALSE(bucket->get_info().obj_lock_enabled());
+
+  their_record("ENABLED",
+	       R"(,"object_lock_configuration":{)"
+	       R"("object_lock_enabled":"Enabled",)"
+	       R"("rule":{"default_retention":{"days":10,)"
+	       R"("mode":"GOVERNANCE"}}})");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+
+  const auto& info = bucket->get_info();
+  EXPECT_TRUE(info.obj_lock_enabled());
+  ASSERT_TRUE(info.obj_lock.has_rule());
+  EXPECT_EQ(info.obj_lock.get_mode(), "GOVERNANCE");
+  EXPECT_EQ(info.obj_lock.get_days(), 10);
+  EXPECT_EQ(info.obj_lock.get_years(), 0);
+}
+
+/* Years rather than days, and the other mode. */
+TEST_F(NSFSNooBaaStateTest, ObjectLockInYearsAndCompliance)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"object_lock_configuration":{)"
+	       R"("object_lock_enabled":"Enabled",)"
+	       R"("rule":{"default_retention":{"years":7,)"
+	       R"("mode":"COMPLIANCE"}}})");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  const auto& info = bucket->get_info();
+  EXPECT_TRUE(info.obj_lock_enabled());
+  ASSERT_TRUE(info.obj_lock.has_rule());
+  EXPECT_EQ(info.obj_lock.get_mode(), "COMPLIANCE");
+  EXPECT_EQ(info.obj_lock.get_years(), 7);
+  EXPECT_EQ(info.obj_lock.get_days(), 0);
+}
+
+/* Locked with no default retention is a lock.
+ *
+ * S3 allows PutObjectLockConfiguration with ObjectLockEnabled and no
+ * rule:  the bucket is locked and objects carry their own retention. */
+TEST_F(NSFSNooBaaStateTest, ObjectLockWithoutARule)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"object_lock_configuration":{)"
+	       R"("object_lock_enabled":"Enabled"})");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_TRUE(bucket->get_info().obj_lock_enabled());
+  EXPECT_FALSE(bucket->get_info().obj_lock.has_rule());
+}
+
+/* "Disabled" is their internal state for a bucket that is not locked,
+ * not a lock that is switched off.  S3 only ever validates "Enabled"
+ * on the wire. */
+TEST_F(NSFSNooBaaStateTest, TheirDisabledLockIsNoLock)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"object_lock_configuration":{)"
+	       R"("object_lock_enabled":"Disabled"})");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_FALSE(bucket->get_info().obj_lock_enabled());
+}
+
+/* A retention we cannot honour fails the bucket closed rather than
+ * being honoured wrongly.  Both S3 and their schema require exactly
+ * one of days or years. */
+TEST_F(NSFSNooBaaStateTest, AnImpossibleRetentionFailsClosed)
+{
+  forget_our_state();
+
+  their_record("ENABLED",
+	       R"(,"object_lock_configuration":{)"
+	       R"("object_lock_enabled":"Enabled",)"
+	       R"("rule":{"default_retention":{"days":10,"years":7,)"
+	       R"("mode":"GOVERNANCE"}}})");
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG)
+      << "a retention naming both days and years was accepted";
+
+  their_record("ENABLED",
+	       R"(,"object_lock_configuration":{)"
+	       R"("object_lock_enabled":"Enabled",)"
+	       R"("rule":{"default_retention":{"mode":"GOVERNANCE"}}})");
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG)
+      << "a retention naming neither days nor years was accepted";
 }
 
 /* A record we cannot make sense of fails the bucket closed, the same

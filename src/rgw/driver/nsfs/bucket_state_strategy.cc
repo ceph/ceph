@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "common/ceph_json.h"
+#include "rgw_object_lock.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -91,6 +92,120 @@ int slurp(const DoutPrefixProvider* dpp, const std::string& path,
   return 0;
 }
 
+/* The last inch of a conversion:  materialise an RGW type from the
+ * document a `from_noobaa_*` function has just written into `f`.
+ *
+ * This exists to keep the driver inside the type's public interface.
+ * `RGWObjectLock` and the two classes under it hold their members
+ * protected and offer `decode_json()` as the way in, so that is the way
+ * we go in.  Adding setters would have been fewer lines here and would
+ * have put an nsfs requirement into a header every other driver
+ * compiles;  reading NooBaa's JSON is this driver's problem and stays
+ * this driver's problem.
+ *
+ * Not a general mechanism.  Of the other bucket features their records
+ * carry, all but this one reach RGW types through public mutators or
+ * constructors -- `RGWObjTags::add_tag()`,
+ * `RGWLifecycleConfiguration::add_rule()`,
+ * `RGWCORSConfiguration::stack_rule()`,
+ * `RGWBucketEncryptionConfig`'s constructor, and plain structs for the
+ * public access block and the website configuration -- and a bucket
+ * policy is document text that goes into the attribute map as it
+ * stands.  So this is for the one awkward type, not a pattern to
+ * follow.
+ *
+ * `c_str()` coalesces, which is why it is avoided on the data path.
+ * Here the buffer is a few hundred bytes this process just produced,
+ * in one segment, once per bucket load. */
+template <class T>
+int decode_into(const DoutPrefixProvider* dpp, JSONFormatter& f, T& out)
+{
+  bufferlist bl;
+  f.flush(bl);
+
+  JSONParser p;
+  if (!p.parse(bl.c_str(), bl.length())) {
+    ldpp_dout(dpp, 0) << "ERROR: could not re-parse a document we wrote"
+      << dendl;
+    return -EBADMSG;
+  }
+  try {
+    out.decode_json(&p);
+  } catch (const JSONDecoder::err& e) {
+    ldpp_dout(dpp, 0) << "ERROR: a document we wrote was rejected: "
+      << e.what() << dendl;
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+/* object_lock_configuration.
+ *
+ * Theirs:   { object_lock_enabled: "Enabled"|"Disabled",
+ *             rule: { default_retention: { days|years, mode } } }
+ * RGW's:    { enabled: bool, rule_exist: bool,
+ *             rule: { defaultRetention: { mode, days, years } } }
+ *
+ * "Disabled" is their internal state for a bucket that is not locked;
+ * S3 only ever validates "Enabled" on the wire.  So Disabled means the
+ * bucket has no lock, not a lock that is off. */
+int from_noobaa_object_lock(const DoutPrefixProvider* dpp, JSONObj* cfg,
+			    RGWBucketInfo& info)
+{
+  std::string enabled;
+  JSONDecoder::decode_json("object_lock_enabled", enabled, cfg);
+  if (enabled != "Enabled") {
+    return 0;
+  }
+
+  int days = 0, years = 0;
+  std::string mode;
+  if (JSONObj* rule = cfg->find_obj("rule"); rule) {
+    if (JSONObj* dr = rule->find_obj("default_retention"); dr) {
+      JSONDecoder::decode_json("days", days, dr);
+      JSONDecoder::decode_json("years", years, dr);
+      JSONDecoder::decode_json("mode", mode, dr);
+    }
+  }
+
+  /* their schema requires one of days or years with a mode, and RGW
+   * requires exactly one of the two as well -- retention_period_valid()
+   * says so.  A rule that satisfies neither is a rule we cannot honour,
+   * and honouring it wrongly is a retention failure. */
+  const bool has_rule = !mode.empty();
+  if (has_rule && ((years > 0) == (days > 0))) {
+    ldpp_dout(dpp, 0) << "ERROR: default_retention names "
+      << (days > 0 ? "both days and years" : "neither days nor years")
+      << dendl;
+    return -EBADMSG;
+  }
+
+  JSONFormatter f;
+  f.open_object_section("lock");
+  encode_json("enabled", true, &f);
+  encode_json("rule_exist", has_rule, &f);
+  if (has_rule) {
+    f.open_object_section("rule");
+    f.open_object_section("defaultRetention");
+    encode_json("mode", mode, &f);
+    encode_json("days", days, &f);
+    encode_json("years", years, &f);
+    f.close_section();
+    f.close_section();
+  }
+  f.close_section();
+
+  RGWObjectLock lock;
+  int ret = decode_into(dpp, f, lock);
+  if (ret < 0) {
+    return ret;
+  }
+
+  info.obj_lock = lock;
+  info.flags |= BUCKET_OBJ_LOCK_ENABLED;
+  return 0;
+}
+
 } // namespace
 
 int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
@@ -150,6 +265,16 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
        * this reader exists. */
       ldpp_dout(dpp, 4) << "nsfs: " << path << " has an unparsable "
 	<< "creation_date \"" << created << "\"" << dendl;
+    }
+  }
+
+  /* Object lock.  First of their optional features, and the one whose
+   * absence is a compliance breach rather than a missing feature:  a
+   * WORM bucket that reads as unlocked accepts overwrite and delete. */
+  if (JSONObj* lock = p.find_obj("object_lock_configuration"); lock) {
+    ret = from_noobaa_object_lock(dpp, lock, info);
+    if (ret < 0) {
+      return ret;
     }
   }
 
