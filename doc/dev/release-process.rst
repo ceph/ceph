@@ -20,16 +20,16 @@ The GPG signing key permanently lives on a `Nitrokey Pro <https://shop.nitrokey.
 Summarized release process
 ==========================
 
-#. QE finishes testing and finds a stopping point.  That commit is pushed to the ``$release-release`` branch in ceph.git (e.g., ``squid-release``).  This allows work to continue in the working ``$release`` branch without having to freeze it during the release process.
+#. QE finishes testing and finds a stopping point.  That commit is pushed to the ``$release-release`` (e.g. ``squid-release``) branch on `ceph-releases.git <https://github.com/ceph/ceph-releases>`_.  This allows work to continue in the working ``$release`` branch without having to freeze it during the release process.
 #. The Release Manager approves the release and notifies the Build Lead.
-#. The Build Lead starts the `Jenkins ceph-release-pipeline <https://jenkins.ceph.com/view/all/job/ceph-release-pipeline>`_, which triggers all builds.
+#. The Build Lead starts the `Jenkins ceph-release-pipeline <https://jenkins.ceph.com/view/all/job/ceph-release-pipeline>`_, which triggers all builds, a version commit, and a release tag (on ``ceph-releases.git``).
 #. Unsigned packages are pushed to chacra.ceph.com.
 #. Packages are pulled from chacra.ceph.com to the Signer VM.
 #. Packages are signed.
 #. Signed packages are pushed to a prerelease area on download.ceph.com.
 #. Prerelease containers are built from those signed packages and pushed to quay.ceph.io.
 #. Final test and validation are done on prerelease packages and containers. Optional: upgrade the lab cluster.
-#. Prerelease packages and containers are promoted to official releases on download.ceph.com and quay.io.
+#. Prerelease packages and containers are promoted to official releases on download.ceph.com and quay.io. Tag is pushed to ceph.git. Tagged version commit is merged into ``$release``.
 
 Hotfix Release Process Deviation
 --------------------------------
