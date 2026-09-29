@@ -22,6 +22,7 @@
 #include "rgw_public_access.h"
 #include "rgw_website.h"
 #include "rgw_bucket_encryption.h"
+#include "rgw_tag.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -425,6 +426,67 @@ int from_noobaa_encryption(const DoutPrefixProvider* dpp, JSONObj* enc,
   return 0;
 }
 
+/* tag -- the bucket's tag set, not an object's.
+ *
+ * An array of {key, value} into RGWObjTags, which has a public
+ * add_tag().  Their `tagging` definition requires both fields of each
+ * entry and constrains neither.
+ *
+ * Stored whatever the set looks like.  RGW's own S3 path builds an
+ * RGWObjTags(50) and refuses a request breaking that or the 128/256
+ * byte key and value limits, but their schema imposes none of it, so a
+ * NooBaa bucket may legitimately carry more or longer tags than the
+ * API would accept.  Refusing to serve such a bucket would deny
+ * everything over metadata that gates nothing and destroys nothing --
+ * the same disproportion as failing a bucket over an encryption
+ * algorithm.  A set that exceeds what the API would take is warned
+ * about, because that is the only signal there will be. */
+int from_noobaa_tags(const DoutPrefixProvider* dpp, JSONObj* tagging,
+		     const std::string& bucket_name, Attrs& attrs)
+{
+  /* S3's limits, not RGW's:  50 tags on a bucket, 128 bytes of key,
+   * 256 of value.  RGWObjTags keeps the same numbers protected, and
+   * they are named here rather than exposed, because this is a
+   * driver's warning and not a reason to widen a shared type. */
+  constexpr size_t S3_MAX_BUCKET_TAGS = 50;
+  constexpr size_t S3_MAX_TAG_KEY = 128;
+  constexpr size_t S3_MAX_TAG_VAL = 256;
+
+  RGWObjTags tags;
+  size_t oversize = 0;
+
+  for (auto i = tagging->find_first(); !i.end(); ++i) {
+    std::string key, val;
+    JSONDecoder::decode_json("key", key, *i);
+    JSONDecoder::decode_json("value", val, *i);
+    if (key.empty()) {
+      /* a tag with no key is not a tag;  RGW rejects it and there is
+       * nothing to keep */
+      ldpp_dout(dpp, 0) << "ERROR: bucket " << bucket_name
+	<< " has a tag with no key" << dendl;
+      return -EBADMSG;
+    }
+    if ((key.size() > S3_MAX_TAG_KEY) || (val.size() > S3_MAX_TAG_VAL)) {
+      ++oversize;
+    }
+    tags.emplace_tag(std::move(key), std::move(val));
+  }
+
+  if (tags.count() == 0) {
+    return 0;
+  }
+  if ((tags.count() > S3_MAX_BUCKET_TAGS) || oversize) {
+    ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket_name << " carries "
+      << tags.count() << " tags" << (oversize ? ", some over length" : "")
+      << ";  more than PutBucketTagging would accept" << dendl;
+  }
+
+  bufferlist bl;
+  tags.encode(bl);
+  attrs[RGW_ATTR_TAGS] = std::move(bl);
+  return 0;
+}
+
 } // namespace
 
 int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
@@ -534,6 +596,15 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
   /* Default encryption.  The attribute map. */
   if (JSONObj* enc = p.find_obj("encryption"); enc) {
     ret = from_noobaa_encryption(dpp, enc, attrs);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  /* Bucket tags.  The attribute map, under the same key object tags
+   * use;  which one it is follows from what carries it. */
+  if (JSONObj* tg = p.find_obj("tag"); tg) {
+    ret = from_noobaa_tags(dpp, tg, bucket_name, attrs);
     if (ret < 0) {
       return ret;
     }

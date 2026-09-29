@@ -3827,6 +3827,76 @@ TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsKeptNotRefused)
   EXPECT_EQ(conf.sse_algorithm(), "rot13");
 }
 
+/* Their bucket tag set reaches the attribute map. */
+TEST_F(NSFSNooBaaStateTest, BucketTagsComeFromTheirRecord)
+{
+  forget_our_state();
+
+  /* the control:  no tags in their record, none in the attributes */
+  their_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_TAGS),
+	    bucket->get_attrs().end());
+
+  their_record("ENABLED",
+	       R"(,"tag":[{"key":"team","value":"storage"},)"
+	       R"({"key":"env","value":"prod"}])");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto i = bucket->get_attrs().find(RGW_ATTR_TAGS);
+  ASSERT_NE(i, bucket->get_attrs().end());
+
+  RGWObjTags tags;
+  auto bi = i->second.cbegin();
+  ASSERT_NO_THROW(decode(tags, bi));
+  const auto& m = tags.get_tags();
+  ASSERT_EQ(m.size(), 2u);
+  ASSERT_NE(m.find("team"), m.end());
+  EXPECT_EQ(m.find("team")->second, "storage");
+  ASSERT_NE(m.find("env"), m.end());
+  EXPECT_EQ(m.find("env")->second, "prod");
+}
+
+/* A set larger than PutBucketTagging would accept is kept.
+ *
+ * Their schema constrains neither the count nor the sizes, so a
+ * bucket of theirs may carry more than fifty.  Refusing to serve it
+ * would deny everything over metadata that gates nothing. */
+TEST_F(NSFSNooBaaStateTest, ATagSetOverTheApiLimitIsKept)
+{
+  forget_our_state();
+
+  std::string arr{",\"tag\":["};
+  for (int n = 0; n < 60; ++n) {
+    if (n) {
+      arr += ",";
+    }
+    arr += "{\"key\":\"k" + std::to_string(n) + "\",\"value\":\"v\"}";
+  }
+  arr += "]";
+  their_record("ENABLED", arr);
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0)
+      << "the bucket was refused over a tag count";
+
+  auto i = bucket->get_attrs().find(RGW_ATTR_TAGS);
+  ASSERT_NE(i, bucket->get_attrs().end());
+  RGWObjTags tags;
+  auto bi = i->second.cbegin();
+  ASSERT_NO_THROW(decode(tags, bi));
+  EXPECT_EQ(tags.get_tags().size(), 60u) << "tags were silently dropped";
+}
+
+/* A tag with no key is not a tag.  Nothing can be kept from it, so
+ * the record is unreadable rather than partly usable. */
+TEST_F(NSFSNooBaaStateTest, AKeylessTagFailsClosed)
+{
+  forget_our_state();
+  their_record("ENABLED", R"(,"tag":[{"key":"","value":"orphan"}])");
+
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+}
+
 /* A record we cannot make sense of fails the bucket closed, the same
  * as unreadable state of our own. */
 TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
