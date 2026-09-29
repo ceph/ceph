@@ -1,0 +1,9 @@
+input[readonly]::-webkit-inner-spin-button,
+input[readonly]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+input[readonly][type='number'] {
+  appearance: textfield;
+}
