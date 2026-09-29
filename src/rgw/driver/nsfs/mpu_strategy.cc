@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <cctype>
 #include <charconv>
 #include <algorithm>
 #include <sys/xattr.h>
@@ -701,6 +702,53 @@ NooBaaMPUStrategy::staging_root_for_write(const DoutPrefixProvider* dpp,
   return root;
 }
 
+/* Does this name end in `_` followed by something UUID-shaped?
+ *
+ * Their temp directory is `config.NSFS_TEMP_DIR_NAME + '_' + bucket_id`
+ * (`native_fs_utils.js:797`).  Only the first part is configurable;  the
+ * separator and the id are structural, and the id is their bucket
+ * record's `_id`, a crypto.randomUUID().  So this recognises the part
+ * of the name they cannot change. */
+static bool nb_uuid_suffixed(std::string_view n)
+{
+  static constexpr size_t UUID_LEN = 36;   /* 8-4-4-4-12 */
+  if (n.size() < UUID_LEN + 2) {           /* at least `x_` before it */
+    return false;
+  }
+  const std::string_view tail = n.substr(n.size() - UUID_LEN);
+  if (n[n.size() - UUID_LEN - 1] != '_') {
+    return false;
+  }
+  for (size_t i = 0; i < UUID_LEN; ++i) {
+    const char c = tail[i];
+    if ((i == 8) || (i == 13) || (i == 18) || (i == 23)) {
+      if (c != '-') {
+	return false;
+      }
+    } else if (!std::isxdigit(static_cast<unsigned char>(c))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* Their per-bucket temp directory, found by what it is rather than by
+ * what it is called.
+ *
+ * `config.NSFS_TEMP_DIR_NAME` is a default in their config.js, not a
+ * constant, so a deployment can change `.noobaa-nsfs` and matching the
+ * prefix would then find nothing:  every upload in flight invisible,
+ * and a second temp directory created beside theirs.
+ *
+ * Two tests, in this order.  A directory holding `multipart-uploads/`
+ * IS the temp directory whatever it is called, and that settles every
+ * tree which has ever taken an upload -- which is every tree the read
+ * path cares about.  Otherwise the name, but only its structural part:
+ * see nb_uuid_suffixed().  The prefix is not consulted at all.
+ *
+ * `ambiguous` distinguishes "none" from "more than one", which matters
+ * only to the write side:  a tree with none may be created into, a tree
+ * with several may not. */
 static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
 						 int bucket_fd, bool* ambiguous)
 {
@@ -719,20 +767,41 @@ static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
   auto close_d = make_scope_guard([d] { ::closedir(d); });
 
   std::string found;
+  bool found_by_content = false;
   struct dirent* de;
   while ((de = ::readdir(d)) != nullptr) {
     std::string_view n = de->d_name;
-    if (!n.starts_with(NB_TMPDIR_PREFIX)) {
+    if ((n == ".") || (n == "..")) {
+      continue;
+    }
+
+    /* the one that holds uploads, whatever it is called */
+    const std::string probe = std::string(n) + "/" + NB_MPU_ROOT;
+    const bool holds_uploads =
+	(::faccessat(bucket_fd, probe.c_str(), F_OK, 0) == 0);
+
+    if (!holds_uploads && !nb_uuid_suffixed(n)) {
+      continue;
+    }
+    if (holds_uploads && !found_by_content) {
+      /* content beats shape:  a directory that holds uploads is the
+       * answer even if something else in the bucket is named like a
+       * temp directory */
+      found = n;
+      found_by_content = true;
+      continue;
+    }
+    if (found_by_content && !holds_uploads) {
       continue;
     }
     if (!found.empty()) {
       /* Two temp directories means two bucket ids have written here.
        * Which one holds the uploads is not decidable from the tree, so
        * refuse rather than pick -- and do not create a third. */
-      ldpp_dout(dpp, 0) << "ERROR: bucket holds more than one "
-			<< NB_TMPDIR_PREFIX << "* directory (" << found
-			<< ", " << n << ");  refusing to guess which holds "
-			<< "multipart uploads" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: bucket holds more than one NooBaa temp "
+			<< "directory (" << found << ", " << n << ");  "
+			<< "refusing to guess which holds multipart uploads"
+			<< dendl;
       if (ambiguous) {
 	*ambiguous = true;
       }

@@ -2046,6 +2046,22 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
 namespace {
 
 /* lay down a staging directory as NooBaa would, and hand back its fd */
+/* a uuid-shaped string;  NooBaa uses crypto.randomUUID() for both the
+ * bucket id and the upload id, and nothing infers either */
+std::string fake_uuid(const std::string& seed)
+{
+  /* 8-4-4-4-12 exactly.  The shape is load-bearing, not decoration:
+   * NooBaaMPUStrategy recognises their temp directory by the
+   * structural part of its name -- `_` and a UUID -- because the
+   * prefix is a config default they can change.  An earlier version
+   * of this produced a 20-character final group and was not a UUID at
+   * all;  nothing noticed while the strategy matched the prefix. */
+  const std::string h =
+      fmt::format("{:0>16x}", std::hash<std::string>{}(seed));
+  return h.substr(0, 8) + "-" + h.substr(8, 4) + "-4" + h.substr(12, 3) +
+	 "-8" + h.substr(1, 3) + "-" + h.substr(0, 12);
+}
+
 class NBStaging {
 public:
   sf::path root;     /* <base>/<test>/.noobaa-nsfs_<id>/multipart-uploads */
@@ -2152,7 +2168,18 @@ TEST(NooBaaMPU, PartTargetIsKeyedByTheSize)
   EXPECT_EQ(t0->extent, std::nullopt);
 }
 
-TEST(NooBaaMPU, StagingRootIsFoundByPrefix)
+/* Staging is found by what the directory holds, not by its name.
+ *
+ * `config.NSFS_TEMP_DIR_NAME` is a default in their config.js, so the
+ * `.noobaa-nsfs` prefix is not something we may depend on.  A
+ * directory holding `multipart-uploads/` IS the temp directory
+ * whatever it is called, and that settles every tree the read path
+ * cares about -- a tree with no uploads has nothing to find.
+ *
+ * `abc123` here is deliberately neither their default prefix nor a
+ * UUID:  it is the case the prefix match got wrong.
+ */
+TEST(NooBaaMPU, StagingRootIsFoundByContent)
 {
   nsfs::NooBaaMPUStrategy nb;
   const std::string test = get_test_name();
@@ -2165,10 +2192,98 @@ TEST(NooBaaMPU, StagingRootIsFoundByPrefix)
   ASSERT_TRUE(r.has_value());
   EXPECT_EQ(*r, ".noobaa-nsfs_abc123/multipart-uploads");
 
-  /* a second bucket id means two trees have written here, and which
-   * holds the uploads is not decidable, so it refuses */
-  sf::create_directories(base_path / test / ".noobaa-nsfs_def456");
+  /* A quiescent temp directory beside it, recognised by its shape.
+   * Content beats shape:  the one holding uploads is still the
+   * answer, because a directory that holds uploads cannot be the
+   * wrong one. */
+  sf::create_directories(base_path / test /
+			 (".noobaa-nsfs_" + fake_uuid("quiescent")));
+  r = nb.staging_root(env->dpp, bfd);
+  ASSERT_TRUE(r.has_value()) << "a quiescent neighbour hid the real one";
+  EXPECT_EQ(*r, ".noobaa-nsfs_abc123/multipart-uploads");
+
+  /* But two directories BOTH holding uploads is undecidable, and it
+   * refuses rather than picking. */
+  NBStaging other(test, "def456", "u2");
+  ASSERT_GE(other.fd, 0);
   EXPECT_EQ(nb.staging_root(env->dpp, bfd), std::nullopt);
+  ::close(bfd);
+}
+
+/* The shape test, on its own.
+ *
+ * It is what finds their temp directory on a tree that has never
+ * taken an upload -- there is nothing inside it to recognise then, so
+ * the name is all there is, and only the structural part of the name
+ * is theirs to keep:  `_` and the bucket id, which is a
+ * crypto.randomUUID().  The prefix before it is configurable and is
+ * not consulted.
+ */
+TEST(NooBaaMPU, AQuiescentTempDirectoryIsFoundByShape)
+{
+  nsfs::NooBaaMPUStrategy nb;
+  const std::string test = get_test_name();
+  const sf::path b{base_path / test};
+  sf::remove_all(b);
+  sf::create_directories(b);
+
+  /* their default prefix, with their id shape */
+  sf::create_directories(b / (".noobaa-nsfs_" + fake_uuid("one")));
+  int bfd = ::open(b.c_str(), O_RDONLY | O_DIRECTORY);
+  ASSERT_GE(bfd, 0);
+
+  /* no uploads, so the read side has nothing to report */
+  EXPECT_EQ(nb.staging_root(env->dpp, bfd), std::nullopt);
+
+  /* but the write side finds it and creates multipart-uploads/ inside
+   * it rather than inventing a second temp directory */
+  auto w = nb.staging_root_for_write(env->dpp, bfd);
+  ASSERT_TRUE(w.has_value());
+  EXPECT_EQ(*w, ".noobaa-nsfs_" + fake_uuid("one") + "/multipart-uploads");
+
+  int n = 0;
+  for (auto& e : sf::directory_iterator(b)) {
+    if (sf::is_directory(e)) {
+      ++n;
+    }
+  }
+  EXPECT_EQ(n, 1) << "a second temp directory was created beside theirs";
+  ::close(bfd);
+}
+
+/* A renamed prefix is still found, which is the whole point.
+ *
+ * A deployment that set config.NSFS_TEMP_DIR_NAME to something else
+ * has a tree the prefix match could not read at all:  every upload in
+ * flight invisible, and a second temp directory created beside
+ * theirs on the next write.
+ */
+TEST(NooBaaMPU, ARenamedTempDirectoryIsStillFound)
+{
+  nsfs::NooBaaMPUStrategy nb;
+  const std::string test = get_test_name();
+  const sf::path b{base_path / test};
+  sf::remove_all(b);
+  const std::string renamed = ".scale-nsfs_" + fake_uuid("renamed");
+  sf::create_directories(b / renamed / "multipart-uploads");
+
+  int bfd = ::open(b.c_str(), O_RDONLY | O_DIRECTORY);
+  ASSERT_GE(bfd, 0);
+  auto r = nb.staging_root(env->dpp, bfd);
+  ASSERT_TRUE(r.has_value()) << "a renamed temp directory was not found";
+  EXPECT_EQ(*r, renamed + "/multipart-uploads");
+
+  /* and the write side uses it rather than creating one of ours */
+  auto w = nb.staging_root_for_write(env->dpp, bfd);
+  ASSERT_TRUE(w.has_value());
+  EXPECT_EQ(*w, renamed + "/multipart-uploads");
+  int n = 0;
+  for (auto& e : sf::directory_iterator(b)) {
+    if (sf::is_directory(e)) {
+      ++n;
+    }
+  }
+  EXPECT_EQ(n, 1) << "a second temp directory was created";
   ::close(bfd);
 }
 
@@ -2413,14 +2528,6 @@ struct TestTree {
   sf::path staging;         /* the upload's directory, when there is one */
 };
 
-/* a uuid-shaped string;  NooBaa uses crypto.randomUUID() for both the
- * bucket id and the upload id, and nothing infers either */
-std::string fake_uuid(const std::string& seed)
-{
-  std::string h = fmt::format("{:0>8x}", std::hash<std::string>{}(seed));
-  return h.substr(0, 8) + "-" + h.substr(0, 4) + "-4" + h.substr(1, 3) +
-	 "-8" + h.substr(2, 3) + "-" + h + h.substr(0, 4);
-}
 
 void write_file(const sf::path& p, const std::string& data, uint64_t offset = 0)
 {
@@ -4749,7 +4856,9 @@ TEST_F(NSFSNooBaaBucketTest, RefusesAnAmbiguousTree)
 {
   TestTree tree;
   make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
-  sf::create_directories(bucket_path() / ".noobaa-nsfs_someone-else");
+  /* uuid-shaped, because that is what the strategy recognises */
+  sf::create_directories(bucket_path() /
+			 (".noobaa-nsfs_" + fake_uuid("someone-else")));
 
   auto upload = bucket->get_multipart_upload("k", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
   rgw_placement_rule placement;
