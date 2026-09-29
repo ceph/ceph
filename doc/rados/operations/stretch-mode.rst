@@ -36,7 +36,7 @@ should match the other Monitors in the cluster: at least 6 vCPUs and 64 GB of
 RAM for modest clusters and 128 GB of RAM for larger clusters. It can have
 higher network latency to the OSD zone(s) than OSD zone(s) can have to
 each other.
-See :ref:`hardware-recommendations` for details on Monitor sizing guidelines.
+See :ref:`hardware-cpu-memory` for details on Monitor sizing guidelines.
 
 The standard Ceph configuration is able to survive many network failures or
 data-center failures without compromising data availability. When enough
