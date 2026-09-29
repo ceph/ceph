@@ -28,8 +28,7 @@ pages hold the numbers you need while you plan.
    get-involved
    documenting-ceph
 
-Learn
-=====
+.. rubric:: Learn
 
 Read these before you install anything.
 
@@ -38,20 +37,18 @@ Read these before you install anything.
   in a cluster, what each one does, and how many you need.
 - :ref:`Architecture <architecture>`: how Ceph stores data, places it with
   :term:`CRUSH`, and recovers from failures.
-- :ref:`Hardware Recommendations <hardware-recommendations>`: how to choose
-  CPUs, memory, storage devices, and networks for a cluster.
 
-Set Up
-======
+.. rubric:: Set Up
 
 - :ref:`Deploying a Single-Host Test Cluster <quick-start-cephadm>`: a working
   cluster on one machine, for learning and testing.
 - :ref:`Creating and Mounting a Block Device <quick-rbd>`: a first block
   device on the new cluster.
 
-Look Up
-=======
+.. rubric:: Look Up
 
+- :ref:`Hardware Recommendations <hardware-recommendations>`: how to choose
+  CPUs, memory, storage devices, and networks for a cluster.
 - :ref:`Minimum Hardware per Daemon <minimum-hardware>`: the smallest
   configuration for each daemon.
 - :ref:`CPU and Memory Sizing <hardware-cpu-memory>`: cores and RAM for each
@@ -67,8 +64,7 @@ Look Up
 - :doc:`Glossary </glossary>`: definitions of the terms used throughout this
   documentation.
 
-Next Steps
-==========
+.. rubric:: Next Steps
 
 - Deploy a production cluster. See :ref:`cephadm_deploying_new_cluster`, or
   :ref:`install-overview` for the other installation methods, including Rook
@@ -79,11 +75,10 @@ Next Steps
   :ref:`Ceph Object Gateway <object-gateway>`, or
   :ref:`Ceph CSI <ceph-csi>` for Kubernetes.
 
-Additional Resources
-====================
+.. rubric:: Additional Resources
 
 - :ref:`Ceph Community Channels <get-involved>`: mailing lists, chat channels, and
-  community meetings.
+  events.
 - :ref:`Troubleshooting <rados_troubleshooting>`: what to check when a
   cluster is unhealthy.
 - :ref:`Documenting Ceph <documenting_ceph>`: how to fix or improve this

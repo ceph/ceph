@@ -50,7 +50,7 @@ tier and the backing storage tier are completely transparent to Ceph clients.
                                  Slower I/O
 
 Additional Resources
-====================
+--------------------
 
 - :doc:`Cache tiering operations </rados/operations/cache-tiering>`
 - :ref:`Pools <rados_pools>`

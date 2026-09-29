@@ -33,7 +33,7 @@ See ``src/objclass/objclass.h``, ``src/fooclass.cc`` and ``src/barclass`` for
 exemplary implementations.
 
 Additional Resources
-====================
+--------------------
 
 - :ref:`arch-ceph-storage-cluster`
 - :ref:`Ceph Storage Cluster APIs <rados api>`
