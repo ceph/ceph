@@ -1409,7 +1409,8 @@ class Module(MgrModule, OrchestratorClientMixin):
                                                                service.get('name', ''))})
         return ret
 
-    def _parse_rgw_instance_id(self, daemon_id: Optional[str]) -> str:
+    @staticmethod
+    def _parse_rgw_instance_id(daemon_id: Optional[str]) -> str:
         """
         Extract the RGW instance id from a daemon_id in the form
         <host>.<rgw>.<instance>, matching the instance id used by

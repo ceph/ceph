@@ -595,10 +595,7 @@ class RgwInstanceIdTest(TestCase):
 
     def _parse(self, daemon_id):
         from prometheus.module import Module
-        # _parse_rgw_instance_id only touches its argument, so it's
-        # safe to call directly on the class without a full Module
-        # instance (no self state is used).
-        return Module._parse_rgw_instance_id(None, daemon_id)
+        return Module._parse_rgw_instance_id(daemon_id)
 
     def test_three_part_daemon_id_extracts_instance(self):
         # e.g. "host1.rgw.0" -> instance id "0"
