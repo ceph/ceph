@@ -31,6 +31,7 @@
 #include "rgw_object_lock.h"
 #include "rgw_iam_policy.h"
 #include "rgw_public_access.h"
+#include "rgw_website.h"
 #include "common/ceph_json.h"
 
 using namespace rgw::sal;
@@ -3665,6 +3666,81 @@ TEST_F(NSFSNooBaaStateTest, AMisshapenFieldFailsClosed)
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"days":"ten",)"
 	       R"("mode":"GOVERNANCE"}}})");
+
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+}
+
+/* Their website configuration, index-document branch. */
+TEST_F(NSFSNooBaaStateTest, WebsiteComesFromTheirRecord)
+{
+  forget_our_state();
+
+  /* the control:  no website in their record, none on the bucket */
+  their_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_FALSE(bucket->get_info().has_website);
+
+  their_record("ENABLED",
+	       R"(,"website":{"website_configuration":{)"
+	       R"("index_document":{"suffix":"index.html"},)"
+	       R"("error_document":{"key":"oops.html"},)"
+	       R"("routing_rules":[{)"
+	       R"("condition":{"key_prefix_equals":"docs/",)"
+	       R"("http_error_code_returned_equals":"404"},)"
+	       R"("redirect":{"protocol":"https","host_name":"example.com",)"
+	       R"("replace_key_prefix_with":"documents/",)"
+	       R"("http_redirect_code":"301"}}]}})");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  const auto& w = bucket->get_info().website_conf;
+  ASSERT_TRUE(bucket->get_info().has_website);
+  EXPECT_FALSE(w.is_redirect_all);
+  EXPECT_TRUE(w.is_set_index_doc);
+  EXPECT_EQ(w.index_doc_suffix, "index.html");
+  EXPECT_EQ(w.error_doc, "oops.html");
+
+  ASSERT_EQ(w.routing_rules.rules.size(), 1u);
+  const auto& r = w.routing_rules.rules.front();
+  EXPECT_EQ(r.condition.key_prefix_equals, "docs/");
+  EXPECT_EQ(r.condition.http_error_code_returned_equals, 404);
+  EXPECT_EQ(r.redirect_info.redirect.protocol, "https");
+  EXPECT_EQ(r.redirect_info.redirect.hostname, "example.com");
+  EXPECT_EQ(r.redirect_info.redirect.http_redirect_code, 301);
+  EXPECT_EQ(r.redirect_info.replace_key_prefix_with, "documents/");
+}
+
+/* The other branch of their anyOf, which is S3's own exclusion. */
+TEST_F(NSFSNooBaaStateTest, WebsiteRedirectAllBranch)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"website":{"website_configuration":{)"
+	       R"("redirect_all_requests_to":{"host_name":"elsewhere.net",)"
+	       R"("protocol":"HTTPS"}}})");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  const auto& w = bucket->get_info().website_conf;
+  ASSERT_TRUE(bucket->get_info().has_website);
+  EXPECT_TRUE(w.is_redirect_all);
+  EXPECT_EQ(w.redirect_all.hostname, "elsewhere.net");
+  EXPECT_EQ(w.redirect_all.protocol, "HTTPS");
+  EXPECT_FALSE(w.is_set_index_doc);
+}
+
+/* A redirect code that is not a number fails the bucket closed.
+ *
+ * They type these as strings and RGW holds a uint16_t, so the
+ * dangerous outcome is a silent zero:  a redirect that redirects with
+ * code 0, or a condition on one error code turned into a condition on
+ * any. */
+TEST_F(NSFSNooBaaStateTest, ANonNumericRedirectCodeFailsClosed)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"website":{"website_configuration":{)"
+	       R"("index_document":{"suffix":"index.html"},)"
+	       R"("routing_rules":[{"redirect":{)"
+	       R"("http_redirect_code":"moved"}}]}})");
 
   EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
 }

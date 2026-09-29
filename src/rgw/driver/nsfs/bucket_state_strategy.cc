@@ -20,6 +20,7 @@
 #include "rgw_object_lock.h"
 #include "rgw_iam_policy.h"
 #include "rgw_public_access.h"
+#include "rgw_website.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -279,6 +280,87 @@ int from_noobaa_public_access(const DoutPrefixProvider* dpp, JSONObj* pab,
   return 0;
 }
 
+/* A field they type as a JSON string where RGW holds a uint16_t.
+ *
+ * The integer decoder reads the node's data, so a quoted "301" parses
+ * and anything that is not a number throws -- which the boundary in
+ * load() turns into a bucket that fails closed.  That is the point:
+ * silently becoming zero would turn a redirect code into 0 and a
+ * condition on one error code into a condition on any. */
+void u16_from(const char* name, JSONObj* obj, uint16_t& out)
+{
+  int v = 0;
+  if (!JSONDecoder::decode_json(name, v, obj)) {
+    return;
+  }
+  if ((v < 0) || (v > UINT16_MAX)) {
+    throw JSONDecoder::err(std::string(name) + " is out of range");
+  }
+  out = static_cast<uint16_t>(v);
+}
+
+/* bucket_website.
+ *
+ * Their website_configuration is an anyOf of two shapes, which is S3's
+ * own rule:  either redirect every request, or serve an index document
+ * with an optional error document and routing rules.  The branches are
+ * exclusive, so taking the redirect first and the rest otherwise
+ * matches both their schema and RGW's is_redirect_all.
+ *
+ * Every RGW type here is a plain struct with public members, so this
+ * is assignment rather than construction.  It lands on the info rather
+ * than in the attribute map, which is where RGW keeps it. */
+int from_noobaa_website(const DoutPrefixProvider* dpp, JSONObj* web,
+			RGWBucketInfo& info)
+{
+  JSONObj* cfg = web->find_obj("website_configuration");
+  if (!cfg) {
+    return 0;
+  }
+
+  RGWBucketWebsiteConf conf;
+
+  if (JSONObj* all = cfg->find_obj("redirect_all_requests_to"); all) {
+    JSONDecoder::decode_json("host_name", conf.redirect_all.hostname, all);
+    JSONDecoder::decode_json("protocol", conf.redirect_all.protocol, all);
+    conf.is_redirect_all = true;
+  } else {
+    if (JSONObj* idx = cfg->find_obj("index_document"); idx) {
+      JSONDecoder::decode_json("suffix", conf.index_doc_suffix, idx);
+      conf.is_set_index_doc = !conf.index_doc_suffix.empty();
+    }
+    if (JSONObj* err = cfg->find_obj("error_document"); err) {
+      JSONDecoder::decode_json("key", conf.error_doc, err);
+    }
+    if (JSONObj* rules = cfg->find_obj("routing_rules"); rules) {
+      for (auto i = rules->find_first(); !i.end(); ++i) {
+	RGWBWRoutingRule rule;
+	if (JSONObj* c = (*i)->find_obj("condition"); c) {
+	  JSONDecoder::decode_json("key_prefix_equals",
+				   rule.condition.key_prefix_equals, c);
+	  u16_from("http_error_code_returned_equals", c,
+		   rule.condition.http_error_code_returned_equals);
+	}
+	if (JSONObj* r = (*i)->find_obj("redirect"); r) {
+	  auto& ri = rule.redirect_info;
+	  JSONDecoder::decode_json("protocol", ri.redirect.protocol, r);
+	  JSONDecoder::decode_json("host_name", ri.redirect.hostname, r);
+	  JSONDecoder::decode_json("replace_key_prefix_with",
+				   ri.replace_key_prefix_with, r);
+	  JSONDecoder::decode_json("replace_key_with",
+				   ri.replace_key_with, r);
+	  u16_from("http_redirect_code", r, ri.redirect.http_redirect_code);
+	}
+	conf.routing_rules.rules.push_back(std::move(rule));
+      }
+    }
+  }
+
+  info.website_conf = std::move(conf);
+  info.has_website = true;
+  return 0;
+}
+
 } // namespace
 
 int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
@@ -372,6 +454,14 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
   /* Public access block.  Also the attribute map, same reason. */
   if (JSONObj* pab = p.find_obj("public_access_block"); pab) {
     ret = from_noobaa_public_access(dpp, pab, attrs);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  /* Website.  Onto the info, which is where RGW keeps it. */
+  if (JSONObj* web = p.find_obj("website"); web) {
+    ret = from_noobaa_website(dpp, web, info);
     if (ret < 0) {
       return ret;
     }
