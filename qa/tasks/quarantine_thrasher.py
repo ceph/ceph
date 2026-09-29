@@ -14,6 +14,7 @@ import errno
 import json
 import logging
 import random
+import time
 
 from io import StringIO
 
@@ -131,19 +132,31 @@ class QuarantineThrasher(ThrasherGreenlet):
         if not self.quarantine_enabled:
             return
         try:
-            self._quarantine_op("disable")
+            # the thrasher is already stopped here, so skip the stop checks
+            self._quarantine_op("disable", honor_stop=False)
         except Exception as e:
             self.logger.warning("Cleanup: disable quarantine failed: %s", e)
 
     # -- Quarantine operations ------------------------------------------------
 
-    def _quarantine_op(self, op):
-        """Enable or disable quarantine, retrying on transient MDS errors."""
+    def _quarantine_op(self, op, honor_stop=True):
+        """Enable or disable quarantine, retrying on transient MDS errors.
+
+        honor_stop=False is for cleanup after stop(): proceed_unless_stopped()
+        and sleep_unless_stopped() would raise Stopped immediately.
+        """
         transient = {errno.EBUSY, errno.EAGAIN, errno.ENOENT,
                      errno.EINTR, errno.EIO}
 
+        def _sleep(secs):
+            if honor_stop:
+                self.sleep_unless_stopped(secs)
+            else:
+                time.sleep(secs)
+
         for attempt in range(1, self.max_retries + 1):
-            self.proceed_unless_stopped()
+            if honor_stop:
+                self.proceed_unless_stopped()
 
             rc, out = self._run_ceph_cmd(
                 'fs', 'subvolume', 'quarantine', op, *self._subvol_args())
@@ -159,12 +172,12 @@ class QuarantineThrasher(ThrasherGreenlet):
                                  "MDS may be recovering",
                                  op, self._rcinfo(rc), attempt,
                                  self.max_retries)
-                self.sleep_unless_stopped(self.retry_delay)
+                _sleep(self.retry_delay)
                 continue
 
             self.logger.warning("quarantine %s failed with %s: %s",
                                 op, self._rcinfo(rc), out.strip())
-            self.sleep_unless_stopped(self.retry_delay)
+            _sleep(self.retry_delay)
 
         raise RuntimeError("quarantine %s failed after %d attempts"
                            % (op, self.max_retries))
