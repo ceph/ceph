@@ -158,9 +158,6 @@ void PaxosService::refresh(bool *need_bootstrap)
   // update cached versions
   auto first_committed = mon.store->get(get_service_name(), first_committed_name);
   auto last_committed = mon.store->get(get_service_name(), last_committed_name);
-  if (last_committed > cached_last_committed) {
-    finish_contexts(g_ceph_context, waiting_for_commit, 0);
-  }
   cached_first_committed = first_committed;
   cached_last_committed = last_committed;
 
@@ -171,7 +168,6 @@ void PaxosService::refresh(bool *need_bootstrap)
   }
   format_version = new_format;
 
-
   _update_from_paxos(need_bootstrap);
 }
 
@@ -180,6 +176,14 @@ void PaxosService::post_refresh()
   dout(10) << __func__ << dendl;
 
   post_paxos_update();
+
+  // After every service has applied this round. Completing waiters in
+  // refresh() would ack OSDMonitor before AuthMonitor updated KeyServer,
+  // and handle_auth_request() can run on the msgr path immediately.
+  if (cached_last_committed > last_committed_post_refresh) {
+    finish_contexts(g_ceph_context, waiting_for_commit, 0);
+    last_committed_post_refresh = cached_last_committed;
+  }
 
   if (mon.is_peon()) {
     finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
