@@ -2117,6 +2117,8 @@ class CephadmUpgrade:
             })
         else:
             logger.info('Found mon/mgr/OSD/mds daemons still needing upgrade. Service cipher not set')
+            logger.info('Upgrade: Cannot mark complete, daemons still need upgrade: %s', still_needing_upgrade)
+            return
 
         if self.upgrade_state.rotated_osd_mds_keyrings:
             self._clear_rotated_daemon_entry()
