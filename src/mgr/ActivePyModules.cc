@@ -19,6 +19,7 @@
 
 #include <rocksdb/version.h>
 
+#include "common/cmdparse.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters_key.h"
@@ -703,6 +704,52 @@ int ActivePyModules::get_store_ex(const std::string &reader,
   }
   *val = i->second;
   return 0;
+}
+
+bool ActivePyModules::try_get_cached_config_key_get(
+    const std::vector<std::string> &cmd, int *r, bufferlist *outbl) const
+{
+  cmdmap_t cmdmap;
+  std::stringstream ss;
+  if (!ceph::common::cmdmap_from_json(cmd, &cmdmap, ss)) {
+    return false;
+  }
+
+  std::string prefix;
+  if (!ceph::common::cmd_getval(cmdmap, "prefix", prefix) ||
+      prefix != "config-key get") {
+    return false;
+  }
+
+  std::string key;
+  if (!ceph::common::cmd_getval(cmdmap, "key", key)) {
+    return false;
+  }
+
+  // Prefixes the mon pushes live updates for, see Mgr::init().
+  static const std::string_view cached_prefixes[] = {
+    "mgr/", "device/", "config/"
+  };
+  bool under_cached_prefix = false;
+  for (auto p : cached_prefixes) {
+    if (key.compare(0, p.size(), p) == 0) {
+      under_cached_prefix = true;
+      break;
+    }
+  }
+  if (!under_cached_prefix) {
+    return false;
+  }
+
+  std::lock_guard l(lock);
+  auto i = store_cache.find(key);
+  if (i == store_cache.end()) {
+    *r = -ENOENT;
+  } else {
+    *r = 0;
+    outbl->append(i->second);
+  }
+  return true;
 }
 
 std::optional<std::vector<std::byte>> ActivePyModules::dispatch_remote(

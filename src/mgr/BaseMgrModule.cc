@@ -165,6 +165,15 @@ ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
 
   if (std::string(type) == "mon") {
 
+    // Skips the OSDMap wait below too: nothing changed on the mon.
+    int cached_r = 0;
+    if (self->py_modules->try_get_cached_config_key_get(
+          {cmd_json}, &cached_r, &command_c->outbl)) {
+      self->py_modules->cmd_finisher.queue(command_c, cached_r);
+      PyEval_RestoreThread(tstate);
+      Py_RETURN_NONE;
+    }
+
     // Wait for the latest OSDMap after each command we send to
     // the mons.  This is a heavy-handed hack to make life simpler
     // for python module authors, so that they know whenever they

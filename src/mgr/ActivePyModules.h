@@ -173,6 +173,11 @@ public:
   void set_store(const std::string &module_name,
       const std::string &key, const std::optional<std::string> &val);
 
+  // Serves a "config-key get" under mgr/, device/ or config/ from the
+  // same cache get_store() uses. False means: dispatch to the mon as usual.
+  bool try_get_cached_config_key_get(const std::vector<std::string> &cmd,
+      int *r, bufferlist *outbl) const;
+
   bool get_config(const std::string &module_name,
       const std::string &key, std::string *val) const;
   std::pair<int, std::string> set_config(const std::string &module_name,
