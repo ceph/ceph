@@ -188,6 +188,7 @@ void FSMirror::init(Context *on_finish) {
                   g_ceph_context->_conf->cluster, &m_cluster, "", "", m_args);
   if (r < 0) {
     m_init_failed = true;
+    set_failed_ts();
     on_finish->complete(r);
     return;
   }
@@ -195,6 +196,7 @@ void FSMirror::init(Context *on_finish) {
   r = m_cluster->ioctx_create2(m_pool_id, m_ioctx);
   if (r < 0) {
     m_init_failed = true;
+    set_failed_ts();
     m_cluster.reset();
     derr << ": error accessing local pool (id=" << m_pool_id << "): "
          << cpp_strerror(r) << dendl;
@@ -205,6 +207,7 @@ void FSMirror::init(Context *on_finish) {
   r = mount(m_cluster, m_filesystem, true, &m_mount);
   if (r < 0) {
     m_init_failed = true;
+    set_failed_ts();
     m_ioctx.close();
     m_cluster.reset();
     on_finish->complete(r);
@@ -273,6 +276,7 @@ void FSMirror::init_instance_watcher(Context *on_finish) {
                                            std::scoped_lock locker(m_lock);
                                            if (r < 0) {
                                              m_init_failed = true;
+                                             set_failed_ts();
                                            }
                                          }
                                          on_finish->complete(r);
