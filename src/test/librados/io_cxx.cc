@@ -1015,6 +1015,7 @@ TEST_P(LibRadosIoPP, ZeroAndTruncateSameRequest) {
   };
 
   auto expect_object = [&](const char* oid, size_t expected_size) {
+      ensure_log_committed(oid, 0, expected_size);
       char buf[expected_size];
       memset(buf, 0, sizeof(buf));
       bufferlist bl;
@@ -1195,6 +1196,7 @@ TEST_P(LibRadosIoECPP, ZeroAndTruncateSameRequest) {
   };
 
   auto expect_object = [&](const char* oid, size_t expected_size) {
+      ensure_log_committed(oid, 0, expected_size);
       char buf[expected_size];
       memset(buf, 0, sizeof(buf));
       bufferlist bl;
