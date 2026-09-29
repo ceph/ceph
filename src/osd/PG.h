@@ -803,6 +803,9 @@ protected:
 #ifndef CEPH_DEBUG_MUTEX
   mutable std::thread::id locked_by;
 #endif
+  // gen_prefix() lean-mode state; only accessed with _lock held
+  mutable std::string last_logged_pg_state;
+  mutable unsigned lean_prefixes_since_full = 0;
   std::atomic<unsigned int> ref{0};
 
 #ifdef PG_DEBUG_REFS

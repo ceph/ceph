@@ -1144,7 +1144,7 @@ std::ostream &operator<<(std::ostream &out, const log_entry_t &rhs) {
   default:
     ceph_assert(false);
   }
-  return out << "[" << rhs.shard << "]->" << rhs.io << "\n";
+  return out << "[" << rhs.shard << "]->" << rhs.io;
 }
 
 // Upgraded pools can still have keys, so there are a few functions that still

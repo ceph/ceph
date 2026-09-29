@@ -334,3 +334,31 @@ TEST(entity_addrvec_t, legacy_equals)
   ASSERT_FALSE(av21.legacy_equals(bv1));
   ASSERT_FALSE(av1.legacy_equals(bv21));
 }
+
+TEST(entity_addrvec_t, brief)
+{
+  // multi-address vector: brief=true drops everything but the first address;
+  // brief=false must match operator<< exactly.
+  entity_addrvec_t multi;
+  const char *end = "";
+  ASSERT_TRUE(multi.parse("[v2:1.2.3.4:111/0,v1:1.2.3.4:222/0]", &end));
+  ASSERT_EQ(stringify(entity_addrvec_brief_t{multi, true}),
+	    "v2:1.2.3.4:111/0");
+  ASSERT_EQ(stringify(entity_addrvec_brief_t{multi, false}),
+	    stringify(multi));
+
+  // one-element vector: brief has nothing to drop, so brief and non-brief
+  // must both match operator<< (which already prints just the one address).
+  entity_addrvec_t one;
+  entity_addr_t a;
+  ASSERT_TRUE(a.parse("v2:1.2.3.4:111/0"));
+  one.v.push_back(a);
+  ASSERT_EQ(stringify(entity_addrvec_brief_t{one, true}), stringify(one));
+  ASSERT_EQ(stringify(entity_addrvec_brief_t{one, false}), stringify(one));
+
+  // empty vector: brief and non-brief must both match operator<<.
+  entity_addrvec_t empty;
+  ASSERT_EQ(stringify(entity_addrvec_brief_t{empty, true}), stringify(empty));
+  ASSERT_EQ(stringify(entity_addrvec_brief_t{empty, false}),
+	    stringify(empty));
+}

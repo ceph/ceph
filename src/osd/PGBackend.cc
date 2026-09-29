@@ -607,7 +607,7 @@ void PGBackend::remove(
 
 void PGBackend::on_change_cleanup(ObjectStore::Transaction *t)
 {
-  dout(10) << __func__ << dendl;
+  dout(15) << __func__ << dendl;
   // clear temp
   for (set<hobject_t>::iterator i = temp_contents.begin();
        i != temp_contents.end();
@@ -934,7 +934,7 @@ int PGBackend::be_scan_list(
   ScrubMap &map,
   ScrubMapBuilder &pos)
 {
-  dout(10) << __func__ << " " << pos << dendl;
+  dout(15) << __func__ << " " << pos << dendl;
   ceph_assert(!pos.done());
   ceph_assert(pos.pos < pos.ls.size());
   hobject_t& poid = pos.ls[pos.pos];
@@ -968,11 +968,12 @@ int PGBackend::be_scan_list(
 	       << ", removing from map" << dendl;
       map.objects.erase(poid);
     } else if (r == -EIO) {
-      dout(25) << __func__ << "  " << poid << " got " << r
+      dout(10) << __func__ << "  " << poid << " got " << r
 	       << ", stat_error" << dendl;
       o.stat_error = true;
     } else if (r != 0) {
-      derr << __func__ << " got: " << cpp_strerror(r) << dendl;
+      derr << __func__ << " got: " << cpp_strerror(r) << " on " << poid
+	   << dendl;
       ceph_abort();
     }
 
@@ -992,7 +993,8 @@ int PGBackend::be_scan_list(
     if (r == -EINPROGRESS) {
       return -EINPROGRESS;
     } else if (r != 0) {
-      derr << __func__ << " be_deep_scrub got: " << cpp_strerror(r) << dendl;
+      derr << __func__ << " be_deep_scrub got: " << cpp_strerror(r)
+	   << " on " << poid << dendl;
       ceph_abort();
     }
   }

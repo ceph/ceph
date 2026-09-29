@@ -113,7 +113,7 @@ void ECBackend::handle_recovery_push(
   if (get_parent()->pg_is_remote_backfilling()) {
     get_parent()->pg_add_local_num_bytes(op.data.length());
     get_parent()->pg_add_num_bytes(op.data.length() * sinfo.get_k());
-    dout(10) << __func__ << " " << op.soid
+    dout(20) << __func__ << " " << op.soid
              << " add new actual data by " << op.data.length()
              << " add new num_bytes by " << op.data.length() * sinfo.get_k()
              << dendl;
@@ -133,7 +133,7 @@ void ECBackend::handle_recovery_push(
       get_parent()->pg_sub_local_num_bytes(st.st_size);
       // XXX: This can be way overestimated for small objects
       get_parent()->pg_sub_num_bytes(st.st_size * sinfo.get_k());
-      dout(10) << __func__ << " " << op.soid
+      dout(20) << __func__ << " " << op.soid
                << " sub actual data by " << st.st_size
                << " sub num_bytes by " << st.st_size * sinfo.get_k()
                << dendl;
@@ -255,7 +255,7 @@ bool ECBackend::can_handle_while_inactive(
 
 bool ECBackend::_handle_message(
   OpRequestRef _op) {
-  dout(10) << __func__ << ": " << *_op->get_req() << dendl;
+  dout(15) << __func__ << ": " << *_op->get_req() << dendl;
   int priority = _op->get_req()->get_priority();
   switch (_op->get_req()->get_type()) {
   case MSG_OSD_EC_WRITE: {
@@ -355,6 +355,9 @@ struct SubWriteCommitted : public Context {
 void ECBackend::sub_write_committed(
   ceph_tid_t tid, eversion_t version, eversion_t last_complete,
   const ZTracer::Trace &trace) {
+  dout(ceph::dout::need_dynamic(version == eversion_t() ? 20 : 10))
+    << __func__ << " tid=" << tid << " v=" << version
+    << " last_complete=" << last_complete << dendl;
   if (get_parent()->pgb_is_primary()) {
     ECSubWriteReply reply;
     reply.tid = tid;
@@ -394,6 +397,17 @@ void ECBackend::handle_sub_write(
     msg->mark_event("sub_op_started");
   }
   trace.event("handle_sub_write");
+  dout(ceph::dout::need_dynamic(op.at_version == eversion_t() ? 20 : 10)) << __func__
+           << " tid=" << op.tid
+           << " reqid=" << op.reqid
+           << " " << op.soid
+           << " v=" << op.at_version
+           << " from=" << from
+           << " log_entries=" << op.log_entries.size()
+           << " ops=" << op.t.get_num_ops()
+           << " bytes=" << op.t.get_num_bytes()
+           << (op.backfill_or_async_recovery ? " backfill_or_async_recovery" : "")
+           << dendl;
 
   if (cct->_conf->bluestore_debug_inject_read_err &&
     ECInject::test_write_error3(op.soid)) {
@@ -591,7 +605,7 @@ void ECBackend::handle_sub_read(
   for (set<hobject_t>::iterator i = op.attrs_to_read.begin();
        i != op.attrs_to_read.end();
        ++i) {
-    dout(10) << __func__ << ": fulfilling attr request on "
+    dout(15) << __func__ << ": fulfilling attr request on "
 	     << *i << dendl;
     if (reply->errors.contains(*i))
       continue;
@@ -733,6 +747,25 @@ void ECBackend::handle_sub_read(
     }
   }
 
+  dout(10) << __func__ << " tid=" << op.tid << " from=" << from;
+  for (const auto &[hoid, extents] : op.to_read) {
+    uint64_t bytes = 0;
+    auto bufs = reply->buffers_read.find(hoid);
+    if (bufs != reply->buffers_read.end()) {
+      for (const auto &p : bufs->second) {
+        bytes += p.second.length();
+      }
+    }
+    *_dout << " " << hoid << " extents=" << extents.size() << " bytes=" << bytes;
+  }
+  if (!op.attrs_to_read.empty()) {
+    *_dout << " attrs_to_read=" << op.attrs_to_read.size();
+  }
+  if (!reply->errors.empty()) {
+    *_dout << " errors=" << reply->errors;
+  }
+  *_dout << dendl;
+
   reply->from = get_parent()->whoami_shard();
   reply->tid = op.tid;
 }
@@ -761,6 +794,13 @@ void ECBackend::handle_sub_write_reply(
         from, ec_write_reply_op.last_complete);
     }
   }
+  dout(15) << __func__ << " tid=" << ec_write_reply_op.tid
+           << " hoid=" << op->hoid
+           << " from=" << from
+           << " committed=" << ec_write_reply_op.committed
+           << " last_complete=" << ec_write_reply_op.last_complete
+           << " pending_commits=" << op->pending_commits
+           << dendl;
 
   if (cct->_conf->bluestore_debug_inject_read_err &&
     (op->pending_commits == 1) &&
@@ -783,12 +823,21 @@ void ECBackend::handle_sub_read_reply(
     ECSubReadReply &op,
     const ZTracer::Trace &trace) {
   trace.event("ec sub read reply");
-  dout(10) << __func__ << ": reply " << op << dendl;
+  dout(15) << __func__ << ": reply " << op << dendl;
   map<ceph_tid_t, ReadOp>::iterator iter = read_pipeline.tid_to_read_map.
                                                          find(op.tid);
   if (iter == read_pipeline.tid_to_read_map.end()) {
     //canceled
-    dout(20) << __func__ << ": dropped " << op << dendl;
+    // Late redundant replies are routine on fast_read pools.
+    dout(ceph::dout::need_dynamic(get_parent()->get_pool().fast_read ? 15 : 10))  // dout-lint: error-path
+      << __func__ << ": dropped " << op << " from " << from;
+    for (auto &kv : op.buffers_read) {
+      *_dout << " " << kv.first;
+    }
+    for (auto &kv : op.errors) {
+      *_dout << " " << kv.first;
+    }
+    *_dout << dendl;
     return;
   }
   ReadOp &rop = iter->second;
@@ -917,7 +966,8 @@ void ECBackend::handle_sub_read_reply(
     // ignore all zeros, or minimum_to_decode may conclude that it has enough
     // shards available.
     rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
-    dout(20) << __func__ << " shard=" << from << " error=" << err << dendl;
+    // dout-lint: error-path
+    dout(10) << __func__ << " tid=" << op.tid << " " << hoid << " shard=" << from << " error=" << err << dendl;
   }
 
   map<pg_shard_t, set<ceph_tid_t>>::iterator siter =
@@ -981,6 +1031,14 @@ void ECBackend::handle_sub_read_reply(
 
           rop.debug_log.emplace_back(ECUtil::REQUEST_MISSING, op.from);
           int r = read_pipeline.send_all_remaining_reads(oid, rop);
+          // dout-lint: error-path
+          dout(10) << __func__ << " tid=" << rop.tid << " " << oid
+                   << " cannot decode from shards " << have
+                   << " attrs_ok=" << attrs_satisfied
+                   << " omap_ok=" << omap_satisfied
+                   << " err=" << err
+                   << " errors=" << read_result.errors
+                   << " send_all_remaining_reads r=" << r << dendl;
           if (r == 0 && !rop.do_redundant_reads) {
             // We found that new reads are required to do a decode.
             need_resend = true;
@@ -1004,14 +1062,16 @@ void ECBackend::handle_sub_read_reply(
         if (!rop.complete.at(oid).errors.empty()) {
           if (cct->_conf->osd_read_ec_check_for_errors) {
             rop.debug_log.emplace_back(ECUtil::COMPLETE_ERROR, op.from);
-            dout(10) << __func__ << ": Not ignoring errors, use one shard" << dendl;
+            dout(10) << __func__ << ": Not ignoring errors, use one shard: tid=" << rop.tid << " " << oid << " errors=" << rop.complete.at(oid).errors << dendl;
             err = rop.complete.at(oid).errors.begin()->second;
             rop.complete.at(oid).r = err;
           } else {
             get_parent()->clog_warn() << "Error(s) ignored for "
-              << iter->first << " enough copies available";
-            dout(10) << __func__ << " Error(s) ignored for " << iter->first
-		     << " enough copies available" << dendl;
+              << oid << " (read tid " << iter->first << ") errors="
+              << rop.complete.at(oid).errors << " enough copies available";
+            dout(10) << __func__ << " Error(s) ignored for tid " << iter->first
+                     << " " << oid << " errors=" << rop.complete.at(oid).errors
+                     << " enough copies available" << dendl;
             rop.debug_log.emplace_back(ECUtil::ERROR_CLEAR, op.from);
             rop.complete.at(oid).errors.clear();
           }
@@ -1031,6 +1091,15 @@ void ECBackend::handle_sub_read_reply(
   } else if (rop.in_progress.empty() ||
              is_complete == rop.complete.size()) {
     dout(20) << __func__ << " Complete: " << rop << dendl;
+    dout(10) << __func__ << " read complete tid=" << rop.tid
+             << " for_recovery=" << rop.for_recovery;
+    for (auto &&[oid, res] : rop.complete) {
+      *_dout << " " << oid << " r=" << res.r;
+      if (!res.errors.empty()) {
+        *_dout << " errors=" << res.errors;
+      }
+    }
+    *_dout << dendl;
     rop.trace.event("ec read complete");
     rop.debug_log.emplace_back(ECUtil::COMPLETE, op.from);
 
@@ -1046,7 +1115,7 @@ void ECBackend::handle_sub_read_reply(
     }
     read_pipeline.complete_read_op(std::move(rop));
   } else {
-    dout(10) << __func__ << " readop not complete: " << rop << dendl;
+    dout(20) << __func__ << " readop not complete: " << rop << dendl;
   }
 }
 
@@ -1164,12 +1233,12 @@ std::tuple<
 > ECBackend::get_attrs_n_size_from_disk(const hobject_t &hoid) {
   struct stat st;
   if (int r = object_stat(hoid, &st); r < 0) {
-    dout(10) << __func__ << ": stat error " << r << " on" << hoid << dendl;
+    dout(10) << __func__ << ": stat error " << r << " on " << hoid << dendl;
     return {r, {}, 0};
   }
   map<string, bufferlist, less<>> real_attrs;
   if (int r = switcher->objects_get_attrs_with_hinfo(hoid, &real_attrs); r < 0) {
-    dout(10) << __func__ << ": get attr error " << r << " on" << hoid << dendl;
+    dout(10) << __func__ << ": get attr error " << r << " on " << hoid << dendl;
     return {r, {}, 0};
   }
   return {0, real_attrs, st.st_size};
@@ -1227,6 +1296,27 @@ void ECBackend::submit_transaction(
   ldpp_dout(get_parent()->get_dpp(), 20) << __func__
              << " plans=" << plans
              << dendl;
+  ldpp_dout(get_parent()->get_dpp(), 10) << __func__
+             << " tid=" << tid
+             << " reqid=" << reqid
+             << " v=" << at_version
+             << " " << hoid;
+  const bool multi_object = plans.plans.size() > 1;
+  for (const auto &p : plans.plans) {
+    if (multi_object) {
+      *_dout << " [" << p.hoid << "]";
+    }
+    *_dout << " read=" << p.to_read
+           << " write=" << p.will_write
+           << " size=" << p.orig_size << "->" << p.projected_size;
+    if (p.do_parity_delta_write) {
+      *_dout << " pdw";
+    }
+    if (p.invalidates_cache) {
+      *_dout << " invalidates_cache";
+    }
+  }
+  *_dout << dendl;
   rmw_pipeline.start_rmw(std::move(op));
 }
 
@@ -1581,7 +1671,7 @@ int ECBackend::be_deep_scrub(
   ScrubMap &map,
   ScrubMapBuilder &pos,
   ScrubMap::object &o) {
-  dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
+  dout(15) << __func__ << " " << poid << " pos " << pos << dendl;
   int r;
 
   utime_t sleeptime;
@@ -1610,7 +1700,7 @@ int ECBackend::be_deep_scrub(
     stride, bl,
     ECCommon::scrub_fadvise_flags);
   if (r < 0) {
-    dout(20) << __func__ << "  " << poid << " got "
+    dout(10) << __func__ << "  " << poid << " got "
 	     << r << " on read, read_error" << dendl;
     o.read_error = true;
     return 0;

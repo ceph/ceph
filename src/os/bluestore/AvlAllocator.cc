@@ -406,7 +406,7 @@ int64_t AvlAllocator::allocate(
   int64_t  hint,
   PExtentVector* extents)
 {
-  ldout(cct, 10) << __func__ << std::hex
+  ldout(cct, 20) << __func__ << std::hex
                  << " 0x" << want
                  << "/" << unit
                  << "," << max_alloc_size
@@ -539,7 +539,7 @@ uint64_t AvlAllocator::get_free_extents(
 
 void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
-  ldout(cct, 10) << __func__ << std::hex
+  ldout(cct, 20) << __func__ << std::hex
                  << " 0x" << offset
                  << "~" << length
                  << std::dec << dendl;
@@ -552,7 +552,7 @@ void AvlAllocator::init_add_free(uint64_t offset, uint64_t length)
 
 void AvlAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
-  ldout(cct, 10) << __func__ << std::hex
+  ldout(cct, 20) << __func__ << std::hex
                  << " 0x" << offset
                  << "~" << length
                  << std::dec << dendl;
