@@ -1274,9 +1274,22 @@ static inline int copy_dir_fd(int old_fd)
   return openat(old_fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
 }
 
+/* Read an object's attributes, through one format or through two.
+ *
+ * `alt` is the other end of the read chain and is null everywhere but
+ * a bucket mid-upgrade -- see NSFSBucket::xattr_fallback().  It is
+ * asked only about a name the bucket's own format declines, so a tree
+ * with nothing foreign left runs the loop it ran before:  no extra
+ * syscall, and one more string comparison for each name neither format
+ * owns, which in practice is `security.selinux`.
+ *
+ * Ours first.  An object rewritten during the conversion carries our
+ * names and must be read as ours even while the bucket still holds
+ * objects that are not. */
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display,
-		       const nsfs::XattrStrategy* xs)
+		       const nsfs::XattrStrategy* xs,
+		       const nsfs::XattrStrategy* alt = nullptr)
 {
   /* large enough for every attribute an object carries in practice;  the
    * biggest is the encoded ACL at a couple of hundred bytes */
@@ -1303,10 +1316,14 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
     std::string xattr_name(keyptr);
     std::string key;
 
+    const nsfs::XattrStrategy* owner = xs;
     if (!xs->parse_disk_name(xattr_name, key)) {
-      buflen -= keylen;
-      keyptr += keylen;
-      continue;
+      if (!alt || !alt->parse_disk_name(xattr_name, key)) {
+	buflen -= keylen;
+	keyptr += keylen;
+	continue;
+      }
+      owner = alt;
     }
 
     /* Read straight into a stack buffer.  Sizing the value first with a
@@ -1335,7 +1352,10 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 
     bufferlist bl;
     bl.append(vp, vallen);
-    if (xs->counted_string_value(key)) {
+    /* `owner` and not `xs`:  whether a value is a counted string is the
+     * format's, and theirs are not.  Asking the wrong one appends a NUL
+     * their value never had. */
+    if (owner->counted_string_value(key)) {
       /* Restore the terminator RGW writes and attr_on_disk() strips.
        *
        * If the value already ends in one, some write path skipped
@@ -1533,6 +1553,8 @@ FSEnt::FSEnt(std::string _name, Directory* _parent, CephContext* _ctx, FSStrateg
     mpu_strategy(_parent ? _parent->mpu_strategy : nullptr),
     xattr_strategy(_parent ? _parent->xattr_strategy : nullptr),
     path_strategy(_parent ? _parent->path_strategy : nullptr),
+    xattr_fallback(_parent ? _parent->xattr_fallback : nullptr),
+    path_fallback(_parent ? _parent->path_fallback : nullptr),
     reserved_names(_parent ? _parent->reserved_names : nullptr)
 {}
 
@@ -1542,6 +1564,8 @@ FSEnt::FSEnt(std::string _name, Directory* _parent, struct statx& _stx, CephCont
     mpu_strategy(_parent ? _parent->mpu_strategy : nullptr),
     xattr_strategy(_parent ? _parent->xattr_strategy : nullptr),
     path_strategy(_parent ? _parent->path_strategy : nullptr),
+    xattr_fallback(_parent ? _parent->xattr_fallback : nullptr),
+    path_fallback(_parent ? _parent->path_fallback : nullptr),
     reserved_names(_parent ? _parent->reserved_names : nullptr)
 {}
 
@@ -1630,8 +1654,14 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
         if (disk_name == nsfs::EXTENSIONS_XATTR) {
           continue;
         }
+        /* Through the chain as well.  A superseded attribute of
+         * theirs then resolves to the key we are about to write and
+         * lands in to_remove, which is how a converting object stops
+         * carrying both spellings of the same fact. */
         std::string logical;
-        if (!xattr_strategy->parse_disk_name(disk_name, logical)) {
+        if (!xattr_strategy->parse_disk_name(disk_name, logical) &&
+            (!xattr_fallback ||
+             !xattr_fallback->parse_disk_name(disk_name, logical))) {
           continue;
         }
         if (to_write.find(disk_name) == to_write.end()) {
@@ -1643,6 +1673,35 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
         std::string disk_name{xattr_strategy->disk_name(key)};
         if (to_write.find(disk_name) == to_write.end()) {
           to_remove.push_back(std::move(disk_name));
+        }
+      }
+    }
+
+    /* One logical key, one spelling.
+     *
+     * MERGE touches only the keys it was given, which is the object
+     * contract and must stay that way -- so the wholesale prune above
+     * is not available here.  What is needed is narrower:  a key we
+     * are writing may already be on this file under the other
+     * format's name, and leaving it there gives the object two
+     * spellings of one fact.  The chain would keep reading ours, so
+     * nothing would look wrong, and the conversion would never finish
+     * because the foreign attribute never goes away.
+     *
+     * Only where a fallback exists, which is only mid-upgrade.  The
+     * design record had this landing in the REPLACE_ALL prune with no
+     * new logic;  that was wrong, because objects do not write that
+     * way. */
+    if (xattr_fallback) {
+      for (auto& [disk_name, _] : to_write) {
+        std::string logical;
+        if (!xattr_strategy->parse_disk_name(disk_name, logical)) {
+          continue;
+        }
+        std::string foreign = xattr_fallback->disk_name(logical);
+        if (!foreign.empty() && (foreign != disk_name) &&
+            (to_write.find(foreign) == to_write.end())) {
+          to_remove.push_back(std::move(foreign));
         }
       }
     }
@@ -1660,7 +1719,8 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   /* per-attr syscalls */
   if (mode == AttrWriteMode::REPLACE_ALL) {
     Attrs old_attrs;
-    ret = get_x_attrs(y, dpp, fd, old_attrs, get_name(), xattr_strategy);
+    ret = get_x_attrs(y, dpp, fd, old_attrs, get_name(), xattr_strategy,
+		    xattr_fallback);
     if (ret >= 0) {
       for (auto& it : old_attrs) {
         if (attrs.find(it.first) == attrs.end() &&
@@ -1683,7 +1743,8 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       if (skip_empty && !it.second.length()) {
         continue;
       }
-      ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name(), xattr_strategy);
+      ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name(),
+			 xattr_strategy);
       if (ret < 0) {
         return ret;
       }
@@ -1694,7 +1755,8 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     if (skip_empty && !it.second.length()) {
       continue;
     }
-    ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name(), xattr_strategy);
+    ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name(),
+		       xattr_strategy);
     if (ret < 0) {
       return ret;
     }
@@ -1710,7 +1772,8 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
     return ret;
   }
 
-  return get_x_attrs(y, dpp, get_fd(), attrs, get_name(), xattr_strategy);
+  return get_x_attrs(y, dpp, get_fd(), attrs, get_name(), xattr_strategy,
+		    xattr_fallback);
 }
 
 int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix)
@@ -1753,7 +1816,8 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
   if (ret < 0)
     return ret;
 
-  ret = get_x_attrs(y, dpp, get_fd(), attrs, get_name(), xattr_strategy);
+  ret = get_x_attrs(y, dpp, get_fd(), attrs, get_name(), xattr_strategy,
+		    xattr_fallback);
   if (ret < 0)
     return ret;
 
@@ -2531,7 +2595,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
         return ret;
 
       Attrs attrs;
-      ret = get_x_attrs(y, dpp, ent->get_fd(), attrs, ent->get_name(), xattr_strategy);
+      ret = get_x_attrs(y, dpp, ent->get_fd(), attrs, ent->get_name(),
+			xattr_strategy, xattr_fallback);
       if (ret < 0)
         return ret;
 
@@ -2564,6 +2629,66 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       ret = subdir->open(dpp);
       if (ret < 0)
         return ret;
+
+      /* A directory object written in the other format.
+       *
+       * Their empty one has no sentinel inside it -- the fact is
+       * user.noobaa.dir_content on the directory -- so nothing in the
+       * walk reveals it and the directory has to be asked.  Only on a
+       * bucket mid-upgrade:  path_fallback is null everywhere else,
+       * and a bucket we wrote holds no foreign directory objects.
+       *
+       * One fgetxattr, on the descriptor just opened for the
+       * recursion.  The sentinel case above costs nothing because the
+       * walk sees the entry anyway, and this is what the other format
+       * costs instead.
+       *
+       * Emitted here and not skipped when it also has a sentinel:
+       * they write `.folder` whenever the object has content, and the
+       * branch above catches that on the way in.  What this adds is
+       * the empty one. */
+      if (path_fallback) {
+	PathStrategy::DirectoryObject dobj{};
+	if (path_fallback->directory_object(dpp, subdir->get_fd(), dobj) &&
+	    !dobj.content_in_sentinel) {
+	  rgw_bucket_dir_entry bde{};
+	  const std::string dkey = path_prefix + name + "/";
+	  rgw_obj_key key = path_strategy->key_from_name(dkey);
+	  key.get_index_key(&bde.key);
+	  bde.ver.pool = 1;
+	  bde.ver.epoch = 1;
+	  bde.exists = true;
+	  bde.meta.category = RGWObjCategory::Main;
+	  bde.meta.size = dobj.size;
+	  bde.meta.accounted_size = dobj.size;
+	  bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+
+	  Attrs dattrs;
+	  if (get_x_attrs(y, dpp, subdir->get_fd(), dattrs, name,
+			  xattr_strategy, xattr_fallback) == 0) {
+	    ACLOwner acl_owner;
+	    if (xattr_strategy->object_owner(dattrs, nullptr, acl_owner) >= 0) {
+	      bde.meta.owner = to_string(acl_owner.id);
+	      bde.meta.owner_display_name = acl_owner.display_name;
+	    }
+	    bufferlist etag_bl;
+	    if (rgw::sal::get_attr(dattrs, RGW_ATTR_ETAG, etag_bl)) {
+	      bde.meta.etag = etag_bl.to_str();
+	    }
+	  }
+	  subdir->stat(dpp);
+	  bde.meta.mtime = from_statx_timestamp(subdir->get_stx().stx_mtime);
+	  if (bde.meta.etag.empty()) {
+	    bde.meta.etag = synthesize_etag(subdir->get_stx());
+	  }
+
+	  ret = cb(dpp, bde);
+	  if (ret < 0) {
+	    return ret;
+	  }
+	}
+      }
+
       return subdir->fill_cache(dpp, y, cb, flags,
                                 path_prefix + name + "/");
     }
@@ -2667,7 +2792,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
             }
 
             Attrs attrs;
-            ret = get_x_attrs(y, dpp, tfd, attrs, vname, xattr_strategy);
+            ret = get_x_attrs(y, dpp, tfd, attrs, vname, xattr_strategy,
+			      xattr_fallback);
 
             ACLOwner acl_owner;
             if (xattr_strategy->object_owner(attrs, nullptr, acl_owner) >= 0) {
@@ -3580,15 +3706,27 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
       }
     );
 
-  errno = 0;
-  while ((entry = readdir(dir)) != NULL) {
+  /* errno is cleared immediately before readdir and read immediately
+   * after it returns NULL, because anything in the body may set it.
+   * Clearing it at the bottom of the body instead -- which this did --
+   * makes every `continue` responsible for remembering, and the one
+   * that did not, an entry owned by somebody else, is the common exit
+   * on a shared root.  resolve_profile() reading an attribute a bucket
+   * does not carry leaves ENODATA behind, and ListBuckets reported
+   * that as a failed listing:  500, for every caller, as soon as a
+   * second attribute was read there. */
+  while (true) {
+    errno = 0;
+    entry = readdir(dir);
+    if (entry == NULL) {
+      break;
+    }
     struct statx stx;
 
     ret = statx(get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
     if (ret < 0) {
       ret = errno;
       if (ret == ENOENT) {
-	errno = 0;
 	continue;
       }
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
@@ -3598,19 +3736,16 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
 
     if (!S_ISDIR(stx.stx_mode)) {
       /* Not a bucket, skip it */
-      errno = 0;
       continue;
     }
     if (entry->d_name[0] == '.') {
       /* Skip dotfiles */
-      errno = 0;
       continue;
     }
     std::unique_ptr<Bucket> bucket;
     ret = load_bucket(dpp, rgw_bucket("", entry->d_name), &bucket, null_yield);
     if (ret < 0) {
       if (ret == -ENOENT) {
-	errno = 0;
 	continue;
       }
       /* A bucket we cannot read is one bucket, not a failed listing.
@@ -3621,7 +3756,6 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
       if (ret == -ERR_NOT_IMPLEMENTED) {
 	ldpp_dout(dpp, 4) << "list_buckets: skipping " << entry->d_name
 	  << ", this gateway cannot serve it" << dendl;
-	errno = 0;
 	continue;
       }
       return ret;
@@ -3639,7 +3773,6 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
     // TODO: ent.size and ent.count
 
     result.buckets.push_back(std::move(ent));
-    errno = 0;
     if (result.buckets.size() == max){
       result.next_marker = ent.bucket.marker;
       break;
@@ -4780,10 +4913,70 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
     return -ERR_NOT_IMPLEMENTED;
   }
 
+  /* And whether a foreign reader is still needed.  On the same fd and
+   * once per resolve, so it costs nothing per object.  Only a marked
+   * bucket can be converting -- base IS their format and reads it
+   * directly -- so this is not asked of one. */
+  converting = false;
+  if (profile->extended()) {
+    char cbuf[32];
+    ssize_t clen = ::fgetxattr(dir->get_fd(), nsfs::CONVERTING_XATTR,
+			       cbuf, sizeof(cbuf) - 1);
+    if (clen > 0) {
+      std::string from(cbuf, clen);
+      if (from == nsfs::CONVERTING_FROM_NOOBAA) {
+	converting = true;
+      } else {
+	/* A format we do not have a reader for.  The objects written in
+	 * it are unreadable whatever we do, and serving them through
+	 * the wrong parser turns that into wrong answers. */
+	ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " is being "
+	  << "converted from \"" << from << "\", which this gateway "
+	  << "cannot read;  refusing to serve it" << dendl;
+	profile = nullptr;
+	return -ERR_NOT_IMPLEMENTED;
+      }
+    }
+  }
+
   apply_format();
 
   ldpp_dout(dpp, 20) << "bucket " << get_name() << " profile "
-    << profile->name() << dendl;
+    << profile->name() << (converting ? " (converting from noobaa)" : "")
+    << dendl;
+  return 0;
+}
+
+/* Set or clear it.  An empty `from` removes the attribute, which is
+ * what finishing the conversion does. */
+int NSFSBucket::mark_converting(const DoutPrefixProvider* dpp,
+				bool from_noobaa)
+{
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (from_noobaa) {
+    const std::string v{nsfs::CONVERTING_FROM_NOOBAA};
+    if (::fsetxattr(dir->get_fd(), nsfs::CONVERTING_XATTR,
+		    v.data(), v.size(), 0) < 0) {
+      ret = -errno;
+      ldpp_dout(dpp, 0) << "ERROR: writing " << nsfs::CONVERTING_XATTR
+	<< " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  } else if ((::fremovexattr(dir->get_fd(), nsfs::CONVERTING_XATTR) < 0) &&
+	     (errno != ENODATA)) {
+    ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: removing " << nsfs::CONVERTING_XATTR
+      << " from bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  converting = from_noobaa;
+  /* the fallbacks the subtree inherits follow the marker */
+  apply_format();
   return 0;
 }
 
@@ -4865,6 +5058,21 @@ void NSFSBucket::apply_format()
   dir->set_xattr_strategy(xattr_strategy());
   dir->set_path_strategy(path_strategy());
   dir->set_mpu_strategy(mpu_strategy());
+  dir->set_xattr_fallback(xattr_fallback());
+  dir->set_path_fallback(path_fallback());
+}
+
+/* The other end of the chain.  Null unless the bucket is mid-upgrade,
+ * so on every other bucket the fallback is not merely unused -- there
+ * is nothing there to call. */
+nsfs::XattrStrategy* NSFSBucket::xattr_fallback() const
+{
+  return converting ? driver->get_noobaa_xattr_strategy() : nullptr;
+}
+
+nsfs::PathStrategy* NSFSBucket::path_fallback() const
+{
+  return converting ? driver->get_noobaa_path_strategy() : nullptr;
 }
 
 int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,

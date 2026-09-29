@@ -97,8 +97,7 @@ bool SentinelPathStrategy::names_directory_object(std::string_view entry) const
 /* Never, and without a syscall.  The sentinel is our marker, and the
  * walk sees it while enumerating the directory anyway. */
 bool SentinelPathStrategy::directory_object(const DoutPrefixProvider* dpp,
-					    int parent_fd,
-					    std::string_view dname,
+					    int dir_fd,
 					    DirectoryObject& out) const
 {
   return false;
@@ -181,19 +180,12 @@ bool NooBaaPathStrategy::names_directory_object(std::string_view entry) const
  * their own read path throws NoSuchKey (`namespace_fs.js:1008`) -- and
  * "0" means the object is empty, with no sentinel file to find. */
 bool NooBaaPathStrategy::directory_object(const DoutPrefixProvider* dpp,
-					  int parent_fd,
-					  std::string_view dname,
+					  int dir_fd,
 					  DirectoryObject& out) const
 {
-  int fd = ::openat(parent_fd, std::string(dname).c_str(),
-		    O_RDONLY | O_DIRECTORY);
-  if (fd < 0) {
-    return false;
-  }
-  auto close_fd = make_scope_guard([fd] { ::close(fd); });
-
   char buf[32];
-  ssize_t len = ::fgetxattr(fd, NB_XATTR_DIR_CONTENT, buf, sizeof(buf) - 1);
+  ssize_t len = ::fgetxattr(dir_fd, NB_XATTR_DIR_CONTENT, buf,
+			    sizeof(buf) - 1);
   if (len < 0) {
     return false;
   }
@@ -203,9 +195,9 @@ bool NooBaaPathStrategy::directory_object(const DoutPrefixProvider* dpp,
   errno = 0;
   unsigned long long v = ::strtoull(buf, &end, 10);
   if (errno || (end == buf) || (*end != '\0')) {
-    ldpp_dout(dpp, 4) << "unreadable " << NB_XATTR_DIR_CONTENT << " on "
-		      << dname << " (\"" << buf << "\");  not treating it "
-		      << "as a directory object" << dendl;
+    ldpp_dout(dpp, 4) << "unreadable " << NB_XATTR_DIR_CONTENT
+		      << " (\"" << buf << "\");  not treating this "
+		      << "directory as an object" << dendl;
     return false;
   }
 

@@ -2680,29 +2680,37 @@ TEST(NooBaaPath, DirectoryObjectFromTheAttribute)
   set_u64_xattr(b / "withcontent", "user.noobaa.dir_content", 17);
   write_file(b / "withcontent" / ".folder", std::string(17, 'x'));
 
-  int bfd = ::open(b.c_str(), O_RDONLY | O_DIRECTORY);
-  ASSERT_GE(bfd, 0);
+  /* the directory's own descriptor, which is what the listing walk
+   * holds by the time it asks */
+  auto dfd = [&b](const char* n) {
+    int fd = ::open((b / n).c_str(), O_RDONLY | O_DIRECTORY);
+    EXPECT_GE(fd, 0) << n;
+    return fd;
+  };
 
   nsfs::PathStrategy::DirectoryObject d{};
-  ASSERT_TRUE(nb.directory_object(env->dpp, bfd, "empty", d));
+  int fd = dfd("empty");
+  ASSERT_TRUE(nb.directory_object(env->dpp, fd, d));
   EXPECT_EQ(d.size, 0u);
   EXPECT_FALSE(d.content_in_sentinel);
+  /* ours never marks a directory, and says so without looking */
+  nsfs::PathStrategy::DirectoryObject od{};
+  EXPECT_FALSE(ours.directory_object(env->dpp, fd, od));
+  ::close(fd);
 
   d = {};
-  ASSERT_TRUE(nb.directory_object(env->dpp, bfd, "withcontent", d));
+  fd = dfd("withcontent");
+  ASSERT_TRUE(nb.directory_object(env->dpp, fd, d));
   EXPECT_EQ(d.size, 17u);
   EXPECT_TRUE(d.content_in_sentinel);
+  ::close(fd);
 
   /* a directory without the attribute is not an object;  their own
    * read path throws NoSuchKey for one */
   d = {};
-  EXPECT_FALSE(nb.directory_object(env->dpp, bfd, "plain", d));
-
-  /* ours never marks a directory, and says so without looking */
-  d = {};
-  EXPECT_FALSE(ours.directory_object(env->dpp, bfd, "empty", d));
-
-  ::close(bfd);
+  fd = dfd("plain");
+  EXPECT_FALSE(nb.directory_object(env->dpp, fd, d));
+  ::close(fd);
 }
 
 /* A bucket's format, and the strategies it selects.
@@ -3405,6 +3413,181 @@ TEST_F(NSFSBucketTest, ObjectsInAMarkedBucketKeepOurNames)
   }
   EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type"));
   EXPECT_FALSE(names.contains("user.noobaa.content_type"));
+}
+
+/* A bucket mid-upgrade:  marked as ours, and still holding objects in
+ * their format.
+ *
+ * The bucket is created marked, which is what every bucket this
+ * gateway makes is, and then told it is converting -- which is what
+ * the upgrade command will do at its start and undo when it finishes.
+ * Nothing else may set that marker.
+ */
+class NSFSConvertingBucketTest : public NSFSBucketTest {
+public:
+  void SetUp() override {
+    NSFSBucketTest::SetUp();
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+    ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+    ASSERT_STREQ(b->profile_name(), "strong");
+    ASSERT_EQ(b->mark_converting(env->dpp, true), 0);
+    ASSERT_TRUE(b->is_converting());
+  }
+
+  sf::path bucket_path() const { return bp / "root" / testname; }
+
+  /* an object of theirs, laid down by hand:  their attribute names,
+   * with no attribute of ours anywhere on it */
+  void write_their_object(const std::string& name) {
+    const sf::path p{bucket_path() / name};
+    write_file(p, "their bytes");
+    const std::string ct{"text/plain"};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
+			 ct.data(), ct.size(), 0), 0);
+    const std::string md5{"0123456789abcdef0123456789abcdef"};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.content_md5",
+			 md5.data(), md5.size(), 0), 0);
+  }
+};
+
+/* Their attributes are read on a converting bucket. */
+TEST_F(NSFSConvertingBucketTest, ReadsTheirAttributes)
+{
+  write_their_object("theirs.bin");
+
+  auto obj = bucket->get_object(rgw_obj_key("theirs.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+
+  auto& attrs = obj->get_attrs();
+  auto ct = attrs.find(RGW_ATTR_CONTENT_TYPE);
+  ASSERT_NE(ct, attrs.end()) << "content type was dropped as foreign";
+  EXPECT_EQ(ct->second.to_str(), "text/plain");
+  auto etag = attrs.find(RGW_ATTR_ETAG);
+  ASSERT_NE(etag, attrs.end()) << "etag was dropped as foreign";
+  EXPECT_EQ(etag->second.to_str(), "0123456789abcdef0123456789abcdef");
+}
+
+/* And are not, on a bucket that is not converting.
+ *
+ * The control the chain needs:  without it the test above passes for a
+ * driver that reads both formats everywhere, which is the arrangement
+ * the marker exists to avoid. */
+TEST_F(NSFSBucketTest, DoesNotReadTheirAttributesWithoutTheMarker)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  ASSERT_FALSE(b->is_converting());
+
+  const sf::path p{bp / "root" / testname / "theirs.bin"};
+  write_file(p, "their bytes");
+  const std::string theirs{"text/plain"};
+  ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
+		       theirs.data(), theirs.size(), 0), 0);
+  const std::string md5{"0123456789abcdef0123456789abcdef"};
+  ASSERT_EQ(::setxattr(p.c_str(), "user.content_md5",
+		       md5.data(), md5.size(), 0), 0);
+
+  auto obj = bucket->get_object(rgw_obj_key("theirs.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+
+  /* Both keys are present either way:  the driver guesses a content
+   * type from the name and synthesizes an etag from the stat when an
+   * object carries neither.  So the values are what distinguish the
+   * two cases, and what is asserted is that neither came from their
+   * attribute. */
+  auto& attrs = obj->get_attrs();
+  auto ct = attrs.find(RGW_ATTR_CONTENT_TYPE);
+  if (ct != attrs.end()) {
+    EXPECT_NE(ct->second.to_str(), "text/plain")
+	<< "their content type was read on a bucket that is not converting";
+  }
+  auto etag = attrs.find(RGW_ATTR_ETAG);
+  if (etag != attrs.end()) {
+    EXPECT_NE(etag->second.to_str(), "0123456789abcdef0123456789abcdef")
+	<< "their etag was read on a bucket that is not converting";
+  }
+}
+
+/* A directory object of theirs, which the walk cannot see.
+ *
+ * Their empty one has no sentinel:  the fact is
+ * user.noobaa.dir_content on the directory.  This is the consumer the
+ * marker is worth having for -- it is a syscall per subdirectory, and
+ * the attribute chain is not. */
+TEST_F(NSFSConvertingBucketTest, ListsTheirEmptyDirectoryObject)
+{
+  sf::create_directories(bucket_path() / "photos");
+  set_u64_xattr(bucket_path() / "photos", "user.noobaa.dir_content", 0);
+  /* an ordinary prefix directory beside it, which must not be emitted */
+  sf::create_directories(bucket_path() / "plain");
+  write_file(bucket_path() / "plain" / "a.txt", "x");
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 128, results, null_yield), 0);
+
+  std::set<std::string> keys;
+  for (auto& o : results.objs) {
+    keys.insert(o.key.name);
+  }
+  EXPECT_TRUE(keys.contains("photos/")) << "their folder was invisible";
+  EXPECT_TRUE(keys.contains("plain/a.txt"));
+  EXPECT_FALSE(keys.contains("plain/")) << "a prefix was emitted as an object";
+}
+
+TEST_F(NSFSBucketTest, DoesNotListTheirDirectoryObjectWithoutTheMarker)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  ASSERT_FALSE(b->is_converting());
+
+  sf::create_directories(bp / "root" / testname / "photos");
+  set_u64_xattr(bp / "root" / testname / "photos",
+		"user.noobaa.dir_content", 0);
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 128, results, null_yield), 0);
+  for (auto& o : results.objs) {
+    EXPECT_NE(o.key.name, "photos/");
+  }
+}
+
+/* Writing over a converting object drops the foreign spelling.
+ *
+ * The REPLACE_ALL prune walks the on-disk names and asks the chain for
+ * the logical key;  a superseded attribute of theirs then resolves to
+ * the key being written and lands in to_remove.  Without the chain in
+ * the prune it parses as nothing, is left alone, and the object ends
+ * up carrying both spellings of its content type -- with the reader
+ * preferring whichever the chain asks first. */
+TEST_F(NSFSConvertingBucketTest, WritingPrunesTheForeignSpelling)
+{
+  write_their_object("theirs.bin");
+  const sf::path p{bucket_path() / "theirs.bin"};
+
+  auto obj = bucket->get_object(rgw_obj_key("theirs.bin"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+
+  Attrs attrs;
+  bufferlist ct;
+  ct.append("application/octet-stream");
+  attrs[RGW_ATTR_CONTENT_TYPE] = ct;
+  ASSERT_EQ(obj->set_obj_attrs(env->dpp, &attrs, nullptr, null_yield,
+			       rgw::sal::FLAG_LOG_OP), 0);
+
+  char buf[8192];
+  ssize_t nlen = ::listxattr(p.c_str(), buf, sizeof(buf));
+  ASSERT_GT(nlen, 0);
+  std::set<std::string> names;
+  for (const char* q = buf; q < buf + nlen; q += strlen(q) + 1) {
+    names.insert(q);
+  }
+  EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type"));
+  EXPECT_FALSE(names.contains("user.noobaa.content_type"))
+      << "the object carries both spellings of its content type";
 }
 
 /* Theirs does move one, because their file IS the size.

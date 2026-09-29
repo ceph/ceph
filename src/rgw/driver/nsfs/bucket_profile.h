@@ -82,6 +82,28 @@ struct Format {
  * It is read with its own fgetxattr, before any strategy is consulted. */
 inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs.extensions";
 
+/* The tree still holds structure somebody else wrote.
+ *
+ * Read the same way and for the same reason, and deliberately NOT a bit
+ * in the extensions mask.  That mask says what structure *of ours* a
+ * tree carries and every bit in it is something we added;  what remains
+ * of another format is the opposite fact, and a reader that finds them
+ * in one word comes to treat a leftover as a feature.
+ *
+ * Set by the upgrade from base to a named profile and cleared when that
+ * upgrade finishes, so it is the upgrade's progress flag and not a
+ * steady state.  Its presence is what turns the read chain on:  a
+ * bucket we created never pays for one, and a bucket that has finished
+ * converting stops paying.
+ *
+ * The value is the format the tree is being converted FROM -- today
+ * only "noobaa", which is the only other format that exists.  A name
+ * rather than a flag because a reader has to know which fallback to
+ * chain, and guessing from the one that happens to be compiled in is
+ * how the wrong parser gets applied to the right bytes. */
+inline constexpr const char* CONVERTING_XATTR = "user.nsfs.converting";
+inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
+
 /* THE VALUE IS A SET, NOT A LEVEL.
  *
  * A decimal integer in the attribute, read as a bitmask:  one bit per

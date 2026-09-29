@@ -143,6 +143,11 @@ protected:
    * built from its parent */
   XattrStrategy* xattr_strategy{nullptr};
   PathStrategy* path_strategy{nullptr};
+  /* the other end of the read chain, null unless the bucket is
+   * mid-upgrade;  carried and inherited for the same reason as the
+   * others.  See NSFSBucket::xattr_fallback(). */
+  XattrStrategy* xattr_fallback{nullptr};
+  PathStrategy* path_fallback{nullptr};
   /* the union of what every strategy calls its own scaffolding, assembled
    * once by the driver.  Carried rather than asked for, because the
    * listing paths test it per directory entry. */
@@ -166,6 +171,8 @@ public:
     mpu_strategy(_ent.mpu_strategy),
     xattr_strategy(_ent.xattr_strategy),
     path_strategy(_ent.path_strategy),
+    xattr_fallback(_ent.xattr_fallback),
+    path_fallback(_ent.path_fallback),
     reserved_names(_ent.reserved_names)
   { }
 
@@ -180,6 +187,10 @@ public:
   XattrStrategy* get_xattr_strategy() const { return xattr_strategy; }
   void set_path_strategy(PathStrategy* s) { path_strategy = s; }
   PathStrategy* get_path_strategy() const { return path_strategy; }
+  void set_xattr_fallback(XattrStrategy* s) { xattr_fallback = s; }
+  XattrStrategy* get_xattr_fallback() const { return xattr_fallback; }
+  void set_path_fallback(PathStrategy* s) { path_fallback = s; }
+  PathStrategy* get_path_fallback() const { return path_fallback; }
   void set_reserved_names(const ReservedNames* r) { reserved_names = r; }
   const ReservedNames* get_reserved_names() const { return reserved_names; }
   void set_sync_on_close(bool sync) { need_fsync = sync; }
@@ -934,6 +945,14 @@ public:
   nsfs::MPUStrategy* get_mpu_strategy() { return mpu_strategy.get(); }
   nsfs::XattrStrategy* get_xattr_strategy() { return xattr_strategy.get(); }
   nsfs::PathStrategy* get_path_strategy() { return path_strategy.get(); }
+  /* The foreign readers.  Reached only through a bucket that is
+   * mid-upgrade;  see NSFSBucket::xattr_fallback(). */
+  nsfs::XattrStrategy* get_noobaa_xattr_strategy() {
+    return nb_xattr_strategy.get();
+  }
+  nsfs::PathStrategy* get_noobaa_path_strategy() {
+    return nb_path_strategy.get();
+  }
   const nsfs::ReservedNames& get_reserved_names() const { return reserved_names; }
 
   /* The profile an extension set selects, or nullptr for a bucket this
@@ -1083,6 +1102,9 @@ private:
   std::unique_ptr<nsfs::Directory> dir;
   /* resolved from the extensions marker;  null until it has been read */
   const nsfs::BucketProfile* profile{nullptr};
+  /* read beside it:  the format this tree is being converted from, or
+   * none.  Only meaningful once profile is non-null. */
+  bool converting{false};
 
 public:
   NSFSBucket(NSFSDriver *_dr, nsfs::Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
@@ -1199,6 +1221,23 @@ public:
   nsfs::PathStrategy* path_strategy() const;
   nsfs::MPUStrategy* mpu_strategy() const;
 
+  /* The other end of the read chain, or null.
+   *
+   * A bucket being converted holds objects in two formats and its mark
+   * cannot say which an individual object is in, so a reader asks the
+   * bucket's own strategy first and these second.  Null on every
+   * bucket that is not mid-conversion, which is every bucket we
+   * created and every one whose conversion has finished -- so the
+   * chain costs nothing to have and the fallbacks are unreachable
+   * rather than merely unused.
+   *
+   * Not a vector.  Two formats exist, the chain is two long, and a
+   * container would put an indirection on a path that has one element
+   * in every case but this one. */
+  nsfs::XattrStrategy* xattr_fallback() const;
+  nsfs::PathStrategy* path_fallback() const;
+  bool is_converting() const { return converting; }
+
   /* Move the bucket to a profile.  The one way a bucket's profile
    * changes:  adding extensions is a write, dropping them requires the
    * bucket to hold no content and removes the scaffolding the dropped
@@ -1212,6 +1251,12 @@ public:
 
   /* test support only -- reachable through the unmark-bucket hint */
   int unmark_extensions(const DoutPrefixProvider* dpp);
+
+  /* Set or clear the converting marker.  Written by the upgrade from
+   * base to a named profile and cleared when it finishes;  nothing
+   * else may touch it, because it is what says a foreign reader is
+   * still needed. */
+  int mark_converting(const DoutPrefixProvider* dpp, bool from_noobaa);
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
 		      optional_yield y) override;

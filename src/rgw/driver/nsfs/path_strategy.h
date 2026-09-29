@@ -111,8 +111,13 @@ public:
     bool content_in_sentinel{false};
   };
 
+  /* `dir_fd` is the directory itself, not its parent.  The listing
+   * walk already opens every subdirectory before recursing into it, so
+   * asking there costs one fgetxattr on a descriptor it holds -- the
+   * openat and close a parent-relative form would need are what made
+   * the probe look expensive. */
   virtual bool directory_object(const DoutPrefixProvider* dpp,
-				int parent_fd, std::string_view dname,
+				int dir_fd,
 				DirectoryObject& out) const = 0;
 
   /* names this layout creates which are not objects.  Contributed to the
@@ -154,8 +159,7 @@ public:
       const std::optional<std::string>& ns) const override;
   std::string folder_object_name() const override;
   bool names_directory_object(std::string_view entry) const override;
-  bool directory_object(const DoutPrefixProvider* dpp, int parent_fd,
-			std::string_view dname,
+  bool directory_object(const DoutPrefixProvider* dpp, int dir_fd,
 			DirectoryObject& out) const override;
   const ReservedNames& reserved_names() const override;
 
@@ -197,8 +201,7 @@ public:
       const std::optional<std::string>& ns) const override;
   std::string folder_object_name() const override;
   bool names_directory_object(std::string_view entry) const override;
-  bool directory_object(const DoutPrefixProvider* dpp, int parent_fd,
-			std::string_view dname,
+  bool directory_object(const DoutPrefixProvider* dpp, int dir_fd,
 			DirectoryObject& out) const override;
   const ReservedNames& reserved_names() const override;
 
