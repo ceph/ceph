@@ -18,6 +18,7 @@
 
 #include "common/ceph_json.h"
 #include "rgw_object_lock.h"
+#include "rgw_iam_policy.h"
 #include "common/errno.h"
 #include "include/scope_guard.h"
 
@@ -206,6 +207,48 @@ int from_noobaa_object_lock(const DoutPrefixProvider* dpp, JSONObj* cfg,
   return 0;
 }
 
+/* s3_policy.
+ *
+ * The one feature that needs no translation:  a bucket policy is an
+ * AWS policy document, RGW keeps the document, and theirs is the same
+ * document held parsed.  `JSONObj::init()` stores
+ * `json_spirit::write_string()` for a non-leaf node, so asking their
+ * `s3_policy` object for its data hands back the whole document as
+ * text.
+ *
+ * Parsed before it is stored, which is not extra care -- it is what
+ * the S3 path does.  `RGWPutBucketPolicy` builds an
+ * `rgw::IAM::Policy` and stores `p.text` rather than the bytes the
+ * client sent, so a policy arriving this way is normalised by the same
+ * parser and ends up in the same form as one set through the API.  It
+ * also means a document RGW cannot parse is caught here, where it
+ * reads as a bucket that will not load, rather than later inside every
+ * request that evaluates policy. */
+int from_noobaa_bucket_policy(const DoutPrefixProvider* dpp, JSONObj* pol,
+			      RGWBucketInfo& info, Attrs& attrs)
+{
+  const std::string doc = pol->get_data();
+  if (doc.empty()) {
+    return 0;
+  }
+
+  CephContext* cct = dpp->get_cct();
+  try {
+    const rgw::IAM::Policy p(
+      cct, &info.bucket.tenant, doc,
+      cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
+
+    bufferlist bl;
+    bl.append(p.text);
+    attrs[RGW_ATTR_IAM_POLICY] = std::move(bl);
+  } catch (const rgw::IAM::PolicyParseException& e) {
+    ldpp_dout(dpp, 0) << "ERROR: bucket policy does not parse: "
+      << e.what() << dendl;
+    return -EBADMSG;
+  }
+  return 0;
+}
+
 } // namespace
 
 int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
@@ -273,6 +316,15 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
    * WORM bucket that reads as unlocked accepts overwrite and delete. */
   if (JSONObj* lock = p.find_obj("object_lock_configuration"); lock) {
     ret = from_noobaa_object_lock(dpp, lock, info);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  /* Bucket policy.  Into the attribute map rather than onto the info,
+   * because rgw_op.cc reads it from there. */
+  if (JSONObj* pol = p.find_obj("s3_policy"); pol) {
+    ret = from_noobaa_bucket_policy(dpp, pol, info, attrs);
     if (ret < 0) {
       return ret;
     }

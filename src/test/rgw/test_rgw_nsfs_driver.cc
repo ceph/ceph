@@ -29,6 +29,7 @@
 #include "rgw_mime.h"
 #include "rgw_tag.h"
 #include "rgw_object_lock.h"
+#include "rgw_iam_policy.h"
 #include "common/ceph_json.h"
 
 using namespace rgw::sal;
@@ -3387,7 +3388,8 @@ public:
 			    "user.nsfs.bucket_info"), 0);
   }
 
-  void their_record(const char* versioning, const char* extra = nullptr,
+  void their_record(const char* versioning,
+		    const std::string& extra = std::string{},
 		    const char* created = "2026-01-02T03:04:05.000Z") {
     std::string doc = std::string(
       "{\"_id\":\"6560e1f1c0ffee0000000001\",\"name\":\"") + testname +
@@ -3396,7 +3398,7 @@ public:
       ",\"path\":\"/ibm/gpfs/noobaadata/" + testname + "\""
       ",\"should_create_underlying_storage\":true"
       ",\"creation_date\":\"" + created + "\"" +
-      (extra ? extra : "") + "}";
+      extra + "}";
     write_file(conf_root() / "buckets" / (testname + ".json"), doc);
   }
 };
@@ -3550,6 +3552,52 @@ TEST_F(NSFSNooBaaStateTest, AnImpossibleRetentionFailsClosed)
 	       R"("rule":{"default_retention":{"mode":"GOVERNANCE"}}})");
   EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG)
       << "a retention naming neither days nor years was accepted";
+}
+
+/* Their bucket policy reaches the attribute map, normalised by RGW's
+ * own parser the way one set through S3 would be. */
+TEST_F(NSFSNooBaaStateTest, BucketPolicyComesFromTheirRecord)
+{
+  forget_our_state();
+
+  /* the control:  no policy in their record, none in the attributes */
+  their_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_IAM_POLICY),
+	    bucket->get_attrs().end());
+
+  their_record("ENABLED",
+	       R"(,"s3_policy":{"Version":"2012-10-17","Statement":[)"
+	       R"({"Sid":"one","Effect":"Allow","Principal":{"AWS":"*"},)"
+	       R"("Action":["s3:GetObject"],)"
+	       R"("Resource":["arn:aws:s3:::)" + std::string(testname) +
+	       R"(/*"]}]})");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto i = bucket->get_attrs().find(RGW_ATTR_IAM_POLICY);
+  ASSERT_NE(i, bucket->get_attrs().end())
+      << "their policy did not reach the attribute map";
+
+  /* stored as a document RGW's own parser accepts, which is the thing
+   * that matters -- not that the bytes match theirs */
+  const std::string stored = i->second.to_str();
+  EXPECT_NE(stored.find("s3:GetObject"), std::string::npos);
+  CephContext* cct = env->cct.get();
+  EXPECT_NO_THROW(rgw::IAM::Policy(cct, &bucket->get_info().bucket.tenant,
+				   stored, false));
+}
+
+/* A policy RGW cannot parse fails the bucket closed, rather than
+ * being stored and failing later inside every request that evaluates
+ * it. */
+TEST_F(NSFSNooBaaStateTest, AnUnparsablePolicyFailsClosed)
+{
+  forget_our_state();
+  their_record("ENABLED",
+	       R"(,"s3_policy":{"Version":"2012-10-17",)"
+	       R"("Statement":[{"Effect":"Perhaps"}]})");
+
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
 }
 
 /* A record we cannot make sense of fails the bucket closed, the same
