@@ -1,0 +1,163 @@
+<cd-side-panel
+  [expanded]="expanded"
+  [headerText]="panelHeaderText"
+  size="lg"
+  (closed)="close()"
+>
+  <div
+    panel-header-description
+    class="cds--type-body-compact-01 cds--text-secondary"
+  >
+    {{ panelHeaderDescription }}
+  </div>
+
+  <div class="panel-content policies-panel-content">
+    @if (!isEditing) {
+      <div class="d-inline-flex align-items-center gap-2">
+        <button
+          type="button"
+          cdsButton="tertiary"
+          size="md"
+          [disabled]="!selectedPolicyName || policyDocumentLoading"
+          (click)="startEdit()"
+          i18n
+        >
+          Edit
+          <svg
+            [cdsIcon]="icons.edit"
+            [size]="icons.size16"
+            class="cds--btn__icon"
+          ></svg>
+        </button>
+        <button
+          type="button"
+          cdsButton="danger--tertiary"
+          size="md"
+          [disabled]="!selectedPolicyName || policyDocumentLoading"
+          (click)="deleteSelectedPolicy()"
+          i18n
+        >
+          Delete
+          <svg
+            [cdsIcon]="icons.trash"
+            [size]="icons.size16"
+            class="cds--btn__icon"
+          ></svg>
+        </button>
+      </div>
+
+      @if (policyDocumentLoading) {
+        <cds-loading
+          [isActive]="true"
+          [overlay]="false"
+          size="sm"
+        ></cds-loading>
+      } @else if (showPolicySnippet) {
+        <div class="policies-panel-snippet">
+          <cds-code-snippet
+            display="multi"
+            [wrapText]="true"
+            [maxCollapsedNumberOfRows]="0"
+            copyButtonDescription="Copy policy document"
+            i18n-copyButtonDescription
+          >
+            {{ selectedPolicyDocument }}
+          </cds-code-snippet>
+        </div>
+      }
+    } @else {
+      <form
+        class="policies-panel-form"
+        name="form"
+        #formDir="ngForm"
+        [formGroup]="form"
+        novalidate
+      >
+        <div class="form-item">
+          <cds-text-label labelInputID="policy_name">
+            Policy name
+            <input
+              cdsText
+              type="text"
+              id="policy_name"
+              name="policy_name"
+              formControlName="policy_name"
+              readonly
+            />
+          </cds-text-label>
+        </div>
+
+        <div class="form-item">
+          <cds-textarea-label
+            labelInputID="policy_doc"
+            [invalid]="policyDoc.isInvalid"
+            [invalidText]="policyError"
+          >
+            JSON
+            <textarea
+              cdsTextArea
+              cdValidate
+              #policyDoc="cdValidate"
+              id="policy_doc"
+              name="policy_doc"
+              formControlName="policy_doc"
+              rows="16"
+              [invalid]="policyDoc.isInvalid"
+            ></textarea>
+          </cds-textarea-label>
+          <ng-template #policyError>
+            @if (form.showError('policy_doc', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (form.showError('policy_doc', formDir, 'invalidJson')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Please enter a valid JSON policy document.</span
+              >
+            }
+          </ng-template>
+        </div>
+      </form>
+    }
+  </div>
+
+  @if (isEditing) {
+    <div class="panel-footer d-flex p-0 border-0">
+      <button
+        type="button"
+        class="flex-fill"
+        cdsButton="secondary"
+        size="xl"
+        [disabled]="isSubmitLoading"
+        (click)="cancelEdit()"
+        i18n
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="flex-fill"
+        cdsButton="primary"
+        size="xl"
+        [disabled]="isSubmitLoading || form?.invalid"
+        (click)="saveChanges()"
+      >
+        @if (isSubmitLoading) {
+          <cds-loading
+            [isActive]="true"
+            [overlay]="false"
+            size="sm"
+          ></cds-loading>
+          <ng-container i18n>Saving</ng-container>...
+        } @else {
+          {{ actionLabels.UPDATE }}
+        }
+      </button>
+    </div>
+  }
+</cd-side-panel>

@@ -4,6 +4,11 @@
   (overlaySelected)="closeModal()"
 >
   <cds-modal-header (closeSelect)="closeModal()">
+    @if (headerLabel) {
+      <h4 cdsModalHeaderLabel>
+        {{ headerLabel }}
+      </h4>
+    }
     <h3
       cdsModalHeaderHeading
       i18n

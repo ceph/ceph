@@ -66,6 +66,14 @@ export class RgwRoleService {
     });
   }
 
+  listPolicies(roleName: string, accountId: string): Observable<string[]> {
+    return this.http.get<string[]>(`${this.getUrl(accountId)}/${roleName}/policy`);
+  }
+
+  getPolicy(roleName: string, policyName: string, accountId: string): Observable<any> {
+    return this.http.get<any>(`${this.getUrl(accountId)}/${roleName}/policy/${policyName}`);
+  }
+
   deletePolicy(roleName: string, policyName: string, accountId: string): Observable<string> {
     return this.http.delete<string>(`${this.getUrl(accountId)}/${roleName}/policy/${policyName}`);
   }
