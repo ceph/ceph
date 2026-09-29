@@ -89,6 +89,14 @@ struct ConvertProgress {
   uint64_t uploads{0};
   uint64_t parts{0};
   bool complete{false};    /* nothing foreign left;  the marker is gone */
+  /* the mask was written, so the bucket IS in the target profile.
+   *
+   * Separate from `complete` because they fail apart:  a run that
+   * stops halfway has changed the profile and not finished the tree,
+   * and the bucket is servable in exactly that state.  A caller that
+   * reads only the return code cannot tell the two, and the two need
+   * different things done about them -- nothing, and a resume. */
+  bool profile_set{false};
 };
 
 using BucketCache = file::listing::BucketCache<NSFSDriver, NSFSBucket>;
@@ -1113,13 +1121,15 @@ public:
   int set_bucket_profile(const DoutPrefixProvider* dpp, optional_yield y,
 			 const std::string& name, uint32_t target,
 			 uint32_t* had /* OUT */,
-			 std::string* had_profile /* OUT */);
+			 std::string* had_profile /* OUT */,
+			 nsfs::ConvertProgress* progress = nullptr /* OUT */);
 
   /* Read it without changing it. */
   int get_bucket_profile(const DoutPrefixProvider* dpp, optional_yield y,
 			 const std::string& name,
 			 uint32_t* extensions /* OUT */,
-			 std::string* pname /* OUT */);
+			 std::string* pname /* OUT */,
+			 bool* converting = nullptr /* OUT */);
 
   /* called by nsfs::BucketCache layer when a new object is discovered
    * by inotify or similar */

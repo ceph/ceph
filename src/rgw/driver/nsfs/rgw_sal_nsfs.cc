@@ -5130,6 +5130,21 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 
   const uint32_t current = profile->extensions;
   if (target == current) {
+    /* Asking for the profile a bucket is already in is a no-op --
+     * unless it is still converting, in which case it is a request to
+     * finish.  That is what resuming a stopped run looks like from
+     * outside:  the same call, issued again.  Without this the
+     * re-issue returned success and did nothing, and the marker
+     * stayed for ever. */
+    if (progress) {
+      /* the bucket is in the target profile either way -- that is
+       * what makes this a no-op */
+      progress->profile_set = true;
+      progress->complete = !converting;
+    }
+    if (converting) {
+      return convert_tree(dpp, y, cb, progress);
+    }
     return 0;
   }
 
@@ -5174,7 +5189,12 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   if (target == nsfs::EXTENSIONS_BASE) {
-    return unmark_extensions(dpp);
+    ret = unmark_extensions(dpp);
+    if ((ret == 0) && progress) {
+      progress->profile_set = true;
+      progress->complete = true;
+    }
+    return ret;
   }
 
   if (current != nsfs::EXTENSIONS_BASE) {
@@ -5182,7 +5202,12 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
      * the tree is in the wrong one and there is nothing to convert --
      * only the mask changes, and what the dropped extensions owned was
      * removed above. */
-    return mark_extensions(dpp, target);
+    ret = mark_extensions(dpp, target);
+    if ((ret == 0) && progress) {
+      progress->profile_set = true;
+      progress->complete = true;
+    }
+    return ret;
   }
 
   /* Leaving base:  the upgrade.
@@ -5202,6 +5227,9 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
     /* the marker is inert on a base bucket;  leaving it costs a
      * read of one attribute on the next resolve */
     return ret;
+  }
+  if (progress) {
+    progress->profile_set = true;
   }
 
   return convert_tree(dpp, y, cb, progress);
@@ -11825,7 +11853,8 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
 int NSFSDriver::set_bucket_profile(const DoutPrefixProvider* dpp,
 				   optional_yield y,
 				   const std::string& name, uint32_t target,
-				   uint32_t* had, std::string* had_profile)
+				   uint32_t* had, std::string* had_profile,
+				   nsfs::ConvertProgress* progress)
 {
   rgw_bucket b;
   b.name = name;
@@ -11846,13 +11875,14 @@ int NSFSDriver::set_bucket_profile(const DoutPrefixProvider* dpp,
     *had_profile = bucket.profile_name();
   }
 
-  return bucket.set_profile(dpp, y, target);
+  return bucket.set_profile(dpp, y, target, nullptr, progress);
 }
 
 int NSFSDriver::get_bucket_profile(const DoutPrefixProvider* dpp,
 				   optional_yield y,
 				   const std::string& name,
-				   uint32_t* extensions, std::string* pname)
+				   uint32_t* extensions, std::string* pname,
+				   bool* converting)
 {
   rgw_bucket b;
   b.name = name;
@@ -11869,6 +11899,9 @@ int NSFSDriver::get_bucket_profile(const DoutPrefixProvider* dpp,
   }
   if (pname) {
     *pname = bucket.profile_name();
+  }
+  if (converting) {
+    *converting = bucket.is_converting();
   }
   return 0;
 }

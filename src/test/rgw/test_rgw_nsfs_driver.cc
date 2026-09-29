@@ -4250,6 +4250,92 @@ TEST_F(NSFSBucketTest, AClosedGateRefusesAWriteHandle)
   driver->gate_open(testname);
 }
 
+/* Re-issuing the same request resumes a stopped conversion.
+ *
+ * That is what a resume looks like from outside:  the operator asks
+ * for the profile again.  Before this it returned success and did
+ * nothing, because the bucket was already in the target profile --
+ * so a conversion that stopped could never be finished through the
+ * only interface there is, and the marker stayed for ever.
+ */
+TEST_F(NSFSUpgradeTest, ReissuingTheSameProfileResumes)
+{
+  for (int i = 0; i < 4; ++i) {
+    their_object("obj-" + std::to_string(i) + ".bin", "text/plain");
+  }
+
+  int seen = 0;
+  nsfs::convert_cb_t stop =
+    [&seen](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      if (ev.phase != nsfs::ConvertEvent::Phase::pruned) {
+	return 0;
+      }
+      return (++seen == 2) ? -EINTR : 0;
+    };
+
+  nsfs::ConvertProgress first;
+  EXPECT_EQ(upgrade(&stop, &first), -EINTR);
+  EXPECT_TRUE(first.profile_set) << "the mask went down before the walk";
+  EXPECT_FALSE(first.complete);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_TRUE(b->is_converting());
+
+  /* the same call again, through set_profile and not convert_tree */
+  nsfs::ConvertProgress second;
+  ASSERT_EQ(upgrade(nullptr, &second), 0);
+  EXPECT_TRUE(second.profile_set);
+  EXPECT_TRUE(second.complete);
+  EXPECT_FALSE(b->is_converting());
+
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_FALSE(xattr_names(bucket_path() /
+			     ("obj-" + std::to_string(i) + ".bin"))
+		     .contains("user.noobaa.content_type")) << i;
+  }
+
+  /* and once more, on a bucket with nothing left to do */
+  nsfs::ConvertProgress third;
+  ASSERT_EQ(upgrade(nullptr, &third), 0);
+  EXPECT_EQ(third.objects, 0u) << "a settled bucket was walked again";
+}
+
+/* The driver reports the profile and whether it is still converting.
+ *
+ * What the GET renders, and what an operator polls while a long
+ * rewrite runs. */
+TEST_F(NSFSUpgradeTest, ReportsTheProfileAndTheConvertingState)
+{
+  their_object("a.bin", "text/plain");
+  their_object("b.bin", "text/plain");
+
+  uint32_t ext = 0;
+  std::string pname;
+  bool converting = true;
+  ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, testname,
+				       &ext, &pname, &converting), 0);
+  EXPECT_EQ(pname, "base");
+  EXPECT_FALSE(converting) << "a base bucket is not converting;  it is "
+			      "simply in their format";
+
+  nsfs::convert_cb_t stop =
+    [](const DoutPrefixProvider*, const nsfs::ConvertEvent& ev) {
+      return (ev.phase == nsfs::ConvertEvent::Phase::pruned) ? -EINTR : 0;
+    };
+  EXPECT_EQ(upgrade(&stop, nullptr), -EINTR);
+
+  ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, testname,
+				       &ext, &pname, &converting), 0);
+  EXPECT_EQ(pname, "strong");
+  EXPECT_EQ(ext, nsfs::EXTENSIONS_STRONG);
+  EXPECT_TRUE(converting) << "a stopped conversion did not report itself";
+
+  ASSERT_EQ(upgrade(nullptr, nullptr), 0);
+  ASSERT_EQ(driver->get_bucket_profile(env->dpp, null_yield, testname,
+				       &ext, &pname, &converting), 0);
+  EXPECT_FALSE(converting);
+}
+
 /* Theirs does move one, because their file IS the size.
  *
  * `parts-size-17` at 17 * (num - 1) is the only place their reader
