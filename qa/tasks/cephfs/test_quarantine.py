@@ -918,13 +918,28 @@ class TestQuarantineDisruptive(QuarantineTestBase):
         self._create_test_file()
 
     def tearDown(self):
-        # After MDS restart the fuse daemon may be in a bad state.
-        # Ensure it's properly killed and remounted before the next test's
-        # setUp tries umount_wait.
+        # The test waits for the MDS to be back after the restart, so unmount
+        # cleanly: a killed ceph-fuse leaves its session behind until the MDS
+        # evicts it as unresponsive (a cluster warning), and quarantine disable
+        # (in super().tearDown()) blocks on revoking its caps until then.
         try:
-            self.mount_a.umount_wait(force=True)
-        except Exception:
-            self.mount_a.kill_cleanup()
+            self.mount_a.umount_wait(require_clean=True, timeout=60)
+        except Exception as e:
+            log.warning("clean umount failed (%s), killing ceph-fuse", e)
+            client_id = None
+            try:
+                client_id = self.mount_a.get_global_id()
+            except Exception:
+                pass
+            try:
+                self.mount_a.umount_wait(force=True)
+            except Exception:
+                self.mount_a.kill_cleanup()
+            if client_id is not None:
+                try:
+                    self.fs.mds_asok(['session', 'evict', str(client_id)])
+                except Exception as e:
+                    log.warning("could not evict client %s: %s", client_id, e)
         try:
             self.mount_a.mount_wait()
         except Exception:
