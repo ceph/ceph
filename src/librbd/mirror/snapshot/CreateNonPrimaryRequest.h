@@ -33,11 +33,12 @@ public:
                                          const SnapSeqs& snap_seqs,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
-                                         Context *on_finish) {
+                                         Context *on_finish,
+                                         const cls::rbd::GroupSpec &group_spec = {}) {
     return new CreateNonPrimaryRequest(image_ctx, demoted, group_snap_id,
                                        primary_mirror_uuid, primary_snap_id,
                                        snap_seqs, image_state, snap_id,
-                                       on_finish);
+                                       on_finish, group_spec);
   }
 
   CreateNonPrimaryRequest(ImageCtxT *image_ctx,
@@ -47,7 +48,8 @@ public:
                           uint64_t primary_snap_id,
                           const SnapSeqs& snap_seqs,
                           const ImageState &image_state, uint64_t *snap_id,
-                          Context *on_finish);
+                          Context *on_finish,
+                          const cls::rbd::GroupSpec &group_spec = {});
 
   void send();
 
@@ -84,6 +86,7 @@ private:
   ImageCtxT *m_image_ctx;
   const bool m_demoted;
   const std::string m_group_snap_id;
+  const cls::rbd::GroupSpec m_group_spec;
   const std::string m_primary_mirror_uuid;
   const uint64_t m_primary_snap_id;
   const SnapSeqs m_snap_seqs;
