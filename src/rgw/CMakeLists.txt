@@ -300,6 +300,7 @@ list(APPEND librgw_nsfs_srcs
   driver/nsfs/fs_strategy.cc
   driver/nsfs/mpu_strategy.cc
   driver/nsfs/xattr_strategy.cc
+  driver/nsfs/bucket_state_strategy.cc
   driver/nsfs/path_strategy.cc
   driver/posix/lmdb-safe.cc
   driver/posix/notify.cpp

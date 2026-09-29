@@ -34,6 +34,7 @@
 #include "mpu_strategy.h"
 #include "xattr_strategy.h"
 #include "path_strategy.h"
+#include "bucket_state_strategy.h"
 #include "bucket_profile.h"
 
 class RGWLC;
@@ -568,6 +569,7 @@ protected:
   /* NooBaa's three.  Held whether or not a bucket is in their format,
    * because which format a bucket is in is not known until it is
    * loaded, and constructing a strategy costs nothing. */
+  std::unique_ptr<nsfs::BucketStateStrategy> bucket_state_strategy;
   std::unique_ptr<nsfs::XattrStrategy> nb_xattr_strategy;
   std::unique_ptr<nsfs::PathStrategy> nb_path_strategy;
   std::unique_ptr<nsfs::MPUStrategy> nb_mpu_strategy;
@@ -1063,6 +1065,9 @@ public:
   nsfs::PathStrategy* get_path_strategy() { return path_strategy.get(); }
   /* The foreign readers.  Reached only through a bucket that is
    * mid-upgrade;  see NSFSBucket::xattr_fallback(). */
+  nsfs::BucketStateStrategy* get_bucket_state_strategy() {
+    return bucket_state_strategy.get();
+  }
   nsfs::XattrStrategy* get_noobaa_xattr_strategy() {
     return nb_xattr_strategy.get();
   }
@@ -1377,6 +1382,7 @@ public:
   nsfs::XattrStrategy* xattr_strategy() const;
   nsfs::PathStrategy* path_strategy() const;
   nsfs::MPUStrategy* mpu_strategy() const;
+  nsfs::BucketStateStrategy* bucket_state_strategy() const;
 
   /* The other end of the read chain, or null.
    *

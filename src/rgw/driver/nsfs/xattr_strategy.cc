@@ -111,11 +111,6 @@ bool PrefixedXattrStrategy::counted_string_value(const std::string& key) const
    * the quotes. */
 }
 
-const char* PrefixedXattrStrategy::bucket_info_key() const
-{
-  return "bucket_info";
-}
-
 /* --- NooBaaXattrStrategy ---------------------------------------------- */
 
 static const std::string NB_USER_PREFIX = "user.";
@@ -456,11 +451,6 @@ bool NooBaaXattrStrategy::disk_attrs(const std::string& key,
 bool NooBaaXattrStrategy::counted_string_value(const std::string& key) const
 {
   return false;
-}
-
-const char* NooBaaXattrStrategy::bucket_info_key() const
-{
-  return "bucket_info";
 }
 
 }}} // namespace rgw::sal::nsfs

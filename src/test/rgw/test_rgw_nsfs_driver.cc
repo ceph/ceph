@@ -828,6 +828,60 @@ public:
   }
 };
 
+/* Stored state that will not decode fails the bucket closed.
+ *
+ * Absent and unreadable are different.  A bucket with no stored state
+ * has none and serves;  a bucket whose state is there and unreadable
+ * would otherwise serve on defaults, and defaults are permissive --
+ * no object lock, no policy, no public access block, versioning off.
+ */
+TEST_F(NSFSBucketTest, UnreadableStateFailsClosedAndAbsentDoesNot)
+{
+  const sf::path bpath{bp / "root" / testname};
+  static constexpr const char* key = "user.nsfs.bucket_info";
+
+  /* the control:  as created, it loads */
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0)
+      << "the bucket does not load before anything was broken";
+
+  /* present and undecodable */
+  const std::string junk{"not an encoded RGWBucketInfo"};
+  ASSERT_EQ(::setxattr(bpath.c_str(), key, junk.data(), junk.size(), 0), 0);
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+
+  /* absent, which is a different answer */
+  ASSERT_EQ(::removexattr(bpath.c_str(), key), 0);
+  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), 0)
+      << "a bucket with no stored state must still serve";
+}
+
+/* A bucket that fails closed is one bucket.
+ *
+ * ListBuckets skips it rather than denying the account every other
+ * bucket, and the profile endpoint still answers -- a profile comes
+ * from the marker, and an operator diagnosing the failure needs that
+ * endpoint precisely then. */
+TEST_F(NSFSBucketTest, UnreadableStateDoesNotDenyTheListingOrTheProfile)
+{
+  const sf::path bpath{bp / "root" / testname};
+  const std::string junk{"not an encoded RGWBucketInfo"};
+  ASSERT_EQ(::setxattr(bpath.c_str(), "user.nsfs.bucket_info",
+		       junk.data(), junk.size(), 0), 0);
+
+  rgw::sal::BucketList result;
+  EXPECT_EQ(driver->list_buckets(env->dpp, owner, std::string(),
+				 std::string(), std::string(), 100, false,
+				 result, null_yield), 0)
+      << "one unreadable bucket denied the whole listing";
+
+  uint32_t ext = 0;
+  std::string pname;
+  bool converting = true;
+  EXPECT_EQ(driver->get_bucket_profile(env->dpp, null_yield, testname,
+				       &ext, &pname, &converting), 0)
+      << "the profile endpoint went blind on the bucket that needs it";
+}
+
 TEST_F(NSFSBucketTest, Object)
 {
   std::unique_ptr<rgw::sal::Object> object =

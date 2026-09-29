@@ -132,17 +132,6 @@ public:
    * etag is not, which is why it is absent. */
   virtual bool counted_string_value(const std::string& key) const = 0;
 
-  /* The attribute holding this bucket's encoded RGWBucketInfo.
-   *
-   * Both formats answer the same way, deliberately:  a tree we write is
-   * readable by us and carries owner, versioning and placement which
-   * NooBaa's own config store holds elsewhere and which we do not write.
-   * It is a method so that the decision is stated once and in one place,
-   * not because the two differ.  See ACCOUNT_METADATA.md and the
-   * decomposition plan 3.1 -- our noobaa format is a fork of NooBaa's, and
-   * this attribute is where that shows. */
-  virtual const char* bucket_info_key() const = 0;
-
   virtual const char* name() const = 0;
 };
 
@@ -186,8 +175,6 @@ public:
 		   ACLOwner& owner) const override;
 
   bool counted_string_value(const std::string& key) const override;
-
-  const char* bucket_info_key() const override;
 
   const char* name() const override { return "rgw"; }
 };
@@ -249,8 +236,6 @@ public:
 		   ACLOwner& owner) const override;
 
   bool counted_string_value(const std::string& key) const override;
-
-  const char* bucket_info_key() const override;
 
   const char* name() const override { return "noobaa"; }
 };

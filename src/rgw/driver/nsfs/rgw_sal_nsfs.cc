@@ -77,9 +77,9 @@ const int64_t DIRECT_IO_ALIGN = 4096;
 /* The on-disk spelling of an attribute, and which attributes are ours to
  * read at all, belong to XattrStrategy (xattr_strategy.h). */
 
-/* the bucket_info attribute's name is XattrStrategy::bucket_info_key();
- * both formats answer it the same way, and the method exists so that the
- * decision is stated once */
+/* Where a bucket's own state comes from belongs to BucketStateStrategy
+ * (bucket_state_strategy.h);  the attribute it is written to is the
+ * constant nsfs::BUCKET_INFO_KEY, because writing is uniform. */
 #define RGW_NSFS_ATTR_OBJECT_TYPE "object_type"
 #define RGW_NSFS_ATTR_MULTIPART_PART_COUNT "multipart_part_count"
 #define RGW_NSFS_ATTR_MULTIPART_PART_SIZES "multipart_part_sizes"
@@ -3231,6 +3231,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
    * bucket's recorded format and is not written yet */
   xattr_strategy = std::make_unique<nsfs::PrefixedXattrStrategy>();
   path_strategy = std::make_unique<nsfs::SentinelPathStrategy>();
+  bucket_state_strategy = std::make_unique<nsfs::RgwBucketStateStrategy>();
 
   nb_xattr_strategy = std::make_unique<nsfs::NooBaaXattrStrategy>();
   nb_path_strategy = std::make_unique<nsfs::NooBaaPathStrategy>();
@@ -3242,6 +3243,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   rgw_meta_format.xattr_strategy = xattr_strategy.get();
   rgw_meta_format.path_strategy = path_strategy.get();
   rgw_meta_format.mpu_strategy = nullptr;
+  rgw_meta_format.bucket_state_strategy = bucket_state_strategy.get();
   rgw_meta_format.fname = "rgw-meta";
 
   /* What base is:  NooBaa's format entire -- their attribute names,
@@ -3251,7 +3253,13 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
    * they do whatever the filesystem can do. */
   noobaa_format.xattr_strategy = nb_xattr_strategy.get();
   noobaa_format.path_strategy = nb_path_strategy.get();
+  /* Bucket state is ours in every profile:  their record is a JSON file
+   * in a store we do not read on the request path, so a base bucket's
+   * state is the attribute we write beside the data, the same one
+   * shared and strong carry.  A reader for their store is a separate
+   * piece of work and does not belong on the request path. */
   noobaa_format.mpu_strategy = nb_mpu_strategy.get();
+  noobaa_format.bucket_state_strategy = bucket_state_strategy.get();
   noobaa_format.fname = "noobaa";
 
   /* Three profiles, two formats.  Shared and strong differ in which
@@ -3951,6 +3959,14 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
       if (ret == -ERR_NOT_IMPLEMENTED) {
 	ldpp_dout(dpp, 4) << "list_buckets: skipping " << entry->d_name
 	  << ", this gateway cannot serve it" << dendl;
+	continue;
+      }
+      /* -EBADMSG is stored state we cannot read, which fails that
+       * bucket closed.  The same reasoning applies:  it is one bucket
+       * and the account's other buckets are fine. */
+      if (ret == -EBADMSG) {
+	ldpp_dout(dpp, 1) << "list_buckets: skipping " << entry->d_name
+	  << ", its stored state does not decode" << dendl;
 	continue;
       }
       return ret;
@@ -5236,6 +5252,13 @@ nsfs::XattrStrategy* NSFSBucket::xattr_strategy() const
 				  : driver->get_xattr_strategy();
 }
 
+nsfs::BucketStateStrategy* NSFSBucket::bucket_state_strategy() const
+{
+  auto* f = get_format();
+  return (f && f->bucket_state_strategy) ? f->bucket_state_strategy
+					 : driver->get_bucket_state_strategy();
+}
+
 nsfs::PathStrategy* NSFSBucket::path_strategy() const
 {
   auto* f = get_format();
@@ -6366,14 +6389,27 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
     }
   }
 
-  RGWBucketInfo bak_info = info;;
-  const char* bi_key = xattr_strategy()->bucket_info_key();
-  if (!decode_attr(attrs, bi_key, info)) {
+  /* Bucket state, from wherever this bucket's format keeps it.  The
+   * strategy erases what it consumed, so nothing of its own is left in
+   * the S3 attribute set.
+   *
+   * -ENOENT is a bucket with no stored state, which is legitimate and
+   * leaves the seeded defaults standing.
+   *
+   * Anything else is not the same thing, and this is where the two stop
+   * being treated alike.  Defaults are permissive:  no object lock, no
+   * policy, no public access block, versioning off.  Serving a bucket
+   * whose stored state we cannot read as though it had none is
+   * therefore fail-open on every setting that matters, and silently so.
+   * The bucket fails instead. */
+  RGWBucketInfo bak_info = info;
+  ret = bucket_state_strategy()->load(dpp, dir->get_fd(), get_name(),
+				      attrs, info);
+  if (ret == -ENOENT) {
     // TODO dang: fake info up (UID to owner conversion?)
     info = bak_info;
-  } else {
-    // Don't leave info visible in attributes
-    attrs.erase(bi_key);
+  } else if (ret < 0) {
+    return ret;
   }
 
   return 0;
@@ -6501,7 +6537,7 @@ int NSFSBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
   bufferlist bl;
   encode(info, bl);
   Attrs extra_attrs;
-  extra_attrs[xattr_strategy()->bucket_info_key()] = bl;
+  extra_attrs[nsfs::BUCKET_INFO_KEY] = bl;
 
   return dir->write_attrs(dpp, y, attrs, &extra_attrs);
 }
@@ -12164,8 +12200,13 @@ int NSFSDriver::get_bucket_profile(const DoutPrefixProvider* dpp,
   b.name = name;
   NSFSBucket bucket(this, root_dir.get(), b);
 
+  /* -EBADMSG is unreadable bucket state, and a profile does not come
+   * from bucket state -- resolve_profile() has already read the marker
+   * by the time the state is loaded.  An operator diagnosing a bucket
+   * that fails closed needs this endpoint precisely then, so it is the
+   * one caller that does not treat unreadable state as fatal. */
   int ret = bucket.load_bucket(dpp, y);
-  if (ret < 0) {
+  if ((ret < 0) && (ret != -EBADMSG)) {
     return ret;
   }
 

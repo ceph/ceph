@@ -25,6 +25,7 @@ namespace rgw { namespace sal { namespace nsfs {
 class XattrStrategy;
 class PathStrategy;
 class MPUStrategy;
+class BucketStateStrategy;
 
 /* The on-disk format of a tree:  one member per format-dependent
  * concern, so the formats sit beside each other with the same shape.
@@ -45,6 +46,7 @@ struct Format {
   XattrStrategy* xattr_strategy{nullptr};
   PathStrategy* path_strategy{nullptr};
   MPUStrategy* mpu_strategy{nullptr};
+  BucketStateStrategy* bucket_state_strategy{nullptr};
   const char* fname{"unset"};
 
   const char* name() const { return fname; }
