@@ -1131,6 +1131,9 @@ class RgwClient(RestClient):
 
     def get_lifecycle_progress(self):
         rgw_bucket_lc_progress_command = ['lc', 'list']
+        realm_name = getattr(self.daemon, 'realm_name', None)
+        if realm_name:
+            rgw_bucket_lc_progress_command += ['--rgw-realm', realm_name]
         code, lifecycle_progress, _err = mgr.send_rgwadmin_command(rgw_bucket_lc_progress_command)
         if code != 0:
             raise DashboardException(msg=f'Error getting lifecycle status: {_err}',
@@ -1850,8 +1853,18 @@ class RgwMultisiteAutomation:
 
 
 class RgwRateLimit:
-    def get_global_rateLimit(self):
+    @staticmethod
+    def _realm_name_for_daemon(daemon_name: Optional[str]) -> Optional[str]:
+        """Resolve daemon_name to its realm name, or None for the default realm."""
+        return RgwMultisite().get_realm_from_daemon(daemon_name) if daemon_name else None
+
+    def get_global_rateLimit(self, daemon_name: Optional[str] = None,
+                             realm_name: Optional[str] = None):
+        if daemon_name and realm_name is None:
+            realm_name = self._realm_name_for_daemon(daemon_name)
         rate_limit_cmd = ['global', 'ratelimit', 'get']
+        if realm_name:
+            rate_limit_cmd += ['--rgw-realm', realm_name]
         try:
             exit_code, out, err = mgr.send_rgwadmin_command(rate_limit_cmd)
             if exit_code > 0:
@@ -1861,8 +1874,13 @@ class RgwRateLimit:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
-    def get_rateLimit(self, scope: str, name: str):
+    def get_rateLimit(self, scope: str, name: str, daemon_name: Optional[str] = None,
+                      realm_name: Optional[str] = None):
+        if daemon_name and realm_name is None:
+            realm_name = self._realm_name_for_daemon(daemon_name)
         rate_limit_cmd = ['ratelimit', 'get', '--ratelimit-scope', scope]
+        if realm_name:
+            rate_limit_cmd += ['--rgw-realm', realm_name]
         if scope == 'user':
             rate_limit_cmd.extend(['--uid', name])
         if scope == 'bucket':
@@ -1880,7 +1898,11 @@ class RgwRateLimit:
 
     def set_rateLimit(self, scope: str, enabled: bool, name: str,
                       max_read_ops: int, max_write_ops: int,
-                      max_read_bytes: int, max_write_bytes: int):
+                      max_read_bytes: int, max_write_bytes: int,
+                      daemon_name: Optional[str] = None,
+                      realm_name: Optional[str] = None):
+        if daemon_name and realm_name is None:
+            realm_name = self._realm_name_for_daemon(daemon_name)
         enabled = str(enabled)
         rgw_rate_limit_cmd = ['ratelimit', 'set', '--ratelimit-scope', scope,
                               '--max-read-ops', str(max_read_ops), '--max-write-ops',
@@ -1889,12 +1911,16 @@ class RgwRateLimit:
 
         rgw_rate_limit_enable_cmd = ['ratelimit', 'enable' if enabled == 'True' else 'disable',
                                      '--ratelimit-scope', scope]
+        if realm_name:
+            rgw_rate_limit_cmd += ['--rgw-realm', realm_name]
+            rgw_rate_limit_enable_cmd += ['--rgw-realm', realm_name]
+
         if scope == 'user':
             rgw_rate_limit_cmd.extend(['--uid', name])
             rgw_rate_limit_enable_cmd.extend(['--uid', name])
 
         if scope == 'bucket':
-            rgw_rate_limit_cmd.extend(['--bucket', name, ])
+            rgw_rate_limit_cmd.extend(['--bucket', name])
             rgw_rate_limit_enable_cmd.extend(['--bucket', name])
         try:
             if enabled == 'True':
@@ -2144,13 +2170,11 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
         return rgw_zonegroup_list
 
-    def get_zonegroup(self, zonegroup_name: str):
+    def get_zonegroup(self, zonegroup_name: str, realm_name: Optional[str] = None):
         zonegroup_info = {}
-        if zonegroup_name != 'default':
-            rgw_zonegroup_info_cmd = ['zonegroup', 'get', '--rgw-zonegroup', zonegroup_name]
-        else:
-            rgw_zonegroup_info_cmd = ['zonegroup', 'get', '--rgw-zonegroup',
-                                      zonegroup_name, '--rgw-realm', 'default']
+        rgw_zonegroup_info_cmd = ['zonegroup', 'get', '--rgw-zonegroup', zonegroup_name]
+        if realm_name:
+            rgw_zonegroup_info_cmd += ['--rgw-realm', realm_name]
         try:
             exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zonegroup_info_cmd)
             if exit_code > 0:
@@ -3224,26 +3248,30 @@ class RgwMultisite:
             realm_name = self.get_realm_from_daemon(daemon_name)
             self.update_period(realm_name=realm_name)
 
-    def create_dashboard_admin_sync_group(self, zonegroup_name: str = ''):
-
-        zonegroup_info = self.get_zonegroup(zonegroup_name)
+    def create_dashboard_admin_sync_group(self, zonegroup_name: str = '',
+                                          daemon_name: Optional[str] = None):
+        realm_name = self.get_realm_from_daemon(daemon_name)
+        zonegroup_info = self.get_zonegroup(zonegroup_name, realm_name=realm_name)
         zone_names = []
         for zones in zonegroup_info['zones']:
             zone_names.append(zones['name'])
 
         # create a sync policy group with status allowed
-        self.create_sync_policy_group(_SYNC_GROUP_ID, SyncStatus.allowed.value)
+        self.create_sync_policy_group(_SYNC_GROUP_ID, SyncStatus.allowed.value,
+                                      daemon_name=daemon_name)
         # create a sync flow with source and destination zones
         self.create_sync_flow(_SYNC_GROUP_ID, _SYNC_FLOW_ID,
                               SyncFlowTypes.symmetrical.value,
-                              zones={'added': zone_names, 'removed': []})
+                              zones={'added': zone_names, 'removed': []},
+                              daemon_name=daemon_name)
         # create a sync pipe with source and destination zones
         self.create_sync_pipe(_SYNC_GROUP_ID, _SYNC_PIPE_ID,
                               source_zones={'added': '*', 'removed': []},
                               destination_zones={'added': '*', 'removed': []}, source_bucket='*',
-                              destination_bucket='*')
+                              destination_bucket='*', daemon_name=daemon_name)
         # period update --commit
-        self.update_period()
+        realm_name = self.get_realm_from_daemon(daemon_name)
+        self.update_period(realm_name=realm_name)
 
     @staticmethod
     def _is_not_found_sync_policy_error(error: DashboardException) -> bool:
@@ -3251,29 +3279,36 @@ class RgwMultisite:
         not_found_markers = ['not found', 'no such', 'does not exist']
         return any(marker in message for marker in not_found_markers)
 
-    def remove_dashboard_admin_sync_group(self, zonegroup_name: str = ''):
-        if not self.policy_group_exists(_SYNC_GROUP_ID, zonegroup_name):
+    def remove_dashboard_admin_sync_group(self, zonegroup_name: str = '',
+                                          daemon_name: Optional[str] = None):
+        if not self.policy_group_exists(_SYNC_GROUP_ID, zonegroup_name,
+                                        daemon_name=daemon_name):
             return
 
         try:
-            self.remove_sync_pipe(_SYNC_GROUP_ID, _SYNC_PIPE_ID)
+            self.remove_sync_pipe(_SYNC_GROUP_ID, _SYNC_PIPE_ID,
+                                  daemon_name=daemon_name)
         except DashboardException as error:
             if not self._is_not_found_sync_policy_error(error):
                 raise
 
         try:
             self.remove_sync_flow(_SYNC_GROUP_ID, _SYNC_FLOW_ID,
-                                  SyncFlowTypes.symmetrical.value)
+                                  SyncFlowTypes.symmetrical.value,
+                                  daemon_name=daemon_name)
         except DashboardException as error:
             if not self._is_not_found_sync_policy_error(error):
                 raise
 
-        self.remove_sync_policy_group(_SYNC_GROUP_ID, update_period=True)
+        self.remove_sync_policy_group(_SYNC_GROUP_ID, update_period=True,
+                                      daemon_name=daemon_name)
 
-    def policy_group_exists(self, group_name: str, zonegroup_name: str):
+    def policy_group_exists(self, group_name: str, zonegroup_name: str,
+                            daemon_name: Optional[str] = None):
         try:
             _ = self.get_sync_policy_group(
-                group_id=group_name, zonegroup_name=zonegroup_name)
+                group_id=group_name, zonegroup_name=zonegroup_name,
+                daemon_name=daemon_name)
             return True
         except DashboardException:
             return False

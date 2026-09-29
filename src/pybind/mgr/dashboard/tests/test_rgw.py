@@ -488,6 +488,61 @@ class RgwUserControllerTestCase(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody(mock_return_value)
 
+    @patch('dashboard.services.rgw_client.RgwMultisite.get_realm_from_daemon',
+           Mock(return_value='my-realm'))
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_get_rate_limit_with_daemon_name(self, mock_proxy, send_rgwadmin_command):
+        """get_rate_limit resolves the realm via daemon_name and passes --rgw-realm."""
+        mock_proxy.side_effect = [{
+            'count': 3,
+            'keys': ['test1', 'test2', 'test3'],
+            'truncated': False
+        }]
+        expected = {
+            "user_ratelimit": {
+                "max_read_ops": 100,
+                "max_write_ops": 50
+            }
+        }
+        send_rgwadmin_command.return_value = (0, expected, "")
+
+        self._get('/test/api/rgw/user/testuser/ratelimit?daemon_name=rgw.0')
+        self.assertStatus(200)
+        self.assertInJsonBody('user_ratelimit')
+        send_rgwadmin_command.assert_called_once_with(
+            ['ratelimit', 'get', '--ratelimit-scope', 'user',
+             '--rgw-realm', 'my-realm', '--uid', 'testuser']
+        )
+
+    @patch('dashboard.services.rgw_client.RgwMultisite.get_realm_from_daemon',
+           Mock(return_value='my-realm'))
+    @patch('dashboard.services.rgw_client.mgr.send_rgwadmin_command')
+    @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
+    def test_get_global_rate_limit_with_daemon_name(self, mock_proxy, send_rgwadmin_command):
+        """get_global_rate_limit resolves the realm via daemon_name and passes --rgw-realm."""
+        mock_proxy.side_effect = [{
+            'count': 3,
+            'keys': ['test1', 'test2', 'test3'],
+            'truncated': False
+        }]
+        expected = {
+            "bucket_ratelimit": {"max_read_ops": 0, "max_write_ops": 0,
+                                 "max_read_bytes": 0, "max_write_bytes": 0, "enabled": False},
+            "user_ratelimit": {"max_read_ops": 0, "max_write_ops": 0,
+                               "max_read_bytes": 0, "max_write_bytes": 0, "enabled": False},
+            "anonymous_ratelimit": {"max_read_ops": 0, "max_write_ops": 0,
+                                    "max_read_bytes": 0, "max_write_bytes": 0, "enabled": False}
+        }
+        send_rgwadmin_command.return_value = (0, expected, "")
+
+        self._get('/test/api/rgw/user/ratelimit?daemon_name=rgw.0')
+        self.assertStatus(200)
+        self.assertJsonBody(expected)
+        send_rgwadmin_command.assert_called_once_with(
+            ['global', 'ratelimit', 'get', '--rgw-realm', 'my-realm']
+        )
+
     @patch('dashboard.controllers.rgw.RgwAccounts.get_account_user_count')
     @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
     def test_create_user_account_limit_reached(self, mock_proxy, mock_count):
