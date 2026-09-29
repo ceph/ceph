@@ -5,6 +5,7 @@
 #define LIBRBD_API_MIRROR_H
 
 #include "include/rbd/librbd.hpp"
+#include "cls/rbd/cls_rbd_client.h"
 #include <map>
 #include <string>
 #include <vector>
@@ -131,7 +132,8 @@ struct Mirror {
   static int group_disable(IoCtx &group_ioctx, const char *group_name,
                            bool force);
   static int group_image_add(IoCtx &group_ioctx, const std::string &group_id,
-                             IoCtx &image_ioctx, const std::string &image_id);
+                             IoCtx &image_ioctx, const std::string &image_id,
+                             const cls::rbd::MirrorImage &mirror_image);
   static int group_image_remove(IoCtx &group_ioctx, const std::string &group_id,
                                 IoCtx &image_ioctx, const std::string &image_id);
   static int group_promote(IoCtx &group_ioctx, const char *group_name,
