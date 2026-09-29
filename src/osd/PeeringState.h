@@ -10,6 +10,7 @@
 #include <boost/statechart/transition.hpp>
 #include <boost/statechart/event_base.hpp>
 #include <string>
+#include <typeinfo>
 #include <atomic>
 #include <map>
 #include <optional>
@@ -18,6 +19,7 @@
 
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
+#include "include/demangle.h"
 
 #include "PGLog.h"
 #include "PGStateUtils.h"
@@ -644,6 +646,10 @@ public:
 
     utime_t event_time;
     uint64_t event_count;
+
+    // diagnostic fields populated just before a Crashed transition
+    std::string last_event_desc;
+    const char *last_exited_state = nullptr;
 
     void clear_event_counters() {
       event_time = utime_t();
@@ -2124,6 +2130,8 @@ public:
   void handle_event(const boost::statechart::event_base &evt,
 		    PeeringCtx *rctx) {
     start_handle(rctx);
+    machine.last_event_desc = ceph_demangle(typeid(evt).name());
+    machine.last_exited_state = get_current_state();
     machine.process_event(evt);
     end_handle();
   }
@@ -2132,6 +2140,8 @@ public:
   void handle_event(PGPeeringEventRef evt,
 		    PeeringCtx *rctx) {
     start_handle(rctx);
+    machine.last_event_desc = evt->get_desc();
+    machine.last_exited_state = get_current_state();
     machine.process_event(evt->get_event());
     end_handle();
   }
