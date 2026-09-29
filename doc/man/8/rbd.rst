@@ -642,10 +642,12 @@ Commands
 
 :command:`snap limit clear` *image-spec*
   Remove any previously set limit on the number of snapshots allowed on
-  an image.
+  an image (unlimited). Images with no limit key use the default of
+  510 snapshots (matching the krbd hard limit).
 
 :command:`snap limit set` [--limit] *limit* *image-spec*
-  Set a limit for the number of snapshots allowed on an image.
+  Set a limit for the number of snapshots allowed on an image. If no
+  limit has been set, the default is 510.
 
 :command:`snap ls` *image-spec*
   Dump the list of snapshots of a specific image.

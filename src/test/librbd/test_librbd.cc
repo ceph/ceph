@@ -9278,7 +9278,7 @@ TEST_F(TestLibRBD, SnapshotLimit)
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
 
   ASSERT_EQ(0, rbd_snap_get_limit(image, &limit));
-  ASSERT_EQ(UINT64_MAX, limit);
+  ASSERT_EQ(RBD_DEFAULT_SNAP_LIMIT, limit);
   ASSERT_EQ(0, rbd_snap_set_limit(image, 2));
   ASSERT_EQ(0, rbd_snap_get_limit(image, &limit));
   ASSERT_EQ(2U, limit);
@@ -9288,6 +9288,8 @@ TEST_F(TestLibRBD, SnapshotLimit)
   ASSERT_EQ(0, rbd_snap_create(image, "snap2"));
   ASSERT_EQ(-EDQUOT, rbd_snap_create(image, "snap3"));
   ASSERT_EQ(0, rbd_snap_set_limit(image, UINT64_MAX));
+  ASSERT_EQ(0, rbd_snap_get_limit(image, &limit));
+  ASSERT_EQ(UINT64_MAX, limit);
   ASSERT_EQ(0, rbd_snap_create(image, "snap3"));
   ASSERT_EQ(0, rbd_close(image));
 
@@ -9312,7 +9314,7 @@ TEST_F(TestLibRBD, SnapshotLimitPP)
     ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
 
     ASSERT_EQ(0, image.snap_get_limit(&limit));
-    ASSERT_EQ(UINT64_MAX, limit);
+    ASSERT_EQ(RBD_DEFAULT_SNAP_LIMIT, limit);
     ASSERT_EQ(0, image.snap_set_limit(2));
     ASSERT_EQ(0, image.snap_get_limit(&limit));
     ASSERT_EQ(2U, limit);
@@ -9322,6 +9324,8 @@ TEST_F(TestLibRBD, SnapshotLimitPP)
     ASSERT_EQ(0, image.snap_create("snap2"));
     ASSERT_EQ(-EDQUOT, image.snap_create("snap3"));
     ASSERT_EQ(0, image.snap_set_limit(UINT64_MAX));
+    ASSERT_EQ(0, image.snap_get_limit(&limit));
+    ASSERT_EQ(UINT64_MAX, limit);
     ASSERT_EQ(0, image.snap_create("snap3"));
   }
 
