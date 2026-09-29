@@ -1498,15 +1498,9 @@ describe('PoolFormComponent', () => {
           form.get(controlName).markAsPristine();
 
         beforeEach(() => {
-          [
-            'algorithm',
-            'maxBlobSize',
-            'minBlobSize',
-            'mode',
-            'pgNum',
-            'ratio',
-            'name'
-          ].forEach((name) => markControlAsPreviouslySet(name));
+          ['algorithm', 'maxBlobSize', 'minBlobSize', 'mode', 'pgNum', 'ratio', 'name'].forEach(
+            (name) => markControlAsPreviouslySet(name)
+          );
           fixture.detectChanges();
         });
 

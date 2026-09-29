@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import _ from 'lodash';
-import { Node } from 'carbon-components-angular/treeview/tree-node.types';
+import { Node } from '~/app/shared/models/carbon-tree-node';
 
 @Injectable({
   providedIn: 'root'

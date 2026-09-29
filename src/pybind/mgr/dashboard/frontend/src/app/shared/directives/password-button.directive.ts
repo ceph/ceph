@@ -10,7 +10,10 @@ export class PasswordButtonDirective implements OnInit {
   @Input()
   private cdPasswordButton: string;
 
-  constructor(private elementRef: ElementRef, private renderer: Renderer2) {}
+  constructor(
+    private elementRef: ElementRef,
+    private renderer: Renderer2
+  ) {}
 
   ngOnInit() {
     this.renderer.setAttribute(this.elementRef.nativeElement, 'tabindex', '-1');

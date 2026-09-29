@@ -52,7 +52,7 @@ describe('RgwBucketTieringFormComponent', () => {
     fixture = TestBed.createComponent(RgwBucketTieringFormComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    rgwBucketService = (TestBed.inject(RgwBucketService) as unknown) as MockRgwBucketService;
+    rgwBucketService = TestBed.inject(RgwBucketService) as unknown as MockRgwBucketService;
   });
 
   it('should create', () => {

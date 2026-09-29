@@ -1,13 +1,23 @@
 <div cdsRow>
   <div cdsCol>
     <fieldset>
-      <legend class="cd-header"
-              i18n>Cluster Resources</legend>
-      <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
+      <legend
+        class="cd-header"
+        i18n
+      >
+        Cluster Resources
+      </legend>
+      <table
+        class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
+      >
         <tbody>
           <tr>
-            <td i18n
-                class="bold">Hosts</td>
+            <td
+              i18n
+              class="bold"
+            >
+              Hosts
+            </td>
             <td>{{ hostsCount }}</td>
           </tr>
           <tr *ngIf="!isSimpleDeployment; else simpleDeploymentTextTpl">
@@ -24,17 +34,29 @@
                 </dd>
               </dl>
             </td>
-            <td class="pt-5"><p>{{ totalDevices }}</p><p>
-              {{ totalCapacity | dimlessBinary }}</p></td>
+            <td class="pt-5">
+              <p>{{ totalDevices }}</p>
+              <p>
+                {{ totalCapacity | dimlessBinary }}
+              </p>
+            </td>
           </tr>
           <tr>
-            <td i18n
-                class="bold">CPUs</td>
+            <td
+              i18n
+              class="bold"
+            >
+              CPUs
+            </td>
             <td>{{ totalCPUs | empty }}</td>
           </tr>
           <tr>
-            <td i18n
-                class="bold">Memory</td>
+            <td
+              i18n
+              class="bold"
+            >
+              Memory
+            </td>
             <td>{{ totalMemory | empty }}</td>
           </tr>
         </tbody>
@@ -44,14 +66,20 @@
 </div>
 <div cdsRow>
   <div cdsCol>
-    <legend i18n
-            class="cd-header">Host Details</legend>
-    <cd-hosts [hiddenColumns]="['service_instances', 'status']"
-              [hideToolHeader]="true"
-              [hasTableDetails]="false"
-              [showGeneralActionsOnly]="true"
-              [showExpandClusterBtn]="false"
-              [showInlineActions]="false">
+    <legend
+      i18n
+      class="cd-header"
+    >
+      Host Details
+    </legend>
+    <cd-hosts
+      [hiddenColumns]="['service_instances', 'status']"
+      [hideToolHeader]="true"
+      [hasTableDetails]="false"
+      [showGeneralActionsOnly]="true"
+      [showExpandClusterBtn]="false"
+      [showInlineActions]="false"
+    >
     </cd-hosts>
   </div>
 </div>
@@ -61,7 +89,7 @@
       <span i18n>Storage Capacity</span>
     </td>
     <td>
-      <span i18n>{{deploymentDescText}}</span>
+      <span i18n>{{ deploymentDescText }}</span>
     </td>
   </tr>
 </ng-template>
