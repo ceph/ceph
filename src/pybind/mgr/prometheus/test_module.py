@@ -1,7 +1,10 @@
 from typing import Dict
 from unittest import TestCase, mock
 
-from prometheus.module import Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict
+import pytest
+
+from prometheus.module import (
+    Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict, Module)
 import threading
 
 
@@ -591,30 +594,18 @@ class RgwSyncMetricsTest(TestCase):
         self.assertEqual(sync_keys, [])
 
 
-class RgwInstanceIdTest(TestCase):
-
-    def _parse(self, daemon_id):
-        from prometheus.module import Module
-        return Module._parse_rgw_instance_id(daemon_id)
-
-    def test_three_part_daemon_id_extracts_instance(self):
-        # e.g. "host1.rgw.0" -> instance id "0"
-        self.assertEqual(self._parse('host1.rgw.0'), '0')
-
-    def test_one_dot_daemon_id_does_not_raise(self):
-        # Regression test: previously raised IndexError, since the
-        # guard only checked for a dot, but the code indexed [2],
-        # which needs two dots.
-        self.assertEqual(self._parse('host1.rgw0'), 'host1.rgw0')
-
-    def test_no_dot_daemon_id_falls_back_to_full_id(self):
-        self.assertEqual(self._parse('standalone'), 'standalone')
-
-    def test_empty_daemon_id_returns_empty_string(self):
-        self.assertEqual(self._parse(''), '')
-
-    def test_none_daemon_id_returns_empty_string(self):
-        self.assertEqual(self._parse(None), '')
-
-    def test_more_than_two_dots_extracts_third_segment(self):
-        self.assertEqual(self._parse('a.b.c.d'), 'c')
+@pytest.mark.parametrize(
+    'daemon_id, expected',
+    [
+        ('host1.rgw.0', '0'),
+        # One dot used to raise IndexError: the guard only checked for a
+        # dot, then indexed split()[2], which needs two dots.
+        ('host1.rgw0', 'host1.rgw0'),
+        ('rgw0', 'rgw0'),
+        ('', ''),
+        (None, ''),
+        ('host1.rgw.foo.bar', 'foo'),
+    ],
+)
+def test_parse_rgw_instance_id(daemon_id, expected):
+    assert Module._parse_rgw_instance_id(daemon_id) == expected
