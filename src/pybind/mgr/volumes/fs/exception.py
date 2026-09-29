@@ -36,6 +36,16 @@ class OpSmException(Exception):
 class NotImplementedException(Exception):
     pass
 
+class JobDeferred(Exception):
+    """
+    Raised by an async job (from execute_job()) that cannot make progress
+    right now (e.g., the subvolume it operates on is quarantined). The job
+    is skipped with an exponential backoff instead of being retried on every
+    pass. Intentionally not a VolumeException so that the generic handlers in
+    the job implementations let it through.
+    """
+    pass
+
 class ClusterTimeout(Exception):
     """
     Exception indicating that we timed out trying to talk to the Ceph cluster,
