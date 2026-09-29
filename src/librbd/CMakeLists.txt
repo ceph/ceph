@@ -162,7 +162,6 @@ set(librbd_internal_srcs
   mirror/GroupEnableRequest.cc
   mirror/GroupGetInfoRequest.cc
   mirror/GroupPromoteRequest.cc
-  mirror/GroupRemoveImageRequest.cc
   mirror/ImageRemoveRequest.cc
   mirror/ImageStateUpdateRequest.cc
   mirror/PromoteRequest.cc
