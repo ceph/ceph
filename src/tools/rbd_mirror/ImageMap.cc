@@ -244,7 +244,7 @@ void ImageMap<I>::schedule_update_task(const ceph::mutex &timer_lock,
       process_updates();
     });
 
-  dout(20) << "scheduling image check update (" << m_timer_task << ")"
+  dout(20) << "scheduling entity check update (" << m_timer_task << ")"
            << " after " << after << " second(s)" << dendl;
   m_threads->timer->add_event_after(after, m_timer_task);
 }
@@ -396,6 +396,10 @@ void ImageMap<I>::handle_load(const std::map<GlobalId,
     m_policy->init(image_mapping);
 
     for (auto& pair : image_mapping) {
+      if (pair.first.type == MIRROR_ENTITY_TYPE_IMAGE &&
+          m_policy->lookup(pair.first).weight == 0) {
+        continue;
+      }
       schedule_action(pair.first);
     }
   }
@@ -435,6 +439,11 @@ void ImageMap<I>::update_entities_added(
       if (m_policy->add_entity(global_id, entity.count)) {
         schedule_action(global_id);
       }
+    } else if (result.second && !mirror_uuid.empty() &&
+               m_policy->modify_entity(global_id, entity.count)) {
+      // Use the remote state when the local and remote watchers report
+      // different group membership.
+      schedule_action(global_id);
     }
   }
 }
@@ -469,7 +478,7 @@ void ImageMap<I>::update_entities_removed(
     }
 
     if (entity_removed) {
-      // local and peer images have been deleted
+      // local and peer entities have been deleted
       if (m_policy->remove_entity(global_id)) {
         schedule_action(global_id);
       }
@@ -478,8 +487,35 @@ void ImageMap<I>::update_entities_removed(
 
   if (!to_remove.empty()) {
     // removal notification will be notified instantly. this is safe
-    // even after scheduling action for images as we still hold m_lock
+    // even after scheduling action for entities as we still hold m_lock
     notify_listener_remove_entities(mirror_uuid, to_remove);
+  }
+}
+
+template <typename I>
+void ImageMap<I>::update_entities_modified(const std::string &mirror_uuid,
+  const MirrorEntities &entities) {
+  // Update the weight of images or groups that remain mirror-enabled.
+  dout(5) << "mirror_uuid=" << mirror_uuid << ", entities={ " << entities
+          << " }" << dendl;
+  ceph_assert(ceph_mutex_is_locked(m_lock));
+
+  for (const auto &entity : entities) {
+    auto global_id = GlobalId(entity.type, entity.global_id);
+
+    auto peer_it = m_peer_map.find(global_id);
+    if (peer_it == m_peer_map.end()) {
+      continue;
+    }
+
+    if (!mirror_uuid.empty() &&
+        peer_it->second.find(mirror_uuid) == peer_it->second.end()) {
+      continue;
+    }
+
+    if (m_policy->modify_entity(global_id, entity.count)) {
+      schedule_action(global_id);
+    }
   }
 }
 
@@ -542,10 +578,12 @@ void ImageMap<I>::update_instances_removed(
 template <typename I>
 void ImageMap<I>::update_entities(const std::string &mirror_uuid,
                                 MirrorEntities &&added_entities,
-                                MirrorEntities &&removed_entities) {
+                                MirrorEntities &&removed_entities,
+                                MirrorEntities &&modified_entities) {
   dout(5) << "mirror_uuid=" << mirror_uuid << ", " << "added_count="
           << added_entities.size() << ", " << "removed_count="
-          << removed_entities.size() << dendl;
+          << removed_entities.size() << ", " << "modified_count="
+          << modified_entities.size() << dendl;
 
   {
     std::lock_guard locker{m_lock};
@@ -558,6 +596,9 @@ void ImageMap<I>::update_entities(const std::string &mirror_uuid,
     }
     if (!added_entities.empty()) {
       update_entities_added(mirror_uuid, added_entities);
+    }
+    if (!modified_entities.empty()) {
+      update_entities_modified(mirror_uuid, modified_entities);
     }
   }
 
