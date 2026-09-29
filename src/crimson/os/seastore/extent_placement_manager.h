@@ -272,7 +272,7 @@ public:
     assert((t.get_src() == transaction_type_t::TRIM_DIRTY) ||
            (t.get_src() == transaction_type_t::DEMOTE) ||
            (t.get_src() == transaction_type_t::PROMOTE));
-    ceph_assert_always(is_root_type(extent->get_type()) ||
+    ceph_assert(is_root_type(extent->get_type()) ||
 	extent->get_paddr().is_absolute());
     return crimson::os::seastore::can_inplace_rewrite(extent->get_type());
   }

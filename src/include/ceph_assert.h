@@ -93,6 +93,9 @@ using namespace ceph;
 #define ceph_abort_msgf(...)                                             \
   ::ceph::__ceph_abortf( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__)
 
+// ceph_assert is *never* compiled out, regardless of NDEBUG.
+// (in the future we might introduce ceph_assert_debug() IF just assert()
+// is not good enough).
 #ifdef __SANITIZE_ADDRESS__
 #define ceph_assert(expr)                           \
   do {                                              \
@@ -102,27 +105,6 @@ using namespace ceph;
   } while (false)
 #else
 #define ceph_assert(expr)							\
-  do { \
-    static const auto func_name = __CEPH_ASSERT_FUNCTION; \
-    [] (const bool eval) { \
-    static const ceph::assert_data assert_data_ctx = \
-    {__STRING(expr), __FILE__, __LINE__, func_name}; \
-    ((eval) \
-    ? _CEPH_ASSERT_VOID_CAST (0) \
-    : ::ceph::__ceph_assert_fail<&assert_data_ctx>()); }((bool)(expr)); } while(false)
-#endif
-
-// this variant will *never* get compiled out to NDEBUG in the future.
-// (ceph_assert currently doesn't either, but in the future it might.)
-#ifdef __SANITIZE_ADDRESS__
-#define ceph_assert_always(expr)                    \
-  do {                                              \
-    ((expr))                                        \
-    ? _CEPH_ASSERT_VOID_CAST (0)                    \
-      : ::ceph::__ceph_assert_fail(__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION); \
-  } while(false)
-#else
-#define ceph_assert_always(expr)							\
   do { \
     static const auto func_name = __CEPH_ASSERT_FUNCTION; \
     [] (const bool eval) { \

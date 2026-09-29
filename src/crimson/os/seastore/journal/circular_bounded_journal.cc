@@ -390,7 +390,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
   // The third pass to replay deltas
   co_await scan_valid_record_delta(std::move(call_d_handler_if_valid), tail);
   for (auto p : crc_info) {
-    ceph_assert_always(p.second.first->get_last_committed_crc() == p.second.second);	
+    ceph_assert(p.second.first->get_last_committed_crc() == p.second.second);	
   }
   crc_info.clear();
   // make sure that committed_to is JOURNAL_SEQ_NULL if jounal is the initial state
