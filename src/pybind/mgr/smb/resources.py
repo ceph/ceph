@@ -411,6 +411,10 @@ class RGWStorage(_RBase):
     def validate(self) -> None:
         if not self.bucket:
             raise ValueError('bucket requires a value')
+        if '/' in self.bucket:
+            raise ValueError(
+                f"Invalid bucket name '{self.bucket}': bucket name should not contain /."
+            )
 
     def convert(self, operation: ConversionOp) -> Self:
         """Convert password fields based on the operation."""
