@@ -252,7 +252,7 @@ void RemoveLocalGroupRequest<I>::get_mirror_images() {
   dout(10) << dendl;
 
   if (m_images.empty()) {
-    remove_image_from_group();
+    remove_unmirrored_image_from_group();
     return;
   }
 
@@ -287,7 +287,12 @@ void RemoveLocalGroupRequest<I>::handle_get_mirror_images(int r) {
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
   }
 
-  if (r < 0) {
+  if (r == -ENOENT) {
+    // ImageDeleter can remove mirror metadata and move the image to trash
+    // before group teardown reaches this member. It still needs to be
+    // detached from the group so its backlink no longer prevents deletion.
+    m_unmirrored_images.emplace_back(spec.pool_id, spec.image_id);
+  } else if (r < 0) {
     derr << "error getting local mirror image: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -298,6 +303,40 @@ void RemoveLocalGroupRequest<I>::handle_get_mirror_images(int r) {
 
   m_images.pop_front();
   get_mirror_images();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::remove_unmirrored_image_from_group() {
+  if (m_unmirrored_images.empty()) {
+    remove_image_from_group();
+    return;
+  }
+
+  auto &[pool_id, image_id] = m_unmirrored_images.front();
+  dout(10) << "image_id=" << image_id << " ,pool_id=" << pool_id
+           << " ,group_id=" << m_group_id << dendl;
+
+  auto ctx = create_context_callback<RemoveLocalGroupRequest,
+    &RemoveLocalGroupRequest<I>::handle_remove_unmirrored_image_from_group>(
+    this);
+
+  auto req = librbd::group::RemoveImageRequest<I>::create(m_io_ctx, m_group_id,
+    m_io_ctx, image_id, ctx);
+  req->send();
+}
+
+template <typename I>
+void RemoveLocalGroupRequest<I>::handle_remove_unmirrored_image_from_group(
+  int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    finish(r);
+    return;
+  }
+
+  m_unmirrored_images.pop_front();
+  remove_unmirrored_image_from_group();
 }
 
 
@@ -330,6 +369,7 @@ void RemoveLocalGroupRequest<I>::handle_remove_image_from_group(int r) {
 
   if (r < 0 && r != -ENOENT) {
     finish(r);
+    return;
   }
 
   move_image_to_trash();
@@ -358,6 +398,7 @@ void RemoveLocalGroupRequest<I>::handle_move_image_to_trash(int r) {
 
   if (r < 0 && r != -ENOENT) {
     finish(r);
+    return;
   }
 
   m_trash_images.erase(m_trash_images.begin());

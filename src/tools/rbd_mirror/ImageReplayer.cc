@@ -289,10 +289,11 @@ void ImageReplayer<I>::prune_snapshot(uint64_t snap_id) {
 }
 
 template <typename I>
-void ImageReplayer<I>::set_remote_snap_id_end_limit(uint64_t snap_id) {
+void ImageReplayer<I>::set_remote_snap_id_end_limit(uint64_t snap_id,
+  const cls::rbd::GroupSpec &local_group_spec) {
   std::unique_lock locker(m_lock);
   if (m_replayer != nullptr) {
-    m_replayer->set_remote_snap_id_end_limit(snap_id);
+    m_replayer->set_remote_snap_id_end_limit(snap_id, local_group_spec);
   }
 }
 
@@ -1019,7 +1020,33 @@ void ImageReplayer<I>::handle_shut_down(int r) {
 
   if (delete_requested || resync_requested) {
     dout(5) << "moving image to trash" << dendl;
-    auto ctx = new LambdaContext([this, r](int) {
+    auto ctx = new LambdaContext([this, r, delete_requested,
+                                   resync_requested](int trash_r) {
+      if (trash_r == -EROFS) {
+        // A group ImageReplayer can still hold the exclusive lock while a
+        // recently detached standalone image is being removed.  Retrying is
+        // required: TrashMoveRequest has already changed the mirror image to
+        // the disabling state, and abandoning it here leaves a named image
+        // which can collide with a later image of the same name.
+        dout(5) << "image is still locked by another replayer; retrying "
+                << "trash move" << dendl;
+        {
+          std::lock_guard locker{m_lock};
+          m_delete_requested = delete_requested;
+          m_delete_in_progress = false;
+          m_resync_requested = resync_requested;
+        }
+
+        auto retry_ctx = new LambdaContext([this, r](int) {
+          handle_shut_down(r);
+        });
+        auto timer_ctx = new LambdaContext([this, retry_ctx](int) {
+          m_threads->work_queue->queue(retry_ctx, 0);
+        });
+        std::lock_guard timer_locker{m_threads->timer_lock};
+        m_threads->timer->add_event_after(1, timer_ctx);
+        return;
+      }
       handle_shut_down(r);
     });
     ImageDeleter<I>::trash_move(m_local_io_ctx, m_global_image_id,
