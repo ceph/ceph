@@ -108,6 +108,12 @@ void GroupDetachImageRequest<I>::validate_image() {
   auto& mirror_image = m_mirror_images[m_detach_image_index];
   m_original_mirror_image = mirror_image;
 
+  if (mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE) {
+    ldout(m_cct, 10) << "resuming a partially completed image detach" << dendl;
+    create_detached_image_snapshot();
+    return;
+  }
+
   if (mirror_image.type != cls::rbd::MIRROR_IMAGE_TYPE_GROUP) {
     lderr(m_cct) << "image is not group mirrored" << dendl;
 
@@ -140,7 +146,7 @@ void GroupDetachImageRequest<I>::detach_mirror_image() {
 
   auto req = ImageStateUpdateRequest<I>::create(m_detach_image_ctx->md_ctx,
     m_detach_image_ctx->id, cls::rbd::MIRROR_IMAGE_STATE_ENABLED, mirror_image,
-    ctx);
+    ctx, true);
 
   req->send();
 }
@@ -481,7 +487,7 @@ void GroupDetachImageRequest<I>::restore_mirror_image() {
     &GroupDetachImageRequest<I>::handle_restore_mirror_image>(this);
   auto req = ImageStateUpdateRequest<I>::create(m_detach_image_ctx->md_ctx,
     m_detach_image_ctx->id, cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-    m_original_mirror_image, ctx);
+    m_original_mirror_image, ctx, true);
   req->send();
 }
 

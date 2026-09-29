@@ -699,11 +699,14 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
     group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
   request->send();
   r = ctx.wait();
+  bool mirror_group_enabled = false;
   if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
     lderr(cct) << "failed to get mirror group info: "
                << cpp_strerror(r) << dendl;
     return r;
   } else if (r == 0) {
+    mirror_group_enabled = mirror_group.state ==
+                           cls::rbd::MIRROR_GROUP_STATE_ENABLED;
     if (promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
       lderr(cct) << "group is not primary, cannot add image" << dendl;
       return -EINVAL;
@@ -804,6 +807,16 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   }
 
   r = cls_client::image_group_add(&image_ioctx, image_header_oid, group_spec);
+  if (r == -EEXIST && mirror_group_enabled) {
+    cls::rbd::GroupSpec existing_group_spec;
+    int get_r = cls_client::image_group_get(&image_ioctx, image_header_oid,
+      &existing_group_spec);
+    if (get_r == 0 && existing_group_spec == group_spec) {
+      ldout(cct, 10) << "resuming an incomplete add for image " << image_id
+                     << dendl;
+      r = 0;
+    }
+  }
   if (r < 0) {
     lderr(cct) << "error adding group reference to image: "
 	       << cpp_strerror(r) << dendl;

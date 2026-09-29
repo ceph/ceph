@@ -174,6 +174,10 @@ template <typename I>
 void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
   ldout(m_cct, 10) << dendl;
 
+  if (m_mirror_images != nullptr) {
+    m_mirror_images->resize(m_images.size());
+  }
+
   auto ctx = create_context_callback<
     GroupPrepareImagesRequest<I>,
     &GroupPrepareImagesRequest<I>::handle_check_mirror_images_disabled>(this);
@@ -202,17 +206,24 @@ void GroupPrepareImagesRequest<I>::check_mirror_images_disabled() {
         } else if (r == 0) {
           bool valid = false;
           if (m_operation == OP_ENABLE) {
-            valid = (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
+            valid =
+              (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED &&
+                mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT &&
+                (mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE ||
+                  mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_GROUP));
           } else if (m_operation == OP_ADD_IMAGE) {
             valid =
               (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED &&
                 mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT &&
-                mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE);
+                (mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_STANDALONE ||
+                  mirror_image.type == cls::rbd::MIRROR_IMAGE_TYPE_GROUP));
           }
           if (!valid) {
             lderr(m_cct) << "image_id=" << m_images[i].spec.image_id
                          << " has incompatible mirroring metadata" << dendl;
             r = -EINVAL;
+          } else if (m_mirror_images != nullptr) {
+            (*m_mirror_images)[i] = mirror_image;
           }
         } else {
           lderr(m_cct) << "failed to get mirror image info for image_id="
@@ -388,10 +399,9 @@ void GroupPrepareImagesRequest<I>::handle_check_images_mirror_mode(int r) {
 template <typename I>
 void GroupPrepareImagesRequest<I>::get_images_mirror_info() {
   ldout(m_cct, 10) << dendl;
-
-  auto ctx = create_context_callback<GroupPrepareImagesRequest<I>,
+  auto ctx = create_context_callback<
+    GroupPrepareImagesRequest<I>,
     &GroupPrepareImagesRequest<I>::handle_get_images_mirror_info>(this);
-
   auto gather_ctx = new C_Gather(m_cct, ctx);
 
   // Keep mirror_images indexed exactly the same as m_images.
@@ -399,16 +409,13 @@ void GroupPrepareImagesRequest<I>::get_images_mirror_info() {
   m_images_promotion_states.resize(m_images.size());
   m_images_primary_mirror_uuids.resize(m_images.size());
 
-  for (size_t i = 0; i < m_images.size(); ++i) {
-    auto req = GetInfoRequest<I>::create(*m_image_ctxs[i],
-      &(*m_mirror_images)[i], &m_images_promotion_states[i],
-      &m_images_primary_mirror_uuids[i],
-      new LambdaContext([this, i, new_sub_ctx = gather_ctx->new_sub()](int r) {
-        CephContext* image_cct = m_image_ctxs[i]->cct;
-
+  for (size_t i = 0; i < m_images.size(); i++) {
+    auto info_ctx = new LambdaContext(
+      [this, i, new_sub_ctx=gather_ctx->new_sub()](int r) {
+        CephContext *image_cct = m_image_ctxs[i]->cct;
         if (r < 0 && r != -ENOENT) {
-          lderr(image_cct) << "failed to retrieve mirror info for "
-                           << m_images[i].spec.image_id << ": "
+          lderr(image_cct) << "image_id=" << m_images[i].spec.image_id
+                           << " failed to retrieve mirroring state: "
                            << cpp_strerror(r) << dendl;
           new_sub_ctx->complete(r);
           return;
@@ -418,9 +425,9 @@ void GroupPrepareImagesRequest<I>::get_images_mirror_info() {
                 m_images[i].spec.image_id == m_image_id_to_add)) {
             r = 0;
           } else {
-            lderr(image_cct)
-              << "image_id=" << m_images[i].spec.image_id
-              << " mirroring is disabled for this image" << dendl;
+            lderr(image_cct) << "image_id=" << m_images[i].spec.image_id
+                             << " mirroring is disabled for this image"
+                             << dendl;
           }
           new_sub_ctx->complete(r);
           return;
@@ -457,7 +464,12 @@ void GroupPrepareImagesRequest<I>::get_images_mirror_info() {
         }
 
         new_sub_ctx->complete(r);
-      }));
+      });
+    auto req = GetInfoRequest<I>::create(*m_image_ctxs[i],
+                                         &(*m_mirror_images)[i],
+                                         &m_images_promotion_states[i],
+                                         &m_images_primary_mirror_uuids[i],
+                                         info_ctx);
     req->send();
   }
   gather_ctx->activate();

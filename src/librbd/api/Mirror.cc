@@ -147,6 +147,87 @@ std::string get_mon_host(CephContext* cct) {
   return mon_host;
 }
 
+template <typename I>
+int check_group_snapshot_dependencies(I *ictx) {
+  struct GroupSnapshotRef {
+    cls::rbd::GroupSpec group_spec;
+    std::string group_snap_id;
+
+    bool operator<(const GroupSnapshotRef &rhs) const {
+      if (group_spec != rhs.group_spec) {
+        return group_spec < rhs.group_spec;
+      }
+      return group_snap_id < rhs.group_snap_id;
+    }
+  };
+
+  std::set<GroupSnapshotRef> group_snapshot_refs;
+  {
+    std::shared_lock image_locker{ictx->image_lock};
+    for (const auto &[snap_id, snap_info] : ictx->snap_info) {
+      if (auto group_ns = std::get_if<cls::rbd::ImageSnapshotNamespaceGroup>(
+            &snap_info.snap_namespace);
+        group_ns != nullptr) {
+        group_snapshot_refs.insert({{group_ns->group_id, group_ns->group_pool},
+          group_ns->group_snapshot_id});
+        continue;
+      }
+
+      if (auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+            &snap_info.snap_namespace);
+        mirror_ns != nullptr && mirror_ns->group_spec.is_valid() &&
+        !mirror_ns->group_snap_id.empty()) {
+        group_snapshot_refs.insert({mirror_ns->group_spec,
+          mirror_ns->group_snap_id});
+      }
+    }
+  }
+
+  for (const auto &ref : group_snapshot_refs) {
+    librados::IoCtx group_ioctx;
+    int r = util::create_ioctx(ictx->md_ctx, "group", ref.group_spec.pool_id,
+      {}, &group_ioctx);
+    if (r == -ENOENT) {
+      continue;
+    } else if (r < 0) {
+      return r;
+    }
+
+    cls::rbd::GroupSnapshot group_snap;
+    r = cls_client::group_snap_get_by_id(&group_ioctx,
+      util::group_header_name(ref.group_spec.group_id), ref.group_snap_id,
+      &group_snap);
+    if (r == -ENOENT) {
+      continue;
+    } else if (r < 0) {
+      return r;
+    }
+
+    auto image_it = std::find_if(group_snap.snaps.begin(),
+      group_snap.snaps.end(), [ictx](const auto &image_snap) {
+        return image_snap.pool == ictx->md_ctx.get_id() &&
+               image_snap.image_id == ictx->id;
+      });
+    if (image_it == group_snap.snaps.end()) {
+      continue;
+    }
+
+    cls::rbd::MirrorGroup mirror_group;
+    r = cls_client::mirror_group_get(&group_ioctx, ref.group_spec.group_id,
+      &mirror_group);
+    if (r == -ENOENT || (r == 0 && mirror_group.state ==
+                                     cls::rbd::MIRROR_GROUP_STATE_DISABLED)) {
+      continue;
+    } else if (r < 0) {
+      return r;
+    }
+
+    return -EBUSY;
+  }
+
+  return 0;
+}
+
 int create_bootstrap_user(CephContext* cct, librados::Rados& rados,
                           std::string* peer_client_id, std::string* cephx_key) {
   ldout(cct, 20) << dendl;
@@ -661,6 +742,18 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
     return 0;
   } else if (r < 0) {
     lderr(cct) << "failed to retrieve mirror image metadata: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = check_group_snapshot_dependencies(ictx);
+  if (r == -EBUSY) {
+    lderr(cct) << "cannot disable mirroring: one or more snapshots from an "
+                  "enabled mirror group still reference this image"
+               << dendl;
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "cannot check group snapshot dependencies: "
                << cpp_strerror(r) << dendl;
     return r;
   }

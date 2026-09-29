@@ -1073,3 +1073,51 @@ TEST_F(TestGroup, mirrorPP)
 
   ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group_name));
 }
+
+TEST_F(TestGroup, mirrorMoveImageToDisabledGroupPP) {
+  // Detach an image from one mirrored group, add it to a disabled group, and
+  // enable the new group. The global ID must stay unchanged so moving an image
+  // does not replace its mirror record or break its history on the peer.
+  REQUIRE_FORMAT_V2();
+
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+
+  std::string peer_uuid;
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_add(m_ioctx, &peer_uuid,
+                 RBD_MIRROR_PEER_DIRECTION_RX_TX, "cluster", "client"));
+
+  const char *group1 = "mirror_move_group1";
+  const char *group2 = "mirror_move_group2";
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, group1));
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, group2));
+  ASSERT_EQ(0,
+    m_rbd.group_image_add(m_ioctx, group1, m_ioctx, m_image_name.c_str()));
+  ASSERT_EQ(0,
+    m_rbd.mirror_group_enable(m_ioctx, group1, RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+
+  librbd::Image image;
+  ASSERT_EQ(0, m_rbd.open(m_ioctx, image, m_image_name.c_str()));
+  librbd::mirror_image_info_t mirror_info;
+  ASSERT_EQ(0, image.mirror_image_get_info(&mirror_info, sizeof(mirror_info)));
+  std::string original_global_image_id = mirror_info.global_id;
+  ASSERT_FALSE(original_global_image_id.empty());
+  image.close();
+
+  ASSERT_EQ(0,
+    m_rbd.group_image_remove(m_ioctx, group1, m_ioctx, m_image_name.c_str()));
+  ASSERT_EQ(0,
+    m_rbd.group_image_add(m_ioctx, group2, m_ioctx, m_image_name.c_str()));
+  ASSERT_EQ(0,
+    m_rbd.mirror_group_enable(m_ioctx, group2, RBD_MIRROR_IMAGE_MODE_SNAPSHOT));
+
+  ASSERT_EQ(0, m_rbd.open(m_ioctx, image, m_image_name.c_str()));
+  ASSERT_EQ(0, image.mirror_image_get_info(&mirror_info, sizeof(mirror_info)));
+  std::string moved_global_image_id = mirror_info.global_id;
+  ASSERT_EQ(original_global_image_id, moved_global_image_id);
+  image.close();
+
+  ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, group1, false));
+  ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, group2, false));
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group1));
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group2));
+}
