@@ -2240,6 +2240,71 @@ TEST(BlueFS, truncate_drops_allocations) {
 
 
 
+// Space reserved by preallocate() but never written to has to be given back
+// when truncate_unused_allocations() is called.
+TEST(BlueFS, truncate_unused_allocations) {
+  constexpr uint64_t K = 1024;
+  constexpr uint64_t M = 1024 * K;
+  uuid_d fsid;
+  const char* DIR_NAME = "dir";
+  const char* FILE_NAME = "file1";
+  constexpr uint64_t alloc_unit = 64 * K;
+  constexpr uint64_t db_size = 128 * M;
+  struct {
+    uint64_t preallocated_size;
+    uint64_t write_size;
+    uint64_t allocated_after_drop;
+  } scenarios [] = {
+    // preallocate 8M, write a single byte, a single AU is to remain
+    { 8*M, 1, 64*K },
+    // preallocate 8M, write 1M + 1, 1M + one AU is to remain
+    { 8*M, 1*M + 1, 1*M + 64*K },
+    // preallocated space fully used, nothing to give back
+    { 1*M, 1*M, 1*M },
+    // nothing preallocated, nothing to give back either
+    { 0, 123*K, 128*K },
+  };
+  for (auto& s : scenarios) {
+    ConfSaver conf(g_ceph_context->_conf);
+    conf.SetVal("bluefs_shared_alloc_size", stringify(alloc_unit).c_str());
+    conf.SetVal("bluefs_alloc_size", stringify(1*M).c_str());
+
+    TempBdev bdev_db{db_size};
+
+    bluefs_shared_alloc_context_t shared_alloc;
+    shared_alloc.set(
+      Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
+                        db_size, alloc_unit, "test shared allocator"),
+      alloc_unit);
+    shared_alloc.a->init_add_free(0, db_size);
+
+    BlueFS fs(g_ceph_context);
+    ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev_db.path, false,
+                                     &shared_alloc));
+    ASSERT_EQ(0, fs.mkfs(fsid, {BlueFS::BDEV_DB, false, false}));
+    ASSERT_EQ(0, fs.mount());
+    ASSERT_EQ(0, fs.maybe_verify_layout({BlueFS::BDEV_DB, false, false}));
+    BlueFS::FileWriter *h;
+    ASSERT_EQ(0, fs.mkdir(DIR_NAME));
+    ASSERT_EQ(0, fs.open_for_write(DIR_NAME, FILE_NAME, &h, false));
+    uint64_t pre = fs.get_used();
+    ASSERT_EQ(0, fs.preallocate(h->file, 0, s.preallocated_size));
+    const std::string content(s.write_size, 'x');
+    h->append(content.c_str(), content.length());
+    fs.fsync(h);
+    ASSERT_EQ(0, fs.truncate_unused(h));
+    fs.fsync(h);
+    uint64_t post = fs.get_used();
+    // no data may be lost by giving the unused tail back
+    EXPECT_EQ(s.write_size, h->file->fnode.size);
+    fs.close_writer(h);
+    EXPECT_EQ(pre, post - s.allocated_after_drop);
+
+    fs.umount();
+    delete shared_alloc.a;
+  }
+}
+
 TEST(BlueFS, test_log_runway) {
   uint64_t max_log_runway = 65536;
   ConfSaver conf(g_ceph_context->_conf);
