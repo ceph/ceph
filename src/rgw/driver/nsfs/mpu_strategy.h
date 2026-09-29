@@ -27,7 +27,7 @@
 #include "rgw_sal_fwd.h"
 #include "rgw_acl.h"
 
-#include "part_info.h"
+#include "mpu_records.h"
 #include "fs_strategy.h"
 
 class DoutPrefixProvider;
@@ -161,6 +161,56 @@ public:
 			    std::string_view dname, ACLOwner& out) const {
     return false;
   }
+
+  /* What CreateMultipartUpload settled, and every later operation on
+   * this upload must honour:  placement and storage class, the
+   * object-lock family, the checksum algorithm.
+   *
+   * The third of the same family.  staged_upload() answers the
+   * upload's identity and is asked of every entry a listing examines,
+   * so it stays cheap;  upload_owner() and this are asked for one
+   * upload and may open and read.
+   *
+   * Both inputs, for the same reason part_record() takes both:
+   * `attrs` are the meta object's, already read through the bucket's
+   * XattrStrategy, and ours is in there;  `root_fd` and `dname` are
+   * for a format whose record that reader does not surface, and
+   * NooBaa's is the content of a file rather than an attribute at
+   * all.
+   *
+   * Typed rather than on-disk, as object_owner() is:  parsing an ISO
+   * 8601 date or a retention mode is format knowledge, and leaving it
+   * to the caller re-creates in the driver the thing these interfaces
+   * exist to remove.
+   *
+   * A format fills what it holds and leaves the rest at its default.
+   * NooBaa's document carries no placement -- a placement rule is an
+   * RGW concept and inert on a filesystem -- and no checksum
+   * algorithm, because their CreateMultipartUpload does not persist
+   * one;  an upload of theirs therefore completes without a composite
+   * checksum, which is what their own gateway does.
+   *
+   * `extra`, when given, takes what the create request settled that
+   * RGW keeps as object attributes rather than in
+   * multipart_upload_info:  the content type, the content encoding
+   * and the user metadata.  Ours are already in `attrs`, because for
+   * us they ARE attributes on the meta object -- so ours adds
+   * nothing and theirs adds what their document holds.  Two shapes
+   * of answer from one read, because RGW splits them that way and
+   * not because the formats do.
+   *
+   * `owner`, likewise, where the format's record carries one -- ours
+   * does, in the same blob.  upload_owner() is the same question
+   * asked by the listing path, which has read no record and must not:
+   * it answers for a format that can tell from the directory alone,
+   * and returns false for one that cannot, and the caller then comes
+   * here.  Two entry points because the two callers have different
+   * things in hand, not because it is two questions. */
+  virtual bool upload_info(const DoutPrefixProvider* dpp, int root_fd,
+			   std::string_view dname, const Attrs& attrs,
+			   multipart_upload_info& out,
+			   Attrs* extra = nullptr,
+			   ACLOwner* owner = nullptr) const = 0;
 
   /* The directory holding staging directories, relative to the bucket.
    *
@@ -394,6 +444,11 @@ public:
   bool part_record(const DoutPrefixProvider* dpp, int dir_fd,
 		   std::string_view pname, const Attrs& attrs,
 		   PartRecord& out) const override;
+  bool upload_info(const DoutPrefixProvider* dpp, int root_fd,
+		   std::string_view dname, const Attrs& attrs,
+		   multipart_upload_info& out,
+		   Attrs* extra = nullptr,
+		   ACLOwner* owner = nullptr) const override;
   int write_staged_upload(const DoutPrefixProvider* dpp, int dir_fd,
 			  const StagedUpload& su) const override;
   int write_part_record(const DoutPrefixProvider* dpp, int dir_fd,
@@ -505,6 +560,11 @@ public:
 			const PartRecord& rec) const override;
   bool upload_owner(const DoutPrefixProvider* dpp, int root_fd,
 		    std::string_view dname, ACLOwner& out) const override;
+  bool upload_info(const DoutPrefixProvider* dpp, int root_fd,
+		   std::string_view dname, const Attrs& attrs,
+		   multipart_upload_info& out,
+		   Attrs* extra = nullptr,
+		   ACLOwner* owner = nullptr) const override;
   std::optional<std::string> staging_root(const DoutPrefixProvider* dpp,
 					  int bucket_fd) const override;
   std::optional<std::string> staging_root_for_write(

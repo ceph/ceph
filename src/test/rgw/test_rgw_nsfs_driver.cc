@@ -3281,6 +3281,122 @@ TEST_F(NSFSNooBaaBucketTest, CompletesAnUploadTheyStarted)
   EXPECT_EQ(read_all(obj), tree.payload);
 }
 
+/* get_info() on an upload they started.
+ *
+ * It decoded our own record off the meta object and returned -EIO
+ * when there was none, which is every upload NooBaa started -- their
+ * create_object_upload is a document and the file carries no
+ * attribute of ours.  Three ops ask for it, all of them through the
+ * op layer:  UploadPart (`rgw_op.cc:4859`), CompleteMultipartUpload
+ * (`:7713`) and ListParts (`:8120`).  So in-flight interop was 500 on
+ * every one, and nothing here caught it because the tests call
+ * complete() directly and never ask for a placement rule.
+ *
+ * What comes back is what their format holds.  Placement has no
+ * counterpart -- a placement rule is an RGW concept, inert on a
+ * filesystem -- and neither does the checksum family, because their
+ * CreateMultipartUpload never persisted one.
+ */
+TEST_F(NSFSNooBaaBucketTest, GetInfoOnAnUploadTheyStarted)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule* rule{nullptr};
+  Attrs attrs;
+  ASSERT_EQ(upload->get_info(env->dpp, null_yield, &rule, &attrs), 0)
+      << "get_info failed on an upload in their format";
+  ASSERT_NE(rule, nullptr);
+}
+
+/* And it carries across what their document holds.
+ *
+ * The fixture's upload has no create-time metadata, so this one is
+ * written with some:  the storage class and the lock settings reach
+ * multipart_upload_info, and the content type and user metadata reach
+ * the attribute set, which is where RGW keeps them and where a
+ * completion looks.
+ */
+TEST_F(NSFSNooBaaBucketTest, GetInfoCarriesTheirCreateParams)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
+
+  const std::string key = "rich/upload.bin";
+  const std::string upload_id = "11111111-2222-4333-8444-555555555555";
+
+  /* their document, by hand, as their gateway writes it */
+  sf::path staging;
+  for (auto& e : sf::directory_iterator(bucket_path())) {
+    if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
+      staging = e.path() / "multipart-uploads" / upload_id;
+    }
+  }
+  ASSERT_FALSE(staging.empty());
+  sf::create_directories(staging);
+  write_file(staging / "create_object_upload",
+	     "{\"key\":\"" + key + "\",\"bucket\":\"b\","
+	     "\"content_type\":\"text/plain\","
+	     "\"content_encoding\":\"gzip\","
+	     "\"storage_class\":\"GLACIER\","
+	     "\"xattr\":{\"colour\":\"green\"},"
+	     "\"lock_settings\":{"
+	     "\"retention\":{\"mode\":\"COMPLIANCE\","
+	     "\"retain_until_date\":\"2030-01-01T00:00:00.000Z\"},"
+	     "\"legal_hold\":{\"status\":\"ON\"}}}");
+
+  auto upload = bucket->get_multipart_upload(key, upload_id);
+  rgw_placement_rule* rule{nullptr};
+  Attrs attrs;
+  ASSERT_EQ(upload->get_info(env->dpp, null_yield, &rule, &attrs), 0);
+  ASSERT_NE(rule, nullptr);
+
+  EXPECT_EQ(rule->storage_class, "GLACIER");
+
+  /* attributes, which is where RGW keeps these and where a completion
+   * reads them */
+  auto ct = attrs.find(RGW_ATTR_CONTENT_TYPE);
+  ASSERT_NE(ct, attrs.end()) << "their content type did not come across";
+  EXPECT_EQ(ct->second.to_str(), "text/plain");
+  auto ce = attrs.find(RGW_ATTR_CONTENT_ENC);
+  ASSERT_NE(ce, attrs.end());
+  EXPECT_EQ(ce->second.to_str(), "gzip");
+  auto meta = attrs.find(std::string(RGW_ATTR_META_PREFIX) + "colour");
+  ASSERT_NE(meta, attrs.end()) << "their user metadata did not come across";
+  EXPECT_EQ(meta->second.to_str(), "green");
+}
+
+/* Ours still answers from its own record.
+ *
+ * The control:  without it the two above pass for a driver that reads
+ * NooBaa's document everywhere, and an upload of ours would lose the
+ * placement and the checksum that only our record carries. */
+TEST_F(NSFSBucketTest, GetInfoOnOurOwnUpload)
+{
+  const std::string objname = "ours.bin";
+  auto upload = bucket->get_multipart_upload(objname, "c0ffee");
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  placement.name = "default-placement";
+  /* not STANDARD:  an empty storage class IS standard --
+   * get_canonical_storage_class() says so -- so asserting it would
+   * pass against a record that carried nothing */
+  placement.storage_class = "GLACIER";
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  auto reread = bucket->get_multipart_upload(objname, "c0ffee");
+  rgw_placement_rule* rule{nullptr};
+  ASSERT_EQ(reread->get_info(env->dpp, null_yield, &rule, nullptr), 0);
+  ASSERT_NE(rule, nullptr);
+  EXPECT_EQ(rule->name, "default-placement");
+  EXPECT_EQ(rule->storage_class, "GLACIER");
+}
+
 /* Base can start an upload, not only finish one of theirs.
  *
  * The staging root is two questions.  Reading asks where staging IS,

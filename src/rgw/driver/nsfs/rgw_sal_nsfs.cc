@@ -11052,6 +11052,32 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
 	return ret;
       }
       *attrs = meta_obj->get_attrs();
+
+      /* and what the format keeps outside them.
+       *
+       * On their tree the meta file has no attributes at all and the
+       * create-time metadata is in its content, so without this a
+       * completion of an upload they started produced an object with
+       * no content type and no user metadata.  Ours adds nothing:
+       * for us these already ARE attributes on the meta object, and
+       * the read above has them. */
+      int lret = load(dpp);
+      auto* pb = static_cast<NSFSBucket*>(bucket);
+      nsfs::Directory* root = staging_root_dir ? staging_root_dir.get()
+					       : (pb ? pb->get_dir() : nullptr);
+      if ((lret == 0) && root && (root->open(dpp) == 0)) {
+	multipart_upload_info ignored;
+	Attrs from_format;
+	if (mpu_strategy()->upload_info(dpp, root->get_fd(), get_fname(),
+					*attrs, ignored, &from_format)) {
+	  /* what is already there wins:  an attribute on the meta
+	   * object was written after the create request and is the
+	   * later word */
+	  for (auto& [k, v] : from_format) {
+	    attrs->try_emplace(k, v);
+	  }
+	}
+      }
   }
 
   if (rule) {
@@ -11065,9 +11091,35 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
                           << get_key() << dendl;
         return ret;
       }
-      if (!decode_attr(meta_obj->get_attrs(), RGW_NSFS_ATTR_MPUPLOAD, mp_obj)) {
-	ldpp_dout(dpp, 0) << " ERROR: could not get meta object attrs for mp upload "
-	  << get_key() << dendl;
+
+      /* Asked of the format, which is the only thing that knows where
+       * its own record is.  Ours is the encoded attribute the read
+       * above already fetched;  NooBaa's is the content of
+       * create_object_upload, and their tree carries no attribute of
+       * ours at all -- so decoding one here returned -EIO for every
+       * upload they started, and UploadPart, ListParts and
+       * CompleteMultipartUpload all failed on it. */
+      ret = load(dpp);
+      if (ret < 0) {
+	return ret;
+      }
+      auto* pb = static_cast<NSFSBucket*>(bucket);
+      nsfs::Directory* root = staging_root_dir ? staging_root_dir.get()
+					       : (pb ? pb->get_dir() : nullptr);
+      if (!root || ((ret = root->open(dpp)) < 0)) {
+	return root ? ret : -EINVAL;
+      }
+      /* the owner with it:  ours is in the same record, and the
+       * listing path depends on this -- upload_owner() answers for a
+       * format that can tell from the directory alone and ours
+       * cannot, so list_multiparts() comes here for it. */
+      if (!mpu_strategy()->upload_info(dpp, root->get_fd(), get_fname(),
+				       meta_obj->get_attrs(),
+				       mp_obj.upload_info, nullptr,
+				       &mp_obj.owner)) {
+	ldpp_dout(dpp, 0) << " ERROR: mp upload " << get_key()
+	  << " carries no record this gateway can read, in "
+	  << mpu_strategy()->name() << dendl;
 	return -EIO;
       }
     }

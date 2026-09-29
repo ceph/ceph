@@ -215,6 +215,37 @@ int PerPartMPUStrategy::write_part_record(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* Ours is one ceph-encoded blob on the meta file, read through the
+ * bucket's XattrStrategy, so it arrives already decoded in `attrs`
+ * and the fd is not needed -- the same arrangement as part_record(). */
+bool PerPartMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
+				     int root_fd, std::string_view dname,
+				     const Attrs& attrs,
+				     multipart_upload_info& out,
+				     Attrs* extra, ACLOwner* owner) const
+{
+  auto i = attrs.find(RGW_NSFS_ATTR_MPUPLOAD);
+  if (i == attrs.end()) {
+    return false;
+  }
+  /* the record is the whole NSFSMPObj;  only its upload_info is this
+   * question's answer -- the identity beside it is staged_upload()'s
+   * and the owner is upload_owner()'s */
+  ACLOwner none;
+  rgw::sal::NSFSMPObj mp(nullptr, std::string(), std::nullopt, none);
+  try {
+    auto bufit = i->second.cbegin();
+    decode(mp, bufit);
+  } catch (buffer::error&) {
+    return false;
+  }
+  out = mp.upload_info;
+  if (owner) {
+    *owner = mp.owner;
+  }
+  return true;
+}
+
 std::string PerPartMPUStrategy::meta_name() const
 {
   return RGW_MP_META_NAME;
@@ -526,9 +557,15 @@ bool NooBaaMPUStrategy::is_staging_dir(std::string_view name) const
  * create_object_upload (`namespace_fs.js` create_object_upload, and
  * their own list_uploads reads it back the same way).  So this opens
  * and parses one file per upload, which is what their layout costs. */
-bool NooBaaMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
-				      int root_fd, std::string_view dname,
-				      StagedUpload& out) const
+/* Their create_object_upload, parsed.
+ *
+ * Two questions read it -- what upload is here, and what the create
+ * request settled -- so the read is in one place.  False means this
+ * is not an upload of theirs:  no document, an empty one, or one that
+ * is not JSON.  Skipped rather than failed, because a listing walks
+ * entries that may be anything. */
+static bool nb_create_params(const DoutPrefixProvider* dpp, int root_fd,
+			     std::string_view dname, JSONParser& parser)
 {
   if (dname.empty() || (dname == ".") || (dname == "..")) {
     return false;
@@ -537,7 +574,6 @@ bool NooBaaMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
   const std::string path = std::string(dname) + "/" + NB_CREATE_NAME;
   int fd = ::openat(root_fd, path.c_str(), O_RDONLY);
   if (fd < 0) {
-    /* not an upload, or one being torn down;  skipped, not failed */
     return false;
   }
   auto close_fd = make_scope_guard([fd] { ::close(fd); });
@@ -553,15 +589,30 @@ bool NooBaaMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
   }
   buf.resize(len);
 
-  JSONParser parser;
   if (!parser.parse(buf.data(), buf.size())) {
     ldpp_dout(dpp, 4) << "could not parse " << path << " as JSON;  not "
 		      << "treating it as an upload" << dendl;
     return false;
   }
+  return true;
+}
+
+bool NooBaaMPUStrategy::staged_upload(const DoutPrefixProvider* dpp,
+				      int root_fd, std::string_view dname,
+				      StagedUpload& out) const
+{
+  if (dname.empty() || (dname == ".") || (dname == "..")) {
+    return false;
+  }
+
+  JSONParser parser;
+  if (!nb_create_params(dpp, root_fd, dname, parser)) {
+    return false;
+  }
   JSONObj* kobj = parser.find_obj("key");
   if (!kobj) {
-    ldpp_dout(dpp, 4) << path << " carries no key" << dendl;
+    ldpp_dout(dpp, 4) << dname << "/" << NB_CREATE_NAME
+		      << " carries no key" << dendl;
     return false;
   }
 
@@ -1061,6 +1112,85 @@ bool NooBaaMPUStrategy::upload_owner(const DoutPrefixProvider* dpp,
     return false;
   }
   out.id = rgw_user(std::to_string(stx.stx_uid));
+  return true;
+}
+
+/* Theirs is the content of create_object_upload, and nothing of it is
+ * an attribute, so this reads the document rather than `attrs`.
+ *
+ * What comes across is what they hold:  the storage class, and the
+ * object-lock family, which their own completion reads off the same
+ * document and puts on the finished object.  Placement stays at its
+ * default because a placement rule is an RGW concept;  the checksum
+ * family stays at its default because their CreateMultipartUpload
+ * never persisted one.
+ */
+bool NooBaaMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
+				    int root_fd, std::string_view dname,
+				    const Attrs& attrs,
+				    multipart_upload_info& out,
+				    Attrs* extra, ACLOwner* owner) const
+{
+  JSONParser parser;
+  if (!nb_create_params(dpp, root_fd, dname, parser)) {
+    return false;
+  }
+
+  if (JSONObj* sc = parser.find_obj("storage_class")) {
+    out.dest_placement.storage_class = sc->get_data();
+  }
+
+  if (extra) {
+    auto put = [extra](const std::string& key, const std::string& v) {
+      if (!v.empty()) {
+	bufferlist bl;
+	bl.append(v);
+	extra->emplace(key, std::move(bl));
+      }
+    };
+    if (JSONObj* ct = parser.find_obj("content_type")) {
+      put(RGW_ATTR_CONTENT_TYPE, ct->get_data());
+    }
+    if (JSONObj* ce = parser.find_obj("content_encoding")) {
+      put(RGW_ATTR_CONTENT_ENC, ce->get_data());
+    }
+    if (JSONObj* x = parser.find_obj("xattr")) {
+      for (auto i = x->find_first(); !i.end(); ++i) {
+	put(std::string(RGW_ATTR_META_PREFIX) + (*i)->get_name(),
+	    (*i)->get_data());
+      }
+    }
+  }
+
+  if (JSONObj* lock = parser.find_obj("lock_settings")) {
+    if (JSONObj* r = lock->find_obj("retention")) {
+      JSONObj* m = r->find_obj("mode");
+      JSONObj* d = r->find_obj("retain_until_date");
+      if (m && d) {
+	ceph::real_time until;
+	/* Their date is whatever new Date() produced, which is ISO
+	 * 8601.  A retention we cannot date is not applied:  a
+	 * retention with the epoch in it would read as expired, which
+	 * is the one wrong answer object lock must never give. */
+	if (parse_time(d->get_data().c_str(), &until) == 0) {
+	  out.obj_retention_exist = true;
+	  out.obj_retention.set_mode(m->get_data());
+	  out.obj_retention.set_retain_until_date(until);
+	} else {
+	  ldpp_dout(dpp, 0) << "ERROR: upload " << dname << " carries a "
+	    << "retention date this gateway cannot parse (\"" << d->get_data()
+	    << "\");  not applying the retention" << dendl;
+	}
+      }
+    }
+    if (JSONObj* h = lock->find_obj("legal_hold")) {
+      if (JSONObj* st = h->find_obj("status")) {
+	out.obj_legal_hold_exist = true;
+	out.obj_legal_hold.set_status(st->get_data());
+      }
+    }
+  }
+
   return true;
 }
 
