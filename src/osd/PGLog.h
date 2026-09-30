@@ -1196,6 +1196,18 @@ protected:
                        << dendl;
 
     auto objiter = log.objects.find(hoid);
+    if (objiter != log.objects.end() && entries.empty() &&
+        objiter->second->version > last) {
+      /// Case 1) where every divergent entry is a partial write that
+      /// skipped this shard (last is the newest of them). They left the
+      /// object here untouched, and merge_log already updated missing for
+      /// the newer entries: rolling missing back to prior_version (Case 2
+      /// or 3) would lose that update.
+      ldpp_dout(dpp, 10) << __func__ << ": more recent entry found: "
+                         << *objiter->second << ", already merged, and no"
+                         << " divergent entry wrote this shard" << dendl;
+      return;
+    }
     if (objiter != log.objects.end() && !entries.empty() &&
         objiter->second->version >= first_divergent_update) {
       /// Case 1)
