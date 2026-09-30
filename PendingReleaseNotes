@@ -1,5 +1,7 @@
 >=22.0.0
 
+* RGW: ``rgw_usage_log_tick_interval``, ``rgw_user_quota_sync_interval``, ``rgw_user_quota_bucket_sync_interval``, ``rgw_bucket_quota_ttl`` and ``rgw_user_quota_sync_wait_time`` now require a value of at least ``1``. A non-positive value was previously accepted and busy-spun a radosgw thread or left the quota stats cache permanently unusable.
+
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
   hold the lock, instead of an empty list. Callers should check the

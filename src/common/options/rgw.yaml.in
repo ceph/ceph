@@ -1986,6 +1986,7 @@ options:
   with_legacy: true
 - name: rgw_usage_log_tick_interval
   type: int
+  min: 1
   level: advanced
   desc: Seconds between periodic usage-log flushes.
   long_desc: The number of seconds between periodic usage-log flushes to the backend.
@@ -2509,6 +2510,7 @@ options:
   with_legacy: true
 - name: rgw_bucket_quota_ttl
   type: int
+  min: 1
   level: advanced
   desc: Bucket quota stats cache TTL
   long_desc: The amount of time in seconds cached quota information is trusted. After
@@ -2606,6 +2608,7 @@ options:
   with_legacy: true
 - name: rgw_user_quota_bucket_sync_interval
   type: int
+  min: 1
   level: advanced
   desc: Interval for syncing per-bucket quota stats to the cluster.
   long_desc: The time, in seconds, that per-bucket quota stats for modified buckets
@@ -2617,6 +2620,7 @@ options:
   with_legacy: true
 - name: rgw_user_quota_sync_interval
   type: int
+  min: 1
   level: advanced
   desc: Interval for syncing whole-user quota stats to the cluster.
   long_desc: The time, in seconds, that user quota stats (across the user's modified
@@ -2637,6 +2641,7 @@ options:
   with_legacy: true
 - name: rgw_user_quota_sync_wait_time
   type: int
+  min: 1
   level: advanced
   desc: User quota full-sync wait time
   long_desc: Minimum time between two full stats sync for non-idle users.
