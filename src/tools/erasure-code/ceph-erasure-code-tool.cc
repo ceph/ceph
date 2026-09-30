@@ -125,7 +125,7 @@ int do_validate_profile(const std::vector<const char*> &args) {
 
   ceph::ErasureCodeInterfaceRef ec_impl;
   int r = ec_init(args[0], {}, &ec_impl, nullptr);
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
@@ -168,7 +168,7 @@ int do_calc_chunk_size(const std::vector<const char*> &args) {
 
   ceph::ErasureCodeInterfaceRef ec_impl;
   int r = ec_init(args[0], {}, &ec_impl, nullptr);
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
@@ -191,7 +191,7 @@ int do_encode(const std::vector<const char*> &args) {
   ceph::ErasureCodeInterfaceRef ec_impl;
   std::unique_ptr<ECUtil::stripe_info_t> sinfo;
   int r = ec_init(args[0], args[1], &ec_impl, &sinfo);
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
