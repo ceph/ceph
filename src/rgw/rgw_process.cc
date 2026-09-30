@@ -503,8 +503,15 @@ done:
   try {
     client_io->complete_request();
   } catch (rgw::io::Exception& e) {
-    dout(0) << "ERROR: client_io->complete_request() returned "
-            << e.what() << dendl;
+    // client disconnected early, not an error
+    if (e.code() == std::errc::broken_pipe ||
+        e.code() == std::errc::connection_reset) {
+      dout(4) << "client_io->complete_request() returned "
+              << e.what() << dendl;
+    } else {
+      dout(0) << "ERROR: client_io->complete_request() returned "
+              << e.what() << dendl;
+    }
     perfcounter->inc(l_rgw_qlen, -1);
     perfcounter->inc(l_rgw_qactive, -1);
   }
