@@ -20,10 +20,9 @@
 # count operations occur in the face of concurrent activity.
 #
 # Each pass of the test creates an rbd image, maps it, and writes
-# some data into the image.  It also reads some data from all of the
-# other images that exist at the time the pass executes.  Finally,
-# the image is unmapped and removed.  The image removal completes in
-# the background.
+# some data into the image.  It reads and compares data from images
+# whose writes have completed, including its own image.  Finally,
+# the image is unmapped and removed.  Each pass waits for its removal.
 #
 # An iteration of the test consists of performing some number of
 # passes, initiating each pass as a background job, and finally
@@ -32,9 +31,9 @@
 # the last iteration will not delay at all.
 #
 # The result exercises concurrent creates and deletes of rbd images,
-# writes to new images, reads from both written and unwritten image
-# data (including reads concurrent with writes), and attempts to
-# unmap images being read.
+# writes to new images, and reads from written and unwritten ranges
+# of initialized images.  Readers hold a shared image lock; unmapping
+# takes an exclusive lock so device removal cannot invalidate a read.
 
 # Usage: concurrent [-i <iter>] [-c <count>] [-d <delay>]
 #
@@ -72,6 +71,7 @@ function setup() {
 	ID_MAX_DIR=$(mktemp -d /tmp/image_max_id.XXXXX)
 	ID_COUNT_DIR=$(mktemp -d /tmp/image_ids.XXXXXX)
 	NAMES_DIR=$(mktemp -d /tmp/image_names.XXXXXX)
+	STATE_DIR=$(mktemp -d /tmp/image_state.XXXXXX)
 	SOURCE_DATA=$(mktemp /tmp/source_data.XXXXXX)
 
 	# Use urandom to generate SOURCE_DATA
@@ -95,7 +95,10 @@ function cleanup() {
 
 	# Unmap only images created by this workunit.
 	for id in $(rbd_ids); do
-		image=$(cat "/sys/bus/rbd/devices/${id}/name")
+		image=$(cat "/sys/bus/rbd/devices/${id}/name") || {
+			status=2
+			continue
+		}
 		if [ -f "${NAMES_DIR}/${image}" ]; then
 			rbd_unmap_image "${id}" || status=2
 			rbd_destroy_image "${image}" || status=2
@@ -114,6 +117,7 @@ function cleanup() {
 	rm -rf "${ID_COUNT_DIR}"
 	echo "Max rbd image id was $(get_max "${ID_MAX_DIR}")"
 	rm -rf "${ID_MAX_DIR}"
+	rm -rf "${STATE_DIR}"
 	return "${status}"
 }
 
@@ -245,7 +249,10 @@ function rbd_create_image() {
 	[ $# -eq 0 ] || exit 99
 	local image=$(basename $(mktemp "${NAMES_DIR}/image.XXXXXX"))
 
-	rbd create "${image}" --size=1024 || return 2
+	rbd create "${image}" --size=1024 || {
+		rm -f "${NAMES_DIR}/${image}"
+		return 2
+	}
 	echo "${image}"
 }
 
@@ -286,22 +293,25 @@ function rbd_write_image() {
 function rbd_read_image() {
 	[ $# -eq 1 ] || exit 99
 	local id="$1"
+	local source_size
+
+	source_size=$(stat -c %s "${SOURCE_DATA}") || return 2
 
 	# First read starting and ending at an offset before any
 	# written data.  The osd zero-fills data read from an
 	# existing rbd object, but before any previously-written
 	# data.
 	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=3 \
-		> /dev/null 2>&1
+		> /dev/null 2>&1 || return 2
 	# Next read starting at an offset before any written data,
 	# but ending at an offset that includes data that's been
 	# written.  The osd zero-fills unwritten data at the
 	# beginning of a read.
 	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=1983 \
-		> /dev/null 2>&1
+		> /dev/null 2>&1 || return 2
 	# Read the data at offset 2015 * 2048 bytes (where it was
-	# written) and make sure it matches the original data.
-	cmp --quiet "${SOURCE_DATA}" "/dev/rbd${id}" 0 4126720 || {
+	# written) and compare only the source length, not the rest of the image.
+	cmp --quiet --bytes="${source_size}" "${SOURCE_DATA}" "/dev/rbd${id}" 0 4126720 || {
 		echo "MISMATCH!!!" >&2
 		return 2
 	}
@@ -309,17 +319,17 @@ function rbd_read_image() {
 	# beyond it.  The rbd client zero-fills the unwritten
 	# portion at the end of a read.
 	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=2079 \
-		> /dev/null 2>&1
+		> /dev/null 2>&1 || return 2
 	# Now read starting from an unwritten range within a written
 	# rbd object.  The rbd client zero-fills this.
 	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=2115 \
-		> /dev/null 2>&1
+		> /dev/null 2>&1 || return 2
 	# Finally read from an unwritten region which would reside
 	# in a different (non-existent) osd object.  The osd client
 	# zero-fills unwritten data when the target object doesn't
 	# exist.
 	dd if="/dev/rbd${id}" of=/dev/null bs=2048 count=34 skip=4098 \
-		> /dev/null 2>&1
+		> /dev/null 2>&1 || return 2
 }
 
 function rbd_unmap_image() {
@@ -341,26 +351,54 @@ function rbd_destroy_image() {
 	rm -f "${NAMES_DIR}/${image}"
 }
 
+# Lock files remain until cleanup, even after the corresponding image is
+# removed.  Otherwise a late reader could lock a new inode during teardown.
+function rbd_read_ready_image() (
+	[ $# -eq 1 ] || exit 99
+	local image="$1"
+	local id
+
+	exec 9> "${STATE_DIR}/${image}.lock" || return 2
+	flock -s 9 || return 2
+	[ -f "${STATE_DIR}/${image}.ready" ] || return 0
+	id=$(cat "${STATE_DIR}/${image}.ready") || return 2
+	rbd_read_image "${id}" || return 2
+)
+
+function rbd_remove_ready_image() (
+	[ $# -eq 2 ] || exit 99
+	local image="$1"
+	local id="$2"
+
+	exec 9> "${STATE_DIR}/${image}.lock" || return 2
+	flock -x 9 || return 2
+	rm -f "${STATE_DIR}/${image}.ready" || return 2
+	rbd_unmap_image "${id}" || return 2
+	rbd_destroy_image "${image}" || return 2
+)
+
 function one_pass() {
 	[ $# -eq 0 ] || exit 99
 	local image
 	local id
 	local ids
-	local i
+	local ready
+	local other_image
 
 	image=$(rbd_create_image) || return 2
 	id=$(rbd_map_image "${image}") || return 2
 	ids=$(rbd_ids)
 	update_maxes "${ids}"
-	for i in ${ids}; do
-		if [ "${i}" -eq "${id}" ]; then
-			rbd_write_image "${i}"
-		else
-			rbd_read_image "${i}"
-		fi
+	rbd_write_image "${id}" || return 2
+	# Publish the device ID atomically, only after the complete write.
+	printf '%s\n' "${id}" > "${STATE_DIR}/${image}.pending" || return 2
+	mv "${STATE_DIR}/${image}.pending" "${STATE_DIR}/${image}.ready" || return 2
+	for ready in "${STATE_DIR}"/image.*.ready; do
+		other_image=${ready##*/}
+		other_image=${other_image%.ready}
+		rbd_read_ready_image "${other_image}" || return 2
 	done
-	rbd_unmap_image "${id}"
-	rbd_destroy_image "${image}"
+	rbd_remove_ready_image "${image}" "${id}" || return 2
 }
 
 ################################################################
@@ -386,6 +424,6 @@ for pid in "${pids[@]}"; do
 	wait "$pid" || result=2
 done
 
-cleanup
+cleanup || result=2
 
 exit "$result"
