@@ -418,7 +418,8 @@ as follows:
   Trim bucket index log (use start-marker, end-marker) manually instead
   of relying on the gateway's integrated log sync.
   Before trimming, compare the listings and make sure the last sync was
-  complete, otherwise it can reinitiate a sync.
+  complete, otherwise it can reinitiate a sync. Without an end-marker the
+  trim has no upper bound, so it requires --yes-i-really-mean-it.
 
 :command:`datalog list`
   List data log which is needed for multi-site deployments.
