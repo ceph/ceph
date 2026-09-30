@@ -385,6 +385,7 @@ void MDCache::remove_inode(CInode *o)
     export_pin_delayed_queue.erase(o);
 
   o->clear_ephemeral_pin(true, true);
+  fragmented_dirs.erase(o);
 
   // remove from inode map
   if (o->last == CEPH_NOSNAP) {
@@ -964,6 +965,27 @@ mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino, frag_t fg)
   auto result = mds_rank_t(b);
   ceph_assert(result >= 0 && result < max_mds);
   return result;
+}
+
+
+/*
+ * Rank for dirfrag @fg of a directory whose fragments are distributed by a
+ * ceph.dir.pin.distributed.tree policy above it.  Fragments are mapped by
+ * their ancestor at the minimum distribution depth, so that later splits
+ * of a large directory leave every fragment where it is, and those
+ * ancestors are dealt out to the ranks in turn, so that each rank gets an
+ * equal share of the name space.
+ */
+mds_rank_t MDCache::dist_tree_rank(inodeno_t ino, frag_t fg)
+{
+  const mds_rank_t max_mds = mds->mdsmap->get_max_mds();
+  if (max_mds == 0)
+    return MDS_RANK_NONE;
+  const unsigned bits = export_ephemeral_dist_frag_bits;
+  uint64_t n = rjhash64(ino);
+  if (bits > 0)
+    n += frag_t(fg.value(), bits).value() >> (24 - bits);
+  return mds_rank_t(n % max_mds);
 }
 
 
