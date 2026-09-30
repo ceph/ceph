@@ -4,6 +4,7 @@
 #include "seastore.h"
 
 #include <algorithm>
+#include <string_view>
 
 #include <boost/algorithm/string/trim.hpp>
 #include <fmt/format.h>

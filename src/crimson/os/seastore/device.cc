@@ -3,6 +3,8 @@
 
 #include "device.h"
 
+#include <sys/stat.h>
+
 #include <seastar/core/smp.hh>
 
 #include "segment_manager.h"
@@ -12,6 +14,37 @@
 SET_SUBSYS(seastore);
 
 namespace crimson::os::seastore {
+
+std::string normalize_device_path(const std::string& device)
+{
+  std::string device_path = device;
+  if (device_path.rfind("/dev/", 0) == 0) {
+    return device_path;
+  }
+
+  const auto last_slash = device_path.find_last_of('/');
+  const std::string basename =
+    (last_slash == std::string::npos) ?
+      device_path :
+      device_path.substr(last_slash + 1);
+
+  // Concrete OSD device entry (file or symlink), e.g. .../block or .../block.db
+  if (basename == "block") {
+    return device_path;
+  }
+  if (basename.rfind("block.", 0) == 0) {
+    // SeaStore secondary devices use a directory named block.<id> that
+    // contains the actual block file (see SeaStore::_mkfs / _mount).
+    struct ::stat st;
+    if (::stat(device_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+      device_path += "/block";
+    }
+    return device_path;
+  }
+
+  device_path += "/block";
+  return device_path;
+}
 
 std::ostream& operator<<(std::ostream& out, const device_spec_t& ds)
 {

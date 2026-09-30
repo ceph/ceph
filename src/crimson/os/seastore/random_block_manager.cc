@@ -15,16 +15,17 @@ get_rb_device(
   device_type_t dtype,
   device_id_t id)
 {
+  std::string device_path = normalize_device_path(device);
   if (dtype == device_type_t::HDD) {
     return seastar::make_ready_future<random_block_device::RBMDeviceRef>(
       std::make_unique<
         random_block_device::RotationalDevice
-      >(device, dtype, DEVICE_ID_RANDOM_BLOCK_MIN + id));
+      >(std::move(device_path), dtype, DEVICE_ID_RANDOM_BLOCK_MIN + id));
   } else {
     return seastar::make_ready_future<random_block_device::RBMDeviceRef>(
       std::make_unique<
         random_block_device::nvme::NVMeBlockDevice
-      >(device, dtype, DEVICE_ID_RANDOM_BLOCK_MIN + id));
+      >(std::move(device_path), dtype, DEVICE_ID_RANDOM_BLOCK_MIN + id));
   }
 }
 
