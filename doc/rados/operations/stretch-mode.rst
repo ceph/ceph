@@ -144,12 +144,22 @@ specifying the ``zone`` parameter:
 
 .. prompt:: bash $
 
-   ceph osd pool create mypool 32 32 replicated my_stretch_rule zone=2
+   ceph osd pool create mypool 32 32 replicated --num_zones=2
 
 This creates a replicated pool named ``mypool`` with 32 placement groups,
-using the CRUSH rule ``my_stretch_rule``, configured to span 2 zones. The pool
-will have peering constraints that require replicas across both zones before
-PGs become active.
+using the ``num_zones`` parameter, the pool is configured to span 2 zones
+and will automatically create and apply a crush the following crush rule:
+
+::
+rule mypool {
+	id 1
+	type replicated
+	step take default
+	step choose firstn 2 type datacenter
+	step chooseleaf firstn 2 type host
+	step emit
+}
+
 
 Per-pool stretch mode provides the same stretch mode benefits (zone-aware
 peering, degraded/recovery modes) but applies only to the specified pool,
@@ -157,10 +167,10 @@ allowing you to have both stretch and non-stretch pools in the same cluster.
 
 .. _stretch_mode1:
 
-Stretch Mode
+Global Stretch Mode (previously known as Stretch Mode) (Legacy Support)
 ============
 
-Stretch mode is designed to handle netsplit scenarios between two data centers as well
+Global Stretch Mode (previously known as Stretch Mode) is designed to handle netsplit scenarios between two data centers as well
 as the loss of one data center. It handles the netsplit scenario by choosing the surviving zone
 that has the best connection to the tiebreaker Monitor. It handles the loss of one data center by
 reducing the ``min_size`` of all pools to ``1``, allowing the cluster to continue operating
@@ -168,12 +178,12 @@ within the surviving data center. When the unavailable data center comes back, C
 converge according to the configured replication policy and return to normal operation.
 
 
-Global Stretch Mode vs Per-Pool Stretch Mode
+Global Stretch Mode (Legacy Support) vs Per-Pool Stretch Mode
 ---------------------------------------------
 
 Ceph supports two approaches to stretch mode configuration:
 
-**Global Stretch Mode:**
+**Global Stretch Mode (Legacy Support):**
 
 Enabled using the ``ceph mon enable_stretch_mode`` command. When global stretch
 mode is enabled, *all existing pools and future pools* in the cluster are
@@ -196,7 +206,7 @@ Or in JSON format:
 
 **Per-Pool Stretch Mode:**
 
-Enabled by creating pools with the ``zone=N`` parameter (see :ref:`creating_stretch_pools`)
+Enabled by creating pools with the ``num_zones=N`` parameter (see :ref:`creating_stretch_pools`)
 or by using ``ceph osd pool set {pool-name} num_zones {N}`` on existing pools. With per-pool stretch
 mode, only the specified pools operate in stretch mode while other pools remain
 unaffected. This provides more granular control and is useful when only specific
