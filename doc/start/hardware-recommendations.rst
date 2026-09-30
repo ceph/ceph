@@ -15,6 +15,7 @@ page gives the principles. :ref:`Minimum Hardware per Daemon
 <hardware-networks>` give the numbers. No two clusters are alike: benchmark
 before you buy.
 
+.. _failure-domains:
 .. _hardware-failure-domains:
 
 Keep Failure Domains Small
