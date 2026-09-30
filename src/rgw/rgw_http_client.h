@@ -292,10 +292,10 @@ enum RGWHTTPRequestSetState {
 
 class RGWHTTPManager {
   struct set_state {
-    rgw_http_req_data *req;
+    uint64_t id;
     int bitmask;
 
-    set_state(rgw_http_req_data *_req, int _bitmask) : req(_req), bitmask(_bitmask) {}
+    set_state(uint64_t _id, int _bitmask) : id(_id), bitmask(_bitmask) {}
   };
   CephContext *cct;
   RGWCompletionManager *completion_mgr;
