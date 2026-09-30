@@ -2048,6 +2048,12 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
           auto& repmap = repmapit->second;
           auto r = ceph::util::generate_random_number<uint64_t>(0, repmap.size()-1);
           mds = repmap.at(r);
+        } else if (auto it = in->fragmap.find(fg); it != in->fragmap.end()) {
+          // not replicated: the auth of the fragment is the only rank that
+          // can answer without forwarding
+          mds = it->second;
+          if (phash_diri)
+            *phash_diri = in;
         }
       } else {
         auto it = in->fragmap.find(fg);
