@@ -798,6 +798,9 @@ endif()
 if(sanitizers)
   find_package(Sanitizers REQUIRED ${sanitizers})
   add_compile_options(${Sanitizers_COMPILE_OPTIONS})
+  # UBSan has no compiler macro like __SANITIZE_THREAD__, so tell the code
+  # ourselves that a sanitizer is enabled.
+  add_compile_definitions(CEPH_SANITIZED)
   string(REPLACE ";" " " sanitiers_compile_flags "${Sanitizers_COMPILE_OPTIONS}")
   string(APPEND CMAKE_EXE_LINKER_FLAGS " ${sanitiers_compile_flags}")
   string(APPEND CMAKE_SHARED_LINKER_FLAGS " ${sanitiers_compile_flags}")
