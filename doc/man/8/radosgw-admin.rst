@@ -429,7 +429,7 @@ as follows:
   List bucket index log which is needed for multi-site deployments.
 
 :command:`bilog trim`
-  Trim bucket index log (use start-marker, end-marker) manually instead
+  Trim bucket index log (use end-marker) manually instead
   of relying on the gateway's integrated log sync.
   Before trimming, compare the listings and make sure the last sync was
   complete, otherwise it can reinitiate a sync. Without an end-marker the
