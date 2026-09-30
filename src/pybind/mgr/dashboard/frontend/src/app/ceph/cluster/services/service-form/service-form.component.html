@@ -162,61 +162,6 @@
         </div>
       }
 
-      <!-- NVMe/TCP -->
-      <!-- Block Pool -->
-      @if (serviceForm.controls.service_type.value === 'nvmeof') {
-        <div class="form-item">
-          <cds-select
-            id="pool"
-            formControlName="pool"
-            label="Block Pool"
-            cdRequiredField="Block Pool"
-            helperText="An RBD application-enabled pool in which the gateway configuration can be managed."
-            i18n-helperText
-            [invalid]="serviceForm.controls.pool.invalid && serviceForm.controls.pool.dirty"
-            [invalidText]="requiredFieldPool"
-            (change)="setNvmeServiceId()"
-          >
-            @if (rbdPools === null) {
-              <option
-                [ngValue]="null"
-                i18n
-              >
-                Loading...
-              </option>
-            }
-            @if (rbdPools && rbdPools.length === 0) {
-              <option
-                [ngValue]="null"
-                i18n
-              >
-                -- No block pools available --
-              </option>
-            }
-            @if (rbdPools && rbdPools.length > 0) {
-              <option
-                [ngValue]="null"
-                i18n
-              >
-                -- Select a pool --
-              </option>
-            }
-            @for (pool of rbdPools; track pool) {
-              <option [value]="pool.pool_name">{{ pool.pool_name }}</option>
-            }
-          </cds-select>
-          <ng-template #requiredFieldPool>
-            @if (serviceForm.showError('pool', frm, 'required')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >This field is required.</span
-              >
-            }
-          </ng-template>
-        </div>
-      }
-
       <!-- Group Name -->
       @if (serviceForm.controls.service_type.value === 'nvmeof') {
         <div class="form-item">
@@ -344,7 +289,6 @@
             [invalidText]="authModeError"
             helperText="Active-directory authentication for domain member servers and User authentication for Stand-alone servers configuration."
             i18n-helperText
-            [disabled]="realmList.length === 0 || editing ? true : false"
           >
             @if (realmList.length === 0) {
               <option
@@ -376,7 +320,6 @@
             id="zonegroup_name"
             formControlName="zonegroup_name"
             label="Zonegroup"
-            [disabled]="zonegroupList.length === 0 || editing ? true : null"
           >
             @for (zonegroup of zonegroupList; track zonegroup) {
               <option [value]="zonegroup.name">
@@ -391,7 +334,6 @@
             id="zone_name"
             formControlName="zone_name"
             label="Zone"
-            [disabled]="zoneList.length === 0 || editing ? true : null"
           >
             @for (zone of zoneList; track zone) {
               <option [value]="zone.name">
@@ -1621,10 +1563,10 @@
           </cds-text-label>
         </div>
       }
-      <!-- RGW, Ingress, iSCSI, Oauth2-proxy & mgmt-gateway -->
+      <!-- RGW, Ingress, iSCSI, Oauth2-proxy, NFS & mgmt-gateway -->
       @if (
         !serviceForm.controls.unmanaged.value &&
-        ['rgw', 'iscsi', 'ingress', 'oauth2-proxy', 'mgmt-gateway'].includes(
+        ['rgw', 'iscsi', 'ingress', 'oauth2-proxy', 'mgmt-gateway', 'nfs'].includes(
           serviceForm.controls.service_type.value
         )
       ) {
@@ -1640,44 +1582,43 @@
             </cds-checkbox>
           </div>
         }
-        <!-- ssl_cert -->
-        @if (
-          serviceForm.controls.ssl.value ||
-          ['mgmt-gateway'].includes(serviceForm.controls.service_type.value)
-        ) {
-          <div class="form-item">
-            <cds-textarea-label
-              helperText="The SSL certificate in PEM format."
-              i18n
-              [invalid]="
-                serviceForm.controls.ssl_cert.invalid && serviceForm.controls.ssl_cert.dirty
-              "
-              [invalidText]="invalidSslCertError"
-              >Certificate
-              <div class="cd-cl-form-input">
-                <textarea
-                  cdsTextArea
-                  id="ssl_cert"
-                  formControlName="ssl_cert"
-                  cols="100"
-                  rows="4"
-                  [invalid]="
-                    serviceForm.controls.ssl_cert.invalid && serviceForm.controls.ssl_cert.dirty
-                  "
-                >
-                </textarea>
 
-                <cds-file-uploader
-                  buttonText="Choose file"
-                  i18n-buttonText
-                  buttonType="secondary"
-                  [multiple]="false"
-                  size="sm"
-                  (filesChange)="fileUpload($event, 'ssl_cert')"
-                  (removeFile)="clearText()"
-                ></cds-file-uploader>
-              </div>
-            </cds-textarea-label>
+        <!-- Certificate Management UI: shown when SSL is enabled, or always for mgmt-gateway -->
+        @if (
+          (serviceForm.controls.ssl.value ||
+            serviceForm.controls.service_type.value === 'mgmt-gateway') &&
+          ['rgw', 'ingress', 'iscsi', 'grafana', 'oauth2-proxy', 'mgmt-gateway', 'nfs'].includes(
+            serviceForm.controls.service_type.value
+          )
+        ) {
+          <cd-certificate-authority-form
+            [formGroup]="serviceForm"
+            [editing]="editing"
+            [currentCertificate]="currentCertificate"
+            [showCertSourceChangeWarning]="showCertSourceChangeWarning"
+            [certMode]="CertMode.externalOnly"
+            (certificateTypeChange)="onCertificateTypeChange($event)"
+          >
+          </cd-certificate-authority-form>
+        }
+
+        <!-- ssl_cert - Only show when SSL is enabled AND certificate type is external -->
+        @if (showExternalSslCert) {
+          <div class="form-item">
+            <ng-container
+              *ngTemplateOutlet="
+                fileUploaderTextarea;
+                context: {
+                  controlName: 'ssl_cert',
+                  title: 'Certificate Input',
+                  helperText:
+                    'Uploaded files will populate the certificate details automatically. Or paste the PEM content directly in the text area.',
+                  description: 'Upload a .crt file, or paste the certificate PEM content directly.',
+                  invalidTemplate: invalidSslCertError,
+                  isRequired: false
+                }
+              "
+            ></ng-container>
             <ng-template #invalidSslCertError>
               @if (serviceForm.showError('ssl_cert', frm, 'required')) {
                 <span
@@ -1696,43 +1637,22 @@
             </ng-template>
           </div>
         }
-        <!-- ssl_key -->
-        @if (
-          (serviceForm.controls.ssl.value &&
-            !['rgw', 'ingress'].includes(serviceForm.controls.service_type.value)) ||
-          ['mgmt-gateway'].includes(serviceForm.controls.service_type.value)
-        ) {
+        @if (showExternalSslKey) {
           <div class="form-item">
-            <cds-textarea-label
-              helperText="The SSL certificate in PEM format."
-              i18n
-              [invalid]="serviceForm.controls.ssl_key.invalid && serviceForm.controls.ssl_key.dirty"
-              [invalidText]="invalidSslKeyError"
-              >Private key
-              <div class="cd-col-form-input">
-                <textarea
-                  cdsTextArea
-                  id="ssl_key"
-                  formControlName="ssl_key"
-                  cols="100"
-                  rows="4"
-                  [invalid]="
-                    serviceForm.controls.ssl_key.invalid && serviceForm.controls.ssl_key.dirty
-                  "
-                >
-                </textarea>
-
-                <cds-file-uploader
-                  buttonText="Choose file"
-                  i18n-buttonText
-                  buttonType="secondary"
-                  [multiple]="false"
-                  size="sm"
-                  (filesChange)="fileUpload($event, 'ssl_key')"
-                  (removeFile)="clearText()"
-                ></cds-file-uploader>
-              </div>
-            </cds-textarea-label>
+            <ng-container
+              *ngTemplateOutlet="
+                fileUploaderTextarea;
+                context: {
+                  controlName: 'ssl_key',
+                  title: 'Private Key Input',
+                  helperText:
+                    'Uploaded files will populate the private key details automatically. Or paste the PEM content directly in the text area.',
+                  description: 'Upload a .key file, or paste the private key PEM content directly.',
+                  invalidTemplate: invalidSslKeyError,
+                  isRequired: false
+                }
+              "
+            ></ng-container>
             <ng-template #invalidSslKeyError>
               @if (serviceForm.showError('ssl_key', frm, 'required')) {
                 <span
@@ -1750,32 +1670,74 @@
               }
             </ng-template>
           </div>
+          <!-- ssl_ca_cert - Only show for NFS when SSL is enabled AND certificate type is external -->
+          @if (
+            serviceForm.controls.ssl.value &&
+            serviceForm.controls.certificateType.value === CertificateType.external &&
+            serviceForm.controls.service_type.value === 'nfs'
+          ) {
+            <div class="form-item">
+              <ng-container
+                *ngTemplateOutlet="
+                  fileUploaderTextarea;
+                  context: {
+                    controlName: 'ssl_ca_cert',
+                    title: 'CA Certificate Input',
+                    helperText:
+                      'Uploaded files will populate the CA certificate details automatically. Or paste the PEM content directly in the text area.',
+                    description:
+                      'Upload a CA certificate file, or paste the CA certificate PEM content directly.',
+                    invalidTemplate: invalidSslCaCertError,
+                    isRequired: false
+                  }
+                "
+              ></ng-container>
+              <ng-template #invalidSslCaCertError>
+                @if (serviceForm.showError('ssl_ca_cert', frm, 'required')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >This field is required.</span
+                  >
+                }
+                @if (serviceForm.showError('ssl_ca_cert', frm, 'pattern')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >Invalid CA certificate.</span
+                  >
+                }
+              </ng-template>
+            </div>
+          }
         }
+      }
 
-        <!-- RGW QAT Compression -->
-        @if (serviceForm.controls.service_type.value === 'rgw') {
-          <div
-            class="form-item"
-            formGroupName="qat"
+      <!-- RGW QAT Compression -->
+      @if (
+        !serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'rgw'
+      ) {
+        <div
+          class="form-item"
+          formGroupName="qat"
+        >
+          <cds-select
+            formControlName="compression"
+            name="compression"
+            label="QAT compression mode"
+            id="compression"
+            helperText="QAT compression is optional. Choose Hardware or Software to enable compression, or select None to disable it."
+            i18n-helperText
           >
-            <cds-select
-              formControlName="compression"
-              name="compression"
-              label="QAT compression mode"
-              id="compression"
-              helperText="QAT compression is optional. Choose Hardware or Software to enable compression, or select None to disable it."
-              i18n-helperText
+            <option
+              *ngFor="let option of qatCompressionOptions"
+              [value]="option.value"
+              i18n
             >
-              <option
-                *ngFor="let option of qatCompressionOptions"
-                [value]="option.value"
-                i18n
-              >
-                {{ option.label }}
-              </option>
-            </cds-select>
-          </div>
-        }
+              {{ option.label }}
+            </option>
+          </cds-select>
+        </div>
       }
       <!-- Grafana -->
       @if (serviceForm.controls.service_type.value === 'grafana') {
@@ -1827,7 +1789,6 @@
               type="password"
               id="grafana_admin_password"
               formControlName="grafana_admin_password"
-              [disabled]="editing ? true : null"
             />
           </cds-password-label>
           <cd-copy-2-clipboard-button
@@ -1853,12 +1814,12 @@
       @if (serviceForm.controls.service_type.value === 'nvmeof') {
         <div class="form-item">
           <fieldset class="cds--fieldset">
-            <legend
+            <label
               class="cds--label"
+              for="enable_mtls"
               i18n
+              >Encryption</label
             >
-              Encryption
-            </legend>
             <cds-checkbox
               i18n-label
               id="enable_mtls"
@@ -1872,215 +1833,230 @@
           </fieldset>
         </div>
         @if (serviceForm.controls.enable_mtls.value) {
-          <!-- root_ca_cert -->
-          <div class="form-item">
-            <cds-textarea-label
-              cdRequiredField="Root CA certificate"
-              [invalid]="
-                serviceForm.controls.root_ca_cert.invalid && serviceForm.controls.root_ca_cert.dirty
-              "
-              [invalidText]="invalidRootCaCertError"
-              >Root CA certificate
-              <textarea
-                cdsTextArea
-                id="root_ca_cert"
-                formControlName="root_ca_cert"
-                cols="100"
-                rows="4"
+          <cd-certificate-authority-form
+            [formGroup]="serviceForm"
+            [editing]="editing"
+            [currentCertificate]="currentCertificate"
+            [certMode]="CertMode.externalOnly"
+            [showCertSourceChangeWarning]="showCertSourceChangeWarning"
+            (certificateTypeChange)="onCertificateTypeChange($event)"
+          >
+          </cd-certificate-authority-form>
+
+          @if (serviceForm.controls.certificateType.value === CertificateType.external) {
+            <!-- root_ca_cert -->
+            <div class="form-item">
+              <cds-textarea-label
+                cdRequiredField="Root CA certificate"
                 [invalid]="
                   serviceForm.controls.root_ca_cert.invalid &&
                   serviceForm.controls.root_ca_cert.dirty
                 "
-              >
-              </textarea>
-
-              <cds-file-uploader
-                buttonText="Choose file"
-                i18n-buttonText
-                buttonType="secondary"
-                [multiple]="false"
-                size="sm"
-                (filesChange)="fileUpload($event, 'root_ca_cert')"
-                (removeFile)="clearText()"
-              ></cds-file-uploader>
-            </cds-textarea-label>
-            <ng-template #invalidRootCaCertError>
-              @if (serviceForm.showError('root_ca_cert', frm, 'required')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >This field is required.</span
+                [invalidText]="invalidRootCaCertError"
+                >Root CA certificate
+                <textarea
+                  cdsTextArea
+                  id="root_ca_cert"
+                  formControlName="root_ca_cert"
+                  cols="100"
+                  rows="4"
+                  [invalid]="
+                    serviceForm.controls.root_ca_cert.invalid &&
+                    serviceForm.controls.root_ca_cert.dirty
+                  "
                 >
-              }
-            </ng-template>
-          </div>
+                </textarea>
 
-          <!-- client_cert -->
-          <div class="form-item">
-            <cds-textarea-label
-              cdRequiredField="Client CA certificate"
-              [invalid]="
-                serviceForm.controls.client_cert.invalid && serviceForm.controls.client_cert.dirty
-              "
-              [invalidText]="invalidClientCertError"
-              >Client CA certificate
-              <textarea
-                cdsTextArea
-                id="client_cert"
-                formControlName="client_cert"
-                cols="100"
-                rows="4"
+                <cds-file-uploader
+                  buttonText="Choose file"
+                  i18n-buttonText
+                  buttonType="secondary"
+                  [multiple]="false"
+                  size="sm"
+                  (filesChange)="fileUpload($event, 'root_ca_cert')"
+                  (removeFile)="clearText()"
+                ></cds-file-uploader>
+              </cds-textarea-label>
+              <ng-template #invalidRootCaCertError>
+                @if (serviceForm.showError('root_ca_cert', frm, 'required')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >This field is required.</span
+                  >
+                }
+              </ng-template>
+            </div>
+
+            <!-- client_cert -->
+            <div class="form-item">
+              <cds-textarea-label
+                cdRequiredField="Client CA certificate"
                 [invalid]="
                   serviceForm.controls.client_cert.invalid && serviceForm.controls.client_cert.dirty
                 "
-              >
-              </textarea>
-              <cds-file-uploader
-                buttonText="Choose file"
-                i18n-buttonText
-                buttonType="secondary"
-                [multiple]="false"
-                size="sm"
-                (filesChange)="fileUpload($event, 'client_cert')"
-                (removeFile)="clearText()"
-              ></cds-file-uploader>
-            </cds-textarea-label>
-            <ng-template #invalidClientCertError>
-              @if (serviceForm.showError('client_cert', frm, 'required')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >This field is required.</span
+                [invalidText]="invalidClientCertError"
+                >Client CA certificate
+                <textarea
+                  cdsTextArea
+                  id="client_cert"
+                  formControlName="client_cert"
+                  cols="100"
+                  rows="4"
+                  [invalid]="
+                    serviceForm.controls.client_cert.invalid &&
+                    serviceForm.controls.client_cert.dirty
+                  "
                 >
-              }
-            </ng-template>
-          </div>
+                </textarea>
+                <cds-file-uploader
+                  buttonText="Choose file"
+                  i18n-buttonText
+                  buttonType="secondary"
+                  [multiple]="false"
+                  size="sm"
+                  (filesChange)="fileUpload($event, 'client_cert')"
+                  (removeFile)="clearText()"
+                ></cds-file-uploader>
+              </cds-textarea-label>
+              <ng-template #invalidClientCertError>
+                @if (serviceForm.showError('client_cert', frm, 'required')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >This field is required.</span
+                  >
+                }
+              </ng-template>
+            </div>
 
-          <!-- client_key -->
-          <div class="form-item">
-            <cds-textarea-label
-              cdRequiredField="Client key"
-              [invalid]="
-                serviceForm.controls.client_key.invalid && serviceForm.controls.client_key.dirty
-              "
-              [invalidText]="invalidClientKeyError"
-              >Client key
-              <textarea
-                cdsTextArea
-                id="client_key"
-                formControlName="client_key"
-                cols="100"
-                rows="4"
+            <!-- client_key -->
+            <div class="form-item">
+              <cds-textarea-label
+                cdRequiredField="Client key"
                 [invalid]="
                   serviceForm.controls.client_key.invalid && serviceForm.controls.client_key.dirty
                 "
-              >
-              </textarea>
-
-              <cds-file-uploader
-                buttonText="Choose file"
-                i18n-buttonText
-                buttonType="secondary"
-                [multiple]="false"
-                size="sm"
-                (filesChange)="fileUpload($event, 'client_key')"
-                (removeFile)="clearText()"
-              ></cds-file-uploader>
-            </cds-textarea-label>
-            <ng-template #invalidClientKeyError>
-              @if (serviceForm.showError('client_key', frm, 'required')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >This field is required.</span
+                [invalidText]="invalidClientKeyError"
+                >Client key
+                <textarea
+                  cdsTextArea
+                  id="client_key"
+                  formControlName="client_key"
+                  cols="100"
+                  rows="4"
+                  [invalid]="
+                    serviceForm.controls.client_key.invalid && serviceForm.controls.client_key.dirty
+                  "
                 >
-              }
-            </ng-template>
-          </div>
+                </textarea>
 
-          <!-- server_cert -->
-          <div class="form-item">
-            <cds-textarea-label
-              cdRequiredField="Gateway server certificate"
-              [invalid]="
-                serviceForm.controls.server_cert.invalid && serviceForm.controls.server_cert.dirty
-              "
-              [invalidText]="invalidServerCertError"
-              >Gateway server certificate
-              <textarea
-                cdsTextArea
-                id="server_cert"
-                formControlName="server_cert"
-                cols="100"
-                rows="4"
+                <cds-file-uploader
+                  buttonText="Choose file"
+                  i18n-buttonText
+                  buttonType="secondary"
+                  [multiple]="false"
+                  size="sm"
+                  (filesChange)="fileUpload($event, 'client_key')"
+                  (removeFile)="clearText()"
+                ></cds-file-uploader>
+              </cds-textarea-label>
+              <ng-template #invalidClientKeyError>
+                @if (serviceForm.showError('client_key', frm, 'required')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >This field is required.</span
+                  >
+                }
+              </ng-template>
+            </div>
+
+            <!-- server_cert -->
+            <div class="form-item">
+              <cds-textarea-label
+                cdRequiredField="Gateway server certificate"
                 [invalid]="
                   serviceForm.controls.server_cert.invalid && serviceForm.controls.server_cert.dirty
                 "
-              >
-              </textarea>
-
-              <cds-file-uploader
-                buttonText="Choose file"
-                i18n-buttonText
-                buttonType="secondary"
-                [multiple]="false"
-                size="sm"
-                (filesChange)="fileUpload($event, 'server_cert')"
-                (removeFile)="clearText()"
-              ></cds-file-uploader>
-            </cds-textarea-label>
-            <ng-template #invalidServerCertError>
-              @if (serviceForm.showError('server_cert', frm, 'required')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >This field is required.</span
+                [invalidText]="invalidServerCertError"
+                >Gateway server certificate
+                <textarea
+                  cdsTextArea
+                  id="server_cert"
+                  formControlName="server_cert"
+                  cols="100"
+                  rows="4"
+                  [invalid]="
+                    serviceForm.controls.server_cert.invalid &&
+                    serviceForm.controls.server_cert.dirty
+                  "
                 >
-              }
-            </ng-template>
-          </div>
+                </textarea>
 
-          <!-- server_key -->
-          <div class="form-item">
-            <cds-textarea-label
-              cdRequiredField="Gateway server key"
-              [invalid]="
-                serviceForm.controls.server_key.invalid && serviceForm.controls.server_key.dirty
-              "
-              [invalidText]="invalidServerKeyError"
-              >Gateway server key
-              <textarea
-                cdsTextArea
-                id="server_key"
-                formControlName="server_key"
-                cols="100"
-                rows="4"
+                <cds-file-uploader
+                  buttonText="Choose file"
+                  i18n-buttonText
+                  buttonType="secondary"
+                  [multiple]="false"
+                  size="sm"
+                  (filesChange)="fileUpload($event, 'server_cert')"
+                  (removeFile)="clearText()"
+                ></cds-file-uploader>
+              </cds-textarea-label>
+              <ng-template #invalidServerCertError>
+                @if (serviceForm.showError('server_cert', frm, 'required')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >This field is required.</span
+                  >
+                }
+              </ng-template>
+            </div>
+
+            <!-- server_key -->
+            <div class="form-item">
+              <cds-textarea-label
+                cdRequiredField="Gateway server key"
                 [invalid]="
                   serviceForm.controls.server_key.invalid && serviceForm.controls.server_key.dirty
                 "
-              >
-              </textarea>
-
-              <cds-file-uploader
-                buttonText="Choose file"
-                i18n-buttonText
-                buttonType="secondary"
-                [multiple]="false"
-                size="sm"
-                (filesChange)="fileUpload($event, 'server_key')"
-                (removeFile)="clearText()"
-              ></cds-file-uploader>
-            </cds-textarea-label>
-            <ng-template #invalidServerKeyError>
-              @if (serviceForm.showError('server_key', frm, 'required')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >This field is required.</span
+                [invalidText]="invalidServerKeyError"
+                >Gateway server key
+                <textarea
+                  cdsTextArea
+                  id="server_key"
+                  formControlName="server_key"
+                  cols="100"
+                  rows="4"
+                  [invalid]="
+                    serviceForm.controls.server_key.invalid && serviceForm.controls.server_key.dirty
+                  "
                 >
-              }
-            </ng-template>
-          </div>
+                </textarea>
+
+                <cds-file-uploader
+                  buttonText="Choose file"
+                  i18n-buttonText
+                  buttonType="secondary"
+                  [multiple]="false"
+                  size="sm"
+                  (filesChange)="fileUpload($event, 'server_key')"
+                  (removeFile)="clearText()"
+                ></cds-file-uploader>
+              </cds-textarea-label>
+              <ng-template #invalidServerKeyError>
+                @if (serviceForm.showError('server_key', frm, 'required')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >This field is required.</span
+                  >
+                }
+              </ng-template>
+            </div>
+          }
         }
       }
     </form>
@@ -2088,7 +2064,7 @@
   <cd-form-button-panel
     (submitActionEvent)="onSubmit()"
     [form]="serviceForm"
-    [submitText]="(action | titlecase) + ' ' + resource"
+    [submitText]="submitAction"
     [modalForm]="true"
   ></cd-form-button-panel>
 </cds-modal>
@@ -2102,4 +2078,46 @@
       >https://ssl-config.mozilla.org/#server=nginx</a
     >
   </span>
+</ng-template>
+
+<ng-template
+  #fileUploaderTextarea
+  let-controlName="controlName"
+  let-title="title"
+  let-helperText="helperText"
+  let-description="description"
+  let-invalidTemplate="invalidTemplate"
+  let-isRequired="isRequired"
+>
+  <cds-textarea-label
+    [attr.cdRequiredField]="isRequired ? title : null"
+    [helperText]="helperText"
+    [invalid]="serviceForm.controls[controlName].invalid && serviceForm.controls[controlName].dirty"
+    [invalidText]="invalidTemplate"
+  >
+    <cds-file-uploader
+      [title]="title"
+      buttonText="Upload File"
+      i18n-buttonText
+      buttonType="tertiary"
+      [multiple]="false"
+      size="md"
+      [description]="description"
+      (filesChange)="fileUpload($event, controlName)"
+      (removeFile)="clearText()"
+    ></cds-file-uploader>
+    <textarea
+      cdsTextArea
+      [id]="controlName"
+      [theme]="'dark'"
+      placeholder="Paste certificate or private key PEM content"
+      [formControl]="serviceForm.controls[controlName]"
+      cols="50"
+      rows="5"
+      [invalid]="
+        serviceForm.controls[controlName].invalid && serviceForm.controls[controlName].dirty
+      "
+    >
+    </textarea>
+  </cds-textarea-label>
 </ng-template>
