@@ -15,7 +15,6 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def task(ctx, config):
     log.info('Setting up nvme_loop on scratch devices...')
-    host = 'hostnqn'
     port = '1'
     devs_by_remote = {}
     old_scratch_by_remote = {}
@@ -30,8 +29,6 @@ def task(ctx, config):
                 'grep', '^nvme_loop', '/proc/modules', run.Raw('||'),
                 'sudo', 'modprobe', 'nvme_loop',
                 run.Raw('&&'),
-                'sudo', 'mkdir', '-p', f'{base}/hosts/{host}',
-                run.Raw('&&'),
                 'sudo', 'mkdir', '-p', f'{base}/ports/{port}',
                 run.Raw('&&'),
                 'echo', 'loop', run.Raw('|'),
@@ -41,27 +38,31 @@ def task(ctx, config):
         for dev in devs:
             short = dev.split('/')[-1]
             log.info(f'Connecting nvme_loop {remote.shortname}:{dev}...')
-            remote.run(
-                args=[
-                    'sudo', 'mkdir', '-p', f'{base}/subsystems/{short}',
-                    run.Raw('&&'),
-                    'echo', '1', run.Raw('|'),
-                    'sudo', 'tee', f'{base}/subsystems/{short}/attr_allow_any_host',
-                    run.Raw('&&'),
-                    'sudo', 'mkdir', '-p', f'{base}/subsystems/{short}/namespaces/1',
-                    run.Raw('&&'),
-                    'echo', '-n', dev, run.Raw('|'),
-                    'sudo', 'tee', f'{base}/subsystems/{short}/namespaces/1/device_path',
-                    run.Raw('&&'),
-                    'echo', '1', run.Raw('|'),
-                    'sudo', 'tee', f'{base}/subsystems/{short}/namespaces/1/enable',
-                    run.Raw('&&'),
-                    'sudo', 'ln', '-s', f'{base}/subsystems/{short}',
-                    f'{base}/ports/{port}/subsystems/{short}',
-                    run.Raw('&&'),
-                    'sudo', 'nvme', 'connect', '-t', 'loop', '-n', short, '-q', host,
-                ]
-            )
+            nvme_connect_args = [
+                'sudo', 'mkdir', '-p', f'{base}/subsystems/{short}',
+                run.Raw('&&'),
+                'echo', '1', run.Raw('|'),
+                'sudo', 'tee', f'{base}/subsystems/{short}/attr_allow_any_host',
+                run.Raw('&&'),
+                'sudo', 'mkdir', '-p', f'{base}/subsystems/{short}/namespaces/1',
+                run.Raw('&&'),
+                'echo', '-n', dev, run.Raw('|'),
+                'sudo', 'tee', f'{base}/subsystems/{short}/namespaces/1/device_path',
+                run.Raw('&&'),
+                'echo', '1', run.Raw('|'),
+                'sudo', 'tee', f'{base}/subsystems/{short}/namespaces/1/enable',
+                run.Raw('&&'),
+                'sudo', 'ln', '-s', f'{base}/subsystems/{short}',
+                f'{base}/ports/{port}/subsystems/{short}',
+                run.Raw('&&'),
+                # Avoid nvme-cli here: some versions may inject an inconsistent
+                # HostNQN/HostID pair. Writing directly to /dev/nvme-fabrics lets
+                # the kernel use its default host identity instead.
+                'printf', '%s', f'nqn={short},transport=loop',
+                run.Raw('|'),
+                'sudo', 'tee', '/dev/nvme-fabrics',
+            ]
+            remote.run(args=nvme_connect_args)
 
         # identify nvme_loops devices
         old_scratch_by_remote[remote] = remote.read_file('/scratch_devs')
