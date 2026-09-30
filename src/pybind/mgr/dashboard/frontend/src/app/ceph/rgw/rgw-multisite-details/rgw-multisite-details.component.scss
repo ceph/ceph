@@ -1,25 +1,38 @@
 @use './src/styles/vendor/variables' as vv;
 
-.tree-container {
-  height: calc(100vh - vv.$tree-container-height);
-  overflow-y: auto;
-}
+cd-rgw-multisite-details {
+  .tree-container {
+    height: calc(100vh - vv.$tree-container-height);
+    overflow-y: auto;
+  }
 
-.align-inline-btns {
-  margin-left: 5em;
-}
+  .align-inline-btns {
+    margin-left: 5em;
+  }
 
-.btn:disabled {
-  pointer-events: none;
-}
+  .btn:disabled {
+    pointer-events: none;
+  }
 
-::ng-deep .cds--tree-node__label__details {
-  padding-block: 0.5rem;
-  width: 100%;
-}
+  .cds--tree-node__label__details {
+    padding-block: 0.5rem;
+    width: 100%;
+  }
 
-::ng-deep cd-table-actions.btn-group.multisite-actions cds-overflow-menu .cds--btn--icon-only {
-  position: relative;
-  top: 4px;
-  width: auto;
+  // Show action buttons on row hover; keep visible on active/selected node
+  .cds--tree-node__label .align-inline-btns {
+    visibility: hidden;
+  }
+
+  .cds--tree-node__label:hover .align-inline-btns,
+  .cds--tree-node--selected > .cds--tree-node__label .align-inline-btns,
+  .cds--tree-node--active > .cds--tree-node__label .align-inline-btns {
+    visibility: visible;
+  }
+
+  cd-table-actions.btn-group.multisite-actions cds-overflow-menu .cds--btn--icon-only {
+    position: relative;
+    top: 4px;
+    width: auto;
+  }
 }
