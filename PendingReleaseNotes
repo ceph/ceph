@@ -287,6 +287,10 @@
 
 >=20.0.0
 
+* RGW: ``radosgw-admin bilog trim`` without ``--end-marker`` now requires
+  ``--yes-i-really-mean-it``, because such a trim has no upper bound and can
+  remove bilog entries that other zones have not synced yet.
+
 * RGW: Bucket Logging suppports creating log buckets in EC pools.
   Implicit logging object commits are now performed asynchronously.
 * RADOS: leader monitor and stretch mode status are now included in the `ceph status` output.
