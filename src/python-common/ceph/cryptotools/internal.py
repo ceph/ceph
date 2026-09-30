@@ -109,8 +109,11 @@ class InternalCryptoCaller(CryptoCaller):
     def verify_tls(self, crt: str, key: str) -> None:
         try:
             _key = crypto.load_privatekey(crypto.FILETYPE_PEM, key)
-            _key.check()
-        except (ValueError, crypto.Error) as e:
+            # check() validates an RSA key, which load_privatekey() does not,
+            # but raises TypeError for any other key type
+            if _key.type() == crypto.TYPE_RSA:
+                _key.check()
+        except (ValueError, TypeError, crypto.Error) as e:
             self.fail('Invalid private key: %s' % str(e))
         _crt = self._load_cert(crt)
         try:
