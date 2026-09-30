@@ -3168,22 +3168,25 @@ TEST_F(PGLogTest, merge_object_divergent_entries_partial_writes) {
     entry.written_shards.insert(shard_id_t(1));
     orig_entries.push_back(entry);
     
-    // Add more recent entry to log - triggers Case 1
+    // Add more recent entry to log - triggers Case 1 (only if the log
+    // indexes objects)
+    log.index();
     log.add(mk_ple_mod(hoid, eversion_t(10, 105), eversion_t(10, 100)));
     missing.add(hoid, eversion_t(10, 105), eversion_t(), false);
-    
+
     pg_info_t oinfo;
     LogHandler rollbacker;
-    
+
     // Shard 2 did NOT participate - Case 1 with partial write check
     _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
                                     log.get_can_rollback_to(), missing,
                                     &rollbacker, false, shard_id_t(2), this);
-    
+
     // Object should NOT be removed (shard didn't participate)
     EXPECT_EQ(0U, rollbacker.removed.size());
-    // Missing should be updated
+    // Missing keeps the need of the more recent entry
     EXPECT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(10, 105), missing.get_items().at(hoid).need);
     EXPECT_EQ(eversion_t(), missing.get_items().at(hoid).have);
   }
   
@@ -3530,6 +3533,109 @@ TEST_F(PGLogTest, merge_divergent_entries_clone_with_partial_write) {
 }
 
 
+
+// merge_log adds the newer authoritative entries to missing before it merges
+// the divergent ones. When every divergent entry for an object is a partial
+// write that skipped this shard, the merge must keep what those newer
+// entries set.
+TEST_F(PGLogTest, merge_log_skipped_partial_write_then_newer_entry) {
+  // 4+2: data shards 1-3 can never be primary. This is shard 2's log.
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  pool.nonprimary_shards.insert_range(shard_id_t(1), 3);
+  const hobject_t hoid = mk_obj(1);
+  const hobject_t other = mk_obj(2);
+
+  // A partial write to shards 0, 1 and the parity shards
+  auto skips_shard_2 = [](pg_log_entry_t e) {
+    for (int s : {0, 1, 4, 5}) {
+      e.written_shards.insert(shard_id_t(s));
+    }
+    return e;
+  };
+  // Both logs share base; shard 2 also has div, where the authoritative log
+  // has auth instead.
+  auto merge = [&](const pg_log_entry_t &base, const pg_log_entry_t &div,
+                   const pg_log_entry_t &auth) {
+    log.tail = eversion_t(10, 90);
+    log.log.push_back(base);
+    log.log.push_back(div);
+    log.head = div.version;
+    log.index();
+
+    pg_info_t info;
+    info.last_update = log.head;
+    info.log_tail = log.tail;
+    info.last_backfill = hobject_t::get_max();
+
+    IndexedLog olog;
+    olog.tail = eversion_t(10, 90);
+    olog.log.push_back(base);
+    olog.log.push_back(auth);
+    olog.head = auth.version;
+    olog.index();
+
+    pg_info_t oinfo;
+    oinfo.last_update = oinfo.last_complete = olog.head;
+    oinfo.log_tail = olog.tail;
+    oinfo.last_backfill = hobject_t::get_max();
+
+    LogHandler h;
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+    merge_log(oinfo, std::move(olog), pg_shard_t(1, shard_id_t(0)), info,
+              pool, pg_shard_t(2, shard_id_t(2)), &h, dirty_info,
+              dirty_big_info, true);
+    EXPECT_TRUE(h.removed.empty());
+    EXPECT_EQ(missing.num_missing(), missing.get_rmissing().size());
+  };
+  const pg_log_entry_t base =
+    mk_ple_mod(hoid, eversion_t(10, 99), eversion_t(9, 50));
+  const pg_log_entry_t div =
+    skips_shard_2(mk_ple_mod(hoid, eversion_t(10, 100), eversion_t(10, 99)));
+  const pg_log_entry_t newer =
+    mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99));
+
+  {
+    // Not missing before: the newer entry needs recovery from 10'99
+    clear();
+    merge(base, div, newer);
+    ASSERT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(11, 110), missing.get_items().at(hoid).need);
+    EXPECT_EQ(eversion_t(10, 99), missing.get_items().at(hoid).have);
+  }
+  {
+    // Already missing, and the divergent entry moved need to 10'100:
+    // need follows the newer entry, not prior_version
+    clear();
+    missing.add(hoid, eversion_t(10, 100), eversion_t(9, 50), false);
+    missing.flush();
+    merge(base, div, newer);
+    ASSERT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(11, 110), missing.get_items().at(hoid).need);
+    EXPECT_EQ(eversion_t(9, 50), missing.get_items().at(hoid).have);
+  }
+  {
+    // The divergent entry and the newer one both create the object
+    clear();
+    merge(mk_ple_mod(other, eversion_t(10, 99), eversion_t(9, 50)),
+          skips_shard_2(mk_ple_mod(hoid, eversion_t(10, 100), eversion_t())),
+          mk_ple_mod(hoid, eversion_t(11, 110), eversion_t()));
+    ASSERT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(11, 110), missing.get_items().at(hoid).need);
+    EXPECT_EQ(eversion_t(), missing.get_items().at(hoid).have);
+  }
+  {
+    // No newer entry for the object: need goes back to prior_version
+    clear();
+    missing.add(hoid, eversion_t(10, 100), eversion_t(9, 50), false);
+    missing.flush();
+    merge(base, div, mk_ple_mod(other, eversion_t(11, 110), eversion_t(9, 60)));
+    ASSERT_TRUE(missing.is_missing(hoid));
+    EXPECT_EQ(eversion_t(10, 99), missing.get_items().at(hoid).need);
+    EXPECT_EQ(eversion_t(9, 50), missing.get_items().at(hoid).have);
+  }
+}
 
 TEST(eversion_t, get_key_name) {
   eversion_t a(1234, 5678);
