@@ -2054,6 +2054,11 @@ public:
 
     int budget = -1;
 
+    /// true once the op has been counted in inflight_ops and op_active (by
+    /// _send_op_account() or add_op_to_splitop_session()); an op retired
+    /// before that point must not be un-counted
+    bool inflight_accounted = false;
+
     /// true if we should resend this message on failure
     bool should_resend = true;
 
@@ -2584,9 +2589,19 @@ public:
 
   MOSDOp *_prepare_osd_op(Op *op);
   void _send_op(Op *op);
+  // Count the op as in-flight: both the Objecter's own counter and the
+  // op_active gauge, plus the per-op marker that tells _finish_unsent_op()
+  // the slot was taken.  Undone by _finish_op() / _finish_unsent_op().
+  void _take_inflight_slot(Op *op);
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void _finish_op(Op *op, int r);
+  // Retire an op that _op_submit() rejects before assigning it to a session
+  // (pool EIO).  Releases what _finish_op() would have: the throttle budget,
+  // any timeout event (a resubmitted op may still have one armed for its
+  // previous tid), the in-flight count if one was taken on an earlier pass,
+  // and the Objecter's reference.  The completion must already have been run.
+  void _finish_unsent_op(Op *op);
   boost::system::error_code process_op_reply_handlers(Op *op, std::vector<OSDOp> &out_ops);
   void complete_op_reply(Op *op, boost::system::error_code handler_error, OSDSession *s, std::unique_lock<std::shared_mutex> &sl, int rc);
   static bool is_pg_changed(
