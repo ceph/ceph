@@ -578,14 +578,15 @@ scrub_level_t PgScrubber::scrub_requested(
 		  m_scrub_job->get_sched_time(), registration_state())
 	   << dendl;
 
-  // if we were marked as 'not registered' - do not try to push into
-  // the queue.
+  // not registered yet: only mark the target. It is queued when the PG
+  // registers.
   if (!m_scrub_job->is_registered()) {
     dout(10) << fmt::format(
 		    "{}: pg[{}]: not registered for scrubbing on this OSD",
 		    __func__, m_pg_id)
 	     << dendl;
-    return scrub_level_t::shallow;
+    m_scrub_job->operator_forced(scrub_level, scrub_type);
+    return scrub_level;
   }
 
   // abort an ongoing scrub, if it's of the lowest priority
@@ -814,17 +815,10 @@ void PgScrubber::on_operator_abort_scrub(ceph::Formatter* f)
     f->dump_bool("active", true);
     f->dump_string("error", err_text);
 
-  } else if (!m_scrub_job->is_registered()) {
-    const auto err_text = fmt::format(
-        "{}: pg[{}] is not registered for scrubbing", __func__, m_pg_id.pgid);
-    dout(5) << err_text << dendl;
-    f->dump_bool("applicable", false);
-    f->dump_bool("active", false);
-    f->dump_string("error", err_text);
-
   } else {
     // not scrubbing now. Remove any operator-requested priority from
     // both targets.
+    const bool registered = m_scrub_job->is_registered();
 
     if (m_scrub_job->is_queued()) {
       // one or both of the targets are in the queue. Remove them.
@@ -844,15 +838,24 @@ void PgScrubber::on_operator_abort_scrub(ceph::Formatter* f)
     // note: must not short-circuit!
     const bool adj_deep = downgrade_on_operator_abort(
         m_scrub_job->get_target(scrub_level_t::deep), scrub_time_now);
-    if (adj_shallow || adj_deep) {
-      update_targets(scrub_time_now);
-      dout(10) << fmt::format("{}: adjusted job: {}", __func__, *m_scrub_job)
-               << dendl;
+    if (registered) {
+      if (adj_shallow || adj_deep) {
+        update_targets(scrub_time_now);
+        dout(10) << fmt::format("{}: adjusted job: {}", __func__, *m_scrub_job)
+                 << dendl;
+      }
+      m_osds->get_scrub_services().enqueue_scrub_job(*m_scrub_job);
+      m_scrub_job->set_both_targets_queued();
     }
-    m_osds->get_scrub_services().enqueue_scrub_job(*m_scrub_job);
-    m_scrub_job->set_both_targets_queued();
-    f->dump_bool("applicable", true);
+    const bool applicable = registered || adj_shallow || adj_deep;
+    f->dump_bool("applicable", applicable);
     f->dump_bool("active", false);
+    if (!applicable) {
+      const auto err_text = fmt::format(
+          "{}: pg[{}] is not registered for scrubbing", __func__, m_pg_id.pgid);
+      dout(5) << err_text << dendl;
+      f->dump_string("error", err_text);
+    }
   }
   dout(5) << fmt::format(
                  "{}: pg[{}] job at exit: {}", __func__, m_pg_id.pgid,
