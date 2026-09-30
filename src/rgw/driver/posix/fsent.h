@@ -175,6 +175,7 @@ struct ObjectType {
     VERSIONED = 3,
     MULTIPART = 4,
     SYMLINK = 5,
+    OBJECT = 6,
   };
   uint32_t type{UNKNOWN};
 
@@ -258,7 +259,7 @@ public:
 
   virtual ~FSEnt() { }
 
-  int get_fd() { return fd; };
+  virtual int get_fd() { return fd; };
   void set_sync_on_close(bool sync) { need_fsync = sync; }
   std::string& get_name() { return fname; }
   void set_name(const std::string& name) { fname = name; }
@@ -446,6 +447,52 @@ public:
   }
   std::unique_ptr<Symlink> clone() {
     return std::make_unique<Symlink>(*this);
+  }
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
+};
+
+class ObjectDirectory : public Directory {
+protected:
+  std::unique_ptr<File> object;
+
+public:
+  ObjectDirectory(std::string _name, Directory* _parent, CephContext* _ctx) :
+    Directory(_name, _parent, _ctx)
+  {}
+  ObjectDirectory(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) : Directory(_name, _parent, _stx, _ctx)
+  {}
+  ObjectDirectory(std::string _name, Directory* _parent, std::unique_ptr<File>&& _obj, CephContext* _ctx) :
+    Directory(_name, _parent, _ctx),
+    object(std::move(_obj))
+  {}
+  ObjectDirectory(const ObjectDirectory& _d) :
+    Directory(_d),
+    object(_d.object ? _d.object->clone() : nullptr)
+  {}
+  ObjectDirectory(const Directory& _d) :
+    Directory(_d)
+  {}
+  virtual ~ObjectDirectory() { close(); }
+
+  struct statx& get_stx() { if (object) return object->get_stx(); return stx; }
+  virtual ObjectType get_type() override { return ObjectType::OBJECT; };
+  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int open(const DoutPrefixProvider *dpp) override;
+  virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
+  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs) override;
+  virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs) override;
+  virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
+  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
+  virtual std::unique_ptr<FSEnt> clone_base() override {
+    return std::make_unique<ObjectDirectory>(*this);
+  }
+  virtual std::unique_ptr<Directory> clone_dir() override {
+    return std::make_unique<ObjectDirectory>(*this);
+  }
+  std::unique_ptr<ObjectDirectory> clone() {
+    return std::make_unique<ObjectDirectory>(*this);
   }
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
 };

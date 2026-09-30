@@ -1062,6 +1062,9 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
     case ObjectType::MULTIPART:
       nent = std::make_unique<MPDirectory>(name, this, nstx, ctx);
       break;
+    case ObjectType::OBJECT:
+      nent = std::make_unique<ObjectDirectory>(name, this, nstx, ctx);
+      break;
     case ObjectType::DIRECTORY:
       nent = std::make_unique<Directory>(name, this, nstx, ctx);
       break;
@@ -1206,6 +1209,199 @@ int Symlink::copy(const DoutPrefixProvider *dpp, optional_yield y,
   ret = symlinkat(tgtname.c_str(), dst_dir->get_fd(), dst_name.c_str());
 
   return 0;
+}
+
+int ObjectDirectory::open(const DoutPrefixProvider* dpp)
+{
+  if (fd > 0) {
+    return 0;
+  }
+  int ret = Directory::open(dpp);
+  if (ret < 0)
+    return ret;
+
+  if (!object) {
+    /* Try seeing of object exists */
+    object = std::make_unique<File>(get_name(), this, ctx);
+    ret = object->stat(dpp, /*force=*/false);
+    if (ret < 0) {
+      /* object doesn't exist, so clear it */
+      object.reset();
+    }
+  }
+
+  if (object) {
+    /* During create, object has a value but file doesn't exist */
+    object->open(dpp);
+  }
+
+  return 0;
+}
+
+int ObjectDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file)
+{
+  int ret = Directory::create(dpp, nullptr, false);
+
+  if (!object) {
+    object = std::make_unique<File>(get_name(), this, ctx);
+  }
+
+  ret = open(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not open object directory " << get_name()
+                      << dendl;
+    return ret;
+  }
+
+  ret = object->create(dpp, existed, temp_file);
+
+  /* Need type attribute written */
+  Attrs attrs;
+  ret = write_attrs(dpp, null_yield, attrs, nullptr);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not write attrs for object directory " << get_name()
+                      << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int ObjectDirectory::stat(const DoutPrefixProvider* dpp, bool force)
+{
+  int ret = Directory::stat(dpp, force);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = open(dpp);
+  if (ret < 0)
+    return ret;
+
+  if (object) {
+    ret = object->stat(dpp, force);
+    if (ret < 0)
+      return ret;
+    /* Some things come from the file */
+    stx.stx_size = object->get_stx().stx_size;
+    stx.stx_mtime = object->get_stx().stx_mtime;
+  }
+
+  return ret;
+}
+
+int ObjectDirectory::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs)
+{
+  int ret = FSEnt::read_attrs(dpp, y, attrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* Override type, it should be OJBECT */
+  bufferlist type_bl;
+  ObjectType type{get_type()};
+  type.encode(type_bl);
+  attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = type_bl;
+
+  return 0;
+}
+
+int ObjectDirectory::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs)
+{
+  /* Override type, it should be OJBECT */
+  bufferlist type_bl;
+  ObjectType type{get_type()};
+  type.encode(type_bl);
+  attrs[RGW_POSIX_ATTR_OBJECT_TYPE] = type_bl;
+
+  return FSEnt::write_attrs(dpp, y, attrs, extra_attrs);
+}
+
+int ObjectDirectory::write(int64_t ofs, bufferlist &bl,
+                              const DoutPrefixProvider *dpp, optional_yield y)
+{
+  if (!object)
+    return 0;
+  return object->write(ofs, bl, dpp, y);
+}
+
+int ObjectDirectory::read(int64_t ofs, int64_t left, bufferlist &bl,
+                    const DoutPrefixProvider *dpp, optional_yield y)
+{
+  if (!object)
+    return 0;
+  return object->read(ofs, left, bl, dpp, y);
+}
+
+int ObjectDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
+                              std::string temp_fname)
+{
+  if (!object)
+    return -EINVAL;
+  return object->link_temp_file(dpp, y, temp_fname);
+}
+
+int ObjectDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result)
+{
+  /* Child is the object file, so always remove it */
+  return Directory::remove(dpp, y, /*delete_children=*/true, result);
+}
+
+int ObjectDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
+                      Directory* dst_dir, const std::string& dst_name)
+{
+  int ret;
+
+  // Delete the target
+  {
+    std::unique_ptr<FSEnt> del;
+    ret = dst_dir->get_ent(dpp, y, dst_name, std::string(), del);
+    if (ret >= 0) {
+      ret = del->remove(dpp, y, /*delete_children=*/true, nullptr);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << dst_name
+                          << dendl;
+        return ret;
+      }
+    }
+  }
+
+  ret = dst_dir->open(dpp);
+  std::unique_ptr<ObjectDirectory> dest = clone();
+  dest->parent = dst_dir;
+  dest->fname = dst_name;
+  dest->object.reset();
+
+  ret = dest->create(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not create dest " << dest->get_name() << dendl;
+    return ret;
+  }
+
+  Attrs attrs;
+  ret = read_attrs(dpp, y, attrs);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not read attrs from " << get_name() << dendl;
+    return ret;
+  }
+  ret = dest->write_attrs(dpp, y, attrs, nullptr);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not write attrs to " << dest->get_name() << dendl;
+    return ret;
+  }
+
+  if (object) {
+    ret = object->copy(dpp, y, dest.get(), dest->get_name());
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not copy object file to "
+                        << dest->get_name() << dendl;
+    }
+  }
+
+  /* Fill object in dest */
+  dest->open(dpp);
+
+  return ret;
 }
 
 int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file)
