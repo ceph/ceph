@@ -1,0 +1,33 @@
+<div class="role-details-container cds-p-4">
+  <h4
+    i18n
+    class="cds--type-heading-02 cds-mb-3"
+  >
+    Permission Policies
+  </h4>
+  <p
+    i18n
+    class="cds--type-body-compact-01 cds-mb-4"
+  >
+    List of IAM permission policies attached to role "{{ selection?.RoleName }}".
+  </p>
+
+  <cd-table
+    #table
+    [autoReload]="false"
+    [data]="policies$ | async"
+    [columns]="columns"
+    selectionType="single"
+    columnMode="flex"
+    (updateSelection)="updateSelection($event)"
+    identifier="name"
+  >
+    <cd-table-actions
+      class="table-actions"
+      [permission]="permission"
+      [selection]="policySelection"
+      [tableActions]="tableActions"
+    >
+    </cd-table-actions>
+  </cd-table>
+</div>

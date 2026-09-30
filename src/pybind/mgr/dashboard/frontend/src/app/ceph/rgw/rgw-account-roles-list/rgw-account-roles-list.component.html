@@ -5,7 +5,9 @@
   [columns]="columns"
   selectionType="single"
   columnMode="flex"
+  [hasDetails]="true"
   (updateSelection)="updateSelection($event)"
+  (setExpandedRow)="setExpandedRow($event)"
   identifier="RoleName"
 >
   <cd-table-actions
@@ -15,4 +17,11 @@
     [tableActions]="tableActions"
   >
   </cd-table-actions>
+
+  <cd-rgw-account-role-details
+    *cdTableDetail
+    [selection]="expandedRow"
+    [accountId]="accountId"
+  >
+  </cd-rgw-account-role-details>
 </cd-table>
