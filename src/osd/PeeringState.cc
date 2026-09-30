@@ -8244,6 +8244,17 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
   DECLARE_LOCALS;
   ps->log_weirdness();
   ceph_assert(!ps->acting_recovery_backfill.empty());
+  // Optimized EC: activate() would reset a shard that is behind the log
+  // tail to empty, and backfill it only if it is a backfill target. Catch
+  // any acting or async recovery shard that choose_acting() judged
+  // contiguous but that is behind the log we now have.
+  for (const auto &s : ps->acting_recovery_backfill) {
+    if (s != ps->get_primary() &&
+	rechoose_acting_for(s, "before requesting logs")) {
+      post_event(RechooseActing());
+      return;
+    }
+  }
   eversion_t since;
   for (auto i = ps->acting_recovery_backfill.begin();
        i != ps->acting_recovery_backfill.end();
@@ -8333,6 +8344,15 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
 		       std::move(logevt.msg->missing),
 		       logevt.from);
 
+  // Optimized EC: when choose_acting() ran, the pwlc known then may have
+  // advanced this shard's last_update past the log tail, making a shard
+  // that is behind look contiguous. A newer pwlc adopted with the
+  // authoritative log may no longer cover it, and proc_replica_log() has
+  // just applied the current pwlc to the shard's own info.
+  if (rechoose_acting_for(logevt.from, "under the current pwlc")) {
+    return transit< GetLog >();
+  }
+
   if (peer_missing_requested.empty()) {
     if (ps->need_up_thru) {
       psdout(10) << " still need up_thru update before going active"
@@ -8345,6 +8365,45 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
     }
   }
   return discard_event();
+}
+
+bool PeeringState::GetMissing::rechoose_acting_for(const pg_shard_t &shard,
+						 const char *why)
+{
+  DECLARE_LOCALS;
+  const pg_info_t &pi = ps->peer_info[shard];
+  if (!ps->pool.info.allows_ecoptimizations() ||
+      ps->is_backfill_target(shard) ||
+      pi.is_empty() ||
+      pi.last_update >= ps->pg_log.get_tail()) {
+    return false;
+  }
+  // An acting or async recovery shard that is not a backfill target is
+  // behind the log tail: activate() would reset it to empty without
+  // backfilling it, and the PG would go clean with that shard empty (and
+  // the first write to it would assert in should_send_op). Choose the
+  // acting set again: choose_acting() now sees the shard as not
+  // contiguous and makes it a backfill target.
+  auto &count = context< Peering >().rechoose_acting;
+  if (count >= 3) {
+    psdout(0) << "osd." << shard << " last_update " << pi.last_update
+	      << " is behind the log tail " << ps->pg_log.get_tail()
+	      << " " << why << " but the acting set was already chosen again "
+	      << count << " times this interval; not choosing it again"
+	      << dendl;
+    return false;
+  }
+  ++count;
+  psdout(1) << "osd." << shard << " last_update " << pi.last_update
+	    << " is behind the log tail " << ps->pg_log.get_tail()
+	    << " " << why << "; choosing the acting set again" << dendl;
+  ps->clear_recovery_state();
+  return true;
+}
+
+boost::statechart::result PeeringState::GetMissing::react(const RechooseActing&)
+{
+  return transit< GetLog >();
 }
 
 boost::statechart::result PeeringState::GetMissing::react(const QueryState& q)
