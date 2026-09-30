@@ -139,6 +139,10 @@ os._exit = os_exit_noop   # type: ignore
 
 DEFAULT_IMAGE = 'quay.io/ceph/ceph'
 
+# Pool type constants from include/rados.h / pg_pool_t (CEPH_PG_TYPE_*)
+CEPH_POOL_TYPE_REPLICATED = 1
+CEPH_POOL_TYPE_ERASURE = 3
+
 
 def host_exists(hostname_position: int = 1) -> Callable:
     """Check that a hostname exists in the inventory"""
@@ -3881,7 +3885,7 @@ Then run the following:
                 f'Pool "{pool}" was not found in the OSD map. '
                 f'Cannot verify OMAP support for service "{service_name}".'
             )
-        if pool_info.get('type') == 1:
+        if pool_info.get('type') == CEPH_POOL_TYPE_REPLICATED:
             return
         flags_names = pool_info.get('flags_names', '')
         flags_set = set(f.strip() for f in flags_names.split(',') if f.strip())
