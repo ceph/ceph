@@ -1630,3 +1630,17 @@ TEST(ECUtil, erase_after_ro_offset_single_byte)
   // Shard 1 should be empty
   ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
 }
+
+// Every constructor populates get_all_shards() with 0..k+m-1.
+TEST(ECUtil, get_all_shards_every_constructor)
+{
+  pg_pool_t pool;
+  shard_id_set all;
+  all.insert_range(shard_id_t(0), 3);
+  EXPECT_EQ(all, stripe_info_t(2, 1, 4096 * 2).get_all_shards());
+  EXPECT_EQ(all, stripe_info_t(2, 1, 4096 * 2, std::vector<shard_id_t>())
+                     .get_all_shards());
+  EXPECT_EQ(all, stripe_info_t(2, 1, 4096 * 2, &pool).get_all_shards());
+  EXPECT_EQ(all, stripe_info_t(2, 1, 4096 * 2, &pool,
+                               std::vector<shard_id_t>()).get_all_shards());
+}
