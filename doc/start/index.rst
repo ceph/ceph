@@ -59,8 +59,10 @@ Read these before you install anything.
   bonding, and management networks.
 - :ref:`OS Recommendations <os-recommendations>`: the platforms that each Ceph
   release is built and tested on.
-- :ref:`Ceph Releases <ceph-releases-general>`: the release cycle, and which
-  releases are currently maintained.
+- :ref:`Ceph Releases <ceph-releases-general>`: the release cycle and how long
+  each release is maintained.
+- :ref:`Active Releases <active-releases>`: the releases that are maintained
+  now, with their release notes.
 - :doc:`Glossary </glossary>`: definitions of the terms used throughout this
   documentation.
 
