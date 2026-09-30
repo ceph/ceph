@@ -1153,7 +1153,10 @@ int AuthMonitor::import_keyring(KeyRing& keyring)
       dout(0) << "import: no caps supplied" << dendl;
       return -EINVAL;
     }
-    int err = add_entity(p->first, p->second);
+    EntityAuth auth = p->second;
+    // pending keys are only created by the *-pending commands
+    auth.pending_key.clear();
+    int err = add_entity(p->first, auth);
     ceph_assert(err == 0);
   }
   return 0;
@@ -1744,6 +1747,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       new_inc.key.create(g_ceph_context, key_type);
     }
     new_inc.caps = encoded_caps;
+    new_inc.pending_key.clear();
 
     err = add_entity(auth_inc.name, new_inc);
     ceph_assert(err == 0);
