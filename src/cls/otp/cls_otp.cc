@@ -126,9 +126,10 @@ bool otp_instance::verify(const ceph::real_time& timestamp, const string& val)
 {
   uint64_t index;
   uint32_t secs = (uint32_t)ceph::real_clock::to_time_t(timestamp);
+  int otp_pos = 0;
   int result = oath_totp_validate2(otp.seed_bin.c_str(), otp.seed_bin.length(),
                                    secs, otp.step_size, otp.time_ofs, otp.window,
-                                   nullptr /* otp pos */,
+                                   &otp_pos,
                                    val.c_str());
   if (result == OATH_INVALID_OTP ||
       result < 0) {
@@ -136,7 +137,10 @@ bool otp_instance::verify(const ceph::real_time& timestamp, const string& val)
     return false;
   }
 
-  index = result + (secs - otp.time_ofs) / otp.step_size;
+  /* liboath's return value is the absolute window distance; the signed
+   * position (past negative, future positive) is delivered via otp_pos.
+   * The matched step is current_step + otp_pos. */
+  index = (secs - otp.time_ofs) / otp.step_size + otp_pos;
 
   if (index <= last_success) { /* already used value */
     CLS_LOG(20, "otp, use of old token: index=%lld last_success=%lld", (long long)index, (long long)last_success);
