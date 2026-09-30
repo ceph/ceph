@@ -1247,6 +1247,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 logger.error(f'{spec_network} from {sspec.service_name()} spec does not overlap with {host_network} on {host}')
         return None
 
+    def get_bond_members(self, host: str, iface: str) -> Set[str]:
+        """Return the member devices of iface on host, empty if it is not a bond.
+
+        Read from the interface metadata already collected by 'cephadm
+        gather-facts', which reports a bond's member devices as its
+        lower_devs_list.
+        """
+        nic = self.cache.get_facts(host).get('interfaces', {}).get(iface, {})
+        if nic.get('nic_type') != 'bonding':
+            return set()
+        return set(nic.get('lower_devs_list') or [])
+
     @staticmethod
     def can_run() -> Tuple[bool, str]:
         if asyncssh is not None:
