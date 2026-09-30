@@ -44,6 +44,24 @@ public:
   void SetUp() override {
     ECPeeringTestFixture::SetUp();
   }
+
+  // Once the PG is active again after a write was rolled back, no shard
+  // keeps it as its log head, and the next write, which reuses its version
+  // like PrimaryLogPG, succeeds.
+  void check_write_rolled_back(const std::string& obj, size_t object_size) {
+    auto* primary_ps = get_peering_state(get_primary_shard_from_osdmap());
+    ASSERT_TRUE(primary_ps->is_active()) << primary_ps->get_current_state();
+    const eversion_t head = primary_ps->get_info().last_update;
+    for (const auto& [shard, range] : primary_ps->get_info().partial_writes_last_complete) {
+      EXPECT_LE(range.second, head) << "pwlc of shard " << shard;
+    }
+    for (const pg_shard_t& shard : primary_ps->get_acting_recovery_backfill()) {
+      ASSERT_EQ(head, get_peering_state(shard.osd)->get_pg_log().get_head()) << shard;
+    }
+
+    set_next_version(head.version + 1);
+    write_verify(obj, stripe_unit, std::string(stripe_unit, 'C'), object_size);
+  }
 };
 
 TEST_P(TestECFailoverWithPeering, BasicPeeringCycle) {
@@ -1528,6 +1546,79 @@ TEST_P(TestECFailoverWithPeering, DivergentLogRewindThenNewInterval) {
 
   // cfg_async_recovery, cfg_trim_min, and cfg_trim_max restore automatically
   // via ScopedConfig destructors at function exit.
+}
+
+// A sub-stripe write kept by a peered interval gives the unwritten nonprimary
+// shards a pwlc range covering it. Once a later interval rolls the write back,
+// no shard may keep that range, or a nonprimary shard keeps the rolled-back
+// version as its log head and asserts when the next write to it reuses that
+// version.
+TEST_P(TestECFailoverWithPeering, RolledBackPeeredWriteLeavesNoStalePwlc) {
+  if (m < 2 || k <= m) {
+    GTEST_SKIP() << "requires m >= 2 and k > m";
+  }
+  set_pool_min_size(k + 1);
+  const std::string obj = "test_peered_pwlc";
+  const size_t object_size = stripe_unit * k;
+  create_and_write_verify(obj, std::string(object_size, 'A'));
+
+  // A primary-capable shard misses the write, then it and enough nonprimary
+  // shards go down to leave the PG below min_size.
+  const int missed = k;
+  std::vector<int> peered_down;
+  for (int i = 0; i <= k + m - (int)get_pool().min_size; i++) {
+    peered_down.push_back(missed - i);
+  }
+  suspend_primary_to_osd(missed);
+  ASSERT_EQ(-EINPROGRESS, write(obj, 0, std::string(stripe_unit, 'B'), object_size));
+  mark_osds_down(peered_down);
+  ASSERT_TRUE(get_peering_state(0)->is_peered());
+  ASSERT_FALSE(get_peering_state(0)->is_active());
+  unsuspend_primary_to_osd(missed);
+  event_loop->run_until_idle();
+
+  mark_osd_down(0);
+  for (int osd : peered_down) {
+    mark_osd_up(osd);
+  }
+  check_write_rolled_back(obj, object_size);
+}
+
+// As above, but the write reaches no other primary-capable shard, so no
+// primary of a later interval has a pwlc entry that could replace the range
+// the nonprimary shards keep for themselves.
+TEST_P(TestECFailoverWithPeering, RolledBackPeeredWriteLeavesNoStaleReplicaPwlc) {
+  if (m < 2) {
+    GTEST_SKIP() << "requires m >= 2";
+  }
+  set_pool_min_size(k + 1);
+  const std::string obj = "test_peered_pwlc";
+  const size_t object_size = stripe_unit * k;
+  create_and_write_verify(obj, std::string(object_size, 'A'));
+
+  std::vector<int> missed;
+  for (int osd = 1; osd < k + m; osd++) {
+    if (!get_pool().is_nonprimary_shard(shard_id_t(osd))) {
+      missed.push_back(osd);
+    }
+  }
+  for (int osd : missed) {
+    suspend_primary_to_osd(osd);
+  }
+  ASSERT_EQ(-EINPROGRESS, write(obj, 0, std::string(stripe_unit, 'B'), object_size));
+  mark_osds_down(missed);
+  ASSERT_TRUE(get_peering_state(0)->is_peered());
+  ASSERT_FALSE(get_peering_state(0)->is_active());
+  for (int osd : missed) {
+    unsuspend_primary_to_osd(osd);
+  }
+  event_loop->run_until_idle();
+
+  mark_osd_down(0);
+  for (int osd : missed) {
+    mark_osd_up(osd);
+  }
+  check_write_rolled_back(obj, object_size);
 }
 
 // ---------------------------------------------------------------------------
