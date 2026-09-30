@@ -86,6 +86,13 @@ int ec_init(const std::string &profile_str,
     return 0;
   }
 
+  if ((*ec_impl)->get_supported_optimizations() &
+      ceph::ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) {
+    usage("invalid profile: plugins using sub-chunks are not supported",
+          std::cerr);
+    return 1;
+  }
+
   uint64_t stripe_unit = atoi(stripe_unit_str.c_str());
   if (stripe_unit <= 0) {
     usage("invalid stripe unit", std::cerr);

@@ -28,6 +28,13 @@ ceph-erasure-code-tool encode \
     grep -q 'invalid stripe unit'
 
 ceph-erasure-code-tool encode \
+                       plugin=clay,k=2,m=2 \
+                       4096 \
+                       0,1,2,3 \
+                       $TMPDIR/data 2>&1 |
+    grep -q 'sub-chunks are not supported'
+
+ceph-erasure-code-tool encode \
                        plugin=isa,technique=reed_sol_van,k=2,m=1 \
                        4096 \
                        0,1,2 \
