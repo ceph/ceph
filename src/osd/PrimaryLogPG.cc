@@ -10808,6 +10808,10 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
           dout(10) << __func__ << " clone " << clone
                    << " already present (or unverifiable) on target, keeping in snapset"
                    << dendl;
+          auto live_it = ctx->obc->ssc->snapset.clone_snaps.find(clone);
+          if (live_it != ctx->obc->ssc->snapset.clone_snaps.end()) {
+            ctx->new_snapset.clone_snaps[clone] = live_it->second;
+          }
           ++it;
           continue;
         }
