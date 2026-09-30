@@ -199,7 +199,7 @@ void MDBalancer::handle_export_pins(void)
 	  remove = false;
 	  continue;
 	}
-	target = mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
+	target = in->get_ephemeral_dist_rank(dir->get_frag());
       }
 
       if (target == MDS_RANK_NONE) {
@@ -261,7 +261,7 @@ void MDBalancer::handle_export_pins(void)
     cd->inode->check_pin_policy(export_pin);
 
     if (export_pin == MDS_RANK_EPHEMERAL_DIST) {
-      export_pin = mdcache->hash_into_rank_bucket(cd->ino(), cd->get_frag());
+      export_pin = cd->inode->get_ephemeral_dist_rank(cd->get_frag());
     } else if (export_pin == MDS_RANK_EPHEMERAL_RAND) {
       export_pin = mdcache->hash_into_rank_bucket(cd->ino());
     }
