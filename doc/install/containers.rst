@@ -1,113 +1,135 @@
 .. _containers:
 
-Ceph Container Images
-=====================
+=======================
+ Ceph Container Images
+=======================
 
-.. important::
+.. meta::
+   :description: Where Ceph publishes its container images, what each image tag points to, and the status of development and legacy images.
+   :ceph-page-type: reference
 
-   Using the ``:latest`` tag is discouraged. If you use the ``:latest`` 
-   tag, there is no guarantee that the same image will be on each of 
-   your hosts.  Under these conditions, upgrades might not work 
-   properly. Remember that ``:latest`` is a relative tag, and a moving
-   target.
+Ceph publishes each :term:`release <Ceph Release>` as the general-purpose
+container image ``quay.io/ceph/ceph:<tag>``
+(https://quay.io/repository/ceph/ceph), with every Ceph daemon and its
+dependencies installed. :term:`cephadm` uses it by default.
 
-   Instead of the ``:latest`` tag, use explicit tags or image IDs. For
-   example:
+.. _ceph-ceph:
 
-   ``podman pull quay.io/ceph/ceph:v20.2.3``
+.. _official-releases:
 
-Official Releases
------------------
+Release Images and Tags
+=======================
 
-Ceph Container images are available from Quay:
+.. list-table::
+   :header-rows: 1
+   :widths: 28 52 20
 
-  https://quay.io/repository/ceph/ceph
-  https://hub.docker.com/r/ceph
+   * - Tag
+     - Points to
+     - Example
+   * - ``vRELNUM``
+     - The newest image in that major series, including
+       :term:`release candidates <Ceph Release Candidate>` until the first
+       :term:`stable release <Ceph Stable Release>` (``v20`` is Tentacle)
+     - ``v20``
+   * - ``vRELNUM.1``
+     - The newest release candidate in the series
+     - ``v21.1``
+   * - ``vRELNUM.2``
+     - The newest stable release in the series
+     - ``v20.2``
+   * - ``vRELNUM.Y.Z``
+     - A specific release
+     - ``v20.2.4``
+   * - ``vRELNUM.Y.Z-YYYYMMDD``
+     - A specific build of that release
+     - ``v20.2.4-20260818``
 
-ceph/ceph
-^^^^^^^^^
+Pull an explicit version tag or an image digest, for example:
 
-- General purpose Ceph container with all necessary daemons and
-  dependencies installed.
+.. prompt:: bash #
 
-+----------------------+--------------------------------------------------------------+
-| Tag                  | Meaning                                                      |
-+----------------------+--------------------------------------------------------------+
-| vRELNUM              | Latest release in this series (e.g., *v14* = Nautilus)       |
-+----------------------+--------------------------------------------------------------+
-| vRELNUM.2            | Latest *stable* release in this stable series (e.g., *v14.2*)|
-+----------------------+--------------------------------------------------------------+
-| vRELNUM.Y.Z          | A specific release (e.g., *v14.2.4*)                         |
-+----------------------+--------------------------------------------------------------+
-| vRELNUM.Y.Z-YYYYMMDD | A specific build (e.g., *v14.2.4-20191203*)                  |
-+----------------------+--------------------------------------------------------------+
+   podman pull quay.io/ceph/ceph:v20.2.4
 
-Legacy container images
------------------------
+``quay.io/ceph/ceph`` has no ``:latest`` tag, and tags such as ``v20`` and
+``v20.2`` move when a new :term:`point release <Ceph Point Release>` ships.
+With a moving tag, the :term:`hosts <Host>` of a cluster can end up with
+different images, and upgrades might not work properly. cephadm pins its own
+daemons to a digest: it converts a tag to the image digest when
+``mgr/cephadm/use_repo_digest`` is ``true``, the default.
 
-Legacy container images are available from Docker Hub at::
-  
-  https://hub.docker.com/r/ceph
+.. _ceph-ci-ceph:
 
-ceph/daemon-base
-^^^^^^^^^^^^^^^^
+.. _development-builds:
 
-- General purpose Ceph container with all necessary daemons and
-  dependencies installed.
-- Basically the same as *ceph/ceph*, but with different tags.
-- Note that all of the *-devel* tags (and the *latest-master* tag) are based on
-  unreleased and generally untested packages from https://shaman.ceph.com.
+Development Images
+==================
 
-:note: This image will soon become an alias to *ceph/ceph*.
+Development images are built like ``quay.io/ceph/ceph``, from unreleased and
+untested code. Do not use them in production. They are pushed to
+``quay.ceph.io/ceph-ci/ceph`` (https://quay.ceph.io/organization/ceph-ci) for
+the branches pushed to ceph-ci, the copy of the Ceph Git repository that the
+CI system builds from, including ``main`` and the release branches.
 
-+------------------------+---------------------------------------------------------+
-| Tag                    | Meaning                                                 |
-+------------------------+---------------------------------------------------------+
-| latest-master          | Build of master branch a last ceph-container.git update |
-+------------------------+---------------------------------------------------------+
-| latest-master-devel    | Daily build of the master branch                        |
-+------------------------+---------------------------------------------------------+
-| latest-RELEASE-devel   | Daily build of the *RELEASE* (e.g., nautilus) branch    |
-+------------------------+---------------------------------------------------------+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 52 20
 
+   * - Tag
+     - Points to
+     - Example
+   * - ``BRANCH``
+     - The latest build of a branch
+     - ``main``, ``wip-foo``
+   * - ``BRANCH-BASEOS-ARCH-devel``
+     - The latest build of a branch for one base image and CPU architecture
+     - ``main-rockylinux-10-x86_64-devel``
+   * - ``SHA1``
+     - The build of one commit, named by its full commit ID
+     -
+   * - ``BRANCH-BASEOS``, ``SHA1-BASEOS``
+     - A build on a base image that is not the default for the branch (the
+       default is ``centos-stream9`` for reef, squid and tentacle, and
+       ``rockylinux-10`` from umbrella onwards)
+     - ``main-centos-stream9``
+   * - ``BRANCH-debug``, ``SHA1-debug``
+     - A debug build
+     - ``main-debug``
+   * - ``BRANCH-arm64``, ``SHA1-arm64``
+     - An arm64 build
+     - ``main-arm64``
 
-ceph/daemon
-^^^^^^^^^^^
+Suffixes combine in the order ``-BASEOS``, ``-debug``, ``-arm64``. The
+exception is tentacle and branches based on it: there, a debug build on a
+base image that is not the default gets the same ``-BASEOS`` tag as the
+non-debug build, without ``-debug``, so that tag points to whichever build
+finished last. The ``-devel`` tag of a debug build always ends in ``-debug``.
 
-- *ceph/daemon-base* plus a collection of BASH scripts that are used
-  by ceph-nano and ceph-ansible to manage a Ceph cluster.
+.. _ceph-daemon-base:
 
-+------------------------+---------------------------------------------------------+
-| Tag                    | Meaning                                                 |
-+------------------------+---------------------------------------------------------+
-| latest-master          | Build of master branch a last ceph-container.git update |
-+------------------------+---------------------------------------------------------+
-| latest-master-devel    | Daily build of the master branch                        |
-+------------------------+---------------------------------------------------------+
-| latest-RELEASE-devel   | Daily build of the *RELEASE* (e.g., nautilus) branch    |
-+------------------------+---------------------------------------------------------+
+.. _ceph-daemon:
 
+.. _legacy-container-images:
 
-Development builds
-------------------
+Legacy Images
+=============
 
-We automatically build container images for development ``wip-*``
-branches in the ceph-ci.git repositories and push them to Quay at::
+Use ``quay.io/ceph/ceph``, which is built from ``container/Containerfile`` in
+the Ceph repository, instead of these legacy images:
 
-  https://quay.ceph.io/organization/ceph-ci
+- The ``ceph/daemon-base`` image, and the ``ceph/daemon`` image
+  (``ceph/daemon-base`` plus the Bash scripts that ceph-ansible and ceph-nano
+  used), are no longer built. Their source repository, ceph/ceph-container,
+  was archived in December 2024, and their last tags on quay.io are from 2024.
+- The Ceph images on Docker Hub (https://hub.docker.com/u/ceph) have not been
+  updated since 2021; ``ceph/ceph`` there stops at ``v16.2.5``.
 
-ceph-ci/ceph
-^^^^^^^^^^^^
+Additional Resources
+====================
 
-- This is analogous to the ceph/ceph image above
-- TODO: remove the ``wip-*`` limitation and also build ceph.git branches.
+- :ref:`cephadm-airgap`
+- :doc:`/cephadm/upgrade`
+- :ref:`start-platforms`
+- `Containerfile of quay.io/ceph/ceph`_
 
-+------------------------------------+------------------------------------------------------+
-| Tag                                | Meaning                                              |
-+------------------------------------+------------------------------------------------------+
-| BRANCH                             | Latest build of a given GIT branch (e.g., *wip-foo*) |
-+------------------------------------+------------------------------------------------------+
-| BRANCH-SHORTSHA1-BASEOS-ARCH-devel | A specific build of a branch                         |
-+------------------------------------+------------------------------------------------------+
-| SHA1                               | A specific build                                     |
-+------------------------------------+------------------------------------------------------+
+.. _Containerfile of quay.io/ceph/ceph: https://github.com/ceph/ceph/blob/main/container/Containerfile
