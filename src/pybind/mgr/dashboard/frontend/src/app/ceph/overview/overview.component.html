@@ -142,8 +142,10 @@
         }
       </div>
       <cd-table
+      <cd-table
         [data]="health?.pgs?.states"
         [columns]="pgTableColumns"
+        [showColumnToggle]="false"
         size="xs"
       >
       </cd-table>

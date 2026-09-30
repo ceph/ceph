@@ -182,20 +182,22 @@
       </cds-icon-button>
       <!-- end refresh button -->
       <!-- show hide columns -->
-      <button
-        cdsButton="ghost"
-        class="toolbar-action"
-        [cdsOverflowMenu]="showHideColumnsRef"
-        placement="bottom"
-        [flip]="true"
-        [offset]="{ x: 3, y: 0 }"
-        type="button"
-      >
-        <svg
-          [cdsIcon]="icons.dataTable"
-          [size]="icons.size16"
-          class="cds--toolbar-action__icon"
-        ></svg>
+      @if (showColumnToggle) {
+        <button
+          cdsButton="ghost"
+          class="toolbar-action"
+          data-testid="column-toggle-button"
+          [cdsOverflowMenu]="showHideColumnsRef"
+          placement="bottom"
+          [flip]="true"
+          [offset]="{ x: 3, y: 0 }"
+          type="button"
+        >
+          <svg
+            [cdsIcon]="icons.dataTable"
+            [size]="icons.size16"
+            class="cds--toolbar-action__icon"
+          ></svg>
       </button>
       <ng-template #showHideColumnsRef>
         <div
@@ -217,6 +219,7 @@
           </ng-container>
         </div>
       </ng-template>
+      }
       <!-- end show hide columns -->
       <!-- actions -->
       <ng-content select=".table-actions"></ng-content>
