@@ -1347,7 +1347,12 @@ void MDBalancer::hit_dir(CDir *dir, int type, double amount)
 
     dout(20) << type << " pop " << dir_pop << " spread in " << *dir << dendl;
     if (dir->is_auth() && !dir->is_ambiguous_auth() && dir->can_rep()) {
-      if (dir_pop >= bal_replicate_threshold) {
+      // The fragments of an ephemerally distributed directory are already
+      // spread over the ranks.  Replicating one as well only makes clients
+      // send lookups to replicas that rarely hold the dentry, and those
+      // get forwarded back to the auth.
+      if (dir_pop >= bal_replicate_threshold &&
+	  !dir->inode->is_ephemeral_dist()) {
 	// replicate
 	double rdp = dir->pop_me.get(META_POP_IRD).get();
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;
