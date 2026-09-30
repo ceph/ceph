@@ -210,6 +210,7 @@ class ServiceAction(enum.Enum):
     restart = 'restart'
     redeploy = 'redeploy'
     reconfig = 'reconfig'
+    kill = 'kill'
 
 
 class DaemonAction(enum.Enum):
@@ -217,6 +218,7 @@ class DaemonAction(enum.Enum):
     stop = 'stop'
     restart = 'restart'
     reconfig = 'reconfig'
+    kill = 'kill'
 
 
 class IngressType(enum.Enum):
