@@ -16,6 +16,8 @@
 #include "rgw_account.h"
 
 #include <algorithm>
+#include <chrono>
+#include <thread>
 #include <fmt/format.h>
 
 #include "common/random_string.h"
@@ -341,30 +343,8 @@ int remove(const DoutPrefixProvider* dpp,
     }
   } while (!vector_buckets.next_marker.empty());
 
-  rgw::sal::UserList users;
-  do {
-    ret = driver->list_account_users(dpp, y, info.id, info.tenant, path_prefix,
-                                     users.next_marker, max_items, users);
-    if (ret < 0) {
-      err_msg = "Unable to list account users";
-      return ret;
-    }
-    if (!users.users.empty() && !op_state.purge_data) {
-      err_msg = "The account cannot be deleted until all users are removed.";
-      return -ENOTEMPTY;
-    }
-
-    for (const auto& info : users.users) {
-      auto user = driver->get_user(info.user_id);
-      ret = user->remove_user(dpp, y);
-      if (ret < 0) {
-        err_msg = fmt::format("unable to delete user {}", info.user_id.to_str());
-        return ret;
-      }
-      ldpp_dout_fmt(dpp, 1, "Deleted account user {}", info.user_id.to_str());
-    }
-  } while (!users.next_marker.empty());
-
+  // Delete regular buckets next (may include backing buckets for vector buckets)
+  // These must be deleted BEFORE users to avoid orphaned buckets
   constexpr bool need_stats = false;
   rgw::sal::BucketList buckets;
   do {
@@ -398,6 +378,52 @@ int remove(const DoutPrefixProvider* dpp,
       ldpp_dout_fmt(dpp, 1, "Deleted account bucket {}", ent.bucket.name);
     }
   } while (!buckets.next_marker.empty());
+
+  // Wait for background sync threads to finish processing deletions
+  // to avoid version conflicts when loading/deleting users
+  if (op_state.purge_data) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  }
+
+  // Delete account users
+  // Note: We re-list users on each iteration since deleting buckets may have
+  // updated user metadata, and we need fresh user info with current version trackers
+  rgw::sal::UserList users;
+  do {
+    users = {};  // Clear previous results
+    ret = driver->list_account_users(dpp, y, info.id, info.tenant, path_prefix,
+                                     "", max_items, users);
+    if (ret < 0) {
+      err_msg = "Unable to list account users";
+      return ret;
+    }
+
+    if (users.users.empty()) {
+      break;  // All users deleted
+    }
+
+    if (!op_state.purge_data) {
+      err_msg = "The account cannot be deleted until all users are removed.";
+      return -ENOTEMPTY;
+    }
+
+    // Delete first user in the list
+    const auto& user_info = users.users.front();
+    auto user = driver->get_user(user_info.user_id);
+    ret = user->load_user(dpp, y);
+    if (ret < 0) {
+      err_msg = fmt::format("unable to load user {}", user_info.user_id.to_str());
+      return ret;
+    }
+
+    ret = user->remove_user(dpp, y);
+    if (ret < 0) {
+      err_msg = fmt::format("unable to delete user {}", user_info.user_id.to_str());
+      return ret;
+    }
+
+    ldpp_dout_fmt(dpp, 1, "Deleted account user {}", user_info.user_id.to_str());
+  } while (true);
 
   rgw::sal::RoleList roles;
   do {
@@ -492,7 +518,13 @@ int remove(const DoutPrefixProvider* dpp,
     }
   } while (!topics.next_marker.empty());
 
-  return driver->delete_account(dpp, y, info, objv);
+  ret = driver->delete_account(dpp, y, info, objv);
+  if (ret < 0) {
+    err_msg = fmt::format("unable to delete account {}", info.id);
+    return ret;
+  }
+
+  return 0;
 }
 
 int info(const DoutPrefixProvider* dpp,

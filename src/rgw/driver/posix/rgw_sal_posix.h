@@ -493,7 +493,7 @@ public:
   virtual int list_vector_buckets(const DoutPrefixProvider* dpp,
                            const rgw_owner& owner, const std::string& tenant,
                            const std::string& marker, const std::string& end_marker,
-                           uint64_t max, bool need_stats, BucketList& buckets,
+                           uint64_t max, BucketList& buckets,
                            optional_yield y) override;
 
   virtual void finalize(void) override;
@@ -771,7 +771,7 @@ public:
   virtual int create(const DoutPrefixProvider* dpp,
                      const CreateParams& params,
                      optional_yield y) override;
-  virtual int load_vector_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
                        ceph::real_time mtime, optional_yield y) override;
   virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -990,7 +990,7 @@ struct POSIXMPObj {
 	     std::optional<std::string> _upload_id, ACLOwner& _owner) {
     if (_upload_id && !_upload_id->empty()) {
       init(_oid, *_upload_id, _owner);
-    } else {
+    } else if (!from_meta(_oid, _owner)) {
       init_gen(driver, _oid, _owner);
     }
   }

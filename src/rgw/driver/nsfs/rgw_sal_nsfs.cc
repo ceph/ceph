@@ -1524,6 +1524,32 @@ int Directory::for_each(const DoutPrefixProvider* dpp, const F& func)
   if (dir == NULL) {
     ret = errno;
     ::close(dir_fd);
+    ldpp_dout(dpp, 0) << "ERROR: could not open dir " << get_name() << " for listing: "
+      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  rewinddir(dir);
+
+  ret = 0;
+  while ((entry = readdir(dir)) != NULL) {
+    std::string_view vname(entry->d_name);
+
+    if (vname == "." || vname == "..")
+      continue;
+
+    int r = func(entry->d_name);
+    if (r < 0) {
+      ret = r;
+      break;
+    }
+  }
+
+  if (ret == -EAGAIN) {
+    /* Limit reached */
+    ret = 0;
+  }
+
   closedir(dir); /* closes dir_fd only; Directory::fd remains valid */
   return ret;
 }
@@ -2250,10 +2276,6 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   } else {
     ldpp_dout(dpp, 1) << "sync policy: "
       << cct->_conf.get_val<std::string>("rgw_posix_sync_policy") << dendl;
-  }
-
-  if (!RGWPubSubEndpoint::init_all(cct)) {
-    ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
   }
 
   if (!RGWPubSubEndpoint::init_all(cct)) {
@@ -3849,17 +3871,8 @@ int NSFSBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 
   bufferlist bl;
   encode(info, bl);
-  Attrs orig_attrs, extra_attrs;
+  Attrs extra_attrs;
   extra_attrs[RGW_NSFS_ATTR_BUCKET_INFO] = bl;
-
-  ret = dir->read_attrs(dpp, y, orig_attrs);
-
-  for (auto attr : orig_attrs) {
-    if (auto found = attrs.find(attr.first); found == attrs.end()) {
-      /* Attribute needs to be erased */
-      remove_x_attr(dpp, y, dir->get_fd(), attr.first, get_name());
-    }
-  }
 
   return dir->write_attrs(dpp, y, attrs, &extra_attrs);
 }
@@ -5169,36 +5182,6 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
         return -ERR_INVALID_PART;
       }
     } else {
-      if (pn < 1 || pn > (int)part_sizes.size()) {
-        return -ERR_INVALID_PART;
-      }
-      int64_t ofs = 0;
-      for (int i = 0; i < pn - 1; ++i) {
-        ofs += part_sizes[i];
-      }
-      part_ofs = ofs;
-      source->set_obj_size(part_sizes[pn - 1]);
-    }
-  }
-
-  if (params.part_num) {
-    int pn = *params.part_num;
-    buffer::list ps_bl;
-    if (!source->get_attr(RGW_NSFS_ATTR_MULTIPART_PART_SIZES, ps_bl)) {
-      if (pn == 1) {
-        // non-multipart object: part 1 returns the whole object
-        params.parts_count = 1;
-      } else {
-        return -ERR_INVALID_PART;
-      }
-    } else {
-      std::vector<uint64_t> part_sizes;
-      try {
-        auto iter = ps_bl.cbegin();
-        ceph::decode(part_sizes, iter);
-      } catch (buffer::error& err) {
-        return -ERR_INVALID_PART;
-      }
       if (pn < 1 || pn > (int)part_sizes.size()) {
         return -ERR_INVALID_PART;
       }

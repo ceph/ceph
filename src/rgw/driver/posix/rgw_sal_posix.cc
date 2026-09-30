@@ -291,10 +291,6 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
   }
 
-  if (!RGWPubSubEndpoint::init_all(cct)) {
-    ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
-  }
-
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
   return 0;
 }
@@ -499,7 +495,7 @@ int POSIXDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
 int POSIXDriver::load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<VectorBucket>* bucket, optional_yield y)
 {
   *bucket = std::make_unique<POSIXVectorBucket>(this, root_dir.get(), b);
-  return (*bucket)->load_vector_bucket(dpp, y);
+  return (*bucket)->load_bucket(dpp, y);
 }
 /* S3Vectors - load_vector_bucket */
 
@@ -717,7 +713,7 @@ int POSIXDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& ow
 int POSIXDriver::list_vector_buckets(const DoutPrefixProvider* dpp, const rgw_owner& owner,
                              const std::string& tenant, const std::string& marker,
                              const std::string& end_marker, uint64_t max,
-                             bool need_stats, BucketList &result, optional_yield y)
+                             BucketList &result, optional_yield y)
 {
   DIR* dir;
   struct dirent* entry;
@@ -1959,7 +1955,42 @@ int POSIXVectorBucket::remove(const DoutPrefixProvider* dpp,
                         bool delete_children,
                         optional_yield y)
 {
-  int ret = dir->remove(dpp, y, delete_children, nullptr);
+  // Vector buckets can share directories with backing S3 buckets (RGW backend mode).
+  // If the vector bucket was created over an existing S3 bucket with different owner,
+  // we should NOT delete the directory - only remove vector bucket metadata.
+  // Check if ownership was preserved (indicating shared directory with S3 bucket).
+
+  bool shared_with_s3_bucket = false;
+
+  // Read current bucket info from xattrs to check ownership
+  Attrs current_attrs;
+  int ret = dir->open(dpp);
+  if (ret == 0) {
+    ret = dir->read_attrs(dpp, y, current_attrs);
+    if (ret == 0) {
+      RGWBucketInfo current_info;
+      ret = posix::decode_attr(current_attrs, RGW_POSIX_ATTR_BUCKET_INFO, current_info);
+      if (ret == 0) {
+        // Check if this is a vector bucket sharing space with regular S3 bucket:
+        // - But owner might be from the original S3 bucket if we preserved it
+        // Actually, simpler: just don't delete directory for vector buckets - let the
+        // S3 bucket deletion handle it if needed
+        shared_with_s3_bucket = true; // For now, always preserve directory for vector buckets
+      }
+    }
+  }
+
+  if (shared_with_s3_bucket) {
+    // Don't delete the directory - it may be shared with an S3 bucket
+    // Just invalidate cache
+    ldpp_dout(dpp, 10) << "Vector bucket " << get_name()
+                       << " removal: preserving directory (may be shared with S3 bucket)" << dendl;
+    driver->get_bucket_cache()->invalidate_bucket(dpp, get_name());
+    return 0;
+  }
+
+  // No sharing detected - safe to delete directory
+  ret = dir->remove(dpp, y, delete_children, nullptr);
   if (ret < 0) {
     return ret;
   }
@@ -2017,8 +2048,8 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   return 0;
 }
 
-/* S3Vectors - load_vector_bucket */
-int POSIXVectorBucket::load_vector_bucket(const DoutPrefixProvider* dpp, optional_yield y)
+/* S3Vectors - load_bucket */
+int POSIXVectorBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
 
@@ -2056,7 +2087,7 @@ int POSIXVectorBucket::load_vector_bucket(const DoutPrefixProvider* dpp, optiona
 
   return 0;
 }
-/* S3Vectors - load_vector_bucket */
+/* S3Vectors - load_bucket */
 
 int POSIXBucket::set_acl(const DoutPrefixProvider* dpp,
 			 RGWAccessControlPolicy& acl,
@@ -2205,6 +2236,35 @@ int POSIXVectorBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield
   int ret = dir->open(dpp);
   if (ret < 0) {
     return ret;
+  }
+
+  // Vector buckets can share physical directories with backing S3 buckets (RGW backend).
+  // Both use RGW_POSIX_ATTR_BUCKET_INFO xattr. When writing vector bucket metadata,
+  // preserve the ownership of an existing S3 bucket to prevent it from being deleted
+  // when the vector bucket owner is deleted.
+  Attrs existing_attrs;
+  ret = dir->read_attrs(dpp, y, existing_attrs);
+  if (ret == 0) {
+    // Successfully read existing attributes
+    RGWBucketInfo existing_info;
+    ret = posix::decode_attr(existing_attrs, RGW_POSIX_ATTR_BUCKET_INFO, existing_info);
+    if (ret == 0) {
+      // Existing bucket metadata found
+      // Check if it's a different bucket type (Normal vs Indexless) with different owner
+      bool is_existing_regular = (existing_info.layout.current_index.layout.type != rgw::BucketIndexType::Indexless);
+      bool is_new_vector = (info.layout.current_index.layout.type == rgw::BucketIndexType::Indexless);
+
+      if (is_existing_regular && is_new_vector && existing_info.owner != info.owner) {
+        // Existing regular S3 bucket with different owner - preserve its ownership
+        ldpp_dout(dpp, 10) << "Vector bucket " << info.bucket.name
+                           << " preserving existing S3 bucket ownership: " << existing_info.owner
+                           << " (vector bucket owner: " << info.owner << ")" << dendl;
+        info.owner = existing_info.owner;
+        info.creation_time = existing_info.creation_time;
+        info.bucket.marker = existing_info.bucket.marker;
+        info.bucket.bucket_id = existing_info.bucket.bucket_id;
+      }
+    }
   }
 
   bufferlist bl;
@@ -2396,7 +2456,21 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* e
     return ret;
   }
 
-  return write_attrs(dpp, y);
+  // Ensure directory is open before writing attrs
+  ret = dir->open(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: POSIXBucket failed to open directory after create: "
+                       << get_fname() << " : " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ret = write_attrs(dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: POSIXBucket write_attrs failed for: " << get_fname()
+                       << " : " << cpp_strerror(-ret) << dendl;
+  }
+
+  return ret;
 }
 
 /* S3Vectors - create */
@@ -2407,7 +2481,21 @@ int POSIXVectorBucket::create(const DoutPrefixProvider* dpp, optional_yield y, b
     return ret;
   }
 
-  return write_attrs(dpp, y);
+  // Ensure directory is open before writing attrs
+  ret = dir->open(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: POSIXVectorBucket failed to open directory after create: "
+                       << get_fname() << " : " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ret = write_attrs(dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: POSIXVectorBucket write_attrs failed for: " << get_fname()
+                       << " : " << cpp_strerror(-ret) << dendl;
+  }
+
+  return ret;
 }
 /* S3Vectors - create */
 
@@ -3372,36 +3460,6 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     }
   }
 
-  if (params.part_num) {
-    int pn = *params.part_num;
-    buffer::list ps_bl;
-    if (!source->get_attr(RGW_POSIX_ATTR_MULTIPART_PART_SIZES, ps_bl)) {
-      if (pn == 1) {
-        // non-multipart object: part 1 returns the whole object
-        params.parts_count = 1;
-      } else {
-        return -ERR_INVALID_PART;
-      }
-    } else {
-      std::vector<uint64_t> part_sizes;
-      try {
-        auto iter = ps_bl.cbegin();
-        ceph::decode(part_sizes, iter);
-      } catch (buffer::error& err) {
-        return -ERR_INVALID_PART;
-      }
-      if (pn < 1 || pn > (int)part_sizes.size()) {
-        return -ERR_INVALID_PART;
-      }
-      int64_t ofs = 0;
-      for (int i = 0; i < pn - 1; ++i) {
-        ofs += part_sizes[i];
-      }
-      part_ofs = ofs;
-      source->set_obj_size(part_sizes[pn - 1]);
-    }
-  }
-
 #if 0 // WIP
   if (params.mod_ptr || params.unmod_ptr) {
     obj_time_weight src_weight;
@@ -4063,7 +4121,6 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs& attrs = target_obj->get_attrs();
-  std::vector<uint64_t> part_sizes;
 
   ofs = accounted_size = 0;
 
@@ -4146,7 +4203,6 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
       }
 #endif
 
-      part_sizes.push_back(part->get_size());
       ofs += part->get_size();
       accounted_size += part->get_size();
     }
