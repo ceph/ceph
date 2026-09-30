@@ -1,6 +1,8 @@
-import { Component, Inject, OnInit, Optional } from '@angular/core';
-import { Validators } from '@angular/forms';
+import { Component, ChangeDetectorRef, Inject, OnInit, Optional } from '@angular/core';
+import { AbstractControl, FormArray, FormGroup, Validators } from '@angular/forms';
 import { BaseModal } from 'carbon-components-angular';
+import { forkJoin } from 'rxjs';
+import { finalize } from 'rxjs/operators';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -8,7 +10,10 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { RgwRoleService } from '~/app/shared/api/rgw-role.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwRole } from '../models/rgw-role';
+
+import { PREDEFINED_POLICY_TEMPLATES, PredefinedPolicyTemplate } from '../utils/constants';
 
 @Component({
   selector: 'cd-rgw-account-role-form',
@@ -19,6 +24,31 @@ import { RgwRole } from '../models/rgw-role';
 export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
   form: CdFormGroup;
   mode: string;
+  isSubmitLoading = false;
+  formSubmitted = false;
+  icons = Icons;
+
+  readonly predefinedTemplates: PredefinedPolicyTemplate[] = PREDEFINED_POLICY_TEMPLATES;
+
+  readonly steps = [{ label: $localize`Role details`, invalid: false }];
+  title: string;
+  modalHeaderLabel: string;
+  description: string;
+
+  readonly policyDocPlaceholder = JSON.stringify(
+    {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Effect: 'Allow',
+          Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
+          Resource: '*'
+        }
+      ]
+    },
+    null,
+    2
+  );
 
   constructor(
     @Optional() @Inject('accountId') public accountId: string,
@@ -29,13 +59,20 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     private formBuilder: CdFormBuilder,
     public actionLabels: ActionLabelsI18n,
     private rgwRoleService: RgwRoleService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private cdr: ChangeDetectorRef
   ) {
     super();
   }
 
   ngOnInit(): void {
     this.mode = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
+    this.title = this.isEdit ? $localize`Edit session duration` : $localize`Create role`;
+    this.modalHeaderLabel = this.isEdit ? $localize`Role` : $localize`User account`;
+    this.description = this.isEdit
+      ? $localize`Update the maximum session duration for this role.`
+      : $localize`Role grants temporary permissions to trusted users, applications, or services.`;
+
     this.createForm();
     if (this.isEdit && this.role) {
       this.form.patchValue({
@@ -46,11 +83,89 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     }
   }
 
+  get permissionPolicies(): FormArray {
+    return this.form.get('permission_policies') as FormArray;
+  }
+
+  addPermissionPolicy(
+    name = '',
+    doc = '',
+    policyMode: 'predefined' | 'custom' = name || doc ? 'custom' : 'predefined'
+  ): void {
+    const isPredefined = policyMode === 'predefined';
+    const defaultTemplate = this.predefinedTemplates[0];
+    const initialName = isPredefined ? defaultTemplate.name : name;
+    const initialDoc = isPredefined ? defaultTemplate.policy_doc : doc;
+
+    this.permissionPolicies.push(
+      this.formBuilder.group({
+        policy_mode: [policyMode],
+        selected_template: [isPredefined ? defaultTemplate.name : name],
+        policy_name: [initialName, [Validators.required]],
+        policy_doc: [initialDoc, [Validators.required, CdValidators.json()]]
+      })
+    );
+  }
+
+  onRolePolicyModeChange(index: number, mode: 'predefined' | 'custom'): void {
+    const group = this.permissionPolicies.at(index);
+    group.get('policy_mode')?.setValue(mode);
+    if (mode === 'predefined') {
+      const currentTpl = group.get('selected_template')?.value || this.predefinedTemplates[0].name;
+      this.onRoleTemplateSelect(index, currentTpl);
+    } else {
+      group.patchValue({
+        policy_name: '',
+        policy_doc: ''
+      });
+    }
+  }
+
+  onRoleTemplateSelect(index: number, templateName: string): void {
+    const group = this.permissionPolicies.at(index);
+    group.get('selected_template')?.setValue(templateName);
+    if (!templateName) {
+      group.patchValue({
+        policy_name: '',
+        policy_doc: ''
+      });
+      return;
+    }
+    const tpl = this.predefinedTemplates.find((t) => t.name === templateName);
+    if (tpl) {
+      group.patchValue({
+        policy_name: tpl.name,
+        policy_doc: tpl.policy_doc
+      });
+    }
+  }
+
+  removePermissionPolicy(index: number): void {
+    this.permissionPolicies.removeAt(index);
+  }
+
+  /** Drop policy rows with no name and no document so optional policies stay optional. */
+  private removeEmptyPermissionPolicies(): void {
+    for (let i = this.permissionPolicies.length - 1; i >= 0; i--) {
+      const group = this.permissionPolicies.at(i);
+      const name = (group.get('policy_name')?.value ?? '').trim();
+      const doc = (group.get('policy_doc')?.value ?? '').trim();
+      const mode = group.get('policy_mode')?.value;
+      const tpl = group.get('selected_template')?.value;
+      if (!name && !doc) {
+        this.permissionPolicies.removeAt(i);
+      } else if (mode === 'predefined' && !tpl) {
+        this.permissionPolicies.removeAt(i);
+      }
+    }
+  }
+
   private createForm() {
     this.form = this.formBuilder.group({
       role_name: [{ value: '', disabled: this.isEdit }, [Validators.required]],
       role_path: [{ value: '', disabled: this.isEdit }, [Validators.required]],
       role_assume_policy_doc: [''],
+      permission_policies: this.formBuilder.array([]),
       max_session_duration: [1]
     });
 
@@ -66,8 +181,62 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     ]);
   }
 
+  isFieldInvalid(controlName: string): boolean {
+    const control = this.form.get(controlName);
+    return !!control && control.invalid && (control.dirty || control.touched || this.formSubmitted);
+  }
+
+  showFieldError(controlName: string, errorName?: string): boolean {
+    const control = this.form.get(controlName);
+    if (!control || !(control.dirty || control.touched || this.formSubmitted)) {
+      return false;
+    }
+    return errorName ? control.hasError(errorName) : control.invalid;
+  }
+
+  isPolicyFieldInvalid(policy: AbstractControl, fieldName: string): boolean {
+    const control = policy.get(fieldName);
+    // Optional policies: only show errors after the user interacts with a row,
+    // or after submit when showValidationErrors() marks that row dirty.
+    return !!control && control.invalid && (control.dirty || control.touched);
+  }
+
+  showPolicyFieldError(policy: AbstractControl, fieldName: string, errorName?: string): boolean {
+    const control = policy.get(fieldName);
+    if (!control || !(control.dirty || control.touched)) {
+      return false;
+    }
+    return errorName ? control.hasError(errorName) : control.invalid;
+  }
+
+  /** Surface field errors when Create is clicked on an invalid tearsheet form. */
+  private showValidationErrors(): void {
+    this.formSubmitted = true;
+    this.form.markAllAsTouched();
+    Object.values(this.form.controls).forEach((control) => {
+      if (control instanceof FormArray) {
+        control.controls.forEach((group) => {
+          if (group instanceof FormGroup) {
+            Object.values(group.controls).forEach((child) => {
+              child.markAsTouched();
+              child.markAsDirty();
+            });
+          }
+        });
+      } else {
+        control.markAsDirty();
+      }
+    });
+    this.cdr.markForCheck();
+  }
+
   onSubmit() {
+    if (!this.isEdit) {
+      this.removeEmptyPermissionPolicies();
+    }
+
     if (this.form.invalid) {
+      this.showValidationErrors();
       return;
     }
 
@@ -77,6 +246,14 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
       delete payload.max_session_duration;
     }
 
+    const permissionPolicies: { policy_name: string; policy_doc: string }[] =
+      !this.isEdit && this.permissionPolicies
+        ? this.permissionPolicies.controls.map((ctrl) => ctrl.getRawValue())
+        : [];
+    delete payload.permission_policies;
+
+    this.isSubmitLoading = true;
+
     if (this.isEdit) {
       this.rgwRoleService
         .update(this.roleName, {
@@ -84,6 +261,11 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
           max_session_duration: payload.max_session_duration,
           account_id: this.accountId
         })
+        .pipe(
+          finalize(() => {
+            this.isSubmitLoading = false;
+          })
+        )
         .subscribe({
           next: () => {
             this.notificationService.show(
@@ -100,13 +282,50 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     } else {
       this.rgwRoleService.create(payload).subscribe({
         next: () => {
-          this.notificationService.show(
-            NotificationType.success,
-            $localize`Role created successfully`
-          );
-          this.closeModal();
+          if (permissionPolicies.length > 0) {
+            const policyCalls = permissionPolicies.map((p) =>
+              this.rgwRoleService.putPolicy(
+                payload.role_name,
+                p.policy_name,
+                p.policy_doc,
+                this.accountId
+              )
+            );
+            forkJoin(policyCalls)
+              .pipe(
+                finalize(() => {
+                  this.isSubmitLoading = false;
+                })
+              )
+              .subscribe({
+                next: () => {
+                  this.notificationService.show(
+                    NotificationType.success,
+                    $localize`Role created with permission policies`,
+                    $localize`Role "${payload.role_name}" created and policies attached successfully.`
+                  );
+                  this.closeModal();
+                },
+                error: () => {
+                  this.notificationService.show(
+                    NotificationType.warning,
+                    $localize`Role created`,
+                    $localize`Role "${payload.role_name}" created, but failed to attach permission policies.`
+                  );
+                  this.closeModal();
+                }
+              });
+          } else {
+            this.isSubmitLoading = false;
+            this.notificationService.show(
+              NotificationType.success,
+              $localize`Role created successfully`
+            );
+            this.closeModal();
+          }
         },
         error: () => {
+          this.isSubmitLoading = false;
           this.form.setErrors({ cdSubmitButton: true });
         }
       });
