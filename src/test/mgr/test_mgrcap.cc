@@ -337,6 +337,29 @@ TEST(MgrCap, Profile)
       nullptr, {}, "", "rbd_support", "", {}, true, false, false, {}));
 }
 
+TEST(MgrCap, ProfileZeroGrantMemoization)
+{
+  // "osd" and "mds" expand to zero grants on the MGR; expand_profile() must
+  // still memoize after the first run
+  for (const auto& profile : {"profile osd"s, "profile mds"s}) {
+    MgrCap cap;
+    ASSERT_TRUE(cap.parse(profile, nullptr))
+        << "failed to parse " << profile;
+    ASSERT_EQ(1u, cap.grants.size()) << profile;
+
+    ASSERT_FALSE(cap.is_capable(
+        nullptr, {}, "osd", "", "asdf", {}, true, true, true, {}))
+        << profile;
+    ASSERT_FALSE(cap.is_capable(
+        nullptr, {}, "osd", "", "asdf", {}, true, true, true, {}))
+        << profile;
+
+    // Must have expanded exactly once across both is_capable() calls.
+    ASSERT_EQ(1u, cap.grants.front().profile_grants_expansions)
+        << profile;
+  }
+}
+
 /* Begin Negative Tests */
 
 TEST(MgrCap, IsCapableEmptyCommand)
@@ -385,7 +408,7 @@ TEST(MgrCap, CommandMismatchedArguments)
 TEST(MgrCap, RegexWithInvalidPattern)
 {
   MgrCap cap;
-  // Invalid regex should be accepted during parse but fail during matching
+  // Invalid regex: parse succeeds, matching always fails.
   ASSERT_TRUE(cap.parse("allow command abc with arg regex \"[*\"", nullptr));
   ASSERT_FALSE(cap.is_capable(
       nullptr, {}, "", "", "abc", {{"arg", "test"}}, true, false, false, {}));
@@ -395,7 +418,6 @@ TEST(MgrCap, PermissionsWithNoCapability)
 {
   MgrCap cap;
   ASSERT_TRUE(cap.parse("allow r", nullptr));
-  // Asking for write when only read is granted
   ASSERT_FALSE(
       cap.is_capable(nullptr, {}, "", "", "", {}, false, true, false, {}));
 }
