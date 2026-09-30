@@ -91,9 +91,21 @@ struct otp_instance {
 WRITE_CLASS_ENCODER(otp_instance)
 
 
+/*
+ * A step_size of 0 is never valid but can be persisted (neither otp_set_op nor
+ * otp_info_t::decode_json rejects it). liboath substitutes
+ * OATH_TOTP_DEFAULT_TIME_STEP_SIZE for a 0 time step, so mirror that here to
+ * keep the replay window (and the index math in verify()) consistent with the
+ * step liboath actually used, and to avoid a divide-by-zero SIGFPE in the OSD.
+ */
+static uint32_t effective_step_size(const otp_info_t& otp)
+{
+  return otp.step_size ? otp.step_size : OATH_TOTP_DEFAULT_TIME_STEP_SIZE;
+}
+
 void otp_instance::trim_expired(const ceph::real_time& now)
 {
-  ceph::real_time window_start = now - std::chrono::seconds(otp.step_size);
+  ceph::real_time window_start = now - std::chrono::seconds(effective_step_size(otp));
 
   while (!last_checks.empty() &&
          last_checks.front().timestamp < window_start) {
@@ -136,7 +148,7 @@ bool otp_instance::verify(const ceph::real_time& timestamp, const string& val)
     return false;
   }
 
-  index = result + (secs - otp.time_ofs) / otp.step_size;
+  index = result + (secs - otp.time_ofs) / effective_step_size(otp);
 
   if (index <= last_success) { /* already used value */
     CLS_LOG(20, "otp, use of old token: index=%lld last_success=%lld", (long long)index, (long long)last_success);
