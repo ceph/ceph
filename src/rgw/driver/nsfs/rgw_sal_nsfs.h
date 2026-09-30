@@ -35,6 +35,7 @@
 #include "xattr_strategy.h"
 #include "path_strategy.h"
 #include "bucket_state_strategy.h"
+#include "identity_db.h"
 #include "bucket_profile.h"
 
 class RGWLC;
@@ -526,7 +527,10 @@ public:
 class NSFSDriver : public StoreDriver {
 protected:
   CephContext *cct;
-  std::unique_ptr<rgw::store::POSIXUserDB> userDB;
+  /* the driver's database.  An IdentityDB rather than a plain
+   * POSIXUserDB:  same file, same connection, one extra table for the
+   * Scale data an identity carries. */
+  std::unique_ptr<nsfs::IdentityDB> userDB;
   NSFSZone zone;
   std::unique_ptr<nsfs::BucketCache> bucket_cache;
   std::unique_ptr<nsfs::MultipartCache> multipart_cache;
@@ -647,7 +651,7 @@ public:
     const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
     auto db_full_path = std::filesystem::path(db_path) / db_name;
 
-    userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
+    userDB = std::make_unique<nsfs::IdentityDB>(db_full_path.string(), cct);
   }
   virtual ~NSFSDriver() { }
 
@@ -1056,6 +1060,20 @@ public:
   /* Internal APIs */
   int get_root_fd() { return root_dir->get_fd(); }
   rgw::store::POSIXUserDB* get_user_db() { return userDB.get(); }
+  nsfs::IdentityDB* get_identity_db() { return userDB.get(); }
+
+  /* The POSIX credentials to serve a request as.
+   *
+   * The one entry point a request path needs;  nothing outside the
+   * driver should reach the identity database directly.  Keyed on
+   * `s->user`, the authenticated user -- not `s->owner`, which is
+   * the account for any member of one.  Returns what
+   * nsfs::resolve_credentials() returns:  0 resolved, -ENOENT no
+   * impersonation asked for, -EPERM asked for and unavailable. */
+  int get_credentials(const DoutPrefixProvider* dpp, const req_state* s,
+		      nsfs::Credentials& out) const {
+    return nsfs::resolve_credentials(dpp, *userDB, s, out);
+  }
   nsfs::Directory* get_root_dir() { return root_dir.get(); }
   const std::string& get_base_path() const { return base_path; }
   nsfs::BucketCache* get_bucket_cache() { return bucket_cache.get(); }

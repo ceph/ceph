@@ -35,6 +35,8 @@
 #include "rgw_public_access.h"
 #include "rgw_website.h"
 #include "rgw_bucket_encryption.h"
+#include "driver/nsfs/identity_db.h"
+#include "rgw_auth.h"
 #include "common/ceph_json.h"
 
 using namespace rgw::sal;
@@ -886,6 +888,524 @@ TEST_F(NSFSBucketTest, UnreadableStateDoesNotDenyTheListingOrTheProfile)
   EXPECT_EQ(driver->get_bucket_profile(env->dpp, null_yield, testname,
 				       &ext, &pname, &converting), 0)
       << "the profile endpoint went blind on the bucket that needs it";
+}
+
+/* The identity table.
+ *
+ * A fixture of its own, and not one deriving from NSFSDriverTest,
+ * because the suite's TestDriver is constructed with a null
+ * CephContext -- so the driver's own IdentityDB can never open.  The
+ * database is a standalone object, which is what stage A is about,
+ * so the fixture builds one directly against the test's own
+ * directory. */
+class NSFSIdentityDBTest : public NSFSDriverTest {
+protected:
+  std::unique_ptr<nsfs::IdentityDB> db;
+
+public:
+  /* The driver comes from the base fixture, for the tests that need
+   * a sal::User to build an applier around.  The database does not:
+   * the suite's TestDriver is constructed with a null CephContext,
+   * so the driver's own IdentityDB can never open.  This one is
+   * built directly against the test's directory. */
+  void SetUp() {
+    NSFSDriverTest::SetUp();
+    db = std::make_unique<nsfs::IdentityDB>((bp / "identity").string(),
+					    env->cct.get());
+    ASSERT_EQ(db->Initialize("", -1), 0);
+  }
+
+  void TearDown() {
+    db.reset();
+    NSFSDriverTest::TearDown();
+  }
+
+  /* A real LocalApplier, which is what makes the account/user
+   * distinction below a statement about RGW rather than about a
+   * stub written to agree with me. */
+  std::unique_ptr<rgw::auth::LocalApplier>
+  local_applier(const rgw_user& uid, const char* account_id) {
+    auto user = driver->get_user(uid);
+    user->get_info().user_id = uid;
+    std::optional<RGWAccountInfo> account;
+    if (account_id) {
+      RGWAccountInfo ai;
+      ai.id = account_id;
+      ai.name = "an-account";
+      user->get_info().account_id = account_id;
+      account = ai;
+    }
+    return std::make_unique<rgw::auth::LocalApplier>(
+	env->cct.get(), std::move(user), std::move(account),
+	std::vector<rgw::IAM::Policy>{},
+	rgw::auth::LocalApplier::NO_SUBUSER, std::nullopt,
+	rgw::auth::LocalApplier::NO_ACCESS_KEY);
+  }
+
+  /* every column populated, so a round trip proves the whole record
+   * and not the subset impersonation reads */
+  static nsfs::Identity local_identity(const std::string& key) {
+    nsfs::Identity id;
+    id.key = key;
+    id.uid = 1001;
+    id.gid = 2002;
+    id.groups = std::vector<uint32_t>{10, 20, 30};
+    id.new_buckets_path = "/gpfs/rgw1/nsfs/newbuckets";
+    id.custom_bucket_path_allowed_list = "/gpfs/rgw1/nsfs/allowed";
+    id.fs_backend = "GPFS";
+    id.noobaa_id = "6a2bdeabf5c8e167f92cb079";
+    return id;
+  }
+};
+
+/* Every column round-trips, including the ones no request path
+ * reads.  A column no test writes and reads is a column whose first
+ * real use finds its bugs. */
+TEST_F(NSFSIdentityDBTest, EveryColumnRoundTrips)
+{
+  /* the control:  nothing is there before it is put */
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, "user$alice", got), -ENOENT);
+
+  const auto put = local_identity("user$alice");
+  ASSERT_EQ(db->put_identity(env->dpp, put), 0);
+  ASSERT_EQ(db->get_identity(env->dpp, "user$alice", got), 0);
+
+  EXPECT_EQ(got.key, put.key);
+  ASSERT_TRUE(got.uid.has_value());
+  EXPECT_EQ(*got.uid, 1001u);
+  ASSERT_TRUE(got.gid.has_value());
+  EXPECT_EQ(*got.gid, 2002u);
+  ASSERT_TRUE(got.groups.has_value());
+  EXPECT_EQ(*got.groups, (std::vector<uint32_t>{10, 20, 30}));
+  EXPECT_EQ(got.new_buckets_path, put.new_buckets_path);
+  EXPECT_EQ(got.custom_bucket_path_allowed_list,
+	    put.custom_bucket_path_allowed_list);
+  EXPECT_EQ(got.fs_backend, "GPFS");
+  EXPECT_EQ(got.noobaa_id, "6a2bdeabf5c8e167f92cb079");
+  EXPECT_TRUE(got.distinguished_name.empty());
+}
+
+/* A directory-backed identity is the other arm:  a name and no ids. */
+TEST_F(NSFSIdentityDBTest, DirectoryBackedIdentityRoundTrips)
+{
+  nsfs::Identity id;
+  id.key = "user$bob";
+  id.distinguished_name = "bob";
+  id.new_buckets_path = "/gpfs/rgw1/nsfs/bob";
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, "user$bob", got), 0);
+  EXPECT_EQ(got.distinguished_name, "bob");
+  EXPECT_FALSE(got.uid.has_value());
+  EXPECT_FALSE(got.gid.has_value());
+  EXPECT_TRUE(got.directory_backed());
+  EXPECT_FALSE(got.local());
+}
+
+/* Unset, explicitly empty, and populated are three distinct states.
+ *
+ * Collapsing the first two would make "this identity has no
+ * supplementary groups" indistinguishable from "nobody has said",
+ * which is the difference the directory arm will turn on. */
+TEST_F(NSFSIdentityDBTest, GroupsDistinguishUnsetFromEmpty)
+{
+  nsfs::Identity id;
+  id.key = "user$carol";
+  id.uid = 1; id.gid = 1;
+
+  id.groups = std::nullopt;
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, "user$carol", got), 0);
+  EXPECT_FALSE(got.groups.has_value()) << "unset became something";
+
+  id.groups = std::vector<uint32_t>{};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(db->get_identity(env->dpp, "user$carol", got), 0);
+  ASSERT_TRUE(got.groups.has_value()) << "an explicit empty list became unset";
+  EXPECT_TRUE(got.groups->empty());
+
+  id.groups = std::vector<uint32_t>{7};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+  ASSERT_EQ(db->get_identity(env->dpp, "user$carol", got), 0);
+  ASSERT_TRUE(got.groups.has_value());
+  EXPECT_EQ(*got.groups, (std::vector<uint32_t>{7}));
+}
+
+/* Each field updates independently:  a put that changes one leaves
+ * the others as they were. */
+TEST_F(NSFSIdentityDBTest, FieldsUpdateIndependently)
+{
+  auto id = local_identity("user$dave");
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  id.fs_backend = "CEPH_FS";
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, "user$dave", got), 0);
+  EXPECT_EQ(got.fs_backend, "CEPH_FS");
+  EXPECT_EQ(*got.uid, 1001u) << "an unrelated field moved";
+  EXPECT_EQ(got.noobaa_id, "6a2bdeabf5c8e167f92cb079");
+}
+
+/* The exclusivity rule is enforced by the schema, not by a caller.
+ *
+ * NooBaa's own schema will not validate a record holding both arms,
+ * so neither may this one -- otherwise an importer could produce a
+ * record their tooling would reject. */
+TEST_F(NSFSIdentityDBTest, BothIdentityArmsAreRefused)
+{
+  /* the control:  each arm alone is accepted */
+  nsfs::Identity local;
+  local.key = "user$ok-local";
+  local.uid = 5; local.gid = 5;
+  ASSERT_EQ(db->put_identity(env->dpp, local), 0);
+
+  nsfs::Identity dir;
+  dir.key = "user$ok-dir";
+  dir.distinguished_name = "someone";
+  ASSERT_EQ(db->put_identity(env->dpp, dir), 0);
+
+  nsfs::Identity both;
+  both.key = "user$both";
+  both.uid = 5; both.gid = 5;
+  both.distinguished_name = "someone";
+  EXPECT_EQ(db->put_identity(env->dpp, both), -EINVAL);
+
+  nsfs::Identity got;
+  EXPECT_EQ(db->get_identity(env->dpp, "user$both", got), -ENOENT)
+      << "a refused record was stored anyway";
+}
+
+/* A uid without a gid is half an identity and is refused. */
+TEST_F(NSFSIdentityDBTest, AUidWithoutAGidIsRefused)
+{
+  nsfs::Identity id;
+  id.key = "user$halfway";
+  id.uid = 9;
+  EXPECT_EQ(db->put_identity(env->dpp, id), -EINVAL);
+}
+
+/* The re-import lookup, which is why the NooBaa id is indexed. */
+TEST_F(NSFSIdentityDBTest, LookupByNoobaaId)
+{
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$erin")), 0);
+
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity_by_noobaa_id(
+	      env->dpp, "6a2bdeabf5c8e167f92cb079", got), 0);
+  EXPECT_EQ(got.key, "user$erin");
+
+  EXPECT_EQ(db->get_identity_by_noobaa_id(env->dpp, "nosuchid", got), -ENOENT);
+}
+
+/* Delete removes it;  deleting what is absent is not an error,
+ * because the caller asked for it to be gone and it is. */
+TEST_F(NSFSIdentityDBTest, RemoveAndList)
+{
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$a")), 0);
+  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$b")), 0);
+
+  std::vector<nsfs::Identity> all;
+  ASSERT_EQ(db->list_identities(env->dpp, all), 0);
+  ASSERT_EQ(all.size(), 2u);
+
+  ASSERT_EQ(db->remove_identity(env->dpp, "user$a"), 0);
+  nsfs::Identity got;
+  EXPECT_EQ(db->get_identity(env->dpp, "user$a", got), -ENOENT);
+  EXPECT_EQ(db->remove_identity(env->dpp, "user$a"), 0)
+      << "removing an absent identity should not be an error";
+
+  all.clear();
+  ASSERT_EQ(db->list_identities(env->dpp, all), 0);
+  EXPECT_EQ(all.size(), 1u);
+}
+
+/* Resolution:  the stored row becomes the credentials a request is
+ * served under. */
+
+/* The process's own supplementary groups, which the resolved vector
+ * must never be.  If this is empty the clear cases below cannot fail
+ * for the reason they are testing, so they say so. */
+static std::vector<gid_t> process_groups()
+{
+  int n = getgroups(0, nullptr);
+  if (n <= 0) {
+    return {};
+  }
+  std::vector<gid_t> g(n);
+  n = getgroups(n, g.data());
+  if (n < 0) {
+    return {};
+  }
+  g.resize(n);
+  return g;
+}
+
+TEST_F(NSFSIdentityDBTest, ResolveLocalIdentity)
+{
+  const rgw_owner owner = parse_owner("user$resolve");
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     local_identity(to_string(owner))), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred), 0);
+  EXPECT_EQ(cred.uid, 1001u);
+  EXPECT_EQ(cred.gid, 2002u);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{10, 20, 30}));
+}
+
+/* An account id is an owner too, and the key resolution looks under
+ * has to be the one the endpoint wrote. */
+TEST_F(NSFSIdentityDBTest, ResolveAccountIdOwner)
+{
+  const rgw_owner owner = parse_owner("RGW12345678901234567");
+  ASSERT_TRUE(std::holds_alternative<rgw_account_id>(owner))
+      << "the fixture's id is not being read as an account id";
+  ASSERT_EQ(db->put_identity(env->dpp,
+			     local_identity(to_string(owner))), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred), 0);
+  EXPECT_EQ(cred.uid, 1001u);
+}
+
+/* The sharpest case.  An absent group list means no supplementary
+ * groups, installed, not "leave whatever the process holds" -- the
+ * reading that grants access rather than denying it.
+ *
+ * The control is the process's own group set:  unless it is
+ * non-empty, an empty answer here is indistinguishable from having
+ * inherited it, and the test proves nothing. */
+TEST_F(NSFSIdentityDBTest, ResolveAbsentGroupListClears)
+{
+  const auto mine = process_groups();
+  ASSERT_FALSE(mine.empty())
+      << "this process holds no supplementary groups, so an empty "
+	 "resolved vector cannot be distinguished from an inherited one";
+
+  nsfs::Identity id;
+  id.key = "user$nogroups";
+  id.uid = 1; id.gid = 1;
+  id.groups = std::nullopt;
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db,
+				      parse_owner(id.key), cred), 0);
+  EXPECT_TRUE(cred.groups.empty())
+      << "an absent list resolved to " << cred.groups.size() << " groups";
+  for (auto g : mine) {
+    EXPECT_EQ(std::find(cred.groups.begin(), cred.groups.end(), g),
+	      cred.groups.end())
+	<< "the process's own group " << g << " reached the credentials";
+  }
+}
+
+/* An explicitly empty list resolves the same way.  The two stay
+ * distinct in the record for the directory arm;  they are not
+ * distinct here. */
+TEST_F(NSFSIdentityDBTest, ResolveEmptyGroupListClears)
+{
+  nsfs::Identity id;
+  id.key = "user$emptygroups";
+  id.uid = 1; id.gid = 1;
+  id.groups = std::vector<uint32_t>{};
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db,
+				      parse_owner(id.key), cred), 0);
+  EXPECT_TRUE(cred.groups.empty());
+}
+
+/* No row is not an error:  it means nothing asked for impersonation,
+ * and the caller does what it did before this existed. */
+TEST_F(NSFSIdentityDBTest, ResolveNoRowIsNotAnError)
+{
+  nsfs::Credentials cred;
+  cred.uid = 4242;			/* must not be written to */
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db,
+				      parse_owner("user$absent"), cred),
+	    -ENOENT);
+  EXPECT_EQ(cred.uid, 4242u) << "a failed resolve wrote to its output";
+}
+
+/* A row carrying only placement data asks for no impersonation.
+ * That is the no-row case, not the cannot-supply one. */
+TEST_F(NSFSIdentityDBTest, ResolvePlacementOnlyRowAsksForNothing)
+{
+  nsfs::Identity id;
+  id.key = "user$placementonly";
+  id.new_buckets_path = "/gpfs/rgw1/nsfs/somewhere";
+  ASSERT_EQ(db->put_identity(env->dpp, id), 0);
+
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db,
+				      parse_owner(id.key), cred), -ENOENT);
+}
+
+/* A directory-backed row asks for an impersonation whose uid and gid
+ * live in the directory.  Serving it unimpersonated would run the
+ * request as the daemon, which holds more access than the user, so
+ * it fails closed.
+ *
+ * The control is the same key carrying the local arm, which must
+ * resolve -- without it a resolver that refused everything would
+ * pass. */
+TEST_F(NSFSIdentityDBTest, ResolveDirectoryBackedFailsClosed)
+{
+  const rgw_owner owner = parse_owner("user$fromdirectory");
+  nsfs::Credentials cred;
+
+  nsfs::Identity local;
+  local.key = to_string(owner);
+  local.uid = 77; local.gid = 77;
+  ASSERT_EQ(db->put_identity(env->dpp, local), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred), 0);
+  ASSERT_EQ(cred.uid, 77u);
+
+  nsfs::Identity dir;
+  dir.key = to_string(owner);
+  dir.distinguished_name = "uid=someone,ou=people,dc=example,dc=com";
+  ASSERT_EQ(db->put_identity(env->dpp, dir), 0);
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, owner, cred), -EPERM);
+}
+
+/* The upstream behaviour this design keys on, pinned.
+ *
+ * Two different answers come out of one applier.  `get_aclowner()`
+ * says who a created object belongs to, and for a member of an
+ * account that is the *account*;  `load_acct_info()` -- what becomes
+ * `s->user` -- says who authenticated, and that is the *member*.
+ * get_credentials() uses the second.
+ *
+ * This is not our code, so it is exactly the kind of thing that can
+ * change under us.  If `load_acct_info()` ever starts returning the
+ * account, every member of an account is silently served as one uid
+ * and gid, and nothing else in the suite would notice. */
+TEST_F(NSFSIdentityDBTest, AclOwnerIsTheAccountButAuthenticatedUserIsNot)
+{
+  const rgw_user uid{"", "alice"};
+  const char* acct = "RGW12345678901234567";
+
+  /* the control:  with no account the two agree, so the second half
+   * below cannot pass merely because they always differ */
+  auto plain = local_applier(uid, nullptr);
+  EXPECT_EQ(plain->get_aclowner().id, rgw_owner{uid});
+  EXPECT_EQ(plain->load_acct_info(env->dpp)->get_id(), uid);
+
+  auto member = local_applier(uid, acct);
+  EXPECT_EQ(member->get_aclowner().id, rgw_owner{rgw_account_id{acct}})
+      << "the ACL owner should be the account";
+  EXPECT_EQ(member->load_acct_info(env->dpp)->get_id(), uid)
+      << "s->user collapsed onto the account;  per-member POSIX "
+	 "identity is no longer expressible";
+}
+
+/* Two members of one account resolve to different credentials.
+ *
+ * This is the property that cannot be expressed through
+ * get_aclowner() at all:  both members share an ACL owner, so keyed
+ * on it they would be indistinguishable. */
+TEST_F(NSFSIdentityDBTest, AccountMembersResolveIndependently)
+{
+  const char* acct = "RGW12345678901234567";
+  const rgw_user alice{"", "alice"};
+  const rgw_user bob{"", "bob"};
+
+  nsfs::Identity a;
+  a.key = alice.to_str();
+  a.uid = 1001; a.gid = 1001;
+  a.groups = std::vector<uint32_t>{50};
+  ASSERT_EQ(db->put_identity(env->dpp, a), 0);
+
+  nsfs::Identity b;
+  b.key = bob.to_str();
+  b.uid = 1002; b.gid = 1002;
+  ASSERT_EQ(db->put_identity(env->dpp, b), 0);
+
+  /* and a row under the account itself, which must not be what
+   * either member gets -- without it, "they differ" could be
+   * satisfied by one of them simply failing */
+  nsfs::Identity acct_row;
+  acct_row.key = acct;
+  acct_row.uid = 9999; acct_row.gid = 9999;
+  ASSERT_EQ(db->put_identity(env->dpp, acct_row), 0);
+
+  auto ia = local_applier(alice, acct);
+  auto ib = local_applier(bob, acct);
+  ASSERT_EQ(ia->get_aclowner().id, ib->get_aclowner().id)
+      << "the fixture is wrong:  these should share an ACL owner";
+
+  /* the key the driver uses:  s->user, which is what
+   * load_acct_info() returns.  Called once per applier -- for
+   * LocalApplier it releases the held user. */
+  nsfs::Credentials ca, cb;
+  ASSERT_EQ(nsfs::resolve_credentials(
+	      env->dpp, *db, ia->load_acct_info(env->dpp)->get_id(), ca), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(
+	      env->dpp, *db, ib->load_acct_info(env->dpp)->get_id(), cb), 0);
+
+  EXPECT_EQ(ca.uid, 1001u);
+  EXPECT_EQ(cb.uid, 1002u);
+  EXPECT_NE(ca.uid, 9999u) << "a member was served as its account";
+  EXPECT_NE(cb.uid, 9999u) << "a member was served as its account";
+  EXPECT_EQ(ca.groups, (std::vector<gid_t>{50}));
+  EXPECT_TRUE(cb.groups.empty());
+}
+
+/* A member with no row of its own does not fall back to its
+ * account's.  Inheriting would hand a user the account root's uid,
+ * which is a grant, not a default. */
+TEST_F(NSFSIdentityDBTest, AMemberDoesNotInheritItsAccountsRow)
+{
+  const char* acct = "RGW12345678901234567";
+
+  nsfs::Identity acct_row;
+  acct_row.key = acct;
+  acct_row.uid = 9999; acct_row.gid = 9999;
+  ASSERT_EQ(db->put_identity(env->dpp, acct_row), 0);
+
+  /* the control:  the account's own row does resolve */
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db,
+				      parse_owner(acct), cred), 0);
+  ASSERT_EQ(cred.uid, 9999u);
+
+  auto member = local_applier(rgw_user{"", "carol"}, acct);
+  EXPECT_EQ(nsfs::resolve_credentials(
+	      env->dpp, *db,
+	      member->load_acct_info(env->dpp)->get_id(), cred),
+	    -ENOENT)
+      << "a member with no row was served as its account";
+}
+
+/* The group text parser, which is the cost of storing the vector in
+ * one column.  An empty list parses to an empty vector;  malformed
+ * input is reported rather than silently yielding one, because an
+ * empty vector is a meaningful value. */
+TEST(NSFSIdentityGroups, TextRoundTripAndRejection)
+{
+  std::vector<uint32_t> out;
+
+  EXPECT_EQ(nsfs::groups_to_text({}), "");
+  EXPECT_EQ(nsfs::groups_to_text({1}), "1");
+  EXPECT_EQ(nsfs::groups_to_text({1, 22, 333}), "1,22,333");
+
+  ASSERT_TRUE(nsfs::groups_from_text("", out));
+  EXPECT_TRUE(out.empty());
+  ASSERT_TRUE(nsfs::groups_from_text("1,22,333", out));
+  EXPECT_EQ(out, (std::vector<uint32_t>{1, 22, 333}));
+
+  EXPECT_FALSE(nsfs::groups_from_text("1,,2", out));
+  EXPECT_FALSE(nsfs::groups_from_text(",1", out));
+  EXPECT_FALSE(nsfs::groups_from_text("1,", out));
+  EXPECT_FALSE(nsfs::groups_from_text("1,x", out));
+  EXPECT_FALSE(nsfs::groups_from_text("-1", out));
 }
 
 TEST_F(NSFSBucketTest, Object)

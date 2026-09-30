@@ -18,6 +18,7 @@
 #include "driver/posix/sync_policy.h"
 #include "rgw_rest_driver_hint.h"
 #include "rgw_rest_nsfs_profile.h"
+#include "rgw_rest_nsfs_identity.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
@@ -12266,6 +12267,9 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
   mgr->register_resource("driver", driver_mgr);
   auto* nsfs_mgr = new RGWRESTMgr;
   nsfs_mgr->register_resource("profile", new RGWRESTMgr_NSFS_Profile);
+  nsfs_mgr->register_resource("identity", new RGWRESTMgr_NSFS_Identity);
+  nsfs_mgr->register_resource("credentials",
+			      new RGWRESTMgr_NSFS_Credentials);
   mgr->register_resource("nsfs", nsfs_mgr);
 }
 
@@ -12541,7 +12545,10 @@ rgw::sal::Driver* newNSFSDriver(CephContext *cct)
 
   int ret = -1;
   const static std::string tenant = "default_ns";
-  if ((ret = driver->get_user_db()->Initialize("", -1)) < 0) {
+  /* get_identity_db(), not get_user_db():  neither Initialize() is
+   * virtual, so the base one would run and the identity table
+   * would never be created */
+  if ((ret = driver->get_identity_db()->Initialize("", -1)) < 0) {
     ldout(cct, 0) << "DB initialization failed for tenant("<<tenant<<")" << dendl;
     delete driver;
     return nullptr;
