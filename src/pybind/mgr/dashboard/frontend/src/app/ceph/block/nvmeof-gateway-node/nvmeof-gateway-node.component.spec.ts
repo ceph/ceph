@@ -3,26 +3,20 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { ActivatedRoute } from '@angular/router';
 import { BehaviorSubject, of, throwError } from 'rxjs';
 
-import { BrowserAnimationsModule, provideAnimations } from '@angular/platform-browser/animations';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { CephModule } from '~/app/ceph/ceph.module';
 import { CephSharedModule } from '~/app/ceph/shared/ceph-shared.module';
 import { CoreModule } from '~/app/core/core.module';
 import { HostService } from '~/app/shared/api/host.service';
-import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
-import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
-import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { HostStatus } from '~/app/shared/enum/host-status.enum';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
-import { NotificationService } from '~/app/shared/services/notification.service';
-import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { TagModule } from 'carbon-components-angular';
@@ -34,9 +28,6 @@ describe('NvmeofGatewayNodeComponent', () => {
   let hostService: HostService;
   let orchService: OrchestratorService;
   let nvmeofService: NvmeofService;
-  let cephServiceService: CephServiceService;
-  let modalService: ModalCdsService;
-  let taskWrapperService: TaskWrapperService;
 
   const fakeAuthStorageService = {
     getPermissions: () => {
@@ -85,8 +76,8 @@ describe('NvmeofGatewayNodeComponent', () => {
       hostname: 'gateway-node-3',
       addr: '192.168.1.12',
       status: '',
-      labels: [] as string[],
-      services: [] as string[],
+      labels: [],
+      services: [],
       ceph_version: 'ceph version 18.0.0',
       sources: {
         ceph: true,
@@ -108,26 +99,19 @@ describe('NvmeofGatewayNodeComponent', () => {
       TagModule
     ],
     providers: [
-      provideAnimations(),
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       {
         provide: ActivatedRoute,
         useValue: {
           parent: {
-            params: new BehaviorSubject({ group: 'group1' }),
-            snapshot: {
-              params: { group: 'group1' }
-            }
+            params: new BehaviorSubject({ group: 'group1' })
           },
+          data: of({ mode: 'selector' }),
           snapshot: {
             data: { mode: 'selector' }
           }
         }
-      },
-      ModalCdsService,
-      CephServiceService,
-      TaskWrapperService,
-      NotificationService
+      }
     ]
   });
 
@@ -137,9 +121,6 @@ describe('NvmeofGatewayNodeComponent', () => {
     hostService = TestBed.inject(HostService);
     orchService = TestBed.inject(OrchestratorService);
     nvmeofService = TestBed.inject(NvmeofService);
-    cephServiceService = TestBed.inject(CephServiceService);
-    modalService = TestBed.inject(ModalCdsService);
-    taskWrapperService = TestBed.inject(TaskWrapperService);
   });
 
   it('should create', () => {
@@ -168,7 +149,7 @@ describe('NvmeofGatewayNodeComponent', () => {
   it('should initialize with default values', () => {
     expect(component.hosts).toEqual([]);
     expect(component.isLoadingHosts).toBe(false);
-    expect(component.count).toBe(0);
+    expect(component.totalHostCount).toBe(5);
     expect(component.permission).toBeDefined();
   });
 
@@ -203,34 +184,119 @@ describe('NvmeofGatewayNodeComponent', () => {
   });
 
   it('should load hosts with orchestrator available and facts feature enabled', fakeAsync(() => {
-    spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(of([mockGatewayNodes[2]]));
+    const hostListSpy = spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
+    const mockOrcStatus: any = {
+      available: true,
+      features: new Map([['get_facts', { available: true }]])
+    };
+
+    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
+      of([
+        [
+          {
+            service_id: 'nvmeof.group1',
+            placement: { hosts: ['gateway-node-1'] }
+          }
+        ]
+      ] as any)
+    );
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+    component.groupName = 'group1';
+    fixture.detectChanges();
+
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
     tick(100);
-    expect(nvmeofService.getAvailableHosts).toHaveBeenCalled();
-    expect(component.hosts.length).toBe(1);
-    expect(component.hosts[0]['hostname']).toBe('gateway-node-3');
+    expect(hostListSpy).toHaveBeenCalled();
+    // Hosts NOT in usedHostnames are included (gateway-node-1 is used, so filtered out)
+    // gateway-node-2 and gateway-node-3 are returned (status is not filtered)
+    expect(component.hosts.length).toBe(2);
+    expect(component.hosts.map((h) => h.hostname)).toContain('gateway-node-2');
+    expect(component.hosts.map((h) => h.hostname)).toContain('gateway-node-3');
   }));
 
   it('should set count to hosts length', fakeAsync(() => {
-    spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(of(mockGatewayNodes));
+    spyOn(hostService, 'list').and.returnValue(of(mockGatewayNodes));
+    const mockOrcStatus: any = {
+      available: true,
+      features: new Map()
+    };
+
+    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
+      of([
+        [
+          {
+            service_id: 'nvmeof.group1',
+            placement: { hosts: ['gateway-node-1', 'gateway-node-2'] }
+          }
+        ]
+      ] as any)
+    );
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+    component.groupName = 'group1';
+    fixture.detectChanges();
+
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
     tick(100);
-    expect(component.count).toBe(component.hosts.length);
+    // Count should equal the filtered hosts length
+    expect(component.totalHostCount).toBe(component.hosts.length);
   }));
 
   it('should set count to 0 when no hosts are returned', fakeAsync(() => {
-    spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(of([]));
+    spyOn(hostService, 'list').and.returnValue(of([]));
+    const mockOrcStatus: any = {
+      available: true,
+      features: new Map()
+    };
+
+    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
+      of([
+        [
+          {
+            service_id: 'nvmeof.group1',
+            placement: { hosts: ['gateway-node-1'] }
+          }
+        ]
+      ] as any)
+    );
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+    component.groupName = 'group1';
+    fixture.detectChanges();
+
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
     tick(100);
-    expect(component.count).toBe(0);
+    expect(component.totalHostCount).toBe(0);
     expect(component.hosts.length).toBe(0);
   }));
 
   it('should handle error when fetching hosts', fakeAsync(() => {
-    spyOn(nvmeofService, 'getAvailableHosts').and.returnValue(throwError(() => new Error('Error')));
+    const errorMsg = 'Failed to fetch hosts';
+    spyOn(hostService, 'list').and.returnValue(throwError(() => new Error(errorMsg)));
+    const mockOrcStatus: any = {
+      available: true,
+      features: new Map()
+    };
+
+    spyOn(orchService, 'status').and.returnValue(of(mockOrcStatus));
+    spyOn(nvmeofService, 'listGatewayGroups').and.returnValue(
+      of([
+        [
+          {
+            service_id: 'nvmeof.group1',
+            placement: { hosts: ['gateway-node-1', 'gateway-node-2'] }
+          }
+        ]
+      ] as any)
+    );
+    spyOn(hostService, 'checkHostsFactsAvailable').and.returnValue(true);
+    component.groupName = 'group1';
+    fixture.detectChanges();
+
     const context = new CdTableFetchDataContext(() => undefined);
     spyOn(context, 'error');
 
@@ -243,12 +309,12 @@ describe('NvmeofGatewayNodeComponent', () => {
 
   it('should not re-fetch if already loading', fakeAsync(() => {
     component.isLoadingHosts = true;
-    spyOn(nvmeofService, 'getAvailableHosts');
+    const hostListSpy = spyOn(hostService, 'list');
 
     component.getHosts(new CdTableFetchDataContext(() => undefined));
 
     tick(100);
-    expect(nvmeofService.getAvailableHosts).not.toHaveBeenCalled();
+    expect(hostListSpy).not.toHaveBeenCalled();
   }));
 
   it('should unsubscribe on component destroy', fakeAsync(() => {
@@ -395,7 +461,7 @@ describe('NvmeofGatewayNodeComponent', () => {
   }));
 
   it('should fetch data using fetchHostsAndGroups in details mode', fakeAsync(() => {
-    (component as any).route.snapshot.data = { mode: 'details' };
+    (component as any).route.data = of({ mode: 'details' });
     component.ngOnInit();
     component.groupName = 'group1';
 
@@ -421,69 +487,55 @@ describe('NvmeofGatewayNodeComponent', () => {
     expect(nvmeofService.fetchHostsAndGroups).toHaveBeenCalled();
     expect(component.hosts.length).toBe(1);
     expect(component.hosts[0].hostname).toBe('gateway-node-1');
+    expect(component.hosts[0].hostname).toBe('gateway-node-1');
+  }));
+
+  it('should show Encryption and mTLS status from encryption_key and enable_auth', fakeAsync(() => {
+    (component as any).route.snapshot.data = { mode: 'details' };
+    component.ngOnInit();
+    component.groupName = 'group1';
+
+    spyOn(nvmeofService, 'fetchHostsAndGroups').and.returnValue(
+      of({
+        groups: [
+          [
+            {
+              service_id: 'nvmeof.group1',
+              spec: {
+                group: 'group1',
+                encryption_key: 'test-encryption-key',
+                enable_auth: false
+              },
+              placement: { hosts: ['gateway-node-1'] }
+            }
+          ]
+        ],
+        hosts: mockGatewayNodes
+      } as any)
+    );
+
+    fixture.detectChanges();
+    component.getHosts(new CdTableFetchDataContext(() => undefined));
+    tick(100);
+
+    const encryptionDetail = component.gatewayDetails.find((d) => d.label === 'Encryption');
+    const mtlsDetail = component.gatewayDetails.find((d) => d.label === 'mTLS');
+
+    expect(encryptionDetail.value).toBe('Enabled');
+    expect(encryptionDetail.statusIcon).toBe('success');
+    expect(mtlsDetail.value).toBe('Disabled');
+    expect(mtlsDetail.statusIcon).toBe('error');
   }));
 
   it('should set selectionType to multiClick in selector mode', () => {
-    (component as any).route.snapshot.data = { mode: 'selector' };
+    (component as any).route.data = of({ mode: 'selector' });
     component.ngOnInit();
     expect(component.selectionType).toBe('multiClick');
   });
 
   it('should set selectionType to single in details mode', () => {
-    (component as any).route.snapshot.data = { mode: 'details' };
+    (component as any).route.data = of({ mode: 'details' });
     component.ngOnInit();
     expect(component.selectionType).toBe('single');
-  });
-
-  it('should remove gateway', () => {
-    spyOn(modalService, 'show').and.callFake((_component, options) => {
-      options.submitActionObservable();
-      return undefined;
-    });
-    const updateSpy = spyOn(cephServiceService, 'update').and.returnValue(of(null));
-    component.serviceSpec = {
-      service_name: 'nvmeof.group1',
-      placement: {
-        hosts: ['host1', 'host2']
-      }
-    } as any;
-    component.selection.selected = [{ hostname: 'host1' }] as any;
-
-    component.removeGateway();
-
-    expect(modalService.show).toHaveBeenCalledWith(DeleteConfirmationModalComponent, {
-      itemDescription: 'gateway node',
-      itemNames: ['host1'],
-      actionDescription: 'remove',
-      hideDefaultWarning: true,
-      impact: DeletionImpact.high,
-
-      bodyContext: {
-        deletionMessage:
-          'Removing <strong>host1</strong> will detach it from the gateway group and stop handling new I/O requests. Active connections may be disrupted.<br><br>You can re-add this node later if required.'
-      },
-      submitActionObservable: jasmine.any(Function)
-    });
-
-    const call = (modalService.show as jasmine.Spy).calls.mostRecent().args[1]
-      .submitActionObservable;
-    spyOn(taskWrapperService, 'wrapTaskAroundCall').and.callFake((args: any) => args.call);
-    call();
-
-    expect(taskWrapperService.wrapTaskAroundCall).toHaveBeenCalledWith({
-      task: jasmine.objectContaining({
-        name: 'nvmeof/gateway-node/delete',
-        metadata: {
-          hostname: 'host1'
-        }
-      }),
-      call: jasmine.any(Object)
-    });
-    expect(updateSpy).toHaveBeenCalledWith({
-      service_name: 'nvmeof.group1',
-      placement: {
-        hosts: ['host2']
-      }
-    });
   });
 });

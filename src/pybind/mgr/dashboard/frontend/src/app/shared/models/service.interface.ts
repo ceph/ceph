@@ -1,3 +1,29 @@
+export type CephCertificateStatus = 'valid' | 'expiring' | 'expiring_soon' | 'expired' | 'not_configured' | 'invalid';
+
+export const CERTIFICATE_STATUS_ICON_MAP: Record<string, string> = {
+  valid: 'success',
+  expiring: 'warning',
+  expiring_soon: 'warning',
+  expired: 'danger',
+  not_configured: 'warning',
+  invalid: 'danger',
+  default: 'warning'
+};
+
+export interface CephServiceCertificate {
+  cert_name: string;
+  scope: string;
+  requires_certificate: boolean;
+  status: CephCertificateStatus | string;
+  days_to_expiration: number;
+  signed_by: string;
+  has_certificate: boolean;
+  certificate_source: string;
+  expiry_date: string;
+  issuer: string;
+  common_name: string;
+}
+
 export interface CephServiceStatus {
   container_image_id: string;
   container_image_name: string;
@@ -21,14 +47,17 @@ export interface CephServiceSpec {
   service_id: string;
   unmanaged: boolean;
   status: CephServiceStatus;
+  certificate?: CephServiceCertificate;
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
+  events?: string[];
 }
 
 // Type for service spec update payload (excludes read-only status field)
 export type CephServiceSpecUpdate = Omit<CephServiceSpec, 'status'>;
 
 export interface CephServiceAdditionalSpec {
+  placement?: CephServicePlacement;
   backend_service: string;
   api_user: string;
   api_password: string;
@@ -72,6 +101,11 @@ export interface CephServiceAdditionalSpec {
   client_secret: string;
   oidc_issuer_url: string;
   enable_auth: boolean;
+  encryption_key?: string;
+  certificate_source: string;
+  custom_sans?: string[];
+  zonegroup_hostnames?: string[];
+  wildcard_enabled?: boolean;
   qat: QatSepcs;
 }
 
@@ -80,6 +114,7 @@ export interface CephServicePlacement {
   placement?: string;
   hosts?: string[];
   label?: string | string[];
+  locations?: Record<string, string[]>;
 }
 
 export interface QatSepcs {
@@ -90,4 +125,15 @@ export enum QatOptions {
   hw = 'hw',
   sw = 'sw',
   none = 'none'
+}
+
+export enum CertificateType {
+  internal = 'internal',
+  external = 'external'
+}
+
+export enum CertMode {
+  externalOnly = 'externalOnly',
+  both = 'both',
+  internalOnly = 'internalOnly'
 }

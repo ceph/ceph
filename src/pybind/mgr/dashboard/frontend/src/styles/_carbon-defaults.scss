@@ -1,7 +1,7 @@
 @use '@carbon/styles/scss/config' with (
   $font-path: '~@ibm/plex',
   $flex-grid-columns: 16,
-  $use-flexbox-grid: true
+  $use-flexbox-grid: true,
 );
 @use '@carbon/layout';
 @use '@carbon/colors';
@@ -11,8 +11,8 @@
 @use '@carbon/styles/scss/themes';
 @use '@carbon/styles/scss/theme' with (
   $theme: default.$theme,
-  $fallback: compat.$g90
-);
+  $fallback: compat.$g90,
+  );
 
 /******************************************
   Component token overrides should go here
@@ -31,6 +31,7 @@
 );
 @use '@carbon/styles';
 @use '@carbon/type';
+@use '@carbon/styles/scss/utilities/text-truncate' as textTruncate;
 
 /******************************************
 Custom theme
@@ -44,7 +45,6 @@ Custom theme
 /******************************************
 Datatable
 ******************************************/
-
 :root {
   @include type.type-classes();
 }
@@ -165,10 +165,6 @@ Forms
   padding-inline: 0;
 }
 
-.cds--col-lg-1 {
-  padding-inline: 0;
-}
-
 /******************************************
 Breadcrumbs
 ******************************************/
@@ -195,11 +191,6 @@ Modals
       background-color: transparent;
     }
   }
-
-  .cds--modal-scroll-content {
-    max-height: 70vh;
-    overflow-y: auto;
-  }
 }
 
 /******************************************
@@ -214,6 +205,7 @@ cd-dashboard {
 /******************************************
 Code snippet
 ******************************************/
+
 .cds--snippet {
   width: fit-content;
 }
@@ -228,6 +220,12 @@ Tooltip
 /******************************************
 Carbon Popover
 ******************************************/
+.cds--popover {
+  .cds--popover-caret {
+    background-color: theme.$background;
+  }
+}
+
 .cds--popover-content {
   background-color: theme.$background;
   padding: layout.$spacing-05;
@@ -236,7 +234,9 @@ Carbon Popover
 // inner container class for overflow
 .cds--popover-scroll-container {
   max-height: layout.$spacing-13;
-  overflow: auto;
+  overflow-y: auto;
+  margin-right: -1rem;
+  padding-right: 1rem;
 }
 
 /******************************************
@@ -244,4 +244,44 @@ Tabs
 ******************************************/
 .cds--tab-content {
   background: var(--cds-layer-01);
+}
+
+.cds-success-color {
+  fill: theme.$support-success;
+}
+
+.cds-danger-color {
+  fill: theme.$support-error;
+}
+
+.cds-info-color {
+  fill: theme.$support-info;
+}
+
+.cds-warning-color {
+  fill: theme.$support-caution-major;
+}
+
+.cds-white {
+  fill: theme.$icon-on-color;
+}
+
+.cds-icon--size-07 {
+  height: layout.$spacing-07;
+  width: layout.$spacing-07;
+}
+
+.cds-icon--size-10 {
+  display: block;
+  height: layout.$spacing-10;
+  margin: auto;
+  width: layout.$spacing-10;
+}
+
+.cds-mb-4 {
+  margin-bottom: layout.$spacing-02;
+}
+
+.cds--text-truncate--end {
+  @include textTruncate.text-truncate-end;
 }

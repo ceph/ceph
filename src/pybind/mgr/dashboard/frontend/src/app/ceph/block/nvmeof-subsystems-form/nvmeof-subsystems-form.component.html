@@ -16,6 +16,7 @@
     <cd-nvmeof-subsystem-step-two
       #tearsheetStep
       [group]="group"
+      (hostTypeChanged)="onHostTypeChanged($event)"
     ></cd-nvmeof-subsystem-step-two>
   </cd-tearsheet-step>
   @if (showAuthStep) {
