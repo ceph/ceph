@@ -276,6 +276,7 @@ struct RGWUploadPartInfo {
   RGWObjManifest manifest;
   RGWCompressionInfo cs_info;
   std::optional<rgw::cksum::Cksum> cksum;
+  std::string crypt_salt;  // per-UploadPart GCM salt (non-secret HMAC input)
 
   // Previous part obj prefixes. Recorded here for later cleanup.
   std::set<std::string> past_prefixes; 
@@ -283,7 +284,7 @@ struct RGWUploadPartInfo {
   RGWUploadPartInfo() : num(0), size(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 2, bl);
+    ENCODE_START(7, 2, bl);
     encode(num, bl);
     encode(size, bl);
     encode(etag, bl);
@@ -293,10 +294,11 @@ struct RGWUploadPartInfo {
     encode(accounted_size, bl);
     encode(past_prefixes, bl);
     encode(cksum, bl);
+    encode(crypt_salt, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(7, 2, 2, bl);
     decode(num, bl);
     decode(size, bl);
     decode(etag, bl);
@@ -314,6 +316,9 @@ struct RGWUploadPartInfo {
     }
     if (struct_v >= 6) {
       decode(cksum, bl);
+    }
+    if (struct_v >= 7) {
+      decode(crypt_salt, bl);
     }
     DECODE_FINISH(bl);
   }
