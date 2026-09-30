@@ -34,10 +34,9 @@
 #include "include/cpp-btree/btree_set.h"
 
 #include "BlueStore.h"
-#include "BlueStore_objects.h"
+#include "BlueStore_components.h"
 #include "BlueStore_inlines.h"
 #include "bluestore_common.h"
-#include "os/bluestore/bluestore_types.h"
 #include "simple_bitmap.h"
 #include "os/kv.h"
 #include "include/compat.h"
@@ -13041,7 +13040,7 @@ void BlueStore::_do_write_small(
     // we still need new blob allocation
     uint64_t b_off = p2phase<uint64_t>(offset, alloc_len);
     uint64_t b_off0 = b_off;
-    o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
+    o->extent_map.punch_hole(c, offset, length, wctx->old_extents.get());
 
     // Zero detection -- small block
     if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
@@ -13187,7 +13186,7 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
           dout(20) << __func__ << "  lex old " << *ep << dendl;
           Extent *le = o->extent_map.set_lextent(c, offset, b_off + head_pad, length,
 						 b,
-						 &wctx->old_extents);
+						 wctx->old_extents.get());
 	  b->dirty_blob().mark_used(le->blob_offset, le->length);
 
 	  txc->statfs_delta.stored() += le->length;
@@ -13269,7 +13268,7 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
           }
 
           Extent *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
-						 b, &wctx->old_extents);
+						 b, wctx->old_extents.get());
           b->dirty_blob().mark_used(le->blob_offset, le->length);
           txc->statfs_delta.stored() += le->length;
           dout(20) << __func__ << "  lex " << *le << dendl;
@@ -13297,7 +13296,7 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
 	    // due to existent extents
 	    uint64_t b_off = offset - bstart;
 	    uint64_t b_off0 = b_off;
-	    o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
+	    o->extent_map.punch_hole(c, offset, length, wctx->old_extents.get());
 
 	    // Zero detection -- small block
 	    if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
@@ -13358,7 +13357,7 @@ uint32_t BlueStore::_do_write_small_with_maybe_blob_reuse(
 
 	  uint64_t b_off = offset - bstart;
 	  uint64_t b_off0 = b_off;
-	  o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
+	  o->extent_map.punch_hole(c, offset, length, wctx->old_extents.get());
 
 	  // Zero detection -- small block
 	  if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
@@ -13463,7 +13462,7 @@ void BlueStore::_do_write_big_apply_deferred(
   b0->dirty_blob().calc_csum(dctx.b_off, bl);
 
   Extent* le = o->extent_map.set_lextent(c, dctx.off,
-    dctx.off - dctx.blob_start, dctx.used, b0, &wctx->old_extents);
+    dctx.off - dctx.blob_start, dctx.used, b0, wctx->old_extents.get());
 
   // in fact this is a no-op for big writes but left here to maintain
   // uniformity and avoid missing after some refactor.
@@ -13598,7 +13597,7 @@ void BlueStore::_do_write_big(
       }
       dout(20) << __func__ << " lookup for blocks to reuse..." << dendl;
 
-      o->extent_map.punch_hole(c, offset, l, &wctx->old_extents);
+      o->extent_map.punch_hole(c, offset, l, wctx->old_extents.get());
 
       // seek again as punch_hole could invalidate ep
       auto ep = o->extent_map.seek_lextent(offset);
@@ -13656,7 +13655,7 @@ void BlueStore::_do_write_big(
     } else {
       // trying to utilize as longer chunk as permitted in case of compression.
       l = std::min(max_bsize, length);
-      o->extent_map.punch_hole(c, offset, l, &wctx->old_extents);
+      o->extent_map.punch_hole(c, offset, l, wctx->old_extents.get());
     } // if (!wctx->compress)
 
     if (b == nullptr) {
@@ -13990,10 +13989,10 @@ void BlueStore::_wctx_finish(
   WriteContext *wctx,
   set<SharedBlob*> *maybe_unshared_blobs)
 {
-  auto oep = wctx->old_extents.begin();
-  while (oep != wctx->old_extents.end()) {
+  auto oep = wctx->old_extents->begin();
+  while (oep != wctx->old_extents->end()) {
     auto &lo = *oep;
-    oep = wctx->old_extents.erase(oep);
+    oep = wctx->old_extents->erase(oep);
     dout(20) << __func__ << " lex_old " << lo.e << dendl;
     BlobRef b = lo.e.blob;
     const bluestore_blob_t& blob = b->get_blob();
@@ -14307,7 +14306,7 @@ int BlueStore::_do_write(
     benefit = gc.estimate(offset,
 			  length,
 			  o->extent_map,
-			  wctx.old_extents,
+			  *wctx.old_extents,
 			  min_alloc_size);
   }
 
@@ -14556,7 +14555,7 @@ int BlueStore::_do_zero(TransContext *txc,
 
   WriteContext wctx;
   o->extent_map.fault_range(db, offset, length);
-  o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
+  o->extent_map.punch_hole(c, offset, length, wctx.old_extents.get());
   o->bc.discard(o->c->cache, offset, length);
   o->extent_map.dirty_range(offset, length);
   _wctx_finish(txc, c, o, &wctx);
@@ -14591,7 +14590,7 @@ void BlueStore::_do_truncate(
     uint64_t length = o->onode.size - offset;
     o->bc.discard(o->c->cache, offset, length);
     o->extent_map.fault_range(db, offset, length);
-    o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
+    o->extent_map.punch_hole(c, offset, length, wctx.old_extents.get());
     o->extent_map.dirty_range(offset, length);
 
     _wctx_finish(txc, c, o, &wctx, maybe_unshared_blobs);
@@ -15638,7 +15637,7 @@ void BlueStore::debug_punch_hole(
 {
   BlueStore::TransContext txc(cct, c.get(), nullptr, nullptr);
   BlueStore::WriteContext wctx;
-  o->extent_map.punch_hole(c, off, len, &wctx.old_extents);
+  o->extent_map.punch_hole(c, off, len, wctx.old_extents.get());
   _wctx_finish(&txc, c, o, &wctx, nullptr);
 }
 

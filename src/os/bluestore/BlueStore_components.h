@@ -15,72 +15,9 @@
 #ifndef CEPH_OSD_BLUESTORE_BLUESTORE_COMPONENTS_H
 #define CEPH_OSD_BLUESTORE_BLUESTORE_COMPONENTS_H
 
-#include "BlueStore_objects_impl.h"
-#include "BlueStore.h"
+#include "BlueStore_objects.h"
 
 namespace bluestore {
-
-  struct OnodeSpace {
-    BlueStore::OnodeCacheShard* cache;
-
-  private:
-    /// forward lookups
-    mempool::bluestore_cache_meta::unordered_map<ghobject_t, OnodeRef> onode_map;
-
-    friend struct Collection;         // for split_cache()
-    friend struct Onode;              // for put()
-    friend struct LruOnodeCacheShard; // for _remove()
-    void _remove(const ghobject_t& oid);
-  public:
-    OnodeSpace(BlueStore::OnodeCacheShard* c) : cache(c) {}
-    ~OnodeSpace() {
-      clear();
-    }
-
-    OnodeRef add_onode(const ghobject_t& oid, OnodeRef& o);
-    OnodeRef lookup(const ghobject_t& o);
-    void rename(OnodeRef& o, const ghobject_t& old_oid,
-      const ghobject_t& new_oid,
-      const mempool::bluestore_cache_meta::string& new_okey);
-    void clear();
-    bool empty();
-
-    template <int LogLevelV>
-    void dump(CephContext* cct);
-
-    /// return true if f true for any item
-    bool map_any(std::function<bool(Onode*)> f);
-  };
-
-  std::ostream& operator<<(std::ostream& out, const bluestore::SharedBlob& sb);
-
-  /// a lookup table of SharedBlobs
-  struct SharedBlobSet {
-    /// protect lookup, insertion, removal
-    ceph::mutex lock = ceph::make_mutex("BlueStore::SharedBlobSet::lock");
-
-    // we use a bare pointer because we don't want to affect the ref
-    // count
-    mempool::bluestore_cache_meta::unordered_map<uint64_t, SharedBlob*> sb_map;
-
-    SharedBlobRef lookup(uint64_t sbid);
-
-    void add(Collection* coll, SharedBlob* sb);
-
-    bool remove(SharedBlob* sb, bool verify_nref_is_zero = false);
-
-    bool empty() {
-      std::lock_guard l(lock);
-      return sb_map.empty();
-    }
-    template <int LogLevelV>
-    void dump(CephContext * cct) {
-      std::lock_guard l(lock);
-      for (auto& i : sb_map) {
-	lgeneric_subdout(cct, bluestore, LogLevelV) << i.first << " : " << *i.second << dendl;
-      }
-    }
-  };
 
   /// Compressed Blob Garbage collector
   /*
@@ -189,32 +126,6 @@ namespace bluestore {
   struct AioContext {
     virtual void aio_finish(BlueStore* store) = 0;
     virtual ~AioContext() {}
-  };
-
-  struct OldExtent {
-    boost::intrusive::list_member_hook<> old_extent_item;
-    Extent e;
-    PExtentVector r;
-    bool blob_empty; // flag to track the last removed extent that makes blob
-    // empty - required to update compression stat properly
-    OldExtent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
-      : e(lo, o, l, b), blob_empty(false) {
-    }
-    static OldExtent* create(CollectionRef c,
-      uint32_t lo,
-      uint32_t o,
-      uint32_t l,
-      BlobRef& b);
-  };
-
-  // Declaring through a struct to be able to have forward declarations
-  struct OldExtentMap :
-    public boost::intrusive::list<
-      OldExtent,
-      boost::intrusive::member_hook<
-	OldExtent,
-	boost::intrusive::list_member_hook<>,
-	&OldExtent::old_extent_item> > {
   };
 
   struct TransContext final : public AioContext {
@@ -570,7 +481,7 @@ namespace bluestore {
     unsigned csum_order = 0;        ///< target checksum chunk order
     uint64_t target_blob_size = 0;  ///< target (max) blob size
 
-    OldExtentMap old_extents;       ///< must deref these blobs
+    std::unique_ptr<OldExtentMap> old_extents; ///< must deref these blobs
     interval_set<uint64_t> extents_to_gc;      ///< extents for garbage collection
 
     bool full_write = false;        /// < whether full object is overwritten
@@ -613,6 +524,7 @@ namespace bluestore {
     };
     std::vector<write_item> writes;                 ///< blobs we're writing
 
+    WriteContext();
     /// partial clone of the context
     void fork(const WriteContext& other) {
       buffered = other.buffered;

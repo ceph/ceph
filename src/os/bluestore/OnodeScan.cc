@@ -53,8 +53,7 @@ struct bool_vector_t {
   }
 };
 
-class BlueStore::Decoder_AllocationsAndStatFS : public BlueStore::ExtentMap::ExtentDecoder {
-  using Extent = BlueStore::Extent;
+class BlueStore::Decoder_AllocationsAndStatFS : public ExtentMap::ExtentDecoder {
   BlueStore &store;
   read_alloc_stats_t &stats;
   SimpleBitmap &sbmap;

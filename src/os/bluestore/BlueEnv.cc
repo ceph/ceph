@@ -1,22 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
-#include <stdio.h>
 #include <string.h>
 #include <filesystem>
 #include <iostream>
-#include <fstream>
-#include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include "global/global_init.h"
-#include "common/ceph_argparse.h"
-#include "include/stringify.h"
 #include "common/errno.h"
-#include "common/safe_io.h"
 
-#include "os/bluestore/BlueStore.h"
-#include "os/bluestore/BlueStore_objects.h"
+#include "BlueStore.h"
 
 using namespace std;
 

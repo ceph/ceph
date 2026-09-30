@@ -17,9 +17,10 @@
 
 #include "BlueStore.h"
 #include "BlueStore_objects.h"
+#include "BlueStore_components.h"
+#include "bluestore_common.h"
 #include "BlueStore_inlines.h"
 #include "Compression.h"
-#include "os/bluestore/bluestore_common.h"
 #include "os/kv.h"
 #include "common/pretty_binary.h"
 
@@ -1329,6 +1330,25 @@ int bluestore::Onode::get_fragmentation_score()
     }
   }
   return frag.frag_score;
+}
+
+// Extent
+
+void bluestore::Extent::dump(Formatter* f) const
+{
+  f->dump_unsigned("logical_offset", logical_offset);
+  f->dump_unsigned("length", length);
+  f->dump_unsigned("blob_offset", blob_offset);
+  f->dump_object("blob", *blob);
+}
+
+namespace bluestore {
+  ostream& operator<<(ostream& out, const bluestore::Extent& e)
+  {
+    return out << std::hex << "0x" << e.logical_offset << "~" << e.length
+      << ": 0x" << e.blob_offset << "~" << e.length << std::dec
+      << " " << *e.blob;
+  }
 }
 
 // ExtentMap
@@ -3302,4 +3322,300 @@ void bluestore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
   ceph_assert(persistent);
   persistent->ref_map.put(offset, length, r,
     unshare && !*unshare ? unshare : nullptr);
+}
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.cache_shard(" << this << ") "
+#undef dout_context
+#define dout_context cct
+
+// LruOnodeCacheShard
+
+namespace bluestore {
+  struct LruOnodeCacheShard : public bluestore::OnodeCacheShard {
+    typedef boost::intrusive::list<
+      bluestore::Onode,
+      boost::intrusive::member_hook<
+      bluestore::Onode,
+      boost::intrusive::list_member_hook<>,
+      &bluestore::Onode::lru_item> > list_t;
+
+    list_t lru;
+
+    explicit LruOnodeCacheShard(CephContext* cct) : bluestore::OnodeCacheShard(cct) {}
+
+    void _add(bluestore::Onode* o, int level) override
+    {
+      o->set_cached();
+      if (o->pin_nref == 1) {
+	(level > 0) ? lru.push_front(*o) : lru.push_back(*o);
+	o->cache_age_bin = age_bins.front();
+	*(o->cache_age_bin) += 1;
+      }
+      ++num; // we count both pinned and unpinned entries
+      dout(20) << __func__ << " " << this << " " << o->oid << " added, num="
+	<< num << dendl;
+    }
+    void _rm(bluestore::Onode* o) override
+    {
+      o->clear_cached();
+      if (o->lru_item.is_linked()) {
+	*(o->cache_age_bin) -= 1;
+	lru.erase(lru.iterator_to(*o));
+      }
+      ceph_assert(num);
+      --num;
+      dout(20) << __func__ << " " << this << " " << " " << o->oid << " removed, num=" << num << dendl;
+    }
+
+    void maybe_unpin(bluestore::Onode* o) override
+    {
+      bluestore::OnodeCacheShard* ocs = this;
+      ocs->lock.lock();
+      // It is possible that during waiting split_cache moved us to different OnodeCacheShard.
+      while (ocs != o->c->get_onode_cache()) {
+	ocs->lock.unlock();
+	ocs = o->c->get_onode_cache();
+	ocs->lock.lock();
+      }
+      if (o->is_cached() && o->pin_nref == 1) {
+	if (!o->lru_item.is_linked()) {
+	  if (o->exists) {
+	    lru.push_front(*o);
+	    o->cache_age_bin = age_bins.front();
+	    *(o->cache_age_bin) += 1;
+	    dout(20) << __func__ << " " << this << " " << o->oid << " unpinned"
+	      << dendl;
+	  }
+	  else {
+	    ceph_assert(num);
+	    --num;
+	    o->clear_cached();
+	    dout(20) << __func__ << " " << this << " " << o->oid << " removed"
+	      << dendl;
+	    // remove will also decrement nref
+	    o->c->onode_space._remove(o->oid);
+	  }
+	}
+	else if (o->exists) {
+	  // move onode within LRU
+	  lru.erase(lru.iterator_to(*o));
+	  lru.push_front(*o);
+	  if (o->cache_age_bin != age_bins.front()) {
+	    *(o->cache_age_bin) -= 1;
+	    o->cache_age_bin = age_bins.front();
+	    *(o->cache_age_bin) += 1;
+	  }
+	  dout(20) << __func__ << " " << this << " " << o->oid << " touched"
+	    << dendl;
+	}
+      }
+      ocs->lock.unlock();
+    }
+
+    void _trim_to(uint64_t new_size) override
+    {
+      if (new_size >= lru.size()) {
+	return; // don't even try
+      }
+      uint64_t n = num - new_size; // note: we might get empty LRU
+      // before n == 0 due to pinned
+      // entries. And hence being unable
+      // to reach new_size target.
+      while (n-- > 0 && lru.size() > 0) {
+	bluestore::Onode* o = &lru.back();
+	lru.pop_back();
+
+	dout(20) << __func__ << "  rm " << o->oid << " "
+	  << o->nref << " " << o->cached << dendl;
+
+	*(o->cache_age_bin) -= 1;
+	if (o->pin_nref > 1) {
+	  dout(20) << __func__ << " " << this << " " << " " << " " << o->oid << dendl;
+	}
+	else {
+	  ceph_assert(num);
+	  --num;
+	  o->clear_cached();
+	  o->c->onode_space._remove(o->oid);
+	}
+      }
+    }
+    void _move_pinned(bluestore::OnodeCacheShard* to, bluestore::Onode* o) override
+    {
+      if (to == this) {
+	return;
+      }
+      _rm(o);
+      ceph_assert(o->nref > 1);
+      to->_add(o, 0);
+    }
+    void add_stats(uint64_t* onodes, uint64_t* pinned_onodes) override
+    {
+      std::lock_guard l(lock);
+      *onodes += num;
+      *pinned_onodes += num - lru.size();
+    }
+#ifdef DEBUG_CACHE
+    void _audit(const char* when) override
+    {
+    }
+#endif
+  };
+}
+
+// OnodeCacheShard
+
+bluestore::OnodeCacheShard* bluestore::OnodeCacheShard::create(
+  CephContext* cct,
+  std::string type,
+  PerfCounters* logger)
+{
+  bluestore::OnodeCacheShard* c = nullptr;
+  // Currently we only implement an LRU cache for onodes
+  c = new LruOnodeCacheShard(cct);
+  c->logger = logger;
+  return c;
+}
+
+// OnodeSpace
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.OnodeSpace(" << this << " in " << cache << ") "
+
+bluestore::OnodeRef bluestore::OnodeSpace::add_onode(const ghobject_t& oid,
+  OnodeRef& o)
+{
+  std::lock_guard l(cache->lock);
+  // add entry or return existing one
+  auto p = onode_map.emplace(oid, o);
+  if (!p.second) {
+    ldout(cache->cct, 30) << __func__ << " " << oid << " " << o
+      << " raced, returning existing " << p.first->second
+      << dendl;
+    return p.first->second;
+  }
+  ldout(cache->cct, 20) << __func__ << " " << oid << " " << o << dendl;
+  cache->_add(o.get(), 1);
+  cache->_trim_some();
+  return o;
+}
+
+void bluestore::OnodeSpace::_remove(const ghobject_t& oid)
+{
+  ldout(cache->cct, 20) << __func__ << " " << oid << " " << dendl;
+  onode_map.erase(oid);
+}
+
+bluestore::OnodeRef bluestore::OnodeSpace::lookup(const ghobject_t& oid)
+{
+  ldout(cache->cct, 30) << __func__ << dendl;
+  OnodeRef o;
+
+  {
+    std::lock_guard l(cache->lock);
+    auto p = onode_map.find(oid);
+    if (p == onode_map.end()) {
+      ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
+    }
+    else {
+      ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
+	<< " " << p->second->nref
+	<< " " << p->second->cached
+	<< dendl;
+      // This will pin onode and implicitly touch the cache when Onode
+      // eventually will become unpinned
+      o = p->second;
+    }
+  }
+
+  return o;
+}
+
+void bluestore::OnodeSpace::clear()
+{
+  std::lock_guard l(cache->lock);
+  ldout(cache->cct, 10) << __func__ << " " << onode_map.size() << dendl;
+  for (auto& p : onode_map) {
+    cache->_rm(p.second.get());
+  }
+  onode_map.clear();
+}
+
+bool bluestore::OnodeSpace::empty()
+{
+  std::lock_guard l(cache->lock);
+  return onode_map.empty();
+}
+
+void bluestore::OnodeSpace::rename(
+  OnodeRef& oldo,
+  const ghobject_t& old_oid,
+  const ghobject_t& new_oid,
+  const mempool::bluestore_cache_meta::string& new_okey)
+{
+  std::lock_guard l(cache->lock);
+  ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
+    << dendl;
+  auto po = onode_map.find(old_oid);
+  auto pn = onode_map.find(new_oid);
+  ceph_assert(po != pn);
+
+  ceph_assert(po != onode_map.end());
+  if (pn != onode_map.end()) {
+    ldout(cache->cct, 30) << __func__ << "  removing target " << pn->second
+      << dendl;
+    cache->_rm(pn->second.get());
+    onode_map.erase(pn);
+  }
+  OnodeRef o = po->second;
+
+  // install a non-existent onode at old location
+  oldo.reset(new Onode(o->c, old_oid, o->key));
+  po->second = oldo;
+  cache->_add(oldo.get(), 1);
+  // add at new position and fix oid, key.
+  // This will pin 'o' and implicitly touch cache
+  // when it will eventually become unpinned
+  onode_map.insert(std::make_pair(new_oid, o));
+
+  o->oid = new_oid;
+  o->key = new_okey;
+  cache->_trim_some();
+}
+
+bool bluestore::OnodeSpace::map_any(std::function<bool(Onode*)> f)
+{
+  std::lock_guard l(cache->lock);
+  ldout(cache->cct, 20) << __func__ << dendl;
+  for (auto& i : onode_map) {
+    if (f(i.second.get())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template <int LogLevelV = 30>
+void bluestore::OnodeSpace::dump(CephContext* cct)
+{
+  for (auto& i : onode_map) {
+    ldout(cct, LogLevelV) << i.first << " : " << i.second
+      << " " << i.second->nref
+      << " " << i.second->cached
+      << dendl;
+  }
+}
+
+// OldExtent
+bluestore::OldExtent* bluestore::OldExtent::create(bluestore::CollectionRef c,
+  uint32_t lo,
+  uint32_t o,
+  uint32_t l,
+  BlobRef& b)
+{
+  OldExtent* oe = new OldExtent(lo, o, l, b);
+  b->put_ref(c.get(), o, l, &(oe->r));
+  oe->blob_empty = !b->is_referenced();
+  return oe;
 }

@@ -17,7 +17,6 @@
 
 #include "BlueStore.h"
 #include "BlueStore_objects.h"
-#include "Allocator.h"
 
 class BlueStore::Writer {
 public:

@@ -57,6 +57,7 @@
 #include "os/ObjectStore.h"
 
 #include "bluestore_types.h"
+#include "BlueStore_fwd.h"
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 #include "common/admin_socket.h"
@@ -73,33 +74,6 @@ class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
 class SimpleBitmap;
-
-namespace bluestore {
-  struct Collection;
-  typedef boost::intrusive_ptr<Collection> CollectionRef;
-  struct Blob;
-  typedef boost::intrusive_ptr<Blob> BlobRef;
-  struct Onode;
-  typedef boost::intrusive_ptr<Onode> OnodeRef;
-  struct OnodeSpace;
-  struct OnodeCacheShard;
-  struct Extent;
-  struct ExtentMap;
-  struct OldExtent;
-  struct OldExtentMap;
-  struct SharedBlob;
-  typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
-  struct SharedBlobSet;
-  struct TransContext;
-  struct DeferredBatch;
-  class OpSequencer;
-  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
-  struct deferred_osr_queue_t;
-  struct WriteContext;
-  struct BigDeferredWriteContext;
-  struct GarbageCollector;
-  struct printer;
-}
 
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED

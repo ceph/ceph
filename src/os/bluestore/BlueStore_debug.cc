@@ -16,7 +16,6 @@
 #include <ostream>
 #include "BlueStore.h"
 #include "BlueStore_objects.h"
-#include "BlueStore_inlines.h"
 
 static const std::string transition_table[26] = {
 "bcdfghjklmnprstuvxyz", //a
