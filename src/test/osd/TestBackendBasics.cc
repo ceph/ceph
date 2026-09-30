@@ -384,6 +384,54 @@ TEST_P(TestBackendBasics, DirectRead) {
   }
 }
 
+// A medium error on the local shard fails an EC direct read with -EIO, while
+// the primary's read path decodes around the same error from other shards.
+TEST_P(TestBackendBasics, DirectReadEIO) {
+  const auto& backend_config = GetParam().backend;
+  if (backend_config.pool_type != EC ||
+      !(backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "DirectReadEIO requires optimized EC";
+  }
+  if (m < 1 || k < 2) {
+    GTEST_SKIP() << "DirectReadEIO needs k >= 2 and m >= 1";
+  }
+
+  const std::string obj_name = "test_direct_read_eio_" + backend_config.label;
+  const uint64_t stripe_width = get_stripe_width();
+  std::string test_data;
+  for (size_t i = 0; i < stripe_width; i++) {
+    test_data.push_back('A' + ((i / stripe_unit) % 26));
+  }
+  ASSERT_EQ(create_and_write(obj_name, test_data), 0);
+
+  const hobject_t hoid = make_test_object(obj_name);
+  const int bad_shard = 1;
+  const ghobject_t bad_ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(bad_shard));
+
+  ECSwitch* ec_switch = dynamic_cast<ECSwitch*>(backends.at(bad_shard).get());
+  ASSERT_NE(ec_switch, nullptr);
+  store->inject_read_error(bad_ghoid, -EIO);
+  bufferlist direct_bl;
+  int r = ec_switch->objects_read_local(hoid, 0, stripe_width,
+                                        CEPH_OSD_RMW_FLAG_EC_DIRECT_READ,
+                                        &direct_bl);
+  EXPECT_EQ(r, -EIO) << "direct read of shard " << bad_shard;
+
+  store->inject_read_error(bad_ghoid, -EIO);
+  bufferlist primary_bl;
+  r = read_object(obj_name, 0, stripe_width, primary_bl, stripe_width);
+  EXPECT_GE(r, 0) << "primary read with shard " << bad_shard << " failing";
+  ASSERT_EQ(primary_bl.length(), stripe_width);
+  EXPECT_TRUE(primary_bl.contents_equal(test_data.data(), test_data.size()));
+
+  // The primary read must have consumed the one-shot injected error.
+  direct_bl.clear();
+  r = ec_switch->objects_read_local(hoid, 0, stripe_width,
+                                    CEPH_OSD_RMW_FLAG_EC_DIRECT_READ,
+                                    &direct_bl);
+  EXPECT_GE(r, 0) << "injected error was not hit by the primary read";
+}
+
 TEST_P(TestBackendBasics, TruncateGrowWithSuspendedReads)
 {
   const auto& backend_config = GetParam().backend;
