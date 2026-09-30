@@ -615,6 +615,7 @@ class RadosObject : public StoreObject {
     /* For rgw_admin.cc */
     RGWObjState& get_state() { return state; }
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
+    virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
 
     /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
     virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
