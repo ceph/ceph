@@ -1130,8 +1130,25 @@ int ErasureCodeLrc::decode_chunks(const shard_id_set &want_to_read,
     } else {
       ceph_assert(chunk_size == ptr.length());
     }
-    erasures.insert(shard);
   }
+
+  // A layer may need a missing chunk that is not in *out*; decode
+  // those into scratch buffers.
+  shard_id_map<bufferptr> scratch(get_chunk_count());
+  for (shard_id_t i; i < get_chunk_count(); ++i) {
+    if (available_chunks.contains(i))
+      continue;
+    erasures.insert(i);
+    if (!out.contains(i))
+      scratch[i] = buffer::create_page_aligned(chunk_size);
+  }
+  auto chunk = [&](shard_id_t s) -> bufferptr& {
+    if (in.contains(s))
+      return in[s];
+    if (out.contains(s))
+      return out[s];
+    return scratch[s];
+  };
 
   shard_id_set want_to_read_erasures =
     shard_id_set::intersection(erasures, want_to_read);
@@ -1156,13 +1173,9 @@ int ErasureCodeLrc::decode_chunks(const shard_id_set &want_to_read,
       {
         shard_id_t cs(*c);
         if (!erasures.contains(cs)) {
-          if (in.contains(cs)) {
-            layer_in[j] = in[cs];
-          } else {
-            layer_in[j] = out[cs];
-          }
+          layer_in[j] = chunk(cs);
         } else {
-          layer_out[j] = out[cs];
+          layer_out[j] = chunk(cs);
         }
         ++j;
       }

@@ -998,6 +998,50 @@ TEST(ErasureCodeLrc, decode_two_erasures_kml)
 }
 END_IGNORE_DEPRECATED
 
+// ECUtil puts only the wanted chunks in *out*.
+TEST(ErasureCodeLrc, decode_chunks_unwanted_erasure_kml)
+{
+  ErasureCodeLrc lrc(g_conf().get_val<std::string>("erasure_code_dir"));
+  ErasureCodeProfile profile;
+  profile["k"] = "4";
+  profile["m"] = "2";
+  profile["l"] = "3";
+  EXPECT_EQ(0, lrc.init(profile, &cerr));
+  const unsigned int chunk_count = lrc.get_chunk_count();
+
+  const unsigned int chunk_size = 4096;
+  bufferlist data;
+  for (unsigned int i = 0; i < lrc.get_data_chunk_count(); i++)
+    data.append(string(chunk_size, 'A' + i));
+  shard_id_set want_to_encode;
+  for (unsigned int i = 0; i < chunk_count; i++)
+    want_to_encode.insert(shard_id_t(i));
+  shard_id_map<bufferlist> encoded(chunk_count);
+  EXPECT_EQ(0, lrc.encode(want_to_encode, data, &encoded));
+
+  for (unsigned int a = 0; a < chunk_count; a++) {
+    for (unsigned int b = 0; b < chunk_count; b++) {
+      if (a == b)
+	continue;
+      SCOPED_TRACE("want " + stringify(a) + ", also erased " + stringify(b));
+      shard_id_map<bufferptr> in(chunk_count);
+      for (unsigned int i = 0; i < chunk_count; i++) {
+	if (i != a && i != b)
+	  in[shard_id_t(i)] = bufferptr(encoded[shard_id_t(i)].c_str(),
+					chunk_size);
+      }
+      shard_id_map<bufferptr> out(chunk_count);
+      out[shard_id_t(a)] = buffer::create_page_aligned(chunk_size);
+      shard_id_set want_to_read;
+      want_to_read.insert(shard_id_t(a));
+      EXPECT_EQ(0, lrc.decode_chunks(want_to_read, in, out));
+      EXPECT_EQ(1U, out.size());
+      EXPECT_EQ(0, memcmp(out[shard_id_t(a)].c_str(),
+			  encoded[shard_id_t(a)].c_str(), chunk_size));
+    }
+  }
+}
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ;
