@@ -4,3 +4,5 @@ overrides:
       osd:
         bluestore compression mode: aggressive
         bluestore compression algorithm: snappy
+        osd op num threads per shard: 2 #https://tracker.ceph.com/issues/72879
+        osd op num shards: 1
