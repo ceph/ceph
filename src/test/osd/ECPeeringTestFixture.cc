@@ -1023,6 +1023,15 @@ void ECPeeringTestFixture::mark_osd_down(int osd_id)
   update_osdmap_with_peering(new_osdmap);
 }
 
+void ECPeeringTestFixture::set_pool_min_size(unsigned new_min_size)
+{
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  OSDMapTestHelpers::set_pool_min_size(new_osdmap, pool_id, new_min_size);
+
+  update_osdmap_with_peering(new_osdmap);
+}
+
 void ECPeeringTestFixture::mark_osd_up(int osd_id)
 {
   // Create new OSDMap with the OSD marked as up using OSDMapTestHelpers
