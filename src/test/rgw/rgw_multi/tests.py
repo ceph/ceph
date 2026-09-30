@@ -2653,7 +2653,7 @@ def trash_bucket(zone, bucket_name):
 
     # Zap the bilog
     cmd = ['bilog', 'trim'] + zone.zone_args()
-    cmd += ['--bucket', bucket_name]
+    cmd += ['--bucket', bucket_name, '--yes-i-really-mean-it']
     zone.cluster.admin(cmd)
 
 @attr('fails_with_rgw')
@@ -7047,7 +7047,7 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
         )
 
         log.info("trim bucket bilog to avoid any incremental sync happening")
-        primary_zone_cluster_conn.cluster.admin(["bilog", "trim", "--bucket", bucket.name])
+        primary_zone_cluster_conn.cluster.admin(["bilog", "trim", "--bucket", bucket.name, "--yes-i-really-mean-it"])
         log.info("set rgw_inject_delay_sec and rgw_inject_delay_pattern to slow down bucket full sync")
         secondary_zone_cluster_conn.cluster.ceph_admin(
             ["config", "set", "client", "rgw_inject_delay_sec", str(bucket_full_sync_listing_inject_delay_sec)]
