@@ -199,3 +199,15 @@ def test_quarantine_disable_clears_deferred(vc, enable, rc, cleared):
     else:
         vc.cloner.clear_deferred.assert_not_called()
         vc.purge_queue.clear_deferred.assert_not_called()
+
+
+def test_quarantine_command_is_one_shot(vc):
+    # a command dropped by the MDS on a connection reset must fail (EPIPE)
+    # rather than block mgr/volumes forever
+    mds_map = {'up': {'mds_0': 4242},
+               'info': {'gid_4242': {'state': 'up:active'}}}
+    vc.mgr.tell_command.return_value = (0, '', '')
+    vc._send_quarantine_command(mds_map, "quarantine enable", "/volumes/_nogroup/sv")
+    vc.mgr.tell_command.assert_called_once_with(
+        "mds", "4242", {"prefix": "quarantine enable", "path": "/volumes/_nogroup/sv"},
+        one_shot=True)

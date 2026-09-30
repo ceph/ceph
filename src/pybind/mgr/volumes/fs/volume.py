@@ -857,7 +857,12 @@ class VolumeClient(CephfsClient["Module"]):
             if info and info['state'] in ('up:active', 'up:clientreplay'):
                 cmd_dict = {"prefix": cmd_prefix, "path": path}
                 log.debug("Sending %s to MDS gid %s (%s)", cmd_prefix, gid, rank_name)
-                return self.mgr.tell_command("mds", str(gid), cmd_dict)
+                # one_shot: fail with EPIPE (and let the caller retry) should
+                # the MDS connection reset, rather than waiting forever for a
+                # reply to a command the MDS may have dropped -- that would
+                # block all mgr/volumes commands, as they are handled serially.
+                return self.mgr.tell_command("mds", str(gid), cmd_dict,
+                                             one_shot=True)
 
         raise VolumeException(-errno.ENOENT, "No active MDS found")
 
