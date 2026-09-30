@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(PG_
+      - \(OSD_
+      - \(OBJECT_
+      - overall HEALTH

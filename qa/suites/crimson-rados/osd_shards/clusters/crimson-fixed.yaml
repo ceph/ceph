@@ -1,0 +1,31 @@
+overrides:
+  install:
+    extra_system_packages:
+      rpm:
+        - fio
+      deb:
+        - fio
+  ceph:
+    conf:
+      global:
+        osd crush chooseleaf type: 0
+        osd pool default pg num:  128
+        osd pool default pgp num:  128
+        ms cluster mode: crc
+        ms service mode: crc
+        ms client mode: crc
+        ms mon service mode: crc
+        ms mon cluster mode: crc
+        ms mon client mode: crc
+      osd:
+        osd shutdown pgref assert: true
+        debug monc: 20
+      mon:
+        mon min osdmap epochs: 50
+        paxos service trim min: 10
+        # prune full osdmaps regularly
+        mon osdmap full prune min: 15
+        mon osdmap full prune interval: 2
+        mon osdmap full prune txsize: 2
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
