@@ -19,6 +19,7 @@ from ceph.deployment.service_spec import (
     RGWSpec,
     ServiceSpec,
     YamlLiteralString,
+    MgmtGatewaySpec,
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
@@ -1333,3 +1334,27 @@ spec:
 
     assert 'ssl_cert: |' in dumped
     assert 'ssl_key: |' in dumped
+
+
+@pytest.mark.parametrize(
+    "virtual_ip, valid",
+    [
+        ("10.128.8.255", True),
+        ("2001:db8::1", True),
+        ("[2001:db8::1]", True),
+        ("ceph.example.com", False),
+        ("10.128.8.255/22", False),
+        ("invalid", False),
+    ],
+)
+def test_mgmt_gateway_virtual_ip_validation(virtual_ip, valid):
+    spec = MgmtGatewaySpec(virtual_ip=virtual_ip)
+
+    if valid:
+        spec.validate()
+    else:
+        with pytest.raises(
+            SpecValidationError,
+            match=r"Invalid virtual_ip: .*\. Must be a valid IP address\.",
+        ):
+            spec.validate()
