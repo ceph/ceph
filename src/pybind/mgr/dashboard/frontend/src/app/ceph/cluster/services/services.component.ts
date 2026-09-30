@@ -145,19 +145,18 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
           ])
         : this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.CREATE] } }]);
     } else {
-      let initialState = {};
-      edit
-        ? (initialState = {
+      const initialState = edit
+        ? {
             serviceName: targetServiceName,
             serviceType: targetServiceType,
             hiddenServices: this.hiddenServices,
             editing: edit
-          })
-        : (initialState = {
+          }
+        : {
             hiddenServices: this.hiddenServices,
             editing: edit
-          });
-      let modalRef = this.cdsModalService.show(ServiceFormComponent);
+          };
+      const modalRef = this.cdsModalService.show(ServiceFormComponent);
       Object.assign(modalRef, initialState);
       modalRef.serviceUpdated.subscribe(() => {
         this.table?.reloadData();

@@ -241,8 +241,7 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
   }
 
   private formatData(array: Array<any>): any {
-    let formattedData = {};
-    formattedData = array?.map((data: any) => ({
+    const formattedData = array?.map((data: any) => ({
       x: data[0] * 1000,
       y: Number(this.convertToChartDataUnits(data[1]).replace(/[^\d,.]+/g, ''))
     }));
@@ -286,7 +285,7 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
   }
 
   private convertUnits(data: any): any {
-    let dataWithUnits: string = '';
+    let dataWithUnits: string;
     if (this.dataUnits === 'B') {
       dataWithUnits = this.dimlessBinary.transform(data, this.decimals);
     } else if (this.dataUnits === 'B/s') {
@@ -305,15 +304,12 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
       return;
     }
 
-    let maxValue = 0;
-    let maxValueDataUnits = '';
-
     const allDataValues = this.dataArray?.reduce((array: string[], data) => {
       return array.concat(data?.map((values: [number, string]) => values[1]));
     }, []);
 
-    maxValue = allDataValues ? Math.max(...allDataValues.map(Number)) : 0;
-    [maxValue, maxValueDataUnits] = this.convertUnits(maxValue).split(' ');
+    const maxValue = allDataValues ? Math.max(...allDataValues.map(Number)) : 0;
+    const [, maxValueDataUnits] = this.convertUnits(maxValue).split(' ');
 
     const yAxesTicks = this.chart.chart.options.scales.y;
     yAxesTicks.ticks.callback = (value: any) => {

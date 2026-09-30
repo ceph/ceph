@@ -921,7 +921,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   updateColumnFilterOptions() {
     // update all possible values in a column
     this.columnFilters.forEach((filter) => {
-      let values: any[] = [];
+      let values: any[];
 
       if (_.isUndefined(filter.column.filterOptions)) {
         // only allow types that can be easily converted into string

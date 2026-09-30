@@ -97,14 +97,14 @@ export class PrometheusAlertService {
     }
     this.activeAlerts = _.reduce<AlertmanagerAlert, number>(
       alerts,
-      (result, alert) => (alert.status.state === AlertState.ACTIVE ? ++result : result),
+      (result, alert) => (alert.status.state === AlertState.ACTIVE ? result + 1 : result),
       0
     );
     this.activeCriticalAlerts = _.reduce<AlertmanagerAlert, number>(
       alerts,
       (result, alert) =>
         alert.status.state === AlertState.ACTIVE && alert.labels.severity === 'critical'
-          ? ++result
+          ? result + 1
           : result,
       0
     );
@@ -112,7 +112,7 @@ export class PrometheusAlertService {
       alerts,
       (result, alert) =>
         alert.status.state === AlertState.ACTIVE && alert.labels.severity === 'warning'
-          ? ++result
+          ? result + 1
           : result,
       0
     );

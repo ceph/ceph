@@ -341,7 +341,6 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     let rootNodes = {};
     let firstChildNodes = {};
     let allFirstChildNodes = [];
-    let secondChildNodes = {};
     let allSecondChildNodes: {}[] = [];
     this.realms = multisiteInfo[0]['realms'];
     this.zonegroups = multisiteInfo[1]['zonegroups'];
@@ -375,10 +374,9 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
                 zonegroup,
                 realm
               );
-              secondChildNodes = zoneResult['nodes'];
+              const secondChildNodes = zoneResult['nodes'];
               this.zoneIds = this.zoneIds.concat(zoneResult['zoneIds']);
               allSecondChildNodes.push(secondChildNodes);
-              secondChildNodes = {};
             }
             allSecondChildNodes = allSecondChildNodes.map((x) => ({
               ...x,
@@ -394,7 +392,6 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
         rootNodes['children'] = allFirstChildNodes;
         allNodes.push({ ...rootNodes, label: rootNodes?.['name'] || rootNodes?.['id'] });
         firstChildNodes = {};
-        secondChildNodes = {};
         rootNodes = {};
         allFirstChildNodes = [];
         allSecondChildNodes = [];
