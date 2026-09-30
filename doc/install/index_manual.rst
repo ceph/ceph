@@ -1,68 +1,93 @@
 .. _install-manual:
 
-=======================
- Installation (Manual)
-=======================
+==========================
+ Installing Ceph Manually
+==========================
 
+.. meta::
+   :description: The manual path to a Ceph cluster without cephadm: get the software, install it on each node, deploy the cluster by hand, and upgrade it.
+   :ceph-page-type: assembly
 
-Get Software
-============
-
-There are several methods for getting Ceph software. The easiest and most common
-method is to :ref:`get packages <packages>` by adding repositories for use with package
-management tools such as the Advanced Package Tool (APT) or Yellowdog Updater,
-Modified (YUM). You may also retrieve pre-compiled packages from the Ceph
-repository. Finally, you can retrieve tarballs or clone the Ceph source code
-repository and build Ceph yourself.
-
+Get Ceph, install it on each :term:`Ceph Node`, and deploy a cluster by hand,
+without :term:`cephadm`. The manual steps serve mainly as an example for
+people who develop deployment scripts with Chef, Juju, Puppet, and similar
+tools. For the recommended method, see :ref:`cephadm_deploying_new_cluster`.
 
 .. toctree::
    :maxdepth: 1
+   :hidden:
 
-   Get Packages <get-packages>
-   Get Tarballs <get-tarballs>
-   Clone Source <clone-source>
-   Build Ceph <build-ceph>
-   Ceph Mirrors <mirrors>
-   Ceph Containers <containers>
+   get-packages
+   get-tarballs
+   clone-source
+   build-ceph
+   mirrors
+   containers
+   install-storage-cluster
+   install-vm-cloud
+   manual-deployment
+   manual-freebsd-deployment
 
+.. _get-software:
 
-Install Software
-================
+.. rubric:: Get the Software
 
-Once you have the Ceph software (or added repositories), installing the software
-is easy. To install packages on each :term:`Ceph Node` in your cluster, use package
-management tools. You should install Yum Priorities for RHEL/CentOS and other
-distributions that use Yum if you intend to install the Ceph Object Gateway or
-QEMU.
+- :ref:`packages`: add the Ceph repository for APT or DNF, the easiest and
+  most common way to get Ceph, or download the pre-compiled packages from it.
+- :doc:`get-tarballs`: the source code of a :term:`release <Ceph Release>`,
+  to build Ceph yourself.
+- :ref:`install-clone-source`: the source code of a branch, from GitHub or
+  with Git.
+- :doc:`build-ceph`: compile Ceph from source, or build its packages.
+- :ref:`install-mirrors`: mirrors of ``download.ceph.com`` that serve the
+  same packages and tarballs.
+- :ref:`containers`: the container image that holds every Ceph daemon, and
+  what each tag points to.
 
-.. toctree::
-   :maxdepth: 1
+.. _install-software:
 
-   Install Ceph Storage Cluster <install-storage-cluster>
-   Install Virtualization for Block <install-vm-cloud>
+.. rubric:: Install the Software
 
+- :ref:`install_storage_cluster`: install the packages on each node with APT
+  or DNF, or install a build.
+- :doc:`install-vm-cloud`: QEMU and ``libvirt``, for virtual machines and
+  :term:`cloud platforms <Cloud Platforms>` that use
+  :term:`Ceph Block Devices <Ceph Block Device>`.
 
-Deploy a Cluster Manually
-=========================
+.. _deploy-a-cluster-manually:
 
-Once you have Ceph installed on your nodes, you can deploy a cluster manually.
-The manual procedure is primarily for exemplary purposes for those developing
-deployment scripts with Chef, Juju, Puppet, etc.
+.. rubric:: Deploy a Cluster by Hand
 
-.. toctree::
+- :ref:`manual-deployment`: create the first :term:`Monitor <Ceph Monitor>`,
+  then add a :term:`Manager <Ceph Manager>`, :term:`OSDs <Ceph OSD>`, a
+  :term:`Metadata Server <Ceph Metadata Server>`, and a
+  :term:`RADOS Gateway <RGW>`.
+- :ref:`manual-freebsd-deployment`: the Monitor, OSD, and Metadata Server
+  steps on FreeBSD, where cephadm is not available.
 
-   Manual Deployment <manual-deployment>
-   Manual Deployment on FreeBSD <manual-freebsd-deployment>
+.. _upgrade-software:
 
-Upgrade Software
-================
+.. rubric:: Upgrade
 
-As new versions of Ceph become available, you may upgrade your cluster to
-take advantage of new functionality, as well as bug fixes and performance
-and security enhancements. Read the release notes of the new
-version before you upgrade your cluster: they document the required
-upgrade sequence and any release-specific steps. See the :ref:`releases
-index <ceph-releases-general>` for the release notes, and
-:doc:`/cephadm/upgrade` if your cluster is managed by cephadm.
+Read the release notes of the new version before you upgrade: they give the
+required upgrade sequence and any release-specific steps.
 
+- :ref:`ceph-releases-index`: the release notes of each version, with its
+  new features, bug fixes, and performance and security improvements.
+- :ref:`ceph-releases-general`: the release cycle, and the releases from
+  which an online, rolling upgrade is supported and tested.
+- :doc:`/cephadm/upgrade`: upgrade a cluster that cephadm manages.
+
+.. rubric:: Next Steps
+
+- :ref:`rados-operations`: check the cluster's health, monitor it, manage
+  :term:`pools <Pools>` and data placement, and add or replace hardware.
+
+.. rubric:: Additional Resources
+
+- :ref:`install-overview`: every installation method, including cephadm and
+  Rook.
+- :ref:`cephadm-adoption`: check whether an existing cluster can be
+  converted to cephadm management, and convert it.
+- :ref:`os-recommendations`: the distributions and kernels that each Ceph
+  release is built and tested on.
