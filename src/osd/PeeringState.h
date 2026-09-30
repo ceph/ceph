@@ -1761,7 +1761,7 @@ private:
     bool *history_les_bound = nullptr) const;
 
   static void calc_ec_acting(
-    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    const eversion_t &log_tail,
     unsigned size,
     const std::vector<int> &acting,
     const std::vector<int> &up,
