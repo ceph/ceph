@@ -1,12 +1,13 @@
-import unittest
 from unittest import mock
+
+import pytest
 
 from rgw.module import Module
 from ceph.deployment.service_spec import RGWSpec
 from ceph.rgw.types import RGWAMException
 
 
-class TestRgwZoneCreate(unittest.TestCase):
+class TestRgwZoneCreate:
     """
     Regression tests for rgw_zone_create().
 
@@ -37,55 +38,35 @@ class TestRgwZoneCreate(unittest.TestCase):
             specs.append(spec)
         return specs
 
-    @mock.patch('rgw.module.RGWAM')
-    def test_multiple_specs_all_created(self, mock_rgwam_cls):
-        """
-        Regression test: with 3 zone specs, all 3 must be created and
-        returned, not just the first one.
-        """
+    @pytest.mark.parametrize('zone_names', [
+        pytest.param(['zone-a', 'zone-b', 'zone-c'], id='multiple'),
+        pytest.param(['zone-only'], id='single'),
+    ])
+    def test_all_specs_created(self, zone_names):
+        """Every requested zone spec is created and returned."""
         module = self._make_module()
-        specs = self._make_specs(['zone-a', 'zone-b', 'zone-c'])
+        specs = self._make_specs(zone_names)
 
-        # Bypass the spec-parsing branch entirely by calling the
-        # loop logic directly via rgw_zone_create with inbuf unset and
-        # zone_name/realm_token unset would raise; instead we exercise
-        # the loop by patching _parse_rgw_specs to return our fake specs.
-        with mock.patch.object(module, '_parse_rgw_specs', return_value=specs):
+        with mock.patch('rgw.module.RGWAM') as mock_rgwam_cls, \
+                mock.patch.object(module, '_parse_rgw_specs', return_value=specs):
             result = module.rgw_zone_create(inbuf='fake-yaml-content')
 
-        self.assertEqual(result, ['zone-a', 'zone-b', 'zone-c'])
-        # RGWAM(...).zone_create should have been called once per spec
-        self.assertEqual(mock_rgwam_cls.return_value.zone_create.call_count, 3)
+        assert result == zone_names
+        assert mock_rgwam_cls.return_value.zone_create.call_count == len(zone_names)
 
-    @mock.patch('rgw.module.RGWAM')
-    def test_single_spec_still_works(self, mock_rgwam_cls):
-        """A single-spec input (the common case) must continue to work."""
-        module = self._make_module()
-        specs = self._make_specs(['zone-only'])
-
-        with mock.patch.object(module, '_parse_rgw_specs', return_value=specs):
-            result = module.rgw_zone_create(inbuf='fake-yaml-content')
-
-        self.assertEqual(result, ['zone-only'])
-        self.assertEqual(mock_rgwam_cls.return_value.zone_create.call_count, 1)
-
-    @mock.patch('rgw.module.RGWAM')
-    def test_later_spec_failure_propagates(self, mock_rgwam_cls):
+    def test_later_spec_failure_propagates(self):
         """A failure on a later spec must surface, not be skipped."""
         module = self._make_module()
         specs = self._make_specs(['zone-a', 'zone-b', 'zone-c'])
-        mock_rgwam_cls.return_value.zone_create.side_effect = [
-            None,
-            RGWAMException('boom'),
-        ]
 
-        with mock.patch.object(module, '_parse_rgw_specs', return_value=specs):
-            with self.assertRaises(RGWAMException):
+        with mock.patch('rgw.module.RGWAM') as mock_rgwam_cls, \
+                mock.patch.object(module, '_parse_rgw_specs', return_value=specs):
+            mock_rgwam_cls.return_value.zone_create.side_effect = [
+                None,
+                RGWAMException('boom'),
+            ]
+            with pytest.raises(RGWAMException):
                 module.rgw_zone_create(inbuf='fake-yaml-content')
 
         # zone-a was created, zone-b failed, zone-c must not be attempted
-        self.assertEqual(mock_rgwam_cls.return_value.zone_create.call_count, 2)
-
-
-if __name__ == '__main__':
-    unittest.main()
+        assert mock_rgwam_cls.return_value.zone_create.call_count == 2
