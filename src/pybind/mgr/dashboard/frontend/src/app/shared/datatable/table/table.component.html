@@ -181,41 +181,44 @@
       </cds-icon-button>
       <!-- end refresh button -->
       <!-- show hide columns -->
-      <button
-        cdsButton="ghost"
-        class="toolbar-action"
-        [cdsOverflowMenu]="showHideColumnsRef"
-        placement="bottom"
-        [flip]="true"
-        [offset]="{ x: 3, y: 0 }"
-        type="button"
-      >
-        <svg
-          [cdsIcon]="icons.dataTable"
-          [size]="icons.size16"
-          class="cds--toolbar-action__icon"
-        ></svg>
-      </button>
-      <ng-template #showHideColumnsRef>
-        <div
-          class="vstack gap-3 p-3"
-          (click)="$event.stopPropagation()"
-          (keydown)="$event.stopPropagation()"
-          tabindex="0"
-          [cdsTheme]="theme"
+      @if (showColumnToggle) {
+        <button
+          cdsButton="ghost"
+          class="toolbar-action"
+          [cdsOverflowMenu]="showHideColumnsRef"
+          placement="bottom"
+          [flip]="true"
+          [offset]="{ x: 3, y: 0 }"
+          type="button"
+          data-testid="column-toggle-button"
         >
-          <ng-container *ngFor="let column of localColumns">
-            <cds-checkbox
-              *ngIf="!column?.isInvisible"
-              id="{{ column.prop }}{{ tableName }}"
-              name="{{ column.prop }}{{ tableName }}"
-              [checked]="!column?.isHidden"
-              (checkedChange)="toggleColumn(column)"
-              >{{ column.name }}
-            </cds-checkbox>
-          </ng-container>
-        </div>
-      </ng-template>
+          <svg
+            [cdsIcon]="icons.dataTable"
+            [size]="icons.size16"
+            class="cds--toolbar-action__icon"
+          ></svg>
+        </button>
+        <ng-template #showHideColumnsRef>
+          <div
+            class="vstack gap-3 p-3"
+            (click)="$event.stopPropagation()"
+            (keydown)="$event.stopPropagation()"
+            tabindex="0"
+            [cdsTheme]="theme"
+          >
+            <ng-container *ngFor="let column of localColumns">
+              <cds-checkbox
+                *ngIf="!column?.isInvisible"
+                id="{{ column.prop }}{{ tableName }}"
+                name="{{ column.prop }}{{ tableName }}"
+                [checked]="!column?.isHidden"
+                (checkedChange)="toggleColumn(column)"
+                >{{ column.name }}
+              </cds-checkbox>
+            </ng-container>
+          </div>
+        </ng-template>
+      }
       <!-- end show hide columns -->
       <!-- actions -->
       <ng-content select=".table-actions"></ng-content>
