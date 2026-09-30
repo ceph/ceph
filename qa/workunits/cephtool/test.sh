@@ -1401,6 +1401,10 @@ function test_mon_osd_create_destroy()
 
   ceph osd find $id
 
+  # osd new must not return until KeyServer can serve the new entity
+  ceph auth get osd.$id >/dev/null
+  ceph auth get client.osd-lockbox.$uuid >/dev/null
+
   # validate secrets and dm-crypt are set
   k=$(ceph auth get-key osd.$id --format=json-pretty 2>/dev/null | jq '.key')
   s=$(cat $all_secrets | jq '.cephx_secret')
@@ -1418,6 +1422,7 @@ function test_mon_osd_create_destroy()
   done
 
   ceph osd find $id2
+  ceph auth get osd.$id2 >/dev/null
   k=$(ceph auth get-key osd.$id --format=json-pretty 2>/dev/null | jq '.key')
   s=$(cat $all_secrets | jq '.cephx_secret')
   [[ $k == $s ]]
