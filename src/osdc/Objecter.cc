@@ -3001,11 +3001,12 @@ bool Objecter::target_should_be_paused(op_target_t *t)
 {
   const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
   bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) ||
-    (t->respects_full() && (_osdmap_full_flag() || _osdmap_pool_full(*pi)));
+  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR);
+  bool full = t->respects_full() &&
+    (_osdmap_full_flag() || _osdmap_pool_full(*pi));
 
   return (t->flags & CEPH_OSD_FLAG_READ && pauserd) ||
-    (t->flags & CEPH_OSD_FLAG_WRITE && pausewr) ||
+    (t->flags & CEPH_OSD_FLAG_WRITE && pausewr) || full ||
     (osdmap->get_epoch() < epoch_barrier);
 }
 
