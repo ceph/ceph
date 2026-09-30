@@ -32,6 +32,7 @@ Usage:
         # Do something with the config
 """
 import logging
+import ssl
 import cherrypy
 import re
 import threading
@@ -39,6 +40,7 @@ import time
 from cherrypy.process.servers import ServerAdapter
 from cheroot.wsgi import Server as WSGIServer
 from cheroot.ssl.builtin import BuiltinSSLAdapter
+from cheroot.makefile import StreamWriter
 from cherrypy._cptree import Tree
 from typing import Any, Tuple, Optional, Dict
 
@@ -92,6 +94,55 @@ class CherryPyErrorFilter(logging.Filter):
         ]
         msg = record.getMessage()
         return not any(m in msg for m in blocked)
+
+
+class _SSLStreamWriter(StreamWriter):
+    """StreamWriter that correctly handles ssl.SSLWantWriteError and
+    ssl.SSLWantReadError in non-blocking mode.
+
+    Cheroot's stock ``BufferedWriter._flush_unlocked`` only catches
+    ``io.BlockingIOError``.  When the underlying socket is a Python
+    ``ssl.SSLSocket`` in non-blocking mode (Cheroot sets FIONBIO=1
+    after accept), ``SSLSocket.write()`` may raise
+    ``ssl.SSLWantWriteError`` or ``ssl.SSLWantReadError`` instead —
+    neither of which is a subclass of ``io.BlockingIOError``.  The
+    uncaught exception bubbles all the way up to Cheroot's connection
+    handler, which closes the socket and sends a TCP RST to the client
+    mid-response.  The client sees ``ERR_CONTENT_LENGTH_MISMATCH`` /
+    ``unexpected EOF while reading``.
+
+    The fix: intercept the two SSL want-* exceptions in the same
+    ``_flush_unlocked`` loop and treat them as n=0 (no bytes consumed
+    yet), so the loop retries the write, exactly what
+    ``io.BlockingIOError`` does for a plain non-blocking socket.
+    """
+
+    def _flush_unlocked(self):
+        self._checkClosed('flush of closed file')
+        while self._write_buf:
+            try:
+                n = self.raw.write(bytes(self._write_buf))
+            except (ssl.SSLWantWriteError, ssl.SSLWantReadError):
+                # TLS record layer not ready; no bytes were consumed.
+                # Retry on the next iteration (the underlying OS select
+                # loop in Cheroot will call us again when the socket is
+                # writable / the renegotiation handshake completes).
+                n = 0
+            except IOError as e:
+                # Covers io.BlockingIOError (plain non-blocking socket)
+                # which carries characters_written for partial sends.
+                n = getattr(e, 'characters_written', 0)
+            del self._write_buf[:n]
+
+
+class _SSLBuiltinAdapter(BuiltinSSLAdapter):
+    """BuiltinSSLAdapter that uses the SSL-aware stream writer."""
+
+    def makefile(self, sock, mode='r', bufsize=-1):
+        from cheroot.makefile import StreamReader
+        if 'r' in mode:
+            return StreamReader(sock, mode, bufsize)
+        return _SSLStreamWriter(sock, mode, bufsize)
 
 
 class CherryPyMgr:
@@ -199,7 +250,7 @@ class CherryPyMgr:
         )
 
         if ssl_info:
-            ssl_adapter = BuiltinSSLAdapter(ssl_info['cert'], ssl_info['key'])
+            ssl_adapter = _SSLBuiltinAdapter(ssl_info['cert'], ssl_info['key'])
             if ssl_info.get('context'):
                 ssl_adapter.context = ssl_info['context']
             server.ssl_adapter = ssl_adapter
