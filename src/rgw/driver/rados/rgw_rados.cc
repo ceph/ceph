@@ -10095,6 +10095,8 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   for (auto& miter : updates) {
     if (miter.second.length()) {
       ObjectWriteOperation o;
+      o.assert_exists();
+      cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
       cls_rgw_suggest_changes(o, miter.second);
       // we don't care if we lose suggested updates, send them off blindly
       AioCompletion *c =
@@ -10331,6 +10333,8 @@ check_updates:
   for (; miter != updates.end(); ++miter) {
     if (miter->second.length()) {
       ObjectWriteOperation o;
+      o.assert_exists();
+      cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
       cls_rgw_suggest_changes(o, miter->second);
       // we don't care if we lose suggested updates, send them off blindly
       AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
