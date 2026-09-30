@@ -3411,26 +3411,56 @@ void PeeringState::proc_primary_info(
 
 void PeeringState::consider_adjusting_pwlc(eversion_t last_complete)
 {
-  for (const auto & [shard, versionrange] :
+  const auto &log = pg_log.get_log().log;
+  for (auto & [shard, versionrange] :
 	 info.partial_writes_last_complete) {
     auto [fromversion, toversion] = versionrange;
     if (last_complete > toversion) {
-      // Full writes are being rolled forward, eventually
+      // Entries up to last_complete are being rolled forward, eventually
       // partial_write will be called to advance pwlc, but we need
       // to preempt that here before proc_master_log considers
-      // rolling forward partial writes
-      info.partial_writes_last_complete[shard] = std::pair(last_complete,
-							   last_complete);
+      // rolling forward partial writes. Advance pwlc the way
+      // partial_write will: an entry that wrote this shard restarts the
+      // range at that entry, an entry that skipped it extends the range.
+      // Resetting to (last_complete, last_complete) would assume every
+      // entry was a full write, and a shard that partial writes skipped
+      // would lose the range that covers its own older last_update.
+      auto e = std::find_if(log.begin(), log.end(),
+			    [&](const pg_log_entry_t &le) {
+			      return le.version > toversion;
+			    });
+      const eversion_t prev = (e == log.begin()) ?
+	pg_log.get_tail() : std::prev(e)->version;
+      if (prev == toversion) {
+	for (; e != log.end() && e->version <= last_complete; ++e) {
+	  if (e->is_written_shard(shard)) {
+	    fromversion = e->version;
+	  }
+	  toversion = e->version;
+	}
+      }
+      if (toversion == last_complete) {
+	versionrange = std::pair(fromversion, toversion);
+      } else {
+	// The log does not hold every entry in the range (e.g. after a
+	// split): fall back to treating them as full writes.
+	versionrange = std::pair(last_complete, last_complete);
+      }
       psdout(10) << "shard " << shard << " pwlc rolled forward to "
-		 << info.partial_writes_last_complete[shard] << dendl;
+		 << versionrange << dendl;
     } else if (last_complete < toversion) {
       // A divergent update has advanced pwlc adhead of last_complete,
-      // roll backwards to the last completed full write and then
-      // let proc_master_log roll forward partial writes
-      info.partial_writes_last_complete[shard] = std::pair(last_complete,
-							   last_complete);
+      // roll backwards to last_complete and then let proc_master_log
+      // roll forward partial writes. Entries up to last_complete that
+      // skipped this shard still did, so keep the start of the range
+      // unless it is past last_complete.
+      if (fromversion <= last_complete) {
+	versionrange = std::pair(fromversion, last_complete);
+      } else {
+	versionrange = std::pair(last_complete, last_complete);
+      }
       psdout(10) << "shard " << shard << " pwlc rolled backward to "
-		 << info.partial_writes_last_complete[shard] << dendl;
+		 << versionrange << dendl;
     }
   }
 }
