@@ -442,7 +442,11 @@ void PeeringState::update_peer_info(const pg_shard_t &from,
       }
     }
   }
-  // Non-primary shards might need to apply pwlc to update info
+  // Non-primary shards might need to apply pwlc to update info, but never
+  // past the primary's last_update
+  if (!is_primary()) {
+    consider_rollback_pwlc(oinfo.last_update);
+  }
   if (info.partial_writes_last_complete.contains(pg_whoami.shard)) {
     apply_pwlc(info.partial_writes_last_complete[pg_whoami.shard], pg_whoami,
 	       info, &pg_log);
@@ -3271,6 +3275,9 @@ void PeeringState::activate(
   send_notify = false;
 
   if (is_primary()) {
+    // pwlc merged from peers may still cover entries that peering rolled
+    // back
+    consider_rollback_pwlc(pg_log.get_head());
     // Update the epoch so that pwlc used by the primary during
     // peering becomes the definitive copy of pwlc
     info.partial_writes_last_complete_epoch = get_osdmap_epoch();
@@ -7672,8 +7679,9 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLogRec& loge
   MOSDPGLog *msg = logevt.msg.get();
   ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
   if (msg->info.partial_writes_last_complete.contains(ps->pg_whoami.shard)) {
-    ps->apply_pwlc(msg->info.partial_writes_last_complete[ps->pg_whoami.shard],
-		   ps->pg_whoami, ps->info, &ps->pg_log);
+    auto [from, to] = msg->info.partial_writes_last_complete[ps->pg_whoami.shard];
+    ps->apply_pwlc({from, std::min(to, msg->info.last_update)},
+                   ps->pg_whoami, ps->info, &ps->pg_log);
   }
   ps->merge_log(t, logevt.msg->info, std::move(logevt.msg->log), logevt.from);
   ps->update_peer_info(logevt.from, logevt.msg->info);
@@ -7797,8 +7805,9 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
     ps->pg_log.reset_backfill();
   } else {
     if (msg->info.partial_writes_last_complete.contains(ps->pg_whoami.shard)) {
-      ps->apply_pwlc(msg->info.partial_writes_last_complete[ps->pg_whoami.shard],
-		     ps->pg_whoami, ps->info, &ps->pg_log);
+      auto [from, to] = msg->info.partial_writes_last_complete[ps->pg_whoami.shard];
+      ps->apply_pwlc({from, std::min(to, msg->info.last_update)},
+                     ps->pg_whoami, ps->info, &ps->pg_log);
     }
     ps->merge_log(t, msg->info, std::move(msg->log), logevt.from);
     ps->update_peer_info(logevt.from, msg->info);
