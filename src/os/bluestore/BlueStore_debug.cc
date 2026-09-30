@@ -214,9 +214,7 @@ std::ostream& operator<<(std::ostream& out, const bluestore::Blob::printer &p)
   out << ")";
   return out;
 }
-}
 
-namespace bluestore {
 std::ostream& operator<<(std::ostream& out, const bluestore::Extent::printer &p)
 {
   out << std::hex << "0x" << p.ext.logical_offset << "~" << p.ext.length
@@ -224,9 +222,7 @@ std::ostream& operator<<(std::ostream& out, const bluestore::Extent::printer &p)
 	<< " " << p.ext.blob->print(p.mode);
   return out;
 }
-}
 
-namespace bluestore {
 std::ostream& operator<<(std::ostream& out, const bluestore::Onode::printer &p)
 {
   using P = BlueStore::printer;
