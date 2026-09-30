@@ -48,4 +48,20 @@ size=$(stat -c '%s' $TMPDIR/data.orig)
 truncate -s "${size}" $TMPDIR/data # remove stripe width padding
 cmp $TMPDIR/data.orig $TMPDIR/data
 
+# lrc maps data chunks to shards other than 0..k-1
+rm $TMPDIR/data.*[0-9]
+ceph-erasure-code-tool encode \
+                       plugin=lrc,k=4,m=2,l=3 \
+                       4096 \
+                       0,1,2,3,4,5,6,7 \
+                       $TMPDIR/data
+rm $TMPDIR/data
+ceph-erasure-code-tool decode \
+                       plugin=lrc,k=4,m=2,l=3 \
+                       4096 \
+                       0,1,2,3,4,5,6,7 \
+                       $TMPDIR/data
+truncate -s "${size}" $TMPDIR/data
+cmp $TMPDIR/data.orig $TMPDIR/data
+
 echo OK

@@ -272,7 +272,7 @@ int do_decode(const std::vector<const char*> &args) {
       std::cerr << "failed to read " << name << ": " << error << std::endl;
       return 1;
     }
-    shard_id_t shard = sinfo->get_shard(raw_shard_id_t(atoi(shard_str.c_str())));
+    shard_id_t shard(atoi(shard_str.c_str()));
     encoded_data.insert_in_shard(shard, 0, bl);
   }
 
