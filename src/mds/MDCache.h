@@ -284,6 +284,7 @@ class MDCache {
   }
 
   mds_rank_t hash_into_rank_bucket(inodeno_t ino, frag_t fg=0);
+  mds_rank_t dist_tree_rank(inodeno_t ino, frag_t fg);
 
   void maybe_eval_stray(CInode *in, bool delay=false);
   void clear_dirty_bits_for_stray(CInode* diri);
@@ -1230,6 +1231,9 @@ private:
   std::set<CInode *> export_pin_queue;
   std::set<CInode *> export_pin_delayed_queue;
   std::set<CInode *> export_ephemeral_pins;
+  /* Directories with a fragment other than the root one in cache, for
+   * finding the ones a ceph.dir.pin.distributed.tree change applies to. */
+  std::set<CInode *> fragmented_dirs;
 
   OpenFileTable open_file_table;
 
