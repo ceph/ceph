@@ -8407,6 +8407,9 @@ void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& obj
                         boost::asio::yield_context y) {
         handle_individual_object(objects[item.index], y, skip_update_olh);
       },
+      [this] (const rgw_obj_key& key, boost::asio::yield_context y) {
+        bucket->get_object(key)->update_olh(this, y, rgw::sal::FLAG_LOG_OP);
+      },
       [this] {
         rgw_flush_formatter(s, s->formatter);
       });
