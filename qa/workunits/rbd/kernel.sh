@@ -18,7 +18,7 @@ function get_device_dir {
 	local POOL=$1
 	local IMAGE=$2
 	local SNAP=$3
-	rbd device list | tail -n +2 | egrep "\s+$POOL\s+$IMAGE\s+$SNAP\s+" |
+	rbd device list | tail -n +2 | grep -E "\s+$POOL\s+$IMAGE\s+$SNAP\s+" |
 	    awk '{print $1;}'
 }
 
