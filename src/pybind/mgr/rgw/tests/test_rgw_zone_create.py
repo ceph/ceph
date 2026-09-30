@@ -3,6 +3,7 @@ from unittest import mock
 
 from rgw.module import Module
 from ceph.deployment.service_spec import RGWSpec
+from ceph.rgw.types import RGWAMException
 
 
 class TestRgwZoneCreate(unittest.TestCase):
@@ -22,10 +23,10 @@ class TestRgwZoneCreate(unittest.TestCase):
     def _make_module(self):
         # Module.__init__ requires a full mgr context we can't construct
         # here; bypass it and only set the attributes rgw_zone_create()
-        # actually touches.
+        # actually touches. log is a read-only MgrModule property backed
+        # by the unit-test logger, so it must not be assigned.
         module = Module.__new__(Module)
         module.env = mock.MagicMock()
-        module.log = mock.MagicMock()
         return module
 
     def _make_specs(self, zone_names):
@@ -67,6 +68,23 @@ class TestRgwZoneCreate(unittest.TestCase):
 
         self.assertEqual(result, ['zone-only'])
         self.assertEqual(mock_rgwam_cls.return_value.zone_create.call_count, 1)
+
+    @mock.patch('rgw.module.RGWAM')
+    def test_later_spec_failure_propagates(self, mock_rgwam_cls):
+        """A failure on a later spec must surface, not be skipped."""
+        module = self._make_module()
+        specs = self._make_specs(['zone-a', 'zone-b', 'zone-c'])
+        mock_rgwam_cls.return_value.zone_create.side_effect = [
+            None,
+            RGWAMException('boom'),
+        ]
+
+        with mock.patch.object(module, '_parse_rgw_specs', return_value=specs):
+            with self.assertRaises(RGWAMException):
+                module.rgw_zone_create(inbuf='fake-yaml-content')
+
+        # zone-a was created, zone-b failed, zone-c must not be attempted
+        self.assertEqual(mock_rgwam_cls.return_value.zone_create.call_count, 2)
 
 
 if __name__ == '__main__':
