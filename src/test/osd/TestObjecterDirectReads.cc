@@ -14,8 +14,8 @@
  */
 
 /**
- * What the Objecter does to in-flight EC direct reads and split sub-reads
- * when the OSDMap changes.
+ * What the Objecter does to in-flight EC direct reads, split sub-reads and
+ * order-reads-writes ops when the OSDMap changes.
  *
  * The Objecter is initialised with a session per OSD whose connection
  * records the MOSDOps sent on it.  Maps are delivered through
@@ -152,14 +152,30 @@ protected:
     });
   }
 
-  void raise_min_size()
+  void modify_pool(const std::function<void(pg_pool_t&)>& change)
   {
     auto pool = objecter->with_osdmap([](const OSDMap& o) {
       return *o.get_pg_pool(ec_pool_id);
     });
-    pool.min_size++;
+    change(pool);
     advance_map([&pool](OSDMap::Incremental& inc) {
       inc.new_pools[ec_pool_id] = pool;
+    });
+  }
+
+  void raise_min_size()
+  {
+    modify_pool([](pg_pool_t& pool) { pool.min_size++; });
+  }
+
+  void set_pool_full(bool full)
+  {
+    modify_pool([full](pg_pool_t& pool) {
+      if (full) {
+        pool.set_flag(pg_pool_t::FLAG_FULL);
+      } else {
+        pool.unset_flag(pg_pool_t::FLAG_FULL);
+      }
     });
   }
 
@@ -178,6 +194,22 @@ protected:
   {
     ceph_tid_t tid = 0;
     objecter->op_submit(new_read_op(off, len, flags), &tid);
+    poll();
+    return tid;
+  }
+
+  ceph_tid_t submit_write()
+  {
+    osdc_opvec ops(1);
+    ops[0].op.op = CEPH_OSD_OP_WRITEFULL;
+    ops[0].indata.append("data");
+    ops[0].op.extent.length = ops[0].indata.length();
+    ceph_tid_t tid = 0;
+    objecter->op_submit(new Objecter::Op(object_t("obj"),
+                                         object_locator_t(ec_pool_id),
+                                         std::move(ops), CEPH_OSD_FLAG_WRITE,
+                                         (Context*)nullptr, nullptr),
+                        &tid);
     poll();
     return tid;
   }
@@ -321,4 +353,42 @@ TEST_F(TestSplitOpMapChange, ECSplitReadShardsMoveDuringSubmit)
   EXPECT_EQ(std::make_pair(parent, shard_id_t(0)), sent_to(moved[0]).back());
   reply(moved[0], cons[moved[0]]->sent.back());
   EXPECT_EQ(0, done.wait_for(0));
+}
+
+// An ORDER_READS_WRITES read must not overtake a write that a full pool
+// pauses.
+TEST_F(TestSplitOpMapChange, RWOrderedReadWaitsForWriteOnFullPool)
+{
+  set_pool_full(true);
+  ceph_tid_t write = submit_write();
+  ceph_tid_t read = submit_read(0, 1, CEPH_OSD_FLAG_RWORDERED);
+  EXPECT_TRUE(sent_to(primary).empty());
+
+  set_pool_full(false);
+  ASSERT_EQ(2u, sent_to(primary).size());
+  EXPECT_EQ(write, sent_to(primary)[0].first);
+  EXPECT_EQ(read, sent_to(primary)[1].first);
+}
+
+TEST_F(TestSplitOpMapChange, RWOrderedReadResentAfterWriteWhenPoolFull)
+{
+  ceph_tid_t write = submit_write();
+  ceph_tid_t read = submit_read(0, 1, CEPH_OSD_FLAG_RWORDERED);
+  ASSERT_EQ(2u, sent_to(primary).size());
+
+  set_pool_full(true);
+  EXPECT_EQ(2u, sent_to(primary).size());
+
+  set_pool_full(false);
+  ASSERT_EQ(4u, sent_to(primary).size());
+  EXPECT_EQ(write, sent_to(primary)[2].first);
+  EXPECT_EQ(read, sent_to(primary)[3].first);
+}
+
+// FULL_TRY ops do not respect the full flag, so are not held back.
+TEST_F(TestSplitOpMapChange, RWOrderedFullTryReadSentOnFullPool)
+{
+  set_pool_full(true);
+  submit_read(0, 1, CEPH_OSD_FLAG_RWORDERED | CEPH_OSD_FLAG_FULL_TRY);
+  EXPECT_EQ(1u, sent_to(primary).size());
 }
