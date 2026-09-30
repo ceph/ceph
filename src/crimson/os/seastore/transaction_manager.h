@@ -891,7 +891,6 @@ public:
       crimson::ct_error::assert_all("invalid error"));
     extent->rewrite(t, src_extent, 0);
     extent->set_laddr(dst_key);
-    extent->set_last_committed_crc(extent->calc_crc32c());
   }
 
   /**
