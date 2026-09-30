@@ -7,11 +7,3 @@ overrides:
       osd:
         osd objectstore: bluestore
         bluestore block size: 96636764160
-  ceph-deploy:
-    fs: xfs
-    bluestore: yes
-    conf:
-      osd:
-        osd objectstore: bluestore
-        bluestore block size: 96636764160
-
