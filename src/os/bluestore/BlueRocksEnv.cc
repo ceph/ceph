@@ -221,6 +221,13 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   }
 
   rocksdb::Status Close() override {
+    // RocksDB assumes that when the file is closed, unused allocated
+    // space is truncated. It's not explicitly documented, but compare
+    // PosixWritableFile::Close().
+    int r = fs->truncate_unused(h);
+    if (r < 0) {
+      return err_to_status(r);
+    }
     fs->fsync(h);
     return rocksdb::Status::OK();
   }
@@ -243,7 +250,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
 
   // Indicates the upper layers if the current WritableFile implementation
   // uses direct IO.
-  bool UseDirectIO() const {
+  bool use_direct_io() const override {
     return false;
   }
 
