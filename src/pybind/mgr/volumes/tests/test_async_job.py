@@ -28,6 +28,8 @@ class FakeJobs(AsyncJobs):
     def __init__(self):
         self.available = {}
         self.executed = []
+        # should_cancel() as seen by each executed job
+        self.cancel_seen = []
         self.execute = None
         with mock.patch.object(async_job, 'CephfsClient'):
             super().__init__(mock.MagicMock(), 'test', 0)
@@ -46,6 +48,7 @@ class FakeJobs(AsyncJobs):
 
     def execute_job(self, volname, job, should_cancel):
         self.executed.append((volname, job))
+        self.cancel_seen.append(should_cancel())
         if self.execute:
             self.execute(volname, job)
 
@@ -196,3 +199,44 @@ def test_job_thread_retries_deferred_job():
     assert j.executed == [('vol', 'a')] * (ndefers + 1)
     assert j.deferred == {}
     j.vc.cluster_log.assert_not_called()  # thread did not bail out
+
+
+def test_job_queued_while_paused_waits_for_resume():
+    """
+    A job queued while paused must not be picked up by an idle worker
+    thread (which would run it with its cancel event set, i.e., cancel it),
+    but run normally once resumed.
+    """
+    done = threading.Event()
+    j = FakeJobs()
+
+    def execute(volname, job):
+        j.available['vol'].remove(job)
+        done.set()
+    j.execute = execute
+
+    with mock.patch.object(async_job.time, 'sleep'):
+        t = JobThread(j, j.vc, name='test.0')
+        j.threads.append(t)
+        j.nr_concurrent_jobs = 1
+        t.start()
+        try:
+            # let the worker go idle, waiting for a job
+            threading.Event().wait(0.3)
+            j.pause()
+            j.available['vol'] = ['a']
+            j.queue_job('vol')
+            assert not done.wait(timeout=1), "job ran while paused"
+            assert j.executed == []
+
+            j.resume()
+            assert done.wait(timeout=10), "job did not run after resume"
+            assert j.executed == [('vol', 'a')]
+            assert j.cancel_seen == [False]
+        finally:
+            j.resume()
+            with j.lock:
+                j.nr_concurrent_jobs = 0
+                j.cv.notify_all()
+            t.join(timeout=10)
+    assert not t.is_alive()

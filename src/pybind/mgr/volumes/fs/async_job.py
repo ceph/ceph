@@ -51,6 +51,12 @@ class JobThread(threading.Thread):
                             log.info("thread [{0}] terminating due to reconfigure".format(thread_name))
                             self.async_job.threads.remove(self)
                             return
+                        if not self.async_job.run_event.is_set():
+                            # paused while idle (waiting for a job): do not
+                            # pick up a job -- it would run with cancel_event
+                            # set (see pause()) and get canceled. wait for
+                            # resume at the top of the loop instead.
+                            break
                         timo = self.async_job.wakeup_timeout
                         if timo is not None:
                             volnames = list_volumes(self.vc.mgr)
@@ -62,6 +68,8 @@ class JobThread(threading.Thread):
                         if vol_job:
                             break
                         self.async_job.cv.wait(timeout=self.async_job.get_wait_timeout())
+                    if vol_job is None:
+                        continue
                     self.async_job.register_async_job(vol_job[0], vol_job[1], thread_id)
 
                 # execute the job (outside lock)
@@ -237,12 +245,13 @@ class AsyncJobs(threading.Thread):
         # XXX: cancel_all_jobs() sets jobthread.cancel_event causing all ongoing
         # jobs to cancel. But if there are no jobs (that is self.q is empty),
         # cancel_all_jobs() will return without doing anything and
-        # jobthread.cancel_event won't be set. This results in future jobs to be
-        # executed even when config option to pause is already set. Similarly,
-        # when there's only 1 ongoing job, jobthread.cancel_event is set for it
-        # but not for other threads causing rest of threads to pick new jobs
-        # when they are queued.
-        # Therefore, set jobthread.cancel_event explicitly.
+        # jobthread.cancel_event won't be set. Similarly, when there's only 1
+        # ongoing job, jobthread.cancel_event is set for it but not for other
+        # threads.
+        # Therefore, set jobthread.cancel_event explicitly. Note that idle
+        # threads do not pick up new jobs while paused (they check run_event
+        # before fetching a job), so new jobs stay queued rather than getting
+        # canceled.
         log.debug('pause() pausing rest of worker threads')
         for t in self.threads:
             # is_set(), although technically redundant, is called to emphasize
@@ -252,6 +261,10 @@ class AsyncJobs(threading.Thread):
             # (some) threads.
             if not t.cancel_event.is_set():
                 t.cancel_event.set()
+        # wake up idle threads (waiting for a job) so that they notice the
+        # pause and wait for resume instead.
+        with lock_timeout_log(self.lock):
+            self.cv.notifyAll()
         log.debug('pause() all jobs cancelled and cancel_event have been set for '
                   'all threads, queue and threads have been paused')
 
