@@ -5816,6 +5816,29 @@ void BlueStore::MempoolThread::_update_cache_settings()
 #undef dout_context
 #define dout_context store->cct
 
+void BlueStore::ClaimRangeStressThread::init()
+{
+  auto& conf = store->cct->_conf;
+  if (!conf.get_val<bool>("bluestore_debug_claim_range_stress")) {
+    return;
+  }
+  max_claims = conf.get_val<uint64_t>(
+    "bluestore_debug_claim_range_stress_max_claims");
+  claim_len = conf.get_val<Option::size_t>(
+    "bluestore_debug_claim_range_stress_claim_length");
+  free_p = conf.get_val<uint64_t>(
+    "bluestore_debug_claim_range_stress_max_free_percent");
+  min_free = conf.get_val<Option::size_t>(
+    "bluestore_debug_claim_range_stress_min_free");
+  interval = conf.get_val<double>(
+    "bluestore_debug_claim_range_stress_interval");
+  // claim_range() asserts on a misaligned length;
+  ceph_assert(claim_len % store->alloc->get_block_size() == 0);
+  ceph_assert(claim_len <= store->bdev->get_size());
+  ceph_assert(!stop);
+  create("bstore_claim_st");
+}
+
 void *BlueStore::ClaimRangeStressThread::entry()
 {
   std::unique_lock l{lock};
