@@ -24,8 +24,23 @@ pub async fn admin_request(
     body: Option<&[u8]>,
 ) -> RawResponse {
     let cfg = get_config();
-    let access_key = &cfg.iam_access_key;
-    let secret_key = &cfg.iam_secret_key;
+    admin_request_as(&cfg.iam_access_key, &cfg.iam_secret_key,
+                     method, path, query, body).await
+}
+
+/// The same request signed as somebody else.
+///
+/// An endpoint gated on a capability needs a credential that lacks
+/// it, or the gate is never observed to close.
+pub async fn admin_request_as(
+    access_key: &str,
+    secret_key: &str,
+    method: reqwest::Method,
+    path: &str,
+    query: &str,
+    body: Option<&[u8]>,
+) -> RawResponse {
+    let cfg = get_config();
 
     let proto = if cfg.default_is_secure { "https" } else { "http" };
     let host = format!("{}:{}", cfg.default_host, cfg.default_port);
@@ -203,4 +218,95 @@ pub async fn driver_hint_results(
         out.insert(k.clone(), s);
     }
     Some(out)
+}
+
+/// Percent-encode a query-string value.
+///
+/// An owner key carries `$` between tenant and user.  SigV4 signs the
+/// canonical -- encoded -- query, so a raw `$` on the wire signs one
+/// string and sends another.
+pub fn q(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for b in value.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9'
+                | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// `PUT /admin/nsfs/identity` -- write one identity record.
+///
+/// The parameters are passed through rather than taken as a struct.
+/// The verb is a full replace, so which fields a caller omits is the
+/// thing under test, and a struct with defaults would hide it.
+pub async fn nsfs_put_identity(params: &[(&str, &str)]) -> RawResponse {
+    let query = params.iter()
+        .map(|(k, v)| format!("{}={}", k, q(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    admin_request(reqwest::Method::PUT, "/admin/nsfs/identity",
+                  &query, None).await
+}
+
+/// `GET /admin/nsfs/identity?identity=<owner>` -- read one record.
+pub async fn nsfs_get_identity(key: &str) -> RawResponse {
+    admin_request(reqwest::Method::GET, "/admin/nsfs/identity",
+                  &format!("identity={}", q(key)), None).await
+}
+
+/// `GET /admin/nsfs/identity` with no key -- every record.
+pub async fn nsfs_list_identities() -> RawResponse {
+    admin_request(reqwest::Method::GET, "/admin/nsfs/identity",
+                  "", None).await
+}
+
+/// `DELETE /admin/nsfs/identity?identity=<owner>`.
+pub async fn nsfs_delete_identity(key: &str) -> RawResponse {
+    admin_request(reqwest::Method::DELETE, "/admin/nsfs/identity",
+                  &format!("identity={}", q(key)), None).await
+}
+
+/// The response body as JSON, or `None` if it is not an object.
+///
+/// Not `flatten_json`:  an identity renders its unset fields by
+/// omitting them and its group list as an array, and flattening
+/// would make an absent key and an empty list read alike.
+pub fn as_json(resp: &RawResponse) -> Option<serde_json::Value> {
+    serde_json::from_str(&resp.body).ok()
+}
+
+/// `GET /admin/nsfs/credentials` -- what a request would be served as.
+///
+/// With no key it resolves the *caller*, which is the only form that
+/// exercises the key an authenticated request actually produces.
+pub async fn nsfs_credentials() -> RawResponse {
+    admin_request(reqwest::Method::GET, "/admin/nsfs/credentials",
+                  "", None).await
+}
+
+/// The same, signed as somebody else.
+pub async fn nsfs_credentials_as(access_key: &str, secret_key: &str)
+    -> RawResponse {
+    admin_request_as(access_key, secret_key, reqwest::Method::GET,
+                     "/admin/nsfs/credentials", "", None).await
+}
+
+/// `GET /admin/nsfs/credentials?identity=<owner>` -- somebody else's.
+pub async fn nsfs_credentials_for(key: &str) -> RawResponse {
+    admin_request(reqwest::Method::GET, "/admin/nsfs/credentials",
+                  &format!("identity={}", q(key)), None).await
+}
+
+/// `PUT /admin/user?caps` -- grant capabilities to a user.
+///
+/// Admin Ops endpoints always require a non-default capability, so a
+/// test identity that needs to call one has to be given it.  The
+/// alternative would be opening the endpoint, which is not on offer.
+pub async fn grant_user_caps(uid: &str, caps: &str) -> RawResponse {
+    admin_request(reqwest::Method::PUT, "/admin/user",
+                  &format!("caps&uid={}&user-caps={}", q(uid), q(caps)),
+                  None).await
 }
