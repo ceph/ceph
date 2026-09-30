@@ -117,6 +117,32 @@ private:
   boost::container::small_vector<char, 1024> str;
 };
 
+class StringEntry : public Entry {
+public:
+  StringEntry() = delete;
+  StringEntry(short pr, short sub, std::string_view prefix)
+      : Entry(pr, sub), str(prefix.begin(), prefix.end()) {}
+  ~StringEntry() override = default;
+
+  StringEntry(const StringEntry&) = default;
+  StringEntry& operator=(const StringEntry&) = default;
+  StringEntry(StringEntry&&) = default;
+  StringEntry& operator=(StringEntry&&) = default;
+
+  std::string_view strv() const override {
+    return std::string_view(str.data(), str.size());
+  }
+  std::size_t size() const override {
+    return str.size();
+  }
+
+  auto get_inserter() {
+    return std::back_inserter(str);
+  }
+
+private:
+  boost::container::small_vector<char, 1024> str;
+};
 }
 }
 
