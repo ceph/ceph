@@ -724,6 +724,14 @@ public:
   int get_parent_of_type(int id, int type, int rule = -1) const;
 
   /**
+   * like get_parent_of_type(), but if the rule takes from a device class
+   * shadow tree, return the bucket the shadow was made from (e.g. dc1
+   * rather than dc1~ssd).  Stretch mode compares these ids against real
+   * buckets, such as the surviving site in degraded stretch mode.
+   */
+  int get_nonshadow_parent_of_type(int id, int type, int rule) const;
+
+  /**
    * get the fully qualified location of a device by successively finding
    * parents beginning at ID and ending at highest type number specified in
    * the CRUSH map which assumes that if device foo is under device bar, the
