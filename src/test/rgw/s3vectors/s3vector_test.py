@@ -4647,10 +4647,10 @@ def test_put_get_list_query_delete_vectors_with_policy():
         other.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['v0'])
     assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
 
-    # with pytest.raises(other.exceptions.ClientError) as err_info:
-    #     other.list_vectors(vectorBucketName=bucket_name, indexName=index_name)
-    # assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
-
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.list_vectors(vectorBucketName=bucket_name, indexName=index_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+    
     with pytest.raises(other.exceptions.ClientError) as err_info:
         other.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
                             queryVector=generate_data(dimension, 0), topK=1)

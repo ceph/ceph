@@ -143,10 +143,31 @@ protected:
     }
     return 0;
   }
+  bool can_bypass_bucket_policy() {
 
-  bool is_bucket_owner() const {
+    // If the user is the root account of the bucket owner,
+    // and x-amz-confirm-remove-self-bucket-access was not set,
+    // then the user can access / modify the bucket policy without policy check.
     return s->auth.identity->is_root_of(s->bucket_owner.id) &&
            s->bucket_attrs.find(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS) == s->bucket_attrs.end();
+  }
+
+  int verify_vector_bucket_permission(const std::string& bucket_name,
+                                      uint64_t iam_op,
+                                      optional_yield y) {
+    int ret = load_vector_bucket_policy_context(bucket_name, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    const auto arn = rgw::s3vector::vector_bucket_arn(
+        s->zonegroup_name, s->account_name, bucket_name);
+    if (!verify_bucket_permission(this, s, arn, s->user_acl, s->bucket_acl,
+                                   s->iam_policy, s->iam_identity_policies,
+                                   s->session_policies, iam_op)) {
+      return -EACCES;
+    }
+    return 0;
   }
 
   void send_validation_error_response() {
@@ -184,22 +205,8 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector CreateIndex" << dendl;
-    int ret = load_vector_bucket_policy_context(configuration.vector_bucket_name, y);
-    if (ret < 0) {
-      return ret;
-    }
-    if (is_bucket_owner()) {
-      return 0;
-    }
-    const auto arn = rgw::s3vector::vector_bucket_arn(
-        s->zonegroup_name, s->account_name, configuration.vector_bucket_name);
-    if (!verify_bucket_permission(this, s, arn, s->user_acl, s->bucket_acl,
-                                   s->iam_policy, s->iam_identity_policies,
-                                   s->session_policies,
-                                   rgw::IAM::s3vectorsCreateIndex)) {
-      return -EACCES;
-    }
-    return 0;
+    return verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsCreateIndex, y);
   }
 
   const char* name() const override { return "s3vector_create_index"; }
@@ -212,6 +219,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     op_ret = rgw::s3vector::create_index(configuration, driver, &s->bucket_tenant, this, y, validation_errors);
   }
 
@@ -376,22 +385,8 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector DeleteIndex" << dendl;
-    int ret = load_vector_bucket_policy_context(configuration.vector_bucket_name, y);
-    if (ret < 0) {
-      return ret;
-    }
-    if (is_bucket_owner()) {
-      return 0;
-    }
-    const auto arn = rgw::s3vector::vector_bucket_arn(
-        s->zonegroup_name, s->account_name, configuration.vector_bucket_name);
-    if (!verify_bucket_permission(this, s, arn, s->user_acl, s->bucket_acl,
-                                   s->iam_policy, s->iam_identity_policies,
-                                   s->session_policies,
-                                   rgw::IAM::s3vectorsDeleteIndex)) {
-      return -EACCES;
-    }
-    return 0;
+    return verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsDeleteIndex, y);
   }
 
   const char* name() const override { return "s3vector_delete_index"; }
@@ -404,6 +399,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     op_ret = rgw::s3vector::delete_index(configuration, driver, &s->bucket_tenant, this, y);
   }
 };
@@ -415,9 +412,10 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector DeleteVectorBucket" << dendl;
-    if (!verify_bucket_permission(this, s, configuration.vector_bucket_arn.get(), rgw::IAM::s3vectorsDeleteVectorBucket)) {
-      // policy TODO: ignore failure for now "evaluate_iam_policies: implicit deny from identity-based policy"
-      // return -EACCES;
+    int ret = verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsDeleteVectorBucket, y);
+    if (ret < 0) {
+      return ret;
     }
     return verify_s3_bucket_permission(
         configuration.vector_bucket_name, {rgw::IAM::s3ListBucket, rgw::IAM::s3GetObject}, y);
@@ -454,15 +452,9 @@ private:
       f.flush(ss);
       ldpp_dout(this, 20) << "INFO: executing s3vector DeleteVectorBucket with: " << ss.str() << dendl;
     }
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
-    op_ret = driver->load_vector_bucket(this, bucket_id, &vector_bucket, y);
-    if (op_ret < 0) {
-      if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
-      }
-      ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
-      return;
-    }
     op_ret = vector_bucket->remove(this, false, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to delete s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
@@ -481,7 +473,8 @@ private:
     if (ret < 0) {
       return ret;
     }
-    iif (is_bucket_owner()) {
+
+    if (can_bypass_bucket_policy()) {
       return 0;
     }
     const auto arn = rgw::s3vector::vector_bucket_arn(
@@ -505,6 +498,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     op_ret = retry_raced_bucket_write(this, vector_bucket.get(), [this] {
       rgw::sal::Attrs& attrs = vector_bucket->get_attrs();
       attrs.erase(RGW_ATTR_IAM_POLICY);
@@ -534,22 +529,8 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector PutVectors" << dendl;
-    int ret = load_vector_bucket_policy_context(configuration.vector_bucket_name, y);
-    if (ret < 0) {
-      return ret;
-    }
-    if (is_bucket_owner()) {
-      return 0;
-    }
-    const auto arn = rgw::s3vector::vector_bucket_arn(
-        s->zonegroup_name, s->account_name, configuration.vector_bucket_name);
-    if (!verify_bucket_permission(this, s, arn, s->user_acl, s->bucket_acl,
-                                   s->iam_policy, s->iam_identity_policies,
-                                   s->session_policies,
-                                   rgw::IAM::s3vectorsPutVectors)) {
-      return -EACCES;
-    }
-    return 0;
+    return verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsPutVectors, y);
   }
 
   const char* name() const override { return "s3vector_put_vectors"; }
@@ -562,6 +543,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     op_ret = rgw::s3vector::put_vectors(configuration, driver, &s->bucket_tenant, this, y, validation_errors);
   }
 
@@ -586,22 +569,8 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetVectors" << dendl;
-    int ret = load_vector_bucket_policy_context(configuration.vector_bucket_name, y);
-    if (ret < 0) {
-      return ret;
-    }
-    if (is_bucket_owner()) {
-      return 0;
-    }
-    const auto arn = rgw::s3vector::vector_bucket_arn(
-        s->zonegroup_name, s->account_name, configuration.vector_bucket_name);
-    if (!verify_bucket_permission(this, s, arn, s->user_acl, s->bucket_acl,
-                                   s->iam_policy, s->iam_identity_policies,
-                                   s->session_policies,
-                                   rgw::IAM::s3vectorsGetVectors)) {
-      return -EACCES;
-    }
-    return 0;
+    return verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsGetVectors, y);
   }
 
   const char* name() const override { return "s3vector_get_vectors"; }
@@ -614,6 +583,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     op_ret = rgw::s3vector::get_vectors(configuration, driver, &s->bucket_tenant, this, y, reply);
   }
 
@@ -644,22 +615,8 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector ListVectors" << dendl;
-    int ret = load_vector_bucket_policy_context(configuration.vector_bucket_name, y);
-    if (ret < 0) {
-      return ret;
-    }
-    if (is_bucket_owner()) {
-      return 0;
-    }
-    const auto arn = rgw::s3vector::vector_bucket_arn(
-        s->zonegroup_name, s->account_name, configuration.vector_bucket_name);
-    if (!verify_bucket_permission(this, s, arn, s->user_acl, s->bucket_acl,
-                                   s->iam_policy, s->iam_identity_policies,
-                                   s->session_policies,
-                                   rgw::IAM::s3vectorsListVectors)) {
-      return -EACCES;
-    }
-    return 0;
+    return verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsListVectors, y);
   }
 
   const char* name() const override { return "s3vector_list_vectors"; }
@@ -672,6 +629,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     op_ret = rgw::s3vector::list_vectors(configuration, driver, &s->bucket_tenant, this, y, reply);
   }
 
@@ -835,13 +794,8 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetVectorBucket" << dendl;
-
-    if (!verify_bucket_permission(this, s, configuration.vector_bucket_arn.get(), rgw::IAM::s3vectorsGetVectorBucket)) {
-      // policy TODO: ignore failure for now "evaluate_iam_policies: implicit deny from identity-based policy"
-      // return -EACCES;
-      return 0;
-    }
-    return 0;
+    return verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsGetVectorBucket, y);
   }
 
   const char* name() const override { return "s3vector_get_vector_bucket"; }
@@ -868,6 +822,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     {
       JSONFormatter f;
       configuration.dump(&f);
@@ -919,22 +875,8 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetIndex" << dendl;
-    int ret = load_vector_bucket_policy_context(configuration.vector_bucket_name, y);
-    if (ret < 0) {
-      return ret;
-    }
-    if (is_bucket_owner()) {
-      return 0;
-    }
-    const auto arn = rgw::s3vector::vector_bucket_arn(
-        s->zonegroup_name, s->account_name, configuration.vector_bucket_name);
-    if (!verify_bucket_permission(this, s, arn, s->user_acl, s->bucket_acl,
-                                   s->iam_policy, s->iam_identity_policies,
-                                   s->session_policies,
-                                   rgw::IAM::s3vectorsGetIndex)) {
-      return -EACCES;
-    }
-    return 0;
+    return verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsGetIndex, y);
   }
 
   const char* name() const override { return "s3vector_get_index"; }
@@ -947,6 +889,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     op_ret = rgw::s3vector::get_index(configuration, s->zonegroup_name, s->account_name, driver, &s->bucket_tenant, this, y, reply);
   }
 
@@ -977,22 +921,8 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector ListIndexes" << dendl;
-    int ret = load_vector_bucket_policy_context(configuration.vector_bucket_name, y);
-    if (ret < 0) {
-      return ret;
-    }
-    if (is_bucket_owner()) {
-      return 0;
-    }
-    const auto arn = rgw::s3vector::vector_bucket_arn(
-        s->zonegroup_name, s->account_name, configuration.vector_bucket_name);
-    if (!verify_bucket_permission(this, s, arn, s->user_acl, s->bucket_acl,
-                                   s->iam_policy, s->iam_identity_policies,
-                                   s->session_policies,
-                                   rgw::IAM::s3vectorsListIndexes)) {
-      return -EACCES;
-    }
-    return 0;
+    return verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsListIndexes, y);
   }
 
   const char* name() const override { return "s3vector_list_indexes"; }
@@ -1005,6 +935,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     if (!configuration.vector_bucket_arn) {
       configuration.vector_bucket_arn = rgw::s3vector::vector_bucket_arn(
         s->zonegroup_name,
@@ -1053,7 +985,8 @@ private:
     if (ret < 0) {
       return ret;
     }
-    if (is_bucket_owner()) {
+
+    if (can_bypass_bucket_policy()) {
       return 0;
     }
     const auto arn = rgw::s3vector::vector_bucket_arn(
@@ -1077,6 +1010,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     try {
       const Policy p(s->cct, &s->bucket_tenant, configuration.policy,
                       s->cct->_conf.get_val<bool> ("rgw_policy_reject_invalid_principals"));
@@ -1086,7 +1021,7 @@ private:
         return;
       }
       op_ret = retry_raced_bucket_write(this, vector_bucket.get(), [&p, this] {
-              rgw::sal::Attrs attrs = vector_bucket->get_attrs();
+              rgw::sal::Attrs& attrs = vector_bucket->get_attrs();
               attrs[RGW_ATTR_IAM_POLICY].clear();
               attrs[RGW_ATTR_IAM_POLICY].append(p.text);
               if (s->info.env->exists("HTTP_X_AMZ_CONFIRM_REMOVE_SELF_BUCKET_ACCESS")) {
@@ -1128,7 +1063,8 @@ private:
     if (ret < 0) {
       return ret;
     }
-    iif (is_bucket_owner()) {
+
+    if (can_bypass_bucket_policy()) {
       return 0;
     }
     const auto arn = rgw::s3vector::vector_bucket_arn(
@@ -1151,19 +1087,21 @@ private:
   }
 
   void execute(optional_yield y) override {
-    rgw::sal::Attrs attrs = vector_bucket->get_attrs();
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
+    const rgw::sal::Attrs& attrs = vector_bucket->get_attrs();
     auto attr = attrs.find(RGW_ATTR_IAM_POLICY);
-    if(attr == attrs.end()) {
+    if (attr == attrs.end()) {
       ldpp_dout(this, 20) << "can't find vector bucket IAM POLICY attr bucket_name = "
         << configuration.vector_bucket_name << dendl;
       op_ret = -ERR_NO_SUCH_BUCKET_POLICY;
       s->err.message = "The vector bucket policy does not exist";
       return;
     } else {
-      policy = attrs[RGW_ATTR_IAM_POLICY];
+      policy = attr->second;
       
-      if(policy.length() == 0) { 
-        ldpp_dout(this, 10) << "The vector bucket policy doesnot exist, bucket_policy = "
+      if (policy.length() == 0) { 
+        ldpp_dout(this, 10) << "The vector bucket policy does not exist, bucket_policy = "
           << configuration.vector_bucket_name << dendl;
           op_ret = -ERR_NO_SUCH_BUCKET_POLICY;
           return;
@@ -1195,22 +1133,8 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector DeleteVectors" << dendl;
-    int ret = load_vector_bucket_policy_context(configuration.vector_bucket_name, y);
-    if (ret < 0) {
-      return ret;
-    }
-    if (is_bucket_owner()) {
-      return 0;
-    }
-    const auto arn = rgw::s3vector::vector_bucket_arn(
-        s->zonegroup_name, s->account_name, configuration.vector_bucket_name);
-    if (!verify_bucket_permission(this, s, arn, s->user_acl, s->bucket_acl,
-                                   s->iam_policy, s->iam_identity_policies,
-                                   s->session_policies,
-                                   rgw::IAM::s3vectorsDeleteVectors)) {
-      return -EACCES;
-    }
-    return 0;
+    return verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsDeleteVectors, y);
   }
 
   const char* name() const override { return "s3vector_delete_vectors"; }
@@ -1223,6 +1147,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     op_ret = rgw::s3vector::delete_vectors(configuration, driver, &s->bucket_tenant, this, y);
   }
 };
@@ -1236,22 +1162,8 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector QueryVectors" << dendl;
-    int ret = load_vector_bucket_policy_context(configuration.vector_bucket_name, y);
-    if (ret < 0) {
-      return ret;
-    }
-    if (is_bucket_owner()) {
-      return 0;
-    }
-    const auto arn = rgw::s3vector::vector_bucket_arn(
-        s->zonegroup_name, s->account_name, configuration.vector_bucket_name);
-    if (!verify_bucket_permission(this, s, arn, s->user_acl, s->bucket_acl,
-                                   s->iam_policy, s->iam_identity_policies,
-                                   s->session_policies,
-                                   rgw::IAM::s3vectorsQueryVectors)) {
-      return -EACCES;
-    }
-    return 0;
+    return verify_vector_bucket_permission(
+        configuration.vector_bucket_name, rgw::IAM::s3vectorsQueryVectors, y);
   }
 
   const char* name() const override { return "s3vector_query_vectors"; }
@@ -1275,6 +1187,8 @@ private:
   }
 
   void execute(optional_yield y) override {
+    ceph_assert(vector_bucket);
+    ceph_assert(!vector_bucket->empty());
     op_ret = rgw::s3vector::query_vectors(configuration, filter_parser, driver, &s->bucket_tenant, this, y, reply, validation_errors);
   }
 
