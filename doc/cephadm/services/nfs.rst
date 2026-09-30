@@ -158,6 +158,12 @@ Example with RDMA enabled:
    address is RDMA-capable. On the host, run ``rdma link show`` and confirm the
    netdev for the interface with the bind IP is listed.
 
+   If the bind IP is on a bond, the RDMA netdevs are usually the bond's member
+   devices rather than the bond itself, so cephadm checks the members instead.
+   Deployment fails if none of them are RDMA-capable, and a warning is logged
+   if only some of them are, since RDMA traffic can then fail whenever it is
+   sent over a member that is not RDMA-capable.
+
 Ceph Client Object Cache
 ------------------------
 
