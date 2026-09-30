@@ -19,6 +19,14 @@ test "$(ceph-erasure-code-tool calc-chunk-size \
 dd if="$(which ceph-erasure-code-tool)" of=$TMPDIR/data bs=770808 count=1
 cp $TMPDIR/data $TMPDIR/data.orig
 
+# cauchy_orig needs k*w*packetsize aligned chunks
+ceph-erasure-code-tool encode \
+                       plugin=jerasure,technique=cauchy_orig,k=2,m=1 \
+                       4096 \
+                       0,1,2 \
+                       $TMPDIR/data 2>&1 |
+    grep -q 'invalid stripe unit'
+
 ceph-erasure-code-tool encode \
                        plugin=isa,technique=reed_sol_van,k=2,m=1 \
                        4096 \

@@ -95,6 +95,12 @@ int ec_init(const std::string &profile_str,
   uint64_t stripe_size = atoi(profile["k"].c_str());
   ceph_assert(stripe_size > 0);
   uint64_t stripe_width = stripe_size * stripe_unit;
+  uint64_t chunk_size = (*ec_impl)->get_chunk_size(stripe_width);
+  if (chunk_size != stripe_unit) {
+    usage("invalid stripe unit: the plugin rounds it up to " +
+          stringify(chunk_size), std::cerr);
+    return 1;
+  }
   sinfo->reset(new ECUtil::stripe_info_t(*ec_impl, nullptr, stripe_width));
 
   return 0;
