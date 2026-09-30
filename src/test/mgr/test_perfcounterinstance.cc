@@ -27,6 +27,22 @@ TEST(PerfCounterInstance, PushSingleValue) {
   ASSERT_EQ(counter.get_latest_data().t, t1);
 }
 
+TEST(PerfCounterInstance, LatentBug_get_latest_data_EmptyBufferGuard) {
+  PerfCounterInstance counter(PERFCOUNTER_U64);
+
+  ASSERT_EQ(counter.get_data().size(), 0u);
+
+  const auto& latest = counter.get_latest_data();
+  ASSERT_EQ(latest.v, 0u);
+  ASSERT_EQ(latest.t, utime_t());
+
+  utime_t t1(100, 0);
+  uint64_t v1 = 42;
+  counter.push(t1, v1);
+  ASSERT_EQ(counter.get_latest_data().v, v1);
+  ASSERT_EQ(counter.get_latest_data().t, t1);
+}
+
 TEST(PerfCounterInstance, PushMultipleValues) {
   PerfCounterInstance counter(PERFCOUNTER_U64);
 

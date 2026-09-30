@@ -93,7 +93,6 @@ add_executable(unittest_mgr_perfcounterinstance
 add_ceph_unittest(unittest_mgr_perfcounterinstance)
 target_link_libraries(unittest_mgr_perfcounterinstance
   ceph-common
-  Python3::Python
 )
 
 #scripts
