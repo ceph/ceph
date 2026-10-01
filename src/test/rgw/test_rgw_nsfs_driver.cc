@@ -36,6 +36,7 @@
 #include "rgw_website.h"
 #include "rgw_bucket_encryption.h"
 #include "driver/nsfs/identity_db.h"
+#include "driver/nsfs/personality.h"
 #include "rgw_auth.h"
 #include "common/ceph_json.h"
 
@@ -1382,6 +1383,242 @@ TEST_F(NSFSIdentityDBTest, AMemberDoesNotInheritItsAccountsRow)
 	      member->load_acct_info(env->dpp)->get_id(), cred),
 	    -ENOENT)
       << "a member with no row was served as its account";
+}
+
+/* The personality table.
+ *
+ * Tested against a counting registrar rather than io_uring:  the
+ * parts worth testing here are eviction order, pinning and the
+ * all-pinned case, none of which involve a ring, and all of which
+ * would otherwise need root to reach. */
+class CountingRegistrar : public nsfs::PersonalityTable::Registrar {
+public:
+  int next_id{1};
+  int fail_with{0};			/* non-zero: refuse with this */
+  std::vector<int> registered;		/* ids handed out, in order */
+  std::vector<int> released;		/* ids taken back, in order */
+  std::vector<nsfs::Credentials> creds;	/* what each registration saw */
+
+  int register_personality(const DoutPrefixProvider*,
+			   const nsfs::Credentials& cred) override {
+    if (fail_with) {
+      return fail_with;
+    }
+    creds.push_back(cred);
+    registered.push_back(next_id);
+    return next_id++;
+  }
+  void unregister_personality(const DoutPrefixProvider*,
+			      uint16_t id) override {
+    released.push_back(id);
+  }
+  bool live(int id) const {
+    return std::count(registered.begin(), registered.end(), id) >
+	   std::count(released.begin(), released.end(), id);
+  }
+};
+
+static nsfs::Credentials creds_for(uid_t uid)
+{
+  nsfs::Credentials c;
+  c.uid = uid;
+  c.gid = uid;
+  c.groups = {uid + 1000};
+  return c;
+}
+
+class NSFSPersonalityTest : public ::testing::Test {
+protected:
+  CountingRegistrar reg;
+};
+
+/* A miss, then a hit, and the registrar is consulted exactly once. */
+TEST_F(NSFSPersonalityTest, MissRegistersAndHitDoesNot)
+{
+  nsfs::PersonalityTable t{4, &reg};
+  const rgw_user alice{"", "alice"};
+
+  nsfs::PersonalityRef ref;
+  ASSERT_EQ(t.find(alice, &ref), -ENOENT) << "empty table reported a hit";
+  ASSERT_FALSE(ref.valid());
+
+  ASSERT_EQ(t.insert(env->dpp, alice, creds_for(1001), &ref), 0);
+  ASSERT_TRUE(ref.valid());
+  const uint16_t id = ref.id();
+  EXPECT_EQ(reg.registered.size(), 1u);
+  ASSERT_EQ(reg.creds.size(), 1u);
+  EXPECT_EQ(reg.creds[0].uid, 1001u) << "the registrar saw other credentials";
+
+  nsfs::PersonalityRef second;
+  ASSERT_EQ(t.find(alice, &second), 0) << "a registered identity missed";
+  EXPECT_EQ(second.id(), id);
+  EXPECT_EQ(reg.registered.size(), 1u)
+      << "a hit registered a second personality";
+
+  EXPECT_EQ(t.get_stats().hits, 1u);
+  EXPECT_EQ(t.get_stats().misses, 1u);
+  EXPECT_EQ(t.get_stats().registrations, 1u);
+}
+
+/* Eviction is by age, and the evicted personality is given back. */
+TEST_F(NSFSPersonalityTest, EvictionIsFifoAndUnregisters)
+{
+  nsfs::PersonalityTable t{3, &reg};
+
+  /* fill it, holding nothing -- refs are released at each iteration */
+  std::vector<rgw_user> users;
+  for (int i = 0; i < 3; ++i) {
+    users.emplace_back("", std::string("u") + std::to_string(i));
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.insert(env->dpp, users[i], creds_for(100 + i), &r), 0);
+  }
+  ASSERT_EQ(t.size(), 3u);
+  const int oldest = reg.registered.front();
+
+  /* the control:  all three are still findable before the overflow */
+  for (const auto& u : users) {
+    nsfs::PersonalityRef r;
+    EXPECT_EQ(t.find(u, &r), 0) << u << " was lost before any eviction";
+  }
+
+  const rgw_user newcomer{"", "newcomer"};
+  nsfs::PersonalityRef r;
+  ASSERT_EQ(t.insert(env->dpp, newcomer, creds_for(999), &r), 0);
+
+  EXPECT_EQ(t.size(), 3u) << "the table grew past its capacity";
+  EXPECT_EQ(t.get_stats().evictions, 1u);
+  EXPECT_FALSE(reg.live(oldest)) << "the evicted personality was not released";
+
+  nsfs::PersonalityRef gone;
+  EXPECT_EQ(t.find(users[0], &gone), -ENOENT)
+      << "the oldest entry survived;  eviction is not FIFO";
+  nsfs::PersonalityRef kept;
+  EXPECT_EQ(t.find(users[1], &kept), 0) << "a younger entry was evicted";
+}
+
+/* A pinned slot is skipped, so a live operation keeps its
+ * credentials even as the cursor comes round. */
+TEST_F(NSFSPersonalityTest, PinnedSlotsAreNotReused)
+{
+  nsfs::PersonalityTable t{2, &reg};
+  const rgw_user held{"", "held"};
+
+  nsfs::PersonalityRef pin;
+  ASSERT_EQ(t.insert(env->dpp, held, creds_for(1), &pin), 0);
+  const uint16_t held_id = pin.id();
+
+  /* the control:  with the pin released, this same sequence evicts
+   * it -- so "survived" below is the pin's doing and not an
+   * accident of the table being big enough */
+  {
+    nsfs::PersonalityTable t2{2, &reg};
+    nsfs::PersonalityRef tmp;
+    ASSERT_EQ(t2.insert(env->dpp, held, creds_for(1), &tmp), 0);
+    tmp.reset();
+    for (int i = 0; i < 2; ++i) {
+      nsfs::PersonalityRef r;
+      ASSERT_EQ(t2.insert(env->dpp, rgw_user{"", "p" + std::to_string(i)},
+			  creds_for(50 + i), &r), 0);
+      r.reset();
+    }
+    nsfs::PersonalityRef gone;
+    ASSERT_EQ(t2.find(held, &gone), -ENOENT)
+	<< "the control did not evict;  the real case proves nothing";
+  }
+
+  /* now with the pin held */
+  for (int i = 0; i < 2; ++i) {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.insert(env->dpp, rgw_user{"", "x" + std::to_string(i)},
+		       creds_for(60 + i), &r), 0);
+    r.reset();
+  }
+
+  nsfs::PersonalityRef still;
+  EXPECT_EQ(t.find(held, &still), 0) << "a pinned slot was reused";
+  EXPECT_EQ(still.id(), held_id);
+  EXPECT_TRUE(reg.live(held_id)) << "a pinned personality was unregistered";
+}
+
+/* Every slot pinned is a denial, not an improvisation.
+ *
+ * Serving the request unimpersonated would give it the gateway's
+ * reach;  evicting a pinned slot would pull credentials out from
+ * under a live operation.  Neither is acceptable, so it fails. */
+TEST_F(NSFSPersonalityTest, AllSlotsPinnedIsRefused)
+{
+  nsfs::PersonalityTable t{2, &reg};
+
+  std::vector<nsfs::PersonalityRef> pins(2);
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_EQ(t.insert(env->dpp, rgw_user{"", "h" + std::to_string(i)},
+		       creds_for(70 + i), &pins[i]), 0);
+  }
+
+  nsfs::PersonalityRef denied;
+  EXPECT_EQ(t.insert(env->dpp, rgw_user{"", "late"}, creds_for(80),
+		     &denied), -EBUSY);
+  EXPECT_FALSE(denied.valid());
+  EXPECT_EQ(t.get_stats().exhausted, 1u);
+  EXPECT_EQ(reg.registered.size(), 2u)
+      << "a refused insert registered a personality anyway";
+
+  /* and it recovers:  release one and the next insert succeeds */
+  pins[0].reset();
+  nsfs::PersonalityRef ok;
+  EXPECT_EQ(t.insert(env->dpp, rgw_user{"", "late"}, creds_for(80), &ok), 0);
+}
+
+/* Two operations on one identity pin it twice;  it stays until both
+ * are gone. */
+TEST_F(NSFSPersonalityTest, PinsNest)
+{
+  nsfs::PersonalityTable t{1, &reg};
+  const rgw_user u{"", "shared"};
+
+  nsfs::PersonalityRef a, b;
+  ASSERT_EQ(t.insert(env->dpp, u, creds_for(5), &a), 0);
+  ASSERT_EQ(t.find(u, &b), 0);
+
+  a.reset();
+  nsfs::PersonalityRef blocked;
+  EXPECT_EQ(t.insert(env->dpp, rgw_user{"", "other"}, creds_for(6),
+		     &blocked), -EBUSY)
+      << "one release freed a slot two operations were holding";
+
+  b.reset();
+  nsfs::PersonalityRef now;
+  EXPECT_EQ(t.insert(env->dpp, rgw_user{"", "other"}, creds_for(6),
+		     &now), 0);
+}
+
+/* A registrar that refuses leaves nothing behind. */
+TEST_F(NSFSPersonalityTest, AFailedRegistrationStoresNothing)
+{
+  nsfs::PersonalityTable t{4, &reg};
+  const rgw_user u{"", "nope"};
+
+  /* the control:  it works before the registrar starts refusing */
+  nsfs::PersonalityRef ok;
+  ASSERT_EQ(t.insert(env->dpp, rgw_user{"", "fine"}, creds_for(1), &ok), 0);
+  ok.reset();
+
+  reg.fail_with = -EPERM;
+  nsfs::PersonalityRef ref;
+  EXPECT_EQ(t.insert(env->dpp, u, creds_for(2), &ref), -EPERM);
+  EXPECT_FALSE(ref.valid());
+
+  nsfs::PersonalityRef after;
+  EXPECT_EQ(t.find(u, &after), -ENOENT)
+      << "a failed registration left an entry";
+  EXPECT_EQ(t.get_stats().failed, 1u);
+}
+
+/* The capacity is clamped to what an SQE can name. */
+TEST_F(NSFSPersonalityTest, CapacityIsClampedToTheIdSpace)
+{
+  nsfs::PersonalityTable t{1000000, &reg};
+  EXPECT_EQ(t.capacity(), 65535u);
 }
 
 /* The group text parser, which is the cost of storing the vector in

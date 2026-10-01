@@ -4890,6 +4890,44 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_nsfs_impersonate
+  type: bool
+  level: advanced
+  desc: Serve each nsfs request as the POSIX identity that made it
+  long_desc: When set, filesystem operations are performed with the uid,
+    gid and supplementary groups recorded for the authenticated identity
+    rather than with the gateway's own credentials. Requires CAP_SETUID
+    and CAP_SETGID; the gateway refuses to start without them. Every
+    identity that can authenticate must have a record, and a request
+    whose identity has none is failed rather than served unimpersonated.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_impersonate_helper_threads
+  type: uint
+  level: advanced
+  desc: Threads for impersonated calls io_uring cannot express
+  long_desc: listxattr and removexattr have no io_uring opcode, so they
+    cannot name a personality on a submission entry and are run instead
+    on a small pool of threads that assume the identity for the duration
+    of one call. Request-serving threads never change identity. This
+    pool is expected to disappear once those opcodes exist.
+  default: 8
+  services:
+  - rgw
+- name: rgw_nsfs_personality_table_size
+  type: uint
+  level: advanced
+  desc: Registered POSIX credentials cached per io_uring ring
+  long_desc: Each ring keeps its own table, so this is multiplied by the
+    number of rings, and every ring's working set converges on the whole
+    set of concurrently active identities. Sized comfortably above that
+    count; eviction is by age, so a table below the working set shows up
+    as repeated re-registration of the same identity. Clamped to 65535,
+    the range of sqe->personality.
+  default: 1024
+  services:
+  - rgw
 - name: rgw_nsfs_io_uring_sq_thread_idle_ms
   type: uint
   level: advanced

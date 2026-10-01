@@ -302,6 +302,8 @@ list(APPEND librgw_nsfs_srcs
   driver/nsfs/xattr_strategy.cc
   driver/nsfs/bucket_state_strategy.cc
   driver/nsfs/identity_db.cc
+  driver/nsfs/impersonate.cc
+  driver/nsfs/personality.cc
   driver/nsfs/path_strategy.cc
   driver/posix/lmdb-safe.cc
   driver/posix/notify.cpp
