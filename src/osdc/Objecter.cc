@@ -193,6 +193,13 @@ enum {
 
   l_osdc_split_op_reads,
 
+  l_osdc_op_send_core,
+  l_osdc_core_hint_change,
+  l_osdc_core_route_switch,
+  l_osdc_core_cons,
+  l_osdc_core_con_open,
+  l_osdc_core_con_reset,
+
   l_osdc_last,
 };
 
@@ -415,6 +422,20 @@ void Objecter::init()
 			"Operations completed by replica");
     pcb.add_u64_counter(l_osdc_split_op_reads, "split_op_reads",
                     "Client read ops split by SplitOp");
+
+    // routing ops to the OSD core owning their PG (objecter_use_osd_core_hints)
+    pcb.add_u64_counter(l_osdc_op_send_core, "op_send_core",
+			"Operations sent to the OSD core owning their PG");
+    pcb.add_u64_counter(l_osdc_core_hint_change, "core_hint_change",
+			"PGs hinted (by OSDs) to a new core");
+    pcb.add_u64_counter(l_osdc_core_route_switch, "core_route_switch",
+			"PGs switched to another OSD connection");
+    pcb.add_u64(l_osdc_core_cons, "core_cons",
+		"Open connections to OSD cores");
+    pcb.add_u64_counter(l_osdc_core_con_open, "core_con_open",
+			"Connections to OSD cores opened");
+    pcb.add_u64_counter(l_osdc_core_con_reset, "core_con_reset",
+			"Connections to OSD cores reset");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2085,6 +2106,7 @@ void Objecter::_close_core_cons(OSDSession *s)
     con->set_priv(NULL);
     con->mark_down();
   }
+  logger->dec(l_osdc_core_cons, s->core_cons.size());
   s->core_cons.clear();
   for (auto& [pgid, route] : s->pg_routes) {
     route.hinted_core.reset();
@@ -2111,6 +2133,8 @@ void Objecter::_reset_core_con(OSDSession *s,
   i->second->set_priv(NULL);
   i->second->mark_down();
   s->core_cons.erase(i);
+  logger->dec(l_osdc_core_cons);
+  logger->inc(l_osdc_core_con_reset);
 
   // the PGs routed via that core fall back to the main connection. Forget
   // the hints to that core, so that the next one reconnects.
@@ -2184,12 +2208,14 @@ ConnectionRef Objecter::_op_route(Op *op)
 		   << ": switching to core "
 		   << (desired ? std::to_string(*desired) : "none") << dendl;
     route.core = desired;
+    logger->inc(l_osdc_core_route_switch);
   }
 
   ++route.in_flight;
   op->routed_pgid = pgid;
   op->routed_core = route.core;
   if (route.core) {
+    logger->inc(l_osdc_op_send_core);
     return s->core_cons.at(*route.core);
   }
   return s->con;
@@ -2239,10 +2265,13 @@ void Objecter::_session_apply_core_hint(OSDSession *s,
 		 << (route.hinted_core ? std::to_string(*route.hinted_core) : "none")
 		 << ")" << dendl;
   route.hinted_core = hint.core;
+  logger->inc(l_osdc_core_hint_change);
   if (!s->core_cons.contains(hint.core)) {
     auto con = messenger->connect_to_osd(hint.addrs);
     con->set_priv(RefCountedPtr{s});
     s->core_cons[hint.core] = con;
+    logger->inc(l_osdc_core_cons);
+    logger->inc(l_osdc_core_con_open);
     ldout(cct, 10) << __func__ << " osd." << s->osd << " core " << hint.core
 		   << ": connecting to " << hint.addrs << " " << con << dendl;
   }
@@ -5283,6 +5312,9 @@ void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
     fmt->dump_stream("last_sent") << op->stamp;
     fmt->dump_float("age", age.count());
     fmt->dump_int("attempts", op->attempts);
+    if (op->routed_core) {
+      fmt->dump_unsigned("osd_core", *op->routed_core);
+    }
     fmt->dump_stream("snapid") << op->snapid;
     fmt->dump_stream("snap_context") << op->snapc;
     fmt->dump_stream("mtime") << op->mtime;
