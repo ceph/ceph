@@ -48,6 +48,10 @@
 
 namespace ceph::libfdb {
 
+// Overload tag for callback-scoped access to FoundationDB's result bytes:
+struct raw_t final {};
+inline constexpr raw_t raw;
+
 namespace concepts {
 
 template <typename IteratorT>
@@ -384,6 +388,16 @@ inline query_cursor make_managed_query_cursor(SelectionT selection)
  }
 
  return query_cursor {std::move(selected_ranges)};
+}
+
+inline auto key_bytes(const FDBKeyValue& pair) noexcept
+{
+ return std::span {pair.key, static_cast<std::size_t>(pair.key_length)};
+}
+
+inline auto value_bytes(const FDBKeyValue& pair) noexcept
+{
+ return std::span {pair.value, static_cast<std::size_t>(pair.value_length)};
 }
 
 /* Returned spans remain valid only while the coroutine retains the owning FDB
@@ -851,6 +865,48 @@ template <typename PredT, typename ValueT>
 concept row_predicate = std::predicate<PredT&, const row_t<ValueT>&>;
 
 } // namespace detail
+
+/* Apply a callback to each selected key/value pair without decoding or copying.
+ * Both spans expire when the callback returns: */
+template <query::expression SelectionT,
+          concepts::raw_key_value_callback FnT>
+inline std::size_t for_each(raw_t,
+                            const transaction_handle& txn,
+                            SelectionT selection,
+                            FnT&& fn,
+                            const read_mode mode = read_mode::serializable)
+{
+ return detail::for_each_result_pair(
+  *txn, std::move(selection), mode, [&fn](const FDBKeyValue& pair) {
+   std::invoke(fn, detail::key_bytes(pair), detail::value_bytes(pair));
+  });
+}
+
+/* The database form retries each result window before exposing its borrowed
+ * bytes. Callbacks are therefore never replayed, but a retry may move later
+ * windows to a newer read version: */
+template <query::expression SelectionT,
+          concepts::raw_key_value_callback FnT>
+inline std::size_t for_each(raw_t,
+                            database_handle dbh,
+                            SelectionT selection,
+                            FnT&& fn,
+                            const read_mode mode = read_mode::serializable)
+{
+ auto txn = make_transaction(std::move(dbh));
+ detail::query_cursor cursor(std::move(selection));
+ std::size_t nread = 0;
+
+ while (auto window = detail::read_query_window_with_retry(txn, cursor, mode)) {
+  for (const auto& pair : window->result_pairs) {
+   std::invoke(fn, detail::key_bytes(pair), detail::value_bytes(pair));
+  }
+
+  nread += std::size(window->result_pairs);
+ }
+
+ return nread;
+}
 
 template <std::ranges::input_range RangeT>
 [[nodiscard]] auto collect(RangeT&& rows, page p)

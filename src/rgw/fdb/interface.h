@@ -17,6 +17,8 @@
 #include "conversion.h"
 #include "transaction.h"
 
+#include <boost/container/small_vector.hpp>
+
 #include <span>
 #include <string>
 #include <string_view>
@@ -165,19 +167,19 @@ inline void create_snapshot(database_handle dbh,
 
 namespace detail {
 
-// Scalar writes share string-view normalization and checked serialization:
-using scalar_encoding_buffer = std::vector<std::uint8_t>;
+// Scalar writes keep typical metadata encodings local while retaining heap fallback:
+using scalar_encoding_buffer = boost::container::small_vector<std::uint8_t, 256>;
 
 inline auto encode_scalar_value(const auto& value, scalar_encoding_buffer& buffer)
 {
- return ::ceph::libfdb::to::convert(value, buffer);
+ return convert_to_buffer(value, buffer, zpp::bits::exact_enlarger {});
 }
 
 // String-like values share the length-prefixed byte encoding, including literals:
 inline auto encode_scalar_value(const concepts::stringview_convertible auto& value,
                                 scalar_encoding_buffer& buffer)
 {
- return ::ceph::libfdb::to::convert(std::string_view(value), buffer);
+ return convert_to_buffer(std::string_view(value), buffer, zpp::bits::exact_enlarger {});
 }
 
 template <typename OutValuesT>
