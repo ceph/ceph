@@ -2545,6 +2545,7 @@ options:
     objecter_osd_core_switch_grace), and the connections to the OSD cores
     are closed once no longer used.
   see_also:
+  - crimson_osd_core_listeners
   - objecter_osd_core_switch_grace
   - objecter_osd_core_max_connections
 - name: objecter_osd_core_switch_grace
