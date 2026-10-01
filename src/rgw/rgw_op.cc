@@ -8291,10 +8291,11 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
 }
 
 int RGWDeleteMultiObj::run_lua_script(rgw::lua::context ctx,
-                                      const rgw::sal::Object* multi_delete_obj)
+                                      const rgw::sal::Object* multi_delete_obj,
+                                      optional_yield y)
 {
   auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, s->penv.lua.manager.get(),
-                                                  s->bucket_tenant, s->yield, ctx);
+                                                  s->bucket_tenant, y, ctx);
   if (rc == -ENOENT) {
     // no script, nothing to do
   } else if (rc < 0) {
@@ -8413,7 +8414,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.size_match = object.get_size_match();
 
   // allow skipping deletion of the current object when the Lua postAuth script returns RGW_ABORT_REQUEST
-  int script_return_code = run_lua_script(rgw::lua::context::postAuth, obj.get());
+  int script_return_code = run_lua_script(rgw::lua::context::postAuth, obj.get(), y);
   if (script_return_code != -EPERM) {
     r = del_op->delete_obj(dpp, y,
                           rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
@@ -8421,7 +8422,7 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
       r = 0;
     }
   }
-  std::ignore = run_lua_script(rgw::lua::context::postRequest, obj.get());
+  std::ignore = run_lua_script(rgw::lua::context::postRequest, obj.get(), y);
 
   if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
     // don't reply with an error in case of failed delete logging
