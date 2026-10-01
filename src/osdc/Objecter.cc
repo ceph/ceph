@@ -1668,6 +1668,7 @@ void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *s
         op->complete(make_error_code(osdc_errc::pool_dne), rc, service.get_executor());
       }
 
+      _op_cancel_map_check(op);
       OSDSession *s = op->session;
       if (s) {
 	ceph_assert(s != NULL);
