@@ -30,6 +30,8 @@ import {
   TARGET_PATH_TEXT,
   TARGET_REGION_TEXT,
   TARGET_SECRET_KEY_TEXT,
+  LOCATION_CONSTRAINT_TEXT,
+  TARGET_STORAGE_CLASS_TEXT,
   TierTarget,
   TIER_TYPE,
   ZoneGroup,
@@ -51,7 +53,6 @@ import {
   TextLabels,
   CLOUD_TIER_REQUIRED_FIELDS,
   GLACIER_REQUIRED_FIELDS,
-  GLACIER_TARGET_STORAGE_CLASS,
   AclHelperText,
   AclTypeLabel,
   AclFieldType,
@@ -158,7 +159,9 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       glacierRestoreTiertypeText: GLACIER_RESTORE_TIER_TYPE_TEXT,
       restoreDaysText: RESTORE_DAYS_TEXT,
       readthroughrestoreDaysText: READTHROUGH_RESTORE_DAYS_TEXT,
-      restoreStorageClassText: RESTORE_STORAGE_CLASS_TEXT
+      restoreStorageClassText: RESTORE_STORAGE_CLASS_TEXT,
+      locationConstraintText: LOCATION_CONSTRAINT_TEXT,
+      targetStorageClassText: TARGET_STORAGE_CLASS_TEXT
     };
     this.storageClassOptions = [
       { value: TIER_TYPE.LOCAL, label: TIER_TYPE_DISPLAY.LOCAL },
@@ -218,6 +221,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             this.storageClassForm.patchValue({
               zonegroup: this.storageClassInfo?.zonegroup_name,
               region: response?.region,
+              location_constraint: response?.location_constraint ?? '',
               placement_target: this.storageClassInfo?.placement_target,
               storageClassType: this.tierTargetInfo?.val?.tier_type ?? TIER_TYPE.LOCAL,
               target_endpoint: response?.endpoint,
@@ -225,6 +229,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
               access_key: response?.access_key,
               secret_key: response?.secret,
               target_path: response?.target_path,
+              target_storage_class: response?.target_storage_class ?? '',
               retain_head_object: this.tierTargetInfo?.val?.retain_head_object || false,
               multipart_sync_threshold:
                 this.dimlessBinary.transform(response?.multipart_sync_threshold) || '',
@@ -454,6 +459,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       region: new FormControl('', [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
       ]),
+      location_constraint: new FormControl(''),
       placement_target: new FormControl('', {
         validators: [Validators.required]
       }),
@@ -467,6 +473,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       target_path: new FormControl('', [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
       ]),
+      target_storage_class: new FormControl(''),
       retain_head_object: new FormControl(true),
       glacier_restore_tier_type: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS, [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER }, [Validators.required])
@@ -747,9 +754,11 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       retain_head_object,
       allow_read_through: rawFormValue.allow_read_through,
       region: rawFormValue.region,
+      location_constraint: rawFormValue.location_constraint || '',
       multipart_sync_threshold,
       multipart_min_part_size,
       restore_storage_class: rawFormValue.restore_storage_class,
+      target_storage_class: rawFormValue.target_storage_class || '',
       ...(rawFormValue.allow_read_through
         ? { read_through_restore_days: rawFormValue.read_through_restore_days }
         : {}),
@@ -783,8 +792,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             tier_config: {
               ...tierConfig,
               glacier_restore_days: rawFormValue.glacier_restore_days,
-              glacier_restore_tier_type: rawFormValue.glacier_restore_tier_type,
-              target_storage_class: GLACIER_TARGET_STORAGE_CLASS
+              glacier_restore_tier_type: rawFormValue.glacier_restore_tier_type
             }
           }
         ]

@@ -1447,37 +1447,73 @@ ceph_rbd_mirror_snapshot_image_sync_time_sum{ceph_daemon="rbd-mirror.a",image="i
 }
 
 TEST(Exporter, add_fixed_name_metrics) {
-    std::vector<std::string> metrics = {
-      "ceph_data_sync_from_zone2-zg1-realm1_fetch_bytes",
-      "ceph_data_sync_from_zone2-zg1-realm1_fetch_bytes_sum",
-      "ceph_data_sync_from_zone2-zg1-realm1_poll_latency_sum",
-    };
-    std::vector<std::string> expected_metrics = {
-      "ceph_data_sync_from_zone_fetch_bytes",
-      "ceph_data_sync_from_zone_fetch_bytes_sum",
-      "ceph_data_sync_from_zone_poll_latency_sum",
-    };
-    std::string metric_name;
-    std::pair<labels_t, std::string> new_metric;
-    labels_t expected_labels;
-    std::string expected_metric_name;
-    for (std::size_t index = 0; index < metrics.size(); ++index) {
-        std::string &metric_name = metrics[index];
-        DaemonMetricCollector &collector = collector_instance();
-        auto new_metric = collector.add_fixed_name_metrics(metric_name);
-        expected_labels = {{"source_zone", "\"zone2-zg1-realm1\""}};
-        std::string expected_metric_name = expected_metrics[index];
-        EXPECT_EQ(new_metric.first, expected_labels);
-        ASSERT_EQ(new_metric.second, expected_metric_name);
-    }
-
-    metric_name = "ceph_data_sync_from_zone2_fetch_bytes_count";
     DaemonMetricCollector &collector = collector_instance();
-    new_metric = collector.add_fixed_name_metrics(metric_name);
-    expected_labels = {{"source_zone", "\"zone2\""}};
-    expected_metric_name = "ceph_data_sync_from_zone_fetch_bytes_count";
-    EXPECT_EQ(new_metric.first, expected_labels);
-    ASSERT_TRUE(new_metric.second == expected_metric_name);
+
+    // Hyphenated zone name
+    auto result = collector.add_fixed_name_metrics(
+        "data-sync-from-data-xyz", "fetch_bytes_sum");
+    ASSERT_FALSE(result.first.empty());
+    std::string counter_name = result.second;
+    promethize(counter_name);
+    EXPECT_EQ(counter_name, "ceph_data_sync_from_zone_fetch_bytes_sum");
+    EXPECT_EQ(result.first.at("source_zone"), "\"data-xyz\"");
+
+    // Simple zone name
+    result = collector.add_fixed_name_metrics(
+        "data-sync-from-zone2", "fetch_bytes_count");
+    ASSERT_FALSE(result.first.empty());
+    counter_name = result.second;
+    promethize(counter_name);
+    EXPECT_EQ(counter_name, "ceph_data_sync_from_zone_fetch_bytes_count");
+    EXPECT_EQ(result.first.at("source_zone"), "\"zone2\"");
+
+    // Zone name with multiple hyphens (e.g. zone2-zg1-realm1)
+    result = collector.add_fixed_name_metrics(
+        "data-sync-from-zone2-zg1-realm1", "fetch_bytes");
+    ASSERT_FALSE(result.first.empty());
+    counter_name = result.second;
+    promethize(counter_name);
+    EXPECT_EQ(counter_name, "ceph_data_sync_from_zone_fetch_bytes");
+    EXPECT_EQ(result.first.at("source_zone"), "\"zone2-zg1-realm1\"");
+
+    // Zone name with multiple hyphens and poll_latency counter
+    result = collector.add_fixed_name_metrics(
+        "data-sync-from-zone2-zg1-realm1", "poll_latency_sum");
+    ASSERT_FALSE(result.first.empty());
+    counter_name = result.second;
+    promethize(counter_name);
+    EXPECT_EQ(counter_name, "ceph_data_sync_from_zone_poll_latency_sum");
+    EXPECT_EQ(result.first.at("source_zone"), "\"zone2-zg1-realm1\"");
+
+    // Zone name with dots
+    result = collector.add_fixed_name_metrics(
+        "data-sync-from-us.east.1", "fetch_bytes_count");
+    ASSERT_FALSE(result.first.empty());
+    counter_name = result.second;
+    promethize(counter_name);
+    EXPECT_EQ(counter_name, "ceph_data_sync_from_zone_fetch_bytes_count");
+    EXPECT_EQ(result.first.at("source_zone"), "\"us.east.1\"");
+
+    // Zone name with underscores
+    result = collector.add_fixed_name_metrics(
+        "data-sync-from-my_zone_01", "fetch_bytes_sum");
+    ASSERT_FALSE(result.first.empty());
+    counter_name = result.second;
+    promethize(counter_name);
+    EXPECT_EQ(counter_name, "ceph_data_sync_from_zone_fetch_bytes_sum");
+    EXPECT_EQ(result.first.at("source_zone"), "\"my_zone_01\"");
+
+    // Non-matching perf group
+    result = collector.add_fixed_name_metrics(
+        "rgw", "op_get_obj_lat_count");
+    EXPECT_TRUE(result.first.empty());
+    EXPECT_TRUE(result.second.empty());
+
+    // Non-matching prefix (partial match)
+    result = collector.add_fixed_name_metrics(
+        "data-sync-to-zone1", "fetch_bytes_sum");
+    EXPECT_TRUE(result.first.empty());
+    EXPECT_TRUE(result.second.empty());
 }
 
 TEST(Exporter, UpdateSockets) {

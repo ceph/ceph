@@ -52,6 +52,19 @@ describe('UserPasswordFormComponent', () => {
     formHelper.expectValidChange('oldpassword', 'foo');
   });
 
+  it('should validate old and new password must be different', () => {
+    formHelper.setMultipleValues({
+      oldpassword: 'aaa',
+      newpassword: 'aaa'
+    });
+    formHelper.expectError('oldpassword', 'notmatch');
+    formHelper.expectError('newpassword', 'notmatch');
+
+    formHelper.setValue('newpassword', 'bbb');
+    formHelper.expectValid('oldpassword');
+    formHelper.expectValid('newpassword');
+  });
+
   it('should validate password match', () => {
     formHelper.setValue('newpassword', 'aaa');
     formHelper.expectErrorChange('confirmnewpassword', 'bbb', 'match');

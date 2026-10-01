@@ -1,6 +1,8 @@
 import json
+import pickle
 import pytest
 import unittest
+from collections import defaultdict
 from unittest import mock
 
 import telemetry
@@ -119,3 +121,22 @@ class TestTelemetry:
         assert m.is_opted_in() == expected['is_opted_in']
         assert m.is_enabled_collection(Collection.basic_base) == expected['is_enabled_collection']['basic_base']
         assert m.is_enabled_collection(Collection.basic_mds_metadata) == expected['is_enabled_collection']['basic_mds_metadata']
+
+    def test_defaultdict_helpers_are_picklable(self) -> None:
+        """Regression test for pickle serialization of defaultdict factories.
+
+        The telemetry report returned through mgr.remote() must be pickle-serializable.
+        Verify that the module-level defaultdict factories can be pickled.
+        """
+        factories = [
+            telemetry.module._defaultdict_list,
+            telemetry.module._defaultdict_dict,
+            telemetry.module._defaultdict_defaultdict_int,
+            telemetry.module._defaultdict_histogram,
+        ]
+
+        for factory in factories:
+            d = defaultdict(factory)
+            restored = pickle.loads(pickle.dumps(d))
+            assert restored is not None, \
+                f"defaultdict({factory.__name__}) failed pickle round-trip"
