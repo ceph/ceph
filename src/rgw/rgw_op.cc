@@ -8304,7 +8304,7 @@ int RGWDeleteMultiObj::run_lua_script(rgw::lua::context ctx,
   } else {
     int script_return_code = 0;
     rc = rgw::lua::request::execute(s->penv.rest, s->penv.olog.get(), s, this,
-                                    lua_script, script_return_code, const_cast<rgw::sal::Object*>(multi_delete_obj));
+                                    lua_script, script_return_code, multi_delete_obj);
 
     if (rc < 0) {
       ldpp_dout(this, 5) <<
