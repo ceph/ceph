@@ -171,7 +171,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
 
   removeStorageClassModal() {
     const selectedItem = this.selection.first();
-    const { storageClass, placementTarget, tierType } = selectedItem;
+    const { storageClass, placementTarget, tierType, zonegroup_name } = selectedItem;
     const isLocalStorageClass =
       tierType?.toLowerCase() === TIER_TYPE.LOCAL || tierType === TIER_TYPE_DISPLAY.LOCAL;
 
@@ -188,17 +188,23 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
                 return this.rgwStorageClassService.removeStorageClass(
                   placementTarget,
                   storageClass,
-                  zoneInfo.zone_name || ''
+                  zoneInfo.zone_name || '',
+                  zonegroup_name || ''
                 );
               })
             )
-          : this.rgwStorageClassService.removeStorageClass(placementTarget, storageClass);
+          : this.rgwStorageClassService.removeStorageClass(
+              placementTarget,
+              storageClass,
+              '',
+              zonegroup_name || ''
+            );
 
         return this.taskWrapper
           .wrapTaskAroundCall({
             task: new FinishedTask('rgw/zonegroup/storage-class', {
-              placementTarget,
-              storageClass
+              placement_target: placementTarget,
+              storage_class: storageClass
             }),
             call: deleteObservable$
           })

@@ -68,6 +68,7 @@ export interface ZoneGroup {
 
 export interface ZoneRequest {
   zone_name: string;
+  zonegroup_name?: string;
   placement_target: string;
   storage_class: string;
   data_pool: string;
