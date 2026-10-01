@@ -2007,6 +2007,7 @@ void Objecter::_reopen_session(OSDSession *s)
     s->con->mark_down();
     logger->inc(l_osdc_osd_session_close);
   }
+  _close_core_cons(s);
   s->con = messenger->connect_to_osd(addrs);
   s->con->set_priv(RefCountedPtr{s});
   s->incarnation++;
@@ -2024,6 +2025,7 @@ void Objecter::close_session(OSDSession *s)
     logger->inc(l_osdc_osd_session_close);
   }
   unique_lock sl(s->lock);
+  _close_core_cons(s);
 
   std::list<LingerOp*> homeless_lingers;
   std::list<CommandOp*> homeless_commands;
@@ -2072,6 +2074,31 @@ void Objecter::close_session(OSDSession *s)
   }
 
   logger->set(l_osdc_osd_sessions, osd_sessions.size());
+}
+
+void Objecter::_close_core_cons(OSDSession *s)
+{
+  // s->lock is locked
+  for (auto& [core, con] : s->core_cons) {
+    ldout(cct, 10) << __func__ << " osd." << s->osd << " core " << core
+		   << " " << con << dendl;
+    con->set_priv(NULL);
+    con->mark_down();
+  }
+  s->core_cons.clear();
+}
+
+void Objecter::_reset_core_con(OSDSession *s, uint32_t core)
+{
+  // rwlock is locked unique
+  // s->lock is locked
+  auto i = s->core_cons.find(core);
+  ceph_assert(i != s->core_cons.end());
+  ldout(cct, 1) << __func__ << " osd." << s->osd << " core " << core
+		<< " " << i->second << dendl;
+  i->second->set_priv(NULL);
+  i->second->mark_down();
+  s->core_cons.erase(i);
 }
 
 void Objecter::wait_for_osd_map(epoch_t e)
@@ -3858,13 +3885,19 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   ConnectionRef con = m->get_connection();
   auto priv = con->get_priv();
   auto s = static_cast<OSDSession*>(priv.get());
-  if (!s || s->con != con) {
+  if (!s) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
     m->put();
     return;
   }
 
   unique_lock sl(s->lock);
+  if (!s->owns_con(con)) {
+    ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
+    sl.unlock();
+    m->put();
+    return;
+  }
 
   map<ceph_tid_t, Op *>::iterator iter = s->ops.find(tid);
   if (iter == s->ops.end()) {
@@ -4075,7 +4108,7 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
   ConnectionRef con = m->get_connection();
   auto priv = con->get_priv();
   auto s = static_cast<OSDSession*>(priv.get());
-  if (!s || s->con != con) {
+  if (!s) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
     m->put();
     return;
@@ -4084,6 +4117,13 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
   get_session(s);
 
   unique_lock sl(s->lock);
+  if (!s->owns_con(con)) {
+    ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
+    sl.unlock();
+    m->put();
+    put_session(s);
+    return;
+  }
 
   switch (m->op) {
   case CEPH_OSD_BACKOFF_OP_BLOCK:
@@ -4959,6 +4999,12 @@ bool Objecter::ms_handle_reset(Connection *con)
       }
       map<uint64_t, LingerOp *> lresend;
       unique_lock sl(session->lock);
+      if (auto core = session->core_of(con); core) {
+	// one of the session's core connections: the rest of the session
+	// is not affected
+	_reset_core_con(session, *core);
+	return true;
+      }
       _reopen_session(session);
       _kick_requests(session, lresend);
       sl.unlock();
@@ -5493,6 +5539,22 @@ void Objecter::_finish_command(CommandOp *c, bs::error_code ec,
   c->put();
 
   logger->dec(l_osdc_command_active);
+}
+
+bool Objecter::OSDSession::owns_con(const ConnectionRef& c) const
+{
+  return c == con || core_of(c).has_value();
+}
+
+std::optional<uint32_t>
+Objecter::OSDSession::core_of(const ConnectionRef& c) const
+{
+  for (const auto& [core, core_con] : core_cons) {
+    if (core_con == c) {
+      return core;
+    }
+  }
+  return std::nullopt;
 }
 
 Objecter::OSDSession::~OSDSession()

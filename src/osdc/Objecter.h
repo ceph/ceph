@@ -2517,6 +2517,11 @@ public:
 
     int incarnation;
     ConnectionRef con;
+
+    /// connections to the per-core listeners of a Crimson OSD (see
+    /// osd_core_hint_t), by core; in addition to 'con'. Protected by lock.
+    std::map<uint32_t, ConnectionRef> core_cons;
+
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
 
@@ -2528,6 +2533,13 @@ public:
     ~OSDSession() override;
 
     bool is_homeless() { return (osd == -1); }
+
+    /// whether c is one of our connections ('con' or a core connection);
+    /// lock is locked
+    bool owns_con(const ConnectionRef& c) const;
+
+    /// the core of c, if c is one of core_cons; lock is locked
+    std::optional<uint32_t> core_of(const ConnectionRef& c) const;
 
     std::unique_lock<std::mutex> get_lock(object_t& oid);
   };
@@ -2677,6 +2689,11 @@ private:
   void get_session(OSDSession *s);
   void _reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
+  /// mark down and forget all of s's core connections; s->lock is locked
+  void _close_core_cons(OSDSession *s);
+  /// handle the reset of one of s's core connections: mark it down and
+  /// forget it. rwlock is locked unique, s->lock is locked
+  void _reset_core_con(OSDSession *s, uint32_t core);
 
   void _nlist_reply(NListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
@@ -4091,6 +4108,9 @@ private:
   epoch_t epoch_barrier = 0;
   bool retry_writes_after_first_reply =
     cct->_conf->objecter_retry_writes_after_first_reply;
+  /// see objecter_use_osd_core_hints
+  const bool use_osd_core_hints =
+    cct->_conf.get_val<bool>("objecter_use_osd_core_hints");
 
 public:
   void set_epoch_barrier(epoch_t epoch);
