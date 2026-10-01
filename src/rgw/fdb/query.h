@@ -14,21 +14,22 @@
 */
 
 #ifndef CEPH_FDB_QUERY_H
- #define CEPH_FDB_QUERY_H
+#define CEPH_FDB_QUERY_H
 
 #include "common/container_concepts.h"
 #include "interval.h"
 
+#include <string>
+#include <vector>
+#include <optional>
+#include <string_view>
+
+#include <cstddef>
+#include <utility>
 #include <compare>
 #include <concepts>
-#include <cstddef>
 #include <functional>
-#include <optional>
-#include <string>
-#include <string_view>
 #include <type_traits>
-#include <utility>
-#include <vector>
 
 /* libfdb queries are small expression trees over FoundationDB's lexicographic
  * keyspace. The interval algebra is generic and option-free; this header adapts
@@ -49,7 +50,6 @@ struct query_options final
 
  FDBStreamingMode streaming_mode = FDB_STREAMING_MODE_ITERATOR;
 
- public:
  constexpr bool operator==(const query_options&) const noexcept = default;
 };
 
@@ -73,6 +73,12 @@ struct byte_string_domain final
   return std::string(keyspace_limit_view());
  }
 
+ // Keys beginning with 0xFF belong to FoundationDB's reserved keyspace:
+ static constexpr bool is_reserved_key(const std::string_view key) noexcept
+ {
+  return key.starts_with('\xFF');
+ }
+
  static constexpr std::strong_ordering compare(const std::string_view lhs,
                                                const std::string_view rhs) noexcept
  {
@@ -86,7 +92,7 @@ struct byte_string_domain final
 
  static constexpr std::optional<std::string> successor(const std::string_view prefix)
  {
-  constexpr auto max_byte = static_cast<unsigned char>(0xFF);
+  constexpr unsigned char max_byte = 0xFF;
 
   for (auto i = prefix.rbegin(); i != prefix.rend(); ++i) {
    const auto byte = static_cast<unsigned char>(*i);
@@ -123,8 +129,8 @@ constexpr std::string successor(const std::string_view prefix)
   return byte_string_domain::keyspace_limit();
  }
 
- if (auto end = byte_string_domain::successor(prefix)) {
-  return std::move(*end);
+ if (auto upper = byte_string_domain::successor(prefix)) {
+  return std::move(*upper);
  }
 
  throw libfdb_exception("requested prefix has no finite successor");
@@ -135,10 +141,10 @@ struct interval_bound final
  std::string key;
  bool inclusive;
 
- explicit constexpr interval_bound(const concepts::libfdb_key auto& key_,
-                                   const bool inclusive_)
-  : key(detail::as_libfdb_key_view(key_)),
-    inclusive(inclusive_)
+ explicit constexpr interval_bound(const concepts::libfdb_key auto& key_value,
+                                   const bool is_inclusive)
+  : key(::ceph::libfdb::detail::as_libfdb_key_view(key_value)),
+    inclusive(is_inclusive)
  {}
 
  constexpr bool operator==(const interval_bound&) const noexcept = default;
@@ -172,50 +178,50 @@ struct interval final
  bool end_inclusive = false;
  query_options options;
 
- constexpr interval(std::string begin_key_,
-                    std::string end_key_,
-                    const bool begin_inclusive_,
-                    const bool end_inclusive_)
-  : begin_key(std::move(begin_key_)),
-    end_key(std::move(end_key_)),
-    begin_inclusive(begin_inclusive_),
-    end_inclusive(end_inclusive_)
+ constexpr interval(std::string lower,
+                    std::string upper,
+                    const bool includes_begin,
+                    const bool includes_end)
+  : begin_key(std::move(lower)),
+    end_key(std::move(upper)),
+    begin_inclusive(includes_begin),
+    end_inclusive(includes_end)
  {
   normalize_keyspace();
  }
 
- constexpr interval(interval_bound begin, interval_bound end)
-  : begin_key(std::move(begin.key)),
-    end_key(std::move(end.key)),
-    begin_inclusive(begin.inclusive),
-    end_inclusive(end.inclusive)
+ constexpr interval(interval_bound lower, interval_bound upper)
+  : begin_key(std::move(lower.key)),
+    end_key(std::move(upper.key)),
+    begin_inclusive(lower.inclusive),
+    end_inclusive(upper.inclusive)
  {
   normalize_keyspace();
  }
 
- constexpr interval(const concepts::libfdb_key auto& begin_key_,
-                    const concepts::libfdb_key auto& end_key_)
-  : interval(closed(begin_key_), open(end_key_))
+ constexpr interval(const concepts::libfdb_key auto& lower,
+                    const concepts::libfdb_key auto& upper)
+  : interval(closed(lower), open(upper))
  {}
 
- constexpr interval(const concepts::libfdb_key auto& begin_key_,
-                    interval_bound end)
-  : interval(closed(begin_key_), std::move(end))
+ constexpr interval(const concepts::libfdb_key auto& lower,
+                    interval_bound upper)
+  : interval(closed(lower), std::move(upper))
  {}
 
- constexpr interval(interval_bound begin,
-                    const concepts::libfdb_key auto& end_key_)
-  : interval(std::move(begin), open(end_key_))
+ constexpr interval(interval_bound lower,
+                    const concepts::libfdb_key auto& upper)
+  : interval(std::move(lower), open(upper))
  {}
 
  constexpr explicit interval(const concepts::libfdb_key auto& prefix)
-  : begin_key(detail::as_libfdb_key_view(prefix)),
-    end_key(successor(detail::as_libfdb_key_view(prefix)))
+  : begin_key(::ceph::libfdb::detail::as_libfdb_key_view(prefix)),
+    end_key(successor(::ceph::libfdb::detail::as_libfdb_key_view(prefix)))
  {
   normalize_keyspace();
  }
 
- constexpr boundary_ref lower() const noexcept
+ constexpr boundary_ref lower() const& noexcept
  {
   if (begin_inclusive) {
    return boundary_ref::closed(begin_key);
@@ -224,7 +230,9 @@ struct interval final
   return boundary_ref::open(begin_key);
  }
 
- constexpr boundary_ref upper() const noexcept
+ boundary_ref lower() const&& = delete;
+
+ constexpr boundary_ref upper() const& noexcept
  {
   if (end_inclusive) {
    return boundary_ref::closed(end_key);
@@ -232,6 +240,8 @@ struct interval final
 
   return boundary_ref::open(end_key);
  }
+
+ boundary_ref upper() const&& = delete;
 
  constexpr bool operator==(const interval& rhs) const noexcept
  {
@@ -246,31 +256,31 @@ struct interval final
  struct unchecked_select_t final {};
 
  constexpr interval(unchecked_select_t,
-                    std::string begin_key_,
-                    std::string end_key_,
-                    const bool begin_inclusive_,
-                    const bool end_inclusive_)
-  : begin_key(std::move(begin_key_)),
-    end_key(std::move(end_key_)),
-    begin_inclusive(begin_inclusive_),
-    end_inclusive(end_inclusive_)
+                    std::string lower,
+                    std::string upper,
+                    const bool includes_begin,
+                    const bool includes_end)
+  : begin_key(std::move(lower)),
+    end_key(std::move(upper)),
+    begin_inclusive(includes_begin),
+    end_inclusive(includes_end)
  {}
 
- friend constexpr interval detail_make_interval(std::string begin_key_,
-                                                std::string end_key_,
-                                                bool begin_inclusive_,
-                                                bool end_inclusive_)
+ friend constexpr interval detail_make_interval(std::string lower,
+                                                std::string upper,
+                                                bool includes_begin,
+                                                bool includes_end)
  {
   return interval(unchecked_select_t {},
-                  std::move(begin_key_),
-                  std::move(end_key_),
-                  begin_inclusive_,
-                  end_inclusive_);
+                  std::move(lower),
+                  std::move(upper),
+                  includes_begin,
+                  includes_end);
  }
 
  constexpr void normalize_keyspace()
  {
-  if (not end_key.empty() && 0xFF == static_cast<unsigned char>(end_key.front())) {
+  if (byte_string_domain::is_reserved_key(end_key)) {
    end_key = byte_string_domain::keyspace_limit();
    end_inclusive = false;
   }
@@ -330,15 +340,10 @@ constexpr std::string key_string(const concepts::libfdb_key auto& key)
  return std::string(key_view(key));
 }
 
-constexpr bool at_or_after_keyspace_limit(const std::string_view key) noexcept
-{
- return not key.empty() && 0xFF == static_cast<unsigned char>(key.front());
-}
-
 // Clamp an executable selector to ordinary FDB keyspace:
 constexpr interval clamp_to_keyspace(interval x)
 {
- if (at_or_after_keyspace_limit(x.end_key)) {
+ if (byte_string_domain::is_reserved_key(x.end_key)) {
   x.end_key = byte_string_domain::keyspace_limit();
   x.end_inclusive = false;
  }
@@ -393,12 +398,6 @@ constexpr interval to_select(const IntervalT& x, const query_options& options)
  }
 
  return to_select(x.lower(), x.upper(), options);
-}
-
-template <core::interval_view IntervalT>
-constexpr interval to_keyspace_select(const IntervalT& x, const query_options& options)
-{
- return to_select(x, options);
 }
 
 template <expression ExprT>
@@ -533,7 +532,7 @@ constexpr interval singleton(const concepts::libfdb_key auto& key)
 {
  const auto key_view = detail::key_view(key);
 
- if (detail::at_or_after_keyspace_limit(key_view)) {
+ if (byte_string_domain::is_reserved_key(key_view)) {
   return empty();
  }
 
@@ -548,23 +547,21 @@ constexpr interval prefix(const concepts::libfdb_key auto& key)
   return universal();
  }
 
- if (detail::at_or_after_keyspace_limit(key_view)) {
+ if (byte_string_domain::is_reserved_key(key_view)) {
   return empty();
  }
 
- if (auto end = byte_string_domain::successor(key_view)) {
+ if (auto upper = byte_string_domain::successor(key_view)) {
   // Prefix math is pure byte-string math; the final selector is keyspace-clamped.
-  return interval(closed(key_view), open(*end));
+  return interval(closed(key_view), open(*upper));
  }
 
  return empty();
 }
 
-constexpr interval between(interval_bound begin, interval_bound end)
+constexpr interval between(interval_bound lower, interval_bound upper)
 {
- auto bounded = interval(std::move(begin), std::move(end));
-
- return detail::to_keyspace_select(bounded, {});
+ return detail::to_select(interval(std::move(lower), std::move(upper)), {});
 }
 
 constexpr interval between(const concepts::libfdb_key auto& begin_key,
@@ -588,7 +585,7 @@ constexpr auto with_options(ExprT&& expr, const query_options& options)
 
 constexpr interval intersection(interval lhs, const interval& rhs)
 {
- return detail::to_keyspace_select(core::intersection(lhs, rhs), lhs.options);
+ return detail::to_select(core::intersection(lhs, rhs), lhs.options);
 }
 
 template <typename LHS_T, typename RHS_T>
@@ -704,7 +701,7 @@ constexpr bool contains(const ExprT& expr, const concepts::libfdb_key auto& key)
 {
  const auto key_view = detail::key_view(key);
 
- if (detail::at_or_after_keyspace_limit(key_view)) {
+ if (byte_string_domain::is_reserved_key(key_view)) {
   return false;
  }
 
@@ -772,19 +769,19 @@ constexpr auto upper_before(const concepts::libfdb_key auto& key)
 constexpr auto between(core::lower_endpoint<byte_string_domain> lower,
                        core::upper_endpoint<byte_string_domain> upper)
 {
- return detail::to_keyspace_select(core::between(std::move(lower), std::move(upper)), {});
+ return detail::to_select(core::between(std::move(lower), std::move(upper)), {});
 }
 
 constexpr auto from(core::lower_endpoint<byte_string_domain> lower)
 {
  // The missing upper side means public libfdb universal, not algebraic +infinity.
- return detail::to_keyspace_select(core::from(std::move(lower)), {});
+ return detail::to_select(core::from(std::move(lower)), {});
 }
 
 constexpr auto until(core::upper_endpoint<byte_string_domain> upper)
 {
  // The missing lower side means public libfdb universal, not algebraic -infinity.
- return detail::to_keyspace_select(core::until(std::move(upper)), {});
+ return detail::to_select(core::until(std::move(upper)), {});
 }
 
 constexpr auto at(const concepts::libfdb_key auto& key)

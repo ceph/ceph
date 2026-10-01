@@ -14,16 +14,18 @@
 */
 
 #ifndef CEPH_FDB_CONTENT_H
- #define CEPH_FDB_CONTENT_H
+#define CEPH_FDB_CONTENT_H
 
 #include "base.h"
 
-#include <algorithm>
-#include <compare>
-#include <cstddef>
 #include <string>
 #include <string_view>
+
+#include <algorithm>
+
+#include <cstddef>
 #include <utility>
+#include <compare>
 
 namespace ceph::libfdb::layer::content {
 
@@ -36,7 +38,7 @@ constexpr std::size_t encoded_string_segment_size(const std::string_view segment
  const auto embedded_nuls =
   static_cast<std::size_t>(std::ranges::count(segment, '\0'));
 
- return std::size(segment) + embedded_nuls + 2;
+ return 2 + std::size(segment) + embedded_nuls;
 }
 
 constexpr void append_encoded_string_segment(std::string& out,
@@ -57,7 +59,7 @@ constexpr void append_encoded_string_segment(std::string& out,
   out.push_back(c);
 
   if ('\0' == c) {
-   out.push_back(static_cast<char>(0xFF));
+   out.push_back('\xFF');
   }
  }
 
@@ -122,25 +124,25 @@ constexpr compiled_key assemble(const Segments& ...segments);
 
 class compiled_key final
 {
- std::string bytes_;
+ std::string encoded_bytes;
 
  public:
  compiled_key() = delete;
 
  private:
  explicit constexpr compiled_key(std::string bytes)
-  : bytes_(std::move(bytes))
+  : encoded_bytes(std::move(bytes))
  {}
 
  public:
  constexpr std::size_t size() const noexcept
  {
-  return bytes_.size();
+  return encoded_bytes.size();
  }
 
  constexpr auto operator<=>(const compiled_key& rhs) const noexcept
  {
-  return bytes_ <=> rhs.bytes_;
+  return encoded_bytes <=> rhs.encoded_bytes;
  }
 
  constexpr bool operator==(const compiled_key& rhs) const noexcept = default;
@@ -151,15 +153,15 @@ class compiled_key final
  {
   const auto segment_bytes = detail::segment_view(segment);
 
-  detail::reserve_encoded_string_segments(lhs.bytes_, segment_bytes);
-  detail::append_encoded_string_segment(lhs.bytes_, segment_bytes);
+  detail::reserve_encoded_string_segments(lhs.encoded_bytes, segment_bytes);
+  detail::append_encoded_string_segment(lhs.encoded_bytes, segment_bytes);
 
   return lhs;
  }
 
  friend constexpr std::string_view libfdb_key_view(const compiled_key& key) noexcept
  {
-  return key.bytes_;
+  return key.encoded_bytes;
  }
 
  private:
