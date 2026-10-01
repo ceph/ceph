@@ -1295,6 +1295,20 @@ public:
 
       virtual ~ReadOp() = default;
 
+      /**
+       * Name the authenticated identity this operation is for.
+       *
+       * Distinct from the owner the object is attributed to:  for a
+       * member of an account `s->owner` is the *account*, while this
+       * is the member.  A driver that maps an identity to filesystem
+       * credentials needs the latter, or every member of an account
+       * is served as one.
+       *
+       * Default does nothing, so a driver with no use for it is
+       * unaffected and none is obliged to implement it.
+       */
+      virtual void set_authenticated_user(const rgw_user& user) {}
+
       /** Prepare the Read op.  Must be called first */
       virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) = 0;
 
@@ -1999,6 +2013,20 @@ class Writer : public ObjectProcessor {
 public:
   Writer() {}
   virtual ~Writer() = default;
+
+  /**
+   * Name the authenticated identity this operation is for.
+   *
+   * Distinct from the owner the object is attributed to:  for a
+   * member of an account the owner is the *account*, while this is
+   * the member.  A driver that maps an identity to filesystem
+   * credentials needs the latter, or every member of an account is
+   * served as one.
+   *
+   * Default does nothing, so a driver with no use for it is
+   * unaffected and none is obliged to implement it.
+   */
+  virtual void set_authenticated_user(const rgw_user& user) {}
 
   /** prepare to start processing object data */
   virtual int prepare(optional_yield y) = 0;

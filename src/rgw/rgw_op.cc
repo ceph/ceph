@@ -340,6 +340,11 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   int ret = 0;
 
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
+  /* No authenticated identity is named here:  this is a static
+   * helper with no req_state, and it reads an ACL attribute rather
+   * than object data.  If an impersonating driver needs the
+   * attribute read under the caller's credentials too, this helper
+   * has to grow a parameter. */
 
   ret = rop->prepare(y, dpp);
   if (ret < 0) {
@@ -2059,6 +2064,9 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   part->set_prefetch_data();
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op = part->get_read_op();
+  if (s->user) {
+    read_op->set_authenticated_user(s->user->get_id());
+  }
 
   if (!swift_slo) {
     /* SLO etag is optional */
@@ -2675,6 +2683,12 @@ void RGWGetObj::execute(optional_yield y)
   rgw::op_counters::inc(counters, l_rgw_op_get_obj, 1);
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op());
+  /* s->user, not s->owner:  the owner is the *account* for a
+   * member of one, and a driver mapping an identity to
+   * filesystem credentials needs the member. */
+  if (s->user) {
+    read_op->set_authenticated_user(s->user->get_id());
+  }
   std::string etag;
 
   op_ret = get_params(y);
@@ -4617,6 +4631,9 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   auto obj = bucket->get_object(rgw_obj_key(copy_source_object_name,
                                             copy_source_version_id));
   auto read_op = obj->get_read_op();
+  if (s->user) {
+    read_op->set_authenticated_user(s->user->get_id());
+  }
 
   ret = read_op->prepare(s->yield, this);
   if (ret < 0)
@@ -4898,6 +4915,12 @@ void RGWPutObj::execute(optional_yield y)
     processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
 					 s->owner,
 					 pdest_placement, olh_epoch, s->req_id);
+  }
+  /* s->user, not s->owner:  the owner is the *account* for a
+   * member of one, and a driver mapping an identity to
+   * filesystem credentials needs the member. */
+  if (processor && s->user) {
+    processor->set_authenticated_user(s->user->get_id());
   }
   if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
     s->object->set_cache_request();
@@ -5402,6 +5425,9 @@ void RGWPostObj::execute(optional_yield y)
     processor = driver->get_atomic_writer(this, s->yield, obj.get(),
 					 s->owner,
 					 &s->dest_placement, 0, s->req_id);
+    if (s->user) {
+      processor->set_authenticated_user(s->user->get_id());
+    }
     op_ret = processor->prepare(s->yield);
     if (op_ret < 0) {
       return;
@@ -8915,6 +8941,9 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   std::unique_ptr<rgw::sal::Writer> processor;
   processor = driver->get_atomic_writer(this, s->yield, obj.get(), bowner,
 				       &s->dest_placement, 0, s->req_id);
+  if (s->user) {
+    processor->set_authenticated_user(s->user->get_id());
+  }
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "cannot prepare processor due to ret=" << op_ret << dendl;
