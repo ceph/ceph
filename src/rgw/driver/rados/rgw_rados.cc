@@ -5422,6 +5422,11 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     copy_data = true;
   }
 
+  // an appendable copy would append under the source's prefix
+  if (dest_obj != src_obj && astate->attrset.count(RGW_ATTR_APPEND_PART_NUM)) {
+    copy_data = true;
+  }
+
   if (petag) {
     const auto iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {

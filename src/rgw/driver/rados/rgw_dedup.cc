@@ -1554,7 +1554,8 @@ namespace rgw::dedup {
       }
 
       RGWObjManifestRule rule;
-      if (!manifest.get_rule(0, &rule)                              ||
+      if (attrs.count(RGW_ATTR_APPEND_PART_NUM)                     ||
+          !manifest.get_rule(0, &rule)                              ||
           // if not a multi-part must have exactly 1 rule
           (rule.part_size == 0 && manifest.get_rules().size() != 1) ||
           !rule.override_prefix.empty()) {
