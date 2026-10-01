@@ -2621,8 +2621,9 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   bool check_for_latest_map = false;
   int r = 0;
   // Avoid duplicating _calc_target for direct reads, where _calc_target has
-  // already been called.
-  if ((op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) == 0) {
+  // already been called with this map.
+  if ((op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) == 0 ||
+      op->target.epoch != osdmap->get_epoch()) {
     r = _calc_target(&op->target);
     switch(r) {
     case RECALC_OP_TARGET_POOL_DNE:
