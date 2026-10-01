@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 #include <compare>
+#include <concepts>
 #include <algorithm>
 #include <string_view>
 
@@ -100,13 +101,13 @@ std::string materialized_key(const content::compiled_key& key)
  return lfdb::select(key, key).begin_key;
 }
 
-} // anonymous namespace
+} // namespace
 
 TEST_CASE("content keys use the FoundationDB byte-string tuple representation",
           "[fdb][content]")
 {
- STATIC_REQUIRE(8 == content::keyspace("tenant").size());
- STATIC_REQUIRE(24 == content::key("tenant", "bucket", "object").size());
+ STATIC_REQUIRE(8 == std::size(content::keyspace("tenant")));
+ STATIC_REQUIRE(24 == std::size(content::key("tenant", "bucket", "object")));
 
  const auto key = content::keyspace("tenant") / "bucket" / "object";
  auto expected = std::string("\x01tenant\0", 8);
@@ -114,18 +115,39 @@ TEST_CASE("content keys use the FoundationDB byte-string tuple representation",
  expected.append("\x01object\0", 8);
 
  CHECK(expected == materialized_key(key));
- CHECK(expected.size() == key.size());
+ CHECK(std::size(expected) == std::size(key));
 }
 
-TEST_CASE("content key function composition matches operator composition", "[fdb][content]")
+TEST_CASE("content key composition forms agree", "[fdb][content]")
 {
  STATIC_REQUIRE(content::key("tenant", "bucket") ==
                 (content::keyspace("tenant") / "bucket"));
+ STATIC_REQUIRE(content::key(content::keyspace("tenant"), "bucket", "object") ==
+                content::key("tenant", "bucket", "object"));
+ STATIC_REQUIRE(requires(content::compiled_key& prefix) {
+  { prefix.append("bucket", "object") } -> std::same_as<content::compiled_key&>;
+  { prefix /= "bucket" } -> std::same_as<content::compiled_key&>;
+ });
 
  const auto via_operator = content::keyspace("tenant") / "bucket" / "object";
  const auto via_function = content::key("tenant", "bucket", "object");
+ const auto reusable_prefix = content::key("tenant", "bucket");
+ const auto original_prefix = reusable_prefix;
+ const auto via_operator_prefix = reusable_prefix / "object";
+ const auto via_compiled_prefix = content::key(reusable_prefix, "object");
+
+ auto via_append = reusable_prefix;
+ via_append.append("object");
+
+ auto via_assignment = reusable_prefix;
+ via_assignment /= "object";
 
  CHECK(via_operator == via_function);
+ CHECK(via_operator_prefix == via_function);
+ CHECK(via_compiled_prefix == via_function);
+ CHECK(via_append == via_function);
+ CHECK(via_assignment == via_function);
+ CHECK(reusable_prefix == original_prefix);
 }
 
 TEST_CASE("content key assembly rejects invalid inputs", "[fdb][content]")
@@ -150,6 +172,8 @@ TEST_CASE("content key assembly accepts arbitrary bytes and empty child segments
   content::keyspace(
     std::string_view(leading_high_segment, sizeof(leading_high_segment)));
  const auto empty_segment_key = content::keyspace("tenant") / "" / "object";
+ const auto derived_empty_segment_key =
+  content::key(content::keyspace("tenant"), "", "object");
  const auto leading_high_key =
   content::keyspace("tenant") /
   std::string_view(leading_high_segment, sizeof(leading_high_segment));
@@ -173,6 +197,7 @@ TEST_CASE("content key assembly accepts arbitrary bytes and empty child segments
             Catch::Matchers::RangeEquals(expected_root));
  CHECK_THAT(materialized_key(empty_segment_key),
             Catch::Matchers::RangeEquals(expected_empty));
+ CHECK(derived_empty_segment_key == empty_segment_key);
  CHECK_THAT(materialized_key(leading_high_key),
             Catch::Matchers::RangeEquals(expected_leading));
  CHECK_THAT(materialized_key(trailing_high_key),
@@ -181,7 +206,7 @@ TEST_CASE("content key assembly accepts arbitrary bytes and empty child segments
 
 TEST_CASE("content key string segments escape embedded nulls", "[fdb][content]")
 {
- STATIC_REQUIRE(6 == content::detail::encoded_string_segment_size("a\0b"sv));
+ STATIC_REQUIRE(5 == content::detail::encoded_string_segment_reserve_size("a\0b"sv));
 
  constexpr char segment_bytes[] = { 'a', '\0', 'b' };
  const auto key = content::keyspace(std::string_view(segment_bytes, sizeof(segment_bytes)));
@@ -194,12 +219,21 @@ TEST_CASE("content key string segments escape multiple embedded nulls", "[fdb][c
 {
  constexpr char segment_bytes[] = { 'a', '\0', 'b', '\0', 'c' };
  const auto segment = std::string_view(segment_bytes, sizeof(segment_bytes));
- const auto key = content::keyspace("tenant") / segment;
+ const auto root = content::keyspace("tenant");
+ const auto key = content::key(root, segment);
  auto expected = std::string("\x01tenant\0", 8);
+
+ auto appended = root;
+ appended.append(segment);
+
+ auto assigned = root;
+ assigned /= segment;
 
  expected.append("\x01" "a\0\xFF" "b\0\xFF" "c\0", 9);
 
  CHECK_THAT(materialized_key(key), Catch::Matchers::RangeEquals(expected));
+ CHECK(appended == key);
+ CHECK(assigned == key);
 }
 
 TEST_CASE("content key string literals preserve embedded nulls", "[fdb][content]")
@@ -226,14 +260,21 @@ TEST_CASE("content key segment encoding is injective over representative bytes",
           "[fdb][content]")
 {
  const auto segments = representative_byte_strings();
+ const auto root = content::keyspace("root");
  std::vector<content::compiled_key> keys;
  keys.reserve(std::size(segments) + std::size(segments) * std::size(segments));
 
  for (const auto& first : segments) {
-  keys.push_back(content::keyspace("root") / first);
+  const auto first_key = content::key(root, first);
+
+  CHECK(first_key == root / first);
+  keys.push_back(first_key);
 
   for (const auto& second : segments) {
-   keys.push_back(content::keyspace("root") / first / second);
+   const auto second_key = content::key(root, first, second);
+
+   CHECK(second_key == root / first / second);
+   keys.push_back(second_key);
   }
  }
 
@@ -306,6 +347,30 @@ TEST_CASE("content key composition benchmarks", "[.benchmark][benchmark][fdb][co
   "object"sv,
   "attribute"sv
  };
+ const auto reusable_prefix = content::key(segments[0], segments[1], segments[2]);
+
+ const auto operator_builder = [](content::compiled_key prefix,
+                                  const std::string_view segment,
+                                  const std::string_view suffix) {
+  return prefix / segment / suffix;
+ };
+
+ const auto append_builder = [](content::compiled_key prefix,
+                                const std::string_view segment,
+                                const std::string_view suffix) {
+  prefix.append(segment, suffix);
+
+  return prefix;
+ };
+
+ const auto assignment_builder = [](content::compiled_key prefix,
+                                    const std::string_view segment,
+                                    const std::string_view suffix) {
+  prefix /= segment;
+  prefix /= suffix;
+
+  return prefix;
+ };
 
  BENCHMARK("baseline manual string composition") {
   std::size_t total = 0;
@@ -313,7 +378,7 @@ TEST_CASE("content key composition benchmarks", "[.benchmark][benchmark][fdb][co
   for (auto i : std::views::iota(0, keys_per_sample)) {
    const auto suffix = std::to_string(i % segment_count);
    const auto key = manually_encoded_key(segments, suffix);
-   total += key.size();
+   total += std::size(key);
   }
 
   return total;
@@ -325,7 +390,7 @@ TEST_CASE("content key composition benchmarks", "[.benchmark][benchmark][fdb][co
   for (auto i : std::views::iota(0, keys_per_sample)) {
    const auto key = content::keyspace(segments[0]) / segments[1] / segments[2] /
                     segments[3] / std::to_string(i % segment_count);
-   total += key.size();
+   total += std::size(key);
   }
 
   return total;
@@ -338,7 +403,67 @@ TEST_CASE("content key composition benchmarks", "[.benchmark][benchmark][fdb][co
    const auto suffix = std::to_string(i % segment_count);
    const auto key = content::key(segments[0], segments[1], segments[2],
                                  segments[3], suffix);
-   total += key.size();
+   total += std::size(key);
+  }
+
+  return total;
+ };
+
+ BENCHMARK("operator extension from reusable compiled prefix") {
+  std::size_t total = 0;
+
+  for (auto i : std::views::iota(0, keys_per_sample)) {
+   const auto key = reusable_prefix / segments[3] /
+                    std::to_string(i % segment_count);
+   total += std::size(key);
+  }
+
+  return total;
+ };
+
+ BENCHMARK("key overload from reusable compiled prefix") {
+  std::size_t total = 0;
+
+  for (auto i : std::views::iota(0, keys_per_sample)) {
+   const auto suffix = std::to_string(i % segment_count);
+   const auto key = content::key(reusable_prefix, segments[3], suffix);
+   total += std::size(key);
+  }
+
+  return total;
+ };
+
+ BENCHMARK("operator extension inside by-value builder") {
+  std::size_t total = 0;
+
+  for (auto i : std::views::iota(0, keys_per_sample)) {
+   const auto suffix = std::to_string(i % segment_count);
+   const auto key = operator_builder(reusable_prefix, segments[3], suffix);
+   total += std::size(key);
+  }
+
+  return total;
+ };
+
+ BENCHMARK("in-place append inside by-value builder") {
+  std::size_t total = 0;
+
+  for (auto i : std::views::iota(0, keys_per_sample)) {
+   const auto suffix = std::to_string(i % segment_count);
+   const auto key = append_builder(reusable_prefix, segments[3], suffix);
+   total += std::size(key);
+  }
+
+  return total;
+ };
+
+ BENCHMARK("operator assignment inside by-value builder") {
+  std::size_t total = 0;
+
+  for (auto i : std::views::iota(0, keys_per_sample)) {
+   const auto suffix = std::to_string(i % segment_count);
+   const auto key = assignment_builder(reusable_prefix, segments[3], suffix);
+   total += std::size(key);
   }
 
   return total;
