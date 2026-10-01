@@ -3220,7 +3220,10 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
   bool recovery_deletes = osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
   pg_t prev_pgid(prev_seed, pgid.pool());
-  if (any_change && PastIntervals::is_new_interval(
+  // A forced OSD can leave the acting set without the primary changing, and
+  // drops ops sent to it in an earlier interval.
+  if ((any_change || (t->flags & CEPH_OSD_FLAG_FORCE_OSD)) &&
+      PastIntervals::is_new_interval(
 	t->acting_primary,
 	acting_primary,
 	t->acting,
