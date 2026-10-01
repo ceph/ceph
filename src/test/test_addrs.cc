@@ -334,3 +334,63 @@ TEST(entity_addrvec_t, legacy_equals)
   ASSERT_FALSE(av21.legacy_equals(bv1));
   ASSERT_FALSE(av1.legacy_equals(bv21));
 }
+
+// The msgr2 encoding of an address is the same on every platform, whatever
+// the local sockaddr layout (the BSDs and macOS have sa_len).
+TEST(Msgr, TestAddrEncodingIsPortable)
+{
+  entity_addr_t addr;
+  ASSERT_TRUE(addr.parse("v2:1.2.3.4:6789/12345"));
+  bufferlist bl;
+  encode(addr, bl, CEPH_FEATURES_ALL);
+  const unsigned char expected[] = {
+    0x01,                    // marker
+    0x01, 0x01,              // struct_v, compat
+    0x1c, 0x00, 0x00, 0x00,  // struct_len: 28
+    0x02, 0x00, 0x00, 0x00,  // type: TYPE_MSGR2
+    0x39, 0x30, 0x00, 0x00,  // nonce: 12345
+    0x10, 0x00, 0x00, 0x00,  // elen: sizeof(sockaddr_in)
+    0x02, 0x00,              // family: AF_INET
+    0x1a, 0x85,              // port 6789, network order
+    0x01, 0x02, 0x03, 0x04,  // address
+    0, 0, 0, 0, 0, 0, 0, 0,  // sin_zero
+  };
+  ASSERT_EQ(sizeof(expected), bl.length());
+  ASSERT_EQ(0, memcmp(expected, bl.c_str(), sizeof(expected)));
+
+  entity_addr_t decoded;
+  auto p = bl.cbegin();
+  decode(decoded, p);
+  ASSERT_EQ(addr, decoded);
+}
+
+// decode() rejects an address longer than the sockaddr it is decoded into,
+// with the same bound on every platform.
+TEST(Msgr, TestAddrDecodeRejectsOversizedAddr)
+{
+  // as above, but with elen and the data one byte too long
+  const unsigned char bad[] = {
+    0x01,
+    0x01, 0x01,
+    0x1d, 0x00, 0x00, 0x00,  // struct_len: 29
+    0x02, 0x00, 0x00, 0x00,
+    0x39, 0x30, 0x00, 0x00,
+    0x11, 0x00, 0x00, 0x00,  // elen: sizeof(sockaddr_in) + 1
+    0x02, 0x00,
+    0x1a, 0x85,
+    0x01, 0x02, 0x03, 0x04,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+  };
+  bufferlist bl;
+  bl.append(reinterpret_cast<const char*>(bad), sizeof(bad));
+  {
+    entity_addr_t a;
+    auto p = bl.cbegin();
+    ASSERT_THROW(decode(a, p), ceph::buffer::malformed_input);
+  }
+  {
+    entity_addrvec_t av;
+    auto p = bl.cbegin();
+    ASSERT_THROW(decode(av, p), ceph::buffer::malformed_input);
+  }
+}
