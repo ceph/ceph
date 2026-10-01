@@ -90,15 +90,8 @@ bool ErrInsertion::check_and_update(FaultType type) const
     int64_t next = p.next_trigger_ns.load(std::memory_order_relaxed);
     if (now >= next) {
       triggered = true;
-      if (p.burst_size > 0) {
-        // Next trigger starts after burst completes (set by caller on last
-        // burst op) Don't advance next_trigger_ns here; it's set when burst
-        // finishes
-      }
-      else {
-        p.next_trigger_ns.store(now + p.interval_us * 1000,
-                                std::memory_order_relaxed);
-      }
+      p.next_trigger_ns.store(now + p.interval_us * 1000,
+                              std::memory_order_relaxed);
     }
     break;
   }

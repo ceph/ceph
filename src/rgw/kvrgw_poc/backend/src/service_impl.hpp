@@ -182,8 +182,6 @@ class BatchCommitQueue {
 
 class TierConfigState;
 
-class KvRgwGrpcService;
-
 bool write_object_value(OValueBuf& buf, const ObjectValue& value);
 void apply_tags_to_value(ObjectValue& obj, std::span<const uint8_t> encoded,
                          KvTransaction& tr, bucket_id_t bucket_id,
@@ -445,7 +443,6 @@ class KvRgwServiceImpl final {
 
   KvrgwErrorCode put_object_in_txn(KvTransaction& tr, PutInTxnParams& params, VersioningState* out_versioning_state);
 
-  friend class KvRgwGrpcService;
   friend class BatchCommitQueue;
   friend int run_perf_driver(KvRgwServiceImpl&, KvStore&, const struct PerfConfig&);
   friend void put_worker(KvRgwServiceImpl&, uint32_t, const std::vector<std::string>&, uint64_t, int, int, std::atomic<bool>&, struct PutWorkerResult&, struct BenchResult&);

@@ -31,7 +31,7 @@ struct OpsStats;
 struct BatchStats;
 
 struct ErrorStats {
-  std::atomic<int64_t> counts[::kvrgw::v1::KvrgwErrorCode_ARRAYSIZE]{};
+  std::atomic<int64_t> counts[KvrgwErrorCode_ARRAYSIZE]{};
 
   void record(KvrgwErrorCode code) {
     counts[static_cast<int>(code)].fetch_add(1, std::memory_order_relaxed);

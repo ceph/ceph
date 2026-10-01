@@ -13,33 +13,10 @@ set(FDB_ROOT "${CMAKE_SOURCE_DIR}/../third_party/fdb")
 set(FDB_INCLUDE_DIR "${FDB_ROOT}/usr/include")
 set(FDB_LIB_DIR "${FDB_ROOT}/usr/lib64")
 
-find_package(Protobuf REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
-
-set(PROTO_FILE "${CMAKE_SOURCE_DIR}/../proto/kvrgw.proto")
-set(GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
-file(MAKE_DIRECTORY "${GENERATED_DIR}")
-
-set(PROTO_SRCS "${GENERATED_DIR}/kvrgw.pb.cc")
-set(PROTO_HDRS "${GENERATED_DIR}/kvrgw.pb.h")
-
-add_custom_command(
-  OUTPUT ${PROTO_SRCS} ${PROTO_HDRS}
-  COMMAND protobuf::protoc
-  ARGS --cpp_out=${GENERATED_DIR}
-       -I ${CMAKE_SOURCE_DIR}/../proto
-       ${PROTO_FILE}
-  DEPENDS ${PROTO_FILE}
-  COMMENT "Generating protobuf sources from kvrgw.proto"
-)
-
-add_library(kvrgw_pb ${PROTO_SRCS})
-target_include_directories(kvrgw_pb PUBLIC "${GENERATED_DIR}")
-target_link_libraries(kvrgw_pb PUBLIC protobuf::libprotobuf)
-set_target_properties(kvrgw_pb PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 set(KVRGW_LIB_SRCS
   src/kvrgw_runtime.cpp
@@ -71,7 +48,6 @@ set(KVRGW_LIB_SRCS
 
 add_library(kvrgw SHARED ${KVRGW_LIB_SRCS})
 target_include_directories(kvrgw PUBLIC
-  "${GENERATED_DIR}"
   "${CMAKE_SOURCE_DIR}/include"
   "${CMAKE_SOURCE_DIR}/src"
   "${FDB_INCLUDE_DIR}"
@@ -79,7 +55,6 @@ target_include_directories(kvrgw PUBLIC
 )
 target_link_directories(kvrgw PUBLIC "${FDB_LIB_DIR}")
 target_link_libraries(kvrgw PUBLIC
-  kvrgw_pb
   "${FDB_LIB_DIR}/libfdb_c.so"
   OpenSSL::Crypto
   ${YAML_CPP_LIBRARIES}
@@ -98,7 +73,6 @@ add_executable(kv-rgw-backend
 )
 
 target_include_directories(kv-rgw-backend PRIVATE
-  "${GENERATED_DIR}"
   "${CMAKE_SOURCE_DIR}/src"
   "${FDB_INCLUDE_DIR}"
   ${YAML_CPP_INCLUDE_DIRS}
@@ -117,19 +91,17 @@ set_target_properties(kv-rgw-backend PROPERTIES
 add_executable(object_value_test tests/object_value_test.cpp src/object_value.cpp src/ref_tag.cpp src/tenant_value.cpp src/id_tag.cpp src/id_meta.cpp src/typed_ids.cpp src/etag.cpp src/error_codes.cpp)
 target_include_directories(object_value_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
-  "${GENERATED_DIR}"
   "${FDB_INCLUDE_DIR}"
 )
-target_link_libraries(object_value_test PRIVATE OpenSSL::Crypto kvrgw_pb "${FDB_LIB_DIR}/libfdb_c.so")
+target_link_libraries(object_value_test PRIVATE OpenSSL::Crypto "${FDB_LIB_DIR}/libfdb_c.so")
 target_compile_definitions(object_value_test PRIVATE FDB_API_VERSION=730)
 
 add_executable(l_key_test tests/l_key_test.cpp src/keys.cpp src/l_keys.cpp src/kv_store.cpp src/ref_tag.cpp src/typed_ids.cpp src/etag.cpp src/error_codes.cpp)
 target_include_directories(l_key_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
-  "${GENERATED_DIR}"
   "${FDB_INCLUDE_DIR}"
 )
-target_link_libraries(l_key_test PRIVATE kvrgw_pb "${FDB_LIB_DIR}/libfdb_c.so")
+target_link_libraries(l_key_test PRIVATE "${FDB_LIB_DIR}/libfdb_c.so")
 target_compile_definitions(l_key_test PRIVATE FDB_API_VERSION=730)
 
 add_executable(data_store_test tests/data_store_test.cpp src/data_store.cpp src/ref_tag.cpp)
@@ -151,13 +123,11 @@ add_executable(kv_range_test
 target_include_directories(kv_range_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
   "${FDB_INCLUDE_DIR}"
-  "${GENERATED_DIR}"
 )
 target_link_directories(kv_range_test PRIVATE "${FDB_LIB_DIR}")
 target_link_libraries(kv_range_test PRIVATE
   "${FDB_LIB_DIR}/libfdb_c.so"
   OpenSSL::Crypto
-  kvrgw_pb
 )
 target_compile_definitions(kv_range_test PRIVATE FDB_API_VERSION=730)
 set_target_properties(kv_range_test PROPERTIES BUILD_RPATH "${FDB_LIB_DIR}")
@@ -179,13 +149,11 @@ add_executable(gc_ctl
 target_include_directories(gc_ctl PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
   "${FDB_INCLUDE_DIR}"
-  "${GENERATED_DIR}"
 )
 target_link_directories(gc_ctl PRIVATE "${FDB_LIB_DIR}")
 target_link_libraries(gc_ctl PRIVATE
   "${FDB_LIB_DIR}/libfdb_c.so"
   OpenSSL::Crypto
-  kvrgw_pb
 )
 target_compile_definitions(gc_ctl PRIVATE FDB_API_VERSION=730)
 set_target_properties(gc_ctl PROPERTIES BUILD_RPATH "${FDB_LIB_DIR}")
@@ -206,10 +174,9 @@ add_executable(fdb_error_test
 target_include_directories(fdb_error_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
   "${FDB_INCLUDE_DIR}"
-  "${GENERATED_DIR}"
 )
 target_link_directories(fdb_error_test PRIVATE "${FDB_LIB_DIR}")
-target_link_libraries(fdb_error_test PRIVATE "${FDB_LIB_DIR}/libfdb_c.so" kvrgw_pb)
+target_link_libraries(fdb_error_test PRIVATE "${FDB_LIB_DIR}/libfdb_c.so")
 target_compile_definitions(fdb_error_test PRIVATE FDB_API_VERSION=730)
 set_target_properties(fdb_error_test PROPERTIES BUILD_RPATH "${FDB_LIB_DIR}")
 

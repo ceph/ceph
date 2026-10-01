@@ -597,12 +597,10 @@ TEST(store_range_scan_success)
 TEST(allocate_retries_on_1020_commit)
 {
   inject::reset();
-  // get succeeds (counter absent) on each attempt, commit fails 3x then
-  // succeeds
-  for (int i = 0; i < 4; ++i) {
+  // get succeeds (counter absent) on each attempt, commit fails 2x then succeeds
+  for (int i = 0; i < kvrgw::kMaxTxnRetries; ++i) {
     inject::push_get_success(false);
   }
-  inject::push_commit_error(1020);
   inject::push_commit_error(1020);
   inject::push_commit_error(1020);
   inject::push_commit_success();
@@ -610,14 +608,13 @@ TEST(allocate_retries_on_1020_commit)
   auto result = store.allocate_rgw_id();
   ASSERT_TRUE(result.has_value());
   ASSERT_EQ(*result, static_cast<uint32_t>(1));
-  ASSERT_EQ(inject::g_commit_calls, 4);
+  ASSERT_EQ(inject::g_commit_calls, 3);
 }
 
 TEST(allocate_retries_on_1020_get)
 {
   inject::reset();
-  // get fails 3x with 1020, then succeeds (absent), commit succeeds
-  inject::push_get_error(1020);
+  // get fails 2x with 1020, then succeeds (absent), commit succeeds
   inject::push_get_error(1020);
   inject::push_get_error(1020);
   inject::push_get_success(false);
@@ -626,7 +623,7 @@ TEST(allocate_retries_on_1020_get)
   auto result = store.allocate_rgw_id();
   ASSERT_TRUE(result.has_value());
   ASSERT_EQ(*result, static_cast<uint32_t>(1));
-  ASSERT_EQ(inject::g_get_calls, 4);
+  ASSERT_EQ(inject::g_get_calls, 3);
 }
 
 TEST(allocate_stops_on_non_retriable_commit)
@@ -655,7 +652,7 @@ TEST(allocate_stops_on_non_retriable_get)
 TEST(allocate_exhausts_retries)
 {
   inject::reset();
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < kvrgw::kMaxTxnRetries; ++i) {
     inject::push_get_success(false);
     inject::push_commit_error(1020);
   }
@@ -663,7 +660,7 @@ TEST(allocate_exhausts_retries)
   auto result = store.allocate_rgw_id();
   ASSERT_TRUE(!result);
   ASSERT_EQ(result.error(), kvrgw::KVRGW_ERR_MAX_RETRIES_EXCEEDED);
-  ASSERT_EQ(inject::g_commit_calls, 10);
+  ASSERT_EQ(inject::g_commit_calls, kvrgw::kMaxTxnRetries);
 }
 
 TEST(allocate_maps_unknown_fdb_code_to_internal)

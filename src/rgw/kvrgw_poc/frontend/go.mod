@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.0
 	github.com/gofiber/fiber/v3 v3.4.0
-	google.golang.org/protobuf v1.36.11
 )
 
 require (

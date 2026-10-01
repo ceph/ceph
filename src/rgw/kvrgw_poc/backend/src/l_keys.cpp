@@ -53,10 +53,9 @@ KvrgwErrorCode LKeyNumericCounter::allocate( KvStore& store,
 					     std::string_view counter_name,
 					     uint64_t& out_id)
 {
-  constexpr int kMaxRetries = 3;
   const auto key = make_l_key(kLocalTypeNumeric, counter_name);
 
-  for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
+  for (int attempt = 0; attempt < kMaxTxnRetries; ++attempt) {
     auto tr_res = store.begin_transaction();
     if (!tr_res) {
       auto ec = fdb_to_error(tr_res.error());

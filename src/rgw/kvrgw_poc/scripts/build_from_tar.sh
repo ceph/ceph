@@ -28,21 +28,12 @@ echo "=== Building kv_poc from source ==="
 echo "Root: $ROOT"
 
 # Prerequisites check
-for cmd in cmake make go protoc; do
+for cmd in cmake make go; do
     if ! command -v "$cmd" &>/dev/null; then
         echo "ERROR: $cmd not found in PATH"
         exit 1
     fi
 done
-
-# Install Go protoc plugins if missing
-GOBIN="$(go env GOPATH)/bin"
-export PATH="$PATH:$GOBIN"
-
-if ! command -v protoc-gen-go &>/dev/null; then
-    echo "Installing protoc-gen-go..."
-    go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-fi
 
 # Build C++ backend
 echo ""
@@ -51,13 +42,10 @@ cmake -B "$ROOT/build" -S "$ROOT/backend"
 cmake --build "$ROOT/build" -j"$(nproc)"
 echo "Backend: $ROOT/build/kv-rgw-backend"
 
-# Generate proto + build Go frontend
+# Build Go frontend
 echo ""
 echo "=== Building Go frontend ==="
 cd "$ROOT/frontend"
-mkdir -p pb
-protoc --go_out=pb --go_opt=paths=source_relative \
-    -I ../proto ../proto/kvrgw.proto
 go build -o ../build/kv-rgw-frontend .
 echo "Frontend: $ROOT/build/kv-rgw-frontend"
 

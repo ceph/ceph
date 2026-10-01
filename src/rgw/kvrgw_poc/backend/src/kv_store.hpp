@@ -34,6 +34,8 @@
 
 namespace kvrgw {
 
+inline constexpr int kMaxTxnRetries = 3;
+
 class FdbFuture {
  public:
   FdbFuture() noexcept : f_(nullptr) {}
@@ -308,8 +310,7 @@ class KvTransaction {
 template <typename Fn>
 auto KvStore::run_transaction(Fn&& fn, TxnRetryPolicy policy)
     -> decltype(fn(std::declval<KvTransaction&>())) {
-  constexpr int kMaxRetries = 10;
-  for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
+  for (int attempt = 0; attempt < kMaxTxnRetries; ++attempt) {
     auto tr_result = begin_transaction();
     if (!tr_result) {
       if (fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE_NOT_COMMITTED, tr_result.error())) {

@@ -1231,7 +1231,6 @@ KvrgwErrorCode KvRgwServiceImpl::add_tenant(std::string_view tenant_name,
                                             tenant_id_t *out_id)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kOther);
-  constexpr int kMaxRetries = 10;
   if (tenant_name.empty()) {
     return KVRGW_ERR_INVALID_ARGUMENT;
   }
@@ -1256,7 +1255,7 @@ KvrgwErrorCode KvRgwServiceImpl::add_tenant(std::string_view tenant_name,
   const tenant_id_t tenant_id = static_cast<tenant_id_t>(tenant_num);
   const auto tenant_key = make_tenant_key(tenant_name);
 
-  for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
+  for (int attempt = 0; attempt < kMaxTxnRetries; ++attempt) {
     auto tr_res = store_.begin_transaction();
     if (!tr_res) {
       auto ec = fdb_to_error(tr_res.error());
@@ -1896,8 +1895,7 @@ KvrgwErrorCode KvRgwServiceImpl::create_bucket(tenant_id_t tenant_id,
   KeyBuf bucket_key;
   make_bucket_key(tenant_id, bucket_name, bucket_key);
 
-  constexpr int kMaxRetries = 10;
-  for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
+  for (int attempt = 0; attempt < kMaxTxnRetries; ++attempt) {
     auto tr_res = store_.begin_transaction();
     if (!tr_res) {
       auto ec = fdb_to_error(tr_res.error());

@@ -143,7 +143,7 @@ struct BenchResult {
   std::atomic<int64_t> ops{};
   std::atomic<int64_t> errors{};
   std::atomic<int64_t> retries{};
-  std::atomic<int64_t> err_counts[::kvrgw::v1::KvrgwErrorCode_ARRAYSIZE]{};
+  std::atomic<int64_t> err_counts[KvrgwErrorCode_ARRAYSIZE]{};
 
   void record_error(KvrgwErrorCode code)
   {
@@ -167,13 +167,13 @@ void print_results(const char *label, const BenchResult &result,
             << " elapsed=" << std::setprecision(1) << elapsed_sec << "s\n";
   if (errs > 0 || result.retries.load() > 0) {
     std::cout << "  Error breakdown:";
-    for (int i = 0; i < ::kvrgw::v1::KvrgwErrorCode_ARRAYSIZE; ++i) {
+    for (int i = 0; i < KvrgwErrorCode_ARRAYSIZE; ++i) {
       auto c = result.err_counts[i].load(std::memory_order_relaxed);
       if (c == 0) {
         continue;
       }
-      auto ec = static_cast<::kvrgw::v1::KvrgwErrorCode>(i);
-      std::cout << " " << ::kvrgw::v1::KvrgwErrorCode_Name(ec) << "=" << c;
+      auto ec = static_cast<KvrgwErrorCode>(i);
+      std::cout << " " << KvrgwErrorCode_Name(ec) << "=" << c;
     }
     std::cout << "\n";
   }

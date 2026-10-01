@@ -313,7 +313,7 @@ kvrgw_restart_instance() {
 }
 
 kvrgw_ensure_dirs() {
-  mkdir -p "${DATA_ROOT}" "${ROOT}/.logs" "${ROOT}/frontend/pb" "${RUN_DIR}" "${NGINX_DIR}" "${NGINX_DIR}/tmp"
+  mkdir -p "${DATA_ROOT}" "${ROOT}/.logs" "${RUN_DIR}" "${NGINX_DIR}" "${NGINX_DIR}/tmp"
 }
 
 kvrgw_stop_gw() {
@@ -359,10 +359,6 @@ kvrgw_build() {
       echo "Skipping kv_range_test (no FDB cluster file)"
     fi
   fi
-  export PATH="$(go env GOPATH)/bin:${PATH}"
-  protoc -I "${ROOT}/proto" \
-    --go_out="${ROOT}/frontend/pb" --go_opt=paths=source_relative \
-    "${ROOT}/proto/kvrgw.proto"
   cd "${ROOT}/frontend" && go mod tidy && go build -o "${ROOT}/build/kv-rgw-frontend" .
 }
 

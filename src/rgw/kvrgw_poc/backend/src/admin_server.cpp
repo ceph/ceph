@@ -15,7 +15,6 @@
 #include "admin_server.hpp"
 
 #include "fdb_latency.hpp"
-#include "kvrgw.pb.h"
 #include "ops_stats.hpp"
 #include "service_impl.hpp"
 
@@ -336,7 +335,7 @@ std::string AdminServer::handle_line(const std::string &line)
     }
     std::ostringstream out;
     bool any = false;
-    for (int i = 0; i < ::kvrgw::v1::KvrgwErrorCode_ARRAYSIZE; ++i) {
+    for (int i = 0; i < KvrgwErrorCode_ARRAYSIZE; ++i) {
       auto cnt = error_stats_->counts[i].load(std::memory_order_relaxed);
       if (cnt == 0) {
         continue;
@@ -345,7 +344,7 @@ std::string AdminServer::handle_line(const std::string &line)
         out << ' ';
       }
       auto ec = static_cast<KvrgwErrorCode>(i);
-      out << ::kvrgw::v1::KvrgwErrorCode_Name(ec) << '=' << cnt;
+      out << KvrgwErrorCode_Name(ec) << '=' << cnt;
       any = true;
     }
     if (!any) {
@@ -360,7 +359,7 @@ std::string AdminServer::handle_line(const std::string &line)
     }
     std::ostringstream out;
     bool any = false;
-    for (int i = 0; i < ::kvrgw::v1::KvrgwErrorCode_ARRAYSIZE; ++i) {
+    for (int i = 0; i < KvrgwErrorCode_ARRAYSIZE; ++i) {
       auto cnt = error_stats_->counts[i].exchange(0, std::memory_order_relaxed);
       if (cnt == 0) {
         continue;
@@ -369,7 +368,7 @@ std::string AdminServer::handle_line(const std::string &line)
         out << ' ';
       }
       auto ec = static_cast<KvrgwErrorCode>(i);
-      out << ::kvrgw::v1::KvrgwErrorCode_Name(ec) << '=' << cnt;
+      out << KvrgwErrorCode_Name(ec) << '=' << cnt;
       any = true;
     }
     if (!any) {
