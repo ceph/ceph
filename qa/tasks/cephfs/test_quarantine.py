@@ -900,9 +900,18 @@ class TestQuarantineMgrAsyncJobs(QuarantineTestBase):
     # -- helpers -------------------------------------------------------------
 
     def _ls(self, rel_path):
-        """List a directory via mount_a; [] if it does not exist."""
-        p = self.mount_a.run_shell(
-            ["sh", "-c", "ls -1 %s 2>/dev/null || true" % rel_path])
+        """
+        List a directory via mount_a; [] if it does not exist. Runs as root:
+        the mgr creates its internal directories (_index, _deleting)
+        root-owned with mode 0700.
+        """
+        p = self.mount_a.run_shell(["sudo", "ls", "-1", rel_path],
+                                   check_status=False)
+        if p.exitstatus != 0:
+            err = p.stderr.getvalue()
+            if "No such file or directory" in err:
+                return []
+            self.fail("ls %s failed: %s" % (rel_path, err))
         return [e for e in p.stdout.getvalue().split() if e]
 
     def _clone_index_entries(self):
