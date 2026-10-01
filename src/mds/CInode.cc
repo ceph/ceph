@@ -5653,7 +5653,11 @@ void CInode::queue_export_pin(mds_rank_t export_pin)
       target = get_ephemeral_dist_rank(dir->get_frag());
     }
 
-    if (target != MDS_RANK_NONE) {
+    if (target == mdcache->mds->get_nodeid() && is_ephemeral_dist_tree() &&
+	mdcache->is_in_auth_parent_subtree(dir)) {
+      // stays in the subtree of its parent: merge it if it is one of its own
+      queue = dir->is_subtree_root();
+    } else if (target != MDS_RANK_NONE) {
       if (dir->is_subtree_root()) {
 	// set auxsubtree bit or export it
 	if (!dir->state_test(CDir::STATE_AUXSUBTREE) ||
@@ -5838,6 +5842,28 @@ mds_rank_t CInode::get_ephemeral_dist_rank(frag_t fg) const
   return mdcache->dist_tree_rank(ino(), fg);
 }
 
+bool CInode::is_dist_tree_fragmented() const
+{
+  if (dirfragtree.empty())
+    return false;
+  uint64_t min = mdcache->get_ephemeral_dist_tree_min_entries();
+  if (min == 0)
+    return true;
+  // stay distributed until it shrinks well below the threshold, so that a
+  // directory at the threshold does not move back and forth
+  if (is_ephemeral_dist())
+    min /= 2;
+  // the dirstat of the inode lags behind the fragments, which on the auth
+  // of a directory that is not distributed yet are all here
+  int64_t size = get_inode()->dirstat.size();
+  if (size >= 0 && (uint64_t)size >= min)
+    return true;
+  size = 0;
+  for (const auto& p : dirfrags)
+    size += p.second->get_projected_fnode()->fragstat.size();
+  return size >= 0 && (uint64_t)size >= min;
+}
+
 void CInode::set_export_pin(mds_rank_t rank)
 {
   ceph_assert(is_dir());
@@ -5905,7 +5931,7 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
       return MDS_RANK_EPHEMERAL_DIST;
     }
 
-    if (!fragged && in->is_dir() && !in->dirfragtree.empty()) {
+    if (!fragged && in->is_dir() && in->is_dist_tree_fragmented()) {
       fragged = in;
       if (in != this)
 	fragged_fg = dir->get_frag();
