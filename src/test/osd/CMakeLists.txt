@@ -226,6 +226,14 @@ endif()
 add_ceph_unittest(unittest_osd_osdcap)
 target_link_libraries(unittest_osd_osdcap osd global ${BLKID_LIBRARIES})
 
+# unittest_objecter_direct_reads
+add_executable(unittest_objecter_direct_reads
+  TestObjecterDirectReads.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_objecter_direct_reads)
+target_link_libraries(unittest_objecter_direct_reads osdc global ${BLKID_LIBRARIES})
+
 # unittest ExtentCache (Legacy)
 add_executable(unittest_extent_cache_l
   test_extent_cache_l.cc
@@ -294,6 +302,7 @@ set(OSD_UNITTESTS
   unittest_extent_cache_l
   unittest_hitset
   unittest_mclock_scheduler
+  unittest_objecter_direct_reads
   unittest_osd_osdcap
   unittest_osd_types
   unittest_osdscrub
