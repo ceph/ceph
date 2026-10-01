@@ -717,7 +717,7 @@ UringReadWindow::~UringReadWindow()
 }
 
 int UringReadWindow::iterate(int64_t ofs, int64_t left,
-                             std::function<int(bufferlist&, int)> on_chunk)
+                             fu2::unique_function<int(bufferlist&, int)> on_chunk)
 {
   int64_t submit_ofs = ofs;
   int64_t submit_left = left;
@@ -996,7 +996,7 @@ UringReadWindow::UringReadWindow(const DoutPrefixProvider* dpp,
 UringReadWindow::~UringReadWindow() = default;
 
 int UringReadWindow::iterate(int64_t ofs, int64_t left,
-                             std::function<int(bufferlist&, int)> on_chunk)
+                             fu2::unique_function<int(bufferlist&, int)> on_chunk)
 {
   (void)ofs; (void)left; (void)on_chunk;
   return -EOPNOTSUPP;

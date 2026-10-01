@@ -385,7 +385,7 @@ struct BucketCache : public Notifiable
      * opens a new one; returns nullopt on failure (e.g. MDB_DBS_FULL) */
     std::optional<LMDBSafe::MDBDbi> get_dbi(
       BucketCacheEntry<D, B, YP>* bucket,
-      std::function<LMDBSafe::MDBDbi()> open_fn)
+      fu2::unique_function<LMDBSafe::MDBDbi()> open_fn)
     {
       auto& part = parts[partition_ix(bucket)];
       std::lock_guard lk(part.mtx);

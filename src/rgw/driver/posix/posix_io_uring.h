@@ -4,10 +4,10 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
 #include "include/buffer.h"
+#include "include/function2.hpp"
 #include "common/async/yield_context.h"
 #include "common/dout.h"
 
@@ -130,7 +130,7 @@ public:
 
   /* Submit up to QD reads, wait oldest, invoke on_chunk(bl, len) in order. */
   int iterate(int64_t ofs, int64_t left,
-              std::function<int(bufferlist&, int)> on_chunk);
+              fu2::unique_function<int(bufferlist&, int)> on_chunk);
 };
 
 class UringWriteWindow {
