@@ -807,6 +807,7 @@ int JournalTool::recover_dentries(
 
     // Update fnode in omap header of dirfrag object
     bool write_fnode = false;
+    fnode_t old_fnode;
     bufferlist old_fnode_bl;
     r = input.omap_get_header(frag_oid.name, &old_fnode_bl);
     if (r == -ENOENT) {
@@ -818,7 +819,6 @@ int JournalTool::recover_dentries(
       // MDS to regenerate backtraces on read or in FSCK
     } else if (r == 0) {
       // Conditionally update existing omap header
-      fnode_t old_fnode;
       auto old_fnode_iter = old_fnode_bl.cbegin();
       try {
         old_fnode.decode(old_fnode_iter);
@@ -841,7 +841,11 @@ int JournalTool::recover_dentries(
     if ((other_pool || write_fnode) && !dry_run) {
       dout(4) << "writing fnode to omap header" << dendl;
       bufferlist fnode_bl;
-      lump.fnode->encode(fnode_bl);
+      // frag_bytes can't be kept exact for the dentries written below, so the
+      // total becomes unknown until a scrub with repair sets it
+      fnode_t fnode = *lump.fnode;
+      fnode.frag_bytes = -1;
+      fnode.encode(fnode_bl);
       if (!other_pool || frag.ino >= MDS_INO_SYSTEM_BASE) {
 	r = output.omap_set_header(frag_oid.name, fnode_bl);
       }
@@ -1082,6 +1086,21 @@ int JournalTool::recover_dentries(
 
 	if (remove_dentry)
 	  null_vals.insert(key);
+      }
+    }
+
+    // the header was newer, so it was kept, but dentries from the journal are
+    // still written under it and its total doesn't count them
+    if (!write_vals.empty() && !other_pool && !write_fnode &&
+        old_fnode.frag_bytes >= 0) {
+      old_fnode.frag_bytes = -1;
+      bufferlist fnode_bl;
+      old_fnode.encode(fnode_bl);
+      r = output.omap_set_header(frag_oid.name, fnode_bl);
+      if (r != 0) {
+        derr << "Failed to write fnode for frag object "
+             << frag_oid.name << dendl;
+        return r;
       }
     }
 
