@@ -39,8 +39,16 @@ tasks:
       osds_per_node: 4
       iterations: 1
 
+    report:
+      force_refresh: True
+      create_pdf: True
+      output_directory: "/home/ubuntu/cephtest/archive/cbt/reports/"
+      results_file_root: "output"
+      no_error_bars: True
+
     benchmarks:
       librbdfio:
+        create_report: True
         time: 60
         ramp: 20
         time_based: True
