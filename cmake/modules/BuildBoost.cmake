@@ -154,14 +154,12 @@ function(do_build_boost root_dir version)
   set(b2_targets stage)
   set(b2_install_targets install)
   if(WITH_ASAN)
-    list(APPEND b2 context-impl=ucontext)
+    list(APPEND boost_features context-impl=ucontext)
     # build the library with the BOOST_USE_ASAN consumers get from Boost::context,
     # so fiber_activation_record has one layout (else heap-buffer-overflow)
-    list(APPEND b2 define=BOOST_USE_ASAN)
-    # `context-impl` is declared in libs/context/build/Jamfile.v2; the headers/stage
-    # and install targets never load it, so b2 aborts with `unknown feature
-    # "<context-impl>"`. Name the context project as a target so its Jamfile loads
-    # the feature first.
+    list(APPEND boost_features define=BOOST_USE_ASAN)
+    # `context-impl` is declared in libs/context/build/Jamfile.v2; list it as a
+    # target so b2 loads it (boostorg/context#297, fixed in Boost 1.88)
     list(PREPEND b2_targets libs/context/build)
     list(PREPEND b2_install_targets libs/context/build)
   endif()
