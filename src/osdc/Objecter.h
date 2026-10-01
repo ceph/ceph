@@ -2522,6 +2522,14 @@ public:
     /// osd_core_hint_t), by core; in addition to 'con'. Protected by lock.
     std::map<uint32_t, ConnectionRef> core_cons;
 
+    /// how a PG's ops are routed to the OSD core owning it
+    struct pg_route_t {
+      /// the core the OSD last hinted for the PG
+      std::optional<uint32_t> hinted_core;
+    };
+    /// by PG; protected by lock
+    std::map<spg_t, pg_route_t> pg_routes;
+
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
 
@@ -2694,6 +2702,11 @@ private:
   /// handle the reset of one of s's core connections: mark it down and
   /// forget it. rwlock is locked unique, s->lock is locked
   void _reset_core_con(OSDSession *s, uint32_t core);
+  /// note the core hinted for pgid in an op reply from s, and connect to
+  /// that core if not yet connected. s->lock is locked
+  void _session_apply_core_hint(OSDSession *s,
+				const spg_t& pgid,
+				const osd_core_hint_t& hint);
 
   void _nlist_reply(NListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
