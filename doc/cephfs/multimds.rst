@@ -178,7 +178,7 @@ cluster. The **consistent hash** also minimizes redistribution when the MDS
 cluster grows or shrinks. So, growing an MDS cluster may automatically increase
 your metadata throughput with no other administrative intervention.
 
-Presently, there are two types of ephemeral pinning:
+Presently, there are three types of ephemeral pinning:
 
 **Distributed Ephemeral Pins**: This policy causes a directory to fragment
 (even well below the normal fragmentation thresholds) and distribute its
@@ -218,10 +218,42 @@ with nothing to indicate that the setting had no effect. Thousands of
 sub-directories are needed before ``.01`` pins a useful number. For smaller
 trees, prefer a distributed ephemeral pin or an explicit pin.
 
-Both random and distributed ephemeral pin policies are off by default in
-Octopus. The features may be enabled via the
+**Distributed Tree Ephemeral Pins**: A distributed ephemeral pin spreads the
+fragments of the directory it is set on, but a directory below it stays on the
+rank of the parent fragment it lives in. When the large directories are deeper
+in the tree, for example a shared directory that many clients create files in,
+set ``ceph.dir.pin.distributed.tree`` on a directory above them instead:
+
+.. prompt:: bash #
+
+    setfattr -n ceph.dir.pin.distributed.tree -v 1 /cephfs/scratch
+
+Every directory below ``/cephfs/scratch`` that grows large enough to be
+fragmented (see ``mds_bal_split_size``) then has its own fragments distributed
+across the ranks, the same way a distributed ephemeral pin distributes the
+fragments of the directory it is set on. Directories that are not fragmented
+are not moved. A fragment is assigned by its ancestor at the minimum
+distribution depth (see ``mds_export_ephemeral_distributed_factor``), and those
+ancestors are dealt out to the ranks in turn, so a fragment stays on its rank
+when the directory splits further. An export pin or a distributed ephemeral pin
+between the directory and the tree policy takes precedence, following the rule
+of the closest parent described below. The policy is read back with
+``getfattr -n ceph.dir.pin.distributed.tree`` and cleared by setting it to 0 or
+removing it.
+
+Spreading one directory over several ranks helps workloads with many clients
+working in it. A single client gains little, because a client serializes the
+creates and unlinks it issues in one directory.
+
+The ranks do not replicate the fragments of directories under a distributed or
+random ephemeral pin for read load: those fragments are already spread over
+the ranks.
+
+Random, distributed and distributed tree ephemeral pin policies are off by
+default in Octopus. The features may be enabled via the
 ``mds_export_ephemeral_random`` and ``mds_export_ephemeral_distributed``
-configuration options.
+configuration options; the distributed tree policy follows
+``mds_export_ephemeral_distributed``.
 
 Ephemeral pins may override parent export pins and vice versa. What determines
 which policy is followed is the rule of the closest parent: if a closer parent
