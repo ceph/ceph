@@ -127,7 +127,7 @@ int main(int argc, const char **argv)
       create_keyring = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--import-keyring", (char*)NULL)) {
       import_keyring = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-t", "--key-type", (char*)NULL)) {
       auto cm = cct->get_crypto_manager();
       key_type = cm->get_key_type(val);
       if (key_type < 0) {
