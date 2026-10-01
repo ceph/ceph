@@ -1035,11 +1035,7 @@ inline auto intervals(ceph::libfdb::select selection)
 template <query::non_interval_expression QueryT>
 inline auto intervals(const QueryT& query)
 {
- std::vector<ceph::libfdb::select> out;
-
- query::for_each_interval(query, [&out](ceph::libfdb::select interval) {
-  out.push_back(std::move(interval));
- });
+ auto out = query::compile_intervals(query);
 
  if (not std::empty(out) and out.front().options.reverse_order) {
   std::ranges::reverse(out);
