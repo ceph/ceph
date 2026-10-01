@@ -45,6 +45,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
   permission: Permission;
   tableActions: CdTableAction[] = [];
   storageClassList: StorageClass[] = [];
+  private zonegroups: ZoneGroupDetails;
 
   constructor(
     private rgwZonegroupService: RgwZonegroupService,
@@ -135,6 +136,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     return new Promise((resolve, reject) => {
       this.rgwZonegroupService.getAllZonegroupsInfo().subscribe(
         (data: ZoneGroupDetails) => {
+          this.zonegroups = data;
           this.storageClassList = [];
           const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
           const tierConfig = tierObj.map((tier) => ({
@@ -171,7 +173,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
 
   removeStorageClassModal() {
     const selectedItem = this.selection.first();
-    const { storageClass, placementTarget, tierType } = selectedItem;
+    const { storageClass, placementTarget, tierType, zonegroup_name } = selectedItem;
     const isLocalStorageClass =
       tierType?.toLowerCase() === TIER_TYPE.LOCAL || tierType === TIER_TYPE_DISPLAY.LOCAL;
 
@@ -180,25 +182,39 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
       itemNames: [storageClass],
       actionDescription: 'remove',
       submitActionObservable: () => {
-        // For local storage classes, delete from both zone and zonegroup
+        // For local storage classes, delete from both zone and zonegroup.
+        // Zonegroup membership comes from the list load, not a second zonegroup request.
         const deleteObservable$ = isLocalStorageClass
           ? this.rgwZoneService.getAllZonesInfo().pipe(
               switchMap((data: AllZonesResponse) => {
-                const zoneInfo = BucketTieringUtils.getZoneInfoHelper(data.zones, selectedItem);
+                const zoneInfo = BucketTieringUtils.getZoneInfoHelper(
+                  data.zones,
+                  selectedItem,
+                  BucketTieringUtils.getZonegroupZoneNames(
+                    this.zonegroups?.zonegroups,
+                    zonegroup_name
+                  ) ?? []
+                );
                 return this.rgwStorageClassService.removeStorageClass(
                   placementTarget,
                   storageClass,
-                  zoneInfo.zone_name || ''
+                  zoneInfo.zone_name || '',
+                  zonegroup_name || ''
                 );
               })
             )
-          : this.rgwStorageClassService.removeStorageClass(placementTarget, storageClass);
+          : this.rgwStorageClassService.removeStorageClass(
+              placementTarget,
+              storageClass,
+              '',
+              zonegroup_name || ''
+            );
 
         return this.taskWrapper
           .wrapTaskAroundCall({
             task: new FinishedTask('rgw/zonegroup/storage-class', {
-              placementTarget,
-              storageClass
+              placement_target: placementTarget,
+              storage_class: storageClass
             }),
             call: deleteObservable$
           })

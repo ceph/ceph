@@ -89,21 +89,13 @@
                 i18n
                 >Default</label
               >
-              @if (disableDefault && action === actionLabels.CREATE) {
-                <span>
-                  <cd-helper i18n>Zonegroup doesn't belong to the default realm.</cd-helper>
-                </span>
+              @if (action === actionLabels.EDIT && info.data.is_default) {
+                <cd-helper> <span i18n>You cannot unset the default flag.</span> </cd-helper>
               }
               @if (action === actionLabels.EDIT && !info.data.is_default) {
                 <cd-helper>
-                  <span i18n
-                    >Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to
-                    follow the failover mechanism</span
-                  >
+                  <span i18n>Default cannot be changed on edit.</span>
                 </cd-helper>
-              }
-              @if (action === actionLabels.EDIT && info.data.is_default) {
-                <cd-helper> <span i18n>You cannot unset the default flag.</span> </cd-helper>
               }
               <br />
               <input
@@ -129,17 +121,14 @@
                   >
                 </span>
               }
-              @if (action === actionLabels.EDIT && !info.data.is_master) {
-                <cd-helper>
-                  <span i18n
-                    >Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to
-                    follow the failover mechanism</span
-                  >
-                </cd-helper>
-              }
               @if (action === actionLabels.EDIT && info.data.is_master) {
                 <cd-helper>
                   <span i18n>You cannot unset the master flag.</span>
+                </cd-helper>
+              }
+              @if (action === actionLabels.EDIT && !info.data.is_master) {
+                <cd-helper>
+                  <span i18n>Master cannot be changed on edit.</span>
                 </cd-helper>
               }
             </div>

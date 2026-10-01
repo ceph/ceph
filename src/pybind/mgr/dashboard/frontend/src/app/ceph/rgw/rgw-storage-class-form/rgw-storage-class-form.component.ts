@@ -78,7 +78,7 @@ import { PoolService } from '~/app/shared/api/pool.service';
 import { Pool } from '../../pool/pool';
 import { catchError, map, switchMap } from 'rxjs/operators';
 import { RGW } from '../utils/constants';
-import { forkJoin, of } from 'rxjs';
+import { forkJoin, from, of } from 'rxjs';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 
@@ -174,13 +174,16 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     this.createForm();
     this.storageClassTypeText();
     this.updateTierTypeHelpText();
-    this.loadZoneGroup();
+    const zoneGroupLoaded = this.loadZoneGroup();
     if (this.editing) {
       this.route.params.subscribe((params: StorageClass) => {
         this.storageClassInfo = params;
       });
       this.rgwStorageService
-        .getPlacement_target(this.storageClassInfo.placement_target)
+        .getPlacement_target(
+          this.storageClassInfo.placement_target,
+          this.storageClassInfo.zonegroup_name
+        )
         .pipe(
           switchMap((placementTargetInfo: PlacementTarget) => {
             // Set the tierTargetInfo based on the placementTargetInfo and storageClassInfo
@@ -190,25 +193,34 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             );
             const tierType = this.tierTargetInfo?.val?.tier_type ?? TIER_TYPE.LOCAL;
 
-            // If tierType is LOCAL, make the second API calls
+            // If tierType is LOCAL, make the second API calls. The zonegroup membership comes
+            // from the load already started above instead of a second zonegroup request.
             if (tierType === TIER_TYPE.LOCAL) {
               return forkJoin([
                 this.poolService.getList(),
-                this.rgwZoneService.getAllZonesInfo()
-              ]).pipe(map(([pools, zones]) => ({ placementTargetInfo, pools, zones })));
+                this.rgwZoneService.getAllZonesInfo(),
+                from(zoneGroupLoaded)
+              ]).pipe(
+                map(([pools, zones]) => ({
+                  placementTargetInfo,
+                  pools,
+                  zones,
+                  zonegroups: this.zoneGroupDetails
+                }))
+              );
             }
 
             // If tierType is not LOCAL, just return placementTargetInfo with null pools and zones
-            return of({ placementTargetInfo, pools: null, zones: null });
-          }),
-          map(({ placementTargetInfo, pools, zones }) => {
-            return { placementTargetInfo, pools, zones };
+            return from(zoneGroupLoaded).pipe(
+              map(() => ({ placementTargetInfo, pools: null, zones: null, zonegroups: null }))
+            );
           }),
           catchError(() => {
             return of({
               placementTargetInfo: null,
               pools: null,
-              zones: null
+              zones: null,
+              zonegroups: null
             });
           })
         )
@@ -217,6 +229,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             placementTargetInfo: PlacementTarget;
             pools: Pool[] | null;
             zones: AllZonesResponse | null;
+            zonegroups: ZoneGroupDetails | null;
           }) => {
             let response = this.tierTargetInfo?.val?.s3;
             this.aclList = response?.acl_mappings || [];
@@ -268,10 +281,18 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
                 glacier_restore_days: glacierResponse.glacier_restore_days
               });
             }
-            const zoneInfo = BucketTieringUtils.getZoneInfoHelper(data.zones?.zones, {
-              placement_target: this.storageClassInfo?.placement_target,
-              storage_class: this.storageClassInfo?.storage_class
-            });
+            this.onZonegroupChange();
+            const zoneInfo = BucketTieringUtils.getZoneInfoHelper(
+              data.zones?.zones,
+              {
+                placement_target: this.storageClassInfo?.placement_target,
+                storage_class: this.storageClassInfo?.storage_class
+              },
+              BucketTieringUtils.getZonegroupZoneNames(
+                data.zonegroups?.zonegroups,
+                this.storageClassInfo?.zonegroup_name
+              ) ?? []
+            );
             if (data.pools) {
               this.rgwPools = data.pools.filter((pool: Pool) =>
                 pool.application_metadata?.includes(RGW)
@@ -465,7 +486,9 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       placement_target: new FormControl('', {
         validators: [Validators.required]
       }),
-      target_endpoint: new FormControl('', [Validators.required, this.urlValidator]),
+      // Required only for cloud tiers; updateValidatorsBasedOnStorageClass() adds it when the
+      // type changes. The default (local) type must not be blocked by it.
+      target_endpoint: new FormControl('', [this.urlValidator]),
       access_key: new FormControl(null, [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
       ]),
@@ -544,8 +567,10 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
           this.defaultZonegroup = this.zonegroupNames.find(
             (zonegroup) => zonegroup.id === data?.default_zonegroup
           );
-          this.storageClassForm.get('zonegroup').setValue(this.defaultZonegroup?.name);
-          this.onZonegroupChange();
+          if (!this.editing) {
+            this.storageClassForm.get('zonegroup').setValue(this.defaultZonegroup?.name);
+            this.onZonegroupChange();
+          }
 
           resolve();
         },
@@ -586,6 +611,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     const rawFormValue = _.cloneDeep(this.storageClassForm.getRawValue());
     const zoneRequest: ZoneRequest = {
       zone_name: this.storageClassForm.get('zone').value,
+      zonegroup_name: this.storageClassForm.get('zonegroup').value,
       placement_target: this.storageClassForm.get('placement_target').value,
       storage_class: this.storageClassForm.get('storage_class').value,
       data_pool: this.storageClassForm.get('pool')?.value || ''

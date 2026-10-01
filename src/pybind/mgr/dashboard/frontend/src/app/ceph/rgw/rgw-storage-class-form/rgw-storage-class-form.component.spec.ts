@@ -1,12 +1,13 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 
 import {
+  AccordionModule,
   CheckboxModule,
   ComboBoxModule,
   GridModule,
@@ -18,8 +19,10 @@ import { RgwStorageClassFormComponent } from './rgw-storage-class-form.component
 import { TIER_TYPE_DISPLAY } from '../models/rgw-storage-class.model';
 import { PoolFormComponent } from '../../pool/pool-form/pool-form.component';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
+import { RgwStorageClassService } from '~/app/shared/api/rgw-storage-class.service';
 import { PoolService } from '~/app/shared/api/pool.service';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 
 describe('RgwStorageClassFormComponent', () => {
   let component: RgwStorageClassFormComponent;
@@ -39,7 +42,8 @@ describe('RgwStorageClassFormComponent', () => {
         CoreModule,
         SelectModule,
         ComboBoxModule,
-        CheckboxModule
+        CheckboxModule,
+        AccordionModule
       ],
       declarations: [RgwStorageClassFormComponent]
     }).compileComponents();
@@ -207,6 +211,25 @@ describe('RgwStorageClassFormComponent', () => {
       expect(component).toBeTruthy();
     });
   });
+  it('should not require target_endpoint for a local storage class', () => {
+    const form = component.storageClassForm;
+    form.get('storage_class').setValue('SC1');
+    form.get('zonegroup').setValue('zg2');
+    form.get('placement_target').setValue('default-placement');
+    form.get('zone').setValue('z2');
+    form.get('pool').setValue('pool1');
+    expect(form.get('target_endpoint').invalid).toBe(false);
+    expect(form.valid).toBe(true);
+  });
+
+  it('should require target_endpoint only for cloud tier storage classes', () => {
+    const form = component.storageClassForm;
+    form.get('storageClassType').setValue('cloud-s3');
+    form.get('target_endpoint').setValue('');
+    expect(form.get('target_endpoint').hasError('required')).toBe(true);
+    form.get('storageClassType').setValue('local');
+    expect(form.get('target_endpoint').invalid).toBe(false);
+  });
 
   describe('pool form navigation from storage class form', () => {
     const storageClassReturnUrl = '/rgw/storage-class/create';
@@ -249,5 +272,141 @@ describe('RgwStorageClassFormComponent', () => {
 
       expect(navigateSpy).toHaveBeenCalledWith(['/pool']);
     });
+  });
+
+  describe('edit mode with delayed zonegroup load', () => {
+    let editComponent: RgwStorageClassFormComponent;
+    let editFixture: ComponentFixture<RgwStorageClassFormComponent>;
+    let zonegroupSubject: Subject<any>;
+
+    beforeEach(async () => {
+      zonegroupSubject = new Subject();
+
+      await TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [
+          BrowserAnimationsModule,
+          SharedModule,
+          HttpClientTestingModule,
+          RouterTestingModule,
+          ReactiveFormsModule,
+          GridModule,
+          InputModule,
+          CoreModule,
+          SelectModule,
+          ComboBoxModule,
+          CheckboxModule,
+          AccordionModule
+        ],
+        declarations: [RgwStorageClassFormComponent],
+        providers: [
+          {
+            provide: ActivatedRoute,
+            useValue: {
+              params: of({
+                storage_class: 'SC1',
+                placement_target: 'default-placement',
+                zonegroup_name: 'zg2'
+              })
+            }
+          },
+          {
+            provide: Router,
+            useValue: {
+              url: '/rgw/storage-class/edit',
+              navigate: jasmine.createSpy('navigate')
+            }
+          }
+        ]
+      }).compileComponents();
+
+      spyOn(TestBed.inject(RgwZonegroupService), 'getAllZonegroupsInfo').and.returnValue(
+        zonegroupSubject.asObservable()
+      );
+      spyOn(TestBed.inject(RgwStorageClassService), 'getPlacement_target').and.returnValue(
+        of({
+          name: 'default-placement',
+          tier_targets: [
+            {
+              key: 'SC1',
+              val: {
+                tier_type: 'local',
+                storage_class: 'SC1'
+              }
+            }
+          ]
+        } as any)
+      );
+      spyOn(TestBed.inject(RgwZoneService), 'getAllZonesInfo').and.returnValue(
+        of({
+          zones: [
+            {
+              name: 'default-zone',
+              placement_pools: [
+                {
+                  key: 'default-placement',
+                  val: {
+                    storage_classes: {
+                      SC1: { data_pool: 'pool-default' }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              name: 'zg2-zone',
+              placement_pools: [
+                {
+                  key: 'default-placement',
+                  val: {
+                    storage_classes: {
+                      SC1: { data_pool: 'pool-zg2' }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        } as any)
+      );
+      spyOn(TestBed.inject(PoolService), 'getList').and.returnValue(
+        of([
+          { pool_name: 'pool-default', application_metadata: ['rgw'] },
+          { pool_name: 'pool-zg2', application_metadata: ['rgw'] }
+        ] as any)
+      );
+
+      editFixture = TestBed.createComponent(RgwStorageClassFormComponent);
+      editComponent = editFixture.componentInstance;
+      editFixture.detectChanges();
+    });
+
+    it('should wait for delayed zonegroup info and populate non-default zone and pool', fakeAsync(() => {
+      expect(editComponent.storageClassForm.get('zone').value).toBeFalsy();
+
+      zonegroupSubject.next({
+        default_zonegroup: 'zg1-id',
+        name: 'default-zg',
+        zonegroups: [
+          {
+            id: 'zg1-id',
+            name: 'default-zg',
+            zones: [{ name: 'default-zone' }],
+            placement_targets: [{ name: 'default-placement' }]
+          },
+          {
+            id: 'zg2-id',
+            name: 'zg2',
+            zones: [{ name: 'zg2-zone' }],
+            placement_targets: [{ name: 'default-placement' }]
+          }
+        ]
+      });
+      tick();
+
+      expect(editComponent.storageClassForm.get('zonegroup').value).toBe('zg2');
+      expect(editComponent.storageClassForm.get('zone').value).toBe('zg2-zone');
+      expect(editComponent.storageClassForm.get('pool').value).toBe('pool-zg2');
+    }));
   });
 });
