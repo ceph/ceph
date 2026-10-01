@@ -43,6 +43,10 @@
 
 namespace ceph::libfdb {
 
+// Overload tag for callback-scoped access to FoundationDB's result bytes:
+struct raw_t final {};
+inline constexpr raw_t raw;
+
 namespace concepts {
 
 template <typename IteratorT>
@@ -181,7 +185,7 @@ inline query_window read_query_window(transaction& txn,
 inline std::optional<select> next_range_after(select key_range,
                                               const query_window& window)
 {
- if (not window.more_available || window.result_pairs.empty()) {
+ if (not window.more_available || std::empty(window.result_pairs)) {
   return std::nullopt;
  }
 
@@ -200,6 +204,45 @@ inline std::optional<select> next_range_after(select key_range,
  return key_range;
 }
 
+inline auto key_bytes(const FDBKeyValue& pair) noexcept
+{
+ return std::span {pair.key, static_cast<std::size_t>(pair.key_length)};
+}
+
+inline auto value_bytes(const FDBKeyValue& pair) noexcept
+{
+ return std::span {pair.value, static_cast<std::size_t>(pair.value_length)};
+}
+
+class query_cursor final
+{
+ std::optional<select> next_selection;
+
+ // FDB iterator streaming uses a one-based iteration count:
+ int iteration = 1;
+
+ public:
+ explicit query_cursor(select selection)
+  : next_selection(std::move(selection))
+ {}
+
+ std::optional<query_window> read_next(
+   transaction& txn,
+   const read_mode mode = read_mode::serializable)
+ {
+  if (not next_selection) {
+   return std::nullopt;
+  }
+
+  auto window = read_query_window(txn, *next_selection, iteration, mode);
+
+  next_selection = next_range_after(std::move(*next_selection), window);
+  ++iteration;
+
+  return {std::move(window)};
+ }
+};
+
 /* Returned spans remain valid only while the coroutine retains the owning FDB
  * future. Consumers must copy their contents before advancing the generator: */
 inline auto generate_FDB_pairs(
@@ -208,19 +251,10 @@ inline auto generate_FDB_pairs(
   const read_mode mode = read_mode::serializable)
  -> std::generator<std::span<const FDBKeyValue>>
 {
- int iteration = 1;
+ query_cursor cursor(std::move(key_range));
 
- for (auto more_available = true; more_available; ++iteration) {
-  auto window = read_query_window(txn, key_range, iteration, mode);
-  auto next_range = next_range_after(key_range, window);
-
-  more_available = next_range.has_value();
-
-  co_yield window.result_pairs;
-
-  if (next_range) {
-   key_range = std::move(*next_range);
-  }
+ while (auto window = cursor.read_next(txn, mode)) {
+  co_yield window->result_pairs;
  }
 }
 
@@ -258,20 +292,31 @@ inline auto materialize_query_window(transaction& txn,
  };
 }
 
+inline std::size_t for_each_result_pair(transaction& txn,
+                                        select key_range,
+                                        const read_mode mode,
+                                        auto&& fn)
+{
+ query_cursor cursor(std::move(key_range));
+ std::size_t nread = 0;
+
+ while (auto window = cursor.read_next(txn, mode)) {
+  std::ranges::for_each(window->result_pairs, std::ref(fn));
+  nread += std::size(window->result_pairs);
+ }
+
+ return nread;
+}
+
 inline std::size_t for_each_decoded_kv_pair(transaction& txn,
                                             const select& key_range,
                                             const read_mode mode,
                                             auto&& fn)
 {
- std::size_t nread = 0;
-
- for (const auto& kv : generate_FDB_pairs(txn, key_range, mode)
-                     | std::views::join) {
-  std::invoke(fn, to_decoded_kv_pair<std::string>(kv));
-  ++nread;
- }
-
- return nread;
+ return for_each_result_pair(
+  txn, key_range, mode, [&fn](const FDBKeyValue& pair) {
+   std::invoke(fn, to_decoded_kv_pair<std::string>(pair));
+  });
 }
 
 template <typename OutIterT>
@@ -307,13 +352,13 @@ inline std::vector<select> select_ranges_from_split_points(
   std::span<const FDBKey> keys,
   const select& parent)
 {
- if (2 > keys.size()) {
+ if (2 > std::size(keys)) {
   return {};
  }
 
  // Gather the flattened list into overlapping libfdb::select pairs:
  auto ranges = ceph::util::collect_as<std::vector<select>>(
-   std::views::iota(std::size_t {0}, keys.size() - 1)
+   std::views::iota(std::size_t {0}, std::size(keys) - 1)
    | std::views::transform([&parent, keys](const auto i) {
        const auto& first = keys[i];
        const auto& second = keys[1 + i];
@@ -326,7 +371,7 @@ inline std::vector<select> select_ranges_from_split_points(
        split.options = parent.options;
 
        split.begin_inclusive = 0 == i ? parent.begin_inclusive : true;
-       split.end_inclusive = 2 + i == keys.size()
+       split.end_inclusive = 2 + i == std::size(keys)
         ? parent.end_inclusive
         : false;
 
@@ -367,7 +412,7 @@ inline range_work_plan plan_range_work(
   auto ranges = select_ranges_from_split_points(
     split_points.result_keys, split_selector);
 
-  if (ranges.empty()) {
+  if (std::empty(ranges)) {
    ranges.push_back(std::move(selector));
   }
 
@@ -413,7 +458,7 @@ inline void publish_string_pair_results(ContainerT& out, ContainerT&& tmp)
 {
  if constexpr (ceph::concepts::has_empty<ContainerT> &&
                std::assignable_from<ContainerT&, ContainerT&&>) {
-  if (out.empty()) {
+  if (std::empty(out)) {
    out = std::move(tmp);
    return;
   }
@@ -752,6 +797,60 @@ concept row_predicate = std::predicate<PredT&, const row_t<ValueT>&>;
 
 } // namespace detail
 
+/* Apply a callback to each selected key/value pair without decoding or copying.
+ * Both spans expire when the callback returns: */
+template <query::expression SelectionT,
+          concepts::raw_key_value_callback FnT>
+inline std::size_t for_each(raw_t,
+                            const transaction_handle& txn,
+                            SelectionT selection,
+                            FnT&& fn,
+                            const read_mode mode = read_mode::serializable)
+{
+ std::size_t nread = 0;
+
+ for (auto& interval : detail::intervals(std::move(selection))) {
+  nread += detail::for_each_result_pair(
+   *txn, std::move(interval), mode, [&fn](const FDBKeyValue& pair) {
+    std::invoke(fn, detail::key_bytes(pair), detail::value_bytes(pair));
+   });
+ }
+
+ return nread;
+}
+
+/* The database form retries each result window before exposing its borrowed
+ * bytes. Callbacks are therefore never replayed, but a retry may move later
+ * windows to a newer read version: */
+template <query::expression SelectionT,
+          concepts::raw_key_value_callback FnT>
+inline std::size_t for_each(raw_t,
+                            database_handle dbh,
+                            SelectionT selection,
+                            FnT&& fn,
+                            const read_mode mode = read_mode::serializable)
+{
+ auto txn = make_transaction(std::move(dbh));
+ std::size_t nread = 0;
+
+ for (auto& interval : detail::intervals(std::move(selection))) {
+  detail::query_cursor cursor(std::move(interval));
+
+  while (auto window = detail::retry_without_commit(
+           txn, [&cursor, mode](transaction_handle& active_txn) {
+            return cursor.read_next(*active_txn, mode);
+           })) {
+   for (const auto& pair : window->result_pairs) {
+    std::invoke(fn, detail::key_bytes(pair), detail::value_bytes(pair));
+   }
+
+   nread += std::size(window->result_pairs);
+  }
+ }
+
+ return nread;
+}
+
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
 requires detail::row_consumer<FnT, ValueT>
 inline void for_each(ceph::libfdb::transaction_handle txn,
@@ -1001,7 +1100,7 @@ auto blocks_selector(ceph::libfdb::database_handle dbh,
 
   auto next_range = std::move(read_result.next_range);
 
-  if (read_result.result_block.empty()) {
+  if (std::empty(read_result.result_block)) {
    co_return;
   }
 

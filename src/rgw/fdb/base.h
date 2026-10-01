@@ -191,6 +191,13 @@ concept value_callback =
  value_invocable<FnT> &&
  std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>>>;
 
+template <typename FnT>
+concept raw_key_value_callback =
+ std::invocable<FnT&, std::span<const std::uint8_t>,
+                       std::span<const std::uint8_t>> &&
+ std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>,
+                                           std::span<const std::uint8_t>>>;
+
 template <typename T>
 concept decoded_value_sink =
  not value_invocable<std::remove_reference_t<T>> and
@@ -321,11 +328,16 @@ inline constexpr fdb_error_t operation_cancelled_error = 1101;
 struct future_value final
 {
  private:
- std::unique_ptr<FDBFuture, decltype(&fdb_future_destroy)> future_ptr;
+ // A captureless lambda allows the deleter to occupy 0 bytes rather than a ptr:
+ using deleter = decltype([](FDBFuture *future) noexcept {
+  fdb_future_destroy(future);
+ });
+
+ std::unique_ptr<FDBFuture, deleter> future_ptr;
 
  public:
  explicit future_value(FDBFuture *future_handle)
-  : future_ptr(future_handle, &fdb_future_destroy)
+  : future_ptr(future_handle)
  {}
 
  FDBFuture *raw_handle() const noexcept { return future_ptr.get(); }
@@ -347,7 +359,7 @@ struct future_value final
 
 inline byte_view as_byte_view(concepts::libfdb_key_view auto key)
 {
- return byte_view(reinterpret_cast<const std::uint8_t *>(key.data()), key.size());
+ return byte_view(reinterpret_cast<const std::uint8_t *>(std::data(key)), std::size(key));
 }
 
 } // namespace detail
@@ -547,12 +559,12 @@ inline std::vector<std::uint8_t> make_versioned_encoding(std::string_view prefix
 
  std::ranges::copy(prefix, std::back_inserter(out));
 
- if (not std::in_range<std::uint32_t>(out.size())) {
+ if (not std::in_range<std::uint32_t>(std::size(out))) {
   throw std::invalid_argument("version-stamped prefix is too large");
  }
 
- const auto versionstamp_offset = static_cast<std::uint32_t>(out.size());
- out.resize(out.size() + versionstamp_byte_count);
+ const auto versionstamp_offset = static_cast<std::uint32_t>(std::size(out));
+ out.resize(std::size(out) + versionstamp_byte_count);
 
  std::ranges::copy(suffix, std::back_inserter(out));
 
@@ -614,13 +626,20 @@ inline std::string key_after(std::string_view key)
  return std::string(key) + '\0';
 }
 
-inline select as_half_open_select(const select& selection)
+inline select as_half_open_select(select selection)
 {
- auto half_open = select {
-  selection.begin_inclusive ? selection.begin_key : key_after(selection.begin_key),
-  selection.end_inclusive ? key_after(selection.end_key) : selection.end_key
- };
+ if (not selection.begin_inclusive) {
+  selection.begin_key.push_back('\0');
+ }
 
+ if (selection.end_inclusive) {
+  selection.end_key.push_back('\0');
+ }
+
+ // Preserve the constructor's reserved-key clamping while transferring buffers.
+ auto half_open = select {
+  std::move(selection.begin_key), std::move(selection.end_key), true, false
+ };
  half_open.options = selection.options;
 
  return half_open;
@@ -720,8 +739,8 @@ struct fdb_bytes final
 constexpr fdb_bytes as_fdb_bytes(const byte_view bytes)
 {
  return {
-  .data = bytes.data(),
-  .length = checked_fdb_size(bytes.size())
+  .data = std::data(bytes),
+  .length = checked_fdb_size(std::size(bytes))
  };
 }
 
@@ -743,12 +762,12 @@ constexpr byte_view result_bytes(const std::uint8_t *data, const int length)
 
 inline std::string_view as_string_view(const byte_view bytes) noexcept
 {
- if (bytes.empty()) {
+ if (std::empty(bytes)) {
   return {};
  }
 
  return std::string_view(
-  reinterpret_cast<const char *>(bytes.data()), bytes.size());
+  reinterpret_cast<const char *>(std::data(bytes)), std::size(bytes));
 }
 
 inline std::string_view key_view(const auto& result)
