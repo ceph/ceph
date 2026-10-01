@@ -2057,6 +2057,12 @@ public:
     /// true if we should resend this message on failure
     bool should_resend = true;
 
+    /// set while the op is accounted for as in flight in its session's
+    /// pg_routes: the PG it was sent for, and the core connection it was
+    /// sent on (nullopt: the session's main connection)
+    std::optional<spg_t> routed_pgid;
+    std::optional<uint32_t> routed_core;
+
     /// true if the throttle budget is get/put on a series of OPs,
     /// instead of per OP basis, when this flag is set, the budget is
     /// acquired before sending the very first OP of the series and
@@ -2526,6 +2532,12 @@ public:
     struct pg_route_t {
       /// the core the OSD last hinted for the PG
       std::optional<uint32_t> hinted_core;
+      /// the core connection the PG's ops are sent on (nullopt: 'con').
+      /// Changed only while no op of the PG is in flight, so that the
+      /// PG's ops arrive in order. Always one of core_cons.
+      std::optional<uint32_t> core;
+      /// the PG's ops in flight (sent, and still assigned to the session)
+      unsigned in_flight = 0;
     };
     /// by PG; protected by lock
     std::map<spg_t, pg_route_t> pg_routes;
@@ -2700,8 +2712,17 @@ private:
   /// mark down and forget all of s's core connections; s->lock is locked
   void _close_core_cons(OSDSession *s);
   /// handle the reset of one of s's core connections: mark it down and
-  /// forget it. rwlock is locked unique, s->lock is locked
-  void _reset_core_con(OSDSession *s, uint32_t core);
+  /// forget it, and resend the ops sent on it via the main connection.
+  /// The lingers to re-register are added to lresend.
+  /// rwlock is locked unique, s->lock is locked
+  void _reset_core_con(OSDSession *s,
+		       uint32_t core,
+		       std::map<uint64_t, LingerOp *>& lresend);
+  /// choose the connection to send op on, and account for op as in flight
+  /// on it; op->session->lock is locked
+  ConnectionRef _op_route(Op *op);
+  /// stop accounting for op as in flight; op->session->lock is locked
+  void _op_unroute(Op *op);
   /// note the core hinted for pgid in an op reply from s, and connect to
   /// that core if not yet connected. s->lock is locked
   void _session_apply_core_hint(OSDSession *s,
