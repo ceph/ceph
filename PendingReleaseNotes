@@ -1,5 +1,15 @@
 >=22.0.0
 
+* CephFS: A new directory policy ``ceph.dir.pin.distributed.tree`` spreads the
+  fragments of every fragmented directory below the directory it is set on
+  across the active MDS ranks;
+  ``mds_export_ephemeral_distributed_tree_min_entries`` limits it to
+  directories of at least that many entries. The MDS also no longer lists
+  dirfrag replicas that were not replicated for read load in its replies, and
+  no longer read-replicates the dirfrags of ephemerally pinned directories;
+  both made clients send lookups to replicas that had to forward them. See
+  doc/cephfs/multimds.rst.
+
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
   hold the lock, instead of an empty list. Callers should check the
