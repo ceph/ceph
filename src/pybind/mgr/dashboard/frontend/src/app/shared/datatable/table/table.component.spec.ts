@@ -870,7 +870,7 @@ describe('TableComponent', () => {
 
     it('should throw an error if custom classes are not set', () => {
       component.customCss = undefined;
-      expect(() => component.useCustomClass('active')).toThrowError('Custom classes are not set!');
+      expect(() => component.useCustomClass('active')).toThrow('Custom classes are not set!');
     });
 
     it('should not return any class', () => {

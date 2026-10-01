@@ -74,10 +74,10 @@ describe('InventoryDevicesComponent', () => {
   it('should call inventoryDataList only when showOnlyAvailableData is true', () => {
     const hostServiceSpy = spyOn(hostService, 'inventoryDeviceList').and.callThrough();
     component.getDevices();
-    expect(hostServiceSpy).toBeCalledTimes(0);
+    expect(hostServiceSpy).toHaveBeenCalledTimes(0);
     component.showAvailDeviceOnly = true;
     component.getDevices();
-    expect(hostServiceSpy).toBeCalledTimes(1);
+    expect(hostServiceSpy).toHaveBeenCalledTimes(1);
   });
 
   describe('table actions', () => {

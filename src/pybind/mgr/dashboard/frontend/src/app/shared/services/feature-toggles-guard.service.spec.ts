@@ -67,6 +67,6 @@ describe('FeatureTogglesGuardService', () => {
   }));
 
   it('should throw error if disable', fakeAsync(() => {
-    expect(() => testCanActivate('cephfs', { cephfs: false })).toThrowError(DashboardNotFoundError);
+    expect(() => testCanActivate('cephfs', { cephfs: false })).toThrow(DashboardNotFoundError);
   }));
 });

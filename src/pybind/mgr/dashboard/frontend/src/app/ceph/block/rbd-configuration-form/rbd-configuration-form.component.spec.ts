@@ -287,7 +287,7 @@ describe('RbdConfigurationFormComponent', () => {
     });
 
     it('should throw an error if used incorrectly', () => {
-      expect(() => component.getDirtyValues(true)).toThrowError(
+      expect(() => component.getDirtyValues(true)).toThrow(
         /^ProgrammingError: If local values shall be included/
       );
     });
