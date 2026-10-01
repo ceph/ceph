@@ -222,6 +222,7 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.state_test(CInode::STATE_MISSINGOBJS)) out << " MISSINGOBJS";
   if (in.is_ephemeral_dist()) out << " DISTEPHEMERALPIN";
   if (in.is_ephemeral_rand()) out << " RANDEPHEMERALPIN";
+  if (in.state_test(CInode::STATE_DISTTREELARGE)) out << " DISTTREELARGE";
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
   if (in.is_frozen_auth_pin()) out << " FROZEN_AUTHPIN";
@@ -538,7 +539,11 @@ void CInode::pop_and_dirty_projected_inode(LogSegmentRef const& ls, const Mutati
   bool pin_updated = (get_inode()->export_pin != front.inode->export_pin) ||
 		     (get_inode()->get_ephemeral_distributed_pin() !=
 		      front.inode->get_ephemeral_distributed_pin()) ||
-		     tree_pin_updated;
+		     tree_pin_updated ||
+		     // the dirstat lags behind the fragments: a directory may
+		     // only now be seen to grow or shrink past the threshold
+		     dist_tree_size_crossed(get_inode()->dirstat.size(),
+					    front.inode->dirstat.size());
 
   reset_inode(std::move(front.inode));
   if (front.xattrs != get_xattrs())
@@ -1960,7 +1965,7 @@ void CInode::decode_lock_idft(bufferlist::const_iterator& p)
 
 void CInode::encode_lock_ifile(bufferlist& bl)
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   if (is_auth()) {
     encode(get_inode()->version, bl);
     encode(get_inode()->ctime, bl);
@@ -2001,16 +2006,20 @@ void CInode::encode_lock_ifile(bufferlist& bl)
   }
   encode(n, bl);
   bl.claim_append(tmp);
-  if (is_auth())
+  if (is_auth()) {
     encode(get_inode()->fscrypt_file, bl);
+    // the decision on the size goes with the dirstat it is made from
+    encode(is_dist_tree_fragmented(), bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void CInode::decode_lock_ifile(bufferlist::const_iterator& p)
 {
   inode_ptr _inode;
+  bool dist_tree_updated = false;
 
-  DECODE_START(2, p);
+  DECODE_START(3, p);
   if (!is_auth()) {
     _inode = allocate_inode(*get_inode());
 
@@ -2087,10 +2096,18 @@ void CInode::decode_lock_ifile(bufferlist::const_iterator& p)
   }
   if (!is_auth() && struct_v >= 2)
     decode(_inode->fscrypt_file, p);
+  if (!is_auth() && struct_v >= 3) {
+    bool large;
+    decode(large, p);
+    dist_tree_updated = large != state_test(STATE_DISTTREELARGE);
+    set_dist_tree_large(large);
+  }
   DECODE_FINISH(p);
 
   if (_inode)
     reset_inode(std::move(_inode));
+  if (dist_tree_updated)
+    maybe_export_pin(true);
 }
 
 void CInode::encode_lock_inest(bufferlist& bl)
@@ -4750,6 +4767,8 @@ void CInode::decode_import(bufferlist::const_iterator& p,
     set_ephemeral_pin((s & STATE_DISTEPHEMERALPIN),
 		      (s & STATE_RANDEPHEMERALPIN));
     state_set(STATE_AUTH | s);
+    // decided here from now on
+    state_clear(STATE_DISTTREELARGE);
   }
 
   if (is_dirty()) {
@@ -5484,6 +5503,8 @@ void CInode::dump(Formatter *f, int flags) const
       f->dump_string("state", "orphan");
     if (state_test(STATE_MISSINGOBJS))
       f->dump_string("state", "missingobjs");
+    if (state_test(STATE_DISTTREELARGE))
+      f->dump_string("state", "disttreelarge");
     f->close_section();
   }
 
@@ -5660,7 +5681,11 @@ void CInode::queue_export_pin(mds_rank_t export_pin)
       target = get_ephemeral_dist_rank(dir->get_frag());
     }
 
-    if (target != MDS_RANK_NONE) {
+    if (target == mdcache->mds->get_nodeid() && is_ephemeral_dist_tree() &&
+	mdcache->is_in_auth_parent_subtree(dir)) {
+      // stays in the subtree of its parent: merge it if it is one of its own
+      queue = dir->is_subtree_root();
+    } else if (target != MDS_RANK_NONE) {
       if (dir->is_subtree_root()) {
 	// set auxsubtree bit or export it
 	if (!dir->state_test(CDir::STATE_AUXSUBTREE) ||
@@ -5845,6 +5870,60 @@ mds_rank_t CInode::get_ephemeral_dist_rank(frag_t fg) const
   return mdcache->dist_tree_rank(ino(), fg);
 }
 
+bool CInode::is_dist_tree_fragmented() const
+{
+  if (dirfragtree.empty())
+    return false;
+  uint64_t min = mdcache->get_ephemeral_dist_tree_min_entries();
+  if (min == 0)
+    return true;
+  /* Only the auth decides from the size.  Another rank sees the dirstat of
+   * the auth as of its last filelock message and the fragstats of the
+   * fragments it holds, which can both be under the threshold while the
+   * auth already distributes the directory, and it would then take the
+   * fragments it imported out of the distribution.  It follows the auth,
+   * which sends its decision with the replica of the inode, with the
+   * filelock state and with every fragment it exports.
+   */
+  if (!is_auth())
+    return state_test(STATE_DISTTREELARGE);
+  // stay distributed until it shrinks well below the threshold, so that a
+  // directory at the threshold does not move back and forth
+  if (is_ephemeral_dist())
+    min /= 2;
+  // the dirstat of the inode lags behind the fragments, which on the auth
+  // of a directory that is not distributed yet are all here
+  int64_t size = get_inode()->dirstat.size();
+  if (size >= 0 && (uint64_t)size >= min)
+    return true;
+  size = 0;
+  for (const auto& p : dirfrags)
+    size += p.second->get_projected_fnode()->fragstat.size();
+  return size >= 0 && (uint64_t)size >= min;
+}
+
+void CInode::set_dist_tree_large(bool large)
+{
+  if (large == state_test(STATE_DISTTREELARGE))
+    return;
+  dout(10) << __func__ << " " << large << " " << *this << dendl;
+  if (large)
+    state_set(STATE_DISTTREELARGE);
+  else
+    state_clear(STATE_DISTTREELARGE);
+}
+
+bool CInode::dist_tree_size_crossed(int64_t before, int64_t after) const
+{
+  if (!is_dir() || dirfragtree.empty())
+    return false;
+  int64_t min = mdcache->get_ephemeral_dist_tree_min_entries();
+  if (min <= 0)
+    return false;
+  return (before < min) != (after < min) ||
+	 (before < min / 2) != (after < min / 2);
+}
+
 void CInode::set_export_pin(mds_rank_t rank)
 {
   ceph_assert(is_dir());
@@ -5912,7 +5991,7 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
       return MDS_RANK_EPHEMERAL_DIST;
     }
 
-    if (!fragged && in->is_dir() && !in->dirfragtree.empty()) {
+    if (!fragged && in->is_dir() && in->is_dist_tree_fragmented()) {
       fragged = in;
       if (in != this)
 	fragged_fg = dir->get_frag();
