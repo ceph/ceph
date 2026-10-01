@@ -231,17 +231,17 @@ TEST(FSEnt, DirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
   std::string val;
-  bool success = decode_attr(attrs, ATTR1.c_str(), val);
+  bool success = ::decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = ::decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = ::decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
   nsfs::ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
+  success = ::decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
   EXPECT_TRUE(success);
   EXPECT_EQ(type.type, nsfs::ObjectType::DIRECTORY);
 
@@ -283,13 +283,13 @@ TEST(FSEnt, DirBase)
   ret = copydir->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
-  success = decode_attr(attrs, ATTR1.c_str(), val);
+  success = ::decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = ::decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = ::decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
 
@@ -434,17 +434,17 @@ TEST(FSEnt, FileBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(attrs.size(), 4);
   std::string val;
-  bool success = decode_attr(attrs, ATTR1.c_str(), val);
+  bool success = ::decode_attr(attrs, ATTR1.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR1);
-  success = decode_attr(attrs, ATTR2.c_str(), val);
+  success = ::decode_attr(attrs, ATTR2.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR2);
-  success = decode_attr(attrs, ATTR3.c_str(), val);
+  success = ::decode_attr(attrs, ATTR3.c_str(), val);
   EXPECT_TRUE(success);
   EXPECT_EQ(val, ATTR3);
   nsfs::ObjectType type;
-  success = decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
+  success = ::decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
   EXPECT_TRUE(success);
   EXPECT_EQ(type.type, nsfs::ObjectType::FILE);
 
