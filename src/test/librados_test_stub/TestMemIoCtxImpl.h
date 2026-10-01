@@ -54,6 +54,10 @@ public:
   int selfmanaged_snap_remove(uint64_t snapid) override;
   int selfmanaged_snap_rollback(const std::string& oid,
                                 uint64_t snapid) override;
+  int snap_rollback(const std::string& snap_name,
+                    uint64_t *rollback_id) override;
+  int pool_selfmanaged_snap_rollback(uint64_t snap_id,
+                                     uint64_t *rollback_id) override;
   int set_alloc_hint(const std::string& oid, uint64_t expected_object_size,
                      uint64_t expected_write_size, uint32_t flags,
                      const SnapContext &snapc) override;

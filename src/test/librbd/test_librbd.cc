@@ -13883,6 +13883,61 @@ TEST_F(TestLibRBD, FormatAndCloneFormatOptions)
   ASSERT_NO_FATAL_FAILURE(verify_format_2(import_name));
 }
 
+// WI-14-d: Integration test -- rbd snap rollback on umbrella cluster.
+// Verifies that after a snap rollback the data reads back correctly
+// (data integrity) via the librbd C++ API.
+TEST_F(TestLibRBD, SnapRollbackFastPathDataIntegrity)
+{
+  REQUIRE_FORMAT_V2();
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 4 << 20;  // 4 MiB
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+
+  // Write data A
+  ceph::bufferlist bl_a;
+  bl_a.append(std::string(4096, 'A'));
+  ASSERT_EQ(4096, image.write(0, 4096, bl_a));
+
+  // Create snapshot
+  ASSERT_EQ(0, image.snap_create("snap1"));
+
+  // Overwrite with data B
+  ceph::bufferlist bl_b;
+  bl_b.append(std::string(4096, 'B'));
+  ASSERT_EQ(4096, image.write(0, 4096, bl_b));
+
+  // Verify data B is present before rollback
+  {
+    ceph::bufferlist bl_read;
+    ASSERT_EQ(4096, image.read(0, 4096, bl_read));
+    ASSERT_EQ(0, memcmp(bl_b.c_str(), bl_read.c_str(), 4096));
+  }
+
+  // Rollback to snap1
+  ASSERT_EQ(0, image.snap_rollback("snap1"));
+
+  // Verify data A is restored after rollback (data integrity)
+  {
+    ceph::bufferlist bl_read;
+    ASSERT_EQ(4096, image.read(0, 4096, bl_read));
+    ASSERT_EQ(0, memcmp(bl_a.c_str(), bl_read.c_str(), 4096))
+      << "Expected data A after rollback, got different data";
+  }
+
+  ASSERT_EQ(0, image.snap_remove("snap1"));
+  ASSERT_EQ(0, image.close());
+  ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));
+}
+
 // poorman's ceph_assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,

@@ -231,6 +231,14 @@ cdef extern from "rados/librados.h" nogil:
                                                    int num_snaps)
     int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io, const char *oid,
                                               rados_snap_t snapid)
+    int rados_ioctx_snap_rollback_all(rados_ioctx_t io, const char *snapname,
+                                      uint64_t *rollback_id)
+    int rados_ioctx_selfmanaged_snap_rollback_all(rados_ioctx_t io,
+                                                   uint64_t snap_id,
+                                                   rados_snap_t snapc_seq,
+                                                   const rados_snap_t *snapc_snaps,
+                                                   int num_snapc_snaps,
+                                                   uint64_t *rollback_id)
 
     int rados_lock_exclusive(rados_ioctx_t io, const char * oid, const char * name,
                              const char * cookie, const char * desc,

@@ -574,7 +574,8 @@ private:
   std::string make_purged_snap_key_value(int64_t pool, snapid_t snap, snapid_t num,
 				    epoch_t epoch, ceph::buffer::list *v);
 
-  bool try_prune_purged_snaps();
+  bool try_prune_purged_snaps(unsigned &max_prune);
+  bool try_prune_completed_rollbacks(unsigned &max_prune);
   int lookup_purged_snap(int64_t pool, snapid_t snap,
 			 snapid_t *begin, snapid_t *end);
 
@@ -649,6 +650,7 @@ private:
   bool prepare_remove_snaps(MonOpRequestRef op);
 
   bool preprocess_get_purged_snaps(MonOpRequestRef op);
+  bool preprocess_get_completed_rollbacks(MonOpRequestRef op);
 
   int load_metadata(int osd, std::map<std::string, std::string>& m,
 		    std::ostream *err);

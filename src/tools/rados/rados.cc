@@ -31,6 +31,7 @@
 #include "global/global_init.h"
 #include "common/Cond.h"
 #include "common/debug.h"
+#include "common/ceph_releases.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
 #include "common/obj_bencher.h"
@@ -109,6 +110,8 @@ void usage(ostream& out)
 "   lssnap                           list snaps\n"
 "   mksnap <snap-name>               create snap <snap-name>\n"
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
+"   rollbacksnap <snap-name|snap-id> roll back entire pool to snap\n"
+"                                    (name for pool-managed, ID for selfmanaged)\n"
 "\n"
 "OBJECT COMMANDS\n"
 "   get <obj-name> <outfile> [--offset offset]\n"
@@ -3359,6 +3362,70 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
     cout << "removed pool " << pool_name << " snap " << nargs[1] << std::endl;
+  }
+
+  else if (strcmp(nargs[0], "rollbacksnap") == 0) {
+    if (!pool_name || nargs.size() < 2) {
+      usage(cerr);
+      return 1;
+    }
+
+    uint64_t rollback_id = 0;
+    bool selfmanaged_mode = false;
+    uint64_t snap_id = 0;
+    ret = rados.pool_is_in_selfmanaged_snaps_mode(pool_name);
+    if (ret < 0) {
+      cerr << "failed to query pool " << pool_name
+           << " for selfmanaged snaps: " << cpp_strerror(ret) << std::endl;
+      return 1;
+    } else if (ret > 0) {
+      selfmanaged_mode = true;
+      // selfmanaged snaps: argument is a numeric snap ID
+      char *endptr = nullptr;
+      snap_id = strtoull(nargs[1], &endptr, 10);
+      if (*endptr || snap_id == 0) {
+        cerr << "error: selfmanaged snap ID must be a positive integer" << std::endl;
+        return 1;
+      }
+      // For the CLI, supply a minimal SnapContext containing only the target
+      // snap ID.  This is equivalent to pre-fix behaviour: no later-snapshot
+      // cloning will occur, which is safe when the caller has no additional
+      // snap context available.
+      std::vector<snap_t> snapc_snaps = { static_cast<snap_t>(snap_id) };
+      ret = io_ctx.selfmanaged_snap_rollback(snap_id, snap_id, snapc_snaps,
+                                             &rollback_id);
+    } else {
+      // pool-managed snaps: argument is a snap name
+      ret = io_ctx.snap_rollback(nargs[1], &rollback_id);
+    }
+
+    if (ret < 0) {
+      if (ret == -EPERM) {
+        int8_t release_raw = 0;
+        rados.get_min_compatible_osd(&release_raw);
+        auto release = static_cast<ceph_release_t>(release_raw);
+        cerr << "error: pool-level snapshot rollback requires all OSDs to be "
+                "running Umbrella or later (require_osd_release is currently "
+             << to_string(release) << ")" << std::endl;
+      } else if (ret == -ENOENT) {
+        if (selfmanaged_mode) {
+          cerr << "error: snap ID " << snap_id
+               << " has already been deleted from pool '" << pool_name << "'"
+               << std::endl;
+        } else {
+          cerr << "error: snapshot '" << nargs[1]
+               << "' does not exist in pool '" << pool_name << "'" << std::endl;
+        }
+      } else {
+        cerr << "error rolling back pool " << pool_name
+             << " to snapshot '" << nargs[1] << "': "
+             << cpp_strerror(ret) << std::endl;
+      }
+      return 1;
+    }
+    cout << "initiated rollback of pool " << pool_name
+         << " to snapshot '" << nargs[1] << "'"
+         << " (rollback id " << rollback_id << ")" << std::endl;
   }
 
   else if (strcmp(nargs[0], "rollback") == 0) {

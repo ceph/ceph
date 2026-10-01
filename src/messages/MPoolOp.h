@@ -16,12 +16,13 @@
 #ifndef CEPH_MPOOLOP_H
 #define CEPH_MPOOLOP_H
 
+#include "common/snap_types.h"
 #include "messages/PaxosServiceMessage.h"
 
 
 class MPoolOp final : public PaxosServiceMessage {
 private:
-  static constexpr int HEAD_VERSION = 4;
+  static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 2;
 
 public:
@@ -31,6 +32,7 @@ public:
   __u32 op = 0;
   snapid_t snapid;
   __s16 crush_rule = 0;
+  SnapContext snapc;  // v5: client SnapContext for POOL_OP_ROLLBACK_UNMANAGED_SNAP
 
   MPoolOp()
     : PaxosServiceMessage{CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION} {}
@@ -65,6 +67,7 @@ public:
     __u8 pad = 0;
     encode(pad, payload);  /* for v3->v4 encoding change */
     encode(crush_rule, payload);
+    encode(snapc, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -90,6 +93,8 @@ public:
 	crush_rule = pad;
     } else
       crush_rule = -1;
+    if (header.version >= 5)
+      decode(snapc, p);
   }
 private:
   template<class T, typename... Args>

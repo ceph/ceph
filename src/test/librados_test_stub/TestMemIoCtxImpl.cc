@@ -508,6 +508,60 @@ int TestMemIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
   return 0;
 }
 
+int TestMemIoCtxImpl::snap_rollback(const std::string& snap_name,
+                                     uint64_t *rollback_id)
+{
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
+  }
+
+  std::unique_lock l{m_pool->file_lock};
+  auto it = m_pool->snap_names.find(snap_name);
+  if (it == m_pool->snap_names.end()) {
+    return -ENOENT;
+  }
+  uint64_t source_snap = it->second;
+
+  // Idempotency: if a rollback for this source snap is already pending,
+  // return the existing rollback_id rather than allocating a new one.
+  for (auto& [rb_id, src] : m_pool->pending_rollbacks) {
+    if (src == source_snap) {
+      *rollback_id = rb_id;
+      return 0;
+    }
+  }
+  // Allocate a monotonically increasing fake rollback ID from the pool
+  // snap counter and record the pending rollback.
+  uint64_t new_rb_id = ++m_pool->snap_id;
+  m_pool->pending_rollbacks[new_rb_id] = source_snap;
+  *rollback_id = new_rb_id;
+  return 0;
+}
+
+int TestMemIoCtxImpl::pool_selfmanaged_snap_rollback(uint64_t snap_id,
+                                                      uint64_t *rollback_id)
+{
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
+  }
+
+  std::unique_lock l{m_pool->file_lock};
+  // Idempotency: if a rollback for this snap_id is already pending,
+  // return the existing rollback_id rather than allocating a new one.
+  for (auto& [rb_id, src] : m_pool->pending_rollbacks) {
+    if (src == snap_id) {
+      *rollback_id = rb_id;
+      return 0;
+    }
+  }
+  // Allocate a monotonically increasing fake rollback ID from the pool
+  // snap counter and record the pending rollback.
+  uint64_t new_rb_id = ++m_pool->snap_id;
+  m_pool->pending_rollbacks[new_rb_id] = snap_id;
+  *rollback_id = new_rb_id;
+  return 0;
+}
+
 int TestMemIoCtxImpl::set_alloc_hint(const std::string& oid,
                                      uint64_t expected_object_size,
                                      uint64_t expected_write_size,

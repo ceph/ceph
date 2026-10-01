@@ -1097,6 +1097,24 @@ inline std::ostream& operator<<(std::ostream& out, const pool_snap_info_t& si) {
 
 
 /*
+ * rollback_snap_info_t
+ *
+ * Metadata for a single pool-level rollback operation.
+ */
+struct rollback_snap_info_t {
+  snapid_t rollback_id;   // unique ID allocated for this rollback (from snap_seq)
+  snapid_t source_snap;   // the snapshot to restore from
+  SnapContext snapc;      // unmanaged only: client-supplied SnapContext at request time
+                          // always empty for pool-managed rollbacks
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &p);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rollback_snap_info_t*>& o);
+};
+WRITE_CLASS_ENCODER(rollback_snap_info_t)
+
+/*
  * pool_opts_t
  *
  * pool options.
@@ -1577,6 +1595,9 @@ public:
    * other!
    */
   interval_set<snapid_t> removed_snaps;
+
+  /// pending rollback operations keyed by rollback_id
+  std::map<snapid_t, rollback_snap_info_t> rollback_snaps;
 
   unsigned pg_num_mask = 0, pgp_num_mask = 0;
 
@@ -2400,6 +2421,7 @@ struct pg_stat_t {
   std::vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
 
   interval_set<snapid_t> purged_snaps;  ///< recently removed snaps that we've purged
+  snap_interval_set_t completed_rollbacks; // rollback IDs fully processed by this PG
 
   utime_t last_became_active;
   utime_t last_became_peered;
@@ -3141,6 +3163,7 @@ struct pg_info_t {
   hobject_t last_backfill;     ///< objects >= this and < last_complete may be missing
 
   interval_set<snapid_t> purged_snaps;
+  snap_interval_set_t completed_rollbacks; // rollback IDs fully processed by this PG
 
   std::map<shard_id_t,std::pair<eversion_t, eversion_t>>
     partial_writes_last_complete; ///< last_complete for shards not modified by a partial write
@@ -3162,6 +3185,7 @@ struct pg_info_t {
       l.log_tail == r.log_tail &&
       l.last_backfill == r.last_backfill &&
       l.purged_snaps == r.purged_snaps &&
+      l.completed_rollbacks == r.completed_rollbacks &&
       l.partial_writes_last_complete == r.partial_writes_last_complete &&
       l.partial_writes_last_complete_epoch == r.partial_writes_last_complete_epoch &&
       l.stats == r.stats &&
@@ -5997,6 +6021,10 @@ public:
 
   epoch_t purged_snaps_last = 0;
   utime_t last_purged_snaps_scrub;
+
+  epoch_t completed_rollbacks_last = 0;  // newest epoch whose new_completed_rollbacks
+                                          // have been recorded in the local SnapMapper
+                                          // (mirrors purged_snaps_last)
 
   epoch_t cluster_osdmap_trim_lower_bound = 0;
 

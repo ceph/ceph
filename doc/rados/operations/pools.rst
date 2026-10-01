@@ -354,6 +354,20 @@ To remove a snapshot of a pool, run a command of the following form:
 
    ceph osd pool rmsnap {pool-name} {snap-name}
 
+
+.. _rolling-back-a-pool-snapshot:
+
+Rolling Back a Snapshot of a Pool
+=================================
+
+A pool snapshot rollback reverts the entire pool to the state it was in when
+a given snapshot was taken.  Unlike a per-object rollback, this operation
+covers every object in the pool.
+
+.. prompt:: bash $
+
+   ceph osd pool rollbacksnap {pool-name} {snap-name}
+
 .. _setpoolvalues:
 
 Setting Pool Values

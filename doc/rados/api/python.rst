@@ -351,22 +351,6 @@ invoking methods of the `Ioctx` and other classes.
 .. automethod:: Ioctx.close()
 
 
-.. Pool Snapshots
-.. --------------
-
-.. The Ceph Storage Cluster allows you to make a snapshot of a pool's state.
-.. Although basic pool operations require only a connection to the cluster,
-.. snapshots require an I/O context.
-
-.. Ioctx.create_snap(self, snap_name)
-.. Ioctx.list_snaps(self)
-.. SnapIterator.next(self)
-.. Snap.get_timestamp(self)
-.. Ioctx.lookup_snap(self, snap_name)
-.. Ioctx.remove_snap(self, snap_name)
-
-.. not published. This doesn't seem ready yet.
-
 Object Operations
 -----------------
 
@@ -422,6 +406,52 @@ operations, you should use the I/O context methods.
 .. automethod:: Object.stat()
 .. automethod:: Object.remove()
 
+
+Pool Snapshot Operations
+------------------------
+
+The Ceph Storage Cluster allows you to make a snapshot of a pool's state,
+an Input/Output context (ioctx) is required to invoke the snapshot
+methods.
+
+**Creating and removing snapshots**:
+
+A snapshot creates a read-only point in time copy of all the objects
+in a pool. The call returns immediatety (O(1) laterncy); the OSDs
+create copies of data for the snapshot as objects are modified.
+
+.. automethod:: Ioctx.create_snap(snap_name)
+.. automethod:: Ioctx.remove_snap(snap_name)
+
+**Reading snapshots**:
+
+Snapshots can be read using object operations, use lookup_snap to
+find the snap_id for a snapshot and then use set_read to direct
+future object read operations to the snapshot.
+
+.. automethod:: Ioctx.lookup_snap(snap_name)
+.. automethod:: Ioctx.set_read(snap_id)
+
+**Listing snapshots**:
+
+From an I/O context, you can retrieve a list of snapshots from a pool and iterate
+over them.
+
+.. automethod:: Ioctx.list_snaps
+.. automethod:: SnapIterator.__next__()
+.. automethod:: Snap.get_timestamp
+
+**Rolling back a snapshot**:
+
+A rollback operation reverts every object in the pool to the state it was in
+when the snapshot was taken.  The call returns immediately (O(1) latency);
+actual data restoration is performed in the background by the OSDs.
+
+.. automethod:: Ioctx.rollback_snap
+
+It is also possible to rollback individual objects
+
+.. automethod:: Ioctx.snap_rollback(object_name, snap_name)
 
 
 

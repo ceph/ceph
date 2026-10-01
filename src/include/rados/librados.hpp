@@ -1043,7 +1043,11 @@ inline namespace v14_2_0 {
 
     int snap_list(std::vector<snap_t> *snaps);
 
+    // Rollback an object to a previous snapshot
     int snap_rollback(const std::string& oid, const char *snapname);
+
+    // Rollback an entire snapshot
+    int snap_rollback(const std::string& snapname, uint64_t *rollback_id);
 
     // Deprecated name kept for backward compatibility - same as snap_rollback()
     int rollback(const std::string& oid, const char *snapname)
@@ -1055,7 +1059,14 @@ inline namespace v14_2_0 {
     int selfmanaged_snap_remove(uint64_t snapid);
     void aio_selfmanaged_snap_remove(uint64_t snapid, AioCompletion *c);
 
+    // Rollback an object to a previous snapshot
     int selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid);
+
+    // Rollback an entire snapshot
+    int selfmanaged_snap_rollback(uint64_t snap_id,
+                                  snap_t snapc_seq,
+                                  const std::vector<snap_t>& snapc_snaps,
+                                  uint64_t *rollback_id);
 
     // Advisory locking on rados objects.
     int lock_exclusive(const std::string &oid, const std::string &name,

@@ -145,6 +145,12 @@ public:
                                            AioCompletionImpl *c);
   virtual int selfmanaged_snap_rollback(const std::string& oid,
                                         uint64_t snapid) = 0;
+  // Pool-level snapshot rollback (pool-managed snaps)
+  virtual int snap_rollback(const std::string& snap_name,
+                            uint64_t *rollback_id) = 0;
+  // Pool-level snapshot rollback (selfmanaged snaps)
+  virtual int pool_selfmanaged_snap_rollback(uint64_t snap_id,
+                                             uint64_t *rollback_id) = 0;
   virtual int selfmanaged_snap_set_write_ctx(snap_t seq,
                                              std::vector<snap_t>& snaps);
   virtual int set_alloc_hint(const std::string& oid,

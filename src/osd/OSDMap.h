@@ -428,6 +428,10 @@ public:
     mempool::osdmap::set<pg_t> old_pg_upmap, old_pg_upmap_items, old_pg_upmap_primary;
     mempool::osdmap::map<int64_t, snap_interval_set_t> new_removed_snaps;
     mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
+    mempool::osdmap::map<int64_t,
+      std::map<snapid_t, rollback_snap_info_t>> new_rollback_snaps;    // rollbacks added this epoch
+    mempool::osdmap::map<int64_t,
+      snap_interval_set_t> new_completed_rollbacks;                    // rollbacks finished this epoch
 
     mempool::osdmap::map<int32_t,uint32_t> new_crush_node_flags;
     mempool::osdmap::map<int32_t,uint32_t> new_device_class_flags;
@@ -646,6 +650,14 @@ private:
 
   /// removed_snaps removals this epoch
   mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
+
+  /// queue of all pending rollback work
+  mempool::osdmap::map<int64_t,
+    std::map<snapid_t, rollback_snap_info_t>> rollback_snaps_queue;
+
+  /// transient per-epoch rollback completions
+  mempool::osdmap::map<int64_t,
+    snap_interval_set_t> new_completed_rollbacks;
 
   epoch_t cluster_snapshot_epoch;
   std::string cluster_snapshot;
@@ -1401,6 +1413,15 @@ public:
   const mempool::osdmap::map<int64_t,snap_interval_set_t>&
   get_new_purged_snaps() const {
     return new_purged_snaps;
+  }
+  const mempool::osdmap::map<int64_t,
+    std::map<snapid_t, rollback_snap_info_t>>&
+  get_rollback_snaps_queue() const {
+    return rollback_snaps_queue;
+  }
+  const mempool::osdmap::map<int64_t, snap_interval_set_t>&
+  get_new_completed_rollbacks() const {
+    return new_completed_rollbacks;
   }
 
   int64_t lookup_pg_pool_name(std::string_view name) const {

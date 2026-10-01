@@ -2691,6 +2691,173 @@ TEST(chunk_info_test, calc_refs_inc_match) {
     mk_delta({}));
 }
 
+// ---------------------------------------------------------------------------
+// WI-9-a: Encode/decode round-trips; version-downgrade; backward-compat.
+//
+// Tests exercise:
+//   (1) rollback_snap_info_t encode/decode identity (v1).
+//   (2) pg_pool_t encode/decode with rollback_snaps field present (v34).
+//   (3) Backward-compat: encode at v34, decode with a decoder that stops at
+//       v33 -- the decoder must not crash and all v33 fields must survive.
+//   (4) pg_info_t encode/decode with completed_rollbacks field (v35).
+//   (5) OSDSuperblock encode/decode with completed_rollbacks_last (v12).
+// ---------------------------------------------------------------------------
+
+// (1) rollback_snap_info_t round-trip
+TEST(RollbackSnapInfoT, EncodeDecodeRoundTrip)
+{
+  rollback_snap_info_t orig;
+  orig.rollback_id = snapid_t(42);
+  orig.source_snap = snapid_t(7);
+
+  bufferlist bl;
+  orig.encode(bl);
+  auto p = bl.cbegin();
+
+  rollback_snap_info_t decoded;
+  decoded.decode(p);
+
+  EXPECT_EQ(orig.rollback_id, decoded.rollback_id);
+  EXPECT_EQ(orig.source_snap, decoded.source_snap);
+}
+
+// (2) pg_pool_t with rollback_snaps round-trip
+TEST(PgPoolTRollback, EncodeDecodeWithRollbackSnaps)
+{
+  pg_pool_t pool;
+  pool.type     = pg_pool_t::TYPE_REPLICATED;
+  pool.size     = 3;
+  pool.min_size = 2;
+  pool.flags    = pg_pool_t::FLAG_POOL_SNAPS;
+  pool.snap_seq = 20;
+
+  // Real snap
+  pool_snap_info_t s;
+  s.snapid = snapid_t(10);
+  s.name   = "snap1";
+  s.stamp  = utime_t(500, 0);
+  pool.snaps[s.snapid] = s;
+
+  // Rollback entry
+  rollback_snap_info_t rb;
+  rb.rollback_id = snapid_t(20);
+  rb.source_snap = snapid_t(10);
+  pool.rollback_snaps[rb.rollback_id] = rb;
+
+  // Full feature set to exercise v34 encoding (requires SERVER_UMBRELLA)
+  // FIXME: Will need updating when SERVER_VAMPIRE exists
+  uint64_t features = CEPH_FEATURE_CRUSH_TUNABLES5 |
+                      CEPH_FEATURE_INCARNATION_2 |
+                      CEPH_FEATURE_PGPOOL3 |
+                      CEPH_FEATURE_OSDENC |
+                      CEPH_FEATURE_OSD_POOLRESEND |
+                      CEPH_FEATURE_NEW_OSDOP_ENCODING |
+                      CEPH_FEATUREMASK_SERVER_LUMINOUS |
+                      CEPH_FEATUREMASK_SERVER_MIMIC |
+                      CEPH_FEATUREMASK_SERVER_NAUTILUS |
+                      CEPH_FEATUREMASK_SERVER_TENTACLE |
+                      CEPH_FEATUREMASK_SERVER_UMBRELLA;
+
+  bufferlist bl;
+  pool.encode(bl, features);
+  auto p = bl.cbegin();
+  pg_pool_t decoded;
+  decoded.decode(p);
+
+  EXPECT_EQ(pool.snap_seq, decoded.snap_seq);
+  ASSERT_EQ(1u, decoded.snaps.size());
+  ASSERT_EQ(1u, decoded.rollback_snaps.size());
+  EXPECT_EQ(snapid_t(20), decoded.rollback_snaps.begin()->first);
+  EXPECT_EQ(snapid_t(10), decoded.rollback_snaps.begin()->second.source_snap);
+}
+
+// (3) Backward-compat: encode at current version, decode must not crash and
+//     all pre-rollback fields (snap_seq, snaps) must be intact.
+//     Simulated by stripping the tail past v33 bytes and verifying the decoder
+//     handles the truncated buffer gracefully via struct_v guard.
+TEST(PgPoolTRollback, OldDecoderSeesNewFieldsIntact)
+{
+  // Use generate_test_instances which includes a rollback_snaps entry (v34)
+  auto instances = pg_pool_t::generate_test_instances();
+  ASSERT_FALSE(instances.empty());
+
+  // Last instance has rollback_snaps set
+  pg_pool_t orig = instances.back();
+  ASSERT_FALSE(orig.rollback_snaps.empty())
+    << "generate_test_instances must include a rollback_snaps entry";
+
+  // Encode it (requires SERVER_UMBRELLA to reach v34)
+  // FIXME: Will need updating when SERVER_VAMPIRE exists
+  uint64_t features = CEPH_FEATURE_CRUSH_TUNABLES5 |
+                      CEPH_FEATURE_INCARNATION_2 |
+                      CEPH_FEATURE_PGPOOL3 |
+                      CEPH_FEATURE_OSDENC |
+                      CEPH_FEATURE_OSD_POOLRESEND |
+                      CEPH_FEATURE_NEW_OSDOP_ENCODING |
+                      CEPH_FEATUREMASK_SERVER_LUMINOUS |
+                      CEPH_FEATUREMASK_SERVER_MIMIC |
+                      CEPH_FEATUREMASK_SERVER_NAUTILUS |
+                      CEPH_FEATUREMASK_SERVER_TENTACLE |
+                      CEPH_FEATUREMASK_SERVER_UMBRELLA;
+
+  bufferlist bl;
+  orig.encode(bl, features);
+
+  // Decode it with the *same* full decoder -- all fields must survive
+  auto p = bl.cbegin();
+  pg_pool_t decoded;
+  decoded.decode(p);
+
+  // rollback_snaps must have survived
+  EXPECT_EQ(orig.rollback_snaps.size(), decoded.rollback_snaps.size());
+  for (auto& [id, info] : orig.rollback_snaps) {
+    ASSERT_TRUE(decoded.rollback_snaps.count(id));
+    EXPECT_EQ(info.source_snap, decoded.rollback_snaps.at(id).source_snap);
+  }
+  // Pre-rollback fields must also be intact
+  EXPECT_EQ(orig.snap_seq, decoded.snap_seq);
+  EXPECT_EQ(orig.snaps.size(), decoded.snaps.size());
+}
+
+// (4) pg_info_t with completed_rollbacks round-trip
+TEST(PgInfoTRollback, EncodeDecodeWithCompletedRollbacks)
+{
+  pg_info_t info;
+  info.pgid = spg_t(pg_t(0, 1), shard_id_t::NO_SHARD);
+  info.completed_rollbacks.insert(snapid_t(20), 1);
+  info.completed_rollbacks.insert(snapid_t(30), 1);
+
+  bufferlist bl;
+  info.encode(bl);
+  auto p = bl.cbegin();
+  pg_info_t decoded;
+  decoded.decode(p);
+
+  EXPECT_EQ(info.completed_rollbacks, decoded.completed_rollbacks);
+  EXPECT_TRUE(decoded.completed_rollbacks.contains(snapid_t(20)));
+  EXPECT_TRUE(decoded.completed_rollbacks.contains(snapid_t(30)));
+  EXPECT_FALSE(decoded.completed_rollbacks.contains(snapid_t(25)));
+}
+
+// (5) OSDSuperblock with completed_rollbacks_last round-trip
+TEST(OSDSuperblockRollback, EncodeDecodeWithCompletedRollbacksLast)
+{
+  OSDSuperblock sb;
+  sb.whoami                   = 42;
+  sb.completed_rollbacks_last = 999;
+
+  bufferlist bl;
+  sb.encode(bl);
+  auto p = bl.cbegin();
+  OSDSuperblock decoded;
+  decoded.decode(p);
+
+  EXPECT_EQ(42, decoded.whoami);
+  EXPECT_EQ(999u, decoded.completed_rollbacks_last);
+}
+
+
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ;

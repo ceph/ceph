@@ -403,6 +403,75 @@ CORO_TEST_F(NeoRadosSelfManagedSnaps, OrderSnap, NeoRadosTest) {
   co_return;
 }
 
+// Pool-managed snap rollback: basic success path with data-integrity check
+CORO_TEST_F(NeoRadosSnapshots, PoolSnapRollback, NeoRadosTest) {
+  static const auto snap1 = "rollback_snap"s;
+  const auto bl1 = filled_buffer_list(0xcc, 128);
+  const auto bl2 = filled_buffer_list(0xdd, 128);
+
+  // Write initial content (A) and create pool snapshot
+  co_await execute(oid, WriteOp{}.write(0, bl1));
+  co_await rados().create_pool_snap(pool(), snap1, asio::use_awaitable);
+  auto rid = rados().lookup_snap(pool(), snap1);
+
+  // Overwrite with different content (B)
+  co_await execute(oid, WriteOp{}.write_full(bl2));
+
+  // Issue pool-level rollback; verify rollback_id > snap sequence
+  auto rollback_id = co_await rados().rollback_pool_snap(
+    pool().get_pool(), snap1, asio::use_awaitable);
+  EXPECT_GT(rollback_id, static_cast<uint64_t>(rid));
+
+  // Read back and verify content equals snapshot content (A, not B)
+  auto resbl = co_await read(oid);
+  EXPECT_EQ(bl1, resbl);
+
+  co_await rados().delete_pool_snap(pool().get_pool(), snap1, asio::use_awaitable);
+  co_return;
+}
+
+// Pool-managed snap rollback: snap does not exist → error
+CORO_TEST_F(NeoRadosSnapshots, PoolSnapRollbackNoent, NeoRadosTest) {
+  co_await expect_error_code(
+    rados().rollback_pool_snap(pool().get_pool(), "nonexistent_snap"s,
+                               asio::use_awaitable),
+    sys::errc::no_such_file_or_directory);
+  co_return;
+}
+
+// Selfmanaged snap rollback: basic success path with data-integrity check
+CORO_TEST_F(NeoRadosSelfManagedSnaps, PoolSelfmanagedSnapRollback, NeoRadosTest) {
+  static constexpr auto len = 128u;
+  std::vector<uint64_t> my_snaps;
+  auto ioc = pool();
+
+  // Create snap0, write initial content (A)
+  co_await new_selfmanaged_snap(rados(), my_snaps, ioc);
+  const auto bl1 = filled_buffer_list(0xcc, len);
+  co_await execute(oid, WriteOp{}.write(0, bl1), ioc);
+
+  // Create snap1 so snap0 is captured as a clone, then overwrite with (B)
+  co_await new_selfmanaged_snap(rados(), my_snaps, ioc);
+  const auto bl2 = filled_buffer_list(0xdd, len);
+  co_await execute(oid, WriteOp{}.write_full(bl2), ioc);
+
+  // Issue pool-level selfmanaged snap rollback to snap0 (content A).
+  // my_snaps is stored in ascending order; highest snap ID = my_snaps[1].
+  // Build snapc_snaps in descending order.
+  std::vector<uint64_t> snapc_snaps = {my_snaps[1], my_snaps[0]};
+  auto rollback_id = co_await rados().rollback_selfmanaged_snap(
+    ioc.get_pool(), my_snaps[0], my_snaps[1], std::move(snapc_snaps),
+    asio::use_awaitable);
+  EXPECT_GT(rollback_id, my_snaps[0]);
+
+  // Read back and verify content equals snapshot content (A, not B)
+  auto resbl = co_await read(oid);
+  EXPECT_EQ(bl1, resbl);
+
+  co_await rm_selfmanaged_snaps(rados(), my_snaps, ioc);
+  co_return;
+}
+
 CORO_TEST_F(NeoRadosSelfManagedSnaps, ReusePurgedSnap, NeoRadosTest) {
   static constexpr auto len = 128u;
   std::vector<uint64_t> my_snaps;

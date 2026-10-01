@@ -58,6 +58,11 @@ public:
     SnapSeqs snap_seqs;
     uint64_t snap_id = 1;
 
+    // pool-managed snap name → snap sequence (for stub snap_rollback support)
+    std::map<std::string, uint64_t> snap_names;
+    // rollback_id → source snap_id (allocated by snap_rollback / selfmanaged_snap_rollback)
+    std::map<uint64_t, uint64_t> pending_rollbacks;
+
     ceph::shared_mutex file_lock =
       ceph::make_shared_mutex("TestMemCluster::Pool::file_lock");
     Files files;

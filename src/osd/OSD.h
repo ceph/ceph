@@ -93,6 +93,7 @@ class MOSDPGInfo;
 class MOSDPGRemove;
 class MOSDForceRecovery;
 class MMonGetPurgedSnapsReply;
+class MMonGetCompletedRollbacksReply;
 
 class OSD;
 
@@ -2017,6 +2018,8 @@ protected:
   void _collect_metadata(std::map<std::string,std::string> *pmeta);
   void _get_purged_snaps();
   void handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *r);
+  void _get_completed_rollbacks();
+  void handle_get_completed_rollbacks_reply(MMonGetCompletedRollbacksReply *m);
 
   void start_waiting_for_healthy();
   bool _is_healthy();

@@ -23,6 +23,10 @@ The difference between *pool snaps* and *self managed snaps* from the
 OSD's point of view lies in whether the *SnapContext* comes to the OSD
 via the client's MOSDOp or via the most recent OSDMap.
 
+In addition to creating and deleting snapshots, Ceph supports rolling back
+an entire snapshot.  See :doc:`rados-snapshot-rollback-design` for the
+full design.
+
 See :ref:`manifest.rst <osd-make-writeable>` for more information.
 
 Ondisk Structures
@@ -88,7 +92,18 @@ PG is clean and not scrubbing.
   #. The primary shares the info with the replica, which persists
      the new set of purged_snaps along with the rest of the info.
 
+Snap Rollback
+-------------
+Individual objects that have been snapshoted can be rolled back by
+the client issuing a rollback operation.
 
+An entire snapshot can be rolled back by making a request to the
+*Monitor* cluster to add the snapshot id to the list of rollback snaps.
+This then causes OSDs to redirect reads and perform just-in-time
+rollback operations for writes, as well as causing the SnapTrimmer
+to schedule the rollback as a background task.
+
+See PrimaryLogPG::SnapTrimmer, make_writeable
 
 Recovery
 --------
