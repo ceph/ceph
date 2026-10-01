@@ -2965,7 +2965,7 @@ bool CDir::is_exportable(mds_rank_t dest) const
 
 void CDir::encode_export(bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ceph_assert(!is_projected());
   encode(first, bl);
   encode(*fnode, bl);
@@ -2980,6 +2980,11 @@ void CDir::encode_export(bufferlist& bl)
 
   encode(dir_rep_by, bl);  
   encode(get_replicas(), bl);
+
+  // the decision of the auth of the directory on its size, which the
+  // importer follows when the directory inode is not its own, see
+  // CInode::STATE_DISTTREELARGE
+  encode(inode->is_dist_tree_fragmented(), bl);
 
   get(PIN_TEMPEXPORTING);
   ENCODE_FINISH(bl);
@@ -2998,7 +3003,7 @@ void CDir::finish_export()
 
 void CDir::decode_import(bufferlist::const_iterator& blp, LogSegmentRef const& ls)
 {
-  DECODE_START(1, blp);
+  DECODE_START(2, blp);
   decode(first, blp);
   {
     auto _fnode = allocate_fnode();
@@ -3031,6 +3036,13 @@ void CDir::decode_import(bufferlist::const_iterator& blp, LogSegmentRef const& l
   decode(dir_rep_by, blp);
   decode(get_replicas(), blp);
   if (is_replicated()) get(PIN_REPLICATED);
+
+  if (struct_v >= 2) {
+    bool large;
+    decode(large, blp);
+    if (!inode->is_auth())
+      inode->set_dist_tree_large(large);
+  }
 
   replica_nonce = 0;  // no longer defined
 
