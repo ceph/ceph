@@ -189,6 +189,8 @@ def task(ctx, config):
     if config.get('ec_pool', False):
         if not config.get('erasure_code_use_overwrites', False):
             args.extend(['--ec-pool'])
+    if config.get('no_omap', False):
+        args.extend(['--no-omap'])
     if config.get('write_fadvise_dontneed', False):
         args.extend(['--write-fadvise-dontneed'])
     if config.get('set_redirect', False):
@@ -207,7 +209,10 @@ def task(ctx, config):
         args.extend(['--pool-snaps'])
     if config.get('balance_reads', False):
         args.extend(['--balance-reads'])
-        pct_update_delay = config.get('pct_update_delay', 5);
+        pct_update_delay = config.get('pct_update_delay', 5)
+        if config.get('osd_min_split_replica_read_size', None) is not None:
+            args.extend(['--min-split-size',
+                         str(config.get('osd_min_split_replica_read_size'))])
     if config.get('localize_reads', False):
         args.extend(['--localize-reads'])
     if config.get('max_attr_len', None):
