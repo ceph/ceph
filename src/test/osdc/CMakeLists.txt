@@ -24,3 +24,11 @@ target_link_libraries(ceph_test_objectcacher_misc
   )
 install(TARGETS ceph_test_objectcacher_misc
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# unittest_objecter_direct_reads
+add_executable(unittest_objecter_direct_reads
+  test_objecter_direct_reads.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_objecter_direct_reads)
+target_link_libraries(unittest_objecter_direct_reads osdc global ${BLKID_LIBRARIES})
