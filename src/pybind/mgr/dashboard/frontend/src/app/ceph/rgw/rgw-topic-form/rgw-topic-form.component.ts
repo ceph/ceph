@@ -226,7 +226,7 @@ export class RgwTopicFormComponent extends CdForm implements OnInit, AfterViewCh
     if (!this.selectedOption) {
       return;
     }
-    let generatedEndpoint = '';
+    let generatedEndpoint: string;
     const ssl = secureSsl !== undefined ? secureSsl : this.topicForm.get('enable_ssl')?.value;
     const fqdn = this.topicForm.get('fqdn')?.value || '<fqdn>';
     const port = this.topicForm.get('port')?.value || '[:port]';
@@ -264,21 +264,17 @@ export class RgwTopicFormComponent extends CdForm implements OnInit, AfterViewCh
   }
 
   generateKafkaEndpoint(fqdn: string, port: string): string {
-    let generatedEndpoint;
     const kafkaProtocol = HostURLProtocol.kafka;
     const userKafka = this.topicForm.get('user')?.value;
     const passwordKafka = this.topicForm.get('password')?.value;
     const kafkaBrokers = this.topicForm.get('kafka_brokers')?.value;
-    generatedEndpoint = `${kafkaProtocol}://${fqdn}:${port}`;
     if (userKafka && passwordKafka) {
-      generatedEndpoint = `${kafkaProtocol}://${userKafka}:${passwordKafka}@${fqdn}:${port}`;
+      return `${kafkaProtocol}://${userKafka}:${passwordKafka}@${fqdn}:${port}`;
     } else if (kafkaBrokers) {
-      generatedEndpoint = `kafka://${kafkaBrokers}`;
-    } else {
-      generatedEndpoint = `kafka://${fqdn}:${port}`;
+      return `${kafkaProtocol}://${kafkaBrokers}`;
     }
 
-    return generatedEndpoint;
+    return `${kafkaProtocol}://${fqdn}:${port}`;
   }
 
   getTopicPolicy() {

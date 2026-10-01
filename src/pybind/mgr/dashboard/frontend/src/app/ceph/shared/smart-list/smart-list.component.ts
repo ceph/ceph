@@ -66,7 +66,7 @@ export class SmartListComponent implements OnInit, OnChanges {
     const result: { [deviceId: string]: SmartDataResult | SmartErrorResult } = {};
     _.each(data, (smartData, deviceId) => {
       if (this.isSmartError(smartData)) {
-        let userMessage = '';
+        let userMessage: string;
         if (smartData.smartctl_error_code === -22) {
           userMessage = $localize`Smartctl has received an unknown argument \
 (error code ${smartData.smartctl_error_code}). \

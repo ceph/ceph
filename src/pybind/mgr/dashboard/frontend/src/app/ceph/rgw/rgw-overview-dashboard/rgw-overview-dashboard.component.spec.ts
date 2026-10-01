@@ -27,8 +27,8 @@ describe('RgwOverviewDashboardComponent', () => {
   let listZonesSpy: jest.SpyInstance;
   let fetchAndTransformBucketsSpy: jest.SpyInstance;
   let totalBucketsAndUsersSpy: jest.SpyInstance;
-  let params: Record<string, any>;
 
+  const params: Record<string, any> = {};
   const totalNumObjectsSubject = new BehaviorSubject<number>(290);
   const totalUsedCapacitySubject = new BehaviorSubject<number>(9338880);
   const averageObjectSizeSubject = new BehaviorSubject<number>(1280);

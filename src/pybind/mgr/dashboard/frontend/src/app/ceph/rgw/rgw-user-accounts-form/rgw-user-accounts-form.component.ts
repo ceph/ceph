@@ -63,12 +63,7 @@ export class RgwUserAccountsFormComponent extends CdForm implements OnInit {
           );
           // Map the quota values.
           ['account', 'bucket'].forEach((type: string) => {
-            let quota: any = {};
-            if (type == 'bucket') {
-              quota = accountData.bucket_quota;
-            } else {
-              quota = accountData.quota;
-            }
+            const quota = type === 'bucket' ? accountData.bucket_quota : accountData.quota;
             value[type + '_quota_enabled'] = quota.enabled;
             if (quota.max_size < 0) {
               value[type + '_quota_max_size_unlimited'] = true;
