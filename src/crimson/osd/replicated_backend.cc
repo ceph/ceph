@@ -90,6 +90,7 @@ MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
   m->pg_trim_to = osd_op_p.pg_trim_to;
   m->pg_committed_to = osd_op_p.pg_committed_to;
   m->pg_stats = pg.get_info().stats;
+  m->sender_shard = seastar::this_shard_id();
   return m;
 }
 
@@ -165,9 +166,15 @@ ReplicatedBackend::submit_transaction(
     }
     pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
     // TODO: set more stuff. e.g., pg_states
+    // First repop learns the replica reactor from the reply. Later ones
+    // use that reactor's port, after ops still on the old port are acked.
+    const auto peer = pg_shard.osd;
     sends->emplace_back(
-      shard_services.send_to_osd(
-	pg_shard.osd, std::move(m), map_epoch));
+      shard_services.begin_ordered_peer_send(peer, pgid).then(
+	[this, peer, m=std::move(m), map_epoch](auto dest) mutable {
+	  return shard_services.send_to_osd(
+	    peer, std::move(m), map_epoch, dest);
+	}));
   }
 
   pg.log_operation(
@@ -227,6 +234,7 @@ ReplicatedBackend::submit_transaction(
 
 void ReplicatedBackend::on_actingset_changed(bool same_primary)
 {
+  shard_services.reset_ordered_peer_sends(pgid);
   crimson::common::actingset_changed e_actingset_changed{same_primary};
   for (auto& [tid, pending_txn] : pending_trans) {
     pending_txn.all_committed.set_exception(e_actingset_changed);
@@ -238,6 +246,11 @@ void ReplicatedBackend::on_actingset_changed(bool same_primary)
 void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
 {
   LOG_PREFIX(ReplicatedBackend::got_rep_op_reply);
+  if (reply.sender_shard != MOSDRepOpReply::UNKNOWN_SENDER_SHARD) {
+    shard_services.note_peer_pg_core(
+      reply.from.osd, reply.pgid.pgid, reply.sender_shard);
+  }
+  shard_services.finish_ordered_peer_send(reply.from.osd, reply.pgid.pgid);
   auto found = pending_trans.find(reply.get_tid());
   if (found == pending_trans.end()) {
     WARNDPP("cannot find rep op for message {}", dpp, reply);
@@ -263,6 +276,7 @@ seastar::future<> ReplicatedBackend::stop()
 {
   LOG_PREFIX(ReplicatedBackend::stop);
   INFODPP("cid {}", dpp, coll->get_cid());
+  shard_services.reset_ordered_peer_sends(pgid);
   for (auto& [tid, pending_on] : pending_trans) {
     pending_on.all_committed.set_exception(
 	crimson::common::system_shutdown_exception());

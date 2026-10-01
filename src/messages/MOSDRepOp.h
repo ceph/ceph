@@ -25,10 +25,12 @@
 
 class MOSDRepOp final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
+  // Crimson reactor that sent this op. Unknown on older peers.
+  static constexpr uint32_t UNKNOWN_SENDER_SHARD = 0xffffffffu;
   epoch_t map_epoch, min_epoch;
 
   // metadata from original request
@@ -88,6 +90,9 @@ public:
 
   bufferlist txn_payload;
 
+  // Seastar reactor on the sender. Not a PG shard index.
+  uint32_t sender_shard = UNKNOWN_SENDER_SHARD;
+
   epoch_t get_map_epoch() const override {
     return map_epoch;
   }
@@ -143,6 +148,9 @@ public:
 
     ceph_assert(header.version >= 3);
     decode(pg_committed_to, p);
+    if (header.version >= 4) {
+      decode(sender_shard, p);
+    }
     final_decode_needed = false;
   }
 
@@ -167,6 +175,7 @@ public:
     encode(from, payload);
     encode(updated_hit_set_history, payload);
     encode(pg_committed_to, payload);
+    encode(sender_shard, payload);
     bufferlist middle(txn_payload);
     set_middle(middle);
   }

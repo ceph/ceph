@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include <seastar/core/sharded.hh>
 
 #include "msg/Policy.h"
@@ -142,6 +144,19 @@ class SocketConnection : public Connection {
   void start_connect(const entity_addr_t& peer_addr,
                      const entity_name_t& peer_name);
 
+  // Pin outbound socket I/O to this reactor before start_connect().
+  // The client ident nonce is stamped with the shard so the peer keeps
+  // this session distinct from the other reactors' sessions.
+  void set_pinned_io_shard(seastar::shard_id sid);
+
+  std::optional<seastar::shard_id> get_pinned_io_shard() const {
+    return pinned_io_shard;
+  }
+
+  // Becomes available once the handshake has reached READY.
+  // Reset if the session leaves READY, failed if the connection closes.
+  seastar::future<> when_ready();
+
   /// start a handshake from the server's perspective,
   /// only call when SocketConnection first construct
   void start_accept(SocketFRef&& socket,
@@ -150,6 +165,10 @@ class SocketConnection : public Connection {
   seastar::future<> close_clean_yielded();
 
   seastar::socket_address get_local_address() const;
+
+  bool has_socket() const {
+    return socket != nullptr;
+  }
 
   seastar::shard_id get_messenger_shard_id() const;
 
@@ -191,6 +210,8 @@ private:
 
 private:
   const seastar::shard_id msgr_sid;
+
+  std::optional<seastar::shard_id> pinned_io_shard;
 
   /*
    * Core owner is messenger core, may allow to access from the I/O core.

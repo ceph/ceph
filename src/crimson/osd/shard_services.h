@@ -4,11 +4,16 @@
 #pragma once
 
 #include <array>
+#include <limits>
+#include <map>
 #include <memory>
+#include <optional>
+#include <utility>
 
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
 #include <seastar/core/metrics.hh>
+#include <seastar/core/shared_future.hh>
 
 #include "include/common_fwd.h"
 #include "osd_operation.h"
@@ -408,6 +413,19 @@ class ShardServices : public OSDMapService,
 
   PerShardState local_state;
   seastar::sharded<OSDSingletonState> &osd_singleton_state;
+  // (peer osd, dest reactor or uint32 max for the osdmap port) -> connection.
+  // The socket lives on this reactor.
+  std::map<std::pair<int, uint32_t>, crimson::net::ConnectionRef> osd_peer_conns;
+  // (peer osd, pg) -> seastar reactor that owns that PG on the peer.
+  std::map<std::pair<int, pg_t>, uint32_t> peer_pg_core;
+  // Stay on one port until every repop already sent on it has been acked.
+  struct ordered_peer_route_t {
+    std::optional<uint32_t> active;
+    bool active_set = false;
+    uint32_t inflight = 0;
+    seastar::shared_promise<> drained;
+  };
+  std::map<std::pair<int, pg_t>, ordered_peer_route_t> ordered_routes;
   PGShardMapping& pg_to_shard_mapping;
   uint32_t store_shard_nums = 0;
 
@@ -536,7 +554,33 @@ public:
     register_metrics();
   }
 
-  FORWARD_TO_OSD_SINGLETON(send_to_osd)
+  // Send on this reactor's own connection. The first send to a peer
+  // waits until that connection is READY; later sends stay on this reactor.
+  // dest_core, when set, connects to the port that only that peer reactor
+  // accepts, so the message is dispatched there.
+  seastar::future<> send_to_osd(
+    int peer, MessageURef m, epoch_t from_epoch,
+    std::optional<seastar::shard_id> dest_core = std::nullopt);
+
+  void note_peer_pg_core(int osd, pg_t pg, uint32_t core) {
+    if (core >= seastar::smp::count) {
+      return;
+    }
+    peer_pg_core[std::make_pair(osd, pg)] = core;
+  }
+
+  std::optional<seastar::shard_id> get_peer_pg_core(int osd, pg_t pg) const {
+    auto it = peer_pg_core.find(std::make_pair(osd, pg));
+    if (it == peer_pg_core.end()) {
+      return std::nullopt;
+    }
+    return seastar::shard_id(it->second);
+  }
+
+  seastar::future<std::optional<seastar::shard_id>> begin_ordered_peer_send(
+    int osd, pg_t pg);
+  void finish_ordered_peer_send(int osd, pg_t pg);
+  void reset_ordered_peer_sends(pg_t pg);
 
   crimson::os::BackendStore get_store(store_index_t store_index) {
     auto store = local_state.b_store;

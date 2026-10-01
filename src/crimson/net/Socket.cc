@@ -378,11 +378,11 @@ ShardedServerSocket::~ShardedServerSocket()
 }
 
 listen_ertr::future<>
-ShardedServerSocket::listen(entity_addr_t addr)
+ShardedServerSocket::listen(entity_addr_t addr, bool per_shard_ports)
 {
   ceph_assert_always(seastar::this_shard_id() == primary_sid);
   logger().debug("ShardedServerSocket({})::listen()...", addr);
-  return this->container().invoke_on_all([addr](auto& ss) {
+  return this->container().invoke_on_all([addr, per_shard_ports](auto& ss) {
     ss.listen_addr = addr;
     seastar::socket_address s_addr(addr.in4_addr());
     seastar::listen_options lo;
@@ -390,7 +390,69 @@ ShardedServerSocket::listen(entity_addr_t addr)
     if (ss.dispatch_only_on_primary_sid) {
       lo.set_fixed_cpu(ss.primary_sid);
     }
+    ss.shard_listener.reset();
+    ss.foreign_shard_listeners.clear();
+    ss.shard_listen_addr = entity_addr_t();
     ss.listener = seastar::listen(s_addr, lo);
+    if (!per_shard_ports) {
+      return;
+    }
+    // seastar::listen() creates a kernel socket only on the main reactor
+    // (posix_network_stack). Other reactors get an accept endpoint
+    // (posix_ap_server_socket_impl) and receive fds moved by fixed_cpu.
+    // Binding the exclusive port on those reactors does not listen.
+    const auto my_sid = seastar::this_shard_id();
+    if (my_sid == 0) {
+      for (unsigned sid = 0; sid < seastar::smp::count; ++sid) {
+        const auto shard_addr = with_osd_shard_port(addr, sid);
+        if (shard_addr.get_port() == 0) {
+          logger().error("ShardedServerSocket({})::listen(): shard {} "
+                         "port overflow",
+                         addr, sid);
+          continue;
+        }
+        seastar::listen_options slo = lo;
+        slo.set_fixed_cpu(sid);
+        try {
+          auto sock = seastar::listen(
+              seastar::socket_address(shard_addr.in4_addr()), slo);
+          if (sid == 0) {
+            ss.shard_listen_addr = shard_addr;
+            ss.shard_listener = std::move(sock);
+          } else {
+            ss.foreign_shard_listeners.push_back(std::move(sock));
+          }
+          logger().info("ShardedServerSocket({})::listen(): shard {} "
+                        "exclusive {} (kernel)",
+                        addr, sid, shard_addr);
+        } catch (const std::system_error& e) {
+          logger().error("ShardedServerSocket({})::listen(): shard {} "
+                         "exclusive {} failed: {}",
+                         addr, sid, shard_addr, e.what());
+        }
+      }
+      return;
+    }
+    const auto shard_addr = with_osd_shard_port(addr, my_sid);
+    if (shard_addr.get_port() == 0) {
+      logger().error("ShardedServerSocket({})::listen(): shard {} port overflow",
+                     addr, my_sid);
+      return;
+    }
+    try {
+      ss.shard_listen_addr = shard_addr;
+      ss.shard_listener = seastar::listen(
+          seastar::socket_address(shard_addr.in4_addr()), lo);
+      logger().info("ShardedServerSocket({})::listen(): shard {} exclusive {} "
+                    "(accept endpoint)",
+                    addr, my_sid, shard_addr);
+    } catch (const std::system_error& e) {
+      ss.shard_listener.reset();
+      ss.shard_listen_addr = entity_addr_t();
+      logger().error("ShardedServerSocket({})::listen(): shard {} exclusive {} "
+                     "failed: {}",
+                     addr, my_sid, shard_addr, e.what());
+    }
   }).then([] {
     return listen_ertr::now();
   }).handle_exception_type(
@@ -409,43 +471,35 @@ ShardedServerSocket::listen(entity_addr_t addr)
   });
 }
 
-seastar::future<>
-ShardedServerSocket::accept(accept_func_t &&_fn_accept)
+void ShardedServerSocket::arm_accept_loop(seastar::server_socket& sock)
 {
-  ceph_assert_always(seastar::this_shard_id() == primary_sid);
-  logger().debug("ShardedServerSocket({})::accept()...", listen_addr);
-  return this->container().invoke_on_all([_fn_accept](auto &ss) {
-    assert(ss.listener);
-    ss.fn_accept = _fn_accept;
-    // gate accepting
-    // ShardedServerSocket::shutdown() will drain the continuations in the gate
-    // so ignore the returned future
-    std::ignore = seastar::with_gate(ss.shutdown_gate, [&ss] {
-      return seastar::keep_doing([&ss] {
-        return ss.listener->accept(
-        ).then([&ss](seastar::accept_result accept_result) {
+  // shutdown_destroy() drains this gate, so the future is intentionally ignored.
+  std::ignore = seastar::with_gate(shutdown_gate, [this, &sock] {
+    return seastar::keep_doing([this, &sock] {
+      return sock.accept(
+      ).then([this](seastar::accept_result accept_result) {
 #ifndef NDEBUG
-          if (ss.dispatch_only_on_primary_sid) {
+          if (dispatch_only_on_primary_sid) {
             // see seastar::listen_options::set_fixed_cpu()
-            ceph_assert_always(seastar::this_shard_id() == ss.primary_sid);
+            ceph_assert_always(seastar::this_shard_id() == primary_sid);
           }
 #endif
           auto [socket, paddr] = std::move(accept_result);
           entity_addr_t peer_addr;
           peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-          peer_addr.set_type(ss.listen_addr.get_type());
+          peer_addr.set_type(listen_addr.get_type());
           SocketRef _socket = std::make_unique<Socket>(
               std::move(socket), Socket::side_t::acceptor,
               peer_addr.get_port(), Socket::construct_tag{});
           logger().debug("ShardedServerSocket({})::accept(): accepted peer {}, "
                          "socket {}, dispatch_only_on_primary_sid = {}",
-                         ss.listen_addr, peer_addr, fmt::ptr(_socket.get()),
-                         ss.dispatch_only_on_primary_sid);
+                         listen_addr, peer_addr, fmt::ptr(_socket.get()),
+                         dispatch_only_on_primary_sid);
           std::ignore = seastar::with_gate(
-              ss.shutdown_gate,
-              [socket=std::move(_socket), peer_addr, &ss]() mutable {
-            return ss.fn_accept(std::move(socket), peer_addr
-            ).handle_exception([&ss, peer_addr](auto eptr) {
+              shutdown_gate,
+              [socket=std::move(_socket), peer_addr, this]() mutable {
+            return fn_accept(std::move(socket), peer_addr
+            ).handle_exception([this, peer_addr](auto eptr) {
               const char *e_what;
               try {
                 std::rethrow_exception(eptr);
@@ -454,20 +508,20 @@ ShardedServerSocket::accept(accept_func_t &&_fn_accept)
               }
               logger().error("ShardedServerSocket({})::accept(): "
                              "fn_accept(s, {}) got unexpected exception {}",
-                             ss.listen_addr, peer_addr, e_what);
+                             listen_addr, peer_addr, e_what);
               ceph_abort();
             });
           });
         });
-      }).handle_exception_type([&ss](const std::system_error& e) {
+      }).handle_exception_type([this](const std::system_error& e) {
         if (e.code() == std::errc::connection_aborted ||
             e.code() == std::errc::invalid_argument) {
           logger().debug("ShardedServerSocket({})::accept(): stopped ({})",
-                         ss.listen_addr, e.what());
+                         listen_addr, e.what());
         } else {
           throw;
         }
-      }).handle_exception([&ss](auto eptr) {
+      }).handle_exception([this](auto eptr) {
         const char *e_what;
         try {
           std::rethrow_exception(eptr);
@@ -475,10 +529,27 @@ ShardedServerSocket::accept(accept_func_t &&_fn_accept)
           e_what = e.what();
         }
         logger().error("ShardedServerSocket({})::accept(): "
-                       "got unexpected exception {}", ss.listen_addr, e_what);
+                       "got unexpected exception {}", listen_addr, e_what);
         ceph_abort();
       });
     });
+}
+
+seastar::future<>
+ShardedServerSocket::accept(accept_func_t &&_fn_accept)
+{
+  ceph_assert_always(seastar::this_shard_id() == primary_sid);
+  logger().debug("ShardedServerSocket({})::accept()...", listen_addr);
+  return this->container().invoke_on_all([_fn_accept](auto &ss) {
+    assert(ss.listener);
+    ss.fn_accept = _fn_accept;
+    ss.arm_accept_loop(*ss.listener);
+    if (ss.shard_listener) {
+      ss.arm_accept_loop(*ss.shard_listener);
+    }
+    for (auto& sock : ss.foreign_shard_listeners) {
+      ss.arm_accept_loop(sock);
+    }
   });
 }
 
@@ -492,13 +563,22 @@ ShardedServerSocket::shutdown_destroy()
     if (ss.listener) {
       ss.listener->abort_accept();
     }
+    if (ss.shard_listener) {
+      ss.shard_listener->abort_accept();
+    }
+    for (auto& sock : ss.foreign_shard_listeners) {
+      sock.abort_accept();
+    }
     return ss.shutdown_gate.close();
   }).then([this] {
     // destroy shards
     return this->container().invoke_on_all([](auto& ss) {
       assert(ss.shutdown_gate.is_closed());
       ss.listen_addr = entity_addr_t();
+      ss.shard_listen_addr = entity_addr_t();
       ss.listener.reset();
+      ss.shard_listener.reset();
+      ss.foreign_shard_listeners.clear();
     });
   }).then([this] {
     // stop the sharded service: we should only construct/stop shards on #0

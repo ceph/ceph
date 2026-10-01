@@ -15,6 +15,8 @@
 
 #include "SocketMessenger.h"
 
+#include <algorithm>
+
 #include <seastar/core/sleep.hh>
 
 #include <tuple>
@@ -111,7 +113,7 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
       logger().warn("{} do_listen: listener doesn't exist", *this);
       return listen_ertr::now();
     }
-    return listener->listen(listen_addr);
+    return listener->listen(listen_addr, logic_name == "cluster");
   });
 }
 
@@ -269,6 +271,39 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
   return conn->get_local_shared_foreign_from_this();
 }
 
+seastar::future<crimson::net::ConnectionRef>
+SocketMessenger::connect_on_shard(const entity_addr_t& peer_addr,
+                                  const entity_name_t& peer_name,
+                                  seastar::shard_id io_shard)
+{
+  assert(seastar::this_shard_id() == sid);
+  if (!peer_addr.is_msgr2()) {
+    ceph_abort_msg("ProtocolV1 is no longer supported");
+  }
+  ceph_assert(peer_addr.get_port() > 0);
+
+  if (auto found = connections.find(peer_addr); found != connections.end()) {
+    for (auto& existing : found->second) {
+      if (existing->get_pinned_io_shard() == io_shard) {
+        logger().debug("{} connect_on_shard({}) to existing",
+                       *existing, io_shard);
+        return existing->when_ready().then([existing] {
+          return existing->get_local_shared_foreign_from_this();
+        });
+      }
+    }
+  }
+
+  SocketConnectionRef conn =
+    seastar::make_shared<SocketConnection>(*this, dispatchers);
+  conn->set_pinned_io_shard(io_shard);
+  conn->start_connect(peer_addr, peer_name);
+  logger().info("{} connect_on_shard({})", *conn, io_shard);
+  return conn->when_ready().then([conn] {
+    return conn->get_local_shared_foreign_from_this();
+  });
+}
+
 seastar::future<> SocketMessenger::shutdown()
 {
   assert(seastar::this_shard_id() == sid);
@@ -288,8 +323,13 @@ seastar::future<> SocketMessenger::shutdown()
     });
   }).then([this] {
     ceph_assert(accepting_conns.empty());
-    return seastar::parallel_for_each(connections, [] (auto conn) {
-      return conn.second->close_clean_yielded();
+    std::vector<SocketConnectionRef> conns;
+    for (auto& [addr, sessions] : connections) {
+      std::ignore = addr;
+      conns.insert(conns.end(), sessions.begin(), sessions.end());
+    }
+    return seastar::parallel_for_each(std::move(conns), [] (auto conn) {
+      return conn->close_clean_yielded();
     });
   }).then([this] {
     return seastar::parallel_for_each(closing_conns, [] (auto conn) {
@@ -419,12 +459,66 @@ void SocketMessenger::set_policy_throttler(entity_type_t peer_type,
 crimson::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
 {
   assert(seastar::this_shard_id() == sid);
-  if (auto found = connections.find(addr);
-      found != connections.end()) {
-    return found->second;
-  } else {
+  auto found = connections.find(addr);
+  if (found == connections.end()) {
     return nullptr;
   }
+  // Legacy connect() and the server handshake want the unpinned session.
+  // Per-reactor outbound sessions are pinned and must not be reused here.
+  for (auto& conn : found->second) {
+    if (!conn->get_pinned_io_shard()) {
+      return conn;
+    }
+  }
+  return nullptr;
+}
+
+crimson::net::SocketConnectionRef
+SocketMessenger::lookup_conn_on_port(const entity_addr_t& addr,
+                                     uint16_t local_port)
+{
+  assert(seastar::this_shard_id() == sid);
+  auto found = connections.find(addr);
+  if (found == connections.end()) {
+    return nullptr;
+  }
+  for (auto& conn : found->second) {
+    if (conn->get_pinned_io_shard() || !conn->has_socket()) {
+      continue;
+    }
+    if (conn->get_local_address().port() == local_port) {
+      return conn;
+    }
+  }
+  return nullptr;
+}
+
+seastar::future<> SocketMessenger::mark_down(const entity_addr_t& a)
+{
+  assert(seastar::this_shard_id() == sid);
+  std::vector<SocketConnectionRef> matched;
+  for (auto& [addr, conns] : connections) {
+    const bool same_endpoint =
+        addr.is_same_host(a) && addr.get_type() == a.get_type();
+    const unsigned port = addr.get_port();
+    const unsigned base = a.get_port();
+    // Exclusive reactor ports are base + stride * (sid + 1).
+    const bool shard_port =
+        port > base &&
+        (port - base) % CRIMSON_OSD_SHARD_PORT_STRIDE == 0 &&
+        (port - base) / CRIMSON_OSD_SHARD_PORT_STRIDE <= seastar::smp::count;
+    if (addr == a ||
+        (same_endpoint && (port == base || shard_port))) {
+      matched.insert(matched.end(), conns.begin(), conns.end());
+    }
+  }
+  return seastar::parallel_for_each(std::move(matched), [](auto conn) {
+    return seastar::smp::submit_to(conn->get_shard_id(), [c=conn.get()] {
+      c->mark_down();
+    }).then([conn] {
+      return seastar::now();
+    });
+  });
 }
 
 void SocketMessenger::accept_conn(SocketConnectionRef conn)
@@ -442,9 +536,9 @@ void SocketMessenger::unaccept_conn(SocketConnectionRef conn)
 void SocketMessenger::register_conn(SocketConnectionRef conn)
 {
   assert(seastar::this_shard_id() == sid);
-  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
-  std::ignore = i;
-  ceph_assert(added);
+  auto& conns = connections[conn->get_peer_addr()];
+  ceph_assert(std::find(conns.begin(), conns.end(), conn) == conns.end());
+  conns.push_back(std::move(conn));
 }
 
 void SocketMessenger::unregister_conn(SocketConnectionRef conn)
@@ -453,8 +547,12 @@ void SocketMessenger::unregister_conn(SocketConnectionRef conn)
   ceph_assert(conn);
   auto found = connections.find(conn->get_peer_addr());
   ceph_assert(found != connections.end());
-  ceph_assert(found->second == conn);
-  connections.erase(found);
+  auto it = std::find(found->second.begin(), found->second.end(), conn);
+  ceph_assert(it != found->second.end());
+  found->second.erase(it);
+  if (found->second.empty()) {
+    connections.erase(found);
+  }
 }
 
 void SocketMessenger::closing_conn(SocketConnectionRef conn)
