@@ -115,6 +115,9 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_BUCKET_LOGGING RGW_ATTR_PREFIX "logging"
 #define RGW_ATTR_BUCKET_LOGGING_MTIME RGW_ATTR_PREFIX "logging-mtime"
 #define RGW_ATTR_BUCKET_LOGGING_SOURCES RGW_ATTR_PREFIX "logging-sources"
+// where the data of a vector bucket is stored: "vector_bucket" or "regular_bucket" (a same-name regular S3 bucket). set once
+// set once at vector bucket creation and never changed.
+#define RGW_ATTR_S3VECTOR_STORAGE RGW_ATTR_PREFIX "s3vector-storage"
 #define RGW_ATTR_ARCHIVE_INSTANCE_MTIME RGW_ATTR_PREFIX "zone.archive.instance.mtime"
 
 /* S3 Object Lock*/
@@ -1090,6 +1093,7 @@ enum RGWBucketFlags {
   BUCKET_MFA_ENABLED = 0X10,
   BUCKET_OBJ_LOCK_ENABLED = 0X20,
   BUCKET_DELETED = 0X40,
+  BUCKET_VECTOR = 0X80, // a vector bucket
 };
 
 class RGWSI_Zone;
@@ -1151,6 +1155,7 @@ struct RGWBucketInfo {
   bool obj_lock_enabled() const { return (flags & BUCKET_OBJ_LOCK_ENABLED) != 0; }
   bool bucket_suspended() const { return (flags & BUCKET_SUSPENDED) != 0; }
   bool bucket_deleted() const { return (flags & BUCKET_DELETED) != 0; }
+  bool is_vector() const { return (flags & BUCKET_VECTOR) != 0; }
 
   bool has_swift_versioning() const {
     /* A bucket may be versioned through one mechanism only. */

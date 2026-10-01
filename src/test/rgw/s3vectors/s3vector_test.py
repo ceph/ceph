@@ -26,6 +26,7 @@ from . import(
     get_config_master_cluster,
     has_backing_bucket,
     get_s3vector_backend,
+    get_s3vector_storage,
     get_s3vector_local_path
     )
 
@@ -121,6 +122,9 @@ def _backend_options(host, port, cluster):
     options = {'rgw_s3vector_backend': backend}
     if backend == 'local':
         options['rgw_s3vector_local_path'] = _configured_local_path(port, cluster)
+    else:
+        # where a new vector bucket keeps its data (vector_bucket / regular_bucket)
+        options['rgw_s3vector_backend_storage'] = get_s3vector_storage()
     return options
 
 
@@ -595,6 +599,47 @@ def test_vector_bucket_without_backend():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     assert not _vector_bucket_exists(conn, bucket_name), \
         "a vector bucket with no backend should be deleted"
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_bucket_storage_mode():
+    """In vector_bucket storage mode, a vector bucket needs no separate backing S3
+    bucket, and its data is not reachable through the S3 object API. The data still
+    round-trips through the S3 Vectors API."""
+    if get_s3vector_backend() != 'rgw' or get_s3vector_storage() != 'vector_bucket':
+        pytest.skip("only relevant for the rgw backend in vector_bucket storage mode")
+
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    index_name = 'test-index'
+
+    # no backing S3 bucket is created: the vector bucket holds the data itself
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # there is no regular S3 bucket of the same name that an S3 user could reach to
+    # read or write the raw vector data
+    s3conn = connection('s3')
+    with pytest.raises(s3conn.exceptions.ClientError) as exc_info:
+        s3conn.head_bucket(Bucket=bucket_name)
+    assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] in (403, 404)
+
+    # the vector data round-trips through the S3 Vectors API
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension,
+                               distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    vectors = generate_vectors(3, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                queryVector=generate_data(dimension, 0), topK=3)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) > 0
+
+    # cleanup
+    _delete_all_vector_buckets(conn)
 
 
 @pytest.mark.vector_bucket_test

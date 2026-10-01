@@ -711,8 +711,9 @@ class RadosObject : public StoreObject {
 };
 
 class RadosBucket : public StoreBucket {
-  private:
+  protected:
     RadosStore* store;
+  private:
     RGWAccessControlPolicy acls;
     std::string topics_oid() const;
 
@@ -830,33 +831,39 @@ class RadosBucket : public StoreBucket {
     friend class RadosUser;
 };
 
-class RadosVectorBucket : public StoreVectorBucket {
-  private:
-    RadosStore* store;
-
+// a vector bucket is a regular RadosBucket kept in a separate metadata namespace
+// (ctl().vector_bucket). it reuses all of RadosBucket's object machinery, so LanceDB
+// can store its data in the vector bucket itself.
+// The bucket-level operations that touch metadata are overridden here to use the
+// vector-bucket namespace.
+class RadosVectorBucket : public RadosBucket {
   public:
-    RadosVectorBucket(RadosStore *_st)
-      : store(_st) {}
-
-    RadosVectorBucket(RadosStore *_st, const rgw_bucket& _b)
-      : StoreVectorBucket(_b),
-	store(_st) {}
-
-    RadosVectorBucket(RadosStore *_st, const RGWBucketInfo& _i)
-      : StoreVectorBucket(_i),
-	store(_st) {}
-
+    using RadosBucket::RadosBucket; // inherit RadosBucket's constructors
     ~RadosVectorBucket() override = default;
+
     int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) override;
     int create(const DoutPrefixProvider* dpp, const CreateParams& params,
                optional_yield y) override;
     int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
-    int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
-    std::unique_ptr<VectorBucket> clone() override {
+    std::unique_ptr<Bucket> clone() override {
       return std::make_unique<RadosVectorBucket>(*this);
     }
     int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
     int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
+    int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y, RGWBucketEnt* ent) override;
+    int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) override;
+
+    // XXX: S3 ACLs do not apply to vector buckets but instead vector bucket policy will be supported.
+    int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
+                optional_yield y) override { return -ENOTSUP; }
+    // XXX: Quota, ownership and the emptiness check are still disabled here for now; drop these overrides once real
+    // support for them lands.
+    int check_quota(const DoutPrefixProvider* dpp, RGWQuota& quota,
+                    uint64_t obj_size, optional_yield y,
+                    bool check_size_only = false) override { return 0; }
+    int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
+              const std::string& new_owner_name, optional_yield y) override { return -ENOTSUP; }
+    int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
 
   private:
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);

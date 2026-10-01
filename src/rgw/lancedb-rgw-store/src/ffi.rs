@@ -34,10 +34,15 @@ pub struct CRgwYieldContext {
 }
 
 /// Bucket identifier (name + optional tenant)
+///
+/// `is_vector_bucket` tells the wrapper which RGW metadata namespace to resolve the
+/// bucket in: the vector-bucket namespace (true) or the regular bucket namespace
+/// (false). It must stay in sync with the `CRgwBucket` typedef in rgw_sal_wrapper.h.
 #[repr(C)]
 pub struct CRgwBucket {
     pub name: *const c_char,
     pub tenant: *const c_char,
+    pub is_vector_bucket: bool,
 }
 
 impl CRgwBucket {
@@ -45,11 +50,16 @@ impl CRgwBucket {
         Self {
             name,
             tenant: std::ptr::null(),
+            is_vector_bucket: true,
         }
     }
 
-    pub fn new(name: *const c_char, tenant: *const c_char) -> Self {
-        Self { name, tenant }
+    pub fn new(name: *const c_char, tenant: *const c_char, is_vector_bucket: bool) -> Self {
+        Self {
+            name,
+            tenant,
+            is_vector_bucket,
+        }
     }
 }
 
@@ -58,6 +68,7 @@ impl Default for CRgwBucket {
         Self {
             name: std::ptr::null(),
             tenant: std::ptr::null(),
+            is_vector_bucket: true,
         }
     }
 }

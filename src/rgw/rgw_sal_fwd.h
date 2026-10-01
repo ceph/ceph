@@ -40,6 +40,9 @@ using Attrs = std::map<std::string, ceph::buffer::list>;
   class User;
   struct UserList;
   class Bucket;
+  // a vector bucket is a regular bucket in a separate metadata namespace; it holds
+  // the data of an S3 Vectors bucket and reuses all of Bucket's machinery
+  using VectorBucket = Bucket;
   struct BucketList;
   class Object;
   class MultipartUpload;

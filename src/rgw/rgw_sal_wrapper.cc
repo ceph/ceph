@@ -84,10 +84,17 @@ static int load_bucket( rgw::sal::Driver* driver, const DoutPrefixProvider* dpp,
     bucket_id.tenant = bucket->tenant;
   }
 
-  int ret = driver->load_bucket(dpp, bucket_id, &bucket_out, y);
+  // a vector bucket lives in a separate metadata namespace and holds the LanceDB
+  // data inside itself; a regular bucket is a same-name ordinary S3 bucket. the
+  // returned object supports the same object operations either way, since a vector
+  // bucket is a regular bucket kept in a different namespace.
+  int ret = bucket->is_vector_bucket
+      ? driver->load_vector_bucket(dpp, bucket_id, &bucket_out, y)
+      : driver->load_bucket(dpp, bucket_id, &bucket_out, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: load_bucket failed for '"
-                      << bucket->name << "' ret=" << ret << dendl;
+                      << bucket->name << "' (vector=" << bucket->is_vector_bucket
+                      << ") ret=" << ret << dendl;
     return ret;
   }
 

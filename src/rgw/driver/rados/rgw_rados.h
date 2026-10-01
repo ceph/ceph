@@ -703,6 +703,7 @@ public:
                     const rgw_owner& owner,
                     const std::string& zonegroup_id,
                     const rgw_placement_rule& placement_rule,
+                    const RGWZonePlacementInfo* zone_placement,
                     const std::map<std::string, bufferlist>& attrs,
                     const std::optional<RGWQuotaInfo>& quota,
                     std::optional<ceph::real_time> creation_time,
@@ -721,7 +722,8 @@ public:
 
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(const rgw_bucket& _bucket, const rgw_obj& obj,
-             RGWBucketInfo* out, const DoutPrefixProvider *dpp, optional_yield y);
+             RGWBucketInfo* out, const DoutPrefixProvider *dpp, optional_yield y,
+             bool is_vector = false);
     int init(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y);
     int init(const DoutPrefixProvider *dpp,
 	     const RGWBucketInfo& bucket_info,
@@ -1012,7 +1014,8 @@ public:
 
       int init_bs(const DoutPrefixProvider *dpp, optional_yield y) {
         int r =
-	  bs.init(target->get_bucket(), obj, &target->bucket_info, dpp, y);
+	  bs.init(target->get_bucket(), obj, &target->bucket_info, dpp, y,
+	          target->get_bucket_info().is_vector());
         if (r < 0) {
           return r;
         }
@@ -1563,7 +1566,7 @@ public:
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, const std::map<std::string, bufferlist> *pattrs, const DoutPrefixProvider *dpp, optional_yield y, RGWBucketCtl* bucket_ctl);
   /* xxx dang obj_ctx -> svc */
   int get_bucket_instance_info(const std::string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp);
-  int get_bucket_instance_info(const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp);
+  int get_bucket_instance_info(const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp, bool is_vector = false);
 
   static void make_bucket_entry_name(const std::string& tenant_name, const std::string& bucket_name, std::string& bucket_entry);
 

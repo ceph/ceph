@@ -34,6 +34,12 @@ pub struct RGWStoreProvider {
     /// default tenant). A provider, and the session holding it, are never
     /// shared between tenants, since two tenants may use the same bucket name
     tenant: String,
+    /// When true, object operations resolve the bucket in RGW's vector-bucket
+    /// namespace (the LanceDB data lives inside the vector bucket itself). When
+    /// false, they resolve a same-name regular S3 bucket. This is fixed for the
+    /// lifetime of the provider/session, since a vector bucket's storage mode is
+    /// immutable.
+    use_vector_bucket: bool,
 }
 
 // To guarantee that driver and dpp are pointers are safe to share across threads
@@ -52,11 +58,19 @@ impl RGWStoreProvider {
     /// * `dpp` - Pointer to DoutPrefixProvider for logging
     /// * `tenant` - Tenant of the buckets accessed through this provider (empty
     ///   for the default tenant)
-    pub unsafe fn new(driver: *mut CRgwDriver, dpp: *const CRgwDoutPrefix, tenant: String) -> Self {
+    /// * `use_vector_bucket` - route object operations through the vector-bucket
+    ///   namespace (true) or a same-name regular S3 bucket (false)
+    pub unsafe fn new(
+        driver: *mut CRgwDriver,
+        dpp: *const CRgwDoutPrefix,
+        tenant: String,
+        use_vector_bucket: bool,
+    ) -> Self {
         Self {
             driver,
             dpp,
             tenant,
+            use_vector_bucket,
         }
     }
 
@@ -110,7 +124,7 @@ impl lance_io::object_store::ObjectStoreProvider for RGWStoreProvider {
         //
         // We keep the prefix for debugging/logging and troubleshooting purposes.
         let inner = Arc::new(unsafe {
-            RGWObjectStore::new(self.driver, self.dpp, bucket, tenant, &prefix)
+            RGWObjectStore::new(self.driver, self.dpp, bucket, tenant, &prefix, self.use_vector_bucket)
         });
 
         let storage_options =
@@ -165,6 +179,7 @@ mod tests {
                 std::ptr::null_mut::<CRgwDriver>(),
                 std::ptr::null::<CRgwDoutPrefix>(),
                 String::new(),
+                true,
             )
         };
 

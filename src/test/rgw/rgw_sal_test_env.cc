@@ -24,9 +24,9 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <mutex>
-#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -46,10 +46,12 @@ struct TestEnv {
   rgw::sal::Driver* driver = nullptr;
   std::string backend;
 
-  // buckets created via rgw_test_env_create_bucket() and not yet removed,
-  // dropped at exit so a failing test never leaks storage
+  // buckets created via rgw_test_env_create_bucket()/create_vector_bucket() and not
+  // yet removed, dropped at exit so a failing test never leaks storage. the mapped
+  // bool records whether the bucket is a vector bucket, so it is loaded from the
+  // right metadata namespace on removal/teardown.
   std::mutex buckets_lock;
-  std::set<std::pair<std::string, std::string>> buckets;
+  std::map<std::pair<std::string, std::string>, bool> buckets;
 };
 
 TestEnv g_env;
@@ -57,6 +59,67 @@ std::once_flag g_init_once;
 int g_init_ret = -EINVAL;
 
 void env_teardown();
+
+// Load a bucket from the vector-bucket metadata namespace (is_vector) or the
+// regular one, matching how it was created.  A vector bucket is a regular bucket
+// kept in a separate namespace, so the returned object supports the same
+// operations either way.
+int load_tracked_bucket(const rgw_bucket& b, bool is_vector,
+                        std::unique_ptr<rgw::sal::Bucket>* bucket)
+{
+  return is_vector
+      ? g_env.driver->load_vector_bucket(g_env.dpp.get(), b, bucket, null_yield)
+      : g_env.driver->load_bucket(g_env.dpp.get(), b, bucket, null_yield);
+}
+
+// Shared creation path for both regular and vector buckets.  Succeeds if the
+// bucket already exists, and remembers it (and its type) for teardown.
+int create_tracked_bucket(const char* name, const char* tenant, bool is_vector)
+{
+  if (!g_env.driver || !name) {
+    return -EINVAL;
+  }
+  const std::string tenant_str = tenant ? tenant : "";
+
+  rgw_bucket b;
+  b.name = name;
+  b.tenant = tenant_str;
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  int r = load_tracked_bucket(b, is_vector, &bucket);
+  if (!bucket) {
+    std::cerr << "ERROR: load_bucket returned no bucket object (r=" << r << ")"
+              << std::endl;
+    return r < 0 ? r : -EIO;
+  }
+
+  rgw::sal::Bucket::CreateParams params;
+  params.owner = rgw_user{tenant_str, "lancedb-object-store-test-user"};
+  params.zonegroup_id = g_env.site.get_zonegroup().get_id();
+  params.placement_rule = g_env.site.get_zonegroup().default_placement;
+  // a vector bucket carries a real bucket index (like an ordinary bucket) so that
+  // LanceDB can store its data inside it; the index is created from zone_placement
+  params.zone_placement = rgw::find_zone_placement(
+      g_env.dpp.get(), g_env.site.get_zone_params(), params.placement_rule);
+  if (is_vector) {
+    // record the (immutable) storage mode, as the CreateVectorBucket REST op does,
+    // so the vector bucket keeps its LanceDB data inside itself
+    bufferlist bl;
+    bl.append("vector_bucket");
+    params.attrs[RGW_ATTR_S3VECTOR_STORAGE] = std::move(bl);
+  }
+
+  r = bucket->create(g_env.dpp.get(), params, null_yield);
+  if (r < 0 && r != -EEXIST) {
+    std::cerr << "ERROR: failed to create bucket '" << name << "' (r=" << r
+              << ")" << std::endl;
+    return r;
+  }
+
+  std::lock_guard l{g_env.buckets_lock};
+  g_env.buckets[{name, tenant_str}] = is_vector;
+  return 0;
+}
 
 // Runs exactly once, guarded by g_init_once.  This is the same sequence the
 // old C++ harness ran in main(), minus the single hard-coded bucket.
@@ -138,13 +201,13 @@ void env_teardown()
     std::lock_guard l{g_env.buckets_lock};
     leftovers.swap(g_env.buckets);
   }
-  for (const auto& [name, tenant] : leftovers) {
+  for (const auto& [key, is_vector] : leftovers) {
+    const auto& [name, tenant] = key;
     rgw_bucket b;
     b.name = name;
     b.tenant = tenant;
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    if (g_env.driver->load_bucket(g_env.dpp.get(), b, &bucket, null_yield) == 0
-        && bucket) {
+    if (load_tracked_bucket(b, is_vector, &bucket) == 0 && bucket) {
       bucket->remove(g_env.dpp.get(), true, null_yield);
     }
   }
@@ -185,42 +248,12 @@ const char* rgw_test_env_backend(void)
 
 int rgw_test_env_create_bucket(const char* name, const char* tenant)
 {
-  if (!g_env.driver || !name) {
-    return -EINVAL;
-  }
-  const std::string tenant_str = tenant ? tenant : "";
+  return create_tracked_bucket(name, tenant, /*is_vector=*/false);
+}
 
-  // same creation path our old harness used for its single bucket, now
-  // parameterized on name/tenant
-  rgw_bucket b;
-  b.name = name;
-  b.tenant = tenant_str;
-
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = g_env.driver->load_bucket(g_env.dpp.get(), b, &bucket, null_yield);
-  if (!bucket) {
-    std::cerr << "ERROR: load_bucket returned no bucket object (r=" << r << ")"
-              << std::endl;
-    return r < 0 ? r : -EIO;
-  }
-
-  rgw::sal::Bucket::CreateParams params;
-  params.owner = rgw_user{tenant_str, "lancedb-object-store-test-user"};
-  params.zonegroup_id = g_env.site.get_zonegroup().get_id();
-  params.placement_rule = g_env.site.get_zonegroup().default_placement;
-  params.zone_placement = rgw::find_zone_placement(
-      g_env.dpp.get(), g_env.site.get_zone_params(), params.placement_rule);
-
-  r = bucket->create(g_env.dpp.get(), params, null_yield);
-  if (r < 0 && r != -EEXIST) {
-    std::cerr << "ERROR: failed to create bucket '" << name << "' (r=" << r
-              << ")" << std::endl;
-    return r;
-  }
-
-  std::lock_guard l{g_env.buckets_lock};
-  g_env.buckets.emplace(name, tenant_str);
-  return 0;
+int rgw_test_env_create_vector_bucket(const char* name, const char* tenant)
+{
+  return create_tracked_bucket(name, tenant, /*is_vector=*/true);
 }
 
 int rgw_test_env_remove_bucket(const char* name, const char* tenant)
@@ -230,12 +263,21 @@ int rgw_test_env_remove_bucket(const char* name, const char* tenant)
   }
   const std::string tenant_str = tenant ? tenant : "";
 
+  // load the bucket from the same namespace it was created in
+  bool is_vector = false;
+  {
+    std::lock_guard l{g_env.buckets_lock};
+    if (auto it = g_env.buckets.find({name, tenant_str}); it != g_env.buckets.end()) {
+      is_vector = it->second;
+    }
+  }
+
   rgw_bucket b;
   b.name = name;
   b.tenant = tenant_str;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = g_env.driver->load_bucket(g_env.dpp.get(), b, &bucket, null_yield);
+  int r = load_tracked_bucket(b, is_vector, &bucket);
   if (r < 0 || !bucket) {
     return r < 0 ? r : -ENOENT;
   }
