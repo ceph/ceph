@@ -1494,6 +1494,12 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
                 false);
   DEBUGDPP("{} do_transaction", *this, *req);
 
+  // Notify the scrubber that this transaction is in-flight before
+  // submitting it.  on_rep_op_submitted() records the version in
+  // pending_writes so that await_update() cannot be satisfied by a
+  // later-versioned commit until this write is also durable.
+  scrubber.on_rep_op_submitted(last_log_version);
+
   auto commit_fut = interruptor::make_interruptible(
     crimson::os::with_store_do_transaction(
       shard_services.get_store(store_index),

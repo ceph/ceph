@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <set>
+
 #include <fmt/format.h>
 
 #include <seastar/core/shared_future.hh>
@@ -96,6 +98,16 @@ class PGScrubber : public crimson::BlockerT<PGScrubber>, ScrubContext {
    * of an in-flight write. */
   eversion_t last_applied_durable;
 
+  /* Versions of rep-op transactions that have been submitted to the
+   * object store but whose commits have not yet been acknowledged via
+   * on_log_update().  In a multi-shard Crimson OSD, transactions can
+   * commit out of version order: a higher-versioned transaction may
+   * complete before a lower-versioned one.  Tracking in-flight versions
+   * prevents await_update(V) from being satisfied prematurely -- we must
+   * ensure no pending write with version <= V exists before allowing a
+   * scrub chunk scan to proceed. */
+  std::set<eversion_t> pending_writes;
+
   /// the sub-object that manages this PG's scheduling parameters.
   /// An Optional instead of a regular member, as we wish to directly
   /// control the order of construction/destruction.
@@ -163,6 +175,11 @@ public:
 
   /// notify machine that PG has committed up to versino v
   void on_log_update(eversion_t v);
+
+  /// notify scrubber that a rep-op transaction at version v has been
+  /// submitted to the object store (before commit).  Must be paired with
+  /// a subsequent on_log_update(v) call once the transaction commits.
+  void on_rep_op_submitted(eversion_t v);
 
   /// notify scrubber that recovery has completed
   void recovery_completed();

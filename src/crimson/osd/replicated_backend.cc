@@ -190,6 +190,15 @@ ReplicatedBackend::submit_transaction(
     txn,
     false);
 
+  // Notify the scrubber that this (primary) transaction is in-flight before
+  // submitting it.  on_rep_op_submitted() records the version in
+  // pending_writes so that await_update() cannot be satisfied by a
+  // later-versioned commit until this write is also durable.  Without this,
+  // ScrubReserveRange can find the log entry in projected_log and release
+  // the scan while the primary's objectstore transaction is still in-flight,
+  // causing the scrub to see SHARD_MISSING for the object on the primary.
+  pg.scrubber.on_rep_op_submitted(osd_op_p.at_version);
+
   auto all_completed = interruptor::make_interruptible(
     crimson::os::with_store_do_transaction(
       shard_services.get_store(pg.get_store_index()),
