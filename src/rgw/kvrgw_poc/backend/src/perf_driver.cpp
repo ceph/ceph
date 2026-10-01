@@ -18,6 +18,7 @@
 #include "data_store.hpp"
 #include "error_codes.hpp"
 #include "fdb_latency.hpp"
+#include "id_meta.hpp"
 #include "id_tag.hpp"
 #include "key_buf.hpp"
 #include "keys.hpp"
@@ -58,30 +59,82 @@ static constexpr int GET_FUTURE_MAX = 1024;
 static constexpr auto GET_IDLE_SLEEP = std::chrono::microseconds(10);
 static constexpr int kKeyPrefixMaxLen = 768;
 static constexpr int kNameMidLen = 21;
-static constexpr int GET_OBJECT_NAME_MAX = kKeyPrefixMaxLen + kNameMidLen + 1;
+static constexpr int GET_OBJECT_NAME_MAX = 1024;
 alignas(64) uint8_t g_put_buffer[16384] = {};
 
 int g_instance_id = 0;
-char g_key_prefix[kKeyPrefixMaxLen + 1] = "perf";
-char g_key_suffix[kKeyPrefixMaxLen + 1] = "";
+bool g_random_prefix_per_key = false;
+char g_key_prefix[kKeyPrefixMaxLen + 1];
+int g_prefix_len = 0;
+char g_key_suffix[kKeyPrefixMaxLen + 1];
+int g_suffix_len = 0;
 const char *g_metadata_file = nullptr;
-static std::array<std::array<char, kMaxTagKeyLen + 16>, kMaxTags> g_put_tag_keybufs{};
-static std::array<std::array<char, kMaxTagValueLen>, kMaxTags> g_put_tag_valbufs{};
+// add 1 extra byte for '\0' terminator
+static std::array<std::array<char, kMaxTagKeyLen + 1>, kMaxTags> g_put_tag_keybufs{};
+static std::array<std::array<char, kMaxTagValueLen +1 >, kMaxTags> g_put_tag_valbufs{};
 static std::array<TagPair, kMaxTags> g_put_tag_pairs{};
 static size_t g_put_tag_count{0};
 
-std::string make_object_name(int thread_id, uint64_t seq)
+const char META_KEY_FMT[] = "meta%03d";
+// 4 bytes for "meta" + 3 bytes for count + null terminator
+const size_t META_KEY_LEN = 8;
+static std::array<std::array<char, META_KEY_LEN>, MAX_META_COUNT> g_put_meta_keybufs{};
+static std::array<std::array<char, MAX_META_VALUE_SIZE>, MAX_META_COUNT> g_put_meta_valbufs{};
+static std::array<MetaPair, MAX_META_COUNT> g_put_meta_pairs{};
+static size_t g_put_meta_count{0};
+
+//--------------------------------------------------------------------------------
+static void fill_buffer_random(std::span<char> buffer, size_t num_bytes)
 {
-  char buf[GET_OBJECT_NAME_MAX];
-  if (g_key_suffix[0] == '\0') {
-    std::snprintf(buf, sizeof(buf), "%s/%04d/%02d_%012lu", g_key_prefix,
-                  thread_id, g_instance_id, seq);
+  assert(num_bytes <= buffer.size() && "Requested bytes exceed buffer size!");
+
+  // AWS:S3 allowed character set for idtag
+  static constexpr std::string_view charset(
+      "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_.!*()'");
+  constexpr size_t max_index = charset.size() - 1;
+
+  thread_local static std::random_device rd;
+  thread_local static std::mt19937 gen(rd());
+  std::uniform_int_distribution<size_t> distrib(0, max_index);
+
+  // Fill N elements starting from the beginning of the reference array
+  std::generate_n(buffer.begin(), num_bytes,
+                  [&distrib]() { return charset[distrib(gen)]; });
+}
+
+std::string_view make_object_name(int thread_id, uint64_t seq)
+{
+  thread_local static char buf[GET_OBJECT_NAME_MAX];
+  int written = 0;
+  if (g_random_prefix_per_key) {
+    if (g_prefix_len > 0) {
+      fill_buffer_random(std::span<char>(buf, static_cast<size_t>(g_prefix_len)),
+                         static_cast<size_t>(g_prefix_len));
+    }
+    if (g_key_suffix[0] == '\0') {
+      written = std::snprintf(buf + g_prefix_len, sizeof(buf) - static_cast<size_t>(g_prefix_len),
+                              "/%04d/%02d_%012lu", thread_id, g_instance_id, seq);
+    }
+    else {
+      written = std::snprintf(buf + g_prefix_len, sizeof(buf) - static_cast<size_t>(g_prefix_len),
+                              "/%04d/%02d_%012lu%s", thread_id, g_instance_id, seq, g_key_suffix);
+    }
+    written += g_prefix_len;
   }
   else {
-    std::snprintf(buf, sizeof(buf), "%s/%04d/%02d_%012lu%s", g_key_prefix,
-                  thread_id, g_instance_id, seq, g_key_suffix);
+    if (g_key_suffix[0] == '\0') {
+      written = std::snprintf(buf, sizeof(buf), "%s/%04d/%02d_%012lu", g_key_prefix,
+                              thread_id, g_instance_id, seq);
+    }
+    else {
+      written = std::snprintf(buf, sizeof(buf), "%s/%04d/%02d_%012lu%s", g_key_prefix,
+                              thread_id, g_instance_id, seq, g_key_suffix);
+    }
   }
-  return buf;
+  if (written < 0 || written >= static_cast<int>(sizeof(buf))) {
+    written = static_cast<int>(sizeof(buf)) - 1;
+  }
+  return std::string_view(buf, static_cast<size_t>(written));
 }
 
 } // namespace
@@ -313,6 +366,50 @@ static bool init_put_tags()
   return true;
 }
 
+//--------------------------------------------------------------------------------
+static bool init_put_metadata()
+{
+  const char *count_env = std::getenv("KVRGW_METADATA_COUNT");
+  int count = 0;
+  if (count_env) {
+    count = std::atoi(count_env);
+  }
+  if (count == 0) {
+    g_put_meta_count = 0;
+    return true;
+  }
+  if (count < 1 || count > static_cast<int>(MAX_META_COUNT)) {
+    std::cerr << "ERROR: KVRGW_METADATA_COUNT must be 0.." << MAX_META_COUNT << "\n";
+    return false;
+  }
+  const char *size_env = std::getenv("KVRGW_METADATA_DATA_SIZE");
+  if (!size_env) {
+    std::cerr << "ERROR: KVRGW_METADATA_DATA_SIZE required when metadata_count > 0\n";
+    return false;
+  }
+  const int data_size = std::atoi(size_env);
+  if (data_size < 1 || data_size > static_cast<int>(MAX_META_VALUE_SIZE)) {
+    std::cerr << "ERROR: KVRGW_METADATA_DATA_SIZE must be 1.." << MAX_META_VALUE_SIZE
+              << "\n";
+    return false;
+  }
+
+  for (int i = 0; i < count; ++i) {
+    const int n = std::snprintf(g_put_meta_keybufs[i].data(),
+                                g_put_meta_keybufs[i].size(), META_KEY_FMT, i);
+    if (n < 1 || static_cast<size_t>(n) >= META_KEY_LEN) {
+      std::cerr << "ERROR: metadata key too long\n";
+      return false;
+    }
+    fill_buffer_random(g_put_meta_valbufs[i], static_cast<size_t>(data_size));
+    g_put_meta_pairs[static_cast<size_t>(i)] = {
+        std::string_view(g_put_meta_keybufs[i].data(), static_cast<size_t>(n)),
+        std::string_view(g_put_meta_valbufs[i].data(), static_cast<size_t>(data_size))};
+  }
+  g_put_meta_count = static_cast<size_t>(count);
+  return true;
+}
+
 static void progress_tick(int thread_id, int progress_sec, OpType op,
                           LatencyStats &stats,
                           std::chrono::steady_clock::time_point t0,
@@ -398,14 +495,14 @@ void put_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     const auto &bucket_name = bucket_names[bucket_idx];
     uint64_t seq = wr.bucket_seq[bucket_idx]++;
     const auto name = make_object_name(thread_id, seq);
-
+    //std::cerr << name << std::endl;
     ScopedRequestLatency _lat(service.latency_stats(), OpType::kPutObject);
 
     auto res = service.put_object(
         tenant_id, bucket_name, name,
         g_put_buffer, obj_size, {}, obj_size, nullptr,
         std::span<const TagPair>(g_put_tag_pairs.data(), g_put_tag_count),
-        {});
+        std::span<const MetaPair>(g_put_meta_pairs.data(), g_put_meta_count));
     if (res.error_code == KVRGW_ERR_OK) {
       ++wr.ops;
     }
@@ -448,7 +545,7 @@ void put_pad_worker(KvRgwServiceImpl &service, tenant_id_t tenant_id,
           tenant_id, bucket_name, name,
           g_put_buffer, obj_size, {}, obj_size, nullptr,
           std::span<const TagPair>(g_put_tag_pairs.data(), g_put_tag_count),
-          {});
+          std::span<const MetaPair>(g_put_meta_pairs.data(), g_put_meta_count));
     }
   }
 }
@@ -532,7 +629,7 @@ void delete_multi_direct_worker(KvRgwServiceImpl &service,
     std::vector<std::string> keys;
     keys.reserve(static_cast<size_t>(end - seq));
     for (int64_t s = seq; s < end; ++s) {
-      keys.push_back(make_object_name(thread_id, s));
+      keys.emplace_back(make_object_name(thread_id, s));
     }
     std::vector<KvRgwServiceImpl::DeleteMultiKeyOutcome> outcomes;
     const auto ec = service.delete_multi(tenant_id, bucket_name, keys, {},
@@ -778,629 +875,6 @@ static void cmd_get(KvRgwServiceImpl &service, tenant_id_t tenant_id,
     std::string label =
         "GET " + bname + " (" + std::to_string(objects.size()) + " objs)";
     print_results(label.c_str(), result, elapsed, service.latency_stats());
-  }
-}
-
-struct GetRequest {
-  int bidx = 0;
-  char name[GET_OBJECT_NAME_MAX]{};
-  version_id_t version{0};
-  bool has_version = false;
-  bool eof = false;
-  std::chrono::steady_clock::time_point creation{};
-  std::chrono::steady_clock::time_point serviced{};
-};
-
-struct GetTask {
-  GetRequest req{};
-  std::unique_ptr<KvTransaction> txn;
-  FdbFuture future;
-  bool occupied = false;
-};
-
-struct GetQueue {
-  GetRequest items[GET_REQUESTS_QUEUE_SIZE]{};
-  int head = 0;
-  int tail = 0;
-  std::mutex mu;
-  std::counting_semaphore<GET_REQUESTS_QUEUE_SIZE> empty{
-      GET_REQUESTS_QUEUE_SIZE};
-  std::counting_semaphore<GET_REQUESTS_QUEUE_SIZE> filled{0};
-
-  void push(const GetRequest &r, std::atomic<int64_t> *blocked_ns)
-  {
-    const auto w0 = std::chrono::steady_clock::now();
-    empty.acquire();
-    if (blocked_ns) {
-      const auto w1 = std::chrono::steady_clock::now();
-      blocked_ns->fetch_add(
-          std::chrono::duration_cast<std::chrono::nanoseconds>(w1 - w0).count(),
-          std::memory_order_relaxed);
-    }
-    {
-      std::lock_guard<std::mutex> g(mu);
-      items[tail] = r;
-      tail = (tail + 1) % GET_REQUESTS_QUEUE_SIZE;
-    }
-    filled.release();
-  }
-
-  bool try_pop(GetRequest *out)
-  {
-    if (!out) {
-      return false;
-    }
-    if (!filled.try_acquire()) {
-      return false;
-    }
-    {
-      std::lock_guard<std::mutex> g(mu);
-      *out = items[head];
-      head = (head + 1) % GET_REQUESTS_QUEUE_SIZE;
-    }
-    empty.release();
-    out->serviced = std::chrono::steady_clock::now();
-    return true;
-  }
-
-  GetRequest pop()
-  {
-    filled.acquire();
-    GetRequest r;
-    {
-      std::lock_guard<std::mutex> g(mu);
-      r = items[head];
-      head = (head + 1) % GET_REQUESTS_QUEUE_SIZE;
-    }
-    empty.release();
-    r.serviced = std::chrono::steady_clock::now();
-    return r;
-  }
-};
-
-static void get_producer_thread_range(int producer_id, int nprod, int nthreads,
-                                      int *t0, int *t1)
-{
-  if (!t0 || !t1) {
-    return;
-  }
-  if (producer_id < 0 || nprod <= 0 || nthreads < 0 || producer_id >= nprod) {
-    *t0 = 0;
-    *t1 = 0;
-    return;
-  }
-  *t0 =
-      static_cast<int>((static_cast<int64_t>(producer_id) * nthreads) / nprod);
-  *t1 = static_cast<int>((static_cast<int64_t>(producer_id + 1) * nthreads) /
-                         nprod);
-}
-
-static bool get_enqueue_one(GetQueue &q, GetRequest r, std::atomic<bool> *stop,
-                            std::atomic<int64_t> *remaining,
-                            std::atomic<int64_t> *blocked_ns)
-{
-  if (stop && stop->load(std::memory_order_relaxed)) {
-    return false;
-  }
-  if (remaining) {
-    const int64_t ticket = remaining->fetch_sub(1, std::memory_order_relaxed);
-    if (ticket <= 0) {
-      return false;
-    }
-  }
-  r.creation = std::chrono::steady_clock::now();
-  r.eof = false;
-  q.push(r, blocked_ns);
-  return true;
-}
-
-static bool get_enqueue_key(GetQueue &q, int bidx, int thread_id, uint64_t seq,
-                            bool all_versions, int64_t num_vers,
-                            std::atomic<bool> *stop,
-                            std::atomic<int64_t> *remaining,
-                            std::atomic<int64_t> *blocked_ns)
-{
-  GetRequest r{};
-  r.bidx = bidx;
-  const auto name = make_object_name(thread_id, seq);
-  if (name.size() >= sizeof(r.name)) {
-    std::cerr << "GET_ERR object name too long\n";
-    return false;
-  }
-  std::snprintf(r.name, sizeof(r.name), "%s", name.c_str());
-  r.has_version = false;
-  if (!get_enqueue_one(q, r, stop, remaining, blocked_ns)) {
-    return false;
-  }
-  if (!all_versions || num_vers <= 1) {
-    return true;
-  }
-  version_id_t vid = kFirstVersionId;
-  for (int64_t ver_i = 1; ver_i < num_vers; ++ver_i) {
-    r.has_version = true;
-    r.version = vid;
-    if (!get_enqueue_one(q, r, stop, remaining, blocked_ns)) {
-      return false;
-    }
-    vid = vid.next_vid();
-  }
-  return true;
-}
-
-static void get_complete_task(GetTask &task, KvRgwServiceImpl &service,
-                              BenchResult &result,
-                              std::atomic<int64_t> &missing)
-{
-  const auto now = std::chrono::steady_clock::now();
-  const int64_t queue_us =
-      std::chrono::duration_cast<std::chrono::microseconds>(task.req.serviced -
-                                                            task.req.creation)
-          .count();
-  const int64_t fdb_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                             now - task.req.serviced)
-                             .count();
-  int64_t total_us = queue_us + fdb_us;
-  if (total_us < 0) {
-    total_us = 0;
-  }
-
-  auto raw = task.txn->kv_wait_get(task.future);
-  RequestLatency rl{};
-  rl.fdb_get_us = fdb_us > 0 ? fdb_us : 0;
-  rl.fdb_get_count = 1;
-  service.latency_stats().record(OpType::kGetObject, total_us, rl);
-  service.ops_stats().inc(OpType::kGetObject);
-
-  if (!raw) {
-    const auto ec = fdb_to_error(raw.error());
-    result.record_error(ec);
-    result.errors.fetch_add(1, std::memory_order_relaxed);
-  }
-  else if (!*raw) {
-    missing.fetch_add(1, std::memory_order_relaxed);
-  }
-  else {
-    auto obj = parse_object_value(**raw);
-    if (!obj) {
-      result.record_error(KVRGW_ERR_CORRUPT_VALUE);
-      result.errors.fetch_add(1, std::memory_order_relaxed);
-    }
-    else if (obj->is_delete_marker()) {
-      missing.fetch_add(1, std::memory_order_relaxed);
-    }
-    else {
-      result.ops.fetch_add(1, std::memory_order_relaxed);
-    }
-  }
-  task.future = FdbFuture();
-  task.txn.reset();
-  task.occupied = false;
-}
-
-static bool get_issue_task(GetTask &task, const GetRequest &req,
-                           KvRgwServiceImpl &service,
-                           const std::vector<bucket_id_t> &bucket_ids,
-                           BenchResult &result)
-{
-  if (req.bidx < 0 || req.bidx >= static_cast<int>(bucket_ids.size())) {
-    std::cerr << "GET_ERR bidx out of range\n";
-    result.errors.fetch_add(1, std::memory_order_relaxed);
-    return false;
-  }
-  const bucket_id_t bucket_id = bucket_ids[static_cast<size_t>(req.bidx)];
-  auto tr_res = service.store().begin_transaction();
-  if (!tr_res) {
-    result.record_error(fdb_to_error(tr_res.error()));
-    result.errors.fetch_add(1, std::memory_order_relaxed);
-    return false;
-  }
-  task.req = req;
-  task.txn = std::move(*tr_res);
-  KeyBuf key;
-  if (req.has_version) {
-    make_v_key(bucket_id, req.name, req.version, key);
-  }
-  else {
-    make_object_key(bucket_id, req.name, key);
-  }
-
-  task.future = task.txn->kv_async_get(key.view());
-  task.occupied = true;
-  return true;
-}
-
-static int get_find_free_slot(GetTask *array, unsigned max_futures)
-{
-  if (!array) {
-    return -1;
-  }
-  for (unsigned i = 0; i < max_futures; ++i) {
-    if (!array[i].occupied) {
-      return static_cast<int>(i);
-    }
-  }
-  return -1;
-}
-
-static void get_test_producer(
-    GetQueue &q, int producer_id, int nprod, int nconsumers, int nthreads,
-    int num_buckets, uint64_t seq_end, bool overwrite, int files_per_thread,
-    bool all_versions, int64_t num_vers, std::atomic<bool> *stop,
-    std::atomic<int64_t> *remaining, std::atomic<int> &producers_left,
-    std::atomic<int64_t> &blocked_ns, std::atomic<int64_t> &elapsed_ns)
-{
-  const auto t0 = std::chrono::steady_clock::now();
-  int t0_id = 0;
-  int t1_id = 0;
-  get_producer_thread_range(producer_id, nprod, nthreads, &t0_id, &t1_id);
-
-  auto one_pass = [&]() -> bool {
-    if (overwrite) {
-      for (int thread_id = t0_id; thread_id < t1_id; ++thread_id) {
-        for (int j = 0; j < files_per_thread; ++j) {
-          const int file_id = thread_id * files_per_thread + j;
-          const int bidx = file_id % num_buckets;
-          if (!get_enqueue_key(q, bidx, thread_id, static_cast<uint64_t>(j),
-                               all_versions, num_vers, stop, remaining,
-                               &blocked_ns)) {
-            return false;
-          }
-        }
-      }
-    }
-    else {
-      for (int thread_id = t0_id; thread_id < t1_id; ++thread_id) {
-        for (int b = 0; b < num_buckets; ++b) {
-          for (uint64_t seq = 0; seq < seq_end; ++seq) {
-            if (!get_enqueue_key(q, b, thread_id, seq, all_versions, num_vers,
-                                 stop, remaining, &blocked_ns)) {
-              return false;
-            }
-          }
-        }
-      }
-    }
-    return true;
-  };
-
-  if (stop) {
-    while (!stop->load(std::memory_order_relaxed)) {
-      if (!one_pass()) {
-        break;
-      }
-    }
-  }
-  else {
-    while (one_pass()) {
-      if (!remaining) {
-        break;
-      }
-    }
-  }
-
-  if (producers_left.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-    GetRequest eof{};
-    eof.eof = true;
-    eof.creation = std::chrono::steady_clock::now();
-    for (int i = 0; i < nconsumers; ++i) {
-      q.push(eof, &blocked_ns);
-    }
-  }
-
-  const auto t1 = std::chrono::steady_clock::now();
-  elapsed_ns.fetch_add(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count(),
-      std::memory_order_relaxed);
-}
-
-static void get_test_consumer(KvRgwServiceImpl &service, int consumer_id,
-                              unsigned max_futures, GetQueue &q,
-                              const std::vector<bucket_id_t> &bucket_ids,
-                              int progress_sec,
-                              std::chrono::steady_clock::time_point t0,
-                              BenchResult &result,
-                              std::atomic<int64_t> &missing)
-{
-  GetTask array[max_futures];
-  unsigned free_count = max_futures;
-  bool eof = false;
-  auto last_t = t0;
-  int64_t last_count = 0;
-  int64_t last_total_us = 0;
-
-  while (true) {
-    for (unsigned i = 0; i < max_futures; ++i) {
-      if (!array[i].occupied) {
-        continue;
-      }
-      if (!array[i].future.is_ready()) {
-        continue;
-      }
-      get_complete_task(array[i], service, result, missing);
-      ++free_count;
-    }
-    progress_tick(consumer_id, progress_sec, OpType::kGetObject,
-                  service.latency_stats(), t0, last_t, last_count,
-                  last_total_us);
-
-    if (eof) {
-      if (free_count == max_futures) {
-        return;
-      }
-      std::this_thread::sleep_for(GET_IDLE_SLEEP);
-      continue;
-    }
-
-    while (free_count > 0) {
-      GetRequest r;
-      if (!q.try_pop(&r)) {
-        break;
-      }
-      if (r.eof) {
-        eof = true;
-        break;
-      }
-      const int slot = get_find_free_slot(array, max_futures);
-      if (slot < 0) {
-        std::cerr << "GET_ERR no free slot with free_count=" << free_count
-                  << "\n";
-        break;
-      }
-      if (get_issue_task(array[slot], r, service, bucket_ids, result)) {
-        --free_count;
-      }
-    }
-
-    if (eof) {
-      continue;
-    }
-    if (free_count == 0) {
-      std::this_thread::sleep_for(GET_IDLE_SLEEP);
-      continue;
-    }
-    if (free_count < max_futures) {
-      std::this_thread::sleep_for(GET_IDLE_SLEEP);
-      continue;
-    }
-
-    GetRequest r = q.pop();
-    if (r.eof) {
-      eof = true;
-      continue;
-    }
-    const int slot = get_find_free_slot(array, max_futures);
-    if (slot < 0) {
-      std::cerr << "GET_ERR no free slot after blocking pop\n";
-      continue;
-    }
-    if (get_issue_task(array[slot], r, service, bucket_ids, result)) {
-      --free_count;
-    }
-  }
-}
-
-//------------------------------------------------------------------------------
-static void cmd_get_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
-                         const ParsedParams &p, const std::string &opts)
-{
-  if (!g_metadata_file) {
-    std::cerr << "GET_ERR KVRGW_METADATA_FILE not set\n";
-    return;
-  }
-  if (p.producers <= 0) {
-    std::cerr << "GET_ERR producers= must be > 0\n";
-    return;
-  }
-  if (p.consumers <= 0) {
-    std::cerr << "GET_ERR consumers= must be > 0\n";
-    return;
-  }
-  if (p.max_futures <= 0 || p.max_futures > GET_FUTURE_MAX) {
-    std::cerr << "GET_ERR max_futures= must be in 1.." << GET_FUTURE_MAX
-              << "\n";
-    return;
-  }
-
-  int threads = 0, instances = 0, meta_buckets = 0;
-  uint64_t max_seq_arr[128]{};
-  std::string src_workload;
-  int64_t base_files = 0;
-  int64_t overwrite_count = 0;
-  {
-    std::ifstream mf(g_metadata_file);
-    if (!mf) {
-      std::cerr << "GET_ERR cannot open " << g_metadata_file << "\n";
-      return;
-    }
-    std::string line;
-    while (std::getline(mf, line)) {
-      if (line.rfind("threads=", 0) == 0) {
-        threads = std::atoi(line.c_str() + 8);
-      }
-      else if (line.rfind("instances=", 0) == 0) {
-        instances = std::atoi(line.c_str() + 10);
-      }
-      else if (line.rfind("buckets=", 0) == 0) {
-        meta_buckets = std::atoi(line.c_str() + 8);
-      }
-      else if (line.rfind("workload=", 0) == 0) {
-        src_workload = line.substr(9);
-      }
-      else if (line.rfind("base_files=", 0) == 0) {
-        base_files = std::atoll(line.c_str() + 11);
-      }
-      else if (line.rfind("overwrite_count=", 0) == 0) {
-        overwrite_count = std::atoll(line.c_str() + 16);
-      }
-      else if (line.rfind("max_seq_", 0) == 0) {
-        auto eq = line.find('=');
-        if (eq != std::string::npos) {
-          int idx = std::atoi(line.c_str() + 8);
-          if (idx >= 0 && idx < 128) {
-            max_seq_arr[idx] = std::stoull(line.substr(eq + 1));
-          }
-        }
-      }
-    }
-  }
-  if (threads <= 0 || instances <= 0 || meta_buckets <= 0) {
-    std::cerr << "GET_ERR invalid metadata (threads=" << threads
-              << " instances=" << instances << " buckets=" << meta_buckets
-              << ")\n";
-    return;
-  }
-  if (g_instance_id < 0 || g_instance_id >= instances || g_instance_id >= 128) {
-    std::cerr << "GET_ERR instance_id=" << g_instance_id
-              << " out of range (instances=" << instances << ")\n";
-    return;
-  }
-
-  bool all_versions = false;
-  {
-    std::istringstream iss(opts);
-    std::string token;
-    while (iss >> token) {
-      if (token == "--all-versions") {
-        all_versions = true;
-      }
-    }
-  }
-
-  const bool overwrite = (src_workload == "put-overwrite");
-  int files_per_thread = 0;
-  uint64_t seq_end = max_seq_arr[g_instance_id];
-  if (overwrite) {
-    if (base_files <= 0) {
-      std::cerr << "GET_ERR put-overwrite source requires base_files\n";
-      return;
-    }
-    if (base_files % threads != 0 || base_files % meta_buckets != 0) {
-      std::cerr << "GET_ERR base_files not divisible by threads/buckets\n";
-      return;
-    }
-    files_per_thread = static_cast<int>(base_files / threads);
-  }
-  else if (seq_end == 0) {
-    std::cerr << "GET_ERR max_seq_" << g_instance_id
-              << " missing or zero in metadata\n";
-    return;
-  }
-
-  int64_t num_vers = 1;
-  if (all_versions && overwrite) {
-    if (overwrite_count < 0) {
-      std::cerr << "GET_ERR --all-versions requires overwrite_count in metadata\n";
-      return;
-    }
-    if (overwrite_count > static_cast<int64_t>(kFirstVersionId.raw())) {
-      std::cerr << "GET_ERR overwrite_count too large\n";
-      return;
-    }
-    num_vers = overwrite_count + 1;
-  }
-
-  const int64_t expected = overwrite
-                               ? static_cast<int64_t>(files_per_thread) * num_vers
-                               : static_cast<int64_t>(meta_buckets) *
-                                     static_cast<int64_t>(seq_end) * num_vers;
-  const int64_t expected_inst = expected * threads;
-
-  std::vector<bucket_id_t> bucket_ids;
-  bucket_ids.reserve(static_cast<size_t>(meta_buckets));
-  for (int b = 0; b < meta_buckets; ++b) {
-    char bname[AWS_MAX_BUCKET_NAME];
-    std::snprintf(bname, sizeof(bname), "perf-bucket-%d", b);
-    bool exists = false;
-    bucket_id_t bid = kNullBucket;
-    const auto ec =
-        service.bucket_exists_cached(tenant_id, bname, &exists, &bid);
-    if (ec != KVRGW_ERR_OK || !exists) {
-      std::cerr << "GET_ERR bucket " << bname << " missing\n";
-      return;
-    }
-    bucket_ids.push_back(bid);
-  }
-
-  std::cout << "get-test: prefix=" << g_key_prefix
-            << " instance=" << g_instance_id << " producers=" << p.producers
-            << " consumers=" << p.consumers << " max_futures=" << p.max_futures
-            << " put_threads=" << threads << " buckets=" << meta_buckets;
-  if (overwrite) {
-    std::cout << " workload=put-overwrite files/thread=" << files_per_thread;
-  }
-  else {
-    std::cout << " max_seq=" << seq_end;
-  }
-  if (all_versions) {
-    std::cout << " --all-versions num_vers=" << num_vers;
-  }
-  if (p.duration > 0) {
-    std::cout << " duration=" << p.duration;
-  }
-  if (p.count > 0) {
-    std::cout << " count=" << p.count;
-  }
-  std::cout << "\n";
-
-  service.latency_stats().reset();
-  BenchResult result;
-  std::atomic<int64_t> missing{0};
-  std::atomic<bool> stop_flag{false};
-  std::atomic<int64_t> remaining{p.count};
-  std::atomic<bool> *stop = (p.duration > 0) ? &stop_flag : nullptr;
-  std::atomic<int64_t> *rem = (p.count > 0) ? &remaining : nullptr;
-  std::atomic<int> producers_left{p.producers};
-  std::atomic<int64_t> blocked_ns{0};
-  std::atomic<int64_t> producer_elapsed_ns{0};
-  GetQueue queue;
-
-  std::vector<std::thread> threads_v;
-  auto t0 = std::chrono::steady_clock::now();
-  for (int t = 0; t < p.producers; ++t) {
-    threads_v.emplace_back(
-        get_test_producer, std::ref(queue), t, p.producers, p.consumers,
-        threads, meta_buckets, seq_end, overwrite, files_per_thread,
-        all_versions, num_vers, stop, rem, std::ref(producers_left),
-        std::ref(blocked_ns), std::ref(producer_elapsed_ns));
-  }
-  for (int t = 0; t < p.consumers; ++t) {
-    threads_v.emplace_back(get_test_consumer, std::ref(service), t,
-                           static_cast<unsigned>(p.max_futures),
-                           std::ref(queue), std::cref(bucket_ids),
-                           p.progress_sec, t0, std::ref(result),
-                           std::ref(missing));
-  }
-  if (p.duration > 0) {
-    std::this_thread::sleep_for(std::chrono::seconds(p.duration));
-    stop_flag.store(true, std::memory_order_relaxed);
-  }
-  for (auto &th : threads_v) {
-    th.join();
-  }
-  auto t1 = std::chrono::steady_clock::now();
-  double elapsed = std::chrono::duration<double>(t1 - t0).count();
-
-  print_results("GET-TEST", result, elapsed, service.latency_stats());
-  const int64_t miss = missing.load();
-  const int64_t hits = result.ops.load();
-  const int64_t errs = result.errors.load();
-  const int64_t bns = blocked_ns.load();
-  const int64_t ens = producer_elapsed_ns.load();
-  const double blocked_pct =
-      (ens > 0) ? (100.0 * static_cast<double>(bns) / static_cast<double>(ens))
-                : 0.0;
-  std::cout << "  producers blocked_full_pct=" << std::fixed
-            << std::setprecision(1) << blocked_pct << "\n";
-  std::cout << "get-test complete expected=" << expected_inst
-            << " hits=" << hits << " missing=" << miss << " errors=" << errs
-            << "\n";
-  if (miss > 0) {
-    std::cerr << "GET_ERR missing=" << miss << " expected=" << expected_inst
-              << " hits=" << hits << "\n";
-  }
-  if (p.duration == 0 && p.count == 0 && hits != expected_inst) {
-    std::cerr << "GET_ERR hits=" << hits << " != expected=" << expected_inst
-              << "\n";
   }
 }
 
@@ -1729,7 +1203,7 @@ void put_overwrite_standalone_worker(KvRgwServiceImpl &service,
           tenant_id, std::string_view(bname), name,
           g_put_buffer, obj_size, {}, obj_size, nullptr,
           std::span<const TagPair>(g_put_tag_pairs.data(), g_put_tag_count),
-          {});
+          std::span<const MetaPair>(g_put_meta_pairs.data(), g_put_meta_count));
       if (res.error_code == KVRGW_ERR_OK) {
         result.ops.fetch_add(1, std::memory_order_relaxed);
       }
@@ -2628,7 +2102,7 @@ static void cmd_list_test(KvRgwServiceImpl &service, tenant_id_t tenant_id,
 }
 
 // --- Main command loop ---
-
+//--------------------------------------------------------------------------------
 int run_perf_driver(KvRgwRuntime &runtime)
 {
   PerfConfig pcfg;
@@ -2636,43 +2110,116 @@ int run_perf_driver(KvRgwRuntime &runtime)
   return run_perf_driver(runtime.service(), runtime.store(), pcfg);
 }
 
+//--------------------------------------------------------------------------------
+static int process_prefix()
+{
+  if (const char *rpk = std::getenv("KVRGW_RANDOM_PREFIX_PER_KEY")) {
+    if (strcasecmp(rpk, "yes") == 0 || strcasecmp(rpk, "true") == 0) {
+      g_random_prefix_per_key = true;
+    }
+    else if (strcasecmp(rpk, "no") == 0 || strcasecmp(rpk, "false") == 0) {
+      g_random_prefix_per_key = false;
+    }
+    else {
+      std::cerr << "ERROR: KVRGW_RANDOM_PREFIX_PER_KEY is set to " << rpk << "\n";
+      return 1;
+    }
+  }
+
+  if (const char *pl = std::getenv("KVRGW_PREFIX_LEN")) {
+    if (pl[0] == '\0') [[unlikely]] {
+      std::cerr << "ERROR: KVRGW_PREFIX_LEN cannot be empty\n";
+      return 1;
+    }
+    g_prefix_len = std::atoi(pl);
+    if (g_prefix_len < 0 || g_prefix_len > kKeyPrefixMaxLen) {
+      std::cerr << "ERROR: KVRGW_PREFIX_LEN must be between 0 and "
+                << kKeyPrefixMaxLen << ", got: '" << pl << "'\n";
+      return 1;
+    }
+    if (!g_random_prefix_per_key) {
+      fill_buffer_random(std::span<char>(g_key_prefix, static_cast<size_t>(g_prefix_len)),
+                         static_cast<size_t>(g_prefix_len));
+      g_key_prefix[g_prefix_len] = '\0';
+    }
+  }
+  else {
+    const char *default_prefix = "perf";
+    size_t default_prefix_len = strlen(default_prefix);
+    assert(default_prefix_len < sizeof(g_key_prefix));
+    strncpy(g_key_prefix, default_prefix, sizeof(g_key_prefix));
+    g_prefix_len = default_prefix_len;
+  }
+
+  return 0;
+}
+
+//--------------------------------------------------------------------------------
+static int process_suffix()
+{
+  if (const char *sl = std::getenv("KVRGW_SUFFIX_LEN")) {
+    if (sl[0] == '\0') [[unlikely]] {
+      std::cerr << "ERROR: KVRGW_SUFFIX_LEN cannot be empty\n";
+      return 1;
+    }
+
+    g_suffix_len = std::atoi(sl);
+    if (g_suffix_len < 0 || g_suffix_len > kKeyPrefixMaxLen) {
+      std::cerr << "ERROR: KVRGW_SUFFIX_LEN must be between 0 and "
+                << kKeyPrefixMaxLen << ", got: '" << sl << "'\n";
+      return 1;
+    }
+  }
+
+  if (g_suffix_len > 0) {
+    fill_buffer_random(std::span<char>(g_key_suffix, static_cast<size_t>(g_suffix_len)),
+                       static_cast<size_t>(g_suffix_len));
+    g_key_suffix[g_suffix_len] = '\0';
+  }
+
+  if (g_prefix_len + g_suffix_len > kKeyPrefixMaxLen) {
+    std::cerr << "ERROR: prefix_len + suffix_len exceeds " << kKeyPrefixMaxLen << "\n";
+    return 1;
+  }
+
+  return 0;
+}
+
+//--------------------------------------------------------------------------------
 int run_perf_driver(KvRgwServiceImpl &service, KvStore &store,
                     const PerfConfig &config)
 {
   if (const char *iid = std::getenv("KVRGW_INSTANCE_ID")) {
     g_instance_id = std::atoi(iid);
   }
-  if (const char *kp = std::getenv("KVRGW_KEY_PREFIX")) {
-    if (std::strlen(kp) > kKeyPrefixMaxLen) {
-      std::cerr << "ERROR: KVRGW_KEY_PREFIX too long (" << std::strlen(kp)
-                << " > " << kKeyPrefixMaxLen << ")\n";
-      return 1;
-    }
-    std::strncpy(g_key_prefix, kp, kKeyPrefixMaxLen);
-    g_key_prefix[kKeyPrefixMaxLen] = '\0';
+
+  int ret = process_prefix();
+  if (ret != 0) [[unlikely]] {
+    return ret;
   }
-  if (const char *ks = std::getenv("KVRGW_KEY_SUFFIX")) {
-    if (std::strlen(ks) > kKeyPrefixMaxLen) {
-      std::cerr << "ERROR: KVRGW_KEY_SUFFIX too long (" << std::strlen(ks)
-                << " > " << kKeyPrefixMaxLen << ")\n";
-      return 1;
-    }
-    std::strncpy(g_key_suffix, ks, kKeyPrefixMaxLen);
-    g_key_suffix[kKeyPrefixMaxLen] = '\0';
+
+  ret = process_suffix();
+  if (ret != 0) [[unlikely]] {
+    return ret;
   }
-  if (std::strlen(g_key_prefix) + std::strlen(g_key_suffix) >
-      kKeyPrefixMaxLen) {
-    std::cerr << "ERROR: prefix+suffix length exceeds " << kKeyPrefixMaxLen
-              << "\n";
-    return 1;
-  }
+
   if (!init_put_tags()) {
     return 1;
   }
+
+  if (!init_put_metadata()) {
+    return 1;
+  }
+
   g_metadata_file = std::getenv("KVRGW_METADATA_FILE");
+
   std::cout << "=== KV-RGW Perf Driver (interactive) ===\n";
   std::cout << "tenant=" << config.tenant_name
-            << " instance_id=" << g_instance_id << " prefix=" << g_key_prefix
+            << " instance_id=" << g_instance_id
+            << " prefix_len=" << g_prefix_len
+            << " suffix_len=" << g_suffix_len
+            << " random_prefix_per_key=" << (g_random_prefix_per_key ? "yes" : "no")
+            << " prefix=" << (g_random_prefix_per_key ? "<random_per_key>" : g_key_prefix)
             << " suffix=" << g_key_suffix << "\n";
   std::cout << "Commands: create-buckets, put, get, delete, "
                "delete-multi,\n"
@@ -2684,9 +2231,7 @@ int run_perf_driver(KvRgwServiceImpl &service, KvStore &store,
                "[--progress-sec=N]\n";
   std::cout
       << "         list-test [--blind] [--quiet] [--all-versions] "
-         "[--ryw-cache=enabled|disabled] [--max-pages=N] [--progress=N]\n";
-  std::cout << "         get-test producers=N consumers=M max_futures=K "
-               "[duration=N|count=N] [--all-versions] [--progress-sec=N]\n\n";
+         "[--ryw-cache=enabled|disabled] [--max-pages=N] [--progress=N]\n\n";
 
   tenant_id_t tenant_id = 0;
   {
@@ -2743,12 +2288,6 @@ int run_perf_driver(KvRgwServiceImpl &service, KvStore &store,
     }
     else if (cmd == "get") {
       cmd_get(service, tenant_id, config.tenant_name, params);
-    }
-    else if (cmd == "get-test") {
-      if (rest.find("duration=") == std::string::npos) {
-        params.duration = 0;
-      }
-      cmd_get_test(service, tenant_id, params, rest);
     }
     else if (cmd == "delete") {
       cmd_delete(service, tenant_id, config.tenant_name, params);

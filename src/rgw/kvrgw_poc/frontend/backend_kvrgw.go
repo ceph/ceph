@@ -57,7 +57,7 @@ func (b *KvRgwBackend) resolveTenantID(name string) (uint32, int32) {
 	if ec == kvrgwc.ErrOK {
 		return id, ec
 	}
-	if ec != kvrgwc.ErrBucketAlreadyExists {
+	if ec != kvrgwc.ErrTenantAlreadyExists {
 		return 0, ec
 	}
 	exists, rid, rec := b.handle.ResolveTenant(name)
@@ -67,16 +67,16 @@ func (b *KvRgwBackend) resolveTenantID(name string) (uint32, int32) {
 	if !exists {
 		return 0, kvrgwc.ErrNoSuchTenant
 	}
-	return rid, kvrgwc.ErrBucketAlreadyExists
+	return rid, ec
 }
 
 func (b *KvRgwBackend) EnsureTenant(ctx context.Context) {
 	id, ec := b.resolveTenantID(b.tenant)
-	if ec != kvrgwc.ErrOK && ec != kvrgwc.ErrBucketAlreadyExists {
+	if ec != kvrgwc.ErrOK && ec != kvrgwc.ErrTenantAlreadyExists {
 		log.Printf("WARNING: AddTenant(%q) failed: error_code=%d", b.tenant, ec)
 		return
 	}
-	if ec == kvrgwc.ErrBucketAlreadyExists {
+	if ec == kvrgwc.ErrTenantAlreadyExists {
 		log.Printf("tenant %q already exists", b.tenant)
 	}
 	b.setTenantID(id)
@@ -87,7 +87,7 @@ func (b *KvRgwBackend) EnsureTenant(ctx context.Context) {
 
 func (b *KvRgwBackend) AddTenant(ctx context.Context, tenantName string) (uint32, error) {
 	id, ec := b.resolveTenantID(tenantName)
-	if ec != kvrgwc.ErrOK && ec != kvrgwc.ErrBucketAlreadyExists {
+	if ec != kvrgwc.ErrOK && ec != kvrgwc.ErrTenantAlreadyExists {
 		return 0, mapErrorCode(ec)
 	}
 	if tenantName == b.tenant {
@@ -125,7 +125,7 @@ func (b *KvRgwBackend) ListBuckets(ctx context.Context, input s3response.ListBuc
 }
 
 func (b *KvRgwBackend) HeadBucket(ctx context.Context, input *s3.HeadBucketInput) (*s3.HeadBucketOutput, error) {
-	exists, _, ec := b.handle.BucketExists(b.cachedTenantID(), deref(input.Bucket))
+	exists, ec := b.handle.BucketExists(b.cachedTenantID(), deref(input.Bucket))
 	if err := mapErrorCode(ec); err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (b *KvRgwBackend) DeleteBucketPolicy(ctx context.Context, bucket string) er
 }
 
 func (b *KvRgwBackend) GetBucketAcl(ctx context.Context, input *s3.GetBucketAclInput) ([]byte, error) {
-	exists, _, ec := b.handle.BucketExistsCached(b.cachedTenantID(), deref(input.Bucket))
+	exists, ec := b.handle.BucketExistsCached(b.cachedTenantID(), deref(input.Bucket))
 	if err := mapErrorCode(ec); err != nil {
 		return nil, err
 	}

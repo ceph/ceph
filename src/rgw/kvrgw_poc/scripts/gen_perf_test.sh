@@ -147,6 +147,8 @@ suffix_len="0"
 tag_count="0"
 tag_name_base=""
 tag_data_size=""
+metadata_count="0"
+metadata_size=""
 if [[ "$workload" == "put" || "$workload" == "put-overwrite" ]]; then
   prefix_len=$(require_int_positive "prefix_len")
   if (( prefix_len < 1 || prefix_len > 768 )); then
@@ -165,6 +167,12 @@ if [[ "$workload" == "put" || "$workload" == "put-overwrite" ]]; then
   if (( prefix_len + suffix_len > 768 )); then
     echo "ERROR: prefix_len + suffix_len must be <= 768, got ${prefix_len}+${suffix_len}" >&2; exit 1
   fi
+  random_prefix_per_key=$(get_field "random_prefix_per_key")
+  if [[ "$random_prefix_per_key" == "yes" || "$random_prefix_per_key" == "true" || "$random_prefix_per_key" == "1" ]]; then
+    random_prefix_per_key="yes"
+  else
+    random_prefix_per_key="no"
+  fi
   tag_count=$(get_field "tag_count")
   if [[ -z "$tag_count" ]]; then
     tag_count=0
@@ -180,6 +188,22 @@ if [[ "$workload" == "put" || "$workload" == "put-overwrite" ]]; then
     tag_data_size=$(require_int_positive "tag_data_size")
     if (( tag_data_size < 1 || tag_data_size > 256 )); then
       echo "ERROR: 'tag_data_size' must be in 1..256, got '${tag_data_size}'" >&2; exit 1
+    fi
+  fi
+  metadata_count=$(get_field "metadata_count")
+  if [[ -z "$metadata_count" ]]; then
+    metadata_count=0
+  fi
+  if ! [[ "$metadata_count" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: 'metadata_count' must be an integer, got '${metadata_count}'" >&2; exit 1
+  fi
+  if (( metadata_count < 0 || metadata_count > 160 )); then
+    echo "ERROR: 'metadata_count' must be in 0..160, got '${metadata_count}'" >&2; exit 1
+  fi
+  if (( metadata_count > 0 )); then
+    metadata_size=$(require_int_positive "metadata_size")
+    if (( metadata_size < 1 || metadata_size > 2048 )); then
+      echo "ERROR: 'metadata_size' must be in 1..2048, got '${metadata_size}'" >&2; exit 1
     fi
   fi
 fi
@@ -258,12 +282,21 @@ if [[ "$workload" == "put" || "$workload" == "put-overwrite" ]]; then
 cat <<EOF
 | prefix_len | ${prefix_len} |
 | suffix_len | ${suffix_len} |
+| random_prefix_per_key | ${random_prefix_per_key} |
 | tag_count | ${tag_count} |
 EOF
   if (( tag_count > 0 )); then
 cat <<EOF
 | tag_name_base | ${tag_name_base} |
 | tag_data_size | ${tag_data_size} |
+EOF
+  fi
+cat <<EOF
+| metadata_count | ${metadata_count} |
+EOF
+  if (( metadata_count > 0 )); then
+cat <<EOF
+| metadata_size | ${metadata_size} |
 EOF
   fi
 fi

@@ -21,6 +21,8 @@
 #include "error_codes.hpp"
 #include "gc_value.hpp"
 #include "keys.hpp"
+#include "kv_store.hpp"
+#include "l_keys.hpp"
 #include "object_value.hpp"
 #include "ref_count.hpp"
 #include "tenant_value.hpp"
@@ -100,26 +102,10 @@ bool starts_with(std::string_view value, std::string_view prefix)
          value.substr(0, prefix.size()) == prefix;
 }
 
-std::optional<uint64_t> read_counter_le(const char *data, size_t len)
-{
-  if (len != sizeof(uint64_t)) {
-    return std::nullopt;
-  }
-  uint64_t val = 0;
-  std::memcpy(&val, data, sizeof(val));
-  return val;
-}
-
-void write_counter_le(uint64_t val, KvTransaction &tr, std::string_view key)
-{
-  std::string buf(sizeof(uint64_t), '\0');
-  std::memcpy(buf.data(), &val, sizeof(val));
-  tr.kv_put(key, buf);
-}
-
+//--------------------------------------------------------------------------------
 bool is_valid_bucket_name(std::string_view name)
 {
-  if (name.size() < 3 || name.size() > 63) {
+  if (name.size() < AWS_MinBucketNameLen || name.size() > AWS_MaxBucketNameLen) {
     return false;
   }
   for (size_t i = 0; i < name.size(); ++i) {
@@ -173,6 +159,7 @@ bool is_valid_bucket_name(std::string_view name)
 
 } // namespace
 
+//--------------------------------------------------------------------------------
 bool write_object_value(OValueBuf &buf, const ObjectValue &value)
 {
   ObjectValueHeader wire = value.hdr;
@@ -191,9 +178,7 @@ bool write_object_value(OValueBuf &buf, const ObjectValue &value)
     }
   }
   if (value.hdr.chunk.type == CHUNK_CHILD_D_REF) {
-    uint8_t bid_be[sizeof(bucket_id_t)];
-    value.chunk_data_bucket_id.serialize(bid_be);
-    if (!buf.append(bid_be, sizeof(bid_be))) {
+    if (!buf.append(value.chunk_data_bucket_id.view())) {
       return false;
     }
     if (!buf.append(value.chunk_data_ref_tag.view())) {
@@ -1241,124 +1226,61 @@ KvRgwServiceImpl::resolve_tenant_id(std::string_view tenant_name)
   return std::optional<tenant_id_t>(tenant_value->tenant_id);
 }
 
-//--------------------------------------------------------------------------------
-KvrgwErrorCode
-KvRgwServiceImpl::tenant_id_for_name(const std::string &tenant_name,
-                                     tenant_id_t *tenant_id)
-{
-  auto resolved = resolve_tenant_id(tenant_name);
-  if (!resolved) {
-    return fdb_to_error(resolved.error());
-  }
-  if (*resolved) {
-    *tenant_id = **resolved;
-    return KVRGW_ERR_OK;
-  }
-
-  tenant_id_t created = 0;
-  const auto ec = add_tenant(tenant_name, &created);
-  if (ec == KVRGW_ERR_OK) {
-    *tenant_id = created;
-    return KVRGW_ERR_OK;
-  }
-  if (ec == KVRGW_ERR_BUCKET_ALREADY_EXISTS) {
-    resolved = resolve_tenant_id(tenant_name);
-    if (!resolved) {
-      return fdb_to_error(resolved.error());
-    }
-    if (*resolved) {
-      *tenant_id = **resolved;
-      return KVRGW_ERR_OK;
-    }
-  }
-  return ec;
-}
-
 //---------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::add_tenant(std::string_view tenant_name,
                                             tenant_id_t *out_id)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kOther);
-  constexpr int kMaxRetries = 3;
+  constexpr int kMaxRetries = 10;
   if (tenant_name.empty()) {
     return KVRGW_ERR_INVALID_ARGUMENT;
   }
 
-  // generate key to the tenant entry
+  auto resolved = resolve_tenant_id(tenant_name);
+  if (!resolved) {
+    return fdb_to_error(resolved.error());
+  }
+  if (*resolved) {
+    return KVRGW_ERR_TENANT_ALREADY_EXISTS;
+  }
+
+  uint64_t tenant_num = 0;
+  auto ec = LKeyNumericCounter::allocate(store_, kLocalCounterTenantId, tenant_num);
+  if (ec != KVRGW_ERR_OK) {
+    return ec;
+  }
+  if (tenant_num > std::numeric_limits<uint32_t>::max()) {
+    return KVRGW_ERR_INTERNAL;
+  }
+
+  const tenant_id_t tenant_id = static_cast<tenant_id_t>(tenant_num);
   const auto tenant_key = make_tenant_key(tenant_name);
 
-  // start txn
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
-    auto tr_result = store_.begin_transaction();
-    if (!tr_result) {
-      auto ec = fdb_to_error(tr_result.error());
+    auto tr_res = store_.begin_transaction();
+    if (!tr_res) {
+      auto ec = fdb_to_error(tr_res.error());
       if (is_retriable(ec)) {
-        // A retriable FDB error poisons that txn -> restart a fresh txn
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
     }
-    auto &tr = *tr_result;
-
-    // block on tenant-entry KV
-    auto existing = tr->kv_get(tenant_key.view());
-    if (!existing) {
-      // failure
-      auto ec = fdb_to_error(existing.error());
-      if (is_retriable(ec)) {
-        // A retriable FDB error poisons that txn -> restart a fresh txn
-        continue;
-      }
-      return ec;
-    }
-
-    if (*existing) {
-      // tenant-already exist -> abort
-      return KVRGW_ERR_BUCKET_ALREADY_EXISTS;
-    }
-
-    // generate key to the tenant-assigned-counter
-    const auto counter_key =
-        make_l_key(kLocalTypeNumeric, kLocalCounterTenantId);
-    auto counter_val = tr->kv_get(counter_key.view());
-    if (!counter_val) {
-      // failure
-      auto ec = fdb_to_error(counter_val.error());
-      if (is_retriable(ec)) {
-        // A retriable FDB error poisons that txn -> restart a fresh txn
-        continue;
-      }
-      return ec;
-    }
-
-    uint64_t tenant_num = 1;
-    if (*counter_val) {
-      auto cur =
-          read_counter_le((*counter_val)->data(), (*counter_val)->size());
-      if (!cur) {
-        return KVRGW_ERR_CORRUPT_VALUE;
-      }
-      tenant_num = *cur + 1;
-    }
-    if (tenant_num > std::numeric_limits<uint32_t>::max()) {
-      return KVRGW_ERR_INTERNAL;
-    }
-    write_counter_le(tenant_num, *tr, counter_key.view());
-    const tenant_id_t tenant_id = static_cast<tenant_id_t>(tenant_num);
+    auto &tr = *tr_res;
     tr->kv_put(tenant_key.view(), make_tenant_value(tenant_id, now_unix()));
-
     auto rc = tr->commit();
     if (rc) {
       put_tenant_cache(tenant_name, tenant_id);
-      *out_id = tenant_id;
+      if (out_id) {
+        *out_id = tenant_id;
+      }
       return KVRGW_ERR_OK;
     }
     auto commit_ec = fdb_to_error(rc.error());
-    if (is_retriable(commit_ec)) {
-      // A retriable FDB error poisons that txn -> restart a fresh txn
-      continue;
+    if (!is_retriable(commit_ec)) {
+      return commit_ec;
     }
-    return commit_ec;
+    sleep_for_msec(10 * (attempt + 1));
   }
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
@@ -1952,86 +1874,51 @@ KvrgwErrorCode KvRgwServiceImpl::create_bucket(tenant_id_t tenant_id,
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kCreateBucket);
   ops_stats_.inc(OpType::kCreateBucket);
-  constexpr int kMaxRetries = 3;
   if (!is_valid_bucket_name(bucket_name)) {
     return KVRGW_ERR_INVALID_BUCKET_NAME;
   }
-  // generate key to the bucket entry
+
+  auto state = read_bucket_state(tenant_id, std::string(bucket_name));
+  if (!state) {
+    return fdb_to_error(state.error());
+  }
+  if (state->has_value()) {
+    return KVRGW_ERR_OK;
+  }
+
+  uint64_t bucket_num = 0;
+  auto ec = LKeyNumericCounter::allocate(store_, kLocalCounterBucketId, bucket_num);
+  if (ec != KVRGW_ERR_OK) {
+    return ec;
+  }
+
+  const bucket_id_t bucket_id = bucket_id_t::from_counter(bucket_num);
   KeyBuf bucket_key;
   make_bucket_key(tenant_id, bucket_name, bucket_key);
 
-  // start txn
+  constexpr int kMaxRetries = 10;
   for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
-    auto tr_result = store_.begin_transaction();
-    if (!tr_result) {
-      auto ec = fdb_to_error(tr_result.error());
+    auto tr_res = store_.begin_transaction();
+    if (!tr_res) {
+      auto ec = fdb_to_error(tr_res.error());
       if (is_retriable(ec)) {
+        sleep_for_msec(10 * (attempt + 1));
         continue;
       }
       return ec;
     }
-    auto &tr = *tr_result;
-
-    // generate key to the bucket-assigned-counter
-    const auto counter_key =
-        make_l_key(kLocalTypeNumeric, kLocalCounterBucketId);
-    // async get() in parallel of both KV
-    auto f_existing = tr->kv_async_get(bucket_key.view());
-    auto f_counter = tr->kv_async_get(counter_key.view());
-
-    // block on bucket-entry KV
-    auto existing = tr->kv_wait_get(f_existing);
-    if (!existing) {
-      // failure
-      auto ec = fdb_to_error(existing.error());
-      if (is_retriable(ec)) {
-        // A retriable FDB error poisons that txn -> restart a fresh txn
-        continue;
-      }
-      return ec;
-    }
-
-    if (*existing) {
-      // bucket-already exist -> abort
-      return KVRGW_ERR_OK;
-    }
-
-    // block on bucket-assigned-counter
-    auto counter_val = tr->kv_wait_get(f_counter);
-    if (!counter_val) {
-      // failure
-      auto ec = fdb_to_error(counter_val.error());
-      if (is_retriable(ec)) {
-        // A retriable FDB error poisons that txn -> restart a fresh txn
-        continue;
-      }
-      return ec;
-    }
-
-    uint64_t bucket_num = 1;
-    if (*counter_val) {
-      auto cur =
-          read_counter_le((*counter_val)->data(), (*counter_val)->size());
-      if (!cur) {
-        return KVRGW_ERR_CORRUPT_VALUE;
-      }
-      bucket_num = *cur + 1;
-    }
-    write_counter_le(bucket_num, *tr, counter_key.view());
-    const bucket_id_t bucket_id = static_cast<bucket_id_t>(bucket_num);
+    auto &tr = *tr_res;
     tr->kv_put(bucket_key.view(), make_bucket_value(bucket_id, now_unix()));
-
     auto rc = tr->commit();
     if (rc) {
       put_bucket_cache(tenant_id, std::string(bucket_name), bucket_id);
       return KVRGW_ERR_OK;
     }
-    auto ec = fdb_to_error(rc.error());
-    if (is_retriable(ec)) {
-      // A retriable FDB error poisons that txn -> restart a fresh txn
-      continue;
+    auto commit_ec = fdb_to_error(rc.error());
+    if (!is_retriable(commit_ec)) {
+      return commit_ec;
     }
-    return ec;
+    sleep_for_msec(10 * (attempt + 1));
   }
   return KVRGW_ERR_MAX_RETRIES_EXCEEDED;
 }
@@ -2039,8 +1926,7 @@ KvrgwErrorCode KvRgwServiceImpl::create_bucket(tenant_id_t tenant_id,
 //---------------------------------------------------------------------------------
 KvrgwErrorCode KvRgwServiceImpl::bucket_exists(tenant_id_t tenant_id,
                                                std::string_view bucket_name,
-                                               bool *out_exists,
-                                               bucket_id_t *out_id)
+                                               bool *out_exists)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kBucketExists);
   ops_stats_.inc(OpType::kBucketExists);
@@ -2048,13 +1934,7 @@ KvrgwErrorCode KvRgwServiceImpl::bucket_exists(tenant_id_t tenant_id,
   if (!state) {
     return fdb_to_error(state.error());
   }
-  if (*state) {
-    *out_exists = true;
-    *out_id = (*state)->bucket_id;
-  }
-  else {
-    *out_exists = false;
-  }
+  *out_exists = state->has_value();
   return KVRGW_ERR_OK;
 }
 
@@ -2062,7 +1942,7 @@ KvrgwErrorCode KvRgwServiceImpl::bucket_exists(tenant_id_t tenant_id,
 KvrgwErrorCode
 KvRgwServiceImpl::bucket_exists_cached(tenant_id_t tenant_id,
                                        std::string_view bucket_name,
-                                       bool *out_exists, bucket_id_t *out_id)
+                                       bool *out_exists)
 {
   ScopedRequestLatency _lat(latency_stats_, OpType::kBucketExists);
   ops_stats_.inc(OpType::kBucketExists);
@@ -2070,13 +1950,7 @@ KvRgwServiceImpl::bucket_exists_cached(tenant_id_t tenant_id,
   if (!state) {
     return fdb_to_error(state.error());
   }
-  if (*state) {
-    *out_exists = true;
-    *out_id = (*state)->bucket_id;
-  }
-  else {
-    *out_exists = false;
-  }
+  *out_exists = state->has_value();
   return KVRGW_ERR_OK;
 }
 
@@ -3343,9 +3217,7 @@ KvrgwErrorCode KvRgwServiceImpl::delete_bucket(tenant_id_t tenant_id,
 
     // scan versions - must be empty
     KeyBuf v_prefix_buf;
-    uint8_t bid_be[sizeof(bucket_id_t)];
-    bucket_id.serialize(bid_be);
-    KeyHeaderS hdr('S', kShardCount, kShardId, bid_be, kCategoryVersion);
+    KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id.view(), kCategoryVersion);
 
     v_prefix_buf.set_header(hdr);
     const auto v_end = prefix_range_end(v_prefix_buf.view());

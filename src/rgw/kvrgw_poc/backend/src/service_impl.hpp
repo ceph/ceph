@@ -213,9 +213,9 @@ class KvRgwServiceImpl final {
   KvrgwErrorCode add_tenant(std::string_view tenant_name, tenant_id_t* out_id);
   KvrgwErrorCode resolve_tenant(std::string_view tenant_name, bool* out_exists, tenant_id_t* out_id);
   KvrgwErrorCode bucket_exists(tenant_id_t tenant_id, std::string_view bucket_name,
-                               bool* out_exists, bucket_id_t* out_id);
+                               bool* out_exists);
   KvrgwErrorCode bucket_exists_cached(tenant_id_t tenant_id, std::string_view bucket_name,
-                               bool* out_exists, bucket_id_t* out_id);
+                               bool* out_exists);
   KvrgwErrorCode put_bucket_versioning(tenant_id_t tenant_id,
                                        std::string_view bucket_name,
                                        VersioningState state);
@@ -527,7 +527,6 @@ class KvRgwServiceImpl final {
 
   void put_tenant_cache(std::string_view tenant_name, tenant_id_t tenant_id);
   void invalidate_tenant_cache(const std::string& tenant_name);
-  KvrgwErrorCode tenant_id_for_name(const std::string& tenant_name, tenant_id_t* tenant_id);
 
   KvrgwErrorCode resolve_bucket_error(tenant_id_t tenant_id,
                                       const std::string &bucket_name,

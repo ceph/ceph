@@ -32,6 +32,7 @@ using ::kvrgw::v1::KVRGW_ERR_INVALID_ARGUMENT;
 using ::kvrgw::v1::KVRGW_ERR_INVALID_BUCKET_NAME;
 using ::kvrgw::v1::KVRGW_ERR_NO_SUCH_VERSION;
 using ::kvrgw::v1::KVRGW_ERR_NO_SUCH_TENANT;
+using ::kvrgw::v1::KVRGW_ERR_TENANT_ALREADY_EXISTS;
 using ::kvrgw::v1::KVRGW_ERR_INVALID_RANGE;
 using ::kvrgw::v1::KVRGW_ERR_INVALID_REQUEST;
 using ::kvrgw::v1::KVRGW_ERR_INVALID_TAG;

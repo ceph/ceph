@@ -118,11 +118,23 @@ struct GcEntry {
   kvrgw::RefTag ref_tag;
   uint8_t size_tier{};
   std::optional<uint64_t> blob_bytes;
-  std::string bucket_id_hex;
+  kvrgw::bucket_id_t bucket_id;
   uint16_t shard_count{};
   uint16_t shard_id{};
   bool size_mismatch{};
 };
+
+std::string to_hex(std::string_view sv)
+{
+  static constexpr char hex_digits[] = "0123456789abcdef";
+  std::string output;
+  output.reserve(sv.length() * 2);
+  for (unsigned char c : sv) {
+    output.push_back(hex_digits[c >> 4]);
+    output.push_back(hex_digits[c & 0x0F]);
+  }
+  return output;
+}
 
 bool tier_overlaps_range(uint8_t tier, uint64_t min_bytes, uint64_t max_bytes)
 {
@@ -167,7 +179,7 @@ std::vector<GcEntry> scan_gc_entries(kvrgw::KvStore &store,
     GcEntry entry;
     entry.size_tier = parts->size_tier;
     entry.ref_tag = parts->ref_tag;
-    entry.bucket_id_hex = parts->bucket_id.to_hex();
+    entry.bucket_id = parts->bucket_id;
     entry.shard_count = parts->shard_count;
     entry.shard_id = parts->shard_id;
 
@@ -554,7 +566,7 @@ int cmd_list(kvrgw::KvStore &store, kvrgw::DataStore &data_store, int limit)
     else {
       std::cout << '-';
     }
-    std::cout << '\t' << entry.bucket_id_hex << '\t' << entry.shard_count
+    std::cout << '\t' << to_hex(entry.bucket_id.view()) << '\t' << entry.shard_count
               << '\t' << entry.shard_id << '\n';
   }
   std::cout << "listed=" << entries.size() << '\n';
@@ -584,7 +596,7 @@ int cmd_list_by_size(kvrgw::KvStore &store, kvrgw::DataStore &data_store,
     else {
       std::cout << '-';
     }
-    std::cout << '\t' << entry.bucket_id_hex << '\t' << entry.shard_count
+    std::cout << '\t' << to_hex(entry.bucket_id.view()) << '\t' << entry.shard_count
               << '\t' << entry.shard_id << '\n';
     ++listed;
     if (limit > 0 && listed >= limit) {

@@ -257,12 +257,12 @@ inline bool ovh_chunk_ref(std::string_view raw, const ObjectValueHeader* h,
 {
   const size_t base = sizeof(ObjectValueHeader) + h->content_type_len;
   if (h->chunk.type == CHUNK_CHILD_D_REF) {
-    const size_t need = base + sizeof(bucket_id_t) + kRefTagSize;
+    const size_t need = base + kBucketIdSize + kRefTagSize;
     if (raw.size() < need) {
       return false;
     }
-    out.bucket_id = bucket_id_t::deserialize(raw.data() + base);
-    out.ref_tag = raw.substr(base + sizeof(bucket_id_t), kRefTagSize);
+    out.bucket_id.load(raw.data() + base);
+    out.ref_tag = raw.substr(base + kBucketIdSize, kRefTagSize);
     return true;
   }
   if (h->chunk.type == CHUNK_STORAGE_REF) {
@@ -311,7 +311,8 @@ inline int64_t bvh_created_at_unix(const BucketValueHeader* h)
 }
 inline bucket_id_t bvh_bucket_id(const BucketValueHeader* h)
 {
-  return bucket_id_t{be64toh(h->bucket_id.raw())};
+  // bucket_id is stored BE — return directly
+  return h->bucket_id;
 }
 inline uint8_t bvh_access_flags(const BucketValueHeader* h)
 {

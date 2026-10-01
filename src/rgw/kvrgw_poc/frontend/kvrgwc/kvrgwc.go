@@ -26,6 +26,7 @@ const (
 	ErrInvalidBucketName   = int32(C.KVRGW_ERR_INVALID_BUCKET_NAME)
 	ErrNoSuchVersion       = int32(C.KVRGW_ERR_NO_SUCH_VERSION)
 	ErrNoSuchTenant        = int32(C.KVRGW_ERR_NO_SUCH_TENANT)
+	ErrTenantAlreadyExists = int32(C.KVRGW_ERR_TENANT_ALREADY_EXISTS)
 	ErrInvalidRange        = int32(C.KVRGW_ERR_INVALID_RANGE)
 	ErrInvalidRequest      = int32(C.KVRGW_ERR_INVALID_REQUEST)
 	ErrInvalidTag          = int32(C.KVRGW_ERR_INVALID_TAG)
@@ -323,20 +324,18 @@ func (h *Handle) DeleteBucket(tenantID uint32, bucket string) int32 {
 	return int32(C.kvrgw_delete_bucket(h.h, C.uint32_t(tenantID), p, n))
 }
 
-func (h *Handle) BucketExists(tenantID uint32, bucket string) (exists bool, id uint64, errCode int32) {
+func (h *Handle) BucketExists(tenantID uint32, bucket string) (exists bool, errCode int32) {
 	p, n := cstr(bucket)
 	var ex C.int
-	var bid C.uint64_t
-	ec := C.kvrgw_bucket_exists(h.h, C.uint32_t(tenantID), p, n, &ex, &bid)
-	return ex != 0, uint64(bid), int32(ec)
+	ec := C.kvrgw_bucket_exists(h.h, C.uint32_t(tenantID), p, n, &ex)
+	return ex != 0, int32(ec)
 }
 
-func (h *Handle) BucketExistsCached(tenantID uint32, bucket string) (exists bool, id uint64, errCode int32) {
+func (h *Handle) BucketExistsCached(tenantID uint32, bucket string) (exists bool, errCode int32) {
 	p, n := cstr(bucket)
 	var ex C.int
-	var bid C.uint64_t
-	ec := C.kvrgw_bucket_exists_cached(h.h, C.uint32_t(tenantID), p, n, &ex, &bid)
-	return ex != 0, uint64(bid), int32(ec)
+	ec := C.kvrgw_bucket_exists_cached(h.h, C.uint32_t(tenantID), p, n, &ex)
+	return ex != 0, int32(ec)
 }
 
 func (h *Handle) PutBucketVersioning(tenantID uint32, bucket string, state uint8) int32 {

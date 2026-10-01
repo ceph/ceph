@@ -45,6 +45,8 @@ const char *kvrgw_strerror(KvrgwErrorCode code)
     return "No such version";
   case KVRGW_ERR_NO_SUCH_TENANT:
     return "No such tenant";
+  case KVRGW_ERR_TENANT_ALREADY_EXISTS:
+    return "Tenant already exists";
   case KVRGW_ERR_FDB_CONFLICT:
     return "FDB transaction conflict";
   case KVRGW_ERR_FDB_PROCESS_BEHIND:

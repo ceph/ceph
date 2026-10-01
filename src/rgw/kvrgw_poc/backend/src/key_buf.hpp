@@ -67,12 +67,12 @@ struct KeyHeaderS {
   char ns;
   uint16_t shard_count;
   uint16_t shard_id;
-  uint8_t bucket_id[sizeof(bucket_id_t)];
+  uint8_t bucket_id[kBucketIdSize];
   char cat;
 
-  KeyHeaderS(char ns_, uint16_t sc, uint16_t si, const void* bid, char cat_)
+  KeyHeaderS(char ns_, uint16_t sc, uint16_t si, std::string_view bid, char cat_)
       : ns(ns_), shard_count(htons(sc)), shard_id(htons(si)), cat(cat_) {
-    std::memcpy(bucket_id, bid, sizeof(bucket_id));
+    std::memcpy(bucket_id, static_cast<const void*>(bid.data()), kBucketIdSize);
   }
 };
 
@@ -81,12 +81,12 @@ struct KeyHeaderG {
   uint8_t size_tier;
   uint16_t shard_count;
   uint16_t shard_id;
-  uint8_t bucket_id[sizeof(bucket_id_t)];
+  uint8_t bucket_id[kBucketIdSize];
   char cat;
 
-  KeyHeaderG(uint8_t tier, uint16_t sc, uint16_t si, const void* bid, char cat_)
+  KeyHeaderG(uint8_t tier, uint16_t sc, uint16_t si, std::string_view bid, char cat_)
       : ns('G'), size_tier(tier), shard_count(htons(sc)), shard_id(htons(si)), cat(cat_) {
-    std::memcpy(bucket_id, bid, sizeof(bucket_id));
+    std::memcpy(bucket_id, static_cast<const void*>(bid.data()), kBucketIdSize);
   }
 };
 
@@ -94,17 +94,17 @@ struct KeyHeaderD {
   char ns;
   uint16_t shard_count;
   uint16_t shard_id;
-  uint8_t bucket_id[sizeof(bucket_id_t)];
+  uint8_t bucket_id[kBucketIdSize];
   uint8_t size_tier;
   uint8_t hash_prefix;
   uint32_t mtime;
   RefTag ref_tag;
 
-  KeyHeaderD(uint16_t sc, uint16_t si, const void* bid,
+  KeyHeaderD(uint16_t sc, uint16_t si, std::string_view bid,
              uint8_t st, uint8_t hp, uint32_t mt, const char* rt)
       : ns('D'), shard_count(htons(sc)), shard_id(htons(si)),
         size_tier(st), hash_prefix(hp), mtime(htonl(mt)) {
-    std::memcpy(bucket_id, bid, sizeof(bucket_id));
+    std::memcpy(bucket_id, static_cast<const void*>(bid.data()), kBucketIdSize);
     ref_tag.load(rt);
   }
 };

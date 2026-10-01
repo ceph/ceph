@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "constants.hpp"
 #include "error_codes.hpp"
 #include "etag.hpp"
 
@@ -27,24 +28,34 @@ namespace kvrgw {
 
 using tenant_id_t = uint32_t;
 
+// Opaque 8-byte bucket identifier stored in network byte order (big-endian).
+// Created only via bucket_id_t::from_counter().
+// Never byte-swapped after creation.
 class __attribute__((packed)) bucket_id_t {
-  uint64_t val_{0};
+  uint8_t bytes_[kBucketIdSize]{};
 
  public:
   bucket_id_t() = default;
-  explicit bucket_id_t(uint64_t v) : val_(v) {}
-  uint64_t raw() const { return val_; }
 
-  void serialize(void* out) const;
-  static bucket_id_t deserialize(const void* src);
-  std::string to_hex() const;
+  // Populate from a raw wire-format byte buffer (e.g. during deserialization).
+  // src must point to at least kBucketIdSize bytes.
+  void load(const void* src);
 
-  friend std::ostream& operator<<(std::ostream& os, const bucket_id_t& v);
-  bool operator==(const bucket_id_t& o) const { return val_ == o.val_; }
-  bool operator!=(const bucket_id_t& o) const { return val_ != o.val_; }
+  // Returns a string_view over the raw BE bytes for use in key-building.
+  // Valid for the lifetime of this bucket_id_t.
+  std::string_view view() const;
+
+  bool operator==(const bucket_id_t& o) const;
+  bool operator!=(const bucket_id_t& o) const;
+
+ private:
+  // Factory: converts a host-format counter value to BE and stores it.
+  static bucket_id_t from_counter(uint64_t host_val);
+
+  friend class KvRgwServiceImpl;
 };
-static_assert(sizeof(bucket_id_t) == 8);
-inline const bucket_id_t kNullBucket{0x0};
+static_assert(sizeof(bucket_id_t) == kBucketIdSize);
+inline const bucket_id_t kNullBucket{};
 
 class __attribute__((packed)) cond_flags_t {
   uint8_t bits_{0};

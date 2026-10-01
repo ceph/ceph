@@ -100,15 +100,15 @@ def parse_fdb_value(raw: str) -> bytes:
         return bytes(out)
     raise RuntimeError(f"unexpected fdb get: {raw!r}")
 
-def fdb_get_u64_le(key: bytes) -> int:
-    """FDB ADD stores counter cells as little-endian uint64."""
+def fdb_get_u64_be(key: bytes) -> int:
+    """Counter cells are stored as big-endian uint64."""
     raw = fdb_exec(f"get {key_hex(key)}")
     val = parse_fdb_value(raw)
     if len(val) < 8:
-        val = val.ljust(8, b"\x00")
+        val = val.rjust(8, b"\x00")
     if len(val) != 8:
         raise RuntimeError(f"counter value not 8 bytes: {val!r}")
-    return struct.unpack("<Q", val)[0]
+    return struct.unpack(">Q", val)[0]
 
 def tenant_id_from_t_key() -> int:
     key = b"T" + tenant_name.encode("utf-8")
@@ -129,46 +129,46 @@ def bucket_id_from_b_key() -> int:
 tenant_id = tenant_id_from_t_key()
 tenant_counter_key = make_l_key("N", "tenant_id")
 assert tenant_counter_key[:3] == b"LNt", tenant_counter_key
-tenant_counter = fdb_get_u64_le(tenant_counter_key)
+tenant_counter = fdb_get_u64_be(tenant_counter_key)
 
 # Define color constants
 RED='\033[0;31m'
 GREEN = "\033[0;32m"
 NC = "\033[0m"  # No Color / Reset
 
-print(f"{GREEN}ok:{NC} L N tenant_id counter={tenant_counter} (T row tenant_id={tenant_id})")
+print(f"{GREEN}ok:{NC} L N tenant_id counter=0x{tenant_counter:016x} (T row tenant_id={tenant_id})")
 if tenant_counter < tenant_id:
-    raise SystemExit(f"{RED}FAIL:{NC} tenant counter {tenant_counter} < allocated tenant_id {tenant_id}")
+    raise SystemExit(f"{RED}FAIL:{NC} tenant counter 0x{tenant_counter:016x} < allocated tenant_id {tenant_id}")
 if tenant_counter != tenant_id:
-    print(f"note: tenant counter {tenant_counter} > tenant_id {tenant_id} (prior AddTenant runs)")
+    print(f"note: tenant counter 0x{tenant_counter:016x} > tenant_id {tenant_id} (prior AddTenant runs)")
 
 # --- L N rgw_id ---
 rgw_counter_key = make_l_key("N", "rgw_id")
-rgw_counter = fdb_get_u64_le(rgw_counter_key)
-print(f"{GREEN}ok:{NC} L N rgw_id counter={rgw_counter}")
+rgw_counter = fdb_get_u64_be(rgw_counter_key)
+print(f"{GREEN}ok:{NC} L N rgw_id counter=0x{rgw_counter:016x}")
 if rgw_counter < instances:
-    raise SystemExit(f"{RED}FAIL:{NC} rgw counter {rgw_counter} < instance count {instances}")
+    raise SystemExit(f"{RED}FAIL:{NC} rgw counter 0x{rgw_counter:016x} < instance count {instances}")
 if instances == 1 and rgw_id_env.isdigit() and int(rgw_id_env) != rgw_counter:
-    raise SystemExit(f"{RED}FAIL:{NC} rgw counter {rgw_counter} != RGW_ID {rgw_id_env}")
-print(f"{GREEN}ok:{NC} rgw counter {rgw_counter} >= instances {instances}")
+    raise SystemExit(f"{RED}FAIL:{NC} rgw counter 0x{rgw_counter:016x} != RGW_ID {rgw_id_env}")
+print(f"{GREEN}ok:{NC} rgw counter 0x{rgw_counter:016x} >= instances {instances}")
 
 # --- L N bucket_id (before/after CreateBucket) ---
 bucket_counter_key = make_l_key("N", "bucket_id")
-before = fdb_get_u64_le(bucket_counter_key)
-print(f"{GREEN}ok:{NC} L N bucket_id counter before mb={before}")
+before = fdb_get_u64_be(bucket_counter_key)
+print(f"{GREEN}ok:{NC} L N bucket_id counter before mb=0x{before:016x}")
 
 subprocess.check_call(
     ["aws", "--endpoint-url", endpoint, "s3", "mb", f"s3://{bucket_name}"],
     stdout=subprocess.DEVNULL,
 )
 
-after = fdb_get_u64_le(bucket_counter_key)
+after = fdb_get_u64_be(bucket_counter_key)
 allocated = bucket_id_from_b_key()
-print(f"{GREEN}ok:{NC} L N bucket_id counter after mb={after} (B row bucket_id={allocated})")
+print(f"{GREEN}ok:{NC} L N bucket_id counter after mb=0x{after:016x} (B row bucket_id=0x{allocated:016x})")
 if after != before + 1:
-    raise SystemExit(f"{RED}FAIL:{NC} bucket counter {before} -> {after}, expected {before + 1}")
+    raise SystemExit(f"{RED}FAIL:{NC} bucket counter 0x{before:016x} -> 0x{after:016x}, expected 0x{before+1:016x}")
 if after != allocated:
-    raise SystemExit(f"{RED}FAIL:{NC} bucket counter {after} != allocated bucket_id {allocated}")
+    raise SystemExit(f"{RED}FAIL:{NC} bucket counter 0x{after:016x} != allocated bucket_id 0x{allocated:016x}")
 
 subprocess.check_call(
     ["aws", "--endpoint-url", endpoint, "s3", "rb", f"s3://{bucket_name}"],

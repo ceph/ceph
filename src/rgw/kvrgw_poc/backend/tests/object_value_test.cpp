@@ -32,15 +32,13 @@ namespace {
 
 void test_bucket_value_endianness()
 {
-  kvrgw::bucket_id_t bucket_id(1);
-
   const int64_t timestamps[] = {0, 1, 1785926327, 2147483647};
   for (const int64_t ts : timestamps) {
-    const std::string encoded = kvrgw::make_bucket_value(bucket_id, ts);
+    const std::string encoded = kvrgw::make_bucket_value(kvrgw::kNullBucket, ts);
     assert(encoded.size() == 18);
     const auto parsed = kvrgw::parse_bucket_value(encoded);
     assert(parsed);
-    assert(parsed->bucket_id == bucket_id);
+    assert(parsed->bucket_id == kvrgw::kNullBucket);
     assert(parsed->created_at_unix == ts);
     assert(parsed->versioning_state == 0);
   }
@@ -96,15 +94,13 @@ void test_tenant_value_roundtrip()
 
 void test_bucket_value_versioning_state()
 {
-  kvrgw::bucket_id_t bucket_id(0x4200000000000000ULL);
-
   for (uint8_t vs = 0; vs <= 2; ++vs) {
     const std::string encoded = kvrgw::make_bucket_value(
-        bucket_id, 1700000000, 0, static_cast<kvrgw::VersioningState>(vs));
+        kvrgw::kNullBucket, 1700000000, 0, static_cast<kvrgw::VersioningState>(vs));
     assert(encoded.size() == 18);
     const auto parsed = kvrgw::parse_bucket_value(encoded);
     assert(parsed);
-    assert(parsed->bucket_id == bucket_id);
+    assert(parsed->bucket_id == kvrgw::kNullBucket);
     assert(parsed->versioning_state == vs);
   }
 }

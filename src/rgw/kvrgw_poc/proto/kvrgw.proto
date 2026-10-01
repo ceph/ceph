@@ -58,6 +58,9 @@ enum KvrgwErrorCode {
   // Object tag set is empty when a tagging header was present, or the tag set is invalid.
   KVRGW_ERR_INVALID_TAG = 112;
 
+  // The tenant name already exists.
+  KVRGW_ERR_TENANT_ALREADY_EXISTS = 113;
+
   // --- FDB retriable, definitely NOT committed (200-206) ---
   // Category: is_retriable_idempotent() = true
   // Safe to retry unconditionally — the transaction did NOT commit.

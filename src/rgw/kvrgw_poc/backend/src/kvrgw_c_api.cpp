@@ -344,7 +344,7 @@ kvrgw_err_t kvrgw_delete_bucket(KvRgwHandle *h, uint32_t tenant_id,
 
 kvrgw_err_t kvrgw_bucket_exists(KvRgwHandle *h, uint32_t tenant_id,
                                 const char *bucket, size_t bucket_len,
-                                int *out_exists, uint64_t *out_id)
+                                int *out_exists)
 {
   return abi_guard([&]() -> kvrgw_err_t {
     auto *s = svc(h);
@@ -352,20 +352,15 @@ kvrgw_err_t kvrgw_bucket_exists(KvRgwHandle *h, uint32_t tenant_id,
       return KVRGW_ERR_INVALID_ARGUMENT;
     }
     bool exists = false;
-    kvrgw::bucket_id_t bucket_id{};
-    const auto ec =
-        s->bucket_exists(tenant_id, sv(bucket, bucket_len), &exists, &bucket_id);
+    const auto ec = s->bucket_exists(tenant_id, sv(bucket, bucket_len), &exists);
     *out_exists = exists ? 1 : 0;
-    if (out_id != nullptr) {
-      *out_id = bucket_id.raw();
-    }
     return ec;
   });
 }
 
 kvrgw_err_t kvrgw_bucket_exists_cached(KvRgwHandle *h, uint32_t tenant_id,
                                        const char *bucket, size_t bucket_len,
-                                       int *out_exists, uint64_t *out_id)
+                                       int *out_exists)
 {
   return abi_guard([&]() -> kvrgw_err_t {
     auto *s = svc(h);
@@ -373,13 +368,8 @@ kvrgw_err_t kvrgw_bucket_exists_cached(KvRgwHandle *h, uint32_t tenant_id,
       return KVRGW_ERR_INVALID_ARGUMENT;
     }
     bool exists = false;
-    kvrgw::bucket_id_t bucket_id{};
-    const auto ec = s->bucket_exists_cached(tenant_id, sv(bucket, bucket_len),
-                                            &exists, &bucket_id);
+    const auto ec = s->bucket_exists_cached(tenant_id, sv(bucket, bucket_len), &exists);
     *out_exists = exists ? 1 : 0;
-    if (out_id != nullptr) {
-      *out_id = bucket_id.raw();
-    }
     return ec;
   });
 }

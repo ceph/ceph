@@ -82,18 +82,36 @@ KvrgwErrorCode GetCondition::encode(std::string_view if_match, uint32_t mtime_va
 }
 
 //--------------------------------------------------------------------------------
-std::string bucket_id_t::to_hex() const
+void bucket_id_t::load(const void* src)
 {
-  std::ostringstream out;
-  out << std::hex << std::setfill('0') << std::setw(2 * sizeof(val_)) << val_;
-  return out.str();
+  std::memcpy(bytes_, src, kBucketIdSize);
 }
 
 //--------------------------------------------------------------------------------
-std::ostream& operator<<(std::ostream& os, const bucket_id_t& v)
+std::string_view bucket_id_t::view() const
 {
-  os << v.val_;
-  return os;
+  return {reinterpret_cast<const char*>(bytes_), kBucketIdSize};
+}
+
+//--------------------------------------------------------------------------------
+bool bucket_id_t::operator==(const bucket_id_t& o) const
+{
+  return std::memcmp(bytes_, o.bytes_, kBucketIdSize) == 0;
+}
+
+//--------------------------------------------------------------------------------
+bool bucket_id_t::operator!=(const bucket_id_t& o) const
+{
+  return !(*this == o);
+}
+
+//--------------------------------------------------------------------------------
+bucket_id_t bucket_id_t::from_counter(uint64_t host_val)
+{
+  bucket_id_t id;
+  const uint64_t be = htobe64(host_val);
+  std::memcpy(id.bytes_, &be, kBucketIdSize);
+  return id;
 }
 
 //--------------------------------------------------------------------------------
@@ -156,21 +174,6 @@ version_id_t version_id_t::deserialize(const char *src)
   uint32_t be;
   std::memcpy(&be, src, sizeof(be));
   return version_id_t{be32toh(be)};
-}
-
-//--------------------------------------------------------------------------------
-void bucket_id_t::serialize(void* out) const
-{
-  uint64_t be = htobe64(val_);
-  std::memcpy(out, &be, sizeof(be));
-}
-
-//--------------------------------------------------------------------------------
-bucket_id_t bucket_id_t::deserialize(const void* src)
-{
-  uint64_t be;
-  std::memcpy(&be, src, sizeof(be));
-  return bucket_id_t{be64toh(be)};
 }
 
 //--------------------------------------------------------------------------------

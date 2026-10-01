@@ -45,6 +45,7 @@ set(KVRGW_LIB_SRCS
   src/kvrgw_runtime.cpp
   src/kvrgw_c_api.cpp
   src/kv_store.cpp
+  src/l_keys.cpp
   src/keys.cpp
   src/object_value.cpp
   src/tenant_value.cpp
@@ -122,7 +123,7 @@ target_include_directories(object_value_test PRIVATE
 target_link_libraries(object_value_test PRIVATE OpenSSL::Crypto kvrgw_pb "${FDB_LIB_DIR}/libfdb_c.so")
 target_compile_definitions(object_value_test PRIVATE FDB_API_VERSION=730)
 
-add_executable(l_key_test tests/l_key_test.cpp src/keys.cpp src/ref_tag.cpp src/typed_ids.cpp src/etag.cpp src/error_codes.cpp)
+add_executable(l_key_test tests/l_key_test.cpp src/keys.cpp src/l_keys.cpp src/kv_store.cpp src/ref_tag.cpp src/typed_ids.cpp src/etag.cpp src/error_codes.cpp)
 target_include_directories(l_key_test PRIVATE
   "${CMAKE_SOURCE_DIR}/src"
   "${GENERATED_DIR}"
@@ -138,6 +139,7 @@ target_link_libraries(data_store_test PRIVATE OpenSSL::Crypto)
 add_executable(kv_range_test
   tests/kv_range_test.cpp
   src/kv_store.cpp
+  src/l_keys.cpp
   src/keys.cpp
   src/object_value.cpp
   src/ref_tag.cpp
@@ -163,6 +165,7 @@ set_target_properties(kv_range_test PROPERTIES BUILD_RPATH "${FDB_LIB_DIR}")
 add_executable(gc_ctl
   tools/gc_ctl.cpp
   src/kv_store.cpp
+  src/l_keys.cpp
   src/keys.cpp
   src/data_store.cpp
   src/ref_tag.cpp
@@ -194,6 +197,7 @@ target_link_libraries(gc_config_state_test PRIVATE OpenSSL::Crypto)
 add_executable(fdb_error_test
   tests/fdb_error_test.cpp
   src/kv_store.cpp
+  src/l_keys.cpp
   src/keys.cpp
   src/ref_tag.cpp
   src/typed_ids.cpp

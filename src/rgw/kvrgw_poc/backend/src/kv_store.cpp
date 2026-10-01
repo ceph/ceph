@@ -17,11 +17,13 @@
 #include "constants.hpp"
 #include "error_codes.hpp"
 #include "keys.hpp"
+#include "l_keys.hpp"
 
 #include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cstring>
+#include <endian.h>
 
 namespace kvrgw {
 
@@ -216,50 +218,15 @@ KvStore::begin_transaction()
   return std::unique_ptr<KvTransaction>(new KvTransaction(*this, raw_tr));
 }
 
+//--------------------------------------------------------------------------------
 std::expected<uint32_t, KvrgwErrorCode> KvStore::allocate_rgw_id()
 {
-  constexpr int kMaxRetries = 10;
-  const auto key = make_l_key(kLocalTypeNumeric, kLocalCounterRgwId);
-  for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
-    auto tr = begin_transaction();
-    if (!tr) {
-      if (fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE_NOT_COMMITTED,
-                              tr.error())) {
-        continue;
-      }
-      return std::unexpected(fdb_to_error(tr.error()));
-    }
-    auto val = (*tr)->kv_get(key.view());
-    if (!val) {
-      if (fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE_NOT_COMMITTED,
-                              val.error())) {
-        continue;
-      }
-      return std::unexpected(fdb_to_error(val.error()));
-    }
-
-    uint64_t counter = 0;
-    if (*val) {
-      if ((*val)->size() != sizeof(uint64_t)) {
-        return std::unexpected(KVRGW_ERR_CORRUPT_VALUE);
-      }
-      std::memcpy(&counter, (*val)->data(), sizeof(counter));
-    }
-
-    const uint64_t next = counter + 1;
-    std::string buf(sizeof(uint64_t), '\0');
-    std::memcpy(buf.data(), &next, sizeof(next));
-    (*tr)->kv_put(key.view(), buf);
-    auto rc = (*tr)->commit();
-    if (rc) {
-      return static_cast<uint32_t>(next);
-    }
-    if (!fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE_NOT_COMMITTED,
-                             rc.error())) {
-      return std::unexpected(fdb_to_error(rc.error()));
-    }
+  uint64_t id = 0;
+  auto ec = LKeyNumericCounter::allocate(*this, kLocalCounterRgwId, id);
+  if (ec != KVRGW_ERR_OK) {
+    return std::unexpected(ec);
   }
-  return std::unexpected(KVRGW_ERR_MAX_RETRIES_EXCEEDED);
+  return static_cast<uint32_t>(id);
 }
 
 //---------------------------------------------------------------------------------

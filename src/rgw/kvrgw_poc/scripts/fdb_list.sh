@@ -279,10 +279,10 @@ def parse_value(key_raw: bytes, val_raw: bytes) -> str:
         created = struct.unpack(">q", val_raw[4:12])[0]
         return f"tenant_id={tenant_id} created_at={created}"
 
-    # L: value — counter (8B LE uint64)
+    # L: value — counter (8B BE uint64)
     if ns == "L" and len(val_raw) == 8:
-        counter = struct.unpack("<Q", val_raw)[0]
-        return f"counter={counter}"
+        counter = struct.unpack(">Q", val_raw)[0]
+        return f"counter=0x{counter:016x}"
 
     # D: value — raw data (show size only)
     if ns == "D":

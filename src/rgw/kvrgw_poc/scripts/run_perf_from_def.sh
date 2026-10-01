@@ -64,9 +64,12 @@ duration=$(get_md_field "duration" "${PERF_MD}")
 workload=$(get_md_field "workload" "${PERF_MD}")
 prefix_len=$(get_md_field "prefix_len" "${PERF_MD}")
 suffix_len=$(get_md_field "suffix_len" "${PERF_MD}")
+random_prefix_per_key=$(get_md_field "random_prefix_per_key" "${PERF_MD}")
 tag_count=$(get_md_field "tag_count" "${PERF_MD}")
 tag_name_base=$(get_md_field "tag_name_base" "${PERF_MD}")
 tag_data_size=$(get_md_field "tag_data_size" "${PERF_MD}")
+metadata_count=$(get_md_field "metadata_count" "${PERF_MD}")
+metadata_size=$(get_md_field "metadata_size" "${PERF_MD}")
 
 # #7: Default tier thresholds if not in config
 [[ -n "$max_inline" ]] || max_inline=256
@@ -132,10 +135,24 @@ if [[ "$workload" == "put" || "$workload" == "put-overwrite" ]]; then
     tag_name_base=""
     tag_data_size=""
   fi
+  [[ -n "$metadata_count" ]] || metadata_count=0
+  if ! [[ "$metadata_count" =~ ^[0-9]+$ ]] || (( metadata_count > 160 )); then
+    echo "ERROR: metadata_count must be in 0..160, got '${metadata_count}'" >&2; exit 1
+  fi
+  if (( metadata_count > 0 )); then
+    if [[ -z "$metadata_size" ]] || ! [[ "$metadata_size" =~ ^[0-9]+$ ]] || \
+       (( metadata_size < 1 || metadata_size > 2048 )); then
+      echo "ERROR: metadata_size must be in 1..2048 when metadata_count > 0, got '${metadata_size}'" >&2; exit 1
+    fi
+  else
+    metadata_size=""
+  fi
 else
   tag_count=0
   tag_name_base=""
   tag_data_size=""
+  metadata_count=0
+  metadata_size=""
 fi
 
 base_files=$(get_md_field "base_files" "${PERF_MD}")
@@ -221,14 +238,14 @@ if [[ "$workload" == "get" ]]; then
   KEY_PREFIX="${src_prefix}"
   KEY_SUFFIX="${src_suffix:-}"
 else
-  hex=$(echo -n "${PERF_NAME}:${FDB_NAME}:${TIMESTAMP}" | sha512sum | awk '{print $1}')
-  KEY_PREFIX=$(hex_to_len "$hex" "$prefix_len")
-  KEY_SUFFIX=$(hex_to_len "$hex" "$suffix_len")
+  KEY_PREFIX=""
+  KEY_SUFFIX=""
 fi
 
 cat > "${OUTDIR}/test_metadata.txt" <<METAEOF
-prefix=${KEY_PREFIX}
-suffix=${KEY_SUFFIX}
+prefix_len=${prefix_len}
+suffix_len=${suffix_len}
+random_prefix_per_key=${random_prefix_per_key:-no}
 instances=${instances}
 threads=${concurrency:-${src_threads:-}}
 buckets=${buckets}
@@ -258,7 +275,7 @@ echo "  Output: ${OUTDIR}"
 echo "  prefix=${KEY_PREFIX}"
 echo "  suffix=${KEY_SUFFIX}"
 if [[ "$workload" == "put" || "$workload" == "put-overwrite" ]]; then
-  echo "  prefix_len=${prefix_len} suffix_len=${suffix_len} xtag_count=${tag_count}"
+  echo "  prefix_len=${prefix_len} suffix_len=${suffix_len} xtag_count=${tag_count} metadata_count=${metadata_count}"
 fi
 echo "  instances=${instances} mode=${mode} clean=${clean}"
 if [[ "$workload" == "get" ]]; then
@@ -372,12 +389,17 @@ for i in $(seq 0 $((instances-1))); do
 
   FDB_CLUSTER_FILE="${CLUSTER_FILE}" \
       KVRGW_INSTANCE_ID="${i}" \
+      KVRGW_PREFIX_LEN="${prefix_len}" \
+      KVRGW_SUFFIX_LEN="${suffix_len}" \
+      KVRGW_RANDOM_PREFIX_PER_KEY="${random_prefix_per_key:-no}" \
       KVRGW_KEY_PREFIX="${KEY_PREFIX}" \
       KVRGW_KEY_SUFFIX="${KEY_SUFFIX}" \
       KVRGW_METADATA_FILE="${inst_meta}" \
       KVRGW_TAG_COUNT="${tag_count}" \
       KVRGW_TAG_NAME_BASE="${tag_name_base}" \
       KVRGW_TAG_DATA_SIZE="${tag_data_size}" \
+      KVRGW_METADATA_COUNT="${metadata_count}" \
+      KVRGW_METADATA_DATA_SIZE="${metadata_size}" \
       KVRGW_MAX_INLINE="${max_inline}" \
       KVRGW_MAX_KV_STORE="${max_kv_store}" \
       KVRGW_BATCH_SIZE="${batch_size}" \

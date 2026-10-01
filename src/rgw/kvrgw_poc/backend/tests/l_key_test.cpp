@@ -47,7 +47,7 @@ int main()
 
   // V: key tests
   {
-    bucket_id_t bucket_id(0x0101010101010101ULL);
+    bucket_id_t bucket_id(kvrgw::kNullBucket);
     std::string object_name = "photos/cat.jpg";
     KeyBuf vk1, vk2, vk3;
     make_v_key(bucket_id, object_name, version_id_t{0xFFFFFFFF}, vk1);

@@ -25,6 +25,7 @@ enum {
   KVRGW_ERR_INVALID_RANGE = 110,
   KVRGW_ERR_INVALID_REQUEST = 111,
   KVRGW_ERR_INVALID_TAG = 112,
+  KVRGW_ERR_TENANT_ALREADY_EXISTS = 113,
   KVRGW_ERR_FDB_CONFLICT = 200,
   KVRGW_ERR_FDB_PROCESS_BEHIND = 201,
   KVRGW_ERR_FDB_FUTURE_VERSION = 202,
@@ -156,10 +157,10 @@ kvrgw_err_t kvrgw_delete_bucket(KvRgwHandle* h, uint32_t tenant_id,
                                 const char* bucket, size_t bucket_len);
 kvrgw_err_t kvrgw_bucket_exists(KvRgwHandle* h, uint32_t tenant_id,
                                 const char* bucket, size_t bucket_len,
-                                int* out_exists, uint64_t* out_id);
+                                int* out_exists);
 kvrgw_err_t kvrgw_bucket_exists_cached(KvRgwHandle* h, uint32_t tenant_id,
                                        const char* bucket, size_t bucket_len,
-                                       int* out_exists, uint64_t* out_id);
+                                       int* out_exists);
 
 kvrgw_err_t kvrgw_put_bucket_versioning(KvRgwHandle* h, uint32_t tenant_id,
                                         const char* bucket, size_t bucket_len, uint8_t state);

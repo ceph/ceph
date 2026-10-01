@@ -52,6 +52,8 @@ inline constexpr bool kDefaultKvStoreCoalescing = false;
 
 inline constexpr size_t kRefTagSize = 12;
 inline constexpr size_t kEtagSize = 16;
+inline constexpr size_t kBucketIdSize = sizeof(uint64_t);
+inline constexpr size_t kTenantIdSize = sizeof(uint32_t);
 inline constexpr size_t kMaxContentTypeLen = 255;
 
 inline constexpr char kCategoryChild = 'C';
