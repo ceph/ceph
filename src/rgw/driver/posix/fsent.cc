@@ -21,15 +21,6 @@
 
 namespace rgw { namespace sal {
 
-const std::string ATTR_PREFIX = "user.X-RGW-";
-const std::string mp_ns = "multipart";
-const std::string MP_OBJ_PART_PFX = "part-";
-const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
-const int64_t READ_SIZE = 128 * 1024;
-// required alignment for O_DIRECT reads/writes (rgw_posix_direct_io)
-const int64_t DIRECT_IO_ALIGN = 4096;
-
-
 namespace posix {
 
 /*

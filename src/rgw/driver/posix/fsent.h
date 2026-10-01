@@ -14,6 +14,7 @@
  */
 
 #pragma once
+#include "../posix/fsent_common.h"
 #include "rgw_sal.h"
 #include "bucket_cache.h"
 #include "multipart_cache.h"
@@ -32,26 +33,15 @@ class POSIXObject;
 
 using DeleteResult = rgw::sal::Object::DeleteOp::Result;
 
-extern const std::string ATTR_PREFIX;
 #define RGW_POSIX_ATTR_BUCKET_INFO "bucket-info"
 #define RGW_POSIX_ATTR_MPUPLOAD "multipart-upload"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "object-type"
 #define RGW_POSIX_ATTR_DELETE_MARKER "delete-marker"
 #define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "multipart-part-count"
 #define RGW_POSIX_ATTR_MULTIPART_TOTAL_SIZE "multipart-total-size"
-extern const std::string mp_ns;
-extern const std::string MP_OBJ_PART_PFX;
-extern const std::string MP_OBJ_HEAD_NAME;
-extern const int64_t READ_SIZE;
 
 /* integration w/bucket listing cache */
 using fill_cache_cb_t = file::listing::fill_cache_cb_t;
-
-static inline ceph::real_time from_statx_timestamp(const struct statx_timestamp& xts)
-{
-  struct timespec ts{xts.tv_sec, xts.tv_nsec};
-  return ceph::real_clock::from_timespec(ts);
-}
 
 static inline std::string gen_rand_instance_name()
 {
