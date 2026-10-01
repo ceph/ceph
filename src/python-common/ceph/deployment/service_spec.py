@@ -1431,6 +1431,7 @@ class NFSServiceSpec(ServiceSpec):
                  enable_client_object_cache: bool = False,
                  client_object_cache_size: Optional[Union[str, int]] = None,
                  client_object_cache_max_dirty: Optional[Union[str, int]] = None,
+                 mem_stats_disable: bool = False,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1467,6 +1468,10 @@ class NFSServiceSpec(ServiceSpec):
         self.enable_client_object_cache = enable_client_object_cache
         self.client_object_cache_size = client_object_cache_size
         self.client_object_cache_max_dirty = client_object_cache_max_dirty
+
+        # Disables per-component memory-statistics capture in NFS_CORE_PARAM.
+        # Applied at daemon startup only; requires daemon restart to take effect.
+        self.mem_stats_disable = mem_stats_disable
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec
@@ -1559,6 +1564,7 @@ class NFSServiceSpec(ServiceSpec):
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
 
         verify_boolean(self.enable_client_object_cache, "enable_client_object_cache")
+        verify_boolean(self.mem_stats_disable, "mem_stats_disable")
         cache_size = verify_size_with_units(
             self.client_object_cache_size, "client_object_cache_size"
         )

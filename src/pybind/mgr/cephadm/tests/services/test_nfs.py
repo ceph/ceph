@@ -763,6 +763,78 @@ class TestNFS:
                 assert "client_oc_size = 1048576;" in ganesha_conf
                 assert "client_oc_max_dirty = 0;" in ganesha_conf
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_mem_stats_disable_default(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Default: Mem_Stats_Disable not written when mem_stats_disable is unset."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']))
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                            service_name=nfs_spec.service_name(),
+                                            rank=0))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert 'Mem_Stats_Disable' not in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_mem_stats_disable_true(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """mem_stats_disable=True writes Mem_Stats_Disable = true; in NFS_CORE_PARAM."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+                mem_stats_disable=True,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                            service_name=nfs_spec.service_name(),
+                                            rank=0))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert 'Mem_Stats_Disable = true;' in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_mem_stats_disable_false_explicit(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """mem_stats_disable=False explicitly: Mem_Stats_Disable not written (uses Ganesha default)."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+                mem_stats_disable=False,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                            service_name=nfs_spec.service_name(),
+                                            rank=0))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert 'Mem_Stats_Disable' not in ganesha_conf
+
+
+def test_nfs_mem_stats_disable_invalid_non_bool():
+    """Non-bool value for mem_stats_disable is rejected at validation time."""
+    spec = NFSServiceSpec(service_id='foo', mem_stats_disable='yes')  # type: ignore[arg-type]
+    with pytest.raises(SpecValidationError, match="mem_stats_disable must be a boolean"):
+        spec.validate()
+
 
 def test_nfs_placement_count_per_host_rejected():
     spec = NFSServiceSpec(
