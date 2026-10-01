@@ -139,7 +139,17 @@ public:
   void learned_addr(const entity_addr_t &peer_addr_for_me,
                     const SocketConnection& conn);
 
-  SocketConnectionRef lookup_conn(const entity_addr_t& addr);
+  /// find the registered connection from/to addr. listener_core selects
+  /// a connection accepted by that core's per-core listener: a client may
+  /// have one such connection per core, besides its main connection.
+  SocketConnectionRef lookup_conn(
+      const entity_addr_t& addr,
+      std::optional<seastar::shard_id> listener_core = std::nullopt);
+
+  /// our addresses as reached via the given listener: the main
+  /// addresses, or the address of listener_core's per-core listener
+  entity_addrvec_t get_myaddrs_via(
+      std::optional<seastar::shard_id> listener_core) const;
 
   void accept_conn(SocketConnectionRef);
 
@@ -165,20 +175,12 @@ public:
   Interceptor *interceptor = nullptr;
 #endif
 
-  seastar::future<> mark_down(const entity_addr_t& a) final {
-    auto conn = lookup_conn(a);
-    if (conn) {
-      return seastar::smp::submit_to(
-	conn->get_shard_id(),
-	[conn=conn.get()] {
-	conn->mark_down();
-	return seastar::now();
-      }).then([conn] { return seastar::now(); });
-    }
-    return seastar::now();
-  }
+  /// mark down all the connections registered for a, including those
+  /// accepted by the per-core listeners
+  seastar::future<> mark_down(const entity_addr_t& a) final;
 private:
-  seastar::future<> accept(SocketFRef &&, const entity_addr_t &);
+  seastar::future<> accept(SocketFRef &&, const entity_addr_t &,
+                           std::optional<seastar::shard_id> listener_core);
 
   listen_ertr::future<> do_listen(const entity_addrvec_t& addr);
 
@@ -199,9 +201,15 @@ private:
 
   /// the accept function of all our listeners: called on the shard the
   /// socket was placed on, hands the socket over to the messenger's
-  /// shard (sid), where the connection is created and the handshake runs
-  seastar::future<> accept_on_primary(SocketRef socket,
-                                      entity_addr_t peer_addr);
+  /// shard (sid), where the connection is created and the handshake runs.
+  /// listener_core: set for the per-core listeners
+  seastar::future<> accept_on_primary(
+      SocketRef socket,
+      entity_addr_t peer_addr,
+      std::optional<seastar::shard_id> listener_core);
+
+  /// the address of core's per-core listener
+  entity_addrvec_t get_core_addr(seastar::shard_id core) const;
 
   const seastar::shard_id sid;
   // Distinguish messengers with meaningful names for debugging
@@ -221,7 +229,11 @@ private:
   /// the port each of core_listeners is bound to, indexed by core
   std::vector<uint32_t> core_ports;
   ChainedDispatchers dispatchers;
-  std::map<entity_addr_t, SocketConnectionRef> connections;
+  /// registered connections, by peer address and accepting per-core
+  /// listener (nullopt for the main listener, and for outgoing ones)
+  using conn_key_t =
+    std::pair<entity_addr_t, std::optional<seastar::shard_id>>;
+  std::map<conn_key_t, SocketConnectionRef> connections;
   std::set<SocketConnectionRef> accepting_conns;
   std::vector<SocketConnectionRef> closing_conns;
   ceph::net::PolicySet<Throttle> policy_set;

@@ -260,41 +260,59 @@ SocketMessenger::bind_core_listeners()
   });
 }
 
+entity_addrvec_t SocketMessenger::get_core_addr(seastar::shard_id core) const
+{
+  assert(seastar::this_shard_id() == sid);
+  ceph_assert(core < core_ports.size());
+  // derived from the main address, which may be learned after binding
+  auto addr = get_myaddr();
+  addr.set_port(core_ports[core]);
+  return entity_addrvec_t{addr};
+}
+
 std::vector<entity_addrvec_t> SocketMessenger::get_core_addrs() const
 {
   assert(seastar::this_shard_id() == sid);
-  // derived from the main address, which may be learned after binding
   std::vector<entity_addrvec_t> core_addrs;
   core_addrs.reserve(core_ports.size());
-  for (auto port : core_ports) {
-    auto addr = get_myaddr();
-    addr.set_port(port);
-    core_addrs.emplace_back(addr);
+  for (seastar::shard_id core = 0; core < core_ports.size(); ++core) {
+    core_addrs.emplace_back(get_core_addr(core));
   }
   return core_addrs;
 }
 
+entity_addrvec_t SocketMessenger::get_myaddrs_via(
+    std::optional<seastar::shard_id> listener_core) const
+{
+  assert(seastar::this_shard_id() == sid);
+  return listener_core ? get_core_addr(*listener_core) : get_myaddrs();
+}
+
 seastar::future<> SocketMessenger::accept_on_primary(
-    SocketRef _socket, entity_addr_t peer_addr)
+    SocketRef _socket,
+    entity_addr_t peer_addr,
+    std::optional<seastar::shard_id> listener_core)
 {
   assert(get_myaddr().is_msgr2());
   SocketFRef socket = seastar::make_foreign(std::move(_socket));
   if (seastar::this_shard_id() == sid) {
-    return accept(std::move(socket), peer_addr);
+    return accept(std::move(socket), peer_addr, listener_core);
   }
   return seastar::smp::submit_to(sid,
-      [this, peer_addr, socket = std::move(socket)]() mutable {
-    return accept(std::move(socket), peer_addr);
+      [this, peer_addr, listener_core, socket = std::move(socket)]() mutable {
+    return accept(std::move(socket), peer_addr, listener_core);
   });
 }
 
 seastar::future<> SocketMessenger::accept(
-    SocketFRef &&socket, const entity_addr_t &peer_addr)
+    SocketFRef &&socket,
+    const entity_addr_t &peer_addr,
+    std::optional<seastar::shard_id> listener_core)
 {
   assert(seastar::this_shard_id() == sid);
   SocketConnectionRef conn =
     seastar::make_shared<SocketConnection>(*this, dispatchers);
-  conn->start_accept(std::move(socket), peer_addr);
+  conn->start_accept(std::move(socket), peer_addr, listener_core);
   return seastar::now();
 }
 
@@ -308,13 +326,15 @@ seastar::future<> SocketMessenger::start(
     ceph_assert(get_myaddr().is_msgr2());
     ceph_assert(get_myaddr().get_port() > 0);
 
-    auto fn_accept = [this](SocketRef socket, entity_addr_t peer_addr) {
-      return accept_on_primary(std::move(socket), peer_addr);
-    };
-    return listener->accept(fn_accept).then([this, fn_accept] {
-      return seastar::parallel_for_each(core_listeners,
-          [fn_accept](ShardedServerSocket* core_listener) {
-        return core_listener->accept(fn_accept);
+    return listener->accept([this](SocketRef socket, entity_addr_t peer_addr) {
+      return accept_on_primary(std::move(socket), peer_addr, std::nullopt);
+    }).then([this] {
+      auto cores = boost::irange<seastar::shard_id>(0, core_listeners.size());
+      return seastar::parallel_for_each(cores, [this](seastar::shard_id core) {
+        return core_listeners[core]->accept(
+            [this, core](SocketRef socket, entity_addr_t peer_addr) {
+          return accept_on_primary(std::move(socket), peer_addr, core);
+        });
       });
     });
   }
@@ -497,10 +517,12 @@ void SocketMessenger::set_policy_throttler(entity_type_t peer_type,
   policy_set.set_throttlers(peer_type, throttle, nullptr);
 }
 
-crimson::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
+crimson::net::SocketConnectionRef SocketMessenger::lookup_conn(
+    const entity_addr_t& addr,
+    std::optional<seastar::shard_id> listener_core)
 {
   assert(seastar::this_shard_id() == sid);
-  if (auto found = connections.find(addr);
+  if (auto found = connections.find({addr, listener_core});
       found != connections.end()) {
     return found->second;
   } else {
@@ -523,7 +545,8 @@ void SocketMessenger::unaccept_conn(SocketConnectionRef conn)
 void SocketMessenger::register_conn(SocketConnectionRef conn)
 {
   assert(seastar::this_shard_id() == sid);
-  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
+  auto [i, added] = connections.emplace(
+      conn_key_t{conn->get_peer_addr(), conn->get_listener_core()}, conn);
   std::ignore = i;
   ceph_assert(added);
 }
@@ -532,10 +555,32 @@ void SocketMessenger::unregister_conn(SocketConnectionRef conn)
 {
   assert(seastar::this_shard_id() == sid);
   ceph_assert(conn);
-  auto found = connections.find(conn->get_peer_addr());
+  auto found = connections.find(
+      conn_key_t{conn->get_peer_addr(), conn->get_listener_core()});
   ceph_assert(found != connections.end());
   ceph_assert(found->second == conn);
   connections.erase(found);
+}
+
+seastar::future<> SocketMessenger::mark_down(const entity_addr_t& a)
+{
+  assert(seastar::this_shard_id() == sid);
+  // the main connection (nullopt sorts first), then the per-core ones
+  std::vector<SocketConnectionRef> conns;
+  for (auto i = connections.lower_bound({a, std::nullopt});
+       i != connections.end() && i->first.first == a;
+       ++i) {
+    conns.push_back(i->second);
+  }
+  return seastar::parallel_for_each(std::move(conns),
+      [](SocketConnectionRef conn) {
+    return seastar::smp::submit_to(
+      conn->get_shard_id(),
+      [conn=conn.get()] {
+      conn->mark_down();
+      return seastar::now();
+    }).then([conn] { return seastar::now(); });
+  });
 }
 
 void SocketMessenger::closing_conn(SocketConnectionRef conn)
