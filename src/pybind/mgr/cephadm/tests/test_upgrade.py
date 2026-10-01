@@ -15,7 +15,7 @@ from cephadm.upgrade import (
 )
 from cephadm.ssh import HostConnectionError
 from cephadm.utils import ContainerInspectInfo
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
 
@@ -826,6 +826,186 @@ def test_to_upgrade_batches_mds_when_fail_fs(
     assert cont
     assert len(to_upgrade) == 1
     assert to_upgrade[0][0].name() == need_upgrade[0][0].name()
+
+
+def _gateway_daemons(
+        daemon_type: str,
+        services: int,
+        daemons_per_service: int,
+        digest: str = 'old_digest') -> List[DaemonDescription]:
+    service = daemon_type_to_service(daemon_type)
+    return [
+        DaemonDescription(
+            daemon_type=daemon_type,
+            daemon_id=f'svc{s}.host{d}.abcdef',
+            hostname=f'host{d}',
+            container_image_id=digest,
+            container_image_digests=[digest],
+            deployed_by=[digest],
+            service_name=f'{service}.svc{s}',
+        )
+        for s in range(1, services + 1)
+        for d in range(1, daemons_per_service + 1)
+    ]
+
+
+def _gateway_need_upgrade_entries(
+        daemon_type: str,
+        services: int,
+        daemons_per_service: int) -> List[Tuple[DaemonDescription, bool]]:
+    return [
+        (d, False)
+        for d in _gateway_daemons(daemon_type, services, daemons_per_service)
+    ]
+
+
+@pytest.mark.parametrize("daemon_type", ['nfs', 'smb', 'iscsi', 'nvmeof', 'rgw'])
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_limits_gateway_batch_by_service(
+        daemon_type: str, cephadm_module: CephadmOrchestrator):
+    # 10 services of 3 daemons each
+    need_upgrade = _gateway_need_upgrade_entries(daemon_type, 10, 3)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.max_parallel_gateway_upgrades = 8
+
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    # 2 full services (6 daemons) fit, a third would exceed the limit of 8
+    assert len(to_upgrade) == 6
+    assert [d[0].name() for d in to_upgrade] == [d[0].name() for d in need_upgrade[:6]]
+    assert {d[0].service_name() for d in to_upgrade} == {
+        f'{daemon_type_to_service(daemon_type)}.svc{s}' for s in (1, 2)}
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_gateway_batch_never_splits_a_service(
+        cephadm_module: CephadmOrchestrator):
+    # a single service with more daemons than the limit is still upgraded
+    # in one pass, otherwise the upgrade would never progress
+    need_upgrade = _gateway_need_upgrade_entries('nfs', 1, 5)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.max_parallel_gateway_upgrades = 2
+
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 5
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_to_upgrade_gateway_batch_limit_disabled(cephadm_module: CephadmOrchestrator):
+    need_upgrade = _gateway_need_upgrade_entries('nfs', 10, 3)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.max_parallel_gateway_upgrades = 0
+
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 30
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch.object(CephadmUpgrade, '_enough_mds_for_ok_to_stop', return_value=False)
+def test_to_upgrade_gateway_batch_limit_not_applied_to_other_types(
+        _enough_mds_for_ok_to_stop: mock.MagicMock,
+        cephadm_module: CephadmOrchestrator):
+    # non gateway/rgw types keep their ok-to-stop driven batching
+    need_upgrade = _mds_need_upgrade_entries()
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'pid', fail_fs=True)
+    cephadm_module.max_parallel_gateway_upgrades = 1
+
+    cont, to_upgrade = cephadm_module.upgrade._to_upgrade(need_upgrade, 'target_image')
+    assert cont
+    assert len(to_upgrade) == 3
+
+
+@pytest.mark.parametrize(
+    "daemon_types,services,hosts,expected",
+    [
+        # no filter beyond the daemon type: whole services from the start of
+        # the list until the limit of 3 is reached
+        (['nfs'], None, None, ['nfs.svc1.host1.abcdef', 'nfs.svc1.host2.abcdef']),
+        # --services: only the filtered services are candidates, and they are
+        # still added to the batch as whole services
+        (None, ['nfs.svc2', 'nfs.svc3'], None,
+         ['nfs.svc2.host1.abcdef', 'nfs.svc2.host2.abcdef']),
+        # --hosts: the batch is limited after the host filter, so it holds 3
+        # daemons from 3 different services rather than 3 whole services
+        (['nfs'], None, ['host1'],
+         ['nfs.svc1.host1.abcdef', 'nfs.svc2.host1.abcdef', 'nfs.svc3.host1.abcdef']),
+    ]
+)
+@mock.patch.object(CephadmUpgrade, '_upgrade_daemons')
+@mock.patch.object(CephadmUpgrade, '_handle_need_upgrade_self')
+@mock.patch.object(CephadmUpgrade, '_set_container_images')
+@mock.patch.object(CephadmUpgrade, '_complete_osd_upgrade')
+@mock.patch.object(CephadmUpgrade, '_complete_mds_upgrade')
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={})
+@mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle')
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', ''))
+@mock.patch("cephadm.module.CephadmOrchestrator.set_container_image")
+@mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests")
+@mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+    'min_mon_release': 19,
+    'require_osd_release': 'tentacle',
+    'have_local_config_map': True,
+})
+@mock.patch(
+    "cephadm.module.CephadmOrchestrator.version",
+    new_callable=mock.PropertyMock,
+    return_value='ceph version 19.3.0-0 (hash)',
+)
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+@mock.patch("cephadm.module.HostCache.get_daemons")
+def test_do_upgrade_gateway_batch_with_upgrade_filters(
+    get_daemons: mock.MagicMock,
+    get_daemons_by_service: mock.MagicMock,
+    _version: mock.MagicMock,
+    _get: mock.MagicMock,
+    get_active_mgr_digests: mock.MagicMock,
+    _set_container_image: mock.MagicMock,
+    _check_mon_command: mock.MagicMock,
+    _lookup_release_name: mock.MagicMock,
+    _get_distinct_container_image_settings: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    _complete_mds_upgrade: mock.MagicMock,
+    _complete_osd_upgrade: mock.MagicMock,
+    _set_container_images: mock.MagicMock,
+    _handle_need_upgrade_self: mock.MagicMock,
+    _upgrade_daemons: mock.MagicMock,
+    daemon_types: Optional[List[str]],
+    services: Optional[List[str]],
+    hosts: Optional[List[str]],
+    expected: List[str],
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    # the batch limit is applied on top of the --daemon-types/--services/--hosts
+    # filters of a staggered upgrade, never outside of them
+    target_digest = 'new_image@repo_digest'
+    get_active_mgr_digests.return_value = [target_digest]
+    # 4 nfs services with one daemon on host1 and one on host2 each
+    daemons = _gateway_daemons('nfs', 4, 2)
+    get_daemons.return_value = daemons
+    get_daemons_by_service.side_effect = \
+        lambda service: [d for d in daemons if d.service_name() == service]
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_id='image_id',
+        target_digests=[target_digest],
+        target_version='19.3.0-0',
+        daemon_types=daemon_types,
+        services=services,
+        hosts=hosts,
+    )
+    cephadm_module.max_parallel_gateway_upgrades = 3
+
+    cephadm_module.upgrade._do_upgrade()
+
+    batches = [c.args[0] for c in _upgrade_daemons.call_args_list if c.args[0]]
+    assert len(batches) == 1
+    assert [d[0].name() for d in batches[0]] == expected
 
 
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
