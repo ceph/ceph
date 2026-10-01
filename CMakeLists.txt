@@ -874,14 +874,19 @@ else()
   endif()
   set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
+  if(WITH_ASAN)
+    set(BOOST_CONTEXT_SANITIZER_DEFINE BOOST_USE_ASAN)
+  elseif(WITH_TSAN)
+    set(BOOST_CONTEXT_SANITIZER_DEFINE BOOST_USE_TSAN)
+  endif()
   include(BuildBoost)
   build_boost(1.87
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
-  if(WITH_ASAN)
+  if(BOOST_CONTEXT_SANITIZER_DEFINE)
     # Boost.Context is built ucontext-only here (context-impl=ucontext); define
     # the matching backend tree-wide so every Boost.Context/Coroutine2 consumer
     # agrees on it, instead of relying on per-target propagation that is easy to miss.
-    add_compile_definitions(BOOST_USE_ASAN BOOST_USE_UCONTEXT)
+    add_compile_definitions(${BOOST_CONTEXT_SANITIZER_DEFINE} BOOST_USE_UCONTEXT)
   endif()
 endif()
 # Set tree-wide: the macro changes the type of bp::filesystem::path in inline
