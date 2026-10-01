@@ -1,0 +1,2893 @@
+#!/usr/bin/env python3
+"""
+ceph-core-bundle: turn ceph core dumps into a self-contained, debuggable
+package: the cores plus the exact binaries and debuginfo they need, a gdb
+wrapper and a backtrace report per core.  Works from a core alone: the build
+is identified from the core's own version strings and GNU build-ids, and
+every fetched file is checked against the build-id the core recorded.
+
+Every core given, or found in a directory, is first checked for truncation
+or damage; then all of them go into one package:
+
+  <package>/gdb --list          the cores (number, name, check, signal)
+  <package>/gdb [CORE] [args]   gdb on one core, by number or name
+                                (optional when there is only one); also
+                                CEPH_SRC=<checkout> for sources, --clion
+                                for IDE setup
+  <package>/README.md           summary and usage
+  <package>/cores/<name>/       report.txt (crashing thread bt full, all
+                                threads bt), manifest.json, core, sysroot/
+
+The package goes in ./core-<...>/ (or -o DIR); --in-place DIR turns a
+directory of cores into the package itself, leaving the originals alone.
+
+Where files come from:
+  CI builds                  shaman.ceph.com -> chacra (rpm/deb), streamed;
+                             only the needed files are extracted
+  official releases          download.ceph.com (+ $CEPH_CORE_RELEASE_SITES)
+  container images           exact ceph and distro binaries for containerized
+                             daemons (cephadm records CONTAINER_IMAGE in the
+                             daemon's environment, so the core names its
+                             image); also searched by sha1/version once a CI
+                             build has expired.  Images carry no debuginfo
+  --debug-repo URL           any yum repo, e.g. a downstream debuginfo repo
+  CentOS/Rocky/RHEL libs     debuginfod + distro mirrors/koji/vault/EPEL
+  Ubuntu libs                Launchpad; debuginfo best effort
+
+Environment: CEPH_CORE_BUNDLES   where packages go (default: current dir)
+             CEPH_CORE_CACHE     download cache (default
+                                 $CEPH_CORE_BUNDLES/.ceph-core-cache, or
+                                 inside DIR with --in-place)
+             CEPH_CORE_IMAGE_REPOS  registries searched for images
+                                 (default quay.ceph.io/ceph-ci/ceph
+                                 quay.io/ceph/ceph)
+             CEPH_CORE_DEBUG_REPOS  extra debuginfo repos (as --debug-repo)
+             CEPH_CORE_DEBUGINFOD   debuginfod servers (the host's
+                                 $DEBUGINFOD_URLS is ignored on purpose)
+             CEPH_CORE_RELEASE_SITES  release package sites
+                                 (default https://download.ceph.com)
+             CEPH_CORE_SHAMAN    shaman search URL override
+             GDB                 gdb binary
+Private registries use your podman/docker login ($REGISTRY_AUTH_FILE,
+~/.config/containers/auth.json, ~/.docker/config.json).
+"""
+
+import argparse
+import concurrent.futures
+import gzip
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+
+# Official release package sites (same repo layout as chacra, kept forever)
+RELEASE_SITES = os.environ.get("CEPH_CORE_RELEASE_SITES",
+                               "https://download.ceph.com").split()
+SHAMAN = os.environ.get("CEPH_CORE_SHAMAN",
+                        "https://shaman.ceph.com/api/search/")
+LAUNCHPAD = "https://api.launchpad.net/devel/ubuntu"
+UBUNTU_ARCHIVE = "http://archive.ubuntu.com/ubuntu"
+CENTOS_MIRROR = "https://mirror.stream.centos.org"
+UBUNTU_CODENAMES = {"20.04": "focal", "22.04": "jammy", "24.04": "noble",
+                    "26.04": "resolute"}
+# Nothing goes to /tmp: bundles land in the current directory and the
+# download cache sits beside them (same filesystem, so bundles hardlink into
+# it rather than copying).  rm -rf of the directory cleans up everything.
+BUNDLES = os.path.abspath(os.environ.get("CEPH_CORE_BUNDLES", "."))
+CACHE = os.path.abspath(os.environ.get(
+    "CEPH_CORE_CACHE", os.path.join(BUNDLES, ".ceph-core-cache")))
+VERBOSE = False
+_log_lock = threading.Lock()
+
+
+def log(*a):
+    with _log_lock:
+        print("[ccb]", *a, file=sys.stderr, flush=True)
+
+
+def vlog(*a):
+    if VERBOSE:
+        log(*a)
+
+
+# --------------------------------------------------------------------------
+# ELF (64-bit little endian - all teuthology produces)
+# --------------------------------------------------------------------------
+PT_LOAD, PT_NOTE = 1, 4
+NT_PRSTATUS, NT_PRPSINFO, NT_SIGINFO, NT_FILE = 1, 3, 0x53494749, 0x46494c45
+NT_GNU_BUILD_ID = 3
+SIGNALS = {4: "SIGILL", 5: "SIGTRAP", 6: "SIGABRT", 7: "SIGBUS", 8: "SIGFPE",
+           9: "SIGKILL", 11: "SIGSEGV", 15: "SIGTERM"}
+
+
+def parse_notes(data):
+    off = 0
+    while off + 12 <= len(data):
+        namesz, descsz, ntype = struct.unpack_from("<III", data, off)
+        off += 12
+        name = data[off:off + namesz].rstrip(b"\0")
+        off += (namesz + 3) & ~3
+        desc = data[off:off + descsz]
+        off += (descsz + 3) & ~3
+        yield name, ntype, desc
+
+
+class Core:
+    """Minimal ELF core reader: mappings, build-ids, process info."""
+
+    def __init__(self, path):
+        self.path = path
+        self.f = open(path, "rb")
+        hdr = self.f.read(64)
+        if hdr[:4] != b"\x7fELF" or hdr[4] != 2 or hdr[5] != 1:
+            raise SystemExit(f"{path}: not a 64-bit LE ELF file")
+        e_type, = struct.unpack_from("<H", hdr, 16)
+        e_phoff, = struct.unpack_from("<Q", hdr, 32)
+        e_phentsize, e_phnum = struct.unpack_from("<HH", hdr, 54)
+        if e_type != 4:
+            raise SystemExit(f"{path}: not an ELF core (e_type={e_type})")
+        self.loads = []   # (vaddr, offset, filesz)
+        self.expected_size = 0
+        notes = b""
+        for i in range(e_phnum):
+            self.f.seek(e_phoff + i * e_phentsize)
+            (p_type, _fl, p_off, p_vaddr, _pa, p_filesz,
+             _memsz, _al) = struct.unpack("<IIQQQQQQ", self.f.read(56))
+            self.expected_size = max(self.expected_size, p_off + p_filesz)
+            if p_type == PT_LOAD:
+                self.loads.append((p_vaddr, p_off, p_filesz))
+            elif p_type == PT_NOTE:
+                self.f.seek(p_off)
+                notes += self.f.read(p_filesz)
+        self.threads = 0
+        self.files = []   # (start, end, file offset in bytes, path)
+        self.exe_name = self.psargs = self.signo = None
+        for name, ntype, desc in parse_notes(notes):
+            if ntype == NT_PRSTATUS and name == b"CORE":
+                self.threads += 1
+                if self.signo is None:
+                    self.signo = struct.unpack_from("<i", desc, 12)[0]
+            elif ntype == NT_PRPSINFO and name == b"CORE":
+                self.exe_name = desc[40:56].split(b"\0")[0].decode()
+                self.psargs = desc[56:136].split(b"\0")[0].decode(
+                    errors="replace").strip()
+            elif ntype == NT_SIGINFO:
+                self.signo = struct.unpack_from("<i", desc, 0)[0]
+            elif ntype == NT_FILE:
+                count, pagesz = struct.unpack_from("<QQ", desc, 0)
+                ents = [struct.unpack_from("<QQQ", desc, 16 + 24 * i)
+                        for i in range(count)]
+                names = desc[16 + 24 * count:].split(b"\0")
+                for (s, e, o), n in zip(ents, names):
+                    self.files.append((s, e, o * pagesz,
+                                       n.decode(errors="replace")))
+
+    def read(self, addr, size):
+        for vaddr, off, filesz in self.loads:
+            if vaddr <= addr and addr + size <= vaddr + filesz:
+                self.f.seek(off + addr - vaddr)
+                return self.f.read(size)
+        return None
+
+    def build_id_at(self, base):
+        """Build-id of the ELF image whose headers are mapped at base."""
+        eh = self.read(base, 64)
+        if not eh or eh[:4] != b"\x7fELF":
+            return None
+        e_phoff, = struct.unpack_from("<Q", eh, 32)
+        e_phentsize, e_phnum = struct.unpack_from("<HH", eh, 54)
+        phs = self.read(base + e_phoff, e_phentsize * e_phnum)
+        if not phs:
+            return None
+        phdrs = [struct.unpack_from("<IIQQQQQQ", phs, i * e_phentsize)
+                 for i in range(e_phnum)]
+        first = min((p[3] for p in phdrs if p[0] == PT_LOAD), default=0)
+        bias = base - (first & ~0xfff)
+        for p in phdrs:
+            if p[0] != PT_NOTE:
+                continue
+            data = self.read(bias + p[3], p[5])
+            for name, ntype, desc in parse_notes(data or b""):
+                if name == b"GNU" and ntype == NT_GNU_BUILD_ID:
+                    return desc.hex()
+        return None
+
+    def modules(self):
+        """[{path, build_id, base}] for every file-backed ELF mapping."""
+        seen = {}
+        for s, _e, off, path in self.files:
+            if off != 0 or path in seen:
+                continue
+            bid = self.build_id_at(s)
+            if bid:
+                seen[path] = {"path": path, "build_id": bid, "base": hex(s)}
+        return list(seen.values())
+
+    def exe(self, mods):
+        n = self.exe_name or "\0"
+        for m in mods:
+            if os.path.basename(m["path"]).startswith(n):
+                return m["path"]
+        # the kernel lists the executable's own mappings first
+        return self.files[0][3] if self.files else None
+
+    def cstr(self, addr, maxlen=4096):
+        out = b""
+        while len(out) < maxlen:
+            chunk = None
+            for n in (256, 64, 16, 1):
+                chunk = self.read(addr + len(out), n)
+                if chunk:
+                    break
+            if not chunk:
+                break
+            i = chunk.find(b"\0")
+            if i >= 0:
+                return (out + chunk[:i]).decode(errors="replace")
+            out += chunk
+        return out.decode(errors="replace")
+
+    def link_map(self, exe_base):
+        """[(name the loader used, real mapped path)] from r_debug.
+
+        gdb opens <sysroot>/<l_name>, which is often a symlink name
+        (/lib64/ld-linux-x86-64.so.2, dlopen("libceph_snappy.so"))."""
+        eh = self.read(exe_base, 64)
+        if not eh or eh[:4] != b"\x7fELF":
+            return []
+        e_phoff, = struct.unpack_from("<Q", eh, 32)
+        e_phentsize, e_phnum = struct.unpack_from("<HH", eh, 54)
+        phs = self.read(exe_base + e_phoff, e_phentsize * e_phnum) or b""
+        phdrs = [struct.unpack_from("<IIQQQQQQ", phs, i * e_phentsize)
+                 for i in range(len(phs) // e_phentsize)]
+        first = min((p[3] for p in phdrs if p[0] == PT_LOAD), default=0)
+        bias = exe_base - (first & ~0xfff)
+        out = []
+        for p in phdrs:
+            if p[0] != 2:   # PT_DYNAMIC
+                continue
+            dyn = self.read(bias + p[3], p[5]) or b""
+            rdebug = next((v for t, v in (struct.unpack_from("<qQ", dyn, i)
+                                          for i in range(0, len(dyn), 16))
+                           if t == 21), 0)   # DT_DEBUG
+            r = rdebug and self.read(rdebug, 16)
+            lm = struct.unpack_from("<Q", r, 8)[0] if r else 0
+            seen = set()
+            while lm and lm not in seen and len(seen) < 4096:
+                seen.add(lm)
+                ent = self.read(lm, 40)
+                if not ent:
+                    break
+                _addr, name, ld, nxt, _prev = struct.unpack("<QQQQQ", ent)
+                n = self.cstr(name) if name else ""
+                real = next((f[3] for f in self.files
+                             if f[0] <= ld < f[1]), None)
+                if n.startswith("/") and real and n != real:
+                    out.append((n, real))
+                lm = nxt
+        return out
+
+    def _scan(self, pat, limit=20):
+        found = {}
+        for _v, off, filesz in self.loads:
+            self.f.seek(off)
+            left, tail = filesz, b""
+            while left > 0:
+                chunk = self.f.read(min(left, 64 << 20))
+                left -= len(chunk)
+                buf = tail + chunk
+                for m in pat.finditer(buf):
+                    k = m.group(1).decode(errors="replace")
+                    found[k] = found.get(k, 0) + 1
+                tail = buf[-512:]
+        return sorted(found, key=lambda k: -found[k])[:limit]
+
+    def find_env(self, name):
+        """Values of NAME=... in the process environment (main thread's
+        stack holds environ, so it is always in the core)."""
+        pat = re.compile(rb"(?:^|\0)" + re.escape(name.encode()) +
+                         rb"=([\x21-\x7e]{1,500})\0")
+        return self._scan(pat, 5)
+
+    def find_ceph_release_versions(self):
+        """'19.2.3' from 'ceph version 19.2.3 (sha) squid (stable)'."""
+        # releases only: dev builds are X.Y.Z-N-g<sha>, downstream builds
+        # X.Y.Z-N.elNcp - neither is on the upstream release sites
+        pat = re.compile(rb"ceph version (\d+\.\d+\.\d+) \([0-9a-f]{40}\)")
+        return self._scan(pat, 3)
+
+    def find_ceph_versions(self):
+        """Ceph build ids left in memory by the process itself.
+
+        Returns ([full sha1s], [short shas]) most frequent first:
+        'ceph version 21.1.0-716-gc495cce6 (c495cce6...40) umbrella (dev)'
+        is common in classic daemons' heap (logs, admin socket); crimson
+        often only has the git-describe form '21.3.0-2602-g25ae64de'."""
+        full_pat = re.compile(rb"ceph version [0-9][\w.\-+~]* \(([0-9a-f]{40})\)")
+        short_pat = re.compile(rb"\b\d+\.\d+\.\d+-\d+-g([0-9a-f]{7,12})\b")
+        full, short = {}, {}
+        for _v, off, filesz in self.loads:
+            self.f.seek(off)
+            left, tail = filesz, b""
+            while left > 0:
+                chunk = self.f.read(min(left, 64 << 20))
+                left -= len(chunk)
+                buf = tail + chunk
+                for pat, d in ((full_pat, full), (short_pat, short)):
+                    for m in pat.finditer(buf):
+                        k = m.group(1).decode()
+                        d[k] = d.get(k, 0) + 1
+                tail = buf[-128:]
+        order = lambda d: sorted(d, key=lambda k: -d[k])   # noqa: E731
+        short = [x for x in order(short)
+                 if not any(f.startswith(x) for f in full)]
+        return order(full), short
+
+
+def elf_sections(path):
+    """{name: (type, offset, size, link)} or {} if not ELF."""
+    with open(path, "rb") as f:
+        eh = f.read(64)
+        if eh[:4] != b"\x7fELF":
+            return {}
+        e_shoff, = struct.unpack_from("<Q", eh, 40)
+        e_shentsize, e_shnum, e_shstrndx = struct.unpack_from("<HHH", eh, 58)
+        f.seek(e_shoff)
+        raw = f.read(e_shentsize * e_shnum)
+        shs = [struct.unpack_from("<IIQQQQIIQQ", raw, i * e_shentsize)
+               for i in range(e_shnum)]
+        if not shs:
+            return {}
+        s = shs[e_shstrndx]
+        f.seek(s[4])
+        strtab = f.read(s[5])
+        out = {}
+        for i, sh in enumerate(shs):
+            name = strtab[sh[0]:strtab.find(b"\0", sh[0])].decode()
+            out[name] = (sh[1], sh[4], sh[5], sh[6], i, sh[2])
+        out["__list__"] = shs
+        return out
+
+
+def elf_section(path, secname):
+    secs = elf_sections(path)
+    s = secs.get(secname)
+    if not s or s[0] == 8:   # SHT_NOBITS
+        return None
+    with open(path, "rb") as f:
+        f.seek(s[1])
+        return f.read(s[2])
+
+
+def file_build_id(path):
+    try:
+        for name, ntype, desc in parse_notes(
+                elf_section(path, ".note.gnu.build-id") or b""):
+            if name == b"GNU" and ntype == NT_GNU_BUILD_ID:
+                return desc.hex()
+    except (OSError, struct.error):
+        pass
+    return None
+
+
+def debugaltlink(path):
+    """(alt_path, alt_build_id) from .gnu_debugaltlink (dwz), if any."""
+    d = elf_section(path, ".gnu_debugaltlink")
+    if not d:
+        return None
+    i = d.index(b"\0")
+    path = d[:i].decode()
+    if not path.startswith("/"):
+        # relative to the installed debug file; dwz multifiles always
+        # live in /usr/lib/debug/.dwz/
+        path = "/usr/lib/debug/.dwz/" + os.path.basename(path)
+    return path, d[i + 1:].hex()
+
+
+def elf_soname(path):
+    secs = elf_sections(path)
+    dyn = secs.get(".dynamic")
+    if not dyn:
+        return None
+    strsec = secs["__list__"][dyn[3]]
+    with open(path, "rb") as f:
+        f.seek(dyn[1])
+        d = f.read(dyn[2])
+        f.seek(strsec[4])
+        strtab = f.read(strsec[5])
+    for i in range(0, len(d), 16):
+        tag, val = struct.unpack_from("<qQ", d, i)
+        if tag == 14:  # DT_SONAME
+            return strtab[val:strtab.find(b"\0", val)].decode()
+        if tag == 0:
+            break
+    return None
+
+
+# --------------------------------------------------------------------------
+# HTTP + build-id cache
+# --------------------------------------------------------------------------
+DOWNLOADED = {}          # host -> bytes, reported in manifest.json
+
+
+class _Counted:
+    """Response wrapper that tallies bytes read per host."""
+
+    def __init__(self, r, url):
+        self._r = r
+        self._host = urllib.parse.urlparse(url).hostname or "?"
+
+    def read(self, n=-1):
+        b = self._r.read(n)
+        with _log_lock:
+            DOWNLOADED[self._host] = DOWNLOADED.get(self._host, 0) + len(b)
+        return b
+
+    def __getattr__(self, name):
+        return getattr(self._r, name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._r.close()
+
+
+def http_get(url, timeout=120):
+    req = urllib.request.Request(url, headers={"User-Agent": "ceph-core-bundle"})
+    return _Counted(urllib.request.urlopen(req, timeout=timeout), url)
+
+
+def http_json(url, tries=1):
+    for i in range(tries):
+        try:
+            with http_get(url) as r:
+                return json.load(r)
+        except (urllib.error.URLError, OSError, ValueError):
+            if i == tries - 1:
+                raise
+            time.sleep(2 * (i + 1))
+
+
+def download(url, dest, timeout=900):
+    """url -> dest atomically. Returns response headers, or None on 404."""
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    tmp = f"{dest}.part{threading.get_ident()}"
+    try:
+        with http_get(url, timeout) as r, open(tmp, "wb") as o:
+            shutil.copyfileobj(r, o, 1 << 20)
+            hdrs = dict(r.headers)
+    except urllib.error.HTTPError as e:
+        if e.code in (404, 406, 410):
+            return None
+        raise
+    os.replace(tmp, dest)
+    return hdrs
+
+
+def bid_path(bid, kind):
+    """kind: executable | debuginfo"""
+    return os.path.join(CACHE, "buildid", bid, kind)
+
+
+def cache_put(bid, kind, src):
+    """Move/link a verified file into the build-id cache."""
+    dst = bid_path(bid, kind)
+    if os.path.exists(dst):
+        return dst
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    tmp = f"{dst}.tmp{threading.get_ident()}"
+    try:
+        os.link(os.path.realpath(src), tmp)
+    except OSError:
+        shutil.copyfile(os.path.realpath(src), tmp)
+    os.replace(tmp, dst)
+    return dst
+
+
+def cache_get(bid, kind):
+    p = bid_path(bid, kind)
+    return p if os.path.exists(p) else None
+
+
+def debuginfod(bid, kind, servers):
+    """Fetch from debuginfod servers; returns (path, archive-name)."""
+    dest = bid_path(bid, kind)
+    meta = dest + ".archive"
+    if os.path.exists(dest):
+        return dest, open(meta).read() if os.path.exists(meta) else ""
+    miss = f"{dest}.miss"
+    if os.path.exists(miss) and time.time() - os.path.getmtime(miss) < 3600:
+        return None, ""
+    errors = False
+    # debuginfod servers can answer 404 while they are still unpacking a big
+    # package on first request, so a miss needs two rounds of 404s
+    for s in servers + [None] + servers:
+        if s is None:
+            time.sleep(5)
+            continue
+        url = f"{s.rstrip('/')}/buildid/{bid}/{kind}"
+        for attempt in range(2):
+            try:
+                h = download(url, dest)
+                break
+            except Exception as e:  # noqa - flaky server/network
+                vlog(f"  {url}: {e}")
+                h = False
+        if h is False:
+            errors = True
+            continue
+        if h is not None:
+            arch = {k.lower(): v for k, v in h.items()}.get(
+                "x-debuginfod-archive", "")
+            with open(meta, "w") as f:
+                f.write(arch)
+            return dest, arch
+    if errors:
+        log(f"debuginfod unreachable for {bid[:12]} {kind} (network?)")
+    else:   # a definite 404 everywhere: don't ask again for a while
+        os.makedirs(os.path.dirname(miss), exist_ok=True)
+        open(miss, "w").close()
+    return None, ""
+
+
+# --------------------------------------------------------------------------
+# Package streaming: extract selected members without storing the package
+# --------------------------------------------------------------------------
+DECOMP = {"zstd": ["zstd", "-dcq"], "zst": ["zstd", "-dcq"],
+          "xz": ["xz", "-dc"], "lzma": ["xz", "-dc"], "gzip": ["gzip", "-dc"],
+          "gz": ["gzip", "-dc"], "bzip2": ["bzip2", "-dc"],
+          "bz2": ["bzip2", "-dc"]}
+
+
+def _pump(r, dst, nbytes=None, label=""):
+    total, t0 = 0, time.time()
+    while nbytes is None or total < nbytes:
+        want = 4 << 20 if nbytes is None else min(4 << 20, nbytes - total)
+        chunk = r.read(want)
+        if not chunk:
+            break
+        dst.write(chunk)
+        total += len(chunk)
+        if time.time() - t0 > 15:
+            log(f"  {label}: {total >> 20} MB")
+            t0 = time.time()
+    return total
+
+
+def rpm_stream_extract(url, dest, members):
+    """curl | strip rpm headers | zstd/xz -dc | cpio -id <members>."""
+    os.makedirs(dest, exist_ok=True)
+    with (open(url, "rb") if os.path.exists(url) else
+          http_get(url, timeout=3600)) as r:
+        lead = r.read(96)
+        if lead[:4] != b"\xed\xab\xee\xdb":
+            raise RuntimeError(f"{url}: not an rpm")
+        hdrs = []
+        for which in ("sig", "main"):
+            h = r.read(16)
+            nidx, hsize = struct.unpack_from(">II", h, 8)
+            hdrs.append(h + r.read(nidx * 16 + hsize))
+            if which == "sig":
+                r.read((8 - len(hdrs[0]) % 8) % 8)
+        comp = "gzip"
+        h = hdrs[1]
+        nidx, _ = struct.unpack_from(">II", h, 8)
+        store = 16 + nidx * 16
+        for i in range(nidx):
+            tag, _t, off, _c = struct.unpack_from(">IIII", h, 16 + 16 * i)
+            if tag == 1125:  # RPMTAG_PAYLOADCOMPRESSOR
+                comp = h[store + off:h.index(b"\0", store + off)].decode()
+        cpio = subprocess.Popen(
+            ["cpio", "-idmu", "--quiet", "--no-absolute-filenames"] +
+            ["." + m for m in members],
+            cwd=dest, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        unz = subprocess.Popen(DECOMP[comp], stdin=subprocess.PIPE,
+                               stdout=cpio.stdin)
+        cpio.stdin.close()
+        _pump(r, unz.stdin, label=os.path.basename(url))
+        unz.stdin.close()
+        unz.wait()
+        cpio.wait()
+
+
+def deb_stream_extract(url, dest, members):
+    """curl | ar walk | data.tar.* -> tar -x <members>."""
+    os.makedirs(dest, exist_ok=True)
+    with (open(url, "rb") if os.path.exists(url) else
+          http_get(url, timeout=3600)) as r:
+        if r.read(8) != b"!<arch>\n":
+            raise RuntimeError(f"{url}: not a deb")
+        while True:
+            h = r.read(60)
+            if len(h) < 60:
+                break
+            name = h[:16].decode().strip().rstrip("/")
+            size = int(h[48:58])
+            if not name.startswith("data.tar"):
+                r.read(size + (size & 1))
+                continue
+            ext = name.rsplit(".", 1)[-1]
+            cmd = ["tar", "-x", "-C", dest, "-f", "-", "--wildcards"]
+            if ext in DECOMP and ext != "tar":
+                cmd += ["-I", " ".join(DECOMP[ext])]
+            # deb members are ./usr/..., older ones usr/...
+            pats = []
+            for m in members:
+                pats += ["." + m, m.lstrip("/")]
+            tar = subprocess.Popen(cmd + pats, stdin=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL)
+            try:
+                _pump(r, tar.stdin, size, os.path.basename(url))
+                tar.stdin.close()
+            except BrokenPipeError:
+                pass
+            tar.wait()
+            break
+
+
+def stream_extract(url, dest, members):
+    if url.endswith(".rpm"):
+        rpm_stream_extract(url, dest, members)
+    else:
+        deb_stream_extract(url, dest, members)
+
+
+def usr_variants(p):
+    """/usr/lib/x <-> /lib/x (usrmerge) spellings of a path."""
+    if p.startswith("/usr/"):
+        return [p, p[4:]]
+    return [p, "/usr" + p]
+
+
+# --------------------------------------------------------------------------
+# Ceph build repos (chacra)
+# --------------------------------------------------------------------------
+def shaman_builds(sha1, arch="x86_64"):
+    """Every ready build of sha1 on shaman (all distros and flavors)."""
+    try:
+        res = http_json(f"{SHAMAN}?project=ceph&sha1={sha1}")
+    except Exception as e:  # noqa
+        log(f"shaman query failed: {e}")
+        return []
+    return [x for x in res if x.get("status") == "ready" and
+            arch in x.get("archs", [arch])]
+
+
+def rec_distro(rec):
+    d, v = rec["distro"], str(rec["distro_version"])
+    if d == "ubuntu":
+        return f"ubuntu/{rec.get('distro_codename') or UBUNTU_CODENAMES.get(v, v)}"
+    return f"{d}/{v.split('.')[0]}"
+
+
+def expand_short_sha(short):
+    """git-describe short sha -> full sha1 via GitHub (ceph-ci first)."""
+    for repo in ("ceph/ceph-ci", "ceph/ceph"):
+        try:
+            sha = http_json(f"https://api.github.com/repos/{repo}/commits/"
+                            f"{short}").get("sha")
+            if sha:
+                return sha
+        except Exception as e:  # noqa - 404/422 or rate limit
+            vlog(f"github {repo} {short}: {e}")
+    return None
+
+
+def release_repos(version, family, distro):
+    """(rec, distro) for every repo of an official release on the release
+    sites: rpm-<ver>/el<N>/ and debian-<ver>/dists/<codename>/, the job's
+    or core's own distro family first."""
+    out = []
+    for site in RELEASE_SITES:
+        site = site.rstrip("/")
+        for kind in ("rpm", "debian"):
+            base = f"{site}/{kind}-{version}/"
+            try:
+                with http_get(base + ("" if kind == "rpm" else "dists/"),
+                              timeout=60) as r:
+                    html = r.read().decode(errors="replace")
+            except Exception:  # noqa - release/kind not published
+                continue
+            if kind == "rpm":
+                for el in sorted(set(re.findall(r'href="el(\d+)/"', html)),
+                                 reverse=True):
+                    out.append(({"url": f"{base}el{el}/", "sha1": version,
+                                 "flavor": "release",
+                                 "extra": {"version": version}},
+                                f"centos/{el}"))
+            else:
+                for code in sorted(set(re.findall(r'href="([a-z]+)/"', html))):
+                    fam = "ubuntu" if code in UBUNTU_CODENAMES.values() \
+                        else "debian"
+                    out.append(({"url": base, "sha1": version,
+                                 "flavor": "release",
+                                 "extra": {"version": version}},
+                                f"{fam}/{code}"))
+    out.sort(key=lambda x: (x[1] != distro,
+                            x[1].startswith("ubuntu") != (family == "ubuntu")))
+    return out
+
+
+def shaman_lookup(sha1, distro, flavor, arch="x86_64"):
+    try:
+        res = http_json(f"{SHAMAN}?project=ceph&sha1={sha1}"
+                        f"&distros={distro}/{arch}")
+    except Exception as e:  # noqa
+        log(f"shaman query failed: {e}")
+        return None
+    ready = [x for x in res if x.get("status") == "ready"]
+    pref = [x for x in ready if x.get("flavor") == flavor] or ready
+    return pref[0] if pref else None
+
+
+class CephRepo:
+    """path/build-id -> package maps for one chacra build."""
+
+    def __init__(self, rec, distro, cachedir):
+        self.rec, self.distro = rec, distro
+        self.url = rec["url"].rstrip("/") + "/"
+        os.makedirs(cachedir, exist_ok=True)
+        self.path2pkg, self.bid2pkg, self.pkgfiles, self.pkgurl = \
+            {}, {}, {}, {}
+        idx = os.path.join(cachedir, "index.json")
+        if os.path.exists(idx):
+            d = json.load(open(idx))
+        else:
+            d = self._load_rpm(cachedir) if self.is_rpm else \
+                self._load_deb(cachedir)
+            with open(idx + ".tmp", "w") as f:
+                json.dump(d, f)
+            os.replace(idx + ".tmp", idx)
+        self.path2pkg, self.bid2pkg, self.pkgfiles, self.pkgurl = (
+            d["path2pkg"], d["bid2pkg"], d["pkgfiles"], d["pkgurl"])
+
+    @property
+    def is_rpm(self):
+        return not self.distro.startswith(("ubuntu", "debian"))
+
+    def _load_rpm(self, cachedir):
+        base = self.url + "x86_64/"
+        if self.rec.get("plain"):     # --debug-repo: repodata/ right here
+            base = self.url
+        with http_get(base + "repodata/repomd.xml") as r:
+            md = ET.parse(r).getroot()
+        ns = "{http://linux.duke.edu/metadata/repo}"
+        loc = next(d.find(ns + "location").get("href")
+                   for d in md.findall(ns + "data")
+                   if d.get("type") == "filelists")
+        fl = os.path.join(cachedir, "filelists.xml.gz")
+        download(base + loc, fl)
+        p2p, b2p, pf, pu = {}, {}, {}, {}
+        tag = "{http://linux.duke.edu/metadata/filelists}"
+        with gzip.open(fl) as g:
+            for _ev, el in ET.iterparse(g):
+                if el.tag != tag + "package":
+                    continue
+                v = el.find(tag + "version")
+                rpm = "%s-%s-%s.%s.rpm" % (el.get("name"), v.get("ver"),
+                                           v.get("rel"), el.get("arch"))
+                pu[rpm] = base + rpm
+                files = [f.text for f in el.findall(tag + "file")]
+                dbg = [f for f in files if f.startswith("/usr/lib/debug/")]
+                if dbg:
+                    pf[rpm] = dbg
+                for p in files:
+                    p2p[p] = rpm
+                    if p.startswith("/usr/lib/debug/.build-id/") and \
+                            p.endswith(".debug"):
+                        b2p[p[25:27] + p[28:-6]] = rpm
+                el.clear()
+        os.unlink(fl)
+        return {"path2pkg": p2p, "bid2pkg": b2p, "pkgfiles": pf,
+                "pkgurl": pu}
+
+    def _load_deb(self, cachedir):
+        code = self.distro.split("/")[1]
+        dist = self.url + f"dists/{code}/main/"
+        p2p, b2p, pu = {}, {}, {}
+        with http_get(dist + "binary-amd64/Packages.gz") as r:
+            txt = gzip.decompress(r.read()).decode()
+        for stanza in txt.split("\n\n"):
+            f = dict(re.findall(r"^(\w[\w-]*): (.*)$", stanza, re.M))
+            if "Package" in f:
+                pu[f["Package"]] = self.url + f["Filename"]
+        with http_get(dist + "Contents-amd64.gz") as r:
+            txt = gzip.decompress(r.read()).decode()
+        for line in txt.splitlines():
+            path, _, pkgs = line.rpartition(" ")
+            path = "/" + path.strip()
+            pkg = pkgs.split(",")[0].split("/")[-1]
+            p2p[path] = pkg
+            if path.startswith("/usr/lib/debug/.build-id/") and \
+                    path.endswith(".debug"):
+                b2p[path[25:27] + path[28:-6]] = pkg
+        return {"path2pkg": p2p, "bid2pkg": b2p, "pkgfiles": {},
+                "pkgurl": pu}
+
+    def owns(self, path, bid):
+        return bid in self.bid2pkg or any(
+            v in self.path2pkg for v in usr_variants(path))
+
+    def binary_pkg(self, path):
+        for v in usr_variants(path):
+            if v in self.path2pkg:
+                return self.path2pkg[v], v
+        return None, None
+
+    def debug_members(self, bid, path):
+        """(pkg, [members]) providing debuginfo for build-id bid."""
+        pkg = self.bid2pkg.get(bid)
+        if not pkg:
+            return None, []
+        link = f"/usr/lib/debug/.build-id/{bid[:2]}/{bid[2:]}.debug"
+        ms = [link]
+        # rpm: the .build-id entry is a symlink to /usr/lib/debug/<path>-<nvr>
+        for f in self.pkgfiles.get(pkg, []):
+            for v in usr_variants(path):
+                if f.startswith("/usr/lib/debug" + v + "-") and \
+                        f.endswith(".debug"):
+                    ms.append(f)
+        return pkg, ms
+
+
+def ceph_stage(repo):
+    return os.path.join(CACHE, "stage", repo.rec["sha1"],
+                        repo.rec["flavor"], repo.distro.replace("/", "_"))
+
+
+def fetch_ceph(repo, mods, local_bins):
+    """Get binaries + debuginfo for ceph-owned modules into the cache."""
+    stage = ceph_stage(repo)
+    jobs = {}
+    for m in mods:
+        path, bid = m["path"], m["build_id"]
+        if not cache_get(bid, "executable"):
+            lb = local_bins.get(path)
+            if lb and file_build_id(lb) == bid:
+                cache_put(bid, "executable", lb)
+            else:
+                pkg, member = repo.binary_pkg(path)
+                if pkg:
+                    jobs.setdefault(pkg, set()).add(member)
+        if not cache_get(bid, "debuginfo"):
+            pkg, ms = repo.debug_members(bid, path)
+            if pkg:
+                jobs.setdefault(pkg, set()).update(ms)
+    run_extract_jobs(repo, jobs, stage)
+    alts = {}
+    for m in mods:
+        path, bid = m["path"], m["build_id"]
+        if not cache_get(bid, "executable"):
+            _pkg, member = repo.binary_pkg(path)
+            if member:
+                f = os.path.join(stage, member.lstrip("/"))
+                if os.path.exists(f) and file_build_id(f) == bid:
+                    cache_put(bid, "executable", f)
+        if not cache_get(bid, "debuginfo"):
+            f = os.path.join(stage, "usr/lib/debug/.build-id", bid[:2],
+                             bid[2:] + ".debug")
+            if os.path.exists(f):
+                cache_put(bid, "debuginfo", f)
+        d = cache_get(bid, "debuginfo")
+        alt = d and debugaltlink(d)
+        if alt and not cache_get(alt[1], "debuginfo"):
+            alts[alt[1]] = alt[0]
+    if alts:
+        # dwz multifiles: find which package ships them
+        jobs = {}
+        for abid, apath in alts.items():
+            pkg, ms = repo.debug_members(abid, apath)
+            if not pkg:
+                pkg, member = repo.binary_pkg(apath)
+                ms = [member] if member else []
+            if pkg:
+                jobs.setdefault(pkg, set()).update(ms + [apath])
+        run_extract_jobs(repo, jobs, stage)
+        for abid, apath in alts.items():
+            for f in (os.path.join(stage, "usr/lib/debug/.build-id",
+                                   abid[:2], abid[2:] + ".debug"),
+                      os.path.join(stage, apath.lstrip("/"))):
+                if os.path.exists(f):
+                    cache_put(abid, "debuginfo", f)
+                    break
+
+
+def run_extract_jobs(repo, jobs, stage):
+    def one(item):
+        pkg, members = item
+        members = sorted(members)
+        if all(os.path.lexists(os.path.join(stage, m.lstrip("/")))
+               for m in members):
+            return
+        log(f"streaming {pkg} ({len(members)} members)")
+        stream_extract(repo.pkgurl.get(pkg, pkg), stage, members)
+    with concurrent.futures.ThreadPoolExecutor(4) as ex:
+        list(ex.map(one, sorted(jobs.items())))
+
+
+# --------------------------------------------------------------------------
+# Distro libraries
+# --------------------------------------------------------------------------
+def fetch_system_rpm(mods, distro, servers):
+    """CentOS/RHEL-like: debuginfod for debuginfo; its X-DEBUGINFOD-ARCHIVE
+    header names the -debuginfo rpm, from which we derive the binary rpm."""
+    ver = distro.split("/")[1]
+    rpms = {}   # url -> [mods]
+
+    def dbg(m):
+        bid = m["build_id"]
+        d, arch = debuginfod(bid, "debuginfo", servers)
+        alt = d and debugaltlink(d)
+        if cache_get(bid, "executable"):
+            return m, None
+        e, _ = debuginfod(bid, "executable", servers)
+        if e:
+            return m, None
+        src = None
+        if alt:   # /usr/lib/debug/.dwz/<srcname>-<ver>-<rel>.<arch>
+            sm = re.match(r"(.+)-[^-]+-[^-]+$", os.path.basename(alt[0]))
+            src = sm and sm.group(1)
+        return m, binary_rpm_urls(arch, distro, src)
+
+    with concurrent.futures.ThreadPoolExecutor(8) as ex:
+        for m, urls in ex.map(dbg, mods):
+            if urls:
+                rpms.setdefault(tuple(urls), []).append(m)
+    # dwz multifiles are shared by many libs (all of glibc's): fetch each
+    # once, serially, rather than racing for it from every thread
+    for abid in sorted({a[1] for a in (debugaltlink(d) for d in (
+            cache_get(m["build_id"], "debuginfo") for m in mods) if d)
+            if a}):
+        debuginfod(abid, "debuginfo", servers)
+    tried = []
+    for urls, ms in rpms.items():
+        f = fetch_first(urls)
+        if f:
+            tried.append(f)
+            extract_verify(f, ms)
+    # modules with no debuginfo (so no archive name) - e.g. ld-linux - are
+    # usually in a package we already have (glibc)
+    left = [m for m in mods if not cache_get(m["build_id"], "executable")]
+    for f in tried:
+        if not left:
+            break
+        extract_verify(f, left)
+        left = [m for m in left if not cache_get(m["build_id"], "executable")]
+    if left:
+        fetch_from_distro_repos(left, distro)
+
+
+def rpm_distro_repos(distro):
+    """[(binary repo url, debuginfo repo url)] to search for a distro."""
+    name, ver = distro.split("/")[:2]
+    out = []
+    if name == "rocky":
+        # current minor, then older minors from the vault
+        roots = [f"https://dl.rockylinux.org/pub/rocky/{ver}/"]
+        try:
+            with http_get("https://dl.rockylinux.org/vault/rocky/") as r:
+                minors = sorted(set(re.findall(
+                    rf'href="({ver}\.\d+)/"', r.read().decode())),
+                    key=_vkey, reverse=True)
+            roots += [f"https://dl.rockylinux.org/vault/rocky/{m}/"
+                      for m in minors]
+        except Exception:  # noqa
+            pass
+    else:
+        roots = [f"{CENTOS_MIRROR}/{ver}-stream/"]
+    for root in roots:
+        for r in ("BaseOS", "AppStream", "CRB"):
+            b = f"{root}{r}/x86_64/"
+            out.append((b + "os/", b + "debug/tree/"))
+    e = f"https://dl.fedoraproject.org/pub/epel/{ver}/Everything/x86_64/"
+    out.append((e, e + "debug/"))
+    return out
+
+
+def repo_index(url, want_files):
+    """Cached {name-ver-rel.arch: href} (and {lib path: [nvra]} if
+    want_files) for an rpm repo.  Refreshed daily."""
+    key = re.sub(r"\W+", "_", url)
+    idx = os.path.join(CACHE, "distro-repos", key + "-v2.json")
+    if os.path.exists(idx) and time.time() - os.path.getmtime(idx) < 86400:
+        return json.load(open(idx))
+    with http_get(url + "repodata/repomd.xml") as r:
+        md = ET.parse(r).getroot()
+    ns = "{http://linux.duke.edu/metadata/repo}"
+    locs = {d.get("type"): d.find(ns + "location").get("href")
+            for d in md.findall(ns + "data")}
+    hrefs, byid, files = {}, {}, {}
+    common = "{http://linux.duke.edu/metadata/common}"
+    with open_meta(url + locs["primary"]) as g:
+        if True:
+            for _ev, el in ET.iterparse(g):
+                if el.tag != common + "package":
+                    continue
+                v = el.find(common + "version")
+                nvra = "%s-%s-%s.%s" % (el.findtext(common + "name"),
+                                        v.get("ver"), v.get("rel"),
+                                        el.findtext(common + "arch"))
+                hrefs[nvra] = el.find(common + "location").get("href")
+                byid[el.findtext(common + "checksum")] = nvra
+                el.clear()
+    if want_files:
+        fl = "{http://linux.duke.edu/metadata/filelists}"
+        keep = re.compile(r"/lib64/.*\.so(\.\w+)*$")
+        with open_meta(url + locs["filelists"]) as g:
+            if True:
+                for _ev, el in ET.iterparse(g):
+                    if el.tag != fl + "package":
+                        continue
+                    nvra = byid.get(el.get("pkgid"))
+                    for f in el.findall(fl + "file"):
+                        if nvra and keep.search(f.text or ""):
+                            files.setdefault(f.text, []).append(nvra)
+                    el.clear()
+    d = {"hrefs": hrefs, "files": files}
+    os.makedirs(os.path.dirname(idx), exist_ok=True)
+    with open(idx + ".tmp", "w") as f:
+        json.dump(d, f)
+    os.replace(idx + ".tmp", idx)
+    return d
+
+
+def open_meta(url):
+    """Repo metadata, decompressed (gz, zst or xz by magic)."""
+    import io
+    with http_get(url) as r:
+        data = r.read()
+    if data[:2] == b"\x1f\x8b":
+        data = gzip.decompress(data)
+    elif data[:4] == b"\x28\xb5\x2f\xfd":
+        data = subprocess.run(["zstd", "-dcq"], input=data,
+                              capture_output=True, check=True).stdout
+    elif data[:6] == b"\xfd7zXZ\x00":
+        import lzma
+        data = lzma.decompress(data)
+    return io.BytesIO(data)
+
+
+def _vkey(nvra):
+    return [int(x) if x.isdigit() else x for x in re.split(r"(\d+)", nvra)]
+
+
+def fetch_from_distro_repos(mods, distro, max_tries=8):
+    """Last resort for rpm distros: path -> package via the distro repos'
+    filelists, then try versions newest first until the build-id matches;
+    then pull the matching -debuginfo rpm from the debug repo."""
+    repos = []
+    for b, d in rpm_distro_repos(distro):
+        try:
+            repos.append((b, repo_index(b, True), d))
+        except Exception as e:  # noqa - repo may not exist for this distro
+            vlog(f"repo {b}: {e}")
+    for m in mods:
+        cands = []
+        for b, idx, d in repos:
+            for v in usr_variants(m["path"]):
+                for nvra in idx["files"].get(v, []):
+                    cands.append((nvra, b + idx["hrefs"][nvra], d))
+        cands.sort(key=lambda c: _vkey(c[0]), reverse=True)
+        found = None
+        for nvra, url, dbgrepo in cands[:max_tries]:
+            f = fetch_first([url])
+            if not f:
+                continue
+            extract_verify(f, [m])
+            if cache_get(m["build_id"], "executable"):
+                found = (nvra, dbgrepo)
+                break
+        if not found:
+            log(f"no distro package matches {m['path']} ({len(cands)} tried)")
+            continue
+        vlog(f"{m['path']}: {found[0]}")
+        if not cache_get(m["build_id"], "debuginfo"):
+            try:
+                fetch_rpm_debuginfo(m, *found)
+            except Exception as e:  # noqa - debuginfo is best effort
+                vlog(f"debuginfo for {m['path']}: {e}")
+
+
+def fetch_rpm_debuginfo(m, nvra, dbgrepo):
+    name, ver, rel_arch = nvra.rsplit("-", 2)
+    rel, arch = rel_arch.rsplit(".", 1)
+    idx = repo_index(dbgrepo, False)["hrefs"]
+    dn = f"{name}-debuginfo-{ver}-{rel}.{arch}"
+    if dn not in idx:
+        return
+    bid = m["build_id"]
+    link = f"/usr/lib/debug/.build-id/{bid[:2]}/{bid[2:]}.debug"
+    real = f"/usr/lib/debug{m['path']}-{ver}-{rel}.{arch}.debug"
+    stage = os.path.join(CACHE, "stage", "distro", nvra)
+    stream_extract(dbgrepo + idx[dn], stage, [link, real])
+    f = os.path.join(stage, link.lstrip("/"))
+    if not os.path.exists(f):
+        return
+    cache_put(bid, "debuginfo", f)
+    alt = debugaltlink(f)
+    if alt and not cache_get(alt[1], "debuginfo"):
+        # /usr/lib/debug/.dwz/<src>-<ver>-<rel>.<arch> in <src>-debuginfo
+        src = os.path.basename(alt[0])
+        sm = re.match(r"(.+)-([^-]+)-([^-]+)\.(\w+)$", src)
+        if sm and f"{sm.group(1)}-debuginfo-{sm.group(2)}-{sm.group(3)}." \
+                  f"{sm.group(4)}" in idx:
+            sn = f"{sm.group(1)}-debuginfo-{sm.group(2)}-{sm.group(3)}." \
+                 f"{sm.group(4)}"
+            stream_extract(dbgrepo + idx[sn], stage, [alt[0]])
+            a = os.path.join(stage, alt[0].lstrip("/"))
+            if os.path.exists(a):
+                cache_put(alt[1], "debuginfo", a)
+
+
+def binary_rpm_urls(archive, distro, srcname=None):
+    """Candidate URLs of the binary rpm matching a -debuginfo archive.
+
+    Any candidate is fine: extract_verify() checks the build-id."""
+    ver = distro.split("/")[1]
+    if not archive:
+        return None
+    base = os.path.basename(archive)
+    m = re.match(r"(.+)-debuginfo-([^-]+)-([^-]+)\.(\w+)\.rpm$", base)
+    if not m:
+        return None
+    name, v, r, a = m.groups()
+    rpm = f"{name}-{v}-{r}.{a}.rpm"
+    urls = []
+    l = rpm[0].lower()
+    # RHEL UBI (public CDN): .../ubiN/N/<arch>/<repo>/debug/Packages/<l>/
+    um = re.search(r"(cdn-ubi\.redhat\.com/.*)/debug/Packages/", archive)
+    if um:
+        urls.append(f"https://{um.group(1)}/os/Packages/{l}/{rpm}")
+    rm = re.search(r"/(BaseOS|AppStream|CRB|HighAvailability)/", archive,
+                   re.I)
+    repos = [rm.group(1)] if rm else []
+    repos += [x for x in ("BaseOS", "AppStream", "CRB")
+              if x.lower() not in (r.lower() for r in repos)]
+    for repo in repos:
+        if distro.startswith("rocky"):
+            urls.append(f"https://dl.rockylinux.org/pub/rocky/{ver}/{repo}/"
+                        f"{a}/os/Packages/{l}/{rpm}")
+        else:
+            urls.append(f"{CENTOS_MIRROR}/{ver}-stream/{repo}/{a}/os/"
+                        f"Packages/{rpm}")
+    if distro.startswith("centos"):
+        # CentOS Stream koji keeps every build (the mirror only the last few)
+        for sn in dict.fromkeys(x for x in (srcname, name) if x):
+            urls.append(f"https://kojihub.stream.centos.org/kojifiles/"
+                        f"packages/{sn}/{v}/{r}/{a}/{rpm}")
+    # koji style (fedora/EPEL): .../packages/<src>/<v>/<r>/<arch>/<rpm>
+    km = re.search(r"/packages/([^/]+)/([^/]+)/([^/]+)/", archive)
+    if km:
+        urls.append(f"https://kojipkgs.fedoraproject.org/packages/"
+                    f"{km.group(1)}/{km.group(2)}/{km.group(3)}/{a}/{rpm}")
+    urls.append(f"https://dl.fedoraproject.org/pub/epel/{ver}/Everything/"
+                f"{a}/Packages/{rpm[0].lower()}/{rpm}")
+    return urls
+
+
+def fetch_first(urls):
+    for u in urls:
+        dest = os.path.join(CACHE, "pkgs", os.path.basename(u))
+        if os.path.exists(dest):
+            return dest
+        try:
+            if download(u, dest):
+                vlog(f"downloaded {u}")
+                return dest
+        except Exception as e:  # noqa
+            vlog(f"  {u}: {e}")
+    log(f"could not download any of {[os.path.basename(u) for u in urls[:1]]}")
+    return None
+
+
+class scratch_dir:
+    """mkdtemp in the cache, removed on exit.  Removal is retried and never
+    fatal: on NFS (e.g. an NFS home) a just-closed big file can linger as
+    .nfsXXXX for a moment and make rmdir fail."""
+
+    def __enter__(self):
+        self.path = tempfile.mkdtemp(dir=CACHE, prefix="tmp-")
+        return self.path
+
+    def __exit__(self, *exc):
+        for _ in range(5):
+            shutil.rmtree(self.path, ignore_errors=True)
+            if not os.path.exists(self.path):
+                return
+            time.sleep(1)
+        vlog(f"left behind {self.path} (NFS?)")
+
+
+def extract_verify(pkgfile, mods):
+    """Extract mods' paths from a local package; cache those that match.
+
+    Also pull libthread_db next to libc so gdb can decode pthreads."""
+    members = set()
+    for m in mods:
+        members.update(usr_variants(m["path"]))
+        if "/libc.so" in m["path"]:
+            d = os.path.dirname(m["path"])
+            for v in usr_variants(d + "/libthread_db.so.1"):
+                members.add(v)
+    with scratch_dir() as tmp:
+        stream_extract(pkgfile, tmp, sorted(members))
+        for m in mods:
+            for v in usr_variants(m["path"]):
+                f = os.path.join(tmp, v.lstrip("/"))
+                if os.path.exists(f) and file_build_id(f) == m["build_id"]:
+                    cache_put(m["build_id"], "executable", f)
+                    # keep libthread_db alongside, keyed by libc's build-id
+                    tdb = os.path.join(os.path.dirname(f),
+                                       "libthread_db.so.1")
+                    if "/libc.so" in m["path"] and os.path.exists(tdb):
+                        cache_put(m["build_id"], "libthread_db", tdb)
+                    break
+
+
+class UbuntuIndex:
+    """path -> binary package for an Ubuntu release (lib paths only)."""
+
+    def __init__(self, codename):
+        idx = os.path.join(CACHE, "ubuntu", f"{codename}-libs-v2.json")
+        if os.path.exists(idx):
+            self.map = json.load(open(idx))
+            return
+        gz = os.path.join(CACHE, "ubuntu", f"{codename}-Contents-amd64.gz")
+        log(f"fetching {codename} Contents index (once)")
+        download(f"{UBUNTU_ARCHIVE}/dists/{codename}/Contents-amd64.gz", gz)
+        self.map = {}
+        # sonames may contain letters: noble's 64-bit time_t transition
+        # renamed e.g. libaio.so.1 -> libaio.so.1t64.0.2 (package libaio1t64)
+        keep = re.compile(r"(^|/)lib[^ ]*\.so(\.\w+)*\s|/bin/|/sbin/")
+        with gzip.open(gz, "rt", errors="replace") as f:
+            for line in f:
+                if not keep.search(line):
+                    continue
+                path, _, pkgs = line.rstrip("\n").rpartition(" ")
+                self.map["/" + path.strip()] = \
+                    pkgs.split(",")[0].split("/")[-1]
+        with open(idx, "w") as f:
+            json.dump(self.map, f)
+        os.unlink(gz)
+
+    def pkg(self, path):
+        for v in usr_variants(path):
+            if v in self.map:
+                return self.map[v]
+        # -updates may have bumped the minor version (libldap-2.5.so.0.1.15
+        # vs .0.1.11 in the release Contents): match on libfoo.so.MAJOR
+        if not hasattr(self, "major"):
+            self.major = {}
+            for p, pkg in self.map.items():
+                m = re.match(r"(.*\.so\.\w+?)\.", p)
+                if m:
+                    self.major.setdefault(m.group(1), pkg)
+        for v in usr_variants(path):
+            m = re.match(r"(.*\.so\.\w+?)\.", v)
+            if m and m.group(1) in self.major:
+                return self.major[m.group(1)]
+        return None
+
+
+def launchpad_debs(pkg, codename, limit=25):
+    """Newest-first download URLs of every published version of pkg."""
+    series = f"{LAUNCHPAD}/{codename}/amd64"
+    url = (f"{LAUNCHPAD}/+archive/primary?ws.op=getPublishedBinaries"
+           f"&binary_name={urllib.parse.quote(pkg)}&exact_match=true"
+           f"&distro_arch_series={urllib.parse.quote(series)}&ws.size=75")
+    try:
+        entries = http_json(url, tries=4)["entries"]
+    except Exception as e:  # noqa
+        log(f"launchpad lookup of {pkg} failed: {e}")
+        return
+    seen = set()
+    for e in entries:
+        v = e["binary_package_version"]
+        if v in seen:
+            continue
+        seen.add(v)
+        if len(seen) > limit:
+            return
+        try:
+            files = http_json(e["self_link"] + "?ws.op=binaryFileUrls",
+                              tries=4)
+        except Exception as ex:  # noqa
+            log(f"launchpad: no file list for {pkg} {v}: {ex}")
+            continue
+        for f in files:
+            if f.endswith(".deb") if isinstance(f, str) else False:
+                yield f
+
+
+def fetch_system_deb(mods, codename, servers):
+    """Ubuntu: find each lib's package in Contents, then walk its Launchpad
+    versions newest -> oldest until the build-id matches."""
+    idx = UbuntuIndex(codename)
+    bypkg = {}
+    for m in mods:
+        if cache_get(m["build_id"], "executable"):
+            continue
+        p = idx.pkg(m["path"])
+        if p:
+            bypkg.setdefault(p, []).append(m)
+        else:
+            log(f"no ubuntu package owns {m['path']}")
+
+    def one(item):
+        pkg, ms = item
+        for url in launchpad_debs(pkg, codename):
+            f = fetch_first([url])
+            if not f:
+                continue
+            extract_verify(f, ms)
+            ms = [m for m in ms if not cache_get(m["build_id"], "executable")]
+            if not ms:
+                return
+            os.unlink(f)   # wrong version, don't keep it
+        for m in ms:
+            log(f"no matching {pkg} version for {m['path']}")
+
+    with concurrent.futures.ThreadPoolExecutor(6) as ex:
+        list(ex.map(one, sorted(bypkg.items())))
+        # debuginfo is best effort (debuginfod.ubuntu.com coverage is thin)
+        list(ex.map(lambda m: debuginfod(m["build_id"], "debuginfo",
+                                         servers), mods))
+
+
+# --------------------------------------------------------------------------
+# Container images (cephadm / Rook / downstream builds).  Generic OCI
+# registry access; nothing vendor specific.  An image holds the exact
+# binaries - ceph *and* distro libraries - a containerized daemon ran, but
+# no debuginfo; that still comes from chacra / --debug-repo / debuginfod.
+# --------------------------------------------------------------------------
+IMAGE_REPOS_DEFAULT = ["quay.ceph.io/ceph-ci/ceph", "quay.io/ceph/ceph"]
+MANIFEST_TYPES = ", ".join([
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json"])
+
+
+def registry_creds(host):
+    """user:password for host from the usual podman/docker login files."""
+    import base64
+    files = [os.environ.get("REGISTRY_AUTH_FILE"),
+             os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/nonexistent"),
+                          "containers/auth.json"),
+             os.path.expanduser("~/.config/containers/auth.json"),
+             os.path.expanduser("~/.docker/config.json")]
+    for f in files:
+        try:
+            auths = json.load(open(f)).get("auths", {})
+        except (OSError, ValueError, TypeError):
+            continue
+        for k, v in auths.items():
+            if k.split("//")[-1].split("/")[0] == host and v.get("auth"):
+                return base64.b64decode(v["auth"]).decode()
+    return None
+
+
+class Registry:
+    """Minimal anonymous/token OCI registry client for one repository."""
+
+    def __init__(self, host, repo):
+        self.host, self.repo = host, repo
+        self.hdr = {"Accept": MANIFEST_TYPES,
+                    "User-Agent": "ceph-core-bundle"}
+        self._authed = False
+
+    def _auth(self, www):
+        import base64
+        p = dict(re.findall(r'(\w+)="([^"]*)"', www))
+        creds = registry_creds(self.host)
+        if www.lower().startswith("basic"):
+            if creds:
+                self.hdr["Authorization"] = "Basic " + base64.b64encode(
+                    creds.encode()).decode()
+            return
+        url = (f"{p['realm']}?service={urllib.parse.quote(p.get('service', ''))}"
+               f"&scope=repository:{self.repo}:pull")
+        req = urllib.request.Request(url, headers={"User-Agent":
+                                                   "ceph-core-bundle"})
+        if creds:
+            req.add_header("Authorization", "Basic " + base64.b64encode(
+                creds.encode()).decode())
+        with urllib.request.urlopen(req, timeout=60) as r:
+            t = json.load(r)
+        self.hdr["Authorization"] = "Bearer " + (t.get("token") or
+                                                 t.get("access_token"))
+
+    def get(self, path, stream=False):
+        url = f"https://{self.host}/v2/{self.repo}/{path}"
+        for attempt in range(2):
+            try:
+                r = _Counted(urllib.request.urlopen(urllib.request.Request(
+                    url, headers=self.hdr), timeout=900), url)
+                return r if stream else (dict(r.headers), r.read())
+            except urllib.error.HTTPError as e:
+                www = e.headers.get("WWW-Authenticate")
+                if e.code == 401 and www and attempt == 0:
+                    self._auth(www)
+                    continue
+                raise
+
+    def manifest(self, ref, arch="amd64"):
+        """(digest of the ref, single-platform manifest)."""
+        h, b = self.get(f"manifests/{ref}")
+        digest = {k.lower(): v for k, v in h.items()}.get(
+            "docker-content-digest", ref)
+        m = json.loads(b)
+        if "manifests" in m:
+            sub = [x for x in m["manifests"]
+                   if x.get("platform", {}).get("architecture") == arch]
+            if not sub:
+                raise RuntimeError(f"no {arch} image in {ref}")
+            _, b = self.get(f"manifests/{sub[0]['digest']}")
+            m = json.loads(b)
+        return digest, m
+
+    def config(self, m):
+        _, b = self.get(f"blobs/{m['config']['digest']}")
+        return json.loads(b)
+
+    def find_tags(self, needle, limit=50):
+        """Tags containing needle: Quay's search API, else the (paged)
+        standard tags/list."""
+        try:
+            url = (f"https://{self.host}/api/v1/repository/{self.repo}/tag/"
+                   f"?filter_tag_name=like:{urllib.parse.quote(needle)}"
+                   f"&onlyActiveTags=true&limit={limit}")
+            with http_get(url, timeout=60) as r:
+                return [t["name"] for t in json.load(r).get("tags", [])
+                        if not t["name"].endswith((".sig", ".att", ".sbom",
+                                                   ".src"))]
+        except Exception:  # noqa - not Quay: walk tags/list
+            pass
+        tags, path = [], "tags/list?n=1000"
+        for _ in range(200):
+            h, b = self.get(path)
+            tags += [t for t in json.loads(b).get("tags") or []
+                     if needle in t]
+            link = {k.lower(): v for k, v in h.items()}.get("link", "")
+            m = re.search(r"<[^>]*?/v2/[^?]+\?([^>]+)>", link)
+            if not m:
+                break
+            path = "tags/list?" + m.group(1)
+        return tags
+
+
+def parse_image_ref(ref, default_repos=()):
+    """'host/repo[:tag|@digest]' -> (host, repo, tag-or-digest).  A bare
+    tag is tried against default_repos by the caller."""
+    ref = ref.strip()
+    if "/" not in ref:
+        return None, None, ref
+    host, rest = ref.split("/", 1)
+    if "." not in host and ":" not in host and host != "localhost":
+        host, rest = "docker.io", ref        # docker hub short form
+    if "@" in rest:
+        repo, tag = rest.split("@", 1)
+    elif ":" in rest.rsplit("/", 1)[-1]:
+        repo, tag = rest.rsplit(":", 1)
+    else:
+        repo, tag = rest, "latest"
+    if host == "docker.io":
+        host = "registry-1.docker.io"
+        if "/" not in repo:
+            repo = "library/" + repo
+    return host, repo, tag
+
+
+def image_repos(args):
+    v = (getattr(args, "image_repo", None) or
+         os.environ.get("CEPH_CORE_IMAGE_REPOS", "").split() or
+         IMAGE_REPOS_DEFAULT)
+    return [x for x in v if x]
+
+
+def image_candidates(c, args, sha1s, flavor, distro):
+    """Ordered image refs to try for this core."""
+    out = []
+    for ref in getattr(args, "image", None) or []:
+        h, r, t = parse_image_ref(ref)
+        if h:
+            out.append(f"{h}/{r}{'@' if t.startswith('sha256:') else ':'}{t}")
+        else:   # bare tag: try every configured repository
+            out += [f"{repo}:{t}" for repo in image_repos(args)]
+    # cephadm puts CONTAINER_IMAGE=<registry>/<repo>@sha256:... in every
+    # daemon's environment, so the core names its own image
+    for v in c.find_env("CONTAINER_IMAGE"):
+        if v not in out:
+            log(f"core was produced in container image {v}")
+            out.append(v)
+    if out or getattr(args, "no_image_search", False):
+        return out
+    needles = [s for s in sha1s if s]
+    _full, short = c.find_ceph_versions()
+    for ver in c.find_ceph_release_versions():
+        needles.append("v" + ver)
+    want_debug = flavor == "debug"
+
+    def rank(tag):
+        t = tag.lower()
+        return (("debug" in t) != want_debug, "arm64" in t or "aarch64" in t,
+                "crimson" in t, ("centos" in t) != distro.startswith("centos"),
+                len(t))
+    for repo in image_repos(args):
+        h, r, _ = parse_image_ref(repo + ":x")
+        reg = Registry(h, r)
+        for n in needles:
+            try:
+                tags = reg.find_tags(n)
+            except Exception as e:  # noqa
+                vlog(f"tag search {repo} {n}: {e}")
+                continue
+            for t in sorted(tags, key=rank)[:3]:
+                ref = f"{repo}:{t}"
+                if ref not in out:
+                    out.append(ref)
+            if tags:
+                break
+    return out
+
+
+def fetch_from_image(ref, mods):
+    """Stream the image's layers, extract the core's files, keep those
+    whose build-id matches.  Returns (number matched, os-release dict)."""
+    h, r, t = parse_image_ref(ref)
+    reg = Registry(h, r)
+    try:
+        digest, m = reg.manifest(t)
+    except Exception as e:  # noqa
+        log(f"image {ref}: {e} (expired or private? podman/docker login "
+            "credentials are used if present)")
+        return 0, {}
+    want = {}
+    for mod in mods:
+        if cache_get(mod["build_id"], "executable"):
+            continue
+        for v in usr_variants(mod["path"]):
+            want[v.lstrip("/")] = mod
+    extra = {"etc/os-release", "usr/lib/os-release"}
+    if not want:
+        return 0, {}
+    stage = os.path.join(CACHE, "stage", "image", digest.replace(":", "_"))
+    total = sum(l.get("size", 0) for l in m["layers"]) >> 20
+    log(f"streaming image {ref} ({total} MB, {len(m['layers'])} layers)")
+    import tarfile
+    for layer in m["layers"]:
+        resp = reg.get(f"blobs/{layer['digest']}", stream=True)
+        mt = layer.get("mediaType", "")
+        src = resp
+        proc = None
+        if "zstd" in mt:
+            proc = subprocess.Popen(["zstd", "-dcq"], stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE)
+            threading.Thread(target=lambda: (shutil.copyfileobj(
+                resp, proc.stdin, 1 << 20), proc.stdin.close()),
+                daemon=True).start()
+            src = proc.stdout
+        with tarfile.open(fileobj=src, mode="r|*") as tf:
+            for ti in tf:
+                n = ti.name.lstrip("./")
+                if not ti.isfile() or (n not in want and n not in extra):
+                    continue
+                dst = os.path.join(stage, n)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with tf.extractfile(ti) as fi, open(dst + ".tmp", "wb") as fo:
+                    shutil.copyfileobj(fi, fo, 1 << 20)
+                os.replace(dst + ".tmp", dst)   # later layers win
+        if proc:
+            proc.wait()
+    matched = 0
+    for n, mod in want.items():
+        f = os.path.join(stage, n)
+        if os.path.exists(f) and not cache_get(mod["build_id"], "executable") \
+                and file_build_id(f) == mod["build_id"]:
+            cache_put(mod["build_id"], "executable", f)
+            matched += 1
+    osr = {}
+    for n in extra:
+        f = os.path.join(stage, n)
+        if os.path.exists(f):
+            osr = dict(re.findall(r'^(\w+)="?([^"\n]*)"?$', open(f).read(),
+                                  re.M))
+    return matched, osr
+
+
+def cmd_images(args):
+    """List image tags matching a sha1/version/substring."""
+    for repo in image_repos(args):
+        h, r, _ = parse_image_ref(repo + ":x")
+        reg = Registry(h, r)
+        try:
+            tags = reg.find_tags(args.needle)
+        except Exception as e:  # noqa
+            print(f"{repo}: {e}")
+            continue
+        for t in sorted(tags):
+            line = f"{repo}:{t}"
+            if args.labels:
+                try:
+                    _, m = reg.manifest(t)
+                    lab = reg.config(m).get("config", {}).get("Labels") or {}
+                    keys = ("CEPH_SHA1", "OSD_FLAVOR", "FROM_IMAGE",
+                            "CEPH_REF", "description", "vcs-ref",
+                            "build-date", "quay.expires-after")
+                    line += "  " + " ".join(f"{k}={lab[k]}" for k in keys
+                                            if lab.get(k))
+                except Exception as e:  # noqa
+                    line += f"  ({e})"
+            print(line)
+
+
+# --------------------------------------------------------------------------
+# Teuthology job metadata
+# --------------------------------------------------------------------------
+def job_info(core_path):
+    d = os.path.dirname(os.path.abspath(core_path))
+    for _ in range(5):
+        cfg = os.path.join(d, "config.yaml")
+        if os.path.exists(cfg):
+            txt = open(cfg).read()
+            info = {"job_dir": d}
+            for k in ("sha1", "os_type", "os_version", "flavor", "branch",
+                      "description"):
+                m = re.search(rf"^{k}: *(.*)$", txt, re.M)
+                if m:
+                    info[k] = m.group(1).strip().strip("'\"")
+            s = os.path.join(d, "summary.yaml")
+            if os.path.exists(s):
+                m = re.search(r"^failure_reason: *(.*)$", open(s).read(), re.M)
+                if m:
+                    info["failure_reason"] = m.group(1).strip()[:300]
+            return info
+        d = os.path.dirname(d)
+    return {}
+
+
+def distro_of(info, override=None):
+    if override:
+        return override
+    os_type = info.get("os_type", "centos")
+    ver = str(info.get("os_version", "9.stream"))
+    if os_type in ("centos", "rhel", "alma"):
+        return f"centos/{ver.split('.')[0]}"
+    if os_type == "rocky":
+        return f"rocky/{ver.split('.')[0]}"
+    if os_type == "ubuntu":
+        return f"ubuntu/{UBUNTU_CODENAMES.get(ver, ver)}"
+    return f"{os_type}/{ver}"
+
+
+def guess_distro(mods):
+    paths = " ".join(m["path"] for m in mods)
+    if "x86_64-linux-gnu" in paths:
+        return "ubuntu"
+    return "centos"
+
+
+def find_cores(arg):
+    if os.path.isfile(arg):
+        return [arg]
+    if not os.path.exists(arg):
+        raise SystemExit(f"{arg}: no such file or directory "
+                         f"(current directory is {os.getcwd()})")
+    # teuthology: <time>.<pid>.core[.gz]; systemd-coredump:
+    # core.<comm>.<uid>.<boot>.<pid>.<time>[.zst|.lz4|.xz]; plain "core"
+    pat = re.compile(r"(\.core|^core\..+|^core)(\.gz|\.zst|\.xz|\.lz4)?$")
+    teuth, other = [], []
+    for root, dirs, files in os.walk(arg):
+        dirs[:] = [d for d in dirs if d not in ("log", "syslog", "audit",
+                                                 "data", "console_logs",
+                                                 ".ceph-core-cache")]
+        # don't pick up a package's own copies of the cores
+        if os.path.exists(os.path.join(root, "cores.list")):
+            dirs[:] = [d for d in dirs if d != "cores"]
+        found = [os.path.join(root, f) for f in files if pat.search(f) and
+                 os.path.isfile(os.path.join(root, f)) and
+                 os.path.getsize(os.path.join(root, f)) > 0]
+        (teuth if os.path.basename(root) == "coredump" else other).extend(
+            found)
+    # a teuthology job/run dir: only its coredump/ dirs; else anything
+    return sorted(teuth or other)
+
+
+# --------------------------------------------------------------------------
+# Bundle
+# --------------------------------------------------------------------------
+GDBINIT = """\
+# Generated by ceph-core-bundle.  The ./gdb wrapper replaces @BUNDLE@ with
+# this directory's absolute path (gdb needs absolute paths for libthread_db).
+set pagination off
+set confirm off
+set width 0
+set print pretty on
+set print frame-arguments scalars
+set debuginfod enabled off
+# first run writes an index of the DWARF here; later runs start much faster
+set index-cache directory @BUNDLE@/index-cache
+set index-cache enabled on
+set auto-load safe-path /
+# say what the files are, so non-Linux hosts (e.g. macOS gdb) can read them
+set gnutarget elf64-x86-64
+set osabi GNU/Linux
+set sysroot @BUNDLE@/sysroot
+set debug-file-directory @BUNDLE@/sysroot/usr/lib/debug
+# source prefix recorded in the debuginfo: {srcprefix}
+{file_cmd}
+core-file @BUNDLE@/core
+# Linux-only (fails harmlessly on macOS gdb, so keep it last)
+set libthread-db-search-path {tdb}
+"""
+
+GDB_WRAPPER = """\
+#!/bin/sh
+# gdb on this core bundle.  Extra arguments go to gdb:
+#   ./gdb                                   interactive
+#   ./gdb -batch -ex 'thread apply all bt'  non-interactive
+#   CEPH_SRC=~/ceph ./gdb   map sources to a checkout of {sha1}
+[ -n "$CEPH_SRC" ] && CEPH_SRC=$(cd "$CEPH_SRC" && pwd)
+cd "$(dirname "$0")" || exit 1
+# macOS gdb has no libthread_db support: drop that (last) line there
+case "$(uname -s)" in
+  Linux) sed "s#@BUNDLE@#$(pwd)#g" gdbinit ;;
+  *) sed -e "s#@BUNDLE@#$(pwd)#g" -e "/libthread-db/d" gdbinit ;;
+esac > .gdbinit.run
+if [ "$1" = "--clion" ]; then
+  # IDE use: the IDE loads program + core itself, so keep only settings
+  grep -vE "^(file|core-file) " .gdbinit.run > clion.gdbinit
+  [ -n "$CEPH_SRC" ] && [ "{srcprefix}" != relative ] &&
+    echo "set substitute-path {srcprefix} $CEPH_SRC" >> clion.gdbinit
+  cat <<CLION
+CLion (or any IDE driving gdb):
+ 1. Settings > Build, Execution, Deployment > Toolchains > Debugger:
+      Linux: bundled GDB is fine.
+      macOS: Custom GDB executable = $(command -v gdb || echo /opt/homebrew/bin/gdb)
+      (CLion's bundled GDB/LLDB on macOS can't open Linux cores properly)
+ 2. Add this line to ~/.gdbinit (gdb reads it before the IDE loads files):
+      source $(pwd)/clion.gdbinit
+ 3. Run > Open Core Dump (or a "Core Dump Debug" run configuration):
+      Core dump   : $(pwd)/core
+      Symbol file : $(pwd)/sysroot{exe}
+      Sysroot     : $(pwd)/sysroot
+      Path mapping: {srcprefix} -> <ceph checkout at {sha1}>
+CLION
+  exit 0
+fi
+set --  -q -nx -x .gdbinit.run "$@"
+if [ -n "$CEPH_SRC" ]; then
+  if [ "{srcprefix}" = relative ]; then
+    # deb builds record '<cmake subdir>/./src/<file>'; one rule per subdir
+    find "$CEPH_SRC/src" -mindepth 1 -maxdepth 3 -type d -not -path '*/.*' |
+      sed "s|^$CEPH_SRC/src/\\(.*\\)|set substitute-path \\1/. $CEPH_SRC|" \\
+      > .srcmap.gdb
+    echo "set substitute-path ./src $CEPH_SRC/src" >> .srcmap.gdb
+  else
+    echo "set substitute-path {srcprefix} $CEPH_SRC" > .srcmap.gdb
+  fi
+  set -- -ix .srcmap.gdb "$@"
+fi
+exec ${{GDB:-gdb}} "$@"
+"""
+
+
+def write_sparse(src, dst, block=1 << 16):
+    """Copy a stream to dst, leaving holes where blocks are all zero."""
+    zero = bytes(block)
+    with open(dst, "wb") as o:
+        while True:
+            b = src.read(block)
+            if not b:
+                break
+            if b == zero[:len(b)]:
+                o.seek(len(b), os.SEEK_CUR)
+            else:
+                o.write(b)
+        o.truncate()
+
+
+def place(src, root, path, symlink_ok=False):
+    dst = os.path.join(root, path.lstrip("/"))
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    if os.path.lexists(dst):
+        os.unlink(dst)
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copyfile(src, dst)
+    return dst
+
+
+def relink(root, path, target):
+    """root/path -> target (relative symlink) unless path already exists."""
+    dst = os.path.join(root, path.lstrip("/"))
+    if os.path.lexists(dst):
+        return
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    os.symlink(os.path.relpath(os.path.join(root, target.lstrip("/")),
+                               os.path.dirname(dst)), dst)
+
+
+_noted = set()
+
+
+def _note_once(msg):
+    if msg not in _noted:
+        _noted.add(msg)
+        log(msg)
+
+
+SHF_COMPRESSED = 0x800
+
+
+def debug_compressed(path):
+    """True if the DWARF in path is already compressed (e.g. Ubuntu -dbg)."""
+    try:
+        sec = elf_sections(path).get(".debug_info")
+    except (OSError, struct.error):
+        return True
+    return not sec or bool(sec[5] & SHF_COMPRESSED)
+
+
+def compress_in_cache(src):
+    """Compress a cached debug file's DWARF sections in place, once.
+
+    Roughly halves it; gdb decompresses transparently (~0.5 s slower to
+    load a 1 GB file).  zstd where binutils has it, else zlib.  Bundles
+    hardlink the cached file, so every later bundle gets it for free."""
+    if debug_compressed(src) or not shutil.which("objcopy"):
+        return
+    tmp = f"{src}.z{threading.get_ident()}"
+    for algo in ("zstd", "zlib"):
+        r = subprocess.run(["objcopy", f"--compress-debug-sections={algo}",
+                            src, tmp], capture_output=True)
+        if r.returncode == 0:
+            if algo != "zstd":
+                _note_once("objcopy has no zstd support: compressing "
+                           "debug sections with zlib")
+            os.replace(tmp, src)
+            return
+    if os.path.exists(tmp):
+        os.unlink(tmp)
+    _note_once("objcopy could not compress debug sections; keeping them "
+               "uncompressed")
+
+
+def place_debug(src, root, path, compress):
+    if compress:
+        compress_in_cache(src)
+    return place(src, root, path)
+
+
+def populate_sysroot(sysroot, mods, names=(), lean=(), compress=False):
+    """lean: paths whose debuginfo is left out (--lean: distro libs)."""
+    tdb_dirs = []
+    # usrmerge: the loader may have recorded /lib64/x or /lib/x86_64.../x
+    for m in mods:
+        top = m["path"].split("/")[1:3]
+        if top[0] == "usr" and top[1] in ("lib", "lib64", "bin", "sbin"):
+            relink(sysroot, "/" + top[1], "/usr/" + top[1])
+    for m in mods:
+        path, bid = m["path"], m["build_id"]
+        e = cache_get(bid, "executable")
+        if e:
+            dst = place(e, sysroot, path)
+            so = elf_soname(dst)
+            if so and so != os.path.basename(path):
+                relink(sysroot, os.path.join(os.path.dirname(path), so), path)
+            t = cache_get(bid, "libthread_db")
+            if t:
+                place(t, sysroot, os.path.dirname(path) + "/libthread_db.so.1")
+                tdb_dirs.append(os.path.join("sysroot",
+                                             os.path.dirname(path).lstrip("/")))
+        d = None if path in lean else cache_get(bid, "debuginfo")
+        if d:
+            place_debug(d, sysroot,
+                        f"/usr/lib/debug/.build-id/{bid[:2]}/{bid[2:]}.debug",
+                        compress)
+            alt = debugaltlink(d)
+            a = alt and cache_get(alt[1], "debuginfo")
+            if a:
+                ab = alt[1]
+                dz = place_debug(a, sysroot, alt[0], compress)
+                place(dz, sysroot,
+                      f"/usr/lib/debug/.build-id/{ab[:2]}/{ab[2:]}.debug")
+    # names the dynamic loader actually used (symlinks, dlopen names)
+    for name, real in names:
+        if os.path.exists(os.path.join(sysroot, real.lstrip("/"))):
+            relink(sysroot, name, real)
+    return tdb_dirs
+
+
+def make_bundle(core_src, args, out, check=None):
+    """Build one core's bundle in directory out (cores/<name>/ of a
+    package).  check: verify_core() result for core_src."""
+    info = job_info(core_src)
+    out = os.path.abspath(out)
+    os.makedirs(out, exist_ok=True)
+    log(f"core {os.path.basename(core_src)} -> {out}")
+    core = os.path.join(out, "core")
+    if not os.path.exists(core):
+        if core_src.endswith((".gz", ".zst", ".xz", ".lz4")):
+            log(f"decompressing {os.path.basename(core_src)}")
+            tool = {"gz": "gzip", "zst": "zstd", "xz": "xz", "lz4": "lz4"}[
+                core_src.rsplit(".", 1)[1]]
+            # cores are mostly zeros: write holes (599 MB -> 14 MB on disk)
+            dec = subprocess.Popen([tool, "-dc", core_src],
+                                   stdout=subprocess.PIPE)
+            write_sparse(dec.stdout, core + ".tmp")
+            if dec.wait():
+                log(f"WARNING: {tool} failed part-way through {core_src}: "
+                    "the core is truncated (continuing with what there is)")
+            os.rename(core + ".tmp", core)
+        else:
+            src = os.path.abspath(core_src)
+            rel = os.path.relpath(src, out)
+            # relative when the core lives inside the package (--in-place),
+            # so the package can be moved
+            os.symlink(rel if not rel.startswith("../../..") else src, core)
+
+    c = Core(core)
+    mods = c.modules()
+    exe = c.exe(mods)
+    log(f"process {c.psargs!r} signal {c.signo} threads {c.threads}, "
+        f"{len(mods)} modules, exe {exe}")
+
+    distro = distro_of(info, args.distro)
+    if not info and not args.distro:
+        distro = "ubuntu/jammy" if guess_distro(mods) == "ubuntu" \
+            else "centos/9"
+    flavor = args.flavor or info.get("flavor", "default")
+    # Which ceph build?  Candidates: --sha1, config.yaml, then whatever
+    # version strings the core itself holds (upgrade tests, or no job dir).
+    # A build matches only if its debuginfo index contains the build-id of
+    # one of the core's modules - that pins sha1, distro AND flavor.
+    repo = None
+    bids = {m["build_id"] for m in mods}
+    candidates = [args.sha1 or info.get("sha1")]
+    scanned = False
+    tried = set()
+    family = guess_distro(mods)
+
+    def pref(rec):   # try the job's own distro/flavor first
+        rd = rec_distro(rec)
+        return (rd != distro, rec["flavor"] != flavor,
+                (rd.startswith("ubuntu")) != (family == "ubuntu"))
+
+    while candidates or not scanned:
+        if not candidates:
+            if args.sha1:
+                break
+            scanned = True
+            log("identifying the build from the core itself")
+            full, short = c.find_ceph_versions()
+            candidates = full[:3]
+            for sh in short[:3]:
+                f = expand_short_sha(sh)
+                if f:
+                    candidates.append(f)
+            continue
+        s = candidates.pop(0)
+        if not s or s in tried:
+            continue
+        tried.add(s)
+        recs = sorted(shaman_builds(s), key=pref)
+        if not recs:
+            log(f"sha1 {s[:10]} not on shaman - chacra builds expire after "
+                "~2-3 weeks")
+            continue
+        for rec in recs:
+            rd = rec_distro(rec)
+            r = CephRepo(rec, rd, os.path.join(
+                CACHE, "repos", s, rec["flavor"], rd.replace("/", "_")))
+            if bids & set(r.bid2pkg):
+                repo, distro, flavor = r, rd, rec["flavor"]
+                log(f"ceph build {rec['extra'].get('version')} {rd} "
+                    f"{flavor}: {rec['url']}")
+                break
+            vlog(f"sha1 {s[:10]} {rd} {rec['flavor']}: no matching build-ids")
+        if repo:
+            break
+        log(f"sha1 {s[:10]}: none of its {len(recs)} builds contain this "
+            "core's binaries")
+
+    # Official releases live on download.ceph.com (and mirrors), not chacra
+    if not repo and not args.sha1:
+        for ver in c.find_ceph_release_versions():
+            for rec, rd in release_repos(ver, family, distro):
+                try:
+                    r = CephRepo(rec, rd, os.path.join(
+                        CACHE, "repos", "release", ver, rd.replace("/", "_"),
+                        re.sub(r"\W+", "_", rec["url"])[-40:]))
+                except Exception as e:  # noqa - e.g. no Contents index
+                    vlog(f"release repo {rec['url']} {rd}: {e}")
+                    continue
+                if bids & set(r.bid2pkg):
+                    repo, distro, flavor = r, rd, "release"
+                    log(f"ceph release {ver} {rd}: {rec['url']}")
+                    break
+            if repo:
+                break
+
+    # Not $DEBUGINFOD_URLS: distros set that for the *host* (Ubuntu points it
+    # at debuginfod.ubuntu.com), which is wrong for e.g. a CentOS core.
+    servers = (args.debuginfod or
+               os.environ.get("CEPH_CORE_DEBUGINFOD", "").split()
+               or (["https://debuginfod.ubuntu.com/"]
+                   if distro.startswith("ubuntu") else
+                   ["https://debuginfod.centos.org/",
+                    # federated: RHEL UBI (== Rocky/Alma build-ids), Fedora,
+                    # EPEL, ...
+                    "https://debuginfod.elfutils.org/",
+                    "https://debuginfod.fedoraproject.org/"]))
+
+    # Container images: exact binaries (ceph and distro) for containerized
+    # daemons; also a fallback when the chacra build has gone.
+    want_images = (getattr(args, "image", None) or
+                   c.find_env("CONTAINER_IMAGE") or
+                   (not repo and not args.no_image_search))
+    if want_images:
+        cands = image_candidates(c, args, [t for t in tried if t],
+                                 flavor, distro)
+        exe_bid = next((m["build_id"] for m in mods if m["path"] == exe),
+                       None)
+        for ref in cands:
+            n, osr = fetch_from_image(ref, mods)
+            log(f"image {ref}: {n} of {len(mods)} files match the core")
+            if n and osr.get("ID") and not info.get("os_type"):
+                ident = osr["ID"]
+                ver = osr.get("VERSION_ID", "").split(".")[0]
+                distro = (f"ubuntu/{UBUNTU_CODENAMES.get(osr.get('VERSION_ID'), '')}"
+                          if ident == "ubuntu" else
+                          f"{'rocky' if ident == 'rocky' else 'centos'}/{ver}")
+            if exe_bid and cache_get(exe_bid, "executable"):
+                break
+
+    # local copies teuthology left next to the core (the main binary)
+    # (matched by build-id: e.g. it saves ceph-osd for /usr/bin/ceph-osd-classic)
+    local = {}
+    cd = os.path.dirname(os.path.abspath(core_src))
+    bids = {m["build_id"]: m["path"] for m in mods}
+    for f in os.listdir(cd):
+        lf = os.path.join(cd, f)
+        if ".core" in f or not os.path.isfile(lf):
+            continue
+        b = file_build_id(lf)
+        if b in bids:
+            local[bids[b]] = lf
+            if not cache_get(b, "executable"):
+                cache_put(b, "executable", lf)
+
+    ceph_mods = [m for m in mods if repo and repo.owns(m["path"],
+                                                         m["build_id"])]
+    sys_mods = [m for m in mods if m not in ceph_mods]
+    if repo:
+        fetch_ceph(repo, ceph_mods, local)
+    # extra debuginfo repositories (e.g. a downstream build's repo)
+    for url in (getattr(args, "debug_repo", None) or
+                os.environ.get("CEPH_CORE_DEBUG_REPOS", "").split()):
+        need = [m for m in mods if not cache_get(m["build_id"], "debuginfo")]
+        if not need:
+            break
+        key = re.sub(r"\W+", "_", url)[-80:]
+        try:
+            dr = CephRepo({"url": url, "sha1": key, "flavor": "repo",
+                           "plain": True, "extra": {}},
+                          "rpm/x",
+                          os.path.join(CACHE, "repos", "extra", key))
+        except Exception as e:  # noqa
+            log(f"debug repo {url}: {e}")
+            continue
+        hits = [m for m in need if m["build_id"] in dr.bid2pkg]
+        log(f"debug repo {url}: debuginfo for {len(hits)} files")
+        if hits:
+            fetch_ceph(dr, hits, {})
+            for m in hits:
+                if m not in ceph_mods:
+                    ceph_mods.append(m)
+                if m in sys_mods:
+                    sys_mods.remove(m)
+    for m in ceph_mods:
+        if not cache_get(m["build_id"], "executable") and m["path"] in local:
+            if file_build_id(local[m["path"]]) == m["build_id"]:
+                cache_put(m["build_id"], "executable", local[m["path"]])
+    if distro.startswith("ubuntu"):
+        fetch_system_deb(sys_mods, distro.split("/")[1], servers)
+    else:
+        fetch_system_rpm(sys_mods, distro, servers)
+
+    sysroot = os.path.join(out, "sysroot")
+    exe_base = next((int(m["base"], 16) for m in mods if m["path"] == exe), 0)
+    tdb = populate_sysroot(
+        sysroot, mods, c.link_map(exe_base),
+        lean={m["path"] for m in sys_mods} if args.lean else (),
+        compress=args.compress_debug)
+    status = {m["path"]: {
+        "build_id": m["build_id"],
+        "origin": "ceph" if m in ceph_mods else "distro",
+        "binary": bool(cache_get(m["build_id"], "executable")),
+        "debuginfo": os.path.exists(os.path.join(
+            sysroot, "usr/lib/debug/.build-id", m["build_id"][:2],
+            m["build_id"][2:] + ".debug"))}
+        for m in mods}
+    manifest = {
+        "core_check": check and {k: check[k] for k in
+                                 ("ok", "problems", "warnings")},
+        "core_source": os.path.abspath(core_src), "job": info,
+        "exe": exe, "psargs": c.psargs, "signal": c.signo,
+        "signal_name": SIGNALS.get(c.signo), "threads": c.threads,
+        "distro": distro,
+        "build_error": None if repo else (
+            f"ceph build {sorted(t for t in tried if t)} for {distro}/"
+            f"{flavor} not available on shaman (chacra builds expire after "
+            "~2-3 weeks): ceph frames will have no debuginfo"),
+        "build": repo and {"sha1": repo.rec["sha1"],
+                           "version": repo.rec["extra"].get("version"),
+                           "flavor": repo.rec["flavor"], "repo": repo.url},
+        "missing_binary": [p for p, s in status.items() if not s["binary"]],
+        "missing_debuginfo": [p for p, s in status.items()
+                              if not s["debuginfo"]],
+        "modules": status}
+    sha1 = manifest["build"]["sha1"] if repo else "<sha1>"
+
+    def write_gdb_files(srcprefix):
+        with open(os.path.join(out, "gdbinit"), "w") as f:
+            have = exe and os.path.exists(os.path.join(sysroot, exe.lstrip("/")))
+            f.write(GDBINIT.format(
+                file_cmd=f"file @BUNDLE@/sysroot{exe}" if have else
+                f"# executable {exe} not available",
+                srcprefix=srcprefix,
+                                   tdb=":".join("@BUNDLE@/" + t for t in tdb) or
+                                   "@BUNDLE@/sysroot/usr/lib64"))
+        w = os.path.join(out, "gdb")
+        with open(w, "w") as f:
+            f.write(GDB_WRAPPER.format(sha1=sha1, srcprefix=srcprefix,
+                                       exe=exe or ""))
+        os.chmod(w, 0o755)
+    write_gdb_files("/usr/src/debug")
+    srcprefix = detect_src_prefix(out)
+    if srcprefix:
+        write_gdb_files(srcprefix)
+    manifest["source_prefix"] = srcprefix
+    with open(os.path.join(out, "manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=1)
+    write_readme(out, manifest)
+    for p in manifest["missing_binary"]:
+        log(f"  MISSING binary  : {p}")
+    for p in manifest["missing_debuginfo"]:
+        if status[p]["origin"] == "ceph":
+            log(f"  MISSING ceph debuginfo: {p}")
+    nd = sum(1 for p in manifest["missing_debuginfo"]
+             if status[p]["origin"] == "distro")
+    if nd and args.lean:
+        log(f"  {nd} distro libs: debuginfo left out (--lean); their frames "
+            "show function names only")
+    elif nd:
+        log(f"  {nd} distro libs: no debuginfo found (tried "
+            f"{', '.join(u.split('/')[2] for u in servers)}); their frames "
+            "show function names only - list in manifest.json "
+            "missing_debuginfo")
+    if not args.no_report:
+        write_report(out, manifest)
+    return manifest
+
+
+def write_tarball(out, tarball):
+    """<package>.tar.zst of the package's own files: sysroot symlinks stay
+    symlinks, shared files are stored once (hardlinks), and each core is
+    stored as a file even when it is a symlink to the original."""
+    import tarfile
+    name = os.path.basename(out)
+    skip_dirs = {"index-cache", ".ceph-core-cache"}
+    skip_files = {".gdbinit.run", ".srcmap.gdb"}
+    with open(tarball + ".tmp", "wb") as f:
+        # -19 --long: ~25% smaller than the default level, worth it when the
+        # bundle then crawls over a VPN (2.8 GB rgw bundle: 509 -> 388 MB)
+        z = subprocess.Popen(["zstd", "-q", "-19", "--long=27", "-T0", "-c"],
+                             stdin=subprocess.PIPE,
+                             stdout=f)
+        with tarfile.open(fileobj=z.stdin, mode="w|") as t:
+            # only the package's own files (--in-place: not the original
+            # cores or anything else that was already in the directory)
+            top = ["gdb", "cores.list", "README.md", "cores"]
+            for e in top:
+                path = os.path.join(out, e)
+                if not os.path.lexists(path):
+                    continue
+                if not os.path.isdir(path):
+                    t.add(path, arcname=f"{name}/{e}")
+                    continue
+                for root, dirs, files in os.walk(path):
+                    dirs[:] = sorted(d for d in dirs if d not in skip_dirs)
+                    rel = os.path.relpath(root, out)
+                    t.add(root, arcname=f"{name}/{rel}", recursive=False)
+                    for fn in sorted(files + [d for d in os.listdir(root)
+                                              if os.path.islink(
+                                                  os.path.join(root, d)) and
+                                              os.path.isdir(
+                                                  os.path.join(root, d))]):
+                        if fn in skip_files:
+                            continue
+                        fp = os.path.join(root, fn)
+                        t.dereference = (fn == "core")
+                        t.add(fp, arcname=f"{name}/{rel}/{fn}",
+                              recursive=False)
+        z.stdin.close()
+        if z.wait():
+            raise RuntimeError("zstd failed")
+    os.replace(tarball + ".tmp", tarball)
+
+
+def run_gdb(out, cmds, timeout=900):
+    gdb = os.environ.get("GDB", "gdb")
+    if not shutil.which(gdb):
+        return None
+    argv = [os.path.join(out, "gdb"), "-batch"]
+    for cmd in cmds:
+        argv += ["-ex", cmd]
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True,
+                           timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return "(gdb timed out)"
+    # drop the per-thread "[New LWP n]" noise
+    return "\n".join(l for l in (p.stdout + p.stderr).splitlines()
+                     if not l.startswith("[New LWP"))
+
+
+def detect_src_prefix(out):
+    """Where the build tree lived, from main()'s line info.
+
+    rpm builds: absolute /usr/src/debug/ceph-<nvr>/src/...
+    deb builds: relative '<cmake subdir>/./src/...' ("relative")."""
+    o = run_gdb(out, ["info line main"], timeout=300) or ""
+    m = re.search(r'of "([^"]+)"', o)
+    if not m:
+        return None
+    p = m.group(1)
+    m = re.match(r"(.*?/ceph-[^/]+)/src/", p)
+    if m:
+        return m.group(1)
+    if not p.startswith("/"):
+        return "relative"
+    return None
+
+
+def write_report(out, m):
+    log("running gdb for report.txt")
+    hdr = [
+        "# ceph-core-bundle report",
+        f"process : {m['psargs']}",
+        f"signal  : {m['signal']} {m['signal_name'] or ''}",
+        f"threads : {m['threads']}",
+        f"build   : {(m['build'] or {}).get('version')} "
+        f"sha1 {(m['build'] or {}).get('sha1')} {m['distro']}",
+        f"job     : {m['job'].get('job_dir')}",
+        *([f"WARNING : {m['build_error']}"] if m.get("build_error") else []),
+        *([f"WARNING : executable {m['exe']} not found (not a ceph binary?)"]
+          if m["exe"] in m["missing_binary"] or m["exe"] not in m["modules"]
+          else []),
+        f"failure : {m['job'].get('failure_reason')}",
+        *[f"CORE PROBLEM : {p}" for p in
+          (m.get("core_check") or {}).get("problems", [])],
+        f"missing binaries : {m['missing_binary']}",
+        "", "==== crashing thread: bt full ===="]
+    # one gdb run: symbol expansion (not loading) dominates for big C++
+    # binaries, and every new gdb process pays it again
+    sep = "@@ccb-all-threads@@"
+    body = run_gdb(out, ["bt full 40", f"echo {sep}\\n",
+                         "thread apply all -ascending bt 30"]) \
+        or "(gdb not available)"
+    first, _, rest = body.partition(sep)
+    hdr += [first.rstrip(), "", "==== all threads: bt ====", rest.lstrip()]
+    with open(os.path.join(out, "report.txt"), "w") as f:
+        f.write("\n".join(hdr) + "\n")
+
+
+def write_readme(out, m):
+    b = m.get("build") or {}
+    txt = f"""# Core bundle: {m['psargs']}
+
+Signal {m['signal']} {m['signal_name'] or ''}, {m['threads']} threads.
+Build {b.get('version')} (sha1 {b.get('sha1')}, {m['distro']}, {b.get('flavor')}).
+Teuthology job: {m['job'].get('job_dir')}
+Failure: {m['job'].get('failure_reason')}
+
+Everything gdb needs is in this directory (core, `sysroot/` holding the
+exact binaries and `sysroot/usr/lib/debug` holding the debuginfo, all
+matched by build-id).  No ceph install or container is needed.
+
+## Files
+* `report.txt`     - `bt full` of the crashing thread + `bt` of every thread.
+                     Start here.
+* `gdb`            - wrapper: runs gdb with `gdbinit` (sysroot, debug dirs,
+                     executable, core already set).
+* `manifest.json`  - process info, build, every mapped module with build-id
+                     and whether its binary/debuginfo was found.
+
+## Recipes
+    ./gdb                                        # interactive
+    ./gdb -batch -ex bt                          # crashing thread
+    ./gdb -batch -ex 'thread apply all bt'       # all threads
+    ./gdb -batch -ex 'thread 12' -ex 'frame 4' -ex 'info locals'
+    ./gdb -batch -ex 'frame 5' -ex 'p *this'
+    ./gdb -batch -ex 'thread find <name>'        # thread by name
+    CEPH_SRC=~/git/ceph ./gdb -batch -ex 'frame 5' -ex list
+        # needs `git checkout {b.get('sha1')}` in that tree; maps
+        # {m.get('source_prefix')} -> $CEPH_SRC
+
+Batch mode (`-batch -ex ...`) is best for scripts/LLM agents: each call
+re-reads debuginfo (a few seconds up to ~1 min for ceph-osd), so ask for
+several things per call with multiple `-ex`.
+"""
+    with open(os.path.join(out, "README.md"), "w") as f:
+        f.write(txt)
+
+
+# --------------------------------------------------------------------------
+def open_core(core_src):
+    """Core object for a possibly-compressed core (temp decompress)."""
+    ext = core_src.rsplit(".", 1)[-1]
+    if ext in ("gz", "zst", "xz", "lz4", "bz2"):
+        tool = {"gz": "gzip", "zst": "zstd", "xz": "xz", "lz4": "lz4",
+                "bz2": "bzip2"}[ext]
+        tmp = tempfile.NamedTemporaryFile(delete=False)
+        dec = subprocess.Popen([tool, "-dc", core_src], stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL)
+        write_sparse(dec.stdout, tmp.name)
+        dec.wait()
+        c = Core(tmp.name)
+        os.unlink(tmp.name)   # our fd keeps it alive; nothing left behind
+        return c
+    return Core(core_src)
+
+
+# --------------------------------------------------------------------------
+# verify: is a core complete?  Purely local, nothing is downloaded, and
+# compressed cores are checked while streaming (nothing written to disk).
+# --------------------------------------------------------------------------
+class CoreStream:
+    """Sequential reader over a (possibly compressed) core that keeps the
+    first bytes for header parsing and can capture chosen ranges later."""
+
+    def __init__(self, path):
+        self.path = path
+        ext = path.rsplit(".", 1)[-1]
+        self.proc = None
+        if ext in ("gz", "zst", "xz", "bz2", "lz4"):
+            tool = {"gz": "gzip", "zst": "zstd", "xz": "xz",
+                    "bz2": "bzip2", "lz4": "lz4"}[ext]
+            self.proc = subprocess.Popen([tool, "-dc", path],
+                                         stdout=subprocess.PIPE,
+                                         stderr=subprocess.PIPE)
+            self.f = self.proc.stdout
+        else:
+            self.f = open(path, "rb")
+        self.pos = 0
+        self.head = b""
+        self.wanted = []   # [offset, length, bytearray]
+
+    def read_head(self, n):
+        """Ensure the first n bytes are buffered (or EOF)."""
+        while len(self.head) < n:
+            b = self.f.read(max(n - len(self.head), 1 << 20))
+            if not b:
+                break
+            self.head += b
+            self.pos += len(b)
+        return self.head[:n]
+
+    def drain(self):
+        """Read to EOF, filling wanted ranges.  Returns (size, error)."""
+        for w in self.wanted:
+            self._fill(w, 0, self.head)
+        while True:
+            b = self.f.read(16 << 20)
+            if not b:
+                break
+            for w in self.wanted:
+                self._fill(w, self.pos, b)
+            self.pos += len(b)
+        err = None
+        if self.proc:
+            rc = self.proc.wait()
+            msg = self.proc.stderr.read().decode(errors="replace").strip()
+            if rc:
+                err = msg or f"decompressor exit status {rc}"
+        return self.pos, err
+
+    @staticmethod
+    def _fill(w, base, b):
+        off, n, buf = w
+        lo, hi = max(off, base), min(off + n, base + len(b))
+        if lo < hi:
+            buf[lo - off:hi - off] = b[lo - base:hi - base]
+
+
+def verify_core(path):
+    """Check a core for truncation/corruption.  Returns a result dict."""
+    r = _verify_core(path)
+    r["ok"] = not r["problems"]
+    return r
+
+
+def _verify_core(path):
+    r = {"core": path, "problems": [], "warnings": []}
+    try:
+        st = CoreStream(path)
+    except OSError as e:
+        r["problems"].append(str(e))
+        return r
+    eh = st.read_head(64)
+    if len(eh) < 64 or eh[:4] != b"\x7fELF":
+        r["problems"].append("not an ELF file (empty, or not a core?)")
+        st.drain()
+        return r
+    if eh[4] != 2 or eh[5] != 1:
+        r["problems"].append("not a 64-bit little-endian ELF file")
+        return r
+    e_type, e_machine = struct.unpack_from("<HH", eh, 16)
+    e_phoff, = struct.unpack_from("<Q", eh, 32)
+    e_shoff, = struct.unpack_from("<Q", eh, 40)
+    e_phentsize, e_phnum = struct.unpack_from("<HH", eh, 54)
+    if e_type != 4:
+        r["problems"].append(f"ELF type {e_type}, not a core file")
+        return r
+    if e_phnum == 0xffff:   # PN_XNUM: real count in section header 0
+        sh = st.read_head(e_shoff + 64)[e_shoff:e_shoff + 64]
+        if len(sh) == 64:
+            e_phnum = struct.unpack_from("<I", sh, 44)[0]
+    ph = st.read_head(e_phoff + e_phnum * e_phentsize)[e_phoff:]
+    if len(ph) < e_phnum * e_phentsize:
+        r["problems"].append("program headers cut off: file truncated "
+                             "almost immediately")
+        r["size"], err = st.drain()
+        return r
+    phdrs = [struct.unpack_from("<IIQQQQQQ", ph, i * e_phentsize)
+             for i in range(e_phnum)]
+    loads = [(p[3], p[2], p[5]) for p in phdrs if p[0] == PT_LOAD]
+    note_end = max((p[2] + p[5] for p in phdrs if p[0] == PT_NOTE),
+                   default=0)
+    head = st.read_head(note_end)
+    notes = b"".join(head[p[2]:p[2] + p[5]] for p in phdrs
+                     if p[0] == PT_NOTE)
+    expected = max((p[2] + p[5] for p in phdrs), default=0)
+    r["expected_size"] = expected
+
+    threads, files, info = [], [], {}
+    for name, ntype, desc in parse_notes(notes):
+        if ntype == NT_PRSTATUS and name == b"CORE" and len(desc) >= 336:
+            pid, = struct.unpack_from("<i", desc, 32)
+            rip, = struct.unpack_from("<Q", desc, 112 + 16 * 8)
+            rsp, = struct.unpack_from("<Q", desc, 112 + 19 * 8)
+            threads.append({"lwp": pid, "rip": rip, "rsp": rsp})
+        elif ntype == NT_PRPSINFO and name == b"CORE":
+            info["psargs"] = desc[56:136].split(b"\0")[0].decode(
+                errors="replace").strip()
+        elif ntype == NT_SIGINFO:
+            info["signal"] = struct.unpack_from("<i", desc, 0)[0]
+        elif ntype == NT_FILE:
+            count, pagesz = struct.unpack_from("<QQ", desc, 0)
+            ents = [struct.unpack_from("<QQQ", desc, 16 + 24 * i)
+                    for i in range(count)]
+            names = desc[16 + 24 * count:].split(b"\0")
+            files = [(s_, e_, o * pagesz, n.decode(errors="replace"))
+                     for (s_, e_, o), n in zip(ents, names)]
+    r.update(info)
+    r["threads"] = len(threads)
+    if note_end and len(head) < note_end:
+        r["problems"].append("notes cut off: no thread/register info")
+    if not threads:
+        r["problems"].append("no thread state (NT_PRSTATUS) in core")
+    if not files:
+        r["warnings"].append("no NT_FILE note: mapped files unknown "
+                             "(very old kernel, or gcore without it)")
+
+    def seg_of(addr):
+        for v, off, sz in loads:
+            if v <= addr < v + sz:
+                return off + (addr - v)
+        return None
+
+    # capture the first page of every mapped ELF (header + build-id note)
+    mods = {}
+    for s_, e_, fo, n in files:
+        if fo == 0 and n not in mods:
+            off = seg_of(s_)
+            if off is not None:
+                buf = bytearray(4096)
+                mods[n] = [off, 4096, buf]
+                st.wanted.append(mods[n])
+    size, err = st.drain()
+    r["size"] = size
+    if err:
+        r["problems"].append(f"compressed file is damaged: {err}")
+    if size < expected:
+        r["problems"].append(
+            f"TRUNCATED: {size:,} of {expected:,} bytes "
+            f"({100 * size // max(expected, 1)}%), "
+            f"{(expected - size) >> 20} MB missing")
+    elif size > expected:
+        r["warnings"].append(f"{size - expected:,} bytes of trailing data")
+
+    present = lambda off, n=1: off + n <= size   # noqa: E731
+    lost = [t["lwp"] for t in threads
+            if seg_of(t["rsp"]) is None or not present(seg_of(t["rsp"]), 64)]
+    r["threads_without_stack"] = lost
+    if lost:
+        first = threads[0]["lwp"] if threads else None
+        which = ("including the CRASHING thread " if first in lost else "")
+        r["problems" if first in lost else "warnings"].append(
+            f"{len(lost)} of {len(threads)} thread stacks missing "
+            f"{which}- those backtraces will be empty")
+    unreadable = []
+    for n, (off, ln, buf) in mods.items():
+        if not present(off, 64) or buf[:4] != b"\x7fELF":
+            unreadable.append(n)
+    r["modules"] = len(mods)
+    r["modules_without_build_id"] = unreadable
+    if unreadable:
+        r["warnings"].append(
+            f"{len(unreadable)} of {len(mods)} loaded files have no ELF "
+            "header in the core (build-id unknown: can't fetch exact "
+            "binaries for them)")
+    loads_missing = sum(1 for v, off, sz in loads if not present(off, sz))
+    r["segments"] = len(loads)
+    r["segments_missing"] = loads_missing
+    return r
+
+
+def print_check(r):
+    print(f"{'OK  ' if r['ok'] else 'BAD '} {r['core']}", flush=True)
+    if "expected_size" in r:
+        print(f"     {r.get('psargs', '?')}  signal {r.get('signal')}  "
+              f"{r.get('threads', 0)} threads  "
+              f"{r.get('modules', 0)} ELF files  "
+              f"size {r.get('size', 0) >> 20}/{r['expected_size'] >> 20} MB  "
+              f"segments missing {r.get('segments_missing', 0)}/"
+              f"{r.get('segments', 0)}", flush=True)
+    for p in r["problems"]:
+        print(f"     ERROR: {p}", flush=True)
+    for w in r["warnings"]:
+        print(f"     warn : {w}", flush=True)
+
+
+def do_verify(cores, args):
+    bad = 0
+    for c in cores:
+        r = verify_core(c)
+        bad += not r["ok"]
+        if args.json:
+            print(json.dumps(r, indent=1))
+        else:
+            print_check(r)
+    return 1 if bad else 0
+
+
+def do_list(cores, args):
+    for c in cores:
+        info = job_info(c)
+        size = os.path.getsize(c) >> 20
+        print(f"{c}\t{size}MB\t{info.get('os_type')} {info.get('os_version')}"
+              f"\t{info.get('sha1', '')[:10]}")
+    return 0
+
+
+def do_info(cores, args):
+    for core_src in cores:
+        c = open_core(core_src)
+        mods = c.modules()
+        print(json.dumps({"core": core_src, "psargs": c.psargs,
+                          "exe": c.exe(mods), "signal": c.signo,
+                          "threads": c.threads, "job": job_info(core_src),
+                          "container_image": c.find_env("CONTAINER_IMAGE"),
+                          "ceph_versions": c.find_ceph_versions()[0],
+                          "modules": mods}, indent=1))
+    return 0
+
+
+PKG_GDB = """\
+#!/bin/sh
+# gdb for one core of this package.
+#   ./gdb                      the only core (or list them if several)
+#   ./gdb CORE [gdb args]      CORE: name or number from ./gdb --list
+#   ./gdb CORE -batch -ex 'thread apply all bt'
+#   ./gdb CORE --clion         IDE (CLion) setup for that core
+#   CEPH_SRC=~/ceph ./gdb CORE map sources to a checkout of the build
+cd "$(dirname "$0")" || exit 1
+if [ "$1" = "--list" ] || [ "$1" = "-l" ]; then cat cores.list; exit 0; fi
+sel=""
+case "$1" in -*|"") ;; *) sel=$1; shift ;; esac
+if [ -z "$sel" ]; then
+  if [ "$(grep -c . cores.list)" = 1 ]; then
+    sel=$(awk 'NR == 1 {print $2}' cores.list)
+  else
+    echo "several cores - pick one: ./gdb <number|name> [gdb args]" >&2
+    cat cores.list >&2
+    exit 1
+  fi
+fi
+d=$(awk -v s="$sel" '$1 == s || $2 == s {print $2; exit}' cores.list)
+if [ -z "$d" ] || [ ! -x "cores/$d/gdb" ]; then
+  echo "no core '$sel' in this package:" >&2
+  cat cores.list >&2
+  exit 1
+fi
+exec "cores/$d/gdb" "$@"
+"""
+
+
+def core_label(core_src):
+    """Short unique-ish name for a core inside a package."""
+    parts = os.path.abspath(core_src).split(os.sep)
+    base = os.path.basename(core_src)
+    base = re.sub(r"\.(gz|zst|xz|lz4|bz2)$", "", base)
+    m = re.match(r"core\.([^.]+)\.\d+\.[0-9a-f]+\.(\d+)\.\d+", base)
+    if m:                                  # systemd-coredump
+        return f"{m.group(1)}-{m.group(2)}"
+    m = re.match(r"\d+\.(\d+)\.core$", base)
+    if m:                                  # teuthology <time>.<pid>.core
+        host = parts[parts.index("remote") + 1] if "remote" in parts else ""
+        return f"{host}-{m.group(1)}" if host else m.group(1)
+    return re.sub(r"[^\w.-]+", "_", re.sub(r"\.core$", "", base)) or "core"
+
+
+def package_dir(args):
+    """Where the package goes."""
+    if args.in_place:
+        return os.path.abspath(args.in_place)
+    if args.output:
+        return os.path.abspath(args.output)
+    if len(args.paths) == 1:
+        p = os.path.abspath(args.paths[0].rstrip("/"))
+        info = job_info(p if os.path.isfile(p) else
+                        os.path.join(p, "x"))
+        job = os.path.basename(info.get("job_dir", ""))
+        if os.path.isfile(p):
+            parts = p.split(os.sep)
+            host = parts[parts.index("remote") + 1] if "remote" in parts \
+                else ""
+            name = re.sub(r"\.core.*$", "", os.path.basename(p))
+            return os.path.join(BUNDLES, "-".join(
+                x for x in ("core", job, host, name) if x))
+        if job:
+            return os.path.join(BUNDLES, f"core-{job}")
+        return os.path.join(BUNDLES, f"{os.path.basename(p)}-bundle")
+    return os.path.join(BUNDLES, "core-bundle")
+
+
+def do_make(cores, args):
+    pkg = package_dir(args)
+    os.makedirs(os.path.join(pkg, "cores"), exist_ok=True)
+    os.makedirs(CACHE, exist_ok=True)
+    log(f"package: {pkg} ({len(cores)} core{'s' * (len(cores) != 1)})")
+    rows, used = [], set()
+    for n, c in enumerate(cores, 1):
+        label = core_label(c)
+        while label in used:
+            label += "_"
+        used.add(label)
+        # always check the core first: cheap, local, and a truncated core
+        # explains missing threads/libraries later
+        r = verify_core(c)
+        print_check(r)
+        if not r["ok"]:
+            log("core is damaged; building from what is there")
+        try:
+            m = make_bundle(c, args, os.path.join(pkg, "cores", label), r)
+        except Exception as e:  # noqa - keep going with the other cores
+            log(f"FAILED on {c}: {e!r}")
+            m = None
+        rows.append((n, label, r, m, c))
+
+    with open(os.path.join(pkg, "cores.list"), "w") as f:
+        for n, label, r, m, c in rows:
+            sig = (m or {}).get("signal_name") or r.get("signal") or "?"
+            st = "OK " if r["ok"] else "BAD"
+            if m is None:
+                st = "ERR"
+            f.write(f"{n:<3} {label:<24} {st} {sig:<8} "
+                    f"{(r.get('psargs') or '?')[:60]}\n")
+    w = os.path.join(pkg, "gdb")
+    with open(w, "w") as f:
+        f.write(PKG_GDB)
+    os.chmod(w, 0o755)
+    write_package_readme(pkg, rows)
+    if DOWNLOADED:
+        tot = sum(DOWNLOADED.values())
+        log(f"downloaded {tot >> 20} MB: " + ", ".join(
+            f"{h} {b >> 20} MB" for h, b in sorted(
+                DOWNLOADED.items(), key=lambda x: -x[1]) if b >> 20) +
+            " (0 for files already in the cache)")
+    if args.tar:
+        tarball = pkg.rstrip("/") + ".tar.zst"
+        log(f"writing {tarball}")
+        write_tarball(pkg, tarball)
+    print(pkg)
+    log(f"debug with: {os.path.relpath(pkg)}/gdb "
+        f"{'' if len(rows) == 1 else '<core> '}"
+        "(cores: ./gdb --list; not plain gdb)")
+    return 0
+
+
+def write_package_readme(pkg, rows):
+    lines = [
+        "# Core dump package", "",
+        "Self-contained: each core with the exact binaries and debuginfo it "
+        "needs (matched by build-id).  No ceph install or container "
+        "needed, only gdb.", "",
+        "| # | core | check | signal | process | build |",
+        "|---|---|---|---|---|---|"]
+    for n, label, r, m, c in rows:
+        b = ((m or {}).get("build") or {}).get("version") or "?"
+        lines.append(
+            f"| {n} | `{label}` | {'OK' if r['ok'] else 'DAMAGED'} | "
+            f"{(m or {}).get('signal_name') or r.get('signal')} | "
+            f"`{(r.get('psargs') or '?')[:50]}` | {b} |")
+    lines += [
+        "", "## Use", "",
+        "    ./gdb --list                         # the cores",
+        "    ./gdb 1                              # interactive, core 1",
+        "    ./gdb 1 -batch -ex 'thread apply all bt'",
+        "    ./gdb 1 -batch -ex 'frame 5' -ex 'p *this'",
+        "    CEPH_SRC=~/git/ceph ./gdb 1          # sources (checkout of the build)",
+        "    ./gdb 1 --clion                      # CLion/IDE setup", "",
+        "Per core, in `cores/<name>/`: `report.txt` (crashing thread "
+        "`bt full`, all threads `bt`), `manifest.json` (core check, build, "
+        "every module's build-id and what was found, downloads), "
+        "`README.md`.",
+        "", "Batch mode (`-batch -ex ...`) suits scripts and LLM agents; "
+        "each gdb start re-reads the debuginfo, so ask for several things "
+        "per call."]
+    for n, label, r, m, c in rows:
+        if r["problems"]:
+            lines += ["", f"Core `{label}` is damaged:"] + \
+                [f"- {p}" for p in r["problems"]]
+    with open(os.path.join(pkg, "README.md"), "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+EPILOG = """\
+examples:
+  ceph-core-bundle 1790361071.14248.core.gz   check + package one core
+  ceph-core-bundle /a/<run>/<job>             one package for a job's cores
+  ceph-core-bundle --in-place ./cores         make ./cores the package
+  ceph-core-bundle --verify-only ./cores      just check, exit 1 if bad
+  ceph-core-bundle --tar --lean core.zst      small portable package
+  ceph-core-bundle --find-images 293bf268     list matching image tags
+then: cd <package> && ./gdb --list && ./gdb 1
+"""
+
+
+def main():
+    global VERBOSE
+    ap = argparse.ArgumentParser(
+        prog="ceph-core-bundle",
+        usage="%(prog)s [options] CORE|DIR [CORE|DIR ...]\n"
+              "       %(prog)s --find-images TEXT [--image-repo R]",
+        description=__doc__, epilog=EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("paths", nargs="*", metavar="CORE|DIR",
+                    help="core files (.core, .gz, .zst, .xz, .lz4) or "
+                    "directories to search for them (teuthology run/job "
+                    "dirs: their coredump/ dirs)")
+    ap.add_argument("-v", "--verbose", action="store_true")
+
+    g = ap.add_argument_group(
+        "instead of building a package")
+    m = g.add_mutually_exclusive_group()
+    m.add_argument("--verify-only", action="store_true",
+                   help="only check the cores for truncation/damage (local, "
+                   "nothing downloaded); exit status 1 if any is bad")
+    m.add_argument("--info", action="store_true",
+                   help="print process, signal, threads, container image, "
+                   "ceph version and every mapped file's build-id (JSON)")
+    m.add_argument("--list", action="store_true",
+                   help="list the cores found (size, distro, sha1)")
+    m.add_argument("--find-images", metavar="TEXT",
+                   help="list container image tags matching a sha1, version "
+                   "or substring (no CORE needed)")
+    g.add_argument("--json", action="store_true",
+                   help="JSON output for --verify-only")
+    g.add_argument("--labels", action="store_true",
+                   help="with --find-images: show ceph sha1, flavor, base "
+                   "image and expiry")
+
+    b = ap.add_argument_group("package")
+    b.add_argument("-o", "--output", metavar="DIR",
+                   help="package directory (default: ./core-<job>-<host>-"
+                   "<pid> for one core, ./core-<job> for a teuthology job, "
+                   "./<dir>-bundle for another directory)")
+    b.add_argument("--in-place", metavar="DIR",
+                   help="turn DIR, a directory of cores, into the package "
+                   "itself: adds gdb, cores.list, README.md and cores/ "
+                   "next to the original files (which are left alone)")
+    b.add_argument("--tar", action="store_true",
+                   help="also write <package>.tar.zst for copying elsewhere")
+    b.add_argument("--no-report", action="store_true",
+                   help="don't run gdb to write report.txt")
+    b.add_argument("--lean", action="store_true",
+                   help="no debuginfo for distro libs (glibc, libstdc++, "
+                   "...): their frames still get function names")
+    b.add_argument("--no-compress-debug", dest="compress_debug",
+                   action="store_false",
+                   help="keep DWARF uncompressed (default: compress debug "
+                   "files that aren't already, ~half the size; gdb reads "
+                   "them transparently)")
+
+    s_ = ap.add_argument_group("build identification and sources")
+    s_.add_argument("--sha1", help="ceph sha1 to use instead of identifying "
+                    "the build from the core / config.yaml")
+    s_.add_argument("--distro", help="override, e.g. centos/9 rocky/10 "
+                    "ubuntu/jammy")
+    s_.add_argument("--flavor", help="override flavor (default, debug, ...)")
+    s_.add_argument("--image", action="append", metavar="REF",
+                    help="container image the process ran in: full ref or a "
+                    "bare tag (searched in --image-repo); repeatable. "
+                    "Normally found automatically for cephadm daemons")
+    s_.add_argument("--image-repo", action="append", metavar="REPO",
+                    help="registry/repository to search for images; "
+                    "repeatable (default $CEPH_CORE_IMAGE_REPOS or "
+                    f"{' '.join(IMAGE_REPOS_DEFAULT)})")
+    s_.add_argument("--no-image-search", action="store_true",
+                    help="don't search registries when chacra lacks the "
+                    "build")
+    s_.add_argument("--debug-repo", action="append", metavar="URL",
+                    help="extra yum/dnf repository (dir holding repodata/) "
+                    "searched for debuginfo by build-id, e.g. a downstream "
+                    "build's debuginfo repo; repeatable "
+                    "($CEPH_CORE_DEBUG_REPOS)")
+    s_.add_argument("--debuginfod", action="append", metavar="URL",
+                    help="debuginfod server to use instead of the defaults "
+                    "for the core's distro; repeatable")
+    args = ap.parse_args()
+    VERBOSE = args.verbose
+
+    if args.find_images:
+        args.needle = args.find_images
+        cmd_images(args)
+        return
+    global CACHE
+    if args.in_place:
+        if args.output:
+            ap.error("--in-place and -o are exclusive")
+        if not os.path.isdir(args.in_place):
+            ap.error(f"--in-place {args.in_place}: not a directory")
+        args.paths = args.paths or [args.in_place]
+        if "CEPH_CORE_CACHE" not in os.environ:
+            CACHE = os.path.join(os.path.abspath(args.in_place),
+                                 ".ceph-core-cache")
+    if not args.paths:
+        ap.error("give at least one core file or directory "
+                 "(or --find-images TEXT)")
+    cores = []
+    for p in args.paths:
+        found = find_cores(p)
+        if not found:
+            log(f"no cores found under {p}")
+        cores += found
+    if not cores:
+        sys.exit(1)
+    if args.verify_only:
+        sys.exit(do_verify(cores, args))
+    if args.list:
+        sys.exit(do_list(cores, args))
+    if args.info:
+        sys.exit(do_info(cores, args))
+    sys.exit(do_make(cores, args))
+
+
+if __name__ == "__main__":
+    main()
