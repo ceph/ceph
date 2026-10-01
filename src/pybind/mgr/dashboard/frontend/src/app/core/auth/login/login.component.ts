@@ -19,6 +19,7 @@ export class LoginComponent implements OnInit {
   isLoginActive = false;
   returnUrl: string;
   postInstalled = false;
+  errorMessage = '';
 
   constructor(
     private authService: AuthService,
@@ -65,17 +66,27 @@ export class LoginComponent implements OnInit {
   }
 
   login() {
+    this.errorMessage = '';
     localStorage.setItem('cluster_api_url', window.location.origin);
-    this.authService.login(this.model).subscribe(() => {
-      const urlPath = this.postInstalled ? '/' : '/add-storage';
-      let url = _.get(this.route.snapshot.queryParams, 'returnUrl', urlPath);
-      if (!this.postInstalled && this.route.snapshot.queryParams['returnUrl'] === '/overview') {
-        url = '/add-storage';
-      }
-      if (url === '/add-storage') {
-        this.router.navigate([url], { queryParams: { welcome: true } });
-      } else {
-        this.router.navigate([url]);
+    this.authService.login(this.model).subscribe({
+      next: () => {
+        const permissions = this.authStorageService.getPermissions();
+        const canSetupCluster = !this.postInstalled && permissions.configOpt?.update;
+        const urlPath = canSetupCluster ? '/add-storage' : '/';
+        let url = _.get(this.route.snapshot.queryParams, 'returnUrl', urlPath);
+        if (canSetupCluster && this.route.snapshot.queryParams['returnUrl'] === '/overview') {
+          url = '/add-storage';
+        }
+        if (url === '/add-storage') {
+          this.router.navigate([url], { queryParams: { welcome: true } });
+        } else {
+          this.router.navigate([url]);
+        }
+      },
+      error: (err) => {
+        err.preventDefault();
+        this.errorMessage = err.error?.detail || $localize`Invalid credentials`;
+        document.getElementById('username')?.focus();
       }
     });
   }

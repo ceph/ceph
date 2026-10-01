@@ -109,6 +109,9 @@ export class ActionLabelsI18n {
   MOVE: string;
   NEXT: string;
   BACK: string;
+  PREVIOUS: string;
+  CREATING: string;
+  SAVING: string;
   CHANGE: string;
   COPY: string;
   CLONE: string;
@@ -199,6 +202,9 @@ export class ActionLabelsI18n {
     /* Wizard wording */
     this.NEXT = $localize`Next`;
     this.BACK = $localize`Back`;
+    this.PREVIOUS = $localize`Previous`;
+    this.CREATING = $localize`Creating`;
+    this.SAVING = $localize`Saving`;
 
     /* Non-standard actions */
     this.CLONE = $localize`Clone`;
