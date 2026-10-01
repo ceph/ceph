@@ -128,15 +128,19 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--import-keyring", (char*)NULL)) {
       import_keyring = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--key-type", (char*)NULL)) {
-      auto cm = cct->get_crypto_manager();
-      key_type = cm->get_key_type(val);
-      if (key_type < 0) {
-        cerr << "invalid key type: " << val << std::endl;
-        exit(1);
-      }
-      if (!cm->crypto_type_supported(key_type)) {
-        cerr << "unsupported key type: " << val << std::endl;
-        exit(1);
+      if (val == "preferred") {
+        key_type = -1;
+      } else {
+        auto cm = cct->get_crypto_manager();
+        key_type = cm->get_key_type(val);
+        if (key_type < 0) {
+          cerr << "invalid key type: " << val << std::endl;
+          exit(1);
+        }
+        if (!cm->crypto_type_supported(key_type)) {
+          cerr << "unsupported key type: " << val << std::endl;
+          exit(1);
+        }
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--mode", (char*)NULL)) {
       std::string err;

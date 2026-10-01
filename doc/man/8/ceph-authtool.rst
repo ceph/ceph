@@ -91,7 +91,8 @@ Options
 .. option:: -t, --key-type *KEY_TYPE*
 
    Set the key-type for generated keys. Can be one of "aes", "aes256k", or
-   "preferred" (Ceph operator chosen default).  Defaults to "preferred".
+   "preferred" (always "aes256k": ceph-authtool works offline and cannot
+   see the cluster's ``auth_preferred_cipher``).  Defaults to "preferred".
 
 
 Capabilities

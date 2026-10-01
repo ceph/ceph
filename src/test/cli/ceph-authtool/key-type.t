@@ -14,6 +14,13 @@ The encoded key starts with its type: "AQ" is aes, "Ag" is aes256k.
   [client.admin]
   \\tkey = Ag[a-zA-Z0-9+/]+=* \(esc\) (re)
 
+  $ ceph-authtool kring --create-keyring --gen-key --key-type preferred
+  creating kring
+
+  $ ceph-authtool kring --list
+  [client.admin]
+  \\tkey = Ag[a-zA-Z0-9+/]+=* \(esc\) (re)
+
   $ ceph-authtool kring --create-keyring --gen-key -t aes
   creating kring
 
