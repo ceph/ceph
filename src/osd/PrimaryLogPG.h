@@ -1214,6 +1214,9 @@ protected:
   /// has already completed and is waiting for its clones (no outstanding op).
   /// Used by the NEW_INTERVAL quiesce to avoid discarding a head that still has a live op.
   std::set<hobject_t> pool_migration_head_copy_in_flight;
+  /// objecter tids of in-flight migration copy-from ops. on_shutdown must
+  /// be able to cancel these tids.
+  std::map<hobject_t, ceph_tid_t> pool_migration_copy_tids;
   /// last pool migration operation started
   hobject_t last_pool_migration_started;
   /// set for 1st object migration after activate
@@ -1523,6 +1526,7 @@ protected:
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue, std::vector<ceph_tid_t> *tids);
   void cancel_copy_ops(bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_pool_migration_copy_ops(std::vector<ceph_tid_t> *tids);
 
   friend struct C_Copyfrom;
 

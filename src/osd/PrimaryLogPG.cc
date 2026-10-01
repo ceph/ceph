@@ -11230,6 +11230,19 @@ void PrimaryLogPG::cancel_copy_ops(bool requeue, vector<ceph_tid_t> *tids)
   }
 }
 
+void PrimaryLogPG::cancel_pool_migration_copy_ops(vector<ceph_tid_t> *tids)
+{
+  dout(10) << __func__ << " " << pool_migration_copy_tids.size()
+	   << " in-flight migration copy op(s)" << dendl;
+  for (auto& p : pool_migration_copy_tids) {
+    tids->push_back(p.second);
+  }
+  pool_migration_copy_tids.clear();
+  pool_migrations_in_flight.clear();
+  pool_migration_head_copy_in_flight.clear();
+  pool_migration_clones_in_flight.clear();
+}
+
 struct C_gather : public Context {
   PrimaryLogPGRef pg;
   hobject_t oid;
@@ -13795,6 +13808,7 @@ void PrimaryLogPG::on_shutdown()
   cancel_proxy_ops(false, &tids);
   cancel_manifest_ops(false, &tids);
   cancel_cls_gather_ops(false, &tids);
+  cancel_pool_migration_copy_ops(&tids);
   osd->objecter->op_cancel(tids, -ECANCELED);
 
   apply_and_flush_repops(false);
@@ -15828,6 +15842,7 @@ struct C_Migrate : public Context {
       return;
     std::scoped_lock l{*pg};
     pg->pool_migration_head_copy_in_flight.erase(oid);
+    pg->pool_migration_copy_tids.erase(oid);
     // If the PG was reset and no quiesce is active, discard this stale op.
     if (last_peering_reset != pg->get_last_peering_reset() &&
         pg->pool_migration_quiesce_reason == PrimaryLogPG::PoolMigrationQuiesceReason::NONE) {
@@ -16647,6 +16662,9 @@ uint64_t PrimaryLogPG::recover_pool_migration(
            osd->get_objecter_finisher(get_pg_shard())));
     objecter_op->snapid = soid.snap;
     osd->objecter->op_submit(objecter_op, &fin->tid);
+    // Track the objecter tid so on_shutdown can cancel this copy op and release
+    // the C_Migrate PGRef
+    pool_migration_copy_tids[soid] = fin->tid;
 
     dout(20) << "pool migration copying " << soid << dendl;
   }
