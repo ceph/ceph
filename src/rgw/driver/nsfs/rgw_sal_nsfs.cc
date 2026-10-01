@@ -19,6 +19,9 @@
 #include "rgw_rest_driver_hint.h"
 #include "rgw_rest_nsfs_profile.h"
 #include "rgw_rest_nsfs_identity.h"
+#include "common/code_environment.h"
+
+#include "impersonate.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
@@ -1291,8 +1294,15 @@ static inline int copy_dir_fd(int old_fd)
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display,
 		       const nsfs::XattrStrategy* xs,
-		       const nsfs::XattrStrategy* alt = nullptr)
+		       const nsfs::XattrStrategy* alt = nullptr,
+		       const nsfs::FSIdentity& id = {})
 {
+  /* The whole read as the identity:  the attribute names come
+   * from a listing the gateway may not be permitted to see in
+   * full, and each value needs read permission on the object.
+   * Nested with_identity() calls below are harmless -- a thread
+   * already running as the identity makes the call directly. */
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   /* large enough for every attribute an object carries in practice;  the
    * biggest is the encoded ACL at a couple of hundred bytes */
   enum { INLINE_VALUE_MAX = 1024 };
@@ -1401,6 +1411,7 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
   }
 
   return 0;
+  });
 }
 
 /* The on-disk form of an attribute value.
@@ -1460,7 +1471,8 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
                          int fd, const std::string &key,
                          const std::string &display,
                          const nsfs::XattrStrategy* xs,
-                         nsfs::FSStrategy* fs = nullptr)
+                         nsfs::FSStrategy* fs = nullptr,
+                         const nsfs::FSIdentity& id = {})
 {
   int ret;
 
@@ -1470,7 +1482,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
    * format the same way a write is, with nothing to write. */
   if (fs) {
     nsfs::xattr_map_t raw;
-    if (fs->get_xattrs(dpp, fd, raw) >= 0) {
+    if (fs->get_xattrs(dpp, fd, raw, id) >= 0) {
       std::vector<std::string> current;
       current.reserve(raw.size());
       for (auto& [n, _] : raw) {
@@ -1486,7 +1498,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
 	   * swallows it too (`namespace_fs.js:2794`) */
 	  return 0;
 	}
-	return fs->remove_xattrs(dpp, fd, spread);
+	return fs->remove_xattrs(dpp, fd, spread, id);
       }
     }
   }
@@ -1680,7 +1692,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       if (!have_current) {
 	have_current = true;
 	nsfs::xattr_map_t raw;
-	if (fs_strategy->get_xattrs(dpp, get_fd(), raw) >= 0) {
+	if (fs_strategy->get_xattrs(dpp, get_fd(), raw, identity) >= 0) {
 	  current.reserve(raw.size());
 	  for (auto& [n, _] : raw) {
 	    current.emplace_back(n);
@@ -1728,7 +1740,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
     if (mode == AttrWriteMode::REPLACE_ALL) {
       nsfs::xattr_map_t old_raw;
-      fs_strategy->get_xattrs(dpp, fd, old_raw);
+      fs_strategy->get_xattrs(dpp, fd, old_raw, identity);
 
       for (auto& [disk_name, _] : old_raw) {
         /* The extensions marker is not object metadata and no attribute
@@ -1803,20 +1815,20 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     }
 
     if (!to_remove.empty()) {
-      ret = fs_strategy->remove_xattrs(dpp, fd, to_remove);
+      ret = fs_strategy->remove_xattrs(dpp, fd, to_remove, identity);
       if (ret < 0) {
         return ret;
       }
     }
 
-    return fs_strategy->set_xattrs(dpp, fd, to_write);
+    return fs_strategy->set_xattrs(dpp, fd, to_write, identity);
   }
 
   /* per-attr syscalls */
   if (mode == AttrWriteMode::REPLACE_ALL) {
     Attrs old_attrs;
     ret = get_x_attrs(y, dpp, fd, old_attrs, get_name(), xattr_strategy,
-		    xattr_fallback);
+		    xattr_fallback, identity);
     if (ret >= 0) {
       for (auto& it : old_attrs) {
         if (attrs.find(it.first) == attrs.end() &&
@@ -1869,7 +1881,7 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
   }
 
   return get_x_attrs(y, dpp, get_fd(), attrs, get_name(), xattr_strategy,
-		    xattr_fallback);
+		    xattr_fallback, identity);
 }
 
 int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix)
@@ -1978,13 +1990,28 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
     flags |= O_DIRECT;
   }
 
-  ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW, S_IRWXU);
+  /* Under a personality the open goes through the ring, because
+   * that is where the kernel decides access -- and under
+   * impersonation it is also what gives the new file the right
+   * owner.  With none, the plain syscall, unchanged. */
+  if (personality != 0) {
+    ret = rgw::sal::posix_uring_openat2(dpp, parent->get_fd(), path.c_str(),
+					flags | O_NOFOLLOW, S_IRWXU,
+					personality);
+  } else {
+    ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW, S_IRWXU);
+    if (ret < 0) {
+      ret = -errno;
+    }
+  }
   if (ret < 0) {
-    ret = errno;
+    ret = -ret;
     if (ret == EEXIST) {
       return 0;
     }
-    ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name() << ": "
+    ldpp_dout(dpp, 0) << "ERROR: could not create object " << get_name()
+		      << " (flags 0x" << std::hex << flags << std::dec
+		      << ", personality " << personality << "): "
                       << cpp_strerror(ret) << dendl;
     return -ret;
     }
@@ -2002,12 +2029,34 @@ int File::open(const DoutPrefixProvider* dpp)
   }
 
   direct_io = ctx->_conf.get_val<bool>("rgw_nsfs_direct_io");
-  int flags = O_RDWR | (direct_io ? O_DIRECT : 0);
+  bool ro = read_only;
+  if (nsfs::impersonation_enabled() && (personality == 0)) {
+    /* No identity, so this is the gateway opening an object it does
+     * not own -- reading an ACL to authorise a request, or an xattr
+     * to compose a listing row.  It holds CAP_DAC_READ_SEARCH and
+     * nothing else by deliberate choice, so it must ask for a read
+     * and stop there.  The data paths refuse rather than arrive
+     * here without an identity;  see NSFSReadOp::iterate(). */
+    ro = true;
+  }
+  int flags = (ro ? O_RDONLY : O_RDWR) | (direct_io ? O_DIRECT : 0);
 
-  int ret = openat(parent->get_fd(), fname.c_str(), flags, S_IRWXU);
+  int ret;
+  if (personality != 0) {
+    ret = rgw::sal::posix_uring_openat2(dpp, parent->get_fd(), fname.c_str(),
+					flags, S_IRWXU, personality);
+  } else {
+    ret = openat(parent->get_fd(), fname.c_str(), flags, S_IRWXU);
+    if (ret < 0) {
+      ret = -errno;
+    }
+  }
   if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name() << ": "
+    ret = -ret;
+    ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name()
+		      << " (flags 0x" << std::hex << flags << std::dec
+		      << ", personality " << personality
+		      << ", read_only " << read_only << "): "
                       << cpp_strerror(ret) << dendl;
     return -ret;
     }
@@ -2084,10 +2133,17 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
   int64_t left = bl.length();
   ssize_t ret;
 
-  ret = fchmod(fd, S_IRUSR|S_IWUSR);
-  if(ret < 0) {
+  /* As the owner.  Under impersonation the file was created by the
+   * identity, so the gateway cannot chmod it -- only the owner or
+   * CAP_FOWNER may.  There is no io_uring opcode for fchmod, so
+   * this is one of the calls that goes to the helper pool;  see
+   * docs/IMPERSONATED_XATTR.md. */
+  ret = nsfs::with_identity(dpp, identity, [&]() -> int {
+    return (::fchmod(fd, S_IRUSR|S_IWUSR) < 0) ? -errno : 0;
+  });
+  if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not change permissions on object " << get_name() << ": "
-                  << cpp_strerror(ret) << dendl;
+                  << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -2305,8 +2361,10 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
   }
 
   int ret = excl
-    ? fs_strategy->link_temp_file_excl(fd, parent->get_fd(), get_name(), dpp)
-    : fs_strategy->link_temp_file(fd, parent->get_fd(), get_name(), dpp);
+    ? fs_strategy->link_temp_file_excl(fd, parent->get_fd(), get_name(),
+				       dpp, identity)
+    : fs_strategy->link_temp_file(fd, parent->get_fd(), get_name(),
+				  dpp, identity);
   if (ret < 0) {
     return ret;
   }
@@ -2342,9 +2400,32 @@ int Directory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_fi
     return -EINVAL;
   }
 
-  int ret = mkdirat(parent->get_fd(), fname.c_str(), S_IRWXU);
+  /* The gateway owns bucket directories, even under impersonation.
+   *
+   * The bucket is the gateway's metadata and the objects are the
+   * users' data, and the ownership follows that:  the gateway can
+   * then write bucket_info, the policy, tags and lifecycle as
+   * itself, and nothing about a bucket operation needs an identity.
+   *
+   * Identities still create objects inside, which needs write
+   * permission on the parent -- hence the group and other write
+   * bits -- and the sticky bit then stops one identity unlinking
+   * another's objects, which per-identity ownership of the
+   * directory would otherwise have given us.
+   *
+   * The permissive mode is reachable only through the gateway.  An
+   * impersonated open is openat2(bucket_dirfd, name, ...), which
+   * starts from a descriptor the gateway holds and never resolves
+   * the path above it -- so the data root's own mode, not this
+   * one, decides who can reach a bucket from outside. */
+  const mode_t dir_mode = nsfs::impersonation_enabled()
+      ? (S_ISVTX | 0777) : S_IRWXU;
+  int ret = mkdirat(parent->get_fd(), fname.c_str(), dir_mode);
   if (ret < 0) {
-    ret = errno;
+    ret = -errno;
+  }
+  if (ret < 0) {
+    ret = -ret;			/* both branches yield -errno */
     if (ret != EEXIST) {
       if (dpp)
 	ldpp_dout(dpp, 0) << "ERROR: could not create bucket " << get_name() << ": "
@@ -2353,6 +2434,17 @@ int Directory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_fi
     } else if (existed != nullptr) {
       *existed = true;
     }
+  }
+
+  /* mkdir(2) masks the mode with the process umask, which on a
+   * typical host strips exactly the write bits an identity needs.
+   * The gateway owns this directory, so it sets the mode outright
+   * rather than asking for it. */
+  if (nsfs::impersonation_enabled() &&
+      (::fchmodat(parent->get_fd(), fname.c_str(), S_ISVTX | 0777, 0) < 0)) {
+    ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
+      << ": " << cpp_strerror(errno) << dendl;
+    return -errno;
   }
 
   return 0;
@@ -2949,9 +3041,15 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_
     path = get_name();
   }
 
-  int ret = mkdirat(parent->get_fd(), path.c_str(), S_IRWXU);
+  /* see Directory::create on the mode */
+  const mode_t dir_mode = nsfs::impersonation_enabled()
+      ? (S_ISVTX | 0777) : S_IRWXU;
+  int ret = mkdirat(parent->get_fd(), path.c_str(), dir_mode);
   if (ret < 0) {
-    ret = errno;
+    ret = -errno;
+  }
+  if (ret < 0) {
+    ret = -ret;			/* both branches yield -errno */
     if (ret != EEXIST) {
       if (dpp)
 	ldpp_dout(dpp, 0) << "ERROR: could not create bucket " << get_name() << ": "
@@ -2960,6 +3058,17 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_
     } else if (existed != nullptr) {
       *existed = true;
     }
+  }
+
+  /* mkdir(2) masks the mode with the process umask, which on a
+   * typical host strips exactly the write bits an identity needs.
+   * The gateway owns this directory, so it sets the mode outright
+   * rather than asking for it. */
+  if (nsfs::impersonation_enabled() &&
+      (::fchmodat(parent->get_fd(), path.c_str(), S_ISVTX | 0777, 0) < 0)) {
+    ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
+      << ": " << cpp_strerror(errno) << dendl;
+    return -errno;
   }
 
   return 0;
@@ -3469,6 +3578,39 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   base_path = g_conf().get_val<std::string>("rgw_nsfs_base_path");
 
   ldpp_dout(dpp, 20) << "Initializing NSFS driver: " << base_path << dendl;
+
+  /* Refuse rather than run in a mode we cannot honour.
+   *
+   * With impersonation on, a request whose credentials cannot be
+   * applied must not fall back to the gateway's own -- the daemon
+   * reaches more of the filesystem than any user it would be acting
+   * for.  Without the capability that is every request, so the
+   * failure belongs at startup, as one message, rather than as a
+   * flood later.
+   *
+   * Only in the daemon.  radosgw-admin and the other tools load
+   * this driver too, and none of them serves a request or registers
+   * a personality, so none of them needs the capability -- and
+   * granting it to them to satisfy a check would be worse than not
+   * checking.  g_code_env is what separates them. */
+  if (nsfs::impersonation_enabled()) {
+    std::string missing;
+    const bool have = nsfs::have_credential_capabilities(&missing);
+
+    if (g_code_env != CODE_ENVIRONMENT_DAEMON) {
+      ldpp_dout(dpp, 10) << "nsfs: impersonation is configured but this is"
+	" not the daemon;  operating as the invoking user" << dendl;
+    } else if (! have) {
+      ldpp_dout(dpp, -1) << "ERROR: rgw_nsfs_impersonate is set but this"
+	" process lacks " << missing << ".  Grant them -- setcap"
+	" cap_setuid,cap_setgid+ep on the binary, or a systemd unit with"
+	" AmbientCapabilities=CAP_SETUID CAP_SETGID -- or unset"
+	" rgw_nsfs_impersonate." << dendl;
+      return -EPERM;
+    } else {
+      ldpp_dout(dpp, 1) << "nsfs: impersonation enabled" << dendl;
+    }
+  }
 
   init_strategies(dpp);
 
@@ -4014,11 +4156,19 @@ int NSFSDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& own
   return 0;
 }
 
+/* Defined below, beside the operations that use it most. */
+static int pin_personality_for(const DoutPrefixProvider* dpp,
+			       NSFSDriver* driver, const rgw_user& who,
+			       nsfs::PersonalityRef* out,
+			       nsfs::FSIdentity* ident,
+			       bool tolerate_absent = false);
+
 int NSFSBucket::create(const DoutPrefixProvider* dpp,
 			const CreateParams& params,
 			optional_yield y)
 {
   info.owner = params.owner;
+
 
   if (params.marker.empty()) {
     char buf[17];
@@ -5552,6 +5702,9 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   if (!to_remove.empty()) {
+    /* the upgrade command's own rewrite, not a request:  it runs on
+     * an operator's instruction across objects of many identities,
+     * so it uses the gateway's credentials deliberately */
     ret = fs->remove_xattrs(dpp, fd, to_remove);
     if (ret < 0) {
       return ret;
@@ -5737,6 +5890,7 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 	}
       }
       if (!gone.empty()) {
+	/* upgrade command;  see convert_attrs */
 	ret = fs->remove_xattrs(dpp, sub.get_fd(), gone);
 	if (ret < 0) {
 	  return ret;
@@ -6337,10 +6491,15 @@ int NSFSBucket::mark_extensions(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  /* The gateway owns bucket directories (Directory::create), so
+   * this needs no identity. */
   std::string v = std::to_string(version);
+  ret = 0;
   if (::fsetxattr(dir->get_fd(), nsfs::EXTENSIONS_XATTR,
 		  v.data(), v.size(), 0) < 0) {
     ret = -errno;
+  }
+  if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: writing " << nsfs::EXTENSIONS_XATTR
       << " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -8978,6 +9137,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
     if (versioned && !req_ver.empty()) {
       /* version-aware stat: check current first, fall back to .versions/ */
       ret = leaf_dir->get_ent(dpp, null_yield, leaf_name, req_ver, ent);
+      apply_pending_access();
       if (ret == 0) {
         ret = ent->stat(dpp);
       }
@@ -9014,6 +9174,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
               HIDDEN_VERSIONS_PATH, leaf_dir, driver->ctx());
             ver_dir->open(dpp);
             ent = std::make_unique<File>(ver_name, ver_dir.get(), driver->ctx());
+            apply_pending_access();
             dir_chain.push_back(std::move(ver_dir));
             ::close(vfd);
 
@@ -9035,6 +9196,7 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
       /* non-versioned or no specific version requested */
       ret = leaf_dir->get_ent(dpp, null_yield, leaf_name,
           state.obj.key.instance, ent);
+      apply_pending_access();
       if (ret < 0 && versioned) {
         int parent_fd = leaf_dir->get_fd();
         if (parent_fd < 0) {
@@ -9200,6 +9362,7 @@ int NSFSObject::make_ent(ObjectType type)
       break;
   }
 
+  apply_pending_access();
   return 0;
 }
 
@@ -9355,6 +9518,29 @@ int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 
 int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
+  /* Pin here if an identity was specified, but do not refuse here
+   * if one was not.
+   *
+   * Not every read op is a request reading data.  The
+   * authorisation path builds one to read an object's ACL
+   * attribute -- and must, since that attribute is what decides
+   * whether the requester may read anything at all.  Refusing it
+   * for having no identity would make authorisation impossible.
+   *
+   * The refusal therefore sits on the data entry points, iterate()
+   * and read(), which is where serving an object as the gateway
+   * would actually be the escalation. */
+  {
+    const int pret = pin_personality(dpp, true);
+    if ((pret < 0) && (pret != -ENODATA) && (pret != -EACCES)) {
+      return pret;
+    }
+    /* Before stat(), which is what creates the entry and opens it.
+     * A read op never writes the object. */
+    source->set_access(personality.valid() ? personality.id() : 0,
+		       identity.cred, /*read_only=*/true);
+  }
+
   int ret = source->stat(dpp);
   if (ret < 0)
     return ret;
@@ -9484,6 +9670,15 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
 int NSFSObject::NSFSReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
 				     optional_yield y, const DoutPrefixProvider* dpp)
 {
+  /* see iterate():  the refusal deferred in prepare() lands on the
+   * data entry points */
+  if (nsfs::impersonation_enabled() && !personality.valid()) {
+    ldpp_dout(dpp, 0) << "ERROR: refusing to read " << source->get_name()
+      << " as the gateway;  no POSIX identity resolved for this request"
+      << dendl;
+    return -EACCES;
+  }
+
   return source->read(ofs + part_ofs, end + 1, bl, dpp, y);
 }
 
@@ -9599,9 +9794,102 @@ static int nsfs_data_file_fd(nsfs::FSEnt* ent)
   return -1;
 }
 
+
+/* Resolve this operation's identity and hold a personality for it.
+ *
+ * Returns -ENODATA when impersonation is off, which is not a
+ * failure:  the caller submits with no personality and the request
+ * is served exactly as it was before any of this existed.
+ *
+ * Every other negative is a refusal.  With the switch on, a request
+ * whose credentials cannot be applied must not fall back to the
+ * gateway's own -- the daemon reaches more of the filesystem than
+ * the user it would be acting for.
+ */
+static int pin_personality_for(const DoutPrefixProvider* dpp,
+			       NSFSDriver* driver, const rgw_user& who,
+			       nsfs::PersonalityRef* out,
+			       nsfs::FSIdentity* ident,
+			       bool tolerate_absent)
+{
+  if (! nsfs::impersonation_enabled()) {
+    return -ENODATA;
+  }
+  if (out->valid()) {
+    return 0;				/* already held */
+  }
+  if (who.empty()) {
+    /* This request specified no identity.  Under the switch that
+     * is a gap in the call site rather than an anonymous request,
+     * and serving it as the daemon is the thing to avoid.
+     *
+     * The authorisation pass is the one site where it is expected,
+     * and it runs on every request, so it says so rather than
+     * filling the log with its own normal operation. */
+    if (! tolerate_absent) {
+      ldpp_dout(dpp, 0) << "ERROR: impersonation is on but this operation"
+	" carries no authenticated identity" << dendl;
+    }
+    return -EACCES;
+  }
+
+  nsfs::Credentials cred;
+  const int ret = nsfs::resolve_credentials(
+      dpp, *driver->get_identity_db(), rgw_owner{who}, cred);
+  if (ret == -ENOENT) {
+    /* A valid account always has an identity record;  one without
+     * is a provisioning fault, reported rather than repaired. */
+    ldpp_dout(dpp, 0) << "ERROR: no POSIX identity recorded for " << who
+      << ";  impersonation is enabled, so the request is refused rather"
+      " than served as the gateway" << dendl;
+    return -EACCES;
+  }
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not resolve a POSIX identity for "
+      << who << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  const int ret2 = nsfs::acquire_personality(dpp, who, cred, out);
+  if ((ret2 == 0) && ident) {
+    /* both halves:  the id for submission entries, the credentials
+     * for the calls io_uring cannot express */
+    ident->personality = out->id();
+    ident->cred = cred;
+  }
+  return ret2;
+}
+
+int NSFSObject::NSFSReadOp::pin_personality(const DoutPrefixProvider* dpp,
+					    bool tolerate_absent)
+{
+  return pin_personality_for(dpp, source->driver, auth_user,
+			     &personality, &identity, tolerate_absent);
+}
+
+int NSFSAtomicWriter::pin_personality(const DoutPrefixProvider* dpp)
+{
+  return pin_personality_for(dpp, driver, auth_user, &personality, &identity);
+}
+
+int NSFSMultipartWriter::pin_personality(const DoutPrefixProvider* dpp)
+{
+  return pin_personality_for(dpp, driver, auth_user, &personality, &identity);
+}
+
 int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
+  /* Serving object data as the gateway is the escalation this
+   * exists to prevent, so the refusal deferred in prepare() lands
+   * here.  A metadata-only read op never reaches this. */
+  if (nsfs::impersonation_enabled() && !personality.valid()) {
+    ldpp_dout(dpp, 0) << "ERROR: refusing to read " << source->get_name()
+      << " as the gateway;  no POSIX identity resolved for this request"
+      << dendl;
+    return -EACCES;
+  }
+
   int64_t left;
   int64_t cur_ofs = ofs + part_ofs;
   end += part_ofs;
@@ -9621,7 +9909,11 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
       if (chunk <= 0) {
         chunk = READ_SIZE;
       }
-      UringReadWindow win(dpp, y, fd, qd, chunk, dio);
+      /* pinned in prepare();  invalid means impersonation is off */
+      const uint16_t pid = personality.valid()
+	  ? personality.id() : rgw::sal::POSIX_URING_NO_PERSONALITY;
+
+      UringReadWindow win(dpp, y, fd, qd, chunk, dio, pid);
       return win.iterate(cur_ofs, left,
           [dpp, cb, source = source](bufferlist& bl, int len) {
             int ret = cb->handle_data(bl, 0, len);
@@ -11490,6 +11782,21 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
 
 int NSFSMultipartWriter::prepare(optional_yield y)
 {
+  /* Resolve and pin before anything else this operation does.
+   *
+   * Here rather than where the SQE is built, because that is one
+   * branch of one path:  with the sync engine, or on a small
+   * transfer, no window is ever constructed, and a refusal placed
+   * there simply never fires.  An operation whose identity cannot
+   * be resolved must fail wherever it would otherwise have been
+   * served as the gateway. */
+  {
+    const int pret = pin_personality(dpp);
+    if ((pret < 0) && (pret != -ENODATA)) {
+      return pret;
+    }
+  }
+
   /* the record, always;  it stays empty when the bytes go elsewhere */
   int ret = part_file->create(dpp, /*existed=*/nullptr, /*tempfile=*/false);
   if (ret < 0) {
@@ -11652,8 +11959,10 @@ int NSFSMultipartWriter::process(bufferlist&& data, uint64_t offset)
     if (!uring_write) {
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io");
+      const uint16_t pid = personality.valid()
+	  ? personality.id() : rgw::sal::POSIX_URING_NO_PERSONALITY;
       uring_write = std::make_unique<UringWriteWindow>(
-          dpp, yield, df->get_fd(), qd, dio);
+          dpp, yield, df->get_fd(), qd, dio, pid);
       df->set_sync_on_close(true);
     }
     return uring_write->process(std::move(data), offset);
@@ -11868,11 +12177,30 @@ int NSFSMultipartWriter::complete(
 
 int NSFSAtomicWriter::prepare(optional_yield y)
 {
+  /* Resolve and pin before anything else this operation does.
+   *
+   * Here rather than where the SQE is built, because that is one
+   * branch of one path:  with the sync engine, or on a small
+   * transfer, no window is ever constructed, and a refusal placed
+   * there simply never fires.  An operation whose identity cannot
+   * be resolved must fail wherever it would otherwise have been
+   * served as the gateway. */
+  {
+    const int pret = pin_personality(dpp);
+    if ((pret < 0) && (pret != -ENODATA)) {
+      return pret;
+    }
+  }
+
   int ret;
 
   ret = obj->make_ent(ObjectType::FILE);
   if (ret < 0) {
     return ret;
+  }
+  /* after make_ent, so there is an entry to set it on */
+  if (personality.valid() && obj->get_fsent()) {
+    obj->get_fsent()->set_identity(personality.id(), identity.cred);
   }
   obj->get_obj_attrs(y, dpp);
   obj->close();
@@ -11886,7 +12214,10 @@ int NSFSAtomicWriter::process(bufferlist&& data, uint64_t offset)
     if (!uring_write) {
       unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth");
       bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io");
-      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd, dio);
+      const uint16_t pid = personality.valid()
+	  ? personality.id() : rgw::sal::POSIX_URING_NO_PERSONALITY;
+      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd,
+						       dio, pid);
       if (obj->get_fsent()) {
         obj->get_fsent()->set_sync_on_close(true);
       }
@@ -12189,6 +12520,12 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
     ctx()->_conf->rgw_nsfs_enable_rename ? "true" : "false";
   features["extensions"] = std::to_string(nsfs::EXTENSIONS_KNOWN);
   features["extensions_default"] = extensions_enabled() ? "true" : "false";
+  /* Whether requests are served as their own POSIX identity.  A test
+   * needs to know this from the gateway rather than infer it:  the
+   * credential endpoint resolves a record whether or not the switch
+   * is on, so a successful resolve says nothing about it. */
+  features["impersonate"] =
+    nsfs::impersonation_enabled() ? "true" : "false";
 }
 
 /* Set the profile of a bucket that already exists.

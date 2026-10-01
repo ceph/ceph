@@ -63,8 +63,10 @@ static bool stat_matches(int fd, const std::string& name,
 
 int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
                                   const std::string& name,
-                                  const DoutPrefixProvider* dpp)
+                                  const DoutPrefixProvider* dpp,
+                                  const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   char temp_file_path[PATH_MAX];
   snprintf(temp_file_path, PATH_MAX, "/proc/self/fd/%d", temp_fd);
 
@@ -93,6 +95,7 @@ int POSIXStrategy::link_temp_file(int temp_fd, int dir_fd,
   }
 
   return 0;
+  });
 }
 
 SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
@@ -101,8 +104,10 @@ SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
                                     int dst_dir_fd,
                                     const std::string& dst_name,
                                     uint64_t expected_mtime_ns,
-                                    uint64_t expected_ino)
+                                    uint64_t expected_ino,
+                                     const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
   int ret = ::linkat(src_dir_fd, src_name.c_str(),
                      dst_dir_fd, dst_name.c_str(), 0);
   if (ret < 0) {
@@ -116,14 +121,17 @@ SafeResult POSIXStrategy::safe_link(const DoutPrefixProvider* dpp,
   }
   ::unlinkat(dst_dir_fd, dst_name.c_str(), 0);
   return SafeResult::MISMATCH;
+  });
 }
 
 SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                                       int dir_fd, const std::string& name,
                                       int tmp_dir_fd,
                                       uint64_t expected_mtime_ns,
-                                      uint64_t expected_ino)
+                                      uint64_t expected_ino,
+                                       const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
   static std::atomic<uint64_t> counter{0};
   std::string tmp_name = std::string(UNLINK_TMP_PREFIX) +
     std::to_string(getpid()) + "_" + std::to_string(counter.fetch_add(1));
@@ -142,6 +150,7 @@ SafeResult POSIXStrategy::safe_unlink(const DoutPrefixProvider* dpp,
   }
   ::renameat(tmp_dir_fd, tmp_name.c_str(), dir_fd, name.c_str());
   return SafeResult::MISMATCH;
+  });
 }
 
 /* --- FSStrategy ------------------------------------------------------- */
@@ -215,8 +224,10 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
 
 int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
 				    const std::string& name,
-				    const DoutPrefixProvider* dpp)
+				    const DoutPrefixProvider* dpp,
+				    const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   char temp_file_path[PATH_MAX];
   snprintf(temp_file_path, PATH_MAX, "/proc/self/fd/%d", temp_fd);
 
@@ -231,6 +242,7 @@ int FSStrategy::link_temp_file_excl(int temp_fd, int dir_fd,
     return -ret;
   }
   return 0;
+  });
 }
 
 size_t FSStrategy::preferred_io_size(int fd) const
@@ -359,8 +371,16 @@ std::unique_ptr<VersionLockHandle> POSIXStrategy::version_lock(
 }
 
 int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
-                              xattr_map_t& attrs)
+                              xattr_map_t& attrs,
+                              const nsfs::FSIdentity& id)
 {
+  /* The whole read, not each call:  this is a listing plus one
+   * fetch per name, and flistxattr has no io_uring opcode -- see
+   * docs/IMPERSONATED_XATTR.md.  Worse, without read permission
+   * it succeeds and silently omits every user.* name, so running
+   * it as the gateway would report an object with no attributes
+   * rather than failing. */
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   /* large enough for every attribute an object carries in practice;  the
    * biggest is the encoded ACL at a couple of hundred bytes */
   enum { INLINE_VALUE_MAX = 1024 };
@@ -419,11 +439,14 @@ int POSIXStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
     p += keylen;
   }
   return 0;
+  });
 }
 
 int POSIXStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
-                              const xattr_map_t& attrs)
+                              const xattr_map_t& attrs,
+                              const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   for (auto& [name, value] : attrs) {
     int ret = ::fsetxattr(fd, name.c_str(), value.data(), value.size(), 0);
     if (ret < 0) {
@@ -434,11 +457,14 @@ int POSIXStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
     }
   }
   return 0;
+  });
 }
 
 int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
-                                 const std::vector<std::string>& names)
+                                 const std::vector<std::string>& names,
+                                 const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   for (auto& name : names) {
     int ret = ::fremovexattr(fd, name.c_str());
     if (ret < 0 && errno != ENODATA) {
@@ -449,6 +475,7 @@ int POSIXStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
     }
   }
   return 0;
+  });
 }
 
 int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
@@ -711,8 +738,10 @@ std::unique_ptr<GPFSStrategy> GPFSStrategy::try_create(
 
 int GPFSStrategy::link_temp_file(int temp_fd, int dir_fd,
                                  const std::string& name,
-                                 const DoutPrefixProvider* dpp)
+                                 const DoutPrefixProvider* dpp,
+                                 const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   /* gpfs_linkat with AT_EMPTY_PATH links an open fd directly into
    * the namespace, atomically replacing any existing entry */
   int ret = fn_linkat(temp_fd, "", dir_fd, name.c_str(), AT_EMPTY_PATH);
@@ -723,6 +752,7 @@ int GPFSStrategy::link_temp_file(int temp_fd, int dir_fd,
     return -ret;
   }
   return 0;
+  });
 }
 
 SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
@@ -731,8 +761,10 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
                                    int dst_dir_fd,
                                    const std::string& dst_name,
                                    uint64_t expected_mtime_ns,
-                                   uint64_t expected_ino)
+                                   uint64_t expected_ino,
+                                    const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
   /* verify the source still matches expectations before linking */
   if (!stat_matches(src_dir_fd, src_name, expected_mtime_ns, expected_ino)) {
     ldpp_dout(dpp, 5) << "gpfs safe_link: source mismatch or gone"
@@ -757,14 +789,17 @@ SafeResult GPFSStrategy::safe_link(const DoutPrefixProvider* dpp,
     return SafeResult::ERROR;
   }
   return SafeResult::OK;
+  });
 }
 
 SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
                                      int dir_fd, const std::string& name,
                                      int tmp_dir_fd,
                                      uint64_t expected_mtime_ns,
-                                     uint64_t expected_ino)
+                                     uint64_t expected_ino,
+                                      const nsfs::FSIdentity& id)
 {
+  return nsfs::with_identity_r(dpp, id, [&]() -> SafeResult {
   /* open the target to get an fd; gpfs_unlinkat removes the entry
    * only if its inode matches this fd */
   int fd = ::openat(dir_fd, name.c_str(), O_RDONLY);
@@ -801,6 +836,7 @@ SafeResult GPFSStrategy::safe_unlink(const DoutPrefixProvider* dpp,
     return SafeResult::ERROR;
   }
   return SafeResult::OK;
+  });
 }
 
 static std::string fd_path(int dir_fd, const std::string& name)
@@ -964,8 +1000,18 @@ void GPFSStrategy::cleanup_clone(const DoutPrefixProvider* dpp,
 static size_t align8(size_t n) { return (n + 7) & ~7; }
 
 int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
-                             xattr_map_t& attrs)
+                             xattr_map_t& attrs,
+                             const nsfs::FSIdentity& id)
 {
+  /* The whole batch under one identity.
+   *
+   * gpfs_fcntl is a vendor ioctl, so no io_uring opcode will ever
+   * carry it -- the mechanism that would is f_op->uring_cmd on
+   * GPFS files, which is IBM's to implement.  Until then every
+   * attribute operation here costs a thread hop, which is why it
+   * is taken once around the whole batch rather than per
+   * attribute.  docs/IMPERSONATED_XATTR.md section 6a. */
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   if (!has_batch_xattrs()) {
     return POSIXStrategy().get_xattrs(dpp, fd, attrs);
   }
@@ -1113,11 +1159,15 @@ int GPFSStrategy::get_xattrs(const DoutPrefixProvider* dpp, int fd,
   ldpp_dout(dpp, 20) << "gpfs get_xattrs: batch read "
     << attrs.size() << " xattrs" << dendl;
   return 0;
+  });
 }
 
 int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
-                             const xattr_map_t& attrs)
+                             const xattr_map_t& attrs,
+                             const nsfs::FSIdentity& id)
 {
+  /* see get_xattrs on why the whole batch */
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   if (!has_batch_xattrs() || attrs.empty()) {
     return POSIXStrategy().set_xattrs(dpp, fd, attrs);
   }
@@ -1175,11 +1225,15 @@ int GPFSStrategy::set_xattrs(const DoutPrefixProvider* dpp, int fd,
   ldpp_dout(dpp, 20) << "gpfs set_xattrs: batch wrote "
     << attrs.size() << " xattrs" << dendl;
   return 0;
+  });
 }
 
 int GPFSStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
-                                const std::vector<std::string>& names)
+                                const std::vector<std::string>& names,
+                                const nsfs::FSIdentity& id)
 {
+  /* see get_xattrs on why the whole batch */
+  return nsfs::with_identity(dpp, id, [&]() -> int {
   if (!has_batch_xattrs() || names.empty()) {
     return POSIXStrategy().remove_xattrs(dpp, fd, names);
   }
@@ -1222,6 +1276,7 @@ int GPFSStrategy::remove_xattrs(const DoutPrefixProvider* dpp, int fd,
   ldpp_dout(dpp, 20) << "gpfs remove_xattrs: batch deleted "
     << names.size() << " xattrs" << dendl;
   return 0;
+  });
 }
 
 /* LWE lock handle — holds a cluster-wide exclusive right via the

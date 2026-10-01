@@ -36,6 +36,7 @@
 #include "path_strategy.h"
 #include "bucket_state_strategy.h"
 #include "identity_db.h"
+#include "impersonate.h"
 #include "bucket_profile.h"
 
 class RGWLC;
@@ -184,6 +185,9 @@ protected:
   std::string fname;
   Directory* parent;
   int fd{-1};
+  uint16_t personality{0};
+  nsfs::FSIdentity identity;
+  bool read_only{false};
   bool need_fsync{false};
   bool exist{false};
   struct statx stx;
@@ -255,6 +259,40 @@ public:
   bool exists() { return exist; }
   struct statx& get_stx() { return stx; }
   virtual ObjectType get_type() { return ObjectType::UNKNOWN; };
+
+  /* The identity this entry's descriptors are obtained under.
+   *
+   * Set rather than passed, so open() and create() keep their
+   * signatures and their call sites.  Zero means the gateway's own
+   * credentials, which is every caller that has not been told
+   * otherwise.
+   *
+   * It applies to the *final component* only:  the parent
+   * descriptor was resolved by the gateway, so ancestor directories
+   * are not rechecked.  Per-directory enforcement is separate work
+   * and collides with the directory descriptor cache. */
+  void set_identity(uint16_t p, const nsfs::Credentials& c) {
+    personality = p;
+    identity.personality = p;
+    identity.cred = c;
+  }
+  uint16_t get_personality() const { return personality; }
+  const nsfs::FSIdentity& get_identity() const { return identity; }
+
+  /* Ask for no more access than the caller needs.
+   *
+   * Descriptors are opened O_RDWR by default, which cost nothing
+   * while the gateway owned every file and could write all of
+   * them.  Under impersonation a read is often the whole of what
+   * the requester is entitled to -- an object reachable through a
+   * supplementary group and not writable at all -- and the
+   * authorisation pass reads attributes with no identity at all,
+   * holding only CAP_DAC_READ_SEARCH.  Both need the open to ask
+   * for a read and stop there.
+   *
+   * Set rather than passed, like the identity above, so open()
+   * keeps its signature and its call sites. */
+  void set_read_only(bool ro) { read_only = ro; }
 
   virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) = 0;
   virtual int open(const DoutPrefixProvider *dpp) = 0;
@@ -1562,7 +1600,43 @@ private:
   std::unique_ptr<rgw::sal::Bucket> pinned_bucket;
   std::string dm_version_id;
 
+  /* How this object's entry is to be reached, held until an entry
+   * exists to apply it to.
+   *
+   * stat() both creates the entry and opens it, so a caller cannot
+   * set this on the entry afterwards -- by then the descriptor
+   * exists and its access mode is fixed.  The write path sidesteps
+   * the problem by calling make_ent() itself and setting it in
+   * between, which a read cannot do:  make_ent() resolves with
+   * create_dirs. */
+  uint16_t pending_personality{0};
+  nsfs::Credentials pending_cred;
+  bool pending_read_only{false};
+
+  void apply_pending_access() {
+    if (! ent) {
+      return;
+    }
+    ent->set_read_only(pending_read_only);
+    if (pending_personality != 0) {
+      ent->set_identity(pending_personality, pending_cred);
+    }
+  }
+
 public:
+  /* Say how the entry is to be opened before anything opens it.
+   *
+   * personality 0 means the gateway's own credentials.  read_only
+   * is what a read op always wants:  asking for write access it
+   * does not need is the difference between serving an object
+   * readable through a supplementary group and refusing it. */
+  void set_access(uint16_t p, const nsfs::Credentials& c, bool ro) {
+    pending_personality = p;
+    pending_cred = c;
+    pending_read_only = ro;
+    apply_pending_access();
+  }
+
   /* The strategies this object's bucket is in.
    *
    * Through the bucket, not the driver:  the driver's are ours, and a
@@ -1587,6 +1661,27 @@ public:
 			RGWGetDataCB* cb, optional_yield y) override;
     virtual int get_attr(const DoutPrefixProvider* dpp, const char* name,
 			 bufferlist& dest, optional_yield y) override;
+
+    /* Set by rgw_op.cc after this op is created, when impersonation
+     * is on.  The pin is taken at first I/O rather than here, so an
+     * operation that never reads a byte costs no registration, and
+     * it is held for this object's whole lifetime -- between two
+     * iterate() calls there is nothing in flight, and a count that
+     * only tracked in-flight SQEs would let the slot be reused. */
+    void set_authenticated_user(const rgw_user& user) override {
+      auth_user = user;
+    }
+    rgw_user auth_user;
+    nsfs::PersonalityRef personality;
+    nsfs::FSIdentity identity;
+    /* resolve, register if needed, pin.  0 or -errno;  -ENODATA
+     * means impersonation is off and the caller proceeds as before.
+     *
+     * tolerate_absent:  the caller is a site that legitimately has
+     * no identity -- the authorisation pass -- so an absent one is
+     * still -EACCES but is not reported as an error. */
+    int pin_personality(const DoutPrefixProvider* dpp,
+			bool tolerate_absent = false);
   };
 
   struct NSFSDeleteOp : DeleteOp {
@@ -1953,8 +2048,17 @@ private:
   QD2PendingWrite pending_write;
   optional_yield yield;
   std::unique_ptr<UringWriteWindow> uring_write;
+  rgw_user auth_user;
+  nsfs::PersonalityRef personality;
+  nsfs::FSIdentity identity;
 
 public:
+  /* see NSFSReadOp::set_authenticated_user */
+  void set_authenticated_user(const rgw_user& user) override {
+    auth_user = user;
+  }
+  int pin_personality(const DoutPrefixProvider* dpp);
+
   NSFSAtomicWriter(const DoutPrefixProvider *dpp,
                     optional_yield y,
 		    rgw::sal::Object* _head_obj,
@@ -1989,6 +2093,9 @@ public:
 
 class NSFSMultipartWriter : public StoreWriter {
 private:
+  rgw_user auth_user;
+  nsfs::PersonalityRef personality;
+  nsfs::FSIdentity identity;
   NSFSDriver* driver;
   /* the upload's staging layout, resolved once by get_writer();  this
    * writer has no bucket of its own to ask */
@@ -2060,6 +2167,12 @@ private:
   std::unique_ptr<UringWriteWindow> uring_write;
 
 public:
+  /* see NSFSReadOp::set_authenticated_user */
+  void set_authenticated_user(const rgw_user& user) override {
+    auth_user = user;
+  }
+  int pin_personality(const DoutPrefixProvider* dpp);
+
   NSFSMultipartWriter(const DoutPrefixProvider *dpp,
                     optional_yield y,
 		    NSFSBucket* _shadow_bucket,

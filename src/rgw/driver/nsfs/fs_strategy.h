@@ -28,6 +28,8 @@
 
 #include "gpfs/gpfs.h"
 
+#include "impersonate.h"
+
 class DoutPrefixProvider;
 
 namespace rgw { namespace sal { namespace nsfs {
@@ -110,9 +112,15 @@ public:
 
   /* atomically publish a temp file (O_TMPFILE fd) to a directory entry,
    * replacing any existing entry with that name */
+  /* `id` is the identity the operation runs as.  Publishing a
+   * temp file hardlinks it, and with fs.protected_hardlinks set a
+   * caller may only link a file it owns or can read and write --
+   * so a file created under an identity must be published under
+   * the same one, whatever the directory permits. */
   virtual int link_temp_file(int temp_fd, int dir_fd,
                              const std::string& name,
-                             const DoutPrefixProvider* dpp) = 0;
+                             const DoutPrefixProvider* dpp,
+                             const nsfs::FSIdentity& id = {}) = 0;
 
   /* publish only if the name is free, returning -EEXIST if it is not.
    *
@@ -129,7 +137,8 @@ public:
    * gpfs_linkat only for the atomic *replace* the ordinary path wants. */
   virtual int link_temp_file_excl(int temp_fd, int dir_fd,
                                   const std::string& name,
-                                  const DoutPrefixProvider* dpp);
+                                  const DoutPrefixProvider* dpp,
+                                  const nsfs::FSIdentity& id = {});
 
   /* CAS link: link src to dst, verify inode+mtime match expected;
    * undo on mismatch */
@@ -137,14 +146,16 @@ public:
                                int src_dir_fd, const std::string& src_name,
                                int dst_dir_fd, const std::string& dst_name,
                                uint64_t expected_mtime_ns,
-                               uint64_t expected_ino) = 0;
+                               uint64_t expected_ino,
+                               const nsfs::FSIdentity& id = {}) = 0;
 
   /* CAS unlink: remove entry only if it matches expected inode+mtime */
   virtual SafeResult safe_unlink(const DoutPrefixProvider* dpp,
                                  int dir_fd, const std::string& name,
                                  int tmp_dir_fd,
                                  uint64_t expected_mtime_ns,
-                                 uint64_t expected_ino) = 0;
+                                 uint64_t expected_ino,
+                                 const nsfs::FSIdentity& id = {}) = 0;
 
   /* copy a byte range between two files, by the cheapest means the
    * filesystem offers:  copy_file_range(2), which shares extents where
@@ -278,14 +289,22 @@ public:
    *
    * names in xattr_map_t are the full on-disk names (e.g.
    * "user.rgw.etag"); the caller handles any prefix mapping. */
+  /* `id` is the identity the operation is performed as.  A
+   * strategy does not decide how that is arranged -- it wraps its
+   * body in nsfs::with_identity() and says what it wants done.
+   * Default-constructed means the gateway's own credentials, which
+   * is every caller that has not been told otherwise. */
   virtual int get_xattrs(const DoutPrefixProvider* dpp, int fd,
-                         xattr_map_t& attrs) = 0;
+                         xattr_map_t& attrs,
+                         const nsfs::FSIdentity& id = {}) = 0;
 
   virtual int set_xattrs(const DoutPrefixProvider* dpp, int fd,
-                         const xattr_map_t& attrs) = 0;
+                         const xattr_map_t& attrs,
+                         const nsfs::FSIdentity& id = {}) = 0;
 
   virtual int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
-                            const std::vector<std::string>& names) = 0;
+                            const std::vector<std::string>& names,
+                            const nsfs::FSIdentity& id = {}) = 0;
 
   virtual const char* name() const = 0;
 
@@ -302,19 +321,22 @@ class POSIXStrategy : public FSStrategy {
 public:
   int link_temp_file(int temp_fd, int dir_fd,
                      const std::string& name,
-                     const DoutPrefixProvider* dpp) override;
+                     const DoutPrefixProvider* dpp,
+                     const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_link(const DoutPrefixProvider* dpp,
                        int src_dir_fd, const std::string& src_name,
                        int dst_dir_fd, const std::string& dst_name,
                        uint64_t expected_mtime_ns,
-                       uint64_t expected_ino) override;
+                       uint64_t expected_ino,
+                       const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_unlink(const DoutPrefixProvider* dpp,
                          int dir_fd, const std::string& name,
                          int tmp_dir_fd,
                          uint64_t expected_mtime_ns,
-                         uint64_t expected_ino) override;
+                         uint64_t expected_ino,
+                         const nsfs::FSIdentity& id = {}) override;
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
@@ -332,11 +354,14 @@ public:
     const DoutPrefixProvider* dpp, int lock_fd) override;
 
   int get_xattrs(const DoutPrefixProvider* dpp, int fd,
-                 xattr_map_t& attrs) override;
+                 xattr_map_t& attrs,
+                 const nsfs::FSIdentity& id = {}) override;
   int set_xattrs(const DoutPrefixProvider* dpp, int fd,
-                 const xattr_map_t& attrs) override;
+                 const xattr_map_t& attrs,
+                 const nsfs::FSIdentity& id = {}) override;
   int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
-                    const std::vector<std::string>& names) override;
+                    const std::vector<std::string>& names,
+                    const nsfs::FSIdentity& id = {}) override;
 
   const char* name() const override { return "posix"; }
   bool can_rename() const override { return true; }
@@ -413,19 +438,22 @@ public:
 
   int link_temp_file(int temp_fd, int dir_fd,
                      const std::string& name,
-                     const DoutPrefixProvider* dpp) override;
+                     const DoutPrefixProvider* dpp,
+                     const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_link(const DoutPrefixProvider* dpp,
                        int src_dir_fd, const std::string& src_name,
                        int dst_dir_fd, const std::string& dst_name,
                        uint64_t expected_mtime_ns,
-                       uint64_t expected_ino) override;
+                       uint64_t expected_ino,
+                       const nsfs::FSIdentity& id = {}) override;
 
   SafeResult safe_unlink(const DoutPrefixProvider* dpp,
                          int dir_fd, const std::string& name,
                          int tmp_dir_fd,
                          uint64_t expected_mtime_ns,
-                         uint64_t expected_ino) override;
+                         uint64_t expected_ino,
+                         const nsfs::FSIdentity& id = {}) override;
 
   int clone_file(const DoutPrefixProvider* dpp,
                  int src_dir_fd, const std::string& src_name,
@@ -443,11 +471,14 @@ public:
     const DoutPrefixProvider* dpp, int lock_fd) override;
 
   int get_xattrs(const DoutPrefixProvider* dpp, int fd,
-                 xattr_map_t& attrs) override;
+                 xattr_map_t& attrs,
+                 const nsfs::FSIdentity& id = {}) override;
   int set_xattrs(const DoutPrefixProvider* dpp, int fd,
-                 const xattr_map_t& attrs) override;
+                 const xattr_map_t& attrs,
+                 const nsfs::FSIdentity& id = {}) override;
   int remove_xattrs(const DoutPrefixProvider* dpp, int fd,
-                    const std::vector<std::string>& names) override;
+                    const std::vector<std::string>& names,
+                    const nsfs::FSIdentity& id = {}) override;
 
   const char* name() const override { return "gpfs"; }
 
