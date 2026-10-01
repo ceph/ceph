@@ -5,7 +5,8 @@ from ceph.smb.constants import REMOTE_CONTROL
 from cephadm.services.smb import SMBSpec, SMBExternalCephCluster
 from cephadm import utils
 from cephadm.module import CephadmOrchestrator
-from cephadm.tests.fixtures import with_host, with_service, async_side_effect
+from cephadm.serve import CephadmServe
+from cephadm.tests.fixtures import with_host, with_service, async_side_effect, wait
 
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
@@ -204,6 +205,75 @@ class TestSMB:
                 assert files.get('remote_control.ssl.crt') == ceph_generated_cert
                 assert files.get('remote_control.ssl.key') == ceph_generated_key
                 assert files.get('remote_control.ca.crt') == cephadm_root_ca
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_smb_tls_feature_cert_remove_after_service_remove(
+        self, _run_cephadm, cephadm_module: CephadmOrchestrator
+    ):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        def _cert_mgr_entries_for(service_name):
+            found = []
+            listing = cephadm_module.cert_mgr.cert_ls(include_cephadm_signed=True)
+            for cert_name, entry in listing.items():
+                if isinstance(entry, dict) and service_name in entry:
+                    found.append(cert_name)
+            return found
+
+        with with_host(cephadm_module, 'test', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks(
+                'test',
+                {'1.2.3.0/24': {'if0': ['1.2.3.7']}}
+            )
+
+            smb_spec = SMBSpec(
+                cluster_id='foxtrot',
+                service_id='foo',
+                config_uri='rados://.smb/foxtrot/config2.json',
+                placement=PlacementSpec(hosts=['test']),
+                features=[REMOTE_CONTROL],
+                ssl_certificates={
+                    'remote_control': {
+                        'enabled': True,
+                        'ssl_cert': ceph_generated_cert,
+                        'ssl_key': ceph_generated_key,
+                        'ssl_ca_cert': cephadm_root_ca,
+                        'certificate_source': 'inline',
+                    },
+                },
+            )
+            service_name = smb_spec.service_name()
+            c = cephadm_module.apply([smb_spec])
+            assert wait(cephadm_module, c) == [
+                f'Scheduled {service_name} update...'
+            ]
+            serve = CephadmServe(cephadm_module)
+            serve._apply_all_services()
+
+            assert service_name in cephadm_module.spec_store
+            assert len(cephadm_module.cache.get_daemons_by_service(service_name)) == 1
+
+            entries_before = _cert_mgr_entries_for(service_name)
+            print("cert_mgr entries BEFORE remove:", entries_before)
+
+            assert wait(
+                cephadm_module,
+                cephadm_module.remove_service(service_name)
+            ) == f'Removed service {service_name}'
+
+            assert service_name in cephadm_module.spec_store.spec_deleted
+
+            serve._check_daemons()
+            serve._apply_all_services()
+            serve._purge_deleted_services()
+
+            assert not cephadm_module.cache.get_daemons_by_service(service_name)
+            assert service_name not in cephadm_module.spec_store
+            assert service_name not in cephadm_module.spec_store.spec_deleted
+
+            entries_after = _cert_mgr_entries_for(service_name)
+            print("cert_mgr entries AFTER remove:", entries_after)
+            assert entries_after == []
 
 
 def test_smb_get_dependencies(cephadm_module):
