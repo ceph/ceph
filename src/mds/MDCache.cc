@@ -14794,6 +14794,12 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
       // after @snapid1 would have created a clone covering it. So a seq at or
       // beyond @snapid1 with no matching clone means the object is new.
       if (it1 == clones.end() && snap_set->snaps.seq >= snapid1) {
+        // created after @snapid2 as well, so it is in neither snapshot
+        if (it2 == clones.end() && snap_set->snaps.seq >= snapid2) {
+          dout(10) << __func__ << ": objectid=" << snap_set->objectid << " does not exist in snaps "
+                   << snapid1 << " and " << snapid2 << " (seq=" << snap_set->snaps.seq << ")" << dendl;
+          continue;
+        }
         auto sz = it2 == clones.end() ? clones.back().size : it2->size;
         dout(10) << __func__ << ": objectid=" << snap_set->objectid << " does not exist in snap "
                  << snapid1 << " (seq=" << snap_set->snaps.seq << "): [" << offset << "~" << sz
