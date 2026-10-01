@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# A dependency diff confined to these prefixes is a log-only change for haproxy.
+HAPROXY_LOG_DEP_PREFIXES = ('haproxy_log_target:', 'haproxy_log_level:')
+
 
 @register_cephadm_service
 class IngressService(CephService):
@@ -152,6 +155,11 @@ class IngressService(CephService):
                 deps.append(
                     f'monitor_ssl_key: {utils.config_hash(ingress_spec.monitor_ssl_key)}'
                 )
+
+        # A changed spec or an upgrade reconfigures the daemon
+        # with new log config without a manual redeploy.
+        deps.append(f'haproxy_log_target: {ingress_spec.haproxy_log_target}')
+        deps.append(f'haproxy_log_level: {ingress_spec.haproxy_log_level}')
 
         return sorted(deps)
 
@@ -634,6 +642,16 @@ class IngressService(CephService):
             return True
         return False
 
+    @staticmethod
+    def get_haproxy_sighup_reload_step() -> utils.NextDaemonStep:
+        """Return the NextDaemonStep that reloads HAProxy via SIGHUP.
+        """
+        return utils.NextDaemonStep(
+            utils.Action.RECONFIG,
+            skip_restart_for_reconfig=True,
+            send_signal_to_daemon='SIGHUP',
+        )
+
     def choose_next_action(
         self,
         scheduled_action: utils.Action,
@@ -665,6 +683,22 @@ class IngressService(CephService):
             )
             return utils.NextDaemonStep(utils.Action.REDEPLOY)
 
+        # HAProxy logging options can be applied with a graceful SIGHUP reload
+        # Here the master keeps the listening sockets, a new worker is forked
+        # with the new config, and the old worker drains. Log change with other
+        # changes (placement, certs, backend set) falls through to the normal
+        # reconfigure/redeploy handling. This is a no-op for non-haproxy daemons.
+        if daemon_type == 'haproxy' and action is utils.Action.RECONFIG:
+            sym_diff = set(curr_deps).symmetric_difference(last_deps)
+            if sym_diff and all(
+                s.startswith(HAPROXY_LOG_DEP_PREFIXES) for s in sym_diff
+            ):
+                logger.debug(
+                    'Reload HAProxy with SIGHUP: logging options changed (%s)',
+                    spec.service_name() if spec else daemon_type,
+                )
+                return self.get_haproxy_sighup_reload_step()
+
         if (
             action is not utils.Action.REDEPLOY
             and daemon_type == 'haproxy'
@@ -689,9 +723,5 @@ class IngressService(CephService):
                         '(%s)',
                         spec.service_name(),
                     )
-                    return utils.NextDaemonStep(
-                        utils.Action.RECONFIG,
-                        skip_restart_for_reconfig=True,
-                        send_signal_to_daemon='SIGHUP',
-                    )
+                    return self.get_haproxy_sighup_reload_step()
         return step

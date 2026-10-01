@@ -417,6 +417,8 @@ Service specs are YAML blocks with the following properties:
       use_keepalived_multicast: <bool>          # optional: Default is False.
       vrrp_interface_network: <string>/<string> # optional: ex: 192.168.20.0/24
       health_check_interval: <string>           # optional: Default is 2s.
+      haproxy_log_target: <string>              # optional: Default is journald. Use none to disable logging.
+      haproxy_log_level: <string>               # optional: Default is info.
       ssl: true
       certificate_source: inline                # optional: Default is cephadm-signed
       ssl_cert: |                               # optional: SSL certificate and key
@@ -547,6 +549,21 @@ where the properties of this service specification are:
 * ``monitor_networks``
     If ``monitor_networks`` is specified, an IP address that matches one of the specified
     networks will be used. If an IP address is not present, then default host IP will be used.
+* ``haproxy_log_target``
+    Where HAProxy sends its logs. Default is ``journald``: HAProxy writes its logs to stdout
+    and cephadm's Podman ``journald`` log driver forwards them to the host systemd journal.
+    Read them with ``cephadm logs --name <haproxy-daemon>`` or
+    ``journalctl -u ceph-<fsid>@<haproxy-daemon>``. Set to ``none`` to stop HAProxy access
+    logging. Note that HAProxy startup, shutdown, and configuration messages (for example,
+    worker fork/exit lines) may still appear in the journal even when the target is ``none``.
+* ``haproxy_log_level``
+    Severity filter on the HAProxy ``log`` directive. Default is ``info``. Valid values are
+    ``debug``, ``info``, ``notice``, ``warning``, and ``err``. Access logs are emitted at
+    ``info`` severity, so ``info`` (or ``debug``) is required to see per-request (HTTP) or
+    per-connection (TCP) access records. A stricter level (``notice``, ``warning``, or ``err``)
+    suppresses normal access logs and keeps only higher-severity events. ``debug`` additionally
+    enables HAProxy health-check status logging (``option log-health-checks``) and is meant for
+    troubleshooting.
 
 .. _ingress-virtual-ip:
 
