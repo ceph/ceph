@@ -21,6 +21,7 @@ from cephadm.utils import (
     NON_CEPH_IMAGE_TYPES,
     MONITORING_STACK_TYPES,
     GATEWAY_TYPES,
+    ALL_GATEWAY_TYPES,
     ALLOWED_CIPHERS,
     SERVICE_CIPHER,
 )
@@ -1647,6 +1648,48 @@ class CephadmUpgrade:
 
         return (need_upgrade_self, need_upgrade, need_upgrade_deployer, done)
 
+    def _limit_gateway_upgrade_batch(
+        self, to_upgrade: List[Tuple[DaemonDescription, bool]]
+    ) -> List[Tuple[DaemonDescription, bool]]:
+        # Cap the batch at mgr/cephadm/max_gateway_upgrades_per_pass;
+        # the rest is picked up by the following upgrade passes.
+        # Daemons are grouped by service and whole services are added to the
+        # batch so that the daemons of one service are never split across
+        # passes. The first service is always included, even when it alone is
+        # larger than the limit.
+        max_batch = self.mgr.max_gateway_upgrades_per_pass
+        if max_batch <= 0 or len(to_upgrade) <= max_batch:
+            return to_upgrade
+        if not all(d_entry[0].daemon_type in ALL_GATEWAY_TYPES
+                   for d_entry in to_upgrade):
+            return to_upgrade
+
+        by_service: Dict[str, List[Tuple[DaemonDescription, bool]]] = {}
+        for d_entry in to_upgrade:
+            by_service.setdefault(d_entry[0].service_name(), []).append(d_entry)
+
+        batch: List[Tuple[DaemonDescription, bool]] = []
+        included_services: List[str] = []
+        for service_name, entries in by_service.items():
+            if batch and len(batch) + len(entries) > max_batch:
+                break
+            if not batch and len(entries) > max_batch:
+                logger.warning(
+                    'Upgrade: Service %s has %d daemons, more than '
+                    'max_gateway_upgrades_per_pass (%d). All of its daemons are '
+                    'upgraded in this pass, as a service is never split across '
+                    'passes.',
+                    service_name, len(entries), max_batch)
+            batch.extend(entries)
+            included_services.append(service_name)
+
+        logger.info(
+            'Upgrade: Upgrading %d of %d %s daemons in this pass '
+            '(service(s) %s, max_gateway_upgrades_per_pass %d)',
+            len(batch), len(to_upgrade), to_upgrade[0][0].daemon_type,
+            ','.join(included_services), max_batch)
+        return batch
+
     # return True if the upgrade is safe to proceed, False otherwise
     # to_upgrade is a list of daemons that need to be upgraded
     def _to_upgrade(self, need_upgrade: List[Tuple[DaemonDescription, bool]], target_image: str) -> Tuple[bool, List[Tuple[DaemonDescription, bool]]]:
@@ -1769,7 +1812,7 @@ class CephadmUpgrade:
                     continue  # do not break
                 break
 
-        return True, to_upgrade
+        return True, self._limit_gateway_upgrade_batch(to_upgrade)
 
     def _rotate_mgr_mon_auth_keys(self, target_image: str, target_digests: Optional[List[str]] = None) -> None:
         if self.upgrade_state:
