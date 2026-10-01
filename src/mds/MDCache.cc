@@ -20,6 +20,7 @@
 
 #include <errno.h>
 
+#include <cmath>
 #include <deque>
 #include <ostream>
 #include <string>
@@ -195,6 +196,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
 
   export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
   export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
+  export_ephemeral_dist_tree_min_entries = g_conf().get_val<uint64_t>("mds_export_ephemeral_distributed_tree_min_entries");
+  export_ephemeral_dist_tree_gather_ratio = g_conf().get_val<double>("mds_export_ephemeral_distributed_tree_gather_ratio");
   export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
 
   symlink_recovery = g_conf().get_val<bool>("mds_symlink_recovery");
@@ -234,6 +237,14 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     export_ephemeral_distributed_config = g_conf().get_val<bool>("mds_export_ephemeral_distributed");
     dout(10) << "Migrating any ephemeral distributed pinned inodes" << dendl;
     /* copy to vector to avoid removals during iteration */
+    ephemeral_pin_config_changed = true;
+  }
+  if (changed.count("mds_export_ephemeral_distributed_tree_min_entries")) {
+    export_ephemeral_dist_tree_min_entries = g_conf().get_val<uint64_t>("mds_export_ephemeral_distributed_tree_min_entries");
+    ephemeral_pin_config_changed = true;
+  }
+  if (changed.count("mds_export_ephemeral_distributed_tree_gather_ratio")) {
+    export_ephemeral_dist_tree_gather_ratio = g_conf().get_val<double>("mds_export_ephemeral_distributed_tree_gather_ratio");
     ephemeral_pin_config_changed = true;
   }
   if (changed.count("mds_export_ephemeral_random")) {
@@ -968,6 +979,22 @@ mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino, frag_t fg)
 }
 
 
+uint64_t MDCache::get_ephemeral_dist_tree_gather_entries() const
+{
+  const uint64_t min = export_ephemeral_dist_tree_min_entries;
+  if (min == 0)
+    return 0;
+  // a little below the product, so that a ratio that double cannot hold
+  // exactly does not round up past an exact product: 100 * 0.07 is
+  // 7.000000000000001, which would round up to 8
+  double n = std::ceil((double)min * export_ephemeral_dist_tree_gather_ratio - 1e-9);
+  if (n < 1)
+    return 1;
+  if (n > (double)min)
+    return min;
+  return (uint64_t)n;
+}
+
 /*
  * Rank for dirfrag @fg of a directory whose fragments are distributed by a
  * ceph.dir.pin.distributed.tree policy above it.  Fragments are mapped by
@@ -986,6 +1013,18 @@ mds_rank_t MDCache::dist_tree_rank(inodeno_t ino, frag_t fg)
   if (bits > 0)
     n += frag_t(fg.value(), bits).value() >> (24 - bits);
   return mds_rank_t(n % max_mds);
+}
+
+bool MDCache::is_in_auth_parent_subtree(CDir *dir)
+{
+  if (!dir->is_auth() || dir->is_ambiguous_auth())
+    return false;
+  if (!dir->is_subtree_root())
+    return true;
+  CDir *pdir = dir->get_parent_dir();
+  if (!pdir)
+    return false;
+  return get_subtree_root(pdir)->is_full_dir_auth();
 }
 
 
@@ -11259,6 +11298,11 @@ void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
   in->_encode_locks_state_for_replica(bl, mds->get_state() < MDSMap::STATE_ACTIVE);
 
   __u32 state = in->state;
+  // the decision of the auth on the size, see STATE_DISTTREELARGE
+  if (in->is_dist_tree_fragmented())
+    state |= CInode::STATE_DISTTREELARGE;
+  else
+    state &= ~CInode::STATE_DISTTREELARGE;
   encode(state, bl);
 
   ENCODE_FINISH(bl);
@@ -11365,6 +11409,7 @@ void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p,
 
 void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, CDentry *dn, MDSContext::vec& finished)
 {
+  bool dist_tree_updated = false;
   DECODE_START(2, p);
   inodeno_t ino;
   snapid_t last;
@@ -11373,6 +11418,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
   decode(last, p);
   decode(nonce, p);
   in = get_inode(ino, last);
+  const bool added = !in;
   if (!in) {
     in = new CInode(this, false, 2, last);
     in->set_replica_nonce(nonce);
@@ -11403,6 +11449,12 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
   if (struct_v >= 2) {
     __u32 s;
     decode(s, p);
+    if (!in->is_auth()) {
+      bool large = s & CInode::STATE_DISTTREELARGE;
+      dist_tree_updated = !added &&
+	large != in->state_test(CInode::STATE_DISTTREELARGE);
+      in->set_dist_tree_large(large);
+    }
     s &= CInode::MASK_STATE_REPLICATED;
     if (s & CInode::STATE_RANDEPHEMERALPIN) {
       dout(10) << "replica inode is random ephemeral pinned" << dendl;
@@ -11411,6 +11463,9 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
   }
 
   DECODE_FINISH(p); 
+
+  if (dist_tree_updated)
+    in->maybe_export_pin(true);
 }
 
  
