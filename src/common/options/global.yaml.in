@@ -2530,6 +2530,19 @@ options:
   level: dev
   default: false
   with_legacy: true
+- name: objecter_use_osd_core_hints
+  type: bool
+  level: advanced
+  default: false
+  desc: Send ops directly to the reactor core owning the PG on Crimson OSDs
+  long_desc: Crimson OSDs with crimson_osd_core_listeners set report, in op
+    replies, the core owning the PG and the port of its per-core listener.
+    When set, the client opens a connection to that port (on the OSD's
+    address it already uses), and sends
+    the PG's subsequent ops on it, saving the OSD a cross-core hop per op.
+    Read when the client starts.
+  see_also:
+  - crimson_osd_core_listeners
 # ignore the first reply for each write, and resend the osd op instead
 - name: objecter_retry_writes_after_first_reply
   type: bool
