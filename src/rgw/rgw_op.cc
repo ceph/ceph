@@ -521,7 +521,23 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     mpobj->set_in_extra_data(true);
     object = mpobj.get();
   }
-  policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->bucket_tenant);
+  try {
+    policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->bucket_tenant);
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "Error reading IAM Policy: " << e.what() << dendl;
+
+    // A stored bucket policy that no longer parses must deny access rather than
+    // let PolicyParseException escape and std::terminate the process. This path
+    // parses the *source* bucket's policy for a copy and runs before any
+    // permission check, so without this guard an unparsable policy aborts
+    // radosgw with no grant required -- including a policy that is valid in its
+    // own tenant but is re-parsed under another tenant during a cross-tenant
+    // copy. Admin/system users are let through so the bucket can be repaired via
+    // PutBucketPolicy/DeleteBucketPolicy, matching read_bucket_policy().
+    if (!s->auth.identity->is_admin()) {
+      return -EACCES;
+    }
+  }
 
   int ret = get_obj_policy_from_attr(dpp, s->cct, driver, s->bucket_owner,
 				     acl, storage_class, object, s->yield);
@@ -6453,7 +6469,20 @@ int RGWCopyObj::verify_permission(optional_yield y)
   if (op_ret < 0) {
     return op_ret;
   }
-  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs(), s->bucket_tenant);
+  boost::optional<Policy> dest_iam_policy;
+  try {
+    dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs(), s->bucket_tenant);
+  } catch (const std::exception& e) {
+    ldpp_dout(this, 0) << "Error reading IAM Policy: " << e.what() << dendl;
+
+    // Deny rather than let an unparsable destination-bucket policy escape as an
+    // uncaught exception and terminate radosgw; a system/multisite copy reaches
+    // this parse on its own bucket. Admin/system users are let through to repair
+    // the bucket, matching read_bucket_policy().
+    if (!s->auth.identity->is_admin()) {
+      return -EACCES;
+    }
+  }
 
   //Add destination bucket tags for authorization
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, dest_iam_policy, s->iam_identity_policies, s->session_policies);
