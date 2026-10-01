@@ -153,6 +153,11 @@ class IngressService(CephService):
                     f'monitor_ssl_key: {utils.config_hash(ingress_spec.monitor_ssl_key)}'
                 )
 
+        # A changed spec or an upgrade reconfigures the daemon
+        # with new log config without a manual redeploy.
+        deps.append(f'haproxy_log_target: {ingress_spec.haproxy_log_target}')
+        deps.append(f'haproxy_log_level: {ingress_spec.haproxy_log_level}')
+
         return sorted(deps)
 
     def haproxy_generate_config(

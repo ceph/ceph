@@ -509,6 +509,8 @@ spec:
   certificate_source: cephadm-signed
   first_virtual_router_id: 50
   frontend_port: 8080
+  haproxy_log_level: info
+  haproxy_log_target: journald
   monitor_cert_source: reuse_service_cert
   monitor_port: 8081
   virtual_ip: 192.168.20.1/24
@@ -1038,6 +1040,61 @@ spec:
     assert isinstance(loaded, IngressSpec)
     assert loaded.haproxy_peer_communication_port == 5000
     assert loaded.get_port_start() == [2049, 9049, 5000]
+
+
+def _make_ingress_spec(**kwargs):
+    base = dict(
+        service_type='ingress',
+        service_id='rgw.foo',
+        backend_service='rgw.foo',
+        frontend_port=8080,
+        monitor_port=8081,
+        virtual_ip='192.168.1.1/24',
+    )
+    base.update(kwargs)
+    return IngressSpec(**base)
+
+
+def test_ingress_haproxy_logging_defaults():
+    """Logging is on by default: journald target, info level."""
+    spec = _make_ingress_spec()
+    spec.validate()
+    assert spec.haproxy_log_target == 'journald'
+    assert spec.haproxy_log_level == 'info'
+
+
+def test_ingress_haproxy_logging_normalizes_case():
+    """Values are lowercased so they are valid HAProxy tokens."""
+    spec = _make_ingress_spec(haproxy_log_target='JournalD', haproxy_log_level='DEBUG')
+    spec.validate()
+    assert spec.haproxy_log_target == 'journald'
+    assert spec.haproxy_log_level == 'debug'
+
+
+@pytest.mark.parametrize("level", ['debug', 'info', 'notice', 'warning', 'err'])
+def test_ingress_haproxy_log_level_accepts_valid(level):
+    spec = _make_ingress_spec(haproxy_log_level=level)
+    spec.validate()
+    assert spec.haproxy_log_level == level
+
+
+@pytest.mark.parametrize("target", ['journald', 'none'])
+def test_ingress_haproxy_log_target_accepts_valid(target):
+    spec = _make_ingress_spec(haproxy_log_target=target)
+    spec.validate()
+    assert spec.haproxy_log_target == target
+
+
+def test_ingress_haproxy_log_level_rejects_invalid():
+    spec = _make_ingress_spec(haproxy_log_level='verbose')
+    with pytest.raises(SpecValidationError, match='haproxy_log_level'):
+        spec.validate()
+
+
+def test_ingress_haproxy_log_target_rejects_invalid():
+    spec = _make_ingress_spec(haproxy_log_target='syslog')
+    with pytest.raises(SpecValidationError, match='haproxy_log_target'):
+        spec.validate()
 
 
 @pytest.mark.parametrize("y, error_match", [
