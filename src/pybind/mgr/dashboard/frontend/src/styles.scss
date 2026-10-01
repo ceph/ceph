@@ -2,6 +2,7 @@
 @use './src/styles/defaults' as *;
 @use '@carbon/charts/styles.css' as *;
 @use '@carbon/colors';
+@use 'sass:color';
 
 @import './src/styles/carbon-defaults.scss';
 
@@ -77,7 +78,7 @@ $grid-breakpoints: (
   }
 
   .very-strong {
-    background: darken($success, 15%);
+    background: color.adjust($success, $lightness: -15%);
     width: 100%;
   }
 }
