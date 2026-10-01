@@ -32,6 +32,7 @@ Usage:
         # Do something with the config
 """
 import logging
+import select
 import ssl
 import cherrypy
 import re
@@ -117,28 +118,62 @@ class _SSLStreamWriter(StreamWriter):
     ``io.BlockingIOError`` does for a plain non-blocking socket.
     """
 
-    def _flush_unlocked(self):
+    # How long to wait in select() before giving up on a stalled write.
+    # Matches Cheroot's default HTTPServer.timeout so behaviour is consistent
+    # with how Cheroot handles plain-socket timeouts.
+    _SSL_SELECT_TIMEOUT = 10.0
+
+    # Declare the C-level attribute so mypy can resolve it on this subclass.
+    _write_buf: bytearray
+
+    def _flush_unlocked(self) -> None:
         self._checkClosed('flush of closed file')
         while self._write_buf:
             try:
                 n = self.raw.write(bytes(self._write_buf))
-            except (ssl.SSLWantWriteError, ssl.SSLWantReadError):
-                # TLS record layer not ready; no bytes were consumed.
-                # Retry on the next iteration (the underlying OS select
-                # loop in Cheroot will call us again when the socket is
-                # writable / the renegotiation handshake completes).
-                n = 0
-            except IOError as e:
-                # Covers io.BlockingIOError (plain non-blocking socket)
-                # which carries characters_written for partial sends.
-                n = getattr(e, 'characters_written', 0)
+            except ssl.SSLWantWriteError:
+                # TLS record layer cannot write yet (send buffer full).
+                # Block in select() until the socket is writable, then
+                # retry.  This yields the Cheroot worker thread to the OS
+                # scheduler instead of spinning at 100% CPU.
+                self._ssl_wait(write=True)
+                continue
+            except ssl.SSLWantReadError:
+                # TLS renegotiation: the SSL layer needs to read before it
+                # can complete the write.  Wait for the socket to be
+                # readable, then retry.
+                self._ssl_wait(write=False)
+                continue
+            except BlockingIOError as e:
+                # Plain non-blocking socket returned EAGAIN; some bytes
+                # may have been written (characters_written).
+                n = e.characters_written
             del self._write_buf[:n]
+
+    def _ssl_wait(self, write: bool) -> None:
+        """Block until the underlying SSL socket is ready for I/O.
+
+        Raises ``ssl.SSLError`` (timeout) if the socket does not become
+        ready within ``_SSL_SELECT_TIMEOUT`` seconds, which causes
+        Cheroot's connection handler to close the connection cleanly.
+        """
+        fd = self.raw.fileno()  # socket.SocketIO exposes the underlying fd
+        if write:
+            _, ready, _ = select.select([], [fd], [], self._SSL_SELECT_TIMEOUT)
+        else:
+            ready, _, _ = select.select([fd], [], [], self._SSL_SELECT_TIMEOUT)
+        if not ready:
+            raise ssl.SSLError(
+                ssl.SSL_ERROR_WANT_WRITE if write else ssl.SSL_ERROR_WANT_READ,
+                "SSL socket not ready after %ss" % self._SSL_SELECT_TIMEOUT,
+            )
 
 
 class _SSLBuiltinAdapter(BuiltinSSLAdapter):
     """BuiltinSSLAdapter that uses the SSL-aware stream writer."""
 
-    def makefile(self, sock, mode='r', bufsize=-1):
+    def makefile(self, sock: ssl.SSLSocket, mode: str = 'r',
+                 bufsize: int = -1) -> Any:
         from cheroot.makefile import StreamReader
         if 'r' in mode:
             return StreamReader(sock, mode, bufsize)
