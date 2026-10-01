@@ -44,6 +44,7 @@ from ceph.deployment.utils import verify_positive_int, verify_non_negative_numbe
 from ceph.deployment.utils import verify_boolean, verify_enum, verify_int, verify_non_empty_string
 from ceph.deployment.utils import verify_size_with_units, validate_port, validate_unique_ports, \
     validate_ip
+from ceph.deployment.utils import verify_dir_path
 from ceph.cephadm.d3n_types import D3NCacheSpec, D3NCacheError
 from ceph.utils import is_hex
 from ceph.smb import constants as smbconst
@@ -1431,6 +1432,9 @@ class NFSServiceSpec(ServiceSpec):
                  enable_client_object_cache: bool = False,
                  client_object_cache_size: Optional[Union[str, int]] = None,
                  client_object_cache_max_dirty: Optional[Union[str, int]] = None,
+                 enable_cephfs_client_log: bool = False,
+                 cephfs_client_log_level: Optional[int] = None,
+                 cephfs_client_log_dir: Optional[str] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1467,6 +1471,10 @@ class NFSServiceSpec(ServiceSpec):
         self.enable_client_object_cache = enable_client_object_cache
         self.client_object_cache_size = client_object_cache_size
         self.client_object_cache_max_dirty = client_object_cache_max_dirty
+
+        self.enable_cephfs_client_log = enable_cephfs_client_log
+        self.cephfs_client_log_level = cephfs_client_log_level
+        self.cephfs_client_log_dir = cephfs_client_log_dir
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec
@@ -1614,6 +1622,12 @@ class NFSServiceSpec(ServiceSpec):
                 if key.endswith('iops') and not isinstance(value, int):
                     raise SpecValidationError(
                         f"Invalid NFS spec: IOPS '{key}' should be an integer")
+
+        if self.enable_cephfs_client_log:
+            if self.cephfs_client_log_level is not None:
+                verify_non_negative_int(
+                    self.cephfs_client_log_level, "cephfs_client_log_level")
+            verify_dir_path(self.cephfs_client_log_dir, "cephfs_client_log_dir")
 
         # TLS certificate validation
         if self.ssl and not self.certificate_source:
