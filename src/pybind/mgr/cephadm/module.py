@@ -452,11 +452,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             type='str',
             default='',
             enum_allowed=['', 'none', 'registry'],
-            desc='Pre-distribute the upgrade target image to in-scope hosts before '
+            desc='Pre-pull the upgrade target image to in-scope hosts before '
                  'any daemon is upgraded. Empty or "none" (default): disabled. '
-                 '"registry": pull in parallel on each in-scope host from the '
-                 'cluster registry (requires registry reachability from hosts; '
-                 'digests/version learned from those pulls).',
+                 '"registry": pull in parallel batches on each in-scope host from the '
+                 'cluster registry (requires registry reachability from hosts).',
         ),
         Option(
             'upgrade_image_mirror_max_parallel',

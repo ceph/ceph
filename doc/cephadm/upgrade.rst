@@ -71,7 +71,7 @@ image from a registry on each host during the upgrade can add significant
 time. This is especially noticeable during MDS upgrades when CephFS may
 already be offline while a host still downloads the image.
 
-When enabled, cephadm pre-distributes the target image to in-scope hosts
+When enabled, cephadm pre-pulls the target image to in-scope hosts
 **before any daemon is upgraded**. Configure this with
 ``mgr/cephadm/upgrade_image_mirror_method``:
 
@@ -80,16 +80,16 @@ When enabled, cephadm pre-distributes the target image to in-scope hosts
   daemon upgrade).
 
 ``registry``
-  Pull in parallel on each in-scope host from the cluster registry (Harbor,
-  Quay, etc.). Use this when every node already has registry connectivity.
-  Target image digests and Ceph version are learned from those parallel
-  pulls, so there is no extra serial "first pull" on a single host before
-  the batch. Hosts that already have the target image are skipped. If
-  pre-distribution fails on any host, the upgrade is paused before any
-  daemon is upgraded. Staggered upgrades pre-pull only on hosts in the
-  current upgrade scope.
+  Pull in parallel batches on each in-scope host from the cluster registry
+  (Harbor, Quay, etc.). Use this when every node already has registry
+  connectivity. The existing first pull on one host still learns the target
+  digest and Ceph version (and rejects a bad target) before the cluster-wide
+  pre-pull. Hosts already completed are skipped after a pause or mgr failover.
+  If pre-pull fails on any host, the upgrade is paused before any daemon is
+  upgraded. Staggered upgrades pre-pull only on hosts in the current upgrade
+  scope.
 
-Enable pre-distribution:
+Enable pre-pull:
 
 .. prompt:: bash #
 
@@ -103,14 +103,11 @@ Disable again (either form):
    # or clear to empty
    ceph config set mgr mgr/cephadm/upgrade_image_mirror_method ''
 
-Optional tuning:
+Optional tuning (hosts pulled per serve iteration):
 
 .. prompt:: bash #
 
    ceph config set mgr mgr/cephadm/upgrade_image_mirror_max_parallel 8
-
-The pre-pull step uses a timeout of at least 7200 seconds (two hours),
-scaled by the number of in-scope hosts.
 
 
 Starting the Upgrade
