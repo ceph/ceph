@@ -42,7 +42,7 @@ describe('NoSsoGuardService', () => {
   it('should prevent if logged in via SSO', fakeAsync(() => {
     spyOn(authStorageService, 'isSSO').and.returnValue(true);
     ngZone.run(() => {
-      expect(() => service.canActivate()).toThrowError(DashboardUserDeniedError);
+      expect(() => service.canActivate()).toThrow(DashboardUserDeniedError);
     });
     tick();
   }));
