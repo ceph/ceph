@@ -321,7 +321,12 @@ inline constexpr fdb_error_t operation_cancelled_error = 1101;
 struct future_value final
 {
  private:
- std::unique_ptr<FDBFuture, decltype(&fdb_future_destroy)> future_ptr;
+ // A captureless lambda allows the deleter to occupy 0 bytes rather than a ptr:
+ using deleter = decltype([](FDBFuture *future) noexcept {
+  fdb_future_destroy(future);
+ });
+
+ std::unique_ptr<FDBFuture, deleter> future_ptr;
 
  public:
  explicit future_value(FDBFuture *future_handle)
