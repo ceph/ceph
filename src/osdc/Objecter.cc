@@ -2193,6 +2193,54 @@ void Objecter::_reset_core_con(OSDSession *s, uint32_t core)
   i->second->set_priv(NULL);
   i->second->mark_down();
   s->core_cons.erase(i);
+  // forget the hints to that core, so that the next one reconnects
+  // TODO: back off reconnecting to a core that keeps failing
+  for (auto& [pgid, route] : s->pg_routes) {
+    if (route.hinted_core == core) {
+      route.hinted_core.reset();
+    }
+  }
+}
+
+void Objecter::_session_apply_core_hint(OSDSession *s,
+					const spg_t& pgid,
+					const osd_core_hint_t& hint)
+{
+  // s->lock is locked
+  auto& route = s->pg_routes[pgid];
+  if (route.hinted_core == hint.core) {
+    // the common case
+    return;
+  }
+
+  // the core's listener: the OSD instance's address we already use (as
+  // the reply came from it), on the hinted port
+  entity_addr_t core_addr;
+  if (s->con && hint.port != 0) {
+    core_addr = s->con->get_peer_addrs().msgr2_addr();
+  }
+  if (core_addr.is_blank_ip()) {
+    ldout(cct, 1) << __func__ << " osd." << s->osd << " pg " << pgid
+		  << ": ignoring hint " << fmt::format("{}", hint) << ": no port,"
+		  << " or no msgr2 address in "
+		  << (s->con ? s->con->get_peer_addrs() : entity_addrvec_t{})
+		  << dendl;
+    return;
+  }
+  core_addr.set_port(hint.port);
+
+  ldout(cct, 15) << __func__ << " osd." << s->osd << " pg " << pgid
+		 << ": core " << hint.core << " (was "
+		 << (route.hinted_core ? std::to_string(*route.hinted_core) : "none")
+		 << ")" << dendl;
+  route.hinted_core = hint.core;
+  if (!s->core_cons.contains(hint.core)) {
+    auto con = messenger->connect_to_osd(entity_addrvec_t(core_addr));
+    con->set_priv(RefCountedPtr{s});
+    s->core_cons[hint.core] = con;
+    ldout(cct, 10) << __func__ << " osd." << s->osd << " core " << hint.core
+		   << ": connecting to " << core_addr << " " << con << dendl;
+  }
 }
 
 void Objecter::wait_for_osd_map(epoch_t e)
@@ -4209,6 +4257,12 @@ void Objecter::handle_osd_op_reply(cref_t<MOSDOpReply> m)
     // we don't know the request attempt because the server is old, so
     // just accept this one.  we may do ACK callbacks we shouldn't
     // have, but that is better than doing callbacks out of order.
+  }
+
+  if (use_osd_core_hints) {
+    if (const auto& hint = m->get_core_hint(); hint) {
+      _session_apply_core_hint(s, op->target.actual_pgid, *hint);
+    }
   }
 
   int rc = m->get_result();
