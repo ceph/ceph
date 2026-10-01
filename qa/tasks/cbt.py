@@ -60,12 +60,14 @@ class CBT(Task):
   
         client_endpoints_config = self.config.get('client_endpoints', None)
         monitoring_profiles = self.config.get('monitoring_profiles', {})
+        report = self.config.get('report', {})
 
         return dict(
             cluster=cluster_config,
             benchmarks=benchmark_config,
             client_endpoints = client_endpoints_config,
             monitoring_profiles = monitoring_profiles,
+            report=report,
             )
 
     def install_dependencies(self):
@@ -73,7 +75,7 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['librbd-devel', 'perf']
+            cbt_depends = ['librbd-devel', 'perf', 'pandoc', 'texlive']
 
             # pdsh is not available in the repos for el10, use el9 version which works fine.
             # Pull it straight from the epel9 repo rather than hardcoding an rpm URL, since
@@ -109,7 +111,10 @@ class CBT(Task):
             )
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['librbd-dev', 'collectl', 'linux-tools-generic', 'python3-venv']
+            cbt_depends = [
+                'librbd-dev', 'collectl', 'linux-tools-generic', 'python3-venv', 
+                'pandoc', 'texlive', 'texlive-latex-extra'
+            ]
         self.first_mon.run(args=install_cmd + cbt_depends)
 
         # Create a virtual environment for CBT
