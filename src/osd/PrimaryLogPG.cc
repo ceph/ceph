@@ -13811,6 +13811,8 @@ void PrimaryLogPG::on_shutdown()
   cancel_pool_migration_copy_ops(&tids);
   osd->objecter->op_cancel(tids, -ECANCELED);
 
+  cancel_pool_migration_reservation_op();
+
   apply_and_flush_repops(false);
   cancel_log_updates();
   // we must remove PGRefs, so do this this prior to release_backoffs() callers
