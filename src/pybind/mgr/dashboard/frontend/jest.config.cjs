@@ -28,7 +28,6 @@ const jestConfig = {
         useESM: true,
         stringifyContentPathRegex: '\\.(html|svg)$',
         tsconfig: '<rootDir>/tsconfig.spec.json',
-        isolatedModules: true
       }
     ],
     '^.+\\.(js)$': 'babel-jest'

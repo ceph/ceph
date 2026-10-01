@@ -832,7 +832,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         const paginate_obs = new PaginateObservable<any>(of({}));
         const cephServiceSpy = spyOn(cephServiceService, 'list').and.returnValue(paginate_obs);
         component.ngOnInit();
-        expect(cephServiceSpy).toBeCalledTimes(2);
+        expect(cephServiceSpy).toHaveBeenCalledTimes(2);
         expect(component.action).toBe('Edit');
         const serviceType = fixture.componentInstance.serviceForm.get('service_type');
         const serviceId = fixture.componentInstance.serviceForm.get('service_id');
