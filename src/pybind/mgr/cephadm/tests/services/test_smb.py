@@ -5,7 +5,8 @@ from ceph.smb.constants import REMOTE_CONTROL
 from cephadm.services.smb import SMBSpec, SMBExternalCephCluster
 from cephadm import utils
 from cephadm.module import CephadmOrchestrator
-from cephadm.tests.fixtures import with_host, with_service, async_side_effect
+from cephadm.serve import CephadmServe
+from cephadm.tests.fixtures import with_host, with_service, async_side_effect, wait
 
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
@@ -204,6 +205,82 @@ class TestSMB:
                 assert files.get('remote_control.ssl.crt') == ceph_generated_cert
                 assert files.get('remote_control.ssl.key') == ceph_generated_key
                 assert files.get('remote_control.ca.crt') == cephadm_root_ca
+
+    @patch("cephadm.services.smb.SMBService.allow_colo", return_value=True)
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_smb_tls_feature_cert_remove_after_last_daemon_remove(
+        self, _run_cephadm, _allow_colo, cephadm_module: CephadmOrchestrator
+    ):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        def _cert_mgr_entries_for(service_name):
+            found = []
+            listing = cephadm_module.cert_mgr.cert_ls(include_cephadm_signed=True)
+            for cert_name, entry in listing.items():
+                if isinstance(entry, dict) and service_name in entry.get('certificates', {}):
+                    found.append(cert_name)
+            return found
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks(
+                'host1',
+                {'1.2.3.0/24': {'if0': ['1.2.3.7']}}
+            )
+
+            smb_spec = SMBSpec(
+                cluster_id='foxtrot',
+                service_id='foo',
+                config_uri='rados://.smb/foxtrot/config2.json',
+                placement=PlacementSpec(hosts=['host1'], count_per_host=2),
+                features=[REMOTE_CONTROL],
+                ssl_certificates={
+                    'remote_control': {
+                        'enabled': True,
+                        'ssl_cert': ceph_generated_cert,
+                        'ssl_key': ceph_generated_key,
+                        'ssl_ca_cert': cephadm_root_ca,
+                        'certificate_source': 'inline',
+                    },
+                },
+            )
+            service_name = smb_spec.service_name()
+
+            c = cephadm_module.apply([smb_spec])
+            assert wait(cephadm_module, c) == [
+                f'Scheduled {service_name} update...'
+            ]
+
+            serve = CephadmServe(cephadm_module)
+            serve._apply_all_services()
+
+            daemons = cephadm_module.cache.get_daemons_by_service(service_name)
+            assert len(daemons) == 2
+            assert cephadm_module.cert_mgr.cert_store.get_tlsobject_if_exists('smb_remote_control_ssl_cert', service_name=service_name) is not None
+            assert cephadm_module.cert_mgr.key_store.get_tlsobject_if_exists('smb_remote_control_ssl_key', service_name=service_name) is not None
+            assert cephadm_module.cert_mgr.cert_store.get_tlsobject_if_exists('smb_remote_control_ca_cert', service_name=service_name) is not None
+
+            daemon1, daemon2 = daemons[0], daemons[1]
+
+            serve._remove_daemon(daemon1.name(), daemon1.hostname)
+
+            remaining = cephadm_module.cache.get_daemons_by_service(service_name)
+            assert len(remaining) == 1
+            assert remaining[0].name() == daemon2.name()
+
+            assert cephadm_module.cert_mgr.cert_store.get_tlsobject_if_exists('smb_remote_control_ssl_cert', service_name=service_name) is not None
+            assert cephadm_module.cert_mgr.key_store.get_tlsobject_if_exists('smb_remote_control_ssl_key', service_name=service_name) is not None
+            assert cephadm_module.cert_mgr.cert_store.get_tlsobject_if_exists('smb_remote_control_ca_cert', service_name=service_name) is not None
+            entries_after_first_remove = _cert_mgr_entries_for(service_name)
+            assert 'smb_remote_control_ssl_cert' in entries_after_first_remove
+            assert 'smb_remote_control_ca_cert' in entries_after_first_remove
+
+            serve._remove_daemon(daemon2.name(), daemon2.hostname)
+
+            assert not cephadm_module.cache.get_daemons_by_service(service_name)
+            assert cephadm_module.cert_mgr.cert_store.get_tlsobject_if_exists('smb_remote_control_ssl_cert', service_name=service_name) is None
+            assert cephadm_module.cert_mgr.key_store.get_tlsobject_if_exists('smb_remote_control_ssl_key', service_name=service_name) is None
+            assert cephadm_module.cert_mgr.cert_store.get_tlsobject_if_exists('smb_remote_control_ca_cert', service_name=service_name) is None
+            assert _cert_mgr_entries_for(service_name) == []
 
 
 def test_smb_get_dependencies(cephadm_module):
