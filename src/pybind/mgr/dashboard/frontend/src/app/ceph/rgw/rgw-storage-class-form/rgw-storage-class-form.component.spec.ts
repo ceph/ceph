@@ -207,6 +207,25 @@ describe('RgwStorageClassFormComponent', () => {
       expect(component).toBeTruthy();
     });
   });
+  it('should not require target_endpoint for a local storage class', () => {
+    const form = component.storageClassForm;
+    form.get('storage_class').setValue('SC1');
+    form.get('zonegroup').setValue('zg2');
+    form.get('placement_target').setValue('default-placement');
+    form.get('zone').setValue('z2');
+    form.get('pool').setValue('pool1');
+    expect(form.get('target_endpoint').invalid).toBe(false);
+    expect(form.valid).toBe(true);
+  });
+
+  it('should require target_endpoint only for cloud tier storage classes', () => {
+    const form = component.storageClassForm;
+    form.get('storageClassType').setValue('cloud-s3');
+    form.get('target_endpoint').setValue('');
+    expect(form.get('target_endpoint').hasError('required')).toBe(true);
+    form.get('storageClassType').setValue('local');
+    expect(form.get('target_endpoint').invalid).toBe(false);
+  });
 
   describe('pool form navigation from storage class form', () => {
     const storageClassReturnUrl = '/rgw/storage-class/create';

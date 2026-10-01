@@ -180,7 +180,10 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
         this.storageClassInfo = params;
       });
       this.rgwStorageService
-        .getPlacement_target(this.storageClassInfo.placement_target)
+        .getPlacement_target(
+          this.storageClassInfo.placement_target,
+          this.storageClassInfo.zonegroup_name
+        )
         .pipe(
           switchMap((placementTargetInfo: PlacementTarget) => {
             // Set the tierTargetInfo based on the placementTargetInfo and storageClassInfo
@@ -465,7 +468,9 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       placement_target: new FormControl('', {
         validators: [Validators.required]
       }),
-      target_endpoint: new FormControl('', [Validators.required, this.urlValidator]),
+      // Required only for cloud tiers; updateValidatorsBasedOnStorageClass() adds it when the
+      // type changes. The default (local) type must not be blocked by it.
+      target_endpoint: new FormControl('', [this.urlValidator]),
       access_key: new FormControl(null, [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
       ]),
@@ -586,6 +591,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     const rawFormValue = _.cloneDeep(this.storageClassForm.getRawValue());
     const zoneRequest: ZoneRequest = {
       zone_name: this.storageClassForm.get('zone').value,
+      zonegroup_name: this.storageClassForm.get('zonegroup').value,
       placement_target: this.storageClassForm.get('placement_target').value,
       storage_class: this.storageClassForm.get('storage_class').value,
       data_pool: this.storageClassForm.get('pool')?.value || ''
