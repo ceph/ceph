@@ -461,6 +461,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Maximum number of OSD daemons upgraded in parallel.'
         ),
         Option(
+            'upgrade_image_mirror_method',
+            type='str',
+            default='',
+            enum_allowed=['', 'none', 'registry'],
+            desc='Pre-pull the upgrade target image to in-scope hosts before '
+                 'any daemon is upgraded. Empty or "none" (default): disabled. '
+                 '"registry": pull in parallel batches on each in-scope host from the '
+                 'cluster registry (requires registry reachability from hosts).',
+        ),
+        Option(
+            'upgrade_image_mirror_max_parallel',
+            type='int',
+            default=8,
+            desc='Maximum number of hosts pulling the upgrade image in parallel '
+                 'when upgrade_image_mirror_method is registry.',
+        ),
+        Option(
             'pg_autoscale_during_upgrade',
             type='bool',
             default=False,
@@ -670,6 +687,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
             self.pg_autoscale_during_upgrade = False
+            self.upgrade_image_mirror_method = ''
+            self.upgrade_image_mirror_max_parallel = 8
             self.ssh_user: Optional[str] = None
             self._ssh_options: Optional[str] = None
             self.tkey = NamedTemporaryFile()
