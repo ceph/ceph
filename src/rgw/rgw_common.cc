@@ -1822,6 +1822,44 @@ std::string url_decode(const std::string_view& src_str, bool in_query)
   return dest_str;
 }
 
+bool url_decode(const std::string_view& src_str, std::string& dest_str, bool in_query)
+{
+  dest_str.clear();
+  dest_str.reserve(src_str.length() + 1);
+
+  for (auto src = std::begin(src_str); src != std::end(src_str); ++src) {
+    if (*src != '%') {
+      if (!in_query || *src != '+') {
+        if (*src == '?') {
+          in_query = true;
+        }
+        dest_str.push_back(*src);
+      } else {
+        dest_str.push_back(' ');
+      }
+    } else {
+      /* A '%' must be followed by two hex digits. The string-returning
+       * url_decode() above silently returns "" on a bad hex digit and silently
+       * drops a '%' with fewer than two following chars; routing on either
+       * value makes radosgw act on a different resource than the URL names, so
+       * report failure here and let the caller reject the request. */
+      if (std::distance(src, std::end(src_str)) < 3) {
+        return false;
+      }
+
+      src++;
+      const char c1 = hex_to_num(*src++);
+      const char c2 = hex_to_num(*src);
+      if (c1 < 0 || c2 < 0) {
+        return false;
+      }
+      dest_str.push_back(c1 << 4 | c2);
+    }
+  }
+
+  return true;
+}
+
 void rgw_uri_escape_char(char c, string& dst)
 {
   char buf[16];
