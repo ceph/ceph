@@ -25,6 +25,13 @@
 #   --with-lifecycle     Set rgw_lc_debug_interval=10 so lifecycle
 #                       expiration tests complete in seconds, and
 #                       uncomment lc_debug_interval in s3tests.conf
+#   --with-impersonation
+#                       Serve each request as its own POSIX identity.
+#                       Creates the fixture users and groups, seeds a
+#                       bucket whose objects are gated on group
+#                       membership, and applies CAP_SETUID/CAP_SETGID
+#                       to the built radosgw.  Needs sudo;  each step
+#                       is skipped if already done.
 #   --with-inotify      Enable inotify watcher on bucket directories
 #                       (for sideloaded file detection; off by default)
 #   --ramdisk           Mount tmpfs on data root and LMDB cache dirs
@@ -54,6 +61,8 @@ KEYCLOAK=false
 KAFKA=false
 VAULT=false
 LIFECYCLE=false
+IMPERSONATE=false
+IMPERSONATE_CLEAN=false
 INOTIFY=false
 RAMDISK=false
 DATA_ROOT=""
@@ -70,11 +79,12 @@ while [[ $# -gt 0 ]]; do
 		--gpfs)       GPFS=true; shift ;;
 		--clone)      CLONE=true; GPFS=true; shift ;;
 		--lwe)        LWE=true; GPFS=true; shift ;;
-		--clean)      CLEAN=true; shift ;;
+		--clean)      CLEAN=true; IMPERSONATE_CLEAN=true; shift ;;
 		--with-keycloak) KEYCLOAK=true; shift ;;
 		--with-kafka) KAFKA=true; shift ;;
 		--with-vault) VAULT=true; shift ;;
 		--with-lifecycle) LIFECYCLE=true; shift ;;
+		--with-impersonation) IMPERSONATE=true; shift ;;
 		--with-inotify) INOTIFY=true; shift ;;
 		--ramdisk) RAMDISK=true; shift ;;
 		--data-root) DATA_ROOT="$2"; shift 2 ;;
@@ -216,6 +226,10 @@ if $LIFECYCLE; then
 	VSTART_OPTS+=(-o 'rgw_lc_debug_interval=10')
 fi
 
+if $IMPERSONATE; then
+	VSTART_OPTS+=(-o 'rgw_nsfs_impersonate=true')
+fi
+
 if $INOTIFY; then
 	VSTART_OPTS+=(-o "rgw_${STORE}_inotify=true")
 fi
@@ -241,6 +255,74 @@ VSTART_FLAGS=(-n -d)
 if $PROFILE; then
 	VSTART_FLAGS=(-n)
 	DEBUG_RGW=0
+fi
+
+# --- impersonation:  users, groups and the capability ------------
+#
+# Before vstart, because the capability has to be on the binary
+# before the daemon execs it.  The fixture tree cannot go here --
+# vstart removes $nsfs_dir/root (vstart.sh:1010) -- so it is seeded
+# further down, once the root exists again.
+
+IMP_GRP_NAME=rgwfix
+IMP_GRP_GID=70010
+IMP_USER_A=rgwalice
+IMP_UID_A=70101
+IMP_USER_B=rgwbob
+IMP_UID_B=70102
+IMP_BUCKET=impersonate-fixture
+
+if $IMPERSONATE; then
+	if [[ "$STORE" != "nsfs" ]]; then
+		echo "error: --with-impersonation only applies to --store nsfs" >&2
+		exit 1
+	fi
+
+	echo "==> --with-impersonation: users, groups and capability (needs sudo)"
+
+	# Objects written under impersonation belong to the identity
+	# that wrote them, so the developer cannot chmod them and
+	# vstart's own clean cannot replace them.  Remove the data
+	# root here, while sudo is already in hand, rather than
+	# leaving vstart to trip over it.  (The unlink itself would
+	# succeed -- bucket directories are gateway-owned, and a
+	# directory's owner may unlink anything inside it -- but the
+	# fixture's chmod and chown still need root.)
+	if $IMPERSONATE_CLEAN; then
+		if $GPFS; then
+			sudo rm -rf "$GPFS_ROOT/root"
+		else
+			sudo rm -rf "$BUILD_DIR/dev/rgw/$STORE/root"
+		fi
+	fi
+
+	getent group "$IMP_GRP_NAME" >/dev/null 2>&1 || \
+		sudo groupadd -g "$IMP_GRP_GID" "$IMP_GRP_NAME"
+	# alice holds the gating group, bob deliberately does not
+	getent passwd "$IMP_USER_A" >/dev/null 2>&1 || \
+		sudo useradd -u "$IMP_UID_A" -M -N -s /sbin/nologin \
+			-G "$IMP_GRP_NAME" "$IMP_USER_A"
+	getent passwd "$IMP_USER_B" >/dev/null 2>&1 || \
+		sudo useradd -u "$IMP_UID_B" -M -N -s /sbin/nologin \
+			"$IMP_USER_B"
+
+	# ninja clears file capabilities on every relink, so this is
+	# reapplied on each start rather than being one-time setup.
+	#
+	# CAP_DAC_READ_SEARCH alongside the two identity capabilities:
+	# objects written under impersonation belong to the identity
+	# that wrote them, and the gateway still has to read their
+	# attributes to build listing rows.  Listings are complete and
+	# unfiltered by design -- an object's contents are protected by
+	# filesystem permissions, its name is not.
+	#
+	# It is safe only because the registration bracket clears the
+	# effective capability set:  a personality copies the
+	# registering task's credentials whole, so without that clear
+	# every impersonated read would inherit this and silently
+	# bypass DAC.  Measured in probes/results-capprobe-2026-10-01.txt.
+	sudo setcap cap_dac_read_search,cap_setuid,cap_setgid+ep \
+		"$BUILD_DIR/bin/radosgw"
 fi
 
 MON=0 OSD=0 MDS=0 MGR=0 RGW=1 \
@@ -384,6 +466,86 @@ fi
 
 export S3TEST_CONF="$S3CONF"
 
+# --- impersonation:  the fixture ---------------------------------
+#
+# The bucket is created over S3 rather than placed in the data root.
+# An unmarked directory has no owner RGW can resolve -- a base
+# bucket's owner waits on the account import -- so a sideloaded one
+# is refused with AccessDenied before any permission question is
+# reached.  Creating it through the gateway gives it an owner;  only
+# the ownership and mode of the gated object need root.
+#
+# That object ends up mode 0040 owned root:$IMP_GRP_NAME.  No owner
+# bits and no other bits, so holding the group is the only thing
+# that can grant a read -- credprobe's shape, and what makes a
+# denial a control rather than an absence.
+
+if $IMPERSONATE; then
+	# vstart's own user.  Taken from the pair radosgw creates at
+	# first start (driver/posix/posixDB.cc) rather than from
+	# s3tests.conf, which is not generated in every tree.
+	IMP_AK=0555b35654ad1656d804
+	IMP_SK='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
+
+	# The data root stays as the gateway made it.  Bucket
+	# directories are owned by the gateway and created sticky and
+	# writable, so identities create objects inside them without
+	# needing to reach them by path -- an impersonated open starts
+	# from the descriptor the gateway already holds.
+
+	# testid is bound to the fixture uid so the seeded objects are
+	# owned by a real identity rather than by the gateway -- and so
+	# that the writes are not refused, since with impersonation on
+	# an identity with no record cannot be served.
+	if ! python3 "$SRC_DIR/src/script/rgw/nsfs-impersonate-fixture.py" \
+			localhost 8000 "$IMP_AK" "$IMP_SK" "$IMP_BUCKET" \
+			testid "$IMP_UID_A"; then
+		echo "error: could not create the impersonation fixture" >&2
+		exit 1
+	fi
+
+	IMP_DIR="$DATA_DIR/$IMP_BUCKET"
+	if [[ ! -f "$IMP_DIR/grouped.txt" ]]; then
+		echo "error: $IMP_DIR/grouped.txt absent after creation;" \
+			"is $DATA_DIR the data root?" >&2
+		exit 1
+	fi
+
+	# Everything here now belongs to the identity that wrote it,
+	# so the developer cannot chmod any of it -- sudo throughout.
+	#
+	# Bucket directories under impersonation are gateway-owned and
+	# 1777:  writable, so identities can create objects in them.
+	#
+	# The sticky bit is not load-bearing.  A directory's owner may
+	# unlink anything inside it regardless, and the gateway owns
+	# every bucket directory -- so sticky does not stop one
+	# identity's object being removed on behalf of another, and
+	# deletion deliberately does not run under the requester's
+	# identity.  It is kept as a true statement about the
+	# filesystem rather than about RGW:  an identity reaching this
+	# directory by path, outside the gateway, cannot unlink
+	# another's objects.
+	#
+	# Asserted rather than set, so a change to that decision shows
+	# up here rather than silently.
+	case "$(stat -c %a "$IMP_DIR")" in
+		1777) ;;
+		*) echo "warning: $IMP_BUCKET is $(stat -c %a "$IMP_DIR")," \
+			"expected 1777" >&2 ;;
+	esac
+
+	# the control:  readable by anyone, so a test that cannot read
+	# this has a broken gateway rather than a working denial
+	sudo chmod 0644 "$IMP_DIR/open.txt"
+
+	sudo chown "root:$IMP_GRP_NAME" "$IMP_DIR/grouped.txt"
+	sudo chmod 0040 "$IMP_DIR/grouped.txt"
+
+	echo "==> --with-impersonation: $IMP_BUCKET seeded;" \
+		"grouped.txt is 0040 root:$IMP_GRP_NAME"
+fi
+
 # --- optional sidecars ---
 
 if $KEYCLOAK; then
@@ -431,6 +593,12 @@ echo "==> radosgw up on port 8000 ($STORE, data on $DATA_DIR)"
 echo "    s3tests.conf: $S3CONF"
 if $LIFECYCLE; then
 	echo "    Lifecycle: rgw_lc_debug_interval=10"
+fi
+if $IMPERSONATE; then
+	echo "    Impersonation: on;  bucket $IMP_BUCKET has open.txt (0644)" \
+		"and grouped.txt (0040 root:$IMP_GRP_NAME, gid $IMP_GRP_GID)"
+	echo "    Fixture ids: $IMP_USER_A=$IMP_UID_A in $IMP_GRP_NAME," \
+		"$IMP_USER_B=$IMP_UID_B not"
 fi
 if $KEYCLOAK; then
 	echo "    Keycloak: http://localhost:8080/realms/demorealm (user: testuser / testuser)"
