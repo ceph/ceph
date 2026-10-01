@@ -431,10 +431,6 @@ if(WITH_OPENLDAP)
     PRIVATE
       OpenLDAP::OpenLDAP)
 endif()
-if(WITH_RADOSGW_LUA_PACKAGES)
-  target_link_libraries(rgw_common
-    PRIVATE Boost::filesystem StdFilesystem::filesystem)
-endif()
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -543,10 +539,6 @@ if(WITH_RADOSGW_STANDALONE)
     target_link_libraries(rgw_common_standalone
       PRIVATE
       OpenLDAP::OpenLDAP)
-  endif()
-  if(WITH_RADOSGW_LUA_PACKAGES)
-    target_link_libraries(rgw_common_standalone
-      PRIVATE Boost::filesystem StdFilesystem::filesystem)
   endif()
 
   if(WITH_JAEGER)
@@ -794,6 +786,7 @@ target_link_libraries(rgw_a
   PRIVATE
     rgw_schedulers
     kmip
+    heap_profiler
     legacy-option-headers
     common_utf8 global
     heap_profiler
@@ -897,7 +890,6 @@ target_include_directories(radosgw
 target_link_libraries(radosgw PRIVATE
   legacy-option-headers
   ${rgw_libs}
-  heap_profiler
   ${ALLOC_LIBS})
 
 if(WITH_RADOSGW_FDB)
@@ -1110,7 +1102,6 @@ target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
   rgw_common
-  heap_profiler
   librados
   cls_rgw_client
   cls_otp_client

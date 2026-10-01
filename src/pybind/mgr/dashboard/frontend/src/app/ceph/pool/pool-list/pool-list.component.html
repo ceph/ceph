@@ -62,14 +62,15 @@
   #poolUsageTpl
   let-row="data.row"
 >
-  <cd-usage-bar
-    *ngIf="row.stats?.avail_raw?.latest"
-    [total]="row.stats.bytes_used.latest + row.stats.avail_raw.latest"
-    [used]="row.stats.bytes_used.latest"
-    [title]="row.pool_name"
-    decimals="2"
-  >
-  </cd-usage-bar>
+  @if (row.stats?.avail_raw?.latest) {
+    <cd-usage-bar
+      [total]="row.stats.bytes_used.latest + row.stats.avail_raw.latest"
+      [used]="row.stats.bytes_used.latest"
+      [title]="row.pool_name"
+      decimals="2"
+    >
+    </cd-usage-bar>
+  }
 </ng-template>
 
 <ng-template

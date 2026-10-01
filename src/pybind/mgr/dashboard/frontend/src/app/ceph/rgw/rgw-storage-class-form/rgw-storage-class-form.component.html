@@ -28,13 +28,14 @@
           [invalid]="storageClassForm.showError('storageClassType', formDir, 'required')"
           [invalidText]="storageError"
         >
-          <option
-            *ngFor="let opt of storageClassOptions"
-            [value]="opt.value"
-            i18n
-          >
-            {{ opt.label }}
-          </option>
+          @for (opt of storageClassOptions; track opt) {
+            <option
+              [value]="opt.value"
+              i18n
+            >
+              {{ opt.label }}
+            </option>
+          }
         </cds-select>
         <ng-template #storageError>
           @if (storageClassForm.showError('storageClassType', formDir, 'required')) {
@@ -62,14 +63,15 @@
             (change)="onZonegroupChange()"
             [invalidText]="zonegroupError"
           >
-            <option
-              *ngFor="let zonegrp of zonegroupNames"
-              [value]="zonegrp.name"
-              [selected]="zonegrp.name === storageClassForm.getValue('zonegroup')"
-              i18n
-            >
-              {{ zonegrp.name }}
-            </option>
+            @for (zonegrp of zonegroupNames; track zonegrp) {
+              <option
+                [value]="zonegrp.name"
+                [selected]="zonegrp.name === storageClassForm.getValue('zonegroup')"
+                i18n
+              >
+                {{ zonegrp.name }}
+              </option>
+            }
           </cds-select>
           <ng-template #zonegroupError>
             @if (storageClassForm.showError('zonegroup', formDir, 'required')) {
@@ -102,22 +104,24 @@
               >
                 --Select--
               </option>
-              <option
-                *ngFor="let zone of zones"
-                [value]="zone?.name"
-                [selected]="zone.name === storageClassForm.getValue('zone')"
-                i18n
-              >
-                {{ zone.name }}
-              </option>
+              @for (zone of zones; track zone) {
+                <option
+                  [value]="zone?.name"
+                  [selected]="zone.name === storageClassForm.getValue('zone')"
+                  i18n
+                >
+                  {{ zone.name }}
+                </option>
+              }
             </cds-select>
             <ng-template #zoneError>
-              <span
-                class="invalid-feedback"
-                *ngIf="storageClassForm.showError('zone', formDir, 'required')"
-                i18n
-                >This field is required.</span
-              >
+              @if (storageClassForm.showError('zone', formDir, 'required')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >This field is required.</span
+                >
+              }
             </ng-template>
           </div>
         }
@@ -155,21 +159,23 @@
             >
               --Select--
             </option>
-            <option
-              *ngFor="let pool of rgwPools"
-              [value]="pool.pool_name"
-              i18n
-            >
-              {{ pool.pool_name }}
-            </option>
+            @for (pool of rgwPools; track pool) {
+              <option
+                [value]="pool.pool_name"
+                i18n
+              >
+                {{ pool.pool_name }}
+              </option>
+            }
           </cds-select>
           <ng-template #poolError>
-            <span
-              class="invalid-feedback"
-              *ngIf="storageClassForm.showError('pool', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (storageClassForm.showError('pool', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </ng-template>
         </div>
       }

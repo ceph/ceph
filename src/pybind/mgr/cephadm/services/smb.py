@@ -32,6 +32,7 @@ from .cephadmservice import (
     AuthEntity,
     CephService,
     CephadmDaemonDeploySpec,
+    DaemonDeployContext,
     simplified_keyring,
 )
 from ..tlsobject_types import TLSCredentials, EMPTY_TLS_CREDENTIALS
@@ -142,13 +143,13 @@ class SMBService(CephService):
         return None
 
     def prepare_create(
-        self, daemon_spec: CephadmDaemonDeploySpec
+            self,
+            deploy_ctx: DaemonDeployContext,
     ) -> CephadmDaemonDeploySpec:
+        daemon_spec = deploy_ctx.daemon_spec
         assert self.TYPE == daemon_spec.daemon_type
         logger.debug('smb prepare_create')
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(
-            daemon_spec
-        )
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(deploy_ctx)
         return daemon_spec
 
     # Flat SSL fields on SMBSpec per feature, used as a fallback when
@@ -223,8 +224,10 @@ class SMBService(CephService):
         return self._lookup_rgw_creds_uri(self.mgr, cluster_id)
 
     def generate_config(
-        self, daemon_spec: CephadmDaemonDeploySpec
+            self,
+            deploy_ctx: DaemonDeployContext,
     ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
         logger.debug('smb generate_config')
         assert self.TYPE == daemon_spec.daemon_type
         super().register_for_certificates(daemon_spec)
@@ -306,7 +309,7 @@ class SMBService(CephService):
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
-        deps = sorted(self.get_dependencies(self.mgr, smb_spec))
+        deps = self.get_dependencies(self.mgr, smb_spec, daemon_spec.daemon_type)
         return config_blobs, deps
 
     def _cert_or_uri(self, data: Optional[str]) -> Optional[str]:
@@ -525,9 +528,9 @@ class SMBService(CephService):
         return ip
 
     @classmethod
-    def get_dependencies(
+    def _get_service_dependencies(
         cls,
-        mgr: 'CephadmOrchestrator',
+        mgr: "CephadmOrchestrator",
         spec: Optional[ServiceSpec] = None,
         daemon_type: Optional[str] = None,
     ) -> List[str]:
@@ -544,6 +547,50 @@ class SMBService(CephService):
             out.append(Dep.META(f'ceph_cluster_config.{ccc.alias}', value))
         # Add features as a dependency
         out.append(Dep.FIELD('features', ','.join(sorted(smb_spec.features or []))))
+
+        # SMB has per-feature TLS settings rather than the generic ServiceSpec
+        # TLS fields. Track the effective certificate inputs for each enabled
+        # feature so certificate rotation triggers daemon reconfiguration.
+        for feature, ssl_params in smb_spec.ssl_certificates.items():
+            if feature not in SMB_FEATURE_SUPPORTS_SSL or not ssl_params.enabled:
+                continue
+
+            prefix = f'ssl_certificates.{feature}'
+            out.append(
+                Dep.FIELD(
+                    f'{prefix}.certificate_source',
+                    ssl_params.certificate_source or '',
+                )
+            )
+
+            cert = ssl_params.ssl_cert
+            key = ssl_params.ssl_key
+            ca_cert = ssl_params.ssl_ca_cert
+
+            # Keep supporting the legacy flat certificate fields used as a
+            # fallback by _get_feature_certs().
+            flat_attrs = cls._FEATURE_FLAT_ATTRS.get(feature)
+            if flat_attrs:
+                cert_attr, key_attr, ca_attr = flat_attrs
+                cert = cert or getattr(smb_spec, cert_attr, None)
+                key = key or getattr(smb_spec, key_attr, None)
+                ca_cert = ca_cert or getattr(smb_spec, ca_attr, None)
+
+            if cert:
+                out.append(
+                    Dep.FIELD(f'{prefix}.ssl_cert', utils.config_hash(cert))
+                )
+            if key:
+                out.append(
+                    Dep.FIELD(f'{prefix}.ssl_key', utils.config_hash(key))
+                )
+            if ca_cert:
+                out.append(
+                    Dep.FIELD(
+                        f'{prefix}.ssl_ca_cert', utils.config_hash(ca_cert)
+                    )
+                )
+
         rgw_creds_uri = cls._lookup_rgw_creds_uri(mgr, smb_spec.cluster_id) or ''
         out.append(Dep.FIELD('rgw_creds_uri', rgw_creds_uri))
         return out

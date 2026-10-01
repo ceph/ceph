@@ -38,12 +38,15 @@
   #bucketSizeTpl
   let-row="data.row"
 >
-  <cd-usage-bar
-    *ngIf="row.bucket_quota.max_size > 0 && row.bucket_quota.enabled; else noSizeQuota"
-    [total]="row.bucket_quota.max_size"
-    [used]="row.bucket_size"
-  >
-  </cd-usage-bar>
+  @if (row.bucket_quota.max_size > 0 && row.bucket_quota.enabled) {
+    <cd-usage-bar
+      [total]="row.bucket_quota.max_size"
+      [used]="row.bucket_size"
+    >
+    </cd-usage-bar>
+  } @else {
+    <ng-container i18n>No Limit</ng-container>
+  }
 
   <ng-template
     #noSizeQuota
@@ -56,13 +59,16 @@
   #bucketObjectTpl
   let-row="data.row"
 >
-  <cd-usage-bar
-    *ngIf="row.bucket_quota.max_objects > 0 && row.bucket_quota.enabled; else noObjectQuota"
-    [total]="row.bucket_quota.max_objects"
-    [used]="row.num_objects"
-    [isBinary]="false"
-  >
-  </cd-usage-bar>
+  @if (row.bucket_quota.max_objects > 0 && row.bucket_quota.enabled) {
+    <cd-usage-bar
+      [total]="row.bucket_quota.max_objects"
+      [used]="row.num_objects"
+      [isBinary]="false"
+    >
+    </cd-usage-bar>
+  } @else {
+    <ng-container i18n>No Limit</ng-container>
+  }
 
   <ng-template
     #noObjectQuota

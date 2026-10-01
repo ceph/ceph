@@ -228,6 +228,12 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     return ret;
   }
 
+  ldpp_dout(op, 2) << "verifying CORS origin matches" << dendl;
+  ret = op->verify_cors_match();
+  if (ret < 0) {
+    return ret;
+  }
+
   /* Check if OPA is used to authorize requests */
   if (s->cct->_conf->rgw_use_opa_authz) {
     ret = rgw_opa_authorize(op, s);
@@ -270,9 +276,9 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     return -ERR_RATE_LIMITED;
   }
 
-  bool is_health_request = (op->get_type() == RGW_OP_GET_HEALTH_CHECK);
+  bool skip_op = op->get_type() == RGW_OP_GET_HEALTH_CHECK || op->get_type() == RGW_OP_DELETE_MULTI_OBJ;
   {
-    if (!is_health_request) {
+    if (!skip_op) {
       auto [script, rc] = rgw::lua::read_script_or_bytecode(
           s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield,
           rgw::lua::context::postAuth);
@@ -353,7 +359,7 @@ int process_request(const RGWProcessEnv& penv,
   bool should_log = false;
   RGWREST* rest = penv.rest;
   RGWRESTMgr *mgr;
-  bool is_health_request = false;
+  bool skip_op = false;
   RGWHandler_REST *handler = rest->get_handler(driver, s,
                                                *penv.auth_registry,
                                                frontend_prefix,
@@ -421,10 +427,10 @@ int process_request(const RGWProcessEnv& penv,
       goto done;
     }
 
-  is_health_request = (op->get_type() == RGW_OP_GET_HEALTH_CHECK);
+  skip_op = op->get_type() == RGW_OP_GET_HEALTH_CHECK || op->get_type() == RGW_OP_DELETE_MULTI_OBJ;
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
-    if (!is_health_request) {
+    if (!skip_op) {
       auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
                                                   s->bucket_tenant, s->yield,
                                                   rgw::lua::context::preRequest);
@@ -479,7 +485,7 @@ done:
         s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
       }
     }
-    if (!is_health_request) {
+    if (!skip_op) {
       auto [lua_script, rc] = rgw::lua::read_script_or_bytecode(s, penv.lua.manager.get(),
                                                   s->bucket_tenant, s->yield,
                                                   rgw::lua::context::postRequest);

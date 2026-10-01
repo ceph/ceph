@@ -1,83 +1,81 @@
 <!-- Embed dashboard -->
-<cd-loading-panel
-  *ngIf="loading && grafanaExist"
-  i18n
-  >Loading panel data...</cd-loading-panel
->
+@if (loading && grafanaExist) {
+  <cd-loading-panel i18n>Loading panel data...</cd-loading-panel>
+}
 
-<cd-alert-panel
-  type="info"
-  *ngIf="!grafanaExist"
-  i18n
-  >Please consult the&nbsp;<cd-doc section="grafana"></cd-doc>&nbsp;on how to configure and enable
-  the monitoring functionality.</cd-alert-panel
->
-
-<cd-alert-panel
-  type="info"
-  *ngIf="!dashboardExist"
-  i18n
-  >Grafana Dashboard doesn't exist. Please refer to &nbsp;<cd-doc section="grafana"></cd-doc
-  >&nbsp;on how to add dashboards to Grafana.</cd-alert-panel
->
-
-<ng-container *ngIf="grafanaExist && dashboardExist">
-  <!--Start : UI row hidden intentionally; code retained as dead code for potential future use. -->
-  <div
-    class="row mb-3"
-    *ngIf="showMessage"
+@if (!grafanaExist) {
+  <cd-alert-panel
+    type="info"
+    i18n
+    >Please consult the&nbsp;<cd-doc section="grafana"></cd-doc>&nbsp;on how to configure and enable
+    the monitoring functionality.</cd-alert-panel
   >
-    <div class="col-lg-5 d-flex">
-      <div class="col-sm-1">
-        <button
-          class="btn btn-light ms-3"
-          i18n-title
-          title="Reset Settings"
-          type="button"
-          (click)="reset()"
-        >
-          <i [ngClass]="[icons.undo]"></i>
-        </button>
-      </div>
-      <div class="col-sm-1">
-        <button
-          class="btn btn-light ms-3"
-          i18n-title
-          title="Show hidden information"
-          type="button"
-          (click)="showMessage = !showMessage"
-        >
-          <i [ngClass]="[icons.infoCircle, icons.size24]"></i>
-        </button>
+}
+
+@if (!dashboardExist) {
+  <cd-alert-panel
+    type="info"
+    i18n
+    >Grafana Dashboard doesn't exist. Please refer to &nbsp;<cd-doc section="grafana"></cd-doc
+    >&nbsp;on how to add dashboards to Grafana.</cd-alert-panel
+  >
+}
+
+@if (grafanaExist && dashboardExist) {
+  <!--Start : UI row hidden intentionally; code retained as dead code for potential future use. -->
+  @if (showMessage) {
+    <div class="row mb-3">
+      <div class="col-lg-5 d-flex">
+        <div class="col-sm-1">
+          <button
+            class="btn btn-light ms-3"
+            i18n-title
+            title="Reset Settings"
+            type="button"
+            (click)="reset()"
+          >
+            <i [ngClass]="[icons.undo]"></i>
+          </button>
+        </div>
+        <div class="col-sm-1">
+          <button
+            class="btn btn-light ms-3"
+            i18n-title
+            title="Show hidden information"
+            type="button"
+            (click)="showMessage = !showMessage"
+          >
+            <i [ngClass]="[icons.infoCircle, icons.size24]"></i>
+          </button>
+        </div>
       </div>
     </div>
-  </div>
+  }
   <!-- end -->
-
   <div class="row">
-    <div
-      class="col my-2"
-      *ngIf="showMessage"
-    >
-      <cd-alert-panel
-        type="info"
-        class="mb-3"
-        *ngIf="showMessage"
-        dismissible="true"
-        (dismissed)="showMessage = false"
-        i18n
-        >If no embedded Grafana Dashboard appeared below, please follow&nbsp;<a
-          [href]="grafanaSrc"
-          target="_blank"
-          noopener
-          noreferrer
-          >this link </a
-        >&nbsp;to check if Grafana is reachable and there are no HTTPS certificate issues. You may
-        need to reload this page after accepting any Browser certificate exceptions</cd-alert-panel
-      >
-    </div>
+    @if (showMessage) {
+      <div class="col my-2">
+        @if (showMessage) {
+          <cd-alert-panel
+            type="info"
+            class="mb-3"
+            dismissible="true"
+            (dismissed)="showMessage = false"
+            i18n
+            >If no embedded Grafana Dashboard appeared below, please follow&nbsp;<a
+              [href]="grafanaSrc"
+              target="_blank"
+              noopener
+              noreferrer
+              >this link </a
+            >&nbsp;to check if Grafana is reachable and there are no HTTPS certificate issues. You
+            may need to reload this page after accepting any Browser certificate
+            exceptions</cd-alert-panel
+          >
+        }
+      </div>
+    }
   </div>
-
   <div class="row">
     <div class="col">
       <div class="grafana-container">
@@ -96,4 +94,4 @@
       </div>
     </div>
   </div>
-</ng-container>
+}

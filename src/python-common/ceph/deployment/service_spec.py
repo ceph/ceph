@@ -44,6 +44,7 @@ from ceph.deployment.utils import verify_positive_int, verify_non_negative_numbe
 from ceph.deployment.utils import verify_boolean, verify_enum, verify_int, verify_non_empty_string
 from ceph.deployment.utils import verify_size_with_units, validate_port, validate_unique_ports, \
     validate_ip
+from ceph.deployment.utils import verify_dir_path
 from ceph.cephadm.d3n_types import D3NCacheSpec, D3NCacheError
 from ceph.utils import is_hex
 from ceph.smb import constants as smbconst
@@ -1431,6 +1432,9 @@ class NFSServiceSpec(ServiceSpec):
                  enable_client_object_cache: bool = False,
                  client_object_cache_size: Optional[Union[str, int]] = None,
                  client_object_cache_max_dirty: Optional[Union[str, int]] = None,
+                 enable_cephfs_client_log: bool = False,
+                 cephfs_client_log_level: Optional[int] = None,
+                 cephfs_client_log_dir: Optional[str] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1467,6 +1471,10 @@ class NFSServiceSpec(ServiceSpec):
         self.enable_client_object_cache = enable_client_object_cache
         self.client_object_cache_size = client_object_cache_size
         self.client_object_cache_max_dirty = client_object_cache_max_dirty
+
+        self.enable_cephfs_client_log = enable_cephfs_client_log
+        self.cephfs_client_log_level = cephfs_client_log_level
+        self.cephfs_client_log_dir = cephfs_client_log_dir
 
         # colocation_ports is a list of port dicts for ADDITIONAL colocated daemons
         # The first daemon always uses port and monitoring_port from the spec
@@ -1614,6 +1622,12 @@ class NFSServiceSpec(ServiceSpec):
                 if key.endswith('iops') and not isinstance(value, int):
                     raise SpecValidationError(
                         f"Invalid NFS spec: IOPS '{key}' should be an integer")
+
+        if self.enable_cephfs_client_log:
+            if self.cephfs_client_log_level is not None:
+                verify_non_negative_int(
+                    self.cephfs_client_log_level, "cephfs_client_log_level")
+            verify_dir_path(self.cephfs_client_log_dir, "cephfs_client_log_dir")
 
         # TLS certificate validation
         if self.ssl and not self.certificate_source:
@@ -1958,6 +1972,9 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_message_length_in_mb: Optional[int] = 4,
                  io_stats_enabled: Optional[bool] = True,
                  degrade_namespace_on_kmip_error: Optional[bool] = True,
+                 fail_io_for_degraded_namespace: Optional[bool] = True,
+                 resize_degraded_namespace: Optional[bool] = True,
+                 verify_image_encryption_settings: Optional[bool] = True,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -2130,6 +2147,12 @@ class NvmeofServiceSpec(ServiceSpec):
         self.io_stats_enabled = io_stats_enabled
         #: ``degrade_namespace_on_kmip_error`` on a KMIP key error in update, create a degraded ns
         self.degrade_namespace_on_kmip_error = degrade_namespace_on_kmip_error
+        #: ``fail_io_for_degraded_namespace`` fail all IOs done on degraded namespaces
+        self.fail_io_for_degraded_namespace = fail_io_for_degraded_namespace
+        #: ``resize_degraded_namespace`` resize degraded ns to accommodate for encryption tables
+        self.resize_degraded_namespace = resize_degraded_namespace
+        #: ``verify_image_encryption_settings`` verify encryption setting of ns before calling SPDK
+        self.verify_image_encryption_settings = verify_image_encryption_settings
         #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
@@ -2413,6 +2436,11 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_positive_int(self.max_message_length_in_mb, "Max protocol message length")
         verify_boolean(self.io_stats_enabled, "Enable IO statistics")
         verify_boolean(self.degrade_namespace_on_kmip_error, "Degrade namespace on KMIP error")
+        verify_boolean(self.fail_io_for_degraded_namespace, "Fail IOs on degraded namespaces")
+        verify_boolean(self.resize_degraded_namespace,
+                       "Resize degraded namespaces to accommodate for encryption tables")
+        verify_boolean(self.verify_image_encryption_settings,
+                       "Verify namespace encryption settings in the gateway")
         verify_non_negative_number(self.monitor_timeout, "Monitor timeout")
         verify_non_negative_int(self.port, "Port")
         verify_non_negative_int(self.discovery_port, "Discovery port")
@@ -3202,6 +3230,9 @@ class CustomContainerSpec(ServiceSpec):
         if ics:
             data['spec']['init_containers'] = [ic.to_json() for ic in ics]
         return data
+
+    def get_port_start(self) -> List[int]:
+        return list(self.ports) if self.ports else []
 
 
 yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)

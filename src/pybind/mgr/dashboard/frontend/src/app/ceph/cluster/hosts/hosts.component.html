@@ -45,32 +45,29 @@
       </cd-table>
     </ng-template>
   </ng-container>
-  <ng-container
-    ngbNavItem
-    *ngIf="permissions.grafana.read"
-  >
-  </ng-container>
-  <ng-container
-    ngbNavItem
-    *ngIf="permissions.grafana.read"
-  >
-    <a
-      ngbNavLink
-      i18n
-      >Overall Performance</a
-    >
-    <ng-template ngbNavContent>
-      <cd-grafana
-        i18n-title
-        title="Host overview"
-        [grafanaPath]="'ceph-hosts-overview?'"
-        [type]="'metrics'"
-        uid="y0KGL0iZz"
-        grafanaStyle="two"
+  @if (permissions.grafana.read) {
+    <ng-container ngbNavItem> </ng-container>
+  }
+  @if (permissions.grafana.read) {
+    <ng-container ngbNavItem>
+      <a
+        ngbNavLink
+        i18n
+        >Overall Performance</a
       >
-      </cd-grafana>
-    </ng-template>
-  </ng-container>
+      <ng-template ngbNavContent>
+        <cd-grafana
+          i18n-title
+          title="Host overview"
+          [grafanaPath]="'ceph-hosts-overview?'"
+          [type]="'metrics'"
+          uid="y0KGL0iZz"
+          grafanaStyle="two"
+        >
+        </cd-grafana>
+      </ng-template>
+    </ng-container>
+  }
 </nav>
 
 <div [ngbNavOutlet]="nav"></div>
@@ -79,13 +76,15 @@
   #servicesTpl
   let-services="data.value"
 >
-  <span *ngFor="let service of services">
-    <cd-label
-      [key]="service['type']"
-      [value]="service['count']"
-      class="me-1"
-    ></cd-label>
-  </span>
+  @for (service of services; track service) {
+    <span>
+      <cd-label
+        [key]="service['type']"
+        [value]="service['count']"
+        class="me-1"
+      ></cd-label>
+    </span>
+  }
 </ng-template>
 
 <ng-template
@@ -101,50 +100,61 @@
       {{ row.hostname }}
     </a> </span
   ><br />
-  <span
-    class="text-muted fst-italic"
-    *ngIf="row.addr"
-    data-testid="ip-address"
-  >
-    ({{ row.addr }})
-  </span>
+  @if (row.addr) {
+    <span
+      class="text-muted fst-italic"
+      data-testid="ip-address"
+    >
+      ({{ row.addr }})
+    </span>
+  }
 </ng-template>
 
 <ng-template #maintenanceConfirmTpl>
-  <div *ngFor="let msg of errorMessage; let last = last">
-    <ul *ngIf="!last || errorMessage.length === '1'">
-      <li i18n>{{ msg }}</li>
-    </ul>
-  </div>
-  <ng-container
-    i18n
-    *ngIf="showSubmit"
-    >Are you sure you want to continue?</ng-container
-  >
+  @for (msg of errorMessage; track msg; let last = $last) {
+    <div>
+      @if (!last || errorMessage.length === '1') {
+        <ul>
+          <li i18n>{{ msg }}</li>
+        </ul>
+      }
+    </div>
+  }
+  @if (showSubmit) {
+    <ng-container i18n>Are you sure you want to continue?</ng-container>
+  }
 </ng-template>
 
 <ng-template
   #hostMetricTmpl
   let-value="data.value"
 >
-  <div *ngIf="validValue(value)">
-    <span>{{ value }}</span>
-  </div>
-  <div *ngIf="!validValue(value)">
-    <span ngbTooltip="Not available. Data could not be fetched from Ceph">-</span>
-  </div>
+  @if (validValue(value)) {
+    <div>
+      <span>{{ value }}</span>
+    </div>
+  }
+  @if (!validValue(value)) {
+    <div>
+      <span ngbTooltip="Not available. Data could not be fetched from Ceph">-</span>
+    </div>
+  }
 </ng-template>
 
 <ng-template
   #hostDimlessTmpl
   let-value="data.value"
 >
-  <div *ngIf="!validValue(value)">
-    <span ngbTooltip="Not available. Data could not be fetched from Ceph">-</span>
-  </div>
-  <div *ngIf="validValue(value)">
-    <span>{{ value | dimlessBinary }}</span>
-  </div>
+  @if (!validValue(value)) {
+    <div>
+      <span ngbTooltip="Not available. Data could not be fetched from Ceph">-</span>
+    </div>
+  }
+  @if (validValue(value)) {
+    <div>
+      <span>{{ value | dimlessBinary }}</span>
+    </div>
+  }
 </ng-template>
 
 <ng-template #orchTmpl>

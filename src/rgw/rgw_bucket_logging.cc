@@ -1102,7 +1102,8 @@ int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
     rgw::IAM::Environment env;
     const auto arn_it = env.emplace("aws:SourceArn", std::move(source_bucket_arn));
     const auto acct_it = env.emplace("aws:SourceAccount", std::move(source_account));
-    if (policy.eval(dpp, env, ident, rgw::IAM::s3PutObject, target_resource_arn) != rgw::IAM::Effect::Allow) {
+    boost::optional<rgw::auth::Principal> principal; // ignored
+    if (policy.eval(dpp, env, ident, rgw::IAM::s3PutObject, target_resource_arn, principal) != rgw::IAM::Effect::Allow) {
       ldpp_dout(dpp, 1) << "ERROR: logging bucket: '" << target_bucket_id <<
         "' must have a bucket policy that allows logging service principal to put objects in the following resource ARN: '" <<
         target_resource_arn.to_string() << "' from source bucket ARN: '" << arn_it->second <<
@@ -1135,6 +1136,18 @@ int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
                                      err_message);
 }
 
+/*
+ * a bucket encryption config that only blocks encryption types doesn't
+ * encrypt anything, so it doesn't disqualify a logging target
+ */
+static bool has_default_encryption(const bufferlist& bl) {
+  RGWBucketEncryptionConfig conf;
+  if (decode_bl(bl, conf) < 0) {
+    return true;
+  }
+  return !conf.sse_algorithm().empty();
+}
+
 int verify_target_bucket_attributes(const DoutPrefixProvider* dpp, rgw::sal::Bucket* target_bucket, std::string* err_message) {
   const auto& target_info = target_bucket->get_info();
   if (target_info.requester_pays) {
@@ -1155,7 +1168,8 @@ int verify_target_bucket_attributes(const DoutPrefixProvider* dpp, rgw::sal::Buc
     }
     return -EINVAL;
   }
-  if (target_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY) != target_attrs.end()) {
+  if (const auto i = target_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+      i != target_attrs.end() && has_default_encryption(i->second)) {
     // verify target bucket does not have encryption
     ldpp_dout(dpp, 1) << "ERROR: logging bucket '" << target_bucket->get_key() << "', is configured with encryption" << dendl;
     if (err_message) {

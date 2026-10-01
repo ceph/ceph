@@ -162,7 +162,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       : `${this.action} ${_.upperFirst(this.resource)}`;
     this.authenticate();
     this.createForm();
-    const nav = this.router.getCurrentNavigation();
+    const nav = this.router.currentNavigation();
     this.fromStorageClass = nav?.extras?.state?.['from'] === FROM_STORAGE_CLASS;
     this.previousPath = nav?.extras?.state?.['returnUrl'] || '/pool';
   }

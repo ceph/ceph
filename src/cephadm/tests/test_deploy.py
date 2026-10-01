@@ -73,6 +73,33 @@ def test_deploy_nfs_container(cephadm_fs, funkypatch):
         assert f.read() == 'FAKE'
 
 
+def test_deploy_nfs_container_cephfs_client_log(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'nfs.fun'
+        ctx.image = 'quay.io/ceph/ceph:latest'
+        ctx.reconfig = False
+        ctx.config_blobs = {
+            'pool': 'foo',
+            'files': {
+                'ganesha.conf': 'FAKE',
+                'idmap.conf': 'FAKE',
+            },
+            'config': 'BALONEY',
+            'keyring': 'BUNKUS',
+            'enable_cephfs_client_log': True,
+        }
+        _cephadm._common_deploy(ctx)
+
+    with open(f'/var/lib/ceph/{fsid}/nfs.fun/unit.run') as f:
+        runfile_lines = f.read().splitlines()
+    assert f'-v /var/log/ceph/{fsid}:/var/log/ceph:z' in runfile_lines[-1]
+    assert pathlib.Path(f'/var/log/ceph/{fsid}').is_dir()
+
+
 def test_deploy_snmp_container(cephadm_fs, funkypatch):
     mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
@@ -286,6 +313,37 @@ def test_deploy_nvmeof_container(cephadm_fs, funkypatch):
         assert f.read() == 'icantbeliveitsnotiscsi'
         si = os.fstat(f.fileno())
         assert (si.st_uid, si.st_gid) == (167, 167)
+
+
+def test_redeploy_nvmeof_removes_stale_encryption_key(cephadm_fs, funkypatch):
+    _common_patches(funkypatch)
+    fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
+
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'nvmeof.andu'
+        ctx.image = 'quay.io/ceph/nvmeof:latest'
+        ctx.reconfig = False
+        ctx.config_blobs = {
+            'config': 'XXXXXXX',
+            'keyring': 'YYYYYY',
+            'files': {
+                'ceph-nvmeof.conf': 'test config',
+            },
+        }
+
+        basedir = pathlib.Path(
+            f'/var/lib/ceph/{fsid}/nvmeof.andu'
+        )
+        basedir.mkdir(parents=True)
+
+        encryption_key = basedir / 'encryption_key'
+        encryption_key.write_text('stale key')
+
+        _cephadm._common_deploy(ctx)
+
+    assert not encryption_key.exists()
 
 
 def test_deploy_a_monitoring_container(cephadm_fs, funkypatch):

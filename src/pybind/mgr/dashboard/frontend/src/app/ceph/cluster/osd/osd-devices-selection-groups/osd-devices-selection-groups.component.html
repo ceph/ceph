@@ -140,9 +140,13 @@
         </button>
       } @else {
         <div class="pb-2 my-2 border-bottom">
-          <span *ngFor="let filter of appliedFilters">
-            <cds-tag class="tag-dark me-2">{{ filter.name }}: {{ filter.value.formatted }}</cds-tag>
-          </span>
+          @for (filter of appliedFilters; track filter) {
+            <span>
+              <cds-tag class="tag-dark me-2"
+                >{{ filter.name }}: {{ filter.value.formatted }}</cds-tag
+              >
+            </span>
+          }
           <a
             class="tc_clearSelections"
             href=""

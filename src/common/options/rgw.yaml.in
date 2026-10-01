@@ -2898,6 +2898,23 @@ options:
   default: 0
   services:
   - rgw
+  flags:
+  - runtime
+  with_legacy: true
+- name: rgw_sync_data_inject_err_list
+  type: str
+  level: dev
+  desc: object keys and error codes for data sync error injection
+  long_desc: Intended for multisite testing. Accepts a comma-separated list of
+    `key=errno` entries. When non-empty, error injection only applies to object
+    keys with an exact match in this list, using the corresponding positive
+    errno value. When empty, error injection defaults to EIO.
+  services:
+  - rgw
+  flags:
+  - runtime
+  see_also:
+  - rgw_sync_data_inject_err_probability
   with_legacy: true
 - name: rgw_sync_meta_inject_err_probability
   type: float
@@ -3214,6 +3231,17 @@ options:
   level: advanced
   desc: Requests including encryption key headers must be sent over ssl
   default: true
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_s3_block_sse_c_by_default
+  type: bool
+  level: advanced
+  desc: Block SSE-C uploads on newly created buckets
+  long_desc: When enabled, RGW configures all newly created buckets to block
+    SSE-C uploads. Existing buckets are not affected. Use PutBucketEncryption
+    to change this setting on a bucket.
+  default: false
   services:
   - rgw
   with_legacy: true

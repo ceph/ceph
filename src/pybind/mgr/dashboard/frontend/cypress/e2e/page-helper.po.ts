@@ -245,12 +245,13 @@ export abstract class PageHelper {
     this.clearTableSearchInput();
     cy.wait(1 * 1000);
     this.searchTable(exactContent);
+    const escapedContent = exactContent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (partialMatch) {
       return cy.contains(`[cdstablerow] [cdstabledata]:nth-child(${columnIndex})`, exactContent);
     }
     return cy.contains(
       `[cdstablerow] [cdstabledata]:nth-child(${columnIndex})`,
-      new RegExp(`^${exactContent}$`)
+      new RegExp(`^\\s*${escapedContent}\\s*$`)
     );
   }
 

@@ -186,6 +186,7 @@ def init(parse_args):
                                          'checkpoint_retries': 60,
                                          'checkpoint_delay': 5,
                                          'reconfigure_delay': 5,
+                                         'config_propagation_wait': 20,
                                          'use_ssl': 'false',
                                          })
     try:
@@ -216,6 +217,7 @@ def init(parse_args):
     parser.add_argument('--checkpoint-retries', type=int, default=cfg.getint(section, 'checkpoint_retries'))
     parser.add_argument('--checkpoint-delay', type=int, default=cfg.getint(section, 'checkpoint_delay'))
     parser.add_argument('--reconfigure-delay', type=int, default=cfg.getint(section, 'reconfigure_delay'))
+    parser.add_argument('--config-propagation-wait', type=int, default=cfg.getint(section, 'config_propagation_wait'))
     parser.add_argument('--use-ssl', type=bool, default=cfg.getboolean(section, 'use_ssl'))
 
 
@@ -426,6 +428,7 @@ def init(parse_args):
     config = Config(checkpoint_retries=args.checkpoint_retries,
                     checkpoint_delay=args.checkpoint_delay,
                     reconfigure_delay=args.reconfigure_delay,
+                    config_propagation_wait=args.config_propagation_wait,
                     tenant=args.tenant)
     init_multi(realm, user, non_account_user, non_account_alt_user, config)
 

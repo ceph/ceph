@@ -817,6 +817,9 @@ In this case it will return the name of the flushed logging object in following 
     <FlushedLoggingObject>string</FlushedLoggingObject>
   </PostBucketLoggingOutput>
 
+.. note:: In case that the operation was successfull, but but the triggered flush failed, the response an empty ``200 OK``, without
+   a ``PutBucketLoggingOutput`` section. In order to prevent potential data loss, it is recommened to flush the logging object before
+   changing the logging configuration.
 
 HTTP Response
 ~~~~~~~~~~~~~

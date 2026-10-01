@@ -5,13 +5,17 @@
 Ceph Clients
 ============
 
+.. meta::
+   :description: The service interfaces that Ceph clients use: object storage, block devices, and file systems.
+   :ceph-page-type: concept
+
 Ceph Clients include a number of service interfaces. These include:
 
 - **Block Devices:** The :term:`Ceph Block Device` (a.k.a., RBD) service
   provides resizable, thin-provisioned block devices that can be snapshotted
   and cloned. Ceph stripes a block device across the cluster for high
   performance. Ceph supports both kernel objects (KO) and a QEMU hypervisor
-  that uses ``librbd`` directly--avoiding the kernel object overhead for
+  that uses ``librbd`` directly, avoiding the kernel object overhead for
   virtualized systems.
 
 - **Object Storage:** The :term:`Ceph Object Storage` (a.k.a., RGW) service
@@ -154,11 +158,19 @@ either for high availability or for scalability.
 
 - **Scalability**: Multiple ``ceph-mds`` instances can be `active`, and they
   will split the directory tree into subtrees (and shards of a single
-  busy directory), effectively balancing the load amongst all `active`
+  busy directory), effectively balancing the load among all `active`
   servers.
 
 Combinations of `standby` and `active` etc are possible, for example
 running 3 `active` ``ceph-mds`` instances for scaling, and one `standby`
 instance for high availability.
+
+Additional Resources
+--------------------
+
+- :ref:`object-gateway`
+- :ref:`ceph_block_device`
+- :ref:`ceph-file-system`
+
 
 .. _RESTful: https://en.wikipedia.org/wiki/RESTful

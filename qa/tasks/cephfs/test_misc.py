@@ -823,7 +823,11 @@ class TestNewFSCreation(CephFSTestCase):
         fs_ops = [["max_mds", "3"], ["refuse_client_session", "true"],
                   ["allow_new_snaps", "true", "max_file_size", "65536"],
                   ["session_timeout", "234", "session_autoclose",
-                   "100", "max_xattr_size", "150"]]
+                   "100", "max_xattr_size", "150"],
+                  ["allow_standby_replay", "true"],
+                  ["balance_automate", "true"],
+                  ["refuse_standby_for_another_fs", "true"],
+                  ["refuse_standby_for_another_fs", "false"]]
 
         for fs_ops_list in fs_ops:
             test_fs = None

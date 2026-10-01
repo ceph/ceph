@@ -1,24 +1,25 @@
-<ng-container *ngIf="!dropDownOnly; else dropDownOnlyTpl">
-  <button
-    *ngIf="currentAction && tableActions.length > 0"
-    type="button"
-    [cdsButton]="currentAction.buttonKind"
-    title="{{ useDisableDesc(currentAction) }}"
-    (click)="useClickAction(currentAction)"
-    [disabled]="disableSelectionAction(currentAction)"
-    [routerLink]="useRouterLink(currentAction)"
-    [attr.aria-label]="currentAction.name"
-    [preserveFragment]="currentAction.preserveFragment ? '' : null"
-    data-testid="primary-action"
-  >
-    <span i18n>{{ currentAction.name }}</span>
-    <svg
-      class="cds--btn__icon"
-      cdsIcon="add"
-      size="16"
-    ></svg>
-  </button>
-  <ng-container *ngIf="primaryDropDown">
+@if (!dropDownOnly) {
+  @if (currentAction && tableActions.length > 0) {
+    <button
+      type="button"
+      [cdsButton]="currentAction.buttonKind"
+      title="{{ useDisableDesc(currentAction) }}"
+      (click)="useClickAction(currentAction)"
+      [disabled]="disableSelectionAction(currentAction)"
+      [routerLink]="useRouterLink(currentAction)"
+      [attr.aria-label]="currentAction.name"
+      [preserveFragment]="currentAction.preserveFragment ? '' : null"
+      data-testid="primary-action"
+    >
+      <span i18n>{{ currentAction.name }}</span>
+      <svg
+        class="cds--btn__icon"
+        cdsIcon="add"
+        size="16"
+      ></svg>
+    </button>
+  }
+  @if (primaryDropDown) {
     <button
       class="primary-dropdown-btn"
       [attr.aria-label]="dropDownOnly"
@@ -30,9 +31,36 @@
       <svg [cdsIcon]="icons.chevronDown"></svg>
     </button>
     <ng-template #overflowMenuTpl>
-      <ng-container *ngFor="let action of dropDownActions">
+      @for (action of dropDownActions; track action) {
+        @if (currentAction !== action) {
+          <cds-overflow-menu-option
+            class="{{ toClassName(action) }}"
+            title="{{ useDisableDesc(action) }}"
+            (click)="useClickAction(action)"
+            [routerLink]="useRouterLink(action)"
+            [preserveFragment]="action.preserveFragment ? '' : null"
+            [disabled]="disableSelectionAction(action)"
+            [attr.aria-label]="action.name"
+            data-testid="table-action-option-btn"
+            i18n
+          >
+            {{ action.name }}
+          </cds-overflow-menu-option>
+        }
+      }
+    </ng-template>
+  }
+} @else {
+  <cds-overflow-menu
+    [customTrigger]="customTrigger"
+    [flip]="true"
+    [offset]="dropDownOnlyOffset"
+    data-testid="table-action-btn"
+    class="d-flex justify-content-end"
+  >
+    @for (action of dropDownActions; track action) {
+      @if (currentAction !== action) {
         <cds-overflow-menu-option
-          *ngIf="currentAction !== action"
           class="{{ toClassName(action) }}"
           title="{{ useDisableDesc(action) }}"
           (click)="useClickAction(action)"
@@ -45,10 +73,10 @@
         >
           {{ action.name }}
         </cds-overflow-menu-option>
-      </ng-container>
-    </ng-template>
-  </ng-container>
-</ng-container>
+      }
+    }
+  </cds-overflow-menu>
+}
 
 <ng-template #caret>
   <button
@@ -61,33 +89,6 @@
       [cdsIcon]="icons.chevronDown"
     ></svg>
   </button>
-</ng-template>
-
-<ng-template #dropDownOnlyTpl>
-  <cds-overflow-menu
-    [customTrigger]="customTrigger"
-    [flip]="true"
-    [offset]="dropDownOnlyOffset"
-    data-testid="table-action-btn"
-    class="d-flex justify-content-end"
-  >
-    <ng-container *ngFor="let action of dropDownActions">
-      <cds-overflow-menu-option
-        *ngIf="currentAction !== action"
-        class="{{ toClassName(action) }}"
-        title="{{ useDisableDesc(action) }}"
-        (click)="useClickAction(action)"
-        [routerLink]="useRouterLink(action)"
-        [preserveFragment]="action.preserveFragment ? '' : null"
-        [disabled]="disableSelectionAction(action)"
-        [attr.aria-label]="action.name"
-        data-testid="table-action-option-btn"
-        i18n
-      >
-        {{ action.name }}
-      </cds-overflow-menu-option>
-    </ng-container>
-  </cds-overflow-menu>
 </ng-template>
 
 <ng-template #customTrigger>

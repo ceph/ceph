@@ -1,4 +1,4 @@
-<ng-container *ngIf="selection">
+@if (selection) {
   <nav
     ngbNav
     #nav="ngbNav"
@@ -37,19 +37,19 @@
         >Metadata</a
       >
       <ng-template ngbNavContent>
-        <cd-table-key-value
-          *ngIf="osd?.details?.osd_metadata; else noMetaData"
-          (fetchData)="refresh()"
-          [data]="osd?.details?.osd_metadata"
-        >
-        </cd-table-key-value>
-        <ng-template #noMetaData>
+        @if (osd?.details?.osd_metadata) {
+          <cd-table-key-value
+            (fetchData)="refresh()"
+            [data]="osd?.details?.osd_metadata"
+          >
+          </cd-table-key-value>
+        } @else {
           <cd-alert-panel
             type="warning"
             i18n
             >Metadata not available</cd-alert-panel
           >
-        </ng-template>
+        }
       </ng-template>
     </ng-container>
     <ng-container ngbNavItem="device-health">
@@ -69,37 +69,36 @@
         >Performance counter</a
       >
       <ng-template ngbNavContent>
-        <cd-table-performance-counter
-          *ngIf="osd?.details"
-          serviceType="osd"
-          [serviceId]="osd?.id"
-        >
-        </cd-table-performance-counter>
+        @if (osd?.details) {
+          <cd-table-performance-counter
+            serviceType="osd"
+            [serviceId]="osd?.id"
+          >
+          </cd-table-performance-counter>
+        }
       </ng-template>
     </ng-container>
-    <ng-container
-      ngbNavItem="performance-details"
-      *ngIf="grafanaPermission.read"
-    >
-      <a
-        ngbNavLink
-        i18n
-        >Performance Details</a
-      >
-      <ng-template ngbNavContent>
-        <cd-grafana
-          i18n-title
-          title="OSD details"
-          [grafanaPath]="'ceph-osd-device-overview?var-osd=osd.' + osd['id']"
-          [type]="'metrics'"
-          uid="CrAHE0iZz"
-          scrollable="no"
-          grafanaStyle="three"
+    @if (grafanaPermission.read) {
+      <ng-container ngbNavItem="performance-details">
+        <a
+          ngbNavLink
+          i18n
+          >Performance Details</a
         >
-        </cd-grafana>
-      </ng-template>
-    </ng-container>
+        <ng-template ngbNavContent>
+          <cd-grafana
+            i18n-title
+            title="OSD details"
+            [grafanaPath]="'ceph-osd-device-overview?var-osd=osd.' + osd['id']"
+            [type]="'metrics'"
+            uid="CrAHE0iZz"
+            scrollable="no"
+            grafanaStyle="three"
+          >
+          </cd-grafana>
+        </ng-template>
+      </ng-container>
+    }
   </nav>
-
   <div [ngbNavOutlet]="nav"></div>
-</ng-container>
+}

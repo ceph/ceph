@@ -2075,6 +2075,13 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       osd->handle_misdirected_op(this, op);
       return;
     }
+    // some requests such as watch/notify/notify_ack can only be handled by the primary,
+    // fail these with EAGAIN to get the client to retry against the primary.
+    if (!is_primary() && op->is_primary_only()) {
+      dout(10) << __func__ << " op must be processed by primary, returning EAGAIN" << dendl;
+      osd->reply_op_error(op, -EAGAIN);
+      return;
+    }
   } else {
     // normal case; must be primary
     if (!is_primary()) {
@@ -2255,7 +2262,7 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       return;
     }
 
-    if (m_scrubber->is_scrub_active() && m_scrubber->write_blocked_by_scrub(head)) {
+    if (m_scrubber->write_blocked_by_scrub(head)) {
       dout(20) << __func__ << ": waiting for scrub" << dendl;
       waiting_for_scrub.push_back(op);
       op->mark_delayed("waiting for scrub");

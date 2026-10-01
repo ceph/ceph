@@ -61,14 +61,14 @@ describe('NvmeofInitiatorsFormComponent', () => {
 
   it('should set allowAllHosts to true when disableAllowAll is not set', () => {
     const router = TestBed.inject(Router);
-    spyOn(router, 'getCurrentNavigation').and.returnValue(null);
+    spyOn(router, 'currentNavigation').and.returnValue(null);
     component.ngOnInit();
     expect(component.allowAllHosts).toBe(true);
   });
 
   it('should set allowAllHosts to false when disableAllowAll is true in navigation state', () => {
     const router = TestBed.inject(Router);
-    spyOn(router, 'getCurrentNavigation').and.returnValue({
+    jest.spyOn(router, 'currentNavigation').mockReturnValue({
       extras: { state: { disableAllowAll: true } }
     } as any);
     component.ngOnInit();

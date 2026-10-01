@@ -1,6 +1,6 @@
 <div class="nvmeof-content-layout">
   <div class="nvmeof-content-main">
-    <ng-container *ngIf="subsystems$ | async as subsystems">
+    @if (subsystems$ | async; as subsystems) {
       <cd-table
         #table
         [data]="subsystems"
@@ -19,7 +19,6 @@
           <cd-nvmeof-gateway-group-filter (groupChange)="groupHandler.onGroupChange($event)">
           </cd-nvmeof-gateway-group-filter>
         </div>
-
         <div class="table-actions">
           <cd-table-actions
             [permission]="permissions.nvmeof"
@@ -29,7 +28,6 @@
           >
           </cd-table-actions>
         </div>
-
         <cd-nvmeof-subsystems-details
           *cdTableDetail
           [selection]="expandedRow"
@@ -38,7 +36,7 @@
         >
         </cd-nvmeof-subsystems-details>
       </cd-table>
-    </ng-container>
+    }
   </div>
 </div>
 

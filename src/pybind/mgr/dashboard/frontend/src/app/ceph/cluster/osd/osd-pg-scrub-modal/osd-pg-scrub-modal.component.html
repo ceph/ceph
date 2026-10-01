@@ -24,32 +24,35 @@
         <!-- Advanced -->
         <div class="row">
           <div class="col-sm-12">
-            <a
-              class="pull-right margin-right-md"
-              (click)="advancedEnabled = true"
-              (keydown.enter)="advancedEnabled = true"
-              *ngIf="!advancedEnabled"
-              i18n
-              tabindex="0"
-              >Advanced...</a
-            >
+            @if (!advancedEnabled) {
+              <a
+                class="pull-right margin-right-md"
+                (click)="advancedEnabled = true"
+                (keydown.enter)="advancedEnabled = true"
+                i18n
+                tabindex="0"
+                >Advanced...</a
+              >
+            }
           </div>
         </div>
-        <div *ngIf="advancedEnabled">
-          <h3
-            class="page-header"
-            i18n
-          >
-            Advanced configuration options
-          </h3>
-          <cd-config-option
-            [optionNames]="advancedOptions"
-            [optionsForm]="osdPgScrubForm"
-            [optionsFormDir]="formDir"
-            [optionsFormGroupName]="'advancedFormGroup'"
-            #advancedOptionsValues
-          ></cd-config-option>
-        </div>
+        @if (advancedEnabled) {
+          <div>
+            <h3
+              class="page-header"
+              i18n
+            >
+              Advanced configuration options
+            </h3>
+            <cd-config-option
+              [optionNames]="advancedOptions"
+              [optionsForm]="osdPgScrubForm"
+              [optionsFormDir]="formDir"
+              [optionsFormGroupName]="'advancedFormGroup'"
+              #advancedOptionsValues
+            ></cd-config-option>
+          </div>
+        }
       </div>
       <div class="modal-footer">
         <cd-form-button-panel

@@ -201,3 +201,22 @@ def test_jaeger_agent_choose_next_action(cephadm_module, mock_cephadm):
         # _daemon_action so we can check what action was chosen
         mock_cephadm.serve(cephadm_module)._check_daemons()
         mock_cephadm._daemon_action.assert_called_with(ANY, action="redeploy")
+
+
+def test_jaeger_agent_get_dependencies():
+    from unittest.mock import MagicMock
+    from cephadm.services.jaeger import JaegerAgentService
+
+    mgr = MagicMock()
+    collector_a = MagicMock()
+    collector_a.hostname = 'collector-a'
+    collector_a.ports = [14251]
+    collector_b = MagicMock()
+    collector_b.hostname = 'collector-b'
+    collector_b.ports = []
+    mgr.cache.get_daemons_by_type.return_value = [collector_a, collector_b]
+
+    assert JaegerAgentService.get_dependencies(mgr) == [
+        'collector-a:14251',
+        'collector-b:14250',
+    ]

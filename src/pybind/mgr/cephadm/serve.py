@@ -25,7 +25,7 @@ from ceph.utils import datetime_now
 import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
     DaemonDescriptionStatus, daemon_type_to_service
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.schedule import HostAssignment, HostSelector
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
@@ -171,16 +171,20 @@ class CephadmServe:
                 self.mgr.service_action('reconfig', svc)
 
     def _serve_sleep(self) -> None:
-        sleep_interval = max(
-            30,
-            min(
-                self.mgr.host_check_interval,
-                self.mgr.facts_cache_timeout,
-                self.mgr.daemon_cache_timeout,
-                self.mgr.device_cache_timeout,
-                self.mgr.stray_daemon_check_interval,
-            )
-        )
+        candidates = [
+            self.mgr.host_check_interval,
+            self.mgr.facts_cache_timeout,
+            self.mgr.daemon_cache_timeout,
+            self.mgr.device_cache_timeout,
+            self.mgr.stray_daemon_check_interval,
+        ]
+        if self.mgr.use_agent:
+            # _agent_down() only runs once per serve loop, so cap the sleep at
+            # the down-detection threshold. A future larger refactor is to run
+            # agent-down detection on its own thread.
+            down_mult = max(self.mgr.agent_down_multiplier, 1.5)
+            candidates.append(int(down_mult * self.mgr.agent_refresh_rate))
+        sleep_interval = max(30, min(candidates))
         self.log.debug('Sleeping for %d seconds', sleep_interval)
         self.mgr.event.wait(sleep_interval)
         self.mgr.event.clear()
@@ -1105,7 +1109,7 @@ class CephadmServe:
                     slot.daemon_type, daemon_id, slot.hostname))
 
                 try:
-                    daemon_spec = svc.prepare_create(daemon_spec)
+                    daemon_spec = svc.prepare_create(DaemonDeployContext(daemon_spec, spec))
                     with self.mgr.async_timeout_handler(slot.hostname, f'cephadm deploy ({daemon_spec.daemon_type} type dameon)'):
                         self.mgr.wait_async(self._create_daemon(daemon_spec))
                     r = True
@@ -1576,8 +1580,6 @@ class CephadmServe:
                     spec = cast(CustomContainerSpec,
                                 self.mgr.spec_store[daemon_spec.service_name].spec)
                     image = spec.image
-                    if spec.ports:
-                        ports.extend(spec.ports)
 
                 # TCP port to open in the host firewall
                 if len(ports) > 0:

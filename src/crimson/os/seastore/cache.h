@@ -771,6 +771,24 @@ public:
   }
 
 private:
+  /**
+   * maybe_page_aligned_bptr
+   *
+   * Return a page-aligned buffer covering src[offset, length).
+   * If the slice is already page-aligned (and uniquely owned when
+   * share_ok is false), share it and skip the copy.
+   */
+  ceph::bufferptr maybe_page_aligned_bptr(
+    const ceph::bufferptr &src,
+    extent_len_t offset,
+    extent_len_t length,
+    bool share_ok
+#ifdef CRIMSON_DETAILED_SAMPLING
+    , uint64_t &copy_counter
+    , uint64_t &skip_counter
+#endif
+    );
+
   using get_extent_ertr = base_ertr;
   template <typename T>
   using read_extent_ret = get_extent_ertr::future<TCachedExtentRef<T>>;
@@ -1282,9 +1300,24 @@ public:
     LOG_PREFIX(Cache::alloc_remapped_extent);
     TCachedExtentRef<T> ext;
     if (original_bptr.has_value()) {
-      // shallow copy the buffer from original extent
-      auto nbp = ceph::bufferptr(buffer::create_page_aligned(remap_length));
-      original_bptr->copy_out(remap_offset, remap_length, nbp.c_str());
+      // Remap leftovers are block-aligned and SeaStore block_size is a
+      // multiple of CEPH_PAGE_SIZE after mkfs, so the leftover slice must
+      // already be page-aligned. share_ok is true here, so skip and
+      // page-aligned are the same; we share the parent buffer.
+      ceph_assert(original_bptr->is_page_aligned());
+      ceph_assert(original_bptr->is_n_page_sized());
+      ceph_assert(remap_offset % CEPH_PAGE_SIZE == 0);
+      ceph_assert(remap_length % CEPH_PAGE_SIZE == 0);
+      auto nbp = maybe_page_aligned_bptr(
+        *original_bptr,
+        remap_offset,
+        remap_length,
+        true /* share_ok */
+#ifdef CRIMSON_DETAILED_SAMPLING
+        , stats.remap_bptr_copy
+        , stats.remap_bptr_skip
+#endif
+        );
       // ExtentPlacementManager::alloc_new_extent will make a new
       // (relative/temp) paddr, so make extent directly
       ext = CachedExtent::make_cached_extent_ref<T>(std::move(nbp));
@@ -1916,6 +1949,13 @@ private:
     uint64_t read_hit_hot = 0;
     uint64_t read_hit_cold = 0;
 
+  #ifdef CRIMSON_DETAILED_SAMPLING
+    uint64_t remap_bptr_copy = 0;
+    uint64_t remap_bptr_skip = 0;
+    uint64_t exist_mutate_bptr_copy = 0;
+    uint64_t exist_mutate_bptr_skip = 0;
+  #endif
+
     rewrite_stats_t trim_rewrites;
     rewrite_stats_t reclaim_rewrites;
     rewrite_stats_t promote_rewrites;
@@ -2301,9 +2341,5 @@ void stage_visibility_handoff(Transaction& t,
   bool booting = true;
 };
 using CacheRef = std::unique_ptr<Cache>;
-
-constexpr bool needs_deepcopy_on_mutate_exist(extent_types_t type) {
-  return type == extent_types_t::LOG_NODE;
-}
 
 }

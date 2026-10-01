@@ -3,130 +3,166 @@
   <div class="d-flex pl-1 pb-2 pt-2 position-relative">
     <div class="ms-4 me-auto">
       @if ((link && data !== null) || total) {
-        <a
-          [routerLink]="link"
-          *ngIf="link && total > 0; else noLinkTitle"
-          [ngPlural]="total"
-          data-testid="title"
-          i18n
-        >
-          {{ total }}
-          <ng-template ngPluralCase="=0">{{ title }}</ng-template>
-          <ng-template ngPluralCase="=1">{{ title }}</ng-template>
-          <ng-template ngPluralCase="other">{{ title }}s</ng-template>
-        </a>
+        @if (link && total > 0) {
+          <a
+            [routerLink]="link"
+            [ngPlural]="total"
+            data-testid="title"
+            i18n
+          >
+            {{ total }}
+            <ng-template ngPluralCase="=0">{{ title }}</ng-template>
+            <ng-template ngPluralCase="=1">{{ title }}</ng-template>
+            <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+          </a>
+        } @else {
+          @if (data !== null || total) {
+            @if (total || total === 0) {
+              <span [ngPlural]="total">
+                {{ total }}
+                <ng-template ngPluralCase="=0">{{ title }}</ng-template>
+                <ng-template ngPluralCase="=1">{{ title }}</ng-template>
+                <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+              </span>
+            }
+          } @else {
+            <span>{{ title }}</span>
+          }
+        }
       } @else {
-        <a
-          [routerLink]="link"
-          *ngIf="link; else noLinkTitle"
-          >{{ title }}
-        </a>
+        @if (link) {
+          <a [routerLink]="link">{{ title }} </a>
+        } @else {
+          @if (data !== null || total) {
+            @if (total || total === 0) {
+              <span [ngPlural]="total">
+                {{ total }}
+                <ng-template ngPluralCase="=0">{{ title }}</ng-template>
+                <ng-template ngPluralCase="=1">{{ title }}</ng-template>
+                <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+              </span>
+            }
+          } @else {
+            <span>{{ title }}</span>
+          }
+        }
       }
     </div>
     <span class="me-4">
-      <ng-container [ngSwitch]="summaryType">
-        <ng-container *ngSwitchCase="'iscsi'">
+      @switch (summaryType) {
+        @case ('iscsi') {
           <ng-container *ngTemplateOutlet="iscsiSummary"></ng-container>
-        </ng-container>
-        <ng-container *ngSwitchCase="'osd'">
+        }
+        @case ('osd') {
           <ng-container *ngTemplateOutlet="osdSummary"></ng-container>
-        </ng-container>
-        <ng-container *ngSwitchCase="'simplified'">
+        }
+        @case ('simplified') {
           <ng-container *ngTemplateOutlet="simplifiedSummary"></ng-container>
-        </ng-container>
-        <ng-container *ngSwitchDefault>
+        }
+        @default {
           <ng-container *ngTemplateOutlet="defaultSummary"></ng-container>
-        </ng-container>
-      </ng-container>
+        }
+      }
     </span>
-    <span
-      *ngIf="dropdownData && dropdownData.total.total.total > 0"
-      class="position-absolute end-0 me-2"
-    >
-      <button
-        type="button"
-        (click)="toggleDropdown()"
-        class="dropdown-toggle border-0 bg-transparent p-0"
-        [attr.aria-expanded]="dropdownToggled"
-        aria-controls="row-dropdown"
-      >
-        <span
-          class="visually-hidden"
-          i18n
-          >Toggle dropdown</span
+    @if (dropdownData && dropdownData.total.total.total > 0) {
+      <span class="position-absolute end-0 me-2">
+        <button
+          type="button"
+          (click)="toggleDropdown()"
+          class="dropdown-toggle border-0 bg-transparent p-0"
+          [attr.aria-expanded]="dropdownToggled"
+          aria-controls="row-dropdown"
         >
-      </button>
-    </span>
+          <span
+            class="visually-hidden"
+            i18n
+            >Toggle dropdown</span
+          >
+        </button>
+      </span>
+    }
   </div>
 </li>
 
-<div *ngIf="dropdownToggled">
-  <hr />
-  <ng-container *ngTemplateOutlet="dropdownTemplate"></ng-container>
-</div>
+@if (dropdownToggled) {
+  <div>
+    <hr />
+    <ng-container *ngTemplateOutlet="dropdownTemplate"></ng-container>
+  </div>
+}
 
 <ng-template #defaultSummary>
   @if (data === null) {
     <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
   } @else {
-    <span
-      *ngIf="
-        data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)
-      "
-    >
-      <span *ngIf="data.success || (data.success === 0 && data.total === 0)">
-        {{ data.success }}
+    @if (data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)) {
+      <span>
+        @if (data.success || (data.success === 0 && data.total === 0)) {
+          <span>
+            {{ data.success }}
+          </span>
+        }
+        @if (data.categoryPgAmount?.clean) {
+          <span>
+            {{ data.categoryPgAmount?.clean }}
+          </span>
+        }
+        <cd-icon type="success"> </cd-icon>
       </span>
-      <span *ngIf="data.categoryPgAmount?.clean">
-        {{ data.categoryPgAmount?.clean }}
+    }
+    @if (data.info) {
+      <span class="ms-2">
+        @if (data.info) {
+          <span>
+            {{ data.info }}
+          </span>
+        }
+        <cd-icon type="infoCircle"> </cd-icon>
       </span>
-      <cd-icon type="success"> </cd-icon>
-    </span>
-    <span
-      *ngIf="data.info"
-      class="ms-2"
-    >
-      <span *ngIf="data.info">
-        {{ data.info }}
+    }
+    @if (data.warn || data.categoryPgAmount?.warning) {
+      <span class="ms-2">
+        @if (data.warn) {
+          <span>
+            {{ data.warn }}
+          </span>
+        }
+        @if (data.categoryPgAmount?.warning) {
+          <span>
+            {{ data.categoryPgAmount?.warning }}
+          </span>
+        }
+        <cd-icon type="warning"> </cd-icon>
       </span>
-      <cd-icon type="infoCircle"> </cd-icon>
-    </span>
-    <span
-      *ngIf="data.warn || data.categoryPgAmount?.warning"
-      class="ms-2"
-    >
-      <span *ngIf="data.warn">
-        {{ data.warn }}
+    }
+    @if (data.error || data.categoryPgAmount?.unknown) {
+      <span class="ms-2">
+        @if (data.error) {
+          <span>
+            {{ data.error }}
+          </span>
+        }
+        @if (data.categoryPgAmount?.unknown) {
+          <span>
+            {{ data.categoryPgAmount?.unknown }}
+          </span>
+        }
+        <cd-icon type="danger"> </cd-icon>
       </span>
-      <span *ngIf="data.categoryPgAmount?.warning">
-        {{ data.categoryPgAmount?.warning }}
+    }
+    @if (data.categoryPgAmount?.working) {
+      <span class="ms-2">
+        @if (data.categoryPgAmount?.working) {
+          <span>
+            {{ data.categoryPgAmount?.working }}
+          </span>
+        }
+        <cds-inline-loading
+          class="text-warning"
+          state="active"
+        ></cds-inline-loading>
       </span>
-      <cd-icon type="warning"> </cd-icon>
-    </span>
-    <span
-      *ngIf="data.error || data.categoryPgAmount?.unknown"
-      class="ms-2"
-    >
-      <span *ngIf="data.error">
-        {{ data.error }}
-      </span>
-      <span *ngIf="data.categoryPgAmount?.unknown">
-        {{ data.categoryPgAmount?.unknown }}
-      </span>
-      <cd-icon type="danger"> </cd-icon>
-    </span>
-    <span
-      *ngIf="data.categoryPgAmount?.working"
-      class="ms-2"
-    >
-      <span *ngIf="data.categoryPgAmount?.working">
-        {{ data.categoryPgAmount?.working }}
-      </span>
-      <cds-inline-loading
-        class="text-warning"
-        state="active"
-      ></cds-inline-loading>
-    </span>
+    }
   }
 </ng-template>
 
@@ -134,49 +170,48 @@
   @if (data === null) {
     <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
   } @else {
-    <span *ngIf="data.up === data.in">
-      {{ data.up }}
-      <cd-icon type="success"> </cd-icon>
-    </span>
-    <span *ngIf="data.up !== data.in">
-      {{ data.up }}
-      <span class="fw-bold text-success"> up </span>
-    </span>
-    <span
-      *ngIf="data.in !== data.up"
-      class="ms-2"
-    >
-      {{ data.in }}
-      <span class="fw-bold text-success"> in </span>
-    </span>
-    <span
-      *ngIf="data.down"
-      class="ms-2"
-    >
-      {{ data.down }}
-      <span class="fw-bold text-danger me-2"> down </span>
-    </span>
-    <span
-      *ngIf="data.out"
-      class="ms-2"
-    >
-      {{ data.out }}
-      <span class="fw-bold text-danger me-2"> out </span>
-    </span>
-    <span
-      *ngIf="data.nearfull"
-      class="ms-2"
-    >
-      {{ data.nearfull }}
-      <span class="fw-bold text-warning me-2"> nearfull</span></span
-    >
-    <span
-      *ngIf="data.full"
-      class="ms-2"
-    >
-      {{ data.full }}
-      <span class="fw-bold text-danger"> full </span>
-    </span>
+    @if (data.up === data.in) {
+      <span>
+        {{ data.up }}
+        <cd-icon type="success"> </cd-icon>
+      </span>
+    }
+    @if (data.up !== data.in) {
+      <span>
+        {{ data.up }}
+        <span class="fw-bold text-success"> up </span>
+      </span>
+    }
+    @if (data.in !== data.up) {
+      <span class="ms-2">
+        {{ data.in }}
+        <span class="fw-bold text-success"> in </span>
+      </span>
+    }
+    @if (data.down) {
+      <span class="ms-2">
+        {{ data.down }}
+        <span class="fw-bold text-danger me-2"> down </span>
+      </span>
+    }
+    @if (data.out) {
+      <span class="ms-2">
+        {{ data.out }}
+        <span class="fw-bold text-danger me-2"> out </span>
+      </span>
+    }
+    @if (data.nearfull) {
+      <span class="ms-2">
+        {{ data.nearfull }}
+        <span class="fw-bold text-warning me-2"> nearfull</span></span
+      >
+    }
+    @if (data.full) {
+      <span class="ms-2">
+        {{ data.full }}
+        <span class="fw-bold text-danger"> full </span>
+      </span>
+    }
   }
 </ng-template>
 
@@ -186,95 +221,77 @@
   } @else {
     <span>
       {{ data?.up }}
-      <cd-icon
-        *ngIf="data?.up || data?.up === 0"
-        type="success"
-      >
-      </cd-icon>
+      @if (data?.up || data?.up === 0) {
+        <cd-icon type="success"> </cd-icon>
+      }
     </span>
-    <span
-      *ngIf="data?.down"
-      class="ms-2"
-    >
-      {{ data?.down }}
-      <cd-icon type="danger"> </cd-icon>
-    </span>
+    @if (data?.down) {
+      <span class="ms-2">
+        {{ data?.down }}
+        <cd-icon type="danger"> </cd-icon>
+      </span>
+    }
   }
 </ng-template>
 
 <ng-template #simplifiedSummary>
   @if (data === 0 || data) {
-    <span *ngIf="!dropdownTotalError; else showErrorNum">
-      {{ data }}
-      <cd-icon type="success"></cd-icon>
-    </span>
+    @if (!dropdownTotalError) {
+      <span>
+        {{ data }}
+        <cd-icon type="success"></cd-icon>
+      </span>
+    } @else {
+      @if (data - dropdownTotalError > 0) {
+        <span>
+          {{ data - dropdownTotalError }}
+          <cd-icon type="success"></cd-icon>
+        </span>
+      }
+      <span>
+        {{ dropdownTotalError }}
+        <cd-icon type="danger"></cd-icon>
+      </span>
+    }
   } @else {
     <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
   }
-  <ng-template #showErrorNum>
-    <span *ngIf="data - dropdownTotalError > 0">
-      {{ data - dropdownTotalError }}
-      <cd-icon type="success"></cd-icon>
-    </span>
-    <span>
-      {{ dropdownTotalError }}
-      <cd-icon type="danger"></cd-icon>
-    </span>
-  </ng-template>
 </ng-template>
 
 <ng-template #loadingTpl>
   <cds-inline-loading></cds-inline-loading>
 </ng-template>
 
-<ng-template #noLinkTitle>
-  @if (data !== null || total) {
-    <span
-      *ngIf="total || total === 0"
-      [ngPlural]="total"
-    >
-      {{ total }}
-      <ng-template ngPluralCase="=0">{{ title }}</ng-template>
-      <ng-template ngPluralCase="=1">{{ title }}</ng-template>
-      <ng-template ngPluralCase="other">{{ title }}s</ng-template>
-    </span>
-  } @else {
-    <span>{{ title }}</span>
-  }
-</ng-template>
-
 <ng-template #dropdownTemplate>
-  <ng-container *ngFor="let data of dropdownData?.total.category | keyvalue">
+  @for (data of dropdownData?.total.category | keyvalue; track data) {
     <li class="list-group-item">
       <div class="d-flex pb-2 pt-2">
         <div class="ms-5 me-auto">
-          <span
-            *ngIf="data.value.total"
-            [ngPlural]="data.value.total"
-            i18n
-          >
-            {{ data.value.total }}
-            <ng-template ngPluralCase="=0">{{ hwNames[data.key] }}</ng-template>
-            <ng-template ngPluralCase="=1">{{ hwNames[data.key] }}</ng-template>
-            <ng-template ngPluralCase="other">{{ hwNames[data.key] | pluralize }}</ng-template>
-          </span>
+          @if (data.value.total) {
+            <span
+              [ngPlural]="data.value.total"
+              i18n
+            >
+              {{ data.value.total }}
+              <ng-template ngPluralCase="=0">{{ hwNames[data.key] }}</ng-template>
+              <ng-template ngPluralCase="=1">{{ hwNames[data.key] }}</ng-template>
+              <ng-template ngPluralCase="other">{{ hwNames[data.key] | pluralize }}</ng-template>
+            </span>
+          }
         </div>
         <span [ngClass]="data.value.error ? 'me-2' : 'me-4'">
           {{ data.value.ok }}
-          <cd-icon
-            *ngIf="data.value.ok"
-            type="success"
-          >
-          </cd-icon>
+          @if (data.value.ok) {
+            <cd-icon type="success"> </cd-icon>
+          }
         </span>
-        <span
-          *ngIf="data.value.error"
-          class="me-4 ms-2"
-        >
-          {{ data.value.error }}
-          <cd-icon type="danger"> </cd-icon>
-        </span>
+        @if (data.value.error) {
+          <span class="me-4 ms-2">
+            {{ data.value.error }}
+            <cd-icon type="danger"> </cd-icon>
+          </span>
+        }
       </div>
     </li>
-  </ng-container>
+  }
 </ng-template>

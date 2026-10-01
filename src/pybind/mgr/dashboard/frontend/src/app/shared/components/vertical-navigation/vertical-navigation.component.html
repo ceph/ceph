@@ -1,10 +1,9 @@
-<ng-container *ngIf="items.length">
-  <h3
-    i18n
-    *ngIf="title"
-  >
-    {{ title }}
-  </h3>
+@if (items.length) {
+  @if (title) {
+    <h3 i18n>
+      {{ title }}
+    </h3>
+  }
   <input
     type="text"
     placeholder="Filter by name..."
@@ -14,29 +13,30 @@
   />
   <div class="overflow-auto">
     <ul class="nav flex-column nav-pills">
-      <li
-        class="nav-item"
-        *ngFor="let item of filteredItems; trackBy: trackByFn"
-      >
-        <a
-          class="nav-link"
-          [class.active]="!activeItem"
-          (click)="selectItem()"
-          tabindex="0"
-          (keydown.enter)="selectItem()"
-          *ngIf="item === ''"
-          >_nogroup</a
-        >
-        <a
-          class="nav-link text-decoration-none text-break"
-          [class.active]="item === activeItem"
-          (click)="selectItem(item)"
-          tabindex="0"
-          (keydown.enter)="selectItem(item)"
-          *ngIf="item !== ''"
-          >{{ item }}</a
-        >
-      </li>
+      @for (item of filteredItems; track trackByFn($index, item)) {
+        <li class="nav-item">
+          @if (item === '') {
+            <a
+              class="nav-link"
+              [class.active]="!activeItem"
+              (click)="selectItem()"
+              tabindex="0"
+              (keydown.enter)="selectItem()"
+              >_nogroup</a
+            >
+          }
+          @if (item !== '') {
+            <a
+              class="nav-link text-decoration-none text-break"
+              [class.active]="item === activeItem"
+              (click)="selectItem(item)"
+              tabindex="0"
+              (keydown.enter)="selectItem(item)"
+              >{{ item }}</a
+            >
+          }
+        </li>
+      }
     </ul>
   </div>
-</ng-container>
+}

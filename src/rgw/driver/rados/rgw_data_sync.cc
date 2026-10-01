@@ -9,6 +9,7 @@
 #include "common/Throttle.h"
 #include "common/errno.h"
 #include "common/perf_counters_key.h"
+#include "common/split.h"
 
 #include "rgw_common.h"
 #include "rgw_zone.h"
@@ -39,6 +40,7 @@
 #include "include/timegm.h"
 
 #include <boost/asio/yield.hpp>
+#include <charconv>
 #include <shared_mutex> // for std::shared_lock
 #include <string_view>
 
@@ -2733,25 +2735,28 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj
     if (!ps->identity->is_owner_of(bucket_acl.get_owner().id)) {
       ldpp_dout(dpp, 4) << "cross-account request for bucket owner "
           << bucket_acl.get_owner().id << " != " << ps->identity->get_aclowner().id << dendl;
+      constexpr bool cross_account = true;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
       return ::verify_bucket_permission(dpp, &(*ps), arn, account_root, {}, {}, {},
-                                      info->user_policies, {}, op)
+                                      info->user_policies, {}, op, cross_account)
           && ::verify_bucket_permission(dpp, &(*ps), arn, false, info->user_acl,
-                                      bucket_acl, bucket_policy, {}, {}, op);
+                                      bucket_acl, bucket_policy, {}, {}, op, cross_account);
     } else {
+      constexpr bool cross_account = false;
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
       return ::verify_bucket_permission(dpp, &(*ps), arn, account_root, {}, {},
                                       bucket_policy, info->user_policies,
-                                      {}, op);
+                                      {}, op, cross_account);
     }
   }
   constexpr bool account_root = false;
+  constexpr bool cross_account = false;
   return ::verify_bucket_permission(dpp, &(*ps), arn, account_root,
                                   info->user_acl, bucket_acl,
                                   bucket_policy, info->user_policies,
-                                  {}, op);
+                                  {}, op, cross_account);
 }
 
 rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj_key& obj_key, const uint64_t op) const
@@ -2765,14 +2770,15 @@ rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj
   const auto arn = rgw::ARN(obj);
   const bool account_root = (ps->identity->get_identity_type() == TYPE_ROOT);
 
+  constexpr bool cross_account = false;
   return ::evaluate_iam_policies(dpp,
                                  ps->env,
                                  *ps->identity,
                                  account_root,
-                                 op, arn,
+                                 op, arn, arn,
                                  bucket_policy,
                                  info->user_policies,
-                                 {});
+                                 {}, cross_account);
 }
 
 int RGWUserPermHandler::policy_from_attrs(CephContext *cct,
@@ -4376,8 +4382,6 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   stringstream error_ss;
 
-  bool error_injection;
-
   RGWDataSyncModule *data_sync_module;
 
   rgw_zone_set_entry source_trace_entry;
@@ -4385,6 +4389,40 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   RGWSyncTraceNodeRef tn;
   std::string zone_name;
+
+  bool maybe_inject_error(int& retcode) const {
+    const auto probability = cct->_conf->rgw_sync_data_inject_err_probability;
+
+    if (probability <= 0 || rand() % 10000 >= probability * 10000.0) {
+      return false;
+    }
+
+    // default to EIO if no specific error is listed
+    const std::string_view error_list = cct->_conf->rgw_sync_data_inject_err_list;
+    if (error_list.empty()) {
+      retcode = -EIO;
+      return true;
+    }
+
+    for (const std::string_view entry : ceph::split(error_list, ",")) {
+      const auto separator = entry.find('=');
+      if (separator == entry.npos ||
+          entry.substr(0, separator) != key.name) {
+        continue;
+      }
+
+      const auto value = entry.substr(separator + 1);
+      int error_code = 0;
+      const auto [end, parse_error] =
+          std::from_chars(value.begin(), value.end(), error_code);
+      if (parse_error == std::errc{} &&
+          end == value.end() && error_code > 0) {
+        retcode = -error_code;
+        return true;
+      }
+    }
+    return false;
+  }
 
 public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncCtx *_sc,
@@ -4415,8 +4453,6 @@ public:
     tn = sync_env->sync_tracer->add_node(_tn_parent, "entry", SSTR(key));
 
     tn->log(20, SSTR("bucket sync single entry (source_zone=" << sc->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state));
-    error_injection = (sync_env->cct->_conf->rgw_sync_data_inject_err_probability > 0);
-
     data_sync_module = sync_env->sync_module->get_data_handler();
 
     source_trace_entry.zone = sc->source_zone.id;
@@ -4449,10 +4485,9 @@ public:
             tn->log(0, "entry with empty obj name, skipping");
             goto done;
           }
-          if (error_injection &&
-              rand() % 10000 < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
-            tn->log(0, SSTR(": injecting data sync error on key=" << key.name));
-            retcode = -EIO;
+          if (maybe_inject_error(retcode)) {
+            tn->log(0, SSTR(": injecting data sync error on key=" << key.name
+                            << " err=" << retcode));
           } else if (op == CLS_RGW_OP_ADD ||
                      op == CLS_RGW_OP_LINK_OLH) {
             set_status("syncing obj");

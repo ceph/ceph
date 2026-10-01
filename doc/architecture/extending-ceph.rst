@@ -1,7 +1,11 @@
 .. index:: Extensibility, Ceph Classes
 
-Extending Ceph
-==============
+Ceph Object Classes
+===================
+
+.. meta::
+   :description: How shared object classes (Ceph Classes) extend the OSD with new object methods.
+   :ceph-page-type: concept
 
 You can extend Ceph by creating shared object classes called 'Ceph Classes'.
 Ceph loads ``.so`` classes stored in the ``osd class dir`` directory dynamically
@@ -28,18 +32,8 @@ operations on the outbound data and return the data to the client.
 See ``src/objclass/objclass.h``, ``src/fooclass.cc`` and ``src/barclass`` for
 exemplary implementations.
 
+Additional Resources
+====================
 
-Summary
-=======
-
-Ceph Storage Clusters are dynamic--like a living organism. Although many storage
-appliances do not fully utilize the CPU and RAM of a typical commodity server,
-Ceph does. From heartbeats, to  peering, to rebalancing the cluster or
-recovering from faults,  Ceph offloads work from clients (and from a centralized
-gateway which doesn't exist in the Ceph architecture) and uses the computing
-power of the OSDs to perform the work. When referring to :ref:`hardware-recommendations`
-and the `Network Config Reference`_,  be cognizant of the
-foregoing concepts to understand how Ceph utilizes computing resources.
-
-
-.. _Network Config Reference: ../../rados/configuration/network-config-ref
+- :ref:`arch-ceph-storage-cluster`
+- :ref:`Ceph Storage Cluster APIs <rados api>`

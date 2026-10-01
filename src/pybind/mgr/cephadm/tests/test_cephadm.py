@@ -15,6 +15,7 @@ from cephadm.inventory import (
 )
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
 from cephadm.services.nvmeof import NvmeofService
+from cephadm.services.service_registry import service_registry
 from cephadm.utils import SpecialHostLabels, cephadmNoImage
 
 try:
@@ -2212,12 +2213,26 @@ class TestCephadm(object):
             spec = NFSServiceSpec(
                 service_id='name',
                 placement=ps)
-            unmanaged_spec = ServiceSpec.from_json(spec.to_json())
-            unmanaged_spec.unmanaged = True
+            unmanaged_spec = NFSServiceSpec(
+                service_id='name',
+                placement=ps,
+                enable_client_object_cache=True,
+                unmanaged=True,
+            )
             with with_service(cephadm_module, unmanaged_spec):
-                c = cephadm_module.add_daemon(spec)
-                [out] = wait(cephadm_module, c)
-                match_glob(out, "Deployed nfs.name.* on host 'test'")
+                nfs_service = service_registry.get_service('nfs')
+                with mock.patch.object(
+                    nfs_service,
+                    'generate_config',
+                    wraps=nfs_service.generate_config,
+                ) as generate_config:
+                    c = cephadm_module.add_daemon(spec)
+                    [out] = wait(cephadm_module, c)
+                    match_glob(out, "Deployed nfs.name.* on host 'test'")
+                    deploy_ctx = generate_config.call_args.args[0]
+                    stored_spec = cephadm_module.spec_store['nfs.name'].spec
+                    assert deploy_ctx.service_spec is stored_spec
+                    assert deploy_ctx.service_spec.enable_client_object_cache is True
 
                 assert_rm_daemon(cephadm_module, 'nfs.name.test', 'test')
 

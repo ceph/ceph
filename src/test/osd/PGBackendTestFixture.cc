@@ -1294,16 +1294,6 @@ void PGBackendTestFixture::update_osdmap(
   event_loop->run_until_idle();
 }
 
-void PGBackendTestFixture::cleanup_data_dir()
-{
-  // Only clean up if the directory exists and hasn't been cleaned already
-  if (!data_dir.empty() && std::filesystem::exists(data_dir)) {
-    std::error_code ec;
-    std::filesystem::remove_all(data_dir, ec);
-    // Silently ignore errors during cleanup - we tried our best
-  }
-}
-
 // Helper function for write_attribute implementation
 int PGBackendTestFixture::do_write_attribute_impl(
   const std::string& obj_name,

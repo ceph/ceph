@@ -30,21 +30,19 @@
     </ng-template>
   </div>
 
-  <div
-    class="col-6 metadata"
-    *ngIf="data"
-  >
-    <legend>{{ title }}</legend>
-
-    <cd-table
-      #detailTable
-      [data]="data"
-      columnMode="flex"
-      [columns]="columns"
-      [limit]="0"
-    >
-    </cd-table>
-  </div>
+  @if (data) {
+    <div class="col-6 metadata">
+      <legend>{{ title }}</legend>
+      <cd-table
+        #detailTable
+        [data]="data"
+        columnMode="flex"
+        [columns]="columns"
+        [limit]="0"
+      >
+      </cd-table>
+    </div>
+  }
 </div>
 
 <ng-template
@@ -52,6 +50,10 @@
   let-row="data.row"
   let-value="data.value"
 >
-  <span *ngIf="row.default === undefined || row.default === row.current">{{ value }}</span>
-  <strong *ngIf="row.default !== undefined && row.default !== row.current">{{ value }}</strong>
+  @if (row.default === undefined || row.default === row.current) {
+    <span>{{ value }}</span>
+  }
+  @if (row.default !== undefined && row.default !== row.current) {
+    <strong>{{ value }}</strong>
+  }
 </ng-template>

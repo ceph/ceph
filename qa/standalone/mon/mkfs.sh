@@ -100,9 +100,10 @@ function auth_none() {
 }
 
 function auth_cephx_keyring() {
+    local key=$(ceph-authtool --gen-print-key)
     cat > $DIR/keyring <<EOF
 [mon.]
-	key = AQDUS79S0AF9FRAA2cgRLFscVce0gROn/s9WMg==
+	key = "$key"
 	caps mon = "allow *"
 EOF
 

@@ -1822,10 +1822,13 @@ rgw::IAM::Effect evaluate_iam_policies(
     const DoutPrefixProvider* dpp,
     const rgw::IAM::Environment& env,
     const rgw::auth::Identity& identity,
-    bool account_root, uint64_t op, const rgw::ARN& arn,
+    bool account_root, uint64_t op,
+    const rgw::ARN& identity_arn,
+    boost::optional<const rgw::ARN&> resource_arn,
     const boost::optional<rgw::IAM::Policy>& resource_policy,
     const std::vector<rgw::IAM::Policy>& identity_policies,
-    const std::vector<rgw::IAM::Policy>& session_policies);
+    const std::vector<rgw::IAM::Policy>& session_policies,
+    bool cross_account);
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             req_state * const s,
@@ -1835,6 +1838,34 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       req_state * const s,
                                       int perm);
+// evaluate permissions on a non-s3 resource like a notification topic
+// or role trust policy
+rgw::IAM::Effect evaluate_resource_permission(
+    const DoutPrefixProvider* dpp,
+    const rgw::IAM::Environment& env,
+    const rgw::auth::Identity& identity,
+    uint64_t op,
+    const rgw::ARN& identity_arn,
+    boost::optional<const rgw::ARN&> resource_arn,
+    const rgw_owner& resource_owner,
+    const boost::optional<rgw::IAM::Policy>& resource_policy,
+    const std::vector<rgw::IAM::Policy>& identity_policies,
+    const std::vector<rgw::IAM::Policy>& session_policies);
+
+// verify permissions on a non-s3 resource like a notification topic
+// or role trust policy
+bool verify_resource_permission(
+    const DoutPrefixProvider* dpp,
+    const rgw::IAM::Environment& env,
+    const rgw::auth::Identity& identity,
+    uint64_t op,
+    const rgw::ARN& identity_arn,
+    boost::optional<const rgw::ARN&> resource_arn,
+    const rgw_owner& resource_owner,
+    const boost::optional<rgw::IAM::Policy>& resource_policy,
+    const std::vector<rgw::IAM::Policy>& identity_policies,
+    const std::vector<rgw::IAM::Policy>& session_policies);
+
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               const perm_state_base * const s,
                               const rgw::ARN& arn,
@@ -1844,7 +1875,9 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 			      const boost::optional<rgw::IAM::Policy>& bucket_policy,
                               const std::vector<rgw::IAM::Policy>& identity_policies,
                               const std::vector<rgw::IAM::Policy>& session_policies,
-                              const uint64_t op, bool *granted_by_acl = nullptr);
+                              const uint64_t op,
+                              bool cross_account,
+                              bool *granted_by_acl = nullptr);
 bool verify_bucket_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
@@ -2237,7 +2270,7 @@ static inline std::string rgw_bl_str(const ceph::buffer::list& bl)
 }
 
 template <typename T>
-int decode_bl(bufferlist& bl, T& t)
+int decode_bl(const bufferlist& bl, T& t)
 {
   auto iter = bl.cbegin();
   try {

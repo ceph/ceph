@@ -37,34 +37,36 @@
           "
           [invalidText]="topicTypeError"
         >
-          <option
-            i18n
-            *ngIf="endpointType === null"
-            value="null"
-          >
-            Loading...
-          </option>
-          <option
-            i18n
-            *ngIf="endpointType !== null"
-            value=""
-          >
-            -- Select a destination type --
-          </option>
-          <option
-            *ngFor="let data of endpointType"
-            i18n
-          >
-            {{ data | upperFirst }}
-          </option>
+          @if (endpointType === null) {
+            <option
+              i18n
+              value="null"
+            >
+              Loading...
+            </option>
+          }
+          @if (endpointType !== null) {
+            <option
+              i18n
+              value=""
+            >
+              -- Select a destination type --
+            </option>
+          }
+          @for (data of endpointType; track data) {
+            <option i18n>
+              {{ data | upperFirst }}
+            </option>
+          }
         </cds-select>
         <ng-template #topicTypeError>
-          <span
-            class="invalid-feedback"
-            *ngIf="topicForm.showError('endpointType', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (topicForm.showError('endpointType', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
 
@@ -79,40 +81,44 @@
           id="owner"
           [invalidText]="ownerError"
         >
-          <option
-            i18n
-            *ngIf="owners === null"
-            value="null"
-          >
-            Loading...
-          </option>
-          <option
-            i18n
-            *ngIf="owners !== null"
-            value=""
-          >
-            -- Select a user --
-          </option>
-          <option
-            *ngFor="let data of owners"
-            i18n
-            [value]="data"
-          >
-            {{ data }}
-          </option>
+          @if (owners === null) {
+            <option
+              i18n
+              value="null"
+            >
+              Loading...
+            </option>
+          }
+          @if (owners !== null) {
+            <option
+              i18n
+              value=""
+            >
+              -- Select a user --
+            </option>
+          }
+          @for (data of owners; track data) {
+            <option
+              i18n
+              [value]="data"
+            >
+              {{ data }}
+            </option>
+          }
         </cds-select>
         <ng-template #ownerError>
-          <span
-            class="invalid-feedback"
-            *ngIf="topicForm.showError('owner', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (topicForm.showError('owner', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
         </ng-template>
       </div>
     </div>
 
-    <ng-container *ngIf="selectedOption">
+    @if (selectedOption) {
       <div
         class="form-item form-item-append"
         cdsRow
@@ -137,20 +143,21 @@
               [invalid]="topicForm.controls.name.invalid && topicForm.controls.name.dirty"
             />
           </cds-text-label>
-
           <ng-template #nameError>
-            <span
-              class="invalid-feedback"
-              *ngIf="topicForm.showError('name', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="topicForm.showError('name', formDir, 'notUnique')"
-              i18n
-              >The name is already in use. Please choose a different one</span
-            >
+            @if (topicForm.showError('name', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (topicForm.showError('name', formDir, 'notUnique')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >The name is already in use. Please choose a different one</span
+              >
+            }
           </ng-template>
         </div>
       </div>
@@ -167,7 +174,6 @@
             Generate push endpoint
             <cd-help-text> Configure the endpoint URL to receive push notifications</cd-help-text>
           </legend>
-
           <!-- Enable SSL -->
           <div
             cdsCol
@@ -185,41 +191,42 @@
               </cd-help-text>
             </cds-checkbox>
           </div>
-
           <!-- Verify ssl -->
-          <div
-            cdsCol
-            *ngIf="selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.HTTP"
-            [columnNumbers]="{ sm: 4 }"
-          >
-            <cds-checkbox
-              id="verify_ssl"
-              formControlName="verify_ssl"
+          @if (selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.HTTP) {
+            <div
+              cdsCol
+              [columnNumbers]="{ sm: 4 }"
             >
-              <ng-container i18n>Verify SSL</ng-container>
-              <cd-help-text i18n
-                >Ensures that the server's SSL certificate is valid and trusted.</cd-help-text
+              <cds-checkbox
+                id="verify_ssl"
+                formControlName="verify_ssl"
               >
-            </cds-checkbox>
-          </div>
-
+                <ng-container i18n>Verify SSL</ng-container>
+                <cd-help-text i18n
+                  >Ensures that the server's SSL certificate is valid and trusted.</cd-help-text
+                >
+              </cds-checkbox>
+            </div>
+          }
           <!-- Cloud Event-->
-          <div
-            cdsCol
-            *ngIf="selectedOption == hostProtocols.HTTP"
-            [columnNumbers]="{ sm: 4 }"
-          >
-            <cds-checkbox
-              id="cloud_events"
-              formControlName="cloud_events"
+          @if (selectedOption == hostProtocols.HTTP) {
+            <div
+              cdsCol
+              [columnNumbers]="{ sm: 4 }"
             >
-              <ng-container i18n>Cloud events</ng-container>
-              <cd-help-text i18n>Captures cloud events as triggers for notifications.</cd-help-text>
-            </cds-checkbox>
-          </div>
+              <cds-checkbox
+                id="cloud_events"
+                formControlName="cloud_events"
+              >
+                <ng-container i18n>Cloud events</ng-container>
+                <cd-help-text i18n
+                  >Captures cloud events as triggers for notifications.</cd-help-text
+                >
+              </cds-checkbox>
+            </div>
+          }
         </fieldset>
       </div>
-
       <div
         cdsRow
         class="form-item form-item-append"
@@ -247,14 +254,11 @@
             />
           </cds-text-label>
           <ng-template #fqdnError>
-            <span
-              class="invalid-feedback"
-              *ngIf="topicForm.showError('fqdn', formDir, 'required')"
-              >This field is required</span
-            >
+            @if (topicForm.showError('fqdn', formDir, 'required')) {
+              <span class="invalid-feedback">This field is required</span>
+            }
           </ng-template>
         </div>
-
         <!-- Port-->
         <div cdsCol>
           <cds-number
@@ -271,111 +275,110 @@
             i18n-helperText
           ></cds-number>
           <ng-template #portError>
-            <span
-              class="invalid-feedback"
-              *ngIf="topicForm.showError('port', formDir, 'required')"
-              i18n
-              >This field is required</span
-            >
-            <span
-              class="invalid-feedback"
-              *ngIf="topicForm.controls.port.hasError('pattern') && topicForm.controls.port.touched"
-              i18n
-            >
-              Port must be a valid integer</span
-            >
+            @if (topicForm.showError('port', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required</span
+              >
+            }
+            @if (topicForm.controls.port.hasError('pattern') && topicForm.controls.port.touched) {
+              <span
+                class="invalid-feedback"
+                i18n
+              >
+                Port must be a valid integer</span
+              >
+            }
           </ng-template>
         </div>
       </div>
-
-      <div
-        cdsRow
-        *ngIf="selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.KAFKA"
-        class="form-item form-item-append"
-      >
-        <!-- User-->
-        <div cdsCol>
-          <cds-text-label
-            labelInputID="User"
-            i18n
-            helperText="Enter the user for the push endpoint"
-            i18n-helperText
-          >
-            User
-            <input
-              cdsText
-              type="text"
-              id="user"
-              formControlName="user"
-              (change)="generatePushEndpoint()"
-            />
-          </cds-text-label>
-        </div>
-
-        <!-- password-->
+      @if (selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.KAFKA) {
         <div
-          cdsCol
-          *ngIf="selectedOption !== hostProtocols.HTTP"
+          cdsRow
+          class="form-item form-item-append"
         >
-          <cds-password-label
-            labelInputID="password"
-            [invalid]="!topicForm.controls.password.valid && topicForm.controls.password.dirty"
-            [invalidText]="passwordError"
-            i18n
-            helperText="Enter the password for the push endpoint"
-            i18n-helperText
-          >
-            Password
-            <input
-              cdsPassword
-              type="password"
-              autocomplete="new-password"
-              formControlName="password"
-              (change)="generatePushEndpoint()"
-            />
-          </cds-password-label>
-          <ng-template #passwordError>
-            <span
-              class="invalid-feedback"
-              *ngIf="userForm.showError('password', formDir, 'required')"
+          <!-- User-->
+          <div cdsCol>
+            <cds-text-label
+              labelInputID="User"
               i18n
-              >This field is required</span
+              helperText="Enter the user for the push endpoint"
+              i18n-helperText
             >
-            <span
-              class="invalid-feedback"
-              *ngIf="userForm.showError('password', formDir, 'passwordPolicy')"
-            >
-              {{ passwordValuation }}
-            </span>
-          </ng-template>
+              User
+              <input
+                cdsText
+                type="text"
+                id="user"
+                formControlName="user"
+                (change)="generatePushEndpoint()"
+              />
+            </cds-text-label>
+          </div>
+          <!-- password-->
+          @if (selectedOption !== hostProtocols.HTTP) {
+            <div cdsCol>
+              <cds-password-label
+                labelInputID="password"
+                [invalid]="!topicForm.controls.password.valid && topicForm.controls.password.dirty"
+                [invalidText]="passwordError"
+                i18n
+                helperText="Enter the password for the push endpoint"
+                i18n-helperText
+              >
+                Password
+                <input
+                  cdsPassword
+                  type="password"
+                  autocomplete="new-password"
+                  formControlName="password"
+                  (change)="generatePushEndpoint()"
+                />
+              </cds-password-label>
+              <ng-template #passwordError>
+                @if (userForm.showError('password', formDir, 'required')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >This field is required</span
+                  >
+                }
+                @if (userForm.showError('password', formDir, 'passwordPolicy')) {
+                  <span class="invalid-feedback">
+                    {{ passwordValuation }}
+                  </span>
+                }
+              </ng-template>
+            </div>
+          }
         </div>
-      </div>
-
+      }
       <!--Vhost-->
-      <div
-        cdsRow
-        class="form-item form-item-append"
-        *ngIf="selectedOption === hostProtocols.AMQP"
-      >
-        <div cdsCol>
-          <cds-text-label
-            labelInputID="Virtual Host(vhost)"
-            i18n
-            helperText="Enter the vhost for the push endpoint"
-            i18n-helperText
-          >
-            Virtual Host(vhost)
-            <input
-              cdsText
-              type="text"
-              id="vhost"
-              (change)="generatePushEndpoint()"
-              formControlName="vhost"
-            />
-          </cds-text-label>
+      @if (selectedOption === hostProtocols.AMQP) {
+        <div
+          cdsRow
+          class="form-item form-item-append"
+        >
+          <div cdsCol>
+            <cds-text-label
+              labelInputID="Virtual Host(vhost)"
+              i18n
+              helperText="Enter the vhost for the push endpoint"
+              i18n-helperText
+            >
+              Virtual Host(vhost)
+              <input
+                cdsText
+                type="text"
+                id="vhost"
+                (change)="generatePushEndpoint()"
+                formControlName="vhost"
+              />
+            </cds-text-label>
+          </div>
         </div>
-      </div>
-
+      }
       <div
         cdsRow
         class="form-item form-item-append"
@@ -407,18 +410,17 @@
             />
           </cds-text-label>
           <ng-template #endpointError>
-            <span
-              class="invalid-feedback"
-              *ngIf="topicForm.showError('push_endpoint', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (topicForm.showError('push_endpoint', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </ng-template>
         </div>
       </div>
-      <ng-container
-        *ngIf="selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.KAFKA"
-      >
+      @if (selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.KAFKA) {
         <div class="form-item">
           <fieldset>
             <legend
@@ -429,157 +431,148 @@
               <cd-help-text> {{ attributeHelpText }}</cd-help-text>
             </legend>
           </fieldset>
-          <ng-container *ngIf="selectedOption === 'KAFKA'">
+          @if (selectedOption === 'KAFKA') {
             <div
               cdsRow
               class="form-item-append"
             >
-              <div
-                cdsCol
-                *ngIf="selectedOption === 'KAFKA'"
-              >
-                <cds-checkbox
-                  id="use-ssl"
-                  formControlName="use_ssl"
-                >
-                  <ng-container i18n>Use SSL</ng-container>
-                  <cd-help-text i18n>
-                    Enabling SSL encrypts communication between your Kafka client and broker,
-                    ensuring the confidentiality and integrity of your messages
-                  </cd-help-text>
-                </cds-checkbox>
-              </div>
+              @if (selectedOption === 'KAFKA') {
+                <div cdsCol>
+                  <cds-checkbox
+                    id="use-ssl"
+                    formControlName="use_ssl"
+                  >
+                    <ng-container i18n>Use SSL</ng-container>
+                    <cd-help-text i18n>
+                      Enabling SSL encrypts communication between your Kafka client and broker,
+                      ensuring the confidentiality and integrity of your messages
+                    </cd-help-text>
+                  </cds-checkbox>
+                </div>
+              }
             </div>
-          </ng-container>
+          }
         </div>
-
         <div
           class="form-item form-item-append"
           cdsRow
         >
           <!---CA location--->
-          <div
-            cdsCol
-            *ngIf="selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.KAFKA"
-          >
-            <cds-text-label
-              labelInputID="Ca-location"
-              i18n
-              helperText="The file path of the CA certificate used to verify the server"
-              i18n-helperText
-            >
-              CA location
-              <input
-                cdsText
-                type="text"
-                id="ca_location"
-                formControlName="ca_location"
-              />
-            </cds-text-label>
-          </div>
-          <div
-            cdsCol
-            *ngIf="selectedOption === hostProtocols.AMQP"
-          >
-            <cds-text-label
-              labelInputID="AMQP exchange"
-              i18n
-              helperText="Name of the AMQP exchange to publish messages to; must exist on the broker"
-              i18n-helperText
-            >
-              AMQP exchange
-              <input
-                cdsText
-                type="text"
-                id="amqp_exchange"
-                formControlName="amqp_exchange"
-              />
-            </cds-text-label>
-          </div>
-
+          @if (selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.KAFKA) {
+            <div cdsCol>
+              <cds-text-label
+                labelInputID="Ca-location"
+                i18n
+                helperText="The file path of the CA certificate used to verify the server"
+                i18n-helperText
+              >
+                CA location
+                <input
+                  cdsText
+                  type="text"
+                  id="ca_location"
+                  formControlName="ca_location"
+                />
+              </cds-text-label>
+            </div>
+          }
+          @if (selectedOption === hostProtocols.AMQP) {
+            <div cdsCol>
+              <cds-text-label
+                labelInputID="AMQP exchange"
+                i18n
+                helperText="Name of the AMQP exchange to publish messages to; must exist on the broker"
+                i18n-helperText
+              >
+                AMQP exchange
+                <input
+                  cdsText
+                  type="text"
+                  id="amqp_exchange"
+                  formControlName="amqp_exchange"
+                />
+              </cds-text-label>
+            </div>
+          }
           <!-- mechanism-->
-          <div
-            cdsCol
-            *ngIf="selectedOption === hostProtocols.KAFKA"
-          >
-            <cds-select
-              formControlName="mechanism"
-              label="Mechanism"
-              i18n-label
-              id="mechanism"
-              helperText="Select the authentication mechanism to connect to the Kafka broker"
-              i18n-helperText
-            >
-              <option
-                i18n
-                value=""
+          @if (selectedOption === hostProtocols.KAFKA) {
+            <div cdsCol>
+              <cds-select
+                formControlName="mechanism"
+                label="Mechanism"
+                i18n-label
+                id="mechanism"
+                helperText="Select the authentication mechanism to connect to the Kafka broker"
+                i18n-helperText
               >
-                -- Select a KAFKA mechanism --
-              </option>
-              <option
-                *ngFor="let data of kafkaMechanism"
-                i18n
-              >
-                {{ data }}
-              </option>
-            </cds-select>
-          </div>
+                <option
+                  i18n
+                  value=""
+                >
+                  -- Select a KAFKA mechanism --
+                </option>
+                @for (data of kafkaMechanism; track data) {
+                  <option i18n>
+                    {{ data }}
+                  </option>
+                }
+              </cds-select>
+            </div>
+          }
         </div>
         <div
           class="form-item form-item-append"
           cdsRow
         >
           <!-- Ack level -->
-          <div
-            cdsCol
-            *ngIf="selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.KAFKA"
-          >
-            <cds-select
-              formControlName="ack_level"
-              label="Ack level"
-              i18n-label
-              id="ack_level"
-              helperText="Select the acknowledgment level to control message delivery guarantees between client and broker"
-              i18n-helperText
-            >
-              <option
-                i18n
-                value=""
+          @if (selectedOption === hostProtocols.AMQP || selectedOption === hostProtocols.KAFKA) {
+            <div cdsCol>
+              <cds-select
+                formControlName="ack_level"
+                label="Ack level"
+                i18n-label
+                id="ack_level"
+                helperText="Select the acknowledgment level to control message delivery guarantees between client and broker"
+                i18n-helperText
               >
-                -- Select the {{ selectedOption }} ack level --
-              </option>
-              <option
-                *ngFor="let level of ackLevels"
-                [value]="level"
-                i18n
-              >
-                {{ level }}
-              </option>
-            </cds-select>
-          </div>
-
+                <option
+                  i18n
+                  value=""
+                >
+                  -- Select the {{ selectedOption }} ack level --
+                </option>
+                @for (level of ackLevels; track level) {
+                  <option
+                    [value]="level"
+                    i18n
+                  >
+                    {{ level }}
+                  </option>
+                }
+              </cds-select>
+            </div>
+          }
           <!-- kafka-brokers-->
-          <div
-            cdsCol
-            *ngIf="selectedOption === hostProtocols.KAFKA"
-          >
-            <cds-text-label
-              labelInputID="kafka_brokers"
-              i18n
-              helperText="Specify the address of the Kafka broker (e.g., host:9092) "
-              i18n-helperText
-            >
-              Kafka brokers
-              <input
-                cdsText
-                type="text"
-                id="kafka_brokers"
-                formControlName="kafka_brokers"
-              />
-            </cds-text-label>
-          </div>
+          @if (selectedOption === hostProtocols.KAFKA) {
+            <div cdsCol>
+              <cds-text-label
+                labelInputID="kafka_brokers"
+                i18n
+                helperText="Specify the address of the Kafka broker (e.g., host:9092) "
+                i18n-helperText
+              >
+                Kafka brokers
+                <input
+                  cdsText
+                  type="text"
+                  id="kafka_brokers"
+                  formControlName="kafka_brokers"
+                />
+              </cds-text-label>
+            </div>
+          }
         </div>
-      </ng-container>
+      }
       <ng-container>
         <div
           cdsRow
@@ -596,7 +589,6 @@
               settings</cd-help-text
             >
           </legend>
-
           <!-- Persistent-->
           <div
             cdsCol
@@ -634,7 +626,6 @@
               />
             </cds-text-label>
           </div>
-
           <!-- Time to live-->
           <div cdsCol>
             <cds-number
@@ -648,7 +639,6 @@
               >Time to live
             </cds-number>
           </div>
-
           <!-- Max retries-->
           <div cdsCol>
             <cds-number
@@ -663,7 +653,6 @@
               Max retries
             </cds-number>
           </div>
-
           <!-- Retry sleep duration-->
           <div cdsCol>
             <cds-number
@@ -679,7 +668,6 @@
             </cds-number>
           </div>
         </div>
-
         <div
           cdsRow
           class="form-item form-item-append"
@@ -758,7 +746,7 @@
           </div>
         </div>
       </ng-container>
-    </ng-container>
+    }
     <div class="card-footer">
       <cd-form-button-panel
         (submitActionEvent)="submitAction()"

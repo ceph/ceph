@@ -35,12 +35,13 @@
         />
       </cds-text-label>
       <ng-template #jaError>
-        <span
-          class="invalid-feedback"
-          *ngIf="form.showError('authId', form, 'required')"
-          i18n
-          >This field is required.</span
-        >
+        @if (form.showError('authId', form, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >This field is required.</span
+          >
+        }
       </ng-template>
     </div>
 
@@ -62,12 +63,13 @@
         />
       </cds-text-label>
       <ng-template #usernameError>
-        <span
-          class="invalid-feedback"
-          *ngIf="form.showError('username', form, 'required')"
-          i18n
-          >This field is required.
-        </span>
+        @if (form.showError('username', form, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >This field is required.
+          </span>
+        }
       </ng-template>
     </div>
 
@@ -89,43 +91,42 @@
         />
       </cds-password-label>
       <ng-template #passwordError>
-        <span
-          class="invalid-feedback"
-          *ngIf="form.showError('password', form, 'required')"
-          i18n
-          >This field is required.
-        </span>
+        @if (form.showError('password', form, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >This field is required.
+          </span>
+        }
       </ng-template>
     </div>
 
     <!-- linkedToCluster -->
-    <div
-      *ngIf="smbClusters$ | async as clusters"
-      class="form-item"
-    >
-      <cds-select
-        label="Linked to cluster"
-        i18n-label
-        formControlName="linkedToCluster"
-        name="linkedToCluster"
-        cdOptionalField="Linked to cluster"
-        helperText="This resource may only be used with the linked cluster and will automatically be removed when the linked cluster is removed."
-        i18n-helperText
-      >
-        <option
-          [value]="null"
-          i18n
+    @if (smbClusters$ | async; as clusters) {
+      <div class="form-item">
+        <cds-select
+          label="Linked to cluster"
+          i18n-label
+          formControlName="linkedToCluster"
+          name="linkedToCluster"
+          cdOptionalField="Linked to cluster"
+          helperText="This resource may only be used with the linked cluster and will automatically be removed when the linked cluster is removed."
+          i18n-helperText
         >
-          -- List of clusters --
-        </option>
-        <option
-          *ngFor="let cluster of clusters"
-          [value]="cluster.cluster_id"
-        >
-          {{ cluster.cluster_id }}
-        </option>
-      </cds-select>
-    </div>
+          <option
+            [value]="null"
+            i18n
+          >
+            -- List of clusters --
+          </option>
+          @for (cluster of clusters; track cluster) {
+            <option [value]="cluster.cluster_id">
+              {{ cluster.cluster_id }}
+            </option>
+          }
+        </cds-select>
+      </div>
+    }
     <cd-form-button-panel
       (submitActionEvent)="submit()"
       [form]="form"

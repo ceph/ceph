@@ -41,12 +41,13 @@
             />
           </cds-text-label>
           <ng-template #fsNameError>
-            <span
-              class="invalid-feedback"
-              *ngIf="form.showError('fsName', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (form.showError('fsName', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </ng-template>
         </div>
 
@@ -87,12 +88,13 @@
             page
           </ng-template>
           <ng-template #userIdError>
-            <span
-              class="invalid-feedback"
-              *ngIf="form.showError('userId', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (form.showError('userId', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </ng-template>
         </div>
 
@@ -123,12 +125,13 @@
             />
           </cds-text-label>
           <ng-template #directoryError>
-            <span
-              class="invalid-feedback"
-              *ngIf="form.showError('directory', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (form.showError('directory', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </ng-template>
         </div>
 
@@ -141,7 +144,7 @@
             >
               Permissions
             </legend>
-            <ng-container *ngFor="let permission of clientPermissions">
+            @for (permission of clientPermissions; track permission) {
               <cds-checkbox
                 i18n-label
                 [id]="permission.name"
@@ -150,11 +153,13 @@
                 (checkedChange)="toggleFormControl($event, permission.name)"
               >
                 {{ permission.name | titlecase }}
-                <cd-help-text *ngIf="permission.description">
-                  {{ permission.description }}
-                </cd-help-text>
+                @if (permission.description) {
+                  <cd-help-text>
+                    {{ permission.description }}
+                  </cd-help-text>
+                }
               </cds-checkbox>
-            </ng-container>
+            }
           </fieldset>
         </div>
       </form>

@@ -1,4 +1,3 @@
-import { CommonModule } from '@angular/common';
 import { Component, Input, ViewEncapsulation } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { LayoutModule, LayerModule, TilesModule } from 'carbon-components-angular';
@@ -12,7 +11,6 @@ import { SetupStepCardComponent } from '~/app/shared/components/setup-step-card/
   standalone: true,
   encapsulation: ViewEncapsulation.None,
   imports: [
-    CommonModule,
     RouterModule,
     LayoutModule,
     LayerModule,

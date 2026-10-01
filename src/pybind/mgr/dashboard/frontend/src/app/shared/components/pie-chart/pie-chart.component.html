@@ -1,6 +1,7 @@
-<ibm-pie-chart
-  *ngIf="chartData && chartOptions"
-  [data]="chartData"
-  [options]="chartOptions"
->
-</ibm-pie-chart>
+@if (chartData && chartOptions) {
+  <ibm-pie-chart
+    [data]="chartData"
+    [options]="chartOptions"
+  >
+  </ibm-pie-chart>
+}

@@ -112,8 +112,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
   }
 
   private formatReport() {
-    let copy = {};
-    copy = JSON.parse(JSON.stringify(this.report));
+    const copy = JSON.parse(JSON.stringify(this.report));
     const perf_keys = [
       'perf_counters',
       'stats_per_pool',
@@ -134,8 +133,7 @@ export class TelemetryComponent extends CdForm implements OnInit {
   }
 
   formatReportTest(report: object) {
-    let copy = {};
-    copy = JSON.parse(JSON.stringify(report));
+    const copy = JSON.parse(JSON.stringify(report));
     const perf_keys = [
       'perf_counters',
       'stats_per_pool',

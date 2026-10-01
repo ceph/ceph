@@ -1,66 +1,64 @@
 <div class="d-flex flex-column justify-content-center align-items-center bold">
   <ng-container>
-    <h3
-      class="text-center"
-      [ngClass]="{ 'mt-3': status === 'in-progress' && isPaused }"
-      *ngIf="!value || actionName === 'upgrading'"
-    >
-      <cds-loading
-        *ngIf="status === 'in-progress' && isPaused; else spinningIcon"
-        [isActive]="false"
-        [overlay]="false"
-        size="sm"
-      ></cds-loading>
-      <ng-template #spinningIcon>
-        <cds-loading
-          [isActive]="true"
-          [overlay]="false"
-          size="sm"
-        ></cds-loading>
-      </ng-template>
-    </h3>
+    @if (!value || actionName === 'upgrading') {
+      <h3
+        class="text-center"
+        [ngClass]="{ 'mt-3': status === 'in-progress' && isPaused }"
+      >
+        @if (status === 'in-progress' && isPaused) {
+          <cds-loading
+            [isActive]="false"
+            [overlay]="false"
+            size="sm"
+          ></cds-loading>
+        } @else {
+          <cds-loading
+            [isActive]="true"
+            [overlay]="false"
+            size="sm"
+          ></cds-loading>
+        }
+      </h3>
+    }
 
-    <h3
-      class="text-center"
-      [ngClass]="status === 'in-progress' && isPaused ? ['mt-3', 'mb-4'] : 'mt-2'"
-      *ngIf="label"
-    >
-      {{ label }}
-    </h3>
+    @if (label) {
+      <h3
+        class="text-center"
+        [ngClass]="status === 'in-progress' && isPaused ? ['mt-3', 'mb-4'] : 'mt-2'"
+      >
+        {{ label }}
+      </h3>
+    }
 
-    <h5
-      class="text-center mt-3"
-      *ngIf="subLabel && status === 'in-progress' && !isPaused"
-    >
-      {{ subLabel }}
-    </h5>
+    @if (subLabel && status === 'in-progress' && !isPaused) {
+      <h5 class="text-center mt-3">
+        {{ subLabel }}
+      </h5>
+    }
 
-    <h5
-      class="text-center mt-3"
-      *ngIf="description"
-    >
-      {{ description }}
-    </h5>
+    @if (description) {
+      <h5 class="text-center mt-3">
+        {{ description }}
+      </h5>
+    }
 
-    <p
-      class="text-center text-muted mt-3"
-      *ngIf="subDescription"
-    >
-      {{ subDescription }}
-    </p>
+    @if (subDescription) {
+      <p class="text-center text-muted mt-3">
+        {{ subDescription }}
+      </p>
+    }
   </ng-container>
 
   <div class="w-50 row h-100 d-flex justify-content-center align-items-center mt-4">
     <div class="text-center w-75">
-      <ng-container
-        *ngIf="completedItems && completedItems.length > 0"
-        i18n
-      >
-        Finished {{ actionName }}:
-        <span class="text-success">
-          {{ completedItems }}
-        </span>
-      </ng-container>
+      @if (completedItems && completedItems.length > 0) {
+        <ng-container i18n>
+          Finished {{ actionName }}:
+          <span class="text-success">
+            {{ completedItems }}
+          </span>
+        </ng-container>
+      }
 
       <!-- Progress Bar -->
       <div class="mt-2">
@@ -76,18 +74,16 @@
       </p>
     </div>
 
-    <h4
-      class="text-center m-2"
-      *ngIf="helperText"
-    >
-      {{ helperText }}
-    </h4>
+    @if (helperText) {
+      <h4 class="text-center m-2">
+        {{ helperText }}
+      </h4>
+    }
 
-    <h5
-      class="text-center mt-2"
-      *ngIf="footerText"
-    >
-      {{ footerText }}
-    </h5>
+    @if (footerText) {
+      <h5 class="text-center mt-2">
+        {{ footerText }}
+      </h5>
+    }
   </div>
 </div>

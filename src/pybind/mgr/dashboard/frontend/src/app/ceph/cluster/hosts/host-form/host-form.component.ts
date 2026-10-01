@@ -129,8 +129,7 @@ export class HostFormComponent extends CdForm implements OnInit {
       const hostnameRange = this.replaceBraces(hostname);
       this.hostnameArray = expand(hostnameRange);
     } else if (this.isCommaSeparatedPattern(hostname)) {
-      let hostArray = [];
-      hostArray = hostname.split(',');
+      const hostArray = hostname.split(',');
       hostArray.forEach((host: string) => {
         if (this.isRangeTypePattern(host)) {
           const hostnameRange = this.replaceBraces(host);

@@ -1,9 +1,26 @@
 >=22.0.0
 
+* RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
+  containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
+  hold the lock, instead of an empty list. Callers should check the
+  ``lockers`` field rather than the truth value of the returned object
+  to determine whether any clients hold the lock.
+
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
   from ``2`` to ``30`` seconds.
+
+* RGW: Fixed a bug in same-account evaluation of bucket policy statements that
+  allow the account principal. Users and roles in that account now require a
+  corresponding allow from identity policy to match AWS behavior. The evaluation
+  of bucket policy against user or role principals is unchanged and still does
+  not require identity policy.
+* RGW: The STS AssumeRole and AssumeRoleWithWebIdentity actions now consult
+  identity policy according to the AWS same-account and cross-account policy
+  evaluation rules. They had previously only consulted the role's trust policy.
+  This means that account users will now require an Allow from identity policy
+  to assume roles in other accounts.
 
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
@@ -68,6 +85,12 @@
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
+* RGW: PutBucketEncryption and GetBucketEncryption now support the
+  ``BlockedEncryptionTypes`` element. Blocking ``SSE-C`` on a bucket rejects new
+  SSE-C uploads with ``403 AccessDenied`` while leaving existing SSE-C objects
+  readable. Newly created buckets are unchanged by default. Enable the new
+  ``rgw_s3_block_sse_c_by_default`` option to block SSE-C on them instead,
+  matching the AWS behavior for new buckets.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
@@ -233,6 +256,16 @@
 * RADOS: Stretch mode can now be entered even if the two dividing buckets differ
   in weight by a small fraction (default 0.1). This is tunable via
   `mon_stretch_max_bucket_weight_delta`.
+
+* RADOS: Added a debug-level guard that protects against accidentally leaving
+  debug subsystems at high log levels in production. When `high_debug_level_threshold`
+  is set (default `0` = disabled), any subsystem whose log level sits at or above
+  the threshold for longer than `high_debug_level_reset_timeout` seconds (default
+  `300`) is automatically set back to the level it had before it was raised, and a
+  `HIGH_DEBUG_LEVEL` health warning surfaces in `ceph health detail` while the
+  level remains elevated. Setting `high_debug_level_reset_timeout` to `0` gives
+  warn-only mode (health warning without auto-revert).
+  Related Tracker: https://tracker.ceph.com/issues/75467
 
 * CephFS: The offline CephFS tools (cephfs-data-scan, cephfs-journal-tool,
   and cephfs-table-tool) now include progress tracking with ETA (Estimated Time of
@@ -1190,3 +1223,9 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   prior to Pacific that have not been resharded yet with
   ``ceph-bluestore-tool reshard``. This warning can be disabled with the new
   ``bluestore_warn_on_no_db_sharding`` option.
+* RADOS: A new ``BLUESTORE_LEGACY_MIN_ALLOC_SIZE`` health warning reports
+  OSDs that use an allocation unit (``min_alloc_size``) that differs from
+  the one a newly deployed OSD would use on the same device, e.g. HDD-backed
+  OSDs deployed prior to the Pacific release with a 64 KiB allocation unit.
+  It can be disabled with the new ``bluestore_warn_on_legacy_min_alloc_size``
+  option, globally or per OSD / device class using a configuration mask.

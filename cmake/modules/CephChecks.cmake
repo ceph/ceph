@@ -1,9 +1,3 @@
-if(CMAKE_COMPILER_IS_GNUCXX)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.1)
-    message(FATAL_ERROR "GCC 8.1+ required due to C++17 requirements")
-  endif()
-endif()
-
 #Check Includes
 include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)

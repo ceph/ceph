@@ -1,4 +1,3 @@
-import { CommonModule } from '@angular/common';
 import {
   Component,
   EventEmitter,
@@ -28,7 +27,6 @@ import { TextLabelListComponent } from '../text-label-list/text-label-list.compo
   styleUrls: ['./certificate-authority-form.component.scss'],
   standalone: true,
   imports: [
-    CommonModule,
     ReactiveFormsModule,
     RadioModule,
     CheckboxModule,

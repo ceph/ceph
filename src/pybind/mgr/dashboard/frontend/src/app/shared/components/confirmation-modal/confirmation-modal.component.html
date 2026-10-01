@@ -19,9 +19,11 @@
       novalidate
     >
       <ng-container *ngTemplateOutlet="bodyTpl; context: bodyContext"></ng-container>
-      <p *ngIf="description">
-        {{ description }}
-      </p>
+      @if (description) {
+        <p>
+          {{ description }}
+        </p>
+      }
     </form>
   </section>
 

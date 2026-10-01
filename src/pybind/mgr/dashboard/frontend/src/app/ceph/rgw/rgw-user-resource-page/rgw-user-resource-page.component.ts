@@ -122,7 +122,11 @@ export class RgwUserResourcePageComponent implements OnInit, OnDestroy {
       },
       {
         label: $localize`Account name`,
-        value: selection?.account?.name
+        value: selection?.account?.name,
+        type: selection?.account?.name ? 'link' : 'text',
+        routerLink: selection?.account?.name
+          ? ['/rgw/accounts', selection.account.name, 'overview']
+          : undefined
       },
       {
         label: $localize`Full name`,

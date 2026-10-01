@@ -18,7 +18,7 @@ from ceph.utils import datetime_now
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from mgr_module import MonCommandFailed
 
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService, DaemonDeployContext
 from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
@@ -235,7 +235,8 @@ class OSDService(CephService):
                     daemon_type='osd',
                     network='',  # required arg but only really needed for mons
                 )
-                daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+                daemon_spec.final_config, daemon_spec.deps = self.generate_config(
+                    DaemonDeployContext(daemon_spec, spec))
                 self._apply_osd_config_to_daemon(str(osd_id), post_create_cfg or {})
 
                 await CephadmServe(self.mgr)._create_daemon(
@@ -279,7 +280,8 @@ class OSDService(CephService):
                 daemon_type='osd',
                 network='',  # required arg but only really needed for mons
             )
-            daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+            daemon_spec.final_config, daemon_spec.deps = self.generate_config(
+                DaemonDeployContext(daemon_spec, spec))
             self._apply_osd_config_to_daemon(osd_id, post_create_cfg or {})
             await CephadmServe(self.mgr)._create_daemon(
                 daemon_spec,
@@ -506,8 +508,12 @@ class OSDService(CephService):
         if not is_failed_deploy:
             super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
-        config, parent_deps = super().generate_config(daemon_spec)
+    def generate_config(
+            self,
+            deploy_ctx: DaemonDeployContext,
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec = deploy_ctx.daemon_spec
+        config, parent_deps = super().generate_config(deploy_ctx)
         if daemon_spec.service_name in self.mgr.spec_store:
             svc_spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
