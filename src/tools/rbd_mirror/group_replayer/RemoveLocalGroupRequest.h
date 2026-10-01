@@ -8,6 +8,8 @@
 #include "include/rados/librados_fwd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/mirror/Types.h"
+#include <deque>
+#include <map>
 #include <string>
 
 struct Context;
@@ -31,21 +33,32 @@ public:
   static RemoveLocalGroupRequest *create(
       librados::IoCtx &io_ctx,
       const std::string &global_group_id,
+      const std::string &group_id,
+      cls::rbd::MirrorGroup mirror_group,
       bool resync,
       librbd::asio::ContextWQ *work_queue,
+      const std::map<std::string, std::pair<int64_t, std::string>>
+        &extra_trash_images,
       Context *on_finish) {
-    return new RemoveLocalGroupRequest(io_ctx, global_group_id,
-                                       resync, work_queue, on_finish);
+    return new RemoveLocalGroupRequest(io_ctx, global_group_id, group_id,
+                                       mirror_group, resync, work_queue,
+                                       extra_trash_images, on_finish);
   }
 
   RemoveLocalGroupRequest(
       librados::IoCtx &io_ctx,
       const std::string &global_group_id,
+      const std::string &group_id,
+      cls::rbd::MirrorGroup mirror_group,
       bool resync,
       librbd::asio::ContextWQ *work_queue,
+      const std::map<std::string, std::pair<int64_t, std::string>>
+        &extra_trash_images,
       Context *on_finish)
     : m_io_ctx(io_ctx), m_global_group_id(global_group_id),
-      m_resync(resync), m_work_queue(work_queue), m_on_finish(on_finish) {
+      m_resync(resync), m_work_queue(work_queue), m_on_finish(on_finish),
+      m_group_id(group_id), m_mirror_group(mirror_group),
+      m_trash_images(extra_trash_images) {
   }
 
   void send();
@@ -104,6 +117,7 @@ private:
 
   bufferlist m_out_bl;
   std::list<cls::rbd::GroupImageStatus> m_images;
+  std::deque<std::pair<int64_t, std::string>> m_unmirrored_images;
 
   cls::rbd::MirrorGroup m_mirror_group;
   librbd::mirror::PromotionState m_promotion_state;
@@ -128,6 +142,9 @@ private:
 
   void get_mirror_images();
   void handle_get_mirror_images(int r);
+
+  void remove_unmirrored_image_from_group();
+  void handle_remove_unmirrored_image_from_group(int r);
 
   void remove_image_from_group();
   void handle_remove_image_from_group(int r);
@@ -158,4 +175,3 @@ private:
 extern template class rbd::mirror::group_replayer::RemoveLocalGroupRequest<librbd::ImageCtx>;
 
 #endif // RBD_MIRROR_GROUP_REPLAYER_REMOVE_LOCAL_GROUP_REQUEST_H
-

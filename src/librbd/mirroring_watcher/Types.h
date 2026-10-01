@@ -22,6 +22,12 @@ enum NotifyOp : uint32_t {
   NOTIFY_OP_MODE_UPDATED  = 0,
   NOTIFY_OP_IMAGE_UPDATED = 1,
   NOTIFY_OP_GROUP_UPDATED = 2,
+  NOTIFY_OP_GROUP_MEMBERSHIP_UPDATED = 3,
+};
+
+enum GroupMembershipAction {
+  GROUP_MEMBERSHIP_ATTACH = 0,
+  GROUP_MEMBERSHIP_DETACH = 1,
 };
 
 struct ModeUpdatedPayload {
@@ -85,6 +91,41 @@ struct GroupUpdatedPayload {
   void dump(Formatter *f) const;
 };
 
+struct GroupMembershipUpdatedPayload {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_GROUP_MEMBERSHIP_UPDATED;
+
+  cls::rbd::MirrorImageState mirror_image_state =
+    cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
+
+  std::string image_id;
+  std::string global_image_id;
+
+  std::string group_id;
+  std::string global_group_id;
+
+  size_t group_image_count = 0;
+
+  GroupMembershipAction action = GROUP_MEMBERSHIP_ATTACH;
+
+  GroupMembershipUpdatedPayload() {}
+
+  GroupMembershipUpdatedPayload(cls::rbd::MirrorImageState mirror_image_state,
+    const std::string &image_id, const std::string &global_image_id,
+    const std::string &group_id, const std::string &global_group_id,
+    size_t group_image_count, GroupMembershipAction action) :
+    mirror_image_state(mirror_image_state),
+    image_id(image_id),
+    global_image_id(global_image_id),
+    group_id(group_id),
+    global_group_id(global_group_id),
+    group_image_count(group_image_count),
+    action(action) {}
+
+  void encode(bufferlist &) const;
+  void decode(__u8, bufferlist::const_iterator &);
+  void dump(Formatter *) const;
+};
+
 struct UnknownPayload {
   static const NotifyOp NOTIFY_OP = static_cast<NotifyOp>(-1);
 
@@ -99,6 +140,7 @@ struct UnknownPayload {
 typedef std::variant<ModeUpdatedPayload,
 		     ImageUpdatedPayload,
 		     GroupUpdatedPayload,
+		     GroupMembershipUpdatedPayload,
 		     UnknownPayload> Payload;
 
 struct NotifyMessage {

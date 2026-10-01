@@ -4,6 +4,8 @@
 #ifndef RBD_MIRROR_IMAGE_REPLAYER_REPLAYER_H
 #define RBD_MIRROR_IMAGE_REPLAYER_REPLAYER_H
 
+#include "cls/rbd/cls_rbd_types.h"
+
 #include <cstdint>
 #include <string>
 
@@ -33,7 +35,8 @@ struct Replayer {
   virtual std::string get_error_description() const = 0;
 
   virtual void prune_snapshot(uint64_t) = 0;
-  virtual void set_remote_snap_id_end_limit(uint64_t) = 0;
+  virtual void set_remote_snap_id_end_limit(uint64_t,
+    const cls::rbd::GroupSpec&) = 0;
   virtual uint64_t get_remote_snap_id_end_limit() = 0;
 
   virtual uint64_t get_last_snapshot_bytes() const {

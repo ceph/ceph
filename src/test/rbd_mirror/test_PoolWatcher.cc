@@ -11,6 +11,7 @@
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
+#include "librbd/MirroringWatcher.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Mirror.h"
@@ -74,21 +75,43 @@ public:
     TestPoolWatcher *test;
     ceph::condition_variable cond;
     set<string> image_ids;
+    std::map<std::string, size_t> group_image_counts;
 
     explicit PoolWatcherListener(TestPoolWatcher *test) : test(test) {
     }
 
     void handle_update(const std::string &mirror_uuid,
                        MirrorEntities &&added_entities,
-                       MirrorEntities &&removed_entities) override {
+                       MirrorEntities &&removed_entities,
+                       MirrorEntities &&modified_entities) override {
       std::lock_guard locker{test->m_lock};
       for (auto &entity : removed_entities) {
-        EXPECT_EQ(entity.type, rbd::mirror::MIRROR_ENTITY_TYPE_IMAGE);
-        image_ids.erase(entity.global_id);
+        if (entity.type == rbd::mirror::MIRROR_ENTITY_TYPE_IMAGE) {
+          image_ids.erase(entity.global_id);
+        } else {
+          EXPECT_EQ(entity.type, rbd::mirror::MIRROR_ENTITY_TYPE_GROUP);
+          group_image_counts.erase(entity.global_id);
+        }
       }
       for (auto &entity : added_entities) {
-        EXPECT_EQ(entity.type, rbd::mirror::MIRROR_ENTITY_TYPE_IMAGE);
-        image_ids.insert(entity.global_id);
+        if (entity.type == rbd::mirror::MIRROR_ENTITY_TYPE_IMAGE) {
+          image_ids.insert(entity.global_id);
+        } else {
+          EXPECT_EQ(entity.type, rbd::mirror::MIRROR_ENTITY_TYPE_GROUP);
+          group_image_counts[entity.global_id] = entity.count;
+        }
+      }
+      for (auto &entity : modified_entities) {
+        if (entity.type == rbd::mirror::MIRROR_ENTITY_TYPE_IMAGE) {
+          if (entity.count == 0) {
+            image_ids.erase(entity.global_id);
+          } else {
+            image_ids.insert(entity.global_id);
+          }
+        } else {
+          EXPECT_EQ(entity.type, rbd::mirror::MIRROR_ENTITY_TYPE_GROUP);
+          group_image_counts[entity.global_id] = entity.count;
+        }
       }
       cond.notify_all();
     }
@@ -105,6 +128,7 @@ public:
     librados::IoCtx ioctx;
     ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
     ioctx.application_enable("rbd", true);
+    m_ioctx.dup(ioctx);
 
     m_pool_watcher.reset(new PoolWatcher<>(m_threads, ioctx, "mirror uuid",
                                            m_pool_watcher_listener));
@@ -121,7 +145,9 @@ public:
       *name = pool_name;
     }
 
-    m_pool_watcher->init();
+    C_SaferCond ctx;
+    m_pool_watcher->init(&ctx);
+    ASSERT_EQ(0, ctx.wait());
   }
 
   void create_image(const string &pool_name, bool mirrored=true,
@@ -214,6 +240,7 @@ public:
 
   ceph::mutex m_lock = ceph::make_mutex("TestPoolWatcherLock");
   RadosRef m_cluster;
+  librados::IoCtx m_ioctx;
   PoolWatcherListener m_pool_watcher_listener;
   std::unique_ptr<PoolWatcher<> > m_pool_watcher;
 
@@ -248,4 +275,43 @@ TEST_F(TestPoolWatcher, ReplicatedPools) {
   check_images();
   create_image(first_pool, false);
   check_images();
+}
+
+TEST_F(TestPoolWatcher, GroupMembershipUpdated) {
+  // Detach an image and attach it again, checking the changed group weight and
+  // standalone image entry reported by PoolWatcher. ImageMap must receive the
+  // final state when membership changes arrive between full pool refreshes.
+  string uuid1 = "00000000-0000-0000-0000-000000000001";
+  PeerSpec site1(uuid1, "site1", "mirror1");
+  create_pool(true, site1);
+
+  C_SaferCond detach_ctx;
+  librbd::MirroringWatcher<>::notify_group_membership_updated(m_ioctx,
+    cls::rbd::MIRROR_IMAGE_STATE_ENABLED, "image id", "global image id",
+    "group id", "global group id", 0,
+    librbd::mirroring_watcher::GROUP_MEMBERSHIP_DETACH, &detach_ctx);
+  ASSERT_EQ(0, detach_ctx.wait());
+
+  {
+    std::unique_lock locker{m_lock};
+    ASSERT_TRUE(m_pool_watcher_listener.cond.wait_for(locker, 10s, [this] {
+      return m_pool_watcher_listener.image_ids.contains("global image id") &&
+             m_pool_watcher_listener.group_image_counts["global group id"] == 0;
+    }));
+  }
+
+  C_SaferCond attach_ctx;
+  librbd::MirroringWatcher<>::notify_group_membership_updated(m_ioctx,
+    cls::rbd::MIRROR_IMAGE_STATE_ENABLED, "image id", "global image id",
+    "group id", "global group id", 1,
+    librbd::mirroring_watcher::GROUP_MEMBERSHIP_ATTACH, &attach_ctx);
+  ASSERT_EQ(0, attach_ctx.wait());
+
+  {
+    std::unique_lock locker{m_lock};
+    ASSERT_TRUE(m_pool_watcher_listener.cond.wait_for(locker, 10s, [this] {
+      return !m_pool_watcher_listener.image_ids.contains("global image id") &&
+             m_pool_watcher_listener.group_image_counts["global group id"] == 1;
+    }));
+  }
 }

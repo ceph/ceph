@@ -40,10 +40,11 @@ public:
   // shut down map operations
   void shut_down(Context *on_finish);
 
-  // update (add/remove) images
-  void update_images(const std::string &mirror_uuid,
+  // update (add/remove/change) entities
+  void update_entities(const std::string &mirror_uuid,
                      MirrorEntities &&added_entities,
-                     MirrorEntities &&removed_entities);
+                     MirrorEntities &&removed_entities,
+                     MirrorEntities &&modified_entities);
 
   // add/remove instances
   void update_instances_added(const std::vector<std::string> &instances);
@@ -144,28 +145,30 @@ private:
   // current action.
   void continue_action(const image_map::GlobalIds &global_id, int r);
 
-  // schedule an image for update
+  // schedule an entity for update
   void schedule_action(const image_map::GlobalId &global_id);
 
   void schedule_update_task();
   void schedule_update_task(const ceph::mutex &timer_lock);
   void schedule_update_task(const ceph::mutex &timer_lock, double after);
   void process_updates();
-  void update_image_mapping(Updates&& map_updates,
+  void update_entity_mapping(Updates&& map_updates,
                             image_map::GlobalIds&& map_removals);
 
   void rebalance();
   void schedule_rebalance_task();
 
-  void notify_listener_acquire_release_images(const Updates &acquire,
+  void notify_listener_acquire_release_entities(const Updates &acquire,
                                               const Updates &release);
-  void notify_listener_remove_images(const std::string &mirror_uuid,
+  void notify_listener_remove_entities(const std::string &mirror_uuid,
                                      const Updates &remove);
 
-  void update_images_added(const std::string &mirror_uuid,
+  void update_entities_added(const std::string &mirror_uuid,
                            const MirrorEntities &entities);
-  void update_images_removed(const std::string &mirror_uuid,
+  void update_entities_removed(const std::string &mirror_uuid,
                              const MirrorEntities &entities);
+  void update_entities_modified(const std::string &mirror_uuid,
+    const MirrorEntities &entities);
 
   void filter_instance_ids(const std::vector<std::string> &instance_ids,
                            std::vector<std::string> *filtered_instance_ids,

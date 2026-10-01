@@ -6,7 +6,6 @@
 
 #include "librbd/ImageCtx.h"
 #include "librbd/mirror/ImageStateUpdateRequest.h"
-#include "librbd/mirror/ImageRemoveRequest.h"
 #include "librbd/mirror/snapshot/GroupPrepareImagesRequest.h"
 #include "librbd/mirror/snapshot/GroupImageCreatePrimaryRequest.h"
 #include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
@@ -25,11 +24,12 @@ public:
                                       const std::string &group_id,
                                       const std::string &image_id,
                                       uint64_t group_snap_create_flags,
-                                      cls::rbd::MirrorImageMode mode,
                                       const cls::rbd::MirrorGroup &mirror_group,
+                                      const cls::rbd::MirrorImage &existing_mirror_image,
                                       Context *on_finish) {
     return new GroupAddImageRequest(group_io_ctx, group_id, image_id,
-          group_snap_create_flags, mode, mirror_group, on_finish);
+          group_snap_create_flags, mirror_group, existing_mirror_image,
+          on_finish);
   }
 
   void send();
@@ -40,62 +40,89 @@ private:
    *
    * <start>
    *    |
-   *    v                         (on error)
-   * PREPARE_GROUP_IMAGES  * * * * * * * * *
-   *    |                                  *
-   *    v  (skip if not needed)            *
-   * VALIDATE_IMAGE  * * * * * * * * * * * *
-   *    |                                  *
-   *    v  (incomplete)                    *
-   * CREATE_PRIMARY_GROUP_SNAP * * * * * * *
-   *    |                                  *
-   *    v (skip if not needed)             *
-   * CREATE_PRIMARY_IMAGE_SNAPS            *
-   *    |                                  *
-   *    v (complete)                       *
-   * UPDATE_PRIMARY_GROUP_SNAP * * * * * * *
-   *    |                                  *
-   *    v                                  *
-   * ENABLE_MIRROR_IMAGE (only new image)  *
-   *    |                                  *
-   *    v                                  *
-   * NOTIFY_MIRRORING_WATCHER              *
-   *    |                                  *
-   *    v                                  *
-   * CLOSE_IMAGES  * * * * * * * * * * * * *
-   *    |                                  *
-   *    v                                  *
-   * <finish>                              *
-   *                                       * (on failure)
-   *                                       *
-   * CLEANUP / ERROR PATHS INLINE:         *
-   * ----------------------------          *
-   *                 (skip if not needed)  *
-   * DISABLE_MIRROR_IMAGE  * * * * * * * * *
-   *    |                                  *
-   *    v                                  *
-   * REMOVE_PRIMARY_GROUP_SNAPSHOT * * * * *
+   *    v
+   * PREPARE_GROUP_IMAGES
    *    |
    *    v
-   * REMOVE_MIRROR_IMAGE
+   * VALIDATE_IMAGE
+   *    |
+   *    | already attached
+   *    |-----------------------> NOTIFY_GROUP_MEMBERSHIP_UPDATED
+   *    |                                  |
+   *    |                                  v
+   *    |                            FINALIZE_PATH
+   *    | new or standalone
+   *    |-----------------------> CREATE_PRIMARY_GROUP_SNAPSHOT
+   *                                      |
+   *                                      v
+   *                             CREATE_PRIMARY_IMAGE_SNAPSHOTS
+   *                                      |
+   *                                      v
+   *                             UPDATE_PRIMARY_GROUP_SNAPSHOT
+   *                                      |
+   *                                      |
+   *                                      v
+   *                         ATTACH_EXISTING_MIRROR_IMAGE
+   *                                      |
+   *                                      v
+   *                       NOTIFY_GROUP_MEMBERSHIP_UPDATED
+   *                                      |
+   *                                      v
+   *                                FINALIZE_PATH
+   *
+   * FINALIZE_PATH
+   *    |
+   *    v
+   * NOTIFY_GROUP_UPDATED
    *    |
    *    v
    * CLOSE_IMAGES
+   *    |
+   *    v
+   * <finish>
+   *
+   * Errors before a group snapshot exists go directly to CLOSE_IMAGES.
+   * Errors after snapshot creation follow CLEANUP_PATH:
+   *
+   * CLEANUP_PATH
+   *    |
+   *    v
+   * REMOVE_PRIMARY_GROUP_SNAPSHOT
+   *    |
+   *    |
+   *    v
+   * RESTORE_MIRROR_IMAGE
+   *    |
+   *    v
+   * CLEANUP_CLOSE_PATH
+   *
+   * CLEANUP_CLOSE_PATH
+   *    |
+   *    v
+   * CLOSE_IMAGES
+   *    |
+   *    v
+   * <finish>
+   *
+   * Watcher notification errors are logged after the membership change is
+   * durable and then continue along FINALIZE_PATH.
    *
    * @endverbatim
    */
 
   GroupAddImageRequest(librados::IoCtx &group_io_ctx,
       const std::string &group_id, const std::string &image_id,
-      uint64_t group_snap_create_flags, cls::rbd::MirrorImageMode mode,
-      const cls::rbd::MirrorGroup &mirror_group, Context *on_finish);
+      uint64_t group_snap_create_flags,
+      const cls::rbd::MirrorGroup &mirror_group,
+      const cls::rbd::MirrorImage &existing_mirror_image,
+      Context *on_finish);
 
   librados::IoCtx &m_group_ioctx;
   std::string m_group_id;
   std::string m_image_id;
   uint64_t m_group_snap_create_flags;
-  cls::rbd::MirrorImageMode m_mode;
   cls::rbd::MirrorGroup m_mirror_group;
+  cls::rbd::MirrorImage m_existing_mirror_image;
   Context *m_on_finish;
 
   CephContext *m_cct;
@@ -123,21 +150,23 @@ private:
   void handle_create_primary_image_snapshots(int r);
   void update_primary_group_snapshot();
   void handle_update_primary_group_snapshot(int r);
-  void enable_mirror_image();
-  void handle_enable_mirror_image(int r);
-  void notify_mirroring_watcher();
-  void handle_notify_mirroring_watcher(int r);
+  void attach_existing_mirror_image();
+  void handle_attach_existing_mirror_image(int r);
+
+  void notify_group_membership_updated();
+  void handle_notify_group_membership_updated(int r);
+
+  void notify_group_updated();
+  void handle_notify_group_updated(int r);
+
+  void restore_mirror_image();
+  void handle_restore_mirror_image(int r);
 
   // Cleanup
   void close_images();
   void handle_close_images(int r);
-  void disable_mirror_image();
-  void handle_disable_mirror_image(int r);
   void remove_primary_group_snapshot();
   void handle_remove_primary_group_snapshot(int r);
-  void remove_mirror_image();
-  void handle_remove_mirror_image(int r);
-
   void finish(int r);
 
 };

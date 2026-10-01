@@ -12,6 +12,7 @@
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/mirror/ImageRemoveRequest.h"
 #include "librbd/mirror/ImageStateUpdateRequest.h"
+#include "librbd/mirror/snapshot/GroupUnlinkPeerRequest.h"
 #include "librbd/mirror/snapshot/PromoteRequest.h"
 #include "librbd/mirror/snapshot/Utils.h"
 
@@ -75,7 +76,11 @@ void GroupRemoveImageRequest<I>::handle_get_mirror_info(int r) {
     return;
   }
 
-  promote_image();
+  // This request is used while force-promoting a group to its last complete
+  // snapshot. An image added after that snapshot has no older mirror snapshot
+  // to roll back to, so promoting it is both unnecessary and invalid. It will
+  // be removed after its group and mirror metadata are detached.
+  set_mirror_image_disabling();
 }
 
 template <typename I>
@@ -141,6 +146,86 @@ void GroupRemoveImageRequest<I>::handle_set_mirror_image_disabling(int r) {
     return;
   }
 
+  get_mirror_peer_list();
+}
+
+template <typename I>
+void GroupRemoveImageRequest<I>::get_mirror_peer_list() {
+  ldout(m_cct, 10) << dendl;
+
+  m_default_ns_ioctx.dup(m_group_io_ctx);
+  m_default_ns_ioctx.set_namespace("");
+
+  librados::ObjectReadOperation op;
+  cls_client::mirror_peer_list_start(&op);
+
+  auto comp = create_rados_callback<GroupRemoveImageRequest<I>,
+    &GroupRemoveImageRequest<I>::handle_get_mirror_peer_list>(this);
+
+  m_out_bl.clear();
+  int r = m_default_ns_ioctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void GroupRemoveImageRequest<I>::handle_get_mirror_peer_list(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  std::vector<cls::rbd::MirrorPeer> peers;
+
+  if (r == 0) {
+    auto it = m_out_bl.cbegin();
+    r = cls_client::mirror_peer_list_finish(&it, &peers);
+  }
+
+  if (r < 0) {
+    lderr(m_cct) << "error listing mirror peers: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  m_mirror_peer_uuids.clear();
+
+  for (auto& peer : peers) {
+    // Receive-only peers do not own snapshots that must be unlinked.
+    if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
+      continue;
+    }
+    m_mirror_peer_uuids.insert(peer.uuid);
+  }
+
+  if (m_mirror_peer_uuids.empty()) {
+    lderr(m_cct) << "no mirror tx peers configured for the pool" << dendl;
+    finish(-EINVAL);
+    return;
+  }
+
+  unlink_group_snapshots();
+}
+
+template <typename I>
+void GroupRemoveImageRequest<I>::unlink_group_snapshots() {
+  auto ctx = create_context_callback<GroupRemoveImageRequest<I>,
+    &GroupRemoveImageRequest<I>::handle_unlink_group_snapshots>(this);
+
+  m_image_ctxs_single = {m_image_ctx};
+
+  auto req = snapshot::GroupUnlinkPeerRequest<I>::create(m_group_io_ctx,
+    m_group_id, &m_mirror_peer_uuids, &m_image_ctxs_single, ctx);
+
+  req->send();
+}
+
+template <typename I>
+void GroupRemoveImageRequest<I>::handle_unlink_group_snapshots(int r) {
+  if (r < 0 && r != -ENOENT) {
+    lderr(m_cct) << "failed to unlink group snapshots: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
+    return;
+  }
+
   remove_group_ref_from_image();
 }
 
@@ -197,7 +282,10 @@ void GroupRemoveImageRequest<I>::handle_remove_global_mirror_image_entry(int r) 
     return;
   }
 
-  close_image();
+  // m_image_ctx is borrowed from GroupPromoteRequest. Leave it open so the
+  // owner can close all removed-image contexts exactly once before deleting
+  // the underlying images.
+  finish(0);
 }
 
 template <typename I>

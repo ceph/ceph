@@ -24,10 +24,12 @@ ImageStateUpdateRequest<I>::ImageStateUpdateRequest(
     const std::string& image_id,
     cls::rbd::MirrorImageState mirror_image_state,
     const cls::rbd::MirrorImage& mirror_image,
-    Context* on_finish)
+    Context* on_finish,
+    bool force_update)
   : m_io_ctx(io_ctx), m_image_id(image_id),
     m_mirror_image_state(mirror_image_state), m_mirror_image(mirror_image),
-    m_on_finish(on_finish), m_cct(static_cast<CephContext*>(m_io_ctx.cct())) {
+    m_on_finish(on_finish), m_force_update(force_update),
+    m_cct(static_cast<CephContext*>(m_io_ctx.cct())) {
   ceph_assert(m_mirror_image_state != cls::rbd::MIRROR_IMAGE_STATE_DISABLED);
 }
 
@@ -39,7 +41,7 @@ void ImageStateUpdateRequest<I>::send() {
 template <typename I>
 void ImageStateUpdateRequest<I>::get_mirror_image() {
   if (!m_mirror_image.global_image_id.empty()) {
-    if (m_mirror_image.state == m_mirror_image_state) {
+    if (!m_force_update && m_mirror_image.state == m_mirror_image_state) {
       finish(0);
       return;
     }

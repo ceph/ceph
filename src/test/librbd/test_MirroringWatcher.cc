@@ -32,6 +32,10 @@ struct MockMirroringWatcher : public MirroringWatcher<> {
                                           const std::string &,
                                           const std::string &,
                                           size_t));
+  MOCK_METHOD7(handle_group_membership_updated,
+    void(cls::rbd::MirrorImageState, const std::string &, const std::string &,
+      const std::string &, const std::string &, size_t,
+      librbd::mirroring_watcher::GroupMembershipAction));
 };
 
 } // anonymous namespace
