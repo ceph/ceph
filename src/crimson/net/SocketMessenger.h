@@ -66,6 +66,18 @@ public:
 
   bind_ertr::future<> bind(const entity_addrvec_t& addr) override;
 
+  /// bind one more listener per reactor core (see core_listeners), each
+  /// on the first free port in ms_bind_port_min..ms_bind_port_max, on the
+  /// IP of the main address. A connection accepted by core c's listener
+  /// is placed on core c. Must follow a successful bind(), and precede
+  /// start(); not available with dispatch_only_on_this_shard.
+  bind_ertr::future<> bind_core_listeners() override;
+
+  /// the address of each core's listener, indexed by core: the current
+  /// main address (thus reflecting a later-learned IP), with the core's
+  /// port. Empty unless bind_core_listeners() succeeded.
+  std::vector<entity_addrvec_t> get_core_addrs() const override;
+
   seastar::future<> start(const dispatchers_t& dispatchers) override;
 
   ConnectionRef connect(const entity_addr_t& peer_addr,
@@ -174,6 +186,23 @@ private:
   bind_ertr::future<> try_bind(const entity_addrvec_t& addr,
                                uint32_t min_port, uint32_t max_port);
 
+  /// starts listening on the given address (port included)
+  using listen_func_t =
+    std::function<listen_ertr::future<>(const entity_addr_t&)>;
+  /// call listen_fn on each port of [min_port, max_port] of the given
+  /// address in turn, until one succeeds; resolves to the bound port.
+  /// Fails with the last error if no port in the range is usable.
+  listen_ertr::future<uint32_t> listen_on_first_free_port(
+      const entity_addr_t& addr,
+      uint32_t min_port, uint32_t max_port,
+      listen_func_t listen_fn);
+
+  /// the accept function of all our listeners: called on the shard the
+  /// socket was placed on, hands the socket over to the messenger's
+  /// shard (sid), where the connection is created and the handshake runs
+  seastar::future<> accept_on_primary(SocketRef socket,
+                                      entity_addr_t peer_addr);
+
   const seastar::shard_id sid;
   // Distinguish messengers with meaningful names for debugging
   const std::string logic_name;
@@ -186,6 +215,11 @@ private:
   crimson::auth::AuthServer* auth_server = nullptr;
 
   ShardedServerSocket *listener = nullptr;
+  /// the per-core listeners (see bind_core_listeners()), indexed by core;
+  /// core_listeners[c] places all the sockets it accepts on core c
+  std::vector<ShardedServerSocket*> core_listeners;
+  /// the port each of core_listeners is bound to, indexed by core
+  std::vector<uint32_t> core_ports;
   ChainedDispatchers dispatchers;
   std::map<entity_addr_t, SocketConnectionRef> connections;
   std::set<SocketConnectionRef> accepting_conns;

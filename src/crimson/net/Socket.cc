@@ -365,9 +365,24 @@ Socket::try_trap_post(bp_action_t& trap) {
 ShardedServerSocket::ShardedServerSocket(
     seastar::shard_id sid,
     bool dispatch_only_on_primary_sid,
+    std::optional<seastar::shard_id> fixed_sid,
     construct_tag)
-  : primary_sid{sid}, dispatch_only_on_primary_sid{dispatch_only_on_primary_sid}
+  : primary_sid{sid},
+    dispatch_only_on_primary_sid{dispatch_only_on_primary_sid},
+    fixed_sid{fixed_sid}
 {
+}
+
+bool ShardedServerSocket::listens_on_this_shard() const
+{
+  if (!fixed_sid || dispatch_only_on_primary_sid) {
+    return true;
+  }
+  // With seastar's posix stack (no SO_REUSEPORT), the kernel listening
+  // socket is owned by #0, which accepts and hands the sockets over to
+  // the fixed target shard. Other shards would never receive a socket.
+  return seastar::this_shard_id() == 0 ||
+         seastar::this_shard_id() == *fixed_sid;
 }
 
 ShardedServerSocket::~ShardedServerSocket()
@@ -384,11 +399,14 @@ ShardedServerSocket::listen(entity_addr_t addr)
   logger().debug("ShardedServerSocket({})::listen()...", addr);
   return this->container().invoke_on_all([addr](auto& ss) {
     ss.listen_addr = addr;
+    if (!ss.listens_on_this_shard()) {
+      return;
+    }
     seastar::socket_address s_addr(addr.in4_addr());
     seastar::listen_options lo;
     lo.reuse_address = true;
-    if (ss.dispatch_only_on_primary_sid) {
-      lo.set_fixed_cpu(ss.primary_sid);
+    if (ss.fixed_sid) {
+      lo.set_fixed_cpu(*ss.fixed_sid);
     }
     ss.listener = seastar::listen(s_addr, lo);
   }).then([] {
@@ -415,6 +433,9 @@ ShardedServerSocket::accept(accept_func_t &&_fn_accept)
   ceph_assert_always(seastar::this_shard_id() == primary_sid);
   logger().debug("ShardedServerSocket({})::accept()...", listen_addr);
   return this->container().invoke_on_all([_fn_accept](auto &ss) {
+    if (!ss.listens_on_this_shard()) {
+      return;
+    }
     assert(ss.listener);
     ss.fn_accept = _fn_accept;
     // gate accepting
@@ -425,9 +446,9 @@ ShardedServerSocket::accept(accept_func_t &&_fn_accept)
         return ss.listener->accept(
         ).then([&ss](seastar::accept_result accept_result) {
 #ifndef NDEBUG
-          if (ss.dispatch_only_on_primary_sid) {
+          if (ss.fixed_sid) {
             // see seastar::listen_options::set_fixed_cpu()
-            ceph_assert_always(seastar::this_shard_id() == ss.primary_sid);
+            ceph_assert_always(seastar::this_shard_id() == *ss.fixed_sid);
           }
 #endif
           auto [socket, paddr] = std::move(accept_result);
@@ -512,12 +533,32 @@ ShardedServerSocket::shutdown_destroy()
 seastar::future<ShardedServerSocket*>
 ShardedServerSocket::create(bool dispatch_only_on_this_shard)
 {
+  return do_create(
+      dispatch_only_on_this_shard,
+      dispatch_only_on_this_shard
+        ? std::make_optional(seastar::this_shard_id())
+        : std::nullopt);
+}
+
+seastar::future<ShardedServerSocket*>
+ShardedServerSocket::create_fixed(seastar::shard_id target_sid)
+{
+  ceph_assert_always(target_sid < seastar::this_smp_shard_count());
+  return do_create(false, target_sid);
+}
+
+seastar::future<ShardedServerSocket*>
+ShardedServerSocket::do_create(
+    bool dispatch_only_on_this_shard,
+    std::optional<seastar::shard_id> fixed_sid)
+{
   auto primary_sid = seastar::this_shard_id();
   // start the sharded service: we should only construct/stop shards on #0
-  return seastar::smp::submit_to(0, [primary_sid, dispatch_only_on_this_shard] {
+  return seastar::smp::submit_to(0,
+      [primary_sid, dispatch_only_on_this_shard, fixed_sid] {
     auto service = std::make_unique<sharded_service_t>();
     return service->start(
-        primary_sid, dispatch_only_on_this_shard, construct_tag{}
+        primary_sid, dispatch_only_on_this_shard, fixed_sid, construct_tag{}
     ).then([service = std::move(service)]() mutable {
       auto p_shard = service.get();
       p_shard->local().service = std::move(service);
