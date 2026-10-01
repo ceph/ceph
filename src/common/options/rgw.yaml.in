@@ -2898,6 +2898,23 @@ options:
   default: 0
   services:
   - rgw
+  flags:
+  - runtime
+  with_legacy: true
+- name: rgw_sync_data_inject_err_list
+  type: str
+  level: dev
+  desc: object keys and error codes for data sync error injection
+  long_desc: Intended for multisite testing. Accepts a comma-separated list of
+    `key=errno` entries. When non-empty, error injection only applies to object
+    keys with an exact match in this list, using the corresponding positive
+    errno value. When empty, error injection defaults to EIO.
+  services:
+  - rgw
+  flags:
+  - runtime
+  see_also:
+  - rgw_sync_data_inject_err_probability
   with_legacy: true
 - name: rgw_sync_meta_inject_err_probability
   type: float
