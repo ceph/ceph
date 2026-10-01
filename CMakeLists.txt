@@ -787,6 +787,9 @@ endif()
 
 option(WITH_TSAN "build with TSAN" OFF)
 if(WITH_TSAN)
+  if(WITH_ASAN OR WITH_ASAN_LEAK)
+    message(FATAL_ERROR "WITH_TSAN cannot be combined with WITH_ASAN or WITH_ASAN_LEAK")
+  endif()
   list(APPEND sanitizers "thread")
 endif()
 
