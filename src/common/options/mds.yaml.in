@@ -699,6 +699,25 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_export_ephemeral_distributed_tree_min_entries
+  type: uint
+  level: advanced
+  desc: minimum size of a directory that a ceph.dir.pin.distributed.tree policy
+    distributes
+  long_desc: A fragmented directory below a ceph.dir.pin.distributed.tree policy
+    has its fragments distributed over the ranks only once it holds at least this
+    many entries, and stays distributed until it shrinks below half of that.  A
+    smaller directory stays in the subtree of its parent, which keeps the number of
+    subtrees down when there are many directories just past the split size.  0
+    distributes every fragmented directory.
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
+  see_also:
+  - mds_bal_split_size
+  - mds_export_ephemeral_distributed_factor
 - name: mds_export_ephemeral_distributed_factor
   type: float
   level: advanced
