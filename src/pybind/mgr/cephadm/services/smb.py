@@ -332,6 +332,31 @@ class SMBService(CephService):
         # TODO ???
         logger.warning('config_dashboard is a no-op')
 
+    def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
+        """
+        Called after a daemon is removed.
+        """
+        super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
+
+        svc_name = daemon.service_name()
+        remaining = [
+            d for d in self.mgr.cache.get_daemons_by_service(svc_name)
+            if d.name() != daemon.name()
+        ]
+        if remaining:
+            return
+
+        for feature in SMB_FEATURE_SUPPORTS_SSL:
+            self.mgr.cert_mgr.rm_cert(
+                f'smb_{feature}_ssl_cert', service_name=svc_name
+            )
+            self.mgr.cert_mgr.rm_cert(
+                f'smb_{feature}_ca_cert', service_name=svc_name
+            )
+            self.mgr.cert_mgr.rm_key(
+                f'smb_{feature}_ssl_key', service_name=svc_name
+            )
+
     def get_auth_entity(self, daemon_id: str, host: str = "", rados_user: str = '') -> AuthEntity:
         # We want a clear, distinct auth entity for fetching the config versus
         # data path access.
