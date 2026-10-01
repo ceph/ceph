@@ -119,6 +119,16 @@ def task(ctx, config):
          - cephfs_test_runner:
            fail_on_skip: false
 
+    The runner stops at the first failure by default.  When the optional
+    `failfast` argument is set to false the whole suite is run regardless, so
+    that one failing case does not hide the result of the others:
+
+    ::
+        tasks:
+            ...
+         - cephfs_test_runner:
+           failfast: false
+
     """
 
     ceph_cluster = CephCluster(ctx)
@@ -152,6 +162,7 @@ def task(ctx, config):
     })
 
     fail_on_skip = config.get('fail_on_skip', True)
+    failfast = config.get('failfast', True)
 
     # Put useful things onto ctx for interactive debugging
     ctx.fs = fs
@@ -197,7 +208,7 @@ def task(ctx, config):
         stream=LogStream(),
         resultclass=LoggingResult,
         verbosity=2,
-        failfast=True).run(overall_suite)
+        failfast=failfast).run(overall_suite)
 
     if not result.wasSuccessful():
         result.printErrors()  # duplicate output at end for convenience
