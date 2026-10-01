@@ -17,6 +17,7 @@
 #ifndef CEPH_MOSDOPREPLY_H
 #define CEPH_MOSDOPREPLY_H
 
+#include <optional>
 #include <ostream>
 #include <vector>
 
@@ -35,7 +36,7 @@
 
 class MOSDOpReply final : public Message {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -51,6 +52,8 @@ private:
   int32_t retry_attempt = -1;
   bool do_redirect;
   request_redirect_t redirect;
+  /// the PG's owning core on a Crimson OSD (v9; peers with OSD_CORE_HINT)
+  std::optional<osd_core_hint_t> core_hint;
 
 public:
   const object_t& get_oid() const { return oid; }
@@ -97,6 +100,11 @@ public:
   void set_redirect(const request_redirect_t& redir) { redirect = redir; }
   const request_redirect_t& get_redirect() const { return redirect; }
   bool is_redirect_reply() const { return do_redirect; }
+
+  void set_core_hint(const osd_core_hint_t& hint) { core_hint = hint; }
+  const std::optional<osd_core_hint_t>& get_core_hint() const {
+    return core_hint;
+  }
 
   void add_flags(int f) { flags |= f; }
 
@@ -227,6 +235,16 @@ public:
         }
       }
       encode_trace(payload, features);
+      if (header.version == HEAD_VERSION) {
+        if (HAVE_FEATURE(features, OSD_CORE_HINT)) {
+          encode(core_hint.has_value(), payload);
+          if (core_hint) {
+            encode(*core_hint, payload, features);
+          }
+        } else {
+          header.version = 8;
+        }
+      }
     }
   }
   void decode_payload() override {
@@ -260,6 +278,12 @@ public:
       if (do_redirect)
 	decode(redirect, p);
       decode_trace(p);
+      bool has_core_hint;
+      decode(has_core_hint, p);
+      if (has_core_hint) {
+        core_hint.emplace();
+        decode(*core_hint, p);
+      }
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
       decode(head, p);
@@ -345,6 +369,9 @@ public:
     }
     if (is_redirect_reply()) {
       out << " redirect: { " << redirect << " }";
+    }
+    if (core_hint) {
+      out << fmt::format(" hint: {{ {} }}", *core_hint);
     }
     out << ")";
   }

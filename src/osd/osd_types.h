@@ -364,6 +364,42 @@ inline std::ostream& operator<<(std::ostream& out, const request_redirect_t& red
   return out;
 }
 
+/**
+ * osd_core_hint_t
+ *
+ * Sent by a Crimson OSD in MOSDOpReply (to peers with OSD_CORE_HINT):
+ * the reactor core that owns the PG addressed by the op, and the
+ * address on which that core accepts client connections. Advisory
+ * only: an op sent to any of the OSD's addresses is still served.
+ */
+struct osd_core_hint_t {
+  uint32_t core = 0;
+  entity_addrvec_t addrs;
+
+  osd_core_hint_t() = default;
+  osd_core_hint_t(uint32_t core, const entity_addrvec_t& addrs)
+    : core(core), addrs(addrs) {}
+
+  bool operator==(const osd_core_hint_t&) const = default;
+
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
+  static std::list<osd_core_hint_t> generate_test_instances();
+};
+WRITE_CLASS_ENCODER_FEATURES(osd_core_hint_t)
+
+namespace fmt {
+template <>
+struct formatter<osd_core_hint_t> {
+  constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const osd_core_hint_t& h, FormatContext& ctx) const {
+    return fmt::format_to(ctx.out(), "core {} at {}", h.core, h.addrs);
+  }
+};
+} // namespace fmt
+
 // Internal OSD op flags - set by the OSD based on the op types
 enum {
   CEPH_OSD_RMW_FLAG_READ        = (1 << 1),
