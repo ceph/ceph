@@ -490,6 +490,39 @@ TEST_P(TestClsLock, TestExclusiveEphemeralStealExclusive) {
   ASSERT_EQ(-ENOENT, l1.unlock(&ioctx, oid1));
 }
 
+TEST_P(TestClsLock, TestExclusiveEphemeralExpiredReadOnly) {
+  string oid1 = "foo1";
+  string lock_name1 = "mylock1";
+
+  uint64_t size;
+  time_t mod_time;
+
+  Lock l1(lock_name1);
+  l1.set_duration(utime_t(3, 0));
+  ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
+  sleep(4);
+
+  // the read-only methods report the expired lock without removing the
+  // object, which only a write-capable method may do
+  map<locker_id_t, locker_info_t> lockers;
+  ClsLockType lock_type = ClsLockType::EXCLUSIVE_EPHEMERAL;
+  lock_info(&ioctx, oid1, lock_name1, lockers, &lock_type, NULL);
+  ASSERT_EQ(0u, lockers.size());
+
+  librados::ObjectReadOperation op;
+  l1.assert_locked_exclusive_ephemeral(&op);
+  ASSERT_EQ(-EBUSY, ioctx.operate(oid1, &op, nullptr));
+
+  ASSERT_EQ(0, ioctx.stat(oid1, &size, &mod_time));
+
+  // the next lock replaces the expired one, and its unlock removes the object
+  Lock l2(lock_name1);
+  l2.set_duration(utime_t(3, 0));
+  ASSERT_EQ(0, l2.lock_exclusive_ephemeral(&ioctx, oid1));
+  ASSERT_EQ(0, l2.unlock(&ioctx, oid1));
+  ASSERT_EQ(-ENOENT, ioctx.stat(oid1, &size, &mod_time));
+}
+
 INSTANTIATE_TEST_SUITE_P(
     ,
     TestClsLock,
