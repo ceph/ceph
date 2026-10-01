@@ -12,10 +12,20 @@
 #include "rgw_zone.h"
 #include "rgw_s3vector_background.h"
 
+#include <type_traits>
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 namespace {
+
+// detect whether an s3vector request config carries a vector_bucket_name field
+// (every op does except list_vector_buckets_t, which has no single bucket)
+template<typename T, typename = void>
+struct has_vector_bucket_name : std::false_type {};
+template<typename T>
+struct has_vector_bucket_name<T, std::void_t<decltype(std::declval<T&>().vector_bucket_name)>>
+    : std::true_type {};
 
 class RGWS3VectorBase : public RGWDefaultResponseOp {
 protected:
@@ -41,6 +51,17 @@ protected:
     } catch (const JSONDecoder::err& e) {
       ldpp_dout(this, 1) << "ERROR: failed to decode JSON s3vector payload: " << e.what() << dendl;
       return -EINVAL;
+    }
+
+    // Attribute this request to its vector bucket in the ops/usage log using the
+    // ARN resource form ("bucket/<name>"), so that it doesn't collide with a same-name
+    // regular bucket
+    if constexpr (has_vector_bucket_name<T>::value) {
+      if (!configuration.vector_bucket_name.empty()) {
+        s->bucket_name = rgw::s3vector::vector_bucket_arn(
+            s->zonegroup_name, s->account_name,
+            configuration.vector_bucket_name).resource;
+      }
     }
 
     return 0;
@@ -488,7 +509,6 @@ private:
       );
     }
 
-    s->bucket_name = configuration.vector_bucket_arn->resource;
     ldpp_dout(this, 20) << "INFO: s3vector bucket ARN: " << configuration.vector_bucket_arn.get() << dendl;
     return 0;
   }
@@ -800,7 +820,7 @@ private:
     }
 
     op_ret = driver->list_vector_buckets(this, s->owner.id, s->auth.identity->get_tenant(),
-        start_marker, end_marker, configuration.max_results, listing, y);
+        start_marker, end_marker, configuration.max_results, false, listing, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: failed to execute ListVectorBuckets. error: " << op_ret << dendl;
       return;
@@ -892,7 +912,7 @@ private:
       );
     }
 
-    s->bucket_name = configuration.vector_bucket_arn->resource;
+    // s->bucket_name for usage/ops-log attribution is set in do_init_processing()
     ldpp_dout(this, 20) << "INFO: s3vector bucket ARN: " << configuration.vector_bucket_arn.get() << dendl;
     return 0;
   }
@@ -1281,6 +1301,9 @@ int RGWHandler_REST_s3Vector::postauth_init(optional_yield y) {
     return ret;
   }
   s->bucket_tenant = tenant;
+
+  // Similar to tenant, a vector bucket is owned by the user making the request.
+  s->bucket_owner = s->owner;
   return 0;
 }
 

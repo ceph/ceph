@@ -435,7 +435,7 @@ class RadosStore : public StoreDriver {
     int list_vector_buckets(const DoutPrefixProvider* dpp,
 			     const rgw_owner& owner, const std::string& tenant,
 			     const std::string& marker, const std::string& end_marker,
-			     uint64_t max, BucketList& listing,
+			     uint64_t max, bool need_stats, BucketList& listing,
 			     optional_yield y) override;
 
     virtual void shutdown(void) override;
@@ -856,14 +856,17 @@ class RadosVectorBucket : public RadosBucket {
     // XXX: S3 ACLs do not apply to vector buckets but instead vector bucket policy will be supported.
     int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
                 optional_yield y) override { return -ENOTSUP; }
-    // XXX: Quota, ownership and the emptiness check are still disabled here for now; drop these overrides once real
-    // support for them lands.
-    int check_quota(const DoutPrefixProvider* dpp, RGWQuota& quota,
-                    uint64_t obj_size, optional_yield y,
-                    bool check_size_only = false) override { return 0; }
     int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
-              const std::string& new_owner_name, optional_yield y) override { return -ENOTSUP; }
+              const std::string& new_owner_name, optional_yield y) override;
+    // check_quota is inherited from RadosBucket: the quota primitive keys on
+    // owner + bucket key and is namespace-agnostic, so it works unchanged.
     int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
+    // usage is emitted under the ARN resource form ("bucket/<name>"), so read/trim
+    // must use the same key rather than the plain bucket name (see .cc).
+    int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
+                   uint32_t max_entries, bool* is_truncated, RGWUsageIter& usage_iter,
+                   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
+    int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
 
   private:
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);

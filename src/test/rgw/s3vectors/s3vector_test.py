@@ -4371,6 +4371,376 @@ def test_delete_user_owning_the_backing_bucket():
         admin(['user', 'rm', '--uid', uid, '--purge-data'] + backend_admin_args())
 
 
+##############################################
+# usage log / quota / owner stats attribution
+##############################################
+
+def _usage_buckets(uid, tenant=None, cluster=None):
+    """
+    The usage-log buckets of a user, as {bucket_name: total_ops}. Runs
+    "radosgw-admin usage show" and folds the per-category ops of every bucket
+    entry.
+    """
+    args = ['usage', 'show', '--uid', uid]
+    if tenant:
+        args += ['--tenant', tenant]
+    out, ret = admin(args, cluster=cluster)
+    assert ret == 0, f"failed to read usage of '{uid}': {out}"
+    data = json.loads(out[out.index('{'):])
+    buckets = {}
+    for entry in data.get('entries', []):
+        for b in entry.get('buckets', []):
+            name = b.get('bucket', '')
+            ops = sum(c.get('ops', 0) for c in b.get('categories', []))
+            buckets[name] = buckets.get(name, 0) + ops
+    return buckets
+
+
+def _wait_for_usage_bucket(uid, bucket, tenant=None, cluster=None, retries=40, delay=2):
+    """
+    Wait until a bucket shows up (with ops > 0) in the usage log of a user, and
+    return its total ops, or 0 if it never appears. The usage log is flushed
+    periodically, so it may take up to rgw_usage_log_tick_interval seconds.
+    """
+    for _ in range(retries):
+        buckets = _usage_buckets(uid, tenant, cluster)
+        if buckets.get(bucket, 0) > 0:
+            return buckets[bucket]
+        time.sleep(delay)
+    return 0
+
+
+def _usage_ops_for_bucket_arg(uid, bucket, vector=False, tenant=None, cluster=None):
+    """
+    Total usage ops that "radosgw-admin usage show --uid <uid> --bucket <bucket>"
+    reports, optionally treating the bucket as a vector bucket (--vector). This
+    exercises the admin-side resolution of a vector bucket's usage from its plain
+    name: a real admin passes the vector-bucket name, not the "bucket/<name>"
+    attribution key.
+    """
+    args = ['usage', 'show', '--uid', uid, '--bucket', bucket]
+    if vector:
+        args += ['--vector']
+    if tenant:
+        args += ['--tenant', tenant]
+    out, ret = admin(args, cluster=cluster)
+    assert ret == 0, f"failed to read usage of bucket '{bucket}': {out}"
+    data = json.loads(out[out.index('{'):])
+    total = 0
+    for entry in data.get('entries', []):
+        for b in entry.get('buckets', []):
+            total += sum(c.get('ops', 0) for c in b.get('categories', []))
+    return total
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_bucket_usage_log():
+
+    """
+    Admins always address a vector bucket by its PLAIN name plus --vector; the
+    "bucket/" prefix is applied for them under the hood (RadosVectorBucket::
+    read_usage/trim_usage). This test inspects the raw "bucket/<name>" key directly
+    only to prove the internal keying: it reads the whole usage dump with
+    "usage show --uid" (no --bucket), which lists entries by their raw storage key.
+    Trimming with the plain name + --vector removes only the vector usage, leaving a
+    same-name regular bucket's usage in place.
+    """
+    uid = get_user_id()
+    # enable the usage log, and make it flush quickly so the test does not have to
+    # wait for the default 30s tick. these are runtime-settable options
+    set_rgw_config_option('rgw_enable_usage_log', 'true')
+    set_rgw_config_option('rgw_usage_log_flush_threshold', '1')
+    set_rgw_config_option('rgw_usage_log_tick_interval', '1')
+
+    conn = connection()
+    dimension = 4
+    index_name = 'usage-index'
+    bucket_name = gen_bucket_name()
+    # the internal usage-log storage key: rgw::s3vector::vector_bucket_arn(...).resource
+    # is fmt::format("bucket/{}", name). admins never type this -- it is only used here
+    # to assert on the raw "usage show --uid" dump (see docstring)
+    usage_key = 'bucket/' + bucket_name
+    created_regular = False
+    try:
+        _create_vector_bucket(conn, bucket_name)
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vectors = generate_vectors(5, dimension)
+        for _ in range(3):
+            result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                      vectors=vectors)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                        queryVector=vectors[0]['data'], topK=5)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # internal keying: the raw usage dump ("usage show --uid", no --bucket) lists
+        # the vector-bucket usage under the internal "bucket/<name>" storage key
+        ops = _wait_for_usage_bucket(uid, usage_key)
+        assert ops > 0, f"vector-bucket usage was not logged under '{usage_key}'"
+
+        # admin-facing path: a real admin passes the plain vector-bucket name with
+        # --vector and never sees the "bucket/<name>" key; RGW applies it under the hood
+        vector_ops = _usage_ops_for_bucket_arg(uid, bucket_name, vector=True)
+        assert vector_ops > 0, \
+            f"'usage show --bucket {bucket_name} --vector' did not resolve vector usage"
+
+        # a regular S3 bucket with the SAME name as the vector bucket is keyed
+        # separately, under its plain name (an S3 ARN resource has no "bucket/"
+        # segment). this is the collision the internal "bucket/<name>" key prevents.
+        # only meaningful when the vector data is not itself kept in a backing bucket
+        # of that name (i.e. the vector_bucket storage mode); in the regular_bucket
+        # mode a bucket of that name already backs the vectors
+        if not has_backing_bucket():
+            s3conn = connection('s3')
+            _create_s3bucket(s3conn, bucket_name)
+            created_regular = True
+            s3conn.put_object(Bucket=bucket_name, Key='obj', Body=b'hello')
+            s3conn.get_object(Bucket=bucket_name, Key='obj')
+
+            plain_ops = _wait_for_usage_bucket(uid, bucket_name)
+            assert plain_ops > 0, \
+                f"regular-bucket usage was not logged under the plain name '{bucket_name}'"
+            buckets = _usage_buckets(uid)
+            assert usage_key in buckets and bucket_name in buckets, \
+                f"vector and regular usage keys did not stay distinct: {buckets}"
+
+            # trimming the vector bucket the admin way (plain name + --vector) removes
+            # only the internal "bucket/<name>" usage: the regular bucket's usage under
+            # the plain name survives
+            out, ret = admin(['usage', 'trim', '--uid', uid, '--bucket', bucket_name, '--vector'])
+            assert ret == 0, f"failed to trim usage of vector bucket '{bucket_name}': {out}"
+            buckets = {}
+            for _ in range(15):
+                buckets = _usage_buckets(uid)
+                if usage_key not in buckets:
+                    break
+                time.sleep(2)
+            assert usage_key not in buckets, \
+                f"usage of '{usage_key}' was not trimmed: {buckets}"
+            assert bucket_name in buckets, \
+                f"trimming the vector key also removed the regular bucket's usage: {buckets}"
+    finally:
+        if created_regular:
+            try:
+                s3conn.delete_object(Bucket=bucket_name, Key='obj')
+                s3conn.delete_bucket(Bucket=bucket_name)
+            except Exception as err:
+                log.warning("failed to clean regular bucket '%s': %s", bucket_name, err)
+        _cleanup_vector_bucket(conn, bucket_name)
+        try_set_rgw_config_option('rgw_enable_usage_log', 'false')
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_bucket_chown():
+    """
+    "radosgw-admin bucket chown --bucket <name> --uid <new-owner> --vector" moves a
+    vector bucket to a new owner. The --vector flag makes RGWBucket::init load the
+    bucket through the vector-bucket namespace (load_vector_bucket), so the chown
+    reaches RadosVectorBucket::chown; without it the plain name would miss the vector
+    bucket (or act on a same-name regular bucket). Ownership is verified from each
+    user's vector-bucket listing, which reflects the moved metadata regardless of the
+    storage mode. In the regular_bucket mode the backing S3 bucket is not moved by
+    chown, so it stays with the original owner and is cleaned up through it.
+    """
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dst = another_user()
+    created = False
+    try:
+        # the vector bucket (and its backing bucket, if any) belong to the main user
+        _create_vector_bucket(conn, bucket_name)
+        created = True
+        assert _vector_bucket_exists(conn, bucket_name), \
+            f"vector bucket '{bucket_name}' was not created under its owner"
+
+        out, ret = admin(['bucket', 'chown', '--bucket', bucket_name,
+                          '--uid', dst.uid, '--vector'])
+        assert ret == 0, f"failed to chown vector bucket '{bucket_name}': {out}"
+
+        # the vector bucket now belongs to the new owner: it lists under dst and no
+        # longer under the original owner
+        assert _vector_bucket_exists(dst, bucket_name), \
+            f"vector bucket '{bucket_name}' does not belong to the new owner '{dst.uid}'"
+        assert not _vector_bucket_exists(conn, bucket_name), \
+            f"vector bucket '{bucket_name}' still belongs to the original owner"
+    finally:
+        if created:
+            # the vector bucket now belongs to dst, so delete it through the new
+            # owner; the backing bucket (regular_bucket mode) is still the main
+            # user's, so delete it through the main user
+            try:
+                _delete_vector_bucket(dst, bucket_name)
+            except Exception as err:
+                log.warning("failed to delete vector bucket '%s': %s", bucket_name, err)
+            _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+def _owner_stats(uid=None, account_id=None, sync=False, cluster=None):
+    """
+    The accounted (quota) storage stats of an owner, as (size, num_objects).
+    Runs "radosgw-admin user stats"/"account stats", optionally syncing first.
+    Syncing reaches the vector data of the owner, so it needs the backend options
+    of the RGWs (backend_admin_args()).
+    """
+    if account_id:
+        args = ['account', 'stats', '--account-id', account_id]
+    else:
+        args = ['user', 'stats', '--uid', uid]
+    if sync:
+        args += ['--sync-stats'] + backend_admin_args()
+    out, ret = admin(args, cluster=cluster)
+    assert ret == 0, f"failed to read owner stats: {out}"
+    data = json.loads(out[out.index('{'):])
+    stats = data['stats']
+    return stats['size'], stats['num_objects']
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_bucket_counts_in_owner_stats():
+    """
+    Vector-bucket storage is folded into the owner (user/account) stats used by
+    the quota subsystem: rgw_sync_all_stats() syncs vector buckets into the vector
+    owner-stats object, and RadosStore::load_stats sums it into the owner stats.
+    In the regular_bucket storage mode the data lives in the backing bucket and is
+    counted through the regular bucket loop instead; either way the owner stats
+    grow, so the assertion holds for both modes.
+    """
+    dimension = 128
+    num_vectors = 50
+    index_name = 'owner-stats-index'
+
+    # --- user owner ---
+    conn = another_user()
+    uid = conn.uid
+    bucket_name = gen_bucket_name()
+    try:
+        # the vector bucket (and its backing bucket) belong to the test user
+        _create_vector_bucket(conn, bucket_name, conn.s3)
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=generate_vectors(num_vectors, dimension))
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # before syncing, a fresh user accounts for nothing
+        size, _ = _owner_stats(uid=uid)
+        assert size == 0, f"user '{uid}' accounted for {size} bytes before any sync"
+
+        # syncing folds the vector-bucket storage into the user stats
+        size, num_objects = _owner_stats(uid=uid, sync=True)
+        assert size > 0 and num_objects > 0, \
+            f"vector-bucket storage was not counted in the stats of user '{uid}': " \
+            f"size={size} num_objects={num_objects}"
+    finally:
+        _cleanup_vector_bucket(conn, bucket_name, conn.s3)
+        admin(['user', 'rm', '--uid', uid, '--purge-data'] + backend_admin_args())
+
+    # --- account owner ---
+    conn = another_account_user()
+    account_id = conn.account_id
+    bucket_name = gen_bucket_name()
+    try:
+        _create_vector_bucket(conn, bucket_name, conn.s3)
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=generate_vectors(num_vectors, dimension))
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        size, num_objects = _owner_stats(account_id=account_id, sync=True)
+        assert size > 0 and num_objects > 0, \
+            f"vector-bucket storage was not counted in the stats of account " \
+            f"'{account_id}': size={size} num_objects={num_objects}"
+    finally:
+        _cleanup_vector_bucket(conn, bucket_name, conn.s3)
+        admin(['account', 'rm', '--account-id', account_id, '--purge-data'] +
+              backend_admin_args())
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_bucket_quota_enforced():
+    """
+    Owner (user) quota accounts for vector-bucket storage. Once the accounted
+    usage crosses the user's max-size quota, further put_vectors are rejected;
+    raising the quota lets them through again. This exercises the folded vector
+    stats (rgw_sync_all_stats producer + RadosStore::load_stats/_async consumer)
+    and the dropped RadosVectorBucket::check_quota override (the inherited,
+    namespace-agnostic quota check now applies to vector buckets).
+    """
+    dimension = 128
+    num_vectors = 50
+    index_name = 'quota-index'
+    conn = another_user()
+    uid = conn.uid
+    bucket_name = gen_bucket_name()
+    # make the owner-stats quota cache re-read from storage on every request, so
+    # the test does not have to wait out the default cache TTL
+    set_rgw_config_option('rgw_bucket_quota_ttl', '0')
+    try:
+        _create_vector_bucket(conn, bucket_name, conn.s3)
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=generate_vectors(num_vectors, dimension))
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # sync so the user stats reflect the vector data written so far
+        size, _ = _owner_stats(uid=uid, sync=True)
+        assert size > 0, f"user '{uid}' accounted for no storage after put_vectors"
+
+        # set the user quota below the already-accounted usage and enable it, so
+        # the owner is immediately over quota
+        out, ret = admin(['quota', 'set', '--uid', uid, '--quota-scope=user',
+                          '--max-size', str(size // 2)])
+        assert ret == 0, f"failed to set user quota: {out}"
+        out, ret = admin(['quota', 'enable', '--uid', uid, '--quota-scope=user'])
+        assert ret == 0, f"failed to enable user quota: {out}"
+
+        # further writes are rejected once the user is over quota. retry to absorb
+        # the propagation of the quota/config changes to the RGW
+        rejected = False
+        for _ in range(20):
+            try:
+                conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                 vectors=generate_vectors(num_vectors, dimension))
+            except conn.exceptions.ClientError as err:
+                if err.response['ResponseMetadata']['HTTPStatusCode'] >= 400:
+                    rejected = True
+                    break
+            time.sleep(2)
+        assert rejected, "put_vectors was not rejected after the user exceeded its quota"
+
+        # raising the quota well above the usage lets writes through again
+        out, ret = admin(['quota', 'set', '--uid', uid, '--quota-scope=user',
+                          '--max-size', str(size * 100)])
+        assert ret == 0, f"failed to raise user quota: {out}"
+        allowed = False
+        for _ in range(20):
+            try:
+                result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                          vectors=generate_vectors(num_vectors, dimension))
+                if result['ResponseMetadata']['HTTPStatusCode'] == 200:
+                    allowed = True
+                    break
+            except conn.exceptions.ClientError:
+                pass
+            time.sleep(2)
+        assert allowed, "put_vectors kept being rejected after the quota was raised"
+    finally:
+        try_set_rgw_config_option('rgw_bucket_quota_ttl', '600')
+        _cleanup_vector_bucket(conn, bucket_name, conn.s3)
+        admin(['user', 'rm', '--uid', uid, '--purge-data'] + backend_admin_args())
+
+
 ###############################
 # multi tenancy isolation tests
 ###############################

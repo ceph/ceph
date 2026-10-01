@@ -417,6 +417,7 @@ void usage()
   cout << "   --system                          set the system flag on the user\n";
   cout << "   --op-mask                         set the op mask on the user\n";
   cout << "   --bucket=<bucket>                 Specify the bucket name. Also used by the quota command.\n";
+  cout << "   --vector                          treat --bucket as a vector bucket (usage show/trim, bucket chown)\n";
   cout << "   --pool=<pool>                     Specify the pool name. Also used to scan for leaked rados objects.\n";
   cout << "   --object=<object>                 object name\n";
   cout << "   --objects-file=<file>             file containing a list of object names to process\n";
@@ -1450,6 +1451,26 @@ static int init_bucket(const string& tenant_name,
 {
   rgw_bucket b{tenant_name, bucket_name, bucket_id};
   return init_bucket(b, bucket);
+}
+
+static int init_bucket_for_usage(const string& tenant_name,
+                                 const string& bucket_name,
+                                 const string& bucket_id,
+                                 bool is_vector,
+                                 std::unique_ptr<rgw::sal::Bucket>* bucket)
+{
+  int ret;
+  if (is_vector) {
+    ret = driver->load_vector_bucket(dpp(), rgw_bucket(tenant_name, bucket_name, bucket_id),
+                                     bucket, null_yield);
+  } else {
+    ret = init_bucket(tenant_name, bucket_name, bucket_id, bucket);
+  }
+  if (ret == 0) {
+    return 0;
+  }
+  cerr << "ERROR: could not init bucket: " << bucket_name << ", error: " << cpp_strerror(-ret) << std::endl;
+  return ret;
 }
 
 static int read_input(const string& infile, bufferlist& bl)
@@ -3859,6 +3880,7 @@ int main(int argc, const char **argv)
   map<int, string> temp_url_keys;
   string bucket_id;
   string new_bucket_name;
+  int bucket_vector = false;
   std::unique_ptr<Formatter> formatter;
   std::unique_ptr<Formatter> zone_formatter;
   int purge_data = false;
@@ -4146,6 +4168,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
       bucket_name = val;
       opt_bucket_name = val;
+    } else if (ceph_argparse_binary_flag(args, i, &bucket_vector, NULL, "--vector", (char*)NULL)) {
+      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       pool_name = val;
       pool = rgw_pool(pool_name);
@@ -8379,6 +8403,7 @@ int main(int argc, const char **argv)
     bucket_op.account_id = account_id;
     bucket_op.set_bucket_name(bucket_name);
     bucket_op.set_new_bucket_name(new_bucket_name);
+    bucket_op.set_vector(bucket_vector);
     string err;
 
     int r = RGWBucketAdminOp::chown(driver, bucket_op, marker, dpp(), null_yield, &err);
@@ -8686,9 +8711,8 @@ next:
 
 
     if (!bucket_name.empty()) {
-      int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+      int ret = init_bucket_for_usage(tenant, bucket_name, bucket_id, bucket_vector, &bucket);
       if (ret < 0) {
-	cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
 	return -ret;
       }
     }
@@ -8730,9 +8754,8 @@ next:
     }
 
     if (!bucket_name.empty()) {
-      int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+      int ret = init_bucket_for_usage(tenant, bucket_name, bucket_id, bucket_vector, &bucket);
       if (ret < 0) {
-	cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
 	return -ret;
       }
     }

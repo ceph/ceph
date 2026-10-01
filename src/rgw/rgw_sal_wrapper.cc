@@ -18,6 +18,7 @@
 
 #include "rgw_sal_wrapper.h"
 #include "rgw/rgw_sal.h"
+#include "rgw/rgw_op.h"
 #include "rgw/rgw_bucket.h"
 #include "rgw/rgw_req_context.h"
 #include "rgw/rgw_obj_types.h"
@@ -101,6 +102,38 @@ static int load_bucket( rgw::sal::Driver* driver, const DoutPrefixProvider* dpp,
   return 0;
 }
 
+// Enforce the bucket owner's quota before a write since Vector data is written
+// straight through SAL.
+static int check_owner_quota(rgw::sal::Driver* driver, const DoutPrefixProvider* dpp,
+        rgw::sal::Bucket* bucket, uint64_t obj_size, optional_yield y) {
+  RGWQuota owner_quotas;
+  int ret = get_owner_quota_info(dpp, y, driver, bucket->get_info().owner, owner_quotas);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: could not read owner quota for bucket '"
+                      << bucket->get_name() << "': " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  RGWQuota quota;
+  driver->get_quota(quota);
+  if (bucket->get_info().quota.enabled) {
+    quota.bucket_quota = bucket->get_info().quota;
+  } else if (owner_quotas.bucket_quota.enabled) {
+    quota.bucket_quota = owner_quotas.bucket_quota;
+  }
+  if (owner_quotas.user_quota.enabled) {
+    quota.user_quota = owner_quotas.user_quota;
+  }
+
+  ret = bucket->check_quota(dpp, quota, obj_size, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 10) << "sal_wrapper: quota check failed for bucket '"
+                       << bucket->get_name() << "' obj_size=" << obj_size
+                       << ": " << cpp_strerror(ret) << dendl;
+  }
+  return ret;
+}
+
 // Convert CRgwObject to rgw_obj_key, using version_id as instance if provided
 static inline rgw_obj_key make_obj_key(const CRgwObject* obj) {
   std::string name(obj->key);
@@ -134,6 +167,11 @@ int rgw_put_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = check_owner_quota(driver, dpp, bucket.get(), len, y);
   if (ret < 0) {
     return ret;
   }
@@ -239,6 +277,11 @@ int rgw_put_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dp
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = check_owner_quota(driver, dpp, bucket.get(), len, y);
   if (ret < 0) {
     return ret;
   }

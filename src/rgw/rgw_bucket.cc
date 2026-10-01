@@ -144,6 +144,11 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
     return ret;
   }
 
+  // vector buckets do not expose S3 object ACLs, so nothing to rewrite on the objects.
+  if (bucket->get_info().is_vector()) {
+    return 0;
+  }
+
   // skip object acls when BucketOwnerEnforced
   if (auto ownership = rgw::s3::get_object_ownership(bucket->get_attrs());
       ownership == rgw::s3::ObjectOwnership::BucketOwnerEnforced) {
