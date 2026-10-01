@@ -1053,9 +1053,17 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_ephemeral_dist() const {
     return state_test(STATE_DISTEPHEMERALPIN);
   }
+  // distributed by a ceph.dir.pin.distributed.tree policy above it, rather
+  // than by ceph.dir.pin.distributed on itself
+  bool is_ephemeral_dist_tree() const {
+    return is_ephemeral_dist() && !get_inode()->get_ephemeral_distributed_pin();
+  }
   // the rank that dirfrag @fg of this ephemerally distributed directory is
   // pinned to
   mds_rank_t get_ephemeral_dist_rank(frag_t fg) const;
+  // fragmented, and large enough for a ceph.dir.pin.distributed.tree policy
+  // above it to distribute its fragments
+  bool is_dist_tree_fragmented() const;
 
   double get_ephemeral_rand() const;
   void maybe_ephemeral_rand(double threshold=-1.0);

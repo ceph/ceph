@@ -194,6 +194,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
 
   export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
   export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
+  export_ephemeral_dist_tree_min_entries = g_conf().get_val<uint64_t>("mds_export_ephemeral_distributed_tree_min_entries");
   export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
 
   symlink_recovery = g_conf().get_val<bool>("mds_symlink_recovery");
@@ -233,6 +234,10 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     export_ephemeral_distributed_config = g_conf().get_val<bool>("mds_export_ephemeral_distributed");
     dout(10) << "Migrating any ephemeral distributed pinned inodes" << dendl;
     /* copy to vector to avoid removals during iteration */
+    ephemeral_pin_config_changed = true;
+  }
+  if (changed.count("mds_export_ephemeral_distributed_tree_min_entries")) {
+    export_ephemeral_dist_tree_min_entries = g_conf().get_val<uint64_t>("mds_export_ephemeral_distributed_tree_min_entries");
     ephemeral_pin_config_changed = true;
   }
   if (changed.count("mds_export_ephemeral_random")) {
@@ -985,6 +990,18 @@ mds_rank_t MDCache::dist_tree_rank(inodeno_t ino, frag_t fg)
   if (bits > 0)
     n += frag_t(fg.value(), bits).value() >> (24 - bits);
   return mds_rank_t(n % max_mds);
+}
+
+bool MDCache::is_in_auth_parent_subtree(CDir *dir)
+{
+  if (!dir->is_auth() || dir->is_ambiguous_auth())
+    return false;
+  if (!dir->is_subtree_root())
+    return true;
+  CDir *pdir = dir->get_parent_dir();
+  if (!pdir)
+    return false;
+  return get_subtree_root(pdir)->is_full_dir_auth();
 }
 
 
