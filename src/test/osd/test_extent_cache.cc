@@ -695,6 +695,17 @@ TEST(ECExtentCache, test_invalidate_lru)
   }
 }
 
+// Mirrors ceph_assert(reads_sent) in ECCommon::ReadPipeline::do_read_op.
+void assert_request_readable(const stripe_info_t &sinfo,
+                             const shard_extent_set_t &request,
+                             uint64_t object_size)
+{
+  shard_extent_set_t readable(sinfo.get_k_plus_m());
+  sinfo.ro_size_to_read_mask(object_size, readable);
+  readable.intersection_of(request);
+  ceph_assert(!readable.empty());
+}
+
 struct MultiClient : public ECExtentCache::BackendReadListener
 {
   hobject_t oid_x = hobject_t().make_temp_hobject("Object X");
@@ -713,6 +724,7 @@ struct MultiClient : public ECExtentCache::BackendReadListener
 
   void backend_read(hobject_t _oid, const shard_extent_set_t& request,
     uint64_t object_size) override  {
+    assert_request_readable(sinfo, request, object_size);
     active_reads[_oid].emplace(request);
     last_read_object_size[_oid] = object_size;
   }
@@ -875,4 +887,94 @@ TEST(ECExtentCache, CloneInvalidateStaleSize)
   cl.complete_write(*op_clone);
   cl.complete_write(*op_x2);
   cl.complete_write(*op_y);
+}
+// G grows X far past its end, but pins only the line it writes. H, an older
+// op pinning line 0, dies while G is stuck behind Y, so erase_line() drops
+// G's growth hole from line 0. V then reads from the hole with
+// current_size still 4096.
+TEST(ECExtentCache, HoleErasedByOlderOpLineDeath)
+{
+  MultiClient cl(4096, 2, 1, 1024*1024);
+  const auto *si = cl.get_stripe_info();
+  auto cb = [&cl] {
+    return [&cl](ECExtentCache::OpRef &op) {
+      cl.cache_ready(op->get_hoid(), op->get_result());
+    };
+  };
+
+  optional op_h = cl.cache.prepare(cl.oid_x, nullopt,
+    iset_from_vector({{{0, 4096}}, {}}, si), 0, 4096, false, cb());
+  cl.cache_execute(*op_h);
+  ASSERT_FALSE(cl.active_reads[cl.oid_x].has_value());
+  cl.complete_write(*op_h);
+
+  optional op_y = cl.cache.prepare(cl.oid_y,
+    iset_from_vector({{{0, 4096}}, {}}, si),
+    iset_from_vector({{{0, 4096}}, {}}, si), 4096, 4096, false, cb());
+  cl.cache_execute(*op_y);
+  ASSERT_TRUE(cl.active_reads[cl.oid_y].has_value());
+
+  optional op_g = cl.cache.prepare(cl.oid_x, nullopt,
+    iset_from_vector({{{131072, 4096}}, {}}, si), 4096, 266240, false, cb());
+  cl.cache_execute(*op_g);
+  ASSERT_FALSE(cl.active_reads[cl.oid_x].has_value());
+
+  op_h.reset();
+
+  optional op_v = cl.cache.prepare(cl.oid_x,
+    iset_from_vector({{}, {{4096, 4096}}}, si),
+    iset_from_vector({{{4096, 4096}}, {}}, si), 266240, 266240, false, cb());
+  cl.cache_execute(*op_v);
+  ASSERT_FALSE(cl.active_reads[cl.oid_x].has_value());
+
+  cl.complete_read(cl.oid_y);
+  cl.complete_write(*op_y);
+  cl.complete_write(*op_g);
+  cl.complete_write(*op_v);
+}
+
+// As above, but V's read is queued behind G's in-flight read, so it is sent
+// from read_done() rather than from request().
+TEST(ECExtentCache, HoleErasedBeforeReadDoneSendReads)
+{
+  MultiClient cl(4096, 2, 1, 1024*1024);
+  const auto *si = cl.get_stripe_info();
+  auto cb = [&cl] {
+    return [&cl](ECExtentCache::OpRef &op) {
+      cl.cache_ready(op->get_hoid(), op->get_result());
+    };
+  };
+
+  optional op_h = cl.cache.prepare(cl.oid_x, nullopt,
+    iset_from_vector({{{32768, 4096}}, {}}, si), 69632, 69632, false, cb());
+  cl.cache_execute(*op_h);
+  ASSERT_FALSE(cl.active_reads[cl.oid_x].has_value());
+  cl.complete_write(*op_h);
+
+  optional op_y = cl.cache.prepare(cl.oid_y,
+    iset_from_vector({{{0, 4096}}, {}}, si),
+    iset_from_vector({{{0, 4096}}, {}}, si), 4096, 4096, false, cb());
+  cl.cache_execute(*op_y);
+  ASSERT_TRUE(cl.active_reads[cl.oid_y].has_value());
+
+  optional op_g = cl.cache.prepare(cl.oid_x,
+    iset_from_vector({{}, {{0, 4096}}}, si),
+    iset_from_vector({{{131072, 4096}}, {}}, si), 69632, 266240, false, cb());
+  cl.cache_execute(*op_g);
+  ASSERT_TRUE(cl.active_reads[cl.oid_x].has_value());
+
+  op_h.reset();
+
+  optional op_v = cl.cache.prepare(cl.oid_x,
+    iset_from_vector({{}, {{36864, 4096}}}, si),
+    iset_from_vector({{{36864, 4096}}, {}}, si), 266240, 266240, false, cb());
+  cl.cache_execute(*op_v);
+
+  cl.complete_read(cl.oid_x);
+  ASSERT_FALSE(cl.active_reads[cl.oid_x].has_value());
+
+  cl.complete_read(cl.oid_y);
+  cl.complete_write(*op_y);
+  cl.complete_write(*op_g);
+  cl.complete_write(*op_v);
 }

@@ -1298,6 +1298,57 @@ TEST_P(TestECFailoverWithPeering, DivergentLogRewindThenNewInterval) {
   // via ScopedConfig destructors at function exit.
 }
 
+/**
+ * ExtentCacheGrowthHoleErasedByLineDeath - G grows X far past its end but
+ * pins only the line it writes, then sits behind Y, whose RMW read to shard 1
+ * is held. H, an older op pinning line 0 of X, commits and erases line 0 of
+ * G's growth hole. V then plans reads in that region against G's projected
+ * size, which the extent cache sends with X's old size, so none survive the
+ * read mask: ceph_assert(reads_sent) in do_read_op.
+ */
+TEST_P(TestECFailoverWithPeering, ExtentCacheGrowthHoleErasedByLineDeath) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t grow_offset = 64 * sw;
+  const uint64_t grown_size = grow_offset + stripe_unit;
+
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  create_and_write_verify("X", std::string(sw, 'a'));
+  create_and_write_verify("Y", std::string(2 * sw, 'b'));
+  // Shrinking truncate drops Y from the extent cache LRU, so Y's next RMW
+  // has to read from the shards.
+  ASSERT_EQ(0, truncate_and_write("Y", 2 * sw, sw, {}));
+
+  suspend_primary_to_osd(1);
+
+  std::string h_data(512, 'h');
+  std::string y_data(512, 'y');
+  std::string g_data(stripe_unit, 'g');
+  std::string v_data(stripe_unit, 'v');
+
+  ASSERT_EQ(-EINPROGRESS, write("X", 0, h_data, sw, false));
+  ASSERT_EQ(-EINPROGRESS, write("Y", stripe_unit, y_data, sw, false));
+  ASSERT_EQ(-EINPROGRESS, write("X", grow_offset, g_data, sw, false));
+  event_loop->run_until_idle();
+
+  ASSERT_EQ(-EINPROGRESS, write("X", sw, v_data, grown_size, false));
+  event_loop->run_until_idle();
+
+  unsuspend_primary_to_osd(1);
+  event_loop->run_until_idle();
+
+  std::string expected(grown_size, '\0');
+  expected.replace(0, sw, std::string(sw, 'a'));
+  expected.replace(0, h_data.size(), h_data);
+  expected.replace(sw, v_data.size(), v_data);
+  expected.replace(grow_offset, g_data.size(), g_data);
+  verify_object("X", expected, 0, grown_size);
+
+  std::string expected_y(sw, 'b');
+  expected_y.replace(stripe_unit, y_data.size(), y_data);
+  verify_object("Y", expected_y, 0, sw);
+}
+
 // ---------------------------------------------------------------------------
 // Instantiate TestECFailoverWithPeering with EC configurations
 // ---------------------------------------------------------------------------
