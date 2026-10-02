@@ -11,7 +11,6 @@
 #include "librbd/internal.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
-#include <list>
 #include <set>
 #include <shared_mutex> // for std::shared_lock
 #include <vector>
@@ -250,13 +249,12 @@ void SnapshotUnprotectRequest<I>::send_scan_pool_children() {
   rados.wait_for_latest_osdmap();
 
   // protect against pools being renamed/deleted
-  std::list<Pool> pool_list;
-  rados.pool_list2(pool_list);
+  Pools pools;
+  rados.pool_list(pools);
 
   cls::rbd::ParentImageSpec pspec(image_ctx.md_ctx.get_id(),
                                   image_ctx.md_ctx.get_namespace(),
                                   image_ctx.id, m_snap_id);
-  Pools pools(pool_list.begin(), pool_list.end());
 
   Context *ctx = this->create_callback_context();
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(

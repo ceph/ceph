@@ -9,8 +9,6 @@
 #include "librbd/image/TypeTraits.h"
 #include "common/Timer.h"
 
-#include <list>
-
 class Context;
 
 namespace librbd {
@@ -130,7 +128,6 @@ private:
 
   int m_ret_val = 0;
   bufferlist m_out_bl;
-  std::list<obj_watch_t> m_watchers;
 
   std::map<uint64_t, SnapInfo> m_snap_infos;
 

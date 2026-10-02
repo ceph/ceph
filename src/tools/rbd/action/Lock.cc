@@ -8,6 +8,7 @@
 #include "common/Formatter.h"
 #include "common/TextTable.h"
 #include <iostream>
+#include <iterator>
 #include <boost/program_options.hpp>
 
 namespace rbd {
@@ -40,13 +41,13 @@ int get_id(const po::variables_map &vm, size_t *arg_index,
 
 static int do_lock_list(librbd::Image& image, Formatter *f)
 {
-  std::list<librbd::locker_t> lockers;
+  std::vector<librbd::locker_t> lockers;
   bool exclusive;
   std::string tag;
   TextTable tbl;
   int r;
 
-  r = image.list_lockers(&lockers, &exclusive, &tag);
+  r = image.list_lockers(lockers, &exclusive, &tag);
   if (r < 0)
     return r;
 
@@ -58,27 +59,27 @@ static int do_lock_list(librbd::Image& image, Formatter *f)
     tbl.define_column("Address", TextTable::LEFT, TextTable::LEFT);
   }
 
-  if (lockers.size()) {
-    bool one = (lockers.size() == 1);
+  if (not std::empty(lockers)) {
+    const bool one = 1 == std::size(lockers);
 
     if (!f) {
-      std::cout << "There " << (one ? "is " : "are ") << lockers.size()
+      std::cout << "There " << (one ? "is " : "are ") << std::size(lockers)
            << (exclusive ? " exclusive" : " shared")
            << " lock" << (one ? "" : "s") << " on this image.\n";
       if (!exclusive)
         std::cout << "Lock tag: " << tag << "\n";
     }
 
-    for (std::list<librbd::locker_t>::const_iterator it = lockers.begin();
-         it != lockers.end(); ++it) {
+    for (const auto& locker : lockers) {
       if (f) {
         f->open_object_section("lock");
-        f->dump_string("id", it->cookie);
-        f->dump_string("locker", it->client);
-        f->dump_string("address", it->address);
+        f->dump_string("id", locker.cookie);
+        f->dump_string("locker", locker.client);
+        f->dump_string("address", locker.address);
         f->close_section();
       } else {
-        tbl << it->client << it->cookie << it->address << TextTable::endrow;
+        tbl << locker.client << locker.cookie << locker.address
+            << TextTable::endrow;
       }
     }
     if (!f)

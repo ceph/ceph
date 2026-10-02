@@ -36,6 +36,7 @@
 #include <boost/scope_exit.hpp>
 #include "json_spirit/json_spirit.h"
 
+#include <vector>
 #include <algorithm>
 #include <shared_mutex> // for std::shared_lock
 
@@ -1707,7 +1708,7 @@ int Mirror<I>::peer_site_remove(librados::IoCtx& io_ctx,
         return r;
       }
 
-      std::list<uint64_t> snap_ids;
+      std::vector<uint64_t> snap_ids;
       {
         std::shared_lock image_locker{img_ctx->image_lock};
         for (auto &it : img_ctx->snap_info) {

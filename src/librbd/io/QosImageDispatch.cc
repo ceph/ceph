@@ -1,12 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <utility>
+#include <iterator>
+
 #include "librbd/io/QosImageDispatch.h"
 #include "common/dout.h"
 #include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/io/FlushTracker.h"
-#include <utility>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -56,19 +58,17 @@ QosImageDispatch<I>::QosImageDispatch(I* image_ctx)
   SafeTimer *timer;
   ceph::mutex *timer_lock;
   ImageCtx::get_timer_instance(cct, &timer, &timer_lock);
+  m_throttles.reserve(std::size(throttle_flags));
+
   for (auto [flag, name] : throttle_flags) {
     m_throttles.emplace_back(
       flag,
-      new TokenBucketThrottle(cct, name, 0, 0, timer, timer_lock));
+      std::make_unique<TokenBucketThrottle>(cct, name, 0, 0, timer, timer_lock));
   }
 }
 
 template <typename I>
-QosImageDispatch<I>::~QosImageDispatch() {
-  for (auto t : m_throttles) {
-    delete t.second;
-  }
-}
+QosImageDispatch<I>::~QosImageDispatch() = default;
 
 template <typename I>
 void QosImageDispatch<I>::shut_down(Context* on_finish) {
@@ -78,7 +78,7 @@ void QosImageDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 void QosImageDispatch<I>::apply_qos_schedule_tick_min(uint64_t tick) {
-  for (auto pair : m_throttles) {
+  for (const auto& pair : m_throttles) {
     pair.second->set_schedule_tick_min(tick);
   }
 }
@@ -88,9 +88,9 @@ void QosImageDispatch<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
                                           uint64_t burst, uint64_t burst_seconds) {
   auto cct = m_image_ctx->cct;
   TokenBucketThrottle *throttle = nullptr;
-  for (auto pair : m_throttles) {
+  for (const auto& pair : m_throttles) {
     if (flag == pair.first) {
-      throttle = pair.second;
+      throttle = pair.second.get();
       break;
     }
   }
@@ -295,7 +295,7 @@ bool QosImageDispatch<I>::needs_throttle(
   *dispatch_result = DISPATCH_RESULT_CONTINUE;
 
   auto qos_enabled_flag = m_qos_enabled_flag;
-  for (auto [flag, throttle] : m_throttles) {
+  for (const auto& [flag, throttle] : m_throttles) {
     if ((qos_enabled_flag & flag) == 0) {
       flags_to_set |= flag;
       continue;
