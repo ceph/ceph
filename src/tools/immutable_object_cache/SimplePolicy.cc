@@ -167,7 +167,7 @@ cache_status_t SimplePolicy::get_status(std::string file_name) {
   return entry_it->second->status;
 }
 
-void SimplePolicy::get_evict_list(std::list<std::string>* obj_list) {
+void SimplePolicy::get_evict_list(std::vector<std::string>& obj_list) {
   ldout(cct, 20) << dendl;
 
   std::unique_lock locker{m_cache_map_lock};
@@ -181,7 +181,7 @@ void SimplePolicy::get_evict_list(std::list<std::string>* obj_list) {
         continue;
       }
       std::string file_name = entry->file_name;
-      obj_list->push_back(file_name);
+      obj_list.push_back(file_name);
     }
   }
 }
