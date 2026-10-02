@@ -14,6 +14,8 @@
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
+#include <vector>
+
 using librbd::util::unique_lock_name;
 using rbd::mirror::LeaderWatcher;
 
@@ -96,7 +98,7 @@ public:
     librados::IoCtx io_ctx;
   };
 
-  std::list<std::unique_ptr<Connection> > m_connections;
+  std::vector<std::unique_ptr<Connection>> m_connections;
 
   void SetUp() override {
     TestFixture::SetUp();
@@ -278,7 +280,7 @@ TEST_F(TestLeaderWatcher, Break)
 TEST_F(TestLeaderWatcher, Stress)
 {
   const int WATCHERS_COUNT = 20;
-  std::list<LeaderWatcher<> *> leader_watchers;
+  std::vector<LeaderWatcher<> *> leader_watchers;
   Listener listener;
 
   for (int i = 0; i < WATCHERS_COUNT; i++) {
