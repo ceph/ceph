@@ -10,10 +10,27 @@ query algebra, content keys, watches, and system utilities.
 Errata: Please report errata, or contact with examples you would like to see.
 
 See `examples/libfdb/` for small standalone programs.
+Build the standalone example against an existing FoundationDB-enabled Ceph build:
+
+```sh
+make -C examples/libfdb -j8 CEPH_BUILD="$PWD/build"
+./examples/libfdb/mini_example
+```
+
+The program writes and reads `example/people`, verifies the round trip, and
+demonstrates repeated transaction tags with the experimental options API. It
+releases its handles and stops the client network before exiting, including
+when an operation fails.
+
+**Breaking API change:** option containers now preserve insertion order and
+repeated codes. Map-specific code must be migrated, and existing initializers
+can apply differently. See [Options (Experimental)](#options-experimental).
 
 The examples use aliases to keep the code readable:
 
 ```cpp
+#include "rgw/fdb/fdb.h"
+
 namespace lfdb = ceph::libfdb;
 namespace q = lfdb::query;
 namespace fdbc = lfdb::layer::content;
@@ -72,6 +89,81 @@ The source type makes the distinction explicit: a string is a FoundationDB
 connection string, while a cluster-file name must be passed as a
 `std::filesystem::path`.
 
+## Options (Experimental)
+
+The ordered options interface is experimental. `network_options`,
+`database_options` and `transaction_options` are aliases of `option_list<CodeT>`.
+Each owns a contiguous sequence of `(code, option_value)` pairs. FoundationDB
+receives every entry in insertion order, including repeated codes and identical
+flags. This supports additive options such as transaction tags and options whose
+order matters.
+
+**Migration from `option_map`:** the former sorted, unique-key container and
+`option_map` alias are removed. Map-specific operations such as `find()`,
+`insert_or_assign()` and `operator[]` are unavailable. The braced initializer
+syntax still compiles, but its behavior changes: entries apply in written order
+instead of numerical code order, and duplicate codes are retained instead of
+discarded. Review existing initializers as well as map-style edits. `size()` now
+counts applications, rather than distinct codes.
+
+Use standard sequence insertion names. `push_back(value_type)` accepts one pair;
+`emplace_back(code, value)` constructs it in place. `std::back_inserter()` works
+with ordinary range algorithms. For bulk insertion, `append_range(range)` accepts
+an input range, and `append(initializer_list<value_type>)` accepts one braced list:
+
+```cpp
+lfdb::transaction_options options;
+options.reserve(4);
+options.emplace_back(FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {3});
+options.append({
+  {FDB_TR_OPTION_TAG, "a"},
+  {FDB_TR_OPTION_AUTO_THROTTLE_TAG, "b"},
+  {FDB_TR_OPTION_TAG, "c"}
+});
+
+const std::array more {
+  lfdb::transaction_options::value_type {
+    FDB_TR_OPTION_MAX_RETRY_DELAY, std::int64_t {1}}
+};
+options.append_range(more);
+```
+
+Bulk insertion preserves all entries and their order. Initializer-list elements
+are const and are copied. Range elements are copied or moved according to their
+reference category; merely passing an rvalue container does not move its
+elements. A range of move iterators transfers owned values. The input range must
+not overlap the destination. Iteration is const; insertion and erasure follow
+ordinary vector iterator and reference invalidation rules.
+
+`replace_all(code, value)` replaces every matching value **in place**, preserving
+positions and entry count. It returns the number of matches, including matches
+already equal to the supplied value. An absent code returns zero and inserts
+nothing. `erase(code)` removes every matching entry and returns the number
+removed; other entries keep their relative order. `clear()` removes all entries.
+
+```cpp
+// Both TAG entries become "batch", with the intervening option left in place.
+const auto replaced = options.replace_all(FDB_TR_OPTION_TAG, "batch"); // 2
+
+// Migrate a former options[FDB_TR_OPTION_TIMEOUT] = 5000 assignment:
+// remove earlier applications, then append one final value, even if absent.
+options.erase(FDB_TR_OPTION_TIMEOUT);
+options.emplace_back(FDB_TR_OPTION_TIMEOUT, std::int64_t {5000});
+```
+
+The container owns string and byte values. A transaction or transactor retains its own option snapshot; editing the original
+list affects future construction. Passing an owned list as an rvalue to
+`make_transaction()` transfers its storage.
+Validation occurs when options are applied, rather than during list editing;
+FoundationDB enforces value types and limits, and may defer an error until a
+subsequent request. Failures retain the native `fdb_error_value` in
+`libfdb_exception`; failures reported while setting an option also include its
+code in the message.
+
+On replay, libfdb reapplies every nonpersistent entry once, in recorded order.
+FoundationDB retains timeout, retry limit, maximum retry delay and authorization
+token options, so libfdb does not reapply those entries after `on_error()`.
+
 ## Basic Operations
 
 Use a `database_handle` when you want libfdb to create, commit, and retry a
@@ -79,6 +171,19 @@ single logical operation:
 
 ```cpp
 lfdb::set(dbh, "person/barbara-moo/name", "Barbara Moo");
+```
+
+Managed operations accept transaction options immediately after the database
+handle. libfdb applies them to every transaction and restores nonpersistent
+options before a retry:
+
+```cpp
+const lfdb::transaction_options batch_options {
+  {FDB_TR_OPTION_PRIORITY_BATCH, lfdb::option_flag}
+};
+
+lfdb::set(dbh, batch_options,
+          "person/barbara-moo/title", "performance engineer");
 ```
 
 Single-key `get()` returns whether the key was found:
@@ -255,21 +360,31 @@ for (const auto& object : objects_to_index) {
 }
 ```
 
-Create an explicit transaction with transaction options:
+Create an explicit transaction with transaction options. The transaction owns a
+copy of the options. After a successful `on_error()`, libfdb reapplies the
+options FoundationDB resets before the caller replays the operation:
 
 ```cpp
-lfdb::transaction_options opts{
-  { FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag },
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
 };
 
-auto txn = lfdb::make_transaction(dbh, opts);
+auto txn = lfdb::make_transaction(dbh, options);
 
-lfdb::set(txn, "person/hypatia/name", "Hypatia");
+for (;;) {
+  lfdb::set(txn, "person/hypatia/name", "Hypatia");
 
-if (not lfdb::commit(txn)) {
-  retry_transaction_body();
+  if (lfdb::commit(txn)) {
+    break;
+  }
 }
 ```
+
+Options set directly through the raw FoundationDB handle cannot be tracked or
+restored by libfdb. Pass replay-sensitive options to `make_transaction()`,
+`make_transactor()`, or a managed operation instead. Options which FoundationDB
+already preserves are not reapplied, so timeout and retry budgets remain
+cumulative.
 
 `reset_for_replay()` is the lower-level hook for application-managed replay. Most
 callers should use a transactor instead; use this when the application needs to
@@ -409,11 +524,11 @@ if (not result.committed) {
 Options are applied to each transaction the transactor creates:
 
 ```cpp
-lfdb::transaction_options opts{
-  { FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag },
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
 };
 
-auto txr = lfdb::make_transactor(dbh, opts);
+auto txr = lfdb::make_transactor(dbh, options);
 
 txr([](auto& txn) {
   lfdb::set(txn, "person/zenobia/name", "Zenobia");
@@ -837,6 +952,12 @@ auto visible =
 auto bytes = lfdb::approximate_range_size(dbh, visible);
 ```
 
+An empty expression returns zero without making a FoundationDB request.
+Overlapping ranges are first reduced to canonical, nonoverlapping intervals;
+for a disjoint selection, libfdb requests every interval's estimate through the
+same transaction and returns their sum. The result remains an estimate of the
+whole selection, not an exact accounting of its keys.
+
 ## Scanning And Traversal
 
 `scan()` is the ordinary flat key/value traversal interface. With a transaction
@@ -861,6 +982,40 @@ for (const auto& [key, value] : lfdb::scan(dbh, q::prefix("person/"))) {
 }
 ```
 
+Pass transaction options after the database handle when every transaction made
+by a managed operation needs the same configuration. The lazy operation owns a
+copy, so the caller's option list need not outlive the returned generator:
+
+```cpp
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
+};
+
+for (const auto& [key, value] :
+     lfdb::scan(dbh, options, q::prefix("person/"))) {
+  fmt::println("{}: {}", key, value);
+}
+```
+
+Transaction options configure transactions, query options configure range
+requests, and `read_mode` chooses serializable or snapshot reads. They remain
+separate even when all three are used:
+
+```cpp
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
+};
+auto people = q::prefix("person/");
+people.options.result_limit = 256;
+
+auto rows = lfdb::collect(
+  dbh, options, people, lfdb::read_mode::snapshot);
+```
+
+Each managed result window uses an independently retried read transaction.
+Later windows may therefore observe a newer read version. Use the explicit
+transaction overload when the entire scan must share one snapshot.
+
 Use `collect()` when a materialized container is exactly what the caller needs:
 
 ```cpp
@@ -874,11 +1029,14 @@ bytes immediately and should not pay to construct decoded key/value objects. The
 explicit `raw` tag makes that lifetime choice visible at the call site:
 
 ```cpp
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
+};
 const auto object_blocks =
   fdbc::keyspace("d4n") / "block" / bucket_id / object_name;
 
 const auto nread = lfdb::for_each(
-  lfdb::raw, dbh, fdbc::prefix(object_blocks),
+  lfdb::raw, dbh, options, fdbc::prefix(object_blocks),
   [](std::span<const std::uint8_t> key,
      std::span<const std::uint8_t> value) {
     inspect_cached_block(key, value);
@@ -891,12 +1049,14 @@ The spans borrow FoundationDB-owned memory and expire when the callback returns;
 copy anything that must outlive that call. Callback exceptions stop traversal
 and propagate normally.
 
-The database-handle form retries each result window before exposing it and never
-replays a callback. A retry may move later windows to a newer read version. Use
-the transaction-handle overload when the whole traversal must share one read
-version. If that operation is itself placed inside a transactor, a transactor
-replay invokes its callbacks again, so externally visible effects must be
-idempotent or staged.
+The database-handle form creates and independently retries one configured
+transaction per result window before exposing it, and never replays a callback.
+A later window may therefore use a newer read version. Use the
+transaction-handle overload when the whole traversal must share one read
+version. Each window pays transaction setup, so avoid artificially small result
+limits unless their memory or latency bound is useful. If that operation is
+itself placed inside a transactor, a transactor replay invokes its callbacks
+again, so externally visible effects must be idempotent or staged.
 
 Use `for_each()` when the operation is naturally callback-shaped and you do not
 need a composable generator. The callback is a row consumer and must return
@@ -913,7 +1073,8 @@ lfdb::for_each(txn, q::prefix("person/"), [](auto&& row) {
 
 The database-handle overload is a convenience for bounded, retryable work that
 should run in one managed transaction. The callback may run again if the
-transaction is retried, so keep it replay-safe:
+transaction is retried, so keep it replay-safe. An exception thrown by the
+callback itself escapes directly, even when it is a `libfdb_exception`:
 
 ```cpp
 lfdb::for_each<person_record>(dbh, q::prefix("person/"), [](auto&& row) {
@@ -939,7 +1100,8 @@ lfdb::transform<person_record>(txn,
 
 When the transformed values should be materialized directly, let `transform()`
 return the vector. The transform function is evaluated inside managed
-transaction work, so it should also be replay-safe:
+transaction work, so it should also be replay-safe. Its own exceptions escape
+without being interpreted as FoundationDB retry requests:
 
 ```cpp
 auto names = lfdb::transform<person_record>(
@@ -975,10 +1137,10 @@ if (page.has_more) {
 }
 ```
 
-`blocks()` is for truly large scans. Given a database handle, libfdb internally
-plans the range work and manages transactions for each block/window. Use it
-when a single transaction may get too old, or when the application naturally
-wants to process bounded groups of rows.
+`blocks()` is for truly large scans. Given a database handle, libfdb manages one
+transaction for each result window. Use it when a single transaction may get
+too old, or when the application naturally wants to process bounded groups of
+rows.
 
 ```cpp
 for (const auto& block : lfdb::blocks(dbh, q::prefix("object/metadata/"))) {
@@ -989,7 +1151,7 @@ for (const auto& block : lfdb::blocks(dbh, q::prefix("object/metadata/"))) {
 ```
 
 For example, a cache maintenance pass might walk a large object-metadata
-keyspace block-at-a-time and only keep one planned block in memory:
+keyspace block-at-a-time and only keep one block in memory:
 
 ```cpp
 for (const auto& block : lfdb::blocks<object_metadata>(
@@ -1031,6 +1193,49 @@ for (const auto& chunk : keys | std::views::chunk(100)) {
   }
 }
 ```
+
+### Planning Independent Partitions
+
+`partitions()` asks FoundationDB to suggest approximately byte-sized ranges for
+a large selection. This is useful when an export, rebuild, scrub, or similar job
+will schedule those ranges independently:
+
+```cpp
+const auto object_metadata = q::prefix("object/metadata/");
+const auto parts = lfdb::partitions(
+  dbh, object_metadata, 64 * 1024 * 1024);
+
+for (const auto& part : parts) {
+  schedule_metadata_work(part);
+}
+```
+
+The owning result type defaults to `std::vector<lfdb::select>` and may be
+selected explicitly when another range type is more suitable:
+
+```cpp
+auto parts = lfdb::partitions<std::deque<lfdb::select>>(
+  dbh, object_metadata, 64 * 1024 * 1024);
+```
+
+Each returned `select` is an ordinary query expression. It can be passed to
+`scan()` or `blocks()`, or composed with the selection algebra:
+
+```cpp
+for (const auto& part : parts) {
+  auto local_work = q::intersection(part, owned_keyspace);
+  schedule_metadata_work(std::move(local_work));
+}
+```
+
+Together, the returned ranges are a disjoint cover of the compiled selection;
+the byte-size target is approximate.
+
+Do not use `partitions()` for an ordinary sequential scan, pagination, or just
+to bound memory; `scan()` and `blocks()` already do that without a planning
+round trip. Partition sizes may become stale as data changes. Independently
+processed partitions also do not automatically share a snapshot; use explicit
+read-version coordination when that consistency is required.
 
 ## Content Layer
 
@@ -1532,6 +1737,18 @@ lfdb::system::reboot_worker(dbh, "127.0.0.1:4500", false, 60);
 lfdb::system::force_recovery_with_data_loss(dbh, "dc1");
 lfdb::system::create_snapshot(dbh, "snapshot-id", "snapshot-command");
 ```
+
+Before the process exits, finish or cancel outstanding operations, release their
+handles, and stop libfdb's client network thread:
+
+```cpp
+lfdb::shutdown_libfdb();
+```
+
+Call this on both success and failure paths. Shutdown is terminal; libfdb cannot
+be reinitialized in the same process. The standalone example separates the
+database work from `main()` so its handles are released before shutdown even
+when an exception occurs.
 
 ## Putting It All Together
 

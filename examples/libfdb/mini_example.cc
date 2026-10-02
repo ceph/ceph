@@ -20,10 +20,12 @@
 
 #include "rgw/fdb/interface.h"
 
-#include <print>
-#include <vector>
-#include <string>
+#include <cstdint>
 #include <cstdio>
+#include <print>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace lfdb = ceph::libfdb;
 
@@ -36,6 +38,8 @@ struct person
  int year_born = 2000;
 
  vector<string> titles;
+
+ bool operator==(const person&) const = default;
 };
 
 static const vector<person> nifty_people {
@@ -51,17 +55,28 @@ static const vector<person> nifty_people {
   }
 };
 
-int main()
+static int run_example()
 try
 {
  auto dbh = lfdb::create_database();
+ // Experimental option lists preserve both tag applications in written order.
+ const lfdb::transaction_options options {
+  {FDB_TR_OPTION_RETRY_LIMIT, std::int64_t {3}},
+  {FDB_TR_OPTION_TIMEOUT, std::int64_t {5000}},
+  {FDB_TR_OPTION_TAG, "example"},
+  {FDB_TR_OPTION_TAG, "people"}
+ };
 
- lfdb::set(dbh, "example/people", nifty_people);
+ lfdb::set(dbh, options, "example/people", nifty_people);
 
  vector<person> people;
- if(lfdb::get(dbh, "example/people", people)) {
-     println("read {} people, some of them are likely nifty", people.size());
+ if (not lfdb::get(dbh, options, "example/people", people) or people != nifty_people) {
+  throw std::runtime_error("people did not round-trip through FoundationDB");
  }
+
+ println("read {} people, some of them are likely nifty", people.size());
+
+ return 0;
 }
 catch(const lfdb::libfdb_exception& e) {
     println(stderr, "libfdb exception: {}", e.what());
@@ -74,4 +89,19 @@ catch(const exception& e) {
 catch(...) {
     println(stderr, "Well, now we're in a real jam, huh?");
     return 1;
+}
+
+int main()
+try
+{
+ const auto result = run_example();
+ // The example's handles are released before the network thread is stopped.
+ lfdb::shutdown_libfdb();
+
+ return result;
+}
+catch (const std::exception& e) {
+ println(stderr, "libfdb shutdown: {}", e.what());
+
+ return 1;
 }

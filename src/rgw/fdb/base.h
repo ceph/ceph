@@ -46,22 +46,13 @@
 #include <exception>
 #include <stdexcept>
 #include <functional>
+#include <initializer_list>
 #include <stop_token>
 #include <filesystem>
 #include <type_traits>
 
 #include <mutex>
 #include <thread>
-
-#ifdef __cpp_lib_flat_map
- #include <flat_map>
- template <typename ...Args>
- using flat_map = std::flat_map<Args...>;
-#else
- #include <boost/container/flat_map.hpp>
- template <typename ...Args>
- using flat_map = boost::container::flat_map<Args...>;
-#endif
 
 // Wrangle some forward declarations:
 namespace ceph::libfdb {
@@ -654,13 +645,98 @@ inline constexpr option_flag_t option_flag;
 
 using option_value = std::variant<option_flag_t, std::int64_t, std::string, std::vector<std::uint8_t>>;
 
-// i.e. option /code/ to the value of the option itself (e.g. FDB_FOO, 42):
+// Experimental owning sequence of option applications. Order and repetitions matter.
+// Breaking change: option_map and its associative interface have been removed.
 template <typename OptionCodeT>
-using option_map = flat_map<OptionCodeT, option_value>; 
+class option_list final
+{
+ public:
+ using value_type = std::pair<OptionCodeT, option_value>;
+ using size_type = typename std::vector<value_type>::size_type;
+ using const_iterator = typename std::vector<value_type>::const_iterator;
 
-using network_options = option_map<FDBNetworkOption>;
-using database_options = option_map<FDBDatabaseOption>;
-using transaction_options = option_map<FDBTransactionOption>;
+ private:
+ std::vector<value_type> entries;
+
+ public:
+ option_list() = default;
+
+ option_list(std::initializer_list<value_type> values)
+  : entries(values)
+ {}
+
+ const_iterator begin() const noexcept { return entries.begin(); }
+ const_iterator cbegin() const noexcept { return entries.cbegin(); }
+
+ const_iterator end() const noexcept { return entries.end(); }
+ const_iterator cend() const noexcept { return entries.cend(); }
+
+ bool empty() const noexcept { return entries.empty(); }
+ size_type size() const noexcept { return entries.size(); }
+
+ void clear() noexcept { entries.clear(); }
+ void reserve(const size_type count) { entries.reserve(count); }
+
+ void push_back(const value_type& value) { entries.push_back(value); }
+ void push_back(value_type&& value) { entries.push_back(std::move(value)); }
+
+ template <typename ...ArgTs>
+ requires std::constructible_from<value_type, ArgTs...>
+ value_type& emplace_back(ArgTs&& ...args)
+ {
+  return entries.emplace_back(std::forward<ArgTs>(args)...);
+ }
+
+ // As with vector::append_range, the range must not overlap this container.
+ template <std::ranges::input_range RangeT>
+ requires std::convertible_to<std::ranges::range_reference_t<RangeT>, value_type>
+ void append_range(RangeT&& values)
+ {
+  if constexpr (std::ranges::sized_range<RangeT>) {
+   const auto count = std::ranges::size(values);
+
+   if (count > entries.max_size() - entries.size()) {
+    throw std::length_error("too many option entries");
+   }
+
+   entries.reserve(entries.size() + count);
+  }
+
+  std::ranges::copy(values, std::back_inserter(entries));
+ }
+
+ void append(std::initializer_list<value_type> values)
+ {
+  append_range(values);
+ }
+
+ // Replace every matching value in place; an absent code inserts nothing.
+ size_type replace_all(const OptionCodeT code, const option_value& value)
+ {
+  size_type count = 0;
+
+  for (auto& entry : entries) {
+   if (entry.first == code) {
+    entry.second = value;
+    ++count;
+   }
+  }
+
+  return count;
+ }
+
+ size_type erase(const OptionCodeT code)
+ {
+  return std::erase_if(entries, [code](const auto& entry) {
+   return entry.first == code;
+  });
+ }
+
+};
+
+using network_options = option_list<FDBNetworkOption>;
+using database_options = option_list<FDBDatabaseOption>;
+using transaction_options = option_list<FDBTransactionOption>;
 
 // Caller-supplied database sources are tagged so paths and connection strings
 // cannot be confused:
@@ -856,19 +932,37 @@ inline auto apply_option_value(auto& set_option,
  return std::invoke(set_option, code, input.data, input.length);
 }
 
-inline void apply_options(const auto& option_map, auto&& set_option)
+inline void apply_options(auto&& options, auto&& set_option)
 {
- std::ranges::for_each(option_map, [&set_option](const auto& option) {
+ std::ranges::for_each(options, [&set_option](const auto& option) {
     const auto apply = [&set_option, code = option.first](const auto& value) {
       return apply_option_value(set_option, code, value);
     };
 
     if (const auto ec = std::visit(apply, option.second); 0 != ec) {
-      throw libfdb_exception(fmt::format(
+      auto error = libfdb_exception(fmt::format(
         "while setting option {}; {}", std::to_underlying(option.first),
         libfdb_exception::make_fdb_error_string(ec)));
+      error.fdb_error_value = ec;
+
+      throw error;
     }
   });
+}
+
+// FoundationDB retains only these transaction options across on_error():
+constexpr bool transaction_option_is_persistent(
+  const FDBTransactionOption option) noexcept
+{
+ switch (option) {
+ default:
+  return false;
+ case FDB_TR_OPTION_TIMEOUT:
+ case FDB_TR_OPTION_RETRY_LIMIT:
+ case FDB_TR_OPTION_MAX_RETRY_DELAY:
+ case FDB_TR_OPTION_AUTHORIZATION_TOKEN:
+  return true;
+ }
 }
 
 // The global DB state and management thread:
@@ -1115,6 +1209,7 @@ class transaction final
 
  database_handle dbh;
  std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_handle;
+ transaction_options options;
  std::vector<versionstamp> version_stamps;
 
  state_t state = state_t::active;
@@ -1143,6 +1238,19 @@ class transaction final
   }
  }
 
+ void restore_options()
+ {
+  auto nonpersistent = options | std::views::filter([](const auto& option) {
+   return not detail::transaction_option_is_persistent(option.first);
+  });
+
+  detail::apply_options(
+   nonpersistent,
+   [handle = raw_handle()](auto option, auto data, auto size) {
+    return fdb_transaction_set_option(handle, option, data, size);
+   });
+ }
+
  void reset_for_replay(const fdb_error_t error)
  {
   require_active("reset_for_replay()");
@@ -1159,6 +1267,7 @@ class transaction final
 
   // Discard versionstamps registered by the abandoned attempt:
   version_stamps.clear();
+  restore_options();
  }
 
  bool get_single_value_from_transaction(
@@ -1172,15 +1281,16 @@ class transaction final
 
  public:
  transaction(database_handle database)
-  : dbh(require_database(std::move(database))),
-    txn_handle(dbh->create_transaction(), &fdb_transaction_destroy)
+  : transaction(std::move(database), transaction_options {})
  {}
 
  transaction(database_handle database, const transaction_options& opts)
-  : transaction(std::move(database))
+  : dbh(require_database(std::move(database))),
+    txn_handle(dbh->create_transaction(), &fdb_transaction_destroy),
+    options(opts)
  {
   detail::apply_options(
-    opts,
+    options,
     [handle = raw_handle()](auto option, auto data, auto size) {
       return fdb_transaction_set_option(handle, option, data, size);
     });
@@ -1606,6 +1716,7 @@ inline void ceph::libfdb::transaction::recover_from_commit_error(
  }
 
  version_stamps.clear();
+ restore_options();
 }
 
 inline void ceph::libfdb::transaction::resolve_versionstamps(
