@@ -13,6 +13,7 @@
 #include "tools/rbd_mirror/image_replayer/Types.h"
 #include <boost/optional.hpp>
 #include <string>
+#include <vector>
 
 class AdminSocketHook;
 
@@ -148,7 +149,7 @@ protected:
 
 private:
   typedef std::set<Peer<ImageCtxT>> Peers;
-  typedef std::list<Context *> Contexts;
+  using Contexts = std::vector<Context *>;
 
   enum State {
     STATE_UNKNOWN,
