@@ -26,7 +26,7 @@ Every Tier
 ``EMBARGOED``
 -------------
 
-- [ ] Upstream code and PRs only in the GHSA private fork; nothing on ceph-ci, Shaman, public Teuthology or public branches.
-- [ ] Builds only through the embargoed build process [link]; every commit hygiene-checked before the release-cut merge.
-- [ ] Release date confirmed in writing with security lead; this is the unembargo date; downstream release aligned.
-- [ ] Security mailing list notified of the targeted date; backports ready for OpenStack and ODF; reporter told.
+- [ ] Code and PRs only in the GHSA private fork; nothing on ceph-ci, Shaman, public Teuthology or public branches.
+- [ ] Builds only through `the embargoed CVE build process <https://github.com/ceph/ceph/blob/main/doc/dev/developer_guide/cve.rst>`_; every commit hygiene-checked before the release-cut merge.
+- [ ] Release date confirmed in writing with security lead; this is the unembargo date; vendors/downstream projects aligned.
+- [ ] Security mailing list notified of the targeted date; backports code ready for stakeholders.
