@@ -19,9 +19,8 @@
 #include "crush/crush.h" // for CRUSH_ITEM_NONE
 
 std::ostream& ECPeeringTestFixture::ShardDpp::gen_prefix(std::ostream& out) const {
-  auto it = fixture->pg_states.find(spgid);
-  if (it != fixture->pg_states.end()) {
-    PeeringState *ps = it->second.get();
+  if (test_pg && test_pg->has_peering_state()) {
+    PeeringState *ps = test_pg->get_peering_state();
     out << *ps;
 
     // Add missing stats like PG::operator<< does (mimics production code)
@@ -52,13 +51,17 @@ ECPeeringTestFixture::ECPeeringTestFixture()
 }
 
 void ECPeeringTestFixture::SetUp() {
+  // Save the initial config state so we can restore it in TearDown()
+  initial_config_values_ = g_ceph_context->_conf.get_config_values();
+
   PGBackendTestFixture::SetUp();
 
-  // The harness does not use CRUSH, so we must set an upmap.  Choose the upmap
-  // to have shard == osd.
-  {
+  // Install a pg_upmap so that shard N is always on OSD N.
+  // Skipped when use_upmap() returns false (e.g. ECCrushTestFixture), which
+  // lets CRUSH determine placement naturally.
+  if (use_upmap()) {
     std::vector<int> initial_acting;
-    for (int i = 0; i < k + m; ++i) {
+    for (int i = 0; i < get_instance_count(); ++i) {
       initial_acting.push_back(i);
     }
     OSDMap::Incremental inc(osdmap->get_epoch() + 1);
@@ -70,22 +73,38 @@ void ECPeeringTestFixture::SetUp() {
     osdmap->apply_incremental(inc);
   }
 
-  for (int i = 0; i < k + m; i++) {
-    create_peering_state(i);
-  }
+  // NOTE: TestPGs and peering states are no longer created upfront here.
+  // They will be created lazily in response to OSD map publication
+  // via ensure_test_pg_exists() called from event_advance_map().
   
-  // Override epoch getter to use pg_listeners instead of base class listeners
-  // (which are moved into pg_listeners during create_peering_state)
+  // Override epoch getter to use peering listeners from OsdTestFixture.
+  // Use the osd parameter to look up the TestPG, since EventLoop context
+  // may not always be set when this is called (e.g. from MockPeeringListener
+  // lambdas scheduled with a null TestPG context).
   messenger->set_epoch_getter([this](int osd) -> epoch_t {
-    spg_t key(pgid, shard_id_t(osd));
-    auto it = pg_listeners.find(key);
-    if (it != pg_listeners.end()) {
-      return it->second->get_osdmap_epoch();
+    // Prefer the EventLoop context TestPG if available and on the right OSD
+    TestPG* test_pg = EventLoop::get_current_test_pg();
+    if (test_pg && test_pg->pg_whoami.osd == osd && test_pg->has_peering_state()) {
+      return test_pg->get_peering_listener()->get_osdmap_epoch();
+    }
+    // Fall back to OSD fixture lookup: scan all PGs on this OSD
+    auto* osd_fixture = get_osd_fixture(osd);
+    if (osd_fixture) {
+      for (auto& [spgid, pg] : osd_fixture->pgs) {
+        if (pg && pg->has_peering_state()) {
+          return pg->get_peering_listener()->get_osdmap_epoch();
+        }
+      }
     }
     // Fallback to test fixture's osdmap
     return osdmap->get_epoch();
   });
   
+  // Set TestPG getter - MockMessenger extracts spg_t and calls this to look up TestPG
+  messenger->set_test_pg_getter([this](int osd, spg_t spgid) -> TestPG* {
+    return get_test_pg(osd, spgid);
+  });
+
   // Register handlers for peering messages (MOSDPeeringOp)
   // All peering messages (Query, Notify, Info, Log) use the same handler pattern
   // since they all inherit from MOSDPeeringOp and use get_event()
@@ -100,21 +119,16 @@ void ECPeeringTestFixture::SetUp() {
     PGPeeringEventRef evt_ref(op->get_event());
 
     // Route to the correct PG shard using the spg_t from the message.
-    // Both parent and child shards are in the same pg_* maps.
     spg_t key = op->get_spg();
-    auto ctx_it = pg_ctxs.find(key);
-    auto ps_it  = pg_states.find(key);
-    ceph_assert(ctx_it != pg_ctxs.end());
-    ceph_assert(ps_it  != pg_states.end());
-    PeeringCtx*  ctx = ctx_it->second.get();
-    PeeringState* ps = ps_it->second.get();
+    TestPG* dest_pg = get_test_pg(to_osd, key);
+    ceph_assert(dest_pg != nullptr);
+    PeeringCtx* ctx = dest_pg->get_peering_ctx();
+    PeeringState* ps = dest_pg->get_peering_state();
     ps->handle_event(evt_ref, ctx);
 
     auto t = ctx->transaction.claim_and_reset();
     if (!t.empty()) {
-      auto listener_it = pg_listeners.find(key);
-      ceph_assert(listener_it != pg_listeners.end());
-      int r = store->queue_transaction(listener_it->second->ch, std::move(t));
+      int r = queue_transaction_helper(dest_pg, std::move(t));
       ceph_assert(r >= 0);
     }
     return true;
@@ -135,39 +149,29 @@ void ECPeeringTestFixture::SetUp() {
   event_loop->register_idle_callback([this]() -> bool {
     bool found_messages = false;
     // Check all PeeringCtx objects for buffered messages
-    for (auto& [spgid, ctx] : pg_ctxs) {
+    for_each_peering_listener([&](int osd, TestPG* test_pg, MockPeeringListener* pl) {
+      PeeringCtx* ctx = test_pg->get_peering_ctx();
       if (!ctx->message_map.empty()) {
-        dispatch_buffered_messages(spgid, ctx.get());
+        dispatch_buffered_messages(osd, ctx);
         found_messages = true;
       }
-    }
+    });
     return found_messages;
   });
-  
-  // Run initial peering cycle to get all shards to active state
-  run_first_peering();
+
+  // Allow derived fixtures to modify the OSDMap before the first peering
+  // cycle runs (e.g. ECCrushTestFixture installs a proper CRUSH map here).
+  pre_peering_hook();
+
+  new_epoch_loop();
 }
 
 void ECPeeringTestFixture::TearDown() {
-  // Clear child PG shards before parent PG shards: child collections were
-  // split from parent collections and hold handles into the same ObjectStore.
-  // spg_t sorts by (pgid.pool, pgid.ps, shard), so child (ps=1) sorts after
-  // parent (ps=0).  When a split has been performed, erase child entries
-  // first so their collection handles are released before the parent
-  // collection handles are released.
-  if (child_pgid != pg_t()) {
-    for (int s = 0; s < k + m; s++) {
-      spg_t child_key(child_pgid, shard_id_t(s));
-      pg_states.erase(child_key);
-      pg_ctxs.erase(child_key);
-      pg_listeners.erase(child_key);
-      pg_dpps.erase(child_key);
-    }
-  }
-  pg_states.clear();
-  pg_ctxs.clear();
-  pg_listeners.clear();
-  pg_dpps.clear();
+  // Restore the initial config state to undo any set_config() calls made during the test
+  g_ceph_context->_conf.set_config_values(initial_config_values_);
+
+  // OSD fixtures (which contain peering states, contexts, listeners, and dpps)
+  // are cleared by the base class
   PGBackendTestFixture::TearDown();
 }
 
@@ -178,15 +182,15 @@ void ECPeeringTestFixture::set_config(const std::string& option, const std::stri
 
 void ECPeeringTestFixture::set_stall_recovery_reservations(bool v) {
   stall_recovery_reservations = v;
-  for (auto& [spgid, listener] : pg_listeners) {
-    listener->inject_event_stall = v;
-  }
+  for_each_peering_listener([&](int osd, TestPG* test_pg, MockPeeringListener* pl) {
+    pl->inject_event_stall = v;
+  });
 }
 
 void ECPeeringTestFixture::set_target_pg_log_entries(unsigned n) {
-  for (auto& [spgid, listener] : pg_listeners) {
-    listener->target_pg_log_entries = n;
-  }
+  for_each_peering_listener([&](int osd, TestPG* test_pg, MockPeeringListener* pl) {
+    pl->target_pg_log_entries = n;
+  });
 }
 
 eversion_t ECPeeringTestFixture::compute_submit_trim_to() {
@@ -225,31 +229,42 @@ void ECPeeringTestFixture::on_primary_write_committed(const eversion_t& at_versi
   ps->complete_write(at_version, at_version);  // mirrors PrimaryLogPG::repop_all_committed
 }
 
+// Find the TestPG for a given shard by spg_t(pgid, shard_id_t(shard)).
+// This handles the case where the OSD is down (not in acting set):
+// we search all OSD fixtures for a TestPG that owns the given shard.
+TestPG* ECPeeringTestFixture::find_test_pg_for_shard(int shard) {
+  // First try the fast path: look up via acting set.
+  TestPG* test_pg = get_test_pg_by_shard(shard);
+  if (test_pg) {
+    return test_pg;
+  }
+  // Slow path: shard's OSD may be down (CRUSH_ITEM_NONE).  Search all
+  // OSD fixtures for the spg_t that matches (pgid, shard_id_t(shard)).
+  spg_t spg(pgid, shard_id_t(shard));
+  for (auto& [osd, osd_fixture] : osd_fixtures) {
+    if (osd_fixture->has_pg(spg)) {
+      return osd_fixture->get_pg(spg);
+    }
+  }
+  return nullptr;
+}
+
 PeeringState* ECPeeringTestFixture::get_peering_state(int shard) {
-  ceph_assert(shard >= 0 && shard < k + m);
-  spg_t key(pgid, shard_id_t(shard));
-  auto it = pg_states.find(key);
-  ceph_assert(it != pg_states.end());
-  ceph_assert(it->second != nullptr);
-  return it->second.get();
+  TestPG* test_pg = find_test_pg_for_shard(shard);
+  ceph_assert(test_pg != nullptr);
+  return test_pg->get_peering_state();
 }
 
 PeeringCtx* ECPeeringTestFixture::get_peering_ctx(int shard) {
-  ceph_assert(shard >= 0 && shard < k + m);
-  spg_t key(pgid, shard_id_t(shard));
-  auto it = pg_ctxs.find(key);
-  ceph_assert(it != pg_ctxs.end());
-  ceph_assert(it->second != nullptr);
-  return it->second.get();
+  TestPG* test_pg = find_test_pg_for_shard(shard);
+  ceph_assert(test_pg != nullptr);
+  return test_pg->get_peering_ctx();
 }
 
 MockPeeringListener* ECPeeringTestFixture::get_peering_listener(int shard) {
-  ceph_assert(shard >= 0 && shard < k + m);
-  spg_t key(pgid, shard_id_t(shard));
-  auto it = pg_listeners.find(key);
-  ceph_assert(it != pg_listeners.end());
-  ceph_assert(it->second != nullptr);
-  return it->second.get();
+  TestPG* test_pg = find_test_pg_for_shard(shard);
+  ceph_assert(test_pg != nullptr);
+  return test_pg->get_peering_listener();
 }
 
 int ECPeeringTestFixture::get_primary_shard_from_osdmap() const {
@@ -260,115 +275,123 @@ int ECPeeringTestFixture::get_primary_shard_from_osdmap() const {
 }
 
 MockPGBackendListener* ECPeeringTestFixture::get_primary_listener() {
-  int primary_shard = get_primary_shard_from_osdmap();
-  if (primary_shard < 0) {
-    return nullptr;
-  }
-  spg_t key(pgid, shard_id_t(primary_shard));
-  auto it = pg_listeners.find(key);
-  if (it != pg_listeners.end() && it->second &&
-      it->second->backend_listener) {
-    // Assert that the backend listener agrees it's primary
-    ceph_assert(it->second->backend_listener->pgb_is_primary());
-    return it->second->backend_listener.get();
+  TestPG* test_pg = get_primary_test_pg();
+  if (test_pg && test_pg->has_peering_state()) {
+    MockPeeringListener* peering_listener = test_pg->get_peering_listener();
+    if (peering_listener && peering_listener->backend_listener) {
+      // Assert that the backend listener agrees it's primary
+      ceph_assert(peering_listener->backend_listener->pgb_is_primary());
+      return peering_listener->backend_listener.get();
+    }
   }
   return nullptr;
 }
 
 PGBackend* ECPeeringTestFixture::get_primary_backend() {
-  int primary_shard = get_primary_shard_from_osdmap();
-  if (primary_shard < 0) {
-    return nullptr;
-  }
-  spg_t key(pgid, shard_id_t(primary_shard));
-  auto listener_it = pg_listeners.find(key);
-  if (listener_it != pg_listeners.end() && listener_it->second &&
-      listener_it->second->backend_listener) {
-    // Assert that the backend listener agrees it's primary
-    ceph_assert(listener_it->second->backend_listener->pgb_is_primary());
-    
-    // Return the backend from the base class's backends map, not from
-    // the peering listener, because the base class backend is connected
-    // to the event loop and message routers
-    auto backend_it = backends.find(primary_shard);
-    return (backend_it != backends.end()) ? backend_it->second.get() : nullptr;
+  TestPG* test_pg = get_primary_test_pg();
+  if (test_pg && test_pg->has_peering_state()) {
+    MockPeeringListener* peering_listener = test_pg->get_peering_listener();
+    if (peering_listener && peering_listener->backend_listener) {
+      // Assert that the backend listener agrees it's primary
+      ceph_assert(peering_listener->backend_listener->pgb_is_primary());
+
+      // Return the backend from TestPG, which is connected to the event loop and message routers
+      if (test_pg->has_backend()) {
+        return test_pg->get_backend();
+      }
+    }
   }
   return nullptr;
 }
 
-void ECPeeringTestFixture::event_initialize() {
-  // Get acting set from OSDMap
-  std::vector<int> acting_osds;
-  int acting_primary = -1;
-  osdmap->pg_to_acting_osds(this->pgid, &acting_osds, &acting_primary);
+void ECPeeringTestFixture::advance_map_impl()
+{
+  std::vector<int> up_osds, acting_osds;
+  int up_primary = -1, acting_primary = -1;
   
-  for (int shard : acting_osds) {
-    // Skip failed OSDs (marked as CRUSH_ITEM_NONE)
-    if (shard == CRUSH_ITEM_NONE) {
+  osdmap->pg_to_up_acting_osds(pgid, &up_osds, &up_primary, &acting_osds, &acting_primary);
+
+  int osd = event_loop->get_current_executing_osd();
+
+  for (size_t shard_pos = 0; shard_pos < up_osds.size(); ++shard_pos) {
+    if (osd != up_osds.at(shard_pos)) {
       continue;
     }
-    auto evt = std::make_shared<PGPeeringEvent>(
-      osdmap->get_epoch(),
-      osdmap->get_epoch(),
-      PeeringState::Initialize());
+    pg_shard_t pg_shard(osd, shard_id_t((int)shard_pos));
     
-    get_peering_state(shard)->handle_event(evt, get_peering_ctx(shard));
+    // Ensure TestPG exists for this OSD/shard combination
+    ensure_test_pg_exists(pg_shard);
   }
-  event_loop->run_until_idle();
+
+  auto osd_fixture = get_osd_fixture(osd);
+
+  for (auto& [spgid, test_pg] : osd_fixture->pgs)
+  {
+    // Advance both the parent and, once split_pg() has created it, the
+    // child PG.  split_pg() advances the child itself up to the split
+    // epoch, but subsequent epochs (e.g. a later OSD failure) must still
+    // reach the child through this path.
+    if (spgid.pgid != pgid &&
+        (child_pgid == pg_t() || spgid.pgid != child_pgid)) {
+      continue;
+    }
+
+    TestPG* test_pg_ptr = test_pg.get();
+    event_loop->schedule_peering_event(osd, test_pg_ptr, [this, test_pg_ptr]
+    {
+      std::vector<int> up_osds, acting_osds;
+      int up_primary = -1, acting_primary = -1;
+
+      osdmap->pg_to_up_acting_osds(test_pg_ptr->spgid.pgid, &up_osds, &up_primary,
+        &acting_osds, &acting_primary);
+      PeeringState* ps = get_peering_state();
+      ps->advance_map(osdmap, ps->get_osdmap(),
+        up_osds, up_primary, acting_osds, acting_primary, *get_peering_ctx());
+    });
+  }
 }
 
 void ECPeeringTestFixture::event_advance_map() {
-  // Capture the current osdmap for use in the lambda
-  OSDMapRef current_osdmap = osdmap;
+  // First, ensure OSD fixtures exist for all UP OSDs in the OSDMap
+  // This must be done BEFORE scheduling peering events
+  std::set<int> all_osds;
+  osdmap->get_all_osds(all_osds);
 
-  // Schedule advance_map events for each parent shard only.
-  // (The child PG is advanced separately during/after split_pg().)
-  for (auto& [spgid, ctx] : pg_ctxs) {
-    if (spgid.pgid != pgid) continue;  // skip child shards
-    PeeringState* ps = pg_states.at(spgid).get();
-    OSDMapRef lastmap = ps->get_osdmap();
-    PeeringCtx* peering_ctx = ctx.get();
-    pg_t cur_pgid = spgid.pgid;
-    int osd = spgid.shard.id;
-    
-    event_loop->schedule_peering_event(osd, [ps, current_osdmap, lastmap, cur_pgid, peering_ctx]() {
-      // Get up/acting sets from OSDMap inside the lambda
-      std::vector<int> up_osds, acting_osds;
-      int up_primary = -1, acting_primary = -1;
-      current_osdmap->pg_to_up_acting_osds(cur_pgid, &up_osds, &up_primary, &acting_osds, &acting_primary);
-      
-      ps->advance_map(
-        current_osdmap, lastmap, up_osds, up_primary, acting_osds, acting_primary,
-        *peering_ctx);
+  for (int osd : all_osds) {
+    ensure_osd_fixture_exists(osd);
+  }
+
+  // Now schedule advance_map events for all existing OSD fixtures
+  for (auto& [osd, osd_fixture] : osd_fixtures) {
+    event_loop->schedule_peering_event(osd, nullptr, [this]() {
+      advance_map_impl();
     });
   }
   event_loop->run_until_idle();
 }
 
 void ECPeeringTestFixture::event_activate_map() {
-  // Schedule activate_map events for each parent shard only.
-  // (The child PG is activated separately during/after split_pg().)
-  for (auto& [spgid, ctx] : pg_ctxs) {
-    if (spgid.pgid != pgid) continue;  // skip child shards
-    PeeringState* ps = pg_states.at(spgid).get();
-    PeeringCtx* peering_ctx = ctx.get();
-    int osd = spgid.shard.id;
-    
-    event_loop->schedule_peering_event(osd, [ps, peering_ctx]() {
-      ps->activate_map(*peering_ctx);
+  // Schedule activate_map events for each shard instead of running directly.
+  // Activate both the parent and, once split_pg() has created it, the
+  // child PG; see the matching comment in advance_map_impl().
+  for_each_test_pg([&](int osd, TestPG* test_pg) {
+    if (test_pg->spgid.pgid != pgid &&
+        (child_pgid == pg_t() || test_pg->spgid.pgid != child_pgid)) {
+      return;
+    }
+    event_loop->schedule_peering_event(osd, test_pg, [this]() {
+      get_peering_state()->activate_map(*get_peering_ctx());
     });
-  }
+  });
   event_loop->run_until_idle();
 }
 
-void ECPeeringTestFixture::dispatch_buffered_messages(spg_t spgid, PeeringCtx* ctx) {
+void ECPeeringTestFixture::dispatch_buffered_messages(int osd, PeeringCtx* ctx) {
   ceph_assert(messenger);
   ceph_assert(ctx);
-
-  int from_osd = spgid.shard.id;
   for (auto& [target_osd, msg_list] : ctx->message_map) {
     for (auto& msg : msg_list) {
-      messenger->send_message(from_osd, target_osd, msg.get());
+      messenger->send_message(osd, target_osd, msg.get());
     }
     msg_list.clear();
   }
@@ -381,32 +404,35 @@ bool ECPeeringTestFixture::all_shards_active() {
   int acting_primary = -1;
   osdmap->pg_to_acting_osds(this->pgid, &acting_osds, &acting_primary);
   
-  for (int shard : acting_osds) {
+  for (size_t shard_idx = 0; shard_idx < acting_osds.size(); ++shard_idx) {
+    int osd = acting_osds[shard_idx];
     // Skip failed OSDs (marked as CRUSH_ITEM_NONE)
-    if (shard == CRUSH_ITEM_NONE) {
+    if (osd == CRUSH_ITEM_NONE) {
       continue;
     }
-    if (!get_peering_state(shard)->is_active()) {
+    spg_t spg(this->pgid, shard_id_t(shard_idx));
+    TestPG* test_pg = get_test_pg(osd, spg);
+    if (!test_pg || !test_pg->get_peering_state()->is_active()) {
       return false;
     }
   }
   return true;
 }
 
-bool ECPeeringTestFixture::all_shards_clean() {
+bool ECPeeringTestFixture::primary_is_clean() {
   // Get primary from OSDMap
   std::vector<int> acting_osds;
   int acting_primary = -1;
   osdmap->pg_to_acting_osds(this->pgid, &acting_osds, &acting_primary);
   
   if (acting_primary >= 0 && acting_primary != CRUSH_ITEM_NONE) {
-    return get_peering_state(acting_primary)->is_clean();
+    return get_primary_test_pg()->get_peering_state()->is_clean();
   }
   return false;
 }
 
 std::string ECPeeringTestFixture::get_state_name(int shard) {
-  return get_peering_state(shard)->get_current_state();
+  return get_test_pg_by_shard(shard)->get_peering_state()->get_current_state();
 }
 
 void ECPeeringTestFixture::suspend_osd(int osd) {
@@ -443,45 +469,21 @@ void ECPeeringTestFixture::unsuspend_primary_to_osd(int to_osd) {
   }
 }
 
-void ECPeeringTestFixture::inject_read_error_for_shard(const std::string& obj_name, int shard, int error_code) {
+void ECPeeringTestFixture::inject_read_error_for_shard(const std::string& obj_name, int shard, int error_code)
+{
   hobject_t hoid(object_t(obj_name), "", CEPH_NOSNAP, 0, pool_id, "");
   ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
 
-  store->inject_read_error(ghoid, error_code);
-}
-
-PeeringState* ECPeeringTestFixture::create_peering_state(int shard)
-{
-  spg_t spgid(pgid, shard_id_t(shard));
-  pg_shard_t pg_whoami(shard, shard_id_t(shard));
-
-  pg_dpps[spgid] = std::make_unique<ShardDpp>(g_ceph_context, this, spgid);
-
-  // Transfer ownership of the backend listener created by setup_ec_pool().
-  pg_listeners[spgid] = std::make_unique<MockPeeringListener>(
-    osdmap, pool_id, pg_dpps[spgid].get(), pg_whoami,
-    std::move(listeners[shard]),
-    store.get(), colls[shard], chs[shard]);
-
-  auto& pl = pg_listeners[spgid];
-  pl->current_epoch = osdmap->get_epoch();
-  pl->set_messenger(messenger.get());
-  pl->set_event_loop(event_loop.get());
-  pl->backend_listener->set_messenger(messenger.get());
-
-  pl->queue_transaction_callback =
-    [this, shard](ObjectStore::Transaction&& t) -> int {
-      return queue_transaction_helper(shard, std::move(t));
-    };
-
-  return create_peering_state_common(spgid);
+  OsdTestFixture* osd_fixture = get_osd_fixture(shard);
+  ceph_assert(osd_fixture != nullptr && osd_fixture->store != nullptr);
+  osd_fixture->store->inject_read_error(ghoid, error_code);
 }
 
 PeeringState* ECPeeringTestFixture::get_child_peering_state(int shard) {
   spg_t key(child_pgid, shard_id_t(shard));
-  auto it = pg_states.find(key);
-  ceph_assert(it != pg_states.end());
-  return it->second.get();
+  TestPG* test_pg = get_test_pg(shard, key);
+  ceph_assert(test_pg != nullptr);
+  return test_pg->get_peering_state();
 }
 
 // The child's log/missing/info are populated by the subsequent
@@ -492,19 +494,32 @@ PeeringState* ECPeeringTestFixture::create_child_peering_state(int shard,
   spg_t child_spgid(child_pgid, shard_id_t(shard));
   pg_shard_t pg_whoami(shard, shard_id_t(shard));
 
+  // Ensure OSD fixture exists for this shard
+  ensure_osd_fixture_exists(shard);
+  auto* osd_fixture = get_osd_fixture(shard);
+  ceph_assert(osd_fixture != nullptr);
+
+  // Create child ObjectStore collection at the post-split bit depth
   coll_t child_coll(child_spgid);
-  auto child_ch = store->create_new_collection(child_coll);
+  auto child_ch = osd_fixture->store->create_new_collection(child_coll);
   {
     ObjectStore::Transaction t;
     // Create at the post-split bit depth; split_collection() asserts dest bits == split_bits.
     t.create_collection(child_coll, split_bits);
-    store->queue_transaction(child_ch, std::move(t));
+    osd_fixture->store->queue_transaction(child_ch, std::move(t));
   }
 
-  pg_dpps[child_spgid] = std::make_unique<ShardDpp>(g_ceph_context, this, child_spgid);
+  // Create child TestPG
+  TestPG* child_test_pg = osd_fixture->create_pg(child_spgid, pg_whoami);
+  child_test_pg->coll = child_coll;
+  child_test_pg->ch = child_ch;
 
+  // Create ShardDpp for child
+  child_test_pg->dpp = std::make_unique<ShardDpp>(g_ceph_context, this, child_test_pg);
+
+  // Create backend listener for child
   auto child_bl = std::make_unique<MockPGBackendListener>(
-    osdmap, pool_id, pg_dpps[child_spgid].get(), pg_whoami);
+    osdmap, pool_id, child_test_pg->dpp.get(), pg_whoami);
   child_bl->info.pgid = child_spgid;
   for (int j = 0; j < k + m; j++) {
     child_bl->shardset.insert(pg_shard_t(j, shard_id_t(j)));
@@ -514,44 +529,73 @@ PeeringState* ECPeeringTestFixture::create_child_peering_state(int shard,
     child_bl->shard_info[pg_shard_t(j, shard_id_t(j))] = shard_pg_info;
     child_bl->shard_missing[pg_shard_t(j, shard_id_t(j))] = pg_missing_t();
   }
-  child_bl->set_store(store.get(), child_ch);
+  child_bl->set_store(osd_fixture->store.get(), child_ch);
   child_bl->set_event_loop(event_loop.get());
+  child_bl->set_messenger(messenger.get());
 
-  pg_listeners[child_spgid] = std::make_unique<MockPeeringListener>(
-    osdmap, pool_id, pg_dpps[child_spgid].get(), pg_whoami,
+  // Create peering listener for child
+  child_test_pg->peering_listener = std::make_unique<MockPeeringListener>(
+    osdmap, pool_id, child_test_pg->dpp.get(), pg_whoami,
     std::move(child_bl),
-    store.get(), child_coll, child_ch);
+    osd_fixture->store.get(), child_coll, child_ch);
 
-  auto& pl = pg_listeners[child_spgid];
+  auto& pl = child_test_pg->peering_listener;
   pl->current_epoch = osdmap->get_epoch();
   pl->inject_event_stall = stall_recovery_reservations;
   pl->set_messenger(messenger.get());
   pl->set_event_loop(event_loop.get());
   pl->backend_listener->set_messenger(messenger.get());
   pl->queue_transaction_callback =
-    [this, child_ch](ObjectStore::Transaction&& t) mutable -> int {
-      if (t.empty()) return 0;
-      return store->queue_transaction(child_ch, std::move(t));
+    [this, child_test_pg](ObjectStore::Transaction&& t) -> int {
+      return queue_transaction_helper(child_test_pg, std::move(t));
     };
 
-  return create_peering_state_common(child_spgid);
+  // Construct PeeringState and wire everything (common with ensure_test_pg_exists).
+  create_peering_state_common(child_test_pg, child_spgid, pg_whoami);
+
+  return child_test_pg->peering_state.get();
 }
 
-PeeringState* ECPeeringTestFixture::create_peering_state_common(spg_t spgid)
+void ECPeeringTestFixture::ensure_osd_fixture_exists(int osd) {
+  if (osd_fixtures.find(osd) != osd_fixtures.end()) {
+    return;
+  }
+
+  // Create OsdTestFixture for this OSD (store + LRU only).
+  // Collections are per-PG and created in ensure_test_pg_exists().
+  auto osd_fixture = std::make_unique<OsdTestFixture>(osd);
+
+  // Create a new store for this OSD
+  osd_fixture->store = MockStore::create(g_ceph_context, osd);
+  ceph_assert(osd_fixture->store);
+  osd_fixture->data_dir = osd_fixture->store->get_data_dir();
+
+  // Create extent cache LRU for this OSD
+  osd_fixture->lru = std::make_unique<ECExtentCache::LRU>(1024 * 1024 * 100);
+
+  osd_fixtures[osd] = std::move(osd_fixture);
+}
+
+
+// Shared tail of ensure_test_pg_exists() and create_child_peering_state():
+// test_pg->peering_listener must already be set by the caller.  This method
+// constructs the PeeringState, wires pl->ps, sets backend predicates, and
+// stores the state, ctx, and ctx pointer into the TestPG.
+void ECPeeringTestFixture::create_peering_state_common(
+  TestPG* test_pg,
+  spg_t spgid,
+  pg_shard_t pg_whoami)
 {
-  int shard = spgid.shard.id;
-  pg_shard_t pg_whoami(shard, shard_id_t(shard));
-  PGPool pool(osdmap, pool_id, get_pool(), "test_pool");
-  auto& pl = pg_listeners[spgid];
+  auto& pl = test_pg->peering_listener;
 
   auto ps = std::make_unique<PeeringState>(
     g_ceph_context,
     pg_whoami,
     spgid,
-    pool,
+    pl->backend_listener->pool,
     osdmap,
     PG_FEATURE_CLASSIC_ALL,
-    pg_dpps[spgid].get(),
+    test_pg->dpp.get(),
     pl.get());
 
   pl->ps = ps.get();
@@ -560,17 +604,108 @@ PeeringState* ECPeeringTestFixture::create_peering_state_common(spg_t spgid)
     get_is_readable_predicate(),
     get_is_recoverable_predicate());
 
-  pg_states[spgid] = std::move(ps);
-  pl->backend_listener->set_peering_state(pg_states[spgid].get());
-  pg_ctxs[spgid] = std::make_unique<PeeringCtx>();
-  pl->ctx = pg_ctxs[spgid].get();
+  test_pg->peering_state = std::move(ps);
+  pl->backend_listener->set_peering_state(test_pg->peering_state.get());
+  test_pg->peering_ctx = std::make_unique<PeeringCtx>();
+  // Wire pl->ctx so MockPeeringListener lambdas route deferred events to the
+  // correct PG (parent vs. split child) when both coexist after split_pg().
+  pl->ctx = test_pg->peering_ctx.get();
+}
 
-  return pg_states[spgid].get();
+void ECPeeringTestFixture::ensure_test_pg_exists(pg_shard_t pg_whoami) {
+  int osd = pg_whoami.osd;
+  ceph_assert(osd_fixtures.find(osd) != osd_fixtures.end());
+
+  auto* osd_fixture = get_osd_fixture(osd);
+  ceph_assert(osd_fixture != nullptr);
+
+  spg_t shard_spgid(pgid, pg_whoami.shard);
+
+  if (osd_fixture->has_pg(shard_spgid)) {
+    return;
+  }
+
+  // Create the TestPG and its per-PG ObjectStore collection.
+  // The collection is keyed by spg_t (pgid + shard_id), so it belongs in
+  // TestPG, not in OsdTestFixture.  CRUSH may place shard N on any OSD, so
+  // shard_id != osd_id in general.
+  TestPG* test_pg = osd_fixture->create_pg(shard_spgid, pg_whoami);
+{
+    coll_t shard_coll(shard_spgid);
+    auto shard_ch = osd_fixture->store->create_new_collection(shard_coll);
+    ObjectStore::Transaction ct;
+    ct.create_collection(shard_coll, 0);
+    int r = osd_fixture->store->queue_transaction(shard_ch, std::move(ct));
+    ceph_assert(r == 0);
+    test_pg->coll = shard_coll;
+    test_pg->ch = shard_ch;
+  }
+  const pg_pool_t* pool_ptr = OSDMapTestHelpers::get_pool(osdmap, pool_id);
+  ceph_assert(pool_ptr != nullptr);
+
+  // Create the per-PG ShardDpp first so both the backend listener and the
+  // peering listener log with the same (per-shard) prefix.
+  test_pg->dpp = std::make_unique<ShardDpp>(g_ceph_context, this, test_pg);
+
+  // Create backend listener using the TestPG's collection
+  auto shard_listener = std::make_unique<MockPGBackendListener>(
+    osdmap, pool_id, test_pg->dpp.get(), pg_whoami);
+
+  shard_listener->info.pgid = shard_spgid;
+  shard_listener->set_store(osd_fixture->store.get(), test_pg->ch);
+  shard_listener->set_event_loop(event_loop.get());
+  shard_listener->set_messenger(messenger.get());
+
+  // Create EC backend using the TestPG's collection
+  auto shard_ec_switch = std::make_unique<ECSwitch>(
+    shard_listener.get(), test_pg->coll, test_pg->ch, osd_fixture->store.get(),
+    g_ceph_context, ec_impl, stripe_unit * k, *osd_fixture->lru);
+
+  // Store in TestPG
+  test_pg->backend_listener = std::move(shard_listener);
+  test_pg->backend = std::move(shard_ec_switch);
+
+  // Construct MockPeeringListener, transferring ownership of the backend
+  // listener from TestPG. The backend listener was created just above, in
+  // this function.
+  auto peering_listener = std::make_unique<MockPeeringListener>(
+    osdmap, pool_id, test_pg->dpp.get(), pg_whoami,
+    std::move(test_pg->backend_listener),
+    osd_fixture->store.get(), test_pg->coll, test_pg->ch);
+
+  peering_listener->current_epoch = osdmap->get_epoch();
+  peering_listener->set_messenger(messenger.get());
+  peering_listener->set_event_loop(event_loop.get());
+  peering_listener->backend_listener->set_messenger(messenger.get());
+  peering_listener->pg_backend = test_pg->backend.get();
+
+  peering_listener->queue_transaction_callback =
+    [this, test_pg](ObjectStore::Transaction&& t) -> int {
+      return queue_transaction_helper(test_pg, std::move(t));
+    };
+
+  // Wire the peering listener and construct PeeringState (common with
+  // create_child_peering_state).
+  test_pg->peering_listener = std::move(peering_listener);
+  create_peering_state_common(test_pg, shard_spgid, pg_whoami);
+
+  init_peering(test_pg);
+
+  // Schedule Initialize event for this newly created TestPG
+  auto evt = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(),
+    osdmap->get_epoch(),
+    PeeringState::Initialize());
+
+  event_loop->schedule_peering_event(osd, test_pg, [test_pg, evt]() {
+    test_pg->get_peering_state()->handle_event(evt, test_pg->get_peering_ctx());
+  });
+
 }
 
 pg_t ECPeeringTestFixture::split_pg()
 {
-  // This harness supports exactly one 1→2 PG split.  The child PG identity
+  // This harness supports exactly one 1->2 PG split.  The child PG identity
   // is stored in child_pgid and can only be set once; a second call would
   // silently overwrite it and orphan all existing child state.  A single
   // 1→2 split is sufficient to reproduce all known split-related bugs;
@@ -578,7 +713,7 @@ pg_t ECPeeringTestFixture::split_pg()
   {
     const pg_pool_t* p = osdmap->get_pg_pool(pool_id);
     ceph_assert(p != nullptr);
-    ceph_assert(p->get_pg_num() == 1 && "split_pg() supports only a single 1→2 split");
+    ceph_assert(p->get_pg_num() == 1 && "split_pg() supports only a single 1->2 split");
   }
 
   const unsigned new_pg_num = 2;
@@ -615,19 +750,22 @@ pg_t ECPeeringTestFixture::split_pg()
       mempool::osdmap::vector<int32_t>(up_osds.begin(), up_osds.end());
     new_osdmap->apply_incremental(inc);
   }
+
   // Advance each parent shard to the new osdmap so split_into() can resolve
-  // child_pgid.  Use a throwaway PeeringCtx to discard the new-interval peering
-  // queries — we must not re-peer the parent and overwrite the corrupt state.
+  // child_pgid.  Use a throwaway PeeringCtx to discard the new-interval
+  // peering queries — we must not re-peer the parent.
   osdmap = new_osdmap;
-  for (auto& [spgid, l] : pg_listeners) {
-    l->current_epoch = osdmap->get_epoch();
-  }
+  for_each_test_pg([&](int osd, TestPG* test_pg) {
+    if (test_pg->spgid.pgid != pgid) return;  // only advance parent shards
+    if (!test_pg->has_peering_state()) return;
+    test_pg->get_peering_listener()->current_epoch = osdmap->get_epoch();
+  });
   {
-    std::vector<int> up_osds, acting_osds;
+    std::vector<int> acting_osds;
     int up_primary = -1, acting_primary = -1;
     osdmap->pg_to_up_acting_osds(pgid, &up_osds, &up_primary,
                                  &acting_osds, &acting_primary);
-    for (int shard = 0; shard < k + m; shard++) {
+    for (int shard = 0; shard < get_instance_count(); shard++) {
       PeeringState* ps = get_peering_state(shard);
       OSDMapRef lastmap = ps->get_osdmap();
       PeeringCtx throwaway;
@@ -639,27 +777,37 @@ pg_t ECPeeringTestFixture::split_pg()
 
   // 2. Split each shard: create the child state, run production split_into(),
   //    then split the ObjectStore collection.
-  for (int shard = 0; shard < k + m; shard++) {
+  for (int shard = 0; shard < get_instance_count(); shard++) {
     create_child_peering_state(shard, split_bits);
-    auto* parent = get_peering_state(shard);
-    parent->split_into(child_pgid, get_child_peering_state(shard), split_bits);
+    auto* parent_ps = get_peering_state(shard);
+    parent_ps->split_into(child_pgid, get_child_peering_state(shard), split_bits);
 
+    // Split the ObjectStore collection
+    auto* osd_fixture = get_osd_fixture(shard);
+    ceph_assert(osd_fixture != nullptr);
+    spg_t parent_spgid(pgid, shard_id_t(shard));
+    TestPG* parent_test_pg = get_test_pg(shard, parent_spgid);
+    ceph_assert(parent_test_pg != nullptr);
     ObjectStore::Transaction t;
-    spg_t child_key(child_pgid, shard_id_t(shard));
-    t.split_collection(colls[shard], split_bits, child_pgid.ps(),
-                       pg_listeners.at(child_key)->coll);
-    store->queue_transaction(chs[shard], std::move(t));
+    spg_t child_spgid(child_pgid, shard_id_t(shard));
+    TestPG* child_test_pg = get_test_pg(shard, child_spgid);
+    ceph_assert(child_test_pg != nullptr);
+    t.split_collection(parent_test_pg->coll, split_bits, child_pgid.ps(),
+                       child_test_pg->coll);
+    osd_fixture->store->queue_transaction(parent_test_pg->ch, std::move(t));
   }
 
   // 3. Peer the child PG: advance_map/activate_map cycles, applying up_thru and
   //    pg_temp as the monitor would.  The child primary requests pg_temp for EC
   //    primaryfirst ordering and stalls in WaitActingChange without it.
-  for (int shard = 0; shard < k + m; shard++) {
+  for (int shard = 0; shard < get_instance_count(); shard++) {
     auto evt = std::make_shared<PGPeeringEvent>(
       osdmap->get_epoch(), osdmap->get_epoch(), PeeringState::Initialize());
-    spg_t child_key(child_pgid, shard_id_t(shard));
-    get_child_peering_state(shard)->handle_event(
-      evt, pg_ctxs.at(child_key).get());
+    spg_t child_spgid(child_pgid, shard_id_t(shard));
+    TestPG* child_test_pg = get_test_pg(shard, child_spgid);
+    ceph_assert(child_test_pg != nullptr);
+    child_test_pg->get_peering_state()->handle_event(
+      evt, child_test_pg->get_peering_ctx());
   }
   event_loop->run_until_idle();
 
@@ -672,24 +820,28 @@ pg_t ECPeeringTestFixture::split_pg()
   int max_cycles = 10;
   bool more = true;
   while (more && --max_cycles) {
-    for (int shard = 0; shard < k + m; shard++) {
+    for (int shard = 0; shard < get_instance_count(); shard++) {
       PeeringState* ps = get_child_peering_state(shard);
       OSDMapRef lastmap = ps->get_osdmap();
       if (lastmap->get_epoch() == osdmap->get_epoch()) {
-          continue;
-        }
-      std::vector<int> up_osds, acting_osds;
-      int up_primary = -1, acting_primary = -1;
-      osdmap->pg_to_up_acting_osds(child_pgid, &up_osds, &up_primary,
-                                   &acting_osds, &acting_primary);
-      spg_t child_key(child_pgid, shard_id_t(shard));
-      ps->advance_map(osdmap, lastmap, up_osds, up_primary, acting_osds,
-                      acting_primary, *pg_ctxs.at(child_key));
+        continue;
+      }
+      std::vector<int> c_up_osds, c_acting_osds;
+      int c_up_primary = -1, c_acting_primary = -1;
+      osdmap->pg_to_up_acting_osds(child_pgid, &c_up_osds, &c_up_primary,
+                                   &c_acting_osds, &c_acting_primary);
+      spg_t child_spgid(child_pgid, shard_id_t(shard));
+      TestPG* child_test_pg = get_test_pg(shard, child_spgid);
+      ceph_assert(child_test_pg != nullptr);
+      ps->advance_map(osdmap, lastmap, c_up_osds, c_up_primary, c_acting_osds,
+                      c_acting_primary, *child_test_pg->get_peering_ctx());
     }
     event_loop->run_until_idle();
-    for (int shard = 0; shard < k + m; shard++) {
-      spg_t child_key(child_pgid, shard_id_t(shard));
-      get_child_peering_state(shard)->activate_map(*pg_ctxs.at(child_key));
+    for (int shard = 0; shard < get_instance_count(); shard++) {
+      spg_t child_spgid(child_pgid, shard_id_t(shard));
+      TestPG* child_test_pg = get_test_pg(shard, child_spgid);
+      ceph_assert(child_test_pg != nullptr);
+      get_child_peering_state(shard)->activate_map(*child_test_pg->get_peering_ctx());
     }
     event_loop->run_until_idle();
 
@@ -699,46 +851,56 @@ pg_t ECPeeringTestFixture::split_pg()
   return child_pgid;
 }
 
-void ECPeeringTestFixture::init_peering(bool dne)
+void ECPeeringTestFixture::init_peering(TestPG *test_pg)
 {
   pg_history_t history;
   history.same_interval_since = osdmap->get_epoch();
   history.epoch_pool_created = osdmap->get_epoch();
   history.last_epoch_clean = osdmap->get_epoch();
-  if (!dne) {
-    history.epoch_created = osdmap->get_epoch();
-  }
+  history.epoch_created = osdmap->get_epoch();
   PastIntervals past_intervals;
 
   // Get primary from OSDMap using base class pgid member
   std::vector<int> up_osds, acting_osds;
   int up_primary = -1, acting_primary = -1;
   osdmap->pg_to_up_acting_osds(this->pgid, &up_osds, &up_primary, &acting_osds, &acting_primary);
+  ObjectStore::Transaction t;
+  test_pg->get_peering_state()->init(
+    (test_pg->pg_whoami.osd == acting_primary) ? 0 : 1,  // role
+    up_osds,
+    up_primary,
+    acting_osds,
+    acting_primary,
+    history,
+    past_intervals,
+    t);
 
-  for (int shard : acting_osds) {
-    ObjectStore::Transaction t;
-    get_peering_state(shard)->init(
-      (shard == acting_primary) ? 0 : 1,  // role
-      up_osds,
-      up_primary,
-      acting_osds,
-      acting_primary,
-      history,
-      past_intervals,
-      t);
-
-    queue_transaction_helper(shard, std::move(t));
-  }
+  queue_transaction_helper(test_pg, std::move(t));
 }
 
 void ECPeeringTestFixture::update_osdmap_with_peering(
-  std::shared_ptr<OSDMap> new_osdmap,
-  std::optional<pg_shard_t> new_primary)
+  std::shared_ptr<OSDMap> new_osdmap)
 {
   OSDMapRef old_osdmap = osdmap;
+  osdmap = new_osdmap;
 
-  update_osdmap(new_osdmap, new_primary);
-  new_epoch(false);
+  for_each_test_pg([&](int osd, TestPG* test_pg) {
+    if (test_pg->has_peering_state()) {
+      test_pg->get_peering_listener()->current_epoch = osdmap->get_epoch();
+    }
+    // Mirror PGBackendTestFixture::update_osdmap(): keep each backend
+    // listener's osdmap and pool snapshot current. Without this,
+    // pgb_get_osdmap()/pgb_get_osdmap_epoch() and get_pool() would keep
+    // returning the SetUp-time map/pool forever on the peering path.
+    if (test_pg->has_backend()) {
+      MockPGBackendListener* bl = test_pg->get_backend_listener();
+      if (bl) {
+        bl->osdmap = new_osdmap;
+        bl->pool.update(new_osdmap);
+      }
+    }
+  });
+
   new_epoch_loop();
 }
 
@@ -767,43 +929,54 @@ bool ECPeeringTestFixture::apply_new_epoch(pg_t which_pg, bool if_required)
   int acting_primary = -1;
   osdmap->pg_to_acting_osds(which_pg, &acting_osds, &acting_primary);
 
-  for (int shard : acting_osds) {
-    if (shard == CRUSH_ITEM_NONE) continue;
-    spg_t key(which_pg, shard_id_t(shard));
-    auto it = pg_states.find(key);
-    if (it != pg_states.end() && it->second->get_need_up_thru()) {
-      pending_inc.new_up_thru[shard] = e;
+  int s = 0;
+  for (int osd : acting_osds) {
+    shard_id_t shard(s++);
+    // Skip failed OSDs (marked as CRUSH_ITEM_NONE)
+    if (osd == CRUSH_ITEM_NONE) {
+      continue;
+    }
+    spg_t spg(which_pg, shard_id_t(shard));
+    // TestPG may not exist yet for OSDs that were just added to the acting
+    // set but haven't been initialized by event_advance_map() yet.
+    TestPG* test_pg = get_test_pg(osd, spg);
+    if (!test_pg || !test_pg->has_peering_state()) {
+      continue;
+    }
+    if (test_pg->get_peering_state()->get_need_up_thru()) {
+      pending_inc.new_up_thru[osd] = e;
       did_work = true;
     }
   }
 
   if (acting_primary >= 0 && acting_primary != CRUSH_ITEM_NONE) {
-    spg_t primary_key(which_pg, shard_id_t(acting_primary));
-    auto lit = pg_listeners.find(primary_key);
-    if (lit != pg_listeners.end() && lit->second->pg_temp_wanted) {
-      auto& listener = lit->second;
-      std::vector<int> up_osds;
-      int up_primary = -1;
-      osdmap->pg_to_up_acting_osds(which_pg, &up_osds, &up_primary, nullptr, nullptr);
+    TestPG* test_pg = get_primary_test_pg(which_pg);
+    if (test_pg && test_pg->has_peering_state()) {
+      MockPeeringListener* listener = test_pg->get_peering_listener();
+      if (listener->pg_temp_wanted) {
+        std::vector<int> up_osds;
+        int up_primary = -1;
+        osdmap->pg_to_up_acting_osds(which_pg, &up_osds, &up_primary, nullptr, nullptr);
 
-      std::vector<int> acting_temp = listener->next_acting;
-      if (acting_temp.empty()) {
-        acting_temp = up_osds;
-      }
+        std::vector<int> acting_temp = listener->next_acting;
+        if (acting_temp.empty()) {
+          acting_temp = up_osds;
+        }
 
-      // For EC pools with optimizations, transform to primaryfirst order before
-      // storing in pg_temp.  This matches what the real monitor does and what
-      // _get_temp_osds() expects when it calls pgtemp_undo_primaryfirst().
-      const pg_pool_t* pool = osdmap->get_pg_pool(which_pg.pool());
-      if (pool && pool->allows_ecoptimizations()) {
-        acting_temp = osdmap->pgtemp_primaryfirst(*pool, acting_temp);
-      }
+        // For EC pools with optimizations, transform to primaryfirst order before
+        // storing in pg_temp.  This matches what the real monitor does and what
+        // _get_temp_osds() expects when it calls pgtemp_undo_primaryfirst().
+        const pg_pool_t* pool = osdmap->get_pg_pool(which_pg.pool());
+        if (pool && pool->allows_ecoptimizations()) {
+          acting_temp = osdmap->pgtemp_primaryfirst(*pool, acting_temp);
+        }
 
-      pending_inc.new_pg_temp[which_pg] =
+        pending_inc.new_pg_temp[which_pg] =
         mempool::osdmap::vector<int32_t>(acting_temp.begin(), acting_temp.end());
 
-      listener->pg_temp_wanted = false;
-      did_work = true;
+        listener->pg_temp_wanted = false;
+        did_work = true;
+      }
     }
   }
 
@@ -813,30 +986,29 @@ bool ECPeeringTestFixture::apply_new_epoch(pg_t which_pg, bool if_required)
 
   osdmap->apply_incremental(pending_inc);
 
-  for (auto& [spgid, listener] : pg_listeners) {
-    listener->current_epoch = osdmap->get_epoch();
-  }
+  for_each_peering_listener([&](int osd, TestPG* test_pg, MockPeeringListener* pl) {
+    pl->current_epoch = osdmap->get_epoch();
+  });
 
   return true;
 }
 
-void ECPeeringTestFixture::run_first_peering() {
-  init_peering();
-  event_initialize();
-  new_epoch_loop();
-}
-
-int ECPeeringTestFixture::queue_transaction_helper(int shard, ObjectStore::Transaction&& t)
+int ECPeeringTestFixture::queue_transaction_helper(TestPG* test_pg, ObjectStore::Transaction&& t)
 {
   if (t.empty()) {
     return 0;
   }
 
-  // Note: Contexts are stolen by MockPGBackendListener::queue_transaction,
-  // so we don't need to call execute_finishers here
-  int result = store->queue_transaction(chs[shard], std::move(t));
+  ceph_assert(test_pg != nullptr && test_pg->ch);
+  OsdTestFixture* osd_fixture = get_osd_fixture(test_pg->pg_whoami.osd);
+  ceph_assert(osd_fixture != nullptr && osd_fixture->store);
 
-  return result;
+  // The collection is in TestPG, not OsdTestFixture.  The ch passed to
+  // queue_transaction is used only as a sequencer key in MemStore; the actual
+  // collection for each op comes from the transaction data itself.  Use this
+  // TestPG's own ch, not some other PG's, so that after a split each child
+  // is sequenced against its own collection rather than a sibling's.
+  return osd_fixture->store->queue_transaction(test_pg->ch, std::move(t));
 }
 
 void ECPeeringTestFixture::mark_osd_down(int osd_id)
@@ -871,6 +1043,15 @@ void ECPeeringTestFixture::mark_osds_down(const std::vector<int>& osd_ids)
   update_osdmap_with_peering(new_osdmap);
 }
 
+void ECPeeringTestFixture::set_pool_min_size(unsigned new_min_size)
+{
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  OSDMapTestHelpers::set_pool_min_size(new_osdmap, pool_id, new_min_size);
+
+  update_osdmap_with_peering(new_osdmap);
+}
+
 void ECPeeringTestFixture::advance_epoch()
 {
   auto new_osdmap = std::make_shared<OSDMap>();
@@ -880,31 +1061,30 @@ void ECPeeringTestFixture::advance_epoch()
   update_osdmap_with_peering(new_osdmap);
 }
 
-void ECPeeringTestFixture::run_recovery_and_verify_callbacks(
+void ECPeeringTestFixture::run_recovery(
   const std::string& obj_name,
-  int removed_osd,
+  bool recover_primary,
   const std::string& expected_data)
 {
   // Delegate to the parallel version with a single object
-  run_parallel_recovery_and_verify_callbacks(
+  run_parallel_recovery(
     {obj_name},
-    removed_osd,
+    recover_primary,
     {expected_data});
 }
 
 // Helper function that performs the actual recovery logic
 // Must be called within event loop context on the primary OSD
-void ECPeeringTestFixture::do_run_parallel_recovery_and_verify_callbacks_impl(
+void ECPeeringTestFixture::do_run_parallel_recovery_impl(
   const std::vector<std::string>& obj_names,
-  int target_osd,
+  bool recover_primary,
   const std::vector<std::string>& expected_data,
   int primary_shard)
 {
-  auto primary_ps = get_peering_state(primary_shard);
-  pg_shard_t target_shard(target_osd, shard_id_t(target_osd));
+  auto primary_ps = get_primary_test_pg()->get_peering_state();
 
   std::cout << "\n=== Starting Parallel Recovery for " << obj_names.size()
-            << " objects ===" << std::endl;
+            << " objects (recover_primary=" << recover_primary << ") ===" << std::endl;
 
   // Step 1: Verify all objects are in the missing set and prepare recovery
   std::vector<hobject_t> hoids;
@@ -917,72 +1097,66 @@ void ECPeeringTestFixture::do_run_parallel_recovery_and_verify_callbacks_impl(
 
     pg_missing_item missing_item;
 
-    // Check if the target OSD is the current primary
-    // If so, check the primary's own missing set; otherwise check peer_missing
-    if (target_osd == primary_shard) {
-      // The target OSD became primary again after coming back up
-      // Check the primary's own missing set
+    if (recover_primary) {
+      // Recovering to primary - check the primary's own missing set
       const pg_missing_t& primary_missing = primary_ps->get_pg_log().get_missing();
       ASSERT_TRUE(primary_missing.have_missing())
-        << "Primary OSD " << target_osd << " should have missing objects after coming back up";
+        << "Primary should have missing objects";
 
       ASSERT_TRUE(primary_missing.is_missing(hoid, &missing_item))
-        << "Object " << obj_names[i] << " should be in primary " << target_osd << "'s missing set";
+        << "Object " << obj_names[i] << " should be in primary's missing set";
 
-      std::cout << "  OSD " << target_osd << " is the primary and has object " << obj_names[i] << " in its own missing set" << std::endl;
+      std::cout << "  Object " << obj_names[i] << " is in primary's missing set" << std::endl;
       obcs.push_back(ObjectContextRef());
     } else {
-
-      // The target OSD is a peer, check peer_missing
+      // Recovering to peers - verify consistency between peer_missing_map and actual peer missing sets
       const auto& peer_missing_map = primary_ps->get_peer_missing();
-      auto peer_missing_it = peer_missing_map.find(target_shard);
-      ASSERT_NE(peer_missing_it, peer_missing_map.end())
-        << "Primary should have peer_missing entry for OSD " << target_osd;
 
-      const pg_missing_t& peer_missing = peer_missing_it->second;
-      ASSERT_TRUE(peer_missing.have_missing())
-        << "Peer OSD " << target_osd << " should have missing objects after coming back up";
+      std::cout << "  Verifying missing set consistency for object " << obj_names[i] << std::endl;
+      std::cout << "    peer_missing_map has " << peer_missing_map.size() << " entries" << std::endl;
 
-      ASSERT_TRUE(peer_missing.is_missing(hoid, &missing_item))
-        << "Object " << obj_names[i] << " should be in peer " << target_osd << "'s missing set";
+      // For each peer in peer_missing_map, verify it matches the peer's actual missing set
+      bool found_missing_peer = false;
+      for (const auto& [peer_shard, peer_missing_from_map] : peer_missing_map) {
+        std::cout << "    Checking peer " << peer_shard << std::endl;
 
-      auto target_ps = get_peering_state(target_osd);
-      const pg_missing_t& target_missing = target_ps->get_pg_log().get_missing();
-      ASSERT_TRUE(target_missing.have_missing())
-        << "Target OSD " << target_osd << " should have missing objects after coming back up";
+        // Get the actual missing set from the peer's PeeringState
+        auto peer_ps = get_test_pg(peer_shard)->get_peering_state();
+        const pg_missing_t& peer_actual_missing = peer_ps->get_pg_log().get_missing();
 
-      pg_missing_item target_missing_item;
-      ASSERT_TRUE(target_missing.is_missing(hoid, &target_missing_item))
-        << "Object " << obj_names[i] << " should be in peer " << target_osd << "'s missing set";
+        // Check if this object is in the peer_missing_map for this peer
+        pg_missing_item map_missing_item;
+        bool in_map = peer_missing_from_map.is_missing(hoid, &map_missing_item);
 
-      ASSERT_EQ(target_missing_item, missing_item) << "Missing on shard and primary should match";
+        // Check if this object is in the peer's actual missing set
+        pg_missing_item actual_missing_item;
+        bool in_actual = peer_actual_missing.is_missing(hoid, &actual_missing_item);
 
-      // Read the OI directly from the primary's store to get the authoritative version
-      // This avoids relying on potentially stale cached data in the OBC
-      ObjectStore::CollectionHandle primary_ch = chs[primary_shard];
-      ASSERT_TRUE(primary_ch) << "Primary shard " << primary_shard << " must have a valid collection handle";
-      
-      ghobject_t primary_ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(primary_shard));
-      ceph::buffer::ptr oi_ptr;
-      int r = store->getattr(primary_ch, primary_ghoid, OI_ATTR, oi_ptr);
-      ASSERT_GE(r, 0) << "Failed to read OI_ATTR from primary store for " << obj_names[i];
-      
-      bufferlist oi_bl;
-      oi_bl.append(oi_ptr);
-      object_info_t oi;
-      auto p = oi_bl.cbegin();
-      oi.decode(p);
-      
-      std::cout << "  OSD " << target_osd << " is a peer and has object " << obj_names[i]
-                << " in peer_missing (OI version from primary store: " << oi.version << ")" << std::endl;
-      
-      // Verify the missing item's need version matches what we read from the store
-      ASSERT_EQ(missing_item.need, oi.version)
-        << "Missing item need version should match OI version from primary store for " << obj_names[i];
-      
-      // Get OBC for this object - matches PrimaryLogPG::prep_object_replica_pushes behavior
-      // which calls get_object_context(soid, false) and handles null response
-      // Pass can_create=false to ensure we reload from disk with all attributes
+        // They should match
+        ASSERT_EQ(in_map, in_actual)
+          << "Mismatch for object " << obj_names[i] << " on peer " << peer_shard
+          << ": in peer_missing_map=" << in_map << ", in actual missing=" << in_actual;
+
+        if (in_map && in_actual) {
+          ASSERT_EQ(map_missing_item, actual_missing_item)
+            << "Missing item mismatch for object " << obj_names[i] << " on peer " << peer_shard;
+          std::cout << "      ✓ Object " << obj_names[i] << " missing set consistent for peer " << peer_shard << std::endl;
+
+          // Use the first matching peer's missing_item for recovery. (Not
+          // "missing_items.size() == i": that compares against the *count*
+          // pushed so far, which never changes within this inner loop, so it
+          // was true on every matching peer and ended up using the *last*
+          // match instead of the first.)
+          if (!found_missing_peer) {
+            missing_item = map_missing_item;
+            found_missing_peer = true;
+          }
+        }
+      }
+      ASSERT_TRUE(found_missing_peer)
+        << "Object " << obj_names[i] << " should be missing on at least one peer";
+
+      // Get OBC for this object
       ObjectContextRef obc = get_object_context(hoid, false);
       ASSERT_TRUE(obc) << "Failed to load OBC from disk for " << obj_names[i];
       ASSERT_FALSE(obc->attr_cache.empty())
@@ -993,7 +1167,8 @@ void ECPeeringTestFixture::do_run_parallel_recovery_and_verify_callbacks_impl(
     missing_items.push_back(missing_item);
   }
 
-  // Reset recovery callback tracker before starting recovery
+  // Reset recovery callback tracker before starting recovery, so the
+  // verification below (Step 5) reflects only this call's recoveries.
   auto* primary_listener = get_primary_listener();
   primary_listener->recovery_tracker.reset();
 
@@ -1018,71 +1193,82 @@ void ECPeeringTestFixture::do_run_parallel_recovery_and_verify_callbacks_impl(
   // Step 4: Run the recovery operation ONCE for all objects
   // This processes all queued recoveries together in a single operation
   std::cout << "\n  Running single recovery operation for all queued objects..." << std::endl;
-  std::cout << "  (This is where Bug 75432 would trigger if present)" << std::endl;
   get_primary_backend()->run_recovery_op(h, 10);  // priority = 10
-  event_loop->run_until_idle();
 
-  // Step 5: Verify recovery callbacks and data for all objects
-  std::cout << "\n  === Recovery Callback Verification ===" << std::endl;
-  std::cout << "  on_local_recover calls: " << primary_listener->recovery_tracker.on_local_recover_calls << std::endl;
-  std::cout << "  on_peer_recover calls: " << primary_listener->recovery_tracker.on_peer_recover_calls.size() << " peers" << std::endl;
-  std::cout << "  on_global_recover calls: " << primary_listener->recovery_tracker.on_global_recover_calls << std::endl;
+  // Recovery callback/data verification (the old step 5) is done by the
+  // caller (run_parallel_recovery()) after event_loop->run_until_idle() has
+  // fully drained the queue, not here: read_object() internally calls
+  // run_until_idle() itself, and calling that reentrantly while still inside
+  // an event being processed by the outer run_until_idle() call (this
+  // function runs inside a scheduled TRANSACTION event) can interleave with
+  // still-in-flight recovery messages and duplicate an EC read tid.
+}
 
-  for (size_t i = 0; i < obj_names.size(); ++i) {
-    std::cout << "\n  Verifying object " << obj_names[i] << "..." << std::endl;
-
-    // Verify recovery callback was called for this object
-    bool callback_found = false;
-    if (target_osd == primary_shard) {
-      // Local recovery
-      for (const auto& obj : primary_listener->recovery_tracker.on_local_recover_objects) {
-        if (obj == hoids[i]) {
-          callback_found = true;
-          break;
-        }
+// Helper to check recovery completion and queue appropriate events
+// This mimics what PrimaryLogPG::start_recovery_ops() does when recovery completes
+void ECPeeringTestFixture::check_recovery_completion_impl(int osd_id)
+{
+  // Find the parent PG (pgid, not child_pgid) for this OSD.
+  // After a split an OSD hosts both the parent and child PGs; we must look up
+  // the parent by iterating the acting set to find this OSD's shard position.
+  TestPG* test_pg = nullptr;
+  {
+    std::vector<int> acting_osds;
+    int acting_primary = -1;
+    osdmap->pg_to_acting_osds(this->pgid, &acting_osds, &acting_primary);
+    for (size_t shard_idx = 0; shard_idx < acting_osds.size(); ++shard_idx) {
+      if (acting_osds[shard_idx] == osd_id) {
+        spg_t spg(this->pgid, shard_id_t(shard_idx));
+        test_pg = get_test_pg(osd_id, spg);
+        break;
       }
-      EXPECT_TRUE(callback_found)
-        << "on_local_recover should be called for " << obj_names[i];
-    } else {
-      // Peer recovery
-      for (const auto& [peer, obj] : primary_listener->recovery_tracker.on_peer_recover_objects) {
-        if (peer == target_shard && obj == hoids[i]) {
-          callback_found = true;
-          break;
-        }
-      }
-      EXPECT_TRUE(callback_found)
-        << "on_peer_recover should be called for " << obj_names[i];
     }
-
-    // Verify the recovered data
-    bufferlist read_bl;
-    if (expected_data[i].size() > 0)
-    {
-      int r = read_object(obj_names[i], 0, expected_data[i].length(),
-                         read_bl, expected_data[i].length());
-      EXPECT_EQ(r, (int)expected_data[i].length())
-        << "Should read full object " << obj_names[i];
-
-      std::string read_data(read_bl.c_str(), read_bl.length());
-      EXPECT_EQ(read_data, expected_data[i])
-        << "Recovered data should match for " << obj_names[i];
-    }
-
-    std::cout << "  ✓ Object " << obj_names[i] << " recovered successfully" << std::endl;
+  }
+  if (!test_pg) {
+    return;
   }
 
-  // Verify on_global_recover was called for all objects
-  EXPECT_EQ((int)obj_names.size(), primary_listener->recovery_tracker.on_global_recover_calls)
-    << "on_global_recover should be called once for each object";
+  auto ps = test_pg->get_peering_state();
+  if (!ps) {
+    return;
+  }
 
-  std::cout << "\n  === All parallel recovery callbacks and data verified successfully ===" << std::endl;
+  // Check if we're in recovering state and recovery is complete
+  if (ps->state_test(PG_STATE_RECOVERING) && !ps->needs_recovery()) {
+    std::cout << "  OSD " << osd_id << ": Recovery complete, queuing completion event..." << std::endl;
+
+    // Clear recovering state (mimics PrimaryLogPG.cc:13619)
+    ps->state_clear(PG_STATE_RECOVERING);
+    ps->state_clear(PG_STATE_FORCED_RECOVERY);
+
+    // Check if backfill is needed
+    if (ps->needs_backfill()) {
+      std::cout << "  OSD " << osd_id << ": Queuing RequestBackfill event" << std::endl;
+      PGPeeringEventRef evt = std::make_shared<PGPeeringEvent>(
+        ps->get_osdmap_epoch(),
+        ps->get_osdmap_epoch(),
+        PeeringState::RequestBackfill());
+      event_loop->schedule_peering_event(osd_id, test_pg, [evt, test_pg]() {
+        test_pg->get_peering_state()->handle_event(evt, test_pg->get_peering_ctx());
+      });
+    } else {
+      std::cout << "  OSD " << osd_id << ": Queuing AllReplicasRecovered event" << std::endl;
+      ps->state_clear(PG_STATE_FORCED_BACKFILL);
+      PGPeeringEventRef evt = std::make_shared<PGPeeringEvent>(
+        ps->get_osdmap_epoch(),
+        ps->get_osdmap_epoch(),
+        PeeringState::AllReplicasRecovered());
+      event_loop->schedule_peering_event(osd_id, test_pg, [evt, test_pg]() {
+        test_pg->get_peering_state()->handle_event(evt, test_pg->get_peering_ctx());
+      });
+    }
+  }
 }
 
 // Public interface that schedules the recovery on the primary OSD
-void ECPeeringTestFixture::run_parallel_recovery_and_verify_callbacks(
+void ECPeeringTestFixture::run_parallel_recovery(
   const std::vector<std::string>& obj_names,
-  int target_osd,
+  bool recover_primary,
   const std::vector<std::string>& expected_data)
 {
   // Verify we have matching sizes
@@ -1096,9 +1282,95 @@ void ECPeeringTestFixture::run_parallel_recovery_and_verify_callbacks(
     return;
   }
   
-  // Schedule the recovery operation on the primary OSD
-  event_loop->schedule_transaction(primary_shard, [this, obj_names, target_osd, expected_data, primary_shard]() {
-    do_run_parallel_recovery_and_verify_callbacks_impl(obj_names, target_osd, expected_data, primary_shard);
-  });
+  // Schedule the recovery operation on the primary OSD.  schedule_transaction()
+  // captures the current EventLoop TestPG context at call time; called from
+  // plain test scope (outside any event) that context is whatever a previous
+  // event happened to leave behind, so establish it explicitly via
+  // run_in_pg() rather than relying on that.
+  {
+    TestPG* primary_test_pg = get_primary_test_pg();
+    ceph_assert(primary_test_pg != nullptr);
+    event_loop->run_in_pg(primary_shard, primary_test_pg, [&] {
+      event_loop->schedule_transaction(primary_shard, [this, obj_names, recover_primary, expected_data, primary_shard]() {
+        do_run_parallel_recovery_impl(obj_names, recover_primary, expected_data, primary_shard);
+      });
+    });
+  }
+  event_loop->run_until_idle();
+
+  // Verify recovery callbacks and the recovered data for each object, now
+  // that the queue is fully drained. (Not done inside
+  // do_run_parallel_recovery_impl(): read_object() calls run_until_idle()
+  // itself, and that function runs inside a scheduled TRANSACTION event
+  // being processed by the run_until_idle() call just above, so calling it
+  // reentrantly there can interleave with still-in-flight recovery messages
+  // and duplicate an EC read tid. See review item C4/E1 — this restores the
+  // verification the old pre-branch run_parallel_recovery_and_verify_callbacks()
+  // did, which was dropped when this function split off of it.)
+  {
+    auto* primary_listener = get_primary_listener();
+    for (size_t i = 0; i < obj_names.size(); ++i) {
+      hobject_t hoid = make_test_object(obj_names[i]);
+      bool callback_found = false;
+      if (recover_primary) {
+        for (const auto& obj : primary_listener->recovery_tracker.on_local_recover_objects) {
+          if (obj == hoid) {
+            callback_found = true;
+            break;
+          }
+        }
+        EXPECT_TRUE(callback_found)
+          << "on_local_recover should be called for " << obj_names[i];
+      } else {
+        for (const auto& [peer, obj] : primary_listener->recovery_tracker.on_peer_recover_objects) {
+          if (obj == hoid) {
+            callback_found = true;
+            break;
+          }
+        }
+        EXPECT_TRUE(callback_found)
+          << "on_peer_recover should be called for " << obj_names[i];
+      }
+
+      if (!expected_data[i].empty()) {
+        bufferlist read_bl;
+        int r = read_object(obj_names[i], 0, expected_data[i].length(), read_bl,
+                             expected_data[i].length());
+        EXPECT_EQ(r, (int)expected_data[i].length())
+          << "Should read full object " << obj_names[i];
+        if (r == (int)expected_data[i].length()) {
+          std::string read_data(read_bl.c_str(), read_bl.length());
+          EXPECT_EQ(read_data, expected_data[i])
+            << "Recovered data should match for " << obj_names[i];
+        }
+      }
+    }
+
+    EXPECT_EQ((int)obj_names.size(), primary_listener->recovery_tracker.on_global_recover_calls)
+      << "on_global_recover should be called once for each object";
+  }
+
+  // After recovery completes, check each OSD to see if recovery is done
+  // and queue appropriate completion events (AllReplicasRecovered, RequestBackfill, etc.)
+  // This mimics what PrimaryLogPG::start_recovery_ops() does when it detects completion
+  std::vector<int> acting_osds;
+  int acting_primary = -1;
+  osdmap->pg_to_acting_osds(this->pgid, &acting_osds, &acting_primary);
+
+  for (int osd : acting_osds) {
+    if (osd == CRUSH_ITEM_NONE) {
+      continue;
+    }
+    spg_t spgid;
+    TestPG* test_pg = get_spg_for_osd(osd, &spgid) ? get_test_pg(osd, spgid) : nullptr;
+    if (!test_pg) {
+      continue;
+    }
+    event_loop->run_in_pg(osd, test_pg, [&] {
+      event_loop->schedule_transaction(osd, [this, osd]() {
+        check_recovery_completion_impl(osd);
+      });
+    });
+  }
   event_loop->run_until_idle();
 }
