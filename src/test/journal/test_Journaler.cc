@@ -174,7 +174,7 @@ TEST_F(TestJournaler, GetTags) {
   ASSERT_EQ(0, create_journal(12, 8));
   ASSERT_EQ(0, register_client(CLIENT_ID, "foo"));
 
-  std::list<cls::journal::Tag> expected_tags;
+  journal::Journaler::Tags expected_tags;
   for (size_t i = 0; i < 256; ++i) {
     C_SaferCond ctx;
     cls::journal::Tag tag;
@@ -190,7 +190,7 @@ TEST_F(TestJournaler, GetTags) {
     }
   }
 
-  std::list<cls::journal::Tag> tags;
+  journal::Journaler::Tags tags;
   C_SaferCond ctx;
   m_journaler->get_tags(0, &tags, &ctx);
   ASSERT_EQ(0, ctx.wait());

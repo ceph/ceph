@@ -9,16 +9,16 @@
 #include "common/ceph_mutex.h"
 #include "gtest/gtest.h"
 #include "test/journal/RadosTestFixture.h"
-#include <list>
+#include <vector>
 #include <boost/scope_exit.hpp>
 
 using namespace std::chrono_literals;
-typedef std::list<journal::Entry> Entries;
+using Entries = std::vector<journal::Entry>;
 
 template <typename T>
 class TestJournalPlayer : public RadosTestFixture {
 public:
-  typedef std::list<journal::JournalPlayer *> JournalPlayers;
+  using JournalPlayers = std::vector<journal::JournalPlayer *>;
 
   static const uint64_t max_fetch_bytes = T::max_fetch_bytes;
 
@@ -48,9 +48,8 @@ public:
   };
 
   void TearDown() override {
-    for (JournalPlayers::iterator it = m_players.begin();
-         it != m_players.end(); ++it) {
-      delete *it;
+    for (auto *player : m_players) {
+      delete player;
     }
     RadosTestFixture::TearDown();
   }
@@ -992,4 +991,3 @@ TYPED_TEST(TestJournalPlayer, LiveReplayShutDown) {
   };
   player->prefetch_and_watch(0.25);
 }
-
