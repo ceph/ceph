@@ -204,6 +204,11 @@
   It can be disabled by setting ``osd_scrub_queued_snaptrims_limit`` to 0.
 * RGW: Add SSE-KMS secrets cache
 
+>=21.2.1
+
+* RGW: S3 Select is deprecated. The default value of ``rgw_disable_s3select``
+  changed from ``false`` to ``true``.
+
 >=21.0.0
 
 * RGW: ``radosgw-admin bilog trim`` without ``--end-marker`` now requires
