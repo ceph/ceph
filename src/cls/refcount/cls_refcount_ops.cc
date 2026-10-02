@@ -75,8 +75,8 @@ vector<cls_refcount_read_op> cls_refcount_read_op::generate_test_instances()
 void cls_refcount_read_ret::dump(ceph::Formatter *f) const
 {
   f->open_array_section("refs");
-  for (auto p = refs.begin(); p != refs.end(); ++p)
-    f->dump_string("ref", *p);
+  for (const auto& ref : refs)
+    f->dump_string("ref", ref);
   f->close_section();
 }
 

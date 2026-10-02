@@ -4,6 +4,9 @@
 #ifndef CEPH_CLS_TIMEINDEX_CLIENT_H
 #define CEPH_CLS_TIMEINDEX_CLIENT_H
 
+#include <vector>
+#include <utility>
+
 #include "include/rados/librados.hpp"
 
 #include "cls_timeindex_ops.h"
@@ -12,14 +15,14 @@
  * timeindex objclass
  */
 class TimeindexListCtx : public librados::ObjectOperationCompletion {
-  std::list<cls_timeindex_entry> *entries;
+  std::vector<cls_timeindex_entry> *entries;
   std::string *marker;
   bool *truncated;
 
 public:
   ///* ctor
   TimeindexListCtx(
-    std::list<cls_timeindex_entry> *_entries,
+    std::vector<cls_timeindex_entry> *_entries,
     std::string *_marker,
     bool *_truncated)
     : entries(_entries), marker(_marker), truncated(_truncated) {}
@@ -34,11 +37,11 @@ public:
         auto iter = bl.cbegin();
         decode(ret, iter);
         if (entries)
-          *entries = ret.entries;
+          *entries = std::move(ret.entries);
         if (truncated)
           *truncated = ret.truncated;
         if (marker)
-          *marker = ret.marker;
+          *marker = std::move(ret.marker);
       } catch (ceph::buffer::error& err) {
         // nothing we can do about it atm
       }
@@ -54,7 +57,7 @@ void cls_timeindex_add_prepare_entry(
 
 void cls_timeindex_add(
   librados::ObjectWriteOperation& op,
-  const std::list<cls_timeindex_entry>& entry);
+  const std::vector<cls_timeindex_entry>& entries);
 
 void cls_timeindex_add(
   librados::ObjectWriteOperation& op,
@@ -72,7 +75,7 @@ void cls_timeindex_list(
   const utime_t& to,
   const std::string& in_marker,
   const int max_entries,
-  std::list<cls_timeindex_entry>& entries,
+  std::vector<cls_timeindex_entry>& entries,
   std::string *out_marker,
   bool *truncated);
 

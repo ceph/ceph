@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <deque>
+#include <vector>
+
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include "include/str_list.h"
@@ -144,11 +147,11 @@ void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp o
                                 const rgw_bucket_entry_ver& ver,
                                 const cls_rgw_obj_key& key,
                                 const rgw_bucket_dir_entry_meta& dir_meta,
-				const std::list<cls_rgw_obj_key> *remove_objs, bool log_op,
+				const std::deque<cls_rgw_obj_key>& remove_objs, bool log_op,
                                 uint16_t bilog_op, const rgw_zone_set *zones_trace,
 				const std::string& obj_locator = ""); // ignored if it's the empty string
 
-void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, std::list<std::string>& keep_attr_prefixes);
+void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, const std::vector<std::string>& keep_attr_prefixes);
 void cls_rgw_obj_store_pg_ver(librados::ObjectWriteOperation& o, const std::string& attr);
 void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const std::string& prefix, bool fail_if_exist);
 void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const ceph::real_time& mtime, bool high_precision_time, RGWCheckMTimeType type);
@@ -164,6 +167,11 @@ void cls_rgw_bi_put(librados::ObjectWriteOperation& op, const std::string oid, c
 void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
                             std::vector<rgw_cls_bi_entry> entries,
                             bool check_existing);
+// Results replace the existing output on success and leave it intact on error:
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
+                    const std::string& name, const std::string& marker,
+                    uint32_t max, std::vector<rgw_cls_bi_entry>& entries,
+                    bool& is_truncated, bool reshardlog = false);
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    const std::string& name, const std::string& marker, uint32_t max,
                    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
@@ -255,7 +263,7 @@ void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const std::vector<std
 void cls_rgw_gc_list(librados::ObjectReadOperation& op, const std::string& marker,
                      uint32_t max, bool expired_only, bufferlist& bl);
 int cls_rgw_gc_list_decode(const bufferlist& bl,
-                           std::list<cls_rgw_gc_obj_info>& entries,
+                           std::vector<cls_rgw_gc_obj_info>& entries,
                            bool& truncated, std::string& next_marker);
 
 /* lifecycle */
@@ -285,7 +293,7 @@ void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_re
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
 #ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const std::string& oid, std::string& marker, uint32_t max,
-                         std::list<cls_rgw_reshard_entry>& entries, bool* is_truncated);
+                         std::vector<cls_rgw_reshard_entry>& entries, bool* is_truncated);
 int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_reshard_entry& entry);
 #endif
 
