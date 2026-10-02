@@ -7,6 +7,8 @@
 #include "common/ceph_mutex.h"
 
 #include <map>
+#include <vector>
+#include <algorithm>
 
 #include <openssl/conf.h>
 #include <openssl/evp.h>
@@ -331,7 +333,7 @@ public:
 using FSCryptFDataDencRef = std::shared_ptr<FSCryptFDataDenc>;
 
 class FSCryptDecryptedInodes {
-  std::list<ino_t> decrypted_inodes;
+  std::vector<ino_t> decrypted_inodes;
   int open_inodes;
 
 public:
@@ -340,15 +342,16 @@ public:
   }
 
   int del_inode(ino_t inode) {
-    if (decrypted_inodes.size() == 0)
-      return 0;
-    auto it = std::find(decrypted_inodes.begin(), decrypted_inodes.end(), inode);
-    if (it != decrypted_inodes.end())
+    if (auto it = std::ranges::find(decrypted_inodes, inode);
+        it != std::end(decrypted_inodes)) {
       decrypted_inodes.erase(it);
+    }
+
     return 0;
   }
-  std::list<ino_t> get_inodes() {
-    return decrypted_inodes;
+
+  [[nodiscard]] bool empty() const noexcept {
+    return std::empty(decrypted_inodes);
   }
 };
 
@@ -358,7 +361,7 @@ class FSCryptKeyHandler {
   ceph::shared_mutex lock = ceph::make_shared_mutex("FSCryptKeyHandler");
   int64_t epoch = -1;
   FSCryptKeyRef key;
-  std::list<int> users;
+  std::vector<int> users;
 public:
   FSCryptKeyHandler() {}
   FSCryptKeyHandler(int64_t epoch, FSCryptKeyRef k) : epoch(epoch), key(k) {}
@@ -367,7 +370,7 @@ public:
 
   int64_t get_epoch();
   FSCryptDecryptedInodesRef di;
-  std::list<int>& get_users() { return users; }
+  std::vector<int>& get_users() { return users; }
   FSCryptKeyRef& get_key();
   FSCryptDecryptedInodesRef& get_di();
   bool present = false;
@@ -388,8 +391,8 @@ public:
 
   bool valid_key_spec(const struct fscrypt_key_specifier& k);
   int master_key_spec_len(const struct fscrypt_key_specifier& spec);
-  int maybe_add_user(std::list<int>* users, int user);
-  int maybe_remove_user(struct fscrypt_remove_key_arg* arg, std::list<int>* users, int user);
+  int maybe_add_user(std::vector<int>& users, int user);
+  int maybe_remove_user(struct fscrypt_remove_key_arg* arg, std::vector<int>& users, int user);
   int create(const char *k, int klen, FSCryptKeyHandlerRef& key, int user);
   int find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyHandlerRef& key);
   int invalidate(struct fscrypt_remove_key_arg* id, int user);
