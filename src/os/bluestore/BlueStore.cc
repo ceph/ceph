@@ -6375,7 +6375,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   const ghobject_t& oid,
   const string& key,
   const bufferlist& value,
-  mempool::bluestore_fsck::list<string>* expecting_shards,
+  shard_key_queue *expecting_shards,
   map<BlobRef, bluestore_blob_t::unused_t>* referenced,
   BlueStore::FSCK_ObjectCtx& ctx)
 {
@@ -7036,7 +7036,7 @@ void BlueStore::_fsck_check_objects(
   size_t processed_myself = 0;
 
   auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
-  mempool::bluestore_fsck::list<string> expecting_shards;
+  shard_key_queue expecting_shards;
   if (it) {
     const size_t thread_count = cct->_conf->bluestore_fsck_quick_fix_threads;
     typedef ShallowFSCKThreadPool::FSCKWorkQueue<256> WQ;
@@ -9321,14 +9321,13 @@ void BlueStore::_read_cache(
             if (r_off <= (pre.r_off + pre.r_len)) {
               front += (r_off - pre.r_off);
               pre.r_len += (r_off + r_len - pre.r_off - pre.r_len);
-              pre.regs.emplace_back(region_t(pos, b_off, l, front));
+              pre.regs.emplace_back(pos, b_off, l, front);
               merged = true;
             }
           }
           if (!merged) {
-            read_req_t req(r_off, r_len);
-            req.regs.emplace_back(region_t(pos, b_off, l, front));
-            r2r.emplace_back(std::move(req));
+            r2r.emplace_back(r_off, r_len);
+            r2r.back().regs.emplace_back(pos, b_off, l, front);
           }
         }
       }
@@ -9517,7 +9516,7 @@ void BlueStore::_measure_runtime_frag(
   for (auto& p : blobs2read) {
     const BlobRef& bptr = p.first;
     const regions2read_t& r2r = p.second;
-    for (auto req : r2r) {
+    for (const auto& req : r2r) {
       bptr->get_blob().map(
         req.r_off, req.r_len,
         [&](uint64_t offset, uint64_t length) {
@@ -11013,7 +11012,7 @@ void BlueStore::get_db_statistics(Formatter *f)
 
 BlueStore::TransContext *BlueStore::_txc_create(
   Collection *c, OpSequencer *osr, //FIXME: osr is redundant, could be taken from c
-  list<Context*> *on_commits,
+  vector<Context *> *on_commits,
   TrackedOpRef osd_op)
 {
   TransContext *txc = new TransContext(cct, c, osr, on_commits);
@@ -11413,7 +11412,9 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
     txc->set_state(TransContext::STATE_KV_DONE);
     if (txc->ch->commit_queue) {
       txc->ch->commit_queue->queue(txc->oncommits);
-    } else {
+    }
+
+    if (!std::empty(txc->oncommits)) {
       finisher.queue(txc->oncommits);
     }
   }
@@ -12441,9 +12442,9 @@ int BlueStore::queue_transactions(
   ThreadPool::TPHandle *handle)
 {
   FUNCTRACE(cct);
-  list<Context *> on_applied, on_commit, on_applied_sync;
+  vector<Context *> on_applied, on_commit, on_applied_sync;
   ObjectStore::Transaction::collect_contexts(
-    tls, &on_applied, &on_commit, &on_applied_sync);
+    tls, on_applied, on_commit, on_applied_sync);
 
   auto start = mono_clock::now();
 
@@ -12517,15 +12518,13 @@ int BlueStore::queue_transactions(
   _txc_state_proc(txc);
 
   // we're immediately readable (unlike FileStore)
-  for (auto c : on_applied_sync) {
-    c->complete(0);
+  finish_contexts(nullptr, on_applied_sync);
+  if (c->commit_queue) {
+    c->commit_queue->queue(on_applied);
   }
-  if (!on_applied.empty()) {
-    if (c->commit_queue) {
-      c->commit_queue->queue(on_applied);
-    } else {
-      finisher.queue(on_applied);
-    }
+
+  if (!std::empty(on_applied)) {
+    finisher.queue(on_applied);
   }
 
 #ifdef WITH_BLKIN
