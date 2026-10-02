@@ -336,7 +336,7 @@ private:
   std::map<uint64_t, QuiesceWatchCtx*> m_watchers;
   uint64_t m_next_handle = 0;
   Context *m_on_notify = nullptr;
-  std::list<Context *> m_pending_notify;
+  std::deque<Context *> m_pending_notify;
   std::map<uint64_t, Context*> m_pending_unregister;
   uint64_t m_handle_quiesce_cnt = 0;
   std::set<uint64_t> m_failed_watchers;
