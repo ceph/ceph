@@ -2,6 +2,11 @@
  Ceph s3 select 
 ===============
 
+.. deprecated:: 19.2.8
+
+   S3 Select is disabled by default. Set ``rgw_disable_s3select`` to
+   ``false`` to enable it.
+
 .. contents::
 
 Overview
