@@ -999,15 +999,12 @@ parse_cred_scope(std::string_view credential_scope)
   return std::make_tuple(date_cs, region_cs, service_cs);
 }
 
-static inline std::vector<unsigned char>
-transform_secret_key(const std::string_view& secret_access_key)
+static inline auto transform_secret_key(const std::string_view& secret_access_key)
 {
   /* TODO(rzarzynski): switch to constexpr when C++14 becomes available. */
   static const std::initializer_list<unsigned char> AWS4 { 'A', 'W', 'S', '4' };
 
-  /* boost::container::small_vector might be used here if someone wants to
-   * optimize out even more dynamic allocations. */
-  std::vector<unsigned char> secret_key_utf8;
+  boost::container::small_vector<unsigned char, 64> secret_key_utf8;
   secret_key_utf8.reserve(AWS4.size() + secret_access_key.size());
   secret_key_utf8.assign(AWS4);
 
@@ -1034,7 +1031,9 @@ get_v4_signing_key(CephContext* const cct,
   std::tie(date, region, service) = parse_cred_scope(credential_scope);
 
   const auto utfed_sec_key = transform_secret_key(secret_access_key);
-  const auto date_k = calc_hmac_sha256(utfed_sec_key, date);
+  const auto date_k = calc_hmac_sha256(
+    std::string_view{reinterpret_cast<const char*>(utfed_sec_key.data()),
+                     utfed_sec_key.size()}, date);
   const auto region_k = calc_hmac_sha256(date_k, region);
   const auto service_k = calc_hmac_sha256(region_k, service);
 
