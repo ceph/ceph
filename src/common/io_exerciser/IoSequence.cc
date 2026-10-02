@@ -924,7 +924,6 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq16::_next() {
   // Perform Consistency check
   if (!consistency_done) {
     consistency_done = true;
-    barrier = true;
     
     // Move to next operation
     operation_count++;
@@ -932,6 +931,10 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq16::_next() {
       setup_next_operation();
     }
     
+    if (!check_consistency) {
+      return BarrierOp::generate();
+    }
+    barrier = true;
     return ConsistencyOp::generate();
   }
   
