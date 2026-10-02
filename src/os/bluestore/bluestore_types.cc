@@ -1563,8 +1563,8 @@ void bluestore_deferred_transaction_t::dump(Formatter *f) const
 {
   f->dump_unsigned("seq", seq);
   f->open_array_section("ops");
-  for (list<bluestore_deferred_op_t>::const_iterator p = ops.begin(); p != ops.end(); ++p) {
-    f->dump_object("op", *p);
+  for (const auto& op : ops) {
+    f->dump_object("op", op);
   }
   f->close_section();
 
