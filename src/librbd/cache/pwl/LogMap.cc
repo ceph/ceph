@@ -5,6 +5,7 @@
 #include "include/ceph_assert.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/pwl/LogEntry.h"
+#include <iterator>
 
 namespace librbd {
 namespace cache {
@@ -60,10 +61,10 @@ void LogMap<T>::add_log_entry(std::shared_ptr<T> log_entry) {
 }
 
 template <typename T>
-void LogMap<T>::add_log_entries(std::list<std::shared_ptr<T>> &log_entries) {
+void LogMap<T>::add_log_entries(const std::vector<std::shared_ptr<T>> &log_entries) {
   std::lock_guard locker(m_lock);
   ldout(m_cct, 20) << dendl;
-  for (auto &log_entry : log_entries) {
+  for (const auto &log_entry : log_entries) {
     add_log_entry_locked(log_entry);
   }
 }
@@ -79,36 +80,37 @@ void LogMap<T>::remove_log_entry(std::shared_ptr<T> log_entry) {
 }
 
 template <typename T>
-void LogMap<T>::remove_log_entries(std::list<std::shared_ptr<T>> &log_entries) {
+void LogMap<T>::remove_log_entries(const std::vector<std::shared_ptr<T>> &log_entries) {
   std::lock_guard locker(m_lock);
   ldout(m_cct, 20) << dendl;
-  for (auto &log_entry : log_entries) {
+  for (const auto &log_entry : log_entries) {
     remove_log_entry_locked(log_entry);
   }
 }
 
 /**
- * Returns the list of all write log entries that overlap the specified block
+ * Returns all write log entries that overlap the specified block
  * extent. This doesn't tell you which portions of these entries overlap the
  * extent, or each other. For that, use find_map_entries(). A log entry may
- * appear in the list more than once, if multiple map entries refer to it
+ * appear more than once if multiple map entries refer to it
  * (e.g. the middle of that write log entry has been overwritten).
  */
 template <typename T>
-std::list<std::shared_ptr<T>> LogMap<T>::find_log_entries(BlockExtent block_extent) {
+std::vector<std::shared_ptr<T>> LogMap<T>::find_log_entries(BlockExtent block_extent) {
   std::lock_guard locker(m_lock);
   ldout(m_cct, 20) << dendl;
+
   return find_log_entries_locked(block_extent);
 }
 
 /**
- * Returns the list of all write log map entries that overlap the
- * specified block extent.
+ * Returns all write log map entries that overlap the specified block extent.
  */
 template <typename T>
 LogMapEntries<T> LogMap<T>::find_map_entries(BlockExtent block_extent) {
   std::lock_guard locker(m_lock);
   ldout(m_cct, 20) << dendl;
+
   return find_map_entries_locked(block_extent);
 }
 
@@ -212,35 +214,37 @@ void LogMap<T>::split_map_entry_locked(LogMapEntry<T> &map_entry, BlockExtent &r
 }
 
 template <typename T>
-std::list<std::shared_ptr<T>> LogMap<T>::find_log_entries_locked(const BlockExtent &block_extent) {
-  std::list<std::shared_ptr<T>> overlaps;
+std::vector<std::shared_ptr<T>> LogMap<T>::find_log_entries_locked(
+    const BlockExtent &block_extent) {
+  std::vector<std::shared_ptr<T>> overlaps;
   ldout(m_cct, 20) << "block_extent=" << block_extent << dendl;
 
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
   LogMapEntries<T> map_entries = find_map_entries_locked(block_extent);
-  for (auto &map_entry : map_entries) {
+  overlaps.reserve(std::size(map_entries));
+
+  for (const auto &map_entry : map_entries) {
     overlaps.emplace_back(map_entry.log_entry);
   }
+
   return overlaps;
 }
 
-/**
- * TODO: Generalize this to do some arbitrary thing to each map
- * extent, instead of returning a list.
- */
 template <typename T>
 LogMapEntries<T> LogMap<T>::find_map_entries_locked(const BlockExtent &block_extent) {
-  LogMapEntries<T> overlaps;
-
   ldout(m_cct, 20) << "block_extent=" << block_extent << dendl;
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
-  auto p = m_block_to_log_entry_map.equal_range(LogMapEntry<T>(block_extent));
-  ldout(m_cct, 20) << "count=" << std::distance(p.first, p.second) << dendl;
-  for ( auto i = p.first; i != p.second; ++i ) {
-    LogMapEntry<T> entry = *i;
-    overlaps.emplace_back(entry);
-    ldout(m_cct, 20) << entry << dendl;
+
+  const auto [first_overlap, after_overlaps] =
+    m_block_to_log_entry_map.equal_range(LogMapEntry<T>(block_extent));
+  LogMapEntries<T> overlaps;
+
+  for (auto i = first_overlap; i != after_overlaps; ++i) {
+    overlaps.emplace_back(*i);
+    ldout(m_cct, 20) << overlaps.back() << dendl;
   }
+  ldout(m_cct, 20) << "count=" << std::size(overlaps) << dendl;
+
   return overlaps;
 }
 

@@ -6,7 +6,6 @@
 
 #include <functional>
 #include <libpmemobj.h>
-#include <list>
 #include "common/Timer.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
@@ -63,11 +62,11 @@ private:
   Builder<This>* create_builder();
   void remove_pool_file();
   void load_existing_entries(pwl::DeferredContexts &later);
-  void alloc_op_log_entries(pwl::GenericLogOperations &ops);
-  int append_op_log_entries(pwl::GenericLogOperations &ops);
+  void alloc_op_log_entries(const pwl::GenericLogOperationBatch &ops);
+  int append_op_log_entries(const pwl::GenericLogOperationBatch &ops);
   void flush_then_append_scheduled_ops(void);
   void enlist_op_flusher();
-  void flush_op_log_entries(pwl::GenericLogOperationsVector &ops);
+  void flush_op_log_entries(const pwl::GenericLogOperationBatch &ops);
   template <typename V>
   void flush_pmem_buffer(V& ops);
   void inc_allocated_cached_bytes(
@@ -83,7 +82,8 @@ protected:
   using AbstractWriteLog<ImageCtxT>::m_first_valid_entry;
 
   void process_work() override;
-  void schedule_append_ops(pwl::GenericLogOperations &ops, C_BlockIORequestT *req) override;
+  void schedule_append_ops(pwl::GenericLogOperationBatch ops,
+                           C_BlockIORequestT *req) override;
   void append_scheduled_ops(void) override;
   void reserve_cache(C_BlockIORequestT *req,
                      bool &alloc_succeeds, bool &no_space) override;
@@ -98,13 +98,12 @@ protected:
   bool retire_entries(const unsigned long int frees_per_tx) override;
   void persist_last_flushed_sync_gen() override;
   bool alloc_resources(C_BlockIORequestT *req) override;
-  void schedule_flush_and_append(pwl::GenericLogOperationsVector &ops) override;
+  void schedule_flush_and_append(pwl::GenericLogOperationBatch ops) override;
   void setup_schedule_append(
-      pwl::GenericLogOperationsVector &ops, bool do_early_flush,
+      pwl::GenericLogOperationBatch &ops, bool do_early_flush,
       C_BlockIORequestT *req) override;
-  void construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
-				DeferredContexts &post_unlock,
-				bool has_write_entry) override;
+  void construct_flush_entries(pwl::GenericLogEntryBatch entries_to_flush,
+				bool) override;
   bool initialize_pool(Context *on_finish, pwl::DeferredContexts &later) override;
   void write_data_to_buffer(
       std::shared_ptr<pwl::WriteLogEntry> ws_entry,

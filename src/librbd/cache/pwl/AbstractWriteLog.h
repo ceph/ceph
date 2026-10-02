@@ -17,8 +17,7 @@
 #include "librbd/cache/pwl/Request.h"
 #include "librbd/cache/pwl/LogMap.h"
 #include "librbd/cache/pwl/Builder.h"
-#include <functional>
-#include <list>
+#include <deque>
 
 class Context;
 
@@ -37,10 +36,8 @@ class SyncPointLogEntry;
 class WriteLogEntry;
 struct WriteLogCacheEntry;
 
-typedef std::list<std::shared_ptr<WriteLogEntry>> WriteLogEntries;
-typedef std::list<std::shared_ptr<GenericLogEntry>> GenericLogEntries;
-typedef std::list<std::shared_ptr<GenericWriteLogEntry>> GenericWriteLogEntries;
-typedef std::vector<std::shared_ptr<GenericLogEntry>> GenericLogEntriesVector;
+using GenericLogEntryQueue = std::deque<std::shared_ptr<GenericLogEntry>>;
+using GenericLogEntryBatch = std::vector<std::shared_ptr<GenericLogEntry>>;
 
 typedef LogMapEntries<GenericWriteLogEntry> WriteLogMapEntries;
 typedef LogMap<GenericWriteLogEntry> WriteLogMap;
@@ -62,8 +59,7 @@ struct C_BlockIORequest;
 template <typename T>
 struct C_WriteRequest;
 
-using GenericLogOperations = std::list<GenericLogOperationSharedPtr>;
-
+using GenericLogOperationQueue = std::deque<GenericLogOperationSharedPtr>;
 
 template <typename ImageCtxT>
 class AbstractWriteLog {
@@ -123,9 +119,9 @@ public:
   void release_write_lanes(C_BlockIORequestT *req);
   virtual bool alloc_resources(C_BlockIORequestT *req) = 0;
   virtual void setup_schedule_append(
-      pwl::GenericLogOperationsVector &ops, bool do_early_flush,
+      pwl::GenericLogOperationBatch &ops, bool do_early_flush,
       C_BlockIORequestT *req) = 0;
-  void schedule_append(pwl::GenericLogOperationsVector &ops, C_BlockIORequestT *req = nullptr);
+  void schedule_append(pwl::GenericLogOperationBatch &ops, C_BlockIORequestT *req = nullptr);
   void schedule_append(pwl::GenericLogOperationSharedPtr op, C_BlockIORequestT *req = nullptr);
   void flush_new_sync_point(C_FlushRequestT *flush_req,
                             pwl::DeferredContexts &later);
@@ -152,7 +148,7 @@ public:
   uint32_t get_free_log_entries() {
     return m_free_log_entries;
   }
-  void add_into_log_map(pwl::GenericWriteLogEntries &log_entries,
+  void add_into_log_map(const pwl::GenericWriteLogEntries &log_entries,
                         C_BlockIORequestT *req);
   virtual void complete_user_request(Context *&user_req, int r) = 0;
   virtual void copy_bl_to_buffer(
@@ -160,9 +156,6 @@ public:
       std::unique_ptr<WriteLogOperationSet> &op_set) {}
 
 private:
- typedef std::list<pwl::C_WriteRequest<This> *> C_WriteRequests;
- typedef std::list<pwl::C_BlockIORequest<This> *> C_BlockIORequests;
-
  std::atomic<bool> m_initialized = {false};
 
   uint64_t m_bytes_dirty = 0;     /* Total bytes yet to flush to RBD */
@@ -208,7 +201,7 @@ private:
   uint64_t m_lowest_flushing_sync_gen = 0;
 
   /* Writes that have left the block guard, but are waiting for resources */
-  C_BlockIORequests m_deferred_ios;
+  std::deque<C_BlockIORequestT *> m_deferred_ios;
   /* Throttle writes concurrently allocating & replicating */
   unsigned int m_free_lanes = pwl::MAX_CONCURRENT_WRITES;
 
@@ -250,8 +243,6 @@ private:
                                       pwl::DeferredContexts &later);
 
   void alloc_and_dispatch_io_req(C_BlockIORequestT *write_req);
-  void schedule_complete_op_log_entries(pwl::GenericLogOperations &&ops,
-                                        const int r);
   void internal_flush(bool invalidate, Context *on_finish);
 
 protected:
@@ -306,21 +297,21 @@ protected:
   mutable ceph::mutex m_lock;
 
   /* Use m_blockguard_lock for the following 3 things */
-  pwl::WriteLogGuard::BlockOperations m_awaiting_barrier;
+  std::deque<GuardedRequest> m_awaiting_barrier;
 
   bool m_wake_up_requested = false;
   bool m_wake_up_scheduled = false;
   bool m_appending = false;
   bool m_dispatching_deferred_ops = false;
 
-  pwl::GenericLogOperations m_ops_to_flush; /* Write ops needing flush in local log */
-  pwl::GenericLogOperations m_ops_to_append; /* Write ops needing event append in local log */
+  pwl::GenericLogOperationQueue m_ops_to_flush; /* Write ops needing flush in local log */
+  pwl::GenericLogOperationQueue m_ops_to_append; /* Write ops needing event append in local log */
 
   pwl::WriteLogMap m_blocks_to_log_entries;
 
   /* New entries are at the back. Oldest at the front */
-  pwl::GenericLogEntries m_log_entries;
-  pwl::GenericLogEntries m_dirty_log_entries;
+  pwl::GenericLogEntryQueue m_log_entries;
+  pwl::GenericLogEntryQueue m_dirty_log_entries;
 
   PerfCounters *m_perfcounter = nullptr;
 
@@ -352,19 +343,21 @@ protected:
   bool can_retire_entry(const std::shared_ptr<pwl::GenericLogEntry> log_entry);
 
   void dispatch_deferred_writes(void);
-  void complete_op_log_entries(pwl::GenericLogOperations &&ops, const int r);
+  void complete_op_log_entries(pwl::GenericLogOperationBatch &&ops,
+                               const int r);
 
   bool check_allocation(
       C_BlockIORequestT *req, uint64_t bytes_cached, uint64_t bytes_dirtied,
       uint64_t bytes_allocated, uint32_t num_lanes, uint32_t num_log_entries,
       uint32_t num_unpublished_reserves);
   void append_scheduled(
-      pwl::GenericLogOperations &ops, bool &ops_remain, bool &appending,
-      bool isRWL=false);
+      pwl::GenericLogOperationBatch &ops, bool &ops_remain, bool &appending,
+      bool is_rwl = false);
 
   virtual void process_work() = 0;
   virtual void append_scheduled_ops(void) = 0;
-  virtual void schedule_append_ops(pwl::GenericLogOperations &ops, C_BlockIORequestT *req) = 0;
+  virtual void schedule_append_ops(pwl::GenericLogOperationBatch ops,
+                                   C_BlockIORequestT *req) = 0;
   virtual void remove_pool_file() = 0;
   virtual bool initialize_pool(Context *on_finish,
                                pwl::DeferredContexts &later) = 0;
@@ -381,17 +374,16 @@ protected:
       pwl::WriteLogCacheEntry *cache_entry) {}
   virtual void release_ram(
       const std::shared_ptr<pwl::GenericLogEntry> log_entry) {}
-  virtual void alloc_op_log_entries(pwl::GenericLogOperations &ops) {}
+  virtual void alloc_op_log_entries(const pwl::GenericLogOperationBatch &ops) {}
   virtual bool retire_entries(const unsigned long int frees_per_tx) {
     return false;
   }
   virtual void schedule_flush_and_append(
-      pwl::GenericLogOperationsVector &ops) {}
+      pwl::GenericLogOperationBatch ops) {}
   virtual void persist_last_flushed_sync_gen() {}
   virtual void reserve_cache(C_BlockIORequestT *req, bool &alloc_succeeds,
                              bool &no_space) {}
-  virtual void construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
-					DeferredContexts &post_unlock,
+  virtual void construct_flush_entries(pwl::GenericLogEntryBatch entries_to_flush,
 					bool has_write_entry) = 0;
   virtual uint64_t get_max_extent() {
     return 0;

@@ -21,6 +21,7 @@
 #include "librbd/cache/pwl/LogEntry.h"
 #include "librbd/plugin/Api.h"
 
+#include <algorithm>
 #include <map>
 #include <shared_mutex> // for std::shared_lock
 #include <vector>
@@ -1270,85 +1271,97 @@ void AbstractWriteLog<I>::release_guarded_request(BlockGuardCell *released_cell)
 }
 
 template <typename I>
-void AbstractWriteLog<I>::append_scheduled(GenericLogOperations &ops, bool &ops_remain,
-                                         bool &appending, bool isRWL)
+void AbstractWriteLog<I>::append_scheduled(
+    GenericLogOperationBatch &ops, bool &ops_remain, bool &appending,
+    bool is_rwl)
 {
-  const unsigned long int OPS_APPENDED = isRWL ? MAX_ALLOC_PER_TRANSACTION
+  const auto max_appended = is_rwl ? MAX_ALLOC_PER_TRANSACTION
     : MAX_WRITES_PER_SYNC_POINT;
-  {
-    std::lock_guard locker(m_lock);
-    if (!appending && m_appending) {
-      /* Another thread is appending */
-      ldout(m_image_ctx.cct, 15) << "Another thread is appending" << dendl;
-      return;
+
+  std::lock_guard locker(m_lock);
+
+  if (!appending && m_appending) {
+    /* Another thread is appending */
+    ldout(m_image_ctx.cct, 15) << "Another thread is appending" << dendl;
+    return;
+  }
+
+  if (!m_ops_to_append.empty()) {
+    appending = true;
+    m_appending = true;
+
+    const auto ops_to_append = std::min<std::size_t>(
+      std::size(m_ops_to_append), max_appended);
+    ops.reserve(ops_to_append);
+
+    for (std::size_t i = 0; i < ops_to_append; ++i) {
+      ops.push_back(std::move(m_ops_to_append.front()));
+      m_ops_to_append.pop_front();
     }
-    if (m_ops_to_append.size()) {
-      appending = true;
-      m_appending = true;
-      auto last_in_batch = m_ops_to_append.begin();
-      unsigned int ops_to_append = m_ops_to_append.size();
-      if (ops_to_append > OPS_APPENDED) {
-        ops_to_append = OPS_APPENDED;
-      }
-      std::advance(last_in_batch, ops_to_append);
-      ops.splice(ops.end(), m_ops_to_append, m_ops_to_append.begin(), last_in_batch);
-      ops_remain = true; /* Always check again before leaving */
-      ldout(m_image_ctx.cct, 20) << "appending " << ops.size() << ", remain "
-                                 << m_ops_to_append.size() << dendl;
-    } else if (isRWL) {
-      ops_remain = false;
-      if (appending) {
-        appending = false;
-        m_appending = false;
-      }
-    }
+
+    ops_remain = true; /* Always check again before leaving */
+    ldout(m_image_ctx.cct, 20) << "appending " << std::size(ops)
+                               << ", remain " << std::size(m_ops_to_append)
+                               << dendl;
+    return;
+  }
+
+  if (!is_rwl) {
+    return;
+  }
+
+  ops_remain = false;
+  if (appending) {
+    appending = false;
+    m_appending = false;
   }
 }
 
 template <typename I>
-void AbstractWriteLog<I>::schedule_append(GenericLogOperationsVector &ops, C_BlockIORequestT *req)
+void AbstractWriteLog<I>::schedule_append(GenericLogOperationBatch &ops,
+                                          C_BlockIORequestT *req)
 {
-  GenericLogOperations to_append(ops.begin(), ops.end());
-
-  schedule_append_ops(to_append, req);
+  schedule_append_ops(std::move(ops), req);
 }
 
 template <typename I>
 void AbstractWriteLog<I>::schedule_append(GenericLogOperationSharedPtr op, C_BlockIORequestT *req)
 {
-  GenericLogOperations to_append { op };
-
-  schedule_append_ops(to_append, req);
+  schedule_append_ops(GenericLogOperationBatch {std::move(op)}, req);
 }
 
 /*
  * Complete a set of write ops with the result of append_op_entries.
  */
 template <typename I>
-void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
-                                                    const int result)
+void AbstractWriteLog<I>::complete_op_log_entries(
+    GenericLogOperationBatch &&ops, const int result)
 {
-  GenericLogEntries dirty_entries;
   int published_reserves = 0;
   ldout(m_image_ctx.cct, 20) << __func__ << ": completing" << dendl;
   for (auto &op : ops) {
     utime_t now = ceph_clock_now();
     auto log_entry = op->get_log_entry();
+    const auto writing_op = op->is_writing_op();
+
     log_entry->completed = true;
-    if (op->is_writing_op()) {
+    if (writing_op) {
       op->mark_log_entry_completed();
-      dirty_entries.push_back(log_entry);
     }
+
     if (log_entry->is_write_entry()) {
       release_ram(log_entry);
     }
+
     if (op->reserved_allocated()) {
       published_reserves++;
     }
     {
       std::lock_guard locker(m_lock);
       m_unpublished_reserves -= published_reserves;
-      m_dirty_log_entries.splice(m_dirty_log_entries.end(), dirty_entries);
+      if (writing_op) {
+        m_dirty_log_entries.push_back(log_entry);
+      }
     }
     op->complete(result);
     m_perfcounter->tinc(l_librbd_pwl_log_op_dis_to_app_t,
@@ -1768,8 +1781,8 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
 
   ldout(cct, 20) << "Look for dirty entries" << dendl;
   {
-    DeferredContexts post_unlock;
-    GenericLogEntries entries_to_flush;
+    GenericLogEntryBatch entries_to_flush;
+    entries_to_flush.reserve(IN_FLIGHT_FLUSH_WRITE_LIMIT);
 
     std::shared_lock entry_reader_locker(m_entry_reader_lock);
     std::lock_guard locker(m_lock);
@@ -1792,15 +1805,14 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
         break;
       }
 
-      auto candidate = m_dirty_log_entries.front();
-      bool flushable = can_flush_entry(candidate);
+      const auto &candidate = m_dirty_log_entries.front();
+      const auto flushable = can_flush_entry(candidate);
+
       if (flushable) {
         entries_to_flush.push_back(candidate);
         flushed++;
         if (!has_write_entry)
           has_write_entry = candidate->is_write_entry();
-        m_dirty_log_entries.pop_front();
-
 	// To track candidate, we should add m_flush_ops_in_flight in here
 	{
 	  if (!m_flush_ops_in_flight ||
@@ -1811,13 +1823,14 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
 	  /* For write same this is the bytes affected by the flush op, not the bytes transferred */
 	  m_flush_bytes_in_flight += candidate->ram_entry.write_bytes;
 	}
+        m_dirty_log_entries.pop_front();
       } else {
         ldout(cct, 20) << "Next dirty entry isn't flushable yet" << dendl;
         break;
       }
     }
 
-    construct_flush_entries(entries_to_flush, post_unlock, has_write_entry);
+    construct_flush_entries(std::move(entries_to_flush), has_write_entry);
   }
   if (need_update_state) {
     std::unique_lock locker(m_lock);
@@ -2173,8 +2186,8 @@ void AbstractWriteLog<I>::internal_flush(bool invalidate, Context *on_finish) {
 }
 
 template <typename I>
-void AbstractWriteLog<I>::add_into_log_map(GenericWriteLogEntries &log_entries,
-                                           C_BlockIORequestT *req) {
+void AbstractWriteLog<I>::add_into_log_map(
+    const GenericWriteLogEntries &log_entries, C_BlockIORequestT *req) {
   req->copy_cache();
   m_blocks_to_log_entries.add_log_entries(log_entries);
 }
