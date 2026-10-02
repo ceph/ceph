@@ -102,6 +102,12 @@ void Client::ms_handle_connect(
 {
   LOG_PREFIX(Client::ms_handle_connect);
   DEBUGDPP("prev_shard: {}", *this, prv_shard);
+  if (conn != c) {
+    // the dispatchers are chained: this is another dispatcher's connection
+    // (e.g. a lossless OSD peer's, whose I/O may have moved between shards)
+    return;
+  }
+  // our connection is a lossy one, served on the messenger's shard
   ceph_assert_always(prv_shard == seastar::this_shard_id());
   gates.dispatch_in_background(__func__, *this,
   [this, c, FNAME] {
