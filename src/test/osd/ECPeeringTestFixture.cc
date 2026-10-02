@@ -468,6 +468,7 @@ PeeringState* ECPeeringTestFixture::create_peering_state(int shard)
   pl->set_messenger(messenger.get());
   pl->set_event_loop(event_loop.get());
   pl->backend_listener->set_messenger(messenger.get());
+  pl->log_backend = backends[shard].get();
 
   pl->queue_transaction_callback =
     [this, shard](ObjectStore::Transaction&& t) -> int {

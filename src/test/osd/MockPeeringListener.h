@@ -53,6 +53,9 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   coll_t coll;
   ObjectStore::CollectionHandle ch;
   std::unique_ptr<MockPGBackend> backend;
+  // The PG's real backend, if it has one. Log entries are rolled back, rolled
+  // forward and trimmed through it, rather than through the mock.
+  PGBackend *log_backend = nullptr;
   PerfCounters* recoverystate_perf;
   PerfCounters* logger_perf;
   std::vector<int> next_acting;
@@ -423,7 +426,8 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
   PGLog::LogEntryHandlerRef get_log_handler(
     ObjectStore::Transaction &t) override {
-    return std::make_unique<MockPGLogEntryHandler>(backend.get(), &t);
+    return std::make_unique<MockPGLogEntryHandler>(
+      log_backend ? log_backend : backend.get(), &t);
   }
 
   void rebuild_missing_set_with_deletes(PGLog &pglog) override {

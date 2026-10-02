@@ -19,18 +19,42 @@
 
 using namespace std;
 
-/**
- * TestECFailoverWithPeering - parameterized EC peering and failover tests.
- *
- * This fixture is parameterized over BackendConfig to test multiple EC
- * configurations (different k/m values, stripe units, plugins, and optimizations).
- * Only EC configurations are tested since peering and failover are EC-specific.
+namespace {
+
+/* One step of an op on a single object: truncate to off, or write or zero
+ * len bytes at off. Written data is chosen when the op is submitted.
  */
-class TestECFailoverWithPeering : public ECPeeringTestFixture,
-                                   public ::testing::WithParamInterface<BackendConfig> {
+struct ObjOp {
+  enum Type { TRUNCATE, WRITE, ZERO } type;
+  uint64_t off;
+  uint64_t len;
+};
+
+ObjOp Truncate(uint64_t size) { return {ObjOp::TRUNCATE, size, 0}; }
+ObjOp Write(uint64_t off, uint64_t len) { return {ObjOp::WRITE, off, len}; }
+ObjOp Zero(uint64_t off, uint64_t len) { return {ObjOp::ZERO, off, len}; }
+
+/* An object created with size bytes of random data. The ops in committed
+ * are then applied one at a time, each committing before the next. Each
+ * entry of ops is one op under test; they are all in flight together.
+ */
+struct ObjectScenario {
+  uint64_t size;
+  std::vector<std::vector<ObjOp>> committed;
+  std::vector<std::vector<ObjOp>> ops;
+};
+
+}  // namespace
+
+/**
+ * ECTruncateTestBase - EC peering fixture configured from a BackendConfig,
+ * with helpers that submit ops mixing truncates, writes and zeros while
+ * keeping a model of the expected contents of each object, and that check
+ * every shard of an object against its model.
+ */
+class ECTruncateTestBase : public ECPeeringTestFixture {
 public:
-  TestECFailoverWithPeering() : ECPeeringTestFixture() {
-    const auto& config = GetParam();
+  explicit ECTruncateTestBase(const BackendConfig& config) {
     k = config.k;
     m = config.m;
     stripe_unit = config.stripe_unit;
@@ -38,9 +62,412 @@ public:
     ec_technique = config.ec_technique;
     pool_flags = config.pool_flags;
   }
-  
-  void SetUp() override {
-    ECPeeringTestFixture::SetUp();
+
+protected:
+  /* Read the head object of every shard directly from the store. */
+  std::map<int, bufferlist> read_shards(const std::string& obj_name) {
+    const hobject_t hoid = make_test_object(obj_name);
+    std::map<int, bufferlist> shards;
+    for (int shard = 0; shard < k + m; ++shard) {
+      ghobject_t ghoid(hoid, ghobject_t::NO_GEN, shard_id_t(shard));
+      EXPECT_LE(0, store->read(chs[shard], ghoid, 0, 0, shards[shard]))
+        << "shard " << shard;
+    }
+    return shards;
+  }
+
+  ECUtil::stripe_info_t get_sinfo() {
+    return ECUtil::stripe_info_t(ec_impl, &get_pool(), stripe_unit * k);
+  }
+
+  int get_shard(unsigned raw_shard) {
+    return int(get_sinfo().get_shard(raw_shard_id_t(raw_shard)));
+  }
+
+  /* Queue ops, in order, as a single PGTransaction on an existing object on
+   * the primary, and apply them to model, which must hold the contents of the
+   * object once every op queued before is applied. The returned result is
+   * set when the op completes.
+   */
+  std::shared_ptr<int> queue_ops(const std::string& obj_name,
+                                 const std::vector<ObjOp>& ops,
+                                 std::string& model) {
+    const uint64_t pre_op_size = model.size();
+    std::vector<std::pair<ObjOp, bufferlist>> steps;
+    for (const auto& op : ops) {
+      bufferlist bl;
+      switch (op.type) {
+      case ObjOp::TRUNCATE:
+        model.resize(op.off, '\0');
+        break;
+      case ObjOp::WRITE:
+        bl = create_random_buffer(op.len);
+        if (model.size() < op.off + op.len) {
+          model.resize(op.off + op.len, '\0');
+        }
+        model.replace(op.off, op.len, bl.c_str(), op.len);
+        break;
+      case ObjOp::ZERO:
+        ceph_assert(op.off + op.len <= model.size());
+        model.replace(op.off, op.len, op.len, '\0');
+        break;
+      }
+      steps.emplace_back(op, bl);
+    }
+
+    const uint64_t new_size = model.size();
+    auto result = std::make_shared<int>(-EINPROGRESS);
+    event_loop->schedule_transaction(
+      osdmap->get_pg_acting_primary(pgid),
+      [this, result, obj_name, steps, pre_op_size, new_size]() {
+        *result = do_ops_impl(obj_name, steps, pre_op_size, new_size);
+      });
+    return result;
+  }
+
+  int submit_ops(const std::string& obj_name,
+                 const std::vector<ObjOp>& ops,
+                 std::string& model) {
+    auto result = queue_ops(obj_name, ops, model);
+    event_loop->run_until_idle();
+    return *result;
+  }
+
+  int do_ops_impl(const std::string& obj_name,
+                  const std::vector<std::pair<ObjOp, bufferlist>>& steps,
+                  uint64_t pre_op_size,
+                  uint64_t new_size) {
+    hobject_t hoid = make_test_object(obj_name);
+    PGTransactionUPtr pg_t = std::make_unique<PGTransaction>();
+
+    ObjectContextRef obc = get_object_context(hoid, false);
+    ceph_assert(obc);
+    ceph_assert(obc->obs.oi.size == pre_op_size);
+    pg_t->obc_map[hoid] = obc;
+    outstanding_writes[hoid]++;
+
+    for (const auto& [op, bl] : steps) {
+      switch (op.type) {
+      case ObjOp::TRUNCATE:
+        pg_t->truncate(hoid, op.off);
+        break;
+      case ObjOp::WRITE: {
+        bufferlist data = bl;
+        pg_t->write(hoid, op.off, data.length(), data);
+        break;
+      }
+      case ObjOp::ZERO:
+        pg_t->zero(hoid, op.off, op.len);
+        break;
+      }
+    }
+
+    object_stat_sum_t delta_stats;
+    delta_stats.num_bytes = int64_t(new_size) - int64_t(pre_op_size);
+
+    eversion_t prior_version = obc->obs.oi.version;
+    eversion_t at_version = get_next_version();
+
+    object_info_t new_oi = obc->obs.oi;
+    new_oi.version = at_version;
+    new_oi.prior_version = prior_version;
+    new_oi.size = new_size;
+    {
+      bufferlist oi_bl;
+      new_oi.encode(oi_bl, osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+      pg_t->setattr(hoid, OI_ATTR, oi_bl);
+    }
+    obc->obs.oi = new_oi;
+
+    std::vector<pg_log_entry_t> log_entries;
+    pg_log_entry_t entry;
+    entry.op = pg_log_entry_t::MODIFY;
+    entry.soid = hoid;
+    entry.version = at_version;
+    entry.prior_version = prior_version;
+    log_entries.push_back(entry);
+
+    auto write_complete = [this, hoid, obc, prior_version, pre_op_size](int r) {
+      if (outstanding_writes[hoid] > 0) {
+        outstanding_writes[hoid]--;
+        if (outstanding_writes[hoid] == 0) {
+          outstanding_writes.erase(hoid);
+        }
+      }
+      if (r != 0 && r != -EINPROGRESS) {
+        obc->obs.oi.version = prior_version;
+        obc->obs.oi.size = pre_op_size;
+        obc->attr_cache.clear();
+        outstanding_writes.erase(hoid);
+      }
+    };
+
+    return do_transaction_and_complete(
+      hoid, std::move(pg_t), delta_stats, at_version, std::move(log_entries),
+      write_complete);
+  }
+
+  /* Check every shard of an object, other than those in skip, against model,
+   * the expected contents of the object. Each shard must be as long as the
+   * shard size for the object size. Each data shard must hold its chunks of
+   * the object, and zeros past the end of the object. Each parity shard must
+   * hold the parity that ec_impl encodes from those data chunks.
+   */
+  void check_shards(const std::string& obj_name,
+                    const std::string& model,
+                    const std::set<int>& skip) {
+    SCOPED_TRACE("check_shards " + obj_name);
+    const ECUtil::stripe_info_t sinfo = get_sinfo();
+    const uint64_t size = model.size();
+    const uint64_t sw = sinfo.get_stripe_width();
+    auto shards = read_shards(obj_name);
+    std::set<int> bad_shards;
+
+    for (int shard = 0; shard < k + m; ++shard) {
+      if (!skip.contains(shard)) {
+        EXPECT_EQ(sinfo.object_size_to_shard_size(size, shard_id_t(shard)),
+                  shards.at(shard).length())
+          << "length of shard " << shard << " for object size " << size;
+      }
+    }
+
+    for (uint64_t stripe = 0; stripe * sw < size; ++stripe) {
+      shard_id_map<bufferptr> in(k + m);
+      shard_id_map<bufferptr> out(k + m);
+      for (raw_shard_id_t raw; raw < k + m; ++raw) {
+        bufferptr bp = buffer::create_aligned(stripe_unit, EC_ALIGN_SIZE);
+        bp.zero();
+        if (raw < k) {
+          const uint64_t ro_offset = stripe * sw + int(raw) * stripe_unit;
+          if (ro_offset < size) {
+            bp.copy_in(0, std::min(stripe_unit, size - ro_offset),
+                       model.data() + ro_offset);
+          }
+          in[sinfo.get_shard(raw)] = bp;
+        } else {
+          out[sinfo.get_shard(raw)] = bp;
+        }
+      }
+      ASSERT_EQ(0, ec_impl->encode_chunks(in, out));
+
+      for (int shard = 0; shard < k + m; ++shard) {
+        const shard_id_t id(shard);
+        if (skip.contains(shard) || bad_shards.contains(shard)) {
+          continue;
+        }
+        const bufferptr& expected = in.contains(id) ? in.at(id) : out.at(id);
+        bufferlist& stored = shards.at(shard);
+        const uint64_t offset = stripe * stripe_unit;
+        if (offset >= stored.length()) {
+          continue;
+        }
+        const uint64_t length = std::min(stripe_unit, stored.length() - offset);
+        const char* actual = stored.c_str() + offset;
+        for (uint64_t i = 0; i < length; ++i) {
+          if (actual[i] != expected.c_str()[i]) {
+            ADD_FAILURE() << (in.contains(id) ? "data" : "parity")
+                          << " shard " << shard << " differs from the model"
+                          << " at shard offset " << offset + i
+                          << " (stripe " << stripe << ", object size "
+                          << size << ")";
+            bad_shards.insert(shard);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  std::string object_name(const std::string& name, size_t index) {
+    return name + "_" + std::to_string(index);
+  }
+
+  /* Create each object and apply its committed ops, returning the models. */
+  std::vector<std::string> create_objects(
+      const std::string& name,
+      const std::vector<ObjectScenario>& objects) {
+    std::vector<std::string> models;
+    for (size_t i = 0; i < objects.size(); ++i) {
+      bufferlist bl = create_random_buffer(objects[i].size);
+      models.emplace_back(bl.c_str(), bl.length());
+      create_and_write_verify(object_name(name, i), models.back());
+      for (const auto& ops : objects[i].committed) {
+        EXPECT_EQ(0, submit_ops(object_name(name, i), ops, models.back()));
+      }
+    }
+    return models;
+  }
+
+  struct QueuedOp {
+    size_t object;
+    std::shared_ptr<int> result;
+    std::string model;  // The object once this op is applied.
+  };
+
+  /* Queue every object's ops, with the i'th op of each object queued after
+   * the (i-1)'th op of every object.
+   */
+  std::vector<QueuedOp> queue_all_ops(
+      const std::string& name,
+      const std::vector<ObjectScenario>& objects,
+      std::vector<std::string>& models) {
+    std::vector<QueuedOp> queued;
+    for (size_t step = 0; ; ++step) {
+      bool any = false;
+      for (size_t i = 0; i < objects.size(); ++i) {
+        if (step < objects[i].ops.size()) {
+          auto result =
+            queue_ops(object_name(name, i), objects[i].ops[step], models[i]);
+          queued.push_back({i, result, models[i]});
+          any = true;
+        }
+      }
+      if (!any) {
+        return queued;
+      }
+    }
+  }
+
+  void verify_objects(const std::string& name,
+                      const std::vector<std::string>& models,
+                      const std::set<int>& down) {
+    for (size_t i = 0; i < models.size(); ++i) {
+      if (!models[i].empty()) {
+        verify_object(object_name(name, i), models[i], 0, models[i].size());
+      }
+      check_shards(object_name(name, i), models[i], down);
+    }
+  }
+
+  /* Apply the ops of each object, all in flight together, and check the
+   * objects and their shards. Then take down the OSD holding the first data
+   * shard, so that reads must decode, and check again.
+   */
+  void run_forward(const std::string& name,
+                   const std::vector<ObjectScenario>& objects) {
+    ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+    auto models = create_objects(name, objects);
+    const auto queued = queue_all_ops(name, objects, models);
+    event_loop->run_until_idle();
+    for (const auto& op : queued) {
+      EXPECT_EQ(0, *op.result);
+    }
+    {
+      SCOPED_TRACE("after the ops");
+      verify_objects(name, models, {});
+    }
+
+    const int down = get_shard(0);
+    mark_osd_down(down);
+    event_loop->run_until_idle();
+    ASSERT_TRUE(all_shards_active()) << "All shards should be active after peering";
+    SCOPED_TRACE("with shard " + std::to_string(down) + " down");
+    verify_objects(name, models, {down});
+  }
+
+  /* Submit the ops of each object so that they reach every shard except
+   * blocked_shard, then take down the OSD of failing_shard so that peering
+   * rolls back those still in flight. An op that does not write to
+   * blocked_shard can complete first, and must then survive. Each object
+   * must be left as it was after its last completed op, and each surviving
+   * shard of an object with no completed op must be restored exactly.
+   */
+  void run_rollback(const std::string& name,
+                    const std::vector<ObjectScenario>& objects,
+                    int blocked_shard,
+                    int failing_shard) {
+    ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+    ASSERT_NE(blocked_shard, failing_shard);
+    ASSERT_GE(k + m - 1, k) << "Too few shards would remain up";
+
+    const auto originals = create_objects(name, objects);
+    std::vector<std::map<int, bufferlist>> original_shards;
+    for (size_t i = 0; i < objects.size(); ++i) {
+      original_shards.push_back(read_shards(object_name(name, i)));
+    }
+    {
+      SCOPED_TRACE("before the ops");
+      verify_objects(name, originals, {});
+    }
+
+    const int primary = get_primary_shard_from_osdmap();
+    event_loop->suspend_from_to_osd(primary, blocked_shard);
+    auto models = originals;
+    const auto queued = queue_all_ops(name, objects, models);
+    event_loop->run_until_idle();
+
+    auto expected = originals;
+    std::vector<bool> in_flight(objects.size(), false);
+    std::vector<bool> completed(objects.size(), false);
+    for (const auto& op : queued) {
+      if (*op.result == 0) {
+        EXPECT_FALSE(in_flight[op.object]) << "ops must complete in order";
+        expected[op.object] = op.model;
+        completed[op.object] = true;
+      } else {
+        EXPECT_EQ(-EINPROGRESS, *op.result);
+        in_flight[op.object] = true;
+      }
+    }
+    if (!std::ranges::any_of(in_flight, std::identity{})) {
+      std::cout << "No op writes to shard " << blocked_shard
+                << ", so none is left to roll back" << std::endl;
+    }
+
+    mark_osd_down(failing_shard);
+    event_loop->unsuspend_from_to_osd(primary, blocked_shard);
+    event_loop->run_until_idle();
+    ASSERT_TRUE(all_shards_active()) << "All shards should be active after peering";
+
+    SCOPED_TRACE("after rollback with shard " + std::to_string(blocked_shard) +
+                 " blocked and shard " + std::to_string(failing_shard) +
+                 " failed");
+    verify_objects(name, expected, {failing_shard});
+    for (size_t i = 0; i < objects.size(); ++i) {
+      if (completed[i]) {
+        continue;
+      }
+      const auto shards = read_shards(object_name(name, i));
+      for (int shard = 0; shard < k + m; ++shard) {
+        if (shard == failing_shard) {
+          continue;
+        }
+        EXPECT_EQ(original_shards[i].at(shard).length(), shards.at(shard).length())
+          << "size of shard " << shard << " of " << object_name(name, i);
+        EXPECT_TRUE(original_shards[i].at(shard).contents_equal(shards.at(shard)))
+          << "contents of shard " << shard << " of " << object_name(name, i);
+      }
+    }
+  }
+};
+
+/**
+ * TestECFailoverWithPeering - parameterized EC peering and failover tests.
+ *
+ * This fixture is parameterized over BackendConfig to test multiple EC
+ * configurations (different k/m values, stripe units, plugins, and optimizations).
+ * Only EC configurations are tested since peering and failover are EC-specific.
+ */
+class TestECFailoverWithPeering : public ECTruncateTestBase,
+                                   public ::testing::WithParamInterface<BackendConfig> {
+public:
+  TestECFailoverWithPeering() : ECTruncateTestBase(GetParam()) {}
+
+protected:
+  /* Truncate an object and apply writes of the given {offset, length} in a
+   * single op that reaches every shard except shard 1, then fail the last
+   * parity shard so that the op is rolled back.
+   */
+  void rollback_truncate_and_write(
+      const std::string& obj_name,
+      uint64_t object_size,
+      uint64_t truncate_to,
+      const std::vector<std::pair<uint64_t, uint64_t>>& writes) {
+    std::vector<ObjOp> ops{Truncate(truncate_to)};
+    for (auto [offset, length] : writes) {
+      ops.push_back(Write(offset, length));
+    }
+    run_rollback(obj_name, {{object_size, {}, {ops}}}, 1, get_shard(k + m - 1));
   }
 };
 
@@ -1298,6 +1725,96 @@ TEST_P(TestECFailoverWithPeering, DivergentLogRewindThenNewInterval) {
   // via ScopedConfig destructors at function exit.
 }
 
+/**
+ * RollbackTruncate*
+ *
+ * Roll back a divergent op that truncates an object to a size that ends part
+ * way through a page of the first shard, optionally writing to the object in
+ * the same op. Rollback must restore the data that the truncate removed,
+ * including the rest of the page holding the new end, which the truncate
+ * zeroes. The truncate leaves a partial stripe at the new end, so the op also
+ * rewrites the parity, which must be restored too.
+ */
+TEST_P(TestECFailoverWithPeering, RollbackTruncate) {
+  const uint64_t sw = k * stripe_unit;
+  const uint64_t truncate_to = sw + stripe_unit / 2 + 1;
+  rollback_truncate_and_write("rollback_truncate",
+                              8 * sw + 3 * stripe_unit, truncate_to, {});
+}
+
+// Write below the new end, ending at it.
+TEST_P(TestECFailoverWithPeering, RollbackTruncateAndWriteBelowNewEnd) {
+  const uint64_t sw = k * stripe_unit;
+  const uint64_t truncate_to = sw + stripe_unit / 2 + 1;
+  rollback_truncate_and_write("rollback_truncate_below",
+                              8 * sw + 3 * stripe_unit, truncate_to,
+                              {{truncate_to - stripe_unit / 4, stripe_unit / 4}});
+}
+
+// Write straddling the new end.
+TEST_P(TestECFailoverWithPeering, RollbackTruncateAndWriteAcrossNewEnd) {
+  const uint64_t sw = k * stripe_unit;
+  const uint64_t truncate_to = sw + stripe_unit / 2 + 1;
+  rollback_truncate_and_write("rollback_truncate_across",
+                              8 * sw + 3 * stripe_unit, truncate_to,
+                              {{truncate_to - stripe_unit / 4, stripe_unit / 2}});
+}
+
+// Write starting just above the new end, in the page that holds it.
+TEST_P(TestECFailoverWithPeering, RollbackTruncateAndWriteAboveNewEnd) {
+  const uint64_t sw = k * stripe_unit;
+  const uint64_t truncate_to = sw + stripe_unit / 2 + 1;
+  rollback_truncate_and_write("rollback_truncate_above",
+                              8 * sw + 3 * stripe_unit, truncate_to,
+                              {{truncate_to + 7, stripe_unit}});
+}
+
+// Write inside the truncated range, stripes above the new end.
+TEST_P(TestECFailoverWithPeering, RollbackTruncateAndWriteInTruncatedRange) {
+  const uint64_t sw = k * stripe_unit;
+  const uint64_t truncate_to = sw + stripe_unit / 2 + 1;
+  rollback_truncate_and_write("rollback_truncate_in_range",
+                              8 * sw + 3 * stripe_unit, truncate_to,
+                              {{4 * sw + 7, stripe_unit}});
+}
+
+/**
+ * RollbackTruncateUp
+ *
+ * Roll back a divergent op that truncates an object to a larger size. The
+ * rollback truncates each shard back to its old size, which differs between
+ * shards.
+ */
+TEST_P(TestECFailoverWithPeering, RollbackTruncateUp) {
+  const uint64_t sw = k * stripe_unit;
+  const uint64_t object_size = 5 * sw + stripe_unit + 123;
+  run_rollback("rollback_truncate_up",
+               {{object_size, {}, {{Truncate(object_size + sw + 77)}}}},
+               1, get_shard(k + m - 1));
+}
+
+/**
+ * TruncateAndWriteInPage, WritesInPageAboveEnd
+ *
+ * An op that leaves a gap between two extents of a shard within a page, here
+ * between the part of a page that a truncate keeps and a write further into
+ * that page, or between two writes to a page above the end of the object,
+ * must keep the data on either side of the gap and zero the gap.
+ */
+TEST_P(TestECFailoverWithPeering, TruncateAndWriteInPage) {
+  const uint64_t sw = k * stripe_unit;
+  run_forward("truncate_and_write_in_page",
+              {{5 * sw + stripe_unit + 123, {}, {{Truncate(1), Write(8, 50)}}}});
+}
+
+TEST_P(TestECFailoverWithPeering, WritesInPageAboveEnd) {
+  const uint64_t sw = k * stripe_unit;
+  const uint64_t object_size = 5 * sw + stripe_unit + 123;
+  const uint64_t page = ECUtil::align_next(object_size);
+  run_forward("writes_in_page_above_end",
+              {{object_size, {}, {{Write(page + 10, 10), Write(page + 100, 10)}}}});
+}
+
 // ---------------------------------------------------------------------------
 // Instantiate TestECFailoverWithPeering with EC configurations
 // ---------------------------------------------------------------------------
@@ -1311,3 +1828,432 @@ INSTANTIATE_TEST_SUITE_P(
   }
 );
 
+/**
+ * TestECTruncateMatrix
+ *
+ * Ops mixing truncates, writes and zeros on optimized EC objects, drawn from
+ * a table of cases with offsets computed from k and the stripe unit. Each
+ * case is run forward, where the objects and their shards must match a model
+ * of the expected contents, including after a data shard goes down, and
+ * rolled back after an OSD fails, where the objects and their shards must be
+ * restored exactly. Rollback is run with the op blocked to shard 1 and the
+ * last parity shard, a data shard other than the first two or the primary
+ * failing, and with the op blocked to the first parity shard, which every op
+ * writes, and a data shard or the primary failing.
+ */
+namespace {
+
+/* Rollback modes block the op to shard 1, which it may not write, or to the
+ * first parity shard, which it always writes, and fail the named shard. */
+enum class TruncateMode {
+  Forward,
+  RollbackParity,
+  RollbackData,
+  RollbackPrimary,
+  BlockParityRollbackData,
+  BlockParityRollbackPrimary,
+};
+
+struct TruncateCase {
+  std::string name;
+  /* The objects of the case for k and stripe unit su, or nullopt if the case
+   * means nothing for them. */
+  std::function<std::optional<std::vector<ObjectScenario>>(uint64_t k,
+                                                           uint64_t su)> make;
+};
+
+constexpr uint64_t PAGE = EC_ALIGN_SIZE;
+
+enum class SizeKind { ChunkAligned, PageAligned, Unaligned, SubStripe };
+
+const std::vector<std::pair<SizeKind, std::string>> kSizeKinds = {
+  {SizeKind::ChunkAligned, "ChunkAligned"},
+  {SizeKind::PageAligned, "PageAligned"},
+  {SizeKind::Unaligned, "Unaligned"},
+  {SizeKind::SubStripe, "SubStripe"},
+};
+
+uint64_t object_size(SizeKind kind, uint64_t k, uint64_t su) {
+  const uint64_t sw = k * su;
+  switch (kind) {
+  case SizeKind::ChunkAligned: return 8 * sw + 3 * su;
+  case SizeKind::PageAligned: return 5 * sw + su + PAGE;
+  case SizeKind::Unaligned: return 5 * sw + su + 123;
+  case SizeKind::SubStripe: return sw / 2 + 1234;
+  }
+  ceph_abort();
+}
+
+enum class TargetKind {
+  Chunk0MidPage,
+  Chunk0Page,
+  ChunkBoundary,
+  MiddleChunkMidPage,
+  LastChunk,
+  StripeBoundary,
+  LastPage,
+  One,
+  Zero,
+  Equal,
+  Grow,
+};
+
+const std::vector<std::pair<TargetKind, std::string>> kTargetKinds = {
+  {TargetKind::Chunk0MidPage, "Chunk0MidPage"},
+  {TargetKind::Chunk0Page, "Chunk0Page"},
+  {TargetKind::ChunkBoundary, "ChunkBoundary"},
+  {TargetKind::MiddleChunkMidPage, "MiddleChunkMidPage"},
+  {TargetKind::LastChunk, "LastChunk"},
+  {TargetKind::StripeBoundary, "StripeBoundary"},
+  {TargetKind::LastPage, "LastPage"},
+  {TargetKind::One, "One"},
+  {TargetKind::Zero, "Zero"},
+  {TargetKind::Equal, "Equal"},
+  {TargetKind::Grow, "Grow"},
+};
+
+/* The size to truncate an object of size s to, or nullopt if the target
+ * means nothing for this geometry. Targets inside chunks are in the second
+ * stripe, if the object has more than two stripes, so that the stripe below
+ * is left intact. */
+std::optional<uint64_t> truncate_target(TargetKind kind, uint64_t s,
+                                        uint64_t k, uint64_t su) {
+  const uint64_t sw = k * su;
+  const uint64_t base = s >= 2 * sw ? sw : 0;
+  std::optional<uint64_t> target;
+  switch (kind) {
+  case TargetKind::Chunk0MidPage:
+    target = base + su / 2 + 1;
+    break;
+  case TargetKind::Chunk0Page:
+    if (su > PAGE) {
+      target = base + PAGE;
+    }
+    break;
+  case TargetKind::ChunkBoundary:
+    target = base + su;
+    break;
+  case TargetKind::MiddleChunkMidPage:
+    if (k > 2) {
+      target = base + (k / 2) * su + su / 2 + 3;
+    }
+    break;
+  case TargetKind::LastChunk:
+    target = base + (k - 1) * su + su / 4 + 5;
+    break;
+  case TargetKind::StripeBoundary:
+    target = base + sw;
+    break;
+  case TargetKind::LastPage: {
+    const uint64_t page_start = (s - 1) / PAGE * PAGE;
+    target = page_start + (s - page_start) / 2;
+    break;
+  }
+  case TargetKind::One:
+    target = 1;
+    break;
+  case TargetKind::Zero:
+    target = 0;
+    break;
+  case TargetKind::Equal:
+    return s;
+  case TargetKind::Grow:
+    return s + sw + 77;
+  }
+  if (target && *target >= s) {
+    return std::nullopt;
+  }
+  return target;
+}
+
+enum class WriteKind {
+  None,
+  Below,
+  EndingAt,
+  Straddling,
+  AboveInPage,
+  InTruncatedRange,
+  PastEnd,
+  Several,
+  ZeroInside,
+};
+
+const std::vector<std::pair<WriteKind, std::string>> kWriteKinds = {
+  {WriteKind::None, "NoWrite"},
+  {WriteKind::Below, "WriteBelow"},
+  {WriteKind::EndingAt, "WriteEndingAt"},
+  {WriteKind::Straddling, "WriteStraddling"},
+  {WriteKind::AboveInPage, "WriteAboveInPage"},
+  {WriteKind::InTruncatedRange, "WriteInTruncatedRange"},
+  {WriteKind::PastEnd, "WritePastEnd"},
+  {WriteKind::Several, "SeveralWrites"},
+  {WriteKind::ZeroInside, "ZeroInside"},
+};
+
+/* The ops that follow a truncate from size s to t in the same op, or nullopt
+ * if the kind means nothing for these sizes. */
+std::optional<std::vector<ObjOp>> writes_after_truncate(
+    WriteKind kind, uint64_t s, uint64_t t, uint64_t k, uint64_t su) {
+  const uint64_t sw = k * su;
+  const uint64_t end = std::max(s, t);
+  switch (kind) {
+  case WriteKind::None:
+    return std::vector<ObjOp>{};
+  case WriteKind::Below:
+    if (t < 8) {
+      return std::nullopt;
+    }
+    return std::vector<ObjOp>{Write(t / 3, std::min<uint64_t>(t / 3, 3000))};
+  case WriteKind::EndingAt:
+    if (t == 0) {
+      return std::nullopt;
+    }
+    return std::vector<ObjOp>{Write(t - std::min<uint64_t>(t, 777),
+                                    std::min<uint64_t>(t, 777))};
+  case WriteKind::Straddling:
+    return std::vector<ObjOp>{Write(t - std::min<uint64_t>(t, 500),
+                                    std::min<uint64_t>(t, 500) + 700)};
+  case WriteKind::AboveInPage:
+    return std::vector<ObjOp>{Write(t + 7, 50)};
+  case WriteKind::InTruncatedRange:
+    if (t + sw + 13 + 1000 >= s) {
+      return std::nullopt;
+    }
+    return std::vector<ObjOp>{Write(t + sw + 13, 1000)};
+  case WriteKind::PastEnd:
+    return std::vector<ObjOp>{Write(end + su + 5, 999)};
+  case WriteKind::Several: {
+    std::vector<ObjOp> ops;
+    if (t >= 3) {
+      ops.push_back(Write(t / 3, std::min<uint64_t>(t / 3, 100)));
+    }
+    ops.push_back(Write(t - std::min<uint64_t>(t, 40),
+                        std::min<uint64_t>(t, 40) + 60));
+    ops.push_back(Write(end + 100, 300));
+    return ops;
+  }
+  case WriteKind::ZeroInside:
+    if (t < 4) {
+      return std::nullopt;
+    }
+    return std::vector<ObjOp>{Zero(t / 4, std::min<uint64_t>(t / 2, su))};
+  }
+  ceph_abort();
+}
+
+std::vector<TruncateCase> make_truncate_cases() {
+  std::vector<TruncateCase> cases;
+
+  /* Every target with every kind of write for the chunk aligned and
+   * unaligned sizes, and with a few kinds for the others. */
+  for (const auto& [size_kind, size_name] : kSizeKinds) {
+    const bool all_writes = size_kind == SizeKind::ChunkAligned ||
+                            size_kind == SizeKind::Unaligned;
+    for (const auto& [target_kind, target_name] : kTargetKinds) {
+      for (const auto& [write_kind, write_name] : kWriteKinds) {
+        if (!all_writes && write_kind != WriteKind::None &&
+            write_kind != WriteKind::Straddling &&
+            write_kind != WriteKind::AboveInPage) {
+          continue;
+        }
+        cases.push_back({
+          size_name + "_Truncate" + target_name + "_" + write_name,
+          [size_kind, target_kind, write_kind](uint64_t k, uint64_t su)
+              -> std::optional<std::vector<ObjectScenario>> {
+            const uint64_t s = object_size(size_kind, k, su);
+            const auto t = truncate_target(target_kind, s, k, su);
+            if (!t) {
+              return std::nullopt;
+            }
+            auto writes = writes_after_truncate(write_kind, s, *t, k, su);
+            if (!writes) {
+              return std::nullopt;
+            }
+            std::vector<ObjOp> ops{Truncate(*t)};
+            ops.insert(ops.end(), writes->begin(), writes->end());
+            return std::vector<ObjectScenario>{{s, {}, {ops}}};
+          }});
+      }
+    }
+  }
+
+  /* Cases on an unaligned object with a low target t1 in the first chunk of
+   * the second stripe and a higher target t2 in the fourth stripe. */
+  auto add = [&cases](const std::string& name,
+                      std::function<std::vector<ObjectScenario>(
+                        uint64_t s, uint64_t t1, uint64_t t2,
+                        uint64_t sw, uint64_t su)> make) {
+    cases.push_back({name, [make](uint64_t k, uint64_t su)
+        -> std::optional<std::vector<ObjectScenario>> {
+      const uint64_t sw = k * su;
+      const uint64_t s = object_size(SizeKind::Unaligned, k, su);
+      return make(s, sw + su / 2 + 1, 3 * sw + su + 555, sw, su);
+    }});
+  };
+
+  // Several truncates in one op.
+  add("TruncateDownThenUp", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{{s, {}, {{Truncate(t1), Truncate(t2)}}}};
+  });
+  add("TruncateDownThenUpThenWrite", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Truncate(t1), Truncate(t2), Write(t1 - 100, 400)}}}};
+  });
+  add("TruncateDownWriteUp", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Truncate(t1), Write(t1 + 300, 2000), Truncate(t2)}}}};
+  });
+  add("TruncateUpThenDown", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{{s, {}, {{Truncate(s + sw), Truncate(t1)}}}};
+  });
+  add("TruncateUpWriteDown", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Truncate(s + sw), Write(s + 100, 500), Truncate(t1)}}}};
+  });
+  add("WriteThenTruncateCuttingIt", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{{s, {}, {{Write(t1 - 300, 1000), Truncate(t1)}}}};
+  });
+  add("WriteThenTruncateUp", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Write(t1 - 300, 1000), Truncate(s + su + 3)}}}};
+  });
+  add("TruncateWriteTruncateCuttingIt", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Truncate(t2), Write(t1 - 50, 3000), Truncate(t1 + 1000)}}}};
+  });
+
+  // Several ops in flight on one object.
+  add("ChainTruncateThenWrite", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Truncate(t1)}, {Write(t1 - 100, 300)}}}};
+  });
+  add("ChainWriteThenTruncate", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Write(t1 - 100, 300)}, {Truncate(t1 - 50)}}}};
+  });
+  add("ChainTruncateThenTruncate", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{{s, {}, {{Truncate(t2)}, {Truncate(t1)}}}};
+  });
+  add("ChainTruncateThenAppend", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{{s, {}, {{Truncate(t1)}, {Write(t1, 5000)}}}};
+  });
+  add("ChainTruncateWriteTruncate", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Truncate(t2)}, {Write(t1 - 10, 100)}, {Truncate(t1)}}}};
+  });
+  add("ChainTruncateThenGrowingWrite", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Truncate(t1)}, {Write(s + 100, 5000)}}}};
+  });
+  add("ChainTruncateToZeroThenWrite", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{{s, {}, {{Truncate(0)}, {Write(0, 3000)}}}};
+  });
+  add("ChainWriteThenTruncateThenWrite", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Write(t1 - 5, su)}, {Truncate(t1)}, {Write(t1 + 50, 100)}}}};
+  });
+
+  // A committed op followed by ops in flight.
+  add("CommittedTruncateThenWrite", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {{Truncate(t1)}}, {{Write(t1 - 100, 3000)}}}};
+  });
+  add("CommittedTruncateThenTruncate", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{{s, {{Truncate(t2)}}, {{Truncate(t1)}}}};
+  });
+  add("CommittedWriteThenTruncateAndWrite", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {{Write(t1 - 5, 10)}}, {{Truncate(t1), Write(t1 - 20, 40)}}}};
+  });
+
+  // Two objects with ops in flight together.
+  add("TwoObjects", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Truncate(t1), Write(t1 - 100, 300)}}},
+      {8 * sw + 3 * su, {}, {{Write(t1 - 50, 200)}, {Truncate(t1 + su)}}}};
+  });
+  add("TwoObjectsSameOps", [](auto s, auto t1, auto t2, auto sw, auto su) {
+    return std::vector<ObjectScenario>{
+      {s, {}, {{Truncate(t1)}, {Write(t1 - 100, 300)}}},
+      {s, {}, {{Truncate(t1)}, {Write(t1 - 100, 300)}}}};
+  });
+
+  return cases;
+}
+
+const std::vector<TruncateCase> kTruncateCases = make_truncate_cases();
+
+}  // namespace
+
+class TestECTruncateMatrix
+  : public ECTruncateTestBase,
+    public ::testing::WithParamInterface<
+      std::tuple<BackendConfig, TruncateCase, TruncateMode>> {
+public:
+  TestECTruncateMatrix() : ECTruncateTestBase(std::get<0>(GetParam())) {}
+};
+
+TEST_P(TestECTruncateMatrix, Run) {
+  const auto& [config, truncate_case, mode] = GetParam();
+  const auto objects = truncate_case.make(k, stripe_unit);
+  if (!objects) {
+    GTEST_SKIP() << truncate_case.name << " does not apply to this geometry";
+  }
+  SCOPED_TRACE(config.label + " " + truncate_case.name);
+
+  switch (mode) {
+  case TruncateMode::Forward:
+    run_forward(truncate_case.name, *objects);
+    break;
+  case TruncateMode::RollbackParity:
+    run_rollback(truncate_case.name, *objects, 1, get_shard(k + m - 1));
+    break;
+  case TruncateMode::RollbackData:
+    if (k <= 2) {
+      GTEST_SKIP() << "needs a data shard other than the first two";
+    }
+    run_rollback(truncate_case.name, *objects, 1, get_shard(2));
+    break;
+  case TruncateMode::RollbackPrimary:
+    run_rollback(truncate_case.name, *objects, 1,
+                 get_primary_shard_from_osdmap());
+    break;
+  case TruncateMode::BlockParityRollbackData:
+    run_rollback(truncate_case.name, *objects, get_shard(k),
+                 get_shard(k > 2 ? 2 : 1));
+    break;
+  case TruncateMode::BlockParityRollbackPrimary:
+    run_rollback(truncate_case.name, *objects, get_shard(k),
+                 get_primary_shard_from_osdmap());
+    break;
+  }
+}
+
+std::string truncate_matrix_name(
+    const ::testing::TestParamInfo<TestECTruncateMatrix::ParamType>& info) {
+  static const std::map<TruncateMode, std::string> mode_names = {
+    {TruncateMode::Forward, "Forward"},
+    {TruncateMode::RollbackParity, "RollbackParity"},
+    {TruncateMode::RollbackData, "RollbackData"},
+    {TruncateMode::RollbackPrimary, "RollbackPrimary"},
+    {TruncateMode::BlockParityRollbackData, "BlockParityRollbackData"},
+    {TruncateMode::BlockParityRollbackPrimary, "BlockParityRollbackPrimary"},
+  };
+  return std::get<0>(info.param).label + "_" + std::get<1>(info.param).name +
+         "_" + mode_names.at(std::get<2>(info.param));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  ECConfigs,
+  TestECTruncateMatrix,
+  ::testing::Combine(
+    ::testing::ValuesIn(kECPeeringConfigs),
+    ::testing::ValuesIn(kTruncateCases),
+    ::testing::Values(TruncateMode::Forward,
+                      TruncateMode::RollbackParity,
+                      TruncateMode::RollbackData,
+                      TruncateMode::RollbackPrimary,
+                      TruncateMode::BlockParityRollbackData,
+                      TruncateMode::BlockParityRollbackPrimary)),
+  truncate_matrix_name
+);
