@@ -225,8 +225,14 @@ private:
    */
   std::unique_ptr<user_private_t> user_private;
 
+  /// Lossy client session that may coexist with others from the same
+  /// address (a shard-aware client's per-reactor connections): kept out of
+  /// the per-address registry and never replaced by a new session.
+  bool multi_session = false;
+
   friend class IOHandler;
   friend class ProtocolV2;
+  friend class SocketMessenger;
   friend class FrameAssemblerV2;
 };
 
