@@ -2799,7 +2799,7 @@ private:
     bool cluster_full,
     std::map<int64_t, bool> *pool_full_map,
     std::map<ceph_tid_t, Op*>& need_resend,
-    std::list<LingerOp*>& need_resend_linger,
+    std::vector<LingerOp*>& need_resend_linger,
     std::map<ceph_tid_t, CommandOp*>& need_resend_command,
     ceph::shunique_lock<ceph::shared_mutex>& sul);
 
