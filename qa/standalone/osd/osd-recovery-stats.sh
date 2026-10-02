@@ -2963,6 +2963,168 @@ function TEST_rebuild_perf_immediate_write_on_latch_transition() {
     kill_daemons $dir || return 1
 }
 
+# pg_rebuild_duration's active-rebuild span onset (info.history.
+# last_rebuild_active_start) must survive a primary handover mid-rebuild,
+# the same way pg_vulnerability_duration's own onset does (see
+# TEST_rebuild_perf_multihop_handover above) -- it is latched in
+# pg_history_t and genuinely merged across peers on every peering info
+# exchange, not wholesale-copied like pg_stat_t. Forces a genuine
+# Backfilling episode (same large-backlog technique as
+# TEST_rebuild_perf_backfilling_case), kills the primary mid-backfill
+# before it finishes, and confirms: (1) the new primary inherits the exact
+# onset the old primary had already armed, not a fresh one of its own, and
+# (2) the whole episode is still recorded exactly once, spanning both
+# primaries' tenure.
+function TEST_rebuild_perf_active_rebuild_handover() {
+    local dir=$1
+    local OSDS=4
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true --debug-osd=15 \
+        --osd_min_pg_log_entries=50 --osd_max_pg_log_entries=100 \
+        --osd_pg_log_trim_min=10 \
+        --osd_async_recovery_min_cost=1000000 || return 1
+    done
+
+    create_pool $poolname 1 1 replicated || return 1
+    ceph osd pool set $poolname size 3 || return 1
+    ceph osd pool set $poolname min_size 2 || return 1
+    wait_for_clean || return 1
+
+    for i in $(seq 1 5)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+    wait_for_clean || return 1
+
+    local PG
+    PG=$(get_pg $poolname obj1)
+    local otherosd
+    otherosd=$(get_not_primary $poolname obj1)
+
+    # Same technique as TEST_rebuild_perf_backfilling_case: hold a replica
+    # down with a growing backlog, then mark it out so CRUSH remaps it to
+    # the spare 4th OSD, forcing a genuine backfill scan rather than a log
+    # catch-up.
+    ceph osd set noup || return 1
+    ceph osd down osd.${otherosd} || return 1
+
+    for i in $(seq 6 150)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+
+    ceph osd out osd.${otherosd} || return 1
+    ceph osd unset noup || return 1
+
+    # Wait for the PG to enter Backfilling on its current primary -- this
+    # arms the active-rebuild latch -- but deliberately do NOT wait for
+    # clean: the handover below must land while the span is still open.
+    local primary_a=""
+    local log_a=""
+    local armed=0
+    for i in $(seq 1 60)
+    do
+      primary_a=$(get_primary $poolname obj1)
+      if test -n "$primary_a"
+      then
+        log_a=$dir/osd.${primary_a}.log
+        if test -f "$log_a" && grep -q "enter Started/Primary/Active/Backfilling" $log_a
+        then
+          armed=1
+          break
+        fi
+      fi
+      sleep 1
+    done
+    test "$armed" = 1 || {
+      echo "FAIL: ${PG} never entered Backfilling before the handover below" \
+           "-- test setup assumption broken, this isn't testing the" \
+           "mid-rebuild handover path"
+      return 1
+    }
+
+    # Capture the onset before killing the primary, to compare against
+    # what the new primary inherits.
+    local original_onset
+    original_onset=$(ceph pg $PG query | jq -r '.info.history.last_rebuild_active_start')
+    test -n "$original_onset" -a "$original_onset" != "null" || {
+      echo "FAIL: couldn't read info.history.last_rebuild_active_start from" \
+           "osd.${primary_a}"
+      return 1
+    }
+
+    # --- Handover: kill the primary mid-backfill, before it finishes.
+    ceph osd set noup || return 1
+    ceph osd down osd.${primary_a} || return 1
+
+    local primary_b=""
+    for i in $(seq 1 30)
+    do
+      primary_b=$(get_primary $poolname obj1)
+      test -n "$primary_b" -a "$primary_b" != "$primary_a" && break
+      sleep 1
+    done
+    test -n "$primary_b" -a "$primary_b" != "$primary_a" || {
+      echo "FAIL: primary never changed after osd.${primary_a} went down"
+      return 1
+    }
+
+    # osd.${primary_b} must inherit osd.${primary_a}'s already-armed onset
+    # via pg_history_t::merge() during peering, not open a fresh span of
+    # its own -- poll info.history.last_rebuild_active_start until it
+    # settles, then confirm it matches the original onset exactly.
+    local inherited_onset=""
+    for i in $(seq 1 30)
+    do
+      flush_pg_stats || return 1
+      inherited_onset=$(ceph pg $PG query 2>/dev/null | jq -r '.info.history.last_rebuild_active_start')
+      test "$inherited_onset" = "$original_onset" && break
+      sleep 1
+    done
+    test "$inherited_onset" = "$original_onset" || {
+      echo "FAIL: osd.${primary_b}'s info.history.last_rebuild_active_start" \
+           "(${inherited_onset}) does not match the original onset" \
+           "(${original_onset}) -- the true active-rebuild onset did not" \
+           "survive the handover"
+      return 1
+    }
+
+    # --- Bring osd.${primary_a} back and let the episode resolve.
+    ceph osd unset noup || return 1
+    wait_for_clean || return 1
+    flush_pg_stats || return 1
+
+    # The active-rebuild span is recorded exactly ONCE for this episode --
+    # by whichever OSD is primary when the rebuild finally finishes -- and
+    # since the true onset survived the handover, the recorded duration
+    # spans the whole episode, not just the new primary's own tenure.
+    local total_avgcount=0
+    for osd in 0 1 2 3
+    do
+      test -S $(get_asok_path osd.${osd}) || continue
+      local d
+      d=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${osd}) perf dump 2>/dev/null) || continue
+      local c
+      c=$(jq '.recoverystate_perf.pg_rebuild_duration.avgcount' <<< "$d")
+      total_avgcount=$(expr $total_avgcount + ${c:-0})
+    done
+
+    echo "INFO: summed pg_rebuild_duration.avgcount across all OSDs=${total_avgcount}"
+    test "$total_avgcount" = 1 || {
+      echo "FAIL: expected summed pg_rebuild_duration.avgcount=1 across all" \
+           "OSDs for ${PG}'s single handover-spanning episode, got" \
+           "$total_avgcount"
+      return 1
+    }
+
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
 
 main osd-recovery-stats "$@"
 

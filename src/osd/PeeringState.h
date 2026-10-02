@@ -2379,57 +2379,34 @@ public:
   void state_clear(uint64_t m) { state &= ~m; }
 
   /**
-   * active-rebuild span (rs_pg_rebuild_duration), the subset of a
-   * vulnerability window where this PG was actually in Recovering or
-   * Backfilling -- as opposed to rs_pg_vulnerability_duration, which spans
-   * the whole redundancy-loss episode including any silent/waiting time.
-   * The state machine is the source of truth for "is real recovery work
-   * happening". One episode is recorded as a single sample, however many
-   * times the rebuild is paused and resumed along the way:
-   * This is set at the following sites:
-   *  1. Armed in Recovering::Recovering()/Backfilling::Backfilling(),
-   *     unless a span is already in progress (e.g. recovery -> backfill).
-   *  2. Paused in NotBackfilling/NotRecovering (defer, toofull, unfound):
-   *     the elapsed active time is folded into rebuild_active_accum and
-   *     the latch is disarmed, so the paused time itself is not counted.
-   *     A later retry re-arms it via (1).
-   *  3. Closed in Recovered: the accumulated active time (plus any still-
-   *     armed span) is recorded once.
-   *  4. Also reset (silently, no recording), alongside
-   *     rebuild_active_accum, in Start::Start()'s not-primary branch.
-   *     if this OSD stops being primary for the PG mid-span, this
-   *     PeeringState instance will never revisit NotRecovering/
-   *     NotBackfilling/Recovered again to close it.
+   * Arm the active-rebuild latch (rs_pg_rebuild_duration) unless a span
+   * is already in progress: latches info.history.last_rebuild_active_
+   * start to now. Called from Recovering::Recovering()/Backfilling::
+   * Backfilling() on every entry.
    */
-  utime_t rebuild_active_start;
-
-  /**
-   * Active-rebuild time accrued by the current episode's already-paused
-   * spans (each one folded in by pause_rebuild_span()), excluding any
-   * still-armed span. Recorded, together with that armed span, by
-   * close_rebuild_span(); cleared after recording, and alongside
-   * rebuild_active_start by Start::Start()'s not-primary branch.
-   */
-  utime_t rebuild_active_accum;
+  void arm_rebuild_span();
 
   /**
    * Fold the elapsed time of a currently-armed active-rebuild span (if
-   * any) into rebuild_active_accum and disarm it, WITHOUT recording --
-   * called when the rebuild is paused (defer/toofull/unfound) rather
-   * than finished, so the pause itself doesn't end the episode. A later
-   * retry re-arms a fresh span via Recovering::Recovering()/
-   * Backfilling::Backfilling(), which also accrues into the same
-   * rebuild_active_accum once it, too, is paused or closed.
+   * any) into info.history.rebuild_active_accum and disarm it, WITHOUT
+   * recording -- called when the rebuild is paused (defer/toofull/
+   * unfound) rather than finished, so the pause itself doesn't end the
+   * episode. A later retry re-arms a fresh span via arm_rebuild_span(),
+   * which also accrues into the same rebuild_active_accum once it, too,
+   * is paused or closed. See info.history.last_rebuild_active_start's
+   * comment in osd_types.h for how the onset itself is tracked and
+   * merged across peers.
    */
   void pause_rebuild_span();
 
   /**
    * Close the active-rebuild latch: fold any still-armed span into
-   * rebuild_active_accum (via pause_rebuild_span()), then record the
-   * whole accumulated total as one rs_pg_rebuild_duration/
+   * info.history.rebuild_active_accum (via pause_rebuild_span()), then
+   * record the whole accumulated total as one rs_pg_rebuild_duration/
    * rs_pg_rebuild_duration_min sample and reset it. No-op if no active
-   * rebuild time was ever accrued. See rebuild_active_start's comment
-   * above for the three call sites this is used from.
+   * rebuild time was ever accrued. Called from NotBackfilling/
+   * NotRecovering (pause only, via pause_rebuild_span() -- see above)
+   * and Recovered (the true close).
    */
   void close_rebuild_span();
 

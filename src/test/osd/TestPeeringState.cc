@@ -3042,6 +3042,74 @@ TEST_F(PeeringStateTest, VulnerabilityWindowMarksInfoDirty) {
 }
 
 // ============================================================================
+// Test 11: Same persistence gap as the vulnerability-window latch above, but for
+// the active-rebuild span (last_rebuild_active_start/rebuild_span_reported):
+// neither Recovering::Recovering()'s arm nor close_rebuild_span()'s close
+// marked info dirty, so a just-armed or just-recorded value had no
+// guarantee of surviving a restart before some unrelated transaction came
+// along to flush it.
+// ============================================================================
+TEST_F(PeeringStateTest, ActiveRebuildLatchMarksInfoDirty) {
+  dout(0) << "== ActiveRebuildLatchMarksInfoDirty ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  // Introduce a missing replica: swap acting[1] from OSD 1 to OSD 9.
+  // test_peering() below drives the PG straight into Recovering, which
+  // arms the active-rebuild latch as part of the same call.
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+
+  {
+    ObjectStore::Transaction t;
+    get_ps(acting_primary)->write_if_dirty(t);
+  }
+  ASSERT_FALSE(get_ps(acting_primary)->debug_has_dirty_state());
+  const utime_t pre_arm_reported =
+      get_ps(acting_primary)->get_info().history.rebuild_span_reported;
+
+  test_peering();
+  // PG is now active+recovering+degraded on the primary.
+
+  const utime_t onset =
+      get_ps(acting_primary)->get_info().history.last_rebuild_active_start;
+  EXPECT_GT(onset, pre_arm_reported)
+      << "entering Recovering must arm the active-rebuild latch";
+  EXPECT_TRUE(get_ps(acting_primary)->debug_has_dirty_state())
+      << "arming the active-rebuild latch must mark info dirty for a "
+         "prompt write";
+
+  {
+    ObjectStore::Transaction t;
+    get_ps(acting_primary)->write_if_dirty(t);
+  }
+  ASSERT_FALSE(get_ps(acting_primary)->debug_has_dirty_state());
+
+  // Drive the PG back to active+clean -- closes the active-rebuild span
+  // via Recovered::Recovered()'s close_rebuild_span() call, unconditionally,
+  // with no separate explicit publish needed.
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, v);
+  test_recover_got(9, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+
+  EXPECT_GT(get_ps(acting_primary)->get_info().history.rebuild_span_reported,
+            onset)
+      << "closing the active-rebuild span must advance rebuild_span_reported";
+  EXPECT_TRUE(get_ps(acting_primary)->debug_has_dirty_state())
+      << "closing the active-rebuild span must mark info dirty for a "
+         "prompt write";
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
