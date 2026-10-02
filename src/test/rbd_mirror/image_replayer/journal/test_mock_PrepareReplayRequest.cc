@@ -83,7 +83,7 @@ class TestMockImageReplayerJournalPrepareReplayRequest : public TestMockFixture 
 public:
   typedef PrepareReplayRequest<librbd::MockTestImageCtx> MockPrepareReplayRequest;
   typedef StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
-  typedef std::list<cls::journal::Tag> Tags;
+  using Tags = ::journal::Journaler::Tags;
 
   void SetUp() override {
     TestMockFixture::SetUp();
