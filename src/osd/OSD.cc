@@ -11170,7 +11170,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
     }
   }
 
-  list<Context *> oncommits;
+  vector<Context *> oncommits;
   if (is_smallest_thread_index) {
     sdata->context_queue.move_to(oncommits);
   }
@@ -11223,7 +11223,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
       // Reapply default wq timeouts
       osd->cct->get_heartbeat_map()->reset_timeout(hb,
         timeout_interval.load(), suicide_interval.load());
-      // Populate the oncommits list if there were any additions
+      // Populate the oncommits batch if there were any additions.
       // to the context_queue while we were waiting
       if (is_smallest_thread_index) {
         sdata->context_queue.move_to(oncommits);

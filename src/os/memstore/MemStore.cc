@@ -645,9 +645,11 @@ int MemStore::queue_transactions(
     _do_transaction(*p);
   }
 
-  Context *on_apply = NULL, *on_apply_sync = NULL, *on_commit = NULL;
-  ObjectStore::Transaction::collect_contexts(tls, &on_apply, &on_commit,
-					     &on_apply_sync);
+  Context *on_apply = nullptr;
+  Context *on_apply_sync = nullptr;
+  Context *on_commit = nullptr;
+  ObjectStore::Transaction::collect_contexts(
+    tls, on_apply, on_commit, on_apply_sync);
   if (on_apply_sync)
     on_apply_sync->complete(0);
   if (on_apply)

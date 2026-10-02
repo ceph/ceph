@@ -4,6 +4,8 @@
 #pragma once
 
 #include <map>
+#include <vector>
+#include <iterator>
 
 #include "include/Context.h"
 #include "include/int_types.h"
@@ -106,6 +108,8 @@ void decode_str_set_to_bl(ceph::buffer::list::const_iterator& p, ceph::buffer::l
 namespace ceph::os {
 class Transaction {
 public:
+  using context_sequence = std::vector<Context *>;
+
   enum {
     OP_NOP =          0,
     OP_CREATE =       7,   // cid, oid
@@ -247,9 +251,34 @@ private:
 
   ceph::buffer::list op_bl;
 
-  std::list<Context *> on_applied;
-  std::list<Context *> on_commit;
-  std::list<Context *> on_applied_sync;
+  context_sequence on_applied;
+  context_sequence on_commit;
+  context_sequence on_applied_sync;
+
+  static void append_contexts(
+    context_sequence& destination, context_sequence& source) {
+    if (std::empty(source)) {
+      return;
+    }
+    if (0 == destination.capacity()) {
+      destination.swap(source);
+      return;
+    }
+    destination.insert(std::end(destination), std::begin(source), std::end(source));
+    source.clear();
+  }
+
+  static std::size_t context_count(
+    const std::vector<Transaction>& transactions,
+    context_sequence Transaction::*source) {
+    std::size_t count = 0;
+
+    for (const auto& transaction : transactions) {
+      count += std::size(transaction.*source);
+    }
+
+    return count;
+  }
 
 public:
   Transaction() = default;
@@ -334,55 +363,84 @@ public:
   }
 
   static void collect_contexts(
-    std::vector<Transaction>& t,
-    Context **out_on_applied,
-    Context **out_on_commit,
-    Context **out_on_applied_sync) {
-    ceph_assert(out_on_applied);
-    ceph_assert(out_on_commit);
-    ceph_assert(out_on_applied_sync);
-    std::list<Context *> on_applied, on_commit, on_applied_sync;
-    for (auto& i : t) {
-	on_applied.splice(on_applied.end(), i.on_applied);
-	on_commit.splice(on_commit.end(), i.on_commit);
-	on_applied_sync.splice(on_applied_sync.end(), i.on_applied_sync);
-    }
-    *out_on_applied = C_Contexts::list_to_context(on_applied);
-    *out_on_commit = C_Contexts::list_to_context(on_commit);
-    *out_on_applied_sync = C_Contexts::list_to_context(on_applied_sync);
+    std::vector<Transaction>& transactions,
+    Context *&out_on_applied,
+    Context *&out_on_commit,
+    Context *&out_on_applied_sync) {
+    context_sequence on_applied;
+    context_sequence on_commit;
+    context_sequence on_applied_sync;
+    collect_contexts(
+      transactions, on_applied, on_commit, on_applied_sync);
+    out_on_applied = C_Contexts::to_context(on_applied);
+    out_on_commit = C_Contexts::to_context(on_commit);
+    out_on_applied_sync = C_Contexts::to_context(on_applied_sync);
   }
+
   static void collect_contexts(
-    std::vector<Transaction>& t,
-    std::list<Context*> *out_on_applied,
-    std::list<Context*> *out_on_commit,
-    std::list<Context*> *out_on_applied_sync) {
-    ceph_assert(out_on_applied);
-    ceph_assert(out_on_commit);
-    ceph_assert(out_on_applied_sync);
-    for (auto& i : t) {
-	out_on_applied->splice(out_on_applied->end(), i.on_applied);
-	out_on_commit->splice(out_on_commit->end(), i.on_commit);
-	out_on_applied_sync->splice(out_on_applied_sync->end(),
-				    i.on_applied_sync);
+    std::vector<Transaction>& transactions,
+    context_sequence& out_on_applied,
+    context_sequence& out_on_commit,
+    context_sequence& out_on_applied_sync) {
+    // Fresh outputs can take ownership of a single transaction's buffers.
+    if (1 == std::size(transactions) &&
+        0 == out_on_applied.capacity() &&
+        0 == out_on_commit.capacity() &&
+        0 == out_on_applied_sync.capacity() &&
+        &out_on_applied != &out_on_commit &&
+        &out_on_applied != &out_on_applied_sync &&
+        &out_on_commit != &out_on_applied_sync) {
+      auto& transaction = transactions.front();
+      out_on_applied.swap(transaction.on_applied);
+      out_on_commit.swap(transaction.on_commit);
+      out_on_applied_sync.swap(transaction.on_applied_sync);
+      return;
+    }
+
+    out_on_applied.reserve(
+      std::size(out_on_applied) + context_count(transactions, &Transaction::on_applied));
+    out_on_commit.reserve(
+      std::size(out_on_commit) + context_count(transactions, &Transaction::on_commit));
+    out_on_applied_sync.reserve(
+      std::size(out_on_applied_sync) +
+      context_count(transactions, &Transaction::on_applied_sync));
+
+    for (auto& transaction : transactions) {
+      append_contexts(out_on_applied, transaction.on_applied);
+      append_contexts(out_on_commit, transaction.on_commit);
+      append_contexts(out_on_applied_sync, transaction.on_applied_sync);
     }
   }
+
   static Context *collect_all_contexts(
     Transaction& t) {
-    std::list<Context*> contexts;
-    contexts.splice(contexts.end(), t.on_applied);
-    contexts.splice(contexts.end(), t.on_commit);
-    contexts.splice(contexts.end(), t.on_applied_sync);
-    return C_Contexts::list_to_context(contexts);
+    const auto count = std::size(t.on_applied) + std::size(t.on_commit) +
+      std::size(t.on_applied_sync);
+    if (count <= 1) {
+      if (!std::empty(t.on_applied)) {
+        return t.get_on_applied();
+      }
+      if (!std::empty(t.on_commit)) {
+        return t.get_on_commit();
+      }
+      return t.get_on_applied_sync();
+    }
+    context_sequence contexts;
+    contexts.reserve(count);
+    append_contexts(contexts, t.on_applied);
+    append_contexts(contexts, t.on_commit);
+    append_contexts(contexts, t.on_applied_sync);
+    return C_Contexts::to_context(contexts);
   }
 
   Context *get_on_applied() {
-    return C_Contexts::list_to_context(on_applied);
+    return C_Contexts::to_context(on_applied);
   }
   Context *get_on_commit() {
-    return C_Contexts::list_to_context(on_commit);
+    return C_Contexts::to_context(on_commit);
   }
   Context *get_on_applied_sync() {
-    return C_Contexts::list_to_context(on_applied_sync);
+    return C_Contexts::to_context(on_applied_sync);
   }
 
   void set_fadvise_flags(uint32_t flags) {
@@ -533,9 +591,9 @@ public:
     ceph_assert(data_features == other.data_features);
     data.ops = data.ops + other.data.ops;
     data.fadvise_flags = data.fadvise_flags | other.data.fadvise_flags;
-    on_applied.splice(on_applied.end(), other.on_applied);
-    on_commit.splice(on_commit.end(), other.on_commit);
-    on_applied_sync.splice(on_applied_sync.end(), other.on_applied_sync);
+    append_contexts(on_applied, other.on_applied);
+    append_contexts(on_commit, other.on_commit);
+    append_contexts(on_applied_sync, other.on_applied_sync);
 
     //append coll_index & object_index
     std::vector<uint32_t> cm(other.coll_index.size());
