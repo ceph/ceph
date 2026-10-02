@@ -3,6 +3,8 @@
 
 #include <errno.h>
 
+#include <iterator>
+
 #include "cls/user/cls_user_client.h"
 #include "include/rados/librados.hpp"
 
@@ -17,15 +19,33 @@ using librados::ObjectOperationCompletion;
 using librados::ObjectReadOperation;
 using namespace cls::user;
 
-void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_bucket_entry>& entries, bool add)
+namespace {
+
+void set_bucket_entries(librados::ObjectWriteOperation& op,
+                        const auto& entries, bool add)
 {
   bufferlist in;
   cls_user_set_buckets_op call;
-  call.entries = entries;
+  call.entries.assign(std::cbegin(entries), std::cend(entries));
   call.add = add;
   call.time = real_clock::now();
   encode(call, in);
   op.exec(method::set_buckets_info, in);
+}
+
+} // namespace
+
+void cls_user_set_buckets(librados::ObjectWriteOperation& op,
+                          std::span<const cls_user_bucket_entry> entries,
+                          bool add)
+{
+  set_bucket_entries(op, entries, add);
+}
+
+void cls_user_set_buckets(librados::ObjectWriteOperation& op,
+                          list<cls_user_bucket_entry>& entries, bool add)
+{
+  set_bucket_entries(op, entries, add);
 }
 
 void cls_user_complete_stats_sync(librados::ObjectWriteOperation& op)
@@ -46,35 +66,92 @@ void cls_user_remove_bucket(librados::ObjectWriteOperation& op, const cls_user_b
   op.exec(method::remove_bucket, in);
 }
 
-class ClsUserListCtx : public ObjectOperationCompletion {
-  list<cls_user_bucket_entry> *entries;
+namespace {
+
+void publish_entries(std::vector<cls_user_bucket_entry>& entries,
+                     std::vector<cls_user_bucket_entry>&& decoded)
+{
+  entries = std::move(decoded);
+}
+
+void publish_entries(list<cls_user_bucket_entry>& entries,
+                     std::vector<cls_user_bucket_entry>&& decoded)
+{
+  entries.assign(std::make_move_iterator(std::begin(decoded)),
+                 std::make_move_iterator(std::end(decoded)));
+}
+
+template <typename ENTRIES_T>
+class ClsUserListCtx final : public ObjectOperationCompletion {
+  ENTRIES_T& entries;
   string *marker;
   bool *truncated;
-  int *pret;
+  int *result;
+
 public:
-  ClsUserListCtx(list<cls_user_bucket_entry> *_entries, string *_marker, bool *_truncated, int *_pret) :
-                                      entries(_entries), marker(_marker), truncated(_truncated), pret(_pret) {}
-  void handle_completion(int r, bufferlist& outbl) override {
+  ClsUserListCtx(ENTRIES_T& entries, string *marker, bool *truncated,
+                 int *result)
+    : entries(entries), marker(marker), truncated(truncated), result(result)
+  {}
+
+  void handle_completion(int r, bufferlist& outbl) override
+  {
+    cls_user_list_buckets_ret reply;
+
     if (r >= 0) {
-      cls_user_list_buckets_ret ret;
       try {
         auto iter = outbl.cbegin();
-        decode(ret, iter);
-        if (entries)
-	  *entries = ret.entries;
-        if (truncated)
-          *truncated = ret.truncated;
-        if (marker)
-          *marker = ret.marker;
+        decode(reply, iter);
       } catch (ceph::buffer::error& err) {
         r = -EIO;
       }
     }
-    if (pret) {
-      *pret = r;
+
+    if (r >= 0) {
+      publish_entries(entries, std::move(reply.entries));
+      if (truncated) {
+        *truncated = reply.truncated;
+      }
+      if (marker) {
+        *marker = std::move(reply.marker);
+      }
+    }
+
+    if (result) {
+      *result = r;
     }
   }
 };
+
+void add_bucket_list_operation(librados::ObjectReadOperation& op,
+                               const string& in_marker,
+                               const string& end_marker, int max_entries,
+                               auto& entries, string *out_marker,
+                               bool *truncated, int *result)
+{
+  bufferlist inbl;
+  cls_user_list_buckets_op call;
+  call.marker = in_marker;
+  call.end_marker = end_marker;
+  call.max_entries = max_entries;
+
+  encode(call, inbl);
+
+  op.exec(method::list_buckets, inbl,
+          new ClsUserListCtx(entries, out_marker, truncated, result));
+}
+
+} // namespace
+
+void cls_user_bucket_list(librados::ObjectReadOperation& op,
+                          const string& in_marker,
+                          const string& end_marker, int max_entries,
+                          std::vector<cls_user_bucket_entry>& entries,
+                          string& out_marker, bool& truncated, int& result)
+{
+  add_bucket_list_operation(op, in_marker, end_marker, max_entries,
+                            entries, &out_marker, &truncated, &result);
+}
 
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
                           const string& in_marker,
@@ -85,15 +162,8 @@ void cls_user_bucket_list(librados::ObjectReadOperation& op,
                           bool *truncated,
                           int *pret)
 {
-  bufferlist inbl;
-  cls_user_list_buckets_op call;
-  call.marker = in_marker;
-  call.end_marker = end_marker;
-  call.max_entries = max_entries;
-
-  encode(call, inbl);
-
-  op.exec(method::list_buckets, inbl, new ClsUserListCtx(&entries, out_marker, truncated, pret));
+  add_bucket_list_operation(op, in_marker, end_marker, max_entries,
+                            entries, out_marker, truncated, pret);
 }
 
 class ClsUserGetHeaderCtx : public ObjectOperationCompletion {
