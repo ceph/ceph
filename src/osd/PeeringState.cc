@@ -839,29 +839,6 @@ void PeeringState::start_peering_interval(
     pl->clear_want_pg_temp();
   }
 
-  // if this OSD specifically is *losing* the primary role (as opposed to
-  // gaining it) while the latch is still armed, close out and record this
-  // OSD's own segment of the vulnerability window before discarding the
-  // latch fields below -- otherwise a primary handover mid-rebuild
-  // silently drops the whole in-progress duration with no trace on any OSD.
-  // This does not recover the true total across a multi-handover chain --
-  // see try_record_rebuild_segment()'s doc comment.
-  const bool losing_primary = was_old_primary && !is_primary();
-  if (losing_primary && rebuild_start_time != utime_t()) {
-    try_record_rebuild_segment(ceph_clock_now(), "handover-away");
-  }
-
-  // Only reset the rebuild-time latch when the primary role actually
-  // changes across this interval transition. Routine peering restarts
-  // (e.g. acting-set churn from backfill peers being added/removed)
-  // that leave this OSD as primary throughout must not wipe an
-  // in-progress rebuild's start time.
-  if (!(was_old_primary && is_primary())) {
-    rebuild_start_time = utime_t();
-    rebuild_base_recovered = 0;
-    rebuild_had_redundancy_loss = false;
-  }
-
   clear_primary_state();
 
   pl->on_change(t);
@@ -1089,35 +1066,6 @@ void PeeringState::clear_primary_state()
   pg_committed_to = eversion_t();
   missing_loc.clear();
   pl->clear_primary_state();
-}
-
-void PeeringState::try_record_rebuild_segment(
-  utime_t end_time,
-  std::string_view reason)
-{
-  // Caller (prepare_stats_for_publish()'s "reached clean" branch, or
-  // start_peering_interval()'s "handover-away" check) is responsible for
-  // guarding rebuild_start_time != utime_t() before calling this, and for
-  // resetting the three latch fields immediately afterward -- this method
-  // only computes, filters, records, and logs; it does not reset state.
-  const int64_t num_recovered = info.stats.stats.sum.num_objects_recovered;
-  const int64_t delta_recovered = num_recovered - rebuild_base_recovered;
-  const utime_t rebuild_dur = end_time - rebuild_start_time;
-
-  if (rebuild_dur.to_msec() > 0 &&
-      (delta_recovered > 0 || rebuild_had_redundancy_loss)) {
-    pl->get_peering_perf().tinc(rs_pg_rebuild_duration, rebuild_dur);
-    psdout(15) << "rebuild-stats: recorded rebuild for " << info.pgid
-              << " duration=" << rebuild_dur
-              << " delta_recovered=" << delta_recovered
-              << " reason=" << reason << dendl;
-  } else {
-    psdout(15) << "rebuild-stats: discarded rebuild for " << info.pgid
-              << " duration=" << rebuild_dur
-              << " delta_recovered=" << delta_recovered
-              << " had_redundancy_loss=" << rebuild_had_redundancy_loss
-              << " reason=" << reason << dendl;
-  }
 }
 
 /// return [start,end) bounds for required past_intervals
@@ -3888,13 +3836,6 @@ void PeeringState::split_into(
   child->info.last_epoch_started = info.last_epoch_started;
   child->info.last_interval_started = info.last_interval_started;
 
-  // rebuild-stats: Make the child inherit the parent's latch. Otherwise the
-  // child's share of a pre-split, still-ongoing failure would understate its
-  // true duration (or vanish from delta_recovered's filter entirely) once it
-  // independently detects its own degradation post-split.
-  child->rebuild_start_time = rebuild_start_time;
-  child->rebuild_had_redundancy_loss = rebuild_had_redundancy_loss;
-
   increment_stats_invalidations_counter(rs_pg_split_parent_stats_invalidated,
                                         info.stats.stats_invalid);
   increment_stats_invalidations_counter(rs_pg_split_child_stats_invalidated,
@@ -4129,21 +4070,6 @@ void PeeringState::finish_split_stats(
   const object_stat_sum_t& stats, ObjectStore::Transaction &t)
 {
   info.stats.stats.sum = stats;
-
-  // rebuild-stats: object_stat_sum_t::split() (see its SPLIT(num_objects_
-  // recovered) macro) divides num_objects_recovered evenly across the
-  // parent and every child -- so info.stats.stats.sum.num_objects_recovered
-  // just dropped to a fraction of whatever it was when rebuild_base_
-  // recovered was last snapshotted, on BOTH the parent and the child. Without
-  // the redistributed value (via split()), try_record_rebuild_segment()'s
-  // delta_recovered = num_recovered - rebuild_base_recovered can go negative
-  // can reflect inaccurate value and result in discarding a genuine rebuild.
-  // Therefore, re-anchor the baseline to the just-applied, already
-  // redistributed value and make the child's inheritance numerically correct.
-  if (rebuild_start_time != utime_t()) {
-    rebuild_base_recovered = info.stats.stats.sum.num_objects_recovered;
-  }
-
   write_if_dirty(t);
 }
 
@@ -4499,6 +4425,7 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   }
 
   utime_t now = ceph_clock_now();
+
   if (info.stats.state != state) {
     info.stats.last_change = now;
     // Optimistic estimation, if we just find out an inactive PG,
@@ -4567,7 +4494,7 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
     info.stats.last_fresh = now;
 
     if (info.stats.state & PG_STATE_CLEAN)
-      info.stats.last_clean = now;
+      info.history.last_clean = now;
     if (info.stats.state & PG_STATE_ACTIVE)
       info.stats.last_active = now;
     if (info.stats.state & (PG_STATE_ACTIVE|PG_STATE_PEERED))
@@ -4580,110 +4507,114 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
       info.stats.last_fullsized = now;
 
     /**
-     * The following block is an interim solution to aggregate PG rebuild stats
-     * into a perf counter. The counter is set based on the following
-     * existing pg_stat_t fields:
-     *  - last_clean, last_change
-     *  - num_objects_degraded, num_objects_misplaced, num_objects_recovered
+     * PG vulnerability-window tracking.
      *
-     * The PG rebuild stats are aggregated into the following recoverystate
-     * perf counter:
-     *  - rs_pg_rebuild_duration: rebuild duration LONGRUNAVG time counter
+     *  A "vulnerability window" is the wall-clock span from the moment a PG
+     * first loses redundancy or placement health -- it enters
+     * DEGRADED/UNDERSIZED, or shows missing (degraded) / misplaced objects
+     * -- until it next returns to active+clean. Three pg_history_t fields
+     * (persisted with the PG info, and genuinely merged across peers on
+     * every peering info exchange -- see pg_history_t::merge()) bracket
+     * and track it:
+     *  - last_degraded: latched, on the first publish of a new window, to
+     *    the onset (last_change, i.e. when the state transition happened),
+     *    and never moved again -- neither while the episode is open nor
+     *    after it is recorded.
+     *  - last_clean: (re-)stamped to "now" on every publish of a clean PG,
+     *    above -- so it is not a stable marker on its own.
+     *  - vuln_window_reported: the "recorded up to" marker. Once a window
+     *    is recorded, this advances to last_clean's value, so a later
+     *    publish (this OSD's own, a peer's after a handover, or this OSD's
+     *    own after a restart) can tell "this onset was already recorded"
+     *    apart from "there's a real, unreported episode" without ever
+     *    moving last_degraded itself.
+     * A window is open and unrecorded exactly when last_degraded >
+     * vuln_window_reported; it has closed once last_clean also advances
+     * past last_degraded.
      *
-     * Workflow:
-     *  1. Only the acting primary OSD of the PG executes the logic to
-     *     determine the rebuild stats.
-     *  2. The logic uses rebuild_start_time as a per-PG in-memory latch that
-     *     captures the failure entry point. When a PG is considered vulnerable,
-     *     rebuild_start_time latches info.stats.last_change as the start time,
-     *     provided last_change > last_clean, which ensures only genuine new
-     *     failures after the prior clean interval are tracked.
-     *  3. On recovery, the rebuild duration is computed as
-     *     (now - rebuild_start_time) and is only recorded if delta
-     *     num_objects_recovered > 0 or the PG had confirmed redundancy loss
-     *     at latch time, filtering out spurious state transitions. The latch
-     *     is cleared after each recorded event.
-     *  4. The "recovered" (record) branch additionally requires the live
-     *     PG_STATE_ACTIVE bit, not just an empty degraded/misplaced count.
-     *     Right after a peering-interval restart, clear_primary_state()
-     *     wipes acting_recovery_backfill/missing_loc before peering has
-     *     repopulated them for the new interval; a publish landing in that
-     *     narrow mid-peering window sees num_objects_degraded == 0 and no
-     *     DEGRADED/UNDERSIZED bit set, which looks identical to a genuine
-     *     recovery completion even though the PG is still mid-transition
-     *     and about to go degraded again. Requiring PG_STATE_ACTIVE (never
-     *     set while PEERING) filters out that transient situation so it can't
-     *     prematurely record a truncated duration and reset the latch out
-     *     from under an in-progress rebuild.
-     *  5. A primary handover mid-vulnerability window closes out and records
-     *     the departing OSD's own segment instead of silently discarding it.
-     *     This means a PG that changes primary N times while continuously
-     *     vulnerable is recorded as N separate rebuild_duration samples
-     *     (whose durations sum to roughly, not exactly, the true total episode
-     *     length) rather than one -- a real, understood, and accepted
-     *     trade-off for this interim solution: avgcount can overcount the true
-     *     number of distinct redundancy-loss incidents whenever a handover
-     *     occurs mid-episode, though avgtime/the summed exposure duration stay
-     *     roughly accurate. A PG whose primary never changes is entirely
-     *     unaffected and continues to produce exactly one sample.
+     * pg_stat_t.last_degraded/last_clean are re-derived from these fields
+     * on every publish, below, purely for external reporting (ceph pg
+     * query/pg dump) -- pg_history_t is the source of truth.
      *
-     * last_degraded is intentionally not used in the interim solution to
-     * retain compatibility with older Ceph releases where this field doesn't
-     * exist and requires encoding changes. The interim solution is a
-     * close approximation of the PG rebuild time.
-     *
-     * A future simplification can replace the latch with a direct
-     * (last_clean - last_degraded) calculation once last_degraded is
-     * consistently available.
+     * Scope: this counter measures *exposure* time, not data-movement time.
+     * An empty or dataless window still counts (durability risk exists from
+     * the state transition itself, independent of whether any object was
+     * ever at risk), and a misplacement-only window (e.g. benign CRUSH
+     * rebalancing) still counts, indistinguishable here from a genuine failure
+     * -- separating those needs OSDMap correlation, tracked separately.
+     * pg_rebuild_duration is a companion counter for the active
+     * recovery/backfill portion of the window only.
      */
     if (is_primary()) {
       const int64_t num_degraded  = info.stats.stats.sum.num_objects_degraded;
       const int64_t num_misplaced = info.stats.stats.sum.num_objects_misplaced;
-      const int64_t num_recovered = info.stats.stats.sum.num_objects_recovered;
-      const bool is_vulnerable =
-        (info.stats.state & (PG_STATE_DEGRADED | PG_STATE_UNDERSIZED)) ||
+      // Deliberately read the live state bits (is_degraded()/is_undersized()),
+      // rather than info.stats.state which is a snapshot synced earlier in this
+      // same function, *before* update_calc_stats(). The state_set()/
+      // state_clear(PG_STATE_DEGRADED) above, called after update_calc_stats()
+      // had a chance to update the live "state". Therefore, on a call where the
+      // PG just became clean, info.stats.state can still carry a stale DEGRADED
+      // and miss closing the window.
+      const bool vulnerable =
+        is_degraded() || is_undersized() ||
         num_degraded > 0 || num_misplaced > 0;
 
-      if (is_vulnerable) {
-        // Latch the failure entry point on the first publish after a new
-        // failure; last_change captures when the state transition occurred.
-        if (rebuild_start_time == utime_t()) {
-          const bool new_failure =
-            info.stats.last_clean == utime_t() ||
-            info.stats.last_change > info.stats.last_clean;
-          if (new_failure) {
-            rebuild_start_time = info.stats.last_change;
-            rebuild_base_recovered = num_recovered;
-            rebuild_had_redundancy_loss =
-              (num_degraded > 0 || num_misplaced > 0);
-            psdout(15) << "rebuild-stats: latched failure start for "
-                       << info.pgid << " at " << rebuild_start_time << dendl;
-          }
+      if (vulnerable) {
+        // Latch the window onset once, on the first publish of a new
+        // window. last_degraded <= vuln_window_reported means there is no
+        // currently-open, not-yet-recorded window (either never opened, or
+        // the previous one was already recorded). Prefer last_change (when
+        // the state transition happened) over "now" so the window includes
+        // the pre-publish detection lag.
+        if (info.history.last_degraded <= info.history.vuln_window_reported) {
+          info.history.last_degraded =
+            (info.stats.last_change > info.history.last_clean)
+              ? info.stats.last_change : now;
+          psdout(15) << "rebuild-stats: vulnerability window opened for "
+                     << info.pgid << " at " << info.history.last_degraded
+                     << dendl;
         }
-      } else if (rebuild_start_time != utime_t() && (state & PG_STATE_ACTIVE)) {
-        // PG recovered — record rebuild time if this was a genuine event.
-        // The PG_STATE_ACTIVE check excludes the transient mid-peering
-        // window (see point 4 above) where the degraded/misplaced counts
-        // can momentarily read as zero before peering has finished
-        // repopulating them for the new interval.
-        try_record_rebuild_segment(now, "reached-clean");
-        // reset for the next event
-        rebuild_start_time = utime_t();
-        rebuild_base_recovered = 0;
-        rebuild_had_redundancy_loss = false;
+      } else if (info.history.last_degraded > info.history.vuln_window_reported &&
+                 info.history.last_clean > info.history.last_degraded) {
+        // A previously-latched, not-yet-recorded window has closed: the PG
+        // reached clean and the clean-stamp above advanced last_clean past
+        // the latched onset. (Leaving the vulnerable state without
+        // reaching clean -- e.g. a transient mid-peering reading where the
+        // degraded count momentarily drops to zero -- does not satisfy
+        // last_clean > last_degraded, so the window stays open until the PG
+        // is genuinely clean.) Record it once, then advance
+        // vuln_window_reported so it is never recorded again (by a later
+        // publish, a peer that inherits this history, or this OSD after a
+        // restart) -- last_degraded itself stays pinned at the true onset.
+        const utime_t dur = info.history.last_clean - info.history.last_degraded;
+        if (dur.to_msec() > 0) {
+          PerfCounters &perf = pl->get_peering_perf();
+          // tinc_with_max() accumulates the sum/avgcount AND tracks the
+          // longest single window (exposed as pg_vulnerability_duration's
+          // max_inc) with an atomic compare-exchange -- recoverystate_perf
+          // is one OSD-wide object shared by every PG shard. There is no
+          // built-in running min, so a companion gauge is updated the same
+          // way via set_min_nonzero(). Both are nanosecond-precision, so a
+          // sub-second window is not lost.
+          perf.tinc_with_max(rs_pg_vulnerability_duration, dur);
+          perf.set_min_nonzero(rs_pg_vulnerability_duration_min, dur.to_nsec());
+          psdout(15) << "rebuild-stats: recorded vulnerability window for "
+                     << info.pgid << " duration=" << dur << dendl;
+        } else {
+          psdout(15) << "rebuild-stats: discarded vulnerability window for "
+                     << info.pgid << " duration=" << dur
+                     << " (below timer resolution)" << dendl;
+        }
+        info.history.vuln_window_reported = info.history.last_clean;
       }
+      // pg_history_t is the source of truth; mirror it into pg_stat_t for
+      // external reporting (ceph pg query/pg dump), and resend immediately
+      // since either field may have just changed above.
+      info.stats.last_degraded = info.history.last_degraded;
+      info.stats.last_clean = info.history.last_clean;
+      pre_publish.last_degraded = info.stats.last_degraded;
+      pre_publish.last_clean = info.stats.last_clean;
     }
-
-    // check if the PG is vulnerable
-    if (info.stats.state & (PG_STATE_DEGRADED|PG_STATE_UNDERSIZED)) {
-      // set last_degraded only if we are entering a new
-      // failure state and if it's older than last_clean
-      if (info.stats.last_degraded <= info.stats.last_clean) {
-        info.stats.last_degraded = now;
-      }
-    }
-    // update pre_publish so the change is sent immediately
-    pre_publish.last_degraded = info.stats.last_degraded;
 
     psdout(15) << "publish_stats_to_osd " << pre_publish.reported_epoch
 	       << ":" << pre_publish.reported_seq << dendl;
@@ -5658,6 +5589,10 @@ PeeringState::Start::Start(my_context ctx)
     post_event(MakePrimary());
   } else { //is_stray
     psdout(1) << "transitioning to Stray" << dendl;
+    // This OSD is not primary, so drop any in-progress active-rebuild span.
+    // This prevents reusing a stale rebuild_active_start from an OSD that loses
+    // primary mid-span and is later re-promoted for the same PG.
+    ps->rebuild_active_start = utime_t();
     post_event(MakeStray());
   }
 }
@@ -5689,7 +5624,11 @@ PeeringState::Primary::Primary(my_context ctx)
     ps->info.stats.last_active = t;
     ps->info.stats.last_change = t;
     ps->info.stats.last_peered = t;
+    ps->info.history.last_clean = t;
+    ps->info.history.last_degraded = t;
+    ps->info.history.vuln_window_reported = t;
     ps->info.stats.last_clean = t;
+    ps->info.stats.last_degraded = t;
     ps->info.stats.last_unstale = t;
     ps->info.stats.last_undegraded = t;
     ps->info.stats.last_fullsized = t;
@@ -5869,6 +5808,19 @@ void PeeringState::Peering::exit()
   pl->get_peering_perf().tinc(rs_peering_latency, dur);
 }
 
+void PeeringState::close_rebuild_span()
+{
+  if (rebuild_active_start != utime_t()) {
+    utime_t dur = ceph_clock_now() - rebuild_active_start;
+    if (dur.to_msec() > 0) {
+      PerfCounters &perf = pl->get_peering_perf();
+      perf.tinc_with_max(rs_pg_rebuild_duration, dur);
+      perf.set_min_nonzero(rs_pg_rebuild_duration_min, dur.to_nsec());
+    }
+    rebuild_active_start = utime_t();
+  }
+}
+
 
 /*------Backfilling-------*/
 PeeringState::Backfilling::Backfilling(my_context ctx)
@@ -5884,6 +5836,10 @@ PeeringState::Backfilling::Backfilling(my_context ctx)
   ps->state_clear(PG_STATE_BACKFILL_WAIT);
   ps->state_set(PG_STATE_BACKFILLING);
   pl->on_backfill_reserved();
+  // Arm the active-rebuild latch unless a span is already in progress.
+  if (ps->rebuild_active_start == utime_t()) {
+    ps->rebuild_active_start = ceph_clock_now();
+  }
   pl->publish_stats_to_osd();
 }
 
@@ -6140,6 +6096,8 @@ PeeringState::NotBackfilling::NotBackfilling(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
   ps->state_clear(PG_STATE_REPAIR);
+  // Close the active-rebuild latch
+  ps->close_rebuild_span();
   pl->publish_stats_to_osd();
 }
 
@@ -6181,6 +6139,8 @@ PeeringState::NotRecovering::NotRecovering(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
   ps->state_clear(PG_STATE_REPAIR);
+  // Close the active-rebuild latch (recovery-track pause path)
+  ps->close_rebuild_span();
   pl->publish_stats_to_osd();
 }
 
@@ -6611,6 +6571,11 @@ PeeringState::Recovering::Recovering(my_context ctx)
   ps->state_set(PG_STATE_RECOVERING);
   pl->on_recovery_reserved();
   ceph_assert(!ps->state_test(PG_STATE_ACTIVATING));
+  // Arm the active-rebuild latch (rs_pg_rebuild_duration) unless a
+  // span is already in progress
+  if (ps->rebuild_active_start == utime_t()) {
+    ps->rebuild_active_start = ceph_clock_now();
+  }
   pl->publish_stats_to_osd();
 }
 
@@ -6726,6 +6691,12 @@ PeeringState::Recovered::Recovered(my_context ctx)
   DECLARE_LOCALS;
 
   psdout(10) << "Recovered::Recovered: entering Recovered state" << dendl;
+
+  // Close the active-rebuild latch. This is the *success* close
+  // point for both tracks -- AllReplicasRecovered (from Recovering) and
+  // Backfilled (from Backfilling) both transition straight here.
+  // A no-op if nothing ever needed recovering (e.g. Activating -> Recovered).
+  ps->close_rebuild_span();
 
   ceph_assert(!ps->needs_recovery());
 

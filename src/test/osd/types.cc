@@ -2691,6 +2691,178 @@ TEST(chunk_info_test, calc_refs_inc_match) {
     mk_delta({}));
 }
 
+// pg_history_t::merge()'s vulnerability-window onset fields (last_degraded/
+// last_clean/vuln_window_reported) are the one part of this struct that
+// isn't a plain monotonic max-merge. See the class comment on those
+// fields and the merge() algorithm's own comments in osd_types.h.
+TEST(pg_history_t, merge_vulnerability_onset_normal_handover)
+{
+  // Local side has no window open; the peer (e.g. the departing primary,
+  // arriving via peering info exchange) has one open since t1. The merge
+  // should inherit the peer's true onset.
+  utime_t t0(100, 0), t1(150, 0);
+  pg_history_t local;
+  local.last_clean = t0;
+  local.last_degraded = t0; // not open (last_degraded <= last_clean)
+
+  pg_history_t peer;
+  peer.last_clean = t0;
+  peer.last_degraded = t1; // open since t1
+
+  ASSERT_TRUE(local.merge(peer));
+  ASSERT_EQ(t0, local.last_clean);
+  ASSERT_EQ(t1, local.last_degraded);
+}
+
+TEST(pg_history_t, merge_vulnerability_onset_stale_peer_after_close)
+{
+  // The peer carries an old, already-superseded onset (t1) from before the
+  // window closed elsewhere; the local side already knows the window
+  // closed at a later point (t2 > t1). The merge must not resurrect the
+  // stale onset just because the peer still shows it as open relative to
+  // ITS OWN last_clean.
+  utime_t t0(100, 0), t1(150, 0), t2(200, 0);
+  pg_history_t local;
+  local.last_clean = t2; // already knows the window closed
+  local.last_degraded = t2; // not open locally
+
+  pg_history_t peer;
+  peer.last_clean = t0; // peer's stale view, from before the close
+  peer.last_degraded = t1; // peer still thinks it's open (t1 > t0)
+
+  // merge is a no-op here as local is already at the correct final state.
+  ASSERT_FALSE(local.merge(peer));
+  ASSERT_EQ(t2, local.last_clean);
+  // Not t1 - the stale onset must be dropped once last_clean is merged
+  // past it, not carried forward.
+  ASSERT_EQ(t2, local.last_degraded);
+}
+
+TEST(pg_history_t, merge_vulnerability_onset_redegrade_after_close)
+{
+  // One peer's view (a stale, already-superseded onset from before a
+  // close) is merged together with a genuinely newer re-degradation from
+  // a different peer. The merge must reflect the new episode's onset, not
+  // the old, already-closed one.
+  utime_t t0(150, 0), t1(200, 0), t2(250, 0);
+  pg_history_t local;
+  local.last_clean = t1; // a close already known locally
+  local.last_degraded = t0; // stale onset from before that close
+
+  pg_history_t peer;
+  peer.last_clean = t1; // agrees on the same close point
+  peer.last_degraded = t2; // but has since observed a genuine re-degrade
+
+  ASSERT_TRUE(local.merge(peer));
+  ASSERT_EQ(t1, local.last_clean);
+  ASSERT_EQ(t2, local.last_degraded);
+}
+
+TEST(pg_history_t, merge_vuln_window_reported_is_plain_max)
+{
+  // Unlike the onset, vuln_window_reported is a genuine monotonic marker --
+  // a plain max-merge, same as every other progress field in this struct.
+  utime_t t0(100, 0), t1(150, 0);
+  pg_history_t local;
+  local.vuln_window_reported = t0;
+
+  pg_history_t peer;
+  peer.vuln_window_reported = t1;
+
+  ASSERT_TRUE(local.merge(peer));
+  ASSERT_EQ(t1, local.vuln_window_reported);
+
+  // Merging an older value back in is a no-op.
+  pg_history_t older_peer;
+  older_peer.vuln_window_reported = t0;
+  ASSERT_FALSE(local.merge(older_peer));
+  ASSERT_EQ(t1, local.vuln_window_reported);
+}
+
+// A genuinely never-touched peer (e.g. a brand-new replica whose own
+// pg_history_t is still all-default) must not disturb an already-settled,
+// not-open last_degraded/vuln_window_reported pair, even when last_clean
+// has since advanced past them via ordinary steady-state re-stamping
+// (every clean publish re-stamps last_clean to "now", independent of any
+// real episode).
+TEST(pg_history_t, merge_never_touched_peer_does_not_open_false_window)
+{
+  utime_t creation(50, 0), later_clean(100, 0);
+  pg_history_t local;
+  local.last_clean = later_clean;
+  local.last_degraded = creation;         // pinned at creation, not open
+  local.vuln_window_reported = creation;  // nothing has ever been recorded
+
+  pg_history_t never_touched_peer;  // all fields default-constructed
+
+  ASSERT_FALSE(local.merge(never_touched_peer));
+  EXPECT_EQ(creation, local.last_degraded)
+      << "merging a blank peer must not move last_degraded past "
+         "vuln_window_reported and create a false open window";
+  EXPECT_EQ(creation, local.vuln_window_reported);
+  EXPECT_EQ(later_clean, local.last_clean);
+}
+
+// Rolling-upgrade test: a peer still on older code encodes
+// pg_history_t at struct_v=10, with no last_degraded/last_clean/
+// vuln_window_reported fields at all. Decoding that blob on this (newer)
+// code must land on the documented safe default with no window open, nothing
+// pending and without an arbitrary or uninitialized value. The struct_v=10
+// wire format below mirrors pg_history_t::encode() as it existed immediately
+// before this struct grew those 3 fields; the current encode() can no
+// longer produce that format on its own, since it always writes at the
+// current struct_v.
+TEST(pg_history_t, decode_pre_v11_defaults_vulnerability_fields)
+{
+  pg_history_t src;
+  src.epoch_created = 5;
+  src.last_epoch_started = 6;
+  src.last_epoch_clean = 6;
+  src.same_interval_since = 6;
+  src.same_up_since = 6;
+  src.same_primary_since = 6;
+  src.last_interval_started = 6;
+  src.last_interval_clean = 6;
+  src.epoch_pool_created = 5;
+
+  bufferlist bl;
+  ENCODE_START(10, 4, bl);
+  encode(src.epoch_created, bl);
+  encode(src.last_epoch_started, bl);
+  encode(src.last_epoch_clean, bl);
+  encode(src.last_epoch_split, bl);
+  encode(src.same_interval_since, bl);
+  encode(src.same_up_since, bl);
+  encode(src.same_primary_since, bl);
+  encode(src.last_scrub, bl);
+  encode(src.last_scrub_stamp, bl);
+  encode(src.last_deep_scrub, bl);
+  encode(src.last_deep_scrub_stamp, bl);
+  encode(src.last_clean_scrub_stamp, bl);
+  encode(src.last_epoch_marked_full, bl);
+  encode(src.last_interval_started, bl);
+  encode(src.last_interval_clean, bl);
+  encode(src.epoch_pool_created, bl);
+  encode(src.prior_readable_until_ub, bl);
+  ENCODE_FINISH(bl);
+
+  pg_history_t decoded;
+  auto p = bl.cbegin();
+  decoded.decode(p);
+
+  // Ordinary pre-v11 fields still decode correctly.
+  EXPECT_EQ(src.epoch_created, decoded.epoch_created);
+  EXPECT_EQ(src.last_epoch_started, decoded.last_epoch_started);
+  EXPECT_EQ(src.same_interval_since, decoded.same_interval_since);
+
+  // The 3 new fields must default to "no window open, nothing pending",
+  // not retroactively discover a pre-upgrade window from whatever memory
+  // happens to hold.
+  EXPECT_EQ(utime_t(), decoded.last_degraded);
+  EXPECT_EQ(decoded.last_clean, decoded.last_degraded);
+  EXPECT_EQ(decoded.last_degraded, decoded.vuln_window_reported);
+}
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ;

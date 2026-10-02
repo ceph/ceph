@@ -3597,7 +3597,7 @@ list<pool_stat_t> pool_stat_t::generate_test_instances()
 
 void pg_history_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(10, 4, bl);
+  ENCODE_START(11, 4, bl);
   encode(epoch_created, bl);
   encode(last_epoch_started, bl);
   encode(last_epoch_clean, bl);
@@ -3615,12 +3615,15 @@ void pg_history_t::encode(ceph::buffer::list &bl) const
   encode(last_interval_clean, bl);
   encode(epoch_pool_created, bl);
   encode(prior_readable_until_ub, bl);
+  encode(last_degraded, bl);
+  encode(last_clean, bl);
+  encode(vuln_window_reported, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_history_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(10, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 4, 4, bl);
   decode(epoch_created, bl);
   decode(last_epoch_started, bl);
   if (struct_v >= 3)
@@ -3668,6 +3671,19 @@ void pg_history_t::decode(ceph::buffer::list::const_iterator &bl)
   if (struct_v >= 10) {
     decode(prior_readable_until_ub, bl);
   }
+  if (struct_v >= 11) {
+    decode(last_degraded, bl);
+    decode(last_clean, bl);
+    decode(vuln_window_reported, bl);
+  } else {
+    // Pre-v11 wire format: default to "no window open, nothing pending"
+    // rather than an old peer's or a rolling upgrade's stale/uninitialized
+    // values, so decoding an old-format instance never retroactively
+    // discovers/records a pre-upgrade window.
+    last_clean = utime_t();
+    last_degraded = last_clean;
+    vuln_window_reported = last_degraded;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3692,6 +3708,9 @@ void pg_history_t::dump(Formatter *f) const
   f->dump_float(
     "prior_readable_until_ub",
     std::chrono::duration<double>(prior_readable_until_ub).count());
+  f->dump_stream("last_degraded") << last_degraded;
+  f->dump_stream("last_clean") << last_clean;
+  f->dump_stream("vuln_window_reported") << vuln_window_reported;
 }
 
 list<pg_history_t> pg_history_t::generate_test_instances()
@@ -3716,6 +3735,9 @@ list<pg_history_t> pg_history_t::generate_test_instances()
   o.back().last_deep_scrub_stamp = utime_t(14, 15);
   o.back().last_clean_scrub_stamp = utime_t(16, 17);
   o.back().last_epoch_marked_full = 18;
+  o.back().last_degraded = utime_t(19, 20);
+  o.back().last_clean = utime_t(21, 22);
+  o.back().vuln_window_reported = utime_t(21, 22);
   return o;
 }
 

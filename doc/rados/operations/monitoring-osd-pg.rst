@@ -463,6 +463,147 @@ however, seeing PGs in the ``stale`` state indicates that the primary OSD for
 those PGs is ``down`` or not reporting PG statistics to the monitor.
 
 
+.. _rados_operations_monitoring_pg_vulnerability_rebuild_duration:
+
+Monitoring PG Vulnerability and Rebuild Duration
+================================================
+
+The PG states above describe a cluster's condition at a single point in
+time. To understand a cluster's durability posture over time -- how long,
+how often, and how severely PGs have run at reduced redundancy -- Ceph
+tracks two per-OSD performance counters:
+
+- ``pg_vulnerability_duration``: the total wall-clock time a PG spent at
+  reduced redundancy or placement health (``degraded``, ``undersized``, or
+  with misplaced objects), from onset to the point it returned to
+  ``active+clean``.
+- ``pg_rebuild_duration``: the subset of that time actually spent in
+  active data movement (``Recovering`` or ``Backfilling``). The
+  difference between the two is time spent *waiting* rather than
+  *repairing* -- for example, waiting for a downed OSD with no spare
+  capacity to take its place.
+
+Both counters are recorded once per PG episode, on whichever OSD is
+primary when the PG returns to ``active+clean``, and both survive OSD
+restarts and primary handovers mid-episode.
+
+Finding the counters
+--------------------
+
+The counters appear under ``recoverystate_perf`` in the admin socket's
+performance dump:
+
+.. prompt:: bash $
+
+    ceph daemon osd.0 perf dump recoverystate_perf
+
+::
+
+    {
+        "recoverystate_perf": {
+            "pg_vulnerability_duration": {
+                "avgcount": 4,
+                "sum": 812.345678901,
+                "avgtime": 203.086419725,
+                "max_inc": 350.123456789
+            },
+            "pg_vulnerability_duration_min": 45.678901234,
+            "pg_rebuild_duration": {
+                "avgcount": 3,
+                "sum": 90.123456789,
+                "avgtime": 30.041152263,
+                "max_inc": 40.987654321
+            },
+            "pg_rebuild_duration_min": 12.345678901
+        }
+    }
+
+``sum``/``avgcount``/``avgtime`` behave like any other Ceph time-average
+counter. ``_min`` and ``max_inc`` additionally give the shortest and
+longest single episode recorded since the daemon started, so a single
+bad outlier is not hidden inside an average.
+
+Deriving metrics with Prometheus
+--------------------------------
+
+The examples below assume ``ceph-exporter`` is being scraped by
+Prometheus, which exposes these as
+``ceph_recoverystate_perf_pg_vulnerability_duration_*`` and
+``ceph_recoverystate_perf_pg_rebuild_duration_*``. They are meant as a
+starting point, not an exhaustive list -- adjust the range and grouping
+to your own reporting needs.
+
+.. note:: These PromQL queries are suggestions to help you get started,
+   not verified reference recipes. Validate them against your own
+   Prometheus setup and adjust thresholds, ranges, and label selectors
+   (for example, to scope by pool or host) to fit your environment
+   before relying on them.
+
+* Weekly exposure report -- how long, cluster-wide, did data run at
+  reduced redundancy this week:
+
+  .. code-block:: promql
+
+      sum(increase(ceph_recoverystate_perf_pg_vulnerability_duration_sum[7d]))
+
+* Mean time to restore redundancy (MTTR):
+
+  .. code-block:: promql
+
+      rate(ceph_recoverystate_perf_pg_vulnerability_duration_sum[1h])
+      / rate(ceph_recoverystate_perf_pg_vulnerability_duration_count[1h])
+
+* Repair vs. waiting -- of the exposure time, how much was spent
+  actually moving data versus waiting for something else (a downed OSD
+  with no spare, an empty or async-recovery-target PG). A high
+  "waiting" fraction points at topology or spare-capacity problems
+  rather than slow recovery:
+
+  .. code-block:: promql
+
+      rate(ceph_recoverystate_perf_pg_vulnerability_duration_sum[1h])
+      - rate(ceph_recoverystate_perf_pg_rebuild_duration_sum[1h])
+
+* Reliability hot-spot triage -- which OSDs are rebuilding most often.
+  Treat this as a triage flag to investigate further, not a verdict on
+  its own:
+
+  .. code-block:: promql
+
+      topk(5, rate(ceph_recoverystate_perf_pg_vulnerability_duration_count[24h]))
+
+* Alerting on a single long episode -- page when one episode exceeds a
+  threshold, independent of the cluster's current ``HEALTH`` status:
+
+  .. code-block:: promql
+
+      ceph_recoverystate_perf_pg_vulnerability_duration_max_inc > 600
+
+Spot-checking a single PG
+-------------------------
+
+Without Prometheus, ``ceph pg query`` shows a PG's current
+``last_degraded`` timestamp directly, useful when investigating one
+specific PG:
+
+.. prompt:: bash $
+
+    ceph pg 1.a query
+
+Known limitations
+-----------------
+
+- The counters are **per OSD, not per PG** -- they answer "how much did
+  this OSD's PGs collectively spend degraded," not "how many times has
+  this specific PG been rebuilt."
+- A benign CRUSH rebalance (reweight, added capacity, a ``pg_num``
+  change) is currently counted the same as an OSD failure; cause
+  attribution is not yet implemented.
+- A PG that is *inactive* (stuck below the ``Activating`` state) is
+  **not** counted -- these counters measure redundancy loss, not
+  availability loss.
+
+
 Identifying Troubled PGs
 ========================
 

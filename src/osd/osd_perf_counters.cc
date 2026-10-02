@@ -542,16 +542,46 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
   rs_perf.add_u64_counter(rs_update_stats_invalidated, "update_stats_invalidated", "Number of times pg stats received invalidations during stats updates");
   rs_perf.add_u64_counter(rs_append_log_stats_invalidated, "append_log_stats_invalidated", "Number of times pg stats received invalidations when appending new log entries");
   rs_perf.add_u64_counter(rs_merge_log_stats_invalidated, "merge_log_stats_invalidated", "Number of times pg stats received invalidations during merging of log entries");
-  rs_perf.add_time_avg(rs_pg_rebuild_duration, "pg_vulnerability_duration",
-    "Average PG vulnerability duration on this OSD (primary role only), "
-    "i.e. time exposed to redundancy loss -- not literal rebuild/"
-    "data-movement time, which this interim counter does not separately "
-    "track; also counts misplacement-only episodes (e.g. benign CRUSH "
-    "rebalancing) indistinguishable from genuine failures, and excludes "
-    "windows where the PG never had data recovered or lost (e.g. an "
-    "empty PG); a primary handover mid-window is recorded as a separate "
-    "sample per OSD segment, so avgcount can exceed the true number of "
-    "distinct redundancy-loss incidents",
+  rs_perf.add_time_avg(rs_pg_vulnerability_duration, "pg_vulnerability_duration",
+    "Average PG vulnerability duration on this OSD (primary role only): "
+    "wall-clock time from when a PG loses redundancy/placement "
+    "health (degraded, undersized, or with missing/misplaced objects) "
+    "until it next reaches active+clean. Timed from the peered "
+    "pg_stat_t.last_degraded / last_clean timestamps, so one episode is "
+    "recorded exactly once regardless of primary handovers or interval "
+    "restarts, and it survives OSD restarts. This is exposure time, not "
+    "data-movement time -- empty/dataless windows are counted, and "
+    "misplacement-only episodes (e.g. benign CRUSH rebalancing) are "
+    "counted indistinguishably from genuine failures. Recorded via "
+    "tinc_with_max(), so the LONGRUNAVG's max_inc field is the longest "
+    "single window seen; see pg_vulnerability_duration_min for the "
+    "shortest.",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_time(rs_pg_vulnerability_duration_min, "pg_vulnerability_duration_min",
+    "Shortest single PG vulnerability-window duration recorded on this OSD "
+    "(primary role only), in seconds; 0 until the first window is recorded. "
+    "Updated atomically so concurrently-recording PGs on the shared OSD-wide "
+    "counter cannot lose a lower value (the companion max is "
+    "pg_vulnerability_duration's max_inc).",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_time_avg(rs_pg_rebuild_duration, "pg_rebuild_duration",
+    "Average PG active-rebuild duration on this OSD (primary role only): "
+    "wall-clock time actually spent in Recovering or Backfilling, a "
+    "subset of the PG's overall vulnerability window "
+    "(pg_vulnerability_duration). A purely silent window (e.g. an empty "
+    "PG) records nothing here even though pg_vulnerability_duration "
+    "does -- their difference, summed over a window, is the silent "
+    "exposure time (degraded with no observed recovery progress). "
+    "Recorded via tinc_with_max(), so the LONGRUNAVG's max_inc field is "
+    "the longest single rebuild span seen; see pg_rebuild_duration_min "
+    "for the shortest.",
+    NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_time(rs_pg_rebuild_duration_min, "pg_rebuild_duration_min",
+    "Shortest single PG active-rebuild span recorded on this OSD (primary "
+    "role only), in seconds; 0 until the first span is recorded. Updated "
+    "with an atomic compare-exchange so concurrently-recording PGs on the "
+    "shared OSD-wide counter cannot lose a lower value (the companion max "
+    "is pg_rebuild_duration's max_inc).",
     NULL, PerfCountersBuilder::PRIO_USEFUL);
 
   return rs_perf.create_perf_counters();

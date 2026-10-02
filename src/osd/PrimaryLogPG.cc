@@ -13241,9 +13241,18 @@ void PrimaryLogPG::clear_cache()
   object_contexts.clear();
 }
 
-void PrimaryLogPG::on_shutdown()
+void PrimaryLogPG::on_shutdown(bool merge_source_teardown)
 {
   dout(10) << __func__ << dendl;
+
+  if (merge_source_teardown) {
+    // One last chance to record a vulnerability-window episode that
+    // already finished (fully recovered) but hadn't yet been published,
+    // before this PG disappears as a merge source. Must run before
+    // clear_primary_state() below, which resets the role/primary state
+    // this depends on.
+    publish_stats_to_osd();
+  }
 
   if (recovery_queued) {
     recovery_queued = false;
