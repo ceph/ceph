@@ -24,6 +24,7 @@
 #include <atomic>
 #include <bit>
 #include <chrono>
+#include <deque>
 #include <ratio>
 #include <mutex>
 #include <queue>
@@ -298,6 +299,10 @@ extern const std::vector<uint64_t> bdev_label_positions;
 
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
+  using shard_key_queue = std::deque<
+    std::string,
+    mempool::bluestore_fsck::pool_allocator<std::string>>;
+
   // -----------------------------------------------------
   // types
 public:
@@ -1479,7 +1484,7 @@ private:
   friend void _dump_transaction(CephContext *cct, Transaction *t);
 
   TransContext *_txc_create(Collection *c, OpSequencer *osr,
-			    std::list<Context*> *on_commits,
+			    std::vector<Context *> *on_commits,
 			    TrackedOpRef osd_op=TrackedOpRef());
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
@@ -1811,11 +1816,6 @@ private:
       blob_xoffset(b_offs),
       length(len),
       front(front){}
-    region_t(const region_t& from)
-      : logical_offset(from.logical_offset),
-      blob_xoffset(from.blob_xoffset),
-      length(from.length),
-      front(from.front){}
 
     friend std::ostream& operator<<(std::ostream& out, const region_t& r) {
       return out << "0x" << std::hex << r.logical_offset << ":"
@@ -1828,7 +1828,7 @@ private:
     uint64_t r_off = 0;
     uint64_t r_len = 0;
     ceph::buffer::list bl;
-    std::list<region_t> regs; // original read regions
+    std::vector<region_t> regs; // original read regions
 
     read_req_t(uint64_t off, uint64_t len) : r_off(off), r_len(len) {}
 
@@ -1840,7 +1840,7 @@ private:
     }
   };
 
-  typedef std::list<read_req_t> regions2read_t;
+  typedef std::vector<read_req_t> regions2read_t;
   typedef std::map<BlueStore::BlobRef, regions2read_t> blobs2read_t;
 
   void _read_cache(
@@ -2542,7 +2542,7 @@ public:
     const ghobject_t& oid,
     const std::string& key,
     const ceph::buffer::list& value,
-    mempool::bluestore_fsck::list<std::string>* expecting_shards,
+    shard_key_queue *expecting_shards,
     std::map<BlobRef, bluestore_blob_t::unused_t>* referenced,
     BlueStore::FSCK_ObjectCtx& ctx);
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
