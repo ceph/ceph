@@ -8,6 +8,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <iosfwd>
+#include <deque>
 #include <list>
 #include <map>
 
@@ -366,7 +367,7 @@ class TokenBucketThrottle {
   SafeTimer *m_timer;
   ceph::mutex *m_timer_lock;
   Context *m_token_ctx = nullptr;
-  std::list<Blocker> m_blockers;
+  std::deque<Blocker> m_blockers;
   ceph::mutex m_lock;
 
   // minimum of the filling period.

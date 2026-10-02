@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <optional>
+#include <utility>
+
 #include "common/Throttle.h"
 
 #include "include/scope_guard.h"
@@ -17,7 +20,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "throttle(" << name << " " << (void*)this << ") "
 
-using std::list;
+using std::deque;
 using std::ostream;
 using std::string;
 
@@ -763,10 +766,10 @@ TokenBucketThrottle::~TokenBucketThrottle() {
     cancel_timer();
   }
 
-  list<Blocker> tmp_blockers;
+  deque<Blocker> tmp_blockers;
   {
     std::lock_guard blockers_lock(m_lock);
-    tmp_blockers.splice(tmp_blockers.begin(), m_blockers, m_blockers.begin(), m_blockers.end());
+    tmp_blockers.swap(m_blockers);
   }
 
   for (auto b : tmp_blockers) {
@@ -841,7 +844,7 @@ uint64_t TokenBucketThrottle::tokens_this_tick() {
 }
 
 void TokenBucketThrottle::add_tokens() {
-  list<Blocker> tmp_blockers;
+  std::optional<deque<Blocker>> tmp_blockers;
   {
     std::lock_guard lock(m_lock);
     // put tokens into bucket.
@@ -850,8 +853,12 @@ void TokenBucketThrottle::add_tokens() {
       burst_ratio = (double)m_throttle.max/m_avg;
     }
     m_throttle.put(tokens_this_tick(), burst_ratio);
-    if (0 == m_avg || 0 == m_throttle.max)
-      tmp_blockers.swap(m_blockers);
+    if (m_blockers.empty()) {
+      return;
+    }
+    if (0 == m_avg || 0 == m_throttle.max) {
+      tmp_blockers.emplace().swap(m_blockers);
+    }
     // check the m_blockers from head to tail, if blocker can get
     // enough tokens, let it go.
     while (!m_blockers.empty()) {
@@ -859,7 +866,11 @@ void TokenBucketThrottle::add_tokens() {
       uint64_t got = m_throttle.get(blocker.tokens_requested);
       if (got == blocker.tokens_requested) {
         // got enough tokens for front.
-        tmp_blockers.splice(tmp_blockers.end(), m_blockers, m_blockers.begin());
+        if (!tmp_blockers) {
+          tmp_blockers.emplace();
+        }
+        tmp_blockers->push_back(std::move(blocker));
+        m_blockers.pop_front();
       } else {
         // there is no more tokens.
         blocker.tokens_requested -= got;
@@ -868,8 +879,10 @@ void TokenBucketThrottle::add_tokens() {
     }
   }
 
-  for (auto b : tmp_blockers) {
-    b.ctx->complete(0);
+  if (tmp_blockers) {
+    for (auto b : *tmp_blockers) {
+      b.ctx->complete(0);
+    }
   }
 }
 
