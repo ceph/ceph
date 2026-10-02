@@ -300,8 +300,8 @@ int ObjectCacheStore::promote_object(librados::IoCtx* ioctx,
 int ObjectCacheStore::evict_objects() {
   ldout(m_cct, 20) << dendl;
 
-  std::list<std::string> obj_list;
-  m_policy->get_evict_list(&obj_list);
+  std::vector<std::string> obj_list;
+  m_policy->get_evict_list(obj_list);
   for (auto& obj : obj_list) {
     do_evict(obj);
   }
