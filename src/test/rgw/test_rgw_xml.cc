@@ -2,11 +2,13 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "rgw_xml.h"
+#include "rgw_website.h"
 #include "common/XMLFormatter.h"
 
 #include <gtest/gtest.h>
 #include <list>
 #include <stdexcept>
+#include <vector>
 
 using namespace ceph;
 
@@ -74,6 +76,15 @@ struct Items {
   // intrusive XML decoding API
   bool decode_xml(XMLObj *obj) {
     do_decode_xml_obj(item_list, "Item", obj);
+    return true;
+  }
+};
+
+struct VectorItems {
+  std::vector<Item> items;
+
+  bool decode_xml(XMLObj *obj) {
+    do_decode_xml_obj(items, "Item", obj);
     return true;
   }
 };
@@ -380,6 +391,21 @@ TEST(TestDecoder, BasicParsing)
   ASSERT_STREQ(to_string(result).c_str(), expected_output);
 }
 
+TEST(TestDecoder, ContiguousSequence)
+{
+  RGWXMLDecoder::XMLParser parser;
+  ASSERT_TRUE(parser.init());
+  ASSERT_TRUE(parser.parse(good_input, strlen(good_input), 1));
+  VectorItems result;
+  ASSERT_NO_THROW({
+    ASSERT_TRUE(RGWXMLDecoder::decode_xml("Items", result, &parser, true));
+  });
+  ASSERT_EQ(result.items.size(), 4U);
+  ASSERT_EQ(result.items[0].name_and_status.name, "hello");
+  ASSERT_EQ(result.items[1].extra_value, 99);
+  ASSERT_FALSE(result.items[3].name_and_status.status);
+}
+
 TEST(TestDecoder, MalformedInput)
 {
   RGWXMLDecoder::XMLParser parser;
@@ -465,3 +491,34 @@ TEST(TestEncoder, ListWithAttrsAndNS)
   ASSERT_STREQ(ss.str().c_str(), expected_xml_output);
 }
 
+TEST(WebsiteEncoding, RoutingRuleSequenceRemainsCompatible)
+{
+  RGWBWRoutingRule first;
+  first.condition.key_prefix_equals = "images/";
+  first.redirect_info.replace_key_prefix_with = "archive/";
+
+  RGWBWRoutingRule second;
+  second.condition.http_error_code_returned_equals = 404;
+  second.redirect_info.redirect.hostname = "errors.example";
+
+  const std::list<RGWBWRoutingRule> legacy {first, second};
+  const std::vector<RGWBWRoutingRule> contiguous(std::begin(legacy), std::end(legacy));
+  bufferlist legacy_encoding;
+  bufferlist contiguous_encoding;
+
+  encode(legacy, legacy_encoding);
+  encode(contiguous, contiguous_encoding);
+
+  ASSERT_TRUE(legacy_encoding.contents_equal(contiguous_encoding));
+
+  auto encoded = std::cbegin(legacy_encoding);
+  std::vector<RGWBWRoutingRule> decoded;
+  decode(decoded, encoded);
+
+  ASSERT_EQ(2, std::size(decoded));
+  EXPECT_EQ("images/", decoded[0].condition.key_prefix_equals);
+  EXPECT_EQ("archive/", decoded[0].redirect_info.replace_key_prefix_with);
+  EXPECT_EQ(404, decoded[1].condition.http_error_code_returned_equals);
+  EXPECT_EQ("errors.example", decoded[1].redirect_info.redirect.hostname);
+  EXPECT_EQ(0, encoded.get_remaining());
+}

@@ -22,7 +22,7 @@
 #include <unistd.h>
 #include <fstream>
 #include <map>
-#include <list>
+#include <vector>
 extern "C"{
 #include <curl/curl.h>
 }
@@ -76,7 +76,7 @@ class test_helper {
     string conf_path;
     CURL *curl_inst;
     map<string, string> response;
-    list<string> extra_hdrs;
+    vector<string> extra_hdrs;
     string *resp_data;
     unsigned resp_code;
   public:
@@ -276,9 +276,8 @@ int test_helper::send_request(string method, string res,
     struct curl_slist *slist = NULL;
     slist = curl_slist_append(slist, auth.c_str());
     slist = curl_slist_append(slist, http_date.c_str());
-    for(list<string>::iterator it = extra_hdrs.begin();
-        it != extra_hdrs.end(); ++it){
-      slist = curl_slist_append(slist, (*it).c_str());
+    for (const auto& extra_header : extra_hdrs) {
+      slist = curl_slist_append(slist, extra_header.c_str());
     }
     if(read_function)
       curl_slist_append(slist, "Expect:");
@@ -307,16 +306,15 @@ int run_rgw_admin(string& cmd, string& resp) {
   pid = fork();
   if (pid == 0) {
     /* child */
-    list<string> l;
-    get_str_list(cmd, " \t", l);
+    vector<string> l;
+    get_str_vec(cmd, " \t", l);
     // One extra for argv[0] and one for the NULL.
     std::vector<char*> argv(l.size() + 2);
     unsigned loop = 1;
 
     argv[0] = (char *)"radosgw-admin";
-    for (list<string>::iterator it = l.begin(); 
-         it != l.end(); ++it) {
-      argv[loop++] = (char *)(*it).c_str();
+    for (const auto& argument : l) {
+      argv[loop++] = (char *)argument.c_str();
     }
     argv[loop] = NULL;
     if (!freopen(RGW_ADMIN_RESP_PATH, "w+", stdout)) {
@@ -582,7 +580,7 @@ static int decode_json(JSONObj *obj, cls_log_entry_json& ret) {
   return decode_json(jo, ret.log_data);
 }
 
-static int get_log_list(list<cls_log_entry_json> &entries) {
+static int get_log_list(vector<cls_log_entry_json> &entries) {
   JSONParser parser;
   if (parse_json_resp(parser) != 0)
     return -1;
@@ -626,7 +624,7 @@ static int decode_json(JSONObj *obj, cls_bilog_entry& ret) {
   return 0;
 }
 
-static int get_bilog_list(list<cls_bilog_entry> &entries) {
+static int get_bilog_list(vector<cls_bilog_entry> &entries) {
   JSONParser parser;
   if (parse_json_resp(parser) != 0)
     return -1;
@@ -661,7 +659,7 @@ static int decode_json(JSONObj *obj, rgw_data_change& ret) {
   return 0;
 }
 
-static int get_datalog_list(list<rgw_data_change> &entries) {
+static int get_datalog_list(vector<rgw_data_change> &entries) {
   JSONParser parser;
 
   if (parse_json_resp(parser) != 0)
@@ -707,7 +705,7 @@ TEST(TestRGWAdmin, datalog_list) {
   string rest_req;
   unsigned shard_id = get_datalog_shard_id(TEST_BUCKET_NAME, g_ceph_context->_conf->rgw_data_log_num_shards);
   stringstream ss;
-  list<rgw_data_change> entries;
+  vector<rgw_data_change> entries;
 
   ASSERT_EQ(get_formatted_time(start_time), 0);
   ASSERT_EQ(0, user_create(uid, display_name));
@@ -753,7 +751,7 @@ TEST(TestRGWAdmin, datalog_list) {
   get_datalog_list(entries);
   EXPECT_EQ(1U, entries.size());
   if (entries.size() == 1) {
-    list<rgw_data_change>::iterator it = (entries.begin());
+    vector<rgw_data_change>::iterator it = (entries.begin());
     EXPECT_EQ((*it).entity_type, ENTITY_TYPE_BUCKET);
     EXPECT_EQ((*it).key.compare(TEST_BUCKET_NAME), 0);
   }
@@ -771,7 +769,7 @@ TEST(TestRGWAdmin, datalog_list) {
   get_datalog_list(entries);
   EXPECT_EQ(2U, entries.size());
   if (entries.size() == 2) {
-    list<rgw_data_change>::iterator it = (entries.begin());
+    vector<rgw_data_change>::iterator it = (entries.begin());
     EXPECT_EQ((*it).entity_type, ENTITY_TYPE_BUCKET);
     EXPECT_EQ((*it).key.compare(TEST_BUCKET_NAME), 0);
     ++it; 
@@ -940,7 +938,7 @@ TEST(TestRGWAdmin, datalog_trim) {
   string rest_req;
   unsigned shard_id = get_datalog_shard_id(TEST_BUCKET_NAME, g_ceph_context->_conf->rgw_data_log_num_shards);
   stringstream ss;
-  list<rgw_data_change> entries;
+  vector<rgw_data_change> entries;
 
   ASSERT_EQ(get_formatted_time(start_time), 0);
   ASSERT_EQ(0, user_create(uid, display_name));
@@ -1056,12 +1054,12 @@ TEST(TestRGWAdmin, mdlog_list) {
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   
-  list<cls_log_entry_json> entries;
+  vector<cls_log_entry_json> entries;
   EXPECT_EQ(get_log_list(entries), 0);
   EXPECT_EQ(entries.size(), 4U);
 
   if(entries.size() == 4) {
-    list<cls_log_entry_json>::iterator it = entries.begin();
+    vector<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
     EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
@@ -1095,7 +1093,7 @@ TEST(TestRGWAdmin, mdlog_list) {
   EXPECT_EQ(entries.size(), 4U);
 
   if(entries.size() == 4) {
-    list<cls_log_entry_json>::iterator it = entries.begin();
+    vector<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
     EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
@@ -1131,7 +1129,7 @@ TEST(TestRGWAdmin, mdlog_list) {
   EXPECT_EQ(get_log_list(entries), 0);
   EXPECT_EQ(entries.size(), 6U);
   if(entries.size() == 6) {
-    list<cls_log_entry_json>::iterator it = entries.begin();
+    vector<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
     EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_REMOVE);
@@ -1207,7 +1205,7 @@ TEST(TestRGWAdmin, mdlog_trim) {
   const char *cname = "mdlog",
              *perm = "*";
   string rest_req;
-  list<cls_log_entry_json> entries;
+  vector<cls_log_entry_json> entries;
   unsigned shard_id = get_mdlog_shard_id(uid, g_ceph_context->_conf->rgw_md_log_max_shards);
   ostringstream ss;
 
@@ -1390,11 +1388,11 @@ TEST(TestRGWAdmin, bilog_list) {
   rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
-  list<cls_bilog_entry> entries;
+  vector<cls_bilog_entry> entries;
   get_bilog_list(entries);
   EXPECT_EQ(2U, entries.size());
   if (entries.size() == 2) {
-    list<cls_bilog_entry>::iterator it = entries.begin();
+    vector<cls_bilog_entry>::iterator it = entries.begin();
     EXPECT_EQ(it->op.compare("write"), 0);
     EXPECT_EQ(it->object.compare(TEST_BUCKET_OBJECT), 0);
     EXPECT_EQ(it->status.compare("pending"), 0);
@@ -1424,7 +1422,7 @@ TEST(TestRGWAdmin, bilog_list) {
   get_bilog_list(entries);
   EXPECT_EQ(4U, entries.size());
   if (entries.size() == 4) {
-    list<cls_bilog_entry>::iterator it = entries.begin();
+    vector<cls_bilog_entry>::iterator it = entries.begin();
 
     ++it; ++it;
     EXPECT_EQ(it->op.compare("write"), 0);
@@ -1448,7 +1446,7 @@ TEST(TestRGWAdmin, bilog_list) {
   EXPECT_EQ(6U, entries.size());
   string marker;
   if (entries.size() == 6) {
-    list<cls_bilog_entry>::iterator it = entries.begin();
+    vector<cls_bilog_entry>::iterator it = entries.begin();
     
     ++it; ++it; ++it; ++it;
     marker = it->op_id;
@@ -1472,7 +1470,7 @@ TEST(TestRGWAdmin, bilog_list) {
   get_bilog_list(entries);
   EXPECT_EQ(2U, entries.size());
   if (entries.size() == 2U) {
-    list<cls_bilog_entry>::iterator it = entries.begin();
+    vector<cls_bilog_entry>::iterator it = entries.begin();
     EXPECT_EQ(it->index_ver, 5U);
     ++it;
     EXPECT_EQ(it->index_ver, 6U);
@@ -1531,11 +1529,11 @@ TEST(TestRGWAdmin, bilog_trim) {
   rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
-  list<cls_bilog_entry> entries;
+  vector<cls_bilog_entry> entries;
   get_bilog_list(entries);
   EXPECT_EQ(2U, entries.size());
 
-  list<cls_bilog_entry>::iterator it = entries.begin();
+  vector<cls_bilog_entry>::iterator it = entries.begin();
   start_marker = it->op_id;
   ++it;
   end_marker = it->op_id;

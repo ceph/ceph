@@ -413,6 +413,35 @@ TEST_F(BlockDirectoryFixture, SetYield)
   io.run();
 }
 
+TEST_F(BlockDirectoryFixture, SetBatchYield)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    std::vector<rgw::d4n::CacheBlock> blocks {*block, *block};
+    blocks[1].blockID = 1;
+
+    ASSERT_EQ(0, dir->set(env->dpp, blocks, optional_yield{yield}));
+
+    boost::system::error_code ec;
+    request req;
+    req.push_range("HMGET", "testBucket_testName_0_0", fields);
+    req.push_range("HMGET", "testBucket_testName_1_0", fields);
+    req.push("FLUSHALL");
+
+    response<std::vector<std::string>, std::vector<std::string>, boost::redis::ignore_t> resp;
+    conn->async_exec(req, resp, yield[ec]);
+
+    auto second_vals = vals;
+    second_vals[0] = "1";
+
+    ASSERT_FALSE(ec);
+    EXPECT_EQ(std::get<0>(resp).value(), vals);
+    EXPECT_EQ(std::get<1>(resp).value(), second_vals);
+    conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
+
 TEST_F(BlockDirectoryFixture, GetYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
