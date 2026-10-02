@@ -25,6 +25,7 @@
 #include <algorithm>
 
 #include <boost/container/flat_set.hpp>
+#include <boost/container/small_vector.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/endian/conversion.hpp>
 #include <boost/random/mersenne_twister.hpp>
@@ -12558,14 +12559,14 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
   _dump_transaction<30>(cct, t);
 
-  vector<CollectionRef> cvec(i.colls.size());
+  boost::container::small_vector<CollectionRef, 2> cvec(i.colls.size());
   unsigned j = 0;
   for (vector<coll_t>::iterator p = i.colls.begin(); p != i.colls.end();
        ++p, ++j) {
     cvec[j] = _get_collection(*p);
   }
   
-  vector<OnodeRef> ovec(i.objects.size());
+  boost::container::small_vector<OnodeRef, 2> ovec(i.objects.size());
 
   for (int pos = 0; i.have_op(); ++pos) {
     Transaction::Op *op = i.decode_op();
