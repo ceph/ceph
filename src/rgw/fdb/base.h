@@ -853,7 +853,7 @@ inline auto apply_option_value(auto& set_option,
  return std::invoke(set_option, code, input.data, input.length);
 }
 
-inline void apply_options(const auto& option_map, auto&& set_option)
+inline void apply_options(auto&& option_map, auto&& set_option)
 {
  std::ranges::for_each(option_map, [&set_option](const auto& option) {
     const auto apply = [&set_option, code = option.first](const auto& value) {
@@ -866,6 +866,21 @@ inline void apply_options(const auto& option_map, auto&& set_option)
         libfdb_exception::make_fdb_error_string(ec)));
     }
   });
+}
+
+// FoundationDB retains only these transaction options across on_error():
+constexpr bool transaction_option_is_persistent(
+  const FDBTransactionOption option) noexcept
+{
+ switch (option) {
+ default:
+  return false;
+ case FDB_TR_OPTION_TIMEOUT:
+ case FDB_TR_OPTION_RETRY_LIMIT:
+ case FDB_TR_OPTION_MAX_RETRY_DELAY:
+ case FDB_TR_OPTION_AUTHORIZATION_TOKEN:
+  return true;
+ }
 }
 
 // The global DB state and management thread:
@@ -1112,6 +1127,7 @@ class transaction final
 
  database_handle dbh;
  std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_handle;
+ transaction_options options;
  std::vector<versionstamp> version_stamps;
 
  state_t state = state_t::active;
@@ -1140,6 +1156,19 @@ class transaction final
   }
  }
 
+ void restore_options()
+ {
+  auto nonpersistent = options | std::views::filter([](const auto& option) {
+   return not detail::transaction_option_is_persistent(option.first);
+  });
+
+  detail::apply_options(
+   nonpersistent,
+   [handle = raw_handle()](auto option, auto data, auto size) {
+    return fdb_transaction_set_option(handle, option, data, size);
+   });
+ }
+
  void reset_for_replay(const fdb_error_t error)
  {
   require_active("reset_for_replay()");
@@ -1156,6 +1185,7 @@ class transaction final
 
   // Discard versionstamps registered by the abandoned attempt:
   version_stamps.clear();
+  restore_options();
  }
 
  bool get_single_value_from_transaction(
@@ -1169,15 +1199,16 @@ class transaction final
 
  public:
  transaction(database_handle database)
-  : dbh(require_database(std::move(database))),
-    txn_handle(dbh->create_transaction(), &fdb_transaction_destroy)
+  : transaction(std::move(database), transaction_options {})
  {}
 
  transaction(database_handle database, const transaction_options& opts)
-  : transaction(std::move(database))
+  : dbh(require_database(std::move(database))),
+    txn_handle(dbh->create_transaction(), &fdb_transaction_destroy),
+    options(opts)
  {
   detail::apply_options(
-    opts,
+    options,
     [handle = raw_handle()](auto option, auto data, auto size) {
       return fdb_transaction_set_option(handle, option, data, size);
     });
@@ -1603,6 +1634,7 @@ inline void ceph::libfdb::transaction::recover_from_commit_error(
  }
 
  version_stamps.clear();
+ restore_options();
 }
 
 inline void ceph::libfdb::transaction::resolve_versionstamps(
