@@ -22,7 +22,9 @@
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "include/random.h"
 #include "messages/MOSDOp.h"
+#include "messages/MOSDShardMap.h"
 #include "messages/MOSDPeeringOp.h"
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGRemove.h"
@@ -504,7 +506,12 @@ seastar::future<> OSD::start()
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   DEBUG("starting store");
   uint32_t store_shards_num = co_await store.start();
-  co_await pg_to_shard_mappings.start(0, seastar::this_smp_shard_count(), store_shards_num);
+  // shard map version = nonce << 32 | changes: a restart changes it, so
+  // clients refetch without the map being persisted
+  const uint32_t boot_nonce =
+    ceph::util::generate_random_number<uint32_t>(1, UINT32_MAX);
+  co_await pg_to_shard_mappings.start(
+    0, seastar::this_smp_shard_count(), store_shards_num, boot_nonce);
   co_await osd_singleton_state.start_single(
         whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
         std::ref(*monc), std::ref(*mgrc));
@@ -613,6 +620,14 @@ seastar::future<> OSD::start()
     DEBUG("adding to crush");
     return _add_me_to_crush();
   });
+  // publish the reactor ports bound above; this precedes boot, so no
+  // client sees the shard map without them
+  if (auto ports = public_msgr->get_client_shard_ports(); !ports.empty()) {
+    INFO("publishing {} client shard ports", ports.size());
+    co_await pg_to_shard_mappings.invoke_on_all([ports](auto &mapping) {
+      mapping.set_shard_ports(ports);
+    });
+  }
   co_await _add_device_class();
   if (is_rotational.has_value()) {
     co_await shard_services.invoke_on_all([this](auto &local_service) {
@@ -971,6 +986,13 @@ OSD::do_ms_dispatch(
     return handle_osd_map(boost::static_pointer_cast<MOSDMap>(m));
   case CEPH_MSG_OSD_OP:
     return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
+  case CEPH_MSG_OSD_SHARD_MAP_GET:
+    if (!pg_to_shard_mappings.local().is_shard_map_published()) {
+      return std::nullopt;   // not publishing: unhandled, as before
+    }
+    // answered from this reactor's replica, always (a client never waits)
+    return conn->send(crimson::make_message<MOSDShardMap>(
+      pg_to_shard_mappings.local().get_shard_map()));
   case MSG_OSD_PG_CREATE2:
     return handle_pg_create(
       conn, boost::static_pointer_cast<MOSDPGCreate2>(m));
