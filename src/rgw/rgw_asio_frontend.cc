@@ -1,12 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <ctime>
+#include <deque>
 #include <atomic>
 #include <chrono>
-#include <ctime>
-#include <iomanip>
-#include <list>
 #include <memory>
+#include <iomanip>
 
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
@@ -448,7 +448,8 @@ class AsioFrontend {
     explicit Listener(boost::asio::io_context& context)
       : acceptor(context), socket(context) {}
   };
-  std::list<Listener> listeners;
+  // Accept coroutines retain references to these non-movable listeners:
+  std::deque<Listener> listeners;
 
   ConnectionList connections;
 
