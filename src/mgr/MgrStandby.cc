@@ -153,11 +153,18 @@ int MgrStandby::asok_command(std::string_view cmd, const cmdmap_t& cmdmap, Forma
   }
 }
 
+static void handle_standby_mgr_signal(int signum)
+{
+  derr << " *** Got signal " << sig_str(signum) << " ***" << dendl;
+  _exit(0);
+}
+
 int MgrStandby::init()
 {
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
-
+  register_async_signal_handler_oneshot(SIGTERM, handle_standby_mgr_signal);
+  register_async_signal_handler_oneshot(SIGINT, handle_standby_mgr_signal);
   cct->_conf.add_observer(this);
 
   std::lock_guard l(lock);
@@ -278,8 +285,23 @@ void MgrStandby::send_beacon()
   }
 
   // Whether I think I am available (request MgrMonitor to set me
-  // as available in the map)
-  bool available = active_mgr != nullptr && active_mgr->is_initialized();
+  // as available in the map).
+  //
+  // The active mgr is marked available if:
+  // 1. The mon has chosen a standby to be active
+  // 2. The chosen active mgr has all of its modules initialized
+  //
+  // In extreme cases, if modules take very long to initialize (a buffer of extra time
+  // is allowed; see "mgr_module_load_expiration"), we will proceed to mark the chosen
+  // active mgr "available" to unblock other mgr functionality such as reporting PG
+  // availability. If this happens, a health error will be issued indicating which
+  // mgr modules got stuck initializing (See src/mgr/PyModuleRegistry.cc). This unblocks
+  // the rest of the mgr's functionality while making it clear that some modules
+  // are unusuable.
+  bool available = false;
+  if (active_mgr != nullptr) {
+    available = active_mgr->is_initialized() || active_mgr->exceeded_initialization_expiration();
+  }
 
   auto addrs = available ? active_mgr->get_server_addrs() : entity_addrvec_t();
   dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
@@ -480,6 +502,8 @@ int MgrStandby::main(vector<const char *> args)
 
   // Disable signal handlers
   unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGTERM, handle_standby_mgr_signal);
+  unregister_async_signal_handler(SIGINT, handle_standby_mgr_signal);
   shutdown_async_signal_handler();
 
   return 0;

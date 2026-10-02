@@ -12,6 +12,10 @@
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   min_mon_release 17 (quincy)
   election_strategy: 1
+  auth_epoch 0
+  auth_service_cipher aes256k
+  auth_allowed_ciphers aes256k
+  auth_preferred_cipher aes256k
 
   $ monmaptool --print -- mymonmap
   monmaptool: monmap file mymonmap
@@ -21,3 +25,7 @@
   created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   min_mon_release 17 (quincy)
   election_strategy: 1
+  auth_epoch 0
+  auth_service_cipher aes256k
+  auth_allowed_ciphers aes256k
+  auth_preferred_cipher aes256k

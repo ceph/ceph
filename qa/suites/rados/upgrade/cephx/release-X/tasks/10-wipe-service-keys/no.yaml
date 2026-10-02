@@ -1,0 +1,3 @@
+teuthology:
+  variables:
+    wipe_service_keys: false

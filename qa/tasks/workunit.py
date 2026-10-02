@@ -387,16 +387,61 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                 raise RuntimeError('Spec did not match any workunits: {spec!r}'.format(spec=spec))
             for workunit in to_run:
                 log.info('Running workunit %s...', workunit)
+                remote.run(
+                    logger=log.getChild(role),
+                    args=['mkdir', '-p', '--', scratch_tmp],
+                    label=f"workunit sandbox creation test {workunit}",
+                )
+
+                try:
+                    cluster_keyring = ctx.ceph[cluster].keyring
+                except AttributeError:
+                    cluster_keyring = f"/etc/ceph/{cluster}.keyring"
+                    log.info("keyring not configured by cluster setup, using default: %s", cluster_keyring)
+
+                try:
+                    k = remote.read_file(cluster_keyring).decode()
+                    log.info("current keyring file:\n%s", k)
+                except FileNotFoundError:
+                    log.info("no cluster keyring found; skipping keyring imports")
+                else:
+                    client_keyring = f'/etc/ceph/{cluster}.client.{id_}.keyring'
+                    admin_keyring = f'/etc/ceph/{cluster}.client.admin.keyring'
+                    #tmp_keyring = f'{scratch_tmp}/workunit.client.{id_}.keyring'
+                    tmp_keyring = cluster_keyring
+                    remote.run(
+                        args=[
+                            'sudo',
+                            'ceph-authtool',
+                            tmp_keyring,
+                            '--import-keyring',
+                            client_keyring,
+                        ],
+                    )
+                    # admin_keyring may be a key type not understood
+                    try:
+                        remote.run(
+                            args=[
+                                'sudo',
+                                'ceph-authtool',
+                                tmp_keyring,
+                                '--import-keyring',
+                                admin_keyring,
+                            ],
+                        )
+                    except:
+                        log.info("admin key type not understood")
+
                 args = [
-                    'mkdir', '-p', '--', scratch_tmp,
-                    run.Raw('&&'),
                     'cd', '--', scratch_tmp,
                     run.Raw('&&'),
                     run.Raw('CEPH_CLI_TEST_DUP_COMMAND=1'),
                     run.Raw('CEPH_REF={ref}'.format(ref=refspec)),
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
-                    run.Raw('CEPH_ARGS="--cluster {0}"'.format(cluster)),
-                    run.Raw('CEPH_ID="{id}"'.format(id=id_)),
+                    run.Raw(f'CEPH_CLIENT_ID={id_}'), # used by src/test/librados/test_cxx.cc
+                    run.Raw(f'CEPH_ARGS="--cluster={cluster}"'),
+                    #run.Raw(f'CEPH_KEYRING="{tmp_keyring}"'),
+                    run.Raw(f'CEPH_ID="{id_}"'), # used by rbd
                     run.Raw('PATH=$PATH:/usr/sbin'),
                     run.Raw('CEPH_BASE={dir}'.format(dir=clonedir)),
                     run.Raw('CEPH_ROOT={dir}'.format(dir=clonedir)),

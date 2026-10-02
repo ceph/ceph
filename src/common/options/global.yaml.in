@@ -43,6 +43,14 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: ms_shutdown_timeout
+  type: millisecs
+  level: advanced
+  desc: Timeout for connection to shutdown gracefully
+  default: 120000
+  flags:
+  - runtime
+  min: 1
 - name: public_addrv
   type: addrvec
   level: basic
@@ -2107,7 +2115,15 @@ options:
    ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
    each other. Valid settings are ``cephx`` or ``none``.
   default: cephx
-  with_legacy: true
+  flags:
+    - runtime
+- name: auth_exit_on_failure
+  type: int
+  level: dev
+  desc: call _exit with given error code when auth fails when non-negative
+  default: -1
+  flags:
+  - runtime
 # required by daemons of clients
 - name: auth_service_required
   type: str
@@ -2117,7 +2133,8 @@ options:
    to authenticate with the Ceph Storage Cluster in order to access
    Ceph services. Valid settings are ``cephx`` or ``none``.
   default: cephx
-  with_legacy: true
+  flags:
+    - runtime
 # what clients require of daemons
 - name: auth_client_required
   type: str
@@ -2127,13 +2144,8 @@ options:
    authenticate with the Ceph Client. Valid settings are ``cephx``
    or ``none``.
   default: cephx, none
-  with_legacy: true
-# deprecated; default value for above if they are not defined.
-- name: auth_supported
-  type: str
-  level: advanced
-  desc: authentication methods required (deprecated)
-  with_legacy: true
+  flags:
+    - runtime
 - name: max_rotating_auth_attempts
   type: int
   level: advanced
@@ -2206,15 +2218,25 @@ options:
   type: float
   level: advanced
   default: 72_hr
-  with_legacy: true
+  desc: The time-to-live for tickets with the auth subsystem of the Monitors.
+  long_desc: >
+    The time-to-live for tickets with the auth subsystem of the Monitors.
+    These tickets are used to reclaim the global ID associated with the
+    running client.
+  flags:
+  - runtime
 - name: auth_service_ticket_ttl
   type: float
   level: advanced
   default: 1_hr
-  fmt_desc: When the Ceph Storage Cluster sends a Ceph Client a ticket for
-   authentication, the Ceph Storage Cluster assigns the ticket a
-   time to live.
-  with_legacy: true
+  desc: The time-to-live for non-auth service tickets issued by the Monitors.
+  fmt_desc: >
+   The time-to-live for non-auth service tickets issued by the Monitors. These
+   tickets would include services like the OSD or MDS. This allows the client
+   to authenticate independently with the service for the given timeframe
+   before having to refresh its tickets with the Monitors again.
+  flags:
+  - runtime
 - name: auth_allow_insecure_global_id_reclaim
   type: bool
   level: advanced
@@ -4868,6 +4890,17 @@ options:
   default: 0.04
   see_also:
   - bluestore_cache_size
+- name: bluestore_cache_meta_evict_limit
+  type: int
+  level: advanced
+  desc: Elements in onode cache shards are evicted when new element is inserted into the cache.
+    In rare cases of cluster inactivity cache can be reduced, but not evicted. Adjusting size at once
+    will cause stall first time cache shard is accessed. The setting limits how many onodes can get evicted in one go.
+    Any value is less than 2 it is treated as request to adjust immediately.
+  default: 10
+  see_also:
+  - bluestore_cache_meta_ratio
+  with_legacy: true
 - name: bluestore_cache_autotune
   type: bool
   level: dev
@@ -4878,6 +4911,18 @@ options:
   see_also:
   - bluestore_cache_size
   - bluestore_cache_meta_ratio
+- name: bluestore_cache_meta_evict_in_autotune
+  type: bool
+  level: advanced
+  desc: Controls eviction of onodes from cache shards as part of autotune.
+    When enabled (true), right after autotune memory allocation run onode cache tries to adapt.
+    Depending on `bluestore_cache_meta_evict_limit` either some or all excess onodes are evicted.
+    When disabled (false), cluster inactivity makes cache to keep its onode elements.
+  default: true
+  see_also:
+  - bluestore_cache_meta_evict_limit
+  - bluestore_cache_autotune
+  with_legacy: true
 - name: bluestore_cache_autotune_interval
   type: float
   level: dev
@@ -5517,6 +5562,23 @@ options:
   - hdd
   - ssd
   with_legacy: true
+- name: bluestore_allocator_lookup_policy
+  type: str
+  level: advanced
+  desc: Determines how to perform the next free extent lookup.
+  long_desc: When set to 'hdd_optimized' the allocator searches from the last
+     location found. This may facilitate contiguous disk writes. It may similarly
+     be beneficial for large-IU QLC SSDs to enable firmware coalescing of sub-IU
+     writes.
+     When set to 'ssd-optimized' the allocator will search from the beginning of
+     the device. This may facilitate SSD firmware housekeeping.
+     When set to 'auto' the value will be derived from the detected device type
+    (rotational or non-rotational).
+  default: auto
+  enum_values:
+  - hdd_optimized
+  - ssd_optimized
+  - auto
 - name: bluestore_avl_alloc_ff_max_search_count
   type: uint
   level: dev

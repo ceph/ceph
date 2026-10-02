@@ -916,7 +916,7 @@ $CCLIENTDEBUG
         rgw crypt s3 kms backend = testing
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
-        rgw sts key = abcdefghijklmnop
+        rgw sts key = AgCo3Fxp7lWQBiAAyF5iCVd6UAo2c5Q6TROJ6vFMxz3nciCS9pq4Z+EFzak=
         rgw s3 auth use sts = true
         ; uncomment the following to set LC days as the value in seconds;
         ; needed for passing lc time based s3-tests (can be verbose)
@@ -967,6 +967,7 @@ $DAEMONOPTS
 
         bluestore fsck on mount = true
         bluestore block create = true
+        
 $BLUESTORE_OPTS
 
         ; kstore

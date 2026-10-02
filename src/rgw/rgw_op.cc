@@ -435,6 +435,8 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
       return -ENOENT;
     }
 
+    s->env.emplace("s3:prefix", object->get_name());
+
     if (verify_bucket_permission(dpp, s, bucket->get_key(), s->user_acl,
                                  bucket_policy, policy, s->iam_identity_policies,
                                  s->session_policies, rgw::IAM::s3ListBucket)) {
@@ -3900,9 +3902,9 @@ int RGWPutObj::init_processing(optional_yield y) {
 
   // reject public canned acls
   if (s->bucket_access_conf && s->bucket_access_conf->block_public_acls() &&
-      (s->canned_acl.compare("public-read") ||
-       s->canned_acl.compare("public-read-write") ||
-       s->canned_acl.compare("authenticated-read"))) {
+      (s->canned_acl == "public-read" ||
+       s->canned_acl == "public-read-write" ||
+       s->canned_acl == "authenticated-read")) {
     return -EACCES;
   }
 
@@ -5278,10 +5280,13 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.bucket_owner = s->bucket_owner.id;
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
       del_op->params.unmod_since = unmod_since;
+      del_op->params.last_mod_time_match = last_mod_time_match;
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
       del_op->params.null_verid = null_verid;
+      del_op->params.size_match = size_match;
+      del_op->params.if_match = if_match;
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
@@ -5341,6 +5346,9 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
     params_str = url_src.substr(pos + 1);
   }
 
+  if (name_str.empty()) {
+    return false;
+  }
   if (name_str[0] == '/') // trim leading slash
     name_str.remove_prefix(1);
 
@@ -6319,6 +6327,9 @@ void RGWInitMultipart::execute(optional_yield y)
     return;
   }
 
+  encode_obj_tags_attr(obj_tags, attrs);
+  rgw_cond_decode_objtags(s, attrs);
+
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
   upload = s->bucket->get_multipart_upload(s->object->get_name(),
 				       upload_id);
@@ -6567,7 +6578,10 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
                                   << oetag << ", re-calculated etag:" << final_etag_str << dendl;
     return false;
   }
-  ldpp_dout(this, 5) << __func__ << "() object etag and re-calculated etag match, etag: " << oetag << dendl;
+  ldpp_dout(this, 5) << __func__
+                     << "() object etag and re-calculated etag match, etag: "
+                     << oetag << dendl;
+  etag = oetag;
   return true;
 }
 
@@ -6807,10 +6821,13 @@ void RGWDeleteMultiObj::wait_flush(optional_yield y,
   }
 }
 
-void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_yield y,
+void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object, optional_yield y,
                                                  boost::asio::deadline_timer *formatter_flush_cond,
                                                  const bool skip_olh_obj_update)
 {
+  const string& key = object.get_key();
+  const string& instance = object.get_version_id();
+  rgw_obj_key o(key, instance);
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o);
   if (o.empty()) {
     send_partial_response(o, false, "", -EINVAL, formatter_flush_cond);
@@ -6868,9 +6885,9 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
                           rgw::notify::ObjectRemovedDelete;
   std::unique_ptr<rgw::sal::Notification> res
           = driver->get_notification(obj.get(), s->src_object.get(), s, event_type, y);
-  op_ret = res->publish_reserve(this);
-  if (op_ret < 0) {
-    send_partial_response(o, false, "", op_ret, formatter_flush_cond);
+  int r = res->publish_reserve(this);
+  if (r < 0) {
+    send_partial_response(o, false, "", r, formatter_flush_cond);
     return;
   }
 
@@ -6882,14 +6899,17 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.obj_owner = s->owner;
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
+  del_op->params.last_mod_time_match = object.get_last_mod_time();
+  del_op->params.if_match = object.get_if_match();
+  del_op->params.size_match = object.get_size_match();
 
-  op_ret = del_op->delete_obj(this, y,
-                              rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
-  if (op_ret == -ENOENT) {
-    op_ret = 0;
+  r = del_op->delete_obj(this, y,
+                         rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
+  if (r == -ENOENT) {
+    r = 0;
   }
 
-  if (op_ret == 0) {
+  if (r == 0) {
     // send request to notification manager
     int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
     if (ret < 0) {
@@ -6898,10 +6918,10 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
     }
   }
   
-  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret, formatter_flush_cond);
+  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, r, formatter_flush_cond);
 }
 
-void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<rgw_obj_key>& objects,
+void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
                                                  uint32_t max_aio,
                                                  boost::asio::yield_context y)
 {
@@ -6909,11 +6929,11 @@ void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<rgw_obj_key>&
   auto ex = y.get_executor();
   formatter_flush_cond = std::make_optional<boost::asio::deadline_timer>(ex);
   uint32_t aio_count = 0;
-  std::map<std::string, std::vector<rgw_obj_key>> grouped_objects;
+  std::map<std::string, std::vector<RGWMultiDelObject>> grouped_objects;
 
   // group objects by their keys
   for (const auto& object : objects) {
-    const std::string& key = object.name;
+    const std::string& key = object.get_key();
     grouped_objects[key].push_back(object);
   }
 
@@ -6925,7 +6945,7 @@ void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<rgw_obj_key>&
         return aio_count < max_aio;
       });
       aio_count++;
-      const rgw_obj_key obj = group[i];
+      const RGWMultiDelObject obj = group[i];
       boost::asio::spawn(y, [this, &aio_count, obj, &formatter_flush_cond](boost::asio::yield_context yield) {
         handle_individual_object(obj, yield, &*formatter_flush_cond, true /* skip_olh_obj_update */);
         aio_count--;
@@ -6940,7 +6960,7 @@ void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<rgw_obj_key>&
 
   // Now handle the last object of each group with update_olh
   for (const auto& kv : grouped_objects) {
-    const rgw_obj_key obj = kv.second.back();
+    const RGWMultiDelObject obj = kv.second.back();
 
     wait_flush(y, &*formatter_flush_cond, [&aio_count, max_aio] {
       return aio_count < max_aio;
@@ -6958,7 +6978,7 @@ void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<rgw_obj_key>&
   });
 }
 
-void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<rgw_obj_key>& objects,
+void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
                                                      uint32_t max_aio,
                                                      boost::asio::yield_context y)
 {
@@ -6985,7 +7005,7 @@ void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<rgw_obj_k
   });
 }
 
-void RGWDeleteMultiObj::handle_objects(const std::vector<rgw_obj_key>& objects,
+void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
                                        uint32_t max_aio,
                                        boost::asio::yield_context yield)
 {
@@ -7046,8 +7066,9 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
   if (s->bucket->get_info().mfa_enabled()) {
     bool has_versioned = false;
-    for (auto i : multi_delete->objects) {
-      if (!i.instance.empty()) {
+    for (auto object : multi_delete->objects) {
+      const string& instance = object.get_version_id();
+      if (instance.empty()) {
         has_versioned = true;
         break;
       }

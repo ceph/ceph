@@ -1,0 +1,20 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health unmute AUTH_INSECURE_SERVICE_KEY_TYPE
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+- ceph.healthy:
+    expected_checks: [AUTH_INSECURE_SERVICE_KEY_TYPE]
+- ceph.key_rotate:
+    daemons: [mon.*]
+    key_type: aes256k
+- ceph.key_rotate:
+    daemons: [mgr.*, osd.*, mds.*]
+    key_type: aes256k
+- exec:
+    mon.a:
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 mon dump
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 auth ls
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 auth --format=json-pretty dump-keys
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 auth --format=json dump-keys | jq 'any(.data.secrets[] | select(.entity.type == 1 or .entity.type == 2 or .entity.type == 4 or .entity.type == 16); .auth.key.type == 2)'
+- ceph.healthy:

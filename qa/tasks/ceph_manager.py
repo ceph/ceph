@@ -1587,6 +1587,11 @@ class CephManager:
         timeout = kwargs.pop('timeout', 120)
         return ['sudo'] + self.pre + ['timeout', f'{timeout}', 'ceph',
                                       '--cluster', self.cluster]
+    def save_conf_epoch(self):
+        p = self.ceph("config log 1 --format=json")
+        J = json.loads(p.stdout.getvalue())
+        self.ctx.conf_epoch = J[0]["version"]
+        log.info("config epoch is %d", self.ctx.conf_epoch)
 
     def ceph(self, cmd, **kwargs):
         """
@@ -2414,6 +2419,14 @@ class CephManager:
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return next((p['stats'] for p in j['pools'] if p['name'] == name),
                     None)
+
+    def get_cluster_df_stats(self):
+        """
+        Get the cluster df stats
+        """
+        out = self.raw_cluster_cmd('df', '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        return j['stats']
 
     def get_pgids_to_force(self, backfill):
         """
@@ -3295,14 +3308,39 @@ class CephManager:
             self.log('health:\n{h}'.format(h=out))
         return json.loads(out)
 
-    def wait_until_healthy(self, timeout=None):
+    def wait_until_healthy(self, timeout=None, expected_checks=[]):
         self.log("wait_until_healthy")
         start = time.time()
-        while self.get_mon_health()['status'] != 'HEALTH_OK':
+        found = set()
+        while True:
+            health = self.get_mon_health()
+            if health['status'] == 'HEALTH_OK':
+                break
+            found = set()
+            okay = True
+            unhealthy = []
+            for name, check in health['checks'].items():
+                if check['muted']:
+                    log.debug("{} is muted", name)
+                elif name in expected_checks:
+                    log.info("{} in expected_checks", name)
+                    found.add(name)
+                else:
+                    unhealthy.append(name)
+                    okay = False
+            if okay:
+                break
             if timeout is not None:
-                assert time.time() - start < timeout, \
-                    'timeout expired in wait_until_healthy'
+                if timeout < (time.time() - start):
+                    what = ", ".join(unhealthy)
+                    err = f"timeout {timeout}s expired waiting for healthy cluster with these unhealthy checks: {what}"
+                    raise RuntimeError(err)
             time.sleep(3)
+        if found != set(expected_checks):
+            exp = ", ".join(expected_checks)
+            fnd = ", ".join(found)
+            err = f"healthy cluster but expected_checks ({exp}) not equal to {fnd}"
+            raise RuntimeError(err)
         self.log("wait_until_healthy done")
 
     def get_filepath(self):

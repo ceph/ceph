@@ -1068,8 +1068,12 @@ TEST_F(QuiesceDbTest, RepeatedQuiesceAwait) {
   // let us reach quiescing
   managers.at(mds_gid_t(1))->reset_agent_callback(QUIESCING_AGENT_CB);
 
-  // pick an expiration timeout
-  auto expiration = sec(0.1);
+  // pick an expiration timeout. each loop iteration pays ~3 CFS sched
+  // latencies (sleep_for wake, manager wake on notify, completion
+  // wake) plus some processing, so the per-iteration overhead is
+  // 20-40ms on loaded CI. at sec(0.2) sleep_for(expiration/2) leaves
+  // a 100ms margin, roughly 3x the worst case.
+  auto expiration = sec(0.2);
 
   // create a set and let it quiesce
   ASSERT_EQ(OK(), run_request([=](auto& r) {
@@ -1082,12 +1086,18 @@ TEST_F(QuiesceDbTest, RepeatedQuiesceAwait) {
 
   EXPECT_EQ(QS_QUIESCED, last_request->response.sets.at("set1").rstate.state);
 
-  // sleep for half the expiration interval multiple times
-  // each time sending another await request
-  // the expectation is that every time we call await
-  // the expiration timer is reset, hence we should be able to
-  // sustain the loop for arbitrarily long
-  for (int i = 0; i < 10; i++) {
+  // sleep for half the expiration multiple times, each time sending
+  // another await. after 3 iterations the cumulative sleep is 1.5x
+  // the expiration, so without timer resets the set would have
+  // expired. surviving the loop proves the resets are extending the
+  // deadline.
+  //
+  // EXPECT_GE inside the loop catches a backward at_age; EXPECT_GT
+  // after the loop catches at_age never being updated (which
+  // EXPECT_GE(x, x) can't, since it passes trivially).
+  auto initial_at_age = last_request->response.sets.at("set1").rstate.at_age;
+  auto prev_at_age = initial_at_age;
+  for (int i = 0; i < 3; i++) {
     std::this_thread::sleep_for(expiration/2);
     ASSERT_EQ(OK(), run_request([i](auto& r) {
       r.set_id = "set1";
@@ -1097,33 +1107,39 @@ TEST_F(QuiesceDbTest, RepeatedQuiesceAwait) {
       }
       r.await = sec(0);
     }));
+    auto at_age = last_request->response.sets.at("set1").rstate.at_age;
+    EXPECT_GE(at_age, prev_at_age);
+    prev_at_age = at_age;
   }
+  EXPECT_GT(prev_at_age, initial_at_age);
 
   // Prevent the set from reaching the RELEASED state
   managers.at(mds_gid_t(1))->reset_agent_callback(SILENT_AGENT_CB);
 
-  // start releasing and observe that the timer isn't reset in this case,
-  // so after a few EINPROGRESS we eventually reach timeout due to expiration
-  for (int i = 0; i < 2; i++) {
-    ASSERT_EQ(ERR(EINPROGRESS), run_request([=](auto& r) {
-      r.set_id = "set1";
-      r.release();
-      r.await = (expiration*2)/5;
-    }));
-  }
+  // release must not reset the timer: at_age should still match the
+  // last successful await.
+  auto last_await_at_age = prev_at_age;
+  ASSERT_EQ(ERR(EINPROGRESS), run_request([=](auto& r) {
+    r.set_id = "set1";
+    r.release();
+    r.await = sec(0);
+  }));
+  EXPECT_EQ(last_await_at_age, last_request->response.sets.at("set1").rstate.at_age);
 
+  // await = 2*expiration so the expiration fires inside the window,
+  // not on its boundary.
   // NB: the ETIMEDOUT is the await result, while the set itself should be EXPIRED
   EXPECT_EQ(ERR(ETIMEDOUT), run_request([=](auto& r) {
     r.set_id = "set1";
     r.release();
-    r.await = expiration;
+    r.await = expiration * 2;
   }));
 
   EXPECT_EQ(QS_EXPIRED, last_request->response.sets.at("set1").rstate.state);
 
   EXPECT_EQ(ERR(EPERM), run_request([](auto& r) {
     r.set_id = "set1";
-    r.await = sec(0.1);
+    r.await = sec(0);
   }));
 
   EXPECT_EQ(ERR(EPERM), run_request([](auto& r) {

@@ -106,6 +106,7 @@ class AdminSocketHook;
 #define COMPAT_SET_LOC "feature_set"
 
 class Monitor : public Dispatcher,
+		public KeyServer,
 		public AuthClient,
 		public AuthServer,
                 public md_config_obs_t {
@@ -145,7 +146,6 @@ public:
   LogChannelRef clog;
   LogChannelRef audit_clog;
   KeyRing keyring;
-  KeyServer key_server;
 
   AuthMethodList auth_cluster_required;
   AuthMethodList auth_service_required;
@@ -163,6 +163,15 @@ public:
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
   std::string gss_ktfile_client{};
+
+private:
+  mutable ceph::mutex cipher_mutex = ceph::make_mutex("Monitor::cipher_mutex");
+  std::vector<int> my_allowed_ciphers;
+  int my_service_cipher = -1;
+public:
+  int get_service_cipher() const override;
+  bool is_cipher_allowed(int cipher) const override;
+  std::vector<int> get_ciphers_allowed() const override;
 
 private:
   void new_tick();
@@ -725,10 +734,9 @@ public:
   ceph::mutex session_map_lock = ceph::make_mutex("Monitor::session_map_lock");
   AdminSocketHook *admin_hook;
 
-  template<typename Func, typename...Args>
-  void with_session_map(Func&& func) {
+  void with_session_map(auto&& f) {
     std::lock_guard l(session_map_lock);
-    std::forward<Func>(func)(session_map);
+    std::forward<decltype(f)>(f)(session_map);
   }
   void send_latest_monmap(Connection *con);
 
@@ -1111,7 +1119,16 @@ public:
   }
 
 private:
+  bool use_mon_keyring = false;
+public:
+  void use_keyring_as_authoritative() {
+    use_mon_keyring = true;
+  }
+
+private:
   ceph::coarse_mono_time const starttime = coarse_mono_clock::now();
+  epoch_t probe_epoch = 0;
+  epoch_t cycle_mon_secret = 0;
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
@@ -1130,6 +1147,9 @@ private:
 #define CEPH_MON_FEATURE_INCOMPAT_QUINCY CompatSet::Feature(14, "quincy ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_REEF CompatSet::Feature(15, "reef ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_SQUID CompatSet::Feature(16, "squid ondisk layout")
+
+// Release-independent features
+#define CEPH_MON_FEATURE_INCOMPAT_CEPHX_AUTH_AES256K CompatSet::Feature(31, "cephx auth aes256k")
 // make sure you add your feature to Monitor::get_supported_features
 
 

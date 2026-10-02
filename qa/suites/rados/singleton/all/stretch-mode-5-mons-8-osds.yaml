@@ -46,8 +46,6 @@ tasks:
       - \(OSD_DATACENTER_DOWN\)
       - \(OSD_DOWN\)
       - \(OSD_HOST_DOWN\)
-
-
 - workunit:
     clients:
       client.0:

@@ -662,3 +662,33 @@ class TestDamage(CephFSTestCase):
         self.mount_a.mount_wait()
         self.mount_a.run_shell_payload("stat a/ && find a/")
         self.fs.flush()
+
+    def test_missing_dirfrag_create(self):
+        """
+        That the MDS won't let you manipulate dentries in a missing dirfrag.
+        """
+
+        self.mount_a.run_shell_payload("mkdir -p dir_x/dir_xx/dir_xxx/")
+        self.mount_a.run_shell_payload("touch dir_x/dir_xx/dir_xxx/file_y")
+        self.mount_a.umount()
+        d = self.fs.read_cache("dir_x/dir_xx", depth=0)
+        self.fs.flush()
+        time.sleep(5)
+        self.fs.flush() # EUpdate scatter_writebehind
+        self.fs.fail()
+        dirfrag_obj = "{0:x}.00000000".format(d[0]['ino'])
+        self.fs.radosm(["rm", dirfrag_obj]),
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        self.mount_a.mount_wait()
+        try:
+            p = self.mount_a.run_shell_payload("touch dir_x/dir_xx/file_x", wait=False)
+            # CDir.cc: 1438: FAILED ceph_assert(get_version() < pv)
+            wait([p], 20)
+            self.fs.flush()
+        except MaxWhileTries:
+            self.fail("MDS probably crashed")
+        except CommandFailedError:
+            self.assertTrue("Input/output error" in p.stderr.getvalue())
+        else:
+            self.fail("command should fail")

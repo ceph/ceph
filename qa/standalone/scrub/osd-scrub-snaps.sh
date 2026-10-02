@@ -29,7 +29,7 @@ function run() {
 
     export CEPH_MON="127.0.0.1:7121" # git grep '\<7121\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     export -n CEPH_CLI_TEST_DUP_COMMAND
@@ -142,7 +142,7 @@ function create_scenario() {
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA || return 1
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj6)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clones || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj7)"
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset corrupt || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj8)"
@@ -153,8 +153,6 @@ function create_scenario() {
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clone_overlap || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj11)"
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clones || return 1
-    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj12)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset head || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj13)"
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset snaps || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj14)"

@@ -1,0 +1,17 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        mon warn on msgr2 not enabled: false
+      osd:
+        ms bind msgr1: true
+        ms bind msgr2: false
+      mds:
+        ms bind msgr1: true
+        ms bind msgr2: false
+      mon:
+        ms bind msgr1: true
+        ms bind msgr2: false
+      mgr:
+        ms bind msgr1: true
+        ms bind msgr2: false

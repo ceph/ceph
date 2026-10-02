@@ -24,9 +24,11 @@
 #include "include/stringify.h"
 
 #include "mon/Monitor.h"
+#include "mon/MonMap.h"
 #include "mon/HealthMonitor.h"
 #include "mon/OSDMonitor.h"
 
+#include "messages/MMonCommand.h"
 #include "messages/MMonHealthChecks.h"
 
 #include "common/Formatter.h"
@@ -71,7 +73,10 @@ static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
 }
 
 HealthMonitor::HealthMonitor(Monitor &m, Paxos &p, const string& service_name)
-  : PaxosService(m, p, service_name) {
+  : PaxosService(m, p, service_name)
+  , quorum_checks(m, *this)
+  , leader_checks(m, *this)
+{
 }
 
 void HealthMonitor::init()
@@ -88,13 +93,12 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version = get_last_committed();
   dout(10) << __func__ << dendl;
-  load_health();
 
   bufferlist qbl;
   mon.store->get(service_name, "quorum", qbl);
   if (qbl.length()) {
     auto p = qbl.cbegin();
-    decode(quorum_checks, p);
+    quorum_checks.decode(p);
   } else {
     quorum_checks.clear();
   }
@@ -103,7 +107,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   mon.store->get(service_name, "leader", lbl);
   if (lbl.length()) {
     auto p = lbl.cbegin();
-    decode(leader_checks, p);
+    leader_checks.decode(p);
   } else {
     leader_checks.clear();
   }
@@ -123,12 +127,12 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   JSONFormatter jf(true);
   jf.open_object_section("health");
   jf.open_object_section("quorum_health");
-  for (auto& p : quorum_checks) {
-    string s = string("mon.") + stringify(p.first);
-    jf.dump_object(s.c_str(), p.second);
+  for (auto& [rank, checks] : quorum_checks.get_map()) {
+    string s = string("mon.") + stringify(rank);
+    jf.dump_object(s.c_str(), checks);
   }
   jf.close_section();
-  jf.dump_object("leader_health", leader_checks);
+  jf.dump_object("leader_health", leader_checks.get_map());
   jf.close_section();
   jf.flush(*_dout);
   *_dout << dendl;
@@ -147,10 +151,10 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   put_last_committed(t, version);
 
   bufferlist qbl;
-  encode(quorum_checks, qbl);
+  encode(quorum_checks.get_pending_map(), qbl);
   t->put(service_name, "quorum", qbl);
   bufferlist lbl;
-  encode(leader_checks, lbl);
+  encode(leader_checks.get_pending_map(), lbl);
   t->put(service_name, "leader", lbl);
   {
     bufferlist bl;
@@ -158,15 +162,15 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     t->put(service_name, "mutes", bl);
   }
 
-  health_check_map_t pending_health;
+  auto& pending_health = get_health_checks_pending_writeable();
 
   // combine per-mon details carefully...
   map<string,set<string>> names; // code -> <mon names>
-  for (auto p : quorum_checks) {
-    for (auto q : p.second.checks) {
-      names[q.first].insert(mon.monmap->get_name(p.first));
+  for (auto& [rank, check_map] : quorum_checks.get_pending_map()) {
+    for (auto q : check_map.checks) {
+      names[q.first].insert(mon.monmap->get_name(rank));
     }
-    pending_health.merge(p.second);
+    pending_health.merge(check_map);
   }
   for (auto &p : pending_health.checks) {
     p.second.summary = std::regex_replace(
@@ -186,8 +190,10 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       names[p.first].size() > 1 ? "are" : "is");
   }
 
-  pending_health.merge(leader_checks);
-  encode_health(pending_health, t);
+  /* populate leader_health health checks */
+  check_leader_health();
+
+  pending_health.merge(leader_checks.get_pending_map());
 }
 
 version_t HealthMonitor::get_trim_to() const
@@ -371,7 +377,9 @@ bool HealthMonitor::prepare_health_checks(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonHealthChecks>();
   // no need to check if it's changed, the peon has done so
-  quorum_checks[m->get_source().num()] = std::move(m->health_checks);
+  auto rank = m->get_source().num();
+  auto& pending = quorum_checks.get_pending_map_writeable();
+  pending[rank] = std::move(m->health_checks);
   return true;
 }
 
@@ -685,20 +693,24 @@ bool HealthMonitor::check_member_health()
     d.detail.push_back(ds.str());
   }
 
-  auto p = quorum_checks.find(mon.rank);
-  if (p == quorum_checks.end()) {
-    if (next.empty()) {
-      return false;
-    }
-  } else {
-    if (p->second == next) {
-      return false;
+  {
+    auto& current_quorum_checks = quorum_checks.get_map();
+    auto p = current_quorum_checks.find(mon.rank);
+    if (p == current_quorum_checks.end()) {
+      if (next.empty()) {
+        return false;
+      }
+    } else {
+      if (p->second == next) {
+        return false;
+      }
     }
   }
 
   if (mon.is_leader()) {
     // prepare to propose
-    quorum_checks[mon.rank] = next;
+    auto& pending_quorum_checks = quorum_checks.get_pending_map_writeable();
+    pending_quorum_checks[mon.rank] = next;
     changed = true;
   } else {
     // tell the leader
@@ -716,10 +728,11 @@ bool HealthMonitor::check_leader_health()
   // prune quorum_health
   {
     auto& qset = mon.get_quorum();
-    auto p = quorum_checks.begin();
-    while (p != quorum_checks.end()) {
+    auto& pending_quorum_checks = quorum_checks.get_pending_map_writeable();
+    auto p = pending_quorum_checks.begin();
+    while (p != pending_quorum_checks.end()) {
       if (qset.count(p->first) == 0) {
-	p = quorum_checks.erase(p);
+	p = pending_quorum_checks.erase(p);
 	changed = true;
       } else {
 	++p;
@@ -727,29 +740,29 @@ bool HealthMonitor::check_leader_health()
     }
   }
 
-  health_check_map_t next;
+  auto& pending = leader_checks.get_pending_map_writeable();
+  pending.clear(); /* start over */
 
  // DAEMON_OLD_VERSION
   if (g_conf().get_val<bool>("mon_warn_on_older_version")) {
-    check_for_older_version(&next);
+    check_for_older_version(&pending);
   }
   std::set<std::string> mons_down;
   // MON_DOWN
-  check_for_mon_down(&next, mons_down);
+  check_for_mon_down(&pending, mons_down);
   // MON_NETSPLIT
-  check_netsplit(&next, mons_down);
+  check_netsplit(&pending, mons_down);
   // MON_CLOCK_SKEW
-  check_for_clock_skew(&next);
+  check_for_clock_skew(&pending);
   // MON_MSGR2_NOT_ENABLED
   if (g_conf().get_val<bool>("mon_warn_on_msgr2_not_enabled")) {
-    check_if_msgr2_enabled(&next);
+    check_if_msgr2_enabled(&pending);
   }
   // STRETCH MODE
-  check_mon_crush_loc_stretch_mode(&next);
+  check_mon_crush_loc_stretch_mode(&pending);
 
-  if (next != leader_checks) {
+  if (pending != leader_checks.get_map()) {
     changed = true;
-    leader_checks = next;
   }
   return changed;
 }
@@ -809,29 +822,37 @@ void HealthMonitor::check_for_mon_down(health_check_map_t *checks, std::set<std:
 {
   int max = mon.monmap->size();
   int actual = mon.get_quorum().size();
+  const auto mon_down_mkfs_grace = g_conf().get_val<std::chrono::seconds>("mon_down_mkfs_grace");
+  const auto mon_down_uptime_grace = g_conf().get_val<std::chrono::seconds>("mon_down_uptime_grace");
+  const auto mon_down_added_grace = g_conf().get_val<std::chrono::seconds>("mon_down_added_grace");
+
   const auto rcnow = ceph::real_clock::now();
   const auto created = mon.monmap->created.to_real_time();
   const auto mcnow = ceph::coarse_mono_clock::now();
   const auto starttime = mon.get_starttime();
 
-  if (actual < max &&
-      (rcnow - created) > g_conf().get_val<std::chrono::seconds>("mon_down_mkfs_grace") &&
-      (mcnow - starttime) > g_conf().get_val<std::chrono::seconds>("mon_down_uptime_grace")) {
-    ostringstream ss;
-    ss << (max-actual) << "/" << max << " mons down, quorum "
-       << mon.get_quorum_names();
-    auto& d = checks->add("MON_DOWN", HEALTH_WARN, ss.str(), max - actual);
-    set<int> q = mon.get_quorum();
+  if (actual < max && ((rcnow - created) > mon_down_mkfs_grace) && ((mcnow - starttime) > mon_down_uptime_grace)) {
+    auto q = mon.get_quorum();
+    std::list<std::string> details;
     for (int i=0; i<max; i++) {
       if (q.count(i) == 0) {
-	ostringstream ss;
-  std::string mon_name = mon.monmap->get_name(i);
-  mon_downs.insert(mon_name);
-	ss << "mon." << mon_name << " (rank " << i
-	   << ") addr " << mon.monmap->get_addrs(i)
-	   << " is down (out of quorum)";
-	d.detail.push_back(ss.str());
+        ostringstream ss;
+        std::string mon_name = mon.monmap->get_name(i);
+        auto const& info = mon.monmap->get(mon_name);
+        if ((rcnow - info.time_added) > mon_down_added_grace) {
+          mon_downs.insert(mon_name);
+	  ss << "mon." << mon_name << " (rank " << i
+	     << ") addr " << mon.monmap->get_addrs(i)
+	     << " is down (out of quorum)";
+	  details.push_back(ss.str());
+        }
       }
+    }
+    if (details.size()) {
+      ostringstream ss;
+      ss << (max-actual) << "/" << max << " mons down, quorum " << mon.get_quorum_names();
+      auto& d = checks->add("MON_DOWN", HEALTH_WARN, ss.str(), max - actual);
+      d.detail = std::move(details);
     }
   }
 }
@@ -941,14 +962,26 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
   * when reporting location-level netsplits, to give operators the most useful information
   * for troubleshooting network issues.
   *
+  * Grace Period: Detected netsplits are not immediately reported. Instead, they are
+  * tracked in pending maps and only reported as health warnings after persisting for
+  * at least mon_netsplit_grace_period seconds. This prevents transient network issues
+  * from generating false alarms.
+  *
   * Time Complexity: O(m^2)
   * Space Complexity: O(m^2)
   * where m is the number of monitors in the monmap.
   */
   dout(20) << __func__ << dendl;
-  if (mon.monmap->size() < 3 || mon.monmap->strategy != MonMap::CONNECTIVITY) {
+  if (mon.monmap->size() < 3) {
+    dout(10) << "Insufficient monitors for netsplit detection" << dendl;
     return;
   }
+  
+  if (mon.monmap->strategy != MonMap::CONNECTIVITY) {
+    dout(10) << "Monitor strategy is not CONNECTIVITY, skipping netsplit check" << dendl;
+    return;
+  }
+
   std::set<unsigned> mons_down_ranks;
   for (const auto& mon_name : mons_down) {
     mons_down_ranks.insert(mon.monmap->get_rank(mon_name));
@@ -957,6 +990,13 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
   // O(m^2)
   std::set<std::pair<unsigned, unsigned>> nsp_pairs = mon.elector.get_netsplit_peer_tracker(mons_down_ranks);
   if (nsp_pairs.empty()) {
+    pending_mon_netsplits.clear();
+    pending_location_netsplits.clear();
+    current_mon_netsplits.clear();
+    current_location_netsplits.clear();
+    dout(30) << "No netsplit pairs found, clearing"
+      << " pending_mon_netsplits, pending_location_netsplits"
+      << " current_mon_netsplits, current_location_netsplits" << dendl;
     return;
   }
   // Pre-populate mon_loc_map & location_to_mons for each monitor, discarding monitors that are down,
@@ -1080,69 +1120,22 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
     location_disconnects[{first_mon_highest_loc, second_mon_highest_loc}]++;
     mon_disconnects.insert({first_mon, second_mon});
   }
-  
-  // For debugging purposes:
-  if (mon.cct->_conf->subsys.should_gather(ceph_subsys_mon, 30)) {
-    dout(30) << "mon_disconnects: {";
-    bool first = true;
-    for (const auto& mon_pair : mon_disconnects) {
-      if (!first) *_dout << ", ";
-      *_dout << "(" << mon_pair.first << ", "
-        << mon_pair.second << ") ";
-    }
-    *_dout << "}" << dendl;
 
-    dout(30) << "location_disconnects: {";
-    bool first = true;
-    for (const auto& loc_pair : location_disconnects) {
-      if (!first) *_dout << ", ";
-      *_dout << "(" << loc_pair.first.first << ", "
-        << loc_pair.first.second << "): "
-        << loc_pair.second;
-    }
-    *_dout << "}" << dendl;
-
-    dout(30) << "mon_loc_map: " << dendl;
-    for (const auto& mon_pair : mon_loc_map) {
-      dout(30) << mon_pair.first << ": {";
-      bool first = true;
-      for (const auto& loc_pair : mon_pair.second) {
-        if (!first) *_dout << ", ";
-        first = false;
-        *_dout << loc_pair.first << ": " << loc_pair.second;
-      }
-      *_dout << "}" << dendl;
-    }
-
-    dout(30) << "location_to_mons: " << dendl;
-    for (const auto& loc_pair : location_to_mons) {
-      dout(30) << loc_pair.first << ": {";
-      bool first = true;
-      for (const auto& monitor : loc_pair.second) {
-        if (!first) *_dout << ", ";
-        first = false;
-        *_dout << monitor;
-      }
-      *_dout << "}" << dendl;
-    }
-  }
-
+  std::set<std::pair<std::string, std::string>> detected_location_netsplits;
+  std::set<std::pair<std::string, std::string>> detected_mon_netsplits;
   // Check for location-level netsplits and remove individual-level netsplits
-  list<string> details;
   for (auto& kv : location_disconnects) {
-    auto& loc_pair = kv.first;
-    int disconnect_count = kv.second;
-    
+    auto& loc_pair = kv.first; // {dc1,dc2}
+    int disconnect_count = kv.second; // Number of disconnects between dc1 and dc2
+
     // The expected number of disconnects between two locations
     // is the product of the number of monitors in each location
-    int expected_disconnects = location_to_mons[loc_pair.first].size() * 
+    int expected_disconnects = location_to_mons[loc_pair.first].size() *
                                 location_to_mons[loc_pair.second].size();
+
     // Report location-level netsplits
     if (disconnect_count == expected_disconnects) {
-      ostringstream ds;
-      ds << "Netsplit detected between " << loc_pair.first << " and " << loc_pair.second;
-      details.push_back(ds.str());
-      
+      detected_location_netsplits.insert(loc_pair);
       // Remove individual monitor disconnects between these locations
       for (const auto& mon1 : location_to_mons[loc_pair.first]) {
         for (const auto& mon2 : location_to_mons[loc_pair.second]) {
@@ -1151,19 +1144,192 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
         }
       }
     }
+
   }
   // Report individual-level netsplits
   for (auto& mon_pair : mon_disconnects) {
-    ostringstream ds;
-    ds << "Netsplit detected between mon." << mon_pair.first << " and mon." << mon_pair.second;
-    details.push_back(ds.str());
+    detected_mon_netsplits.insert(mon_pair);
   }
   
+  // update/add/erase to pending_mon_netsplits and pending_location_netsplits
+  auto now = ceph::coarse_mono_clock::now();
+  auto mon_netsplit_grace_period = g_conf().get_val<std::chrono::seconds>("mon_netsplit_grace_period");
+  auto pending_location_netsplits_end = pending_location_netsplits.end();
+  auto pending_mon_netsplits_end = pending_mon_netsplits.end();
+  list<string> details;
+
+  // Process location-level netsplits
+  for (const auto& nsp : detected_location_netsplits) {
+    auto loc_it = pending_location_netsplits.find(nsp);
+    if (loc_it != pending_location_netsplits_end) {
+      auto elapsed = now - loc_it->second;
+      if (elapsed >= mon_netsplit_grace_period) {
+        // Add MON_NETSPLIT detail, erase the netsplit
+        // from pending_location_netsplits and move to current_location_netsplits
+        dout(20) << "Netsplit detected between " << loc_it->first.first
+            << " and " << loc_it->first.second
+            << ", elapsed time: " << elapsed
+            << " > mon_netsplit_grace_period: " << mon_netsplit_grace_period << dendl;
+        ostringstream ds;
+        ds << "Netsplit detected between " << loc_it->first.first
+           << " and " << loc_it->first.second;
+        details.push_back(ds.str());
+        pending_location_netsplits.erase(loc_it);
+        current_location_netsplits[nsp] = now;
+      }
+    } else if (current_location_netsplits.count(nsp)) {
+      // Can't find in pending_location_netsplits, but found in current_location_netsplits
+      // This means the netsplit is still ongoing, so we continue reporting it
+      dout(20) << "Ongoing netsplit between " << nsp.first
+          << " and " << nsp.second << " duration: "
+          << (now - current_location_netsplits[nsp]) << dendl;
+      ostringstream ds;
+      ds << "Netsplit detected between " << nsp.first
+        << " and " << nsp.second;
+      details.push_back(ds.str());
+    } else {
+      // First time seeing the location-level netsplit
+      dout(20) << "First time seeing netsplit between " << nsp.first
+          << " and " << nsp.second << dendl;
+      // Add to pending_location_netsplits
+      pending_location_netsplits[nsp] = now;
+    }
+  }
+
+  // Process monitor-level netsplits
+  for (const auto& mon_pair : detected_mon_netsplits) {
+    auto mon_it = pending_mon_netsplits.find(mon_pair);
+    if (mon_it != pending_mon_netsplits_end) {
+      auto elapsed = now - mon_it->second;
+      if (elapsed >= mon_netsplit_grace_period) {
+        // Add MON_NETSPLIT detail, erase the netsplit
+        // from pending_mon_netsplits and move to current_mon_netsplits
+        dout(20) << "Netsplit detected between mon." << mon_it->first.first
+            << " and mon." << mon_it->first.second
+            << ", elapsed time: " << elapsed
+            << " >  mon_netsplit_grace_period: " << mon_netsplit_grace_period << dendl;
+        ostringstream ds;
+        ds << "Netsplit detected between mon." << mon_it->first.first
+          << " and mon." << mon_it->first.second;
+        details.push_back(ds.str());
+        pending_mon_netsplits.erase(mon_it);
+        current_mon_netsplits[mon_pair] = now;
+      }
+    } else if (current_mon_netsplits.count(mon_pair)) {
+      // Can't find in pending_mon_netsplits, but found in current_mon_netsplits
+      // This means the netsplit is still ongoing, so we continue reporting it
+      dout(20) << "Ongoing netsplit between mon." << mon_pair.first
+               << " and mon." << mon_pair.second
+               << " duration: " << (now - current_mon_netsplits[mon_pair]) << dendl;
+      ostringstream ds;
+      ds << "Netsplit detected between mon." << mon_pair.first
+         << " and mon." << mon_pair.second;
+      details.push_back(ds.str());
+    } else {
+      // First time seeing the monitor-level netsplit
+      dout(20) << "First time seeing netsplit between mon." << mon_pair.first
+               << " and mon." << mon_pair.second << dendl;
+      pending_mon_netsplits[mon_pair] = now;
+    }
+  }
+
   // Report health check if any details
   if (!details.empty()) {
     ostringstream ss;
     ss << details.size() << " network partition" << (details.size() > 1 ? "s" : "") << " detected";
     auto& d = checks->add("MON_NETSPLIT", HEALTH_WARN, ss.str(), details.size());
     d.detail.swap(details);
+  }
+
+  if (mon.cct->_conf->subsys.should_gather(ceph_subsys_mon, 30)) {
+    dout(30) << "mon_disconnects: {";
+    bool first = true;
+    for (const auto& mon_pair : mon_disconnects) {
+      if (!first) *_dout << ", ";
+      first = false;
+      *_dout << "(" << mon_pair.first << ", " << mon_pair.second << ")";
+    }
+    *_dout << "}" << dendl;
+
+    dout(30) << "location_disconnects: {";
+    bool first = true;
+    for (const auto& loc_pair : location_disconnects) {
+      if (!first) *_dout << ", ";
+      first = false;
+      *_dout << "(" << loc_pair.first.first << ", " << loc_pair.first.second << "): "
+             << loc_pair.second;
+    }
+    *_dout << "}" << dendl;
+
+    dout(30) << "mon_loc_map: { ";
+    bool outer_first = true;
+    for (const auto& mon_pair : mon_loc_map) {
+      if (!outer_first) *_dout << ", ";
+      outer_first = false;
+      *_dout << mon_pair.first << ": {";
+      bool inner_first = true;
+      for (const auto& loc_pair : mon_pair.second) {
+        if (!inner_first) *_dout << ", ";
+        inner_first = false;
+        *_dout << loc_pair.first << ": " << loc_pair.second;
+      }
+      *_dout << "}";
+    }
+    *_dout << " }" << dendl;
+
+
+    dout(30) << "location_to_mons: {";
+    bool outer_first = true;
+    for (const auto& loc_pair : location_to_mons) {
+      if (!outer_first) *_dout << ", ";
+      outer_first = false;
+      *_dout << loc_pair.first << ": {";
+      bool inner_first = true;
+      for (const auto& monitor : loc_pair.second) {
+        if (!inner_first) *_dout << ", ";
+        inner_first = false;
+        *_dout << monitor;
+      }
+      *_dout << "}";
+    }
+    *_dout << " }" << dendl;
+
+    dout(30) << "detected_location_netsplits: {";
+    bool first = true;
+    for (const auto& netsplit : detected_location_netsplits) {
+      if (!first) *_dout << ", ";
+      *_dout << "(" << netsplit.first << ", " << netsplit.second << ")";
+      first = false;
+    }
+    *_dout << "}" << dendl;
+
+    dout(30) << "detected_mon_netsplits: {";
+    bool first = true;
+    for (const auto& netsplit : detected_mon_netsplits) {
+      if (!first) *_dout << ", ";
+      *_dout << "(" << netsplit.first << ", " << netsplit.second << ")";
+      first = false;
+    }
+    *_dout << "}" << dendl;
+  
+    dout(30) << "pending_location_netsplits: {";
+    bool first = true;
+    for (const auto& netsplit : pending_location_netsplits) {
+      if (!first) *_dout << ", ";
+      *_dout << "(" << netsplit.first.first << ", " << netsplit.first.second
+             << "): " << netsplit.second;
+      first = false;
+    }
+    *_dout << "}" << dendl;
+
+    dout(30) << "pending_mon_netsplits: {";
+    bool first = true;
+    for (const auto& netsplit : pending_mon_netsplits) {
+      if (!first) *_dout << ", ";
+      *_dout << "(" << netsplit.first.first << ", " << netsplit.first.second
+             << "): " << netsplit.second;
+      first = false;
+    }
+    *_dout << "}" << dendl;
   }
 }

@@ -300,6 +300,8 @@ class RGWHTTPManager {
   ceph::shared_mutex reqs_lock = ceph::make_shared_mutex("RGWHTTPManager::reqs_lock");
   std::map<uint64_t, rgw_http_req_data *> reqs;
   std::list<rgw_http_req_data *> unregistered_reqs;
+  ceph::mutex reqs_change_state_lock =
+    ceph::make_mutex("RGWHTTPManager::reqs_change_state_lock");
   std::list<set_state> reqs_change_state;
   std::map<uint64_t, rgw_http_req_data *> complete_reqs;
   int64_t num_reqs = 0;

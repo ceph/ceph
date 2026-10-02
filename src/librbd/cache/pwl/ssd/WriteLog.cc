@@ -518,10 +518,6 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
     });
   // Append logs and update first_free_update
   append_ops(ops, append_ctx, new_first_free_entry);
-
-  if (ops.size()) {
-    this->dispatch_deferred_writes();
-  }
 }
 
 template <typename I>
@@ -896,6 +892,7 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
     m_first_free_entry = *new_first_free_entry;
     m_bytes_allocated -= bytes_to_free;
   }
+  this->dispatch_deferred_writes();
 
   bdev->aio_submit(&aio->ioc);
 }

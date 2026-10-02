@@ -407,7 +407,6 @@ def ceph_log(ctx, config):
 
     update_archive_setting(ctx, 'log', '/var/log/ceph')
 
-
     try:
         yield
 
@@ -418,20 +417,37 @@ def ceph_log(ctx, config):
 
     finally:
         log.info('Checking cluster log for badness...')
+
+        log_path = '/var/log/ceph/{fsid}/ceph.log'.format(fsid=fsid)
+
+        def _ceph_log_exists():
+            try:
+                ctx.ceph[cluster_name].bootstrap_remote.run(
+                    args=['sudo', 'test', '-f', log_path],
+                )
+                return True
+            except CommandFailedError:
+                return False
+
         def first_in_ceph_log(pattern, excludes, only_match):
             """
-            Find the first occurrence of the pattern specified in the Ceph log,
-            Returns None if none found.
+            Find the first occurrence of the pattern specified in the Ceph log.
 
-            :param pattern: Pattern scanned for.
-            :param excludes: Patterns to ignore.
-            :return: First line of text (or None if not found)
+            Returns:
+                - matching line as a string if found
+                - None if the file does not exist or no match is found
+
+            Raises:
+                - CommandFailedError if the scan command itself fails unexpectedly
             """
+            if not _ceph_log_exists():
+                log.warning('Skipping cluster log scan: %s does not exist', log_path)
+                return None
+
             args = [
                 'sudo',
-                'egrep', pattern,
-                '/var/log/ceph/{fsid}/ceph.log'.format(
-                    fsid=fsid),
+                'grep', '-E', pattern,
+                log_path,
             ]
             if only_match:
                 args.extend([run.Raw('|'), 'egrep', '|'.join(only_match)])
@@ -441,18 +457,33 @@ def ceph_log(ctx, config):
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
+
             r = ctx.ceph[cluster_name].bootstrap_remote.run(
                 stdout=BytesIO(),
                 args=args,
                 stderr=StringIO(),
+                check_status=False,
             )
-            stdout = r.stdout.getvalue().decode()
+
+            stdout = r.stdout.getvalue().decode(errors='replace')
+            stderr = r.stderr.getvalue().strip()
+            exitstatus = getattr(r, 'exitstatus', None)
+
             if stdout:
                 return stdout
-            stderr = r.stderr.getvalue()
-            if stderr:
-                return stderr
-            return None
+
+            # No stdout and no stderr means no match.
+            if not stderr:
+                return None
+
+            # stderr is a grep/pipeline execution problem, not a log match.
+            raise CommandFailedError(
+                'error scanning cluster log {}: {}{}'.format(
+                    log_path,
+                    stderr,
+                    '' if exitstatus is None else ' (exitstatus={})'.format(exitstatus),
+                )
+            )
 
         # NOTE: technically the first and third arg to first_in_ceph_log
         # are serving a similar purpose here of being something we
@@ -461,21 +492,32 @@ def ceph_log(ctx, config):
         # we match even if the test yaml specifies nothing else, and then the
         # log-only-match options are for when a test only wants to fail on
         # a specific subset of log lines that '\[ERR\]|\[WRN\]|\[SEC\]' matches
-        if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config.get('log-ignorelist'),
-                             config.get('log-only-match')) is not None:
-            log.warning('Found errors (ERR|WRN|SEC) in cluster log')
-            ctx.summary['success'] = False
-            # use the most severe problem as the failure reason
+        try:
+            if first_in_ceph_log(
+                r'\[ERR\]|\[WRN\]|\[SEC\]',
+                config.get('log-ignorelist'),
+                config.get('log-only-match'),
+            ) is not None:
+                log.warning('Found errors (ERR|WRN|SEC) in cluster log')
+                ctx.summary['success'] = False
+                # use the most severe problem as the failure reason
+                if 'failure_reason' not in ctx.summary:
+                    for pattern in [r'\[SEC\]', r'\[ERR\]', r'\[WRN\]']:
+                        match = first_in_ceph_log(
+                            pattern,
+                            config.get('log-ignorelist'),
+                            config.get('log-only-match'),
+                        )
+                        if match is not None:
+                            ctx.summary['failure_reason'] = \
+                                '"{match}" in cluster log'.format(
+                                    match=match.rstrip('\n'),
+                                )
+                            break
+        except CommandFailedError as e:
+            log.warning('Unable to scan cluster log safely: %s', e)
             if 'failure_reason' not in ctx.summary:
-                for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern, config['log-ignorelist'], config.get('log-only-match'))
-                    if match is not None:
-                        ctx.summary['failure_reason'] = \
-                            '"{match}" in cluster log'.format(
-                                match=match.rstrip('\n'),
-                            )
-                        break
+                ctx.summary['failure_reason'] = 'cluster log scan failed'
 
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
@@ -523,8 +565,11 @@ def ceph_log(ctx, config):
                 except OSError:
                     pass
                 try:
-                    teuthology.pull_directory(remote, '/var/log/ceph',  # everything
-                                              os.path.join(sub, 'log'))
+                    teuthology.pull_directory(
+                        remote,
+                        '/var/log/ceph',
+                        os.path.join(sub, 'log'),
+                    )
                 except ReadError:
                     pass
 
@@ -897,6 +942,7 @@ def ceph_bootstrap(ctx, config):
             args=[
                 'sudo', 'rm', '-f',
                 '/etc/ceph/{}.conf'.format(cluster_name),
+                '/etc/ceph/{}.keyring'.format(cluster_name),
                 '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             ],
             check_status=False,  # rm-cluster above should have cleaned these up
@@ -1379,6 +1425,8 @@ def ceph_iscsi(ctx, config):
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
 
+    client_key_type = config.get('client_key_type', None)
+
     log.info('Setting up client nodes...')
     clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
     for remote, roles_for_host in clients.remotes.items():
@@ -1387,18 +1435,22 @@ def ceph_clients(ctx, config):
             name = teuthology.ceph_role(role)
             client_keyring = '/etc/ceph/{0}.{1}.keyring'.format(cluster_name,
                                                                 name)
+
+            args = ['ceph', 'auth', 'get-or-create']
+            if client_key_type is not None:
+                args.append(f'--key-type={client_key_type}')
+            args.extend([
+                name,
+                'mon', 'allow *',
+                'osd', 'allow *',
+                'mds', 'allow *',
+                'mgr', 'allow *',
+            ])
             r = _shell(
                 ctx=ctx,
                 cluster_name=cluster_name,
                 remote=remote,
-                args=[
-                    'ceph', 'auth',
-                    'get-or-create', name,
-                    'mon', 'allow *',
-                    'osd', 'allow *',
-                    'mds', 'allow *',
-                    'mgr', 'allow *',
-                ],
+                args=args,
                 stdout=StringIO(),
             )
             keyring = r.stdout.getvalue()
@@ -1719,14 +1771,17 @@ def distribute_config_and_admin_keyring(ctx, config):
             path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             data=ctx.ceph[cluster_name].admin_keyring,
             sudo=True)
+        keyring = f"/etc/ceph/{cluster_name}.keyring"
+        remote.write_file(
+            path=keyring,
+            data=ctx.ceph[cluster_name].admin_keyring,
+            sudo=True)
+        ctx.ceph[cluster_name].keyring = keyring
     try:
         yield
     finally:
-        ctx.cluster.run(args=[
-            'sudo', 'rm', '-f',
-            '/etc/ceph/{}.conf'.format(cluster_name),
-            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-        ])
+        # ceph_bootstrap cleans up keys/confs
+        pass
 
 
 @contextlib.contextmanager
@@ -1739,6 +1794,83 @@ def crush_setup(ctx, config):
         args=['ceph', 'osd', 'crush', 'tunables', profile])
     yield
 
+
+@contextlib.contextmanager
+def module_setup(ctx, config):
+    cluster_name = config['cluster']
+    remote = ctx.ceph[cluster_name].bootstrap_remote
+
+    modules = config.get('mgr-modules', [])
+    for m in modules:
+        m = str(m)
+        cmd = [
+           'sudo',
+           'ceph',
+           '--cluster',
+           cluster_name,
+           'mgr',
+           'module',
+           'enable',
+           m,
+        ]
+        log.info("enabling module %s", m)
+        _shell(ctx, cluster_name, remote, args=cmd)
+    yield
+
+
+@contextlib.contextmanager
+def conf_setup(ctx, config):
+    cluster_name = config['cluster']
+    remote = ctx.ceph[cluster_name].bootstrap_remote
+
+    client_key_type = config.get('client_key_type', None)
+
+    if client_key_type is not None:
+        if client_key_type in ('aes',):
+            args = ['ceph', 'config', 'set', 'mon', 'mon_auth_allow_insecure_key', 'true']
+            _shell(ctx, cluster_name, remote, args=args)
+
+            args = ['ceph', 'mon', 'set', 'auth_allowed_ciphers', f'{client_key_type},aes256k']
+            _shell(ctx, cluster_name, remote, args=args)
+
+            auth_warnings = [
+                'AUTH_INSECURE_CLIENT_KEY_TYPE',
+                'AUTH_INSECURE_KEYS_ALLOWED',
+                'AUTH_INSECURE_KEYS_CREATABLE',
+            ]
+            for w in auth_warnings:
+                args = ['ceph', 'health', 'mute', w, '--sticky']
+                _shell(ctx, cluster_name, remote, args=args)
+
+
+    configs = config.get('cluster-conf', {})
+    procs = []
+    for section, confs in configs.items():
+        section = str(section)
+        for k, v in confs.items():
+            k = str(k).replace(' ', '_') # pre-pacific compatibility
+            v = str(v)
+            cmd = [
+                'ceph',
+                'config',
+                'set',
+                section,
+                k,
+                v,
+            ]
+            log.info("setting config [%s] %s = %s", section, k, v)
+            procs.append(_shell(ctx, cluster_name, remote, args=cmd, wait=False))
+    log.debug("set %d configs", len(procs))
+    for p in procs:
+        log.debug("waiting for %s", p)
+        p.wait()
+    yield
+
+@contextlib.contextmanager
+def conf_epoch(ctx, config):
+    cm = ctx.managers[config['cluster']]
+    cm.save_conf_epoch()
+    yield
 
 @contextlib.contextmanager
 def create_rbd_pool(ctx, config):
@@ -2155,6 +2287,16 @@ def task(ctx, config):
               username: registry-user
               password: registry-password
 
+    By default, the image tag is determined as a suite 'branch' value,
+    or 'sha1' if provided. However, the tag value can be overridden by
+    including ':TAG' or '@DIGEST' in the container image name, for example,
+    for the tag 'latest', the 'overrides' section looks like:
+
+        overrides:
+          cephadm:
+            containers:
+              image: 'quay.io/ceph-ci/ceph:latest'
+
     :param ctx: the argparse.Namespace object
     :param config: the config dict
     """
@@ -2201,7 +2343,10 @@ def task(ctx, config):
         sha1 = config.get('sha1')
         flavor = config.get('flavor', 'default')
 
-        if sha1:
+        if any(_ in container_image_name for _ in (':', '@')):
+            log.info('Provided image contains tag or digest, using it as is')
+            ctx.ceph[cluster_name].image = container_image_name
+        elif sha1:
             if flavor == "crimson":
                 ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
             else:
@@ -2231,7 +2376,9 @@ def task(ctx, config):
             lambda: crush_setup(ctx=ctx, config=config),
             lambda: ceph_mons(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
+            lambda: module_setup(ctx=ctx, config=config),
             lambda: ceph_mgrs(ctx=ctx, config=config),
+            lambda: conf_setup(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: cephfs_setup(ctx=ctx, config=config),
@@ -2243,6 +2390,7 @@ def task(ctx, config):
             lambda: ceph_monitoring('grafana', ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: create_rbd_pool(ctx=ctx, config=config),
+            lambda: conf_epoch(ctx=ctx, config=config),
     ):
         try:
             if config.get('wait-for-healthy', True):

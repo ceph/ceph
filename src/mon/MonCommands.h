@@ -157,24 +157,42 @@ COMMAND_WITH_FLAG("auth list", "list authentication state", "auth", "rx",
 COMMAND("auth ls", "list authentication state", "auth", "rx")
 COMMAND("auth import", "auth import: read keyring file from -i <file>",
 	"auth", "rwx")
-COMMAND("auth add "
-	"name=entity,type=CephString "
-	"name=caps,type=CephString,n=N,req=false",
+COMMAND("auth add"
+	" name=entity,type=CephString"
+	" name=caps,type=CephString,n=N,req=false"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
 	"add auth info for <entity> from input file, or random key if no "
         "input is given, and/or any caps specified in the command",
 	"auth", "rwx")
-COMMAND("auth rotate "
-	"name=entity,type=CephString",
+COMMAND("auth rotate"
+	" name=entity,type=CephString"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
 	"rotate entity key",
 	"auth", "rwx")
-COMMAND("auth get-or-create-key "
-	"name=entity,type=CephString "
-	"name=caps,type=CephString,n=N,req=false",
+COMMAND("auth dump-keys",
+	"dump keys",
+	"auth", "rwx")
+COMMAND("auth wipe-rotating-service-keys",
+	"wipe rotating keys",
+	"auth", "rwx")
+COMMAND("auth get-or-create-key"
+	" name=entity,type=CephString"
+	" name=caps,type=CephString,n=N,req=false"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
 	"get, or add, key for <name> from system/caps pairs specified in the command.  If key already exists, any given caps must match the existing caps for that key.",
 	"auth", "rwx")
-COMMAND("auth get-or-create "
-	"name=entity,type=CephString "
-	"name=caps,type=CephString,n=N,req=false",
+COMMAND("auth get-or-create"
+	" name=entity,type=CephString"
+	" name=caps,type=CephString,n=N,req=false"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
 	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command",
 	"auth", "rwx")
 COMMAND("auth get-or-create-pending "
@@ -189,10 +207,13 @@ COMMAND("auth commit-pending "
 	"name=entity,type=CephString",
 	"rotate pending key into active position",
 	"auth", "rwx")
-COMMAND("fs authorize "
-   "name=filesystem,type=CephString "
-   "name=entity,type=CephString "
-	"name=caps,type=CephString,n=N",
+COMMAND("fs authorize"
+        " name=filesystem,type=CephString"
+        " name=entity,type=CephString"
+	" name=caps,type=CephString,n=N"
+        " --"
+	" name=key_type,type=CephString,req=false"
+        ,
 	"add auth for <entity> to access file system <filesystem> based on following directory and permissions pairs",
 	"auth", "rwx")
 COMMAND("auth caps "
@@ -543,6 +564,11 @@ COMMAND("mon set_location " \
 	"name=name,type=CephString "
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]",
 	"specify location <args> for the monitor <name>, using CRUSH bucket names", \
+	"mon", "rw")
+COMMAND("mon set " \
+	"name=name,type=CephChoices,strings=auth_service_cipher|auth_allowed_ciphers|auth_preferred_cipher "
+	"name=value,type=CephString",
+	"set mon configuration", \
 	"mon", "rw")
 COMMAND("mon enable_stretch_mode " \
 	"name=tiebreaker_mon,type=CephString, "
@@ -1023,14 +1049,15 @@ COMMAND("osd rm-pg-upmap-items "
 COMMAND("osd pg-upmap-primary "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName ",
-	"set pg primary osd <pgid>:<id> (id (osd) must be part of pgid)",
+	"set pg_upmap_primary osd <pgid>:<id> (id (osd) must be part of pgid)",
         "osd", "rw")
 COMMAND("osd rm-pg-upmap-primary "
 	"name=pgid,type=CephPgid ",
-	"clear pg primary setting for <pgid>",
+	"clear pg_upmap_primary setting for <pgid>",
         "osd", "rw")
-COMMAND("osd rm-pg-upmap-primary-all ",
-        "clear all pg primary entries (developers only)",
+COMMAND("osd rm-pg-upmap-primary-all "
+        "name=pool,type=CephPoolname,req=false",
+        "clear all pg_upmap_primary entries, or all entries for pool <pool> (developers only)",
         "osd", "rw")
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "

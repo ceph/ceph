@@ -95,7 +95,7 @@ class OsdScrub {
    *  'scheduled_at' time. This is used whenever the scrub-job schedule is
    *  updated not as a result of a scrub attempt failure.
    *
-   *  locking: not using the jobs_lock
+   *  locking: using the jobs_lock
    */
   void update_job(
       Scrub::ScrubJobRef sjob,
@@ -137,6 +137,8 @@ class OsdScrub {
   /**
    * push the 'not_before' time out by 'delay' seconds, so that this scrub target
    * would not be retried before 'delay' seconds have passed.
+   *
+   * locking: using the jobs_lock
    */
   void delay_on_failure(
       Scrub::ScrubJobRef sjob,

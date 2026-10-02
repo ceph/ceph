@@ -41,6 +41,7 @@ void usage()
        << "                                existing keyringfile\n"
        << "  -g, --gen-key                 will generate a new secret key for the\n"
        << "                                specified entityname\n"
+       << "  -t, --key-type KEY_TYPE       set the key-type\n"
        << "  --gen-print-key               will generate a new secret key without set it\n"
        << "                                to the keyringfile, prints the secret to stdout\n"
        << "  --import-keyring FILE         will import the content of a given keyring\n"
@@ -64,6 +65,8 @@ int main(int argc, const char **argv)
   std::string import_keyring;
   map<string,bufferlist> caps;
   std::string fn;
+
+  int key_type = -1;
 
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
@@ -122,6 +125,17 @@ int main(int argc, const char **argv)
       create_keyring = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--import-keyring", (char*)NULL)) {
       import_keyring = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
+      auto cm = cct->get_crypto_manager();
+      key_type = cm->get_key_type(val);
+      if (key_type < 0) {
+        cerr << "invalid key type: " << val << std::endl;
+        exit(1);
+      }
+      if (!cm->crypto_type_supported(key_type)) {
+        cerr << "unsupported key type: " << val << std::endl;
+        exit(1);
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--mode", (char*)NULL)) {
       std::string err;
       mode = strict_strtoll(val.c_str(), 8, &err);
@@ -161,6 +175,10 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
   EntityName ename(g_conf()->name);
 
+  if (key_type < 0) {
+    key_type = CEPH_CRYPTO_AES256KRB5;
+  }
+
   // Enforce the use of gen-key or add-key when creating to avoid ending up
   // with an "empty" key (key = AAAAAAAAAAAAAAAA)
   if (create_keyring && !gen_key && add_key.empty() && !caps.empty()) {
@@ -170,7 +188,7 @@ int main(int argc, const char **argv)
 
   if (gen_print_key) {
     CryptoKey key;
-    key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    key.create(g_ceph_context, key_type);
     cout << key << std::endl;
     return 0;
   }
@@ -239,7 +257,7 @@ int main(int argc, const char **argv)
   }
   if (gen_key) {
     EntityAuth eauth;
-    eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    eauth.key.create(g_ceph_context, key_type);
     keyring.add(ename, eauth);
     modified = true;
   }

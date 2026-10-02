@@ -85,7 +85,7 @@ DaemonServer::DaemonServer(MonClient *monc_,
 					g_conf().get_val<uint64_t>("mgr_client_messages"))),
       osd_byte_throttler(new Throttle(g_ceph_context, "mgr_osd_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_osd_bytes"))),
-      osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messsages",
+      osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messages",
 				     g_conf().get_val<uint64_t>("mgr_osd_messages"))),
       mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_mds_bytes"))),
@@ -112,7 +112,9 @@ DaemonServer::DaemonServer(MonClient *monc_,
       mds_perf_metric_collector_listener(this),
       mds_perf_metric_collector(mds_perf_metric_collector_listener),
       op_tracker(g_ceph_context, g_ceph_context->_conf->mgr_enable_op_tracker,
-                                 g_ceph_context->_conf->mgr_num_op_tracker_shard)
+                                 g_ceph_context->_conf->mgr_num_op_tracker_shard),
+      stats_autotuner(std::make_unique<StatsAutotuner>(
+        g_conf().get_val<int64_t>("mgr_stats_period")))
 {
   g_conf().add_observer(this);
   /* define op size and time for mgr daemon */
@@ -273,7 +275,7 @@ bool DaemonServer::ms_handle_fast_authentication(Connection *con)
 	   << " addr " << con->get_peer_addrs()
 	   << dendl;
 
-  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  auto& caps_info = con->get_peer_caps_info();
   if (caps_info.allow_all) {
     dout(10) << " session " << s << " " << s->entity_name
 	     << " allow_all" << dendl;
@@ -314,21 +316,27 @@ void DaemonServer::ms_handle_accept(Connection* con)
 
 bool DaemonServer::ms_handle_reset(Connection *con)
 {
+  std::lock_guard l(lock);
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
     auto priv = con->get_priv();
     auto session = static_cast<MgrSession*>(priv.get());
-    if (!session) {
-      return false;
+    if (session) {
+      dout(10) << "unregistering osd." << session->osd_id
+               << "  session " << session << " con " << con << dendl;
+      osd_cons[session->osd_id].erase(con);
     }
-    std::lock_guard l(lock);
-    dout(10) << "unregistering osd." << session->osd_id
-	     << "  session " << session << " con " << con << dendl;
-    osd_cons[session->osd_id].erase(con);
+  }
 
-    auto iter = daemon_connections.find(con);
-    if (iter != daemon_connections.end()) {
-      daemon_connections.erase(iter);
-    }
+  auto iter = daemon_connections.find(con);
+  if (iter != daemon_connections.end()) {
+    dout(10) << "removing daemon connection " << con
+             << " peer " << con->get_peer_addr()
+             << dendl;
+    daemon_connections.erase(iter);
+  } else {
+    dout(10) << "reset for untracked daemon connection " << con
+             << " peer " << con->get_peer_addr()
+             << dendl;
   }
   return false;
 }
@@ -411,11 +419,42 @@ void DaemonServer::maybe_ready(int32_t osd_id)
 void DaemonServer::tick()
 {
   dout(10) << dendl;
+  auto tick_period = g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count();
+  utime_t now = ceph_clock_now();
+
+  if (g_conf().get_val<bool>("mgr_stats_period_autotune") &&
+      stats_autotuner->should_check_now(now, tick_period)) {
+    dout(20) << "checking whether to adjust stats period" << dendl;
+    maybe_adjust_stats_period();
+  }
   send_report();
   adjust_pgs();
 
   schedule_tick_locked(
     g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count());
+}
+
+void DaemonServer::maybe_adjust_stats_period() {
+  int64_t queue_depth = msgr->get_dispatch_queue_len();
+  int64_t current_period = g_conf().get_val<int64_t>("mgr_stats_period");
+  int64_t queue_threshold = g_conf().get_val<int64_t>("mgr_stats_period_autotune_queue_threshold");
+  auto result = stats_autotuner->evaluate_adjustment(queue_depth, current_period, queue_threshold);
+
+  if (result.new_period != current_period) {
+    dout(10) << "Adjusting mgr_stats_period from " << current_period
+      << " to " << result.new_period << " seconds ("
+      << result.reason_str()
+      << ")" << dendl;
+
+    std::stringstream ss;
+    int r = cct->_conf.set_val("mgr_stats_period", std::to_string(result.new_period), &ss);
+    if (r != 0) {
+      derr << "Failed to update mgr_stats_period: " << ss.str() << dendl;
+      return;
+    }
+    stats_autotuner->record_our_change(result.new_period);  // Track that we made this change
+    cct->_conf.apply_changes(nullptr);
+  }
 }
 
 // Currently modules do not set health checks in response to events delivered to
@@ -2550,14 +2589,27 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  // Validate that the module is enabled
+  auto& py_handler_name = py_command.module_name;
+  PyModuleRef module = py_modules.get_module(py_handler_name);
+  ceph_assert(module);
+  if (!module->is_enabled()) {
+    ss << "Module '" << py_handler_name << "' is not enabled (required by "
+          "command '" << prefix << "'): use `ceph mgr module enable "
+          << py_handler_name << "` to enable it";
+    dout(4) << ss.str() << dendl;
+    cmdctx->reply(-EOPNOTSUPP, ss);
+    return true;
+  }
+
   // Validate that the module is active
   auto& mod_name = py_command.module_name;
   if (!py_modules.is_module_active(mod_name)) {
-    ss << "Module '" << mod_name << "' is not enabled/loaded (required by "
-          "command '" << prefix << "'): use `ceph mgr module enable "
-          << mod_name << "` to enable it";
+    ss << "Module '" << mod_name << "' did not initialize in time (required by "
+          "command '" << prefix << "'): see https://docs.ceph.com/en/latest/rados/operations/health-checks/#mgr-module-error "
+	  "for troubleshooting tips.";
     dout(4) << ss.str() << dendl;
-    cmdctx->reply(-EOPNOTSUPP, ss);
+    cmdctx->reply(-ETIMEDOUT, ss);
     return true;
   }
 
@@ -2566,24 +2618,11 @@ bool DaemonServer::_handle_command(
   dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
   Finisher& mod_finisher = py_modules.get_active_module_finisher(mod_name);
 
-  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op]
+  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op, py_handler_name, module]
                                        (int r_) mutable {
     std::stringstream ss;
 
     dout(10) << "dispatching command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
-
-    // Validate that the module is enabled
-    auto& py_handler_name = py_command.module_name;
-    PyModuleRef module = py_modules.get_module(py_handler_name);
-    ceph_assert(module);
-    if (!module->is_enabled()) {
-      ss << "Module '" << py_handler_name << "' is not enabled (required by "
-            "command '" << prefix << "'): use `ceph mgr module enable "
-            << py_handler_name << "` to enable it";
-      dout(4) << ss.str() << dendl;
-      cmdctx->reply(-EOPNOTSUPP, ss);
-      return;
-    }
 
     // Hack: allow the self-test method to run on unhealthy modules.
     // Fix this in future by creating a special path for self test rather
@@ -2780,6 +2819,7 @@ void DaemonServer::adjust_pgs()
   std::map<string,unsigned> pg_num_to_set;
   std::map<string,unsigned> pgp_num_to_set;
   std::set<pg_t> upmaps_to_clear;
+  std::map<uint64_t,string> current_pools; // pid -> pool_name
   cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
       unsigned creating_or_unknown = 0;
       for (auto& i : pg_map.num_pg_by_state) {
@@ -2814,7 +2854,8 @@ void DaemonServer::adjust_pgs()
 
       for (auto& i : osdmap.get_pools()) {
 	const pg_pool_t& p = i.second;
-
+        const auto& pool_name = osdmap.get_pool_name(i.first);
+        current_pools[i.first] = pool_name;
 	// adjust pg_num?
 	if (p.get_pg_num_target() != p.get_pg_num()) {
 	  dout(20) << "pool " << i.first
@@ -3071,7 +3112,9 @@ void DaemonServer::adjust_pgs()
       "}";
     monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
   }
+  std::set<uint64_t> affected_pools;
   for (auto pg : upmaps_to_clear) {
+    affected_pools.emplace(pg.pool());
     const string cmd =
       "{"
       "\"prefix\": \"osd rm-pg-upmap\", "
@@ -3084,6 +3127,20 @@ void DaemonServer::adjust_pgs()
       "\"pgid\": \"" + stringify(pg) + "\"" +
       "}";
     monc->start_mon_command({cmd2}, {}, nullptr, nullptr, nullptr);
+   }
+  // remove all pg_upmap_primary mappings from any pool where pg_num was changed.
+  for (auto pool_id : affected_pools) {
+   std::string pool_name;
+   auto it = current_pools.find(pool_id);
+   if (it != current_pools.end()) {
+     pool_name = it->second;
+     const string cmd =
+       "{"
+       "\"prefix\": \"osd rm-pg-upmap-primary-all\", "
+       "\"pool\": \"" + pool_name + "\"" +
+       "}";
+     monc->start_mon_command({cmd}, {}, nullptr, nullptr, nullptr);
+   }
   }
 }
 
@@ -3189,6 +3246,12 @@ void DaemonServer::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("mgr_stats_threshold") || changed.count("mgr_stats_period")) {
     dout(4) << "Updating stats threshold/period on "
             << daemon_connections.size() << " clients" << dendl;
+    if (changed.count("mgr_stats_period")) {
+      int64_t new_period = g_conf().get_val<int64_t>("mgr_stats_period");
+      if (stats_autotuner->was_changed_by_user(new_period)) {
+        stats_autotuner->set_baseline_period(new_period); // user changed
+      }
+    }
     // Send a fresh MMgrConfigure to all clients, so that they can follow
     // the new policy for transmitting stats
     finisher.queue(new LambdaContext([this](int r) {

@@ -1961,7 +1961,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::add_onode(const ghobject_t& oid,
   }
   ldout(cache->cct, 20) << __func__ << " " << oid << " " << o << dendl;
   cache->_add(o.get(), 1);
-  cache->_trim();
+  cache->_trim_some();
   return o;
 }
 
@@ -2048,7 +2048,7 @@ void BlueStore::OnodeSpace::rename(
 
   o->oid = new_oid;
   o->key = new_okey;
-  cache->_trim();
+  cache->_trim_some();
 }
 
 bool BlueStore::OnodeSpace::map_any(std::function<bool(Onode*)> f)
@@ -5246,7 +5246,9 @@ void BlueStore::Collection::split_cache(
       }
     }
   }
-  dest->cache->_trim();
+  // The cache has now more elements.
+  // Trimming right away will cause stalls.
+  // It will get adjusted in MempoolThread
 }
 
 // =======================================================
@@ -5776,6 +5778,7 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_warn_on_no_per_pool_omap",
     "bluestore_warn_on_no_per_pg_omap",
     "bluestore_max_defer_interval",
+    "bluestore_allocator_lookup_policy",
     NULL
   };
   return KEYS;
@@ -5845,6 +5848,9 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_memory_cache_min") ||
       changed.count("osd_memory_expected_fragmentation")) {
     _update_osd_memory_options();
+  }
+  if (changed.count("bluestore_allocator_lookup_policy")) {
+    _update_allocator_lookup_policy();
   }
 }
 
@@ -5978,6 +5984,24 @@ void BlueStore::_update_osd_memory_options()
            << " osd_memory_expected_fragmentation " << osd_memory_expected_fragmentation
            << " osd_memory_cache_min " << osd_memory_cache_min
            << dendl;
+}
+
+
+void BlueStore::_update_allocator_lookup_policy()
+{
+  auto policy = cct->_conf.get_val<string>("bluestore_allocator_lookup_policy");
+  if (policy == "hdd_optimized") {
+    use_last_allocator_lookup_position = true;
+  } else if (policy == "ssd_optimized") {
+    use_last_allocator_lookup_position = false;
+  } else {
+    // Apply "auto" policy for everything else.
+    // Which means reusing last lookup position for hdds.
+    use_last_allocator_lookup_position = _use_rotational_settings();
+  }
+  dout(5) << __func__
+          << " use_last_lookup_position " << use_last_allocator_lookup_position
+          << dendl;
 }
 
 int BlueStore::_set_cache_sizes()
@@ -11190,7 +11214,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	    dout(5) << __func__ << "::NCB::(F)alloc=" << alloc << ", length=" << e->length << dendl;
 	    int64_t alloc_len =
               alloc->allocate(e->length, min_alloc_size,
-				       0, 0, &exts);
+				       0, -1, &exts);
 	    if (alloc_len < 0 || alloc_len < (int64_t)e->length) {
 	      derr << __func__
 	           << " failed to allocate 0x" << std::hex << e->length
@@ -11614,7 +11638,7 @@ void BlueStore::inject_leaked(uint64_t len)
 {
   PExtentVector exts;
   int64_t alloc_len = alloc->allocate(len, min_alloc_size,
-					   min_alloc_size * 256, 0, &exts);
+					   min_alloc_size * 256, -1, &exts);
   ceph_assert(alloc_len >= 0); // generally we do not expect any errors
   if (fm->is_null_manager()) {
     return;
@@ -14002,6 +14026,7 @@ int BlueStore::_open_super_meta()
   _set_csum();
   _set_compression();
   _set_blob_size();
+  _update_allocator_lookup_policy();
 
   _validate_bdev();
   return 0;
@@ -16926,7 +16951,8 @@ int BlueStore::_do_alloc_write(
   auto start = mono_clock::now();
   prealloc_left = alloc->allocate(
     need, min_alloc_size, need,
-    0, &prealloc);
+    use_last_allocator_lookup_position ? -1 : 0,
+    &prealloc);
   log_latency("allocator@_do_alloc_write",
     l_bluestore_allocator_lat,
     mono_clock::now() - start,
@@ -19333,6 +19359,7 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
   sout << "RocksDBBlueFSVolumeSelector " << std::endl;
   sout << ">>Settings<<"
        << " extra=" << byte_u_t(db_avail4slow)
+       << ", extra level=" << extra_level
        << ", l0_size=" << byte_u_t(level0_size)
        << ", l_base=" << byte_u_t(level_base)
        << ", l_multi=" << byte_u_t(level_multiplier)
@@ -19359,13 +19386,13 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     sout.width(width);
     switch (l + LEVEL_FIRST) {
     case LEVEL_LOG:
-      sout << "LOG"; break;
+      sout << "log"; break;
     case LEVEL_WAL:
-      sout << "WAL"; break;
+      sout << "db.wal"; break;
     case LEVEL_DB:
-      sout << "DB"; break;
+      sout << "db"; break;
     case LEVEL_SLOW:
-      sout << "SLOW"; break;
+      sout << "db.slow"; break;
     case LEVEL_MAX:
       sout << "TOTAL"; break;
     }
@@ -19386,13 +19413,13 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     sout.width(width);
     switch (l + LEVEL_FIRST) {
     case LEVEL_LOG:
-      sout << "LOG"; break;
+      sout << "log"; break;
     case LEVEL_WAL:
-      sout << "WAL"; break;
+      sout << "db.wal"; break;
     case LEVEL_DB:
-      sout << "DB"; break;
+      sout << "db"; break;
     case LEVEL_SLOW:
-      sout << "SLOW"; break;
+      sout << "db.slow"; break;
     case LEVEL_MAX:
       sout << "TOTAL"; break;
     }

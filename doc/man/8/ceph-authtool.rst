@@ -18,6 +18,7 @@ Synopsis
   [ --import-keyring *otherkeyringfile* ]
   [ -n | --name *entityname* ]
   [ -a | --add-key *base64_key* ]
+  [ -t | --key-type *KEY_TYPE* ]
   [ --cap *subsystem* *capability* ]
   [ --caps *capfile* ]
   [ --mode *mode* ]
@@ -86,6 +87,11 @@ Options
 .. option:: --mode *mode*
 
    will set the desired file mode to the keyring e.g: 0644, defaults to 0600
+
+.. option:: --key-type *KEY_TYPE*
+
+   Set the key-type for generated keys. Can be one of "aes", "aes256k", or
+   "preferred" (Ceph operator chosen default).  Defaults to "preferred".
 
 
 Capabilities

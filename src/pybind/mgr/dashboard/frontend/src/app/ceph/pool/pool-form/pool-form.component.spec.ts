@@ -1334,6 +1334,20 @@ describe('PoolFormComponent', () => {
         expect(form.getValue('max_objects')).toBe(pool.quota_max_objects);
       });
 
+      it('shows the erasure profile usage in edit mode', () => {
+        pool.type = 'erasure';
+        pool.crush_rule = 'ecp1';
+        pool.erasure_code_profile = 'ecp1';
+        setUrl('/pool/edit/somePoolName');
+        fixture.detectChanges();
+
+        const infoButton = fixture.debugElement.query(By.css('#ecp-info-button'));
+        infoButton.triggerEventHandler('click', null);
+        fixture.detectChanges();
+
+        expect(component.ecpUsage).toEqual(['some.other.pool.uses.it']);
+      });
+
       it('updates pgs on every change', () => {
         testPgUpdate(undefined, -1, 16);
         testPgUpdate(undefined, -1, 8);

@@ -9,34 +9,28 @@
 
 #include "acconfig.h"
 #include "include/buffer_fwd.h"
-#ifdef WITH_BLUESTORE
-#include "os/bluestore/BlueStore.h"
-#endif
+#include "kv/KeyValueDB.h"
+#include "os/ObjectStore.h"
 
 class KeyValueDB;
 
 class StoreTool
 {
-#ifdef WITH_BLUESTORE
   struct Deleter {
-    BlueStore *bluestore;
-    Deleter()
-      : bluestore(nullptr) {}
-    Deleter(BlueStore *store)
-      : bluestore(store) {}
+    ObjectStore* store = nullptr;
+    std::function<void(ObjectStore*)> cb;
+    Deleter() {}
+    Deleter(ObjectStore* _store, std::function<void(ObjectStore*)> _cb)
+      : store(_store), cb(_cb) {}
     void operator()(KeyValueDB *db) {
-      if (bluestore) {
-	bluestore->umount();
-	delete bluestore;
+      if (cb) {
+        cb(store);
       } else {
 	delete db;
       }
     }
   };
   std::unique_ptr<KeyValueDB, Deleter> db;
-#else
-  std::unique_ptr<KeyValueDB> db;
-#endif
 
   const std::string store_path;
 
@@ -46,7 +40,6 @@ public:
             bool read_only,
 	    bool need_open_db = true,
 	    bool need_stats = false);
-  int load_bluestore(const std::string& path, bool read_only, bool need_open_db);
   uint32_t traverse(const std::string& prefix,
                     const bool do_crc,
                     const bool do_value_dump,
@@ -79,4 +72,7 @@ public:
 
   int print_stats() const;
   int build_size_histogram(const std::string& prefix) const;
+
+private:
+  int load_bluestore(const std::string& path, bool read_only, bool need_open_db);
 };

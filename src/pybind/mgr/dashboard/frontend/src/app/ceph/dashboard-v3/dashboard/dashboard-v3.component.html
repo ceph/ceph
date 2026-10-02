@@ -203,7 +203,7 @@
                    [fullHeight]="true"
                    aria-label="Capacity card">
             <ng-container class="ms-4 me-4"
-                          *ngIf="capacity && osdSettings">
+                          *ngIf="capacity">
               <cd-dashboard-pie [data]="{max: capacity.total_bytes, current: capacity.total_used_raw_bytes}"
                                 [lowThreshold]="osdSettings.nearfull_ratio"
                                 [highThreshold]="osdSettings.full_ratio">

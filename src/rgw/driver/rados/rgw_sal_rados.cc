@@ -1888,7 +1888,8 @@ int RadosStore::get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_
 
 int RadosStore::init_neorados(const DoutPrefixProvider* dpp) {
   if (!neorados) try {
-      neorados = neorados::RADOS::make_with_cct(dpp->get_cct(), io_context,
+      neorados = neorados::RADOS::make_with_cct(boost::intrusive_ptr{dpp->get_cct()},
+						io_context,
 						ceph::async::use_blocked);
     } catch (const boost::system::system_error& e) {
       ldpp_dout(dpp, 0) << "ERROR: creating neorados handle failed: "
@@ -2903,7 +2904,10 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.remove_objs = params.remove_objs;
   parent_op.params.expiration_time = params.expiration_time;
   parent_op.params.unmod_since = params.unmod_since;
+  parent_op.params.last_mod_time_match = params.last_mod_time_match;
   parent_op.params.mtime = params.mtime;
+  parent_op.params.size_match = params.size_match;
+  parent_op.params.if_match = params.if_match;
   parent_op.params.high_precision_time = params.high_precision_time;
   parent_op.params.zones_trace = params.zones_trace;
   parent_op.params.abortmp = params.abortmp;

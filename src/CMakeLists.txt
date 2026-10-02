@@ -413,6 +413,7 @@ set(libcommon_files
   global/global_context.cc
   xxHash/xxhash.c
   common/error_code.cc
+  common/frag.cc
   common/tracer.cc
   log/Log.cc
   mon/MonCap.cc

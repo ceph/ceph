@@ -488,8 +488,10 @@ example, ``osd/rack:foo`` would refer to all OSD daemons under the ``foo`` CRUSH
 When configuration options are displayed, the section name and any mask are presented
 in separate fields or columns to make them more readable.
 
-Commands
---------
+.. _configuring-ceph-api:
+
+Configuration Commands
+----------------------
 
 The following CLI commands are used to configure the cluster:
 
@@ -523,6 +525,12 @@ The following CLI commands are used to configure the cluster:
 
 * ``ceph config show-with-defaults <who>`` is like the above,
   but also shows all defaults, and for changed values, where they are changed.
+
+* ``ceph config generate-minimal-conf`` generates a minimal ``ceph.conf`` file
+  necessary to bootstrap connections to the cluster. Further configuration
+  can be done via the ``ceph config`` interface.
+
+  .. note:: Some configs only affect startup behavior for clients or daemons. In that case, modifying the local ``ceph.conf`` is required.
 
 * ``ceph config assimilate-conf -i <input_file> -o <output_file>`` ingests a
   configuration file from *input_file* and sets any valid options found into the

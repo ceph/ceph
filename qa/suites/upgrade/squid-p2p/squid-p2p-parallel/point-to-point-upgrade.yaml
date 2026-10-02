@@ -70,12 +70,12 @@ openstack:
     count: 3
     size: 30 # GB
 tasks:
-- print: "****  done squid about to install v19.2.0"
+- print: "****  done squid about to install v19.2.1"
 - install:
-    tag: v19.2.0
+    tag: v19.2.1
     # line below can be removed its from jewel test
     #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librgw2']
-- print: "**** done v19.2.0 install"
+- print: "**** done v19.2.1 install"
 - ceph:
    fs: xfs
    add_osds_to_crush: true
@@ -190,9 +190,28 @@ workload_squid:
 upgrade-sequence_squid:
    sequential:
    - print: "**** done branch: squid install.upgrade"
-   - ceph.restart: [mds.a]
+   - ceph.restart: [mgr.x]
    - sleep:
        duration: 60
+   - print: "**** done ceph.restart all squid branch mgr"
+   - ceph.restart:
+       daemons: [mon.a]
+       wait-for-healthy: false
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [mon.b]
+       wait-for-healthy: false
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [mon.c]
+       wait-for-healthy: false
+   - sleep:
+       duration: 60
+   - sequential: [ignore-auth-warn-pkg]
+   - ceph.healthy:
+   - print: "**** done ceph.restart all squid branch mon"
    - ceph.restart: [osd.0]
    - sleep:
        duration: 30
@@ -211,16 +230,8 @@ upgrade-sequence_squid:
    - ceph.restart: [osd.5]
    - sleep:
        duration: 60
-   - ceph.restart: [mgr.x]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.a]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.b]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.c]
+   - print: "**** done ceph.restart all squid branch osd"
+   - ceph.restart: [mds.a]
    - sleep:
        duration: 60
    - print: "**** done ceph.restart all squid branch mds/osd/mon"

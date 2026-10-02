@@ -20,7 +20,6 @@
 #define dout_subsys ceph_subsys_ms
 #include "common/debug.h"
 
-using ceph::cref_t;
 using ceph::ref_t;
 
 /*******************
@@ -35,7 +34,7 @@ double DispatchQueue::get_max_age(utime_t now) const {
   if (marrival.empty())
     return 0;
   else
-    return (now - marrival.begin()->first);
+    return (now - *marrival.begin());
 }
 
 uint64_t DispatchQueue::pre_dispatch(const ref_t<Message>& m)
@@ -63,7 +62,7 @@ void DispatchQueue::post_dispatch(const ref_t<Message>& m, uint64_t msize)
   ldout(cct,20) << "done calling dispatch on " << m << dendl;
 }
 
-bool DispatchQueue::can_fast_dispatch(const cref_t<Message> &m) const
+bool DispatchQueue::can_fast_dispatch(const Message& m) const
 {
   return msgr->ms_can_fast_dispatch(m);
 }
@@ -80,23 +79,25 @@ void DispatchQueue::fast_preprocess(const ref_t<Message>& m)
   msgr->ms_fast_preprocess(m);
 }
 
-void DispatchQueue::enqueue(const ref_t<Message>& m, int priority, uint64_t id)
+void DispatchQueue::enqueue(ref_t<Message>&& m, int priority, uint64_t id)
 {
   std::lock_guard l{lock};
   if (stop) {
     return;
   }
   ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
-  add_arrival(m);
+  auto&& cost = m->get_cost();
+  QueueItem item{std::move(m)};
+  add_arrival(item);
   if (priority >= CEPH_MSG_PRIO_LOW) {
-    mqueue.enqueue_strict(id, priority, QueueItem(m));
+    mqueue.enqueue_strict(id, priority, std::move(item));
   } else {
-    mqueue.enqueue(id, priority, m->get_cost(), QueueItem(m));
+    mqueue.enqueue(id, priority, cost, std::move(item));
   }
   cond.notify_all();
 }
 
-void DispatchQueue::local_delivery(const ref_t<Message>& m, int priority)
+void DispatchQueue::local_delivery(ref_t<Message>&& m, int priority)
 {
   auto local_delivery_stamp = ceph_clock_now();
   m->set_recv_stamp(local_delivery_stamp);
@@ -105,7 +106,7 @@ void DispatchQueue::local_delivery(const ref_t<Message>& m, int priority)
   std::lock_guard l{local_delivery_lock};
   if (local_messages.empty())
     local_delivery_cond.notify_all();
-  local_messages.emplace(m, priority);
+  local_messages.emplace(std::move(m), priority);
   return;
 }
 
@@ -122,13 +123,13 @@ void DispatchQueue::run_local_delivery()
     auto p = std::move(local_messages.front());
     local_messages.pop();
     l.unlock();
-    const ref_t<Message>& m = p.first;
+    auto& m = p.first;
     int priority = p.second;
     fast_preprocess(m);
-    if (can_fast_dispatch(m)) {
+    if (can_fast_dispatch(*m)) {
       fast_dispatch(m);
     } else {
-      enqueue(m, priority, 0);
+      enqueue(std::move(m), priority, 0);
     }
     l.lock();
   }
@@ -160,7 +161,7 @@ void DispatchQueue::entry()
     while (!mqueue.empty()) {
       QueueItem qitem = mqueue.dequeue();
       if (!qitem.is_code())
-	remove_arrival(qitem.get_message());
+	remove_arrival(qitem);
       l.unlock();
 
       if (qitem.is_code()) {
@@ -214,15 +215,20 @@ void DispatchQueue::entry()
 }
 
 void DispatchQueue::discard_queue(uint64_t id) {
+  uint64_t dropped = 0;
+  ldout(cct,10) << __func__ << " discarding id=" << id << dendl;
   std::lock_guard l{lock};
   std::list<QueueItem> removed;
   mqueue.remove_by_class(id, &removed);
   for (auto i = removed.begin(); i != removed.end(); ++i) {
     ceph_assert(!(i->is_code())); // We don't discard id 0, ever!
     const ref_t<Message>& m = i->get_message();
-    remove_arrival(m);
+    ldout(cct,15) << __func__ << " removing " << *m << dendl;
+    remove_arrival(*i);
     dispatch_throttle_release(m->get_dispatch_throttle_size());
+    ++dropped;
   }
+  ldout(cct,10) << __func__ << " dropped " << dropped << " messages" << dendl;
 }
 
 void DispatchQueue::start()

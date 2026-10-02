@@ -4,12 +4,16 @@
 #ifndef CEPH_MONCAP_H
 #define CEPH_MONCAP_H
 
+#include <map>
 #include <ostream>
+#include <string>
+#include <vector>
 
 #include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/entity_name.h"
 #include "mds/mdstypes.h"
+#include "msg/msg_types.h" // for entity_addr_t
 
 static const __u8 MON_CAP_R     = (1 << 1);      // read
 static const __u8 MON_CAP_W     = (1 << 2);      // write

@@ -6,6 +6,7 @@ overrides:
     - \(PG_
     - \(MON_DOWN\)
     - \(AUTH_BAD_CAPS\)
+    - AUTH_INSECURE_CLIENT_KEY_TYPE
 tasks:
 - workunit:
     clients:

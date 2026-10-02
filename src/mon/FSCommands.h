@@ -17,10 +17,12 @@
 #define FS_COMMANDS_H_
 
 #include "Monitor.h"
+#include "MonOpRequest.h"
 #include "CommandHandler.h"
 
 #include "osd/OSDMap.h"
 #include "mds/FSMap.h"
+#include "include/cephfs/types.h" // for fs_cluster_id_t"
 
 #include <string>
 #include <ostream>

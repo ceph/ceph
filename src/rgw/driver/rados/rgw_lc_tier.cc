@@ -1092,7 +1092,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
   }
 
   if (ret >= 0) {
-    // check here that mtime and size did not change 
+    // check here that mtime and size did not change
     if (status.mtime != obj_properties.mtime || status.obj_size != obj_size ||
         status.etag != obj_properties.etag) {
       cloud_tier_abort_multipart_upload(tier_ctx, dest_obj, status_obj, status.upload_id);
@@ -1100,7 +1100,7 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
     }
   }
 
-  if (ret == -ENOENT) { 
+  if (ret == -ENOENT) {
     RGWLCStreamRead readf(tier_ctx.cct, tier_ctx.dpp, tier_ctx.obj, tier_ctx.o.meta.mtime);
 
     readf.init();
@@ -1122,11 +1122,12 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
 
     if (ret < 0) {
       ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to driver multipart upload state, ret=" << ret << dendl;
-      // continue with upload anyway 
+      // continue with upload anyway
     }
+  }
 
 #define MULTIPART_MAX_PARTS 10000
-#define MULTIPART_MAX_PARTS 10000
+  {
     uint64_t min_part_size = obj_size / MULTIPART_MAX_PARTS;
     uint64_t min_conf_size = tier_ctx.multipart_min_part_size;
 
@@ -1136,9 +1137,9 @@ static int cloud_tier_multipart_transfer(RGWLCCloudTierCtx& tier_ctx) {
 
     part_size = std::max(min_conf_size, min_part_size);
     num_parts = (obj_size + part_size - 1) / part_size;
-    cur_part = 1;
-    cur_ofs = 0;
   }
+  cur_part = 1;
+  cur_ofs = 0;
 
   for (; (uint32_t)cur_part <= num_parts; ++cur_part) {
     ldpp_dout(tier_ctx.dpp, 20) << "cur_part = "<< cur_part << ", info.ofs = " << cur_ofs << ", info.size = " << part_size << ", obj size = " << obj_size<< ", num_parts:" << num_parts << dendl;

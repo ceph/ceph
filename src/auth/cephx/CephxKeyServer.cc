@@ -12,9 +12,13 @@
  * 
  */
 
-#include "common/config.h"
 #include "CephxKeyServer.h"
+#include "common/ceph_json.h"
+#include "common/Clock.h" // for ceph_clock_now()
+#include "common/config.h"
 #include "common/dout.h"
+#include "common/Formatter.h"
+
 #include <sstream>
 
 #define dout_subsys ceph_subsys_auth
@@ -29,10 +33,70 @@ using ceph::bufferptr;
 using ceph::bufferlist;
 using ceph::Formatter;
 
+void KeyServerData::encode(ceph::buffer::list& bl) const {
+  __u8 struct_v = 1;
+  using ceph::encode;
+  encode(struct_v, bl);
+  encode(version, bl);
+  encode(rotating_ver, bl);
+  encode(secrets, bl);
+  encode(rotating_secrets, bl);
+}
+
+void KeyServerData::decode(ceph::buffer::list::const_iterator& bl) {
+  using ceph::decode;
+  __u8 struct_v;
+  decode(struct_v, bl);
+  decode(version, bl);
+  decode(rotating_ver, bl);
+  decode(secrets, bl);
+  decode(rotating_secrets, bl);
+}
+
+void KeyServerData::encode_rotating(ceph::buffer::list& bl) const {
+  using ceph::encode;
+  __u8 struct_v = 1;
+  encode(struct_v, bl);
+  encode(rotating_ver, bl);
+  encode(rotating_secrets, bl);
+}
+
+void KeyServerData::decode_rotating(ceph::buffer::list& rotating_bl) {
+  using ceph::decode;
+  auto iter = rotating_bl.cbegin();
+  __u8 struct_v;
+  decode(struct_v, iter);
+  decode(rotating_ver, iter);
+  decode(rotating_secrets, iter);
+}
+
+void KeyServerData::dump(ceph::Formatter *f) const {
+  f->dump_unsigned("version", version);
+  f->dump_unsigned("rotating_version", rotating_ver);
+  f->open_array_section("secrets");
+  for (auto const& [name, auth] : secrets) {
+    f->open_object_section("secret");
+    f->dump_object("entity", name);
+    f->dump_object("auth", auth);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("rotating_secrets");
+  for (auto const& [entity_type, secrets] : rotating_secrets) {
+    f->open_object_section("rotating_secret");
+    auto name = EntityName(entity_type);
+    f->dump_object("entity", name);
+    f->dump_object("secrets", secrets);
+    f->close_section();
+  }
+  f->close_section();
+}
+
 bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 				       CryptoKey& secret, uint64_t& secret_id,
 				       double& ttl) const
 {
+  ldout(cct,30) << __func__ << ": " << service_id << dendl;
   auto iter = rotating_secrets.find(service_id);
   if (iter == rotating_secrets.end()) { 
     ldout(cct, 10) << "get_service_secret service " << ceph_entity_type_name(service_id) << " not found " << dendl;
@@ -53,11 +117,13 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
   secret_id = riter->first;
   secret = riter->second.key;
 
+  double const auth_mon_ticket_ttl = cct->_conf.get_val<double>("auth_mon_ticket_ttl");
+  double const auth_service_ticket_ttl= cct->_conf.get_val<double>("auth_service_ticket_ttl");
+
   // ttl may have just been increased by the user
   // cap it by expiration of "next" key to prevent handing out a ticket
   // with a bogus, possibly way into the future, validity
-  ttl = service_id == CEPH_ENTITY_TYPE_AUTH ?
-      cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
+  ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? auth_mon_ticket_ttl : auth_service_ticket_ttl;
   ttl = std::min(ttl, static_cast<double>(
 		     secrets.secrets.rbegin()->second.expiration - now));
 
@@ -96,21 +162,28 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 
   return true;
 }
-bool KeyServerData::get_auth(const EntityName& name, EntityAuth& auth) const {
+bool KeyServerData::get_auth(CephContext *cct, const EntityName& name, EntityAuth& auth) const {
+  ldout(cct, 20) << __func__ << ": " << name << dendl;
   auto iter = secrets.find(name);
   if (iter != secrets.end()) {
     auth = iter->second;
+    ldout(cct, 30) << __func__ << ": found " << auth << dendl;
     return true;
   }
+  ldout(cct, 30) << __func__ << ": searching extra secrets" << dendl;
   return extra_secrets->get_auth(name, auth);
 }
 
-bool KeyServerData::get_secret(const EntityName& name, CryptoKey& secret) const {
+bool KeyServerData::get_secret(CephContext *cct, const EntityName& name, CryptoKey& secret) const {
+  ldout(cct, 20) << __func__ << ": " << name << dendl;
   auto iter = secrets.find(name);
   if (iter != secrets.end()) {
     secret = iter->second.key;
+    ldout(cct, 30) << __func__ << ": found " << secret << dendl;
     return true;
   }
+
+  ldout(cct, 30) << __func__ << ": searching extra secrets" << dendl;
   return extra_secrets->get_secret(name, secret);
 }
 
@@ -133,17 +206,53 @@ bool KeyServerData::get_caps(CephContext *cct, const EntityName& name,
   return extra_secrets->get_caps(name, type, caps_info);
 }
 
+void KeyServerData::Incremental::encode(ceph::buffer::list& bl) const {
+  using ceph::encode;
+  __u8 struct_v = 1;
+  encode(struct_v, bl);
+  __u32 _op = (__u32)op;
+  encode(_op, bl);
+  if (op == AUTH_INC_SET_ROTATING) {
+    encode(rotating_bl, bl);
+  } else {
+    encode(name, bl);
+    encode(auth, bl);
+  }
+}
+
+void KeyServerData::Incremental::decode(ceph::buffer::list::const_iterator& bl) {
+  using ceph::decode;
+  __u8 struct_v;
+  decode(struct_v, bl);
+  __u32 _op;
+  decode(_op, bl);
+  op = (IncrementalOp)_op;
+  ceph_assert(op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
+  if (op == AUTH_INC_SET_ROTATING) {
+    decode(rotating_bl, bl);
+  } else {
+    decode(name, bl);
+    decode(auth, bl);
+  }
+}
+
+void KeyServerData::Incremental::dump(ceph::Formatter *f) const {
+  f->dump_unsigned("op", op);
+  f->dump_object("name", name);
+  f->dump_object("auth", auth);
+}
 
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx keyserver: "
-
+#define cct kscct.get()
 
 KeyServer::KeyServer(CephContext *cct_, KeyRing *extra_secrets)
-  : cct(cct_),
+  : kscct(cct_),
     data(extra_secrets),
     lock{ceph::make_mutex("KeyServer::lock")}
 {
 }
+
 
 int KeyServer::start_server()
 {
@@ -178,11 +287,31 @@ int KeyServer::_rotate_secret(uint32_t service_id, KeyServerData &pending_data)
   RotatingSecrets& r = pending_data.rotating_secrets[service_id];
   int added = 0;
   utime_t now = ceph_clock_now();
-  double ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? cct->_conf->auth_mon_ticket_ttl : cct->_conf->auth_service_ticket_ttl;
+
+  double const auth_mon_ticket_ttl = cct->_conf.get_val<double>("auth_mon_ticket_ttl");
+  double const auth_service_ticket_ttl= cct->_conf.get_val<double>("auth_service_ticket_ttl");
+  auto const auth_service_cipher_key_type = get_service_cipher();
+  auto auth_service_cipher = CryptoManager::get_key_type_name(auth_service_cipher_key_type);
+  //const int auth_service_cipher_key_type = CryptoManager::get_key_type(auth_service_cipher);
+
+  ldout(cct, 10) << __func__
+          << ": auth_mon_ticket_ttl=" << auth_mon_ticket_ttl
+          << ", auth_service_ticket_ttl=" << auth_service_ticket_ttl
+          << ", auth_service_cipher=" << auth_service_cipher
+          << ", service_id=" << service_id
+          << dendl;;
+
+  double ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? auth_mon_ticket_ttl : auth_service_ticket_ttl;
 
   while (r.need_new_secrets(now)) {
     ExpiringCryptoKey ek;
-    generate_secret(ek.key);
+
+    int key_type = auth_service_cipher_key_type;
+    if (key_type < 0 || key_type == CEPH_CRYPTO_NONE) {
+      key_type = CEPH_CRYPTO_AES256KRB5;
+    }
+
+    generate_secret(ek.key, key_type);
     if (r.empty()) {
       ek.expiration = now;
     } else {
@@ -204,13 +333,13 @@ int KeyServer::_rotate_secret(uint32_t service_id, KeyServerData &pending_data)
 bool KeyServer::get_secret(const EntityName& name, CryptoKey& secret) const
 {
   std::scoped_lock l{lock};
-  return data.get_secret(name, secret);
+  return data.get_secret(cct, name, secret);
 }
 
 bool KeyServer::get_auth(const EntityName& name, EntityAuth& auth) const
 {
   std::scoped_lock l{lock};
-  return data.get_auth(name, auth);
+  return data.get_auth(cct, name, auth);
 }
 
 bool KeyServer::get_caps(const EntityName& name, const string& type,
@@ -267,34 +396,33 @@ void KeyServer::generate_test_instances(std::list<KeyServer*>& ls)
   ls.push_back(new KeyServer(nullptr, nullptr));
 }
 
-bool KeyServer::generate_secret(CryptoKey& secret)
+bool KeyServer::generate_secret(CryptoKey& secret, std::optional<int> key_type)
 {
+  int type = key_type.value_or(CEPH_CRYPTO_AES256KRB5);
   bufferptr bp;
-  CryptoHandler *crypto = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  auto crypto = cct->get_crypto_manager()->get_handler(type);
   if (!crypto)
     return false;
+
+  ldout(cct, 20) << __func__ << ": generating key type " << type << dendl;
 
   if (crypto->create(cct->random(), bp) < 0)
     return false;
 
-  secret.set_secret(CEPH_CRYPTO_AES, bp, ceph_clock_now());
+  secret.set_secret(type, bp, ceph_clock_now());
 
   return true;
 }
 
-bool KeyServer::generate_secret(EntityName& name, CryptoKey& secret)
-{
-  if (!generate_secret(secret))
-    return false;
+void KeyServer::encode(ceph::buffer::list& bl) const {
+  using ceph::encode;
+  encode(data, bl);
+}
 
+void KeyServer::decode(ceph::buffer::list::const_iterator& bl) {
   std::scoped_lock l{lock};
-
-  EntityAuth auth;
-  auth.key = secret;
-
-  data.add_auth(name, auth);
-
-  return true;
+  using ceph::decode;
+  decode(data, bl);
 }
 
 bool KeyServer::contains(const EntityName& name) const
@@ -370,7 +498,7 @@ void KeyServer::encode_plaintext(bufferlist &bl)
   bl.append(os.str());
 }
 
-bool KeyServer::prepare_rotating_update(bufferlist& rotating_bl)
+bool KeyServer::prepare_rotating_update(bufferlist& rotating_bl, bool wipe)
 {
   std::scoped_lock l{lock};
   ldout(cct, 20) << __func__ << " before: data.rotating_ver=" << data.rotating_ver
@@ -378,7 +506,19 @@ bool KeyServer::prepare_rotating_update(bufferlist& rotating_bl)
 
   KeyServerData pending_data(nullptr);
   pending_data.rotating_ver = data.rotating_ver + 1;
-  pending_data.rotating_secrets = data.rotating_secrets;
+  if (wipe) {
+    /* Always keep CEPH_ENTITY_TYPE_AUTH: existing auth service keys are needed
+     * to renew tickets by daemons/clients and the only information in an old
+     * ticket used is the global_id. Forging tickets is not a significant
+     * concern. A stolen auth service key is not worthwhile since you would
+     * be incaapable of generating useful service tickets with the associated
+     * service key (e.g. "osd").
+     */
+    RotatingSecrets& r = data.rotating_secrets[CEPH_ENTITY_TYPE_AUTH];
+    pending_data.rotating_secrets[CEPH_ENTITY_TYPE_AUTH] = r;
+  } else {
+    pending_data.rotating_secrets = data.rotating_secrets;
+  }
 
   int added = 0;
   added += _rotate_secret(CEPH_ENTITY_TYPE_AUTH, pending_data);
@@ -415,7 +555,7 @@ bool KeyServer::get_rotating_encrypted(const EntityName& name,
   RotatingSecrets secrets = rotate_iter->second;
 
   std::string error;
-  if (encode_encrypt(cct, secrets, specific_key, enc_bl, error))
+  if (encode_encrypt(cct, secrets, specific_key, CEPHX_KEY_USAGE_ROTATING_SECRET, enc_bl, error))
     return false;
 
   return true;
@@ -439,6 +579,7 @@ bool KeyServer::get_service_caps(const EntityName& name, uint32_t service_id,
 
 int KeyServer::_build_session_auth_info(uint32_t service_id,
 					const AuthTicket& parent_ticket,
+                                        std::optional<int> key_type,
 					CephXSessionAuthInfo& info,
 					double ttl)
 {
@@ -447,20 +588,37 @@ int KeyServer::_build_session_auth_info(uint32_t service_id,
   info.ticket.init_timestamps(ceph_clock_now(), ttl);
   info.validity.set_from_double(ttl);
 
-  generate_secret(info.session_key);
+  /* The session key cipher must be supported by both the requesting client and
+   * the target service. During rolling upgrades, services are typically
+   * upgraded before external clients, but internal cluster daemons (such as
+   * the mgr) acting as RADOS clients may be upgraded before target services
+   * (such as osd). Therefore, we select the minimum (lowest common
+   * denominator) of the client's key type and the target service's rotating
+   * secret key type. This is also (even more) important to consider rolling
+   * upgrades of service daemons where two OSD or two MDS need to talk to each
+   * other.
+   */
+  int ktype = std::min<int>(key_type.value_or(info.service_secret.get_type()),
+                            info.service_secret.get_type());
 
-  // mon keys are stored externally.  and the caps are blank anyway.
-  if (service_id != CEPH_ENTITY_TYPE_MON) {
-    string s = ceph_entity_type_name(service_id);
-    if (!data.get_caps(cct, info.ticket.name, s, info.ticket.caps)) {
-      return -EINVAL;
-    }
+  generate_secret(info.session_key, ktype);
+
+  /* N.B.: the Monitor special cases cap retrieval via a call to
+   * CephxServiceHandler::handle_request which fills in the
+   * Connection::peer_caps_info. This lets the Monitor always use the latest
+   * up-to-date mon caps for the entity but it's an unfortunate divergence in
+   * behavior.
+   */
+  string s = ceph_entity_type_name(service_id);
+  if (!data.get_caps(cct, info.ticket.name, s, info.ticket.caps)) {
+    return -EINVAL;
   }
   return 0;
 }
 
 int KeyServer::build_session_auth_info(uint32_t service_id,
 				       const AuthTicket& parent_ticket,
+                                       std::optional<int> key_type,
 				       CephXSessionAuthInfo& info)
 {
   double ttl;
@@ -470,20 +628,22 @@ int KeyServer::build_session_auth_info(uint32_t service_id,
   }
 
   std::scoped_lock l{lock};
-  return _build_session_auth_info(service_id, parent_ticket, info, ttl);
+  return _build_session_auth_info(service_id, parent_ticket,
+                                  key_type, info, ttl);
 }
 
 int KeyServer::build_session_auth_info(uint32_t service_id,
 				       const AuthTicket& parent_ticket,
 				       const CryptoKey& service_secret,
 				       uint64_t secret_id,
+                                       std::optional<int> key_type,
 				       CephXSessionAuthInfo& info)
 {
   info.service_secret = service_secret;
   info.secret_id = secret_id;
 
   std::scoped_lock l{lock};
-  return _build_session_auth_info(service_id, parent_ticket, info,
-				  cct->_conf->auth_service_ticket_ttl);
+  double const auth_service_ticket_ttl= cct->_conf.get_val<double>("auth_service_ticket_ttl");
+  return _build_session_auth_info(service_id, parent_ticket, key_type, info, auth_service_ticket_ttl);
 }
 

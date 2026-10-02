@@ -7,7 +7,13 @@ from ceph_volume import process, conf, terminal
 from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
-from .disk import lsblk, device_family, get_part_entry_type, _dd_read
+from .disk import (
+    lsblk,
+    device_family,
+    get_part_entry_type,
+    _dd_read,
+    BackingDeviceRotation,
+)
 from packaging import version
 from typing import Any, Dict, List
 
@@ -64,7 +70,8 @@ def set_dmcrypt_no_workqueue(target_version: str = '2.3.4') -> None:
         raise RuntimeError("Couldn't check the cryptsetup version.")
 
 def bypass_workqueue(device: str) -> bool:
-    return not Device(device).rotational and conf.dmcrypt_no_workqueue
+    return (not BackingDeviceRotation.is_rotational(device)
+            and bool(conf.dmcrypt_no_workqueue))
 
 def get_key_size_from_conf():
     """

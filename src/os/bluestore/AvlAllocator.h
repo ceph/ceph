@@ -108,6 +108,7 @@ private:
   int _allocate(
     uint64_t size,
     uint64_t unit,
+    int64_t  hint,
     uint64_t *offset,
     uint64_t *length);
 

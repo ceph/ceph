@@ -19,9 +19,11 @@
 #ifndef CEPH_MONMAPMONITOR_H
 #define CEPH_MONMAPMONITOR_H
 
-#include <map>
+#include <iosfwd>
 #include <set>
+#include <string>
 
+#include "include/buffer_fwd.h"
 #include "include/types.h"
 #include "msg/Messenger.h"
 
@@ -36,6 +38,8 @@ class MonmapMonitor : public PaxosService {
   {
   }
   MonMap pending_map; //the pending map awaiting passage
+
+  void init() override;
 
   void create_initial() override;
 
@@ -73,6 +77,8 @@ class MonmapMonitor : public PaxosService {
   void check_sub(Subscription *sub);
 
   void tick() override;
+
+  epoch_t bump_auth_epoch(epoch_t e);
 
 private:
   void check_subs();

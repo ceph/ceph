@@ -6,6 +6,7 @@
 #include <optional>
 #include <regex>
 #include "include/function2.hpp"
+#include "rgw_account.h"
 #include "rgw_iam_policy.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_pubsub_push.h"
@@ -451,9 +452,13 @@ private:
 
 public:
   int verify_permission(optional_yield) override {
-    // check account permissions up front
-    if (s->auth.identity->get_account() &&
-        !verify_user_permission(this, s, {}, rgw::IAM::snsListTopics)) {
+    // account permissions are checked up front. for non-account users,
+    // execute() instead checks permissions against each topic
+    if (!s->auth.identity->get_account()) {
+      return 0;
+    }
+    const auto arn = rgw::account::root_arn(s->auth.identity->get_account()->id);
+    if (!verify_user_permission(this, s, arn, rgw::IAM::snsListTopics)) {
       return -ERR_AUTHORIZATION;
     }
 

@@ -17,6 +17,7 @@ add_executable(ceph_test_mon_msg
   test-mon-msg.cc
   )
 target_link_libraries(ceph_test_mon_msg os osdc global ${UNITTEST_LIBS})
+install(TARGETS ceph_test_mon_msg DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # unittest_config_map
 add_executable(unittest_config_map

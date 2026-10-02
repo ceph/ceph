@@ -314,7 +314,7 @@ void RGWRadosThread::start()
 
 void RGWRadosThread::stop()
 {
-  down_flag = true;
+  set_down_flag();
   stop_process();
   if (worker) {
     worker->signal();
@@ -1022,6 +1022,19 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
 void RGWRados::finalize()
 {
+  if (run_sync_thread) {
+    std::lock_guard l{meta_sync_thread_lock};
+    meta_sync_processor_thread->set_down_flag();
+    std::lock_guard dl{data_sync_thread_lock};
+    for (auto iter : data_sync_processor_threads) {
+      RGWDataSyncProcessorThread *thread = iter.second;
+      thread->set_down_flag();
+    }
+    if (sync_log_trimmer) {
+      sync_log_trimmer->set_down_flag();
+    }
+  }
+
   /* Before joining any sync threads, drain outstanding requests &
    * mark the async_processor as going_down() */
   if (svc.async_processor) {
@@ -1239,6 +1252,41 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   auto& zone_params = svc.zone->get_zone_params();
   auto& zone = svc.zone->get_zone();
 
+  binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
+  binfo_cache->init(svc.cache);
+
+  topic_cache = new RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
+  topic_cache->init(svc.cache);
+
+  lc = new RGWLC();
+  lc->initialize(cct, this->driver);
+
+  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
+
+  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
+                             zone.bucket_index_max_shards);
+  if (bucket_index_max_shards > get_max_bucket_shards()) {
+    bucket_index_max_shards = get_max_bucket_shards();
+    ldpp_dout(dpp, 1) << __func__ << " bucket index max shards is too large, reset to value: "
+      << get_max_bucket_shards() << dendl;
+  }
+  ldpp_dout(dpp, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
+
+  bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
+
+  if (need_tombstone_cache) {
+    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
+  }
+
+  reshard_wait = std::make_shared<RGWReshardWait>();
+
+  reshard = new RGWReshard(this->driver);
+
+  // disable reshard thread based on zone/zonegroup support
+  run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
+
+  index_completion_manager = new RGWIndexCompletionManager(this);
+
   /* no point of running sync thread if we don't have a master zone configured
     or there is no rest_master_conn */
   if (!svc.zone->need_to_sync()) {
@@ -1317,47 +1365,12 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
     data_notifier->start();
   }
 
-  binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
-  binfo_cache->init(svc.cache);
-
-  topic_cache = new RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
-  topic_cache->init(svc.cache);
-
-  lc = new RGWLC();
-  lc->initialize(cct, this->driver);
-
   if (use_lc_thread)
     lc->start_processor();
-
-  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
-
-  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
-                             zone.bucket_index_max_shards);
-  if (bucket_index_max_shards > get_max_bucket_shards()) {
-    bucket_index_max_shards = get_max_bucket_shards();
-    ldpp_dout(dpp, 1) << __func__ << " bucket index max shards is too large, reset to value: "
-      << get_max_bucket_shards() << dendl;
-  }
-  ldpp_dout(dpp, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
-
-  bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
-
-  if (need_tombstone_cache) {
-    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
-  }
-
-  reshard_wait = std::make_shared<RGWReshardWait>();
-
-  reshard = new RGWReshard(this->driver);
-
-  // disable reshard thread based on zone/zonegroup support
-  run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
 
   if (run_reshard_thread)  {
     reshard->start_processor();
   }
-
-  index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (run_notification_thread) {
     if (!rgw::notify::init(dpp, driver, *svc.site)) {
@@ -3168,7 +3181,26 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (!ptag && !index_op->get_optag()->empty()) {
     ptag = index_op->get_optag();
   }
-  r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.if_match, meta.if_nomatch, false, meta.modify_tail, rctx.y);
+
+  target->manifest = manifest;
+  target->state = state;
+  RGWObjState* current_state = target->state;
+  if (!target->obj.key.instance.empty()) {
+    r = target->get_current_version_state(rctx.dpp, current_state, rctx.y);
+    if (r == -ENOENT) {
+      current_state = target->state;
+    } else if (r < 0) {
+      return r;
+    }
+  }
+
+  r = target->check_preconditions(rctx.dpp, std::nullopt, real_clock::zero(), false, meta.if_match, meta.if_nomatch, *current_state, rctx.y);
+  if (r < 0) {
+    return r;
+  }
+  bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0)) && (!target->state->fake_tag);
+  bool set_attr_id_tag = guard && target->obj.key.instance.empty() && (meta.if_nomatch == nullptr || meta.if_nomatch != "*"sv);
+  r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.modify_tail, set_attr_id_tag, rctx.y);
   if (r < 0)
     return r;
 
@@ -4875,7 +4907,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
     return copy_obj_data(dest_obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
+                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y, astate->accounted_size);
   }
 
   /* This has been in for 2 years, so we can safely assume amanifest is not NULL */
@@ -5045,6 +5077,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                string *petag,
                const DoutPrefixProvider *dpp,
                optional_yield y,
+               uint64_t src_accounted_size,
                bool log_op)
 {
   string tag;
@@ -5104,14 +5137,48 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
       ldpp_dout(dpp, 0) << "ERROR: failed to read compression info" << dendl;
       return ret;
     }
-    // pass original size if compressed
-    accounted_size = compressed ? cs_info.orig_size : ofs;
+    // The bucket index accounted_size must be the object's logical (uncompressed)
+    // size. When the destination is compressed we take it from the compression info.
+    // Otherwise `ofs` is the number of RAW bytes read from the source: but if the source
+    // itself is compressed, the ofs is the *compressed* size, not the logical
+    // size. So, prefer the source's known logical size.
+    accounted_size = compressed ? cs_info.orig_size
+                                : (src_accounted_size ? src_accounted_size : ofs);
   }
 
   const req_context rctx{dpp, y, nullptr};
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
                             nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
+}
+
+int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &src_attrs) {
+  auto iter = src_attrs.find(RGW_ATTR_MANIFEST);
+  if (iter == src_attrs.end()) {
+    return 0;
+  }
+
+  bufferlist &manifest_bl { iter->second };
+
+  // if the source object was encrypted, preserve the part lengths from
+  // the original object's manifest in RGW_ATTR_CRYPT_PARTS. if the object
+  // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
+  if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
+      !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
+    std::vector<size_t> parts_len;
+    int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
+							parts_len);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to read part lengths from the manifest r=" << r << dendl;
+      return r;
+    }
+    // store the encoded part lenghts in RGW_ATTR_CRYPT_PARTS
+    bufferlist parts_bl;
+    encode(parts_len, parts_bl);
+    src_attrs[RGW_ATTR_CRYPT_PARTS] = std::move(parts_bl);
+  }
+
+  return 0;
 }
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
@@ -5137,6 +5204,11 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   read_op.params.obj_size = &obj_size;
 
   int ret = read_op.prepare(y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = fixup_manifest_to_parts_len(dpp, attrs);
   if (ret < 0) {
     return ret;
   }
@@ -5175,6 +5247,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       nullptr /* petag */,
                       dpp,
                       y,
+                      0, /* src_accounted_size: unknown here, keep ofs-based size */
                       log_op);
   if (ret < 0) {
     return ret;
@@ -5381,6 +5454,9 @@ int RGWRados::bucket_suspended(const DoutPrefixProvider *dpp, rgw_bucket& bucket
 
 int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp, bool keep_tail, optional_yield y)
 {
+  int r = get_state(dpp, &state, &manifest, false, y);
+  if (r < 0)
+    return r;
   if ((!manifest) || keep_tail)
     return 0;
 
@@ -5803,7 +5879,24 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         meta.mtime = params.mtime;
       }
 
-      int r = store->set_olh(dpp, target->get_ctx(), target->get_bucket_info(), marker, true,
+      int r = target->get_state(dpp, &target->state, &target->manifest, false, y);
+      if (r < 0)
+        return r;
+      RGWObjState* current_state = target->state;
+      r = target->get_current_version_state(dpp, current_state, y);
+      if (r == -ENOENT) {
+        current_state = target->state;
+      } else if (r < 0) {
+        return r;
+      }
+
+      r = target->check_preconditions(dpp, params.size_match, params.last_mod_time_match, params.high_precision_time,
+                                        params.if_match, nullptr, *current_state, y);
+      if (r < 0) {
+        return r;
+      }
+
+      r = store->set_olh(dpp, target->get_ctx(), target->get_bucket_info(), marker, true,
                              &meta, params.olh_epoch, params.unmod_since, params.high_precision_time,
                              y, params.zones_trace, add_log, skip_olh_obj_update);
       if (r < 0) {
@@ -5816,6 +5909,38 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       if (r < 0) {
         return r;
       }
+
+      using namespace std::string_literals;
+      if (params.if_match && params.if_match != "*"sv) {
+        string if_match = rgw_string_unquote(params.if_match);
+        ldpp_dout(dpp, 10) << "checking precondtion if_match: " << if_match << ", etag: " << dirent.meta.etag << dendl;
+        if(dirent.meta.etag != if_match) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+
+      if (params.size_match.has_value()) {
+        ldpp_dout(dpp, 10) << "checking precondtion size_match: " << params.size_match << ", size: " << dirent.meta.size << dendl;
+        if (params.size_match != dirent.meta.size) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+
+      if (!real_clock::is_zero(params.last_mod_time_match)) {
+        struct timespec ctime = ceph::real_clock::to_timespec(dirent.meta.mtime);
+        struct timespec last_mod_time = ceph::real_clock::to_timespec(params.last_mod_time_match);
+        if (!params.high_precision_time) {
+          ctime.tv_nsec = 0;
+          last_mod_time.tv_nsec = 0;
+        }
+
+        ldpp_dout(dpp, 10) << "checking precondtion If-Match-Last-Modified-Time: " << params.last_mod_time_match
+                           << ", Last-Modified: " << ctime << ", with high_precision_time:" << params.high_precision_time << dendl;
+        if (ctime != last_mod_time) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+
       result.delete_marker = dirent.is_delete_marker();
       r = store->unlink_obj_instance(
 	dpp, target->get_ctx(), target->get_bucket_info(), obj,
@@ -5855,8 +5980,18 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     return r;
   }
 
-  ObjectWriteOperation op;
+  if (!state->exists) {
+    if (!force) {
+      target->invalidate_state();
+      return -ENOENT;
+    } else {
+      ldpp_dout(dpp, 5) << "WARNING: head for \"" << src_obj <<
+                        "\" does not exist; will continue with deleting bucket "
+                        "index entry(ies)" << dendl;
+    }
+  }
 
+  ObjectWriteOperation op;
   if (!real_clock::is_zero(params.unmod_since)) {
     struct timespec ctime = ceph::real_clock::to_timespec(state->mtime);
     struct timespec unmod = ceph::real_clock::to_timespec(params.unmod_since);
@@ -5911,7 +6046,12 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     }
   }
 
-  r = target->prepare_atomic_modification(dpp, op, false, NULL, NULL, NULL, true, false, y);
+  r = target->check_preconditions(dpp, params.size_match, params.last_mod_time_match, params.high_precision_time,
+                                    params.if_match, nullptr, *state, y);
+  if (!real_clock::is_zero(params.last_mod_time_match)) {
+    /* only delete object if mtime is equal to params.last_mod_time_match */
+    store->cls_obj_check_mtime(op, params.last_mod_time_match, params.high_precision_time, CLS_RGW_CHECK_TIME_MTIME_EQ);
+  }
   if (r < 0) {
     return r;
   }
@@ -6481,21 +6621,104 @@ void RGWRados::Object::invalidate_state()
   ctx.invalidate(obj);
 }
 
-int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
-                                                  ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                                  const char *if_match, const char *if_nomatch, bool removal_op,
-                                                  bool modify_tail, optional_yield y)
+int RGWRados::Object::get_current_version_state(const DoutPrefixProvider *dpp, RGWObjState*& current_state, optional_yield y)
 {
-  int r = get_state(dpp, &state, &manifest, false, y);
-  if (r < 0)
+  // objects in versioning-enabled buckets don't get overwritten.
+  // preconditions refer to the current version instead
+  current_state = state;
+  rgw_obj current_obj = obj;
+  current_obj.key.instance.clear();
+  constexpr bool follow_olh = true; // look up current version
+  int r = store->get_obj_state(dpp, &ctx, bucket_info, current_obj,
+                           &current_state, nullptr, follow_olh, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 4) << "failed to load current version or no current object version for preconditions on " << current_obj << dendl;
+    current_state = nullptr;
     return r;
+  } else {
+    ldpp_dout(dpp, 4) << "loaded current object " << current_state->obj
+                      << " for preconditions" << dendl;
+  }
 
-  bool need_guard = ((manifest) || (state->obj_tag.length() != 0) ||
-                     if_match != NULL || if_nomatch != NULL) &&
-                     (!state->fake_tag);
+  return 0;
+}
 
+int RGWRados::Object::check_preconditions(const DoutPrefixProvider *dpp, std::optional<uint64_t> size_match,
+                                            ceph::real_time last_mod_time_match, bool high_precision_time,
+                                            const char *if_match, const char *if_nomatch, RGWObjState& current_state, optional_yield y)
+{
+  if (size_match.has_value()) {
+    ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions size_match: " << size_match.value() << ", size: " << current_state.size << dendl;
+      if (current_state.size != size_match) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+
+  if (!real_clock::is_zero(last_mod_time_match)) {
+    struct timespec ctime = ceph::real_clock::to_timespec(current_state.mtime);
+    struct timespec last_mod_time = ceph::real_clock::to_timespec(last_mod_time_match);
+    if (!high_precision_time) {
+      ctime.tv_nsec = 0;
+      last_mod_time.tv_nsec = 0;
+    }
+
+    ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions If-Match-Last-Modified-Time: " << last_mod_time_match
+                       << ", Last-Modified: " << ctime << ", with high_precision_time:" << high_precision_time << dendl;
+    if (ctime != last_mod_time) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+
+  using namespace std::string_literals;
+  if (if_match) {
+    if (if_match == "*"sv) {
+      // test the object is existing
+      if (!current_state.exists) {
+        return -ENOENT;
+      }
+    } else {
+      bufferlist bl;
+      if (current_state.get_attr(RGW_ATTR_ETAG, bl)) {
+        string if_match_str = rgw_string_unquote(if_match);
+        string etag = string(bl.c_str(), bl.length());
+        ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions if_match: " << if_match_str << ", etag: " << etag << dendl;
+        if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions if_match object has no etag" << dendl;
+        return (!current_state.exists)? -ENOENT: -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
+
+  if (if_nomatch) {
+    if (if_nomatch == "*"sv) {
+      // test the object is NOT existing
+      if (current_state.exists) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    } else {
+      bufferlist bl;
+      if (current_state.get_attr(RGW_ATTR_ETAG, bl)) {
+        string if_nomatch_str = rgw_string_unquote(if_nomatch);
+        string etag = string(bl.c_str(), bl.length());
+        ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions if_match: " << if_nomatch_str << ", etag: " << etag << dendl;
+        if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+
+int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp, ObjectWriteOperation& op, bool reset_obj,
+                                                  const string *ptag, bool modify_tail, bool set_attr_id_tag, optional_yield y)
+{
   if (!state->is_atomic) {
-    ldpp_dout(dpp, 20) << "prepare_atomic_modification: state is not atomic. state=" << (void *)state << dendl;
+    ldpp_dout(dpp, 20) << "prepare_atomic_modification: state is not atomic. state=" << (void *) state << dendl;
 
     if (reset_obj) {
       op.create(false);
@@ -6505,42 +6728,10 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
     return 0;
   }
 
-  if (need_guard) {
+  if (set_attr_id_tag) {
     /* first verify that the object wasn't replaced under */
-    if (if_nomatch == NULL || strcmp(if_nomatch, "*") != 0) {
-      op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag); 
-      // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
-    }
-
-    if (if_match) {
-      if (strcmp(if_match, "*") == 0) {
-        // test the object is existing
-        if (!state->exists) {
-          return -ERR_PRECONDITION_FAILED;
-        }
-      } else {
-        bufferlist bl;
-        if (!state->get_attr(RGW_ATTR_ETAG, bl) ||
-            strncmp(if_match, bl.c_str(), bl.length()) != 0) {
-          return -ERR_PRECONDITION_FAILED;
-        }
-      }
-    }
-
-    if (if_nomatch) {
-      if (strcmp(if_nomatch, "*") == 0) {
-        // test the object is NOT existing
-        if (state->exists) {
-          return -ERR_PRECONDITION_FAILED;
-        }
-      } else {
-        bufferlist bl;
-        if (!state->get_attr(RGW_ATTR_ETAG, bl) ||
-            strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
-          return -ERR_PRECONDITION_FAILED;
-        }
-      }
-    }
+    op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
+    // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
   }
 
   if (reset_obj) {
@@ -6550,11 +6741,6 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
     } else {
       op.create(true);
     }
-  }
-
-  if (removal_op) {
-    /* the object is being removed, no need to update its tag */
-    return 0;
   }
 
   if (ptag) {
@@ -7037,6 +7223,12 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
     }
 
     r = call(bs);
+    if (r == -ENOENT) {
+      ldpp_dout(dpp, 10) << "ENOENT in guard_reshard(), likely bucket resharding, retrying" << dendl;
+      invalidate_bs();
+      continue;
+    }
+
     if (r != -ERR_BUSY_RESHARDING) {
       break;
     }
@@ -7735,6 +7927,10 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
     }
 
     r = call(bs);
+    if (r == -ENOENT) {
+      ldpp_dout(dpp, 10) << "ENOENT in guard_reshard(), likely bucket resharding, retrying" << dendl;
+      continue;
+    }
     if (r != -ERR_BUSY_RESHARDING) {
       break;
     }

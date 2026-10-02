@@ -10,7 +10,7 @@ function run() {
 
     export CEPH_MON="127.0.0.1:7146" # git grep '\<7146\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     # avoid running out of fds in rados bench
     CEPH_ARGS+="--filestore_wbthrottle_xfs_ios_hard_limit=900 "

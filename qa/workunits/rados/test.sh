@@ -135,7 +135,7 @@ done
 
 # Running all tests in ceph_test_neorados
 for f in \
-    cls cmd handler_error io ec_io list ec_list misc pool read_operations snapshots \
+    cls cmd completions handler_error io ec_io list ec_list misc pool read_operations snapshots \
     watch_notify write_operations
 do
     executable="ceph_test_neorados_$f"

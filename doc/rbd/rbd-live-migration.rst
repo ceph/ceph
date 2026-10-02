@@ -157,8 +157,15 @@ as follows::
 
         {
             "type": "native",
+            ["mon_host": "<mon-host>",] (specify if image in another cluster,
+                                         must be specified together with "key",
+                                         mutually exclusive with "cluster_name")
+            ["key": "<key or key-ref>",] (for connecting to another cluster,
+                                          must be specified together with "mon_host",
+                                          mutually exclusive with "cluster_name")
             ["cluster_name": "<cluster-name>",] (specify if image in another cluster,
-                                                 requires ``<cluster-name>.conf`` file)
+                                                 requires ``<cluster-name>.conf`` file,
+                                                 mutually exclusive with "mon_host" and "key")
             ["client_name": "<client-name>",] (for connecting to another cluster,
                                                default is ``client.admin``)
             "pool_name": "<pool-name>",
@@ -181,6 +188,14 @@ it utilizes native Ceph operations. For example, to import from the image
             "image_name": "image1",
             "snap_name": "snap1"
         }
+
+.. note::
+  The ``key`` parameter supports storing the key in the MON config-key store
+  by utilizing ``config://`` prefix followed by the path in the MON config-key
+  store to the key (key reference). Values can be stored in the config-key store
+  via ``ceph config-key set <key-path> <value>`` (e.g.
+  ``ceph config-key set rbd/native/my_key AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==``
+  and ``"key": "config://rbd/native/my_key"`` in ``source-spec``).
 
 The ``qcow`` format can be used to describe a QCOW (QEMU copy-on-write) block
 device. Both the QCOW (v1) and QCOW2 formats are currently supported with the
@@ -280,8 +295,8 @@ The ``s3`` stream can be used to import from a remote S3 bucket. Its
             "stream": {
                 "type": "s3",
                 "url": "<url-path>",
-                "access_key": "<access-key>",
-                "secret_key": "<secret-key>"
+                "access_key": "<access-key or access-key-ref>",
+                "secret_key": "<secret-key or secret-key-ref>"
             }
         }
 
@@ -301,10 +316,11 @@ as follows::
 
 .. note::
   The ``access_key`` and ``secret_key`` parameters support storing the keys in
-  the MON config-key store by prefixing the key values with ``config://``
-  followed by the path in the MON config-key store to the value. Values can be
+  the MON config-key store by utilizing ``config://`` prefix followed by the
+  path in the MON config-key store to the key (key reference). Values can be
   stored in the config-key store via ``ceph config-key set <key-path> <value>``
-  (e.g. ``ceph config-key set rbd/s3/access_key NX5QOQKC6BH2IDN8HC7A``).
+  (e.g. ``ceph config-key set rbd/s3/my_access_key NX5QOQKC6BH2IDN8HC7A`` and
+  ``"access_key": "config://rbd/s3/my_access_key"`` in ``source-spec``).
 
 The ``nbd`` stream can be used to import from a remote NBD export. Its
 ``source-spec`` JSON is encoded as follows::

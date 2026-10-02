@@ -55,6 +55,17 @@ options:
   default: 1_min
   services:
   - mon
+  flags:
+  - runtime
+- name: mon_down_added_grace
+  type: secs
+  level: advanced
+  desc: Period in seconds that the cluster may have a newly added mon down
+  default: 3_min
+  services:
+  - mon
+  flags:
+  - runtime
 - name: mon_down_uptime_grace
   type: secs
   level: advanced
@@ -606,6 +617,14 @@ options:
   - mon
   min: 2
   max: 4
+- name: mon_stretch_max_bucket_weight_delta
+  type: float
+  level: dev
+  desc: Max difference allowed among CRUSH bucket weights when in stretch mode.
+    The value is a percentage expressed as a real number between 0.0 and 1.0.
+  default: 0.1
+  services:
+  - mon
 - name: mon_clock_drift_allowed
   type: float
   level: advanced
@@ -755,6 +774,31 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_auth_allow_insecure_key
+  type: bool
+  level: advanced
+  desc: Allow the creation of keys with insecure type.
+  long_desc: >
+    By default, the Monitors will allow creation of keys with a cipher type
+    known to be insecure so long as the Monitors also allow that cipher to
+    authenticate. When that cipher type is removed from the authentication
+    list, the Monitors will also disable the default value of this
+    configuration. When disabled, ceph commands can no longer create keys with
+    an insecure cipher type.
+  default: false
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_auth_emergency_allowed_ciphers
+  type: str
+  level: advanced
+  desc: set allowed ciphers to override mon map configuration
+  services:
+  - mon
+  flags:
+  - startup
+  - no_mon_update
 - name: mon_auth_validate_all_caps
   type: bool
   level: advanced
@@ -1349,3 +1393,11 @@ options:
   with_legacy: true
   see_also:
   - osd_heartbeat_use_min_delay_socket
+- name: mon_netsplit_grace_period
+  type: secs
+  level: advanced
+  desc: Time (in seconds) to wait before emitting a MON_NETSPLIT
+    health warning.
+  default: 9
+  services :
+  - mon

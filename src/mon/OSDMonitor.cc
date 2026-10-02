@@ -24,10 +24,12 @@
 
 #include "mon/OSDMonitor.h"
 #include "mon/Monitor.h"
+#include "mon/MonMap.h"
 #include "mon/MDSMonitor.h"
 #include "mon/MgrStatMonitor.h"
 #include "mon/AuthMonitor.h"
 #include "mon/KVMonitor.h"
+#include "mon/Paxos.h"
 
 #include "mon/MonitorDBStore.h"
 #include "mon/Session.h"
@@ -740,7 +742,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mapping_job.reset();
   }
 
-  load_health();
 
   /*
    * We will possibly have a stashed latest that *we* wrote, and we will
@@ -2076,9 +2077,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
 
   // health
-  health_check_map_t next;
+  auto& next = get_health_checks_pending_writeable();
   tmp.check_health(cct, &next);
-  encode_health(next, t);
 }
 
 int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
@@ -12773,8 +12773,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     case OP_RM_PG_UPMAP_PRIMARY_ALL:
       {
-	osdmap.rm_all_upmap_prims(cct, &pending_inc);
-	ss << "cleared all pg_upmap_primary mappings";
+        string pool_name;
+        if (cmd_getval(cmdmap, "pool", pool_name)) {
+          auto pool_id = osdmap.lookup_pg_pool_name(pool_name);
+          if (pool_id < 0) {
+            err = -EINVAL;
+            ss << "unrecognized pool name '" << pool_name << "'";
+            goto reply_no_propose;
+          }
+          osdmap.rm_all_upmap_prims(cct, &pending_inc, pool_id);
+          ss << "cleared all pg_upmap_primary mappings for pool '" << pool_name << "'";
+        } else {
+          osdmap.rm_all_upmap_prims(cct, &pending_inc);
+          ss << "cleared all pg_upmap_primary mappings";
+        }
       }
       break;
 
@@ -14411,7 +14423,7 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
         pool_name = &osdmap.get_pool_name(m->pool);
       }
 
-      if (!is_unmanaged_snap_op_permitted(cct, mon.key_server,
+      if (!is_unmanaged_snap_op_permitted(cct, mon,
                                           session->entity_name, session->caps,
 					  session->get_peer_socket_addr(),
                                           pool_name)) {
@@ -15266,23 +15278,26 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     return;
   }
   __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
-
-  int weight1 = crush.get_item_weight(subtrees[0]);
-  int weight2 = crush.get_item_weight(subtrees[1]);
-  if (weight1 != weight2) {
-    // TODO: I'm really not sure this is a good idea?
-    ss << "the 2 " << dividing_bucket
-       << "instances in the cluster have differing weights "
-       << weight1 << " and " << weight2
-       <<" but stretch mode currently requires they be the same!";
-    *errcode = -EINVAL;
-    ceph_assert(!commit || (weight1 == weight2));
-    return;
-  }
   if (bucket_count != 2) {
     ss << "currently we only support 2-site stretch clusters!";
     *errcode = -EINVAL;
     ceph_assert(!commit || bucket_count == 2);
+    return;
+  }
+  double stretch_max_weight_delta = g_conf().get_val<double>("mon_stretch_max_bucket_weight_delta");
+  int weight1 = crush.get_item_weight(subtrees[0]);
+  int weight2 = crush.get_item_weight(subtrees[1]);
+  bool exceeds_threshold = abs(weight1 - weight2) >
+      (stretch_max_weight_delta * std::min(weight1, weight2));
+  if (exceeds_threshold) {
+    ss << "the 2 " << dividing_bucket
+       << "instances in the cluster have differing weights "
+       << weight1 << " and " << weight2
+       << " but stretch mode currently" 
+       <<" requires the difference to be no greater than "
+       << stretch_max_weight_delta * 100 << "%";
+    *errcode = -EINVAL;
+    ceph_assert(!commit || !exceeds_threshold);
     return;
   }
   // TODO: check CRUSH rules for pools so that we are appropriately divided

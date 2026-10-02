@@ -516,6 +516,11 @@ class TestIoctx(object):
             eq(self.ioctx.read('write_ops'), b'12\x00\x005')
 
             write_op.write_full(b'12345')
+            write_op.zero(0, 2)
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'\x00\x00345')
+
+            write_op.write_full(b'12345')
             write_op.truncate(2)
             self.ioctx.operate_write_op(write_op, "write_ops")
             eq(self.ioctx.read('write_ops'), b'12')

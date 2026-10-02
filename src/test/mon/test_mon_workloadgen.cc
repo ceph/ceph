@@ -355,8 +355,6 @@ class OSDStub : public TestStub
       gen(whoami),
       mon_osd_rng(STUB_MON_OSD_FIRST, STUB_MON_OSD_LAST)
   {
-    dout(20) << __func__ << " auth supported: "
-	     << cct->_conf->auth_supported << dendl;
     stringstream ss;
     ss << "client-osd" << whoami;
     std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;

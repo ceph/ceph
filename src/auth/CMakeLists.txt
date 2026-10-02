@@ -1,4 +1,5 @@
 set(auth_srcs
+  Auth.cc
   AuthClientHandler.cc
   AuthMethodList.cc
   AuthRegistry.cc
@@ -8,6 +9,7 @@ set(auth_srcs
   RotatingKeyRing.cc
   cephx/CephxAuthorizeHandler.cc
   cephx/CephxClientHandler.cc
+  cephx/CephxKeyServer.cc
   cephx/CephxProtocol.cc
   cephx/CephxSessionHandler.cc
   none/AuthNoneAuthorizeHandler.cc)

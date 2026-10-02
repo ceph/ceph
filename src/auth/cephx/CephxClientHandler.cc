@@ -26,11 +26,26 @@
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix
-#define dout_prefix *_dout << "cephx client: "
+#define dout_prefix *_dout << "cephx_client(" << this << "): "
 
 using std::string;
 
 using ceph::bufferlist;
+
+CephxClientHandler::CephxClientHandler(CephContext *cct_, RotatingKeyRing *rsecrets)
+    : AuthClientHandler(cct_),
+      tickets(cct_),
+      rotating_secrets(rsecrets),
+      keyring(rsecrets->get_keyring())
+{
+  ldout(cct, 20) << "con" << dendl;
+  reset();
+}
+
+CephxClientHandler::~CephxClientHandler()
+{
+  ldout(cct, 20) << "des" << dendl;
+}
 
 void CephxClientHandler::reset()
 {
@@ -57,7 +72,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     }
 
     // is the key OK?
-    if (!secret.get_secret().length()) {
+    if (!secret) {
       ldout(cct, 20) << "secret for entity " << cct->_conf->name << " is invalid" << dendl;
       return -EINVAL;
     }
@@ -212,7 +227,7 @@ int CephxClientHandler::handle_response(
 	  if (cbl.length() && connection_secret) {
 	    auto p = cbl.cbegin();
 	    string err;
-	    if (decode_decrypt(cct, *connection_secret, *session_key, p,
+	    if (decode_decrypt(cct, *connection_secret, *session_key, CEPHX_KEY_USAGE_AUTH_CONNECTION_SECRET, p,
 			       err)) {
 	      lderr(cct) << __func__ << " failed to decrypt connection_secret"
 			 << dendl;
@@ -268,7 +283,7 @@ int CephxClientHandler::handle_response(
           return -ENOENT;
         }
 	std::string error;
-	if (decode_decrypt(cct, secrets, secret_key, indata, error)) {
+	if (decode_decrypt(cct, secrets, secret_key, CEPHX_KEY_USAGE_ROTATING_SECRET, indata, error)) {
 	  ldout(cct, 0) << "could not set rotating key: decode_decrypt failed. error:"
 	    << error << dendl;
 	  return -EINVAL;
@@ -330,4 +345,9 @@ bool CephxClientHandler::need_tickets()
 		 << dendl;
 
   return _need_tickets();
+}
+
+void CephxClientHandler::invalidate_all_tickets()
+{
+  tickets.invalidate_all_tickets();
 }
