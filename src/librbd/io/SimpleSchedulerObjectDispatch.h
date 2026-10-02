@@ -11,9 +11,10 @@
 #include "librbd/io/ObjectDispatchInterface.h"
 #include "librbd/io/TypeTraits.h"
 
-#include <list>
 #include <map>
+#include <deque>
 #include <memory>
+#include <vector>
 
 namespace librbd {
 
@@ -121,7 +122,7 @@ public:
 private:
   struct MergedRequests {
     ceph::bufferlist data;
-    std::list<Context *> requests;
+    std::vector<Context *> requests;
   };
 
   class ObjectRequests {
@@ -200,7 +201,7 @@ private:
   uint64_t m_dispatch_seq = 0;
 
   Requests m_requests;
-  std::list<ObjectRequestsRef> m_dispatch_queue;
+  std::deque<ObjectRequestsRef> m_dispatch_queue;
   Context *m_timer_task = nullptr;
   std::unique_ptr<LatencyStats> m_latency_stats;
 
