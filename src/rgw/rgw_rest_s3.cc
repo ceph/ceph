@@ -3922,6 +3922,19 @@ int RGWCopyObj_ObjStore_S3::init_dest_policy()
   return create_s3_policy(s, driver, dest_policy, s->owner);
 }
 
+static bool sse_explicitly_requested(const req_state* s)
+{
+  const auto& attrs = s->info.crypt_attribute_map;
+  for (const auto& name : {"x-amz-server-side-encryption",
+                           "x-amz-server-side-encryption-customer-algorithm"}) {
+    auto i = attrs.find(name);
+    if (i != attrs.end() && !i->second.empty()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
 {
   //handle object lock
@@ -4011,13 +4024,29 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
     }
   }
 
+  // an explicit encryption request makes a copy onto itself legal
   if (source_zone.empty() &&
       (s->bucket->get_tenant() == s->src_tenant_name) &&
       (s->bucket->get_name() == s->src_bucket_name) &&
       (s->object->get_name() == s->src_object->get_name()) &&
       s->src_object_key.instance.empty() &&
-      (attrs_mod != rgw::sal::ATTRSMOD_REPLACE)) {
+      (attrs_mod != rgw::sal::ATTRSMOD_REPLACE) &&
+      !sse_explicitly_requested(s)) {
     need_to_check_storage_class = true;
+  }
+
+  /*
+   * This runs after the self-copy check, so a bucket default does not make
+   * a copy onto itself legal. A copy from another zone is written verbatim,
+   * so the default does not apply to it.
+   */
+  if (source_zone.empty()) {
+    int ret = get_encryption_defaults(s);
+    if (ret < 0) {
+      ldpp_dout(this, 5)
+        << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+      return ret;
+    }
   }
 
   return 0;
