@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <memory>
+#include <sstream>
 #include <vector>
 
 #include "global/global_init.h"
@@ -42,4 +43,26 @@ TEST_F(ThreadMonitorTestHelper, BasicCreation) {
 TEST_F(ThreadMonitorTestHelper, Construction) {
   ThreadMonitor tm(cct.get());
   // Should not crash
+}
+
+// Regression test for https://tracker.ceph.com/issues/81338:
+// read_process_statm() must report a parse failure instead of silently
+// returning a valid-looking rss_pages=0 reading. parse_statm() is the
+// stream-based seam that read_process_statm() uses to parse /proc/self/statm,
+// so it carries the same "returns false on parse failure" contract.
+TEST(ThreadMonitor, ReadProcessStatmReturnsFalseOnMalformedLine) {
+  // A malformed statm line must be reported as a failure, not silently
+  // accepted as rss_pages=0.
+  long long rss_pages = -1;
+  std::istringstream malformed("not-a-statm-line");
+  EXPECT_FALSE(ThreadMonitor::parse_statm(malformed, rss_pages))
+      << "Current: returns true with rss_pages=0 on malformed statm line; "
+         "Expected: returns false.";
+
+  // A well-formed statm line must parse successfully and yield the resident
+  // set size from the second field: "size resident shared text lib data dt".
+  long long good_rss_pages = -1;
+  std::istringstream well_formed("100 50 40 10 0 90 0");
+  EXPECT_TRUE(ThreadMonitor::parse_statm(well_formed, good_rss_pages));
+  EXPECT_EQ(good_rss_pages, 50);
 }
