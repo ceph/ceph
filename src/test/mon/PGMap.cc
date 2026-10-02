@@ -51,6 +51,27 @@ namespace {
   }
 }
 
+TEST(pgmap, recovery_summary_order)
+{
+  PGMapDigest digest;
+  auto& summary = digest.pg_sum.stats.sum;
+  summary.num_objects_degraded = 3;
+  summary.num_object_copies = 10;
+  summary.num_objects_misplaced = 2;
+  summary.num_objects_unfound = 1;
+  summary.num_objects = 20;
+
+  vector<string> output;
+  digest.overall_recovery_summary(nullptr, output);
+
+  const vector<string> expected {
+    "3/10 objects degraded (30.000%)",
+    "2/10 objects misplaced (20.000%)",
+    "1/20 objects unfound (5.000%)"
+  };
+  EXPECT_EQ(expected, output);
+}
+
 // dump_object_stat_sum() is called by "ceph df" command
 // with table, without formatter, verbose = true, not empty, avail > 0
 TEST(pgmap, dump_object_stat_sum_0)
