@@ -81,6 +81,80 @@ add_ceph_unittest(unittest_mgr_map_cache)
 target_link_libraries(unittest_mgr_map_cache ceph-common
   Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
 
+# unittest_mgr_pymodule
+#
+# Scaffolding for building PyModule against its full link closure is
+# cherry-picked from ceph/ceph PR #71237 (pending its merge) as a temporary
+# measure; reconcile this block with that PR's CMake changes once it lands.
+set(unittest_mgr_pymodule_srcs
+  ${CMAKE_SOURCE_DIR}/src/mgr/ActivePyModule.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/ActivePyModules.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/BaseMgrModule.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/BaseMgrStandbyModule.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/ClusterState.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonHealthMetricCollector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonHealthMetric.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonKey.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonPerfCounters.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonServer.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/DaemonState.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/Gil.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricCollector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MetricCollector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MgrMapCache.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MgrOpRequest.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricCollector.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PerfCounterInstance.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyFormatter.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyModule.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyModuleRegistry.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyModuleRunner.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyOSDMap.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/PyUtil.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/ServiceMap.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/StandbyPyModules.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/ThreadMonitor.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/mgr_commands.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/mgr_perf_counters.cc
+)
+
+add_library(unittest_mgr_pymodule_obj OBJECT ${unittest_mgr_pymodule_srcs})
+target_include_directories(unittest_mgr_pymodule_obj PRIVATE
+  $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>
+  $<TARGET_PROPERTY:Python3::Python,INTERFACE_INCLUDE_DIRECTORIES>)
+target_compile_definitions(unittest_mgr_pymodule_obj PRIVATE UNIT_TESTS_BUILT)
+target_link_libraries(unittest_mgr_pymodule_obj legacy-option-headers)
+if(WITH_LTTNG)
+  add_dependencies(unittest_mgr_pymodule_obj mgr_op_tp)
+endif()
+
+add_executable(unittest_mgr_pymodule
+  test_pymodule.cc
+  $<TARGET_OBJECTS:unittest_mgr_pymodule_obj>
+  $<TARGET_OBJECTS:mgr_cap_obj>
+  ${CMAKE_SOURCE_DIR}/src/mgr/Mgr.cc
+)
+add_ceph_unittest(unittest_mgr_pymodule)
+target_compile_definitions(unittest_mgr_pymodule PRIVATE UNIT_TESTS_BUILT)
+target_include_directories(unittest_mgr_pymodule PRIVATE
+  $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>)
+if(WITH_LTTNG)
+  add_dependencies(unittest_mgr_pymodule mgr_op_tp)
+endif()
+target_link_libraries(unittest_mgr_pymodule
+  ceph-common
+  osdc
+  mon
+  global
+  Boost::python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR}
+  Python3::Python
+  ${CMAKE_DL_LIBS}
+  $<$<BOOL:${WITH_LIBCEPHSQLITE}>:cephsqlite>
+  $<$<BOOL:${WITH_LIBCEPHSQLITE}>:SQLite3::SQLite3>
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
