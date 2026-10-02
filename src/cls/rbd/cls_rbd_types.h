@@ -12,10 +12,12 @@
 #include "include/utime.h"
 #include "msg/msg_types.h"
 #include "include/rados/cls_traits.hpp"
-#include <iosfwd>
 #include <map>
-#include <string>
 #include <set>
+#include <iosfwd>
+#include <string>
+#include <vector>
+#include <utility>
 #include <variant>
 
 #include "cls_rbd_ops.h"
@@ -259,11 +261,11 @@ struct MirrorImageSiteStatusOnDisk : cls::rbd::MirrorImageSiteStatus {
 WRITE_CLASS_ENCODER_FEATURES(MirrorImageSiteStatusOnDisk)
 
 struct MirrorImageStatus {
-  typedef std::list<MirrorImageSiteStatus> MirrorImageSiteStatuses;
+  using MirrorImageSiteStatuses = std::vector<MirrorImageSiteStatus>;
 
   MirrorImageStatus() {}
-  MirrorImageStatus(const MirrorImageSiteStatuses& statuses)
-    : mirror_image_site_statuses(statuses) {
+  MirrorImageStatus(MirrorImageSiteStatuses statuses)
+    : mirror_image_site_statuses(std::move(statuses)) {
   }
 
   MirrorImageSiteStatuses mirror_image_site_statuses;
