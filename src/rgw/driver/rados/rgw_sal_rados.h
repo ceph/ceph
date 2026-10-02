@@ -739,6 +739,9 @@ class RadosBucket : public StoreBucket {
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) override;
     virtual int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) override;
+    virtual int remove_unless_admin_locked(const DoutPrefixProvider* dpp,
+                                           bool delete_children,
+                                           optional_yield y) override;
     virtual int remove_bypass_gc(int concurrent_max, bool
 				 keep_index_consistent,
 				 optional_yield y, const
@@ -828,6 +831,8 @@ class RadosBucket : public StoreBucket {
   private:
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
     int unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, optional_yield y, bool update_entrypoint = true);
+    int do_remove(const DoutPrefixProvider* dpp, bool delete_children,
+                  bool refuse_admin_locked, optional_yield y);
     friend class RadosUser;
 };
 

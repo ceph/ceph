@@ -62,6 +62,7 @@ extern "C" {
 #include "rgw_user.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
+#include "rgw_op.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_datalog.h"
@@ -187,6 +188,8 @@ void usage()
   cout << "  bucket stats                     returns bucket statistics\n";
   cout << "  bucket suspend                   suspend a bucket\n";
   cout << "  bucket unsuspend                 unsuspend a bucket\n";
+  cout << "  bucket admin-lock                admin-lock a bucket\n";
+  cout << "  bucket admin-unlock              remove a bucket's admin lock\n";
   cout << "  bucket rm                        remove bucket\n";
   cout << "  bucket check                     check bucket index by verifying size and object count stats\n";
   cout << "  bucket check olh                 check for olh index entries and objects that are pending removal\n";
@@ -623,6 +626,8 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket stats", OPT::BUCKET_STATS },
   { "bucket suspend", OPT::BUCKET_SUSPEND },
   { "bucket unsuspend", OPT::BUCKET_UNSUSPEND },
+  { "bucket admin-lock", OPT::BUCKET_ADMIN_LOCK },
+  { "bucket admin-unlock", OPT::BUCKET_ADMIN_UNLOCK },
 #ifdef WITH_RADOSGW_RADOS
   { "bucket check", OPT::BUCKET_CHECK },
   { "bucket check olh", OPT::BUCKET_CHECK_OLH },
@@ -1016,6 +1021,39 @@ static int init_bucket(const string& tenant_name,
 {
   rgw_bucket b{tenant_name, bucket_name, bucket_id};
   return init_bucket(b, bucket);
+}
+
+// Rewrites the bucket's entrypoint as it is, which bumps its version. A
+// delete that read the entrypoint before the bucket was locked can then no
+// longer remove it (see RadosBucket::remove_unless_admin_locked()). Fails
+// with -ENOENT if the bucket was removed or its name points elsewhere now.
+static int bump_bucket_entrypoint(const rgw_bucket& b)
+{
+  auto* ctl = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket;
+  int r = -ECANCELED;
+  for (int i = 0; i < 15 && r == -ECANCELED; ++i) {
+    RGWBucketEntryPoint ep;
+    RGWObjVersionTracker ot;
+    std::map<std::string, bufferlist> attrs;
+    r = ctl->read_bucket_entrypoint_info(b, &ep, null_yield, dpp(),
+        RGWBucketCtl::Bucket::GetParams()
+        .set_objv_tracker(&ot)
+        .set_attrs(&attrs));
+    if (r < 0) {
+      return r;
+    }
+    if (ep.bucket.bucket_id != b.bucket_id) {
+      return -ENOENT;
+    }
+    rgw_inject_delay(dpp(), "delay_admin_lock_entrypoint", null_yield);
+    // a failed write drops the cached entrypoint, the next read is fresh
+    r = ctl->store_bucket_entrypoint_info(b, ep, null_yield, dpp(),
+        RGWBucketCtl::Bucket::PutParams()
+        .set_objv_tracker(&ot)
+        .set_attrs(&attrs)
+        .set_mtime(ceph::real_clock::now()));
+  }
+  return r;
 }
 
 static int read_input(const string& infile, bufferlist& bl)
@@ -10627,6 +10665,61 @@ next:
       cerr << "failed to " << (enabled ? "unsuspend" : "suspend")
            << " bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
+    }
+  }
+
+  if ((opt_cmd == OPT::BUCKET_ADMIN_LOCK) ||
+      (opt_cmd == OPT::BUCKET_ADMIN_UNLOCK)) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    if (!driver->is_meta_master()) {
+      // a lock set here isn't enforced by the master and metadata sync would
+      // overwrite it, so --yes-i-really-mean-it doesn't apply
+      cerr << "ERROR: run this on the metadata master zone" << std::endl;
+      return EINVAL;
+    }
+    // the lock is enforced on the instance the bucket name points to
+    ret = init_bucket(tenant, bucket_name, "", &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    if (!bucket_id.empty() && bucket_id != bucket->get_bucket_id()) {
+      cerr << "ERROR: bucket id " << bucket_id << " is not the current instance "
+           << bucket->get_bucket_id() << " of the bucket" << std::endl;
+      return EINVAL;
+    }
+    const bool lock = (opt_cmd == OPT::BUCKET_ADMIN_LOCK);
+    // retry if a request changed the bucket at the same time
+    ret = retry_raced_bucket_write_unchecked(dpp(), bucket.get(), [&bucket, lock] {
+        auto& bucket_info = bucket->get_info();
+        if (lock) {
+          bucket_info.flags |= BUCKET_ADMIN_LOCKED;
+        } else {
+          bucket_info.flags &= ~BUCKET_ADMIN_LOCKED;
+        }
+        return bucket->put_info(dpp(), false, real_time(), null_yield);
+      }, null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: failed writing bucket instance info: "
+           << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    if (lock) {
+      // after the flag, so a delete running now either sees the lock or
+      // fails to remove the entrypoint
+      ret = bump_bucket_entrypoint(bucket->get_key());
+      if (ret == -ENOENT) {
+        cerr << "ERROR: the bucket was removed while it was being locked"
+             << std::endl;
+        return ENOENT;
+      }
+      if (ret < 0) {
+        cerr << "ERROR: failed writing bucket entrypoint: "
+             << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
   }
 

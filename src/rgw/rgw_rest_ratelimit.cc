@@ -255,6 +255,13 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
   }
   RESTArgs::get_bool(s, "global", false, &global, nullptr);
 
+  if (ratelimit_scope == "bucket" && !global) {
+    op_ret = rgw_admin_api_verify_bucket_lock(s, driver, tenant_name, bucket_name, "", y, false);
+    if (op_ret < 0) {
+      return;
+    }
+  }
+
   // forward to master zonegroup
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
                                          nullptr, nullptr, s->info, s->err, y);
@@ -316,6 +323,15 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
                                  &bucket, y);
     if (op_ret) {
       ldpp_dout(this, 0) << "Error on getting bucket info" << dendl;
+      return;
+    }
+    // the lock may have been set since the check above. if the request was
+    // forwarded, the master has checked and applied it, so don't refuse it here
+    const bool sent_to_master = s->penv.site->get_period() &&
+                                !s->penv.site->is_meta_master();
+    if (!sent_to_master && rgw_bucket_admin_locked_for(s, bucket.get())) {
+      ldpp_dout(this, 4) << "bucket " << bucket_name << " is admin-locked" << dendl;
+      op_ret = -EACCES;
       return;
     }
     auto iter = bucket->get_attrs().find(RGW_ATTR_RATELIMIT);

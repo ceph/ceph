@@ -411,7 +411,8 @@ public:
                                   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
 
   static int remove_bucket(rgw::sal::Driver* driver, const rgw::SiteConfig& site, RGWBucketAdminOpState& op_state, optional_yield y,
-			   const DoutPrefixProvider *dpp, bool bypass_gc = false, bool keep_index_consistent = true, bool forwarded_request = false);
+			   const DoutPrefixProvider *dpp, bool bypass_gc = false, bool keep_index_consistent = true, bool forwarded_request = false,
+			   const rgw_owner* forward_as = nullptr);
   static int remove_object(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y);
   static int info(rgw::sal::Driver* driver, const rgw::SiteConfig& site, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp);
   static int limit_check(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
