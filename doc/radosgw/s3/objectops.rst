@@ -34,7 +34,7 @@ Copy Object
 To copy an object, use ``PUT`` and specify a destination bucket and the object name.
 
 Use ``x-amz-storage-class`` to select the destination object's storage class.
-If this header is omitted, RGW uses the destination bucket's default storage
+By default, if this header is omitted, RGW uses the destination bucket's default storage
 class, normally ``STANDARD``. It does not inherit the source object's storage
 class, even when ``x-amz-metadata-directive`` is ``COPY``. To preserve the source
 class, specify it explicitly; it must be configured for the destination bucket's
@@ -44,6 +44,12 @@ For general purpose buckets, `Amazon S3 CopyObject
 <https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html#AmazonS3-CopyObject-request-header-StorageClass>`_
 defaults to ``STANDARD`` when ``x-amz-storage-class`` is omitted. RGW's configurable
 bucket default is a Ceph extension, not source-class inheritance.
+
+Users can enable ``rgw_copy_obj_preserve_source_storage_class`` to preserve
+the source object's storage class for local S3 CopyObject requests, including
+metadata replacement. This option is ``false`` by default leaving the existing
+behavior unchanged. Enabling it is a Ceph extension that deviates from the AWS
+default described above.
 
 Syntax
 ~~~~~~
