@@ -105,7 +105,11 @@ namespace ceph::libfdb::detail {
 
 using byte_view = std::span<const std::uint8_t>;
 
+class commit_attempt;
 struct future_value;
+
+inline void transaction_replay_ready(transaction& txn);
+inline future_value take_watch_future(watch_handle&& watch);
 
 inline void transaction_set_kv_bytes(const transaction_handle& txn,
                                      byte_view key,
@@ -346,6 +350,21 @@ struct future_value final
 
  FDBFuture *raw_handle() const noexcept { return future_ptr.get(); }
 
+ void cancel() noexcept
+ {
+  if (auto *future = raw_handle(); nullptr != future) {
+   // Cancellation may complete a callback inline, so this call remains last:
+   fdb_future_cancel(future);
+  }
+ }
+
+ [[nodiscard]] fdb_error_t set_callback(FDBCallback callback,
+                                        void *context) noexcept
+ {
+  // The callback may destroy this owner inline, so this call remains last:
+  return fdb_future_set_callback(raw_handle(), callback, context);
+ }
+
  FDBFuture *raw_ptr_or_throw() const
  {
   if (auto *future = raw_handle(); nullptr != future) {
@@ -356,9 +375,9 @@ struct future_value final
  }
 
  private:
- void destroy() noexcept { future_ptr.reset(nullptr); }
+ void destroy() noexcept { future_ptr.reset(); }
 
- friend class ceph::libfdb::transaction;
+ friend class commit_attempt;
 };
 
 inline byte_view as_byte_view(concepts::libfdb_key_view auto key)
@@ -374,7 +393,6 @@ class watch_handle final
  private:
  detail::future_value watch_future;
 
- private:
  explicit watch_handle(detail::future_value future)
   : watch_future(std::move(future))
  {}
@@ -387,7 +405,6 @@ class watch_handle final
  watch_handle(watch_handle&&) noexcept = default;
  watch_handle& operator=(watch_handle&&) noexcept = default;
 
- public:
  [[nodiscard]] bool ready() const noexcept
  {
   auto *future = watch_future.raw_handle();
@@ -396,9 +413,7 @@ class watch_handle final
 
  void cancel() noexcept
  {
-  if (auto *future = watch_future.raw_handle(); nullptr != future) {
-   fdb_future_cancel(future);
-  }
+  watch_future.cancel();
  }
 
  // Block until the watch reports an event:
@@ -421,12 +436,6 @@ class watch_handle final
 
  [[nodiscard]] watch_event wait_for_event(std::stop_token stop_token)
  {
-  if (stop_token.stop_requested()) {
-   cancel();
-
-   return wait_for_event();
-  }
-
   std::stop_callback cancel_watch_on_stop(stop_token, [this] {
    cancel();
   });
@@ -450,11 +459,17 @@ class watch_handle final
  }
 
  private:
+ friend detail::future_value detail::take_watch_future(watch_handle&& watch);
  friend watch_handle make_watch(transaction_handle txn, std::string_view key);
  friend class transaction;
 };
 
 namespace detail {
+
+inline future_value take_watch_future(watch_handle&& watch)
+{
+ return std::move(watch.watch_future);
+}
 
 inline byte_view as_byte_view(const concepts::libfdb_key auto& key)
 requires (!concepts::libfdb_key_view<decltype(key)>)
@@ -504,6 +519,7 @@ struct versionstamp final
 
  private:
  friend class transaction;
+ friend class detail::commit_attempt;
  friend void ceph::libfdb::from::convert(const std::span<const std::uint8_t>&,
                                          ceph::libfdb::versionstamp&);
 };
@@ -725,6 +741,19 @@ constexpr std::size_t checked_result_size(const int size)
  return static_cast<std::size_t>(size);
 }
 
+// FoundationDB returns arrays as a pointer and signed element count:
+template <typename T>
+constexpr std::span<const T> result_span(const T *data, const int count)
+{
+ const auto size = checked_result_size(count);
+
+ if (0 != size and nullptr == data) {
+  throw libfdb_exception("FoundationDB returned a NULL result buffer");
+ }
+
+ return {data, size};
+}
+
 // FoundationDB's C interface represents every byte range as a pointer and a
 // checked int length:
 struct fdb_bytes final
@@ -748,13 +777,7 @@ inline fdb_bytes as_fdb_bytes(const concepts::libfdb_key auto& key)
 
 constexpr byte_view result_bytes(const std::uint8_t *data, const int length)
 {
- const auto size = checked_result_size(length);
-
- if (0 != size && nullptr == data) {
-  throw libfdb_exception("FoundationDB returned a NULL result buffer");
- }
-
- return byte_view(data, size);
+ return result_span(data, length);
 }
 
 inline std::string_view as_string_view(const byte_view bytes) noexcept
@@ -1183,19 +1206,13 @@ class transaction final
    throw libfdb_exception(ec);
   }
 
-  // Discard versionstamps registered by the abandoned attempt:
-  version_stamps.clear();
-  restore_options();
+  detail::transaction_replay_ready(*this);
  }
 
  bool get_single_value_from_transaction(
   detail::byte_view key,
   concepts::value_callback auto&& write_output_fn,
   read_mode mode);
- void recover_from_commit_error(detail::future_value& commit_future,
-                                fdb_error_t error,
-                                fdb_error_t *replay_error);
- void resolve_versionstamps(std::optional<detail::future_value>& versionstamp_future);
 
  public:
  transaction(database_handle database)
@@ -1480,8 +1497,10 @@ class transaction final
  friend inline std::int64_t read_version(const transaction_handle& txn);
  friend inline std::int64_t approximate_commit_bytes(const transaction_handle& txn);
  friend inline bool ceph::libfdb::detail::reset_for_replay_if_needed(transaction_handle&, fdb_error_t);
+ friend inline void ceph::libfdb::detail::transaction_replay_ready(transaction&);
  friend inline void set_read_version(const transaction_handle& txn, std::int64_t version);
  friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
+ friend class ceph::libfdb::detail::commit_attempt;
  friend inline void ceph::libfdb::detail::transaction_set_kv_bytes(const transaction_handle&,
                                                                    detail::byte_view,
                                                                    detail::byte_view);
@@ -1509,6 +1528,173 @@ class transaction final
 };
 
 namespace detail {
+
+enum struct commit_progress {
+ pending,
+ committed,
+ replay_ready
+};
+
+// Owns every FDB future involved in one commit attempt. Synchronous and
+// sender-based commits differ only in how they wait for pending_future():
+class commit_attempt final
+{
+ enum struct phase {
+  commit,
+  on_error,
+  versionstamp,
+  complete
+ };
+
+ transaction& txn;
+ std::optional<future_value> versionstamp_future;
+ future_value commit_future;
+ std::optional<future_value> on_error_future;
+ phase current_phase = phase::commit;
+ fdb_error_t original_error = 0;
+
+ static std::optional<future_value> make_versionstamp_future(transaction& txn)
+ {
+  if (std::empty(txn.version_stamps)) {
+   return std::nullopt;
+  }
+
+  return std::optional<future_value> {
+   std::in_place, fdb_transaction_get_versionstamp(txn.raw_handle())
+  };
+ }
+
+ void invalidate_transaction()
+ {
+  // FDB requires its futures to be destroyed before their transaction:
+  commit_future.destroy();
+  on_error_future.reset();
+  versionstamp_future.reset();
+  txn.destroy();
+ }
+
+ void publish_versionstamp()
+ {
+  const std::uint8_t *data = nullptr;
+  int size = 0;
+
+  if (const auto ec = fdb_future_get_key(
+        versionstamp_future->raw_handle(), &data, &size); 0 != ec) {
+   throw libfdb_exception(ec);
+  }
+
+  constexpr auto expected_size =
+   std::tuple_size_v<versionstamp::versionstamp_data_t>;
+
+  if (expected_size != static_cast<std::size_t>(size) or nullptr == data) {
+   throw libfdb_exception("invalid version stamp result");
+  }
+
+  const auto result = std::span(data, expected_size);
+
+  for (auto& stamp : txn.version_stamps) {
+   stamp.store_result(result);
+  }
+ }
+
+ public:
+ explicit commit_attempt(transaction& transaction)
+  : txn(transaction),
+    versionstamp_future(make_versionstamp_future(txn)),
+    commit_future(fdb_transaction_commit(txn.raw_handle()))
+ {}
+
+ commit_attempt(const commit_attempt&) = delete;
+ commit_attempt(commit_attempt&&) = delete;
+
+ commit_attempt& operator=(const commit_attempt&) = delete;
+ commit_attempt& operator=(commit_attempt&&) = delete;
+
+ [[nodiscard]] FDBFuture *pending_future() const
+ {
+  switch (current_phase) {
+   case phase::commit:
+    return commit_future.raw_ptr_or_throw();
+   case phase::on_error:
+    return on_error_future->raw_ptr_or_throw();
+   case phase::versionstamp:
+    return versionstamp_future->raw_ptr_or_throw();
+   case phase::complete:
+    std::unreachable();
+  }
+
+  std::unreachable();
+ }
+
+ [[nodiscard]] fdb_error_t replay_error() const noexcept
+ {
+  return original_error;
+ }
+
+ [[nodiscard]] fdb_error_t error_after_failed_wait(
+   const fdb_error_t error) const noexcept
+ {
+  if (phase::on_error == current_phase) {
+   return original_error;
+  }
+
+  return error;
+ }
+
+ [[nodiscard]] commit_progress advance()
+ {
+  const auto ec = fdb_future_get_error(pending_future());
+
+  switch (current_phase) {
+   case phase::commit:
+    if (0 != ec) {
+     original_error = ec;
+     on_error_future.emplace(
+       fdb_transaction_on_error(txn.raw_handle(), original_error));
+     current_phase = phase::on_error;
+     return commit_progress::pending;
+    }
+
+    txn.state = transaction::state_t::committed;
+
+    if (versionstamp_future) {
+     current_phase = phase::versionstamp;
+     return commit_progress::pending;
+    }
+
+    current_phase = phase::complete;
+    return commit_progress::committed;
+
+   case phase::on_error:
+    if (0 != ec) {
+     invalidate_transaction();
+     throw libfdb_exception(original_error);
+   }
+
+   transaction_replay_ready(txn);
+   current_phase = phase::complete;
+   return commit_progress::replay_ready;
+
+   case phase::versionstamp:
+    publish_versionstamp();
+    txn.version_stamps.clear();
+    current_phase = phase::complete;
+    return commit_progress::committed;
+
+   case phase::complete:
+    std::unreachable();
+  }
+
+  std::unreachable();
+ }
+};
+
+// Discard client-side state which belonged only to the failed attempt:
+inline void transaction_replay_ready(transaction& txn)
+{
+ txn.version_stamps.clear();
+ txn.restore_options();
+}
 
 // Since lambdas cannot be friend-functions, we use a named helper:
 inline void transaction_set_kv_bytes(const transaction_handle& txn,
@@ -1615,65 +1801,6 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(
  return true;
 }
 
-inline void ceph::libfdb::transaction::recover_from_commit_error(
-  detail::future_value& commit_result_future,
-  const fdb_error_t error,
-  fdb_error_t *replay_error)
-{
- auto on_error_future = detail::wait_for_on_error(raw_handle(), error);
-
- if (0 != detail::get_future_error(on_error_future)) {
-  // These cleanup operations are one ordered action:
-  commit_result_future.destroy(), on_error_future.destroy(), destroy();
-
-  throw libfdb_exception(error);
- }
-
- if (nullptr != replay_error) {
-  *replay_error = error;
- }
-
- version_stamps.clear();
- restore_options();
-}
-
-inline void ceph::libfdb::transaction::resolve_versionstamps(
-  std::optional<detail::future_value>& versionstamp_future)
-{
- if (not versionstamp_future) {
-  return;
- }
-
- auto ready = detail::block_until_ready(std::move(*versionstamp_future));
-
- const std::uint8_t *data = nullptr;
- int size = 0;
-
- if (const auto ec = fdb_future_get_key(ready.raw_handle(), &data, &size);
-     0 != ec) {
-  throw libfdb_exception(ec);
- }
-
- constexpr auto expected_size =
-  std::tuple_size_v<versionstamp::versionstamp_data_t>;
-
- if (nullptr == data) {
-  throw libfdb_exception("invalid version stamp result");
- }
-
- const auto result = detail::result_bytes(data, size);
-
- if (expected_size != std::size(result)) {
-  throw libfdb_exception("invalid version stamp result");
- }
-
- for (auto& stamp : version_stamps) {
-  stamp.store_result(result);
- }
-
- version_stamps.clear();
-}
-
 [[nodiscard]] inline bool ceph::libfdb::transaction::commit()
 {
  return commit(nullptr);
@@ -1686,31 +1813,29 @@ inline void ceph::libfdb::transaction::resolve_versionstamps(
  }
 
  require_active("commit()");
+ detail::commit_attempt attempt {*this};
 
- std::optional<detail::future_value> versionstamp_future;
+ for (;;) {
+  if (const auto ec = fdb_future_block_until_ready(attempt.pending_future());
+      0 != ec) {
+   throw libfdb_exception(attempt.error_after_failed_wait(ec));
+  }
 
- if (not version_stamps.empty()) {
-  versionstamp_future.emplace(fdb_transaction_get_versionstamp(raw_handle()));
+  switch (attempt.advance()) {
+   case detail::commit_progress::pending:
+    continue;
+   case detail::commit_progress::committed:
+    return true;
+   case detail::commit_progress::replay_ready:
+    if (nullptr != replay_error) {
+     *replay_error = attempt.replay_error();
+    }
+
+    return false;
+  }
+
+  std::unreachable();
  }
-
- detail::future_value commit_result_future(
-  fdb_transaction_commit(raw_handle()));
- auto *commit_future = commit_result_future.raw_ptr_or_throw();
-
- if (const auto ec = fdb_future_block_until_ready(commit_future); 0 != ec) {
-  throw libfdb_exception(ec);
- }
-
- if (const auto ec = fdb_future_get_error(commit_future); 0 != ec) {
-  recover_from_commit_error(commit_result_future, ec, replay_error);
-
-  return false;
- }
-
- state = state_t::committed;
- resolve_versionstamps(versionstamp_future);
-
- return true;
 }
 
 } // namespace ceph::libfdb
@@ -1737,15 +1862,6 @@ inline future_value block_until_ready(future_value&& fv)
  return fv;
 }
 
-inline future_value wait_until_ready(future_value&& fv)
-{
- if (fdb_error_t r = fdb_future_block_until_ready(fv.raw_ptr_or_throw()); 0 != r) {
-  throw libfdb_exception(r);
- }
-
- return fv;
-}
-
 inline fdb_error_t get_future_error(const future_value& fv)
 {
  return fdb_future_get_error(fv.raw_ptr_or_throw());
@@ -1761,14 +1877,6 @@ inline future_value wait_for_on_error(FDBTransaction *txn,
  }
 
  return on_error_future;
-}
-
-template <typename FnT, typename... XS>
-requires std::invocable<FnT, XS...>
-inline future_value await_future_of(FnT&& fn, XS&& ...params)
-{
- return block_until_ready(
-          std::invoke(std::forward<FnT>(fn), std::forward<XS>(params)...));
 }
 
 } // namespace ceph::libfdb::detail
