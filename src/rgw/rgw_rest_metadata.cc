@@ -146,7 +146,7 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
 
   uint64_t left;
   do {
-    list<string> keys;
+    vector<string> keys;
     left = (max_entries_specified ? max_entries - count : max);
     op_ret = driver->meta_list_keys_next(this, handle, left, keys, &truncated);
     if (op_ret < 0) {
@@ -155,9 +155,8 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
       return;
     }
 
-    for (list<string>::iterator iter = keys.begin(); iter != keys.end();
-	 ++iter) {
-      s->formatter->dump_string("key", *iter);
+    for (const auto& key : keys) {
+      s->formatter->dump_string("key", key);
       ++count;
     }
 
@@ -332,4 +331,3 @@ RGWOp *RGWHandler_Metadata::op_put() {
 RGWOp *RGWHandler_Metadata::op_delete() {
   return new RGWOp_Metadata_Delete;
 }
-

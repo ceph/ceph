@@ -102,7 +102,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
                                 const rgw_bucket_entry_ver& ver,
                                 const cls_rgw_obj_key& key,
                                 const rgw_bucket_dir_entry_meta& dir_meta,
-				const std::deque<cls_rgw_obj_key>& remove_objs, bool log_op,
+				const std::vector<cls_rgw_obj_key>& remove_objs, bool log_op,
                                 uint16_t bilog_flags,
                                 const rgw_zone_set *zones_trace,
 				const std::string& obj_locator)
@@ -129,7 +129,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
 void CLSRGWCompleteModifyOpBase::complete_op(librados::ObjectWriteOperation& o,
                                              const rgw_bucket_entry_ver& ver,
                                              const rgw_bucket_dir_entry_meta& dir_meta,
-                                             const std::deque<cls_rgw_obj_key>& remove_objs,
+                                             const std::vector<cls_rgw_obj_key>& remove_objs,
                                              const std::string& locator) const {
   cls_rgw_bucket_complete_op(o, op, op_tag, ver, key, dir_meta,
                              remove_objs, log_op, bilog_flags,

@@ -141,8 +141,6 @@ public:
   int lock_exclusive(const DoutPrefixProvider *dpp, int shard_id, timespan duration, std::string&zone_id, std::string& owner_id);
   int unlock(const DoutPrefixProvider *dpp, int shard_id, std::string& zone_id, std::string& owner_id);
 
-  int update_shards(std::list<int>& shards);
-
   void read_clear_modified(std::set<int> &modified);
 };
 
