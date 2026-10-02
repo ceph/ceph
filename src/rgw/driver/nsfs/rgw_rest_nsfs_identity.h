@@ -286,6 +286,11 @@ public:
     if (op_ret < 0) {
       return;
     }
+    /* Personalities already registered from the previous record are
+     * now stale;  without this they keep being served until the FIFO
+     * cursor evicts them, which on a table above the working set may
+     * be never. */
+    rgw::sal::nsfs::note_identity_changed(rgw_user{id.key});
 
     Formatter* f = flusher.get_formatter();
     flusher.start(0);
@@ -331,6 +336,9 @@ public:
     }
 
     op_ret = nsfs_driver->get_identity_db()->remove_identity(s, key);
+    if (op_ret == 0) {
+      rgw::sal::nsfs::note_identity_changed(rgw_user{key});
+    }
   }
 
   const char* name() const override { return "nsfs_identity_delete"; }

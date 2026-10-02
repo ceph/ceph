@@ -27,6 +27,9 @@
 #include <vector>
 
 #include "common/ceph_context.h"
+#include <array>
+#include <atomic>
+
 #include "common/errno.h"
 #include "global/global_context.h"
 
@@ -225,13 +228,46 @@ thread_local RingRegistrar tl_registrar;
 
 } // namespace
 
+/* The generation shards.
+ *
+ * 256 counters, indexed by the same XXH3 hash the personality table
+ * uses for its map, so two identities collide here only if they
+ * collide in the low byte of that hash.  Relaxed ordering is enough:
+ * a reader that sees the old value serves one more request under the
+ * old credentials and sees the new value on the next lookup, which
+ * is the same window an operator already has between issuing the
+ * Admin Ops call and the next request arriving. */
+static constexpr size_t GENERATION_SHARDS = 256;
+static std::array<std::atomic<uint64_t>, GENERATION_SHARDS> generations{};
+
+static size_t generation_shard(const rgw_user& key)
+{
+  return ankerl::unordered_dense::hash<rgw_user>{}(key) %
+      GENERATION_SHARDS;
+}
+
+void note_identity_changed(const rgw_user& key)
+{
+  generations[generation_shard(key)].fetch_add(1, std::memory_order_relaxed);
+}
+
+namespace {
+struct ShardedGenerations : GenerationSource {
+  uint64_t generation(const rgw_user& key) const override {
+    return generations[generation_shard(key)].load(
+	std::memory_order_relaxed);
+  }
+};
+ShardedGenerations tl_generations;
+} // namespace
+
 PersonalityTable& thread_personality_table()
 {
   /* Sized from configuration on first use, which is the first time
    * this thread serves an impersonated request. */
   thread_local PersonalityTable table{
       g_conf().get_val<uint64_t>("rgw_nsfs_personality_table_size"),
-      &tl_registrar};
+      &tl_registrar, &tl_generations};
   return table;
 }
 
@@ -369,6 +405,12 @@ int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
     return fn();
   }
   return run_as(dpp, id.cred, fn);
+}
+
+int find_personality(const rgw_user& key, PersonalityRef* out,
+		     const DoutPrefixProvider* dpp)
+{
+  return thread_personality_table().find(key, out, dpp);
 }
 
 int acquire_personality(const DoutPrefixProvider* dpp, const rgw_user& key,

@@ -13,6 +13,8 @@
  *
  */
 
+#include <sys/resource.h>
+
 #include "rgw_sal_nsfs.h"
 #include "rgw_rest_user.h"
 #include "driver/posix/sync_policy.h"
@@ -2051,6 +2053,12 @@ int File::open(const DoutPrefixProvider* dpp)
       ret = -errno;
     }
   }
+  /* POSIX decides access here and nowhere later, so this line is
+   * what explains a permission outcome:  a personality of 0 under
+   * impersonation means the open ran as the gateway. */
+  ldpp_dout(dpp, 20) << "nsfs: open " << get_name()
+    << (ro ? " O_RDONLY" : " O_RDWR")
+    << " personality " << personality << " -> " << ret << dendl;
   if (ret < 0) {
     ret = -ret;
     ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name()
@@ -3608,7 +3616,22 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 	" rgw_nsfs_impersonate." << dendl;
       return -EPERM;
     } else {
-      ldpp_dout(dpp, 1) << "nsfs: impersonation enabled" << dendl;
+      /* Every thread that serves an impersonated request creates an
+       * io_uring ring, because the open carries the personality on a
+       * submission entry.  Ring memory is charged against
+       * RLIMIT_MEMLOCK, so the budget is one limit against the
+       * frontend's whole thread count -- and a thread that cannot
+       * create a ring cannot register a personality, so its requests
+       * fail rather than being served as the gateway.  Report the
+       * limit here so the arithmetic is visible before it bites. */
+      struct rlimit rl{};
+      if (::getrlimit(RLIMIT_MEMLOCK, &rl) == 0) {
+	ldpp_dout(dpp, 1) << "nsfs: impersonation enabled;  RLIMIT_MEMLOCK is "
+	  << rl.rlim_cur << " bytes, and each serving thread creates an"
+	  " io_uring ring charged against it" << dendl;
+      } else {
+	ldpp_dout(dpp, 1) << "nsfs: impersonation enabled" << dendl;
+      }
     }
   }
 
@@ -9535,6 +9558,14 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
     if ((pret < 0) && (pret != -ENODATA) && (pret != -EACCES)) {
       return pret;
     }
+    /* The identity this read will run as, and whether one was
+     * obtained.  An empty user is the authorisation pass or an
+     * unauthenticated caller;  pinned=0 with a non-empty user means
+     * the request will be refused at iterate(). */
+    ldpp_dout(dpp, 20) << "nsfs: read " << source->get_name()
+      << " as '" << auth_user << "' pinned=" << personality.valid()
+      << " personality=" << (personality.valid() ? personality.id() : 0)
+      << dendl;
     /* Before stat(), which is what creates the entry and opens it.
      * A read op never writes the object. */
     source->set_access(personality.valid() ? personality.id() : 0,
@@ -9833,6 +9864,20 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
     return -EACCES;
   }
 
+  /* Level 1 first.  A personality already registered on this ring
+   * answers the whole question -- the slot carries the credentials
+   * it was registered with -- so a hit costs a hash lookup and a
+   * pin, and skips the identity-row read below.  That read is
+   * otherwise paid on every impersonated request, because nothing
+   * caches it. */
+  if (nsfs::find_personality(who, out, dpp) == 0) {
+    if (ident) {
+      ident->personality = out->id();
+      ident->cred = out->credentials();
+    }
+    return 0;
+  }
+
   nsfs::Credentials cred;
   const int ret = nsfs::resolve_credentials(
       dpp, *driver->get_identity_db(), rgw_owner{who}, cred);
@@ -9850,6 +9895,9 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  ldpp_dout(dpp, 20) << "nsfs: resolved " << who << " to uid " << cred.uid
+    << " gid " << cred.gid << " and " << cred.groups.size()
+    << " supplementary groups" << dendl;
   const int ret2 = nsfs::acquire_personality(dpp, who, cred, out);
   if ((ret2 == 0) && ident) {
     /* both halves:  the id for submission entries, the credentials

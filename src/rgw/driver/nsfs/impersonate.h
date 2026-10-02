@@ -69,6 +69,35 @@ PersonalityTable& thread_personality_table();
 int acquire_personality(const DoutPrefixProvider* dpp, const rgw_user& key,
 			const Credentials& cred, PersonalityRef* out);
 
+/* Say that an identity's record has changed.
+ *
+ * Called by whatever writes the identity table -- the Admin Ops PUT
+ * and DELETE -- so that personalities already registered from the
+ * old record stop being served.  Cheap enough to call
+ * unconditionally;  it is one relaxed atomic increment.
+ *
+ * NOT global.  The counters are a small sharded array indexed by a
+ * hash of the key, so a change to one identity leaves most others
+ * alone.  A collision costs one re-registration of an unrelated
+ * identity, which is the same thing a single global counter would
+ * cost everybody, so sharding is strictly the weaker hammer at the
+ * same price:  the read on the request path is one relaxed load
+ * either way. */
+void note_identity_changed(const rgw_user& key);
+
+/* The level-1 lookup on its own:  a pinned personality if this ring
+ * already has one for `key`, without resolving credentials.
+ *
+ * Exposed separately because resolving them is a database read on
+ * every request, and a hit needs none -- the slot carries the
+ * credentials it was registered with.
+ *
+ *   0        `out` is pinned;  out.credentials() is usable
+ *   -ENOENT  this ring has not seen `key`
+ */
+int find_personality(const rgw_user& key, PersonalityRef* out,
+		     const DoutPrefixProvider* dpp = nullptr);
+
 /* Run one filesystem call as `cred`, on a thread that does nothing
  * else.
  *

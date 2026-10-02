@@ -1427,6 +1427,21 @@ static nsfs::Credentials creds_for(uid_t uid)
   return c;
 }
 
+/* A generation source a test drives by hand.
+ *
+ * The production one is a sharded atomic array bumped by the Admin
+ * Ops identity writes;  what the table needs from it is only that a
+ * changed identity returns something new. */
+class ManualGenerations : public nsfs::GenerationSource {
+public:
+  std::map<std::string, uint64_t> gens;
+  uint64_t generation(const rgw_user& key) const override {
+    auto it = gens.find(key.id);
+    return it == gens.end() ? 0 : it->second;
+  }
+  void bump(const rgw_user& key) { ++gens[key.id]; }
+};
+
 class NSFSPersonalityTest : public ::testing::Test {
 protected:
   CountingRegistrar reg;
@@ -1458,6 +1473,150 @@ TEST_F(NSFSPersonalityTest, MissRegistersAndHitDoesNot)
   EXPECT_EQ(t.get_stats().hits, 1u);
   EXPECT_EQ(t.get_stats().misses, 1u);
   EXPECT_EQ(t.get_stats().registrations, 1u);
+}
+
+/* A hit carries the credentials, so the caller need not resolve them.
+ *
+ * The whole point of splitting find() from insert():  resolving an
+ * identity is a database read on the S3 path, and a personality
+ * already registered on this ring has had that read done once
+ * already.  The thread-pool fallback assumes the identity itself, so
+ * the id alone would not be enough -- a caller skipping resolution
+ * would hand it a default-constructed Credentials and it would try
+ * to become uid 0.
+ *
+ * The negative case is reachable:  before the slot kept them,
+ * credentials() had nothing to return and this test could not have
+ * been written. */
+TEST_F(NSFSPersonalityTest, AHitCarriesTheCredentials)
+{
+  nsfs::PersonalityTable t{4, &reg};
+  const rgw_user alice{"", "alice"};
+
+  nsfs::PersonalityRef ref;
+  ASSERT_EQ(t.insert(env->dpp, alice, creds_for(1001), &ref), 0);
+  EXPECT_EQ(ref.credentials().uid, 1001u);
+  EXPECT_EQ(ref.credentials().gid, 1001u);
+  ASSERT_EQ(ref.credentials().groups.size(), 1u);
+  EXPECT_EQ(ref.credentials().groups[0], 2001u);
+  ref.reset();
+
+  /* the hit, which is the case that matters:  no registrar call, and
+   * the credentials still available */
+  nsfs::PersonalityRef hit;
+  ASSERT_EQ(t.find(alice, &hit), 0) << "a registered identity missed";
+  EXPECT_EQ(reg.registered.size(), 1u) << "a hit registered again";
+  EXPECT_EQ(hit.credentials().uid, 1001u)
+      << "a hit did not carry the credentials it was registered with";
+  EXPECT_EQ(hit.credentials().gid, 1001u);
+  ASSERT_EQ(hit.credentials().groups.size(), 1u)
+      << "the supplementary group vector was not kept";
+  EXPECT_EQ(hit.credentials().groups[0], 2001u);
+}
+
+/* A reused slot carries the new identity's credentials, not the old.
+ *
+ * The failure this guards is silent and serious:  a slot recycled by
+ * the FIFO cursor that kept its previous credentials would serve one
+ * identity's requests as another. */
+TEST_F(NSFSPersonalityTest, AReusedSlotDoesNotKeepStaleCredentials)
+{
+  nsfs::PersonalityTable t{1, &reg};
+  const rgw_user alice{"", "alice"};
+  const rgw_user bob{"", "bob"};
+
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.insert(env->dpp, alice, creds_for(1001), &r), 0);
+    ASSERT_EQ(r.credentials().uid, 1001u);
+  }
+
+  /* one slot, so bob evicts alice and takes it */
+  nsfs::PersonalityRef r;
+  ASSERT_EQ(t.insert(env->dpp, bob, creds_for(2002), &r), 0);
+  EXPECT_EQ(t.get_stats().evictions, 1u) << "alice was not evicted";
+  EXPECT_EQ(r.credentials().uid, 2002u)
+      << "the reused slot served bob with alice's credentials";
+  ASSERT_EQ(r.credentials().groups.size(), 1u);
+  EXPECT_EQ(r.credentials().groups[0], 3002u);
+
+  EXPECT_EQ(t.find(alice, &r), -ENOENT) << "alice survived her eviction";
+}
+
+/* A changed identity record stops the old personality being served.
+ *
+ * The bug this closes:  nothing about a registered slot notices that
+ * the row it was minted from has been rewritten, so an Admin Ops
+ * change to a uid, gid or group vector was ignored until the FIFO
+ * cursor happened to evict the slot -- never, on a table larger than
+ * the working set.  Measured in the live suite as a group revocation
+ * that did not take effect.
+ *
+ * Both polarities, and in this order:  the hit must happen without a
+ * bump, so that its absence after one is attributable to the bump. */
+TEST_F(NSFSPersonalityTest, AChangedIdentityInvalidatesItsPersonality)
+{
+  ManualGenerations gens;
+  nsfs::PersonalityTable t{4, &reg, &gens};
+  const rgw_user alice{"", "alice"};
+
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.insert(env->dpp, alice, creds_for(1001), &r), 0);
+  }
+
+  /* the control:  unchanged, so a hit */
+  {
+    nsfs::PersonalityRef r;
+    ASSERT_EQ(t.find(alice, &r), 0) << "an unchanged identity missed";
+    EXPECT_EQ(r.credentials().uid, 1001u);
+  }
+  ASSERT_EQ(t.get_stats().stale, 0u);
+
+  gens.bump(alice);
+
+  nsfs::PersonalityRef r;
+  EXPECT_EQ(t.find(alice, &r), -ENOENT)
+      << "a rewritten identity was still served from its old slot";
+  EXPECT_EQ(t.get_stats().stale, 1u);
+  EXPECT_EQ(reg.released.size(), 1u)
+      << "the stale personality was not given back to the ring";
+
+  /* and the next insert registers the new credentials */
+  ASSERT_EQ(t.insert(env->dpp, alice, creds_for(2002), &r), 0);
+  EXPECT_EQ(r.credentials().uid, 2002u);
+  EXPECT_EQ(reg.registered.size(), 2u);
+}
+
+/* A stale slot a live operation still holds is not pulled out from
+ * under it.
+ *
+ * Dropping a pinned slot would unregister a personality an in-flight
+ * submission still names.  The old credentials are served for the
+ * life of that operation and the slot goes on the next lookup. */
+TEST_F(NSFSPersonalityTest, AStaleSlotInUseIsNotPulled)
+{
+  ManualGenerations gens;
+  nsfs::PersonalityTable t{4, &reg, &gens};
+  const rgw_user alice{"", "alice"};
+
+  nsfs::PersonalityRef held;
+  ASSERT_EQ(t.insert(env->dpp, alice, creds_for(1001), &held), 0);
+  gens.bump(alice);
+
+  nsfs::PersonalityRef r;
+  EXPECT_EQ(t.find(alice, &r), 0)
+      << "a pinned stale slot was dropped under a live operation";
+  EXPECT_TRUE(reg.released.empty())
+      << "a personality still in use was unregistered";
+  r.reset();
+  held.reset();
+
+  /* released, so now it goes */
+  nsfs::PersonalityRef after;
+  EXPECT_EQ(t.find(alice, &after), -ENOENT)
+      << "the stale slot survived its last pin";
+  EXPECT_EQ(reg.released.size(), 1u);
 }
 
 /* Eviction is by age, and the evicted personality is given back. */

@@ -33,8 +33,15 @@ void PersonalityRef::reset()
   }
 }
 
-PersonalityTable::PersonalityTable(size_t capacity, Registrar* reg)
-  : registrar(reg)
+const Credentials& PersonalityRef::credentials() const
+{
+  ceph_assert(table != nullptr);
+  return table->slots[slot].cred;
+}
+
+PersonalityTable::PersonalityTable(size_t capacity, Registrar* reg,
+				   const GenerationSource* gen)
+  : registrar(reg), gen_source(gen)
 {
   if (capacity > MAX_PERSONALITIES) {
     capacity = MAX_PERSONALITIES;
@@ -65,16 +72,67 @@ void PersonalityTable::unpin(uint32_t slot)
   --slots[slot].pins;
 }
 
-int PersonalityTable::find(const rgw_user& key, PersonalityRef* out)
+bool PersonalityTable::invalidate(uint32_t slot)
+{
+  if (slots[slot].pins > 0) {
+    /* A live operation is still submitting under it.  Leave it;  the
+     * next caller after that operation finishes will find it stale
+     * again and drop it then.  Registering a second personality for
+     * the same identity would be the alternative, and it would make
+     * the table's size a function of how often an identity is
+     * rewritten. */
+    return false;
+  }
+  if (registrar) {
+    registrar->unregister_personality(nullptr, slots[slot].id);
+  }
+  by_key.erase(slots[slot].key);
+  slots[slot].occupied = false;
+  slots[slot].cred = Credentials{};
+  return true;
+}
+
+int PersonalityTable::find(const rgw_user& key, PersonalityRef* out,
+			   const DoutPrefixProvider* dpp)
 {
   auto it = by_key.find(key);
   if (it == by_key.end()) {
     ++stats.misses;
+    if (dpp) {
+      ldpp_dout(dpp, 20) << "nsfs: personality miss for " << key << dendl;
+    }
     return -ENOENT;
   }
   const uint32_t slot = it->second;
+
+  /* Stale?  The record this was minted from has been rewritten, so
+   * the credentials in the slot are no longer what this identity
+   * is. */
+  if (gen_source && (slots[slot].gen != gen_source->generation(key))) {
+    ++stats.stale;
+    const bool dropped = invalidate(slot);
+    if (dpp) {
+      ldpp_dout(dpp, 20) << "nsfs: personality for " << key
+	<< " is stale (slot gen " << slots[slot].gen << ", now "
+	<< gen_source->generation(key) << ");  "
+	<< (dropped ? "dropped" : "PINNED, serving the old one")
+	<< dendl;
+    }
+    if (dropped) {
+      ++stats.misses;
+      return -ENOENT;
+    }
+    /* pinned, so it could not be dropped -- fall through and serve
+     * the old one rather than failing a request mid-flight */
+  }
+
   ++slots[slot].pins;
   ++stats.hits;
+  if (dpp) {
+    ldpp_dout(dpp, 20) << "nsfs: personality hit for " << key << " id "
+      << slots[slot].id << " uid " << slots[slot].cred.uid << " with "
+      << slots[slot].cred.groups.size() << " groups" << dendl;
+  }
   *out = PersonalityRef(this, slot, slots[slot].id);
   return 0;
 }
@@ -118,10 +176,16 @@ int PersonalityTable::insert(const DoutPrefixProvider* dpp,
    * registering a second time. */
   if (auto it = by_key.find(key); it != by_key.end()) {
     const uint32_t slot = it->second;
-    ++slots[slot].pins;
-    ++stats.hits;
-    *out = PersonalityRef(this, slot, slots[slot].id);
-    return 0;
+    const bool stale = gen_source &&
+	(slots[slot].gen != gen_source->generation(key));
+    if (! stale || ! invalidate(slot)) {
+      ++slots[slot].pins;
+      ++stats.hits;
+      *out = PersonalityRef(this, slot, slots[slot].id);
+      return 0;
+    }
+    ++stats.stale;
+    /* dropped;  fall through and register the new credentials */
   }
 
   const uint32_t slot = claim_slot(dpp);
@@ -154,6 +218,8 @@ int PersonalityTable::insert(const DoutPrefixProvider* dpp,
   }
 
   slots[slot].key = key;
+  slots[slot].cred = cred;
+  slots[slot].gen = gen_source ? gen_source->generation(key) : 0;
   slots[slot].id = static_cast<uint16_t>(id);
   slots[slot].occupied = true;
   slots[slot].pins = 1;

@@ -54,6 +54,25 @@ namespace rgw { namespace sal { namespace nsfs {
 
 class PersonalityTable;
 
+/* Where a table learns that an identity's record has changed.
+ *
+ * A registered personality is a snapshot of credentials taken when
+ * it was minted, and nothing about the slot notices that the row it
+ * came from has since been rewritten.  Without this, an Admin Ops
+ * change to a uid, gid or group vector is ignored until the FIFO
+ * cursor happens to evict the slot -- which, on a table larger than
+ * the working set, may be never.
+ *
+ * Injected rather than read from a global so the table stays
+ * testable with no process state.  A null source means no
+ * invalidation, which is what a test that does not care gets. */
+struct GenerationSource {
+  virtual ~GenerationSource() = default;
+  /* Any change to this identity must make this return something it
+   * has not returned before. */
+  virtual uint64_t generation(const rgw_user& key) const = 0;
+};
+
 /* A pinned slot.
  *
  * Holds a personality id and keeps its slot from being reused for as
@@ -95,6 +114,15 @@ public:
   bool valid() const { return table != nullptr; }
   /* The value for sqe->personality.  Only meaningful while valid. */
   uint16_t id() const { return pid; }
+
+  /* The credentials this personality was registered with.
+   *
+   * Held by the slot so that a find() hit answers the whole
+   * question.  The calls io_uring cannot express run on a helper
+   * thread which must assume the identity itself, so a caller needs
+   * these as well as the id -- and resolving them is a database
+   * read.  Only meaningful while valid. */
+  const Credentials& credentials() const;
 };
 
 /* One ring's personality table.
@@ -130,11 +158,13 @@ public:
     uint64_t evictions{0};
     uint64_t exhausted{0};		/* every slot pinned */
     uint64_t failed{0};			/* the registrar said no */
+    uint64_t stale{0};			/* the record changed under it */
   };
 
   /* `capacity` is clamped to the id space:  sqe->personality is
    * __u16, so a table larger than 65535 could not be addressed. */
-  PersonalityTable(size_t capacity, Registrar* reg);
+  PersonalityTable(size_t capacity, Registrar* reg,
+		   const GenerationSource* gen = nullptr);
   ~PersonalityTable();
 
   PersonalityTable(const PersonalityTable&) = delete;
@@ -142,13 +172,19 @@ public:
 
   /* A pinned reference if this identity is already registered here.
    *
-   *   0        `out` is pinned and usable
-   *   -ENOENT  not present;  the caller resolves credentials and
-   *            calls insert()
+   *   0        `out` is pinned and usable, and carries the
+   *            credentials it was registered with
+   *   -ENOENT  not present, or present and stale -- the identity's
+   *            record changed since it was registered, so the slot
+   *            is given back and the caller resolves afresh
    *
    * Separate from insert() so that a hit costs no credential
-   * resolution -- which on the S3 path is a database read. */
-  int find(const rgw_user& key, PersonalityRef* out);
+   * resolution -- which on the S3 path is a database read.  The
+   * slot keeps the credentials for that reason:  without them a
+   * hit would still have to resolve, because the thread-pool
+   * fallback assumes the identity itself. */
+  int find(const rgw_user& key, PersonalityRef* out,
+	   const DoutPrefixProvider* dpp = nullptr);
 
   /* Register `cred` and install it, evicting if the table is full.
    *
@@ -169,6 +205,9 @@ private:
 
   struct Slot {
     rgw_user key;
+    Credentials cred;
+    /* what the generation source said when this was registered */
+    uint64_t gen{0};
     uint16_t id{0};
     uint32_t pins{0};
     bool occupied{false};
@@ -179,10 +218,15 @@ private:
    * Returns capacity() when every slot is pinned. */
   uint32_t claim_slot(const DoutPrefixProvider* dpp);
 
+  /* Drop a slot that no longer matches its identity's record.
+   * Returns false when a live operation still holds it. */
+  bool invalidate(uint32_t slot);
+
   std::vector<Slot> slots;
   ankerl::unordered_dense::map<rgw_user, uint32_t> by_key;
   uint32_t cursor{0};
   Registrar* registrar;
+  const GenerationSource* gen_source;
   Stats stats;
 };
 
