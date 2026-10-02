@@ -14534,12 +14534,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    if (pool_type == pg_pool_t::TYPE_ERASURE && has_profile && num_zones > 1) {
-      ss << "erasure_code_profile cannot be used with multi-zone configurations";
-      err = -EINVAL;
-      goto reply_no_propose;
-    }
-
     if (has_crush_params && has_crush_rule) {
       ss << "cannot specify both crush rule and crush parameters (crush_root, "
             "zone_failure_domain, osd_failure_domain, crush_device_class)";
