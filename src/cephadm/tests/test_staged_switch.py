@@ -352,3 +352,117 @@ class TestSwitchStagedCommand:
             ctx.fsid = None
             with pytest.raises(_cephadm.Error, match='must pass --fsid'):
                 _cephadm.command_switch_staged(ctx)
+
+
+DATA_B = f'/var/lib/ceph/{FSID}/mds.b'
+UNIT_B = f'ceph-{FSID}@mds.b'
+
+
+def _daemon_b(live=OLD_IMAGE, staged=NEW_IMAGE):
+    for n in _cephadm.UNIT_FILES:
+        _write(f'{DATA_B}/{n}', f'{n} for {live}\n' if n != 'unit.image' else f'{live}\n')
+        if staged:
+            _write(f'{DATA_B}/{n}.staged', f'{n} for {staged}\n' if n != 'unit.image' else f'{staged}\n')
+
+
+class TestSwitchStagedSeveral:
+    """switch-staged with several --name: one stop of all the units, the
+    swaps, one start - the downtime of a host's daemons is one restart."""
+
+    def _ctx(self):
+        cm = with_cephadm_ctx([f'--image={NEW_IMAGE}'], list_networks={})
+        ctx = cm.__enter__()
+        ctx.fsid = FSID
+        ctx.container_engine = mock_podman()
+        return cm, ctx
+
+    def test_two_daemons_one_stop_one_start(self, cephadm_fs):
+        cm, ctx = self._ctx()
+        try:
+            _live_daemon(OLD_IMAGE)
+            _staged_daemon(NEW_IMAGE)
+            _daemon_b()
+            idents = [_ident(), _cephadm.DaemonIdentity(FSID, 'mds', 'b')]
+            with mock.patch('cephadm.call_throws') as call_throws, \
+                    mock.patch('cephadm.call', return_value=('', '', 0)) as call, \
+                    mock.patch('cephadm.clean_cgroup') as clean_cgroup:
+                res = _cephadm.switch_staged_units(ctx, idents, expected_image=NEW_IMAGE)
+            assert [r['name'] for r in res] == ['mds.a', 'mds.b']
+            assert all(r['image'] == NEW_IMAGE and set(r['switched']) == set(_cephadm.UNIT_FILES) for r in res)
+            assert _read(f'{DATA}/unit.image').strip() == NEW_IMAGE
+            assert _read(f'{DATA_B}/unit.image').strip() == NEW_IMAGE
+            assert _systemctl_calls(call_throws) == [
+                ['systemctl', 'stop', UNIT, UNIT_B],
+                ['systemctl', 'enable', UNIT, UNIT_B],
+                ['systemctl', 'start', UNIT, UNIT_B],
+            ]
+            assert ['systemctl', 'reset-failed', UNIT, UNIT_B] in _systemctl_calls(call)
+            assert clean_cgroup.call_count == 2
+        finally:
+            cm.__exit__(None, None, None)
+
+    def test_a_bad_daemon_stops_nothing(self, cephadm_fs):
+        # mds.b was staged with another image: the whole call is refused
+        # before mds.a is stopped
+        cm, ctx = self._ctx()
+        try:
+            _live_daemon(OLD_IMAGE)
+            _staged_daemon(NEW_IMAGE)
+            _daemon_b(staged='quay.io/ceph/ceph:other')
+            idents = [_ident(), _cephadm.DaemonIdentity(FSID, 'mds', 'b')]
+            with mock.patch('cephadm.call_throws') as call_throws, \
+                    mock.patch('cephadm.call', return_value=('', '', 0)), \
+                    mock.patch('cephadm.clean_cgroup'):
+                with pytest.raises(_cephadm.Error, match='mds.b: staged image'):
+                    _cephadm.switch_staged_units(ctx, idents, expected_image=NEW_IMAGE)
+            assert _systemctl_calls(call_throws) == []
+            assert _read(f'{DATA}/unit.image').strip() == OLD_IMAGE
+            assert os.path.exists(f'{DATA}/unit.run.staged')
+        finally:
+            cm.__exit__(None, None, None)
+
+    def test_mixed_already_switched_and_pending(self, cephadm_fs):
+        # a retry after a lost reply: mds.a is already switched (only made
+        # sure to run), mds.b still pending
+        cm, ctx = self._ctx()
+        try:
+            _live_daemon(NEW_IMAGE)
+            _daemon_b()
+            idents = [_ident(), _cephadm.DaemonIdentity(FSID, 'mds', 'b')]
+            with mock.patch('cephadm.call_throws') as call_throws, \
+                    mock.patch('cephadm.call', return_value=('', '', 0)), \
+                    mock.patch('cephadm.clean_cgroup'), \
+                    mock.patch('cephadm.check_unit', return_value=(True, 'running', True)):
+                res = _cephadm.switch_staged_units(ctx, idents, expected_image=NEW_IMAGE)
+            assert res[0]['already_switched'] and res[0]['switched'] == []
+            assert set(res[1]['switched']) == set(_cephadm.UNIT_FILES)
+            assert _systemctl_calls(call_throws) == [
+                ['systemctl', 'stop', UNIT_B],
+                ['systemctl', 'enable', UNIT_B],
+                ['systemctl', 'start', UNIT_B],
+            ]
+        finally:
+            cm.__exit__(None, None, None)
+
+    def test_command_accepts_several_names(self, cephadm_fs, capsys):
+        with with_cephadm_ctx(['switch-staged', '--fsid', FSID, '--name', 'mds.a', '--name', 'mds.b',
+                               '--expected-image', NEW_IMAGE]) as ctx:
+            assert ctx.name == ['mds.a', 'mds.b']
+            assert _cephadm._ctx_daemon_name(ctx) is None
+            ctx.container_engine = mock_podman()
+            _live_daemon(OLD_IMAGE)
+            _staged_daemon(NEW_IMAGE)
+            _daemon_b()
+            with mock.patch('cephadm.call_throws'), \
+                    mock.patch('cephadm.call', return_value=('', '', 0)), \
+                    mock.patch('cephadm.clean_cgroup'):
+                rc = _cephadm.command_switch_staged(ctx)
+            assert rc == 0
+            out = json.loads(capsys.readouterr().out)
+            assert [o['name'] for o in out] == ['mds.a', 'mds.b']
+        with with_cephadm_ctx(['switch-staged', '--fsid', FSID, '--name', 'mds.a']) as ctx:
+            assert ctx.name == ['mds.a']
+            assert _cephadm._ctx_daemon_name(ctx) == 'mds.a'
+        with pytest.raises(SystemExit):
+            with with_cephadm_ctx(['switch-staged', '--fsid', FSID, '--name', 'mds.a', '--name', 'bogus.b']):
+                pass
