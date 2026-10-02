@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include <deque>
+#include <vector>
+#include <utility>
+
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados_fwd.hpp"
 
@@ -98,7 +102,7 @@ struct rgw_cls_obj_complete_op : cls_rgw_bi_log_related_op
   std::string locator;
   rgw_bucket_entry_ver ver;
   rgw_bucket_dir_entry_meta meta;
-  std::list<cls_rgw_obj_key> remove_objs;
+  std::deque<cls_rgw_obj_key> remove_objs;
 
   rgw_cls_obj_complete_op() { op = CLS_RGW_OP_ADD; }
 
@@ -133,14 +137,12 @@ struct rgw_cls_obj_complete_op : cls_rgw_bi_log_related_op
       decode(locator, bl);
     }
     if (struct_v >= 4 && struct_v < 7) {
-      std::list<std::string> old_remove_objs;
+      std::vector<std::string> old_remove_objs;
       decode(old_remove_objs, bl);
 
-      for (auto  iter = old_remove_objs.begin();
-           iter != old_remove_objs.end(); ++iter) {
-        cls_rgw_obj_key k;
-        k.name = *iter;
-        remove_objs.push_back(k);
+      for (auto& name : old_remove_objs) {
+        auto& key = remove_objs.emplace_back();
+        key.name = std::move(name);
       }
     } else {
       decode(remove_objs, bl);
@@ -547,7 +549,7 @@ struct rgw_cls_bucket_update_stats_op
 WRITE_CLASS_ENCODER(rgw_cls_bucket_update_stats_op)
 
 struct rgw_cls_obj_remove_op {
-  std::list<std::string> keep_attr_prefixes;
+  std::vector<std::string> keep_attr_prefixes;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -883,7 +885,7 @@ struct rgw_cls_bi_list_op {
 WRITE_CLASS_ENCODER(rgw_cls_bi_list_op)
 
 struct rgw_cls_bi_list_ret {
-  std::list<rgw_cls_bi_entry> entries;
+  std::vector<rgw_cls_bi_entry> entries;
   bool is_truncated;
 
   rgw_cls_bi_list_ret() : is_truncated(false) {}
@@ -1150,7 +1152,7 @@ struct cls_rgw_gc_list_op {
 WRITE_CLASS_ENCODER(cls_rgw_gc_list_op)
 
 struct cls_rgw_gc_list_ret {
-  std::list<cls_rgw_gc_obj_info> entries;
+  std::vector<cls_rgw_gc_obj_info> entries;
   std::string next_marker;
   bool truncated;
 
@@ -1251,7 +1253,7 @@ struct cls_rgw_bi_log_trim_op {
 WRITE_CLASS_ENCODER(cls_rgw_bi_log_trim_op)
 
 struct cls_rgw_bi_log_list_ret {
-  std::list<rgw_bi_log_entry> entries;
+  std::vector<rgw_bi_log_entry> entries;
   bool truncated;
 
   cls_rgw_bi_log_list_ret() : truncated(false) {}
@@ -1631,7 +1633,7 @@ WRITE_CLASS_ENCODER(cls_rgw_reshard_list_op)
 
 
 struct cls_rgw_reshard_list_ret {
-  std::list<cls_rgw_reshard_entry> entries;
+  std::vector<cls_rgw_reshard_entry> entries;
   bool is_truncated{false};
 
   cls_rgw_reshard_list_ret() {}
@@ -1835,7 +1837,7 @@ struct CLSRGWCompleteModifyOpBase : cls_rgw_bi_log_related_op {
   void complete_op(librados::ObjectWriteOperation& o,
                    const rgw_bucket_entry_ver& ver,
                    const rgw_bucket_dir_entry_meta& dir_meta,
-                   const std::list<cls_rgw_obj_key>* remove_objs,
+                   const std::deque<cls_rgw_obj_key>& remove_objs,
                    const std::string& locator) const;
 };
 
@@ -1981,4 +1983,3 @@ constexpr auto guard_bucket_resharding = ClsMethod<RdTag, ClassId>(RGW_GUARD_BUC
 constexpr auto get_bucket_resharding = ClsMethod<RdTag, ClassId>(RGW_GET_BUCKET_RESHARDING);
 }
 }
-
