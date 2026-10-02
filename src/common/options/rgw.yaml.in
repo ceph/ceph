@@ -2366,6 +2366,23 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_copy_obj_preserve_source_storage_class
+  type: bool
+  level: advanced
+  desc: Preserve the source storage class for local S3 CopyObject requests
+  long_desc: When enabled, a CopyObject request without an x-amz-storage-class
+    header preserves the source object's stored storage class if it is valid for
+    the destination placement target.
+    Only the storage class is preserved, not the source placement target or data pool.
+    Cloud-tiered or temporarily restored sources, and unsupported destination classes
+    still keep the destination bucket default. This applies to local, non-system S3
+    CopyObject requests. Disabled by default to keep the existing behavior.
+    Enabling this option deviates from the AWS CopyObject default behaviour.
+  default: false
+  services:
+  - rgw
+  flags:
+  - runtime
 - name: rgw_copy_obj_progress
   type: bool
   level: advanced
