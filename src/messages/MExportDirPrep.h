@@ -17,6 +17,8 @@
 #ifndef CEPH_MEXPORTDIRPREP_H
 #define CEPH_MEXPORTDIRPREP_H
 
+#include <vector>
+
 #include "include/types.h"
 #include "messages/MMDSOp.h"
 
@@ -28,15 +30,15 @@ private:
   dirfrag_t dirfrag;
 public:
   ceph::buffer::list basedir;
-  std::list<dirfrag_t> bounds;
-  std::list<ceph::buffer::list> traces;
+  std::vector<dirfrag_t> bounds;
+  std::vector<ceph::buffer::list> traces;
 private:
   std::set<mds_rank_t> bystanders;
   bool b_did_assim = false;
 
 public:
   dirfrag_t get_dirfrag() const { return dirfrag; }
-  const std::list<dirfrag_t>& get_bounds() const { return bounds; }
+  const std::vector<dirfrag_t>& get_bounds() const { return bounds; }
   const std::set<mds_rank_t> &get_bystanders() const { return bystanders; }
 
   bool did_assim() const { return b_did_assim; }

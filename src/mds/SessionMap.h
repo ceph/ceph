@@ -418,7 +418,7 @@ public:
 
   xlist<Session*>::item item_session_list;
 
-  std::list<ceph::ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
+  std::deque<ceph::ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
 
   /* This is mutable to allow get_request_count to be const. elist does not
    * support const iterators yet.
