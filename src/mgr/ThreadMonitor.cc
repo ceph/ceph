@@ -230,8 +230,7 @@ bool ThreadMonitor::read_thread_stat(pid_t tid, long long& utime, long long& sti
 }
 
 bool ThreadMonitor::parse_statm(std::istream& statm_stream, long long& rss_pages) {
-  // /proc/<pid>/statm format: size resident shared text lib data dt
-  // The second field (resident) is the RSS in pages.
+  // statm fields: size resident shared text lib data dt
   long long vsize_pages;
   return static_cast<bool>(statm_stream >> vsize_pages >> rss_pages);
 }

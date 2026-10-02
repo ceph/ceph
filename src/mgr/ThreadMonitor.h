@@ -51,10 +51,7 @@ public:
   void stop_monitoring();
   void register_thread(const pid_t thread_id, const pid_t serve_thread_id, const std::string& name, const PyModuleRef py_module);
 
-  // Parse the two leading fields (size, resident) of a /proc/<pid>/statm
-  // stream and return the resident set size in pages via rss_pages. Returns
-  // false if the extraction fails (e.g. the stream is truncated or corrupt),
-  // in which case rss_pages must not be relied upon. Exposed for unit testing.
+  // Split out of read_process_statm() so tests can feed a stream
   static bool parse_statm(std::istream& statm_stream, long long& rss_pages);
 
 protected:
