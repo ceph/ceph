@@ -129,7 +129,9 @@ ninja -C build -j8 unittest_fdb_execution
 CPM fetches the pinned stdexec source during configuration; no separate
 `install-deps.sh` step is required. With the option disabled, CPM does not fetch
 stdexec and ordinary libfdb consumers have no dependency on its headers or
-targets.
+targets. The `unittest_fdb_execution` target is likewise available only when
+the option is enabled; the ordinary libfdb test targets remain available
+without it.
 
 Link `rgw_fdb_execution` and include `rgw/fdb/execution.h` to use the extension:
 
