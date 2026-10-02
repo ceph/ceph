@@ -7,6 +7,7 @@
 #include "librbd/cache/pwl/AbstractWriteLog.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
+#include <iterator>
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
@@ -183,6 +184,8 @@ std::shared_ptr<WriteLogOperation> C_WriteRequest<T>::create_operation(
 template <typename T>
 void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
   GenericWriteLogEntries log_entries;
+  log_entries.reserve(std::size(this->image_extents));
+
   {
     std::lock_guard locker(m_lock);
     std::shared_ptr<SyncPoint> current_sync_point = pwl.get_current_sync_point();
@@ -425,8 +428,11 @@ bool C_DiscardRequest<T>::alloc_resources() {
 
 template <typename T>
 void C_DiscardRequest<T>::setup_log_operations() {
-  std::lock_guard locker(m_lock);
   GenericWriteLogEntries log_entries;
+  log_entries.reserve(1);
+
+  std::lock_guard locker(m_lock);
+
   for (auto &extent : this->image_extents) {
     op = pwl.m_builder->create_discard_log_operation(
         pwl.get_current_sync_point(), extent.first, extent.second,

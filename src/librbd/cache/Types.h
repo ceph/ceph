@@ -4,8 +4,8 @@
 #ifndef CEPH_LIBRBD_CACHE_TYPES_H
 #define CEPH_LIBRBD_CACHE_TYPES_H
 
-#include <list>
 #include <string>
+#include <vector>
 
 class Context;
 
@@ -18,7 +18,7 @@ enum ImageCacheType {
   IMAGE_CACHE_TYPE_UNKNOWN
 };
 
-typedef std::list<Context *> Contexts;
+typedef std::vector<Context *> Contexts;
 
 const std::string PERSISTENT_CACHE_STATE = ".rbd_persistent_cache_state";
 

@@ -385,8 +385,8 @@ int Image<I>::list_descendants(
   librados::Rados rados(ictx->md_ctx);
 
   // search all pools for clone v1 children dependent on this snapshot
-  std::list<std::pair<int64_t, std::string> > pools;
-  int r = rados.pool_list2(pools);
+  std::vector<std::pair<int64_t, std::string>> pools;
+  int r = rados.pool_list(pools);
   if (r < 0) {
     lderr(cct) << "error listing pools: " << cpp_strerror(r) << dendl;
     return r;

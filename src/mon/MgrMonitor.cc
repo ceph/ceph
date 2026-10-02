@@ -12,6 +12,8 @@
  * Foundation.  See file COPYING.
  */
 
+#include <iterator>
+
 #include <boost/tokenizer.hpp>
 
 #include "messages/MMgrBeacon.h"
@@ -45,7 +47,6 @@ using namespace TOPNSPC::common;
 
 using std::dec;
 using std::hex;
-using std::list;
 using std::map;
 using std::make_pair;
 using std::ostream;
@@ -786,7 +787,9 @@ void MgrMonitor::tick()
 
   // Cull standbys first so that any remaining standbys
   // will be eligible to take over from the active if we cull him.
-  std::list<uint64_t> dead_standbys;
+  vector<uint64_t> dead_standbys;
+  dead_standbys.reserve(std::size(pending_map.standbys));
+
   const auto cutoff = now - mgr_beacon_grace;
   for (const auto &i : pending_map.standbys) {
     auto last_beacon_time = last_beacon.at(i.first);
@@ -1490,7 +1493,7 @@ void MgrMonitor::count_metadata(const string& field, Formatter *f)
   f->close_section();
 }
 
-void MgrMonitor::get_versions(std::map<string, list<string> > &versions)
+void MgrMonitor::get_versions(std::map<string, vector<string>>& versions)
 {
   std::set<string> ls = map.get_all_names();
   for (auto& name : ls) {
@@ -1517,7 +1520,7 @@ void MgrMonitor::print_nodes(Formatter *f) const
 {
   ceph_assert(f);
 
-  std::map<string, list<string> > mgrs; // hostname => mgr
+  std::map<string, vector<string>> mgrs; // hostname => mgr
   auto ls = map.get_all_names();
   for (auto& name : ls) {
     std::map<string,string> meta;

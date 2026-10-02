@@ -13,7 +13,7 @@
  */
 
 #include <map>
-#include <list>
+#include <vector>
 extern "C"{
 #include <curl/curl.h>
 }
@@ -40,7 +40,7 @@ namespace admin_helper
         string conf_path;
         CURL *curl_inst;
         map<string, string> response;
-        list<string> extra_hdrs;
+        vector<string> extra_hdrs;
         string *resp_data;
         unsigned resp_code;
 

@@ -40,9 +40,9 @@ void inode_backpointer_t::dump(ceph::Formatter *f) const
   f->dump_unsigned("version", version);
 }
 
-std::list<inode_backpointer_t> inode_backpointer_t::generate_test_instances()
+std::vector<inode_backpointer_t> inode_backpointer_t::generate_test_instances()
 {
-  std::list<inode_backpointer_t> ls;
+  std::vector<inode_backpointer_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().dirino = 1;
@@ -107,9 +107,9 @@ void inode_backtrace_t::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-std::list<inode_backtrace_t> inode_backtrace_t::generate_test_instances()
+std::vector<inode_backtrace_t> inode_backtrace_t::generate_test_instances()
 {
-  std::list<inode_backtrace_t> ls;
+  std::vector<inode_backtrace_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().ino = 1;

@@ -449,14 +449,15 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
   /// selecting best auth source below. Then - stopping on the first one
   /// that is auth eligible.
   /// This creates an issue with 'digest_match' that should be handled.
-  std::list<pg_shard_t> shards;
+  std::vector<pg_shard_t> shards;
+  shards.reserve(std::size(this_chunk->received_maps));
+  shards.push_back(m_pg_whoami);
 
   for (const auto& [srd, smap] : this_chunk->received_maps) {
     if (srd != m_pg_whoami) {
       shards.push_back(srd);
     }
   }
-  shards.push_front(m_pg_whoami);
 
   auth_selection_t ret_auth;
   ret_auth.auth = this_chunk->received_maps.end();
@@ -1057,7 +1058,7 @@ std::optional<std::string> ScrubBackend::compare_obj_in_maps(
 
 
 std::optional<ScrubBackend::auth_and_obj_errs_t>
-ScrubBackend::for_empty_auth_list(std::list<pg_shard_t>&& auths,
+ScrubBackend::for_empty_auth_list(std::vector<pg_shard_t>&& auths,
                                   std::set<pg_shard_t>&& obj_errors,
                                   shard_to_scrubmap_t::const_iterator auth,
                                   const hobject_t& ho,
@@ -1229,8 +1230,9 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
   inconsistent_obj_wrapper& obj_result,
   stringstream& errstream)
 {
-  std::list<pg_shard_t> auth_list;     // out "param" to
+  std::vector<pg_shard_t> auth_list;   // out "param" to
   std::set<pg_shard_t> object_errors;  // be returned
+  auth_list.reserve(std::size(this_chunk->received_maps));
   std::size_t digest_size = 0;
   if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode() &&
       m_depth == scrub_level_t::deep) {
@@ -1482,7 +1484,7 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
                           auth_list.size(),
                           object_errors.size())
            << dendl;
-  return {auth_list, object_errors};
+  return {std::move(auth_list), std::move(object_errors)};
 }
 
 // == PGBackend::be_compare_scrub_objects()

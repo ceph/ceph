@@ -274,7 +274,7 @@ struct Inode : RefCountedObject {
   std::vector<Context*> waitfor_caps;
   std::vector<Context*> waitfor_caps_pending;
   std::vector<Context*> waitfor_commit;
-  std::list<ceph::condition_variable*> waitfor_deleg;
+  std::vector<ceph::condition_variable *> waitfor_deleg;
 
   Dentry *get_first_parent() {
     ceph_assert(!dentries.empty());

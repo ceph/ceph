@@ -4,8 +4,10 @@
 #include <boost/algorithm/string.hpp>
 #include <gtest/gtest.h>
 #include <regex>
-#include <sstream>
 #include <string>
+#include <vector>
+#include <sstream>
+#include <utility>
 
 #include "common/BackTrace.h"
 #include "common/version.h"
@@ -58,4 +60,15 @@ TEST(BackTrace, Basic) {
 		 "\\[0x[[:xdigit:]]+\\]$"};
 #endif
   EXPECT_TRUE(std::regex_match(lines[lineno], e));
+}
+
+TEST(BackTrace, PythonFormatting)
+{
+  std::vector<std::string> frames {"frame one", "frame two"};
+  const ceph::PyBackTrace backtrace {std::move(frames)};
+  std::ostringstream output;
+
+  output << backtrace;
+
+  EXPECT_EQ("frame one\nframe two\n", output.str());
 }

@@ -141,8 +141,6 @@ public:
   int lock_exclusive(const DoutPrefixProvider *dpp, int shard_id, timespan duration, std::string&zone_id, std::string& owner_id);
   int unlock(const DoutPrefixProvider *dpp, int shard_id, std::string& zone_id, std::string& owner_id);
 
-  int update_shards(std::list<int>& shards);
-
   void read_clear_modified(std::set<int> &modified);
 };
 
@@ -164,7 +162,7 @@ struct RGWMetadataLogData {
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWMetadataLogData> generate_test_instances();
+  static std::vector<RGWMetadataLogData> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWMetadataLogData)
 

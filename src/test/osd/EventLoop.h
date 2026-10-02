@@ -15,12 +15,11 @@
 
 #pragma once
 
-#include <functional>
-#include <deque>
 #include <map>
 #include <set>
-#include <list>
+#include <deque>
 #include <vector>
+#include <functional>
 #include "include/types.h"
 #include "messages/MOSDOp.h"
 #include "osd/OpRequest.h"
@@ -102,7 +101,7 @@ private:
   std::map<int, std::deque<Event>> suspended_events;
   
   // Callback to check for more work when idle (returns true if more work was generated)
-  std::list<std::function<bool()>> idle_callbacks;
+  std::vector<std::function<bool()>> idle_callbacks;
   
   static constexpr const char* event_type_name(EventType type) {
     switch (type) {
@@ -239,7 +238,7 @@ public:
 
   bool do_idle_callbacks() {
     bool new_work = false;
-    for (auto cb : idle_callbacks) {
+    for (const auto& cb : idle_callbacks) {
       if (cb()) {
         new_work = true;
       }
@@ -386,4 +385,3 @@ public:
 // Define the static variable
 // Initialized to -1 (no OSD currently executing)
 inline int EventLoop::current_executing_osd = -1;
-

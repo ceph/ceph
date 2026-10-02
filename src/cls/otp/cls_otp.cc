@@ -9,7 +9,7 @@
  */
 
 #include <cerrno>
-#include <list>
+#include <deque>
 
 #include <boost/range/adaptor/reversed.hpp>
 
@@ -22,7 +22,7 @@
 #include "cls/otp/cls_otp_ops.h"
 #include "cls/otp/cls_otp_types.h"
 
-using std::list;
+using std::deque;
 using std::string;
 using std::set;
 
@@ -62,7 +62,7 @@ WRITE_CLASS_ENCODER(otp_header)
 struct otp_instance {
   otp_info_t otp;
 
-  list<otp_check_t> last_checks; 
+  deque<otp_check_t> last_checks;
   uint64_t last_success{0}; /* otp counter/step of last successful check */
 
   otp_instance() {}
@@ -313,7 +313,7 @@ static int otp_set_op(cls_method_context_t hctx,
     return r;
   }
 
-  for (auto entry : op.entries) {
+  for (const auto& entry : op.entries) {
     otp_instance instance;
     r = get_otp_instance(hctx, entry.id, &instance);
     if (r < 0 &&
@@ -363,7 +363,7 @@ static int otp_remove_op(cls_method_context_t hctx,
     return r;
   }
 
-  for (auto id : op.ids) {
+  for (const auto& id : op.ids) {
     bool existed = (h.ids.find(id) != h.ids.end());
     removed_existing = (removed_existing || existed);
 
@@ -414,12 +414,12 @@ static int otp_get_op(cls_method_context_t hctx,
 
   if (op.get_all) {
     op.ids.clear();
-    for (auto id : h.ids) {
+    for (const auto& id : h.ids) {
       op.ids.push_back(id);
     }
   }
 
-  for (auto id : op.ids) {
+  for (const auto& id : op.ids) {
     bool exists = (h.ids.find(id) != h.ids.end());
 
     if (!exists) {

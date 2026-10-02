@@ -13,6 +13,7 @@
  */
 
 #include <boost/tokenizer.hpp>
+#include <vector>
 #include "include/stringify.h"
 #include "NVMeofGwMon.h"
 #include "Monitor.h"
@@ -627,7 +628,7 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
 }
 
 void NVMeofGwMon::get_gw_listeners(Formatter *f, std::pair<std::string, std::string>& group_key){
-  std::map<std::string, std::list<std::pair<BeaconListener, std::string>>> subsystem_listeners;
+  std::map<std::string, std::vector<std::pair<BeaconListener, std::string>>> subsystem_listeners;
   for (auto& gw_created_pair: map.created_gws[group_key]) {
     auto& gw_id = gw_created_pair.first;
     auto& state = gw_created_pair.second;

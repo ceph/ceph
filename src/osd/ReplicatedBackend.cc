@@ -41,7 +41,6 @@ static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
 }
 
 using std::less;
-using std::list;
 using std::make_pair;
 using std::map;
 using std::ostringstream;
@@ -315,8 +314,7 @@ int ReplicatedBackend::objects_readv_sync(
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
   uint64_t object_size,
-  const list<pair<ec_align_t,
-		  pair<bufferlist*, Context*> > > &to_read,
+  std::vector<async_read_request> &&requests,
   Context *on_complete,
   bool fast_read)
 {
@@ -1018,12 +1016,12 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
 
 struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
   ReplicatedBackend *bc;
-  list<ReplicatedBackend::pull_complete_info> to_continue;
+  vector<ReplicatedBackend::pull_complete_info> to_continue;
   int priority;
   C_ReplicatedBackend_OnPullComplete(
     ReplicatedBackend *bc,
     int priority,
-    list<ReplicatedBackend::pull_complete_info> &&to_continue)
+    vector<ReplicatedBackend::pull_complete_info> &&to_continue)
     : bc(bc), to_continue(std::move(to_continue)), priority(priority) {}
 
   void finish(ThreadPool::TPHandle &handle) override {
@@ -1073,11 +1071,12 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
   }
 
   ObjectStore::Transaction t{get_parent()->min_peer_features()};
-  list<pull_complete_info> to_continue;
+  vector<pull_complete_info> to_continue;
+  to_continue.reserve(m->pushes.size());
   for (vector<PushOp>::const_iterator i = m->pushes.begin();
        i != m->pushes.end();
        ++i) {
-    bool more = handle_pull_response(from, *i, &(replies.back()), &to_continue, &t);
+    bool more = handle_pull_response(from, *i, &(replies.back()), to_continue, &t);
     if (more)
       replies.push_back(PullOp());
   }
@@ -1993,7 +1992,7 @@ ObjectRecoveryInfo ReplicatedBackend::recalc_subsets(
 
 bool ReplicatedBackend::handle_pull_response(
   pg_shard_t from, const PushOp &pop, PullOp *response,
-  list<pull_complete_info> *to_continue,
+  vector<pull_complete_info>& to_continue,
   ObjectStore::Transaction *t)
 {
   interval_set<uint64_t> data_included = pop.data_included;
@@ -2108,7 +2107,7 @@ bool ReplicatedBackend::handle_pull_response(
       get_parent()->inc_osd_stat_repaired();
     }
     clear_pull_from(piter);
-    to_continue->push_back({hoid, pull_info.stat});
+    to_continue.push_back({hoid, pull_info.stat});
     get_parent()->on_local_recover(
       hoid, pull_info.recovery_info, pull_info.obc, false, t);
     return false;
@@ -2614,20 +2613,23 @@ int ReplicatedBackend::start_pushes(
   ObjectContextRef obc,
   RPGHandle *h)
 {
-  list< map<pg_shard_t, pg_missing_t>::const_iterator > shards;
-
   dout(20) << __func__ << " soid " << soid << dendl;
   // who needs it?
-  ceph_assert(get_parent()->get_acting_recovery_backfill_shards().size() > 0);
-  for (set<pg_shard_t>::iterator i =
-	 get_parent()->get_acting_recovery_backfill_shards().begin();
-       i != get_parent()->get_acting_recovery_backfill_shards().end();
-       ++i) {
-    if (*i == get_parent()->whoami_shard()) continue;
-    pg_shard_t peer = *i;
-    map<pg_shard_t, pg_missing_t>::const_iterator j =
-      get_parent()->get_shard_missing().find(peer);
-    ceph_assert(j != get_parent()->get_shard_missing().end());
+  const auto& recovery_shards = get_parent()->get_acting_recovery_backfill_shards();
+  const auto& shard_missing = get_parent()->get_shard_missing();
+  vector<map<pg_shard_t, pg_missing_t>::const_iterator> shards;
+
+  ceph_assert(!std::empty(recovery_shards));
+  shards.reserve(std::size(recovery_shards));
+
+  for (const auto peer : recovery_shards) {
+    if (peer == get_parent()->whoami_shard()) {
+      continue;
+    }
+
+    const auto j = shard_missing.find(peer);
+    ceph_assert(j != std::end(shard_missing));
+
     if (j->second.is_missing(soid)) {
       shards.push_back(j);
     }

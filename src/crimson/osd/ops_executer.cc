@@ -3,6 +3,8 @@
 
 #include "ops_executer.h"
 
+#include <iterator>
+
 #include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/adaptor/map.hpp>
 #include <boost/range/adaptor/transformed.hpp>
@@ -389,6 +391,8 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_list_watchers(
   logger().debug("{}", __func__);
 
   obj_list_watch_response_t response;
+  response.entries.reserve(std::size(os.oi.watchers));
+
   for (const auto& [key, info] : os.oi.watchers) {
     logger().debug("{}: key cookie={}, entity={}",
                    __func__, key.first, key.second);

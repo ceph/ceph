@@ -1339,7 +1339,7 @@ void MDSRank::_advance_queues()
     if (beacon.is_laggy())
       break;
 
-    cref_t<Message> old = waiting_for_nolaggy.front();
+    auto old = std::move(waiting_for_nolaggy.front());
     waiting_for_nolaggy.pop_front();
 
     if (!is_stale_message(old)) {

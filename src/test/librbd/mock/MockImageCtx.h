@@ -211,7 +211,7 @@ struct MockImageCtx {
 
   xlist<operation::ResizeRequest<MockImageCtx>*> resize_reqs;
   xlist<AsyncRequest<MockImageCtx>*> async_requests;
-  std::list<Context*> async_requests_waiters;
+  std::vector<Context*> async_requests_waiters;
 
   std::map<uint64_t, io::CopyupRequest<MockImageCtx>*> copyup_list;
 

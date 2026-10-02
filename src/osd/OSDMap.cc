@@ -108,9 +108,9 @@ void osd_info_t::decode(ceph::buffer::list::const_iterator& bl)
   decode(lost_at, bl);
 }
 
-list<osd_info_t> osd_info_t::generate_test_instances()
+vector<osd_info_t> osd_info_t::generate_test_instances()
 {
-  list<osd_info_t> o;
+  vector<osd_info_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().last_clean_begin = 1;
@@ -192,9 +192,9 @@ void osd_xinfo_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-list<osd_xinfo_t> osd_xinfo_t::generate_test_instances()
+vector<osd_xinfo_t> osd_xinfo_t::generate_test_instances()
 {
-  list<osd_xinfo_t> o;
+  vector<osd_xinfo_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().down_stamp = utime_t(2, 3);
@@ -313,8 +313,8 @@ bool OSDMap::subtree_is_down(int id, set<int> *down_cache) const
     return true;
   }
 
-  list<int> children;
-  crush->get_children(id, &children);
+  vector<int> children;
+  crush->get_children(id, children);
   for (const auto &child : children) {
     if (!subtree_is_down(child, down_cache)) {
       return false;
@@ -390,8 +390,8 @@ bool OSDMap::subtree_type_is_down(
     return true;
   }
 
-  list<int> children;
-  crush->get_children(id, &children);
+  vector<int> children;
+  crush->get_children(id, children);
   for (const auto &child : children) {
     if (!subtree_type_is_down(
 	  cct, child, crush->get_bucket_type(child),
@@ -1393,9 +1393,9 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->close_section();
 }
 
-auto OSDMap::Incremental::generate_test_instances() -> list<Incremental>
+auto OSDMap::Incremental::generate_test_instances() -> vector<Incremental>
 {
-  list<Incremental> o;
+  vector<Incremental> o;
   o.emplace_back();
   return o;
 }
@@ -1535,12 +1535,16 @@ bool OSDMap::is_blocklisted(const entity_addrvec_t& av, CephContext *cct) const
   return false;
 }
 
-void OSDMap::get_blocklist(list<pair<entity_addr_t,utime_t> > *bl,
-			   std::list<std::pair<entity_addr_t,utime_t> > *rl) const
+void OSDMap::get_blocklist(
+  vector<pair<entity_addr_t, utime_t>>& blocklisted,
+  vector<pair<entity_addr_t, utime_t>>& range_blocklisted) const
 {
-   std::copy(blocklist.begin(), blocklist.end(), std::back_inserter(*bl));
-   std::copy(range_blocklist.begin(), range_blocklist.end(),
-	     std::back_inserter(*rl));
+  blocklisted.reserve(blocklisted.size() + blocklist.size());
+  std::ranges::copy(blocklist, std::back_inserter(blocklisted));
+
+  range_blocklisted.reserve(
+    range_blocklisted.size() + range_blocklist.size());
+  std::ranges::copy(range_blocklist, std::back_inserter(range_blocklisted));
 }
 
 void OSDMap::get_blocklist(std::set<entity_addr_t> *bl,
@@ -4343,9 +4347,9 @@ void OSDMap::dump(Formatter *f, CephContext *cct) const
   f->close_section();
 }
 
-list<OSDMap> OSDMap::generate_test_instances()
+std::deque<OSDMap> OSDMap::generate_test_instances()
 {
-  list<OSDMap> o;
+  std::deque<OSDMap> o;
   o.emplace_back();
 
   CephContext *cct = new CephContext(CODE_ENVIRONMENT_UTILITY);
@@ -7667,9 +7671,9 @@ void OSDMap::check_health(CephContext *cct,
       for (auto j = subtree_type_down[type].begin();
 	   j != subtree_type_down[type].end();
 	   ++j) {
-	list<int> children;
+	vector<int> children;
 	int num = 0;
-	int num_children = crush->get_children(*j, &children);
+	int num_children = crush->get_children(*j, children);
 	if (num_children == 0)
 	  continue;
 	for (auto l = children.begin(); l != children.end(); ++l) {
@@ -7754,7 +7758,7 @@ void OSDMap::check_health(CephContext *cct,
     }
   }
 
-  std::list<std::string> scrub_messages;
+  vector<std::string> scrub_messages;
   bool noscrub = false, nodeepscrub = false;
   for (const auto &p : pools) {
     if (p.second.flags & pg_pool_t::FLAG_NOSCRUB) {
@@ -7776,7 +7780,7 @@ void OSDMap::check_health(CephContext *cct,
     out += nodeepscrub ? "nodeep-scrub" : "";
     auto& d = checks->add("POOL_SCRUB_FLAGS", HEALTH_OK,
 			  "Some pool(s) have the " + out + " flag(s) set", 0);
-    d.detail.splice(d.detail.end(), scrub_messages);
+    d.detail.swap(scrub_messages);
   }
 
   // OSD_OUT_OF_ORDER_FULL
@@ -7789,7 +7793,7 @@ void OSDMap::check_health(CephContext *cct,
     float br = get_backfillfull_ratio();
     float nr = get_nearfull_ratio();
 
-    list<string> detail;
+    vector<string> detail;
     // These checks correspond to how OSDService::check_full_status() in an OSD
     // handles the improper setting of these values.
     if (br < nr) {
@@ -7888,7 +7892,7 @@ void OSDMap::check_health(CephContext *cct,
 
   // OSD_FLAGS
   {
-    list<string> detail;
+    vector<string> detail;
     const unsigned flags =
       CEPH_OSD_NOUP |
       CEPH_OSD_NOIN |
@@ -7958,7 +7962,7 @@ void OSDMap::check_health(CephContext *cct,
 
   // CACHE_POOL_NO_HIT_SET
   if (cct->_conf->mon_warn_on_cache_pools_without_hit_sets) {
-    list<string> detail;
+    vector<string> detail;
     for (auto p = pools.cbegin(); p != pools.cend(); ++p) {
       const pg_pool_t& info = p->second;
       if (info.cache_mode_requires_hit_set() &&
@@ -7997,7 +8001,7 @@ void OSDMap::check_health(CephContext *cct,
 
   // POOL_NEARFULL/BACKFILLFULL/FULL
   {
-    list<string> full_detail, backfillfull_detail, nearfull_detail;
+    vector<string> full_detail, backfillfull_detail, nearfull_detail;
     for (auto it : get_pools()) {
       const pg_pool_t &pool = it.second;
       const string& pool_name = get_pool_name(it.first);
@@ -8045,7 +8049,7 @@ void OSDMap::check_health(CephContext *cct,
 
   // POOL_PG_NUM_NOT_POWER_OF_TWO
   if (cct->_conf.get_val<bool>("mon_warn_on_pool_pg_num_not_power_of_two")) {
-    list<string> detail;
+    vector<string> detail;
     for (auto it : get_pools()) {
       if (!std::has_single_bit(it.second.get_pg_num_target())) {
 	ostringstream ss;
@@ -8067,7 +8071,7 @@ void OSDMap::check_health(CephContext *cct,
   // POOL_NO_REDUNDANCY
   if (cct->_conf.get_val<bool>("mon_warn_on_pool_no_redundancy"))
   {
-    list<string> detail;
+    vector<string> detail;
     for (auto it : get_pools()) {
       if (it.second.get_size() == 1) {
         ostringstream ss;

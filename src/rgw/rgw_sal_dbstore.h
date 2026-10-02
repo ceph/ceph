@@ -177,7 +177,7 @@ protected:
           bool *is_truncated, RGWUsageIter& usage_iter,
           std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
       virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
-      virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) override;
+      virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, const std::vector<rgw_obj_index_key>& objs_to_unlink) override;
       virtual int check_index(const DoutPrefixProvider *dpp, optional_yield y,
                               std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
                               std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
@@ -242,13 +242,11 @@ protected:
     virtual void get_placement_target_names(std::set<std::string>& names) const override;
     virtual const std::string& get_default_placement_name() const override {
       return group->default_placement.name; };
-    virtual int get_hostnames(std::list<std::string>& names) const override {
-      names = group->hostnames;
-      return 0;
+    virtual const std::vector<std::string>& get_hostnames() const override {
+      return group->hostnames;
     };
-    virtual int get_s3website_hostnames(std::list<std::string>& names) const override {
-      names = group->hostnames_s3website;
-      return 0;
+    virtual const std::vector<std::string>& get_s3website_hostnames() const override {
+      return group->hostnames_s3website;
     };
     virtual int get_zone_count() const override {
       /* currently only 1 zone supported */
@@ -264,9 +262,8 @@ protected:
     virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override {
       return -1;
     }
-    virtual int list_zones(std::list<std::string>& zone_ids) override {
-      zone_ids.clear();
-      return 0;
+    virtual std::vector<std::string> list_zones() const override {
+      return {};
     }
     virtual std::unique_ptr<ZoneGroup> clone() override {
       std::unique_ptr<RGWZoneGroup>zg = std::make_unique<RGWZoneGroup>(*group.get());
@@ -460,7 +457,7 @@ protected:
     virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,
-		       std::list<rgw_obj_index_key>& remove_objs,
+		       std::vector<rgw_obj_index_key>& remove_objs,
 		       uint64_t& accounted_size, bool& compressed,
 		       RGWCompressionInfo& cs_info, off_t& ofs,
 		       std::string& tag, ACLOwner& owner,
@@ -472,7 +469,7 @@ protected:
   virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
                                      CephContext *cct, optional_yield y,
                                      const rgw_obj& obj,
-                                     std::list<rgw_obj_index_key>& remove_objs,
+                                     std::vector<rgw_obj_index_key>& remove_objs,
                                      prefix_map_t& processed_prefixes) override;
     virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
     virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
@@ -547,7 +544,7 @@ protected:
       virtual int delete_object(const DoutPrefixProvider* dpp,
           optional_yield y,
           uint32_t flags,
-          std::list<rgw_obj_index_key>* remove_objs,
+          std::vector<rgw_obj_index_key>* remove_objs,
           RGWObjVersionTracker* objv) override;
       virtual int copy_object(const ACLOwner& owner,
           const rgw_user& remote_user,
@@ -905,7 +902,7 @@ public:
       virtual std::string zone_unique_id(uint64_t unique_num) override;
       virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
       virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) override;
-      virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
+      virtual int list_all_zones(const DoutPrefixProvider* dpp, std::vector<std::string>& zone_ids) override;
       virtual int cluster_stat(RGWClusterStat& stats) override;
       virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
       virtual std::unique_ptr<Restore> get_restore(void) override;
@@ -970,7 +967,7 @@ public:
       virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
       virtual int get_config_key_val(std::string name, bufferlist* bl) override;
       virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) override;
-      virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) override;
+      virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::vector<std::string>& keys, bool* truncated) override;
       virtual void meta_list_keys_complete(void* handle) override;
       virtual std::string meta_get_marker(void *handle) override;
       virtual int meta_remove(const DoutPrefixProvider *dpp, std::string& metadata_key, optional_yield y) override;

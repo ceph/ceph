@@ -18,9 +18,11 @@
 #include "test/librados/test_pool_types.h"
 
 #include <errno.h>
-#include <iomanip> // for std::setw(), std::setfill()
+#include <list>
 #include <string>
 #include <vector>
+#include <iomanip> // for std::setw(), std::setfill()
+#include <algorithm>
 using ceph::test::PoolType;
 using ceph::test::pool_type_name;
 using ceph::test::create_pool_by_type;
@@ -1695,6 +1697,114 @@ TEST_P(TestClsRbd, mirror_image) {
   ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
 }
 
+namespace {
+
+bufferlist encode_list_mirror_image_status(
+  const std::list<cls::rbd::MirrorImageSiteStatus>& statuses)
+{
+  bufferlist encoded;
+  ENCODE_START(2, 1, encoded);
+
+  const auto local = std::find_if(
+    std::cbegin(statuses), std::cend(statuses), [](const auto& status) {
+      return status.mirror_uuid ==
+             cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID;
+    });
+  const bool local_status_valid = local != std::cend(statuses);
+  cls::rbd::MirrorImageSiteStatus local_status;
+
+  if (local_status_valid) {
+    local_status = *local;
+  }
+
+  local_status.encode_meta(1, encoded);
+  encode(local_status_valid, encoded);
+
+  __u32 remote_count = std::size(statuses);
+  if (local_status_valid) {
+    --remote_count;
+  }
+
+  encode(remote_count, encoded);
+
+  for (const auto& status : statuses) {
+    if (status.mirror_uuid ==
+          cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID) {
+      continue;
+    }
+
+    status.encode_meta(2, encoded);
+  }
+
+  ENCODE_FINISH(encoded);
+  return encoded;
+}
+
+bufferlist encode_v1_mirror_image_status(
+  const cls::rbd::MirrorImageSiteStatus& local_status)
+{
+  bufferlist encoded;
+  ENCODE_START(1, 1, encoded);
+  local_status.encode_meta(1, encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+} // namespace
+
+TEST(ClsRbdEncoding, MirrorImageStatusContainersRemainWireCompatible)
+{
+  cls::rbd::MirrorImageSiteStatus local {
+    "", cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING, "local"
+  };
+  local.last_update = utime_t(123, 456);
+  local.up = true;
+
+  cls::rbd::MirrorImageSiteStatus remote_a {
+    "remote-a", cls::rbd::MIRROR_IMAGE_STATUS_STATE_SYNCING, "first"
+  };
+  remote_a.last_update = utime_t(234, 567);
+
+  cls::rbd::MirrorImageSiteStatus remote_b {
+    "remote-b", cls::rbd::MIRROR_IMAGE_STATUS_STATE_STOPPED, "second"
+  };
+  remote_b.last_update = utime_t(345, 678);
+  remote_b.up = true;
+
+  const std::list<cls::rbd::MirrorImageSiteStatus> legacy_statuses {
+    remote_a, local, remote_b
+  };
+  const auto legacy_bytes = encode_list_mirror_image_status(legacy_statuses);
+  cls::rbd::MirrorImageStatus status;
+  status.mirror_image_site_statuses.assign(
+    std::cbegin(legacy_statuses), std::cend(legacy_statuses));
+  bufferlist current_bytes;
+  encode(status, current_bytes);
+  ASSERT_TRUE(current_bytes.contents_equal(legacy_bytes));
+
+  cls::rbd::MirrorImageStatus decoded;
+  auto cursor = legacy_bytes.cbegin();
+  decode(decoded, cursor);
+
+  bufferlist decoded_bytes;
+  encode(decoded, decoded_bytes);
+  EXPECT_TRUE(decoded_bytes.contents_equal(legacy_bytes));
+
+  const auto v1_bytes = encode_v1_mirror_image_status(local);
+  cls::rbd::MirrorImageStatus decoded_v1;
+  auto v1_cursor = v1_bytes.cbegin();
+  decode(decoded_v1, v1_cursor);
+  ASSERT_EQ(1U, std::size(decoded_v1.mirror_image_site_statuses));
+
+  const auto& decoded_local = decoded_v1.mirror_image_site_statuses.front();
+  EXPECT_EQ(local.mirror_uuid, decoded_local.mirror_uuid);
+  EXPECT_EQ(local.state, decoded_local.state);
+  EXPECT_EQ(local.description, decoded_local.description);
+  EXPECT_EQ(local.last_update, decoded_local.last_update);
+  EXPECT_EQ(local.up, decoded_local.up);
+}
+
 TEST_P(TestClsRbd, mirror_image_status) {
   SKIP_IF_OMAP_NOT_SUPPORTED();
   struct WatchCtx : public librados::WatchCtx2 {
@@ -3001,14 +3111,38 @@ TEST_P(TestClsRbd, clone_child)
   ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_CHILD) == 0ULL);
 }
 
+TEST(ClsRbdEncoding, NamespaceListContainersRemainWireCompatible)
+{
+  const std::list<std::string> legacy_names {
+    "alpha", "middle\0name"s, "omega"
+  };
+  const std::vector<std::string> names(std::cbegin(legacy_names),
+                                       std::cend(legacy_names));
+  bufferlist legacy_bytes;
+  bufferlist contiguous_bytes;
+
+  encode(legacy_names, legacy_bytes);
+  encode(names, contiguous_bytes);
+  ASSERT_TRUE(contiguous_bytes.contents_equal(legacy_bytes));
+
+  std::vector<std::string> decoded {"stale"};
+  auto cursor = legacy_bytes.cbegin();
+  EXPECT_EQ(0, namespace_list_finish(cursor, decoded));
+  EXPECT_EQ(names, decoded);
+
+  bufferlist decoded_bytes;
+  encode(decoded, decoded_bytes);
+  EXPECT_TRUE(decoded_bytes.contents_equal(legacy_bytes));
+}
+
 TEST_P(TestClsRbd, namespace_methods)
 {
   SKIP_IF_OMAP_NOT_SUPPORTED();
   string name1 = "123456789";
   string name2 = "123456780";
 
-  std::list<std::string> entries;
-  ASSERT_EQ(-ENOENT, namespace_list(&ioctx, "", 1024, &entries));
+  std::vector<std::string> entries;
+  ASSERT_EQ(-ENOENT, namespace_list(ioctx, "", 1024, entries));
 
   ASSERT_EQ(0, namespace_add(&ioctx, name1));
   ASSERT_EQ(-EEXIST, namespace_add(&ioctx, name1));
@@ -3016,21 +3150,25 @@ TEST_P(TestClsRbd, namespace_methods)
   ASSERT_EQ(0, namespace_remove(&ioctx, name1));
   ASSERT_EQ(-ENOENT, namespace_remove(&ioctx, name1));
 
-  ASSERT_EQ(0, namespace_list(&ioctx, "", 1024, &entries));
+  ASSERT_EQ(0, namespace_list(ioctx, "", 1024, entries));
   ASSERT_TRUE(entries.empty());
 
   ASSERT_EQ(0, namespace_add(&ioctx, name1));
   ASSERT_EQ(0, namespace_add(&ioctx, name2));
 
-  ASSERT_EQ(0, namespace_list(&ioctx, "", 1, &entries));
+  std::list<std::string> legacy_entries;
+  ASSERT_EQ(0, namespace_list(&ioctx, "", 1024, &legacy_entries));
+  ASSERT_EQ((std::list<std::string> {name2, name1}), legacy_entries);
+
+  ASSERT_EQ(0, namespace_list(ioctx, "", 1, entries));
   ASSERT_EQ(1U, entries.size());
   ASSERT_EQ(name2, entries.front());
 
-  ASSERT_EQ(0, namespace_list(&ioctx, name2, 1, &entries));
+  ASSERT_EQ(0, namespace_list(ioctx, name2, 1, entries));
   ASSERT_EQ(1U, entries.size());
   ASSERT_EQ(name1, entries.front());
 
-  ASSERT_EQ(0, namespace_list(&ioctx, name1, 1, &entries));
+  ASSERT_EQ(0, namespace_list(ioctx, name1, 1, entries));
   ASSERT_TRUE(entries.empty());
 }
 

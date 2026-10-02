@@ -74,12 +74,13 @@ class UserLister : public RGWMetadataLister {
   using RGWMetadataLister::RGWMetadataLister;
 
   void filter_transform(std::vector<std::string>& oids,
-                        std::list<std::string>& keys) override
+                        std::vector<std::string>& keys) override
   {
     // filter out the user.buckets objects
     constexpr auto filter = [] (const std::string& oid) {
                               return oid.ends_with(RGW_BUCKETS_OBJ_SUFFIX);
                             };
+    keys.reserve(std::size(oids));
     // 'oids' is mutable so we can move its elements instead of copying
     std::remove_copy_if(std::make_move_iterator(oids.begin()),
                         std::make_move_iterator(oids.end()),

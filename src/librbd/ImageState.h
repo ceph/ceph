@@ -6,8 +6,9 @@
 
 #include "include/int_types.h"
 #include "common/ceph_mutex.h"
-#include <list>
+#include <deque>
 #include <string>
+#include <vector>
 #include <utility>
 #include "cls/rbd/cls_rbd_types.h"
 
@@ -104,9 +105,9 @@ private:
     }
   };
 
-  typedef std::list<Context *> Contexts;
-  typedef std::pair<Action, Contexts> ActionContexts;
-  typedef std::list<ActionContexts> ActionsContexts;
+  using Contexts = std::vector<Context *>;
+  using ActionContexts = std::pair<Action, Contexts>;
+  using ActionsContexts = std::deque<ActionContexts>;
 
   ImageCtxT *m_image_ctx;
   State m_state;

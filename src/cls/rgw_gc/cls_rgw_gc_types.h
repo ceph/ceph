@@ -4,6 +4,7 @@
 #pragma once
 
 #include "include/types.h"
+#include <vector>
 #include <unordered_map>
 
 struct cls_rgw_gc_urgent_data
@@ -40,8 +41,8 @@ struct cls_rgw_gc_urgent_data
     f->dump_unsigned("num_head_urgent_entries", num_head_urgent_entries);
     f->dump_unsigned("num_xattr_urgent_entries", num_xattr_urgent_entries);
   }
-  static std::list<cls_rgw_gc_urgent_data> generate_test_instances() {
-    std::list<cls_rgw_gc_urgent_data> o;
+  static std::vector<cls_rgw_gc_urgent_data> generate_test_instances() {
+    std::vector<cls_rgw_gc_urgent_data> o;
     o.emplace_back();
     o.emplace_back();
     o.back().num_urgent_data_entries = 1024;

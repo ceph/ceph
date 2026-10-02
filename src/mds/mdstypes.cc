@@ -16,7 +16,6 @@
 
 const mds_gid_t MDS_GID_NONE = mds_gid_t(0);
 
-using std::list;
 using std::make_pair;
 using std::ostream;
 using std::set;
@@ -85,9 +84,9 @@ void frag_info_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("change_attr", change_attr, obj, true);
 }
 
-std::list<frag_info_t> frag_info_t::generate_test_instances()
+std::vector<frag_info_t> frag_info_t::generate_test_instances()
 {
-  std::list<frag_info_t> ls;
+  std::vector<frag_info_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().version = 1;
@@ -168,9 +167,9 @@ void nest_info_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("rctime", rctime, obj, true);
 }
 
-std::list<nest_info_t> nest_info_t::generate_test_instances()
+std::vector<nest_info_t> nest_info_t::generate_test_instances()
 {
-  std::list<nest_info_t> ls;
+  std::vector<nest_info_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().version = 1;
@@ -214,9 +213,9 @@ void  quota_info_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("max_files", max_files, obj, true);
 }
 
-std::list<quota_info_t> quota_info_t::generate_test_instances()
+std::vector<quota_info_t> quota_info_t::generate_test_instances()
 {
-  std::list<quota_info_t> ls;
+  std::vector<quota_info_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().max_bytes = 16;
@@ -270,9 +269,9 @@ void client_writeable_range_t::byte_range_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("last", last, obj, true);
 }
 
-std::list<client_writeable_range_t> client_writeable_range_t::generate_test_instances()
+std::vector<client_writeable_range_t> client_writeable_range_t::generate_test_instances()
 {
-  std::list<client_writeable_range_t> ls;
+  std::vector<client_writeable_range_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().range.first = 123;
@@ -318,9 +317,9 @@ void inline_data_t::dump(Formatter *f) const
   f->dump_unsigned("length", length());
 }
 
-std::list<inline_data_t> inline_data_t::generate_test_instances()
+std::vector<inline_data_t> inline_data_t::generate_test_instances()
 {
-  std::list<inline_data_t> ls;
+  std::vector<inline_data_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   bufferlist bl;
@@ -402,17 +401,17 @@ void fnode_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("rstat", rstat, obj, true);
   JSONDecoder::decode_json("accounted_rstat", accounted_rstat, obj, true);
 }
-std::list<fnode_t> fnode_t::generate_test_instances()
+std::vector<fnode_t> fnode_t::generate_test_instances()
 {
-  std::list<fnode_t> ls;
+  std::vector<fnode_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().version = 1;
   ls.back().snap_purged_thru = 2;
-  list<frag_info_t> fls = frag_info_t::generate_test_instances();
+  vector<frag_info_t> fls = frag_info_t::generate_test_instances();
   ls.back().fragstat = fls.back();
   ls.back().accounted_fragstat = fls.front();
-  list<nest_info_t> nls = nest_info_t::generate_test_instances();
+  vector<nest_info_t> nls = nest_info_t::generate_test_instances();
   ls.back().rstat = nls.front();
   ls.back().accounted_rstat = nls.back();
   return ls;
@@ -451,13 +450,13 @@ void old_rstat_t::dump(Formatter *f) const
   f->close_section();
 }
 
-std::list<old_rstat_t> old_rstat_t::generate_test_instances()
+std::vector<old_rstat_t> old_rstat_t::generate_test_instances()
 {
-  std::list<old_rstat_t> ls;
+  std::vector<old_rstat_t> ls;
   ls.push_back(old_rstat_t());
   ls.push_back(old_rstat_t());
   ls.back().first = 12;
-  list<nest_info_t> nls = nest_info_t::generate_test_instances();
+  vector<nest_info_t> nls = nest_info_t::generate_test_instances();
   ls.back().rstat = nls.back();
   ls.back().accounted_rstat = nls.front();
   return ls;
@@ -559,9 +558,9 @@ void feature_bitset_t::dump(Formatter *f) const {
   f->dump_string("feature_bits", css->strv());
 }
 
-std::list<feature_bitset_t> feature_bitset_t::generate_test_instances()
+std::vector<feature_bitset_t> feature_bitset_t::generate_test_instances()
 {
-  std::list<feature_bitset_t> ls;
+  std::vector<feature_bitset_t> ls;
   ls.push_back(feature_bitset_t());
   ls.push_back(feature_bitset_t());
   ls.back()._vec.push_back(1);
@@ -606,9 +605,9 @@ void metric_spec_t::dump(Formatter *f) const {
   f->dump_object("metric_flags", metric_flags);
 }
 
-std::list<metric_spec_t> metric_spec_t::generate_test_instances()
+std::vector<metric_spec_t> metric_spec_t::generate_test_instances()
 {
-  std::list<metric_spec_t> ls;
+  std::vector<metric_spec_t> ls;
   ls.push_back(metric_spec_t());
   ls.push_back(metric_spec_t());
   ls.back().metric_flags = 1;
@@ -652,9 +651,9 @@ void client_metadata_t::dump(Formatter *f) const
     f->dump_string(name.c_str(), val);
 }
 
-std::list<client_metadata_t> client_metadata_t::generate_test_instances()
+std::vector<client_metadata_t> client_metadata_t::generate_test_instances()
 {
-  std::list<client_metadata_t> ls;
+  std::vector<client_metadata_t> ls;
   ls.push_back(client_metadata_t());
   ls.push_back(client_metadata_t());
   ls.back().kv_map["key1"] = "val1";
@@ -740,9 +739,9 @@ void session_info_t::dump(Formatter *f) const
   f->dump_object("client_metadata", client_metadata);
 }
 
-std::list<session_info_t> session_info_t::generate_test_instances()
+std::vector<session_info_t> session_info_t::generate_test_instances()
 {
-  std::list<session_info_t>ls;
+  std::vector<session_info_t>ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().inst = entity_inst_t(entity_name_t::MDS(12), entity_addr_t());
@@ -834,9 +833,9 @@ void string_snap_t::dump(Formatter *f) const
   f->dump_unsigned("snapid", snapid);
 }
 
-std::list<string_snap_t> string_snap_t::generate_test_instances()
+std::vector<string_snap_t> string_snap_t::generate_test_instances()
 {
-  std::list<string_snap_t> ls;
+  std::vector<string_snap_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().name = "foo";
@@ -890,9 +889,9 @@ void MDSCacheObjectInfo::print(std::ostream& out) const {
   }
 }
 
-std::list<MDSCacheObjectInfo> MDSCacheObjectInfo::generate_test_instances()
+std::vector<MDSCacheObjectInfo> MDSCacheObjectInfo::generate_test_instances()
 {
-  std::list<MDSCacheObjectInfo> ls;
+  std::vector<MDSCacheObjectInfo> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().ino = 1;
@@ -935,9 +934,9 @@ void mds_table_pending_t::dump(Formatter *f) const
   f->dump_unsigned("tid", tid);
 }
 
-std::list<mds_table_pending_t> mds_table_pending_t::generate_test_instances()
+std::vector<mds_table_pending_t> mds_table_pending_t::generate_test_instances()
 {
-  std::list<mds_table_pending_t> ls;
+  std::vector<mds_table_pending_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().reqid = 234;
@@ -967,8 +966,8 @@ void metareqid_t::print(std::ostream& out) const {
   out << name << ":" << tid;
 }
 
-std::list<metareqid_t> metareqid_t::generate_test_instances() {
-  std::list<metareqid_t> ls;
+std::vector<metareqid_t> metareqid_t::generate_test_instances() {
+  std::vector<metareqid_t> ls;
   ls.emplace_back();
   ls.push_back(metareqid_t(entity_name_t::CLIENT(123), 456));
   return ls;
@@ -1013,8 +1012,8 @@ void dirfrag_t::dump(ceph::Formatter *f) const {
   f->dump_unsigned("frag", frag);
 }
 
-std::list<dirfrag_t> dirfrag_t::generate_test_instances() {
-  std::list<dirfrag_t> ls;
+std::vector<dirfrag_t> dirfrag_t::generate_test_instances() {
+  std::vector<dirfrag_t> ls;
   ls.emplace_back();
   ls.push_back(dirfrag_t(1, frag_t((1<<23), 2)));
   ls.push_back(dirfrag_t(2, frag_t()));
@@ -1053,9 +1052,9 @@ void inode_load_vec_t::dump(Formatter *f) const
   f->close_section();
 }
 
-std::list<inode_load_vec_t> inode_load_vec_t::generate_test_instances()
+std::vector<inode_load_vec_t> inode_load_vec_t::generate_test_instances()
 {
-  std::list<inode_load_vec_t> ls;
+  std::vector<inode_load_vec_t> ls;
   ls.push_back(inode_load_vec_t(DecayRate()));
   return ls;
 }
@@ -1115,9 +1114,9 @@ void dirfrag_load_vec_t::print(std::ostream& out) const {
   out << css->strv();
 }
 
-std::list<dirfrag_load_vec_t> dirfrag_load_vec_t::generate_test_instances()
+std::vector<dirfrag_load_vec_t> dirfrag_load_vec_t::generate_test_instances()
 {
-  std::list<dirfrag_load_vec_t> ls;
+  std::vector<dirfrag_load_vec_t> ls;
   ls.push_back(dirfrag_load_vec_t(DecayRate()));
   return ls;
 }
@@ -1170,9 +1169,9 @@ void mds_load_t::dump(Formatter *f) const
   f->close_section();
 }
 
-std::list<mds_load_t> mds_load_t::generate_test_instances()
+std::vector<mds_load_t> mds_load_t::generate_test_instances()
 {
-  std::list<mds_load_t> ls;
+  std::vector<mds_load_t> ls;
   ls.push_back(mds_load_t(DecayRate()));
   return ls;
 }
@@ -1221,9 +1220,9 @@ void cap_reconnect_t::dump(Formatter *f) const
   f->dump_string("has file locks", capinfo.flock_len ? "true" : "false");
 }
 
-std::list<cap_reconnect_t> cap_reconnect_t::generate_test_instances()
+std::vector<cap_reconnect_t> cap_reconnect_t::generate_test_instances()
 {
-  std::list<cap_reconnect_t> ls;
+  std::vector<cap_reconnect_t> ls;
   ls.emplace_back();
   ls.back().path = "/test/path";
   ls.back().capinfo.cap_id = 1;
@@ -1262,9 +1261,9 @@ void snaprealm_reconnect_t::dump(Formatter *f) const
   f->dump_int("parent", realm.parent);
 }
 
-std::list<snaprealm_reconnect_t> snaprealm_reconnect_t::generate_test_instances()
+std::vector<snaprealm_reconnect_t> snaprealm_reconnect_t::generate_test_instances()
 {
-  std::list<snaprealm_reconnect_t> ls;
+  std::vector<snaprealm_reconnect_t> ls;
   ls.emplace_back();
   ls.back().realm.ino = 0x10000000001ULL;
   ls.back().realm.seq = 2;
@@ -1304,9 +1303,9 @@ void BlockDiff::dump(Formatter *f) const {
   f->dump_stream("blocks") << blocks;
 }
 
-std::list<BlockDiff> BlockDiff::generate_test_instances()
+std::vector<BlockDiff> BlockDiff::generate_test_instances()
 {
-  std::list<BlockDiff> ls;
+  std::vector<BlockDiff> ls;
   ls.push_back(BlockDiff());
   ls.push_back(BlockDiff());
   ls.back().rval = 0;

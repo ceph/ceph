@@ -7,6 +7,7 @@
 
 #include <cerrno>
 #include <string>
+#include <vector>
 #include <sstream>
 #include <optional>
 #include <iostream>
@@ -1400,7 +1401,7 @@ static void show_policy_arns(const boost::container::flat_set<std::string>& arns
 
 #ifdef WITH_RADOSGW_RADOS
 static void show_reshard_status(
-  const list<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
+  const std::vector<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
 {
   formatter->open_array_section("status");
   for (const auto& entry : status) {
@@ -2416,17 +2417,17 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
   return 0;
 }
 
-void flush_ss(stringstream& ss, list<string>& l)
+void flush_ss(stringstream& ss, vector<string>& lines)
 {
   if (!ss.str().empty()) {
-    l.push_back(ss.str());
+    lines.push_back(ss.str());
   }
   ss.str("");
 }
 
-stringstream& push_ss(stringstream& ss, list<string>& l, int tab = 0)
+stringstream& push_ss(stringstream& ss, vector<string>& lines, int tab = 0)
 {
-  flush_ss(ss, l);
+  flush_ss(ss, lines);
   if (tab > 0) {
     ss << setw(tab) << "" << setw(1);
   }
@@ -2434,7 +2435,7 @@ stringstream& push_ss(stringstream& ss, list<string>& l, int tab = 0)
 }
 
 #ifdef WITH_RADOSGW_RADOS
-static void get_md_sync_status(list<string>& status)
+static void get_md_sync_status(vector<string>& status)
 {
   RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
@@ -2575,7 +2576,7 @@ static void get_md_sync_status(list<string>& status)
   flush_ss(ss, status);
 }
 
-static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& status, int tab)
+static void get_data_sync_status(const rgw_zone_id& source_zone, vector<string>& status, int tab)
 {
   stringstream ss;
 
@@ -2742,11 +2743,11 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
   flush_ss(ss, status);
 }
 
-static void tab_dump(const string& header, int width, const list<string>& entries)
+static void tab_dump(const string& header, int width, const vector<string>& entries)
 {
   string s = header;
 
-  for (auto e : entries) {
+  for (const auto& e : entries) {
     cout << std::setw(width) << s << std::setw(1) << " " << e << std::endl;
     s.clear();
   }
@@ -2784,7 +2785,7 @@ static void sync_status(Formatter *formatter)
     cout << std::setw(width) << "                   disabled: " << d << std::endl;
   }
 
-  list<string> md_status;
+  vector<string> md_status;
 
   if (driver->is_meta_master()) {
     md_status.push_back("no sync (zone is master)");
@@ -2794,7 +2795,7 @@ static void sync_status(Formatter *formatter)
 
   tab_dump("metadata sync", width, md_status);
 
-  list<string> data_status;
+  vector<string> data_status;
 
   auto& zone_conn_map = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_conn_map();
 
@@ -3331,12 +3332,8 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
     }
     zone_ids.insert(source_zone_id);
   } else {
-    std::list<std::string> ids;
-    int ret = driver->get_zone()->get_zonegroup().list_zones(ids);
-    if (ret == 0) {
-      for (const auto& entry : ids) {
-	zone_ids.insert(entry);
-      }
+    for (const auto& id : driver->get_zone()->get_zonegroup().list_zones()) {
+      zone_ids.insert(id);
     }
   }
 
@@ -3376,7 +3373,7 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
 {
   int level = 0;
   string cur_conf;
-  list<string> confs;
+  vector<string> confs;
   for (auto c : s) {
     if (c == ',') {
       if (level == 0) {
@@ -3396,7 +3393,7 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
     confs.push_back(cur_conf);
   }
 
-  for (auto c : confs) {
+  for (const auto& c : confs) {
     ssize_t pos = c.find("=");
     if (pos < 0) {
       out[c] = "";
@@ -3823,12 +3820,12 @@ int main(int argc, const char **argv)
   std::string policy_arn;
   std::string redirect_zone;
   bool redirect_zone_set = false;
-  list<string> endpoints;
+  vector<string> endpoints;
   int tmp_int;
   int sync_from_all_specified = false;
   bool sync_from_all = false;
-  list<string> sync_from;
-  list<string> sync_from_rm;
+  vector<string> sync_from;
+  vector<string> sync_from_rm;
   int is_master_int;
   int set_default = 0;
   bool is_master = false;
@@ -3908,9 +3905,9 @@ int main(int argc, const char **argv)
   string object_version;
   string placement_id;
   std::optional<string> opt_storage_class;
-  list<string> tags;
-  list<string> tags_add;
-  list<string> tags_rm;
+  vector<string> tags;
+  vector<string> tags_add;
+  vector<string> tags_rm;
 #ifdef WITH_RADOSGW_RADOS
   int placement_inline_data = true;
   bool placement_inline_data_specified = false;
@@ -4396,13 +4393,9 @@ int main(int argc, const char **argv)
       format_arg_passed = true;
 #endif
     } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*)NULL)) {
-      string cat_str = val;
-      list<string> cat_list;
-      list<string>::iterator iter;
-      get_str_list(cat_str, cat_list);
-      for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
-	categories[*iter] = true;
-      }
+      ceph::for_each_substr(val, ";,= \t", [&categories](const auto category) {
+	categories.emplace(category, true);
+      });
     } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, NULL, "--purge-objects", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
@@ -4519,11 +4512,11 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
       opt_storage_class = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
-      get_str_list(val, ",", tags);
+      get_str_vec(val, ",", tags);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
-      get_str_list(val, ",", tags_add);
+      get_str_vec(val, ",", tags_add);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*)NULL)) {
-      get_str_list(val, ",", tags_rm);
+      get_str_vec(val, ",", tags_rm);
     } else if (ceph_argparse_witharg(args, i, &val, "--api-name", (char*)NULL)) {
       api_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
@@ -4533,11 +4526,11 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
       zone_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
-      get_str_list(val, endpoints);
+      get_str_vec(val, endpoints);
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from", (char*)NULL)) {
-      get_str_list(val, sync_from);
+      get_str_vec(val, sync_from);
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*)NULL)) {
-      get_str_list(val, sync_from_rm);
+      get_str_vec(val, sync_from_rm);
     } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--sync-from-all", (char*)NULL)) {
       sync_from_all = (bool)tmp_int;
       sync_from_all_specified = true;
@@ -7229,7 +7222,7 @@ int main(int argc, const char **argv)
   }
 
   if (!tags.empty()) {
-    user_op.set_placement_tags(tags);
+    user_op.set_placement_tags(std::move(tags));
   }
   user_op.path = path;
 
@@ -8048,7 +8041,7 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT::BUCKET_LIMIT_CHECK) {
     void *handle;
-    std::list<std::string> user_ids;
+    std::vector<std::string> user_ids;
     metadata_key = "user";
     int max = 1000;
 
@@ -8886,7 +8879,7 @@ next:
       return -ret;
     }
 
-    std::list<rgw_cls_bi_entry> entries;
+    std::vector<rgw_cls_bi_entry> entries;
     bool is_truncated;
     const auto& index = bucket->get_info().layout.current_index;
     if (index.layout.type == rgw::BucketIndexType::Indexless) {
@@ -8930,8 +8923,8 @@ next:
         entries.clear();
 	// if object is specified, we use that as a filter to only
 	// retrieve some entries
-        ret = rados->bi_list(bs, object, marker, max_entries, &entries,
-			     &is_truncated, false, null_yield);
+        ret = rados->bi_list(bs, object, marker, max_entries, entries,
+			     is_truncated, false, null_yield);
         if (ret < 0) {
           ldpp_dout(dpp(), 0) << "ERROR: bi_list(): " <<
 	    cpp_strerror(-ret) << dendl;
@@ -9437,7 +9430,7 @@ next:
       bool is_truncated = true;
       std::string marker;
       do {
-	std::list<cls_rgw_reshard_entry> entries;
+	std::vector<cls_rgw_reshard_entry> entries;
         ret = reshard.list(dpp(), i, marker, max_entries - count, entries, &is_truncated);
         if (ret < 0) {
           cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
@@ -9479,8 +9472,8 @@ next:
     RGWBucketReshard br(static_cast<rgw::sal::RadosStore*>(driver),
 			bucket->get_info(), bucket->get_attrs(),
 			nullptr /* no callback */);
-    list<cls_rgw_bucket_instance_entry> status;
-    int r = br.get_status(dpp(), null_yield, &status);
+    std::vector<cls_rgw_bucket_instance_entry> status;
+    int r = br.get_status(dpp(), null_yield, status);
     if (r < 0) {
       cerr << "ERROR: could not get resharding status for bucket " <<
 	bucket_name << std::endl;
@@ -9620,7 +9613,7 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    list<rgw_obj_index_key> oid_list;
+    vector<rgw_obj_index_key> oid_list;
     rgw_obj_key key(object, object_version);
     rgw_obj_index_key index_key;
     key.get_index_key(&index_key);
@@ -10014,7 +10007,7 @@ next:
     std::optional<int> gc_shard_id = specified_shard_id ? std::optional<int>(shard_id) : std::nullopt;
 
     do {
-      list<cls_rgw_gc_obj_info> result;
+      vector<cls_rgw_gc_obj_info> result;
       int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(index, marker, 1000, !include_all, result, truncated, processing_queue, gc_shard_id);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
@@ -10022,9 +10015,7 @@ next:
       }
 
 
-      list<cls_rgw_gc_obj_info>::iterator iter;
-      for (iter = result.begin(); iter != result.end(); ++iter) {
-	cls_rgw_gc_obj_info& info = *iter;
+      for (auto& info : result) {
 	formatter->open_object_section("chain_info");
 	formatter->dump_string("tag", info.tag);
 	formatter->dump_stream("time") << info.time;
@@ -10563,15 +10554,15 @@ next:
 
     uint64_t left;
     do {
-      list<string> keys;
+      vector<string> keys;
       left = (max_entries_specified ? max_entries - count : max);
       ret = driver->meta_list_keys_next(dpp(), handle, left, keys, &truncated);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       } if (ret != -ENOENT) {
-	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-	  formatter->dump_string("key", *iter);
+	for (const auto& key : keys) {
+	  formatter->dump_string("key", key);
           ++count;
 	}
 	formatter->flush(cout);
@@ -11228,7 +11219,7 @@ next:
     }
 
     do {
-      list<rgw_bi_log_entry> entries;
+      vector<rgw_bi_log_entry> entries;
       ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_list(dpp(), null_yield, bucket->get_info(), log_layout, shard_id, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
@@ -12303,7 +12294,7 @@ next:
       return EINVAL;
     }
 
-    list<rados::cls::otp::otp_info_t> result;
+    vector<rados::cls::otp::otp_info_t> result;
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.list_mfa(dpp(), user->get_id(), &result, null_yield);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "MFA listing failed, error: " << cpp_strerror(-ret) << std::endl;
@@ -12331,7 +12322,6 @@ next:
       return EINVAL;
     }
 
-    list<rados::cls::otp::otp_info_t> result;
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.check_mfa(dpp(), user->get_id(), totp_serial, totp_pin.front(), null_yield);
     if (ret < 0) {
       cerr << "MFA check failed, error: " << cpp_strerror(-ret) << std::endl;
@@ -12446,7 +12436,7 @@ next:
       return -ret;
     }
 
-    list<rgw_cls_bi_entry> entries;
+    vector<rgw_cls_bi_entry> entries;
     bool is_truncated;
     if (max_entries < 0)
       max_entries = 1000;
@@ -12476,16 +12466,14 @@ next:
       do {
         entries.clear();
         ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bi_list(bs, "", marker, max_entries,
-                                                                              &entries, &is_truncated,
+                                                                              entries, is_truncated,
                                                                               true, null_yield);
         if (ret < 0) {
           cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
 
-        list<rgw_cls_bi_entry>::iterator iter;
-        for (iter = entries.begin(); iter != entries.end(); ++iter) {
-          rgw_cls_bi_entry& entry = *iter;
+        for (auto& entry : entries) {
           formatter->dump_string("idx", entry.idx);
           marker = entry.idx;
         }

@@ -436,7 +436,7 @@ out:
 int DB::list_users(const DoutPrefixProvider *dpp,
         const std::string& marker,
         uint64_t max,
-        std::list<std::string>& keys,
+        std::vector<std::string>& keys,
         bool *is_truncated)
 {
   int ret = 0;
@@ -1167,7 +1167,7 @@ out:
 }
 
 int DB::Object::get_mp_parts_list(const DoutPrefixProvider *dpp,
-                                  std::list<RGWUploadPartInfo>& info)
+                                  std::vector<RGWUploadPartInfo>& info)
 {
   int ret = 0;
   DBOpParams params = {};
@@ -1180,7 +1180,7 @@ int DB::Object::get_mp_parts_list(const DoutPrefixProvider *dpp,
     goto out;
   }
 
-  info = params.op.obj.mp_parts;
+  info = std::move(params.op.obj.mp_parts);
 
 out:
   return ret;
@@ -1424,7 +1424,7 @@ int DB::raw_obj::write(const DoutPrefixProvider *dpp, int64_t ofs, int64_t write
 }
 
 int DB::Object::list_versioned_objects(const DoutPrefixProvider *dpp,
-                                       std::list<rgw_bucket_dir_entry>& list_entries) {
+                                       std::vector<rgw_bucket_dir_entry>& list_entries) {
   int ret = 0;
   store = get_store();
   DBOpParams db_params = {};
@@ -1439,7 +1439,7 @@ int DB::Object::list_versioned_objects(const DoutPrefixProvider *dpp,
   if (ret) {
     ldpp_dout(dpp, 0)<<"In ListVersionedObjects failed err:(" <<ret<<") " << dendl;
   } else {
-    list_entries = db_params.op.obj.list_entries;
+    list_entries = std::move(db_params.op.obj.list_entries);
   }
 
   return ret;
@@ -2274,9 +2274,7 @@ int DB::list_entries(const std::string& oid, const std::string& marker,
     goto out;
   }
 
-  for (auto& entry : params.op.lc_entry.list_entries) {
-    entries.push_back(std::move(entry));
-  }
+  entries = std::move(params.op.lc_entry.list_entries);
 
 out:
   return ret;
@@ -2430,4 +2428,3 @@ done:
 }
 
 } } // namespace rgw::store
-

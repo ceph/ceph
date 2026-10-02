@@ -21,7 +21,9 @@
 
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <list>
+#include <vector>
 #include <map>
 #include <memory>
 #include <ostream>
@@ -175,7 +177,7 @@ struct osd_reqid_t {
     DENC_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<osd_reqid_t> generate_test_instances();
+  static std::vector<osd_reqid_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(osd_reqid_t)
 
@@ -200,8 +202,8 @@ struct pg_shard_t {
       f->dump_unsigned("shard", static_cast<unsigned>(shard));
     }
   }
-  static std::list<pg_shard_t> generate_test_instances() {
-    std::list<pg_shard_t> o;
+  static std::vector<pg_shard_t> generate_test_instances() {
+    std::vector<pg_shard_t> o;
     o.emplace_back();
     o.push_back(pg_shard_t(1));
     o.push_back(pg_shard_t(1, shard_id_t(2)));
@@ -305,7 +307,7 @@ struct object_locator_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<object_locator_t> generate_test_instances();
+  static std::vector<object_locator_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(object_locator_t)
 
@@ -355,7 +357,7 @@ public:
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<request_redirect_t> generate_test_instances();
+  static std::vector<request_redirect_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(request_redirect_t)
 
@@ -507,7 +509,7 @@ struct pg_t {
     *this = opg;
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_t> generate_test_instances();
+  static std::vector<pg_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(pg_t)
 
@@ -617,8 +619,8 @@ struct spg_t {
     f->dump_stream("pgid") << pgid;
     f->dump_unsigned("shard", static_cast<unsigned>(shard));
   }
-  static std::list<spg_t> generate_test_instances() {
-    std::list<spg_t> o;
+  static std::vector<spg_t> generate_test_instances() {
+    std::vector<spg_t> o;
     o.emplace_back();
     o.push_back(spg_t(pg_t(1, 2), shard_id_t(3)));
     return o;
@@ -806,7 +808,7 @@ public:
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<coll_t> generate_test_instances();
+  static std::vector<coll_t> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(coll_t)
@@ -954,8 +956,8 @@ public:
     f->dump_unsigned("version", version);
     f->dump_unsigned("epoch", epoch);
   }
-  static std::list<eversion_t> generate_test_instances() {
-    std::list<eversion_t> o;
+  static std::vector<eversion_t> generate_test_instances() {
+    std::vector<eversion_t> o;
     o.emplace_back();
     o.push_back(eversion_t(1, 2));
     return o;
@@ -1027,7 +1029,7 @@ struct objectstore_perf_stat_t {
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
-  static std::list<objectstore_perf_stat_t> generate_test_instances();
+  static std::vector<objectstore_perf_stat_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 
@@ -1087,7 +1089,7 @@ struct pool_snap_info_t {
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
-  static std::list<pool_snap_info_t> generate_test_instances();
+  static std::vector<pool_snap_info_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(pool_snap_info_t)
 
@@ -1209,7 +1211,7 @@ public:
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
-  static std::list<pool_opts_t> generate_test_instances();
+  static std::vector<pool_opts_t> generate_test_instances();
 
 private:
   typedef std::map<key_t, value_t> opts_t;
@@ -1263,8 +1265,8 @@ struct pg_merge_meta_t {
     f->dump_stream("source_version") << source_version;
     f->dump_stream("target_version") << target_version;
   }
-  static std::list<pg_merge_meta_t> generate_test_instances() {
-    std::list<pg_merge_meta_t> o;
+  static std::vector<pg_merge_meta_t> generate_test_instances() {
+    std::vector<pg_merge_meta_t> o;
     o.emplace_back();
     o.emplace_back();
     o.back().source_pgid = pg_t(1,2);
@@ -2023,7 +2025,7 @@ public:
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
 
-  static std::list<pg_pool_t> generate_test_instances();
+  static std::vector<pg_pool_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(pg_pool_t)
 
@@ -2261,7 +2263,7 @@ struct object_stat_sum_t {
   }
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
-  static std::list<object_stat_sum_t> generate_test_instances();
+  static std::vector<object_stat_sum_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(object_stat_sum_t)
 
@@ -2285,7 +2287,7 @@ struct object_stat_collection_t {
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
-  static std::list<object_stat_collection_t> generate_test_instances();
+  static std::vector<object_stat_collection_t> generate_test_instances();
 
   bool is_zero() const {
     return sum.is_zero();
@@ -2513,7 +2515,7 @@ struct pg_stat_t {
   std::string dump_scrub_schedule() const;
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
-  static std::list<pg_stat_t> generate_test_instances();
+  static std::vector<pg_stat_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
 
@@ -2643,7 +2645,7 @@ struct store_statfs_t
     denc(v.internal_metadata, p);
     DENC_FINISH(p);
   }
-  static std::list<store_statfs_t> generate_test_instances();
+  static std::vector<store_statfs_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(store_statfs_t)
 
@@ -2731,7 +2733,7 @@ struct osd_stat_t {
   void dump_ping_time(ceph::Formatter *f) const;
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
-  static std::list<osd_stat_t> generate_test_instances();
+  static std::vector<osd_stat_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(osd_stat_t)
 
@@ -2874,7 +2876,7 @@ struct pool_stat_t {
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
-  static std::list<pool_stat_t> generate_test_instances();
+  static std::vector<pool_stat_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
 
@@ -2907,7 +2909,7 @@ struct pg_hit_set_info_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_hit_set_info_t> generate_test_instances();
+  static std::vector<pg_hit_set_info_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(pg_hit_set_info_t)
 
@@ -2919,7 +2921,7 @@ WRITE_CLASS_ENCODER(pg_hit_set_info_t)
  */
 struct pg_hit_set_history_t {
   eversion_t current_last_update;  ///< last version inserted into current set
-  std::list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
+  std::deque<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
 
   friend bool operator==(const pg_hit_set_history_t& l,
 			 const pg_hit_set_history_t& r) {
@@ -2931,7 +2933,7 @@ struct pg_hit_set_history_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_hit_set_history_t> generate_test_instances();
+  static std::vector<pg_hit_set_history_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(pg_hit_set_history_t)
 
@@ -3081,7 +3083,7 @@ struct pg_history_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_history_t> generate_test_instances();
+  static std::vector<pg_history_t> generate_test_instances();
 
   ceph::signedspan refresh_prior_readable_until_ub(
     ceph::signedspan now,  ///< now, relative to osd startup_time
@@ -3199,7 +3201,7 @@ struct pg_info_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_info_t> generate_test_instances();
+  static std::vector<pg_info_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(pg_info_t)
 
@@ -3418,8 +3420,8 @@ struct pg_fast_info_t {
     f->dump_unsigned("num_objects_dirty", stats.stats.sum.num_objects_dirty);
     f->close_section();
   }
-  static std::list<pg_fast_info_t> generate_test_instances() {
-    std::list<pg_fast_info_t> o;
+  static std::vector<pg_fast_info_t> generate_test_instances() {
+    std::vector<pg_fast_info_t> o;
     o.emplace_back();
     o.emplace_back();
     o.back().last_update = eversion_t(1, 2);
@@ -3479,7 +3481,7 @@ public:
     void decode(ceph::buffer::list::const_iterator& bl);
     void dump(ceph::Formatter *f) const;
     std::string fmt_print() const;
-    static std::list<pg_interval_t> generate_test_instances();
+    static std::vector<pg_interval_t> generate_test_instances();
   };
 
   PastIntervals();
@@ -3552,7 +3554,7 @@ public:
 
   std::string fmt_print() const;
 
-  static std::list<PastIntervals> generate_test_instances();
+  static std::vector<PastIntervals> generate_test_instances();
 
   /**
    * Determines whether there is an interval change
@@ -3984,7 +3986,7 @@ struct pg_notify_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &p);
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_notify_t> generate_test_instances();
+  static std::vector<pg_notify_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(pg_notify_t)
 std::ostream &operator<<(std::ostream &lhs, const pg_notify_t &notify);
@@ -4049,7 +4051,7 @@ struct pg_query_t {
   void decode(ceph::buffer::list::const_iterator &bl);
 
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_query_t> generate_test_instances();
+  static std::vector<pg_query_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(pg_query_t)
 
@@ -4088,7 +4090,7 @@ struct pg_lease_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_lease_t> generate_test_instances();
+  static std::vector<pg_lease_t> generate_test_instances();
 
   friend std::ostream& operator<<(std::ostream& out, const pg_lease_t& l) {
     return out << "pg_lease(ru " << l.readable_until
@@ -4115,7 +4117,7 @@ struct pg_lease_ack_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_lease_ack_t> generate_test_instances();
+  static std::vector<pg_lease_ack_t> generate_test_instances();
 
   friend std::ostream& operator<<(std::ostream& out, const pg_lease_ack_t& l) {
     return out << "pg_lease_ack(ruub " << l.readable_until_ub << ")";
@@ -4336,7 +4338,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ObjectModDesc> generate_test_instances();
+  static std::vector<ObjectModDesc> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ObjectModDesc)
 
@@ -4382,7 +4384,7 @@ public:
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
   std::string fmt_print() const;
-  static std::list<ObjectCleanRegions> generate_test_instances();
+  static std::vector<ObjectCleanRegions> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ObjectCleanRegions)
 std::ostream& operator<<(std::ostream& out, const ObjectCleanRegions& ocr);
@@ -4509,8 +4511,8 @@ struct pg_log_op_return_item_t {
     f->dump_int("rval", rval);
     f->dump_unsigned("bl_length", bl.length());
   }
-  static std::list<pg_log_op_return_item_t> generate_test_instances() {
-    std::list<pg_log_op_return_item_t> o;
+  static std::vector<pg_log_op_return_item_t> generate_test_instances() {
+    std::vector<pg_log_op_return_item_t> o;
     o.emplace_back();
     o.back().rval = 0;
     o.emplace_back();
@@ -4697,7 +4699,7 @@ struct pg_log_entry_t {
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
   std::string fmt_print() const;
-  static std::list<pg_log_entry_t> generate_test_instances();
+  static std::vector<pg_log_entry_t> generate_test_instances();
 
 };
 WRITE_CLASS_ENCODER(pg_log_entry_t)
@@ -4731,7 +4733,7 @@ struct pg_log_dup_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_log_dup_t> generate_test_instances();
+  static std::vector<pg_log_dup_t> generate_test_instances();
 
   bool operator==(const pg_log_dup_t &rhs) const {
     return reqid == rhs.reqid &&
@@ -4960,7 +4962,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl, int64_t pool = -1);
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_log_t> generate_test_instances();
+  static std::vector<pg_log_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(pg_log_t)
 
@@ -5061,8 +5063,8 @@ struct pg_missing_item {
     f->dump_stream("flags") << flag_str();
     f->dump_stream("clean_regions") << clean_regions;
   }
-  static std::list<pg_missing_item> generate_test_instances() {
-    std::list<pg_missing_item> o;
+  static std::vector<pg_missing_item> generate_test_instances() {
+    std::vector<pg_missing_item> o;
     o.emplace_back();
     o.emplace_back();
     o.back().need = eversion_t(1, 2);
@@ -5481,8 +5483,8 @@ public:
       }
     }
   }
-  static std::list<pg_missing_set> generate_test_instances() {
-    std::list<pg_missing_set> o;
+  static std::vector<pg_missing_set> generate_test_instances() {
+    std::vector<pg_missing_set> o;
     o.emplace_back();
     o.back().may_include_deletes = true;
     o.emplace_back();
@@ -5626,8 +5628,8 @@ struct pg_nls_response_template {
     }
     f->close_section();
   }
-  static std::list<pg_nls_response_template> generate_test_instances() {
-    std::list<pg_nls_response_template<T>> o;
+  static std::vector<pg_nls_response_template> generate_test_instances() {
+    std::vector<pg_nls_response_template<T>> o;
     o.emplace_back();
     o.emplace_back();
     o.back().handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
@@ -5658,7 +5660,7 @@ WRITE_CLASS_ENCODER(pg_nls_response_t)
 // For backwards compatibility with older OSD requests
 struct pg_ls_response_t {
   collection_list_handle_t handle; 
-  std::list<std::pair<object_t, std::string> > entries;
+  std::vector<std::pair<object_t, std::string>> entries;
 
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
@@ -5678,16 +5680,16 @@ struct pg_ls_response_t {
   void dump(ceph::Formatter *f) const {
     f->dump_stream("handle") << handle;
     f->open_array_section("entries");
-    for (std::list<std::pair<object_t, std::string> >::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+    for (const auto& [object, key] : entries) {
       f->open_object_section("object");
-      f->dump_stream("object") << p->first;
-      f->dump_string("key", p->second);
+      f->dump_stream("object") << object;
+      f->dump_string("key", key);
       f->close_section();
     }
     f->close_section();
   }
-  static std::list<pg_ls_response_t> generate_test_instances() {
-    std::list<pg_ls_response_t> o;
+  static std::vector<pg_ls_response_t> generate_test_instances() {
+    std::vector<pg_ls_response_t> o;
     o.emplace_back();
     o.emplace_back();
     o.back().handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
@@ -5723,7 +5725,7 @@ struct object_copy_cursor_t {
     return attr_complete && data_complete && omap_complete;
   }
 
-  static std::list<object_copy_cursor_t> generate_test_instances();
+  static std::vector<object_copy_cursor_t> generate_test_instances();
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
@@ -5780,7 +5782,7 @@ public:
     truncate_seq(0),
     truncate_size(0) {}
 
-  static std::list<object_copy_data_t> generate_test_instances();
+  static std::vector<object_copy_data_t> generate_test_instances();
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
@@ -5803,7 +5805,7 @@ struct pg_create_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<pg_create_t> generate_test_instances();
+  static std::vector<pg_create_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(pg_create_t)
 
@@ -6003,7 +6005,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<OSDSuperblock> generate_test_instances();
+  static std::vector<OSDSuperblock> generate_test_instances();
 
   // Allow default operators to avoid crimson related errors
   OSDSuperblock(OSDSuperblock&&) noexcept = default;
@@ -6060,7 +6062,7 @@ struct SnapSet {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<SnapSet> generate_test_instances();
+  static std::vector<SnapSet> generate_test_instances();
 
   SnapContext get_ssc_as_of(snapid_t as_of) const {
     SnapContext out;
@@ -6104,7 +6106,7 @@ struct watch_info_t {
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   std::string fmt_print() const;
-  static std::list<watch_info_t> generate_test_instances();
+  static std::vector<watch_info_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(watch_info_t)
 
@@ -6242,7 +6244,7 @@ struct chunk_info_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<chunk_info_t> generate_test_instances();
+  static std::vector<chunk_info_t> generate_test_instances();
   friend std::ostream& operator<<(std::ostream& out, const chunk_info_t& ci);
   bool operator==(const chunk_info_t& cit) const;
   bool operator!=(const chunk_info_t& cit) const {
@@ -6341,7 +6343,7 @@ struct object_manifest_t {
     object_ref_delta_t &delta    ///< [out] set of refs to drop
   ) const;
 
-  static std::list<object_manifest_t> generate_test_instances();
+  static std::vector<object_manifest_t> generate_test_instances();
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
@@ -6527,7 +6529,7 @@ struct object_info_t {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<object_info_t> generate_test_instances();
+  static std::vector<object_info_t> generate_test_instances();
 
   explicit object_info_t()
     : user_version(0), size(0), flags((flag_t)0),
@@ -6575,7 +6577,7 @@ struct ObjectRecoveryInfo {
 
   ObjectRecoveryInfo() : size(0), num_omap_keys(0), object_exist(true) { }
 
-  static std::list<ObjectRecoveryInfo> generate_test_instances();
+  static std::vector<ObjectRecoveryInfo> generate_test_instances();
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl, int64_t pool = -1);
   std::string fmt_print() const;
@@ -6606,7 +6608,7 @@ struct ObjectRecoveryProgress {
     return info.size - data_recovered_to;
   }
 
-  static std::list<ObjectRecoveryProgress> generate_test_instances();
+  static std::vector<ObjectRecoveryProgress> generate_test_instances();
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   std::ostream &print(std::ostream &out) const;
@@ -6619,7 +6621,7 @@ std::ostream& operator<<(std::ostream& out, const ObjectRecoveryProgress &prog);
 struct PushReplyOp {
   hobject_t soid;
 
-  static std::list<PushReplyOp> generate_test_instances();
+  static std::vector<PushReplyOp> generate_test_instances();
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   std::ostream &print(std::ostream &out) const;
@@ -6636,7 +6638,7 @@ struct PullOp {
   ObjectRecoveryInfo recovery_info;
   ObjectRecoveryProgress recovery_progress;
 
-  static std::list<PullOp> generate_test_instances();
+  static std::vector<PullOp> generate_test_instances();
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   std::ostream &print(std::ostream &out) const;
@@ -6660,7 +6662,7 @@ struct PushOp {
   ObjectRecoveryProgress before_progress;
   ObjectRecoveryProgress after_progress;
 
-  static std::list<PushOp> generate_test_instances();
+  static std::vector<PushOp> generate_test_instances();
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   std::ostream &print(std::ostream &out) const;
@@ -6705,7 +6707,7 @@ struct ScrubMap {
     void encode(ceph::buffer::list& bl) const;
     void decode(ceph::buffer::list::const_iterator& bl);
     void dump(ceph::Formatter *f) const;
-    static std::list<object> generate_test_instances();
+    static std::vector<object> generate_test_instances();
   };
   WRITE_CLASS_ENCODER(object)
 
@@ -6734,7 +6736,7 @@ struct ScrubMap {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl, int64_t pool=-1);
   void dump(ceph::Formatter *f) const;
-  static std::list<ScrubMap> generate_test_instances();
+  static std::vector<ScrubMap> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
@@ -6818,8 +6820,8 @@ struct watch_item_t {
     addr.dump(f);
     f->close_section();
   }
-  static std::list<watch_item_t> generate_test_instances() {
-    std::list<watch_item_t> o;
+  static std::vector<watch_item_t> generate_test_instances() {
+    std::vector<watch_item_t> o;
     entity_addr_t ea;
     ea.set_type(entity_addr_t::TYPE_LEGACY);
     ea.set_nonce(1000);
@@ -6849,7 +6851,7 @@ struct obj_watch_item_t {
  *
  */
 struct obj_list_watch_response_t {
-  std::list<watch_item_t> entries;
+  std::vector<watch_item_t> entries;
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
@@ -6863,19 +6865,19 @@ struct obj_list_watch_response_t {
   }
   void dump(ceph::Formatter *f) const {
     f->open_array_section("entries");
-    for (std::list<watch_item_t>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+    for (const auto& entry : entries) {
       f->open_object_section("watch");
-      p->dump(f);
+      entry.dump(f);
       f->close_section();
     }
     f->close_section();
   }
-  static std::list<obj_list_watch_response_t> generate_test_instances() {
-    std::list<obj_list_watch_response_t> o;
+  static std::vector<obj_list_watch_response_t> generate_test_instances() {
+    std::vector<obj_list_watch_response_t> o;
     entity_addr_t ea;
     o.emplace_back();
     o.emplace_back();
-    std::list<watch_item_t> test_watchers = watch_item_t::generate_test_instances();
+    std::vector<watch_item_t> test_watchers = watch_item_t::generate_test_instances();
     for (auto &e : test_watchers) {
       o.back().entries.push_back(e);
     }
@@ -6931,8 +6933,8 @@ struct clone_info {
     f->close_section();
     f->dump_unsigned("size", size);
   }
-  static std::list<clone_info> generate_test_instances() {
-    std::list<clone_info> o;
+  static std::vector<clone_info> generate_test_instances() {
+    std::vector<clone_info> o;
     o.emplace_back();
     o.emplace_back();
     o.back().cloneid = 1;
@@ -6981,8 +6983,8 @@ struct obj_list_snap_response_t {
     f->dump_unsigned("seq", seq);
     f->close_section();
   }
-  static std::list<obj_list_snap_response_t> generate_test_instances() {
-    std::list<obj_list_snap_response_t> o;
+  static std::vector<obj_list_snap_response_t> generate_test_instances() {
+    std::vector<obj_list_snap_response_t> o;
     o.emplace_back();
     o.emplace_back();
     clone_info cl;
@@ -7105,8 +7107,8 @@ struct pool_pg_num_history_t {
     }
     f->close_section();
   }
-  static std::list<pool_pg_num_history_t> generate_test_instances() {
-    std::list<pool_pg_num_history_t> ls;
+  static std::vector<pool_pg_num_history_t> generate_test_instances() {
+    std::vector<pool_pg_num_history_t> ls;
     ls.emplace_back();
     return ls;
   }

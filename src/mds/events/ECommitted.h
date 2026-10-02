@@ -16,6 +16,7 @@
 #ifndef CEPH_MDS_ECOMMITTED_H
 #define CEPH_MDS_ECOMMITTED_H
 
+#include <deque>
 #include "../LogEvent.h"
 #include "EMetaBlob.h"
 
@@ -34,7 +35,7 @@ public:
   void encode(bufferlist &bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator &bl) override;
   void dump(Formatter *f) const override;
-  static std::list<ECommitted> generate_test_instances();
+  static std::deque<ECommitted> generate_test_instances();
 
   void update_segment() override {}
   void replay(MDSRank *mds) override;
