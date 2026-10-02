@@ -27,6 +27,7 @@
  */
 #include <vector>
 #include <list>
+#include <deque>
 #include <set>
 #include <map>
 #include <memory>
@@ -85,7 +86,7 @@ struct osd_info_t {
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
-  static std::list<osd_info_t> generate_test_instances();
+  static std::vector<osd_info_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(osd_info_t)
 
@@ -106,7 +107,7 @@ struct osd_xinfo_t {
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
-  static std::list<osd_xinfo_t> generate_test_instances();
+  static std::vector<osd_xinfo_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(osd_xinfo_t)
 
@@ -347,8 +348,8 @@ struct PGTempMap {
       f->close_section();
     }
   }
-  static std::list<PGTempMap> generate_test_instances() {
-    std::list<PGTempMap> o;
+  static std::vector<PGTempMap> generate_test_instances() {
+    std::vector<PGTempMap> o;
     o.emplace_back();
     o.emplace_back();
     o.back().set(pg_t(1, 2), { 3, 4 });
@@ -456,7 +457,7 @@ public:
     void decode_classic(ceph::buffer::list::const_iterator &p);
     void decode(ceph::buffer::list::const_iterator &bl);
     void dump(ceph::Formatter *f) const;
-    static std::list<Incremental> generate_test_instances();
+    static std::vector<Incremental> generate_test_instances();
 
     explicit Incremental(epoch_t e=0) :
       encode_features(0),
@@ -757,8 +758,9 @@ public:
 
   bool is_blocklisted(const entity_addr_t& a, CephContext *cct=nullptr) const;
   bool is_blocklisted(const entity_addrvec_t& a, CephContext *cct=nullptr) const;
-  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl,
-		     std::list<std::pair<entity_addr_t,utime_t> > *rl) const;
+  void get_blocklist(
+    std::vector<std::pair<entity_addr_t, utime_t>>& blocklisted,
+    std::vector<std::pair<entity_addr_t, utime_t>>& range_blocklisted) const;
   void get_blocklist(std::set<entity_addr_t> *bl,
 		     std::set<entity_addr_t> *rl) const;
 
@@ -1864,7 +1866,7 @@ public:
   void dump_osds(ceph::Formatter *f) const;
   void dump_pool(CephContext *cct, int64_t pid, const pg_pool_t &pdata, ceph::Formatter *f) const;
   void dump_read_balance_score(CephContext *cct, int64_t pid, const pg_pool_t &pdata, ceph::Formatter *f) const;
-  static std::list<OSDMap> generate_test_instances();
+  static std::deque<OSDMap> generate_test_instances();
   bool check_new_blocklist_entries() const { return new_blocklist_entries; }
 
   void check_health(CephContext *cct, health_check_map_t *checks) const;

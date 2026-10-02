@@ -15,10 +15,12 @@
 #ifndef CEPH_MDCACHE_H
 #define CEPH_MDCACHE_H
 
+#include <deque>
 #include <atomic>
 #include <chrono>
-#include <string_view>
 #include <thread>
+#include <vector>
+#include <string_view>
 #include <unordered_map>
 
 #include "common/DecayCounter.h"
@@ -360,7 +362,7 @@ class MDCache {
   void adjust_bounded_subtree_auth(CDir *dir, const std::vector<dirfrag_t>& bounds, mds_rank_t a) {
     adjust_bounded_subtree_auth(dir, bounds, mds_authority_t(a, CDIR_AUTH_UNKNOWN));
   }
-  void map_dirfrag_set(const std::list<dirfrag_t>& dfs, std::set<CDir*>& result);
+  void map_dirfrag_set(const std::vector<dirfrag_t>& dfs, std::set<CDir*>& result);
   void try_subtree_merge(CDir *root);
   void try_subtree_merge_at(CDir *root, std::set<CInode*> *to_eval, bool adjust_pop=true);
   void eval_subtree_root(CInode *diri);
@@ -377,7 +379,6 @@ class MDCache {
   void get_subtree_bounds(CDir *root, std::set<CDir*>& bounds);
   void get_wouldbe_subtree_bounds(CDir *root, std::set<CDir*>& bounds);
   void verify_subtree_bounds(CDir *root, const std::set<CDir*>& bounds);
-  void verify_subtree_bounds(CDir *root, const std::list<dirfrag_t>& bounds);
 
   void project_subtree_rename(CInode *diri, CDir *olddir, CDir *newdir);
   void adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop);
@@ -1381,7 +1382,8 @@ private:
 
   /* subtree keys and each tree's non-recursive nested subtrees (the "bounds") */
   std::map<CDir*,std::set<CDir*> > subtrees;
-  std::map<CInode*,std::list<std::pair<CDir*,CDir*> > > projected_subtree_renames;  // renamed ino -> target dir
+  // Projected old/new parents by renamed inode:
+  std::map<CInode*, std::vector<std::pair<CDir*, CDir*>>> projected_subtree_renames;
 
   // -- requests --
   std::unordered_map<metareqid_t, MDRequestRef> active_requests;
@@ -1437,7 +1439,7 @@ private:
   std::map<mds_rank_t, std::set<CInode*> > rejoin_unlinked_inodes;
 
   std::vector<CInode*> rejoin_recover_q, rejoin_check_q;
-  std::list<SimpleLock*> rejoin_eval_locks;
+  std::deque<SimpleLock*> rejoin_eval_locks;
   std::vector<MDSContext*> rejoin_waiters;
 
   std::unique_ptr<MDSContext> rejoin_done;

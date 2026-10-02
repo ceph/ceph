@@ -143,9 +143,9 @@ void file_layout_t::decode_json(JSONObj *obj){
     JSONDecoder::decode_json("pool_ns", pool_ns, obj, true);
 }
 
-std::list<file_layout_t> file_layout_t::generate_test_instances()
+std::vector<file_layout_t> file_layout_t::generate_test_instances()
 {
-  std::list<file_layout_t> o;
+  std::vector<file_layout_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().stripe_unit = 4096;

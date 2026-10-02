@@ -164,9 +164,7 @@ RGWXMLParser::
   XML_ParserFree(p);
 
   free(buf);
-  std::list<XMLObj *>::const_iterator iter;
-  for (iter = allocated_objs.begin(); iter != allocated_objs.end(); ++iter) {
-    XMLObj *obj = *iter;
+  for (auto *obj : allocated_objs) {
     delete obj;
   }
 }
@@ -518,4 +516,3 @@ void encode_xml(const char *name, const bufferlist& bl, Formatter *f)
 
   encode_xml(name, s, f);
 }
-

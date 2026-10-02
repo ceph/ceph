@@ -1,13 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include <cerrno>
-#include <optional>
-#include <cstdlib>
-#include <system_error>
 #include <span>
+#include <cerrno>
+#include <cstdlib>
 #include <sstream>
+#include <iterator>
+#include <optional>
 #include <string_view>
+#include <system_error>
 
 #include <unistd.h>
 
@@ -1995,17 +1996,19 @@ int RGWOp::read_global_cors()
  * */
 static void get_cors_response_headers(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_hdrs, string& hdrs, string& exp_hdrs, unsigned *max_age) {
   if (req_hdrs) {
-    list<string> hl;
-    get_str_list(req_hdrs, hl);
-    for(list<string>::iterator it = hl.begin(); it != hl.end(); ++it) {
-      if (!rule->is_header_allowed((*it).c_str(), (*it).length())) {
-        ldpp_dout(dpp, 5) << "Header " << (*it) << " is not registered in this rule" << dendl;
-      } else {
-        ldpp_dout(dpp, 20) << "Header " << (*it) << " is registered in this rule" << dendl;
-        if (hdrs.length() > 0) hdrs.append(",");
-        hdrs.append((*it));
+    ceph::for_each_substr(req_hdrs, ";,= \t", [&](std::string_view header) {
+      if (!rule->is_header_allowed(header.data(), header.size())) {
+        ldpp_dout(dpp, 5) << "Header " << header << " is not registered in this rule" << dendl;
+        return;
       }
-    }
+
+      ldpp_dout(dpp, 20) << "Header " << header << " is registered in this rule" << dendl;
+      if (!hdrs.empty()) {
+        hdrs.append(",");
+      }
+
+      hdrs.append(header);
+    });
   }
   rule->format_exp_headers(exp_hdrs);
   *max_age = rule->get_max_age();
@@ -5939,7 +5942,9 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
     return -ENOMEM;
   }
 
-  list<RGWBulkDelete::acct_path_t> items;
+  std::vector<RGWBulkDelete::acct_path_t> items;
+  items.reserve(1 + std::size(slo_info.entries));
+
   for (const auto& iter : slo_info.entries) {
     const string& path_str = iter.path;
 
@@ -5958,14 +5963,14 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
     path.bucket_name = url_decode(path_str.substr(pos_init, sep_pos - pos_init));
     path.obj_key = url_decode(path_str.substr(sep_pos + 1));
 
-    items.push_back(path);
+    items.push_back(std::move(path));
   }
 
   /* Request removal of the manifest object itself. */
   RGWBulkDelete::acct_path_t path;
   path.bucket_name = s->bucket_name;
   path.obj_key = s->object->get_key();
-  items.push_back(path);
+  items.push_back(std::move(path));
 
   int ret = deleter->delete_chunk(items, y);
   if (ret < 0) {
@@ -7762,7 +7767,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   bool compressed = false;
   uint64_t accounted_size = 0;
 
-  list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
+  vector<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
 
   std::unique_ptr<rgw::sal::Object> meta_obj = upload->get_meta_obj();
   meta_obj->set_in_extra_data(true);
@@ -8664,7 +8669,7 @@ binfo_fail:
         .err  = ret,
         .path = path
       };
-      failures.push_back(failed_item);
+      failures.push_back(std::move(failed_item));
     }
     return false;
 
@@ -8675,7 +8680,7 @@ auth_fail:
         .err  = ret,
         .path = path
       };
-      failures.push_back(failed_item);
+      failures.push_back(std::move(failed_item));
     }
     return false;
 
@@ -8688,15 +8693,15 @@ delop_fail:
         .err  = ret,
         .path = path
       };
-      failures.push_back(failed_item);
+      failures.push_back(std::move(failed_item));
     }
     return false;
 }
 
-bool RGWBulkDelete::Deleter::delete_chunk(const std::list<acct_path_t>& paths, optional_yield y)
+bool RGWBulkDelete::Deleter::delete_chunk(const std::vector<acct_path_t>& paths, optional_yield y)
 {
   ldpp_dout(dpp, 20) << "in delete_chunk" << dendl;
-  for (auto path : paths) {
+  for (const auto& path : paths) {
     ldpp_dout(dpp, 20) << "bulk deleting path: " << path << dendl;
     delete_single(path, y);
   }
@@ -8720,9 +8725,10 @@ void RGWBulkDelete::execute(optional_yield y)
 
   bool is_truncated = false;
   do {
-    list<RGWBulkDelete::acct_path_t> items;
+    std::vector<RGWBulkDelete::acct_path_t> items;
+    items.reserve(MAX_CHUNK_ENTRIES);
 
-    int ret = get_data(items, &is_truncated);
+    int ret = get_data(items, is_truncated);
     if (ret < 0) {
       return;
     }

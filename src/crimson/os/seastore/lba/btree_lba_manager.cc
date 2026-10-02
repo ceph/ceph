@@ -276,7 +276,7 @@ BtreeLBAManager::get_cursors(
   LOG_PREFIX(BtreeLBAManager::get_cursors);
   TRACET("{}~0x{:x} ...", c.trans, laddr, length);
 
-  std::list<LBACursorRef> ret;
+  std::vector<LBACursorRef> ret;
 
   auto pos = co_await btree.upper_bound_right(c, laddr);
   while (true) {
@@ -815,9 +815,9 @@ BtreeLBAManager::insert_mappings(
   std::vector<alloc_mapping_info_t> &alloc_infos)
 {
   return seastar::do_with(
-    std::move(iter), std::list<LBACursorRef>(),
+    std::move(iter), std::vector<LBACursorRef>(std::size(alloc_infos)),
     [c, &btree, &alloc_infos]
-    (LBABtree::iterator &iter, std::list<LBACursorRef> &ret)
+    (LBABtree::iterator &iter, std::vector<LBACursorRef> &ret)
   {
     return trans_intr::do_for_each(
       alloc_infos.begin(),
@@ -858,15 +858,15 @@ BtreeLBAManager::insert_mappings(
       return trans_intr::do_for_each(
 	boost::make_counting_iterator<size_t>(0),
 	boost::make_counting_iterator<size_t>(alloc_infos.size()),
-	[&ret, &iter, c](auto) {
-	return iter.prev(c).si_then([c, &ret, &iter](auto it) {
-	  ret.push_front(it.get_cursor(c));
+	[&ret, &iter, c](auto index) {
+	return iter.prev(c).si_then([c, index, &ret, &iter](auto it) {
+	  ret[std::size(ret) - 1 - index] = it.get_cursor(c);
 	  iter = std::move(it);
 	});
       });
     }).si_then([&ret] {
       return alloc_mappings_iertr::make_ready_future<
-	std::list<LBACursorRef>>(std::move(ret));
+	std::vector<LBACursorRef>>(std::move(ret));
     });
   });
 }
@@ -1100,7 +1100,7 @@ BtreeLBAManager::update_mapping(
 BtreeLBAManager::update_mappings_ret
 BtreeLBAManager::update_mappings(
   Transaction& t,
-  const std::list<LogicalChildNodeRef>& extents)
+  const std::vector<LogicalChildNodeRef>& extents)
 {
   LOG_PREFIX(BtreeLBAManager::update_mappings);
   auto c = get_context(t);

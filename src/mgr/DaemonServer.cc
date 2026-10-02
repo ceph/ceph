@@ -53,12 +53,12 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include <iomanip>
-
-#include <list>
 #include <map>
 #include <string>
 #include <vector>
+#include <iomanip>
+#include <utility>
+#include <iterator>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -68,7 +68,6 @@
 using namespace TOPNSPC::common;
 using namespace std::literals;
 
-using std::list;
 using std::ostream;
 using std::ostringstream;
 using std::string;
@@ -77,6 +76,27 @@ using std::vector;
 using std::unique_ptr;
 
 namespace {
+  string format_config_overrides(const std::map<int32_t, string>& settings)
+  {
+    vector<string> overrides;
+    overrides.reserve(std::size(settings) - 1);
+
+    const auto& active_value = std::rbegin(settings)->second;
+    for (auto setting = std::next(std::rbegin(settings));
+         setting != std::rend(settings); ++setting) {
+      auto text = ceph_conf_level_name(setting->first) +
+                  string("[") + setting->second + "]";
+
+      if (setting->second == active_value) {
+        text = "(" + text + ")";
+      }
+
+      overrides.emplace_back(std::move(text));
+    }
+
+    return boost::algorithm::join(overrides, ",");
+  }
+
   template <typename Map>
   bool map_compare(Map const &lhs, Map const &rhs) {
     return lhs.size() == rhs.size()
@@ -1298,9 +1318,9 @@ int DaemonServer::_populate_crush_bucket_osds(
   std::vector<std::string> bucket_names;
   // get candidate additions that are beneath this point in the tree
   if (bucket_type_str == "rack" || bucket_type_str == "chassis") {
-    std::list<int> crush_bucket_children;
+    std::vector<int> crush_bucket_children;
     // Get the list of children
-    if (osdmap.crush->get_children(item_id, &crush_bucket_children) <= 0) {
+    if (osdmap.crush->get_children(item_id, crush_bucket_children) <= 0) {
       ostringstream os;
       os << "crush bucket \"" << item_name << "\" of type: "
          << bucket_type_str << " has no children!";
@@ -2738,20 +2758,7 @@ bool DaemonServer::_handle_command(
 	    tbl << i.second.rbegin()->second;
 	    tbl << ceph_conf_level_name(i.second.rbegin()->first);
 	    if (i.second.size() > 1) {
-	      list<string> ov;
-	      auto j = i.second.rend();
-	      for (--j; j != i.second.rbegin(); --j) {
-		if (j->second == i.second.rbegin()->second) {
-		  ov.push_front(string("(") + ceph_conf_level_name(j->first) +
-				string("[") + j->second + string("]") +
-				string(")"));
-		} else {
-                  ov.push_front(ceph_conf_level_name(j->first) +
-                                string("[") + j->second + string("]"));
-
-		}
-	      }
-	      tbl << ov;
+	      tbl << format_config_overrides(i.second);
 	    } else {
 	      tbl << "";
 	    }
@@ -2811,19 +2818,7 @@ bool DaemonServer::_handle_command(
 	      tbl << j->second.rbegin()->second;
 	      tbl << ceph_conf_level_name(j->second.rbegin()->first);
 	      if (j->second.size() > 1) {
-		list<string> ov;
-		auto k = j->second.rend();
-		for (--k; k != j->second.rbegin(); --k) {
-		  if (k->second == j->second.rbegin()->second) {
-		    ov.push_front(string("(") + ceph_conf_level_name(k->first) +
-				  string("[") + k->second + string("]") +
-				  string(")"));
-		  } else {
-                    ov.push_front(ceph_conf_level_name(k->first) +
-                                  string("[") + k->second + string("]"));
-		  }
-		}
-		tbl << ov;
+		tbl << format_config_overrides(j->second);
 	      } else {
 		tbl << "";
 	      }

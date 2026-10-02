@@ -59,8 +59,8 @@ struct objv {
     f->dump_string("instance", instance);
     f->dump_unsigned("ver", ver);
   }
-  static std::list<objv> generate_test_instances() {
-    std::list<objv> o;
+  static std::vector<objv> generate_test_instances() {
+    std::vector<objv> o;
     o.emplace_back();
     o.emplace_back();
     o.back().instance = "instance";
@@ -120,8 +120,8 @@ struct data_params {
     f->dump_unsigned("max_entry_size", max_entry_size);
     f->dump_unsigned("full_size_threshold", full_size_threshold);
   }
-  static std::list<data_params> generate_test_instances() {
-    std::list<data_params> o;
+  static std::vector<data_params> generate_test_instances() {
+    std::vector<data_params> o;
     o.emplace_back();
     o.emplace_back();
     o.back().max_part_size = 1;
@@ -442,8 +442,8 @@ struct info {
     }
     f->close_section();
   }
-  static std::list<info> generate_test_instances() {
-    std::list<info> o;
+  static std::vector<info> generate_test_instances() {
+    std::vector<info> o;
     o.emplace_back();
     o.emplace_back();
     o.back().id = "myid";

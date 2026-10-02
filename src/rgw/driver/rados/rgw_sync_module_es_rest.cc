@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <vector>
+
 #include "rgw_sync_module_es.h"
 #include "rgw_sync_module_es_rest.h"
 #include "rgw_es_query.h"
@@ -49,17 +51,17 @@ struct es_index_obj_response {
       JSONDecoder::decode_json("etag", etag, obj);
       JSONDecoder::decode_json("content_type", content_type, obj);
       JSONDecoder::decode_json("storage_class", storage_class, obj);
-      list<_custom_entry<string> > str_entries;
+      vector<_custom_entry<string>> str_entries;
       JSONDecoder::decode_json("custom-string", str_entries, obj);
       for (auto& e : str_entries) {
         custom_str[e.name] = e.value;
       }
-      list<_custom_entry<int64_t> > int_entries;
+      vector<_custom_entry<int64_t>> int_entries;
       JSONDecoder::decode_json("custom-int", int_entries, obj);
       for (auto& e : int_entries) {
         custom_int[e.name] = e.value;
       }
-      list<_custom_entry<string> > date_entries;
+      vector<_custom_entry<string>> date_entries;
       JSONDecoder::decode_json("custom-date", date_entries, obj);
       for (auto& e : date_entries) {
         custom_date[e.name] = e.value;
@@ -107,7 +109,7 @@ struct es_search_response {
   struct {
     uint32_t total;
     // double max_score;
-    list<obj_hit> hits;
+    vector<obj_hit> hits;
     void decode_json(JSONObj *obj) {
       JSONDecoder::decode_json("total", total, obj);
       // JSONDecoder::decode_json("max_score", max_score, obj);
@@ -166,7 +168,7 @@ void RGWMetadataSearchOp::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  list<pair<string, string> > conds;
+  vector<pair<string, string>> conds;
 
   if (!s->user->get_info().system) {
     conds.push_back(make_pair("permissions", s->user->get_id().to_str()));
@@ -176,7 +178,7 @@ void RGWMetadataSearchOp::execute(optional_yield y)
     conds.push_back(make_pair("bucket", s->bucket_name));
   }
 
-  ESQueryCompiler es_query(expression, &conds, custom_prefix);
+  ESQueryCompiler es_query(expression, std::move(conds), custom_prefix);
   
   static map<string, string, ltstr_nocase> aliases = {
                                   { "bucket", "bucket" }, /* forces lowercase */
@@ -425,4 +427,3 @@ RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(rgw::sal::Driver* driver,
 		    << dendl;
   return handler;
 }
-

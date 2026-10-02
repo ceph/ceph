@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <errno.h>
+#include <iterator>
 
 #include "objclass/objclass.h"
 #include "cls/refcount/cls_refcount_ops.h"
@@ -150,13 +151,13 @@ static int cls_rc_refcount_set(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  if (!op.refs.size()) {
+  if (op.refs.empty()) {
     return cls_cxx_remove(hctx);
   }
 
   obj_refcount objr;
-  for (auto iter = op.refs.begin(); iter != op.refs.end(); ++iter) {
-    objr.refs[*iter] = true;
+  for (const auto& ref : op.refs) {
+    objr.refs[ref] = true;
   }
 
   int ret = set_refcount(hctx, objr);
@@ -185,8 +186,9 @@ static int cls_rc_refcount_read(cls_method_context_t hctx, bufferlist *in, buffe
   if (ret < 0)
     return ret;
 
-  for (auto iter = objr.refs.begin(); iter != objr.refs.end(); ++iter) {
-    read_ret.refs.push_back(iter->first);
+  read_ret.refs.reserve(std::size(objr.refs));
+  for (const auto& ref : objr.refs) {
+    read_ret.refs.push_back(ref.first);
   }
 
   encode(read_ret, *out);
@@ -215,4 +217,3 @@ CLS_INIT(refcount)
 
   return;
 }
-

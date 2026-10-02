@@ -31,6 +31,7 @@
 #include "osd/scrubber_common.h"
 #include "common/LogClient.h"
 #include <string>
+#include <vector>
 #include "PGTransaction.h"
 #include "common/ostream_temp.h"
 #include "Coroutines.h"
@@ -641,6 +642,16 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const hobject_t &hoid,
      std::map<std::string, ceph::buffer::list, std::less<>> *out);
 
+   /**
+    * The output buffer must outlive the read. Moving a request to
+    * objects_read_async() transfers ownership of its completion callback.
+    */
+   struct async_read_request final {
+     ec_align_t extent;
+     ceph::buffer::list *output;
+     Context *completion;
+   };
+
    virtual int objects_read_sync(
      const hobject_t &hoid,
      uint64_t off,
@@ -674,8 +685,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual void objects_read_async(
      const hobject_t &hoid,
      uint64_t object_size,
-     const std::list<std::pair<ec_align_t,
-		std::pair<ceph::buffer::list*, Context*>>> &to_read,
+     std::vector<async_read_request> &&requests,
      Context *on_complete, bool fast_read = false) = 0;
 
    virtual bool auto_repair_supported() const = 0;

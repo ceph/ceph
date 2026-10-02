@@ -177,9 +177,9 @@ void MDSMap::mds_info_t::dump(std::ostream& o) const
   o << "]";
 }
 
-auto MDSMap::mds_info_t::generate_test_instances() -> std::list<mds_info_t>
+auto MDSMap::mds_info_t::generate_test_instances() -> std::vector<mds_info_t>
 {
-  std::list<mds_info_t> ls;
+  std::vector<mds_info_t> ls;
   mds_info_t sample;
   ls.push_back(std::move(sample));
   sample = mds_info_t();
@@ -278,9 +278,9 @@ void MDSMap::dump_flags_state(Formatter *f) const
     f->close_section();
 }
 
-std::list<MDSMap> MDSMap::generate_test_instances()
+std::vector<MDSMap> MDSMap::generate_test_instances()
 {
-  std::list<MDSMap> ls;
+  std::vector<MDSMap> ls;
   MDSMap m;
   m.max_mds = 1;
   m.data_pools.push_back(0);
@@ -558,27 +558,6 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
     CachedStackStringStream css;
     *css << "fs " << fs_name << " is degraded";
     fscheck.detail.push_back(css->str());
-
-    list<string> detail;
-    for (mds_rank_t i = mds_rank_t(0); i< get_max_mds(); i++) {
-      if (!is_up(i))
-	continue;
-      mds_gid_t gid = up.find(i)->second;
-      const auto& info = mds_info.at(gid);
-      CachedStackStringStream css;
-      *css << "fs " << fs_name << " mds." << info.name << " at "
-	 << info.addrs << " rank " << i;
-      if (is_resolve(i))
-	*css << " is resolving";
-      if (is_replay(i))
-	*css << " is replaying journal";
-      if (is_rejoin(i))
-	*css << " is rejoining";
-      if (is_reconnect(i))
-	*css << " is reconnecting to clients";
-      if (css->strv().length())
-	detail.push_back(css->str());
-    }
   }
 
   // MDS_UP_LESS_THAN_MAX

@@ -509,7 +509,7 @@ class Driver {
     /** Lookup a zonegroup by ID */
     virtual int get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zonegroup) = 0;
     /** List all zones in all zone groups by ID */
-    virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) = 0;
+    virtual int list_all_zones(const DoutPrefixProvider* dpp, std::vector<std::string>& zone_ids) = 0;
     /** Get statistics about the cluster represented by this driver */
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
@@ -654,7 +654,7 @@ class Driver {
     /** Start a metadata listing of the given section */
     virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) = 0;
     /** Get the next key from a metadata list */
-    virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::list<std::string>& keys, bool* truncated) = 0;
+    virtual int meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, std::vector<std::string>& keys, bool* truncated) = 0;
     /** Complete a metadata listing */
     virtual void meta_list_keys_complete(void* handle) = 0;
     /** Get the marker associated with the current metadata listing */
@@ -1011,7 +1011,7 @@ class Bucket {
     /** Trim the usage information to the given epoch range */
     virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) = 0;
     /** Remove objects from the bucket index of this bucket.  May be removed from API */
-    virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) = 0;
+    virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, const std::vector<rgw_obj_index_key>& objs_to_unlink) = 0;
     /** Check the state of the bucket index, and get stats from it.  May be removed from API */
     virtual int check_index(const DoutPrefixProvider *dpp, optional_yield y,
                             std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
@@ -1216,7 +1216,7 @@ class Object {
         uint64_t olh_epoch{0};
 	std::string marker_version_id;
         uint32_t bilog_flags{0};
-        std::list<rgw_obj_index_key>* remove_objs{nullptr};
+        std::vector<rgw_obj_index_key>* remove_objs{nullptr};
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
         ceph::real_time last_mod_time_match;
@@ -1248,7 +1248,7 @@ class Object {
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y,
 			      uint32_t flags,
-			      std::list<rgw_obj_index_key>* remove_objs,
+			      std::vector<rgw_obj_index_key>* remove_objs,
 			      RGWObjVersionTracker* objv) = 0;
     /** Copy an this object to another object. */
     virtual int copy_object(const ACLOwner& owner, const rgw_user& remote_user,
@@ -1589,7 +1589,7 @@ public:
   virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,
-		       std::list<rgw_obj_index_key>& remove_objs,
+		       std::vector<rgw_obj_index_key>& remove_objs,
 		       uint64_t& accounted_size, bool& compressed,
 		       RGWCompressionInfo& cs_info, off_t& ofs,
 		       std::string& tag, ACLOwner& owner,
@@ -1602,7 +1602,7 @@ public:
   virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
                                      CephContext *cct, optional_yield y,
                                      const rgw_obj& obj,
-                                     std::list<rgw_obj_index_key>& remove_objs,
+                                     std::vector<rgw_obj_index_key>& remove_objs,
                                      prefix_map_t& processed_prefixes) = 0;
 
   /** Get placement and/or attribute info for this upload */
@@ -1898,10 +1898,10 @@ public:
   virtual void get_placement_target_names(std::set<std::string>& names) const = 0;
   /** Get the name of the default placement target for this zone */
   virtual const std::string& get_default_placement_name() const = 0;
-  /** Get the list of hostnames from this zone */
-  virtual int get_hostnames(std::list<std::string>& names) const = 0;
-  /** Get the list of hostnames that host s3 websites from this zone */
-  virtual int get_s3website_hostnames(std::list<std::string>& names) const = 0;
+  /** Get the hostnames from this zone */
+  virtual const std::vector<std::string>& get_hostnames() const = 0;
+  /** Get the hostnames that host s3 websites from this zone */
+  virtual const std::vector<std::string>& get_s3website_hostnames() const = 0;
   /** Get the number of zones in this zonegroup */
   virtual int get_zone_count() const = 0;
   /** Get the placement tier associated with the rule */
@@ -1910,8 +1910,8 @@ public:
   virtual int get_zone_by_id(const std::string& id, std::unique_ptr<Zone>* zone) = 0;
   /** Get a zone by Name */
   virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) = 0;
-  /** List zones in zone group by ID */
-  virtual int list_zones(std::list<std::string>& zone_ids) = 0;
+  /** Return zones in this zone group by ID */
+  virtual std::vector<std::string> list_zones() const = 0;
   /** Clone a copy of this zonegroup. */
   virtual std::unique_ptr<ZoneGroup> clone() = 0;
 };

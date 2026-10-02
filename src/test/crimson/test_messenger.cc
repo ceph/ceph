@@ -17,6 +17,7 @@
 
 #include <map>
 #include <random>
+#include <vector>
 #include <boost/program_options.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -65,12 +66,12 @@ static entity_addr_t get_server_addr() {
  * In contrast, deferred_stop() does not retain ownership and assumes the referenced
  * object remains valid for the lifetime of the deferred_stop instance.
  *
- * To address this, we introduced a static list to retain each sharded_obj
+ * To address this, we introduced a static sequence to retain each sharded_obj
  * created via create_sharded().
  */
 
 template <typename T>
-static std::list<seastar::lw_shared_ptr<seastar::sharded<T>>> sharded_objects;
+static std::vector<seastar::lw_shared_ptr<seastar::sharded<T>>> sharded_objects;
 
 template <typename T, typename... Args>
 seastar::future<T*> create_sharded(Args... args) {

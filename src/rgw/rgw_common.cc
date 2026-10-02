@@ -2056,17 +2056,15 @@ static struct rgw_name_to_flag cap_names[] = { {"*",     RGW_CAP_ALL},
 static int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
 			    const string& str, uint32_t *perm)
 {
-  list<string> strs;
-  get_str_list(str, strs);
-  list<string>::iterator iter;
   uint32_t v = 0;
-  for (iter = strs.begin(); iter != strs.end(); ++iter) {
-    string& s = *iter;
-    for (int i = 0; mapping[i].type_name; i++) {
-      if (s.compare(mapping[i].type_name) == 0)
+
+  ceph::for_each_substr(str, ";,= \t", [mapping, &v](std::string_view item) {
+    for (int i = 0; mapping[i].type_name; ++i) {
+      if (item == mapping[i].type_name) {
         v |= mapping[i].flag;
+      }
     }
-  }
+  });
 
   *perm = v;
   return 0;
@@ -2177,9 +2175,9 @@ void RGWUserCaps::dump(Formatter *f) const
   dump(f, "caps");
 }
 
-list<RGWUserCaps> RGWUserCaps::generate_test_instances()
+vector<RGWUserCaps> RGWUserCaps::generate_test_instances()
 {
-  list<RGWUserCaps> o;
+  vector<RGWUserCaps> o;
   o.emplace_back();
   RGWUserCaps caps;
   caps.add_cap("read");
@@ -2233,12 +2231,10 @@ struct RGWUserCap {
 
 void RGWUserCaps::decode_json(JSONObj *obj)
 {
-  list<RGWUserCap> caps_list;
-  decode_json_obj(caps_list, obj);
+  std::vector<RGWUserCap> decoded_caps;
+  decode_json_obj(decoded_caps, obj);
 
-  list<RGWUserCap>::iterator iter;
-  for (iter = caps_list.begin(); iter != caps_list.end(); ++iter) {
-    RGWUserCap& cap = *iter;
+  for (const auto& cap : decoded_caps) {
     caps[cap.type] = cap.perm;
   }
 }
@@ -2320,9 +2316,9 @@ void rgw_raw_obj::decode_from_rgw_obj(bufferlist::const_iterator& bl)
   pool = old_obj.get_explicit_data_pool();
 }
 
-std::list<rgw_raw_obj> rgw_raw_obj::generate_test_instances()
+std::vector<rgw_raw_obj> rgw_raw_obj::generate_test_instances()
 {
-  std::list<rgw_raw_obj> o;
+  std::vector<rgw_raw_obj> o;
   rgw_raw_obj r;
   r.oid = "foo";
   r.loc = "bar";
@@ -2568,9 +2564,9 @@ void encode_json(const char *name, const RGWUserCaps& val, Formatter *f)
   val.dump(f, name);
 }
 
-list<RGWBucketEnt> RGWBucketEnt::generate_test_instances()
+vector<RGWBucketEnt> RGWBucketEnt::generate_test_instances()
 {
-  list<RGWBucketEnt> o;
+  vector<RGWBucketEnt> o;
   RGWBucketEnt e;
   init_bucket(&e.bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
   e.size = 1024;
@@ -2592,9 +2588,9 @@ void RGWBucketEnt::dump(Formatter *f) const
   encode_json("placement_rule", placement_rule.to_str(), f);
 }
 
-list<rgw_obj> rgw_obj::generate_test_instances()
+vector<rgw_obj> rgw_obj::generate_test_instances()
 {
-  list<rgw_obj> o;
+  vector<rgw_obj> o;
   rgw_bucket b;
   init_bucket(&b, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
   o.push_back(rgw_obj(b, "object"));
@@ -2608,9 +2604,9 @@ void rgw_bucket_placement::dump(Formatter *f) const
   encode_json("placement_rule", placement_rule, f);
 }
 
-list<RGWBucketInfo> RGWBucketInfo::generate_test_instances()
+vector<RGWBucketInfo> RGWBucketInfo::generate_test_instances()
 {
-  list<RGWBucketInfo> o;
+  vector<RGWBucketInfo> o;
   // Since things without a log will have one synthesized on decode,
   // ensure the things we attempt to encode will have one added so we
   // round-trip properly.
@@ -2715,9 +2711,9 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   }
 }
 
-list<RGWUserInfo> RGWUserInfo::generate_test_instances()
+vector<RGWUserInfo> RGWUserInfo::generate_test_instances()
 {
-  list<RGWUserInfo> o;
+  vector<RGWUserInfo> o;
   RGWUserInfo i;
   i.user_id = "user_id";
   i.display_name =  "display_name";
@@ -3028,9 +3024,9 @@ void RGWUserInfo::decode_json(JSONObj *obj)
 }
 
 
-list<RGWSubUser> RGWSubUser::generate_test_instances()
+vector<RGWSubUser> RGWSubUser::generate_test_instances()
 {
-  list<RGWSubUser> o;
+  vector<RGWSubUser> o;
   RGWSubUser u;
   u.name = "name";
   u.perm_mask = 0xf;
@@ -3083,9 +3079,9 @@ void RGWSubUser::decode_json(JSONObj *obj)
   perm_mask = str_to_perm(perm_str);
 }
 
-list<RGWAccessKey> RGWAccessKey::generate_test_instances()
+vector<RGWAccessKey> RGWAccessKey::generate_test_instances()
 {
-  list<RGWAccessKey> o;
+  vector<RGWAccessKey> o;
   RGWAccessKey k;
   k.id = "id";
   k.key = "key";
@@ -3192,9 +3188,9 @@ void RGWAccountInfo::decode_json(JSONObj* obj)
   JSONDecoder::decode_json("max_access_keys", max_access_keys, obj);
 }
 
-std::list<RGWAccountInfo> RGWAccountInfo::generate_test_instances()
+std::vector<RGWAccountInfo> RGWAccountInfo::generate_test_instances()
 {
-  std::list<RGWAccountInfo> o;
+  std::vector<RGWAccountInfo> o;
   o.emplace_back();
   auto p = RGWAccountInfo{};
   p.id = "account1";
@@ -3228,9 +3224,9 @@ void RGWGroupInfo::decode_json(JSONObj* obj)
   JSONDecoder::decode_json("account_id", account_id, obj);
 }
 
-std::list<RGWGroupInfo> RGWGroupInfo::generate_test_instances()
+std::vector<RGWGroupInfo> RGWGroupInfo::generate_test_instances()
 {
-  std::list<RGWGroupInfo> o;
+  std::vector<RGWGroupInfo> o;
   o.emplace_back();
   auto p = RGWGroupInfo{};
   p.id = "id";

@@ -3,6 +3,9 @@
 
 #include <errno.h>
 
+#include <utility>
+#include <iterator>
+
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/refcount/cls_refcount_ops.h"
 #include "include/rados/librados.hpp"
@@ -33,22 +36,38 @@ void cls_refcount_put(librados::ObjectWriteOperation& op, const string& tag, boo
   op.exec(method::put, in);
 }
 
-void cls_refcount_set(librados::ObjectWriteOperation& op, list<string>& refs)
+namespace {
+
+void set_refs(librados::ObjectWriteOperation& op, const auto& refs)
 {
   bufferlist in;
   cls_refcount_set_op call;
-  call.refs = refs;
+  call.refs.assign(std::cbegin(refs), std::cend(refs));
   encode(call, in);
   op.exec(method::set, in);
 }
 
-int cls_refcount_read(librados::IoCtx& io_ctx, string& oid, list<string> *refs, bool implicit_ref)
+} // namespace
+
+void cls_refcount_set(librados::ObjectWriteOperation& op,
+                      const std::vector<std::string>& refs)
+{
+  set_refs(op, refs);
+}
+
+void cls_refcount_set(librados::ObjectWriteOperation& op, list<string>& refs)
+{
+  set_refs(op, refs);
+}
+
+int cls_refcount_read(librados::IoCtx& io_ctx, string& oid,
+                      std::vector<std::string>& refs, bool implicit_ref)
 {
   bufferlist in, out;
   cls_refcount_read_op call;
   call.implicit_ref = implicit_ref;
   encode(call, in);
-  int r = io_ctx.exec(oid, method::read, in, out);
+  const int r = io_ctx.exec(oid, method::read, in, out);
   if (r < 0)
     return r;
 
@@ -60,7 +79,21 @@ int cls_refcount_read(librados::IoCtx& io_ctx, string& oid, list<string> *refs, 
     return -EIO;
   }
 
-  *refs = ret.refs;
+  refs = std::move(ret.refs);
+
+  return r;
+}
+
+int cls_refcount_read(librados::IoCtx& io_ctx, string& oid,
+                      list<string> *refs, bool implicit_ref)
+{
+  std::vector<std::string> result;
+  const int r = cls_refcount_read(io_ctx, oid, result, implicit_ref);
+  if (r < 0)
+    return r;
+
+  refs->assign(std::make_move_iterator(std::begin(result)),
+               std::make_move_iterator(std::end(result)));
 
   return r;
 }

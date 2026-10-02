@@ -14,6 +14,14 @@ add_executable(unittest_mds_sessionfilter
 add_ceph_unittest(unittest_mds_sessionfilter)
 target_link_libraries(unittest_mds_sessionfilter mds osdc ceph-common global ${BLKID_LIBRARIES})
 
+# unittest_mds_flock
+add_executable(unittest_mds_flock
+  TestFlock.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_mds_flock)
+target_link_libraries(unittest_mds_flock mds global ${BLKID_LIBRARIES})
+
 # unittest_mds_quiesce_db
 add_executable(unittest_mds_quiesce_db
   TestQuiesceDb.cc

@@ -67,14 +67,16 @@
 #define tracepoint(...)
 #endif
 
+#include <ranges>
 #include <sstream>
+#include <iterator>
+#include <algorithm>
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-using std::list;
 using std::map;
 using std::ostringstream;
 using std::pair;
@@ -1185,11 +1187,13 @@ void PG::filter_snapc(vector<snapid_t> &snaps)
   }
 }
 
-void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef>>& m)
+void PG::requeue_object_waiters(map<hobject_t, vector<OpRequestRef>>& waiters)
 {
-  for (auto it = m.begin(); it != m.end(); ++it)
-    requeue_ops(it->second);
-  m.clear();
+  for (auto& waiter : waiters) {
+    requeue_ops(waiter.second);
+  }
+
+  waiters.clear();
 }
 
 void PG::requeue_op(OpRequestRef op)
@@ -1213,25 +1217,42 @@ void PG::requeue_op(OpRequestRef op)
   }
 }
 
-void PG::requeue_ops(list<OpRequestRef> &ls)
+template <typename OperationsT>
+void PG::requeue_ops_impl(OperationsT& operations, bool can_wait_for_readable)
 {
-  if (!waiting_for_readable.empty() && &ls != &waiting_for_peered &&
-      &ls != &waiting_for_flush && &ls != &waiting_for_active &&
-      &ls != &waiting_for_readable) {
-    dout(20) << __func__ << " not readable ops (count=" << ls.size() << ")"
+  if (!std::empty(waiting_for_readable) && can_wait_for_readable) {
+    dout(20) << "requeue_ops not readable ops (count="
+             << std::size(operations) << ")"
              << dendl;
-    for (auto& op : ls) {
+    for (auto& op : operations) {
       op->mark_delayed("waiting for readable");
     }
-    waiting_for_readable.splice(waiting_for_readable.begin(), ls);
+
+    std::ranges::move(operations | std::views::reverse,
+                      std::front_inserter(waiting_for_readable));
+    operations.clear();
+    return;
   }
 
-  for (list<OpRequestRef>::reverse_iterator i = ls.rbegin();
-       i != ls.rend();
-       ++i) {
+  for (auto i = std::rbegin(operations); i != std::rend(operations); ++i) {
     requeue_op(*i);
   }
-  ls.clear();
+  operations.clear();
+}
+
+void PG::requeue_ops(vector<OpRequestRef>& operations)
+{
+  const bool can_wait_for_readable =
+    &operations != &waiting_for_peered &&
+    &operations != &waiting_for_flush &&
+    &operations != &waiting_for_active;
+
+  requeue_ops_impl(operations, can_wait_for_readable);
+}
+
+void PG::requeue_ops(std::deque<OpRequestRef>& operations)
+{
+  requeue_ops_impl(operations, &operations != &waiting_for_readable);
 }
 
 void PG::requeue_map_waiters()

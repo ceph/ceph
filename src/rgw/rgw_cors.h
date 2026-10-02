@@ -17,6 +17,8 @@
 
 #include <map>
 #include <string>
+#include <vector>
+#include <iterator>
 #include <include/types.h>
 #include "include/encoding.h" // for WRITE_CLASS_ENCODER()
 #include "include/str_list.h"
@@ -47,18 +49,24 @@ protected:
   std::set<std::string> allowed_hdrs; /* If you change this, you need to discard lowercase_allowed_hdrs */
   std::set<std::string> lowercase_allowed_hdrs; /* Not built until needed in RGWCORSRule::is_header_allowed */
   std::set<std::string> allowed_origins;
-  std::list<std::string> exposable_hdrs;
+  std::vector<std::string> exposable_hdrs;
 
 public:
   RGWCORSRule() : max_age(CORS_MAX_AGE_INVALID),allowed_methods(0) {}
   RGWCORSRule(std::set<std::string>& o, std::set<std::string>& h,
-              std::list<std::string>& e, uint8_t f, uint32_t a)
+              const std::vector<std::string>& e, uint8_t f, uint32_t a)
       :max_age(a),
        allowed_methods(f),
        allowed_hdrs(h),
        allowed_origins(o),
        exposable_hdrs(e) {}
-  virtual ~RGWCORSRule() {}
+  RGWCORSRule(const RGWCORSRule&) = default;
+  RGWCORSRule(RGWCORSRule&&) noexcept = default;
+
+  virtual ~RGWCORSRule() = default;
+
+  RGWCORSRule& operator=(const RGWCORSRule&) = default;
+  RGWCORSRule& operator=(RGWCORSRule&&) noexcept = default;
 
   std::string& get_id() { return id; }
   uint32_t get_max_age() { return max_age; }
@@ -85,7 +93,7 @@ public:
     decode(exposable_hdrs, bl);
     DECODE_FINISH(bl);
   }
-  static std::list<RGWCORSRule> generate_test_instances();
+  static std::vector<RGWCORSRule> generate_test_instances();
   static int create_rule(const char *allow_origins, const char *allow_headers,
                   const char *expose_headers, const char* allowed_methods, std::optional<RGWCORSRule>& rule, const char *max_age="");
   bool has_wildcard_origin();
@@ -106,7 +114,7 @@ WRITE_CLASS_ENCODER(RGWCORSRule)
 class RGWCORSConfiguration
 {
   protected:
-    std::list<RGWCORSRule> rules;
+    std::vector<RGWCORSRule> rules;
   public:
     RGWCORSConfiguration() {}
     ~RGWCORSConfiguration() {}
@@ -122,13 +130,12 @@ class RGWCORSConfiguration
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  std::list<RGWCORSRule>& get_rules() {
+  std::vector<RGWCORSRule>& get_rules() {
     return rules;
   }
   bool is_empty() {
     return rules.empty();
   }
-  void get_origins_list(const char *origin, std::list<std::string>& origins);
   RGWCORSRule * host_name_rule(const char *origin);
   RGWCORSRule * match_rule(const char *origin,
                            const char *req_meth,
@@ -136,7 +143,7 @@ class RGWCORSConfiguration
   void erase_host_name_rule(std::string& origin);
   void dump();
   void stack_rule(RGWCORSRule& r) {
-    rules.push_front(r);    
+    rules.insert(std::begin(rules), r);
   }
 };
 WRITE_CLASS_ENCODER(RGWCORSConfiguration)

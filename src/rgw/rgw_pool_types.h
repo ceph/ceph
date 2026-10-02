@@ -21,6 +21,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <fmt/format.h>
 
 #include "include/encoding.h"
@@ -96,8 +97,8 @@ struct rgw_pool {
     f->dump_string("ns", ns);
   }
 
-  static std::list<rgw_pool> generate_test_instances() {
-    std::list<rgw_pool> o;
+  static std::vector<rgw_pool> generate_test_instances() {
+    std::vector<rgw_pool> o;
     o.emplace_back();
     o.push_back(rgw_pool("pool", "ns"));
     return o;

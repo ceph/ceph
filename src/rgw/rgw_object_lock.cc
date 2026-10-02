@@ -58,8 +58,8 @@ void ObjectLockRule::dump(Formatter *f) const {
   encode_json("defaultRetention", defaultRetention, f);
 }
 
-std::list<ObjectLockRule> ObjectLockRule::generate_test_instances() {
-  std::list<ObjectLockRule> o;
+std::vector<ObjectLockRule> ObjectLockRule::generate_test_instances() {
+  std::vector<ObjectLockRule> o;
   o.emplace_back();
   return o;
 }
@@ -112,8 +112,8 @@ ceph::real_time RGWObjectLock::get_lock_until_date(const ceph::real_time& mtime)
   return mtime + std::chrono::years(get_years());
 }
 
-list<RGWObjectLock> RGWObjectLock::generate_test_instances() {
-  list<RGWObjectLock> o;
+vector<RGWObjectLock> RGWObjectLock::generate_test_instances() {
+  vector<RGWObjectLock> o;
   RGWObjectLock obj;
   obj.enabled = true;
   obj.rule_exist = true;

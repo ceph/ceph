@@ -172,7 +172,7 @@ struct MirrorInfo {
   Peers peers;
 
   void dump(ceph::Formatter *f) const;
-  static std::list<MirrorInfo> generate_test_instances();
+  static std::vector<MirrorInfo> generate_test_instances();
   void print(std::ostream& out) const;
 
   void encode(ceph::buffer::list &bl) const;
@@ -642,6 +642,7 @@ public:
 
   const mds_info_t* find_replacement_for(mds_role_t role) const;
 
+  [[deprecated("use get_health_checks()")]]
   void get_health(std::list<std::pair<health_status_t,std::string> >& summary,
 		  std::list<std::pair<health_status_t,std::string> > *detail) const;
 
@@ -681,7 +682,7 @@ public:
   void print_fs_summary(std::ostream& out) const;
 
   void dump(ceph::Formatter *f) const;
-  static std::list<FSMap> generate_test_instances();
+  static std::vector<FSMap> generate_test_instances();
 
 protected:
   iterator begin() {

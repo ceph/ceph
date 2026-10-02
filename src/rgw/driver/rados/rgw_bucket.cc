@@ -96,7 +96,7 @@ static void parse_bucket(const string& bucket,
   }
 }
 
-static void dump_multipart_index_results(std::list<rgw_obj_index_key>& objs,
+static void dump_multipart_index_results(const std::vector<rgw_obj_index_key>& objs,
 					 Formatter *f)
 {
   for (const auto& o : objs) {
@@ -241,15 +241,15 @@ bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw:
     return -ret;
   }
   do {
-      list<string> keys;
+      vector<string> keys;
       ret = driver->meta_list_keys_next(dpp, handle, 1000, keys, &truncated);
       if (ret < 0) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         driver->meta_list_keys_complete(handle);
         return -ret;
       }
-      for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-        s = *iter;
+      for (const auto& key : keys) {
+        s = key;
         ret = rgw_bucket_parse_bucket_key(cct, s, bucket_out, nullptr);
         if (ret < 0) {
           continue;
@@ -413,20 +413,20 @@ static int check_bad_index_multipart(rgw::sal::RadosStore* const rados_store,
 				   std::string(),
 				   RGW_OBJ_NS_MULTIPART).get_index_key_name();
   bool is_truncated = true;
-  std::list<rgw_cls_bi_entry> entries_read;
+  std::vector<rgw_cls_bi_entry> entries_read;
 
   // holds part entries w/o ".meta"
-  std::list<rgw_obj_index_key> entries_to_unlink;
+  std::vector<rgw_obj_index_key> entries_to_unlink;
 
   // holds entries pending finding of ".meta"
-  std::list<rgw_obj_index_key> entries_window;
+  std::vector<rgw_obj_index_key> entries_window;
 
   // tracks whether on same multipart upload or not
   std::string prev_entry_prefix;
   do {
     entries_read.clear();
     ret = store->bi_list(bs, "", marker, -1,
-			 &entries_read, &is_truncated, false, y);
+			 entries_read, is_truncated, false, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR bi_list(): " << cpp_strerror(-ret) <<
 	dendl;
@@ -676,7 +676,7 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
 {
   string marker = BI_OLH_ENTRY_NS_START;
   bool is_truncated = true;
-  list<rgw_cls_bi_entry> entries;
+  vector<rgw_cls_bi_entry> entries;
 
   RGWObjectCtx obj_ctx(rados_store);
   RGWRados* store = rados_store->getRados();
@@ -691,14 +691,12 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
   *count_out = 0;
   do {
     entries.clear();
-    ret = store->bi_list(bs, "", marker, -1, &entries, &is_truncated, false, y);
+    ret = store->bi_list(bs, "", marker, -1, entries, is_truncated, false, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR bi_list(): " << cpp_strerror(-ret) << dendl;
       break;
     }
-    list<rgw_cls_bi_entry>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      rgw_cls_bi_entry& entry = *iter;
+    for (auto& entry : entries) {
       marker = entry.idx;
       if (entry.type != BIIndexType::OLH) {
         is_truncated = false;
@@ -904,7 +902,7 @@ static int check_index_unlinked(rgw::sal::RadosStore* const rados_store,
 {
   string marker = BI_INSTANCE_ENTRY_NS_START;
   bool is_truncated = true;
-  list<rgw_cls_bi_entry> entries;
+  vector<rgw_cls_bi_entry> entries;
 
   RGWObjectCtx obj_ctx(rados_store);
   RGWRados* store = rados_store->getRados();
@@ -922,14 +920,12 @@ static int check_index_unlinked(rgw::sal::RadosStore* const rados_store,
   *count_out = 0;
   do {
     entries.clear();
-    ret = store->bi_list(bs, "", marker, -1, &entries, &is_truncated, false, y);
+    ret = store->bi_list(bs, "", marker, -1, entries, is_truncated, false, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR bi_list(): " << cpp_strerror(-ret) << dendl;
       break;
     }
-    list<rgw_cls_bi_entry>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      rgw_cls_bi_entry& entry = *iter;
+    for (auto& entry : entries) {
       marker = entry.idx;
       if (entry.type != BIIndexType::Instance) {
         is_truncated = false;
@@ -1751,7 +1747,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
 
 int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 				  RGWBucketAdminOpState& op_state,
-				  const std::list<std::string>& user_ids,
+				  const std::vector<std::string>& user_ids,
 				  RGWFormatterFlusher& flusher, optional_yield y,
                                   const DoutPrefixProvider *dpp,
 				  bool warnings_only)
@@ -2012,7 +2008,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
     ret = driver->meta_list_keys_init(dpp, "bucket", string(), &handle);
 
     while (ret == 0 && !done && truncated) {
-      std::list<std::string> buckets;
+      std::vector<std::string> buckets;
 
       // in experiments, meta_list_keys_next often doesn't return as
       // many keys as requested; so asking for only the minimal amount
@@ -2183,7 +2179,7 @@ static int process_stale_instances(rgw::sal::Driver* driver, RGWBucketAdminOpSta
                             });
 
   do {
-    list<std::string> keys;
+    vector<std::string> keys;
 
     ret = driver->meta_list_keys_next(dpp, handle, default_max_keys, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
@@ -2320,7 +2316,7 @@ int RGWBucketAdminOp::fix_lc_shards(rgw::sal::Driver* driver,
                                    formatter->flush(cout);
                                  });
       do {
-        list<std::string> keys;
+        vector<std::string> keys;
         ret = driver->meta_list_keys_next(dpp, handle, default_max_keys, keys, &truncated);
         if (ret < 0 && ret != -ENOENT) {
           std::cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
@@ -2486,7 +2482,7 @@ class RGWBucketMetadataHandler : public RGWMetadataHandler {
   int list_keys_init(const DoutPrefixProvider* dpp, const std::string& marker,
                      void** phandle) override;
   int list_keys_next(const DoutPrefixProvider* dpp, void* handle, int max,
-                     std::list<std::string>& keys, bool* truncated) override;
+                     std::vector<std::string>& keys, bool* truncated) override;
   void list_keys_complete(void *handle) override;
   std::string get_marker(void *handle) override;
 };
@@ -2693,7 +2689,7 @@ int RGWBucketMetadataHandler::list_keys_init(const DoutPrefixProvider* dpp,
 
 int RGWBucketMetadataHandler::list_keys_next(const DoutPrefixProvider* dpp,
                                              void* handle, int max,
-                                             std::list<std::string>& keys,
+                                             std::vector<std::string>& keys,
                                              bool* truncated)
 {
   auto lister = static_cast<RGWMetadataLister*>(handle);
@@ -3013,7 +3009,7 @@ protected:
   int list_keys_init(const DoutPrefixProvider* dpp, const std::string& marker,
                      void** phandle) override;
   int list_keys_next(const DoutPrefixProvider* dpp, void* handle, int max,
-                     std::list<std::string>& keys, bool* truncated) override;
+                     std::vector<std::string>& keys, bool* truncated) override;
   void list_keys_complete(void *handle) override;
   std::string get_marker(void *handle) override;
 };
@@ -3289,7 +3285,7 @@ int RGWBucketInstanceMetadataHandler::list_keys_init(const DoutPrefixProvider* d
 
 int RGWBucketInstanceMetadataHandler::list_keys_next(const DoutPrefixProvider* dpp,
                                                      void* handle, int max,
-                                                     std::list<std::string>& keys,
+                                                     std::vector<std::string>& keys,
                                                      bool* truncated)
 {
   auto lister = static_cast<RGWMetadataLister*>(handle);
@@ -3910,9 +3906,9 @@ auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
 }
 #endif
 
-list<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()
+vector<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()
 {
-  list<RGWBucketEntryPoint> o;
+  vector<RGWBucketEntryPoint> o;
   RGWBucketEntryPoint bp;
   init_bucket(&bp.bucket, "tenant", "bucket", "pool", ".index.pool", "marker", "10");
   bp.owner = "owner";
@@ -3949,4 +3945,3 @@ void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("old_bucket_info", old_bucket_info, obj);
   }
 }
-
