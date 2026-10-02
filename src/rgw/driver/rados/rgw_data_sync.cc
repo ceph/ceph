@@ -914,7 +914,7 @@ static string full_data_sync_index_shard_oid(const rgw_zone_id& source_zone, int
 struct read_metadata_list {
   string marker;
   bool truncated;
-  list<string> keys;
+  vector<string> keys;
   int count;
 
   read_metadata_list() : truncated(false), count(0) {}
@@ -991,7 +991,7 @@ class RGWListBucketIndexesCR : public RGWCoroutine {
   int req_ret = 0;
   int ret = 0;
 
-  list<string>::iterator iter;
+  vector<string>::iterator iter;
 
   unique_ptr<RGWShardedOmapCRManager> entries_index;
   string oid_prefix =
@@ -4057,7 +4057,7 @@ struct bucket_list_result {
   string version_id_marker;
   int max_keys;
   bool is_truncated;
-  list<bucket_list_entry> entries;
+  vector<bucket_list_entry> entries;
 
   bucket_list_result() : max_keys(0), is_truncated(false) {}
 
@@ -4125,7 +4125,7 @@ struct next_bilog_result {
 };
 
 struct bilog_list_result {
-  list<rgw_bi_log_entry> entries;
+  vector<rgw_bi_log_entry> entries;
   bool truncated{false};
   std::optional<next_bilog_result> next_log;
 
@@ -4590,7 +4590,7 @@ class RGWBucketFullSyncCR : public RGWCoroutine {
   rgw_bucket_shard& bs;
   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
   bucket_list_result list_result;
-  list<bucket_list_entry>::iterator entries_iter;
+  vector<bucket_list_entry>::iterator entries_iter;
   rgw_obj_key list_marker;
   bucket_list_entry *entry{nullptr};
 
@@ -4910,12 +4910,12 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   const rgw_raw_obj& bucket_status_obj;
   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
   bilog_list_result extended_result;
-  list<rgw_bi_log_entry> list_result;
+  vector<rgw_bi_log_entry> list_result;
   int next_num_shards;
   uint64_t next_gen;
   bool truncated;
 
-  list<rgw_bi_log_entry>::iterator entries_iter, entries_end;
+  vector<rgw_bi_log_entry>::iterator entries_iter, entries_end;
   map<pair<string, string>, pair<real_time, RGWModifyOp> > squash_map;
   rgw_bucket_shard_sync_info& sync_info;
   uint64_t generation;
