@@ -19,6 +19,7 @@
 #define CEPH_ASYNCMESSENGER_H
 
 #include <map>
+#include <vector>
 #include <optional>
 #include <unordered_map>
 
@@ -83,7 +84,7 @@ class AsyncMessengerSocketHook : public AdminSocketHook {
       Formatter* f, std::ostream& errss, ceph::buffer::list& out) override;
   bool add_messenger(const std::string& name, AsyncMessenger& msgr);
   void remove_messenger(AsyncMessenger& msgr);
-  std::list<std::string> messengers() const;
+  std::vector<std::string> messengers() const;
 };
 
 /*

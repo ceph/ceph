@@ -641,10 +641,8 @@ int global_init_preload_erasure_code(const CephContext *cct)
   string plugins = conf->osd_erasure_code_plugins;
 
   // validate that this is a not a legacy plugin
-  std::list<string> plugins_list;
-  get_str_list(plugins, plugins_list);
-  for (auto i = plugins_list.begin(); i != plugins_list.end(); ++i) {
-	string plugin_name = *i;
+  const auto plugins_list = get_str_vec(plugins);
+  for (const auto& plugin_name : plugins_list) {
 	string replacement = "";
 
 	if (plugin_name == "jerasure_generic" || 
