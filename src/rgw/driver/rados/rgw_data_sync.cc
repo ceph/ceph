@@ -4022,7 +4022,7 @@ int RGWRemoteDataLog::read_shard_status(const DoutPrefixProvider *dpp, int shard
   sync_env_local.http_manager = &http_manager;
   RGWDataSyncCtx sc_local = sc;
   sc_local.env = &sync_env_local;
-  list<RGWCoroutinesStack *> stacks;
+  vector<RGWCoroutinesStack *> stacks;
   RGWCoroutinesStack* recovering_stack = new RGWCoroutinesStack(driver->ctx(), &crs);
   recovering_stack->call(new RGWReadRecoveringBucketShardsCoroutine(&sc_local, shard_id, recovering_buckets, max_entries));
   stacks.push_back(recovering_stack);
@@ -6265,7 +6265,7 @@ int RGWBucketPipeSyncStatusManager::init_sync_status(
   // Just running one at a time saves us from buildup/teardown and in
   // practice we only do one zone at a time.
   for (auto& source : sources) {
-    list<RGWCoroutinesStack*> stacks;
+    vector<RGWCoroutinesStack*> stacks;
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(driver->ctx(), &cr_mgr);
     pretty_print(source.sc.env, "Initializing sync state of bucket {} with zone {}.\n",
 		 source.info.bucket.name, source.zone_name);
@@ -6293,7 +6293,7 @@ RGWBucketPipeSyncStatusManager::read_sync_status(
   const DoutPrefixProvider *dpp)
 {
   std::map<int, rgw_bucket_shard_sync_info> sync_status;
-  list<RGWCoroutinesStack *> stacks;
+  vector<RGWCoroutinesStack *> stacks;
 
   auto sz = sources.begin();
 
@@ -6592,7 +6592,7 @@ public:
 
 int RGWBucketPipeSyncStatusManager::run(const DoutPrefixProvider *dpp)
 {
-  list<RGWCoroutinesStack *> stacks;
+  vector<RGWCoroutinesStack *> stacks;
   for (auto& source : sources) {
     auto stack = new RGWCoroutinesStack(driver->ctx(), &cr_mgr);
     stack->call(new rgw::bucket_sync_run::SourceCR(
