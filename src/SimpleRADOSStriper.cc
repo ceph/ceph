@@ -25,6 +25,7 @@
 #include <regex>
 #include <sstream>
 #include <string_view>
+#include <vector>
 
 #include <limits.h>
 #include <string.h>
@@ -533,9 +534,9 @@ int SimpleRADOSStriper::print_lockers(std::ostream& out)
 {
   int exclusive;
   std::string tag;
-  std::list<librados::locker_t> lockers;
+  std::vector<librados::locker_t> lockers;
   auto ext = get_first_extent();
-  if (int rc = ioctx.list_lockers(ext.soid, biglock, &exclusive, &tag, &lockers); rc < 0) {
+  if (int rc = ioctx.list_lockers(ext.soid, biglock, exclusive, tag, lockers); rc < 0) {
     d(1) << " list_lockers failure: " << cpp_strerror(rc) << dendl;
     return rc;
   }
