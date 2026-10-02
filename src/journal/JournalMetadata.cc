@@ -6,8 +6,13 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "cls/journal/cls_journal_client.h"
-#include <functional>
 #include <set>
+#include <bitset>
+#include <limits>
+#include <utility>
+#include <iterator>
+#include <algorithm>
+#include <functional>
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
@@ -273,6 +278,7 @@ struct C_GetTags : public Context {
       async_op_tracker(async_op_tracker),
       start_after_tag_tid(start_after_tag_tid), tag_class(tag_class),
       tags(tags), on_finish(on_finish) {
+    tags->reserve(std::size(*tags) + MAX_RETURN);
     async_op_tracker.start_op();
   }
   ~C_GetTags() override {
@@ -599,7 +605,7 @@ void JournalMetadata::remove_listener(JournalMetadataListener *listener) {
   m_update_cond.wait(locker, [this] {
     return m_update_notifications <= 0;
   });
-  m_listeners.remove(listener);
+  std::erase(m_listeners, listener);
 }
 
 void JournalMetadata::set_minimum_set(uint64_t object_set) {
@@ -763,9 +769,8 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
 
       ++m_update_notifications;
       m_lock.unlock();
-      for (Listeners::iterator it = m_listeners.begin();
-           it != m_listeners.end(); ++it) {
-        (*it)->handle_update(this);
+      for (auto *listener : m_listeners) {
+        listener->handle_update(this);
       }
       m_lock.lock();
       if (--m_update_notifications == 0) {
@@ -1002,7 +1007,8 @@ void JournalMetadata::committed(uint64_t commit_tid,
     CommitEntry &commit_entry = it->second;
     commit_entry.committed = true;
 
-    bool update_commit_position = false;
+    const auto previous_size = std::size(commit_position.object_positions);
+
     while (!m_pending_commit_tids.empty()) {
       CommitTids::iterator it = m_pending_commit_tids.begin();
       CommitEntry &commit_entry = it->second;
@@ -1010,28 +1016,45 @@ void JournalMetadata::committed(uint64_t commit_tid,
         break;
       }
 
-      commit_position.object_positions.emplace_front(
+      commit_position.object_positions.emplace_back(
         commit_entry.object_num, commit_entry.tag_tid,
         commit_entry.entry_tid);
       m_pending_commit_tids.erase(it);
-      update_commit_position = true;
     }
 
-    if (!update_commit_position) {
+    if (std::size(commit_position.object_positions) == previous_size) {
       return;
     }
 
-    // prune the position to have one position per splay offset
-    std::set<uint8_t> in_use_splay_offsets;
-    ObjectPositions::iterator ob_it = commit_position.object_positions.begin();
-    while (ob_it != commit_position.object_positions.end()) {
-      uint8_t splay_offset = ob_it->object_number % m_splay_width;
-      if (!in_use_splay_offsets.insert(splay_offset).second) {
-        ob_it = commit_position.object_positions.erase(ob_it);
-      } else {
-        ++ob_it;
+    // New commits arrive oldest-first. Move their reversed block ahead of the
+    // previously recorded positions to retain newest-first ordering:
+    auto first_new = std::begin(commit_position.object_positions) + previous_size;
+    std::ranges::reverse(first_new, std::end(commit_position.object_positions));
+    std::ranges::rotate(commit_position.object_positions, first_new);
+
+    // Prune the position to one entry per possible splay offset:
+    std::bitset<1 + std::numeric_limits<uint8_t>::max()> in_use_splay_offsets;
+    auto output = std::begin(commit_position.object_positions);
+
+    for (auto input = output;
+         input != std::end(commit_position.object_positions); ++input) {
+      const auto splay_offset = input->object_number % m_splay_width;
+
+      if (in_use_splay_offsets.test(splay_offset)) {
+        continue;
       }
+
+      in_use_splay_offsets.set(splay_offset);
+
+      if (output != input) {
+        *output = std::move(*input);
+      }
+
+      ++output;
     }
+
+    commit_position.object_positions.erase(
+      output, std::end(commit_position.object_positions));
 
     stale_ctx = m_commit_position_ctx;
     m_commit_position_ctx = create_context();
