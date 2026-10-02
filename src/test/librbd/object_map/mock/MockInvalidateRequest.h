@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <deque>
+
 #include "librbd/object_map/InvalidateRequest.h"
 
 // template definitions
@@ -11,7 +13,7 @@ namespace object_map {
 
 template <typename I>
 struct MockInvalidateRequestBase {
-  static std::list<InvalidateRequest<I>*> s_requests;
+  static std::deque<InvalidateRequest<I>*> s_requests;
   uint64_t snap_id = 0;
   bool force = false;
   Context *on_finish = nullptr;
@@ -35,7 +37,7 @@ struct MockInvalidateRequestBase {
 };
 
 template <typename I>
-std::list<InvalidateRequest<I>*> MockInvalidateRequestBase<I>::s_requests;
+std::deque<InvalidateRequest<I>*> MockInvalidateRequestBase<I>::s_requests;
 
 } // namespace object_map
 } // namespace librbd

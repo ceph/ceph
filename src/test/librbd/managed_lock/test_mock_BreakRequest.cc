@@ -12,7 +12,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <arpa/inet.h>
-#include <list>
+#include <vector>
 
 namespace librbd {
 namespace {
@@ -52,7 +52,6 @@ GetLockerRequest<librbd::MockTestImageCtx> *GetLockerRequest<librbd::MockTestIma
 
 } // namespace managed_lock
 } // namespace librbd
-
 // template definitions
 #include "librbd/managed_lock/BreakRequest.cc"
 
@@ -86,8 +85,7 @@ public:
       watcher.watcher_id = 0;
       watcher.cookie = watch_handle;
 
-      std::list<obj_watch_t> watchers;
-      watchers.push_back(watcher);
+      std::vector<obj_watch_t> watchers {watcher};
 
       expect.WillOnce(DoAll(SetArgPointee<1>(watchers), Return(0)));
     }
@@ -481,4 +479,3 @@ TEST_F(TestMockManagedLockBreakRequest, BreakLockError) {
 
 } // namespace managed_lock
 } // namespace librbd
-
