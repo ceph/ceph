@@ -12,6 +12,8 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/ceph_features.h"
+#include "common/LogEntry.h"
 
 #include <fmt/format.h>
 #include "gtest/gtest.h"
@@ -22,6 +24,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream> // for std::cout
+#include <iterator>
 #include <list>
 #include <map>
 #include <memory>
@@ -36,6 +39,107 @@
 #include <boost/tuple/tuple.hpp>
 
 using namespace std;
+
+namespace {
+
+using legacy_log_entries = std::list<std::pair<uint64_t, LogEntry>>;
+
+ceph::buffer::list encode_legacy_log_summary(const LogSummary& summary)
+{
+  std::map<std::string, legacy_log_entries> legacy_tail;
+
+  for (const auto& [channel, entries] : summary.tail_by_channel) {
+    legacy_tail.emplace(channel, legacy_log_entries {
+      std::cbegin(entries), std::cend(entries)});
+  }
+
+  ceph::buffer::list encoded;
+  ENCODE_START(4, 3, encoded);
+  encode(summary.version, encoded);
+  encode(summary.seq, encoded);
+  encode(legacy_tail, encoded, CEPH_FEATURES_ALL);
+  encode(summary.channel_info, encoded);
+  summary.recent_keys.encode(encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+LogEntry make_log_entry(
+  const std::string& channel,
+  const uint64_t sequence,
+  const std::string& message)
+{
+  LogEntry entry;
+  entry.rank = entity_name_t::CLIENT(sequence);
+  entry.stamp = utime_t {static_cast<time_t>(sequence), 0};
+  entry.seq = sequence;
+  entry.prio = CLOG_INFO;
+  entry.msg = message;
+  entry.channel = channel;
+
+  return entry;
+}
+
+} // namespace
+
+TEST(EncodingCompatibility, LogSummaryLegacySequenceBytes)
+{
+  LogSummary summary;
+  summary.version = 42;
+  const auto first = make_log_entry("cluster", 11, "first");
+  summary.add_legacy(first);
+  summary.add_legacy(make_log_entry("audit", 12, "second"));
+  summary.add_legacy(make_log_entry("cluster", 13, "third"));
+  summary.add_legacy(make_log_entry("audit", 14, "fourth"));
+  summary.channel_info["cluster"] = {7, 9};
+
+  ceph::buffer::list current_bytes;
+  summary.encode(current_bytes, CEPH_FEATURES_ALL);
+  const auto legacy_bytes = encode_legacy_log_summary(summary);
+  ASSERT_TRUE(current_bytes.contents_equal(legacy_bytes));
+
+  LogSummary decoded;
+  auto cursor = legacy_bytes.cbegin();
+  decoded.decode(cursor);
+  EXPECT_TRUE(decoded.contains(first.key()));
+
+  ceph::buffer::list reencoded;
+  decoded.encode(reencoded, CEPH_FEATURES_ALL);
+  EXPECT_TRUE(reencoded.contents_equal(legacy_bytes));
+}
+
+TEST(EncodingCompatibility, LogSummaryLegacyOrderingAndPruning)
+{
+  LogSummary summary;
+  const auto first = make_log_entry("cluster", 11, "first");
+  const auto second = make_log_entry("audit", 12, "second");
+  const auto third = make_log_entry("cluster", 13, "third");
+  const auto fourth = make_log_entry("audit", 14, "fourth");
+  summary.add_legacy(first);
+  summary.add_legacy(second);
+  summary.add_legacy(third);
+  summary.add_legacy(fourth);
+
+  std::vector<LogEntry> ordered;
+  summary.build_ordered_tail_legacy(ordered);
+  ASSERT_EQ(4, std::size(ordered));
+  EXPECT_EQ("first", ordered[0].msg);
+  EXPECT_EQ("second", ordered[1].msg);
+  EXPECT_EQ("third", ordered[2].msg);
+  EXPECT_EQ("fourth", ordered[3].msg);
+
+  summary.prune(1);
+  EXPECT_FALSE(summary.contains(first.key()));
+  EXPECT_FALSE(summary.contains(second.key()));
+  EXPECT_TRUE(summary.contains(third.key()));
+  EXPECT_TRUE(summary.contains(fourth.key()));
+
+  summary.build_ordered_tail_legacy(ordered);
+  ASSERT_EQ(2, std::size(ordered));
+  EXPECT_EQ("third", ordered[0].msg);
+  EXPECT_EQ("fourth", ordered[1].msg);
+}
 
 template < typename T >
 static void test_encode_and_decode(const T& src)
