@@ -6,7 +6,7 @@
 
 #include "include/ceph_assert.h"
 #include "include/xlist.h"
-#include <list>
+#include <vector>
 
 class Context;
 
@@ -42,7 +42,7 @@ private:
 
   ImageCtx *m_image_ctx;
   xlist<AsyncOperation *>::item m_xlist_item;
-  std::list<Context *> m_flush_contexts;
+  std::vector<Context *> m_flush_contexts;
 
 };
 

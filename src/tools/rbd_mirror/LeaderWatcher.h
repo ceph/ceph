@@ -4,7 +4,6 @@
 #ifndef CEPH_RBD_MIRROR_LEADER_WATCHER_H
 #define CEPH_RBD_MIRROR_LEADER_WATCHER_H
 
-#include <list>
 #include <memory>
 #include <string>
 
