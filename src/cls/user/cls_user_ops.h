@@ -4,11 +4,13 @@
 #ifndef CEPH_CLS_USER_OPS_H
 #define CEPH_CLS_USER_OPS_H
 
+#include <vector>
+
 #include "cls_user_types.h"
 #include "include/rados/cls_traits.hpp"
 
 struct cls_user_set_buckets_op {
-  std::list<cls_user_bucket_entry> entries;
+  std::vector<cls_user_bucket_entry> entries;
   bool add;
   ceph::real_time time; /* op time */
 
@@ -90,7 +92,7 @@ struct cls_user_list_buckets_op {
 WRITE_CLASS_ENCODER(cls_user_list_buckets_op)
 
 struct cls_user_list_buckets_ret {
-  std::list<cls_user_bucket_entry> entries;
+  std::vector<cls_user_bucket_entry> entries;
   std::string marker;
   bool truncated;
 
