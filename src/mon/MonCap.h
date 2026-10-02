@@ -101,7 +101,7 @@ struct MonCapGrant {
 
   // explicit grants that a profile grant expands to; populated as
   // needed by expand_profile() (via is_match()) and cached here.
-  mutable std::list<MonCapGrant> profile_grants;
+  mutable std::vector<MonCapGrant> profile_grants;
 
   void expand_profile(const EntityName& name) const;
 

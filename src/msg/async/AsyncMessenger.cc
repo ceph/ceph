@@ -353,10 +353,14 @@ void AsyncMessengerSocketHook::remove_messenger(
     }
   }
 }
-std::list<std::string> AsyncMessengerSocketHook::messengers() const {
-  std::list<std::string> result;
-  std::transform(m_msgrs.begin(), m_msgrs.end(), std::back_inserter(result),
-		 [](const auto& pair) { return pair.first; });
+std::vector<std::string> AsyncMessengerSocketHook::messengers() const
+{
+  std::vector<std::string> result;
+  result.reserve(std::size(m_msgrs));
+
+  std::ranges::transform(m_msgrs, std::back_inserter(result),
+			 [](const auto& entry) { return entry.first; });
+
   return result;
 }
 
