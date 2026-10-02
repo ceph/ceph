@@ -137,10 +137,12 @@ public:
   void print_summary(ceph::Formatter *f, std::ostream *out) const;
   void print_oneline_summary(ceph::Formatter *f, std::ostream *out) const;
 
-  void recovery_summary(ceph::Formatter *f, std::list<std::string> *psl,
+  void recovery_summary(ceph::Formatter *f, std::vector<std::string>& output,
                         const pool_stat_t& pool_sum) const;
-  void overall_recovery_summary(ceph::Formatter *f, std::list<std::string> *psl) const;
-  void pool_recovery_summary(ceph::Formatter *f, std::list<std::string> *psl,
+  void overall_recovery_summary(ceph::Formatter *f,
+                                std::vector<std::string>& output) const;
+  void pool_recovery_summary(ceph::Formatter *f,
+                             std::vector<std::string>& output,
                              uint64_t poolid) const;
   void recovery_rate_summary(ceph::Formatter *f, std::ostream *out,
                              const pool_stat_t& delta_sum,

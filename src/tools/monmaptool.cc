@@ -26,9 +26,10 @@
 #include "mon/MonMap.h"
 #include "mon/mon_types.h" // for ceph::features::mon::*
 
+#include <span>
+
 using std::cerr;
 using std::cout;
-using std::list;
 using std::map;
 using std::ostream;
 using std::set;
@@ -119,7 +120,7 @@ struct feature_op_t {
   }
 };
 
-void features_list(feature_op_t &f, MonMap &m)
+void features_list(const feature_op_t& f, MonMap &m)
 {
   if (f.type == feature_op_t::type_t::PLAIN) {
 
@@ -162,14 +163,14 @@ void features_list(feature_op_t &f, MonMap &m)
   }
 }
 
-bool handle_features(list<feature_op_t>& lst, MonMap &m)
+bool handle_features(std::span<const feature_op_t> operations, MonMap &m)
 {
-  if (lst.empty())
+  if (operations.empty())
     return false;
 
   bool modified = false;
 
-  for (auto &f : lst) {
+  for (const auto& f : operations) {
     if (f.op == feature_op_t::op_t::OP_LIST) {
       features_list(f, m);
     } else if (f.op == feature_op_t::op_t::OP_SET ||
@@ -219,8 +220,8 @@ int main(int argc, const char **argv)
   ceph_release_t min_mon_release = ceph_release_t::unknown;
   map<string,entity_addr_t> add;
   map<string,entity_addrvec_t> addv;
-  list<string> rm;
-  list<feature_op_t> features;
+  vector<string> rm;
+  vector<feature_op_t> features;
   int auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
   std::vector<int> auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
   int auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
@@ -437,14 +438,13 @@ int main(int argc, const char **argv)
 
   if (filter) {
     // apply initial members
-    list<string> initial_members;
-    get_str_list(g_conf()->mon_initial_members, initial_members);
+    auto initial_members = get_str_vec(g_conf()->mon_initial_members);
     if (!initial_members.empty()) {
       cout << "initial_members " << initial_members << ", filtering seed monmap" << std::endl;
       set<entity_addrvec_t> removed;
       monmap.set_initial_members(g_ceph_context, initial_members,
 				 string(), entity_addrvec_t(),
-				 &removed);
+				 removed);
       cout << "removed " << removed << std::endl;
     }
     modified = true;
