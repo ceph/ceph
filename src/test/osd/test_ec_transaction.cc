@@ -33,6 +33,13 @@ struct ECTestOp : ECCommon::RMWPipeline::Op {
   PGTransactionUPtr t;
 };
 
+TEST(ectransaction, write_plan_initializes_read_state)
+{
+  ECTransaction::WritePlan plan;
+
+  EXPECT_FALSE(plan.want_read);
+}
+
 TEST(ectransaction, two_writes_separated_append)
 {
   hobject_t h;
