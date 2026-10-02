@@ -24,6 +24,8 @@
 
 #include "messages/MMDSTableRequest.h"
 
+#include <vector>
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -413,12 +415,12 @@ void MDSTableServer::handle_mds_failure_or_stop(mds_rank_t who)
 
   active_clients.erase(who);
 
-  list<ref_t<MMDSTableRequest>> rollback;
+  vector<ref_t<MMDSTableRequest>> rollbacks;
   for (auto p = pending_notifies.begin(); p != pending_notifies.end(); ) {
     auto q = p++;
     if (q->second.mds == who) {
       // haven't sent reply yet.
-      rollback.push_back(q->second.reply);
+      rollbacks.push_back(q->second.reply);
       pending_notifies.erase(q);
     } else if (q->second.notify_ack_gather.erase(who)) {
       // the failed mds will reload snaptable when it recovers.
@@ -433,7 +435,7 @@ void MDSTableServer::handle_mds_failure_or_stop(mds_rank_t who)
     }
   }
 
-  for (auto &req : rollback) {
+  for (auto& req : rollbacks) {
     req->op = TABLESERVER_OP_ROLLBACK;
     handle_rollback(req);
   }
