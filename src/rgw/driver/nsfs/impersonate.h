@@ -43,9 +43,23 @@ namespace rgw { namespace sal { namespace nsfs {
  */
 bool have_credential_capabilities(std::string* missing);
 
-/* Whether impersonation is configured on.  The switch is the hinge,
- * not the presence of identity records:  records arrive and depart
- * over Admin Ops at any time, a deployment's intent does not. */
+/* Whether the switch is set.  The switch is the hinge, not the
+ * presence of identity records:  records arrive and depart over Admin
+ * Ops at any time, a deployment's intent does not.
+ *
+ * This is the deployment's intent and not what is in effect here.
+ * Only the startup gate wants it, so that a gateway missing the
+ * capabilities refuses to start. */
+bool impersonation_configured();
+
+/* Whether requests in THIS process are served as their own POSIX
+ * identity.
+ *
+ * False where nothing will ever pin a personality -- radosgw-admin,
+ * and an embedding library, which binds one uid at mount.  The
+ * distinction matters because the callers of this refuse a read when
+ * no personality is pinned, so believing impersonation is on in a
+ * process that cannot do it denies every read. */
 bool impersonation_enabled();
 
 /* The personality table for the calling thread's io_uring ring.

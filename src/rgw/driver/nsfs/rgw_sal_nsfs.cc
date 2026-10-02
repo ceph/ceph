@@ -3601,7 +3601,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
    * a personality, so none of them needs the capability -- and
    * granting it to them to satisfy a check would be worse than not
    * checking.  g_code_env is what separates them. */
-  if (nsfs::impersonation_enabled()) {
+  if (nsfs::impersonation_configured()) {
     std::string missing;
     const bool have = nsfs::have_credential_capabilities(&missing);
 

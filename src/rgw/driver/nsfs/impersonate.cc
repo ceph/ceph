@@ -30,10 +30,13 @@
 #include <array>
 #include <atomic>
 
+#include "common/code_environment.h"
 #include "common/errno.h"
 #include "global/global_context.h"
 
 #include "driver/posix/posix_io_uring.h"
+
+#include "rgw_sal.h"
 
 #include "impersonate.h"
 
@@ -41,9 +44,36 @@
 
 namespace rgw { namespace sal { namespace nsfs {
 
-bool impersonation_enabled()
+bool impersonation_configured()
 {
   return g_conf().get_val<bool>("rgw_nsfs_impersonate");
+}
+
+bool impersonation_enabled()
+{
+  if (! impersonation_configured()) {
+    return false;
+  }
+
+  /* Configured is not the same as in effect, and the difference is
+   * not cosmetic:  the callers of this refuse a read when no
+   * personality is pinned, because serving it as the daemon is the
+   * escalation the design exists to prevent.  In a process where
+   * nothing will ever pin one, that refusal denies everything.
+   *
+   * Two such processes.  radosgw-admin runs as the operator and
+   * serves no authenticated identity.  An embedding library binds one
+   * uid at mount -- `RGWLibFS` -- and likewise has no per-request
+   * identity;  it needs its own test because librgw initialises with
+   * CODE_ENVIRONMENT_DAEMON and `g_code_env` cannot see it.
+   *
+   * The startup gate asks `impersonation_configured()` instead, so a
+   * gateway missing the capabilities still refuses to start rather
+   * than quietly serving every request as itself. */
+  if (g_code_env != CODE_ENVIRONMENT_DAEMON) {
+    return false;
+  }
+  return ! rgw::sal::embedded();
 }
 
 bool have_credential_capabilities(std::string* missing)
