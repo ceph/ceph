@@ -10,6 +10,7 @@
 #include <iosfwd>
 #include <list>
 #include <string>
+#include <vector>
 
 namespace ceph {
 class Formatter;
@@ -55,7 +56,7 @@ struct ObjectPosition {
   static std::list<ObjectPosition> generate_test_instances();
 };
 
-typedef std::list<ObjectPosition> ObjectPositions;
+using ObjectPositions = std::vector<ObjectPosition>;
 
 struct ObjectSetPosition {
   // stored in most-recent -> least recent committed entry order
