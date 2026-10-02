@@ -875,7 +875,9 @@ int update_bucket_logging_sources(const DoutPrefixProvider* dpp, rgw::sal::Drive
 }
 
 int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr<rgw::sal::Bucket>& bucket, const rgw_bucket& src_bucket_id, bool add, optional_yield y) {
-  return retry_raced_bucket_write(dpp, bucket.get(), [dpp, &bucket, &src_bucket_id, add, y] {
+  // bookkeeping on the log target bucket, not a config change made by its
+  // owner, so it isn't subject to the target's admin lock
+  return retry_raced_bucket_write_unchecked(dpp, bucket.get(), [dpp, &bucket, &src_bucket_id, add, y] {
     auto& attrs = bucket->get_attrs();
     auto iter = attrs.find(RGW_ATTR_BUCKET_LOGGING_SOURCES);
     if (iter == attrs.end()) {
@@ -982,9 +984,10 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
                                    sal::Bucket* bucket,
                                    bool remove_attr,
                                    optional_yield y,
-                                   std::string* last_committed) {
+                                   std::string* last_committed,
+                                   const std::function<int()>& check) {
   std::optional<configuration> conf;
-  if (const int ret = retry_raced_bucket_write(dpp, bucket, [dpp, bucket, &conf, remove_attr, y] {
+  if (const int ret = retry_raced_bucket_write_checked(dpp, bucket, [dpp, bucket, &conf, remove_attr, y] {
     auto& attrs = bucket->get_attrs();
     if (auto iter = attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != attrs.end()) {
       try {
@@ -1005,7 +1008,7 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
     }
     // nothing to remove or no need to remove
     return 0;
-  }, y); ret < 0) {
+  }, [&check] { return check ? check() : 0; }, y); ret < 0) {
     if (remove_attr) {
       ldpp_dout(dpp, 5) << "WARNING: failed to remove logging attribute '" << RGW_ATTR_BUCKET_LOGGING <<
         "' from bucket '" << bucket->get_key() << "' during source cleanup. ret = " << ret << dendl;

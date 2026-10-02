@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 #include <cstdint>
 #include "rgw_sal_fwd.h"
@@ -267,12 +268,16 @@ int bucket_deletion_cleanup(const DoutPrefixProvider* dpp,
 // any pending log objects should be comitted to the log bucket
 // and the log bucket should be updated to remove the bucket as a source
 // if "last_committed" is not null, it will be set to the name of the last committed object
+// if "check" is set, it runs before the write and after a raced write
+// refreshed the bucket, and stops with its error (used for the bucket admin
+// lock)
 int source_bucket_cleanup(const DoutPrefixProvider* dpp,
                                    sal::Driver* driver,
                                    sal::Bucket* bucket,
                                    bool remove_attr,
                                    optional_yield y,
-                                   std::string* last_committed);
+                                   std::string* last_committed,
+                                   const std::function<int()>& check = {});
 
 // verify that the target bucket has the correct policy to allow the source bucket to log to it
 // note that this function adds entries to the request state environment

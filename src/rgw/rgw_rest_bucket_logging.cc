@@ -227,6 +227,9 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
 
     std::unique_ptr<rgw::sal::Bucket> src_bucket;
     {
+      // test hook: a lock set here is already in src_bucket, so only the
+      // check before the first write sees it
+      rgw_inject_delay(this, "delay_bucket_logging_load", y);
       const rgw_bucket src_bucket_id{s->bucket_tenant, s->bucket_name};
       op_ret = driver->load_bucket(this, src_bucket_id,
                                    &src_bucket, y);
@@ -237,7 +240,12 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
     }
 
     if (!configuration.enabled) {
-      op_ret = rgw::bucketlogging::source_bucket_cleanup(this, driver, src_bucket.get(), true, y, &old_obj);
+      // turning logging off changes this bucket: check the admin lock against
+      // the version the write is conditional on
+      op_ret = rgw::bucketlogging::source_bucket_cleanup(this, driver, src_bucket.get(), true, y, &old_obj,
+          [this, &src_bucket] {
+            return rgw_verify_bucket_admin_lock(this, s, get_type(), src_bucket.get());
+          });
       return;
     }
 
