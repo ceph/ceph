@@ -117,7 +117,7 @@ void ImageMap<I>::update_image_mapping(Updates&& map_updates,
     return;
   }
 
-  dout(5) << "updates=[" << map_updates << "], "
+  dout(5) << "updates=" << map_updates << ", "
           << "removes=[" << map_removals << "]" << dendl;
 
   Context *on_finish = new LambdaContext(
@@ -304,8 +304,8 @@ void ImageMap<I>::notify_listener_acquire_release_images(
     return;
   }
 
-  dout(5) << "acquire=[" << acquire << "], "
-          << "release=[" << release << "]" << dendl;
+  dout(5) << "acquire=" << acquire << ", "
+          << "release=" << release << dendl;
 
   for (auto const &update : acquire) {
     m_listener.acquire_image(
@@ -328,7 +328,7 @@ template <typename I>
 void ImageMap<I>::notify_listener_remove_images(const std::string &mirror_uuid,
                                                 const Updates &remove) {
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
-          << "remove=[" << remove << "]" << dendl;
+          << "remove=" << remove << dendl;
 
   for (auto const &update : remove) {
     m_listener.remove_image(

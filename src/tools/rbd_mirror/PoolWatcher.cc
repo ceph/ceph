@@ -23,7 +23,6 @@
 #define dout_prefix *_dout << "rbd::mirror::PoolWatcher: " << this << " " \
                            << __func__ << ": "
 
-using std::list;
 using std::string;
 using std::unique_ptr;
 using std::vector;

@@ -7,8 +7,11 @@
 #include "include/stringify.h"
 #include "tools/rbd/MirrorDaemonServiceInfo.h"
 
-#include <boost/scope_exit.hpp>
+#include <ranges>
 #include <iostream>
+#include <iterator>
+
+#include <boost/scope_exit.hpp>
 
 #include "json_spirit/json_spirit.h"
 
@@ -87,11 +90,14 @@ const MirrorService* MirrorDaemonServiceInfo::get_by_instance_id(
   return get_by_service_id(it->second);
 }
 
-MirrorServices MirrorDaemonServiceInfo::get_mirror_services() const {
-  MirrorServices mirror_services;
-  for (auto& it : m_mirror_services) {
-    mirror_services.push_back(it.second);
+std::vector<MirrorService> MirrorDaemonServiceInfo::get_mirror_services() const {
+  std::vector<MirrorService> mirror_services;
+  mirror_services.reserve(std::size(m_mirror_services));
+
+  for (const auto& mirror_service : m_mirror_services | std::views::values) {
+    mirror_services.push_back(mirror_service);
   }
+
   return mirror_services;
 }
 
@@ -302,4 +308,3 @@ int MirrorDaemonServiceInfo::get_mirror_service_status() {
 }
 
 } // namespace rbd
-
