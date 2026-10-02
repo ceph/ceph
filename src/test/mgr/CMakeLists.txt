@@ -123,7 +123,8 @@ set(unittest_mgr_pymodule_srcs
 add_library(unittest_mgr_pymodule_obj OBJECT ${unittest_mgr_pymodule_srcs})
 target_include_directories(unittest_mgr_pymodule_obj PRIVATE
   $<TARGET_PROPERTY:RocksDB::RocksDB,INTERFACE_INCLUDE_DIRECTORIES>
-  $<TARGET_PROPERTY:Python3::Python,INTERFACE_INCLUDE_DIRECTORIES>)
+  $<TARGET_PROPERTY:Python3::Python,INTERFACE_INCLUDE_DIRECTORIES>
+  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_INCLUDE_DIRECTORIES>)
 target_compile_definitions(unittest_mgr_pymodule_obj PRIVATE UNIT_TESTS_BUILT)
 target_link_libraries(unittest_mgr_pymodule_obj legacy-option-headers)
 if(WITH_LTTNG)
