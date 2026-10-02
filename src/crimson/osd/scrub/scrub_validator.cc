@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <set>
 #include <ranges>
+#include <vector>
 
 #include "include/utime.h"
 #include "common/Clock.h"
@@ -640,16 +641,12 @@ object_evaluation_t evaluate_object(
   return ret;
 }
 
-using clone_meta_list_t = std::list<std::pair<hobject_t, object_info_t>>;
-
 struct clone_info_t {
   hobject_t hoid;
   std::optional<object_info_t> oi;
   std::optional<uint64_t> size;
   bool has_info() const { return oi.has_value(); }
 };
-
-using all_clones_list_t = std::list<clone_info_t>;
 
 struct snapset_evaluation_result_t {
   std::optional<inconsistent_snapset_wrapper> head_error;
@@ -668,7 +665,7 @@ snapset_evaluation_result_t evaluate_snapset(
   const std::optional<SnapSet> &maybe_snapset,
   snapset_status_t snapset_status,
   const ceph::buffer::list &snapset_bl,
-  const all_clones_list_t &clones,
+  const std::vector<clone_info_t> &clones,
   const std::optional<object_info_t> &head_oi,
   uint64_t head_actual_size)
 {
@@ -1247,7 +1244,7 @@ chunk_result_t validate_chunk(
       // using the cached eval OI. Track which clones are present on the
       // primary's own scrub map so we can suppress errors for replica-only ones.
       // For replicas: only include clones present on the replica's scrub map.
-      all_clones_list_t shard_clones;
+      std::vector<clone_info_t> shard_clones;
       std::set<hobject_t> primary_local_clones;  // clones in primary's scrub map
       for (const auto &coid : object_set) {
         if (!coid.is_snap() || coid.get_head() != oid.get_head()) {

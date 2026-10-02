@@ -1283,7 +1283,7 @@ using do_reclaim_space_ertr = base_ertr;
 using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
 do_reclaim_space_ret do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
-    backref_mapping_list_t &pin_list,
+    backref_mappings_t &pin_list,
     std::size_t &reclaimed,
     std::size_t &runs,
     ExtentCallbackInterface &extent_callback,
@@ -1378,13 +1378,13 @@ do_reclaim_space_ret do_reclaim_space(
 	      ent.len);
 	    return extent_callback.get_extents_if_live(
 	      t, ent.type, ent.paddr, ent.laddr, ent.len
-	    ).si_then([FNAME, &extents, &ent, &t](auto list) {
-	      if (list.empty()) {
+	    ).si_then([FNAME, &extents, &ent, &t](auto live_extents) {
+	      if (live_extents.empty()) {
 		TRACET("addr {} dead, skipping", t, ent.paddr);
-	      } else {
-		for (auto &e : list) {
-		  extents.emplace_back(std::move(e));
-		}
+	      }
+
+	      for (auto &e : live_extents) {
+		extents.emplace_back(std::move(e));
 	      }
 	    });
 	  });
@@ -1442,7 +1442,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   // transactions.  So, concurrent transactions between trim and reclaim are
   // not allowed right now.
   return seastar::do_with(
-    std::pair<std::vector<CachedExtentRef>, backref_mapping_list_t>(),
+    std::pair<std::vector<CachedExtentRef>, backref_mappings_t>(),
     [this](auto &weak_read_ret) {
     return repeat_eagain([this, &weak_read_ret] {
       // Note: not tracked by shard_stats_t intentionally.

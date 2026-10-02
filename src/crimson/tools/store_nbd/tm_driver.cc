@@ -67,13 +67,14 @@ TMDriver::read_extents_ret TMDriver::read_extents(
   extent_len_t length)
 {
   return seastar::do_with(
-    lba_mapping_list_t(),
-    lextent_list_t<TestBlock>(),
+    lba_mappings_t(),
+    lextents_t<TestBlock>(),
     [this, &t, offset, length](auto &pins, auto &ret) {
       return tm->get_pins(
 	t, offset, length
       ).si_then([this, &t, &pins, &ret](auto _pins) {
 	_pins.swap(pins);
+	ret.reserve(std::size(pins));
 	logger().debug("read_extents: mappings {}", pins);
 	return trans_intr::do_for_each(
 	  pins.begin(),

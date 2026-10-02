@@ -123,7 +123,7 @@ BtreeBackrefManager::get_mappings(
   LOG_PREFIX(BtreeBackrefManager::get_mappings);
   TRACET("{}~{}", t, offset, end);
   auto c = get_context(t);
-  return with_btree_state<BackrefBtree, backref_mapping_list_t>(
+  return with_btree_state<BackrefBtree, backref_mappings_t>(
     cache,
     c,
     [c, offset, end](auto &btree, auto &ret) {
