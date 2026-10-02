@@ -4906,6 +4906,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   if (!keep_tags) {
     attrs.erase(RGW_ATTR_TAGS);
   }
+  attrs.erase(RGW_ATTR_TAIL_TAG);
   attrs.erase(RGW_ATTR_SHARE_MANIFEST);
   attrs.erase(RGW_ATTR_BLAKE3);
 
@@ -6015,6 +6016,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
       attrs[RGW_ATTR_RESTORE_VERSIONED_EPOCH] = std::move(bl);
     }
   }
+  attrs.erase(RGW_ATTR_TAIL_TAG);
 
   {
     bufferlist bl;
