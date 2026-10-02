@@ -1,96 +1,207 @@
 Ceph Vulnerability Handling
 ============================
-If you have discovered a security vulnerability in Ceph, please report it to security@ceph.io. Every report is acknowledged within three business days. For details on how to report, what to expect, and how disclosures are handled, see the sections below.
+
+If you have discovered a security vulnerability in Ceph, please report it to
+security@ceph.io. Every report is acknowledged within three business days. For
+details on how to report, what to expect, and how disclosures are handled, see
+the sections below.
 
 1. Purpose
 ----------
 
-Ceph maintains a vulnerability handling process for receiving, assessing, fixing, and disclosing security vulnerabilities in the Ceph project. This document defines that process from the initial report through public disclosure.
+Ceph maintains a vulnerability handling process for receiving, assessing,
+fixing, and disclosing security vulnerabilities in the Ceph project. This
+document defines that process from the initial report through public disclosure.
 
-Vulnerabilities are handled based on their disclosure risk. Reports that are already public follow the normal development process. Nonpublic Low and Medium reports normally use deferred disclosure, which keeps the security context private while allowing development in the open. Vulnerabilities that require coordinated disclosure are handled under embargo.
+Vulnerabilities are handled based on their disclosure risk. Reports that are
+already public follow the normal development process. Nonpublic Low and Medium
+reports normally use deferred disclosure, which keeps the security context
+private while allowing development in the open. Vulnerabilities that require
+coordinated disclosure are handled under embargo.
 
-Ceph has one vulnerability-handling service-level agreement: every report is acknowledged within three business days. Remediation is prioritized according to risk and follows the applicable development and release pipeline; fixes are not subject to a fixed release deadline.
+Ceph has one vulnerability-handling service-level agreement: every report is
+acknowledged within three business days. Remediation is prioritized according to
+risk and follows the applicable development and release pipeline; fixes are not
+subject to a fixed release deadline.
 
-As an open-source project, Ceph receives reports ranging from already-public dependency vulnerabilities to serious flaws that require coordinated disclosure. The handling tier is selected at intake according to disclosure risk. Full embargo is reserved for cases where keeping the fix private materially protects users. Otherwise, the engineer follows the normal development, build, CI, and release process.
+As an open-source project, Ceph receives reports ranging from already-public
+dependency vulnerabilities to serious flaws that require coordinated
+disclosure. The handling tier is selected at intake according to disclosure
+risk. Full embargo is reserved for cases where keeping the fix private
+materially protects users. Otherwise, the engineer follows the normal
+development, build, CI, and release process.
 
 **Severity alone does not require an embargo.**
 
 2. Stages
 ---------
 
-Every vulnerability, whatever its tier, passes through the same three stages from report to publication, so that each one is handled systematically.
+Every vulnerability, whatever its tier, passes through the same three stages
+from report to publication, so that each one is handled systematically.
 
-**Decide.** A new report first goes through intake. The vulnerability is acknowledged within three business days, and then is triaged and reviewed. The responder updates the email thread with relevant information and may ask for additional information. The responder confirms via email that it is a valid vulnerability. If the report is not confirmed, no further action is taken and the issue is closed. If confirmed, the responder decides whether it warrants a CVE, and if so, assigns a unique CVE identifier and shares it with the reporter. Next, the responder assesses its CVSS score and CWE, and assigns it a tier: embargoed, deferred disclosure, or unembargoed. Trackers are then created, shared, and assigned to the responsible engineering lead, and a card is added to the Security Project Board so the security team can follow the case. `Checklist for Decision <https://github.com/ceph/ceph/blob/main/doc/security/stage1_decide.rst>`_ gives the criteria for completing this stage.
+**Decide.** A new report first goes through intake. The vulnerability is
+ acknowledged within three business days, and then is triaged and reviewed. The
+ responder updates the email thread with relevant information and may ask for
+ additional information. The responder confirms via email that it is a valid
+ vulnerability. If the report is not confirmed, no further action is taken and
+ the issue is closed. If confirmed, the responder decides whether it warrants a
+ CVE, and if so, assigns a unique CVE identifier and shares it with the
+ reporter. Next, the responder assesses its CVSS score and CWE, and assigns it a
+ tier: embargoed, deferred disclosure, or unembargoed. Trackers are then
+ created, shared, and assigned to the responsible engineering lead, and a card
+ is added to the Security Project Board so the security team can follow the
+ case. `Checklist for Decision
+ <https://github.com/ceph/ceph/blob/main/doc/security/stage1_decide.rst>`_ gives
+ the criteria for completing this stage.
 
-**Fix.** The fix must land in main and in every supported branch. If the vulnerability is embargoed, all development happens in private forks of the advisory; otherwise pull requests may be opened publicly. Downstream vendors must be able to cherry-pick and pull in the fix before disclosure.  `Checklist for fix <https://github.com/ceph/ceph/blob/main/doc/security/stage2_fix.rst>`_ gives the criteria for completing this stage.
+**Fix.** The fix must land in main and in every supported branch. If the
+ vulnerability is embargoed, all development happens in private forks of the
+ advisory; otherwise pull requests may be opened publicly. Downstream vendors
+ must be able to cherry-pick and pull in the fix before disclosure.  `Checklist
+ for fix <https://github.com/ceph/ceph/blob/main/doc/security/stage2_fix.rst>`_
+ gives the criteria for completing this stage.
 
-**Disclose.** Once a disclosure date is set, the security mailing list is notified at least seven days in advance. This gives stakeholders time to prepare their releases and to decide whether they need time to mitigate internally. Requests to delay the unembargo are honored where possible, but the decision rests with the Security Lead. Before disclosure, at least one release must contain the fix, and every supported branch must have a backport in a pull request so the fix can ship in that branch's next release. The case may be held until the fix is in all branches. On the unembargo date, the GitHub advisory is published, a notice goes to oss-security, and the relevant documentation is updated, all at the same time, with the release notes linked in the public announcement.  `Checklist for disclosure <https://github.com/ceph/ceph/blob/main/doc/security/stage3_disclose.rst>`_ gives the criteria for completing this stage.
+**Disclose.** Once a disclosure date is set, the security mailing list is
+ notified at least seven days in advance. This gives stakeholders time to
+ prepare their releases and to decide whether they need time to mitigate
+ internally. Requests to delay the unembargo are honored where possible, but the
+ decision rests with the Security Lead. Before disclosure, at least one release
+ must contain the fix, and every supported branch must have a backport in a pull
+ request so the fix can ship in that branch's next release. The case may be held
+ until the fix is in all branches. On the unembargo date, the GitHub advisory is
+ published, a notice goes to oss-security, and the relevant documentation is
+ updated, all at the same time, with the release notes linked in the public
+ announcement.  `Checklist for disclosure
+ <https://github.com/ceph/ceph/blob/main/doc/security/stage3_disclose.rst>`_
+ gives the criteria for completing this stage.
 
 3. The Tiers
 ------------
 
-At intake, each vulnerability is assigned one of three handling tiers: **Unembargoed**, **Deferred Disclosure**, or **Embargoed**. The tier determines whether development occurs publicly or privately and when vulnerability details are disclosed.
+At intake, each vulnerability is assigned one of three handling tiers:
+**Unembargoed**, **Deferred Disclosure**, or **Embargoed**. The tier determines
+whether development occurs publicly or privately and when vulnerability details
+are disclosed.
 
 
 3.1 Unembargoed
 ~~~~~~~~~~~~~~~
 
-This tier applies when the vulnerability is already public, such as a standard dependency vulnerability or a flaw already publicly known to affect Ceph. There is no security benefit to concealing the remediation.
+This tier applies when the vulnerability is already public, such as a standard
+dependency vulnerability or a flaw already publicly known to affect Ceph. There
+is no security benefit to concealing the remediation.
 
-The engineer follows the normal development, build, CI, and release process. Commits, pull requests, and release notes may include the CVE identifier and describe the security impact of the fix.
+The engineer follows the normal development, build, CI, and release
+process. Commits, pull requests, and release notes may include the CVE
+identifier and describe the security impact of the fix.
 
-These fixes normally ship in the next applicable Ceph release. When the risk warrants faster delivery, the Security Lead may arrange a hotfix. A scheduled release is not delayed to coordinate disclosure; fixes ship as soon as they are ready.
+These fixes normally ship in the next applicable Ceph release. When the risk
+warrants faster delivery, the Security Lead may arrange a hotfix. A scheduled
+release is not delayed to coordinate disclosure; fixes ship as soon as they are
+ready.
 
 
 3.2 Deferred Disclosure
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Deferred disclosure is the default for vulnerabilities that are not yet public and are rated Low or Medium by CVSS, unless one of the embargo criteria in §3.3 applies. High and Critical vulnerabilities may also be handled under deferred disclosure with the approval of the Security Lead.
+Deferred disclosure is the default for vulnerabilities that are not yet public
+and are rated Low or Medium by CVSS, unless one of the embargo criteria in §3.3
+applies. High and Critical vulnerabilities may also be handled under deferred
+disclosure with the approval of the Security Lead.
 
-Deferred disclosure is **not** a formal embargo. Development occurs publicly through normal pull requests, builds, and CI, while the vulnerability's security context and advisory remain private until disclosure.
+Deferred disclosure is **not** a formal embargo. Development occurs publicly
+through normal pull requests, builds, and CI, while the vulnerability's security
+context and advisory remain private until disclosure.
 
-Public commits and pull requests must not include the CVE identifier or wording that identifies the change as a vulnerability fix. Prohibited terms are listed in Section 5.
+Public commits and pull requests must not include the CVE identifier or wording
+that identifies the change as a vulnerability fix. Prohibited terms are listed
+in Section 5.
 
 The advisory remains private until all of the following conditions are met:
 
 1. At least one Ceph release contains the fix.
 2. Every other supported release has a backport pull request containing the fix.
-3. Downstream stakeholders have received at least seven days' notice of the planned disclosure.
+3. Downstream stakeholders and vendors have received at least seven days' notice of the
+   planned disclosure via the security email list. 
 
-Reporters may request full embargo handling in their initial report. If they have not, the responder asks whether they want coordinated embargo handling. If the reporter approves deferred disclosure, or does not object within five business days of the request, the vulnerability proceeds under deferred disclosure, subject to Security Lead approval for High and Critical vulnerabilities. If the reporter of a Low or Medium vulnerability objects, the Security Lead grants an embargo unless it is impractical. The Security Lead may require an embargo in any case.
+Reporters may request full embargo handling in their initial report. If they
+have not, the responder asks whether they want coordinated embargo handling. If
+the reporter approves deferred disclosure, or does not object within five
+business days of the request, the vulnerability proceeds under deferred
+disclosure, subject to Security Lead approval for High and Critical
+vulnerabilities. If the reporter of a Low or Medium vulnerability objects, the
+Security Lead grants an embargo unless it is impractical. The Security Lead may
+require an embargo in any case.
 
-Deferred-disclosure fixes normally ship in the next applicable Ceph release. When the risk warrants faster delivery, the Security Lead may arrange a hotfix. A scheduled release is not delayed to coordinate disclosure; fixes ship as soon as they are ready.
+Deferred-disclosure fixes normally ship in the next applicable Ceph
+release. When the risk warrants faster delivery, the Security Lead may arrange a
+hotfix. A scheduled release is not delayed to coordinate disclosure; fixes ship
+as soon as they are ready.
 
 
 3.3 Embargo (Coordinated Release)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-An embargo keeps both the vulnerability and its remediation private until a coordinated release and disclosure. Reporters and participants must not disclose an embargoed vulnerability before it has been fixed and announced, unless explicitly permitted by the Ceph security team. This restriction holds until the agreed public disclosure date.
+An embargo keeps both the vulnerability and its remediation private until a
+coordinated release and disclosure. Reporters and participants must not disclose
+an embargoed vulnerability before it has been fixed and announced, unless
+explicitly permitted by the Ceph security team. This restriction holds until the
+agreed public disclosure date.
 
 A vulnerability receives embargo handling when any of the following applies:
 
 1. The report was received under an external embargo.
-2. The reporter requested embargo handling. For Low or Medium vulnerabilities, the Security Lead may decline if an embargo is impractical (§3.2).
-3. The Security Lead determines that an embargo is warranted based on the risk of disclosure before a fix is available.
+2. The reporter requested embargo handling. For Low or Medium vulnerabilities,
+   the Security Lead may decline if an embargo is impractical (§3.2).
+3. The Security Lead determines that an embargo is warranted based on the risk
+   of disclosure before a fix is available.
 
-The tiered embargo process was introduced in 2026. It uses private forks and private builds and is stricter than Ceph's previous vulnerability-handling process.
+The tiered embargo process was introduced in 2026. It uses private forks and
+private builds and is stricter than Ceph's previous vulnerability-handling
+process.
 
-All development takes place in a private repository associated with the vulnerability's GitHub Security Advisory. Builds follow `the embargoed CVE build process <https://github.com/ceph/ceph/blob/main/doc/dev/developer_guide/cve.rst>`_. Vulnerability details, fixes, commits, builds, and related development remain private until the agreed disclosure date. If a vulnerability is unintentionally already fixed in the public repository, stakeholders and vendors will be notified, and the embargo status will be moved to deferred disclosure. If the vulnerability is fully public from this breach, several days are given to downstream stakeholders/vendors to prepare for updating before the public disclosure. 
+All development takes place in a private repository associated with the
+vulnerability's GitHub Security Advisory. Builds follow `the embargoed CVE build
+process
+<https://github.com/ceph/ceph/blob/main/doc/dev/developer_guide/cve.rst>`_. Vulnerability
+details, fixes, commits, builds, and related development remain private until
+the agreed disclosure date. If a vulnerability is unintentionally already fixed
+in the public repository, stakeholders and vendors will be notified, and the
+embargo status will be moved to deferred disclosure. If the vulnerability is
+fully public from this breach, several days are given to downstream
+stakeholders/vendors to prepare for updating before the public disclosure.
 
-The disclosure date is agreed with the release coordinator before being announced to stakeholders, and must coincide with a Ceph release containing the fix. No fix may ship publicly before that date. If the reporter has no date in mind, the security team will coordinate one with list members and share the agreed date with the reporter. Disclosure dates are not set on Fridays or during holiday periods. 
+The disclosure date is agreed with the release coordinator before being
+announced to stakeholders, and must coincide with a Ceph release containing the
+fix. No fix may ship publicly before that date. If the reporter has no date in
+mind, the security team will coordinate one with list members and share the
+agreed date with the reporter. Disclosure dates are not set on Fridays or during
+holiday periods.
 
-Once set, the planned date is announced on the security mailing list so downstream stakeholders can prepare their releases and advisories. Security announcements are published to ceph-announce@ceph.io and oss-security@lists.openwall.com (both low-traffic).
+Once set, the planned date is announced on the security mailing list so
+downstream stakeholders can prepare their releases and advisories. Security
+announcements are published to ceph-announce@ceph.io and
+oss-security@lists.openwall.com (both low-traffic).
 
-Requests to extend an embargo are considered individually by the Security Lead. Embargoes should not be held for more than 90 days from the date of vulnerability confirmation, except under unusual circumstances. 
+Requests to extend an embargo are considered individually by the Security
+Lead. Embargoes should not be held for more than 90 days from the date of
+vulnerability confirmation, except under unusual circumstances.
 
 
 
 4. Rules for All Tiers
 -----------------------
 
-For deferred-disclosure and embargoed vulnerabilities, commits, pull requests, tests, and documentation must not mention the CVE or describe the change as a vulnerability fix until the advisory is published. Unembargoed vulnerabilities may be referenced openly, but it is good practice to say no more than necessary. 
+For deferred-disclosure and embargoed vulnerabilities, commits, pull requests,
+tests, and documentation must not mention the CVE or describe the change as a
+vulnerability fix until the advisory is published. Unembargoed vulnerabilities
+may be referenced openly, but it is good practice to say no more than necessary.
 
 
 6. Acknowledgements
 --------------------
-Your efforts and responsible disclosure are greatly appreciated and will be publicly acknowledged by name, unless you prefer to remain anonymous. We do not offer a bug bounty program, but we appreciate your contribution to open source security! 
+
+Your efforts and responsible disclosure
+are greatly appreciated and will be publicly acknowledged by name, unless you
+prefer to remain anonymous. We do not offer a bug bounty program, but we
+appreciate your contribution to open source security!
