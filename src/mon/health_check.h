@@ -3,10 +3,11 @@
 
 #pragma once
 
-#include <iosfwd>
 #include <map>
+#include <iosfwd>
 #include <string>
 #include <vector>
+#include <iterator>
 
 #include "include/container_ios.h"
 #include "include/health.h"
@@ -19,7 +20,7 @@
 struct health_check_t {
   health_status_t severity;
   std::string summary;
-  std::list<std::string> detail;
+  std::vector<std::string> detail;
   int64_t count = 0;
 
   DENC(health_check_t, v, p) {
@@ -209,10 +210,9 @@ struct health_check_map_t {
       auto [it, new_check] = checks.try_emplace(code, check);
       if (!new_check) {
         // merge details, and hope the summary matches!
-        it->second.detail.insert(
-          it->second.detail.end(),
-          check.detail.begin(),
-          check.detail.end());
+        auto& detail = it->second.detail;
+        detail.reserve(std::size(detail) + std::size(check.detail));
+        detail.insert(std::end(detail), std::begin(check.detail), std::end(check.detail));
         it->second.count += check.count;
       }
     }
