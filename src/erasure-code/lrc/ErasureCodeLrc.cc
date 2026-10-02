@@ -42,6 +42,23 @@ static ostream& _prefix(std::ostream* _dout)
 }
 
 int ErasureCodeLrc::create_rule(const string &name,
+                                int num_zones,
+                                const string &root,
+                                const string &zone_failure_domain,
+                                const string &osd_failure_domain,
+                                const string &device_class,
+                                CrushWrapper &crush,
+                                ostream *ss) const
+{
+  if (num_zones > 1) {
+    if (ss)
+      *ss << "LRC erasure code does not support stretch (num_zones > 1)";
+    return -EINVAL;
+  }
+  return create_rule(name, crush, ss);
+}
+
+int ErasureCodeLrc::create_rule(const string &name,
 				   CrushWrapper &crush,
 				   ostream *ss) const
 {

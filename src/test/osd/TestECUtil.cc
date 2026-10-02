@@ -1630,3 +1630,166 @@ TEST(ECUtil, erase_after_ro_offset_single_byte)
   // Shard 1 should be empty
   ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
 }
+
+// Every constructor populates get_all_shards() with 0..k+m-1.
+TEST(ECUtil, get_all_shards_every_constructor)
+{
+  pg_pool_t pool;
+  shard_id_set all;
+  all.insert_range(shard_id_t(0), 3);
+  EXPECT_EQ(all, stripe_info_t(2, 1, 4096 * 2).get_all_shards());
+  EXPECT_EQ(all, stripe_info_t(2, 1, 4096 * 2, std::vector<shard_id_t>())
+                     .get_all_shards());
+  EXPECT_EQ(all, stripe_info_t(2, 1, 4096 * 2, &pool).get_all_shards());
+  EXPECT_EQ(all, stripe_info_t(2, 1, 4096 * 2, &pool,
+                               std::vector<shard_id_t>()).get_all_shards());
+}
+
+// Test get_base_shard and get_shard_zone
+TEST(ECUtil, get_base_shard)
+{
+  int k = 2;
+  int m = 1;
+  stripe_info_t sinfo(k, m, 4096 * k);
+
+  // Basic: k+m=3, so shard % 3
+  ASSERT_EQ(shard_id_t(0), sinfo.get_rel_shard(shard_id_t(0)));
+  ASSERT_EQ(shard_id_t(2), sinfo.get_rel_shard(shard_id_t(2)));
+  ASSERT_EQ(shard_id_t(0), sinfo.get_rel_shard(shard_id_t(3)));
+  ASSERT_EQ(shard_id_t(1), sinfo.get_rel_shard(shard_id_t(100)));
+
+  // Zone: shard / 3
+  ASSERT_EQ(0, sinfo.get_shard_zone(shard_id_t(2)));
+  ASSERT_EQ(1, sinfo.get_shard_zone(shard_id_t(3)));
+  ASSERT_EQ(33, sinfo.get_shard_zone(shard_id_t(100)));
+}
+
+
+
+// Verify consistency: abs_shard == zone * (k+m) + rel_shard
+TEST(ECUtil, get_shard_zone_consistency_with_get_rel_shard)
+{
+  int k = 4;
+  int m = 2;
+  int chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k);
+
+  // Test a few examples
+  for (int shard_id = 0; shard_id < 20; shard_id++) {
+    shard_id_t abs_shard(shard_id);
+    int zone = sinfo.get_shard_zone(abs_shard);
+    shard_id_t rel_shard = sinfo.get_rel_shard(abs_shard);
+    int reconstructed = zone * sinfo.get_k_plus_m() + rel_shard.id;
+    ASSERT_EQ(shard_id, reconstructed);
+    ASSERT_EQ(abs_shard, sinfo.get_abs_shard(rel_shard, zone));
+  }
+}
+
+// stripe_info_t::get_num_zones() and pg_pool_t::get_num_zone() are two
+// near-identically named helpers answering the same question ("how many
+// zones does this pool have?") for the same unset-option case, and they
+// must not silently disagree on the default. A default pg_pool_t leaves
+// pool_opts_t::NUM_ZONES unset, which is exactly the "no zones configured"
+// case both helpers claim to handle.
+TEST(ECUtil, get_num_zones_matches_pg_pool_t_get_num_zone_default)
+{
+  pg_pool_t pool;
+  stripe_info_t sinfo(2, 1, 4096 * 2, &pool);
+
+  // pg_pool_t treats "unset" as a single-zone pool.
+  ASSERT_EQ(1, pool.get_num_zone());
+
+  // stripe_info_t must agree with pg_pool_t on the very same question,
+  // for the very same pool.
+  ASSERT_EQ(pool.get_num_zone(), (int)sinfo.get_num_zones());
+}
+
+// Relative shard/zone helpers across three zones, NO_SHARD, and agreement
+// with pg_pool_t::get_relative_shard, which PGLog uses for written_shards.
+TEST(ECUtil, rel_shard_and_zone_three_zones_match_pool)
+{
+  pg_pool_t pool;
+  pool.type = pg_pool_t::TYPE_ERASURE;
+  pool.size = 18;
+  pool.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(3));
+  stripe_info_t sinfo(4, 2, 4096 * 4, &pool);
+
+  ASSERT_EQ(3u, sinfo.get_num_zones());
+  ASSERT_EQ(3, pool.get_num_zone());
+
+  shard_id_t no_shard = shard_id_t::NO_SHARD;
+  ASSERT_EQ(no_shard, sinfo.get_rel_shard(no_shard));
+  ASSERT_EQ(0, sinfo.get_shard_zone(no_shard));
+  ASSERT_EQ(std::make_pair(no_shard, 0), sinfo.get_rel_shard_and_zone(no_shard));
+  ASSERT_EQ(no_shard, pool.get_relative_shard(no_shard));
+
+  for (int i = 0; i < 18; ++i) {
+    shard_id_t abs(i);
+    ASSERT_EQ(shard_id_t(i % 6), sinfo.get_rel_shard(abs));
+    ASSERT_EQ(i / 6, sinfo.get_shard_zone(abs));
+    ASSERT_EQ(std::make_pair(sinfo.get_rel_shard(abs), sinfo.get_shard_zone(abs)),
+              sinfo.get_rel_shard_and_zone(abs));
+    ASSERT_EQ(sinfo.get_rel_shard(abs), pool.get_relative_shard(abs));
+    ASSERT_EQ(sinfo.get_raw_shard(sinfo.get_rel_shard(abs)),
+              sinfo.get_raw_shard(abs));
+  }
+}
+
+// zones_or folds every zone's shards onto the zone-0 (relative) ids.
+TEST(ECUtil, zones_or)
+{
+  pg_pool_t pool;
+  stripe_info_t sinfo(2, 1, 4096 * 2, &pool);
+
+  ASSERT_EQ(shard_id_set(), sinfo.zones_or(shard_id_set()));
+  ASSERT_EQ(shard_id_set({shard_id_t(0), shard_id_t(1), shard_id_t(2)}),
+            sinfo.zones_or(shard_id_set({shard_id_t(0), shard_id_t(1),
+                                         shard_id_t(2)})));
+  ASSERT_EQ(shard_id_set({shard_id_t(0)}),
+            sinfo.zones_or(shard_id_set({shard_id_t(3)})));
+  ASSERT_EQ(shard_id_set({shard_id_t(1), shard_id_t(2)}),
+            sinfo.zones_or(shard_id_set({shard_id_t(1), shard_id_t(5)})));
+  ASSERT_EQ(shard_id_set({shard_id_t(0), shard_id_t(1), shard_id_t(2)}),
+            sinfo.zones_or(shard_id_set({shard_id_t(0), shard_id_t(4),
+                                         shard_id_t(8)})));
+  ASSERT_EQ(shard_id_set({shard_id_t(0), shard_id_t(2)}),
+            sinfo.zones_or(shard_id_set({shard_id_t(2), shard_id_t(3)})));
+
+  // k+m = 24, so zone 2 starts beyond the first 64-bit word.
+  stripe_info_t wide(20, 4, 4096 * 20, &pool);
+  ASSERT_EQ(shard_id_set({shard_id_t(22)}),
+            wide.zones_or(shard_id_set({shard_id_t(70)})));
+  ASSERT_EQ(shard_id_set({shard_id_t(0), shard_id_t(23)}),
+            wide.zones_or(shard_id_set({shard_id_t(23), shard_id_t(48)})));
+}
+
+// A non-positive NUM_ZONES is treated as a single zone.
+TEST(ECUtil, get_num_zones_nonpositive)
+{
+  for (int64_t zones : {int64_t(0), int64_t(-1)}) {
+    pg_pool_t pool;
+    pool.opts.set(pool_opts_t::NUM_ZONES, zones);
+    stripe_info_t sinfo(2, 1, 4096 * 2, &pool);
+    ASSERT_EQ(1u, sinfo.get_num_zones());
+  }
+}
+
+// Absolute zone-1 shard ids must not be used on per-zone shard maps.
+TEST(ECUtil, per_zone_maps_reject_absolute_shards)
+{
+  pg_pool_t pool;
+  stripe_info_t sinfo(2, 1, 4096 * 2, &pool);
+
+  shard_extent_set_t set(sinfo.get_k_plus_m());
+  ASSERT_EQ(0u, set.erase(shard_id_t(2)));
+  EXPECT_DEATH(set.erase(shard_id_t(3)), "");
+
+  shard_extent_map_t semap(&sinfo);
+  bufferlist bl;
+  bl.append_zero(4096);
+  semap.insert_in_shard(shard_id_t(1), 0, bl);
+  ASSERT_TRUE(semap.contains_shard(shard_id_t(1)));
+  ASSERT_EQ(4096u, semap.get_extent_set(shard_id_t(1)).size());
+  EXPECT_DEATH(semap.contains_shard(shard_id_t(4)), "");
+  EXPECT_DEATH(semap.get_extent_set(shard_id_t(4)), "");
+}

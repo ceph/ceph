@@ -1176,7 +1176,8 @@ int expand_log(
       oss,
       cct->_conf->osd_ignore_stale_divergent_priors,
       true, // Always use relaxed asserts for this tool.
-      cct->_conf->osd_debug_verify_missing_on_start);
+      cct->_conf->osd_debug_verify_missing_on_start,
+      pool_info);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
 

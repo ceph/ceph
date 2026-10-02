@@ -65,7 +65,7 @@ TEST(ErasureCodeShec, init_1)
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->rule_root.c_str());
-  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
+  EXPECT_STREQ("osd", shec->rule_osd_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
@@ -99,7 +99,7 @@ TEST(ErasureCodeShec, init_2)
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("test", shec->rule_root.c_str());
-  EXPECT_STREQ("host", shec->rule_failure_domain.c_str());
+  EXPECT_STREQ("host", shec->rule_osd_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
@@ -132,7 +132,7 @@ TEST(ErasureCodeShec, init_3)
   EXPECT_EQ(16, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->rule_root.c_str());
-  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
+  EXPECT_STREQ("osd", shec->rule_osd_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
@@ -165,7 +165,7 @@ TEST(ErasureCodeShec, init_4)
   EXPECT_EQ(32, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->rule_root.c_str());
-  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
+  EXPECT_STREQ("osd", shec->rule_osd_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
@@ -902,7 +902,7 @@ TEST(ErasureCodeShec, init2_4)
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->rule_root.c_str());
-  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
+  EXPECT_STREQ("osd", shec->rule_osd_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 
@@ -944,7 +944,7 @@ TEST(ErasureCodeShec, init2_5)
   EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->rule_root.c_str());
-  EXPECT_STREQ("osd", shec->rule_failure_domain.c_str());
+  EXPECT_STREQ("osd", shec->rule_osd_failure_domain.c_str());
   EXPECT_TRUE(shec->matrix != NULL);
   EXPECT_EQ(0, r);
 

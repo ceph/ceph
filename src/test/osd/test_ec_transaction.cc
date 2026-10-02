@@ -564,3 +564,49 @@ TEST(ectransaction, truncate_then_write_one_shard) {
   
   ASSERT_EQ(ref_write, plan.will_write);
 }
+// Write planning in a two-zone pool works on relative shards and must give
+// the same plan as the equivalent single-zone pool.
+TEST(ectransaction, partial_overwrite_plan_two_zones_matches_one_zone)
+{
+  hobject_t h;
+  PGTransaction::ObjectOperation op;
+  bufferlist a;
+  a.append_zero(4096);
+  op.buffer_updates.insert(4096, a.length(), PGTransaction::ObjectOperation::BufferUpdate::Write{a, 0});
+
+  object_info_t oi;
+  oi.size = 16384;
+
+  pg_pool_t pool1;
+  pool1.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  pool1.size = 6;
+  pg_pool_t pool2 = pool1;
+  pool2.size = 12;
+  pool2.opts.set(pool_opts_t::NUM_ZONES, 2);
+  ECUtil::stripe_info_t sinfo1(4, 2, 16384, &pool1, std::vector<shard_id_t>(0));
+  ECUtil::stripe_info_t sinfo2(4, 2, 16384, &pool2, std::vector<shard_id_t>(0));
+  ASSERT_EQ(sinfo2.get_k_plus_m(), 6u);
+
+  shard_id_set all;
+  all.insert_range(shard_id_t(0), 6);
+  shard_id_set readable = all;
+  readable.erase(shard_id_t(2));
+
+  ECTransaction::WritePlanObj plan1(h, op, sinfo1, readable, all, false,
+                                    oi.size, oi, std::nullopt, 0);
+  ECTransaction::WritePlanObj plan2(h, op, sinfo2, readable, all, false,
+                                    oi.size, oi, std::nullopt, 0);
+
+  ECUtil::shard_extent_set_t ref_write(6);
+  for (int shard : {1, 4, 5}) {
+    ref_write[shard_id_t(shard)].insert(0, 4096);
+  }
+  ASSERT_EQ(ref_write, plan2.will_write);
+  ASSERT_EQ(plan1.will_write, plan2.will_write);
+  ASSERT_EQ(plan1.to_read, plan2.to_read);
+  ASSERT_TRUE(plan2.to_read);
+  for (auto &&[shard, eset] : *plan2.to_read) {
+    ASSERT_LT(shard, shard_id_t(6));
+    ASSERT_NE(shard, shard_id_t(2));
+  }
+}
