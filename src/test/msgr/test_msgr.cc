@@ -15,20 +15,25 @@
  *
  */
 
-#include <atomic>
-#include <iostream>
-#include <list>
-#include <memory>
-#include <set>
-#include <gmock/gmock-matchers.h>
-#include <stdlib.h>
 #include <time.h>
+#include <stdlib.h>
 #include <unistd.h>
+
+#include <set>
+#include <deque>
+#include <atomic>
+#include <memory>
+#include <vector>
+#include <sstream>
+#include <iostream>
+#include <iterator>
+#include <algorithm>
+
+#include <gmock/gmock-matchers.h>
 
 #include <boost/random/binomial_distribution.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
-#include <sstream>
 #include "common/Formatter.h"
 #include <gtest/gtest.h>
 
@@ -244,18 +249,12 @@ struct TestInterceptor : public Interceptor {
   bool step_waiting = false;
   bool waiting = true;
   std::map<Connection *, uint32_t> current_step;
-  std::map<Connection *, std::list<uint32_t>> step_history;
+  std::map<Connection *, std::vector<uint32_t>> step_history;
   std::map<uint32_t, std::optional<ACTION>> decisions;
   std::set<uint32_t> breakpoints;
 
   uint32_t count_step(Connection *conn, uint32_t step) {
-    uint32_t count = 0;
-    for (auto s : step_history[conn]) {
-      if (s == step) {
-        count++;
-      }
-    }
-    return count;
+    return static_cast<uint32_t>(std::ranges::count(step_history[conn], step));
   }
 
   void breakpoint(uint32_t step) {
@@ -1745,7 +1744,7 @@ class SyntheticDispatcher : public Dispatcher {
   bool got_new;
   bool got_remote_reset;
   bool got_connect;
-  map<ConnectionRef, list<uint64_t> > conn_sent;
+  std::map<ConnectionRef, std::deque<uint64_t>> conn_sent;
   map<uint64_t, bufferlist> sent;
   std::atomic<uint64_t> index;
   SyntheticWorkload *workload;
@@ -1754,6 +1753,20 @@ class SyntheticDispatcher : public Dispatcher {
       Dispatcher(g_ceph_context), is_server(s), got_new(false),
       got_remote_reset(false), got_connect(false), index(0), workload(wl) {
   }
+
+  void clear_sent_locked(Connection *connection) {
+    const auto pending = conn_sent.find(connection);
+    if (pending == std::end(conn_sent)) {
+      return;
+    }
+
+    for (const auto sequence : pending->second) {
+      sent.erase(sequence);
+    }
+
+    conn_sent.erase(pending);
+  }
+
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -1767,21 +1780,13 @@ class SyntheticDispatcher : public Dispatcher {
 
   void ms_handle_fast_connect(Connection *con) override {
     std::lock_guard l{lock};
-    list<uint64_t> c = conn_sent[con];
-    for (list<uint64_t>::iterator it = c.begin();
-         it != c.end(); ++it)
-      sent.erase(*it);
-    conn_sent.erase(con);
+    clear_sent_locked(con);
     got_connect = true;
     cond.notify_all();
   }
   void ms_handle_fast_accept(Connection *con) override {
     std::lock_guard l{lock};
-    list<uint64_t> c = conn_sent[con];
-    for (list<uint64_t>::iterator it = c.begin();
-         it != c.end(); ++it)
-      sent.erase(*it);
-    conn_sent.erase(con);
+    clear_sent_locked(con);
     cond.notify_all();
   }
   bool ms_dispatch(Message *m) override {
@@ -1790,11 +1795,7 @@ class SyntheticDispatcher : public Dispatcher {
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {
     std::lock_guard l{lock};
-    list<uint64_t> c = conn_sent[con];
-    for (list<uint64_t>::iterator it = c.begin();
-         it != c.end(); ++it)
-      sent.erase(*it);
-    conn_sent.erase(con);
+    clear_sent_locked(con);
     got_remote_reset = true;
   }
   bool ms_handle_refused(Connection *con) override {
@@ -1868,11 +1869,7 @@ class SyntheticDispatcher : public Dispatcher {
 
   void clear_pending(ConnectionRef con) {
     std::lock_guard l{lock};
-
-    for (list<uint64_t>::iterator it = conn_sent[con].begin();
-         it != conn_sent[con].end(); ++it)
-      sent.erase(*it);
-    conn_sent.erase(con);
+    clear_sent_locked(con.get());
   }
 
   void print() {
