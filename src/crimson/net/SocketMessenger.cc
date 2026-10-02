@@ -292,11 +292,21 @@ seastar::future<> SocketMessenger::shutdown()
       return conn.second->close_clean_yielded();
     });
   }).then([this] {
+    // copy: closing unregisters and mutates the set
+    auto multi = std::vector<SocketConnectionRef>(
+      multi_session_conns.begin(), multi_session_conns.end());
+    return seastar::do_with(std::move(multi), [](auto &conns) {
+      return seastar::parallel_for_each(conns, [](auto conn) {
+        return conn->close_clean_yielded();
+      });
+    });
+  }).then([this] {
     return seastar::parallel_for_each(closing_conns, [] (auto conn) {
       return conn->close_clean_yielded();
     });
   }).then([this] {
     ceph_assert(connections.empty());
+    ceph_assert(multi_session_conns.empty());
     shutdown_promise.set_value();
   });
 }
@@ -439,9 +449,36 @@ void SocketMessenger::unaccept_conn(SocketConnectionRef conn)
   accepting_conns.erase(conn);
 }
 
+bool SocketMessenger::is_lossy_client(const SocketConnection &conn)
+{
+  return conn.policy.lossy && conn.get_peer_name().is_client();
+}
+
+seastar::future<> SocketMessenger::mark_down_multi_session(const entity_addr_t& a)
+{
+  assert(seastar::this_shard_id() == sid);
+  std::vector<SocketConnectionRef> matched;
+  for (auto &c : multi_session_conns) {
+    if (c->get_peer_addr() == a) {
+      matched.push_back(c);
+    }
+  }
+  return seastar::parallel_for_each(matched, [](auto conn) {
+    return seastar::smp::submit_to(conn->get_shard_id(), [c = conn.get()] {
+      c->mark_down();
+    });
+  });
+}
+
 void SocketMessenger::register_conn(SocketConnectionRef conn)
 {
   assert(seastar::this_shard_id() == sid);
+  if (conn->multi_session) {
+    auto [it, added] = multi_session_conns.insert(conn);
+    std::ignore = it;
+    ceph_assert(added);
+    return;
+  }
   auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
   std::ignore = i;
   ceph_assert(added);
@@ -451,6 +488,9 @@ void SocketMessenger::unregister_conn(SocketConnectionRef conn)
 {
   assert(seastar::this_shard_id() == sid);
   ceph_assert(conn);
+  if (conn->multi_session && multi_session_conns.erase(conn)) {
+    return;
+  }
   auto found = connections.find(conn->get_peer_addr());
   ceph_assert(found != connections.end());
   ceph_assert(found->second == conn);
