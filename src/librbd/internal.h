@@ -94,7 +94,7 @@ namespace librbd {
   int lock_acquire(ImageCtx *ictx, rbd_lock_mode_t lock_mode);
   int lock_release(ImageCtx *ictx);
   int lock_get_owners(ImageCtx *ictx, rbd_lock_mode_t *lock_mode,
-                      std::list<std::string> *lock_owners);
+                      std::vector<std::string>& lock_owners);
   int lock_break(ImageCtx *ictx, rbd_lock_mode_t lock_mode,
                  const std::string &lock_owner);
 
@@ -103,10 +103,8 @@ namespace librbd {
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx, size_t sparse_size);
 
   /* cooperative locking */
-  int list_lockers(ImageCtx *ictx,
-		   std::list<locker_t> *locks,
-		   bool *exclusive,
-		   std::string *tag);
+  int list_lockers(ImageCtx *ictx, std::vector<locker_t>& lockers,
+                   bool *exclusive, std::string *tag);
   int lock(ImageCtx *ictx, bool exclusive, const std::string& cookie,
 	   const std::string& tag);
   int lock_shared(ImageCtx *ictx, const std::string& cookie,
@@ -138,7 +136,8 @@ namespace librbd {
 		    std::map<std::string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
 
-  int list_watchers(ImageCtx *ictx, std::list<librbd::image_watcher_t> &watchers);
+  int list_watchers(ImageCtx *ictx,
+                    std::vector<librbd::image_watcher_t>& watchers);
 }
 
 std::ostream &operator<<(std::ostream &os, const librbd::ImageOptions &opts);

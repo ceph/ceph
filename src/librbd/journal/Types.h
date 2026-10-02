@@ -11,9 +11,9 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "librbd/Types.h"
-#include <iosfwd>
-#include <list>
 #include <vector>
+#include <iosfwd>
+#include <utility>
 #include <variant>
 #include <boost/none.hpp>
 #include <boost/optional.hpp>
@@ -528,7 +528,7 @@ enum MirrorPeerState {
 };
 
 struct MirrorPeerClientMeta {
-  typedef std::list<MirrorPeerSyncPoint> SyncPoints;
+  using SyncPoints = std::vector<MirrorPeerSyncPoint>;
 
   static const ClientMetaType TYPE = MIRROR_PEER_CLIENT_META_TYPE;
 
@@ -541,9 +541,10 @@ struct MirrorPeerClientMeta {
   MirrorPeerClientMeta() {
   }
   MirrorPeerClientMeta(const std::string &image_id,
-                       const SyncPoints &sync_points = SyncPoints(),
+                       SyncPoints sync_points = SyncPoints(),
                        const SnapSeqs &snap_seqs = SnapSeqs())
-    : image_id(image_id), sync_points(sync_points), snap_seqs(snap_seqs) {
+    : image_id(image_id), sync_points(std::move(sync_points)),
+      snap_seqs(snap_seqs) {
   }
 
   inline bool operator==(const MirrorPeerClientMeta &meta) const {

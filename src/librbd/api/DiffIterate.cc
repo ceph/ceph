@@ -20,10 +20,9 @@
 #include "common/Throttle.h"
 #include "osdc/Striper.h"
 #include <boost/tuple/tuple.hpp>
-#include <list>
 #include <map>
-#include <shared_mutex> // for std::shared_lock
 #include <vector>
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -86,8 +85,8 @@ public:
   }
 
 protected:
-  typedef boost::tuple<uint64_t, size_t, bool> Diff;
-  typedef std::list<Diff> Diffs;
+  using Diff = boost::tuple<uint64_t, size_t, bool>;
+  using Diffs = std::vector<Diff>;
 
   void finish(int r) override {
     CephContext *cct = m_cct;
@@ -102,8 +101,8 @@ protected:
                      << m_image_length << ": list_snaps complete" << dendl;
 
     compute_diffs(&diffs);
-    for (Diffs::const_iterator d = diffs.begin(); d != diffs.end(); ++d) {
-      r = m_diff_context.callback(d->get<0>(), d->get<1>(), d->get<2>(),
+    for (const auto& diff : diffs) {
+      r = m_diff_context.callback(diff.get<0>(), diff.get<1>(), diff.get<2>(),
                                   m_diff_context.callback_arg);
       if (r < 0) {
         break;
