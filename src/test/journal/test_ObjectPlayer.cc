@@ -116,11 +116,14 @@ TYPED_TEST(TestObjectPlayer, FetchDeDup) {
   std::string oid = this->get_temp_oid();
 
   journal::Entry entry1(234, 123, this->create_payload(std::string(24, '1')));
-  journal::Entry entry2(234, 123, this->create_payload(std::string(24, '2')));
+  journal::Entry entry2(234, 124, this->create_payload(std::string(24, '2')));
+  journal::Entry replacement(
+    234, 123, this->create_payload(std::string(24, '3')));
 
   bufferlist bl;
   encode(entry1, bl);
   encode(entry2, bl);
+  encode(replacement, bl);
   ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
 
   auto object = this->create_object(oid, 14);
@@ -128,9 +131,9 @@ TYPED_TEST(TestObjectPlayer, FetchDeDup) {
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
-  ASSERT_EQ(1U, entries.size());
+  ASSERT_EQ(2U, entries.size());
 
-  journal::ObjectPlayer::Entries expected_entries = {entry2};
+  journal::ObjectPlayer::Entries expected_entries = {replacement, entry2};
   ASSERT_EQ(expected_entries, entries);
 }
 
