@@ -11,6 +11,33 @@ using namespace librados;
 typedef RadosTestPP LibRadosStatPP;
 typedef RadosTestECPP LibRadosStatECPP;
 
+namespace {
+
+void verify_pool_stats_overloads(Rados& cluster,
+                                 const std::string& pool_name)
+{
+  constexpr uint64_t sentinel_objects = 23;
+  const std::string sentinel_pool = "not-requested";
+
+  std::list<std::string> list_pools {pool_name};
+  const auto expected_list_pools = list_pools;
+  stats_map list_stats;
+  list_stats[sentinel_pool].num_objects = sentinel_objects;
+
+  ASSERT_EQ(0, cluster.get_pool_stats(list_pools, list_stats));
+  EXPECT_EQ(expected_list_pools, list_pools);
+  EXPECT_EQ(sentinel_objects, list_stats.at(sentinel_pool).num_objects);
+
+  const std::vector<std::string> vector_pools {pool_name};
+  stats_map vector_stats;
+  vector_stats[sentinel_pool].num_objects = sentinel_objects;
+
+  ASSERT_EQ(0, cluster.get_pool_stats(vector_pools, vector_stats));
+  EXPECT_EQ(sentinel_objects, vector_stats.at(sentinel_pool).num_objects);
+}
+
+} // namespace
+
 TEST_P(LibRadosStatPP, StatPP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -67,9 +94,7 @@ TEST_P(LibRadosStatPP, PoolStatPP) {
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
-  std::list<std::string> v;
-  std::map<std::string,stats_map> stats;
-  ASSERT_EQ(0, cluster.get_pool_stats(v, stats));
+  verify_pool_stats_overloads(cluster, pool_name);
 }
 
 TEST_P(LibRadosStatECPP, StatPP) {
@@ -101,9 +126,7 @@ TEST_P(LibRadosStatECPP, PoolStatPP) {
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
-  std::list<std::string> v;
-  std::map<std::string,stats_map> stats;
-  ASSERT_EQ(0, cluster.get_pool_stats(v, stats));
+  verify_pool_stats_overloads(cluster, pool_name);
 }
 
 TEST_P(LibRadosStatPP, StatPPNS) {
