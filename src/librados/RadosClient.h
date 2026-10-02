@@ -141,7 +141,11 @@ public:
   int pool_get_name(uint64_t pool_id, std::string *name,
 		    bool wait_latest_map = false);
 
-  int pool_list(std::list<std::pair<int64_t, std::string> >& ls);
+  int pool_list(std::vector<std::pair<int64_t, std::string>>& pools);
+  int pool_list(std::list<std::pair<int64_t, std::string>>& pools);
+  int get_pool_stats(const std::vector<std::string>& pools,
+                     std::map<std::string, ::pool_stat_t> *result,
+                     bool *per_pool);
   int get_pool_stats(std::list<std::string>& ls, std::map<std::string,::pool_stat_t> *result,
     bool *per_pool);
   int get_fs_stats(ceph_statfs& result);
