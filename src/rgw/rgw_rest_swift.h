@@ -4,6 +4,7 @@
 #pragma once
 #define TIME_BUF_SIZE 128
 
+#include <vector>
 #include <string_view>
 
 #include <boost/optional.hpp>
@@ -204,8 +205,7 @@ public:
   RGWBulkDelete_ObjStore_SWIFT() {}
   ~RGWBulkDelete_ObjStore_SWIFT() override {}
 
-  int get_data(std::list<RGWBulkDelete::acct_path_t>& items,
-               bool * is_truncated) override;
+  int get_data(std::vector<RGWBulkDelete::acct_path_t>& items, bool& is_truncated) override;
   void send_response() override;
 };
 

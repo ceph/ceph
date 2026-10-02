@@ -318,7 +318,7 @@ WRITE_CLASS_ENCODER(RGWZonePlacementInfo)
 struct RGWZone {
   std::string id;
   std::string name;
-  std::list<std::string> endpoints; // std::vector?
+  std::vector<std::string> endpoints;
   bool log_meta;
   bool log_data;
   bool read_only;
@@ -718,7 +718,7 @@ struct RGWZoneGroupPlacementTarget {
   std::set<std::string> storage_classes;
   std::map<std::string, RGWZoneGroupPlacementTier> tier_targets;
 
-  bool user_permitted(const std::list<std::string>& user_tags) const {
+  bool user_permitted(const std::ranges::input_range auto& user_tags) const {
     if (tags.empty()) {
       return true;
     }

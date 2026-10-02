@@ -16,6 +16,7 @@
 
 #include "radosgw-admin/sync_checkpoint.h"
 
+#include <deque>
 #include <iostream>
 
 #include <fmt/format.h>
@@ -215,7 +216,8 @@ int rgw_bucket_sync_checkpoint(const DoutPrefixProvider* dpp,
     BucketIndexShardsManager remote_markers;
     RGWBucketInfo source_bucket_info;
   };
-  std::list<sync_source_entry> sources;
+  // Coroutines retain references while later sources are appended:
+  std::deque<sync_source_entry> sources;
 
   // fetch remote markers and bucket info in parallel
   boost::asio::io_context ioctx;
@@ -282,4 +284,3 @@ int rgw_bucket_sync_checkpoint(const DoutPrefixProvider* dpp,
   std::cout << "bucket checkpoint complete" << std::endl;
   return 0;
 }
-

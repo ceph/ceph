@@ -2,7 +2,12 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "svc_zone.h"
+
+#include <algorithm>
+#include <string_view>
+
 #include "common/admin_socket.h"
+#include "common/container_concepts.h"
 #include "svc_sys_obj.h"
 #include "svc_sync_modules.h"
 
@@ -422,12 +427,28 @@ void RGWSI_Zone::shutdown()
   }
 }
 
+int RGWSI_Zone::list_regions(const DoutPrefixProvider *dpp, vector<string>& regions)
+{
+  RGWZoneGroup zonegroup;
+  RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
+
+  return syspool.list_prefixed_objs(dpp, region_info_oid_prefix, &regions);
+}
+
 int RGWSI_Zone::list_regions(const DoutPrefixProvider *dpp, list<string>& regions)
 {
   RGWZoneGroup zonegroup;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
 
   return syspool.list_prefixed_objs(dpp, region_info_oid_prefix, &regions);
+}
+
+int RGWSI_Zone::list_zonegroups(const DoutPrefixProvider *dpp, vector<string>& zonegroups)
+{
+  RGWZoneGroup zonegroup;
+  RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
+
+  return syspool.list_prefixed_objs(dpp, zonegroup_names_oid_prefix, &zonegroups);
 }
 
 int RGWSI_Zone::list_zonegroups(const DoutPrefixProvider *dpp, list<string>& zonegroups)
@@ -438,7 +459,7 @@ int RGWSI_Zone::list_zonegroups(const DoutPrefixProvider *dpp, list<string>& zon
   return syspool.list_prefixed_objs(dpp, zonegroup_names_oid_prefix, &zonegroups);
 }
 
-int RGWSI_Zone::list_zones(const DoutPrefixProvider *dpp, list<string>& zones)
+int RGWSI_Zone::list_zones(const DoutPrefixProvider *dpp, vector<string>& zones)
 {
   RGWZoneParams zoneparams;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zoneparams.get_pool(cct));
@@ -446,7 +467,7 @@ int RGWSI_Zone::list_zones(const DoutPrefixProvider *dpp, list<string>& zones)
   return syspool.list_prefixed_objs(dpp, zone_names_oid_prefix, &zones);
 }
 
-int RGWSI_Zone::list_realms(const DoutPrefixProvider *dpp, list<string>& realms)
+int RGWSI_Zone::list_realms(const DoutPrefixProvider *dpp, vector<string>& realms)
 {
   RGWRealm realm;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(realm.get_pool(cct));
@@ -454,44 +475,108 @@ int RGWSI_Zone::list_realms(const DoutPrefixProvider *dpp, list<string>& realms)
   return syspool.list_prefixed_objs(dpp, realm_names_oid_prefix, &realms);
 }
 
-int RGWSI_Zone::list_periods(const DoutPrefixProvider *dpp, list<string>& periods)
+namespace {
+
+void sort_unique_periods(vector<string>& periods)
 {
-  RGWPeriod period;
-  list<string> raw_periods;
-  RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(period.get_pool(cct));
-  int ret = syspool.list_prefixed_objs(dpp, period.get_info_oid_prefix(), &raw_periods);
+  ranges::sort(periods);
+  const auto [unique_end, old_end] = ranges::unique(periods);
+  periods.erase(unique_end, old_end);
+}
+
+void sort_unique_periods(list<string>& periods)
+{
+  periods.sort();
+  periods.unique();
+}
+
+template <typename PeriodsT>
+requires ceph::concepts::can_append<PeriodsT, string> &&
+         ceph::concepts::can_append<PeriodsT, const string&>
+int list_period_ids(RGWSI_SysObj::Pool& syspool, const DoutPrefixProvider *dpp,
+                    const string& prefix, PeriodsT& periods)
+{
+  vector<string> raw_periods;
+  int ret = syspool.list_prefixed_objs(dpp, prefix, &raw_periods);
   if (ret < 0) {
     return ret;
   }
+
+  // The raw names own the storage behind these views:
+  vector<string_view> period_ids;
+  period_ids.reserve(std::size(raw_periods));
+
   for (const auto& oid : raw_periods) {
-    size_t pos = oid.find(".");
-    if (pos != std::string::npos) {
-      periods.push_back(oid.substr(0, pos));
-    } else {
-      periods.push_back(oid);
-    }
+    const auto separator = oid.find('.');
+
+    period_ids.emplace_back(string_view {oid}.substr(0, separator));
   }
-  periods.sort(); // unique() only detects duplicates if they're adjacent
-  periods.unique();
+
+  ranges::sort(period_ids);
+  const auto [unique_end, old_end] = ranges::unique(period_ids);
+  period_ids.erase(unique_end, old_end);
+
+  ceph::util::maybe_reserve(periods, std::size(periods) + std::size(period_ids));
+  for (const auto period_id : period_ids) {
+    ceph::util::push_back(periods, string {period_id});
+  }
+
+  sort_unique_periods(periods); // unique() only detects adjacent duplicates
+
   return 0;
 }
 
-
-int RGWSI_Zone::list_periods(const DoutPrefixProvider *dpp, const string& current_period, list<string>& periods, optional_yield y)
+template <typename PeriodsT>
+requires ceph::concepts::can_append<PeriodsT, const string&>
+int list_period_history(rgw::sal::ConfigStore& cfgstore,
+                        const DoutPrefixProvider *dpp,
+                        const string& current_period, PeriodsT& periods,
+                        optional_yield y)
 {
-  int ret = 0;
   string period_id = current_period;
-  while(!period_id.empty()) {
+
+  while (!period_id.empty()) {
     RGWPeriod period(period_id);
-    ret = cfgstore->read_period(dpp, y, period_id, std::nullopt, period);
+    int ret = cfgstore.read_period(dpp, y, period_id, std::nullopt, period);
     if (ret < 0) {
       return ret;
     }
-    periods.push_back(period.get_id());
+
+    ceph::util::push_back(periods, period.get_id());
     period_id = period.get_predecessor();
   }
 
-  return ret;
+  return 0;
+}
+
+} // namespace
+
+int RGWSI_Zone::list_periods(const DoutPrefixProvider *dpp, vector<string>& periods)
+{
+  RGWPeriod period;
+  RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(period.get_pool(cct));
+
+  return list_period_ids(syspool, dpp, period.get_info_oid_prefix(), periods);
+}
+
+int RGWSI_Zone::list_periods(const DoutPrefixProvider *dpp, list<string>& periods)
+{
+  RGWPeriod period;
+  RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(period.get_pool(cct));
+
+  return list_period_ids(syspool, dpp, period.get_info_oid_prefix(), periods);
+}
+
+int RGWSI_Zone::list_periods(const DoutPrefixProvider *dpp, const string& current_period,
+                             vector<string>& periods, optional_yield y)
+{
+  return list_period_history(*cfgstore, dpp, current_period, periods, y);
+}
+
+int RGWSI_Zone::list_periods(const DoutPrefixProvider *dpp, const string& current_period,
+                             list<string>& periods, optional_yield y)
+{
+  return list_period_history(*cfgstore, dpp, current_period, periods, y);
 }
 
 /**
@@ -696,6 +781,7 @@ bool RGWSI_Zone::find_zone_id_by_name(const string& name, rgw_zone_id *id) {
   return true;
 }
 
+
 bool RGWSI_Zone::need_to_sync() const
 {
   return !(zonegroup->master_zone.empty() ||
@@ -887,4 +973,3 @@ bool RGWSI_Zone::get_redirect_zone_endpoint_url(string *url)
 
   return true;
 }
-
