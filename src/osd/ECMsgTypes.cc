@@ -17,7 +17,6 @@
 
 #include "common/ceph_context.h"
 
-using std::list;
 using std::deque;
 using std::make_pair;
 using std::map;
@@ -208,13 +207,14 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     ENCODE_START(2, 1, bl);
     encode(from, bl);
     encode(tid, bl);
-    map<hobject_t, list<pair<uint64_t, uint64_t> >> tmp;
-    for (auto m = to_read.cbegin(); m != to_read.cend(); ++m) {
-      list<pair<uint64_t, uint64_t> > tlist;
-      for (auto l = m->second.cbegin(); l != m->second.cend(); ++l) {
-	tlist.push_back(std::make_pair(l->get<0>(), l->get<1>()));
+    map<hobject_t, std::vector<pair<uint64_t, uint64_t>>> tmp;
+    for (const auto& [oid, extents] : to_read) {
+      auto& legacy_extents = tmp[oid];
+      legacy_extents.reserve(extents.size());
+
+      for (const auto& extent : extents) {
+	legacy_extents.emplace_back(extent.get<0>(), extent.get<1>());
       }
-      tmp[m->first] = tlist;
     }
     encode(tmp, bl);
     encode(attrs_to_read, bl);
@@ -239,34 +239,51 @@ void ECSubRead::decode(bufferlist::const_iterator &bl)
   DECODE_START(4, bl);
   decode(from, bl);
   decode(tid, bl);
-  if (struct_v == 1) {
-    map<hobject_t, list<pair<uint64_t, uint64_t> >>tmp;
+
+  to_read.clear();
+  subchunks.clear();
+  omap_read_from.clear();
+  omap_headers_to_read.clear();
+
+  // Version 2 has two historical layouts: compat 2 added extent flags, while
+  // the later compat 1 encoding kept legacy extents and added subchunks:
+  if (struct_compat < 2) {
+    map<hobject_t, std::vector<pair<uint64_t, uint64_t>>> tmp;
     decode(tmp, bl);
-    for (auto m = tmp.cbegin(); m != tmp.cend(); ++m) {
-      list<boost::tuple<uint64_t, uint64_t, uint32_t> > tlist;
-      for (auto l = m->second.cbegin(); l != m->second.cend(); ++l) {
-	tlist.push_back(boost::make_tuple(l->first, l->second, 0));
+
+    for (const auto& [oid, legacy_extents] : tmp) {
+      auto& extents = to_read[oid];
+      extents.reserve(legacy_extents.size());
+
+      for (const auto& [offset, length] : legacy_extents) {
+	extents.emplace_back(boost::make_tuple(offset, length, 0));
       }
-      to_read[m->first] = tlist;
     }
-  } else {
+  }
+
+  if (struct_compat >= 2) {
     decode(to_read, bl);
   }
+
   decode(attrs_to_read, bl);
-  if (struct_v > 2 && struct_v.v > struct_compat) {
+
+  const auto has_subchunks = struct_v.v > struct_compat;
+
+  if (has_subchunks) {
     decode(subchunks, bl);
-  } else {
+  }
+
+  if (!has_subchunks) {
     for (auto &i : to_read) {
       subchunks[i.first].push_back(make_pair(0, 1));
     }
   }
+
   if (struct_v >= 4) {
     decode(omap_read_from, bl);
     decode(omap_headers_to_read, bl);
-  } else {
-    omap_read_from.clear();
-    omap_headers_to_read.clear();
   }
+
   DECODE_FINISH(bl);
 }
 
@@ -345,18 +362,16 @@ std::ostream &operator<<(
 
 void ECSubRead::dump(Formatter *f) const
 {
-  using extent_t = boost::tuple<uint64_t, uint64_t, uint32_t>;
-
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
 
-  // 'to_read' (map<hobject_t, list<tuple<offset, length, flags>>>)
+  // Requested object extents:
   f->with_obj_array_section(
       "object"sv, to_read,
-      [](Formatter& f, const hobject_t& oid, const list<extent_t>& extents) {
+      [](Formatter& f, const hobject_t& oid, const read_extents& extents) {
 	f.dump_stream("oid") << oid;
 	f.with_obj_array_section(
-	    "extent", extents, [](Formatter& f, const extent_t& extent) {
+	    "extent", extents, [](Formatter& f, const read_extent& extent) {
 	      f.dump_unsigned("off", extent.get<0>());
 	      f.dump_unsigned("len", extent.get<1>());
 	      f.dump_unsigned("flags", extent.get<2>());
@@ -420,17 +435,16 @@ void ECSubReadReply::encode(bufferlist &p_bl,
   encode(from, p_bl);
   encode(tid, p_bl);
   if (ver >= 2) {
-    // Manual encode of std::map<hobject_t, std::list<std::pair<uint64_t,
-    //   ceph::buffer::list> >> buffers_read;
-    // data is encoded into d_bl to keep it aligned
-    __u32 nmap = (__u32)(buffers_read.size());
+    // Encode payload data into d_bl to preserve its alignment:
+    const auto nmap = static_cast<__u32>(buffers_read.size());
     encode(nmap, p_bl);
-    for (auto [oid, datalist] : buffers_read) {
+    for (const auto& [oid, datalist] : buffers_read) {
       encode(oid, p_bl);
-      __u32 nlist = (__u32)(datalist.size());
+      const auto nlist = static_cast<__u32>(datalist.size());
       encode(nlist, p_bl);
-      for (auto [result,bl] : datalist) {
-	encode(result, p_bl);
+
+      for (const auto& [offset, bl] : datalist) {
+	encode(offset, p_bl);
 	encode(bl.length(), p_bl);
 	encode_nohead(bl, d_bl);
       }
@@ -462,28 +476,28 @@ void ECSubReadReply::decode(bufferlist::const_iterator &p_bl,
   if (struct_v < 2) {
     decode(buffers_read, p_bl);
   } else {
-    // Manual decode of std::map<hobject_t, std::list<std::pair<uint64_t,
-    //   ceph::buffer::list> >> buffers_read;
-    // data is decoded from d_bl to keep it aligned
+    // Decode the separately aligned payload data from d_bl:
     __u32 nmap;
     decode(nmap, p_bl);
     buffers_read.clear();
     while (nmap--) {
       hobject_t oid;
       decode(oid, p_bl);
-      std::list<std::pair<uint64_t,ceph::buffer::list>> datalist;
+      returned_extents datalist;
       __u32 nlist;
       decode(nlist, p_bl);
+
+      datalist.reserve(nlist);
       while (nlist--) {
-	uint64_t result;
-	decode(result, p_bl);
+	uint64_t offset;
+	decode(offset, p_bl);
 	ceph::buffer::list bl;
 	__u32 length;
 	decode(length, p_bl);
 	decode_nohead(length, bl, d_bl);
-	datalist.emplace_back(make_pair(result, bl));
+	datalist.emplace_back(offset, std::move(bl));
       }
-      buffers_read[oid] = datalist;
+      buffers_read.insert_or_assign(std::move(oid), std::move(datalist));
     }
   }
   decode(attrs_read, p_bl);
@@ -528,20 +542,17 @@ std::ostream &operator<<(
 
 void ECSubReadReply::dump(Formatter* f) const
 {
-  using offset_pair_t = pair<uint64_t, bufferlist>;
-  using extents_list_t = list<offset_pair_t>;
-
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
 
-  // 'buffers_read' (map<hobject_t, list<pair<uint64_t, bufferlist>>>)
+  // Returned object extents:
   f->with_obj_array_section(
       "object"sv, buffers_read,
-      [](Formatter& f, const hobject_t& oid, const extents_list_t& l) {
+      [](Formatter& f, const hobject_t& oid, const returned_extents& extents) {
 	f.dump_stream("oid") << oid;
 	f.with_obj_array_section(
-	    "extent", l,
-	    [](Formatter& f, const offset_pair_t& offset_n_bl) {
+	    "extent", extents,
+	    [](Formatter& f, const returned_extent& offset_n_bl) {
 	      const auto& [off, bl] = offset_n_bl;
 	      f.dump_unsigned("off", off);
 	      f.dump_unsigned("buf_len", bl.length());

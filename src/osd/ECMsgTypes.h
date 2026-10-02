@@ -114,9 +114,12 @@ struct ECSubWriteReply {
 WRITE_CLASS_ENCODER(ECSubWriteReply)
 
 struct ECSubRead {
+  using read_extent = boost::tuple<uint64_t, uint64_t, uint32_t>;
+  using read_extents = std::vector<read_extent>;
+
   pg_shard_t from;
   ceph_tid_t tid;
-  std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
+  std::map<hobject_t, read_extents> to_read;
   std::set<hobject_t> attrs_to_read;
   std::map<hobject_t, std::vector<std::pair<int, int>>> subchunks;
   std::set<hobject_t> omap_headers_to_read;
@@ -137,9 +140,12 @@ struct ECSubRead {
 WRITE_CLASS_ENCODER_FEATURES(ECSubRead)
 
 struct ECSubReadReply {
+  using returned_extent = std::pair<uint64_t, ceph::buffer::list>;
+  using returned_extents = std::vector<returned_extent>;
+
   pg_shard_t from;
   ceph_tid_t tid;
-  std::map<hobject_t, std::list<std::pair<uint64_t, ceph::buffer::list> >> buffers_read;
+  std::map<hobject_t, returned_extents> buffers_read;
   std::map<hobject_t, std::map<std::string, ceph::buffer::list, std::less<>>> attrs_read;
   std::map<hobject_t, int> errors;
   std::map<hobject_t, ceph::buffer::list> omap_headers_read;
