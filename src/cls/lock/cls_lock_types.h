@@ -4,6 +4,7 @@
 #ifndef CEPH_CLS_LOCK_TYPES_H
 #define CEPH_CLS_LOCK_TYPES_H
 
+#include <vector>
 #include "include/encoding.h"
 #include "include/types.h"
 #include "include/utime.h"
@@ -91,7 +92,7 @@ namespace rados {
 	  out << data.locker;
 	  return out;
 	}
-        static std::list<locker_id_t> generate_test_instances();
+        static std::vector<locker_id_t> generate_test_instances();
       };
       WRITE_CLASS_ENCODER(locker_id_t)
 
@@ -134,7 +135,7 @@ namespace rados {
 
 	  return out;
 	}
-        static std::list<locker_info_t > generate_test_instances();
+        static std::vector<locker_info_t > generate_test_instances();
       };
       WRITE_CLASS_ENCODER_FEATURES(locker_info_t)
 
@@ -165,7 +166,7 @@ namespace rados {
 
         lock_info_t() : lock_type(ClsLockType::NONE) {}
         void dump(ceph::Formatter *f) const;
-        static std::list<lock_info_t > generate_test_instances();
+        static std::vector<lock_info_t > generate_test_instances();
       };
       WRITE_CLASS_ENCODER_FEATURES(lock_info_t);
     }

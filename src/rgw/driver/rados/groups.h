@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include <list>
+#include <vector>
 #include <string>
 #include "include/rados/librados_fwd.hpp"
 #include "include/encoding.h"
@@ -72,7 +72,7 @@ struct resource_metadata {
   }
 
   void dump(ceph::Formatter* f) const;
-  static std::list<resource_metadata> generate_test_instances();
+  static std::vector<resource_metadata> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(resource_metadata);
 

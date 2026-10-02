@@ -82,8 +82,8 @@ struct CephXServerChallenge {
   void dump(ceph::Formatter *f) const {
     f->dump_unsigned("server_challenge", server_challenge);
   }
-  static std::list<CephXServerChallenge> generate_test_instances() {
-    std::list<CephXServerChallenge> ls;
+  static std::vector<CephXServerChallenge> generate_test_instances() {
+    std::vector<CephXServerChallenge> ls;
     ls.emplace_back();
     ls.back().server_challenge = 1;
     return ls;
@@ -108,8 +108,8 @@ struct CephXRequestHeader {
   void dump(ceph::Formatter *f) const {
     f->dump_unsigned("request_type", request_type);
   }
-  static std::list<CephXRequestHeader> generate_test_instances() {
-    std::list<CephXRequestHeader> ls;
+  static std::vector<CephXRequestHeader> generate_test_instances() {
+    std::vector<CephXRequestHeader> ls;
     ls.emplace_back();
     ls.back().request_type = 1;
     return ls;
@@ -135,8 +135,8 @@ struct CephXResponseHeader {
     f->dump_unsigned("request_type", request_type);
     f->dump_int("status", status);
   }
-  static std::list<CephXResponseHeader> generate_test_instances() {
-    std::list<CephXResponseHeader> ls;
+  static std::vector<CephXResponseHeader> generate_test_instances() {
+    std::vector<CephXResponseHeader> ls;
     ls.emplace_back();
     ls.back().request_type = 1;
     ls.back().status = 0;
@@ -172,8 +172,8 @@ struct CephXTicketBlob {
     f->dump_unsigned("blob_len", blob.length());
   }
 
-  static std::list<CephXTicketBlob> generate_test_instances() {
-    std::list<CephXTicketBlob> ls;
+  static std::vector<CephXTicketBlob> generate_test_instances() {
+    std::vector<CephXTicketBlob> ls;
     ls.emplace_back();
     ls.back().secret_id = 123;
     ls.back().blob.append(std::string_view("this is a blob"));
@@ -226,8 +226,8 @@ struct CephXAuthenticate {
     f->close_section();
     f->dump_unsigned("other_keys", other_keys);
   }
-  static std::list<CephXAuthenticate> generate_test_instances() {
-    std::list<CephXAuthenticate> ls;
+  static std::vector<CephXAuthenticate> generate_test_instances() {
+    std::vector<CephXAuthenticate> ls;
     ls.emplace_back();
     ls.back().client_challenge = 0;
     ls.back().key = 0;
@@ -259,8 +259,8 @@ struct CephXChallengeBlob {
     f->dump_unsigned("server_challenge", server_challenge);
     f->dump_unsigned("client_challenge", client_challenge);
   }
-  static std::list<CephXChallengeBlob> generate_test_instances() {
-    std::list<CephXChallengeBlob> ls;
+  static std::vector<CephXChallengeBlob> generate_test_instances() {
+    std::vector<CephXChallengeBlob> ls;
     ls.emplace_back();
     ls.back().server_challenge = 123;
     ls.back().client_challenge = 456;
@@ -322,8 +322,8 @@ struct CephXServiceTicketRequest {
     f->dump_unsigned("keys", keys);
   }
 
-  static std::list<CephXServiceTicketRequest> generate_test_instances() {
-    std::list<CephXServiceTicketRequest> ls;
+  static std::vector<CephXServiceTicketRequest> generate_test_instances() {
+    std::vector<CephXServiceTicketRequest> ls;
     ls.emplace_back();
     ls.back().keys = 123;
     return ls;
@@ -365,8 +365,8 @@ struct CephXAuthorizeReply {
     f->dump_unsigned("nonce_plus_one", nonce_plus_one);
     f->dump_string("connection_secret", connection_secret);
   }
-  static std::list<CephXAuthorizeReply> generate_test_instances() {
-    std::list<CephXAuthorizeReply> ls;
+  static std::vector<CephXAuthorizeReply> generate_test_instances() {
+    std::vector<CephXAuthorizeReply> ls;
     ls.emplace_back();
     ls.back().nonce_plus_one = 0;
     ls.emplace_back();
@@ -481,8 +481,8 @@ struct CephXServiceTicket {
     session_key.dump(f);
     validity.dump(f);
   }
-  static std::list<CephXServiceTicket> generate_test_instances() {
-    std::list<CephXServiceTicket> ls;
+  static std::vector<CephXServiceTicket> generate_test_instances() {
+    std::vector<CephXServiceTicket> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().session_key.set_secret(
@@ -516,8 +516,8 @@ struct CephXServiceTicketInfo {
     ticket.dump(f);
     session_key.dump(f);
   }
-  static std::list<CephXServiceTicketInfo> generate_test_instances() {
-    std::list<CephXServiceTicketInfo> ls;
+  static std::vector<CephXServiceTicketInfo> generate_test_instances() {
+    std::vector<CephXServiceTicketInfo> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().ticket.global_id = 1234;
@@ -546,8 +546,8 @@ struct CephXAuthorizeChallenge : public AuthAuthorizerChallenge {
   void dump(ceph::Formatter *f) const {
     f->dump_unsigned("server_challenge", server_challenge);
   }
-  static std::list<CephXAuthorizeChallenge> generate_test_instances() {
-    std::list<CephXAuthorizeChallenge> ls;
+  static std::vector<CephXAuthorizeChallenge> generate_test_instances() {
+    std::vector<CephXAuthorizeChallenge> ls;
     ls.emplace_back();
     ls.back().server_challenge = 1234;
     return ls;
@@ -582,8 +582,8 @@ struct CephXAuthorize {
     f->dump_unsigned("have_challenge", have_challenge);
     f->dump_unsigned("server_challenge_plus_one", server_challenge_plus_one);
   }
-  static std::list<CephXAuthorize> generate_test_instances() {
-    std::list<CephXAuthorize> ls;
+  static std::vector<CephXAuthorize> generate_test_instances() {
+    std::vector<CephXAuthorize> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().nonce = 1234;

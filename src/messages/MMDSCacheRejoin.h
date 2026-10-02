@@ -16,6 +16,7 @@
 #ifndef CEPH_MMDSCACHEREJOIN_H
 #define CEPH_MMDSCACHEREJOIN_H
 
+#include <vector>
 #include <string_view>
 #include "include/types.h"
 #include "mds/CInode.h"
@@ -71,8 +72,8 @@ public:
       f->dump_int("nestlock", nestlock);
       f->dump_int("dftlock", dftlock);
     }
-    static std::list<inode_strong> generate_test_instances() {
-      std::list<inode_strong> ls;
+    static std::vector<inode_strong> generate_test_instances() {
+      std::vector<inode_strong> ls;
       ls.emplace_back();
       ls.push_back(inode_strong(1, 2, 3, 4, 5));
       return ls;
@@ -95,8 +96,8 @@ public:
       decode(nonce, bl);
       decode(dir_rep, bl);
     }
-    static std::list<dirfrag_strong> generate_test_instances() {
-      std::list<dirfrag_strong> ls;
+    static std::vector<dirfrag_strong> generate_test_instances() {
+      std::vector<dirfrag_strong> ls;
       ls.emplace_back();
       ls.push_back(dirfrag_strong(1, 2));
       return ls;
@@ -142,8 +143,8 @@ public:
       decode(lock, bl);
       decode(alternate_name, bl);
     }
-    static std::list<dn_strong> generate_test_instances() {
-      std::list<dn_strong> ls;
+    static std::vector<dn_strong> generate_test_instances() {
+      std::vector<dn_strong> ls;
       ls.emplace_back();
       ls.push_back(dn_strong(1, "alternate_name", 2, 3, 4, 5, 6));
       return ls;
