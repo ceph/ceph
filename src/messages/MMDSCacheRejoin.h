@@ -373,11 +373,11 @@ public:
   ceph::buffer::list inode_locks;
   std::map<dirfrag_t, ceph::buffer::list> dirfrag_bases;
 
-  std::map<vinodeno_t, std::list<peer_reqid> > authpinned_inodes;
+  std::map<vinodeno_t, std::vector<peer_reqid>> authpinned_inodes;
   std::map<vinodeno_t, peer_reqid> frozen_authpin_inodes;
   std::map<vinodeno_t, std::map<__s32, peer_reqid> > xlocked_inodes;
-  std::map<vinodeno_t, std::map<__s32, std::list<peer_reqid> > > wrlocked_inodes;
-  std::map<dirfrag_t, std::map<string_snap_t, std::list<peer_reqid> > > authpinned_dentries;
+  std::map<vinodeno_t, std::map<__s32, std::vector<peer_reqid>>> wrlocked_inodes;
+  std::map<dirfrag_t, std::map<string_snap_t, std::vector<peer_reqid>>> authpinned_dentries;
   std::map<dirfrag_t, std::map<string_snap_t, peer_reqid> > xlocked_dentries;
 
 private:

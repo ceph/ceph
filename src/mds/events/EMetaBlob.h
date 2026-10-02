@@ -217,7 +217,7 @@ public:
   private:
     mutable bufferlist dnbl;
     mutable bool dn_decoded;
-    mutable std::list<fullbit> dfull;
+    mutable std::deque<fullbit> dfull;
     mutable std::vector<remotebit> dremote;
     mutable std::vector<nullbit> dnull;
 
@@ -237,8 +237,8 @@ public:
     bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
     void mark_dirty_dft() { state |= STATE_DIRTYDFT; }
 
-    const std::list<fullbit>		&get_dfull() const { return dfull; }
-    std::list<fullbit>			&_get_dfull() { return dfull; }
+    const std::deque<fullbit>		&get_dfull() const { return dfull; }
+    std::deque<fullbit>			&_get_dfull() { return dfull; }
     const std::vector<remotebit>	&get_dremote() const { return dremote; }
     const std::vector<nullbit>		&get_dnull() const { return dnull; }
 

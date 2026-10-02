@@ -431,6 +431,7 @@ public:
   void get_mds_set_lower_bound(std::set<mds_rank_t>& s, DaemonState first) const;
   void get_mds_set(std::set<mds_rank_t>& s, DaemonState state) const;
 
+  [[deprecated("use get_health_checks()")]]
   void get_health(std::list<std::pair<health_status_t,std::string> >& summary,
 		  std::list<std::pair<health_status_t,std::string> > *detail) const;
 

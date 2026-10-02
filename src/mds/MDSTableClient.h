@@ -22,7 +22,7 @@
 #include "common/ref.h" // for cref_t
 #include "LogSegmentRef.h"
 
-#include <list>
+#include <deque>
 #include <map>
 #include <set>
 
@@ -104,7 +104,7 @@ protected:
 
   std::map<uint64_t, _pending_prepare> pending_prepare;
   std::map<version_t, uint64_t> prepared_update;
-  std::list<_pending_prepare> waiting_for_reqid;
+  std::deque<_pending_prepare> waiting_for_reqid;
 
   // pending commits
   std::map<version_t, LogSegmentRef> pending_commit;
