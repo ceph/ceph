@@ -190,7 +190,7 @@ bool ECOmapJournal::has_omap_updates(const hobject_t &hoid) const {
   return false;
 }
 
-std::list<ECOmapJournalEntry> ECOmapJournal::snapshot_entries(const hobject_t &hoid) const {
+std::vector<ECOmapJournalEntry> ECOmapJournal::snapshot_entries(const hobject_t &hoid) const {
   if (const auto it = entries.find(hoid);
     it != entries.end()) {
     return it->second;

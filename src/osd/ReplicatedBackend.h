@@ -202,10 +202,9 @@ public:
   void objects_read_async(
     const hobject_t &hoid,
     uint64_t object_size,
-    const std::list<std::pair<ec_align_t,
-	       std::pair<ceph::buffer::list*, Context*> > > &to_read,
-               Context *on_complete,
-               bool fast_read = false) override;
+    std::vector<async_read_request> &&requests,
+    Context *on_complete,
+    bool fast_read = false) override;
   bool get_ec_supports_crc_encode_decode() const override;
   ECUtil::stripe_info_t ec_get_sinfo() const override;
   bool ec_can_decode(const shard_id_set &available_shards) const override;
@@ -299,7 +298,7 @@ public:
   };
   bool handle_pull_response(
     pg_shard_t from, const PushOp &op, PullOp *response,
-    std::list<pull_complete_info> *to_continue,
+    std::vector<pull_complete_info>& to_continue,
     ObjectStore::Transaction *t);
   void handle_push(pg_shard_t from, const PushOp &op, PushReplyOp *response,
 		   ObjectStore::Transaction *t, bool is_repair);
