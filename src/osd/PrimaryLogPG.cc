@@ -1580,14 +1580,18 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
     case CEPH_OSD_OP_PG_HITSET_LS:
       {
-	list< pair<utime_t,utime_t> > ls;
-	for (list<pg_hit_set_info_t>::const_iterator p = info.hit_set.history.begin();
-	     p != info.hit_set.history.end();
-	     ++p)
-	  ls.push_back(make_pair(p->begin, p->end));
-	if (hit_set)
-	  ls.push_back(make_pair(hit_set_start_stamp, utime_t()));
-	encode(ls, osd_op.outdata);
+	vector<pair<utime_t, utime_t>> intervals;
+	intervals.reserve(std::size(info.hit_set.history) + (hit_set ? 1 : 0));
+
+	for (const auto& entry : info.hit_set.history) {
+	  intervals.emplace_back(entry.begin, entry.end);
+	}
+
+	if (hit_set) {
+	  intervals.emplace_back(hit_set_start_stamp, utime_t());
+	}
+
+	encode(intervals, osd_op.outdata);
       }
       break;
 

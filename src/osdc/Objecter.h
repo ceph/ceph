@@ -16,11 +16,16 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
+#include <concepts>
+#include <iterator>
+#include <algorithm>
 #include <list>
 #include <map>
+#include <deque>
 #include <mutex>
 #include <memory>
 #include <string>
+#include <vector>
 #include <string_view>
 #include <type_traits>
 #include <variant>
@@ -763,12 +768,13 @@ struct ObjectOperation {
       }
     }
   };
+  template <typename WatchersT>
   struct CB_ObjectOperation_decodewatchers {
-    std::list<obj_watch_t>* pwatchers;
-    int* prval;
-    boost::system::error_code* pec;
-    CB_ObjectOperation_decodewatchers(std::list<obj_watch_t>* pw, int* pr,
-				      boost::system::error_code* pec)
+    WatchersT *pwatchers;
+    int *prval;
+    boost::system::error_code *pec;
+    CB_ObjectOperation_decodewatchers(WatchersT *pw, int *pr,
+                                      boost::system::error_code *pec)
       : pwatchers(pw), prval(pr), pec(pec) {}
     void operator()(boost::system::error_code ec, int r,
 		    const ceph::buffer::list& bl) {
@@ -778,6 +784,10 @@ struct ObjectOperation {
 	  obj_list_watch_response_t resp;
 	  decode(resp, p);
 	  if (pwatchers) {
+	    if constexpr (requires { pwatchers->reserve(0); }) {
+	      pwatchers->reserve(std::size(*pwatchers) + std::size(resp.entries));
+	    }
+
 	    for (const auto& watch_item : resp.entries) {
 	      obj_watch_t ow;
 	      std::string sa = watch_item.addr.get_legacy_str();
@@ -1259,38 +1269,66 @@ struct ObjectOperation {
     set_handler(h);
   }
 
+  template <typename OUTPUT_T>
   struct C_ObjectOperation_hit_set_ls : public Context {
     ceph::buffer::list bl;
-    std::list< std::pair<time_t, time_t> > *ptls;
-    std::list< std::pair<ceph::real_time, ceph::real_time> > *putls;
+    OUTPUT_T *intervals;
     int *prval;
-    C_ObjectOperation_hit_set_ls(std::list< std::pair<time_t, time_t> > *t,
-				 std::list< std::pair<ceph::real_time,
-						      ceph::real_time> > *ut,
-				 int *r)
-      : ptls(t), putls(ut), prval(r) {}
+
+    using real_time_interval = std::pair<ceph::real_time, ceph::real_time>;
+    using time_interval = std::pair<time_t, time_t>;
+    using output_value = typename OUTPUT_T::value_type;
+
+    C_ObjectOperation_hit_set_ls(OUTPUT_T *intervals, int *prval)
+      : intervals(intervals), prval(prval)
+    {}
+
+    static void assign(OUTPUT_T& intervals,
+                       std::vector<real_time_interval>&& decoded)
+      requires std::same_as<output_value, real_time_interval>
+    {
+      if constexpr (std::same_as<OUTPUT_T, std::vector<real_time_interval>>) {
+        intervals = std::move(decoded);
+        return;
+      }
+
+      intervals.assign(std::make_move_iterator(std::begin(decoded)),
+                       std::make_move_iterator(std::end(decoded)));
+    }
+
+    static void assign(OUTPUT_T& intervals,
+                       std::vector<real_time_interval>&& decoded)
+      requires std::same_as<output_value, time_interval>
+    {
+      intervals.clear();
+
+      if constexpr (requires { intervals.reserve(std::size(decoded)); }) {
+        intervals.reserve(std::size(decoded));
+      }
+
+      // Preserve the historical upward rounding of the lower bound:
+      std::ranges::transform(
+        decoded, std::back_inserter(intervals), [](const auto& interval) {
+          return time_interval {
+            ceph::real_clock::to_time_t(
+              ceph::ceil(interval.first, std::chrono::seconds {1})),
+            ceph::real_clock::to_time_t(interval.second)
+          };
+        });
+    }
+
     void finish(int r) override {
       using ceph::decode;
       if (r < 0)
 	return;
       try {
 	auto p = bl.cbegin();
-	std::list< std::pair<ceph::real_time, ceph::real_time> > ls;
-	decode(ls, p);
-	if (ptls) {
-	  ptls->clear();
-	  for (auto p = ls.begin(); p != ls.end(); ++p)
-	    // round initial timestamp up to the next full second to
-	    // keep this a valid interval.
-	    ptls->push_back(
-	      std::make_pair(ceph::real_clock::to_time_t(
-			  ceph::ceil(p->first,
-				     // Sadly, no time literals until C++14.
-				     std::chrono::seconds(1))),
-			ceph::real_clock::to_time_t(p->second)));
+	std::vector<real_time_interval> decoded;
+	decode(decoded, p);
+
+	if (intervals) {
+	  assign(*intervals, std::move(decoded));
 	}
-	if (putls)
-	  putls->swap(ls);
       } catch (const ceph::buffer::error& e) {
 	r = -EIO;
       }
@@ -1300,33 +1338,20 @@ struct ObjectOperation {
   };
 
   /**
-   * std::list available HitSets.
+   * List available HitSets.
    *
-   * We will get back a std::list of time intervals.  Note that the most
-   * recent range may have an empty end timestamp if it is still
-   * accumulating.
-   *
-   * @param pls [out] std::list of time intervals
-   * @param prval [out] return value
+   * The output sequence stores either second-resolution or real-time
+   * intervals. The most recent interval may have an empty end timestamp while
+   * it is still accumulating.
    */
-  void hit_set_ls(std::list< std::pair<time_t, time_t> > *pls, int *prval) {
+  template <typename OUTPUT_T>
+  void hit_set_ls(OUTPUT_T *intervals, int *prval) {
     add_op(CEPH_OSD_OP_PG_HITSET_LS);
     unsigned p = ops.size() - 1;
     out_rval[p] = prval;
-    C_ObjectOperation_hit_set_ls *h =
-      new C_ObjectOperation_hit_set_ls(pls, NULL, prval);
-    out_bl[p] = &h->bl;
-    set_handler(h);
-  }
-  void hit_set_ls(std::list<std::pair<ceph::real_time, ceph::real_time> > *pls,
-		  int *prval) {
-    add_op(CEPH_OSD_OP_PG_HITSET_LS);
-    unsigned p = ops.size() - 1;
-    out_rval[p] = prval;
-    C_ObjectOperation_hit_set_ls *h =
-      new C_ObjectOperation_hit_set_ls(NULL, pls, prval);
-    out_bl[p] = &h->bl;
-    set_handler(h);
+    auto *handler = new C_ObjectOperation_hit_set_ls<OUTPUT_T>(intervals, prval);
+    out_bl[p] = &handler->bl;
+    set_handler(handler);
   }
 
   /**
@@ -1469,6 +1494,14 @@ struct ObjectOperation {
   }
 
   void list_watchers(std::list<obj_watch_t> *out,
+		     int *prval) {
+    add_op(CEPH_OSD_OP_LIST_WATCHERS);
+    if (prval || out) {
+      set_handler(CB_ObjectOperation_decodewatchers(out, prval, nullptr));
+      out_rval.back() = prval;
+    }
+  }
+  void list_watchers(std::vector<obj_watch_t> *out,
 		     int *prval) {
     add_op(CEPH_OSD_OP_LIST_WATCHERS);
     if (prval || out) {
@@ -2397,7 +2430,7 @@ public:
 
     // queue of pending async operations, with the timestamp of
     // when they were queued.
-    std::list<ceph::coarse_mono_time> watch_pending_async;
+    std::deque<ceph::coarse_mono_time> watch_pending_async;
 
     uint32_t register_gen{0};
     bool registered{false};
