@@ -120,9 +120,10 @@ in Section 5.
 The advisory remains private until all of the following conditions are met:
 
 1. At least one Ceph release contains the fix.
-2. Every other supported release has a backport pull request containing the fix.
-3. Downstream stakeholders and vendors have received at least seven days' notice of the
-   planned disclosure via the security email list. 
+2. Every other supported release has a backport pull request
+   containing the fix.
+3. Downstream stakeholders and vendors have received at least seven
+   days' notice of the planned disclosure via the security email list.
 
 Reporters may request full embargo handling in their initial report. If they
 have not, the responder asks whether they want coordinated embargo handling. If
@@ -160,16 +161,17 @@ The tiered embargo process was introduced in 2026. It uses private forks and
 private builds and is stricter than Ceph's previous vulnerability-handling
 process.
 
-All development takes place in a private repository associated with the
-vulnerability's GitHub Security Advisory. Builds follow `the embargoed CVE build
-process
+All development takes place in a private repository associated with
+the vulnerability's GitHub Security Advisory. Builds follow `the
+embargoed CVE build process
 <https://github.com/ceph/ceph/blob/main/doc/dev/developer_guide/cve.rst>`_. Vulnerability
-details, fixes, commits, builds, and related development remain private until
-the agreed disclosure date. If a vulnerability is unintentionally already fixed
-in the public repository, stakeholders and vendors will be notified, and the
-embargo status will be moved to deferred disclosure. If the vulnerability is
-fully public from this breach, several days are given to downstream
-stakeholders/vendors to prepare for updating before the public disclosure.
+details, fixes, commits, builds, and related development remain
+private until the agreed disclosure date. If a vulnerability is
+unintentionally already fixed in the public repository, stakeholders
+and vendors will be notified, and the embargo status will be moved to
+deferred disclosure. If the vulnerability is fully public from this
+breach, several days are given to downstream stakeholders/vendors to
+prepare for updating before the public disclosure.
 
 The disclosure date is agreed with the release coordinator before being
 announced to stakeholders, and must coincide with a Ceph release containing the
