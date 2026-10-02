@@ -663,7 +663,18 @@ template <transaction_op FnT>
 auto in_transaction(database_handle dbh, FnT&& fn) -> operation_result_t<FnT>;
 
 template <transaction_op FnT>
+auto in_transaction(database_handle dbh, const transaction_options& options, FnT&& fn)
+ -> operation_result_t<FnT>;
+
+template <transaction_op FnT>
+auto in_transaction(const transaction_source& source, FnT&& fn) -> operation_result_t<FnT>;
+
+template <transaction_op FnT>
 auto in_read_transaction(database_handle dbh, FnT&& fn)
+ -> operation_result_t<FnT>;
+
+template <transaction_op FnT>
+auto in_read_transaction(database_handle dbh, const transaction_options& options, FnT&& fn)
  -> operation_result_t<FnT>;
 
 template <transaction_op FnT>
@@ -863,6 +874,19 @@ auto in_transaction(database_handle dbh, FnT&& fn) -> operation_result_t<FnT>
 }
 
 template <transaction_op FnT>
+auto in_transaction(database_handle dbh, const transaction_options& options, FnT&& fn)
+ -> operation_result_t<FnT>
+{
+ return maybe_retry(make_transaction(std::move(dbh), options), std::forward<FnT>(fn));
+}
+
+template <transaction_op FnT>
+auto in_transaction(const transaction_source& source, FnT&& fn) -> operation_result_t<FnT>
+{
+ return maybe_retry(source.make(), std::forward<FnT>(fn));
+}
+
+template <transaction_op FnT>
 auto in_read_transaction(database_handle dbh, FnT&& fn)
  -> operation_result_t<FnT>
 {
@@ -874,6 +898,13 @@ auto in_read_transaction(const transaction_source& source, FnT&& fn) -> operatio
 {
  // Successful read-only transactions can simply be destroyed without commit:
  return retry_without_commit(source.make(), std::forward<FnT>(fn));
+}
+
+template <transaction_op FnT>
+auto in_read_transaction(database_handle dbh, const transaction_options& options, FnT&& fn)
+ -> operation_result_t<FnT>
+{
+ return retry_without_commit(make_transaction(std::move(dbh), options), std::forward<FnT>(fn));
 }
 
 // Commit only once; the caller is responsible for transaction replay:
