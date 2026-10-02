@@ -14,6 +14,7 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 
+#include <algorithm>
 #include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
@@ -178,6 +179,7 @@ struct C_RefreshIfRequired : public Context {
 template <typename I>
 Replay<I>::Replay(I &image_ctx)
   : m_image_ctx(image_ctx) {
+  m_aio_modify_unsafe_contexts.reserve(IN_FLIGHT_IO_LOW_WATER_MARK);
 }
 
 template <typename I>
@@ -940,13 +942,9 @@ void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
     }
 
     // strip out previously failed on_safe contexts
-    for (auto it = on_safe_ctxs.begin(); it != on_safe_ctxs.end(); ) {
-      if (m_aio_modify_safe_contexts.erase(*it)) {
-        ++it;
-      } else {
-        it = on_safe_ctxs.erase(it);
-      }
-    }
+    std::erase_if(on_safe_ctxs, [this](Context *ctx) {
+      return 0 == m_aio_modify_safe_contexts.erase(ctx);
+    });
   }
 
   if (on_aio_ready != nullptr) {
@@ -1140,11 +1138,16 @@ io::AioCompletion *Replay<I>::create_aio_flush_completion(Context *on_safe) {
   ++m_in_flight_aio_flush;
 
   // associate all prior write/discard ops to this flush request
+  Contexts on_safe_contexts;
+
+  if (!m_aio_modify_unsafe_contexts.empty()) {
+    on_safe_contexts.swap(m_aio_modify_unsafe_contexts);
+    m_aio_modify_unsafe_contexts.reserve(IN_FLIGHT_IO_LOW_WATER_MARK);
+  }
+
   auto aio_comp = io::AioCompletion::create_and_start<Context>(
-      new C_AioFlushComplete(this, on_safe,
-                             std::move(m_aio_modify_unsafe_contexts)),
+      new C_AioFlushComplete(this, on_safe, std::move(on_safe_contexts)),
       util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_FLUSH);
-  m_aio_modify_unsafe_contexts.clear();
   return aio_comp;
 }
 
