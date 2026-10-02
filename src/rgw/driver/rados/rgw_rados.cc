@@ -5019,6 +5019,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   if (!keep_tags) {
     attrs.erase(RGW_ATTR_TAGS);
   }
+  attrs.erase(RGW_ATTR_TAIL_TAG);
   attrs.erase(RGW_ATTR_SHARE_MANIFEST);
   attrs.erase(RGW_ATTR_BLAKE3);
 
