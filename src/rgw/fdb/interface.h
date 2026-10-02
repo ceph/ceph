@@ -185,9 +185,6 @@ struct value_collector_t final
  void operator()(std::span<const std::uint8_t> out_data) const;
 };
 
-template <typename OutValuesT>
-auto value_collector(OutValuesT& out_values) -> value_collector_t<OutValuesT>;
-
 template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>>
 decltype(auto) get_output_for(OutputTargetOrFnT&& output_target_or_fn)
@@ -199,24 +196,7 @@ template <typename OutputTargetOrFnT>
 requires (not concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>>)
 auto get_output_for(OutputTargetOrFnT&& output_target_or_fn)
 {
- return value_collector(output_target_or_fn);
-}
-
-// Keep caller failures out of FoundationDB's retry classifier:
-struct user_callback_failure final
-{
- std::exception_ptr cause;
-};
-
-inline void invoke_user_callback(concepts::value_callback auto& fn,
-                                 const std::span<const std::uint8_t> value)
-try
-{
- std::invoke(fn, value);
-}
-catch (...)
-{
- throw user_callback_failure {std::current_exception()};
+ return value_collector_t {output_target_or_fn};
 }
 
 } // namespace detail
@@ -260,13 +240,11 @@ concept watch_callback =
  std::invocable<FnT&, std::string_view> &&
  std::is_void_v<std::invoke_result_t<FnT&, std::string_view>>;
 
-template <typename FnT>
-requires watch_callback<FnT>
 void watched_loop(database_handle dbh,
                   const transaction_options& options,
                   std::string_view key,
                   std::stop_token stop_token,
-                  FnT&& fn)
+                  watch_callback auto&& fn)
 {
  std::string watched_key(key);
 
@@ -277,37 +255,32 @@ void watched_loop(database_handle dbh,
  }
 }
 
-template <typename FnT>
-requires watch_callback<FnT>
 void watched_loop(database_handle dbh,
                   std::string_view key,
                   std::stop_token stop_token,
-                  FnT&& fn)
+                  watch_callback auto&& fn)
 {
- return watched_loop(std::move(dbh), transaction_options {}, key,
-                     stop_token, std::forward<FnT>(fn));
+ watched_loop(std::move(dbh), transaction_options {}, key,
+              stop_token, std::forward<decltype(fn)>(fn));
 }
 
 /* watched_loop() runs until the watch is cancelled or an exception escapes.
  * For more complex stop behavior, see make_watch(), ready(), cancel(), and
  * wait_for_event(): */
-template <typename FnT>
-requires watch_callback<FnT>
 void watched_loop(database_handle dbh,
                   const transaction_options& options,
                   std::string_view key,
-                  FnT&& fn)
+                  watch_callback auto&& fn)
 {
- return watched_loop(std::move(dbh), options, key,
-                     std::stop_token {}, std::forward<FnT>(fn));
+ watched_loop(std::move(dbh), options, key,
+              std::stop_token {}, std::forward<decltype(fn)>(fn));
 }
 
-template <typename FnT>
-requires watch_callback<FnT>
-void watched_loop(database_handle dbh, std::string_view key, FnT&& fn)
+void watched_loop(database_handle dbh, std::string_view key,
+                  watch_callback auto&& fn)
 {
- return watched_loop(std::move(dbh), transaction_options {}, key,
-                     std::forward<FnT>(fn));
+ watched_loop(std::move(dbh), transaction_options {}, key,
+              std::forward<decltype(fn)>(fn));
 }
 
 inline void set(transaction_handle txn,
@@ -1245,12 +1218,6 @@ template <typename OutValuesT>
 void value_collector_t<OutValuesT>::operator()(std::span<const std::uint8_t> out_data) const
 {
  ceph::libfdb::from::convert(out_data, out_values);
-}
-
-template <typename OutValuesT>
-auto value_collector(OutValuesT& out_values) -> value_collector_t<OutValuesT>
-{
- return { out_values };
 }
 
 } // namespace detail
