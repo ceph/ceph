@@ -285,16 +285,7 @@ public:
    */
   static void mark_osd_down(OSDMap& osdmap, int osd_id)
   {
-    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
-    inc.fsid = osdmap.get_fsid();
-    inc.new_state[osd_id] = CEPH_OSD_EXISTS;  // Mark as down (exists but not UP)
-
-    // Preserve xinfo features when marking OSD down
-    // This is critical for peering to work correctly with feature checks
-    const osd_xinfo_t& existing_xinfo = osdmap.get_xinfo(osd_id);
-    inc.new_xinfo[osd_id] = existing_xinfo;
-
-    osdmap.apply_incremental(inc);
+    mark_osds_down(osdmap, {osd_id});
   }
   
   static void mark_osd_down(std::shared_ptr<OSDMap> osdmap, int osd_id)
@@ -311,15 +302,13 @@ public:
    */
   static void mark_osd_up(OSDMap& osdmap, int osd_id)
   {
+    ceph_assert(osdmap.exists(osd_id) && osdmap.is_down(osd_id));
     OSDMap::Incremental inc(osdmap.get_epoch() + 1);
     inc.fsid = osdmap.get_fsid();
-    inc.new_state[osd_id] = CEPH_OSD_EXISTS | CEPH_OSD_UP;
-    
-    // Preserve xinfo features when marking OSD up
-    // This is critical for peering to work correctly with feature checks
-    const osd_xinfo_t& existing_xinfo = osdmap.get_xinfo(osd_id);
-    inc.new_xinfo[osd_id] = existing_xinfo;
-    
+    // As OSDMonitor boots an OSD, which also sets up_from
+    inc.new_up_client[osd_id] = osdmap.get_addrs(osd_id);
+    inc.new_hb_back_up[osd_id] = osdmap.get_hb_back_addrs(osd_id);
+    inc.new_hb_front_up[osd_id] = osdmap.get_hb_front_addrs(osd_id);
     osdmap.apply_incremental(inc);
   }
   
@@ -340,12 +329,10 @@ public:
     OSDMap::Incremental inc(osdmap.get_epoch() + 1);
     inc.fsid = osdmap.get_fsid();
     for (int osd_id : osd_ids) {
-      inc.new_state[osd_id] = CEPH_OSD_EXISTS;  // Mark as down (exists but not UP)
-
-      // Preserve xinfo features when marking OSD down
-      // This is critical for peering to work correctly with feature checks
-      const osd_xinfo_t& existing_xinfo = osdmap.get_xinfo(osd_id);
-      inc.new_xinfo[osd_id] = existing_xinfo;
+      ceph_assert(osdmap.is_up(osd_id));
+      // new_state is XORed into the OSD's state: CEPH_OSD_EXISTS would
+      // destroy the OSD
+      inc.new_state[osd_id] = CEPH_OSD_UP;
     }
     osdmap.apply_incremental(inc);
   }
