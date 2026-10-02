@@ -15,7 +15,6 @@
 
 #include <algorithm>
 #include <errno.h>
-#include <list>
 #include <map>
 #include <sstream>
 #include <stdio.h>
