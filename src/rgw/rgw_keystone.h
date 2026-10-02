@@ -152,12 +152,12 @@ public:
   class Role {
   public:
     Role() : is_admin(false), is_reader(false) { }
-    Role(const Role &r) {
-      id = r.id;
-      name = r.name;
-      is_admin = r.is_admin;
-      is_reader = r.is_reader;
-    }
+    Role(const Role&) = default;
+    Role(Role&&) noexcept = default;
+
+    Role& operator=(const Role&) = default;
+    Role& operator=(Role&&) noexcept = default;
+
     std::string id;
     std::string name;
     bool is_admin;
@@ -185,7 +185,7 @@ public:
   Token token;
   Project project;
   User user;
-  std::list<Role> roles;
+  std::vector<Role> roles;
   std::optional<ApplicationCredential> app_cred;
 
   void decode(JSONObj* obj);

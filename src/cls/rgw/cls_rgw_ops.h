@@ -102,7 +102,7 @@ struct rgw_cls_obj_complete_op : cls_rgw_bi_log_related_op
   std::string locator;
   rgw_bucket_entry_ver ver;
   rgw_bucket_dir_entry_meta meta;
-  std::deque<cls_rgw_obj_key> remove_objs;
+  std::vector<cls_rgw_obj_key> remove_objs;
 
   rgw_cls_obj_complete_op() { op = CLS_RGW_OP_ADD; }
 
@@ -145,7 +145,14 @@ struct rgw_cls_obj_complete_op : cls_rgw_bi_log_related_op
         key.name = std::move(name);
       }
     } else {
-      decode(remove_objs, bl);
+      uint32_t count;
+      decode(count, bl);
+      remove_objs.clear();
+      // Bound allocation by the minimum encoded size of a key.
+      if (count > bl.get_remaining() / cls_rgw_obj_key{}.estimate_encoded_size()) {
+        throw ceph::buffer::malformed_input("invalid completion removal key count");
+      }
+      decode_nohead(count, remove_objs, bl);
     }
     if (struct_v >= 5) {
       decode(ver, bl);
@@ -1837,7 +1844,7 @@ struct CLSRGWCompleteModifyOpBase : cls_rgw_bi_log_related_op {
   void complete_op(librados::ObjectWriteOperation& o,
                    const rgw_bucket_entry_ver& ver,
                    const rgw_bucket_dir_entry_meta& dir_meta,
-                   const std::deque<cls_rgw_obj_key>& remove_objs,
+                   const std::vector<cls_rgw_obj_key>& remove_objs,
                    const std::string& locator) const;
 };
 

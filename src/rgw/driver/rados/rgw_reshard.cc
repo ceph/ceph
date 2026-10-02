@@ -1083,7 +1083,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
                                       Formatter *formatter, rgw::BucketReshardState reshard_stage,
                                       const DoutPrefixProvider *dpp, optional_yield y)
 {
-  list<rgw_cls_bi_entry> entries;
+  vector<rgw_cls_bi_entry> entries;
 
   string stage;
   bool process_log = false;
@@ -1122,8 +1122,8 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
       entries.clear();
 
       int ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter,
-                                           marker, max_op_entries, &entries,
-                                           &is_truncated, process_log, y);
+                                           marker, max_op_entries, entries,
+                                           is_truncated, process_log, y);
       if (ret == -ENOENT) {
         ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
             << i << ", skipping" << dendl;
@@ -1266,7 +1266,7 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 } // RGWBucketReshard::do_reshard
 
 int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, optional_yield y,
-                                 list<cls_rgw_bucket_instance_entry> *status)
+                                 std::vector<cls_rgw_bucket_instance_entry>& status)
 {
   return store->svc()->bi_rados->get_reshard_status(dpp, y, bucket_info, status);
 }
@@ -1504,7 +1504,7 @@ int RGWReshard::update(const DoutPrefixProvider *dpp,
 }
 
 
-int RGWReshard::list(const DoutPrefixProvider *dpp, int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated)
+int RGWReshard::list(const DoutPrefixProvider *dpp, int logshard_num, string& marker, uint32_t max, std::vector<cls_rgw_reshard_entry>& entries, bool *is_truncated)
 {
   string logshard_oid;
 
@@ -1811,7 +1811,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
   }
   
   do {
-    std::list<cls_rgw_reshard_entry> entries;
+    std::vector<cls_rgw_reshard_entry> entries;
     ret = list(dpp, logshard_num, marker, max_op_entries, entries, &is_truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "cannot list all reshards in logshard oid=" <<

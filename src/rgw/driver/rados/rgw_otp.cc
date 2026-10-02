@@ -2,7 +2,9 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_otp.h"
-#include <list>
+
+#include <vector>
+
 #include <fmt/format.h>
 #include "services/svc_cls.h"
 #include "services/svc_mdlog.h"
@@ -14,9 +16,9 @@
 
 class MetadataObject : public RGWMetadataObject {
 public:
-  std::list<rados::cls::otp::otp_info_t> devices;
+  std::vector<rados::cls::otp::otp_info_t> devices;
 
-  MetadataObject(std::list<rados::cls::otp::otp_info_t> devices,
+  MetadataObject(std::vector<rados::cls::otp::otp_info_t> devices,
                  const obj_version& v, ceph::real_time m)
     : RGWMetadataObject(v, m), devices(std::move(devices))
   {}
@@ -42,7 +44,7 @@ class MetadataHandler : public RGWMetadataHandler {
                                   const obj_version& objv,
                                   const ceph::real_time& mtime) override
   {
-    std::list<rados::cls::otp::otp_info_t> devices;
+    std::vector<rados::cls::otp::otp_info_t> devices;
     try {
       JSONDecoder::decode_json("devices", devices, obj);
     } catch (const JSONDecoder::err&) {
@@ -54,7 +56,7 @@ class MetadataHandler : public RGWMetadataHandler {
   int get(std::string& entry, RGWMetadataObject** obj,
           optional_yield y, const DoutPrefixProvider* dpp) override
   {
-    std::list<rados::cls::otp::otp_info_t> devices;
+    std::vector<rados::cls::otp::otp_info_t> devices;
     RGWObjVersionTracker objv;
     ceph::real_time mtime;
 
@@ -120,7 +122,7 @@ class MetadataHandler : public RGWMetadataHandler {
   }
 
   int list_keys_next(const DoutPrefixProvider* dpp, void* handle, int max,
-                     std::list<std::string>& keys, bool* truncated) override
+                     std::vector<std::string>& keys, bool* truncated) override
   {
     auto lister = static_cast<RGWMetadataLister*>(handle);
     return lister->get_next(dpp, max, keys, truncated);

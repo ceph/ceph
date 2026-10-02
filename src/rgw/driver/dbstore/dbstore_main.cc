@@ -73,11 +73,8 @@ void* process(void *arg)
   cout << "tenant: " << params2.op.user.uinfo.user_id.tenant << "\n";
   cout << "suspended: " << (int)params2.op.user.uinfo.suspended << "\n";
 
-  list<string>::iterator it = params2.op.user.uinfo.placement_tags.begin();
-
-  while (it != params2.op.user.uinfo.placement_tags.end()) {
-    cout << "list = " << *it << "\n";
-    it++;
+  for (const auto& placement_tag : params2.op.user.uinfo.placement_tags) {
+    cout << "list = " << placement_tag << "\n";
   }
 
   map<string, RGWAccessKey>::iterator it2 = params2.op.user.uinfo.access_keys.begin();

@@ -7,7 +7,9 @@
 #include <boost/container/flat_map.hpp>
 
 #include "include/types.h"
+#include "rgw_sal_fwd.h"
 
+namespace ceph { class Formatter; }
 class XMLObj;
 
 struct rgw_s3_key_filter {
