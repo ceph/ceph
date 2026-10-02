@@ -18,6 +18,7 @@
 
 #include <map>
 #include <list>
+#include <vector>
 #ifdef WITH_CRIMSON
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #else
@@ -53,7 +54,7 @@ private:
 
   std::map<K, std::pair<WeakVPtr, V*>, C> weak_refs;
 
-  void trim_cache(std::list<VPtr> *to_release) {
+  void trim_cache(std::vector<VPtr> *to_release) {
     while (size > max_size) {
       to_release->push_back(lru.back().second);
       lru_remove(lru.back().first);
@@ -69,7 +70,7 @@ private:
     contents.erase(i);
   }
 
-  void lru_add(const K& key, const VPtr& val, std::list<VPtr> *to_release) {
+  void lru_add(const K& key, const VPtr& val, std::vector<VPtr> *to_release) {
     auto i = contents.find(key);
     if (i != contents.end()) {
       lru.splice(lru.begin(), lru, i->second);
@@ -176,7 +177,7 @@ public:
   void clear_range(
     const K& from,
     const K& to) {
-    std::list<VPtr> vals; // release any refs we have after we drop the lock
+    std::vector<VPtr> vals; // release any refs we have after we drop the lock
     {
       std::lock_guard l{lock};
       auto from_iter = weak_refs.lower_bound(from);
@@ -203,7 +204,7 @@ public:
   }
 
   void set_size(size_t new_size) {
-    std::list<VPtr> to_release;
+    std::vector<VPtr> to_release;
     {
       std::lock_guard l{lock};
       max_size = new_size;
@@ -219,7 +220,7 @@ public:
 
   VPtr lower_bound(const K& key) {
     VPtr val;
-    std::list<VPtr> to_release;
+    std::vector<VPtr> to_release;
     {
       std::unique_lock l{lock};
       ++waiting;
@@ -276,7 +277,7 @@ public:
 
   VPtr lookup(const K& key) {
     VPtr val;
-    std::list<VPtr> to_release;
+    std::vector<VPtr> to_release;
     {
       std::unique_lock l{lock};
       ++waiting;
@@ -298,7 +299,7 @@ public:
   }
   VPtr lookup_or_create(const K &key) {
     VPtr val;
-    std::list<VPtr> to_release;
+    std::vector<VPtr> to_release;
     {
       std::unique_lock l{lock};
       cond.wait(l, [this, &key, &val] {
@@ -346,7 +347,7 @@ public:
    */
   VPtr add(const K& key, V *value, bool *existed = NULL) {
     VPtr val;
-    std::list<VPtr> to_release;
+    std::vector<VPtr> to_release;
     {
       typename std::map<K, std::pair<WeakVPtr, V*>, C>::iterator actual;
       std::unique_lock l{lock};
