@@ -9,7 +9,7 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/ceph_mutex.h"
-#include <list>
+#include <vector>
 
 namespace librbd {
 
@@ -31,7 +31,7 @@ public:
   void notify(bufferlist &bl, NotifyResponse *response, Context *on_finish);
 
 private:
-  typedef std::list<Context*> Contexts;
+  typedef std::vector<Context*> Contexts;
 
   struct C_AioNotify : public Context {
     Notifier *notifier;

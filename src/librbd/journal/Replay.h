@@ -10,9 +10,10 @@
 #include "common/ceph_mutex.h"
 #include "librbd/io/Types.h"
 #include "librbd/journal/Types.h"
-#include <list>
-#include <unordered_set>
+#include <vector>
+#include <utility>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace librbd {
 
@@ -56,8 +57,7 @@ private:
     ReturnValues ignore_error_codes;
   };
 
-  typedef std::list<uint64_t> OpTids;
-  typedef std::list<Context *> Contexts;
+  typedef std::vector<Context *> Contexts;
   typedef std::unordered_set<Context *> ContextSet;
   typedef std::unordered_map<uint64_t, OpEvent> OpEvents;
 
@@ -94,7 +94,7 @@ private:
     C_AioFlushComplete(Replay *replay, Context *on_flush_safe,
                        Contexts &&on_safe_ctxs)
       : replay(replay), on_flush_safe(on_flush_safe),
-        on_safe_ctxs(on_safe_ctxs) {
+        on_safe_ctxs(std::move(on_safe_ctxs)) {
     }
     void finish(int r) override {
       replay->handle_aio_flush_complete(on_flush_safe, on_safe_ctxs, r);

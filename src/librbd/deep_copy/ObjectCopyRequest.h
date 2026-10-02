@@ -11,8 +11,8 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/deep_copy/Types.h"
 #include "librbd/io/Types.h"
-#include <list>
 #include <map>
+#include <deque>
 #include <string>
 
 class Context;
@@ -116,7 +116,7 @@ private:
   io::SnapshotDelta m_snapshot_delta;
 
   std::map<WriteReadSnapIds, ReadOp> m_read_ops;
-  std::list<WriteReadSnapIds> m_read_snaps;
+  std::deque<WriteReadSnapIds> m_read_snaps;
   io::SnapshotSparseBufferlist m_snapshot_sparse_bufferlist;
 
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_data_interval;
