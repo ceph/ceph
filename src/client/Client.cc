@@ -926,7 +926,7 @@ void Client::trim_cache_for_reconnect(MetaSession *s)
   ldout(cct, 20) << __func__ << " mds." << mds << dendl;
 
   int trimmed = 0;
-  list<Dentry*> skipped;
+  vector<Dentry*> skipped;
   while (lru.lru_get_size() > 0) {
     Dentry *dn = static_cast<Dentry*>(lru.lru_expire());
     if (!dn)
@@ -940,8 +940,8 @@ void Client::trim_cache_for_reconnect(MetaSession *s)
       skipped.push_back(dn);
   }
 
-  for(list<Dentry*>::iterator p = skipped.begin(); p != skipped.end(); ++p)
-    lru.lru_insert_mid(*p);
+  for (auto *dentry : skipped)
+    lru.lru_insert_mid(dentry);
 
   assert_lru_num_pinned_sane("trim_cache_for_reconnect end");
 
@@ -1333,7 +1333,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
 
     if (old_dentry) {
       dn->is_renaming = false;
-      signal_cond_list(waiting_for_rename);
+      signal_conditions(waiting_for_rename);
     }
   }
 
@@ -2312,7 +2312,7 @@ int Client::make_request(MetaRequest *request,
 	}
       } else {
 	ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
-	wait_on_list(waiting_for_mdsmap);
+	wait_on_conditions(waiting_for_mdsmap);
       }
       continue;
     }
@@ -3318,7 +3318,7 @@ void Client::handle_fs_map(const MConstRef<MFSMap>& m)
   std::scoped_lock cl(client_lock);
   fsmap.reset(new FSMap(m->get_fsmap()));
 
-  signal_cond_list(waiting_for_fsmap);
+  signal_conditions(waiting_for_fsmap);
 
   monclient->sub_got("fsmap", fsmap->get_epoch());
 }
@@ -3330,7 +3330,7 @@ void Client::handle_fs_map_user(const MConstRef<MFSMapUser>& m)
   *fsmap_user = m->get_fsmap();
 
   monclient->sub_got("fsmap.user", fsmap_user->get_epoch());
-  signal_cond_list(waiting_for_fsmap);
+  signal_conditions(waiting_for_fsmap);
 }
 
 // Cancel all the commands for missing or laggy GIDs
@@ -3430,7 +3430,7 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
   }
 
   // kick any waiting threads
-  signal_cond_list(waiting_for_mdsmap);
+  signal_conditions(waiting_for_mdsmap);
 
   monclient->sub_got("mdsmap", mdsmap->get_epoch());
 }
@@ -3524,7 +3524,7 @@ void Client::send_reconnect(MetaSession *session)
   mount_cond.notify_all();
 
   if (session->reclaim_state == MetaSession::RECLAIMING)
-    signal_cond_list(waiting_for_reclaim);
+    signal_conditions(waiting_for_reclaim);
 }
 
 
@@ -3578,20 +3578,21 @@ void Client::resend_unsafe_requests(MetaSession *session)
 
 void Client::wait_unsafe_requests()
 {
-  list<MetaRequest*> last_unsafe_reqs;
+  vector<MetaRequest*> last_unsafe_reqs;
+
   for (const auto &p : mds_sessions) {
     const auto s = p.second;
     if (!s->unsafe_requests.empty()) {
+      if (last_unsafe_reqs.empty()) {
+        last_unsafe_reqs.reserve(mds_sessions.size());
+      }
       MetaRequest *req = s->unsafe_requests.back();
       req->get();
       last_unsafe_reqs.push_back(req);
     }
   }
 
-  for (list<MetaRequest*>::iterator p = last_unsafe_reqs.begin();
-       p != last_unsafe_reqs.end();
-       ++p) {
-    MetaRequest *req = *p;
+  for (auto *req : last_unsafe_reqs) {
     if (req->unsafe_item.is_on_list())
       wait_on_context_list(req->waitfor_safe);
     put_request(req);
@@ -4587,19 +4588,19 @@ void Client::flush_snaps(Inode *in)
   }
 }
 
-void Client::wait_on_list(list<ceph::condition_variable*>& ls)
+void Client::wait_on_conditions(std::vector<ceph::condition_variable *>& waiters)
 {
   ceph::condition_variable cond;
-  ls.push_back(&cond);
+  waiters.push_back(&cond);
   std::unique_lock l{client_lock, std::adopt_lock};
   cond.wait(l);
   l.release();
-  ls.remove(&cond);
+  std::erase(waiters, &cond);
 }
 
-void Client::signal_cond_list(list<ceph::condition_variable*>& ls)
+void Client::signal_conditions(std::vector<ceph::condition_variable *>& waiters)
 {
-  for (auto cond : ls) {
+  for (auto cond : waiters) {
     cond->notify_all();
   }
 }
@@ -5407,23 +5408,25 @@ void Client::early_kick_flushing_caps(MetaSession *session)
   }
 }
 
+static void visit_snaprealm_tree(SnapRealm *root, auto&& visit)
+{
+  vector<SnapRealm*> realms {root};
+
+  for (std::size_t cursor = 0; cursor < std::size(realms); ++cursor) {
+    auto *realm = realms[cursor];
+    visit(realm);
+    realms.insert(std::end(realms), std::begin(realm->pchildren), std::end(realm->pchildren));
+  }
+}
+
 void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
 {
-  list<SnapRealm*> q;
-  q.push_back(realm);
+  const auto function = __func__;
 
-  while (!q.empty()) {
-    realm = q.front();
-    q.pop_front();
-
-    ldout(cct, 10) << __func__ << " " << *realm << dendl;
+  visit_snaprealm_tree(realm, [this, function](auto *realm) {
+    ldout(cct, 10) << function << " " << *realm << dendl;
     realm->invalidate_cache();
-
-    for (set<SnapRealm*>::iterator p = realm->pchildren.begin();
-	 p != realm->pchildren.end(); 
-	 ++p)
-      q.push_back(*p);
-  }
+  });
 }
 
 SnapRealm *Client::get_snap_realm(inodeno_t r)
@@ -5544,25 +5547,16 @@ void Client::update_snap_trace(MetaSession *session, const bufferlist& bl, SnapR
                      << dendl;
 
       if (flush) {
-	// writeback any dirty caps _before_ updating snap list (i.e. with old snap info)
-	//  flush me + children
-	list<SnapRealm*> q;
-	q.push_back(realm);
-	while (!q.empty()) {
-	  SnapRealm *realm = q.front();
-	  q.pop_front();
+        // writeback any dirty caps _before_ updating snap list (i.e. with old snap info)
+        //  flush me + children
+        visit_snaprealm_tree(realm, [&](auto *realm) {
+          auto it = dirty_realms.lower_bound(realm);
 
-	  for (set<SnapRealm*>::iterator p = realm->pchildren.begin(); 
-	       p != realm->pchildren.end();
-	       ++p)
-	    q.push_back(*p);
-          auto it =
-            dirty_realms.lower_bound(realm);
-	  if (it->first != realm) {
-	    realm->nref++;
-	    dirty_realms.emplace_hint(it, realm, realm->get_snap_context());
-	  }
-	}
+          if (it == std::end(dirty_realms) || it->first != realm) {
+            realm->nref++;
+            dirty_realms.emplace_hint(it, realm, realm->get_snap_context());
+          }
+        });
       }
 
       // update
@@ -6821,7 +6815,7 @@ int Client::fetch_fsmap(bool user)
     if (!fsmap_user || fsmap_user->get_epoch() < fsmap_latest) {
       monclient->sub_want("fsmap.user", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
       monclient->renew_subs();
-      wait_on_list(waiting_for_fsmap);
+      wait_on_conditions(waiting_for_fsmap);
     }
     ceph_assert(fsmap_user);
     ceph_assert(fsmap_user->get_epoch() >= fsmap_latest);
@@ -6829,7 +6823,7 @@ int Client::fetch_fsmap(bool user)
     if (!fsmap || fsmap->get_epoch() < fsmap_latest) {
       monclient->sub_want("fsmap", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
       monclient->renew_subs();
-      wait_on_list(waiting_for_fsmap);
+      wait_on_conditions(waiting_for_fsmap);
     }
     ceph_assert(fsmap);
     ceph_assert(fsmap->get_epoch() >= fsmap_latest);
@@ -7078,7 +7072,7 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
       } else if (availability == MDSMap::TRANSIENT_UNAVAILABLE) {
         // Else, wait.  MDSMonitor will update the map to bring
         // us to a conclusion eventually.
-        wait_on_list(waiting_for_mdsmap);
+        wait_on_conditions(waiting_for_mdsmap);
       } else {
         // Unexpected value!
         ceph_abort();
@@ -7259,7 +7253,7 @@ void Client::_abort_mds_sessions(int err)
   // Process aborts on any requests that were on this waitlist.
   // Any requests that were on a waiting_for_open session waitlist
   // will get kicked during close session below.
-  signal_cond_list(waiting_for_mdsmap);
+  signal_conditions(waiting_for_mdsmap);
 
   // Force-close all sessions
   while(!mds_sessions.empty()) {
@@ -7347,7 +7341,9 @@ void Client::_unmount(bool abort)
 
   if (cct->_conf->client_oc) {
     // flush/release all buffered data
-    std::list<InodeRef> anchor;
+    vector<InodeRef> anchors;
+    anchors.reserve(inode_map.size());
+
     for (auto& p : inode_map) {
       Inode *in = p.second;
       if (!in) {
@@ -7356,7 +7352,7 @@ void Client::_unmount(bool abort)
       }
 
       // prevent inode from getting freed
-      anchor.emplace_back(in);
+      anchors.emplace_back(in);
 
       if (abort || blocklisted) {
         objectcacher->purge_set(&in->oset);
@@ -7559,7 +7555,7 @@ void Client::tick()
         req->kick = true;
         req->caller_cond->notify_all();
       }
-      signal_cond_list(waiting_for_mdsmap);
+      signal_conditions(waiting_for_mdsmap);
       for (auto &p : mds_sessions) {
         signal_context_list(p.second->waiting_for_open);
       }
@@ -7940,7 +7936,7 @@ relookup:
       ldout(cct, 1) << __func__ << " dir " << *dir
                     << " rename is on the way, will wait for dn '"
                     << dname << "'" << dendl;
-      wait_on_list(waiting_for_rename);
+      wait_on_conditions(waiting_for_rename);
       goto relookup;
     }
   } else {
@@ -10719,22 +10715,21 @@ int Client::_getdents(dir_result_t *dir, char *buf, int buflen, bool fullent)
 }
 
 
-/* getdir */
 struct getdir_result {
-  list<string> *contents;
-  int num;
+  vector<string>& contents;
+  int count = 0;
 };
 
 static int _getdir_cb(void *p, struct dirent *de, struct ceph_statx *stx, off_t off, Inode *in)
 {
-  getdir_result *r = static_cast<getdir_result *>(p);
+  auto& result = *static_cast<getdir_result *>(p);
 
-  r->contents->push_back(de->d_name);
-  r->num++;
+  result.contents.push_back(de->d_name);
+  ++result.count;
   return 0;
 }
 
-int Client::getdir(const char *relpath, list<string>& contents,
+int Client::getdir(const char *relpath, vector<string>& contents,
 		   const UserPerm& perms)
 {
   ldout(cct, 3) << "getdir(" << relpath << ")" << dendl;
@@ -10746,16 +10741,14 @@ int Client::getdir(const char *relpath, list<string>& contents,
   if (r < 0)
     return r;
 
-  getdir_result gr;
-  gr.contents = &contents;
-  gr.num = 0;
-  r = readdir_r_cb(d, _getdir_cb, (void *)&gr);
+  getdir_result result {contents};
+  r = readdir_r_cb(d, _getdir_cb, &result);
 
   closedir(d);
 
   if (r < 0)
     return r;
-  return gr.num;
+  return result.count;
 }
 
 
@@ -16796,7 +16789,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   // if rename fails it will miss waking up the waiters
   if (op == CEPH_MDS_OP_RENAME && wdr_to.dn->is_renaming) {
     wdr_to.dn->is_renaming = false;
-    signal_cond_list(waiting_for_rename);
+    signal_conditions(waiting_for_rename);
   }
 
   // renamed item from our cache
@@ -18431,7 +18424,7 @@ int Client::check_pool_perm(Inode *in, int need)
       break;
     if (it->second == POOL_CHECKING) {
       // avoid concurrent checkings
-      wait_on_list(waiting_for_pool_perm);
+      wait_on_conditions(waiting_for_pool_perm);
     } else {
       have = it->second;
       ceph_assert(have & POOL_CHECKED);
@@ -18497,12 +18490,12 @@ int Client::check_pool_perm(Inode *in, int need)
       // Raise EIO because actual error code might be misleading for
       // userspace filesystem user.
       pool_perms.erase(perm_key);
-      signal_cond_list(waiting_for_pool_perm);
+      signal_conditions(waiting_for_pool_perm);
       return -EIO;
     }
 
     pool_perms[perm_key] = have | POOL_CHECKED;
-    signal_cond_list(waiting_for_pool_perm);
+    signal_conditions(waiting_for_pool_perm);
   }
 
   if ((need & CEPH_CAP_FILE_RD) && !(have & POOL_READ)) {
@@ -18880,13 +18873,13 @@ int Client::start_reclaim(const std::string& uuid, unsigned flags,
     populate_metadata("");
 
   while (mdsmap->get_epoch() == 0)
-    wait_on_list(waiting_for_mdsmap);
+    wait_on_conditions(waiting_for_mdsmap);
 
   reclaim_errno = 0;
   for (unsigned mds = 0; mds < mdsmap->get_num_in_mds(); ) {
     if (!mdsmap->is_up(mds)) {
       ldout(cct, 10) << "mds." << mds << " not active, waiting for new mdsmap" << dendl;
-      wait_on_list(waiting_for_mdsmap);
+      wait_on_conditions(waiting_for_mdsmap);
       continue;
     }
 
@@ -18913,7 +18906,7 @@ int Client::start_reclaim(const std::string& uuid, unsigned flags,
       session->reclaim_state = MetaSession::RECLAIMING;
       auto m = make_message<MClientReclaim>(uuid, flags);
       session->con->send_message2(std::move(m));
-      wait_on_list(waiting_for_reclaim);
+      wait_on_conditions(waiting_for_reclaim);
     } else if (session->reclaim_state == MetaSession::RECLAIM_FAIL) {
       return reclaim_errno ? : -ENOTRECOVERABLE;
     } else {
@@ -18995,7 +18988,7 @@ void Client::handle_client_reclaim_reply(const MConstRef<MClientReclaimReply>& r
     reclaim_errno = reply->get_result();
   }
 
-  signal_cond_list(waiting_for_reclaim);
+  signal_conditions(waiting_for_reclaim);
 }
 
 /**

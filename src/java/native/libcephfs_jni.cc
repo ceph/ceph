@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <sys/un.h>
 #include <jni.h>
+#include <vector>
 
 #include "ScopedLocalRef.h"
 #include "JniConstants.h"
@@ -757,8 +758,8 @@ JNIEXPORT jobjectArray JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1listdir
 	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
 	CephContext *cct = ceph_get_mount_context(cmount);
 	struct ceph_dir_result *dirp;
-	list<string>::iterator it;
-	list<string> contents;
+	vector<string>::iterator it;
+	vector<string> contents;
 	const char *c_path;
 	jobjectArray dirlist;
 	string *ent;
@@ -2040,8 +2041,8 @@ JNIEXPORT jobjectArray JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1listxatt
 	const char *c_path;
 	string *ent;
 	jstring name;
-	list<string>::iterator it;
-	list<string> contents;
+	vector<string>::iterator it;
+	vector<string> contents;
 	int ret, buflen, bufpos, i;
 	char *buf;
 
@@ -2136,8 +2137,8 @@ JNIEXPORT jobjectArray JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1llistxat
 	const char *c_path;
 	string *ent;
 	jstring name;
-	list<string>::iterator it;
-	list<string> contents;
+	vector<string>::iterator it;
+	vector<string> contents;
 	int ret, buflen, bufpos, i;
 	char *buf;
 
