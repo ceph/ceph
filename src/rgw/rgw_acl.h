@@ -287,7 +287,7 @@ protected:
    * in data structures. */
   std::map<std::string, int> acl_user_map;
   std::map<uint32_t, int> acl_group_map;
-  std::list<ACLReferer> referer_list;
+  std::vector<ACLReferer> referer_list;
   ACLGrantMap grant_map;
   // register a grant in the correspoding acl_user/group_map
   void register_grant(const ACLGrant& grant);

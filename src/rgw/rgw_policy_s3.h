@@ -6,8 +6,8 @@
 #include <limits.h>
 
 #include <map>
-#include <list>
 #include <string>
+#include <vector>
 
 #include "include/utime.h"
 
@@ -30,8 +30,8 @@ class RGWPolicyCondition;
 class RGWPolicy {
   uint64_t expires;
   std::string expiration_str;
-  std::list<RGWPolicyCondition *> conditions;
-  std::list<std::pair<std::string, std::string> > var_checks;
+  std::vector<RGWPolicyCondition *> conditions;
+  std::vector<std::pair<std::string, std::string>> var_checks;
   std::map<std::string, bool, ltstr_nocase> checked_vars;
 
 public:

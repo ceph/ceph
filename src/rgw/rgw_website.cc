@@ -23,7 +23,7 @@
 
 #include <errno.h>
 #include <string>
-#include <list>
+#include <vector>
 #include "include/types.h"
 #include "rgw_website.h"
 #include "rgw_common.h"
@@ -64,9 +64,9 @@ void RGWBWRoutingRule::apply_rule(const string& default_protocol, const string& 
 
 bool RGWBWRoutingRules::check_key_and_error_code_condition(const string &key, int error_code, RGWBWRoutingRule **rule)
 {
-  for (list<RGWBWRoutingRule>::iterator iter = rules.begin(); iter != rules.end(); ++iter) {
-    if (iter->check_key_condition(key) && iter->check_error_code_condition(error_code)) {
-      *rule = &(*iter);
+  for (auto& candidate : rules) {
+    if (candidate.check_key_condition(key) && candidate.check_error_code_condition(error_code)) {
+      *rule = &candidate;
       return true;
     }
   }
@@ -75,9 +75,9 @@ bool RGWBWRoutingRules::check_key_and_error_code_condition(const string &key, in
 
 bool RGWBWRoutingRules::check_key_condition(const string& key, RGWBWRoutingRule **rule)
 {
-  for (list<RGWBWRoutingRule>::iterator iter = rules.begin(); iter != rules.end(); ++iter) {
-    if (iter->check_key_condition(key)) {
-      *rule = &(*iter);
+  for (auto& candidate : rules) {
+    if (candidate.check_key_condition(key)) {
+      *rule = &candidate;
       return true;
     }
   }
@@ -86,9 +86,9 @@ bool RGWBWRoutingRules::check_key_condition(const string& key, RGWBWRoutingRule 
 
 bool RGWBWRoutingRules::check_error_code_condition(const int http_error_code, RGWBWRoutingRule **rule)
 {
-  for (list<RGWBWRoutingRule>::iterator iter = rules.begin(); iter != rules.end(); ++iter) {
-    if (iter->check_error_code_condition(http_error_code)) {
-      *rule = &(*iter);
+  for (auto& candidate : rules) {
+    if (candidate.check_error_code_condition(http_error_code)) {
+      *rule = &candidate;
       return true;
     }
   }
@@ -285,9 +285,10 @@ void RGWBWRoutingRule::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("Redirect", redirect_info, obj);
 }
 
-static void encode_xml(const char *name, const std::list<RGWBWRoutingRule>& l, ceph::Formatter *f)
+static void encode_xml(const char *name, const std::vector<RGWBWRoutingRule>& rules,
+                       ceph::Formatter *f)
 {
-  do_encode_xml("RoutingRules", l, "RoutingRule", f);
+  do_encode_xml("RoutingRules", rules, "RoutingRule", f);
 }
 
 void RGWBucketWebsiteConf::dump_xml(Formatter *f) const
@@ -315,9 +316,9 @@ void RGWBucketWebsiteConf::dump_xml(Formatter *f) const
   }
 }
 
-void decode_xml_obj(list<RGWBWRoutingRule>& l, XMLObj *obj)
+void decode_xml_obj(vector<RGWBWRoutingRule>& rules, XMLObj *obj)
 {
-  do_decode_xml_obj(l, "RoutingRule", obj);
+  do_decode_xml_obj(rules, "RoutingRule", obj);
 }
 
 void RGWBucketWebsiteConf::decode_xml(XMLObj *obj) {

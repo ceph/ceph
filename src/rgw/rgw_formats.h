@@ -5,10 +5,11 @@
 
 #include "common/Formatter.h"
 
-#include <list>
-#include <stdint.h>
 #include <string>
 #include <ostream>
+#include <stdint.h>
+
+#include <boost/container/small_vector.hpp>
 
 struct plain_stack_entry {
   int size;
@@ -55,7 +56,8 @@ private:
   int len = 0;
   int max_len = 0;
 
-  std::list<struct plain_stack_entry> stack;
+  // Four inline entries cover ordinary shallow nesting; deeper input spills to the heap.
+  boost::container::small_vector<plain_stack_entry, 4> stack;
   size_t min_stack_level = 0;
   bool use_kv;
   bool wrote_something = 0;
