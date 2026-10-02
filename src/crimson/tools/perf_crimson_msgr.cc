@@ -3,6 +3,7 @@
 
 #include <iomanip>
 #include <map>
+#include <vector>
 #include <boost/program_options.hpp>
 #include <boost/iterator/counting_iterator.hpp>
 
@@ -45,7 +46,7 @@ seastar::logger& logger() {
 }
 
 template <typename T>
-static std::list<seastar::lw_shared_ptr<seastar::sharded<T>>> sharded_objects;
+static std::vector<seastar::lw_shared_ptr<seastar::sharded<T>>> sharded_objects;
 
 template <typename T, typename... Args>
 seastar::future<T*> create_sharded(Args... args) {
