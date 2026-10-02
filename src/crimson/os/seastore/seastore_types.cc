@@ -692,25 +692,6 @@ std::ostream &operator<<(std::ostream &out, mod_time_point_printer_t tp) {
   return out << "mod_" << sea_time_point_printer_t{time};
 }
 
-std::ostream &operator<<(std::ostream &out, const laddr_list_t &rhs)
-{
-  bool first = false;
-  for (auto &i: rhs) {
-    out << (first ? '[' : ',') << '(' << i.first << ',' << i.second << ')';
-    first = true;
-  }
-  return out << ']';
-}
-std::ostream &operator<<(std::ostream &out, const paddr_list_t &rhs)
-{
-  bool first = false;
-  for (auto &i: rhs) {
-    out << (first ? '[' : ',') << '(' << i.first << ',' << i.second << ')';
-    first = true;
-  }
-  return out << ']';
-}
-
 std::ostream &operator<<(std::ostream &out, const delta_info_t &delta)
 {
   return out << "delta_info_t("

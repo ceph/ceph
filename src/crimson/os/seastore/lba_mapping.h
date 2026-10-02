@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/btree/btree_types.h"
 #include "crimson/os/seastore/lba/lba_btree_node.h"
@@ -303,13 +305,13 @@ private:
 };
 
 std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs);
-using lba_mapping_list_t = std::list<LBAMapping>;
+using lba_mappings_t = std::vector<LBAMapping>;
 
-std::ostream &operator<<(std::ostream &out, const lba_mapping_list_t &rhs);
+std::ostream &operator<<(std::ostream &out, const lba_mappings_t &rhs);
 
 } // namespace crimson::os::seastore
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::LBAMapping> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba_mapping_list_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::lba_mappings_t> : fmt::ostream_formatter {};
 #endif
