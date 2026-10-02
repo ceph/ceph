@@ -96,6 +96,8 @@ public:
 #endif
 
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
+  // The kernel retains pointers into each aio_t and its iovec storage. splice()
+  // moves submissions into the running queue without relocating either.
   std::list<aio_t> pending_aios;    ///< not yet submitted
   std::list<aio_t> running_aios;    ///< submitting or submitted
 #endif
