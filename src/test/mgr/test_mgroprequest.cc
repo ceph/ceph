@@ -48,3 +48,33 @@ TEST_F(MgrOpRequestTestHelper, BasicSetup) {
   ASSERT_TRUE(req);
   ASSERT_EQ(req->get_req(), msg);
 }
+
+// Flag bit values mirrored from the private constants in
+// src/mgr/MgrOpRequest.h. They are not publicly accessible, so the raw
+// latest-flag value returned by state_flag() is compared against these.
+static constexpr uint8_t kFlagStartMonCommand = 1 << 3;   // 0x08
+static constexpr uint8_t kFlagFinishMonCommand = 1 << 4;  // 0x10
+
+TEST_F(MgrOpRequestTestHelper, MarkFinishMonCommandSetsCorrectFlag) {
+  auto msg = ceph::make_message<MCommand>();
+  auto req = tracker->create_request<MgrOpRequest>(msg);
+  ASSERT_TRUE(req);
+
+  req->mark_start_mon_command();
+  EXPECT_EQ(req->state_flag(), kFlagStartMonCommand)
+      << "mark_start_mon_command() should set the start-mon-command flag.";
+
+  req->mark_finish_mon_command();
+  EXPECT_EQ(req->state_flag(), kFlagFinishMonCommand)
+      << "Current: flag_start_mon_command set twice, flag_finish_mon_command "
+         "never set; Expected: flag_finish_mon_command set after "
+         "mark_finish_mon_command().";
+  // The finish call must advance the state off the start flag, i.e. it must
+  // not re-set the start-mon-command flag a second time.
+  EXPECT_NE(req->state_flag(), kFlagStartMonCommand)
+      << "mark_finish_mon_command() must not leave the op in the "
+         "start-mon-command state (start flag double-set).";
+  EXPECT_EQ(req->_get_state_string(), "mon command finished")
+      << "_get_state_string() should report the finished state after "
+         "mark_finish_mon_command().";
+}
