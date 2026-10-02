@@ -111,6 +111,14 @@ as follows:
 :command:`bucket unsuspend`
   Unsuspend a previously suspended bucket.
 
+:command:`bucket admin-lock`
+  Only allow admin and system users to change the bucket's configuration or
+  the retention, legal hold or ACL of objects in it, to bypass governance
+  retention, or to delete the bucket.
+
+:command:`bucket admin-unlock`
+  Remove the admin lock from a bucket.
+
 :command:`bucket rm`
   Remove a bucket.
 
