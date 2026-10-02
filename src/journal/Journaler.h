@@ -12,9 +12,9 @@
 #include "journal/JournalMetadataListener.h"
 #include "cls/journal/cls_journal_types.h"
 #include "common/Timer.h"
-#include <list>
 #include <map>
 #include <string>
+#include <vector>
 #include "include/ceph_assert.h"
 
 class ContextWQ;
@@ -43,7 +43,7 @@ public:
   };
 
   typedef cls::journal::Tag Tag;
-  typedef std::list<cls::journal::Tag> Tags;
+  using Tags = std::vector<cls::journal::Tag>;
   typedef std::set<cls::journal::Client> RegisteredClients;
 
   static std::string header_oid(const std::string &journal_id);
