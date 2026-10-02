@@ -36,6 +36,22 @@ using namespace std::literals;
 
 namespace librados {
 
+int TestRadosClient::pool_list(
+  std::list<std::pair<int64_t, std::string>>& pools)
+{
+  std::vector<std::pair<int64_t, std::string>> contiguous_pools;
+  int r = pool_list(contiguous_pools);
+  if (r < 0) {
+    return r;
+  }
+
+  pools.insert(std::end(pools),
+               std::make_move_iterator(std::begin(contiguous_pools)),
+               std::make_move_iterator(std::end(contiguous_pools)));
+
+  return 0;
+}
+
 static void finish_aio_completion(AioCompletionImpl *c, int r) {
   c->lock.lock();
   c->complete = true;
@@ -210,7 +226,7 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
       std::stringstream str;
       str << R"({"pools": [)";
 
-      std::list<std::pair<int64_t, std::string>> pools;
+      std::vector<std::pair<int64_t, std::string>> pools;
       pool_list(pools);
       for (auto& pool : pools) {
         if (pools.begin()->first != pool.first) {

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <chrono>
 #include <thread>
+#include <vector>
 #include <errno.h>
 #include <sys/time.h>
 #include "gtest/gtest.h"
@@ -72,10 +73,21 @@ TEST_P(LibRadosLockPP, ListLockersPP) {
   ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockPP7", "Cookie", "Tag", "", NULL, 0));
   ASSERT_EQ(0, ioctx.unlock("foo", "TestLockPP7", "Cookie"));
   {
-    int exclusive;
-    std::string tag;
+    int list_exclusive;
+    std::string list_tag;
     std::list<librados::locker_t> lockers;
-    ASSERT_EQ(0, ioctx.list_lockers("foo", "TestLockPP7", &exclusive, &tag, &lockers));
+    ASSERT_EQ(0, ioctx.list_lockers(
+      "foo", "TestLockPP7", &list_exclusive, &list_tag, &lockers));
+
+    int vector_exclusive = -1;
+    std::string vector_tag = "old";
+    std::vector<librados::locker_t> vector_lockers {{"old", "old", "old"}};
+    ASSERT_EQ(0, ioctx.list_lockers(
+      "foo", "TestLockPP7", vector_exclusive, vector_tag, vector_lockers));
+    ASSERT_EQ(list_exclusive, vector_exclusive);
+    ASSERT_EQ(list_tag, vector_tag);
+    ASSERT_TRUE(lockers.empty());
+    ASSERT_TRUE(vector_lockers.empty());
   }
   ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockPP7", "Cookie", "Tag", "", NULL, 0));
   {
@@ -87,6 +99,18 @@ TEST_P(LibRadosLockPP, ListLockersPP) {
     ASSERT_FALSE(lockers.end() == it);
     ASSERT_EQ(me, it->client);
     ASSERT_EQ("Cookie", it->cookie);
+
+    int vector_exclusive;
+    std::string vector_tag;
+    std::vector<librados::locker_t> vector_lockers;
+    ASSERT_EQ(1, ioctx.list_lockers(
+      "foo", "TestLockPP7", vector_exclusive, vector_tag, vector_lockers));
+    ASSERT_EQ(exclusive, vector_exclusive);
+    ASSERT_EQ(tag, vector_tag);
+    ASSERT_EQ(lockers.size(), vector_lockers.size());
+    ASSERT_EQ(it->client, vector_lockers.front().client);
+    ASSERT_EQ(it->cookie, vector_lockers.front().cookie);
+    ASSERT_EQ(it->address, vector_lockers.front().address);
   }
 }
 
@@ -167,10 +191,21 @@ TEST_P(LibRadosLockECPP, ListLockersPP) {
   ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockECPP7", "Cookie", "Tag", "", NULL, 0));
   ASSERT_EQ(0, ioctx.unlock("foo", "TestLockECPP7", "Cookie"));
   {
-    int exclusive;
-    std::string tag;
+    int list_exclusive;
+    std::string list_tag;
     std::list<librados::locker_t> lockers;
-    ASSERT_EQ(0, ioctx.list_lockers("foo", "TestLockECPP7", &exclusive, &tag, &lockers));
+    ASSERT_EQ(0, ioctx.list_lockers(
+      "foo", "TestLockECPP7", &list_exclusive, &list_tag, &lockers));
+
+    int vector_exclusive = -1;
+    std::string vector_tag = "old";
+    std::vector<librados::locker_t> vector_lockers {{"old", "old", "old"}};
+    ASSERT_EQ(0, ioctx.list_lockers(
+      "foo", "TestLockECPP7", vector_exclusive, vector_tag, vector_lockers));
+    ASSERT_EQ(list_exclusive, vector_exclusive);
+    ASSERT_EQ(list_tag, vector_tag);
+    ASSERT_TRUE(lockers.empty());
+    ASSERT_TRUE(vector_lockers.empty());
   }
   ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockECPP7", "Cookie", "Tag", "", NULL, 0));
   {
@@ -182,6 +217,18 @@ TEST_P(LibRadosLockECPP, ListLockersPP) {
     ASSERT_FALSE(lockers.end() == it);
     ASSERT_EQ(me, it->client);
     ASSERT_EQ("Cookie", it->cookie);
+
+    int vector_exclusive;
+    std::string vector_tag;
+    std::vector<librados::locker_t> vector_lockers;
+    ASSERT_EQ(1, ioctx.list_lockers(
+      "foo", "TestLockECPP7", vector_exclusive, vector_tag, vector_lockers));
+    ASSERT_EQ(exclusive, vector_exclusive);
+    ASSERT_EQ(tag, vector_tag);
+    ASSERT_EQ(lockers.size(), vector_lockers.size());
+    ASSERT_EQ(it->client, vector_lockers.front().client);
+    ASSERT_EQ(it->cookie, vector_lockers.front().cookie);
+    ASSERT_EQ(it->address, vector_lockers.front().address);
   }
 }
 

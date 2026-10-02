@@ -104,12 +104,19 @@ int TestMemCluster::pool_get_base_tier(int64_t pool_id, int64_t* base_tier) {
   return 0;
 }
 
-int TestMemCluster::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
+int TestMemCluster::pool_list(
+  std::vector<std::pair<int64_t, std::string>>& pools)
+{
   std::lock_guard locker{m_lock};
-  v.clear();
+  std::vector<std::pair<int64_t, std::string>> result;
+  result.reserve(std::size(m_pools));
+
   for (Pools::iterator iter = m_pools.begin(); iter != m_pools.end(); ++iter) {
-    v.push_back(std::make_pair(iter->second->pool_id, iter->first));
+    result.emplace_back(iter->second->pool_id, iter->first);
   }
+
+  pools = std::move(result);
+
   return 0;
 }
 
