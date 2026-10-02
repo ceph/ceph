@@ -2478,6 +2478,8 @@ OSD::OSD(CephContext *cct_,
                                            cct->_conf->osd_op_history_duration);
   op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
                                                     cct->_conf->osd_op_history_slow_op_threshold);
+  op_tracker.set_trace_threshold_and_rate(cct->_conf->osd_op_trace_slow_threshold,
+                                          cct->_conf->osd_op_trace_max_per_sec);
   ObjectCleanRegions::set_max_num_intervals(cct->_conf->osd_object_clean_region_max_num_intervals);
 #ifdef WITH_BLKIN
   std::stringstream ss;
@@ -3676,6 +3678,14 @@ int OSD::init()
   if (is_stopping())
     return 0;
   tracing::osd::tracer.init(cct, "osd");
+  // runs on the op history thread, which op_tracker.on_shutdown() joins
+  // before the OSD goes away
+  op_tracker.set_slow_op_tracer([this](TrackedOp& op, bool in_flight,
+                                       const trace_admit_t& admit) {
+    auto osdmap = service.get_osdmap();
+    return tracing::osd::trace_slow_op(op, whoami, osdmap.get(), in_flight,
+                                       admit);
+  });
   tick_timer.init();
   tick_timer_without_osd_lock.init();
   service.recovery_request_timer.init();
@@ -7999,14 +8009,25 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
     map<uint64_t, int> slow_op_pools;
     bool log_aggregated_slow_op =
 	    cct->_conf.get_val<bool>("osd_aggregated_slow_ops_logging");
+    // ops that stay stuck never complete, so they are traced here, once each
+    // and at most osd_op_trace_max_per_sec new ones per check
+    uint64_t in_flight_traces = 0;
+    const uint64_t max_in_flight_traces = cct->_conf->osd_op_trace_max_per_sec;
     auto count_slow_ops = [&](TrackedOp& op) {
       if (op.get_initiated() < too_old) {
+        if (in_flight_traces < max_in_flight_traces &&
+            op_tracker.trace_in_flight(op)) {
+          ++in_flight_traces;
+        }
         stringstream ss;
         ss << "slow request " << op.get_desc()
            << " initiated "
            << op.get_initiated()
            << " currently "
            << op.state_string();
+        if (auto trace_id = op.get_trace_id(); !trace_id.empty()) {
+          ss << " trace_id " << trace_id;
+        }
         lgeneric_subdout(cct,osd,20) << ss.str() << dendl;
         if (log_aggregated_slow_op) {
           if (const OpRequest *req = dynamic_cast<const OpRequest *>(&op)) {
@@ -10100,6 +10121,12 @@ std::vector<std::string> OSD::get_tracked_keys() const noexcept
     "osd_op_history_duration"s,
     "osd_op_history_slow_op_size"s,
     "osd_op_history_slow_op_threshold"s,
+    "osd_op_trace_slow_threshold"s,
+    "osd_op_trace_max_per_sec"s,
+    "trace_exporter"s,
+    "trace_otlp_endpoint"s,
+    "jaeger_agent_host"s,
+    "jaeger_agent_port"s,
     "osd_enable_op_tracker"s,
     "osd_map_cache_size"s,
     "osd_pg_epoch_max_lag_factor"s,
@@ -10215,6 +10242,15 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_op_history_slow_op_threshold")) {
     op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
                                                       cct->_conf->osd_op_history_slow_op_threshold);
+  }
+  if (changed.count("osd_op_trace_slow_threshold") ||
+      changed.count("osd_op_trace_max_per_sec")) {
+    op_tracker.set_trace_threshold_and_rate(cct->_conf->osd_op_trace_slow_threshold,
+                                            cct->_conf->osd_op_trace_max_per_sec);
+  }
+  if (changed.count("trace_exporter") || changed.count("trace_otlp_endpoint") ||
+      changed.count("jaeger_agent_host") || changed.count("jaeger_agent_port")) {
+    tracing::osd::tracer.reconfigure();
   }
   if (changed.count("osd_enable_op_tracker")) {
       op_tracker.set_tracking(cct->_conf->osd_enable_op_tracker);

@@ -25,7 +25,7 @@
 
 class MOSDRepOp final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -143,6 +143,10 @@ public:
 
     ceph_assert(header.version >= 3);
     decode(pg_committed_to, p);
+    if (header.version >= 4) {
+      // the client's trace context, so slow-op traces join the client's trace
+      decode_otel_trace(p);
+    }
     final_decode_needed = false;
   }
 
@@ -167,6 +171,7 @@ public:
     encode(from, payload);
     encode(updated_hit_set_history, payload);
     encode(pg_committed_to, payload);
+    encode_otel_trace(payload, features);
     bufferlist middle(txn_payload);
     set_middle(middle);
   }

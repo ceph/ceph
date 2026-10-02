@@ -1877,6 +1877,37 @@ options:
   - rgw_enable_usage_log
   min: 1
   with_legacy: true
+- name: rgw_trace_slow_threshold
+  type: float
+  level: advanced
+  desc: Export a trace for every request that takes at least this many seconds
+    (0 disables)
+  long_desc: Requests that are not traced live (jaeger_tracing_enable is off)
+    then carry trace ids to the OSDs, at the cost of 24 random bytes per
+    request, and the trace is built after the request completes, so faster
+    requests cost nothing more. The slow ops of a traced request, recorded by
+    the OSDs under osd_op_trace_slow_threshold, appear in the same trace,
+    under the request's span.
+  default: 0
+  services:
+  - rgw
+  see_also:
+  - rgw_trace_max_per_sec
+  - osd_op_trace_slow_threshold
+- name: rgw_trace_max_per_sec
+  type: uint
+  level: advanced
+  desc: Number of slow-request traces exported per second
+  long_desc: When there are more slow requests, RGW keeps about this many a
+    second, chosen by their trace id as the OSDs choose their slow ops, so
+    that a request that the OSDs trace is traced here too. For a second after
+    the rate goes up, RGW may export up to twice as many. Requests not traced
+    are counted in the rgw slow_request_traces_dropped perf counter.
+  default: 100
+  services:
+  - rgw
+  see_also:
+  - rgw_trace_slow_threshold
 # enable logging every rgw operation
 - name: rgw_enable_ops_log
   type: bool

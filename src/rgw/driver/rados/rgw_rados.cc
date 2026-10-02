@@ -3779,6 +3779,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   RGWRados::Bucket bop(target->get_store(), bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj());
   index_op.set_zones_trace(meta.zones_trace);
+  index_op.set_trace(&trace);
   
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   int r;
@@ -8591,7 +8592,7 @@ int RGWRados::Bucket::UpdateIndex::prepare(const DoutPrefixProvider *dpp, RGWMod
   }
 
   int r = guard_reshard(dpp, obj, nullptr, [&](BucketShard *bs) -> int {
-				   return store->cls_obj_prepare_op(dpp, *bs, op, optag, obj, y);
+				   return store->cls_obj_prepare_op(dpp, *bs, op, optag, obj, y, trace);
 				 }, y);
   if (r < 0) {
     return r;
@@ -8649,7 +8650,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
   ret = store->cls_obj_complete_add(dpp, target->bucket_info, *bs, obj, optag,
                                     poolid, epoch, ent, category,
                                     remove_objs, bilog_flags, y, zones_trace,
-                                    log_op);
+                                    log_op, trace);
   if (add_log) {
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
 			    target->bucket_info, obj.get_hash_object(),
@@ -11188,7 +11189,7 @@ bool RGWRados::process_expired_objects(const DoutPrefixProvider *dpp, optional_y
 }
 
 int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, string& tag,
-                                 rgw_obj& obj, optional_yield y)
+                                 rgw_obj& obj, optional_yield y, const jspan_context* trace)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs << " obj=" << obj << " tag=" << tag << " op=" << op << dendl_bitx;
@@ -11200,7 +11201,7 @@ int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs,
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
   cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc());
-  int ret = bs.bucket_obj.operate(dpp, std::move(o), y);
+  int ret = bs.bucket_obj.operate(dpp, std::move(o), y, 0, trace);
   ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
   return ret;
 }
@@ -11261,7 +11262,8 @@ int RGWRados::cls_obj_complete_op(const DoutPrefixProvider* dpp,
                                   int64_t pool, uint64_t epoch,
                                   rgw_bucket_dir_entry& ent, RGWObjCategory category,
                                   list<rgw_obj_index_key>* remove_objs, uint16_t bilog_flags,
-                                  optional_yield y, rgw_zone_set* _zones_trace, bool log_op)
+                                  optional_yield y, rgw_zone_set* _zones_trace, bool log_op,
+                                  const jspan_context* trace)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx_c(bitx, cct, 10) << "ENTERING " << __func__ << ": bucket-shard=" << bs <<
@@ -11312,7 +11314,7 @@ int RGWRados::cls_obj_complete_op(const DoutPrefixProvider* dpp,
         obj, op_issuer.op, tag, ver, key, dir_meta, remove_objs,
         op_issuer.log_op, bilog_flags, &zones_trace, &arg);
       librados::AioCompletion *completion = arg->rados_completion;
-      int ret = bs.bucket_obj.aio_operate(arg->rados_completion, &o);
+      int ret = bs.bucket_obj.aio_operate(arg->rados_completion, &o, trace);
       completion->release(); /* can't reference arg here, as it might have already been released */
 
       ldout_bitx_c(bitx, cct, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
@@ -11328,17 +11330,17 @@ template int RGWRados::cls_obj_complete_op<CLSRGWCompleteModifyOp<CLS_RGW_OP_ADD
     const DoutPrefixProvider*, const RGWBucketInfo&,
     BucketShard&, const rgw_obj&, string&, int64_t, uint64_t,
     rgw_bucket_dir_entry&, RGWObjCategory, list<rgw_obj_index_key>*,
-    uint16_t, optional_yield, rgw_zone_set*, bool);
+    uint16_t, optional_yield, rgw_zone_set*, bool, const jspan_context*);
 template int RGWRados::cls_obj_complete_op<CLSRGWCompleteModifyOp<CLS_RGW_OP_DEL>>(
     const DoutPrefixProvider*, const RGWBucketInfo&,
     BucketShard&, const rgw_obj&, string&, int64_t, uint64_t,
     rgw_bucket_dir_entry&, RGWObjCategory, list<rgw_obj_index_key>*,
-    uint16_t, optional_yield, rgw_zone_set*, bool);
+    uint16_t, optional_yield, rgw_zone_set*, bool, const jspan_context*);
 template int RGWRados::cls_obj_complete_op<CLSRGWCompleteModifyOp<CLS_RGW_OP_CANCEL>>(
     const DoutPrefixProvider*, const RGWBucketInfo&,
     BucketShard&, const rgw_obj&, string&, int64_t, uint64_t,
     rgw_bucket_dir_entry&, RGWObjCategory, list<rgw_obj_index_key>*,
-    uint16_t, optional_yield, rgw_zone_set*, bool);
+    uint16_t, optional_yield, rgw_zone_set*, bool, const jspan_context*);
 
 int RGWRados::cls_obj_complete_add(const DoutPrefixProvider* dpp,
                                    const RGWBucketInfo& bucket_info,
@@ -11346,11 +11348,12 @@ int RGWRados::cls_obj_complete_add(const DoutPrefixProvider* dpp,
                                    int64_t pool, uint64_t epoch,
                                    rgw_bucket_dir_entry& ent, RGWObjCategory category,
                                    list<rgw_obj_index_key>* remove_objs, uint16_t bilog_flags,
-                                   optional_yield y, rgw_zone_set* zones_trace, bool log_op)
+                                   optional_yield y, rgw_zone_set* zones_trace, bool log_op,
+                                   const jspan_context* trace)
 {
   return cls_obj_complete_op<CLSRGWCompleteModifyOp<CLS_RGW_OP_ADD>>(
     dpp, bucket_info, bs, obj, tag, pool, epoch,
-    ent, category, remove_objs, bilog_flags, y, zones_trace, log_op);
+    ent, category, remove_objs, bilog_flags, y, zones_trace, log_op, trace);
 }
 
 int RGWRados::cls_obj_complete_del(const DoutPrefixProvider* dpp,

@@ -5,6 +5,51 @@
   hold the lock, instead of an empty list. Callers should check the
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
+* OSD: Operations slower than ``osd_op_trace_slow_threshold`` seconds can now
+  be exported as traces to Jaeger. A trace is built after the operation
+  completes, from the events the op tracker already records, so faster
+  operations cost nothing extra; ``osd_op_trace_max_per_sec`` limits the rate.
+  Traced operations show a ``trace_id`` in ``dump_historic_ops``. The
+  primary's and the replicas' operations for one request share a trace, and
+  carry searchable attributes such as pool, PG, object, op type and role.
+  Disabled by default. See the tracing documentation.
+  Operations still stuck when they are reported as slow requests are traced
+  too, with the phase they are in; ``dump_ops_in_flight`` and the
+  per-operation slow request log lines show their ``trace_id``.
+* OSD, RGW: Spans can now be exported over OTLP/HTTP, the OpenTelemetry
+  protocol accepted by Jaeger v2, Grafana Tempo, the OpenTelemetry Collector
+  and most tracing backends: set ``trace_exporter`` to ``otlp`` and
+  ``trace_otlp_endpoint`` to the backend's URL. The default remains the Jaeger
+  UDP exporter, whose destination host is now configurable with
+  ``jaeger_agent_host``, so all daemons can send to one Jaeger instead of an
+  agent on every host. OSDs and RGWs apply changes to these options without
+  restarting.
+  Builds with tracing now require protobuf (``WITH_OTLP``, on by default).
+* RGW, OSD: Slow S3 and Swift requests can now be traced end to end, from the
+  request in RGW to the primary OSD's operation and the replicas'
+  sub-operations, in one trace. With ``rgw_trace_slow_threshold`` set, RGW
+  passes a trace context (IDs only, marked not sampled) to the OSDs with every
+  request, and exports the request's span only if the request was slow; the
+  OSDs place their slow operations under it. The primary forwards the context
+  to the replicas: ``MOSDRepOp`` and ``MOSDRepOpReply`` gain a field, ignored
+  by older OSDs. OSDs no longer create live spans for a context they receive
+  unless ``jaeger_tracing_enable`` is set on the OSD and the context is
+  sampled.
+  RGW exports about ``rgw_trace_max_per_sec`` request traces a second, now
+  100 by default, and counts them in its ``slow_request_traces`` and
+  ``slow_request_traces_dropped`` perf counters. RGW and the OSDs choose the
+  slow requests they trace by trace ID, so they keep the same requests and
+  their traces arrive whole.
+* OSD: Slow-op traces are smaller. Phases that took less than 5% of the
+  operation no longer get a span, nor does a phase that covers 90% of it; the
+  primary no longer exports replicas' acknowledgements (``osd_repop_reply``)
+  as spans. The new option ``osd_op_trace_slow_require_context`` makes the
+  OSDs trace only operations that carry a trace context, such as those from
+  RGW with ``rgw_trace_slow_threshold`` set, which leaves out RGW's background
+  work and clients that pass no context.
+* OSD: The op tracker event ``sub_op_commit_rec`` is now
+  ``sub_op_commit_rec from osd.N``, naming the replica that acknowledged.
+  Scripts that match the exact event name need updating.
 
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.

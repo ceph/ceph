@@ -3485,6 +3485,52 @@ options:
   level: advanced
   default: 10
   with_legacy: true
+- name: osd_op_trace_slow_threshold
+  type: float
+  level: advanced
+  desc: Export a trace for every op that takes at least this many seconds (0 disables)
+  long_desc: The trace is built after the op completes, from the events the op
+    tracker already recorded, so ops faster than the threshold cost nothing extra.
+    Traces go to the trace_exporter destination, independently of
+    jaeger_tracing_enable.
+  default: 0
+  services:
+  - osd
+  see_also:
+  - osd_op_trace_max_per_sec
+  - osd_enable_op_tracker
+  with_legacy: true
+- name: osd_op_trace_max_per_sec
+  type: uint
+  level: advanced
+  desc: Number of slow-op traces exported per second
+  long_desc: When there are more slow ops, the OSD keeps about this many a
+    second, chosen by their trace id so that the OSDs and RGW keep the same
+    requests and their traces arrive whole. For a second after the rate goes
+    up, the OSD may export up to twice as many. Ops not traced are counted in
+    the trackedop slow_op_traces_dropped perf counter.
+  default: 10
+  services:
+  - osd
+  see_also:
+  - osd_op_trace_slow_threshold
+  with_legacy: true
+- name: osd_op_trace_slow_require_context
+  type: bool
+  level: advanced
+  desc: Trace only the slow ops whose client sent a trace context
+  long_desc: RGW sends a trace context with the ops of every request when
+    rgw_trace_slow_threshold is set, but not with its own background work
+    (garbage collection, lifecycle, locks and watches on its log and control
+    pools). Setting this to true keeps the slow-op traces to the ops of client
+    requests. Clients that never send a context, such as RBD and CephFS, are
+    then not traced at all.
+  default: false
+  services:
+  - osd
+  see_also:
+  - osd_op_trace_slow_threshold
+  - rgw_trace_slow_threshold
 # to adjust various transactions that batch smaller items
 - name: osd_target_transaction_size
   type: uint
@@ -7246,14 +7292,68 @@ options:
   - rgw
   - osd
   with_legacy: true
-- name: jaeger_agent_port
-  type: int
+- name: trace_exporter
+  type: str
   level: advanced
-  desc: TCP port number of the Jaeger agent
-  default: 6799
+  desc: Protocol used to export spans
+  long_desc: otlp sends spans over OTLP/HTTP to trace_otlp_endpoint, which
+    Jaeger v2, Grafana Tempo, the OpenTelemetry Collector and most tracing
+    backends accept. jaeger sends them over UDP to jaeger_agent_host and
+    jaeger_agent_port, the older Jaeger-only protocol. OSDs and RGWs pick up a
+    change without restarting.
+  default: jaeger
+  enum_values:
+  - jaeger
+  - otlp
+  flags:
+  - runtime
   services:
   - rgw
   - osd
+  see_also:
+  - trace_otlp_endpoint
+  - jaeger_agent_host
+- name: trace_otlp_endpoint
+  type: str
+  level: advanced
+  desc: URL that spans are posted to when trace_exporter is otlp
+  default: http://localhost:4318/v1/traces
+  flags:
+  - runtime
+  services:
+  - rgw
+  - osd
+  see_also:
+  - trace_exporter
+- name: jaeger_agent_host
+  type: str
+  level: advanced
+  desc: Host that spans are sent to
+  long_desc: A Jaeger agent on each host, or one Jaeger collector for the whole
+    cluster; Jaeger v2 accepts spans directly on UDP port 6831. OSDs and RGWs pick
+    up a change without restarting.
+  default: localhost
+  flags:
+  - runtime
+  services:
+  - rgw
+  - osd
+  see_also:
+  - jaeger_agent_port
+- name: jaeger_agent_port
+  type: int
+  level: advanced
+  desc: UDP port that spans are sent to
+  long_desc: 6799 matches the Jaeger agent that cephadm deploys; Jaeger v2
+    listens on 6831. OSDs pick up a change without restarting.
+  default: 6799
+  flags:
+  - runtime
+  services:
+  - rgw
+  - osd
+  see_also:
+  - jaeger_agent_host
 - name: objectstore_debug_throw_on_failed_txc
   type: bool
   level: dev

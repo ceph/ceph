@@ -166,6 +166,9 @@
 /* Define if you want to use Jaeger */
 #cmakedefine HAVE_JAEGER
 
+/* Define if traces can be exported over OTLP/HTTP */
+#cmakedefine HAVE_OTLP
+
 /* Define if you want to use EVENTTRACE */
 #cmakedefine WITH_EVENTTRACE
 

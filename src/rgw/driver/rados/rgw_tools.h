@@ -134,13 +134,14 @@ struct rgw_rados_ref {
   }
 
   int operate(const DoutPrefixProvider* dpp, librados::ObjectWriteOperation&& op,
-	      optional_yield y, int flags = 0) {
-    return rgw_rados_operate(dpp, ioctx, obj.oid, std::move(op), y, flags);
+	      optional_yield y, int flags = 0, const jspan_context* trace = nullptr) {
+    return rgw_rados_operate(dpp, ioctx, obj.oid, std::move(op), y, flags, trace);
   }
 
   int aio_operate(librados::AioCompletion* c,
-		  librados::ObjectWriteOperation* op) {
-    return ioctx.aio_operate(obj.oid, c, op);
+		  librados::ObjectWriteOperation* op,
+		  const jspan_context* trace = nullptr) {
+    return ioctx.aio_operate(obj.oid, c, op, 0, trace);
   }
 
   int aio_operate(librados::AioCompletion* c, librados::ObjectReadOperation* op,

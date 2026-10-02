@@ -18,6 +18,7 @@
 #include "common/ceph_mutex.h"
 #include "common/Thread.h"
 #include "common/Clock.h"
+#include "common/trace_sampler.h"
 #include "common/zipkin_trace.h"
 #include "include/spinlock.h"
 
@@ -65,8 +66,18 @@ public:
 enum {
   l_trackedop_slow_op_first = 1000,
   l_trackedop_slow_op_count,
+  l_trackedop_slow_op_traced,
+  l_trackedop_slow_op_trace_dropped,
   l_trackedop_slow_op_last,
 };
+
+/// asked by the tracer, once it knows the trace an op belongs to, whether to
+/// export it; the key is tracing::TraceSampler::key() of the trace id
+using trace_admit_t = std::function<bool(uint64_t key)>;
+/// exports a trace for an op, completed or, with in_flight, still in flight;
+/// returns its trace id, or "" if none
+using slow_op_tracer_t =
+  std::function<std::string(TrackedOp&, bool in_flight, const trace_admit_t&)>;
 
 class OpHistory {
   CephContext* cct = nullptr;
@@ -83,6 +94,13 @@ class OpHistory {
   OpHistoryServiceThread opsvc;
   friend class OpHistoryServiceThread;
   std::unique_ptr<PerfCounters> logger;
+
+  // slow-op tracing; the sampler is only touched by the service thread
+  std::atomic<float> trace_slow_threshold{0};
+  std::atomic_uint32_t trace_max_per_sec{0};
+  slow_op_tracer_t slow_op_tracer;  ///< protected by ops_history_lock
+  tracing::TraceSampler trace_sampler;
+  void maybe_trace(const utime_t& now, TrackedOp& op, double opduration);
 
 public:
   OpHistory(CephContext *c);
@@ -107,6 +125,15 @@ public:
     history_slow_op_size = new_size;
     history_slow_op_threshold = new_threshold;
   }
+  void set_slow_op_tracer(slow_op_tracer_t tracer) {
+    std::lock_guard history_lock(ops_history_lock);
+    slow_op_tracer = std::move(tracer);
+  }
+  void set_trace_threshold_and_rate(float threshold, uint32_t max_per_sec) {
+    trace_slow_threshold = threshold;
+    trace_max_per_sec = max_per_sec;
+  }
+  bool trace_in_flight(TrackedOp& op);
 };
 
 struct ShardedTrackingData;
@@ -136,6 +163,19 @@ public:
   }
   void set_history_slow_op_size_and_threshold(uint32_t new_size, float new_threshold) {
     history.set_slow_op_size_and_threshold(new_size, new_threshold);
+  }
+  // exports what a slow op that is still in flight did so far, the first time
+  // it is called for the op while slow-op tracing is on; true if it did
+  bool trace_in_flight(TrackedOp& op) {
+    return history.trace_in_flight(op);
+  }
+  void set_slow_op_tracer(slow_op_tracer_t tracer) {
+    history.set_slow_op_tracer(std::move(tracer));
+  }
+  /// export a trace for each op slower than `threshold` seconds (0: never),
+  /// at most `max_per_sec` a second
+  void set_trace_threshold_and_rate(float threshold, uint32_t max_per_sec) {
+    history.set_trace_threshold_and_rate(threshold, max_per_sec);
   }
   bool is_tracking() const {
     return tracking_enabled;
@@ -285,6 +325,10 @@ protected:
   };
   std::atomic<int> state = {STATE_UNTRACKED};
   uint64_t flags = 0;
+  /// set by OpHistory if the op was traced, in flight or when it completed;
+  /// protected by lock
+  std::string trace_id;
+  std::atomic_bool traced_in_flight{false};
 
   void mark_continuous() {
     flags |= FLAG_CONTINUOUS;
@@ -353,6 +397,26 @@ public:
   }
 
   void mark_event(std::string_view event, utime_t stamp=ceph_clock_now());
+
+  /// a copy of the recorded events, in order
+  std::string get_trace_id() const {
+    std::lock_guard l(lock);
+    return trace_id;
+  }
+  void set_trace_id(std::string id) {
+    std::lock_guard l(lock);
+    trace_id = std::move(id);
+  }
+
+  std::vector<std::pair<utime_t, std::string>> get_events() const {
+    std::lock_guard l(lock);
+    std::vector<std::pair<utime_t, std::string>> ret;
+    ret.reserve(events.size());
+    for (const auto& e : events) {
+      ret.emplace_back(e.stamp, e.str);
+    }
+    return ret;
+  }
 
   void mark_nowarn() {
     warn_interval_multiplier = 0;

@@ -1009,6 +1009,9 @@ public:
       bool blind;
       bool prepared{false};
       rgw_zone_set *zones_trace{nullptr};
+      // the request's trace context, so that the index ops of a slow request
+      // show up in its trace
+      const jspan_context *trace{nullptr};
 
       int init_bs(const DoutPrefixProvider *dpp, optional_yield y) {
         int r =
@@ -1055,6 +1058,10 @@ public:
 
       void set_zones_trace(rgw_zone_set *_zones_trace) {
         zones_trace = _zones_trace;
+      }
+
+      void set_trace(const jspan_context *_trace) {
+        trace = _trace;
       }
 
       int prepare(const DoutPrefixProvider *dpp, RGWModifyOp, const std::string *write_tag, optional_yield y);
@@ -1589,7 +1596,7 @@ public:
                              const DoutPrefixProvider *dpp, optional_yield y, RGWBucketCtl* bucket_ctl);
 
   int cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, std::string& tag, rgw_obj& obj,
-                         optional_yield y);
+                         optional_yield y, const jspan_context* trace = nullptr);
   template <class CLSRGWBucketModifyOpT>
   int cls_obj_complete_op(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
                           BucketShard& bs, const rgw_obj& obj, std::string& tag,
@@ -1597,13 +1604,15 @@ public:
                           rgw_bucket_dir_entry& ent, RGWObjCategory category,
                           std::list<rgw_obj_index_key>* remove_objs,
                           uint16_t bilog_flags, optional_yield y,
-                          rgw_zone_set* zones_trace = nullptr, bool log_op = true);
+                          rgw_zone_set* zones_trace = nullptr, bool log_op = true,
+                          const jspan_context* trace = nullptr);
   int cls_obj_complete_add(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
                            BucketShard& bs, const rgw_obj& obj, std::string& tag,
                            int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
                            RGWObjCategory category, std::list<rgw_obj_index_key>* remove_objs,
                            uint16_t bilog_flags, optional_yield y,
-                           rgw_zone_set* zones_trace = nullptr, bool log_op = true);
+                           rgw_zone_set* zones_trace = nullptr, bool log_op = true,
+                           const jspan_context* trace = nullptr);
   int cls_obj_complete_del(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
                            BucketShard& bs, std::string& tag,
                            int64_t pool, uint64_t epoch, rgw_obj& obj,
