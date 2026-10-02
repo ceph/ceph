@@ -34,6 +34,7 @@
 #include "BaseMgrModule.h"
 #include "Gil.h"
 
+#include <vector>
 #include <algorithm>
 
 #define dout_context g_ceph_context
@@ -41,8 +42,8 @@
 
 #define PLACEHOLDER ""
 
-using std::list;
 using std::string;
+using std::vector;
 using namespace std::literals;
 
 typedef struct {
@@ -283,7 +284,7 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
     }
     health_status_t severity = HEALTH_OK;
     string summary;
-    list<string> detail;
+    vector<string> detail;
     int64_t count = 0;
     PyObject *infols = PyDict_Items(check_info);
     for (int j = 0; j < PyList_Size(infols); ++j) {
