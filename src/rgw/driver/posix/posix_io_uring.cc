@@ -3,6 +3,8 @@
 
 #include <condition_variable>
 
+#include <sys/resource.h>
+
 #include "posix_io_uring.h"
 
 #include "acconfig.h"
@@ -232,6 +234,15 @@ struct ThreadIoUringState {
       flags = 0;
     }
     if (ret < 0) {
+      if (ret == -ENOMEM) {
+        struct rlimit rl{};
+        ::getrlimit(RLIMIT_MEMLOCK, &rl);
+        ldpp_dout(dpp, 0) << "ERROR: URING: cannot create this thread's ring:"
+          " out of locked memory.  Ring memory is charged against"
+          " RLIMIT_MEMLOCK, currently " << rl.rlim_cur << " bytes, and every"
+          " serving thread creates one.  Raise the limit, or reduce the"
+          " ring depth" << dendl;
+      }
       ldpp_dout(dpp, 0) << "ERROR: URING: io_uring_queue_init_params failed: "
                         << cpp_strerror(-ret) << dendl;
       init_error = ret;
@@ -473,10 +484,31 @@ bool posix_uring_ensure_ring(const DoutPrefixProvider* dpp, bool nsfs)
 
   CephContext* cct = dpp->get_cct();
   const char* prefix = nsfs ? "rgw_nsfs" : "rgw_posix";
-  unsigned entries = cct->_conf.get_val<uint64_t>(
-      std::string(prefix) + "_io_uring_queue_depth");
-  if (entries < POSIX_URING_MAX_IODEPTH) {
-    entries = POSIX_URING_MAX_IODEPTH;
+
+  /* Size the ring to what will actually be submitted on it.
+   *
+   * A ring is per thread and its memory is accounted against
+   * RLIMIT_MEMLOCK, which is 8 MiB by default -- so the depth is
+   * multiplied by the frontend's thread count and measured against
+   * a small fixed budget.  A 1024-entry ring on each of a couple of
+   * hundred threads wants more than that limit allows, and the
+   * thread that loses cannot create a ring at all.
+   *
+   * When the data engine is synchronous the ring still exists,
+   * because an impersonated open goes through it to carry the
+   * personality (see posix_uring_register_personality) -- but
+   * nothing else does.  Those submissions are one at a time and
+   * waited on individually, so a handful of entries is the whole
+   * requirement and the configured data depth is irrelevant. */
+  unsigned entries;
+  if (posix_io_engine_is_uring(cct, (std::string(prefix) + "_io_engine").c_str())) {
+    entries = cct->_conf.get_val<uint64_t>(
+	std::string(prefix) + "_io_uring_queue_depth");
+    if (entries < POSIX_URING_MAX_IODEPTH) {
+      entries = POSIX_URING_MAX_IODEPTH;
+    }
+  } else {
+    entries = POSIX_URING_CONTROL_ENTRIES;
   }
   entries = round_up_pow2(entries);
 

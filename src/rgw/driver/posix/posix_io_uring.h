@@ -16,6 +16,17 @@ namespace rgw::sal {
 constexpr int64_t POSIX_DIRECT_ALIGN = 4096;
 constexpr unsigned POSIX_URING_MAX_IODEPTH = 128;
 
+/* Entries for a ring that carries no data transfer.
+ *
+ * With the synchronous data engine a ring exists only so that an
+ * impersonated open can name a personality;  those submissions are
+ * issued one at a time and waited on individually.  Ring memory is
+ * charged against RLIMIT_MEMLOCK and multiplied by the frontend's
+ * thread count, so the difference between this and a data-sized
+ * ring decides whether a gateway with a few hundred threads can
+ * create rings at all. */
+constexpr unsigned POSIX_URING_CONTROL_ENTRIES = 8;
+
 inline int64_t posix_align_down(int64_t x, int64_t a = POSIX_DIRECT_ALIGN) {
   return x & ~(a - 1);
 }
