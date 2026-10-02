@@ -166,7 +166,7 @@
     mdlog trim                       trim metadata log (use marker)
     mdlog status                     read metadata log status
     bilog list                       list bucket index log
-    bilog trim                       trim bucket index log (use start-marker, end-marker)
+    bilog trim                       trim bucket index log (use end-marker); without end-marker, requires --yes-i-really-mean-it
     bilog status                     read bucket index log status
     bilog autotrim                   auto trim bucket index log
     datalog list                     list data log

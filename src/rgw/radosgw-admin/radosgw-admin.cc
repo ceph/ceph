@@ -320,7 +320,7 @@ void usage()
   cout << "  mdlog trim                       trim metadata log (use marker)\n";
   cout << "  mdlog status                     read metadata log status\n";
   cout << "  bilog list                       list bucket index log\n";
-  cout << "  bilog trim                       trim bucket index log (use start-marker, end-marker)\n";
+  cout << "  bilog trim                       trim bucket index log (use end-marker); without end-marker, requires --yes-i-really-mean-it\n";
   cout << "  bilog status                     read bucket index log status\n";
   cout << "  bilog autotrim                   auto trim bucket index log\n";
   cout << "  datalog list                     list data log\n";
@@ -11712,6 +11712,17 @@ next:
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
+    }
+    if (!start_marker.empty()) {
+      std::cerr << "start-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (end_marker.empty() && !yes_i_really_mean_it) {
+      cerr << "bilog trim without --end-marker has no upper bound and can remove "
+              "all of the bucket's bilog entries, including changes that other "
+              "zones have not synced yet.\n"
+              "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return EPERM;
     }
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
