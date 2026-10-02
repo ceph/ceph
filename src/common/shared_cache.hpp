@@ -18,6 +18,8 @@
 
 #include <map>
 #include <list>
+#include <vector>
+#include <boost/container/small_vector.hpp>
 #ifdef WITH_CRIMSON
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #else
@@ -48,14 +50,15 @@ public:
 private:
   using C = std::less<K>;
   using H = std::hash<K>;
+  using DeferredRefs = boost::container::small_vector<VPtr, 1>;
   std::unordered_map<K, typename std::list<std::pair<K, VPtr>>::iterator, H> contents;
   std::list<std::pair<K, VPtr> > lru;
 
   std::map<K, std::pair<WeakVPtr, V*>, C> weak_refs;
 
-  void trim_cache(std::list<VPtr> *to_release) {
+  void trim_cache(DeferredRefs& to_release) {
     while (size > max_size) {
-      to_release->push_back(lru.back().second);
+      to_release.push_back(lru.back().second);
       lru_remove(lru.back().first);
     }
   }
@@ -69,7 +72,7 @@ private:
     contents.erase(i);
   }
 
-  void lru_add(const K& key, const VPtr& val, std::list<VPtr> *to_release) {
+  void lru_add(const K& key, const VPtr& val, DeferredRefs& to_release) {
     auto i = contents.find(key);
     if (i != contents.end()) {
       lru.splice(lru.begin(), lru, i->second);
@@ -176,7 +179,7 @@ public:
   void clear_range(
     const K& from,
     const K& to) {
-    std::list<VPtr> vals; // release any refs we have after we drop the lock
+    std::vector<VPtr> vals; // release any refs we have after we drop the lock
     {
       std::lock_guard l{lock};
       auto from_iter = weak_refs.lower_bound(from);
@@ -203,11 +206,11 @@ public:
   }
 
   void set_size(size_t new_size) {
-    std::list<VPtr> to_release;
+    DeferredRefs to_release;
     {
       std::lock_guard l{lock};
       max_size = new_size;
-      trim_cache(&to_release);
+      trim_cache(to_release);
     }
   }
 
@@ -219,7 +222,7 @@ public:
 
   VPtr lower_bound(const K& key) {
     VPtr val;
-    std::list<VPtr> to_release;
+    DeferredRefs to_release;
     {
       std::unique_lock l{lock};
       ++waiting;
@@ -232,7 +235,7 @@ public:
           --i;
         }
         if (val = i->second.first.lock(); val) {
-          lru_add(i->first, val, &to_release);
+          lru_add(i->first, val, to_release);
           return true;
         } else {
           return false;
@@ -276,14 +279,14 @@ public:
 
   VPtr lookup(const K& key) {
     VPtr val;
-    std::list<VPtr> to_release;
+    DeferredRefs to_release;
     {
       std::unique_lock l{lock};
       ++waiting;
       cond.wait(l, [this, &key, &val, &to_release] {
         if (auto i = weak_refs.find(key); i != weak_refs.end()) {
           if (val = i->second.first.lock(); val) {
-            lru_add(key, val, &to_release);
+            lru_add(key, val, to_release);
             return true;
           } else {
             return false;
@@ -298,7 +301,7 @@ public:
   }
   VPtr lookup_or_create(const K &key) {
     VPtr val;
-    std::list<VPtr> to_release;
+    DeferredRefs to_release;
     {
       std::unique_lock l{lock};
       cond.wait(l, [this, &key, &val] {
@@ -316,7 +319,7 @@ public:
         val = VPtr{new V{}, Cleanup{this, key}};
         weak_refs.insert(make_pair(key, make_pair(val, val.get())));
       }
-      lru_add(key, val, &to_release);
+      lru_add(key, val, to_release);
     }
     return val;
   }
@@ -346,7 +349,7 @@ public:
    */
   VPtr add(const K& key, V *value, bool *existed = NULL) {
     VPtr val;
-    std::list<VPtr> to_release;
+    DeferredRefs to_release;
     {
       typename std::map<K, std::pair<WeakVPtr, V*>, C>::iterator actual;
       std::unique_lock l{lock};
@@ -375,7 +378,7 @@ public:
 	val = VPtr(value, Cleanup(this, key));
 	weak_refs.insert(actual, make_pair(key, make_pair(val, value)));
       }
-      lru_add(key, val, &to_release);
+      lru_add(key, val, to_release);
     }
     return val;
   }
