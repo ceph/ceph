@@ -209,10 +209,18 @@ bool ThreadMonitor::read_thread_stat(pid_t tid, long long& utime, long long& sti
   }
   std::string line;
   std::getline(stat_file, line);
+  if (!parse_thread_stat(line, utime, stime)) {
+    dout(20) << __func__ << "Malformed stat file for TID " << tid << dendl;
+    return false;
+  }
+  return true;
+}
+
+bool ThreadMonitor::parse_thread_stat(const std::string& line, long long& utime,
+                                      long long& stime) {
   size_t start = line.find('(');
   size_t end = line.rfind(')');
   if (start == std::string::npos || end == std::string::npos) {
-    dout(20) << __func__ << "Malformed stat file for TID " << tid << dendl;
     return false;
   }
 
@@ -220,12 +228,14 @@ bool ThreadMonitor::read_thread_stat(pid_t tid, long long& utime, long long& sti
   std::stringstream ss(remainder);
   std::string val;
 
-  // skip 11 fields before utime/stime: 
+  // skip 11 fields before utime/stime:
   // state ppid pgrp session tty_nr tpgid flags minflt cminflt majflt cmajflt
   for (int i = 0; i < 11; ++i) {
     ss >> val;
   }
-  ss >> utime >> stime;
+  if (!(ss >> utime >> stime)) {
+    return false;
+  }
   return true;
 }
 
