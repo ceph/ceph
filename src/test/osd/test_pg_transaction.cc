@@ -18,6 +18,17 @@
 
 using namespace std;
 
+TEST(pgtransaction, empty_safe_create_traverse)
+{
+  PGTransaction t;
+  unsigned num = 0;
+  t.safe_create_traverse([&num](const auto&) {
+    ++num;
+  });
+
+  ASSERT_EQ(num, 0u);
+}
+
 TEST(pgtransaction, simple)
 {
   hobject_t h;
@@ -33,6 +44,26 @@ TEST(pgtransaction, simple)
       ASSERT_TRUE(std::holds_alternative<T::None>(p.second.init_type));
       ++num;
     });
+  ASSERT_EQ(num, 1u);
+}
+
+TEST(pgtransaction, single_clone_safe_create_traverse)
+{
+  hobject_t source, target;
+  source.snap = 1;
+  target.snap = 2;
+  PGTransaction t;
+  t.clone(target, source);
+  unsigned num = 0;
+  t.safe_create_traverse(
+    [&](const pair<const hobject_t, PGTransaction::ObjectOperation> &p) {
+      ASSERT_EQ(p.first, target);
+      using T = PGTransaction::ObjectOperation::Init;
+      ASSERT_TRUE(std::holds_alternative<T::Clone>(p.second.init_type));
+      ASSERT_EQ(std::get_if<T::Clone>(&p.second.init_type)->source, source);
+      ++num;
+    });
+
   ASSERT_EQ(num, 1u);
 }
 
