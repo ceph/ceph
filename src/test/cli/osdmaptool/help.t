@@ -24,6 +24,8 @@
      --test-map-object <objectname> [--pool <poolid>] map an object to osds
      --upmap-cleanup <file>  clean up pg_upmap[_items] entries, writing
                              commands to <file> [default: - for stdout]
+     --import-upmaps <file>  apply pg upmap commands read from <file>, in the
+                             format written by --upmap-cleanup and --upmap
      --upmap <file>          calculate pg upmap entries to balance pg layout
                              writing commands to <file> [default: - for stdout]
      --upmap-max <max-count> set max upmap entries to calculate [default: 10]

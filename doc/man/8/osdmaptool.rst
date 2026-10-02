@@ -179,6 +179,15 @@ Options
 
    clean up pg_upmap[_items] entries, writing commands to <file> [default: - for stdout]
 
+.. option:: --import-upmaps <file>
+
+   apply pg upmap commands read from <file> to the map (but do not persist
+   without --save). The file uses the format written by --upmap-cleanup and
+   --upmap: one ``pg-upmap``, ``pg-upmap-items``, ``pg-upmap-primary`` or
+   matching ``rm-`` command per line, optionally prefixed with ``ceph osd``.
+   Blank lines and ``#`` comments are ignored. Entries are not validated;
+   run --upmap-cleanup to drop entries that are invalid for the map.
+
 .. option:: --upmap <file>
 
    calculate pg upmap entries to balance pg layout writing commands to <file> [default: - for stdout]

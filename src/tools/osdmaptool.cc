@@ -13,6 +13,10 @@
  * 
  */
 
+#include <cstdint>
+#include <fstream>
+#include <set>
+#include <sstream>
 #include <string>
 #include <sys/stat.h>
 
@@ -60,6 +64,8 @@ void usage()
        << std::endl;
   cout << "   --upmap-cleanup <file>  clean up pg_upmap[_items] entries, writing" << std::endl;
   cout << "                           commands to <file> [default: - for stdout]" << std::endl;
+  cout << "   --import-upmaps <file>  apply pg upmap commands read from <file>, in the" << std::endl;
+  cout << "                           format written by --upmap-cleanup and --upmap" << std::endl;
   cout << "   --upmap <file>          calculate pg upmap entries to balance pg layout" << std::endl;
   cout << "                           writing commands to <file> [default: - for stdout]" << std::endl;
   cout << "   --upmap-max <max-count> set max upmap entries to calculate [default: 10]" << std::endl;
@@ -130,6 +136,97 @@ void print_inc_upmaps(const OSDMap::Incremental& pending_inc, int fd, bool vstar
   }
 }
 
+static int parse_upmap_commands(const string& path, const OSDMap& osdmap,
+				OSDMap::Incremental *pending_inc)
+{
+  ifstream in(path);
+  if (!in.is_open()) {
+    cerr << "error opening " << path << ": " << cpp_strerror(errno) << std::endl;
+    return -EINVAL;
+  }
+  int count = 0;
+  string line;
+  for (unsigned lineno = 1; std::getline(in, line); ++lineno) {
+    if (auto hash = line.find('#'); hash != string::npos)
+      line.resize(hash);
+    vector<string> tok;
+    istringstream ls(line);
+    for (string t; ls >> t;)
+      tok.push_back(t);
+    if (tok.empty())
+      continue;
+    // skip any command prefix and start at the verb
+    static const std::set<string> verbs = {
+      "pg-upmap", "rm-pg-upmap", "pg-upmap-items", "rm-pg-upmap-items",
+      "pg-upmap-primary", "rm-pg-upmap-primary"};
+    auto v = std::find_if(tok.begin(), tok.end(),
+			  [&](const string& t) { return verbs.count(t) > 0; });
+    if (v == tok.end()) {
+      cerr << path << ":" << lineno << ": no upmap verb in '" << line << "'" << std::endl;
+      return -EINVAL;
+    }
+    const string verb = *v;
+    vector<string> args(v + 1, tok.end());
+    if (args.empty()) {
+      cerr << path << ":" << lineno << ": " << verb << " needs a pgid" << std::endl;
+      return -EINVAL;
+    }
+    pg_t pgid;
+    if (!pgid.parse(args[0].c_str())) {
+      cerr << path << ":" << lineno << ": invalid pgid '" << args[0] << "'" << std::endl;
+      return -EINVAL;
+    }
+    if (!osdmap.have_pg_pool(pgid.pool())) {
+      cerr << path << ":" << lineno << ": pool " << pgid.pool() << " does not exist"
+	   << std::endl;
+      return -EINVAL;
+    }
+    vector<int32_t> osds;
+    for (auto a = args.begin() + 1; a != args.end(); ++a) {
+      string err;
+      int64_t osd = strict_strtoll(a->c_str(), 10, &err);
+      if (!err.empty() || osd < 0 || osd > INT32_MAX) {
+	cerr << path << ":" << lineno << ": invalid osd id '" << *a << "'" << std::endl;
+	return -EINVAL;
+      }
+      osds.push_back((int32_t)osd);
+    }
+    if (verb == "rm-pg-upmap-items") {
+      pending_inc->old_pg_upmap_items.insert(pgid);
+    } else if (verb == "rm-pg-upmap") {
+      pending_inc->old_pg_upmap.insert(pgid);
+    } else if (verb == "rm-pg-upmap-primary") {
+      pending_inc->old_pg_upmap_primary.insert(pgid);
+    } else if (verb == "pg-upmap-items") {
+      if (osds.empty() || osds.size() % 2) {
+	cerr << path << ":" << lineno << ": pg-upmap-items takes <from> <to> pairs"
+	     << std::endl;
+	return -EINVAL;
+      }
+      mempool::osdmap::vector<pair<int32_t,int32_t>> items;
+      for (size_t i = 0; i < osds.size(); i += 2)
+	items.push_back(make_pair(osds[i], osds[i + 1]));
+      pending_inc->new_pg_upmap_items[pgid] = items;
+    } else if (verb == "pg-upmap") {
+      if (osds.empty()) {
+	cerr << path << ":" << lineno << ": pg-upmap takes at least one osd" << std::endl;
+	return -EINVAL;
+      }
+      pending_inc->new_pg_upmap[pgid] =
+	mempool::osdmap::vector<int32_t>(osds.begin(), osds.end());
+    } else {  // pg-upmap-primary
+      if (osds.size() != 1) {
+	cerr << path << ":" << lineno << ": pg-upmap-primary takes exactly one osd"
+	     << std::endl;
+	return -EINVAL;
+      }
+      pending_inc->new_pg_upmap_primary[pgid] = osds[0];
+    }
+    ++count;
+  }
+  return count;
+}
+
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);
@@ -181,6 +278,7 @@ int main(int argc, const char **argv)
   bool upmap = false;
   bool health = false;
   std::string upmap_file = "-";
+  std::string import_upmaps;
   int upmap_max = 10;
   int upmap_deviation = 5;
   bool upmap_active = false;
@@ -215,6 +313,7 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &pg_bits, err, "--osd-pg-bits", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &pgp_bits, err, "--osd-pgp-bits", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &import_upmaps, "--import-upmaps", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-cleanup", (char*)NULL)) {
       upmap_cleanup = true;
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap", (char*)NULL)) {
@@ -543,6 +642,19 @@ int main(int argc, const char **argv)
       r = osdmap.apply_incremental(pending_inc);
       ceph_assert(r == 0);
     }
+  }
+  // applied after --upmap-cleanup and before --upmap
+  if (!import_upmaps.empty()) {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
+    pending_inc.fsid = osdmap.get_fsid();
+    int r = parse_upmap_commands(import_upmaps, osdmap, &pending_inc);
+    if (r < 0)
+      exit(1);
+    cout << "importing " << r << " upmap command(s) from " << import_upmaps << std::endl;
+    r = osdmap.apply_incremental(pending_inc);
+    ceph_assert(r == 0);
+    if (save)
+      modified = true;
   }
   if (read) {
     int64_t pid = osdmap.lookup_pg_pool_name(read_pool);
@@ -984,6 +1096,7 @@ skip_upmap:
       test_map_pg.empty() && test_map_object.empty() &&
       !test_map_pgs && !test_map_pgs_dump && !test_map_pgs_dump_all &&
       adjust_crush_weight.empty() && create_osds <= 0 &&
+      import_upmaps.empty() &&
       !upmap && !upmap_cleanup && !read) {
     cerr << me << ": no action specified?" << std::endl;
     usage();
