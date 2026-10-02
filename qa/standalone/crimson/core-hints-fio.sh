@@ -37,7 +37,7 @@
 #                  first MiB is zeroed! Unset: a SEASTORE_SIZE block file per
 #                  OSD, in the test dir                         (default: unset)
 #   SEASTORE_SIZE  seastore block file size, without SEASTORE_DEVS (default: 10G)
-#   PG_NUM         the pool's PGs                               (default: 32)
+#   POOL_PGS       the pool's PGs (PG_NUM is accepted too)      (default: 32)
 #   WORKLOADS      fio rw modes, from: randread randwrite randrw
 #                                     (default: all three; randrw is 70% reads)
 #   FIO            the fio binary (with the rados engine)       (default: fio)
@@ -57,6 +57,9 @@
 #   STRICT         1: fail unless the flag removes most of the OSD-side
 #                  cross-core hops (default: 0, only warn)
 
+# read before ceph-helpers.sh sets its own PG_NUM (4)
+POOL_PGS=${POOL_PGS:-${PG_NUM:-32}}
+
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 NUM_OSDS=${NUM_OSDS:-3}
@@ -68,7 +71,6 @@ OSD_MEMORY=${OSD_MEMORY:-4G}
 STORE=${STORE:-seastore}
 SEASTORE_DEVS=${SEASTORE_DEVS:-}
 SEASTORE_SIZE=${SEASTORE_SIZE:-10G}
-PG_NUM=${PG_NUM:-32}
 WORKLOADS=${WORKLOADS:-"randread randwrite randrw"}
 FIO=${FIO:-fio}
 FIO_RUNTIME=${FIO_RUNTIME:-60}
@@ -236,7 +238,7 @@ function _setup_cluster() {
             $store_args || return 1
     done
 
-    create_pool $POOL $PG_NUM $PG_NUM || return 1
+    create_pool $POOL $POOL_PGS $POOL_PGS || return 1
     ceph osd pool set $POOL size $POOL_SIZE --yes-i-really-mean-it || return 1
     wait_for_clean || return 1
 
@@ -300,13 +302,36 @@ rw=$rw
 EOF
 }
 
-# run fio (on CLIENT_CPUS, if set) on a job file, into RESULTS_DIR/<tag>.json
+# run fio (on CLIENT_CPUS, if set) on a job file, into RESULTS_DIR/<tag>.json.
+# Stopped early if an OSD runs out of memory (see _oom_watchdog()).
 function _fio() {
-    local tag=$1 job=$2
+    local dir=$1 tag=$2 job=$3
     local -a pin=()
     [ -n "$CLIENT_CPUS" ] && pin=(taskset -c "$CLIENT_CPUS")
     "${pin[@]}" "$FIO" --output-format=json --output=$RESULTS_DIR/$tag.json \
-        $job
+        $job &
+    local fio_pid=$!
+    _oom_watchdog $dir $fio_pid &
+    local watchdog_pid=$!
+    local ret=0
+    wait $fio_pid || ret=$?
+    kill $watchdog_pid 2>/dev/null
+    wait $watchdog_pid 2>/dev/null
+    return $ret
+}
+
+# kill fio (pid) once an OSD ran out of memory: the OSDs' connections then
+# keep failing, ops get stuck, and fio would never complete
+function _oom_watchdog() {
+    local dir=$1 pid=$2
+    while kill -0 $pid 2>/dev/null; do
+        sleep 10
+        if ! _check_osds_memory $dir > /dev/null; then
+            echo "ERROR: an OSD ran out of memory: stopping fio" >&2
+            kill $pid 2>/dev/null
+            return
+        fi
+    done
 }
 
 # write all the objects once, so that the read workloads find them
@@ -316,7 +341,7 @@ function _fio_prefill() {
     conf=$(_client_conf $dir off) || return 1
     _fio_job $conf write bs=$FIO_PREFILL_BS iodepth=$FIO_PREFILL_IODEPTH \
         > $dir/prefill.fio || return 1
-    _fio prefill $dir/prefill.fio || return 1
+    _fio $dir prefill $dir/prefill.fio || { _check_osds_memory $dir; return 1; }
     _check_osds_memory $dir || return 1
     _check_fio_io prefill || return 1
 }
@@ -459,7 +484,7 @@ function _fio_run() {
     local before after
     before=$(_osd_hop_counters) || return 1
 
-    _fio $tag $dir/$tag.fio &
+    _fio $dir $tag $dir/$tag.fio &
     local fio_pid=$!
     # the measured part of the run starts after the ramp: sample the
     # reactors' load from (about) then, and until (about) its end - when
@@ -473,7 +498,11 @@ function _fio_run() {
     _reactor_busy > $dir/$tag.busy1 || return 1
     local client
     client=$(_client_counters $dir $mode $RESULTS_DIR/$tag.client.txt)
-    wait $fio_pid || { echo "ERROR: fio $tag failed"; return 1; }
+    wait $fio_pid || {
+        echo "ERROR: fio $tag failed"
+        _check_osds_memory $dir
+        return 1
+    }
     _check_osds_memory $dir || return 1
     _check_fio_io $tag || return 1
 
