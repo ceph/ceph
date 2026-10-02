@@ -98,7 +98,7 @@ constexpr std::string_view first_segment_view(const auto& first, const auto&...)
 constexpr void reserve_encoded_string_segments(std::string& out,
                                                const auto& ...segments)
 {
- out.reserve(out.size() +
+ out.reserve(std::size(out) +
              (encoded_string_segment_size(segment_view(segments)) +
               ... + std::size_t{0}));
 }
@@ -137,7 +137,7 @@ class compiled_key final
  public:
  constexpr std::size_t size() const noexcept
  {
-  return encoded_bytes.size();
+  return std::size(encoded_bytes);
  }
 
  constexpr auto operator<=>(const compiled_key& rhs) const noexcept
