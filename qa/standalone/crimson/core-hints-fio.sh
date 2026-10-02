@@ -13,14 +13,23 @@
 #   - the fraction of client ops that needed a cross-core hop on the OSDs
 #     (osd_pg_shard_op_remote vs op_local, from 'dump_metrics');
 #   - the fraction of ops the client sent on per-core connections
-#     (objecter op_send_core vs op_send, from the fio clients' admin sockets).
+#     (objecter op_send_core vs op_send, from the fio clients' admin sockets);
+#   - the load of the OSDs' reactor cores: busy time over the measured part
+#     of the run (reactor_cpu_busy_ms), averaged over all of them, and of the
+#     busiest one. Per-core values are kept in <RESULTS_DIR>/<run>.cores.tsv.
 #
 # Run with:
 #   cd build && ../qa/run-standalone.sh crimson/core-hints-fio.sh
 #
 # Tunables (environment):
-#   NUM_OSDS       OSDs, and the replicated pool's size         (default: 3)
-#   OSD_SMP        reactor cores per OSD (crimson_cpu_num)      (default: 4)
+#   NUM_OSDS       OSDs                                         (default: 3)
+#   POOL_SIZE      the replicated pool's size                   (default: 3)
+#   OSD_SMP        reactor cores per OSD                        (default: 4)
+#   OSD_CPU_BASE   unset: the OSDs' reactors are not pinned (crimson_cpu_num,
+#                  at most 32). Set: OSD i's reactors are pinned to the
+#                  OSD_SMP CPUs from OSD_CPU_BASE + i * OSD_SMP on
+#                  (crimson_cpu_set)                            (default: unset)
+#   CLIENT_CPUS    the CPUs (taskset list) to run fio on        (default: any)
 #   OSD_MEMORY     memory per OSD (crimson_memory)              (default: 4G)
 #   STORE          cyanstore | seastore | bluestore (alienstore) (default: seastore)
 #   SEASTORE_DEVS  seastore: comma-separated block devices, one per OSD (in
@@ -36,6 +45,7 @@
 #   FIO_BS, FIO_IODEPTH, FIO_NUMJOBS                            (default: 4k, 16, 4)
 #   FIO_NRFILES, FIO_FILESIZE  objects per fio job, and their size (default: 32, 4m)
 #                  (a job's fio 'size' is their product)
+#   FIO_PREFILL_BS block size of writing the objects initially  (default: 1m)
 #   REPEAT         repetitions of every (workload, mode) pair   (default: 1)
 #   RESULTS_DIR    where fio outputs and the summary are kept
 #                  (default: ./fio-hints-results.<date> under the build dir)
@@ -45,7 +55,10 @@
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 NUM_OSDS=${NUM_OSDS:-3}
+POOL_SIZE=${POOL_SIZE:-3}
 OSD_SMP=${OSD_SMP:-4}
+OSD_CPU_BASE=${OSD_CPU_BASE:-}
+CLIENT_CPUS=${CLIENT_CPUS:-}
 OSD_MEMORY=${OSD_MEMORY:-4G}
 STORE=${STORE:-seastore}
 SEASTORE_DEVS=${SEASTORE_DEVS:-}
@@ -60,6 +73,7 @@ FIO_IODEPTH=${FIO_IODEPTH:-16}
 FIO_NUMJOBS=${FIO_NUMJOBS:-4}
 FIO_NRFILES=${FIO_NRFILES:-32}
 FIO_FILESIZE=${FIO_FILESIZE:-4m}
+FIO_PREFILL_BS=${FIO_PREFILL_BS:-1m}
 REPEAT=${REPEAT:-1}
 # Note: teardown() takes any file in the build dir whose name starts or ends
 # with "core" for a core dump (with a relative kernel.core_pattern), and
@@ -79,6 +93,7 @@ function run() {
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     command -v "$FIO" >/dev/null || { echo "ERROR: $FIO not found"; return 1; }
+    _check_params || return 1
     "$FIO" --enghelp=rados >/dev/null 2>&1 ||
         { echo "ERROR: $FIO has no rados engine"; return 1; }
     # fio uses the librados it is linked with: make it this build's
@@ -103,6 +118,40 @@ function run() {
 
 # The vstart.sh equivalent of the cluster, for reference:
 # MGR=1 MON=1 OSD=3 MDS=0 RGW=1 ../src/vstart.sh -n --crimson --no-restart --without-dashboard --seastore --seastore-devs /dev/nvme5n1,/dev/nvme6n1,/dev/nvme7n1 --crimson-smp 24 -o "crimson_seastar_blocked_reactor_notify_ms = 10000" --msgr2 -X -o "osd_op_queue=wpq"
+
+function _check_params() {
+    if [ $POOL_SIZE -gt $NUM_OSDS ]; then
+        echo "ERROR: POOL_SIZE $POOL_SIZE > NUM_OSDS $NUM_OSDS"
+        return 1
+    fi
+    if [ $FIO_RUNTIME -lt 10 ]; then
+        echo "ERROR: FIO_RUNTIME must be at least 10 (seconds)"
+        return 1
+    fi
+    if [ -n "$OSD_CPU_BASE" ]; then
+        local last=$((OSD_CPU_BASE + NUM_OSDS * OSD_SMP - 1))
+        if [ $last -ge $(nproc) ]; then
+            echo "ERROR: the OSDs would need CPUs $OSD_CPU_BASE-$last" \
+                 "of $(nproc)"
+            return 1
+        fi
+    elif [ $OSD_SMP -gt 32 ]; then
+        echo "ERROR: unpinned OSDs (crimson_cpu_num) are limited to 32" \
+             "reactors: set OSD_CPU_BASE"
+        return 1
+    fi
+}
+
+# OSD id's reactor CPUs: pinned (see OSD_CPU_BASE), or just their number
+function _osd_cpu_args() {
+    local id=$1
+    if [ -n "$OSD_CPU_BASE" ]; then
+        local first=$((OSD_CPU_BASE + id * OSD_SMP))
+        echo "--crimson_cpu_set=$first-$((first + OSD_SMP - 1))"
+    else
+        echo "--crimson_cpu_num=$OSD_SMP"
+    fi
+}
 
 # the SEASTORE_DEVS, one per line
 function _seastore_devs() {
@@ -158,10 +207,11 @@ function _osd_store_args() {
 }
 
 # NUM_OSDS Crimson OSDs with per-core listeners, and a replicated crimson pool
+# of POOL_SIZE
 function _setup_cluster() {
     local dir=$1
 
-    run_mon $dir a --osd_pool_default_size=$NUM_OSDS \
+    run_mon $dir a --osd_pool_default_size=$POOL_SIZE \
         --mon_allow_pool_size_one=true \
         --osd_pool_default_crimson=true \
         --osd_pool_default_pg_autoscale_mode=off || return 1
@@ -174,14 +224,14 @@ function _setup_cluster() {
     for id in $(seq 0 $((NUM_OSDS - 1))); do
         _prepare_osd_dev $dir $id || return 1
         run_crimson_osd $dir $id \
-            --crimson_cpu_num=$OSD_SMP \
+            $(_osd_cpu_args $id) \
             --crimson_memory=$OSD_MEMORY \
             --crimson_osd_core_listeners=true \
             $store_args || return 1
     done
 
     create_pool $POOL $PG_NUM $PG_NUM || return 1
-    ceph osd pool set $POOL size $NUM_OSDS --yes-i-really-mean-it || return 1
+    ceph osd pool set $POOL size $POOL_SIZE --yes-i-really-mean-it || return 1
     wait_for_clean || return 1
 
     # each OSD must have bound its per-core listeners
@@ -201,6 +251,8 @@ function _setup_cluster() {
 function _client_conf() {
     local dir=$1 mode=$2
     local conf=$dir/client-$mode.conf
+    local abs_dir
+    abs_dir=$(cd $dir && pwd) || return 1
     cat > $conf <<EOF
 [global]
 mon host = $CEPH_MON
@@ -209,8 +261,8 @@ auth service required = none
 auth client required = none
 [client]
 objecter use osd core hints = $([ $mode = on ] && echo true || echo false)
-admin socket = $dir/fio-$mode.\$pid.\$cctid.asok
-log file = $dir/fio-$mode.\$pid.log
+admin socket = $abs_dir/fio-$mode.\$pid.\$cctid.asok
+log file = $abs_dir/fio-$mode.\$pid.log
 EOF
     echo $conf
 }
@@ -242,14 +294,22 @@ rw=$rw
 EOF
 }
 
+# run fio (on CLIENT_CPUS, if set) on a job file, into RESULTS_DIR/<tag>.json
+function _fio() {
+    local tag=$1 job=$2
+    local -a pin=()
+    [ -n "$CLIENT_CPUS" ] && pin=(taskset -c "$CLIENT_CPUS")
+    "${pin[@]}" "$FIO" --output-format=json --output=$RESULTS_DIR/$tag.json \
+        $job
+}
+
 # write all the objects once, so that the read workloads find them
 function _fio_prefill() {
     local dir=$1
     local conf
     conf=$(_client_conf $dir off) || return 1
-    _fio_job $conf write > $dir/prefill.fio || return 1
-    "$FIO" --output-format=json --output=$RESULTS_DIR/prefill.json \
-        $dir/prefill.fio || return 1
+    _fio_job $conf write bs=$FIO_PREFILL_BS > $dir/prefill.fio || return 1
+    _fio prefill $dir/prefill.fio || return 1
     _check_fio_io prefill || return 1
 }
 
@@ -286,24 +346,75 @@ function _osd_hop_counters() {
     echo "$local_sum $remote_sum"
 }
 
+# 'perf dump <logger>' over an admin socket (the admin socket protocol:
+# a JSON command, NUL terminated; the reply is prefixed by its length)
+function _asok_perf_dump() {
+    local asok=$1 logger=$2
+    python3 - "$asok" "$logger" <<'EOF'
+import json, socket, struct, sys
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(10)
+s.connect(sys.argv[1])
+s.sendall(json.dumps({"prefix": "perf dump", "logger": sys.argv[2]}).encode()
+          + b"\0")
+def recv(n):
+    buf = b""
+    while len(buf) < n:
+        chunk = s.recv(n - len(buf))
+        if not chunk:
+            raise EOFError("admin socket closed")
+        buf += chunk
+    return buf
+print(recv(struct.unpack(">I", recv(4))[0]).decode())
+EOF
+}
+
 # sum of the objecter op_send / op_send_core counters of a mode's running
-# fio clients, printed as "<op_send> <op_send_core>"
+# fio clients, printed as "<op_send> <op_send_core> <clients read>".
+# The details go to <out>.
 function _client_counters() {
-    local dir=$1 mode=$2
-    local asok out send=0 core=0 s c found=0
+    local dir=$1 mode=$2 out=$3
+    local asok dump send=0 core=0 s c found=0
+    : > $out
     for asok in $dir/fio-$mode.*.asok; do
         [ -S "$asok" ] || continue
-        found=$((found + 1))
-        out=$(ceph --admin-daemon $asok perf dump objecter 2>/dev/null) ||
+        if ! dump=$(_asok_perf_dump $asok objecter 2>>$out); then
+            echo "$asok: perf dump failed" >> $out
             continue
-        s=$(jq '.objecter.op_send // 0' <<<"$out")
-        c=$(jq '.objecter.op_send_core // 0' <<<"$out")
+        fi
+        s=$(jq '.objecter.op_send // 0' <<<"$dump")
+        c=$(jq '.objecter.op_send_core // 0' <<<"$dump")
+        echo "$asok: op_send $s op_send_core $c" >> $out
         send=$((send + s))
         core=$((core + c))
+        found=$((found + 1))
     done
-    [ $found -gt 0 ] ||
-        echo "WARNING: no admin socket of a running fio client ($mode)" >&2
-    echo "$send $core"
+    if [ $found = 0 ]; then
+        echo "WARNING: no fio client ($mode) counters read; see $out" >&2
+        { echo "no readable admin socket in $dir:"; ls -l $dir; } >> $out
+    fi
+    echo "$send $core $found"
+}
+
+# the reactors' busy time of all OSDs, as "<osd> <shard> <busy ms>" lines
+function _reactor_busy() {
+    local id
+    for id in $(seq 0 $((NUM_OSDS - 1))); do
+        ceph tell osd.$id dump_metrics reactor_cpu_busy_ms --format=json |
+            jq -r --arg osd $id '.metrics[] | to_entries[] |
+                   select(.key == "reactor_cpu_busy_ms") |
+                   "\($osd) \(.value.shard) \(.value.value)"' || return 1
+    done
+}
+
+# per reactor utilization (%) between two _reactor_busy snapshots taken
+# <ms> apart, as "<osd> <shard> <util>" lines
+function _reactor_util() {
+    local before=$1 after=$2 ms=$3
+    awk -v ms=$ms 'NR == FNR { b[$1 " " $2] = $3; next }
+                   ($1 " " $2) in b {
+                       printf "%s %s %.1f\n", $1, $2, 100 * ($3 - b[$1 " " $2]) / ms
+                   }' $before $after | sort -n -k1 -k2
 }
 
 # one fio run: workload rw, client mode (off/on), repetition rep.
@@ -324,28 +435,46 @@ function _fio_run() {
     local before after
     before=$(_osd_hop_counters) || return 1
 
-    "$FIO" --output-format=json --output=$RESULTS_DIR/$tag.json \
-        $dir/$tag.fio &
+    _fio $tag $dir/$tag.fio &
     local fio_pid=$!
-    # the fio clients exit with fio: sample their counters near the end
-    sleep $((FIO_RAMP + FIO_RUNTIME - 3))
+    # the measured part of the run starts after the ramp: sample the
+    # reactors' load from (about) then, and until (about) its end - when
+    # the fio clients are still alive to be sampled too
+    sleep $((FIO_RAMP + 2))
+    local t0 t1
+    t0=$(date +%s%3N)
+    _reactor_busy > $dir/$tag.busy0 || return 1
+    sleep $((FIO_RUNTIME - 5))
+    t1=$(date +%s%3N)
+    _reactor_busy > $dir/$tag.busy1 || return 1
     local client
-    client=$(_client_counters $dir $mode)
+    client=$(_client_counters $dir $mode $RESULTS_DIR/$tag.client.txt)
     wait $fio_pid || { echo "ERROR: fio $tag failed"; return 1; }
     _check_fio_io $tag || return 1
 
     after=$(_osd_hop_counters) || return 1
 
+    _reactor_util $dir/$tag.busy0 $dir/$tag.busy1 $((t1 - t0)) \
+        > $RESULTS_DIR/$tag.cores.tsv
+    local cpu_avg cpu_max
+    cpu_avg=$(awk '{ t += $3; n++ } END { printf "%.1f", n ? t / n : 0 }' \
+              $RESULTS_DIR/$tag.cores.tsv)
+    cpu_max=$(awk 'BEGIN { m = 0 } $3 > m { m = $3 } END { printf "%.1f", m }' \
+              $RESULTS_DIR/$tag.cores.tsv)
+
     local -a b=($before) a=($after) c=($client)
     local d_local=$((a[0] - b[0])) d_remote=$((a[1] - b[1]))
-    local hop_pct client_pct
+    local hop_pct client_pct=n/a
     hop_pct=$(awk -v l=$d_local -v r=$d_remote \
                   'BEGIN { t = l + r; printf "%.1f", t ? 100 * r / t : 0 }')
-    client_pct=$(awk -v s=${c[0]} -v k=${c[1]} \
-                     'BEGIN { printf "%.1f", s ? 100 * k / s : 0 }')
+    if [ ${c[2]} -gt 0 ] && [ ${c[0]} -gt 0 ]; then
+        client_pct=$(awk -v s=${c[0]} -v k=${c[1]} \
+                         'BEGIN { printf "%.1f", 100 * k / s }')
+    fi
 
     jq -r --arg rw $rw --arg mode $mode --arg rep $rep \
-          --arg hop $hop_pct --arg client $client_pct '
+          --arg hop $hop_pct --arg client $client_pct \
+          --arg cpu_avg $cpu_avg --arg cpu_max $cpu_max '
         .jobs[0] as $j |
         [$rw, $mode, $rep,
          ($j.read.iops | floor), ($j.write.iops | floor),
@@ -353,14 +482,14 @@ function _fio_run() {
          (($j.read.clat_ns.percentile["99.000000"] // 0) / 1000 | floor),
          ($j.write.clat_ns.mean / 1000 | floor),
          (($j.write.clat_ns.percentile["99.000000"] // 0) / 1000 | floor),
-         $hop, $client] | @tsv' \
+         $hop, $client, $cpu_avg, $cpu_max] | @tsv' \
         $RESULTS_DIR/$tag.json >> $RESULTS_DIR/summary.tsv || return 1
     echo "$d_remote $((d_local + d_remote))" > $dir/$tag.hops
 }
 
 function _print_summary() {
     {
-        printf 'workload\tmode\trep\trd_iops\twr_iops\trd_lat_us\trd_p99_us\twr_lat_us\twr_p99_us\tosd_hop_%%\tcore_send_%%\n'
+        printf 'workload\tmode\trep\trd_iops\twr_iops\trd_lat_us\trd_p99_us\twr_lat_us\twr_p99_us\tosd_hop_%%\tcore_send_%%\tcpu_avg_%%\tcpu_max_%%\n'
         cat $RESULTS_DIR/summary.tsv
     } | column -t -s $'\t' | tee $RESULTS_DIR/summary.txt
     echo "fio outputs and summary in $RESULTS_DIR"
