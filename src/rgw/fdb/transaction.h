@@ -23,6 +23,7 @@
 #include <optional>
 #include <string_view>
 
+#include <iterator>
 #include <algorithm>
 
 #include <memory>
@@ -114,7 +115,9 @@ class staged_proxy final
  noexcept(detail::staged_initialization::copy_target == Initialization or
           std::is_nothrow_default_constructible_v<T>)
  {
-  attempt_value.reset();
+  if constexpr (detail::staged_initialization::copy_target == Initialization) {
+   attempt_value.reset();
+  }
 
   if constexpr (detail::staged_initialization::in_place == Initialization) {
    attempt_value.emplace();
@@ -537,11 +540,41 @@ concept bound_result_reporting_transaction_op =
  bound_transaction_op<FnT, ArgTs...> &&
  std::is_void_v<bound_transaction_result_t<FnT, ArgTs...>>;
 
+// Bind the callable and arguments once so replays see stable state:
+template <typename FnT, typename ...ArgTs>
+auto bind_transaction_invocation(FnT&& fn, ArgTs&& ...args)
+{
+ validate_staged_arguments(args...);
+
+ return bound_invocation<std::decay_t<FnT>, std::decay_t<ArgTs>...> {
+  .fn = std::forward<FnT>(fn),
+  .arguments = {
+   std::forward<ArgTs>(args)...
+  }
+ };
+}
+
 template <typename FnT>
 using operation_result_t =
  std::conditional_t<std::is_void_v<transaction_invocation_result_t<FnT>>,
                     void,
                     std::remove_cvref_t<transaction_invocation_result_t<FnT>>>;
+
+// Keep caller failures out of FoundationDB's retry classifier:
+struct user_callback_failure final
+{
+ std::exception_ptr cause;
+};
+
+inline decltype(auto) invoke_user_callback(auto& fn, auto&&... arguments)
+try
+{
+ return std::invoke(fn, std::forward<decltype(arguments)>(arguments)...);
+}
+catch (...)
+{
+ throw user_callback_failure {std::current_exception()};
+}
 
 template <transaction_op FnT>
 auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>;
@@ -579,22 +612,6 @@ template <transaction_op FnT>
 auto in_read_transaction(const transaction_source& source,
                          FnT&& fn) -> operation_result_t<FnT>;
 
-// Keep caller failures out of FoundationDB's retry classifier:
-struct user_callback_failure final
-{
- std::exception_ptr cause;
-};
-
-inline decltype(auto) invoke_user_callback(auto& fn, auto&&... arguments)
-try
-{
- return std::invoke(fn, std::forward<decltype(arguments)>(arguments)...);
-}
-catch (...)
-{
- throw user_callback_failure {std::current_exception()};
-}
-
 } // namespace detail
 
 /* A "transactor" is a function-like wrapper for running replayable transactions.
@@ -616,21 +633,6 @@ class transactor final
   : source(std::move(database), options)
  {}
 
- // Bind the callable and arguments once so replays see stable state:
- template <typename FnT, typename ...ArgTs>
- static auto bind_invocation(FnT&& fn, ArgTs&& ...args)
- {
-  detail::validate_staged_arguments(args...);
-
-  return detail::bound_invocation<std::decay_t<FnT>,
-                                  std::decay_t<ArgTs>...> {
-   .fn = std::forward<FnT>(fn),
-   .arguments = {
-    std::forward<ArgTs>(args)...
-   }
-  };
- }
-
  transaction_handle make_transaction_for_call() const
  {
   return source.make();
@@ -649,8 +651,8 @@ class transactor final
  requires (0 < sizeof...(ArgTs) && detail::bound_transaction_op<FnT, ArgTs...>)
  decltype(auto) operator()(FnT&& fn, ArgTs&& ...args) const
  {
-  auto bound = bind_invocation(std::forward<FnT>(fn),
-                               std::forward<ArgTs>(args)...);
+  auto bound = detail::bind_transaction_invocation(
+    std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
 
   return (*this)(bound);
  }
@@ -668,8 +670,8 @@ class transactor final
            detail::bound_result_reporting_transaction_op<FnT, ArgTs...>)
  transaction_result operator()(with_result_t, FnT&& fn, ArgTs&& ...args) const
  {
-  auto bound = bind_invocation(std::forward<FnT>(fn),
-                               std::forward<ArgTs>(args)...);
+  auto bound = detail::bind_transaction_invocation(
+    std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
 
   return (*this)(with_result, bound);
  }
@@ -720,6 +722,8 @@ namespace detail {
 
 enum struct invocation_failure_policy { no_retry, retry };
 
+// Gives void transaction bodies a storable completion shape so they can share
+// the ordinary result and replay machinery:
 struct no_invocation_result final {};
 
 // Keep the existing transactor retry behavior in one place:
