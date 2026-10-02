@@ -199,6 +199,7 @@ void RadosIo::applyIoOp(IoOp& op) {
       }
       ceph_assert(is_consistent);
       finish_io();
+      break;
     }
 
     case OpType::Copy: {
