@@ -973,21 +973,17 @@ inline void decode(BeaconSubsystem& sub, ceph::buffer::list::const_iterator &bl)
   decode(sub.nqn, bl);
   dout(20) << "decode BeaconSubsystems " << sub.nqn << dendl;
   uint32_t s;
-  sub.listeners.clear();
   decode(s, bl);
+  sub.listeners.resize(s);
   dout(20) << "decode Nlisteners " << s << dendl;
-  for (uint32_t i = 0; i < s; i++) {
-    BeaconListener ls;
+  for (auto& ls : sub.listeners) {
     decode(ls, bl);
-    sub.listeners.push_back(ls);
   }
 
-  sub.namespaces.clear();
   decode(s, bl);
-  for (uint32_t i = 0; i < s; i++) {
-    BeaconNamespace ns;
+  sub.namespaces.resize(s);
+  for (auto& ns : sub.namespaces) {
     decode(ns, bl);
-    sub.namespaces.push_back(ns);
   }
   DECODE_FINISH(bl);
 }
