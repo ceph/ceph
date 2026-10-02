@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <ctime>
@@ -61,7 +62,6 @@
 namespace fs = std::filesystem;
 
 using std::function;
-using std::list;
 using std::map;
 using std::ostream;
 using std::pair;
@@ -537,9 +537,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   // std::stoull does throw, we may as well just catch everything here.
   try {
     if (kv_options.count("db_paths")) {
-      list<string> paths;
-      get_str_list(kv_options["db_paths"], "; \t", paths);
-      for (auto& p : paths) {
+      for (const auto& p : get_str_vec(kv_options["db_paths"], "; \t")) {
 	size_t pos = p.find(',');
 	if (pos == std::string::npos) {
 	  derr << __func__ << " invalid db path item " << p << " in "
@@ -2423,36 +2421,39 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
   // try to merge adjacent ranges.  this is O(n), but the queue should
   // be short.  note that we do not cover all overlap cases and merge
   // opportunities here, but we capture the ones we currently need.
-  list< pair<string,string> >::iterator p = compact_queue.begin();
-  while (p != compact_queue.end()) {
-    if (p->first == start && p->second == end) {
-      // dup; no-op
+  pair requested {start, end};
+  auto queued = std::begin(compact_queue);
+
+  while (queued != std::end(compact_queue)) {
+    if (*queued == requested) {
       return;
     }
-    if (start <= p->first && p->first <= end) {
-      // new region crosses start of existing range
-      // select right bound that is bigger
-      compact_queue.push_back(make_pair(start, end > p->second ? end : p->second));
-      compact_queue.erase(p);
-      logger->inc(l_rocksdb_compact_queue_merge);
+
+    if ((requested.first <= queued->first &&
+         queued->first <= requested.second) ||
+        (requested.first <= queued->second &&
+         queued->second <= requested.second)) {
       break;
     }
-    if (start <= p->second && p->second <= end) {
-      // new region crosses end of existing range
-      //p->first < p->second and p->second <= end, so p->first <= end.
-      //But we break if previous condition, so start > p->first.
-      compact_queue.push_back(make_pair(p->first, end));
-      compact_queue.erase(p);
-      logger->inc(l_rocksdb_compact_queue_merge);
-      break;
-    }
-    ++p;
+
+    ++queued;
   }
-  if (p == compact_queue.end()) {
-    // no merge, new entry.
-    compact_queue.push_back(make_pair(start, end));
+
+  const bool merged = queued != std::end(compact_queue);
+
+  if (merged) {
+    requested.first = std::min(requested.first, queued->first);
+    requested.second = std::max(requested.second, queued->second);
+    compact_queue.erase(queued);
+    logger->inc(l_rocksdb_compact_queue_merge);
+  }
+
+  compact_queue.push_back(std::move(requested));
+
+  if (!merged) {
     logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
   }
+
   compact_queue_cond.notify_all();
   if (!compact_thread.is_started()) {
     compact_thread.create("rstore_compact");
