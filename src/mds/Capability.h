@@ -374,9 +374,9 @@ private:
 
   // track in-flight caps --------------
   //  - add new caps to _pending
-  //  - track revocations in _revokes list
+  //  - track revocations in _revokes history
   __u32 _pending = 0, _issued = 0;
-  mempool::mds_co::list<revoke_info> _revokes;
+  std::deque<revoke_info, mempool::mds_co::pool_allocator<revoke_info>> _revokes;
 
   ceph_seq_t last_sent = 0;
   ceph_seq_t last_issue = 0;

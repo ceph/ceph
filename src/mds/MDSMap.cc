@@ -558,27 +558,6 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
     CachedStackStringStream css;
     *css << "fs " << fs_name << " is degraded";
     fscheck.detail.push_back(css->str());
-
-    list<string> detail;
-    for (mds_rank_t i = mds_rank_t(0); i< get_max_mds(); i++) {
-      if (!is_up(i))
-	continue;
-      mds_gid_t gid = up.find(i)->second;
-      const auto& info = mds_info.at(gid);
-      CachedStackStringStream css;
-      *css << "fs " << fs_name << " mds." << info.name << " at "
-	 << info.addrs << " rank " << i;
-      if (is_resolve(i))
-	*css << " is resolving";
-      if (is_replay(i))
-	*css << " is replaying journal";
-      if (is_rejoin(i))
-	*css << " is rejoining";
-      if (is_reconnect(i))
-	*css << " is reconnecting to clients";
-      if (css->strv().length())
-	detail.push_back(css->str());
-    }
   }
 
   // MDS_UP_LESS_THAN_MAX

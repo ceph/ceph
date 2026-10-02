@@ -4565,7 +4565,7 @@ void CInode::_decode_locks_state_for_replica(bufferlist::const_iterator& p, bool
   DECODE_FINISH(p);
 }
 void CInode::_decode_locks_rejoin(bufferlist::const_iterator& p, MDSContext::vec& waiters,
-				  list<SimpleLock*>& eval_locks, bool survivor)
+				  std::deque<SimpleLock*>& eval_locks, bool survivor)
 {
   authlock.decode_state_rejoin(p, waiters, survivor);
   linklock.decode_state_rejoin(p, waiters, survivor);

@@ -13,7 +13,9 @@
  * 
  */
 
+#include <algorithm>
 #include <deque>
+#include <vector>
 
 #include "common/config.h"
 #include "common/debug.h"
@@ -71,7 +73,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".journal "
 
-using std::list;
 using std::map;
 using std::ostream;
 using std::pair;
@@ -392,12 +393,12 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 {
   MDSRank *mds = dir->mdcache->mds;
 
-  list<CDentry*> parents;
+  std::vector<CDentry*> parents;
 
   // it may be okay not to include the maybe items, if
   //  - we journaled the maybe child inode in this segment
   //  - that subtree turns out to be unambiguously auth
-  list<CDentry*> maybe;
+  std::vector<CDentry*> maybe;
   bool maybenot = false;
 
   while (true) {
@@ -438,7 +439,8 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 	  dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached ambig or !auth subtree, need " << maybe
 		   << " at " << *dir << dendl;
 	  // we need the maybe list after all!
-	  parents.splice(parents.begin(), maybe);
+	  parents.insert(std::end(parents), std::begin(maybe), std::end(maybe));
+	  maybe.clear();
 	  maybenot = false;
 	}
       }
@@ -464,16 +466,17 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 
     if (maybenot) {
       dout(25) << "EMetaBlob::add_dir_context(" << dir << ")      maybe " << *parent << dendl;
-      maybe.push_front(parent);
+      maybe.push_back(parent);
     } else {
       dout(25) << "EMetaBlob::add_dir_context(" << dir << ") definitely " << *parent << dendl;
-      parents.push_front(parent);
+      parents.push_back(parent);
     }
     
     dir = parent->get_dir();
   }
   
-  parents.splice(parents.begin(), maybe);
+  parents.insert(std::end(parents), std::begin(maybe), std::end(maybe));
+  std::ranges::reverse(parents);
 
   dout(20) << "EMetaBlob::add_dir_context final: " << parents << dendl;
   for (const auto& dentry : parents) {
@@ -895,6 +898,17 @@ auto EMetaBlob::dirlump::generate_test_instances() -> std::deque<dirlump>
   ls.emplace_back();
   dirlump& dl = ls.back();
   dl.fnode = CDir::allocate_fnode();
+
+  auto& populated = ls.emplace_back();
+  populated.fnode = CDir::allocate_fnode();
+  auto inode = CInode::allocate_inode();
+  fragtree_t fragtree;
+  auto xattrs = CInode::allocate_xattr_map();
+  bufferlist snapbl;
+
+  populated.add_dfull("/testdn", "", 0, 0, 0, inode, fragtree, xattrs,
+                      "", 0, snapbl, false, nullptr);
+
   return ls;
 }
 
@@ -966,11 +980,12 @@ void EMetaBlob::decode(bufferlist::const_iterator &bl)
   if (struct_v >= 2) {
     decode(client_reqs, bl);
   } else {
-    list<metareqid_t> r;
-    decode(r, bl);
-    while (!r.empty()) {
-	client_reqs.push_back(pair<metareqid_t,uint64_t>(r.front(), 0));
-	r.pop_front();
+    std::vector<metareqid_t> requests;
+    decode(requests, bl);
+    client_reqs.reserve(std::size(client_reqs) + std::size(requests));
+
+    for (const auto& request : requests) {
+	client_reqs.emplace_back(request, 0);
     }
   }
   if (struct_v >= 3) {

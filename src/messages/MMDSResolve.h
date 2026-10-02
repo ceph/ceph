@@ -92,7 +92,7 @@ public:
     }
   };
 
-  std::list<table_client> table_clients;
+  std::vector<table_client> table_clients;
 
 protected:
   MMDSResolve() : MMDSOp{MSG_MDS_RESOLVE, HEAD_VERSION, COMPAT_VERSION}
@@ -128,7 +128,7 @@ public:
   }
 
   void add_table_commits(int table, const std::set<version_t>& pending_commits) {
-    table_clients.push_back(table_client(table, pending_commits));
+    table_clients.emplace_back(table, pending_commits);
   }
 
   void encode_payload(uint64_t features) override {

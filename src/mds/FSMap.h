@@ -642,6 +642,7 @@ public:
 
   const mds_info_t* find_replacement_for(mds_role_t role) const;
 
+  [[deprecated("use get_health_checks()")]]
   void get_health(std::list<std::pair<health_status_t,std::string> >& summary,
 		  std::list<std::pair<health_status_t,std::string> > *detail) const;
 
