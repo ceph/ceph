@@ -592,6 +592,9 @@ option(WITH_RADOSGW_KAFKA_ENDPOINT "RADOS Gateway's pubsub support for Kafka pus
 option(WITH_SYSTEM_RDKAFKA "build against system librdkafka instead of the bundled submodule" OFF)
 option(WITH_RADOSGW_LUA_PACKAGES "RADOS Gateway's support for dynamically adding lua packagess" ON)
 option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
+cmake_dependent_option(EXPERIMENTAL_NVIDIA_STDEXEC
+ "Fetch NVIDIA stdexec and enable experimental libfdb concurrency" OFF
+ WITH_RADOSGW_FDB OFF)
 option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 if(WITH_RADOSGW_DAOS)
@@ -682,6 +685,30 @@ if(WITH_RADOSGW_FDB)
 
  CPMAddPackage("gh:eyalz800/zpp_bits@4.5.1")
  message("-- enabled zpp_bits")
+
+ if(EXPERIMENTAL_NVIDIA_STDEXEC)
+  # NVIDIA stdexec is header-only, but its tagged CMake project requires a
+  # newer CMake than Ceph. Fetch its sources and reproduce the relevant target:
+  CPMAddPackage(
+   NAME stdexec
+   GITHUB_REPOSITORY NVIDIA/stdexec
+   GIT_TAG 6d7ad689f4d4831c5136e4abe1c601f9a3b64e43
+   DOWNLOAD_ONLY YES)
+
+  if(NOT TARGET STDEXEC::stdexec)
+   add_library(ceph_stdexec INTERFACE)
+   add_library(STDEXEC::stdexec ALIAS ceph_stdexec)
+
+   target_include_directories(ceph_stdexec SYSTEM INTERFACE
+    "${stdexec_SOURCE_DIR}/include")
+   target_compile_features(ceph_stdexec INTERFACE cxx_std_20)
+   target_compile_options(ceph_stdexec INTERFACE
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-fcoroutines>
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-fconcepts-diagnostics-depth=10>)
+   target_link_libraries(ceph_stdexec INTERFACE Threads::Threads)
+  endif()
+  message("-- enabled NVIDIA stdexec")
+ endif()
 
 # JFW: sadly, I'm having trouble getting FoundationDB to build, but this is VERY close
 # to "just working". But, how would we install the RPMs, etc.? This will need looking at
