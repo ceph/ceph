@@ -64,3 +64,60 @@ TEST(IoSequence, Seq16ChecksConsistencyWhenRequested) {
   auto ops = run_sequence(Sequence::SEQUENCE_SEQ16, 1, true);
   EXPECT_GT(std::count(ops.begin(), ops.end(), OpType::Consistency), 0);
 }
+
+// ObjectModel only stops a read overlapping an in-flight Write, so a
+// sequence must issue a barrier between an op that rewrites a whole object
+// (copy, truncate, create, remove) and the next read of that object.
+// Without it a balanced read can reach a replica before that op does and
+// return the old object.
+TEST(IoSequence, NoReadWhileWholeObjectWriteInFlight) {
+  for (Sequence seq : supported_sequences()) {
+    for (int seed = 1; seed <= 3; seed++) {
+      auto ops = run_sequence(seq, seed, false);
+      int primary = 0;
+      bool in_flight[2] = {false, false};
+      for (size_t step = 0; step < ops.size(); step++) {
+        switch (ops[step]) {
+          case OpType::Barrier:
+            in_flight[0] = in_flight[1] = false;
+            break;
+          case OpType::Swap:
+            primary = 1 - primary;
+            break;
+          case OpType::Copy:
+            in_flight[1 - primary] = true;
+            break;
+          case OpType::Create:
+          case OpType::Remove:
+          case OpType::Truncate:
+          case OpType::TruncateWrite:
+          case OpType::TruncateWrite2:
+          case OpType::TruncateWrite3:
+            in_flight[primary] = true;
+            break;
+          case OpType::Read:
+          case OpType::Read2:
+          case OpType::Read3:
+          case OpType::SparseRead:
+          case OpType::Consistency:
+            EXPECT_FALSE(in_flight[primary])
+                << seq << " seed " << seed << " step " << step;
+            break;
+          case OpType::Done:
+          case OpType::Write:
+          case OpType::Write2:
+          case OpType::Write3:
+          case OpType::Append:
+          case OpType::FailedWrite:
+          case OpType::FailedWrite2:
+          case OpType::FailedWrite3:
+          case OpType::InjectReadError:
+          case OpType::InjectWriteError:
+          case OpType::ClearReadErrorInject:
+          case OpType::ClearWriteErrorInject:
+            break;
+        }
+      }
+    }
+  }
+}
