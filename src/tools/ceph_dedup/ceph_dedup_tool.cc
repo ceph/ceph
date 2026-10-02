@@ -17,6 +17,8 @@
 #include "common/Clock.h" // for ceph_clock_now()
 #include "log/Log.h"
 
+#include <vector>
+
 #include <boost/optional.hpp>
 
 struct EstimateResult {
@@ -542,7 +544,7 @@ int estimate_dedup_ratio(const po::variables_map &opts)
   ObjectCursor begin;
   ObjectCursor end;
   librados::pool_stat_t s; 
-  std::list<std::string> pool_names;
+  std::vector<std::string> pool_names;
   std::map<std::string, librados::pool_stat_t> stats;
 
   pool_name = get_opts_pool_name(opts);
@@ -695,7 +697,7 @@ int chunk_scrub_common(const po::variables_map &opts)
   ObjectCursor begin;
   ObjectCursor end;
   librados::pool_stat_t s; 
-  std::list<std::string> pool_names;
+  std::vector<std::string> pool_names;
   std::map<std::string, librados::pool_stat_t> stats;
 
   op_name = get_opts_op_name(opts);
