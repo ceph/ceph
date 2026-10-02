@@ -815,8 +815,7 @@ class RGWOmapAppend : public RGWConsumerCR<std::string> {
 
   bool going_down;
 
-  int num_pending_entries;
-  std::list<std::string> pending_entries;
+  uint64_t pending_count;
 
   std::map<std::string, bufferlist> entries;
 
@@ -827,7 +826,6 @@ public:
                 const rgw_raw_obj& _obj,
                 uint64_t _window_size = OMAP_APPEND_MAX_ENTRIES_DEFAULT);
   int operate(const DoutPrefixProvider *dpp) override;
-  void flush_pending();
   bool append(const std::string& s);
   bool finish();
 
@@ -1785,7 +1783,7 @@ struct bucket_unordered_list_result {
   std::string prefix;
   int max_keys;
   bool is_truncated;
-  std::list<bucket_list_entry> entries;
+  std::vector<bucket_list_entry> entries;
 
   bucket_unordered_list_result() : max_keys(0), is_truncated(false) {}
 
