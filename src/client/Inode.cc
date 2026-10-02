@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <iterator>
+
 #include "Client.h"
 #include "Inode.h"
 #include "Dentry.h"
@@ -13,7 +15,6 @@
 #include "mds/flock.h"
 
 using std::dec;
-using std::list;
 using std::oct;
 using std::ostream;
 using std::string;
@@ -684,10 +685,7 @@ void Inode::recall_deleg(bool skip_read)
     return;
 
   // Issue any recalls
-  for (list<Delegation>::iterator d = delegations.begin();
-       d != delegations.end(); ++d) {
-
-    Delegation& deleg = *d;
+  for (auto& deleg : delegations) {
     deleg.recall(skip_read);
   }
 }
@@ -721,7 +719,7 @@ void Inode::break_deleg(bool skip_read)
   recall_deleg(skip_read);
 
   while (!delegations_broken(skip_read))
-    client->wait_on_list(waitfor_deleg);
+    client->wait_on_conditions(waitfor_deleg);
 }
 
 /**
@@ -794,9 +792,7 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
     return -EAGAIN;
   }
 
-  for (list<Delegation>::iterator d = delegations.begin();
-       d != delegations.end(); ++d) {
-    Delegation& deleg = *d;
+  for (auto& deleg : delegations) {
     if (deleg.get_fh() == fh) {
       deleg.reinit(type, cb, priv);
       return 0;
@@ -815,12 +811,11 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
  */
 void Inode::unset_deleg(Fh *fh)
 {
-  for (list<Delegation>::iterator d = delegations.begin();
-       d != delegations.end(); ++d) {
+  for (auto d = std::begin(delegations); d != std::end(delegations); ++d) {
     Delegation& deleg = *d;
     if (deleg.get_fh() == fh) {
       delegations.erase(d);
-      client->signal_cond_list(waitfor_deleg);
+      client->signal_conditions(waitfor_deleg);
       break;
     }
   }

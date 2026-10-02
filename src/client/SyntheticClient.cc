@@ -15,8 +15,9 @@
 
 #include "include/compat.h"
 
-#include <iostream>
 #include <sstream>
+#include <iostream>
+#include <iterator>
 #include <unordered_map>
 
 
@@ -53,9 +54,9 @@ using namespace std;
 //void trace_openssh(SyntheticClient *syn, Client *cl, string& prefix);
 
 int num_client = 1;
-list<int> syn_modes;
-list<int> syn_iargs;
-list<string> syn_sargs;
+vector<int> syn_modes;
+deque<int> syn_iargs;
+deque<string> syn_sargs;
 int syn_filer_flags = 0;
 
 void parse_syn_options(vector<const char*>& args)
@@ -340,10 +341,7 @@ int SyntheticClient::run()
 
   int seq = 0;
 
-  for (list<int>::iterator it = modes.begin();
-       it != modes.end();
-       ++it) {
-    int mode = *it;
+  for (const auto mode : modes) {
     dout(3) << "mode " << mode << dendl;
 
     switch (mode) {
@@ -1142,7 +1140,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       client->mknod(a, b, perms, 0);
     } else if (strcmp(op, "getdir") == 0) {
       const char *a = t.get_string(buf, p);
-      list<string> contents;
+      vector<string> contents;
       int r = client->getdir(a, contents, perms);
       if (r < 0) {
         dout(1) << "getdir on " << a << " returns " << r << dendl;
@@ -1542,7 +1540,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 int SyntheticClient::clean_dir(string& basedir)
 {
   // read dir
-  list<string> contents;
+  vector<string> contents;
   UserPerm perms = client->pick_my_perms();
   int r = client->getdir(basedir.c_str(), contents, perms);
   if (r < 0) {
@@ -1550,12 +1548,10 @@ int SyntheticClient::clean_dir(string& basedir)
     return r;
   }
 
-  for (list<string>::iterator it = contents.begin();
-       it != contents.end();
-       ++it) {
-    if (*it == ".") continue;
-    if (*it == "..") continue;
-    string file = basedir + "/" + *it;
+  for (const auto& name : contents) {
+    if (name == ".") continue;
+    if (name == "..") continue;
+    string file = basedir + "/" + name;
 
     if (time_to_stop()) break;
 
@@ -1583,8 +1579,8 @@ int SyntheticClient::full_walk(string& basedir)
 {
   if (time_to_stop()) return -1;
 
-  list<string> dirq;
-  list<frag_info_t> statq;
+  deque<string> dirq;
+  deque<frag_info_t> statq;
   dirq.push_back(basedir);
   frag_info_t empty;
   statq.push_back(empty);
@@ -1602,20 +1598,18 @@ int SyntheticClient::full_walk(string& basedir)
     frag_info_t actual = empty;
 
     // read dir
-    list<string> contents;
+    vector<string> contents;
     int r = client->getdir(dir.c_str(), contents, perms);
     if (r < 0) {
       dout(1) << "getdir on " << dir << " returns " << r << dendl;
       continue;
     }
     
-    for (list<string>::iterator it = contents.begin();
-	 it != contents.end();
-	 ++it) {
-      if (*it == "." ||
-	  *it == "..") 
+    for (const auto& name : contents) {
+      if (name == "." ||
+	  name == "..")
 	continue;
-      string file = dir + "/" + *it;
+      string file = dir + "/" + name;
       
       struct stat st;
       frag_info_t dirstat;
@@ -1796,7 +1790,7 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
   char d[500];
   dout(3) << "read_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << dendl;
 
-  list<string> contents;
+  vector<string> contents;
   UserPerm perms = client->pick_my_perms();
   utime_t s = ceph_clock_now();
   int r = client->getdir(basedir, contents, perms);
@@ -1936,7 +1930,12 @@ int SyntheticClient::open_shared(int num, int count)
   UserPerm perms = client->pick_my_perms();
   for (int c=0; c<count; c++) {
     // open
-    list<int> fds;
+    vector<int> fds;
+
+    if (0 < num) {
+      fds.reserve(num);
+    }
+
     for (int n=0; n<num; n++) {
       snprintf(d, sizeof(d), "test/file.%d", n);
       int fd = client->open(d, O_RDONLY, perms);
@@ -1949,9 +1948,7 @@ int SyntheticClient::open_shared(int num, int count)
 	client->unlink(d, perms);
       }
 
-    while (!fds.empty()) {
-      int fd = fds.front();
-      fds.pop_front();
+    for (const auto fd : fds) {
       client->close(fd);
     }
   }
@@ -2255,7 +2252,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   
   int unsafe = 0;
   
-  list<utime_t> starts;
+  deque<utime_t> starts;
 
   for (int i=start; i<end; i += inc) {
     if (time_to_stop()) break;
@@ -2780,19 +2777,11 @@ int SyntheticClient::random_walk(int num_req)
     if (op == CEPH_MDS_OP_READDIR) {
       clear_dir();
       
-      list<string> c;
+      vector<string> c;
       r = client->getdir(cwd.c_str(), c, perms);
-      
-      for (list<string>::iterator it = c.begin();
-           it != c.end();
-           ++it) {
-        //dout(DBL) << " got " << *it << dendl;
+
+      if (!std::empty(c)) {
 	ceph_abort();
-	/*contents[*it] = it->second;
-        if (it->second &&
-	    S_ISDIR(it->second->st_mode)) 
-          subdirs.insert(*it);
-	*/
       }
       
       did_readdir = true;

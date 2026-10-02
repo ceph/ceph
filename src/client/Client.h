@@ -448,7 +448,7 @@ public:
     unsigned diff_mask,
     struct dirent* out_de, snapid_t* out_snap);
 
-  int getdir(const char *relpath, std::list<std::string>& names,
+  int getdir(const char *relpath, std::vector<std::string>& names,
 	     const UserPerm& perms);  // get the whole dir at once.
 
   /**
@@ -788,8 +788,8 @@ public:
   int ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv);
 
   entity_name_t get_myname() { return messenger->get_myname(); }
-  void wait_on_list(std::list<ceph::condition_variable*>& ls);
-  void signal_cond_list(std::list<ceph::condition_variable*>& ls);
+  void wait_on_conditions(std::vector<ceph::condition_variable *>& waiters);
+  void signal_conditions(std::vector<ceph::condition_variable *>& waiters);
 
   void set_filer_flags(int flags);
   void clear_filer_flags(int flags);
@@ -1068,7 +1068,7 @@ protected:
     void print(std::ostream& os) const;
   };
 
-  std::list<ceph::condition_variable*> waiting_for_reclaim;
+  std::vector<ceph::condition_variable *> waiting_for_reclaim;
   /* Flags for check_caps() */
   static const unsigned CHECK_CAPS_NODELAY = 0x1;
   static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x2;
@@ -2320,10 +2320,10 @@ private:
   // mds sessions
   map<mds_rank_t, MetaSessionRef> mds_sessions;  // mds -> push seq
   std::set<mds_rank_t> mds_ranks_closing;  // mds ranks currently tearing down sessions
-  std::list<ceph::condition_variable*> waiting_for_mdsmap;
+  std::vector<ceph::condition_variable *> waiting_for_mdsmap;
 
   // FSMap, for when using mds_command
-  std::list<ceph::condition_variable*> waiting_for_fsmap;
+  std::vector<ceph::condition_variable *> waiting_for_fsmap;
   std::unique_ptr<FSMap> fsmap;
   std::unique_ptr<FSMapUser> fsmap_user;
 
@@ -2383,9 +2383,9 @@ private:
   ceph::condition_variable mount_cond, sync_cond;
 
   std::map<std::pair<int64_t,std::string>, int> pool_perms;
-  std::list<ceph::condition_variable*> waiting_for_pool_perm;
+  std::vector<ceph::condition_variable *> waiting_for_pool_perm;
 
-  std::list<ceph::condition_variable*> waiting_for_rename;
+  std::vector<ceph::condition_variable *> waiting_for_rename;
 
   uint64_t retries_on_invalidate = 0;
 
