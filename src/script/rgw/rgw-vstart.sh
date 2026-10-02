@@ -323,6 +323,25 @@ if $IMPERSONATE; then
 	# bypass DAC.  Measured in probes/results-capprobe-2026-10-01.txt.
 	sudo setcap cap_dac_read_search,cap_setuid,cap_setgid+ep \
 		"$BUILD_DIR/bin/radosgw"
+
+	# Every thread that serves an impersonated request creates an
+	# io_uring ring, because the open carries the personality on a
+	# submission entry, and ring memory is charged against
+	# RLIMIT_MEMLOCK.  One limit against the whole frontend thread
+	# count:  a thread that cannot create a ring cannot register a
+	# personality, and its requests fail with a 500 rather than being
+	# served as the gateway.
+	#
+	# Control rings are 8 entries, so the default 8 MiB is ample.  The
+	# check is here because a deployment that turns the io_uring data
+	# engine on makes them 1024, and then a few hundred threads will
+	# not fit.
+	MEMLOCK_KB=$(ulimit -l)
+	if [ "$MEMLOCK_KB" != "unlimited" ] && [ "$MEMLOCK_KB" -lt 65536 ]; then
+		echo "==> note: RLIMIT_MEMLOCK is ${MEMLOCK_KB}K." \
+			"Ample for control rings;  raise it before enabling" \
+			"the io_uring data engine on a large frontend" >&2
+	fi
 fi
 
 MON=0 OSD=0 MDS=0 MGR=0 RGW=1 \
