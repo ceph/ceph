@@ -9,6 +9,7 @@
 #include "common/errno.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
+#include <iterator>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -59,6 +60,8 @@ void SyncPointHandler<I>::update_sync_points(
 
   m_client_meta_copy.snap_seqs = snap_seqs;
   m_client_meta_copy.sync_points.clear();
+  m_client_meta_copy.sync_points.reserve(std::size(sync_points));
+
   for (auto& sync_point : sync_points) {
     m_client_meta_copy.sync_points.emplace_back(
       sync_point.snap_namespace,

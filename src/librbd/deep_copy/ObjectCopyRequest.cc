@@ -143,7 +143,7 @@ void ObjectCopyRequest<I>::send_read() {
     return;
   }
 
-  auto index = *m_read_snaps.begin();
+  auto index = m_read_snaps.front();
   auto& read_op = m_read_ops[index];
   if (read_op.image_interval.empty()) {
     // nothing written to this object for this snapshot (must be trunc/remove)
@@ -194,13 +194,13 @@ void ObjectCopyRequest<I>::handle_read(int r) {
   }
 
   if (m_handler != nullptr) {
-    auto index = *m_read_snaps.begin();
+    auto index = m_read_snaps.front();
     auto& read_op = m_read_ops[index];
     m_handler->handle_read(read_op.out_bl.length());
   }
 
   ceph_assert(!m_read_snaps.empty());
-  m_read_snaps.erase(m_read_snaps.begin());
+  m_read_snaps.pop_front();
 
   send_read();
 }

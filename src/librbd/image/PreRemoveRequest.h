@@ -7,8 +7,8 @@
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
 #include "librbd/ImageCtx.h"
-#include <list>
 #include <map>
+#include <vector>
 
 class Context;
 
@@ -63,7 +63,7 @@ private:
   decltype(m_image_ctx->exclusive_lock) m_exclusive_lock = nullptr;
 
   bufferlist m_out_bl;
-  std::list<obj_watch_t> m_watchers;
+  std::vector<obj_watch_t> m_watchers;
 
   std::map<uint64_t, SnapInfo> m_snap_infos;
   int m_ret_val = 0;
