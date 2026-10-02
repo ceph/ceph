@@ -331,6 +331,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
                                     CephContext *cct,
 				    rgw::sal::Driver* driver,
 				    const ACLOwner& bucket_owner,
+				    const rgw_user& auth_user,
 				    RGWAccessControlPolicy& policy,
                                     string *storage_class,
 				    rgw::sal::Object* obj,
@@ -340,11 +341,26 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   int ret = 0;
 
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
-  /* No authenticated identity is named here:  this is a static
-   * helper with no req_state, and it reads an ACL attribute rather
-   * than object data.  If an impersonating driver needs the
-   * attribute read under the caller's credentials too, this helper
-   * has to grow a parameter. */
+  /* The ACL read runs as the requester, not as the daemon.
+   *
+   * A driver which serves requests under the caller's filesystem
+   * identity opens the object here, and that descriptor is the one
+   * the data read goes on to use -- POSIX decides access at open.
+   * Reading the attribute as the daemon would therefore hand the
+   * data path a descriptor the requester could not have obtained.
+   *
+   * Empty where there is no authenticated user -- lifecycle,
+   * anonymous access -- and a driver treats that as "serve this as
+   * yourself", which is what it did for every caller before this
+   * parameter existed.
+   *
+   * It costs no extra open:  the alternative is to leave the
+   * daemon's descriptor in place and reopen on the data path.
+   *
+   * A requester permitted by bucket policy but refused by the
+   * filesystem now fails here rather than at the data read.  Same
+   * status, same request, earlier. */
+  rop->set_authenticated_user(auth_user);
 
   ret = rop->prepare(y, dpp);
   if (ret < 0) {
@@ -489,6 +505,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->bucket_tenant);
 
   int ret = get_obj_policy_from_attr(dpp, s->cct, driver, s->bucket_owner,
+				     s->user ? s->user->get_id() : rgw_user{},
 				     acl, storage_class, object, s->yield);
   if (ret == -ENOENT) {
     // the object doesn't exist, but we can't expose that information to clients
