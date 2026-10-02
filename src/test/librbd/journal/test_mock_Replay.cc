@@ -9,6 +9,7 @@
 #include "librbd/journal/Types.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include <deque>
 #include <boost/scope_exit.hpp>
 
 namespace librbd {
@@ -656,7 +657,7 @@ TEST_F(TestMockJournalReplay, PauseIO) {
 
   InSequence seq;
   const size_t io_count = 64;
-  std::list<io::AioCompletion *> flush_comps;
+  std::deque<io::AioCompletion *> flush_comps;
   C_SaferCond on_safes[io_count];
   for (size_t i = 0; i < io_count; ++i) {
     io::AioCompletion *aio_comp;

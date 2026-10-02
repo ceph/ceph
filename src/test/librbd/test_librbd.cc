@@ -36,6 +36,7 @@
 #include <poll.h>
 #include <time.h>
 #include <unistd.h>
+#include <deque>
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -7010,12 +7011,43 @@ TEST_F(TestLibRBD, LockingPP)
     ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
 
+    const librbd::locker_t sentinel {
+      .client = "sentinel",
+      .cookie = "sentinel",
+      .address = "sentinel"
+    };
+    std::vector<librbd::locker_t> lockers {sentinel};
+    std::list<librbd::locker_t> legacy_lockers {sentinel};
+    std::string tag = "sentinel";
+    bool exclusive = false;
+
+    const auto refresh_lockers = [&] {
+      int r = image.list_lockers(lockers, &exclusive, &tag);
+      if (r < 0) {
+        return r;
+      }
+
+      bool legacy_exclusive = false;
+      std::string legacy_tag;
+      r = image.list_lockers(&legacy_lockers, &legacy_exclusive, &legacy_tag);
+      if (r < 0) {
+        return r;
+      }
+
+      EXPECT_EQ(exclusive, legacy_exclusive);
+      EXPECT_EQ(tag, legacy_tag);
+      EXPECT_TRUE(std::ranges::equal(
+        lockers, legacy_lockers, [](const auto& lhs, const auto& rhs) {
+          return lhs.client == rhs.client and lhs.cookie == rhs.cookie and
+                 lhs.address == rhs.address;
+        }));
+
+      return 0;
+    };
+
     // no lockers initially
-    std::list<librbd::locker_t> lockers;
-    std::string tag;
-    bool exclusive;
-    ASSERT_EQ(0, image.list_lockers(&lockers, &exclusive, &tag));
-    ASSERT_EQ(0u, lockers.size());
+    ASSERT_EQ(0, refresh_lockers());
+    ASSERT_EQ(0u, std::size(lockers));
     ASSERT_EQ("", tag);
 
     // exclusive lock is exclusive
@@ -7028,10 +7060,10 @@ TEST_F(TestLibRBD, LockingPP)
     ASSERT_EQ(-EBUSY, image.lock_shared("", ""));
 
     // list exclusive
-    ASSERT_EQ(0, image.list_lockers(&lockers, &exclusive, &tag));
+    ASSERT_EQ(0, refresh_lockers());
     ASSERT_TRUE(exclusive);
     ASSERT_EQ("", tag);
-    ASSERT_EQ(1u, lockers.size());
+    ASSERT_EQ(1u, std::size(lockers));
     ASSERT_EQ(cookie1, lockers.front().cookie);
 
     // unlock
@@ -7039,8 +7071,8 @@ TEST_F(TestLibRBD, LockingPP)
     ASSERT_EQ(-ENOENT, image.unlock(cookie2));
     ASSERT_EQ(0, image.unlock(cookie1));
     ASSERT_EQ(-ENOENT, image.unlock(cookie1));
-    ASSERT_EQ(0, image.list_lockers(&lockers, &exclusive, &tag));
-    ASSERT_EQ(0u, lockers.size());
+    ASSERT_EQ(0, refresh_lockers());
+    ASSERT_EQ(0u, std::size(lockers));
 
     ASSERT_EQ(0, image.lock_shared(cookie1, ""));
     ASSERT_EQ(-EEXIST, image.lock_shared(cookie1, ""));
@@ -7052,8 +7084,10 @@ TEST_F(TestLibRBD, LockingPP)
     ASSERT_EQ(-EBUSY, image.lock_exclusive("test"));
 
     // list shared
-    ASSERT_EQ(0, image.list_lockers(&lockers, &exclusive, &tag));
-    ASSERT_EQ(2u, lockers.size());
+    ASSERT_EQ(0, refresh_lockers());
+    ASSERT_FALSE(exclusive);
+    ASSERT_EQ("", tag);
+    ASSERT_EQ(2u, std::size(lockers));
   }
 
   ioctx.close();
@@ -10562,7 +10596,7 @@ TEST_F(TestLibRBD, ExclusiveLockTransition)
   librbd::Image image2;
   ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
 
-  std::list<librbd::RBD::AioCompletion *> comps;
+  std::deque<librbd::RBD::AioCompletion *> comps;
   ceph::bufferlist bl;
   bl.append(std::string(1 << order, '1'));
   for (size_t object_no = 0; object_no < (size >> 12); ++object_no) {
@@ -10629,8 +10663,8 @@ TEST_F(TestLibRBD, ExclusiveLockReadTransition)
   librbd::Image image2;
   ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
 
-  std::list<librbd::RBD::AioCompletion *> comps;
-  std::list<bufferlist> read_bls;
+  std::deque<librbd::RBD::AioCompletion *> comps;
+  std::deque<bufferlist> read_bls;
   for (size_t object_no = 0; object_no < (size >> 12); ++object_no) {
     librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(NULL,
                                                                       NULL);
@@ -11696,6 +11730,53 @@ TEST_F(TestLibRBD, BreakLock)
   rados_shutdown(blocklist_cluster);
 }
 
+TEST_F(TestLibRBD, ExclusiveLockPP)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+
+  std::vector<std::string> lock_owners {"sentinel"};
+  std::list<std::string> legacy_lock_owners {"sentinel"};
+  rbd_lock_mode_t lock_mode;
+  rbd_lock_mode_t legacy_lock_mode;
+
+  ASSERT_EQ(-ENOENT, image.lock_get_owners(&lock_mode, lock_owners));
+  ASSERT_EQ(std::vector<std::string> {"sentinel"}, lock_owners);
+  ASSERT_EQ(-ENOENT,
+            image.lock_get_owners(&legacy_lock_mode, &legacy_lock_owners));
+  ASSERT_EQ(std::list<std::string> {"sentinel"}, legacy_lock_owners);
+
+  ASSERT_EQ(0, image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE));
+  ASSERT_EQ(0, image.lock_get_owners(&lock_mode, lock_owners));
+  ASSERT_EQ(0,
+            image.lock_get_owners(&legacy_lock_mode, &legacy_lock_owners));
+  ASSERT_EQ(RBD_LOCK_MODE_EXCLUSIVE, lock_mode);
+  ASSERT_EQ(lock_mode, legacy_lock_mode);
+  ASSERT_EQ(1U, std::size(lock_owners));
+  ASSERT_TRUE(std::ranges::equal(lock_owners, legacy_lock_owners));
+
+  ASSERT_EQ(0, image.lock_release());
+  lock_owners = {"sentinel"};
+  legacy_lock_owners = {"sentinel"};
+
+  ASSERT_EQ(-ENOENT, image.lock_get_owners(&lock_mode, lock_owners));
+  ASSERT_EQ(std::vector<std::string> {"sentinel"}, lock_owners);
+  ASSERT_EQ(-ENOENT,
+            image.lock_get_owners(&legacy_lock_mode, &legacy_lock_owners));
+  ASSERT_EQ(std::list<std::string> {"sentinel"}, legacy_lock_owners);
+}
+
 TEST_F(TestLibRBD, DiscardAfterWrite)
 {
   librados::IoCtx ioctx;
@@ -11750,7 +11831,7 @@ TEST_F(TestLibRBD, DefaultFeatures) {
                                  orig_default_features.c_str()));
   };
 
-  std::list<std::pair<std::string, std::string> > feature_names_to_bitmask = {
+  std::vector<std::pair<std::string, std::string>> feature_names_to_bitmask = {
     {"", orig_default_features},
     {"layering", "1"},
     {"layering, exclusive-lock", "5"},
@@ -11959,25 +12040,51 @@ TEST_F(TestLibRBD, TestListWatchers) {
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
 
   librbd::Image image;
-  std::list<librbd::image_watcher_t> watchers;
+  const librbd::image_watcher_t sentinel {
+    .addr = "sentinel",
+    .id = -1,
+    .cookie = 0
+  };
+  std::vector<librbd::image_watcher_t> watchers {sentinel};
+  std::list<librbd::image_watcher_t> legacy_watchers {sentinel};
+
+  const auto refresh_watchers = [&] {
+    int r = image.list_watchers(watchers);
+    if (r < 0) {
+      return r;
+    }
+
+    r = image.list_watchers(legacy_watchers);
+    if (r < 0) {
+      return r;
+    }
+
+    EXPECT_TRUE(std::ranges::equal(
+      watchers, legacy_watchers, [](const auto& lhs, const auto& rhs) {
+        return lhs.addr == rhs.addr and lhs.id == rhs.id and
+               lhs.cookie == rhs.cookie;
+      }));
+
+    return 0;
+  };
 
   // No watchers
   ASSERT_EQ(0, rbd.open_read_only(ioctx, image, name.c_str(), nullptr));
-  ASSERT_EQ(0, image.list_watchers(watchers));
-  ASSERT_EQ(0U, watchers.size());
+  ASSERT_EQ(0, refresh_watchers());
+  ASSERT_EQ(0U, std::size(watchers));
   ASSERT_EQ(0, image.close());
 
   // One watcher
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
-  ASSERT_EQ(0, image.list_watchers(watchers));
-  ASSERT_EQ(1U, watchers.size());
+  ASSERT_EQ(0, refresh_watchers());
+  ASSERT_EQ(1U, std::size(watchers));
   auto watcher1 = watchers.front();
   ASSERT_EQ(0, image.close());
 
   // (Still) one watcher
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
-  ASSERT_EQ(0, image.list_watchers(watchers));
-  ASSERT_EQ(1U, watchers.size());
+  ASSERT_EQ(0, refresh_watchers());
+  ASSERT_EQ(1U, std::size(watchers));
   auto watcher2 = watchers.front();
   ASSERT_EQ(0, image.close());
 
@@ -12893,7 +13000,7 @@ TEST_F(TestLibRBD, DISABLED_TestSeqWriteAIOPP)
     struct timespec start_time;
     clock_gettime(CLOCK_REALTIME, &start_time);
 
-    std::list<librbd::RBD::AioCompletion *> comps;
+    std::vector<librbd::RBD::AioCompletion *> comps;
     for (uint64_t i = 0; i < size / TEST_IO_SIZE; ++i) {
       char *p = test_data + (TEST_IO_SIZE + 1) * (i % 10);
       ceph::bufferlist bl;

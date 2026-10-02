@@ -11,7 +11,7 @@
 #include "librbd/managed_lock/ReleaseRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include <list>
+#include <deque>
 
 using namespace std;
 
@@ -48,7 +48,7 @@ namespace managed_lock {
 
 template<typename T>
 struct BaseRequest {
-  static std::list<T *> s_requests;
+  static std::deque<T *> s_requests;
   Context *on_finish = nullptr;
 
   static T* create(librados::IoCtx& ioctx, MockImageWatcher *watcher,
@@ -67,7 +67,7 @@ struct BaseRequest {
 };
 
 template<typename T>
-std::list<T *> BaseRequest<T>::s_requests;
+std::deque<T *> BaseRequest<T>::s_requests;
 
 template <>
 struct AcquireRequest<MockManagedLockImageCtx>
