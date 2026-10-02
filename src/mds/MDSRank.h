@@ -16,6 +16,7 @@
 #ifndef MDS_RANK_H_
 #define MDS_RANK_H_
 
+#include <deque>
 #include <atomic>
 #include <cstdint>
 #include <string_view>
@@ -626,7 +627,7 @@ class MDSRank {
     MetricsHandler metrics_handler;
     std::unique_ptr<MetricAggregator> metric_aggregator;
 
-    std::list<cref_t<Message>> waiting_for_nolaggy;
+    std::deque<cref_t<Message>> waiting_for_nolaggy;
     std::deque<MDSContext*> finished_queue;
     // Dispatch, retry, queues
     int dispatch_depth = 0;
