@@ -5,11 +5,17 @@
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/transaction_manager.h"
 
+#include <list>
+#include <vector>
+#include <iterator>
+
 #include <boost/unordered/unordered_flat_map.hpp>
 
 SET_SUBSYS(seastore_cache);
 
 namespace crimson::os::seastore {
+
+using extent_refs_t = std::vector<CachedExtentRef>;
 
 /**
  * ExtentQueue
@@ -59,11 +65,11 @@ class ExtentQueue {
     intrusive_ptr_release(&extent);
   }
 
-  std::list<CachedExtentRef> trim_to_capacity(
+  extent_refs_t trim_to_capacity(
     const Transaction::src_t* p_src) {
-    std::list<CachedExtentRef> ret;
+    extent_refs_t ret;
     while (current_size > capacity) {
-      ret.push_back(&list.front());
+      ret.emplace_back(&list.front());
       do_remove_from_list(list.front(), p_src);
     }
     return ret;
@@ -96,7 +102,7 @@ public:
     do_remove_from_list(extent, nullptr);
   }
 
-  std::list<CachedExtentRef> add_to_top(
+  extent_refs_t add_to_top(
     CachedExtent &extent,
     const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
@@ -134,7 +140,7 @@ public:
     list.push_back(extent);
   }
 
-  std::list<CachedExtentRef> increase_cached_size(
+  extent_refs_t increase_cached_size(
     CachedExtent &extent,
     extent_len_t increased_length,
     const Transaction::src_t* p_src) {
@@ -357,7 +363,7 @@ public:
   using run_promote_ret = base_iertr::future<>;
   run_promote_ret run_promote(
     Transaction &t,
-    std::list<CachedExtentRef> &promoting_extents)
+    extent_refs_t &promoting_extents)
   {
     LOG_PREFIX(ExtentPromoter::run_promote);
     std::size_t promote_size = 0;
@@ -368,7 +374,7 @@ public:
                  // round of promotion was not a test workload and was
                  // interrupted, so this round shouldn't be a test workload
                  // too.
-                 promoting_extents.empty())) {
+                 std::empty(promoting_extents))) {
       auto id = epm.get_cold_device_id();
       paddr_t start = P_ADDR_NULL;
       if (device_id_to_paddr_type(id) == paddr_types_t::SEGMENT) {
@@ -378,22 +384,22 @@ public:
       }
       co_await ecb->promote_extents_from_disk(t, start);
     } else {
-      std::list<CachedExtentRef> extents;
+      const auto already_promoting = std::size(promoting_extents);
+      promoting_extents.reserve(already_promoting + std::size(list));
+
       for (auto &extent : list) {
         DEBUGT("promote {} to the hot tier", t, extent);
         ceph_assert(extent.is_stable_clean());
         ceph_assert(extent.get_pin_state() == extent_pin_state_t::PendingPromote);
-        extents.emplace_back(&extent);
+        promoting_extents.emplace_back(&extent);
       }
-      for (auto &extent : extents) {
-        remove_extent(*extent, extent_pin_state_t::Promoting);
+
+      for (auto i = already_promoting; i < std::size(promoting_extents); ++i) {
+        remove_extent(*promoting_extents[i], extent_pin_state_t::Promoting);
       }
-      promoting_extents.insert(
-        promoting_extents.end(),
-        extents.begin(),
-        extents.end());
-      for (auto it = promoting_extents.begin();
-           it != promoting_extents.end();) {
+
+      for (auto it = std::begin(promoting_extents);
+           it != std::end(promoting_extents);) {
         auto &extent = *it;
         if (!extent->is_valid()) {
           it = promoting_extents.erase(it);
@@ -403,21 +409,21 @@ public:
         t.add_to_read_set(extent);
         co_await trans_intr::make_interruptible(extent->wait_io());
         co_await ecb->promote_extent(t, extent);
-        it++;
+        ++it;
       }
     }
     // existing extents in lru will be retired after transaction submitted
     co_await ecb->submit_transaction_direct(t);
-    promoted_count += promoting_extents.size();
+    promoted_count += std::size(promoting_extents);
     promoted_size += promote_size;
     DEBUGT("finish promoting {} {}B extents",
-      t, promoting_extents.size(), promote_size);
+      t, std::size(promoting_extents), promote_size);
     co_return;
   }
 
   seastar::future<> promote() {
     assert(enabled());
-    std::list<CachedExtentRef> promoting_extents;
+    extent_refs_t promoting_extents;
     co_await repeat_eagain([this, &promoting_extents] {
       return ecb->with_transaction_intr(
         Transaction::src_t::PROMOTE,
@@ -698,6 +704,7 @@ private:
     extent_len_t last_access_end;
   };
 
+  // The address index stores queue iterators, so these nodes must stay stable:
   using entry_queue_t = std::list<entry_t>;
   using entry_index_t = boost::unordered_flat_map<
     laddr_t, entry_queue_t::iterator>;
@@ -913,8 +920,8 @@ public:
     clear();
   }
 private:
-  void on_update_hot(std::list<CachedExtentRef> &extents) {
-    for (auto extent : extents) {
+  void on_update_hot(const extent_refs_t &extents) {
+    for (const auto &extent : extents) {
       if (promoter.should_promote_extent(*extent)) {
 	promoter.add_extent(*extent);
       } else {
@@ -922,8 +929,8 @@ private:
       }
     }
   }
-  void on_update_warm_in(std::list<CachedExtentRef> &extents) {
-    for (auto extent : extents) {
+  void on_update_warm_in(const extent_refs_t &extents) {
+    for (const auto &extent : extents) {
       ceph_assert(is_logical_type(extent->get_type()));
       extent->set_pin_state(extent_pin_state_t::Fresh);
       auto len = extent->get_loaded_length();

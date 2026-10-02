@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 #include <optional>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
@@ -1113,7 +1114,7 @@ public:
     }
   }
   void set_dynamic_perf_stats_queries(
-    const std::list<OSDPerfMetricQuery> &queries) {
+    const std::vector<OSDPerfMetricQuery>& queries) {
     dp_stats.set_queries(queries);
   }
   void get_dynamic_perf_stats(DynamicPerfStats *stats) {

@@ -3,10 +3,12 @@
 
 #include "seastore.h"
 
+#include <iterator>
 #include <algorithm>
 #include <string_view>
 
 #include <boost/algorithm/string/trim.hpp>
+#include <boost/container/static_vector.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
@@ -1230,14 +1232,13 @@ SeaStore::get_objs_range(CollectionRef ch, unsigned bits)
   return obj_ranges;
 }
 
-static std::list<std::pair<ghobject_t, ghobject_t>>
-get_ranges(CollectionRef ch,
-           ghobject_t start,
-           ghobject_t end,
-           col_obj_ranges_t obj_ranges)
+static auto get_ranges(ghobject_t start,
+                       ghobject_t end,
+                       col_obj_ranges_t obj_ranges)
 {
   ceph_assert(start <= end);
-  std::list<std::pair<ghobject_t, ghobject_t>> ranges;
+  boost::container::static_vector<
+    std::pair<ghobject_t, ghobject_t>, 2> ranges;
   if (start < obj_ranges.temp_end) {
     ranges.emplace_back(
       std::max(obj_ranges.temp_begin, start),
@@ -1298,21 +1299,20 @@ SeaStore::Shard::list_objects(CollectionRef ch,
 	    using repeat_ret = list_iertr::future<seastar::stop_iteration>;
             return trans_intr::repeat(
               [this, FNAME, &t, &ret, &limit, end, ch,
-	       filter, ranges = get_ranges(ch, start, end, filter)
+	       ranges = get_ranges(start, end, filter),
+	       range_index = std::size_t {0}
 	      ]() mutable -> repeat_ret {
-		if (limit == 0 || ranges.empty()) {
+		if (limit == 0 || range_index == std::size(ranges)) {
 		  return list_iertr::make_ready_future<
 		    seastar::stop_iteration
 		    >(seastar::stop_iteration::yes);
 		}
-		auto ite = ranges.begin();
-		auto pstart = ite->first;
-		auto pend = ite->second;
-		ranges.pop_front();
+		auto [pstart, pend] = ranges[range_index++];
 		DEBUGT("pstart {}, pend {}, limit {} ...", t, pstart, pend, limit);
 		return onode_manager->list_onodes(
 		  t, ch->get_cid(), pstart, pend, limit
-		).si_then([&limit, &ret, pend, &t, last=ranges.empty(), end, FNAME]
+		).si_then([&limit, &ret, pend, &t,
+		           last=range_index == std::size(ranges), end, FNAME]
 			  (auto &&_ret) mutable {
 		  auto &next_objects = std::get<0>(_ret);
 		  auto &ret_objects = std::get<0>(ret);
