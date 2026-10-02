@@ -52,7 +52,10 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   std::unique_ptr<MockPGBackendListener> backend_listener;
   coll_t coll;
   ObjectStore::CollectionHandle ch;
+  // Stub used by the pg log entry handler unless set_pgbackend() supplies
+  // the PG's real backend, as PG::PGLogEntryHandler would have.
   std::unique_ptr<MockPGBackend> backend;
+  PGBackend *pgbackend = nullptr;
   PerfCounters* recoverystate_perf;
   PerfCounters* logger_perf;
   std::vector<int> next_acting;
@@ -421,9 +424,14 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     recovery_space_unreserved = true;
   }
 
+  void set_pgbackend(PGBackend *b) {
+    pgbackend = b;
+  }
+
   PGLog::LogEntryHandlerRef get_log_handler(
     ObjectStore::Transaction &t) override {
-    return std::make_unique<MockPGLogEntryHandler>(backend.get(), &t);
+    return std::make_unique<MockPGLogEntryHandler>(
+      pgbackend ? pgbackend : backend.get(), &t);
   }
 
   void rebuild_missing_set_with_deletes(PGLog &pglog) override {

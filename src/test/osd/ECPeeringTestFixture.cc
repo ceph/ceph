@@ -149,6 +149,8 @@ void ECPeeringTestFixture::SetUp() {
 }
 
 void ECPeeringTestFixture::TearDown() {
+  assert_backends_idle();
+
   // Clear child PG shards before parent PG shards: child collections were
   // split from parent collections and hold handles into the same ObjectStore.
   // spg_t sorts by (pgid.pool, pgid.ps, shard), so child (ps=1) sorts after
@@ -468,6 +470,7 @@ PeeringState* ECPeeringTestFixture::create_peering_state(int shard)
   pl->set_messenger(messenger.get());
   pl->set_event_loop(event_loop.get());
   pl->backend_listener->set_messenger(messenger.get());
+  pl->set_pgbackend(backends[shard].get());
 
   pl->queue_transaction_callback =
     [this, shard](ObjectStore::Transaction&& t) -> int {
@@ -528,6 +531,8 @@ PeeringState* ECPeeringTestFixture::create_child_peering_state(int shard,
   pl->set_messenger(messenger.get());
   pl->set_event_loop(event_loop.get());
   pl->backend_listener->set_messenger(messenger.get());
+  // The child PG shares this shard's EC backend.
+  pl->set_pgbackend(backends[shard].get());
   pl->queue_transaction_callback =
     [this, child_ch](ObjectStore::Transaction&& t) mutable -> int {
       if (t.empty()) return 0;
