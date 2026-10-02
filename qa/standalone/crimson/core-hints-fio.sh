@@ -45,7 +45,12 @@
 #   FIO_BS, FIO_IODEPTH, FIO_NUMJOBS                            (default: 4k, 16, 4)
 #   FIO_NRFILES, FIO_FILESIZE  objects per fio job, and their size (default: 32, 4m)
 #                  (a job's fio 'size' is their product)
-#   FIO_PREFILL_BS block size of writing the objects initially  (default: 1m)
+#   FIO_PREFILL_BS, FIO_PREFILL_IODEPTH  block size and iodepth of writing
+#                  the objects initially                        (default: 1m, 4)
+#                  Note: crimson_memory is split evenly among an OSD's
+#                  reactors, and a reactor that runs out of it fails its
+#                  connections (std::bad_alloc). Keep OSD_MEMORY / OSD_SMP
+#                  well above the data in flight per reactor.
 #   REPEAT         repetitions of every (workload, mode) pair   (default: 1)
 #   RESULTS_DIR    where fio outputs and the summary are kept
 #                  (default: ./fio-hints-results.<date> under the build dir)
@@ -74,6 +79,7 @@ FIO_NUMJOBS=${FIO_NUMJOBS:-4}
 FIO_NRFILES=${FIO_NRFILES:-32}
 FIO_FILESIZE=${FIO_FILESIZE:-4m}
 FIO_PREFILL_BS=${FIO_PREFILL_BS:-1m}
+FIO_PREFILL_IODEPTH=${FIO_PREFILL_IODEPTH:-4}
 REPEAT=${REPEAT:-1}
 # Note: teardown() takes any file in the build dir whose name starts or ends
 # with "core" for a core dump (with a relative kernel.core_pattern), and
@@ -308,9 +314,27 @@ function _fio_prefill() {
     local dir=$1
     local conf
     conf=$(_client_conf $dir off) || return 1
-    _fio_job $conf write bs=$FIO_PREFILL_BS > $dir/prefill.fio || return 1
+    _fio_job $conf write bs=$FIO_PREFILL_BS iodepth=$FIO_PREFILL_IODEPTH \
+        > $dir/prefill.fio || return 1
     _fio prefill $dir/prefill.fio || return 1
+    _check_osds_memory $dir || return 1
     _check_fio_io prefill || return 1
+}
+
+# fail if an OSD ran out of (its reactors' share of) memory: its
+# connections then fail and reconnect in a loop, and the results are
+# meaningless
+function _check_osds_memory() {
+    local dir=$1 id
+    for id in $(seq 0 $((NUM_OSDS - 1))); do
+        if grep -q -m1 bad_alloc $dir/osd.$id.log; then
+            echo "ERROR: osd.$id ran out of memory (std::bad_alloc):" \
+                 "raise OSD_MEMORY ($OSD_MEMORY for $OSD_SMP reactors)," \
+                 "or lower the I/O in flight"
+            grep -m3 bad_alloc $dir/osd.$id.log
+            return 1
+        fi
+    done
 }
 
 # fail if a fio run completed no I/O (fio itself does not)
@@ -450,6 +474,7 @@ function _fio_run() {
     local client
     client=$(_client_counters $dir $mode $RESULTS_DIR/$tag.client.txt)
     wait $fio_pid || { echo "ERROR: fio $tag failed"; return 1; }
+    _check_osds_memory $dir || return 1
     _check_fio_io $tag || return 1
 
     after=$(_osd_hop_counters) || return 1
