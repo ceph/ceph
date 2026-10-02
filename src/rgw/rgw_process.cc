@@ -242,6 +242,11 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     }
   }
 
+  ret = rgw_verify_bucket_admin_lock(op, s, op->get_type());
+  if (ret < 0) {
+    return ret;
+  }
+
   ldpp_dout(op, 2) << "verifying op permissions" << dendl;
   {
     auto span = tracing::rgw::tracer.add_span("verify_permission", s->trace);

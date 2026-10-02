@@ -278,6 +278,12 @@ namespace rgw {
 	goto done;
       }
 
+      ret = rgw_verify_bucket_admin_lock(op, s, op->get_type());
+      if (ret < 0) {
+        abort_req(s, op, ret);
+        goto done;
+      }
+
       ldpp_dout(s, 2) << "verifying op permissions" << dendl;
       ret = op->verify_permission(null_yield);
       if (ret < 0) {
@@ -408,6 +414,12 @@ namespace rgw {
 
     ldpp_dout(s, 2) << "verifying op mask" << dendl;
     ret = op->verify_op_mask();
+    if (ret < 0) {
+      abort_req(s, op, ret);
+      goto done;
+    }
+
+    ret = rgw_verify_bucket_admin_lock(op, s, op->get_type());
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;

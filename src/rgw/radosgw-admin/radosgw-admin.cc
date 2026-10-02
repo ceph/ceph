@@ -195,6 +195,8 @@ void usage()
   cout << "  bucket stats                     returns bucket statistics\n";
   cout << "  bucket suspend                   suspend a bucket\n";
   cout << "  bucket unsuspend                 unsuspend a bucket\n";
+  cout << "  bucket admin-lock                only admins can change the bucket's config or delete it\n";
+  cout << "  bucket admin-unlock              remove the admin lock from a bucket\n";
   cout << "  bucket rm                        remove bucket\n";
   cout << "  bucket check                     check bucket index by verifying size and object count stats\n";
   cout << "  bucket check olh                 check for olh index entries and objects that are pending removal\n";
@@ -764,6 +766,8 @@ enum class OPT {
   BUCKET_STATS,
   BUCKET_SUSPEND,
   BUCKET_UNSUSPEND,
+  BUCKET_ADMIN_LOCK,
+  BUCKET_ADMIN_UNLOCK,
 #ifdef WITH_RADOSGW_RADOS
   BUCKET_CHECK,
   BUCKET_CHECK_OLH,
@@ -1057,6 +1061,8 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket stats", OPT::BUCKET_STATS },
   { "bucket suspend", OPT::BUCKET_SUSPEND },
   { "bucket unsuspend", OPT::BUCKET_UNSUSPEND },
+  { "bucket admin-lock", OPT::BUCKET_ADMIN_LOCK },
+  { "bucket admin-unlock", OPT::BUCKET_ADMIN_UNLOCK },
 #ifdef WITH_RADOSGW_RADOS
   { "bucket check", OPT::BUCKET_CHECK },
   { "bucket check olh", OPT::BUCKET_CHECK_OLH },
@@ -7108,6 +7114,8 @@ int main(int argc, const char **argv)
                                         OPT::BUCKET_CHOWN,
                                         OPT::BUCKET_SUSPEND,
                                         OPT::BUCKET_UNSUSPEND,
+                                        OPT::BUCKET_ADMIN_LOCK,
+                                        OPT::BUCKET_ADMIN_UNLOCK,
 #ifdef WITH_RADOSGW_RADOS
                                         OPT::METADATA_PUT,
                                         OPT::METADATA_RM,
@@ -11099,6 +11107,30 @@ next:
     if (ret < 0) {
       cerr << "failed to " << (enabled ? "unsuspend" : "suspend")
            << " bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
+  if ((opt_cmd == OPT::BUCKET_ADMIN_LOCK) ||
+      (opt_cmd == OPT::BUCKET_ADMIN_UNLOCK)) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    auto& bucket_info = bucket->get_info();
+    if (opt_cmd == OPT::BUCKET_ADMIN_LOCK) {
+      bucket_info.flags |= BUCKET_ADMIN_LOCKED;
+    } else {
+      bucket_info.flags &= ~BUCKET_ADMIN_LOCKED;
+    }
+    ret = bucket->put_info(dpp(), false, real_time(), null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: failed writing bucket instance info: "
+           << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
   }

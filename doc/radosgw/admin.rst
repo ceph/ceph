@@ -228,6 +228,48 @@ inspect the bucket ``flags`` value (``1`` means ``BUCKET_SUSPENDED``).
 .. note:: Suspending a user still suspends all of that user's buckets and
    blocks all requests for that user, regardless of per-bucket state.
 
+Bucket Admin Lock
+-----------------
+
+An admin-locked bucket can still be read from and written to as usual, but
+only admin and system users can:
+
+- change its configuration: policy, ACL, versioning, lifecycle, object lock,
+  tags, CORS, encryption, website, logging, notifications, replication, public
+  access block, ownership controls, request payment and Swift container
+  metadata
+- change the retention, legal hold or ACL of objects in it, or bypass
+  governance retention
+- delete it
+
+Other users, including the bucket owner, get ``403 AccessDenied`` for these
+requests. Objects can still be written with a retention period set at write
+time.
+
+RGWs that don't know about the admin lock ignore it, so finish upgrading all
+RGWs before relying on it.
+
+This is meant for audit and records buckets. The operator sets the bucket up
+with object lock, retention and the access it needs, and the tenant that owns
+it can write and read its data but can't weaken any of that: shorten
+retention, lift a legal hold, add an expiration rule, open up access or delete
+the bucket. Object lock protects the objects, the admin lock protects
+everything around them.
+
+To lock a bucket:
+
+.. prompt:: bash #
+
+   radosgw-admin bucket admin-lock --bucket=mybucket
+
+To unlock a bucket:
+
+.. prompt:: bash #
+
+   radosgw-admin bucket admin-unlock --bucket=mybucket
+
+Use ``bucket stats`` to verify the ``admin_locked`` field.
+
 
 Remove a User
 -------------
