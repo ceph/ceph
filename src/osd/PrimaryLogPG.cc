@@ -10103,6 +10103,10 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   if (obs.exists) {
     dout(20) << __func__ << ": exists, removing" << dendl;
     ctx->op_t->remove(obs.oi.soid);
+    // If the source has no omap, has_omap is false and the omap won't be
+    // marked dirty below. But the existing target's omap was removed with
+    // the object; mark it dirty here so log-based recovery wipes it too.
+    ctx->clean_regions.mark_omap_dirty();
   } else {
     ctx->delta_stats.num_objects++;
     obs.exists = true;
