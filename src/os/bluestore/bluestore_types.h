@@ -17,6 +17,7 @@
 #define CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
 
 #include <bit>
+#include <deque>
 #include <limits>
 #include <ostream>
 #include <type_traits>
@@ -1399,7 +1400,7 @@ WRITE_CLASS_DENC(bluestore_deferred_op_t)
 /// writeahead-logged transaction
 struct bluestore_deferred_transaction_t {
   uint64_t seq = 0;
-  std::list<bluestore_deferred_op_t> ops;
+  std::deque<bluestore_deferred_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after tx
 
   bluestore_deferred_transaction_t() : seq(0) {}
