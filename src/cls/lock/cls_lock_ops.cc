@@ -19,7 +19,6 @@
 #include "cls/lock/cls_lock_ops.h"
 
 using namespace rados::cls::lock;
-using std::list;
 using std::map;
 using std::string;
 using std::vector;
@@ -162,11 +161,10 @@ vector<cls_lock_get_info_reply> cls_lock_get_info_reply::generate_test_instances
 
 void cls_lock_list_locks_reply::dump(Formatter *f) const
 {
-  list<string>::const_iterator iter;
   f->open_array_section("locks");
-  for (iter = locks.begin(); iter != locks.end(); ++iter) {
+  for (const auto& lock : locks) {
     f->open_array_section("object");
-    f->dump_string("lock", *iter);
+    f->dump_string("lock", lock);
     f->close_section();
   }
   f->close_section();
