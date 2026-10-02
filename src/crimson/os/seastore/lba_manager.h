@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <vector>
 #include <iostream>
 
 #include <boost/intrusive_ptr.hpp>
@@ -39,7 +40,7 @@ public:
   ) = 0;
 
   using get_cursors_iertr = base_iertr;
-  using get_cursors_ret = get_cursors_iertr::future<std::list<LBACursorRef>>;
+  using get_cursors_ret = get_cursors_iertr::future<std::vector<LBACursorRef>>;
   virtual get_cursors_ret get_cursors(
     Transaction &t,
     laddr_t offset, extent_len_t length) = 0;
@@ -315,7 +316,7 @@ public:
   using update_mappings_ret = update_mappings_iertr::future<>;
   virtual update_mappings_ret update_mappings(
     Transaction& t,
-    const std::list<LogicalChildNodeRef>& extents) = 0;
+    const std::vector<LogicalChildNodeRef>& extents) = 0;
 
   /**
    * get_physical_extent_if_live
