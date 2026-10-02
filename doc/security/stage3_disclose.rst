@@ -1,14 +1,10 @@
 Stage 3 — Disclose
 ==================
 
-**Owner:** Security case owner; the Security Lead approves publication.
-**Entry:** Stage 2 complete.
-
-
 Before the date
 ---------------
 
-- [ ] At least supported release contain the fix, verified in the built artifacts; backports are in PRs for every supported release.
+- [ ] At least one supported release contain the fix, verified in the built artifacts; backports are in PRs for every supported release.
 - [ ] Advisory verified: affected and fixed versions, CVSS, credit, references, fixing PRs linked; nothing confidential.
 - [ ] Disclosure date set and the security mailing list notified at least 7 days ahead; any delay request decided by the Security Lead.
 - [ ] ``EMBARGOED``: backports ready for stakeholders; a slip in the date is re-confirmed and re-announced at once.
