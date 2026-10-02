@@ -10,6 +10,31 @@ for the mechanism.
 | Model | Covers | Properties |
 |---|---|---|
 | [`rgw_overwrite`](rgw_overwrite/README.md) | PutObject, DeleteObject, CopyObject with a shared tail, dedup and multipart completion over existing keys: head-object races, the bucket index entry and stats, listings, resharding, `cls_refcount`, part re-uploads, abort, lifecycle's abort, GC; `If-Match` and `If-None-Match: *` on PutObject, completion and DeleteObject | no head's data is deleted; the index matches the head; the stats match the index; nothing leaks; every request answered; a conditional request is answered as some order of the requests would answer it |
+| [`rgw_iam_sts`](rgw_iam_sts/README.md) | IAM roles, users, access keys and groups in one account, with their inline and managed policies. AssumeRole, GetSessionToken, and the S3 requests that use their credentials | A delete removes only an empty entity, and takes effect. The indexes match the entities. Limits hold, and names are unique. No update is lost. Only active keys and trusted callers get in. A session dies with its role. Each answer is one that the Smithy model of IAM or STS lists |
+
+## Shared components
+
+The models share the files in `common/`. A model lists the ones it uses in
+its `.pproj` file. P has no generics, so each file names the types and
+machines that a model must define.
+
+- `Common.p` holds RGW's return codes (`tRc`), the Driver, and the helpers
+  that write a scenario's script (`One`, `Two`, `Three`). The Driver runs a
+  script in phases. The requests of a phase run concurrently. Once every
+  request of a phase is answered or its RGW is dead, the next phase
+  starts. An answer can fill a slot that later requests take as input,
+  for example the credentials that an STS request issues. At the end, the
+  Driver asks the Store to finish. A model defines the types `tCfg`, `tReq`,
+  `tInit` and `tOut`, and the functions `InSlot` and `OutSlot`. It also
+  defines the machines `Store` and `Rgw`, with the constructor payloads
+  that `Common.p` gives.
+- `Rados.p` holds RADOS semantics as pure functions, which a Store calls
+  from its handlers. They cover metadata objects under an
+  `RGWObjVersionTracker` or an exclusive create, and the `cls_user`
+  account resource omaps. A model that includes this file defines `tOid`
+  and `tObj`, and `tObj` has a field `ver`.
+
+`rgw_overwrite` uses `Common.p`. `rgw_iam_sts` uses both files.
 
 ## Running
 
@@ -26,9 +51,10 @@ dotnet tool install --global P
 ./deep.sh <model> <test case> [schedules] # one case under random, PCT and POS
 ```
 
-The scripts find P in `~/.dotnet/tools`, and a Homebrew `dotnet@8` by
-themselves; otherwise set `DOTNET_ROOT`. `run.sh` runs `jobs` cases at a
-time; `rgw_overwrite` has 167, at 20,000 schedules each.
+The scripts find P in `~/.dotnet/tools`, and a Homebrew `dotnet@8` or a
+.NET in `~/.dotnet` by themselves; otherwise set `DOTNET_ROOT`. `run.sh` runs `jobs` cases at a
+time; `rgw_overwrite` has 167, at 20,000 schedules each, and
+`rgw_iam_sts` has 123.
 
 `run.sh` counts a case as violated if *any* of P's summaries reports a bug.
 `p check -tc` matches test names by prefix and runs every match, so no
@@ -76,3 +102,26 @@ also lists the tracker issues and the proposed fixes:
   bucket index**, while the upload stays.
 
 Resharding holds, and each of its mechanisms is needed.
+
+`rgw_iam_sts` finds sixteen problems on main, detailed in its README with
+a proposed fix for most of them. Its README also maps the filed tracker
+issues to their fixes:
+
+- DeleteRole can delete a role that has policies. It checks the role it
+  loaded, then deletes whatever role holds the name.
+- A role update that races DeleteRole can be answered EntityAlreadyExists.
+- Concurrent creates can exceed the account's limits on roles, users and
+  groups, and can give two users, or two groups, the same name.
+- DeleteUser can answer success while the user survives with a new access
+  key, unreachable by name.
+- A deactivated access key can still authenticate. A user policy write can
+  restore its index entry, and authentication does not check the flag.
+- DeleteGroup can delete a group that has members: one added
+  concurrently, or one hidden behind a stale member entry that a rename
+  leaves.
+- AssumeRole can issue credentials for a role whose trust policy it never
+  checked. For this, the role is deleted and created again under its name
+  while the request runs. In the same account, AssumeRole does not require
+  the trust policy at all.
+- GetSessionToken accepts session credentials, and the credentials it
+  issues to a role session survive the role's deletion.
