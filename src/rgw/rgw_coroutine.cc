@@ -12,6 +12,7 @@
 
 #include <boost/asio/yield.hpp>
 
+#include <array>
 #include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rgw
@@ -233,7 +234,6 @@ RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *
   if (start) {
     ops.push_back(start);
   }
-  pos = ops.begin();
 }
 
 RGWCoroutinesStack::~RGWCoroutinesStack()
@@ -250,7 +250,7 @@ RGWCoroutinesStack::~RGWCoroutinesStack()
 int RGWCoroutinesStack::operate(const DoutPrefixProvider *dpp, RGWCoroutinesEnv *_env)
 {
   env = _env;
-  RGWCoroutine *op = *pos;
+  RGWCoroutine *op = ops[current_op_index];
   op->stack = this;
   ldpp_dout(dpp, 20) << *op << ": operate()" << dendl;
   int r = op->operate_wrapper(dpp);
@@ -264,7 +264,7 @@ int RGWCoroutinesStack::operate(const DoutPrefixProvider *dpp, RGWCoroutinesEnv 
     int op_retcode = r;
     r = unwind(op_retcode);
     op->put();
-    done_flag = (pos == ops.end());
+    done_flag = current_op_index == std::size(ops);
     blocked_flag &= !done_flag;
     if (done_flag) {
       retcode = op_retcode;
@@ -280,8 +280,8 @@ int RGWCoroutinesStack::operate(const DoutPrefixProvider *dpp, RGWCoroutinesEnv 
 
 string RGWCoroutinesStack::error_str()
 {
-  if (pos != ops.end()) {
-    return (*pos)->error_str();
+  if (current_op_index < std::size(ops)) {
+    return ops[current_op_index]->error_str();
   }
   return string();
 }
@@ -290,12 +290,8 @@ void RGWCoroutinesStack::call(RGWCoroutine *next_op) {
   if (!next_op) {
     return;
   }
+  current_op_index = std::size(ops);
   ops.push_back(next_op);
-  if (pos != ops.end()) {
-    ++pos;
-  } else {
-    pos = ops.begin();
-  }
 }
 
 void RGWCoroutinesStack::schedule()
@@ -360,19 +356,18 @@ void RGWCoroutinesStack::io_complete(const rgw_io_id& io_id)
 
 int RGWCoroutinesStack::unwind(int retcode)
 {
-  rgw_spawned_stacks *src_spawned = &(*pos)->spawned;
+  rgw_spawned_stacks *src_spawned = &ops[current_op_index]->spawned;
 
-  if (pos == ops.begin()) {
+  if (0 == current_op_index) {
     ldout(cct, 15) << "stack " << (void *)this << " end" << dendl;
     spawned.inherit(src_spawned);
     ops.clear();
-    pos = ops.end();
     return retcode;
   }
 
-  --pos;
+  --current_op_index;
   ops.pop_back();
-  RGWCoroutine *op = *pos;
+  RGWCoroutine *op = ops[current_op_index];
   op->set_retcode(retcode);
   op->spawned.inherit(src_spawned);
   return 0;
@@ -381,7 +376,7 @@ int RGWCoroutinesStack::unwind(int retcode)
 void RGWCoroutinesStack::cancel()
 {
   while (!ops.empty()) {
-    RGWCoroutine *op = *pos;
+    RGWCoroutine *op = ops[current_op_index];
     unwind(-ECANCELED);
     op->put();
   }
@@ -560,7 +555,7 @@ bool RGWCoroutinesStack::consume_io_finish(const rgw_io_id& io_id)
 }
 
 
-void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& scheduled_stacks,
+void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, deque<RGWCoroutinesStack *>& scheduled_stacks,
                                                   RGWCompletionManager::io_completion& io, int *blocked_count, int *interval_wait_count)
 {
   ceph_assert(ceph_mutex_is_wlocked(lock));
@@ -617,7 +612,8 @@ void RGWCoroutinesManager::io_complete(RGWCoroutine *cr, const rgw_io_id& io_id)
   cr->io_complete(io_id);
 }
 
-int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesStack *>& stacks)
+int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp,
+                              std::span<RGWCoroutinesStack *const> stacks)
 {
   maybe_warn_about_blocking(dpp);
 
@@ -632,23 +628,22 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesS
 
   lock.lock();
   set<RGWCoroutinesStack *>& context_stacks = run_contexts[run_context];
-  list<RGWCoroutinesStack *> scheduled_stacks;
-  for (auto& st : stacks) {
-    context_stacks.insert(st);
-    scheduled_stacks.push_back(st);
-    st->set_is_scheduled(true);
+  deque<RGWCoroutinesStack *> scheduled_stacks;
+  for (auto* stack : stacks) {
+    context_stacks.insert(stack);
+    scheduled_stacks.push_back(stack);
+    stack->set_is_scheduled(true);
   }
   env.run_context = run_context;
   env.manager = this;
   env.scheduled_stacks = &scheduled_stacks;
 
-  for (list<RGWCoroutinesStack *>::iterator iter = scheduled_stacks.begin(); iter != scheduled_stacks.end() && !going_down;) {
+  while (!scheduled_stacks.empty() && !going_down) {
     RGWCompletionManager::io_completion io;
-    RGWCoroutinesStack *stack = *iter;
-    ++iter;
+    RGWCoroutinesStack *stack = scheduled_stacks.front();
     scheduled_stacks.pop_front();
 
-    if (context_stacks.find(stack) == context_stacks.end()) {
+    if (!context_stacks.contains(stack)) {
       /* stack was probably schedule more than once due to IO, but was since complete */
       goto next;
     }
@@ -757,14 +752,9 @@ next:
         break;
       }
       handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count, &interval_wait_count);
-      iter = scheduled_stacks.begin();
     }
     if (canceled) {
       break;
-    }
-
-    if (iter == scheduled_stacks.end()) {
-      iter = scheduled_stacks.begin();
     }
   }
 
@@ -796,12 +786,11 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, RGWCoroutine *op)
   if (!op) {
     return 0;
   }
-  list<RGWCoroutinesStack *> stacks;
   RGWCoroutinesStack *stack = allocate_stack();
   op->get();
   stack->call(op);
 
-  stacks.push_back(stack);
+  const std::array stacks {stack};
 
   int r = run(dpp, stacks);
   if (r < 0) {
@@ -1153,5 +1142,3 @@ int RGWSimpleCoroutine::state_all_complete()
   }
   return 0;
 }
-
-
