@@ -11477,20 +11477,17 @@ int RGWRados::cls_obj_complete_op(const DoutPrefixProvider* dpp,
         return flush_r;
       }
 
-      ObjectWriteOperation o;
-      o.assert_exists(); // bucket index shard must exist
-      cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
       // op_issuer.log_op is true for InIndex (writes in-index bilog),
       // false for FIFO (suppressed — FIFO batch handles it above).
-      op_issuer.complete_op(o, ver, dir_meta, remove_objs, obj.key.get_loc());
-
-      complete_op_data *arg;
-      index_completion_manager->create_completion(
-        obj, op_issuer.op, tag, ver, key, dir_meta, remove_objs,
-        op_issuer.log_op, bilog_flags, &zones_trace, &arg);
-      librados::AioCompletion *completion = arg->rados_completion;
-      int ret = bs.bucket_obj.aio_operate(arg->rados_completion, &o);
-      completion->release(); /* can't reference arg here, as it might have already been released */
+      RGWBucketInfo info = bucket_info;
+      int ret = guard_reshard(dpp, &bs, obj, info,
+        [&](RGWRados::BucketShard *bs) -> int {
+          ObjectWriteOperation o;
+          o.assert_exists(); // bucket index shard must exist
+          cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
+          op_issuer.complete_op(o, ver, dir_meta, remove_objs, obj.key.get_loc());
+          return bs->bucket_obj.operate(dpp, std::move(o), y);
+        }, y);
 
       ldout_bitx_c(bitx, cct, 10) << "EXITING " << __func__ << ": ret=" << ret << dendl_bitx;
       return ret;
