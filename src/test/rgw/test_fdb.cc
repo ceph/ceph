@@ -215,6 +215,9 @@ TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
  using transformed_pair_range = decltype(std::declval<string_pair_vector&>() |
                                          std::views::transform(pair_identity {}));
 
+ STATIC_REQUIRE(std::movable<lfdb::detail::future_value>);
+ STATIC_REQUIRE_FALSE(std::copyable<lfdb::detail::future_value>);
+
  STATIC_REQUIRE(lfdb::concepts::key_value_iterator<string_pair_vector::iterator>);
  STATIC_REQUIRE(lfdb::concepts::key_value_range<string_pair_vector>);
  STATIC_REQUIRE(lfdb::concepts::key_value_forward_range<string_pair_vector>);
@@ -239,6 +242,12 @@ TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
  STATIC_REQUIRE_FALSE(lfdb::concepts::value_callback<decltype([](std::span<const std::uint8_t>) {
   return true;
  })>);
+ STATIC_REQUIRE(lfdb::concepts::raw_key_value_callback<
+  decltype([](std::span<const std::uint8_t>, std::span<const std::uint8_t>) {})>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::raw_key_value_callback<
+  decltype([](std::span<const std::uint8_t>, std::span<const std::uint8_t>) {
+   return true;
+  })>);
  STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<decltype([](std::span<const std::uint8_t>) {
   return true;
  })&>);
@@ -1804,7 +1813,7 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
   const auto encoded = lfdb::to::convert(input);
   lfdb::from::convert(encoded, output);
 
-  CHECK(sizeof input == encoded.size());
+  CHECK(sizeof input == std::size(encoded));
   CHECK_THAT(output, Catch::Matchers::RangeEquals(input));
  }
 }
@@ -1867,8 +1876,8 @@ TEST_CASE("FoundationDB C API argument conversion", "[fdb][rgw]")
  SECTION("empty result buffers are accepted") {
   const auto empty = lfdb::detail::result_bytes(nullptr, 0);
 
-  CHECK(empty.empty());
-  CHECK(lfdb::detail::as_string_view(empty).empty());
+  CHECK(std::empty(empty));
+  CHECK(std::empty(lfdb::detail::as_string_view(empty)));
  }
 }
 
@@ -1887,10 +1896,23 @@ TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
 
- // vector<uint8_t> -> vector<uint8_t>
+ // A scalar encoding larger than libfdb's inline buffer must spill to dynamic
+ // storage without changing the public operation:
  {
- const std::vector<uint8_t> n = { 1, 2, 3, 4, 5 };
- std::vector<uint8_t> o;
+ const std::string n(4 * 1024, 'x');
+ std::string o;
+
+ const auto key = test_key("large-value");
+ lfdb::set(lfdb::make_transaction(j), key, n, lfdb::commit_after_op::commit);
+ lfdb::get(lfdb::make_transaction(j), key, o, lfdb::commit_after_op::no_commit);
+
+ REQUIRE(n == o);
+ }
+
+ // A large vector also exercises the generic scalar-set spill path:
+ {
+ const std::vector<std::uint8_t> n(4 * 1024, 42);
+ std::vector<std::uint8_t> o;
 
  const auto key = test_key("key");
  lfdb::set(lfdb::make_transaction(j), key, n, lfdb::commit_after_op::commit);
@@ -2137,6 +2159,210 @@ TEST_CASE("generate_FDB_pairs", "[fdb]")
    return page.size() <= result_limit;
   }));
   CHECK_THAT(out, Catch::Matchers::RangeEquals(last_keys_reversed(kvs_in, nkeys)));
+ }
+}
+
+TEST_CASE("for_each provides callback-scoped raw range values", "[fdb]")
+{
+ janitor j;
+
+ const std::size_t result_limit = 5;
+ const std::size_t nkeys = 12;
+
+ const auto kvs_in = write_monotonic_kvs(j, nkeys);
+
+ auto check_traversal = [&kvs_in](auto source, auto selector, auto expected,
+                                  const auto expected_end) {
+  const auto nread = lfdb::for_each(
+    lfdb::raw, source, selector,
+    [&](std::span<const std::uint8_t> key,
+        std::span<const std::uint8_t> value) {
+      REQUIRE(expected_end != expected);
+      REQUIRE(std::ranges::equal(key, expected->first));
+
+      std::string decoded;
+      lfdb::from::convert(value, decoded);
+      CHECK(expected->second == decoded);
+      ++expected;
+    });
+
+  CHECK(std::size(kvs_in) == nread);
+  CHECK(expected_end == expected);
+ };
+
+ SECTION("drains paged forward results in order") {
+  auto selector = lfdb::select { make_key(0), make_key(nkeys) };
+  selector.options.result_limit = result_limit;
+
+  check_traversal(lfdb::make_transaction(j), selector,
+                  std::begin(kvs_in), std::end(kvs_in));
+ }
+
+ SECTION("drains paged reverse results in order") {
+  auto selector = lfdb::select { make_key(0), make_key(nkeys) };
+  selector.options.result_limit = result_limit;
+  selector.options.reverse_order = true;
+
+  check_traversal(lfdb::make_transaction(j), selector,
+                  std::rbegin(kvs_in), std::rend(kvs_in));
+ }
+
+ SECTION("database traversal drains paged forward results in order") {
+  auto selector = lfdb::select { make_key(0), make_key(nkeys) };
+  selector.options.result_limit = result_limit;
+
+  check_traversal(j.dbh(), selector,
+                  std::begin(kvs_in), std::end(kvs_in));
+ }
+
+ SECTION("database traversal drains paged reverse results in order") {
+  auto selector = lfdb::select { make_key(0), make_key(nkeys) };
+  selector.options.result_limit = result_limit;
+  selector.options.reverse_order = true;
+
+  check_traversal(j.dbh(), selector,
+                  std::rbegin(kvs_in), std::rend(kvs_in));
+ }
+
+ SECTION("executes disjoint query intervals exactly once") {
+  const auto selection = lfdb::query::difference(
+    lfdb::query::between(make_key(0), make_key(nkeys)),
+    lfdb::query::between(make_key(4), make_key(8)));
+  const std::array expected {
+   make_key(0),
+   make_key(1),
+   make_key(2),
+   make_key(3),
+   make_key(8),
+   make_key(9),
+   make_key(10),
+   make_key(11)
+  };
+  auto next = std::begin(expected);
+  const auto expected_end = std::end(expected);
+
+  auto txn = lfdb::make_transaction(j);
+  const auto nread = lfdb::for_each(
+    lfdb::raw, txn, selection,
+    [&next, expected_end](std::span<const std::uint8_t> key,
+                         std::span<const std::uint8_t>) {
+      REQUIRE(expected_end != next);
+      REQUIRE(std::ranges::equal(key, *next));
+      ++next;
+    });
+
+ CHECK(std::size(expected) == nread);
+ CHECK(expected_end == next);
+ }
+
+ SECTION("reverses disjoint query intervals as one result") {
+  const auto selection = lfdb::query::with_options(
+    lfdb::query::difference(
+      lfdb::query::between(make_key(0), make_key(nkeys)),
+      lfdb::query::between(make_key(4), make_key(8))),
+    {.reverse_order = true});
+  const std::array expected {
+   make_key(11),
+   make_key(10),
+   make_key(9),
+   make_key(8),
+   make_key(3),
+   make_key(2),
+   make_key(1),
+   make_key(0)
+  };
+  auto next = std::begin(expected);
+  const auto expected_end = std::end(expected);
+
+  auto txn = lfdb::make_transaction(j);
+  const auto nread = lfdb::for_each(
+    lfdb::raw, txn, selection,
+    [&next, expected_end](std::span<const std::uint8_t> key,
+                         std::span<const std::uint8_t>) {
+      REQUIRE(expected_end != next);
+      REQUIRE(std::ranges::equal(key, *next));
+      ++next;
+    });
+
+  CHECK(std::size(expected) == nread);
+  CHECK(expected_end == next);
+ }
+
+ SECTION("preserves arbitrary value bytes") {
+  constexpr std::array<std::uint8_t, 5> raw_value {0, 1, 0xff, 0, 42};
+  const auto key = test_key("raw-range-value");
+
+  write_raw_fdb_value(j, key, raw_value);
+
+  auto txn = lfdb::make_transaction(j);
+  const auto nread = lfdb::for_each(
+    lfdb::raw, txn, lfdb::query::prefix(key),
+    [&](std::span<const std::uint8_t> found_key,
+        std::span<const std::uint8_t> found_value) {
+      CHECK(std::ranges::equal(found_key, key));
+      CHECK(std::ranges::equal(found_value, raw_value));
+    });
+
+  CHECK(1 == nread);
+ }
+
+ SECTION("does not invoke the callback for an empty expression") {
+  const auto keys = lfdb::query::prefix(make_key_prefix());
+  const auto empty = lfdb::query::difference(keys, keys);
+  std::size_t callbacks = 0;
+
+  auto txn = lfdb::make_transaction(j);
+  const auto nread = lfdb::for_each(
+    lfdb::raw, txn, empty,
+    [&callbacks](std::span<const std::uint8_t>,
+                 std::span<const std::uint8_t>) {
+      ++callbacks;
+    });
+
+  CHECK(0 == nread);
+  CHECK(0 == callbacks);
+ }
+
+ SECTION("propagates callback exceptions and stops immediately") {
+  std::size_t callbacks = 0;
+  auto txn = lfdb::make_transaction(j);
+
+  CHECK_THROWS_WITH(
+    lfdb::for_each(
+      lfdb::raw, txn, lfdb::select { make_key(0), make_key(nkeys) },
+      [&callbacks](std::span<const std::uint8_t>,
+                   std::span<const std::uint8_t>) {
+        ++callbacks;
+
+        if (2 == callbacks) {
+         throw std::runtime_error("stop raw traversal");
+        }
+      }),
+    "stop raw traversal");
+
+  CHECK(2 == callbacks);
+
+  std::string value;
+  CHECK(lfdb::get(txn, make_key(0), value));
+ }
+
+ SECTION("database traversal never interprets callback exceptions as retries") {
+  constexpr fdb_error_t not_committed = 1020;
+  std::size_t callbacks = 0;
+
+  REQUIRE(fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE,
+                              not_committed));
+  CHECK_THROWS_AS(
+    lfdb::for_each(
+      lfdb::raw, j.dbh(), lfdb::select { make_key(0), make_key(nkeys) },
+      [&callbacks, not_committed](std::span<const std::uint8_t>,
+                                  std::span<const std::uint8_t>) {
+        ++callbacks;
+        throw lfdb::libfdb_exception(not_committed);
+      }),
+    lfdb::libfdb_exception);
+
+  CHECK(1 == callbacks);
  }
 }
 
@@ -3528,7 +3754,7 @@ SCENARIO("transactor", "[fdb]")
 
   txr([](auto, auto&) {}, lfdb::staged(values, std::in_place));
 
-  CHECK(values.empty());
+  CHECK(std::empty(values));
  }
 
  SECTION("in-place staging does not require a copyable target") {
@@ -3764,9 +3990,9 @@ TEST_CASE("staged proxy benchmarks", "[.benchmark][benchmark][fdb][staged]")
 
  auto rebuild_large_output = [&](auto& values) {
   values.clear();
-  values.get_target().reserve(large_initial_values.size());
+  values.get_target().reserve(std::size(large_initial_values));
 
-  for (auto remaining = large_initial_values.size(); remaining; --remaining) {
+  for (auto remaining = std::size(large_initial_values); remaining; --remaining) {
    values.push_back(large_value);
   }
  };
