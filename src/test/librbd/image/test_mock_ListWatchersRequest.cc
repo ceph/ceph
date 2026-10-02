@@ -11,6 +11,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+#include <iterator>
+#include <vector>
+
 namespace librbd {
 
 namespace {
@@ -55,7 +58,7 @@ public:
 
   void expect_list_watchers(MockTestImageCtx &mock_image_ctx,
                             const std::string oid,
-                            const std::list<obj_watch_t> &watchers, int r) {
+                            const std::vector<obj_watch_t> &watchers, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                list_watchers(oid, _));
     if (r < 0) {
@@ -66,14 +69,14 @@ public:
   }
 
   void expect_list_image_watchers(MockTestImageCtx &mock_image_ctx,
-                                  const std::list<obj_watch_t> &watchers,
+                                  const std::vector<obj_watch_t> &watchers,
                                   int r) {
     expect_list_watchers(mock_image_ctx, mock_image_ctx.header_oid,
                          watchers, r);
   }
 
   void expect_list_mirror_watchers(MockTestImageCtx &mock_image_ctx,
-                                   const std::list<obj_watch_t> &watchers,
+                                   const std::vector<obj_watch_t> &watchers,
                                    int r) {
     expect_list_watchers(mock_image_ctx, RBD_MIRRORING, watchers, r);
   }
@@ -95,7 +98,7 @@ TEST_F(TestMockListWatchersRequest, NoImageWatchers) {
   InSequence seq;
   expect_list_image_watchers(mock_image_ctx, {}, 0);
 
-  std::list<obj_watch_t> watchers;
+  std::vector<obj_watch_t> watchers {watcher("sentinel", 42)};
   C_SaferCond ctx;
   auto req = MockListWatchersRequest::create(mock_image_ctx, 0, &watchers,
                                              &ctx);
@@ -115,13 +118,15 @@ TEST_F(TestMockListWatchersRequest, Error) {
   InSequence seq;
   expect_list_image_watchers(mock_image_ctx, {}, -EINVAL);
 
-  std::list<obj_watch_t> watchers;
+  std::vector<obj_watch_t> watchers {watcher("sentinel", 42)};
   C_SaferCond ctx;
   auto req = MockListWatchersRequest::create(mock_image_ctx, 0, &watchers,
                                              &ctx);
   req->send();
 
   ASSERT_EQ(-EINVAL, ctx.wait());
+  ASSERT_EQ(1U, std::size(watchers));
+  ASSERT_STREQ("sentinel", watchers.front().addr);
 }
 
 TEST_F(TestMockListWatchersRequest, Success) {
@@ -136,7 +141,7 @@ TEST_F(TestMockListWatchersRequest, Success) {
                              {watcher("a", 123), watcher("b", 456)}, 0);
   expect_get_watch_handle(*mock_image_ctx.image_watcher, 123);
 
-  std::list<obj_watch_t> watchers;
+  std::vector<obj_watch_t> watchers;
   C_SaferCond ctx;
   auto req = MockListWatchersRequest::create(mock_image_ctx, 0, &watchers,
                                              &ctx);
@@ -145,13 +150,10 @@ TEST_F(TestMockListWatchersRequest, Success) {
   ASSERT_EQ(0, ctx.wait());
   ASSERT_EQ(2U, watchers.size());
 
-  auto w = watchers.begin();
-  ASSERT_STREQ("a", w->addr);
-  ASSERT_EQ(123U, w->cookie);
-
-  w++;
-  ASSERT_STREQ("b", w->addr);
-  ASSERT_EQ(456U, w->cookie);
+  ASSERT_STREQ("a", watchers[0].addr);
+  ASSERT_EQ(123U, watchers[0].cookie);
+  ASSERT_STREQ("b", watchers[1].addr);
+  ASSERT_EQ(456U, watchers[1].cookie);
 }
 
 TEST_F(TestMockListWatchersRequest, FilterOutMyInstance) {
@@ -166,7 +168,7 @@ TEST_F(TestMockListWatchersRequest, FilterOutMyInstance) {
                              {watcher("a", 123), watcher("b", 456)}, 0);
   expect_get_watch_handle(*mock_image_ctx.image_watcher, 123);
 
-  std::list<obj_watch_t> watchers;
+  std::vector<obj_watch_t> watchers;
   C_SaferCond ctx;
   auto req = MockListWatchersRequest::create(
       mock_image_ctx, LIST_WATCHERS_FILTER_OUT_MY_INSTANCE, &watchers, &ctx);
@@ -175,8 +177,8 @@ TEST_F(TestMockListWatchersRequest, FilterOutMyInstance) {
   ASSERT_EQ(0, ctx.wait());
   ASSERT_EQ(1U, watchers.size());
 
-  ASSERT_STREQ("b", watchers.begin()->addr);
-  ASSERT_EQ(456U, watchers.begin()->cookie);
+  ASSERT_STREQ("b", watchers.front().addr);
+  ASSERT_EQ(456U, watchers.front().cookie);
 }
 
 TEST_F(TestMockListWatchersRequest, FilterOutMirrorInstance) {
@@ -194,7 +196,7 @@ TEST_F(TestMockListWatchersRequest, FilterOutMirrorInstance) {
   expect_list_mirror_watchers(mock_image_ctx, {watcher("b", 789)}, 0);
   expect_get_watch_handle(*mock_image_ctx.image_watcher, 123);
 
-  std::list<obj_watch_t> watchers;
+  std::vector<obj_watch_t> watchers;
   C_SaferCond ctx;
   auto req = MockListWatchersRequest::create(
       mock_image_ctx, LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES, &watchers,
@@ -204,8 +206,8 @@ TEST_F(TestMockListWatchersRequest, FilterOutMirrorInstance) {
   ASSERT_EQ(0, ctx.wait());
   ASSERT_EQ(1U, watchers.size());
 
-  ASSERT_STREQ("a", watchers.begin()->addr);
-  ASSERT_EQ(123U, watchers.begin()->cookie);
+  ASSERT_STREQ("a", watchers.front().addr);
+  ASSERT_EQ(123U, watchers.front().cookie);
 }
 
 } // namespace image
