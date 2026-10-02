@@ -563,6 +563,11 @@ if(WITH_RADOSGW_FDB)
  add_catch2_test_rgw(fdb_query)
  add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
  add_catch2_test_rgw(fdb_content)
+
+ if(EXPERIMENTAL_NVIDIA_STDEXEC)
+  add_catch2_test_rgw(fdb_execution NO_CATCH2_MAIN)
+  target_link_libraries(unittest_fdb_execution rgw_fdb_execution)
+ endif()
 endif()
 
 if(WITH_RADOSGW_LANCEDB)

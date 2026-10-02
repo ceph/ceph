@@ -930,6 +930,16 @@ if(WITH_RADOSGW_FDB)
 
  target_link_libraries(rgw_fdb INTERFACE zpp_bits)
 
+ if(EXPERIMENTAL_NVIDIA_STDEXEC)
+ # Keep the experimental execution model out of core libfdb consumers:
+  add_library(rgw_fdb_execution INTERFACE)
+  target_compile_definitions(rgw_fdb_execution INTERFACE
+   CEPH_EXPERIMENTAL_NVIDIA_STDEXEC)
+  target_link_libraries(rgw_fdb_execution INTERFACE
+   rgw_fdb
+   STDEXEC::stdexec)
+ endif()
+
 endif(WITH_RADOSGW_FDB)
 
 install(TARGETS radosgw DESTINATION bin)
