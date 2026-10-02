@@ -213,3 +213,33 @@ TEST(PerfCounterInstance, TimeOrdering) {
     prev_t = point.t;
   }
 }
+
+TEST(PerfCounterInstance, LatentBug_get_latest_data_avg_ScalarEmptyGuard) {
+  PerfCounterInstance counter(PERFCOUNTER_U64);
+
+  ASSERT_EQ(counter.get_data_avg().size(), 0u);
+
+  const auto& datapoint = counter.get_latest_data_avg();
+  ASSERT_EQ(datapoint.s, 0u);
+  ASSERT_EQ(datapoint.c, 0u);
+  ASSERT_EQ(datapoint.t, utime_t());
+}
+
+TEST(PerfCounterInstance, LatentBug_get_latest_data_avg_AvgEmptyGuard) {
+  PerfCounterInstance counter(PERFCOUNTER_LONGRUNAVG);
+
+  ASSERT_EQ(counter.get_data_avg().size(), 0u);
+
+  const auto& before = counter.get_latest_data_avg();
+  ASSERT_EQ(before.s, 0u);
+  ASSERT_EQ(before.c, 0u);
+  ASSERT_EQ(before.t, utime_t());
+
+  utime_t t1(100, 0);
+  counter.push_avg(t1, 1000, 10);
+
+  const auto& after = counter.get_latest_data_avg();
+  ASSERT_EQ(after.s, 1000u);
+  ASSERT_EQ(after.c, 10u);
+  ASSERT_EQ(after.t, t1);
+}
