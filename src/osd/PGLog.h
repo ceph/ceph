@@ -25,14 +25,15 @@
 #include "osd_types.h"
 #include "os/ObjectStore.h"
 
-#include <iosfwd>
 #include <map>
-#include <memory>
-#include <list>
 #include <set>
+#include <list>
+#include <iosfwd>
+#include <memory>
+#include <ranges>
 #include <string>
-#include <unordered_map>
 #include <vector>
+#include <unordered_map>
 
 #ifdef WITH_CRIMSON
 #include <seastar/core/future.hh>
@@ -1115,7 +1116,8 @@ protected:
     // entries is non-empty
     ceph_assert(!orig_entries.empty());
     // strip out and ignore ERROR entries
-    mempool::osd_pglog::list<pg_log_entry_t> entries;
+    std::vector<pg_log_entry_t> entries;
+    entries.reserve(std::ranges::size(orig_entries));
     eversion_t last;
     bool seen_non_error = false;
     std::optional<eversion_t> prior_version_opt;
@@ -1415,10 +1417,10 @@ public:
 		 bool &dirty_info, bool &dirty_big_info,
 		 bool ec_optimizations_enabled);
 
-  template <typename missing_type>
+  template <std::ranges::forward_range EntriesT, typename missing_type>
   static bool append_log_entries_update_missing(
     const hobject_t &last_backfill,
-    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
+    const EntriesT &entries,
     bool maintain_rollback,
     IndexedLog *log,
     missing_type &missing,
@@ -1427,31 +1429,32 @@ public:
     shard_id_t shard,
     const DoutPrefixProvider *dpp) {
     bool invalidate_stats = false;
-    if (log && !entries.empty()) {
-      ceph_assert(log->head < entries.begin()->version);
+    if (log && !std::ranges::empty(entries)) {
+      ceph_assert(log->head < std::ranges::begin(entries)->version);
     }
-    for (auto p = entries.begin(); p != entries.end(); ++p) {
-      invalidate_stats = invalidate_stats || !p->is_error();
+
+    for (const auto &entry : entries) {
+      invalidate_stats = invalidate_stats || !entry.is_error();
       if (log) {
-	ldpp_dout(dpp, 20) << "update missing, append " << *p << dendl;
-	log->add(*p);
+	ldpp_dout(dpp, 20) << "update missing, append " << entry << dendl;
+	log->add(entry);
       }
-      if (p->soid <= last_backfill &&
-	  !p->is_error()) {
+      if (entry.soid <= last_backfill &&
+	  !entry.is_error()) {
 	if (missing.may_include_deletes) {
-	  missing.add_next_event(*p, pool, shard);
+	  missing.add_next_event(entry, pool, shard);
 	} else {
-	  if (p->is_delete()) {
-	    missing.rm(p->soid, p->version);
+	  if (entry.is_delete()) {
+	    missing.rm(entry.soid, entry.version);
 	  } else {
-	    missing.add_next_event(*p, pool, shard);
+	    missing.add_next_event(entry, pool, shard);
 	  }
 	  if (rollbacker) {
 	    // hack to match PG::mark_all_unfound_lost
-	    if (maintain_rollback && p->is_lost_delete() && p->can_rollback()) {
-	      rollbacker->try_stash(p->soid, p->version.version);
-	    } else if (p->is_delete()) {
-	      rollbacker->remove(p->soid);
+	    if (maintain_rollback && entry.is_lost_delete() && entry.can_rollback()) {
+	      rollbacker->try_stash(entry.soid, entry.version.version);
+	    } else if (entry.is_delete()) {
+	      rollbacker->remove(entry.soid);
 	    }
 	  }
 	}
@@ -1616,8 +1619,8 @@ public:
     std::map<eversion_t, hobject_t> divergent_priors;
     bool must_rebuild = false;
     missing.may_include_deletes = false;
-    std::list<pg_log_entry_t> entries;
-    std::list<pg_log_dup_t> dups;
+    mempool::osd_pglog::list<pg_log_entry_t> entries;
+    mempool::osd_pglog::list<pg_log_dup_t> dups;
     const auto NUM_DUPS_WARN_THRESHOLD = 2*cct->_conf->osd_pg_log_dups_tracked;
     store->omap_iterate(
       ch, pgmeta_oid, ObjectStore::omap_iter_seek_t::min_lower_bound(),
@@ -1670,7 +1673,7 @@ public:
 			      << " Consider ceph-objectstore-tool --op trim-pg-log-dups"
 			      << dendl;
 	  }
-	  dups.push_back(dup);
+	  dups.push_back(std::move(dup));
 	} else {
 	  pg_log_entry_t e;
 	  e.decode_with_checksum(bp);
@@ -1680,9 +1683,9 @@ public:
 	    ceph_assert(last_e.version.version < e.version.version);
 	    ceph_assert(last_e.version.epoch <= e.version.epoch);
 	  }
-	  entries.push_back(e);
+	  entries.push_back(std::move(e));
 	  if (log_keys_debug)
-	    log_keys_debug->insert(e.get_key_name());
+	    log_keys_debug->insert(entries.back().get_key_name());
 	}
 	return ObjectStore::omap_iter_ret_t::NEXT;
       });
