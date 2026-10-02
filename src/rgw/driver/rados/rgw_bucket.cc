@@ -1694,6 +1694,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
   formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
   formatter->dump_bool("suspended", bucket_info.bucket_suspended());
+  formatter->dump_bool("admin_locked", bucket_info.admin_locked());
   ::encode_json("owner", bucket_info.owner, formatter);
 
   if (has_index) {

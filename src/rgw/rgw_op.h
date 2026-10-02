@@ -2345,6 +2345,12 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
+// true when s->bucket is admin-locked and the requester isn't an admin
+bool rgw_bucket_admin_locked_for(const req_state* s);
+// -EACCES when an op of this type may not change an admin-locked bucket
+int rgw_verify_bucket_admin_lock(const DoutPrefixProvider* dpp,
+                                 const req_state* s, RGWOpType type);
+
 extern int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 				     req_state* s, optional_yield y);
 extern int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,

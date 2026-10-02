@@ -459,6 +459,71 @@ static int read_public_access_conf(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+bool rgw_bucket_admin_locked_for(const req_state* s)
+{
+  return !rgw::sal::Bucket::empty(s->bucket.get()) &&
+         s->bucket->get_info().admin_locked() &&
+         !s->auth.identity->is_admin();
+}
+
+/*
+ * Requests that change an admin-locked bucket: its configuration, or the
+ * retention, legal hold or ACL of objects in it. Object reads and writes,
+ * listing and deletes that respect object lock are not in this list.
+ */
+static bool admin_lock_applies(RGWOpType type, const req_state* s)
+{
+  switch (type) {
+  case RGW_OP_DELETE_BUCKET:
+  case RGW_OP_SET_BUCKET_VERSIONING:
+  case RGW_OP_SET_BUCKET_WEBSITE:
+  case RGW_OP_PUT_METADATA_BUCKET:
+  case RGW_OP_PUT_ACLS:
+  case RGW_OP_PUT_CORS:
+  case RGW_OP_DELETE_CORS:
+  case RGW_OP_PUT_BUCKET_ENCRYPTION:
+  case RGW_OP_DELETE_BUCKET_ENCRYPTION:
+  case RGW_OP_SET_REQUEST_PAYMENT:
+  case RGW_OP_PUT_BUCKET_POLICY:
+  case RGW_OP_DELETE_BUCKET_POLICY:
+  case RGW_OP_PUT_LC:
+  case RGW_OP_DELETE_LC:
+  case RGW_OP_PUT_BUCKET_OBJ_LOCK:
+  case RGW_OP_PUT_OBJ_RETENTION:
+  case RGW_OP_PUT_OBJ_LEGAL_HOLD:
+  case RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS:
+  case RGW_OP_DELETE_BUCKET_OWNERSHIP_CONTROLS:
+  case RGW_OP_PUT_BUCKET_LOGGING:
+  case RGW_OP_CONFIG_BUCKET_META_SEARCH:
+  case RGW_OP_DEL_BUCKET_META_SEARCH:
+  case RGW_OP_PUBSUB_NOTIF_CREATE:
+  case RGW_OP_PUBSUB_NOTIF_DELETE:
+  case RGW_OP_PUT_BUCKET_TAGGING:
+  case RGW_OP_DELETE_BUCKET_TAGGING:
+  case RGW_OP_PUT_BUCKET_REPLICATION:
+  case RGW_OP_DELETE_BUCKET_REPLICATION:
+  case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
+  case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
+    return true;
+  case RGW_OP_SET_ATTRS:
+  case RGW_OP_DELETE_ATTRS:
+    return rgw::sal::Object::empty(s->object.get());
+  default:
+    return false;
+  }
+}
+
+int rgw_verify_bucket_admin_lock(const DoutPrefixProvider* dpp,
+                                 const req_state* s, RGWOpType type)
+{
+  if (!admin_lock_applies(type, s) || !rgw_bucket_admin_locked_for(s)) {
+    return 0;
+  }
+  ldpp_dout(dpp, 4) << "bucket " << s->bucket->get_name()
+      << " is admin-locked" << dendl;
+  return -EACCES;
+}
+
 static int read_bucket_policy(const DoutPrefixProvider *dpp, 
                               rgw::sal::Driver* driver,
                               req_state *s,
@@ -4322,6 +4387,10 @@ void RGWCreateBucket::execute(optional_yield y)
       return;
     } else {
       // For swift, update the bucket metadata and do not call createbucket.
+      op_ret = rgw_verify_bucket_admin_lock(this, s, RGW_OP_PUT_METADATA_BUCKET);
+      if (op_ret < 0) {
+        return;
+      }
       op_ret = put_swift_bucket_metadata(
           this, s, policy, has_policy, policy_rw_mask, cors_config, has_cors,
           createparams.swift_ver_location, rmattr_names, y);
@@ -6001,7 +6070,8 @@ int RGWDeleteObj::verify_permission(optional_yield y)
 
   if (s->bucket->get_info().obj_lock_enabled() && bypass_governance_mode) {
     // require s3BypassGovernanceRetention for x-amz-bypass-governance-retention
-    bypass_perm = verify_bucket_permission(this, s, arn, rgw::IAM::s3BypassGovernanceRetention);
+    bypass_perm = verify_bucket_permission(this, s, arn, rgw::IAM::s3BypassGovernanceRetention) &&
+                  !rgw_bucket_admin_locked_for(s);
   }
 
   if (s->bucket->get_info().mfa_enabled() &&
@@ -8262,7 +8332,8 @@ int RGWDeleteMultiObj::verify_permission(optional_yield y)
 
   if (s->bucket->get_info().obj_lock_enabled() && bypass_governance_mode) {
     // require s3BypassGovernanceRetention for x-amz-bypass-governance-retention
-    bypass_perm = verify_bucket_permission(this, s, rgw::IAM::s3BypassGovernanceRetention);
+    bypass_perm = verify_bucket_permission(this, s, rgw::IAM::s3BypassGovernanceRetention) &&
+                  !rgw_bucket_admin_locked_for(s);
   }
 
   return 0;
@@ -8611,6 +8682,14 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
   }
 
   if (!verify_permission(bucket->get_info(), bucket->get_attrs(), bowner, y)) {
+    ret = -EACCES;
+    goto auth_fail;
+  }
+
+  if (path.obj_key.empty() && bucket->get_info().admin_locked() &&
+      !s->auth.identity->is_admin()) {
+    ldpp_dout(dpp, 4) << "bucket " << path.bucket_name
+        << " is admin-locked" << dendl;
     ret = -EACCES;
     goto auth_fail;
   }
