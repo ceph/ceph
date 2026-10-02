@@ -1,0 +1,8 @@
+# Dentry miss fetches the whole dirfrag.  This is the default, and in this
+# mode mds_dir_prefetch_backend has no effect at all - the backend path in
+# CDir::fetch() lives entirely under `if (!mds_dir_prefetch)`.
+overrides:
+  ceph:
+    cluster-conf:
+      mds:
+        mds_dir_prefetch: true

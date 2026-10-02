@@ -1,0 +1,8 @@
+# Dentry miss fetches only the requested key, and the rest of the dirfrag is
+# never warmed.
+overrides:
+  ceph:
+    cluster-conf:
+      mds:
+        mds_dir_prefetch: false
+        mds_dir_prefetch_backend: false
