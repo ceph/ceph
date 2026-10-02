@@ -210,13 +210,10 @@ int ErasureCodePluginRegistry::preload(const std::string &plugins,
 				       ostream *ss)
 {
   std::lock_guard l{lock};
-  list<string> plugins_list;
-  get_str_list(plugins, plugins_list);
-  for (list<string>::iterator i = plugins_list.begin();
-       i != plugins_list.end();
-       ++i) {
+  const auto plugins_list = get_str_vec(plugins);
+  for (const auto& plugin_name : plugins_list) {
     ErasureCodePlugin *plugin;
-    int r = load(*i, directory, &plugin, ss);
+    int r = load(plugin_name, directory, &plugin, ss);
     if (r)
       return r;
   }

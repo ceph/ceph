@@ -29,7 +29,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-using std::list;
 using std::make_pair;
 using std::map;
 using std::ostream;
