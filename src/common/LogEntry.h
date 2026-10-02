@@ -27,12 +27,12 @@
 #include "ostream_temp.h"
 #include "LRUSet.h"
 
+#include <map>
+#include <deque>
+#include <string>
+#include <vector>
 #include <cstdint>
 #include <iostream>
-#include <list>
-#include <vector>
-#include <map>
-#include <string>
 #include <unordered_set>
 
 namespace ceph {
@@ -161,7 +161,7 @@ struct LogSummary {
 
   // ---- pre-quincy ----
   // channel -> [(seq#, entry), ...]
-  std::map<std::string,std::list<std::pair<uint64_t,LogEntry>>> tail_by_channel;
+  std::map<std::string, std::deque<std::pair<uint64_t, LogEntry>>> tail_by_channel;
   uint64_t seq = 0;
   std::unordered_set<LogEntryKey> keys;
 
@@ -171,7 +171,7 @@ struct LogSummary {
 
   LogSummary() : version(0) {}
 
-  void build_ordered_tail_legacy(std::list<LogEntry> *tail) const;
+  void build_ordered_tail_legacy(std::vector<LogEntry>& tail) const;
 
   void add_legacy(const LogEntry& e) {
     keys.insert(e.key());

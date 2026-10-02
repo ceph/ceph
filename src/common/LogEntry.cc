@@ -3,15 +3,15 @@
 
 //
 #include <syslog.h>
+#include <ranges>
+#include <iterator>
+
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "LogEntry.h"
 #include "Formatter.h"
 #include "include/stringify.h"
 
-using std::list;
-using std::map;
-using std::make_pair;
 using std::pair;
 using std::string;
 using std::vector;
@@ -283,32 +283,47 @@ vector<LogEntry> LogEntry::generate_test_instances()
 
 // -----
 
-void LogSummary::build_ordered_tail_legacy(list<LogEntry> *tail) const
+void LogSummary::build_ordered_tail_legacy(vector<LogEntry>& tail) const
 {
-  tail->clear();
-  // channel -> (begin, end)
-  map<string,pair<list<pair<uint64_t,LogEntry>>::const_iterator,
-		  list<pair<uint64_t,LogEntry>>::const_iterator>> pos;
-  for (auto& i : tail_by_channel) {
-    pos.emplace(i.first, make_pair(i.second.begin(), i.second.end()));
+  using legacy_channel_entries = decltype(tail_by_channel)::mapped_type;
+  using cursor = pair<legacy_channel_entries::const_iterator,
+                      legacy_channel_entries::const_iterator>;
+
+  tail.clear();
+  vector<cursor> cursors;
+  cursors.reserve(std::size(tail_by_channel));
+  std::size_t total = 0;
+
+  for (const auto& entries : tail_by_channel | std::views::values) {
+    cursors.emplace_back(std::cbegin(entries), std::cend(entries));
+    total += std::size(entries);
   }
-  while (true) {
-    uint64_t min_seq = 0;
-    list<pair<uint64_t,LogEntry>>::const_iterator *minp = 0;
-    for (auto& i : pos) {
-      if (i.second.first == i.second.second) {
-	continue;
+
+  tail.reserve(total);
+
+  for (;;) {
+    uint64_t minimum_sequence = 0;
+    legacy_channel_entries::const_iterator *minimum = nullptr;
+
+    for (auto& cursor : cursors) {
+      if (cursor.first == cursor.second) {
+        continue;
       }
-      if (min_seq == 0 || i.second.first->first < min_seq) {
-	min_seq = i.second.first->first;
-	minp = &i.second.first;
+
+      if (0 != minimum_sequence && minimum_sequence <= cursor.first->first) {
+        continue;
       }
+
+      minimum_sequence = cursor.first->first;
+      minimum = &cursor.first;
     }
-    if (min_seq == 0) {
+
+    if (0 == minimum_sequence) {
       break; // done
     }
-    tail->push_back((*minp)->second);
-    ++(*minp);
+
+    tail.push_back((*minimum)->second);
+    ++(*minimum);
   }
 }
 

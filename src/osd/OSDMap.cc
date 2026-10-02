@@ -7758,7 +7758,7 @@ void OSDMap::check_health(CephContext *cct,
     }
   }
 
-  std::list<std::string> scrub_messages;
+  vector<std::string> scrub_messages;
   bool noscrub = false, nodeepscrub = false;
   for (const auto &p : pools) {
     if (p.second.flags & pg_pool_t::FLAG_NOSCRUB) {
@@ -7780,7 +7780,7 @@ void OSDMap::check_health(CephContext *cct,
     out += nodeepscrub ? "nodeep-scrub" : "";
     auto& d = checks->add("POOL_SCRUB_FLAGS", HEALTH_OK,
 			  "Some pool(s) have the " + out + " flag(s) set", 0);
-    d.detail.splice(d.detail.end(), scrub_messages);
+    d.detail.swap(scrub_messages);
   }
 
   // OSD_OUT_OF_ORDER_FULL
@@ -7793,7 +7793,7 @@ void OSDMap::check_health(CephContext *cct,
     float br = get_backfillfull_ratio();
     float nr = get_nearfull_ratio();
 
-    list<string> detail;
+    vector<string> detail;
     // These checks correspond to how OSDService::check_full_status() in an OSD
     // handles the improper setting of these values.
     if (br < nr) {
@@ -7892,7 +7892,7 @@ void OSDMap::check_health(CephContext *cct,
 
   // OSD_FLAGS
   {
-    list<string> detail;
+    vector<string> detail;
     const unsigned flags =
       CEPH_OSD_NOUP |
       CEPH_OSD_NOIN |
@@ -7962,7 +7962,7 @@ void OSDMap::check_health(CephContext *cct,
 
   // CACHE_POOL_NO_HIT_SET
   if (cct->_conf->mon_warn_on_cache_pools_without_hit_sets) {
-    list<string> detail;
+    vector<string> detail;
     for (auto p = pools.cbegin(); p != pools.cend(); ++p) {
       const pg_pool_t& info = p->second;
       if (info.cache_mode_requires_hit_set() &&
@@ -8001,7 +8001,7 @@ void OSDMap::check_health(CephContext *cct,
 
   // POOL_NEARFULL/BACKFILLFULL/FULL
   {
-    list<string> full_detail, backfillfull_detail, nearfull_detail;
+    vector<string> full_detail, backfillfull_detail, nearfull_detail;
     for (auto it : get_pools()) {
       const pg_pool_t &pool = it.second;
       const string& pool_name = get_pool_name(it.first);
@@ -8049,7 +8049,7 @@ void OSDMap::check_health(CephContext *cct,
 
   // POOL_PG_NUM_NOT_POWER_OF_TWO
   if (cct->_conf.get_val<bool>("mon_warn_on_pool_pg_num_not_power_of_two")) {
-    list<string> detail;
+    vector<string> detail;
     for (auto it : get_pools()) {
       if (!std::has_single_bit(it.second.get_pg_num_target())) {
 	ostringstream ss;
@@ -8071,7 +8071,7 @@ void OSDMap::check_health(CephContext *cct,
   // POOL_NO_REDUNDANCY
   if (cct->_conf.get_val<bool>("mon_warn_on_pool_no_redundancy"))
   {
-    list<string> detail;
+    vector<string> detail;
     for (auto it : get_pools()) {
       if (it.second.get_size() == 1) {
         ostringstream ss;
