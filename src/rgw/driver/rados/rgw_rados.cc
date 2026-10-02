@@ -4542,6 +4542,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
     attrs = cb.get_attrs();
   }
 
+  attrs.erase(RGW_ATTR_TAIL_TAG);
+
   if (copy_if_newer) {
     uint64_t pg_ver = 0;
     auto i = attrs.find(RGW_ATTR_PG_VER);
