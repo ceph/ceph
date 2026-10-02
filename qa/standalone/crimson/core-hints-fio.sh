@@ -22,8 +22,12 @@
 #   NUM_OSDS       OSDs, and the replicated pool's size         (default: 3)
 #   OSD_SMP        reactor cores per OSD (crimson_cpu_num)      (default: 4)
 #   OSD_MEMORY     memory per OSD (crimson_memory)              (default: 4G)
-#   STORE          cyanstore | seastore | bluestore (alienstore) (default: cyanstore)
-#   SEASTORE_SIZE  seastore block file size                     (default: 10G)
+#   STORE          cyanstore | seastore | bluestore (alienstore) (default: seastore)
+#   SEASTORE_DEVS  seastore: comma-separated block devices, one per OSD (in
+#                  OSD id order), as with vstart.sh --seastore-devs. Their
+#                  first MiB is zeroed! Unset: a SEASTORE_SIZE block file per
+#                  OSD, in the test dir                         (default: unset)
+#   SEASTORE_SIZE  seastore block file size, without SEASTORE_DEVS (default: 10G)
 #   PG_NUM         the pool's PGs                               (default: 32)
 #   WORKLOADS      fio rw modes, from: randread randwrite randrw
 #                                     (default: all three; randrw is 70% reads)
@@ -33,7 +37,7 @@
 #   FIO_NRFILES, FIO_FILESIZE  objects per fio job, and their size (default: 32, 4m)
 #   REPEAT         repetitions of every (workload, mode) pair   (default: 1)
 #   RESULTS_DIR    where fio outputs and the summary are kept
-#                  (default: ./core-hints-fio.<date> under the build dir)
+#                  (default: ./fio-hints-results.<date> under the build dir)
 #   STRICT         1: fail unless the flag removes most of the OSD-side
 #                  cross-core hops (default: 0, only warn)
 
@@ -42,7 +46,8 @@ source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 NUM_OSDS=${NUM_OSDS:-3}
 OSD_SMP=${OSD_SMP:-4}
 OSD_MEMORY=${OSD_MEMORY:-4G}
-STORE=${STORE:-cyanstore}
+STORE=${STORE:-seastore}
+SEASTORE_DEVS=${SEASTORE_DEVS:-}
 SEASTORE_SIZE=${SEASTORE_SIZE:-10G}
 PG_NUM=${PG_NUM:-32}
 WORKLOADS=${WORKLOADS:-"randread randwrite randrw"}
@@ -55,7 +60,10 @@ FIO_NUMJOBS=${FIO_NUMJOBS:-4}
 FIO_NRFILES=${FIO_NRFILES:-32}
 FIO_FILESIZE=${FIO_FILESIZE:-4m}
 REPEAT=${REPEAT:-1}
-RESULTS_DIR=${RESULTS_DIR:-$PWD/core-hints-fio.$(date +%Y%m%d-%H%M%S)}
+# Note: teardown() takes any file in the build dir whose name starts or ends
+# with "core" for a core dump (with a relative kernel.core_pattern), and
+# fails the test. Hence the name.
+RESULTS_DIR=${RESULTS_DIR:-$PWD/fio-hints-results.$(date +%Y%m%d-%H%M%S)}
 STRICT=${STRICT:-0}
 
 POOL=corehints
@@ -92,12 +100,54 @@ function run() {
 # Cluster
 #
 
+# The vstart.sh equivalent of the cluster, for reference:
+# MGR=1 MON=1 OSD=3 MDS=0 RGW=1 ../src/vstart.sh -n --crimson --no-restart --without-dashboard --seastore --seastore-devs /dev/nvme5n1,/dev/nvme6n1,/dev/nvme7n1 --crimson-smp 24 -o "crimson_seastar_blocked_reactor_notify_ms = 10000" --msgr2 -X -o "osd_op_queue=wpq"
+
+# the SEASTORE_DEVS, one per line
+function _seastore_devs() {
+    tr ',' '\n' <<<"$SEASTORE_DEVS" | grep -v '^$'
+}
+
+function _check_seastore_devs() {
+    [ "$STORE" = seastore ] && [ -n "$SEASTORE_DEVS" ] || return 0
+    local -a devs=($(_seastore_devs))
+    if [ ${#devs[@]} -lt $NUM_OSDS ]; then
+        echo "ERROR: ${#devs[@]} SEASTORE_DEVS for $NUM_OSDS OSDs"
+        return 1
+    fi
+    local dev
+    for dev in "${devs[@]}"; do
+        if [ ! -b "$dev" ] || [ ! -w "$dev" ]; then
+            echo "ERROR: $dev is not a writable block device"
+            return 1
+        fi
+    done
+}
+
+# OSD id's seastore device: as vstart.sh does, zero its first MiB, and link
+# it as the 'block' of the OSD's data dir, for the OSD's mkfs to use
+function _prepare_osd_dev() {
+    local dir=$1 id=$2
+    [ "$STORE" = seastore ] && [ -n "$SEASTORE_DEVS" ] || return 0
+    local -a devs=($(_seastore_devs))
+    local dev=${devs[$id]}
+    echo "osd.$id: seastore on $dev"
+    mkdir -p $dir/$id || return 1
+    dd if=/dev/zero of=$dev bs=1M count=1 oflag=direct || return 1
+    ln -sf $dev $dir/$id/block || return 1
+}
+
 function _osd_store_args() {
     case "$STORE" in
         cyanstore)
             echo "--osd_objectstore=cyanstore" ;;
         seastore)
-            echo "--osd_objectstore=seastore --seastore_device_size=$SEASTORE_SIZE" ;;
+            if [ -n "$SEASTORE_DEVS" ]; then
+                # the device linked as 'block' by _prepare_osd_dev()
+                echo "--osd_objectstore=seastore"
+            else
+                echo "--osd_objectstore=seastore --seastore_device_size=$SEASTORE_SIZE"
+            fi ;;
         bluestore)
             echo "--osd_objectstore=bluestore" ;;
         *)
@@ -118,8 +168,10 @@ function _setup_cluster() {
 
     local store_args
     store_args=$(_osd_store_args) || return 1
+    _check_seastore_devs || return 1
     local id
     for id in $(seq 0 $((NUM_OSDS - 1))); do
+        _prepare_osd_dev $dir $id || return 1
         run_crimson_osd $dir $id \
             --crimson_cpu_num=$OSD_SMP \
             --crimson_memory=$OSD_MEMORY \
