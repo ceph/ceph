@@ -13,10 +13,12 @@
 #include "global/global_context.h"
 #include "include/stringify.h"
 
-#include <iostream>
-#include <list>
 #include <map>
 #include <string>
+#include <vector>
+#include <iostream>
+#include <iterator>
+
 #include <boost/program_options.hpp>
 
 #include "json_spirit/json_spirit.h"
@@ -51,7 +53,11 @@ public:
         return -EBADMSG;
       }
 
-      for (auto &item_val : s["scheduled_images"].get_array()) {
+      auto &scheduled_image_values = s["scheduled_images"].get_array();
+      scheduled_images.reserve(
+        std::size(scheduled_images) + std::size(scheduled_image_values));
+
+      for (auto &item_val : scheduled_image_values) {
         if (item_val.type() != json_spirit::obj_type) {
           std::cerr << "rbd: unexpected schedule status JSON received: "
                     << "schedule item is not object" << std::endl;
@@ -100,7 +106,7 @@ public:
 
 private:
 
-  std::list<std::pair<std::string, std::string>> scheduled_images;
+  std::vector<std::pair<std::string, std::string>> scheduled_images;
 };
 
 std::ostream& operator<<(std::ostream& os, ScheduleStatus &s) {

@@ -78,7 +78,7 @@ private:
     }
 
   };
-  typedef std::list<Update> Updates;
+  using Updates = std::vector<Update>;
 
   // Lock ordering: m_threads->timer_lock, m_lock
 
