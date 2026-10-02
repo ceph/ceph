@@ -537,8 +537,9 @@ class MetadataLister : public RGWMetadataLister {
   using RGWMetadataLister::RGWMetadataLister;
 
   void filter_transform(std::vector<std::string>& oids,
-                        std::list<std::string>& keys) override
+                        std::vector<std::string>& keys) override
   {
+    keys.reserve(std::size(oids));
     // remove the oid prefix from keys
     constexpr auto trim = [] (const std::string& oid) {
       return oid.substr(account_oid_prefix.size());
@@ -664,7 +665,7 @@ class MetadataHandler : public RGWMetadataHandler {
   }
 
   int list_keys_next(const DoutPrefixProvider* dpp, void* handle, int max,
-                     std::list<std::string>& keys, bool* truncated) override
+                     std::vector<std::string>& keys, bool* truncated) override
   {
     auto lister = static_cast<MetadataLister*>(handle);
     return lister->get_next(dpp, max, keys, truncated);

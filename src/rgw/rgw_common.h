@@ -17,9 +17,10 @@
 #pragma once
 
 #include <array>
+#include <ranges>
+#include <vector>
 #include <cstdint>
 #include <iterator>
-#include <ranges>
 #include <string_view>
 #include <unordered_map>
 
@@ -645,7 +646,7 @@ struct RGWUserInfo
   __u8 admin = 0;
   __u8 system = 0;
   rgw_placement_rule default_placement;
-  std::list<std::string> placement_tags;
+  std::vector<std::string> placement_tags;
   std::map<int, std::string> temp_url_keys;
   RGWQuota quota;
   uint32_t type;
