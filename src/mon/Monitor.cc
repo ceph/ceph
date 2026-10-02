@@ -121,7 +121,6 @@ using namespace std::literals;
 using std::cout;
 using std::dec;
 using std::hex;
-using std::list;
 using std::map;
 using std::make_pair;
 using std::ostream;
@@ -961,15 +960,14 @@ int Monitor::preinit()
 
   if (!has_ever_joined) {
     // impose initial quorum restrictions?
-    list<string> initial_members;
-    get_str_list(g_conf()->mon_initial_members, initial_members);
+    auto initial_members = get_str_vec(g_conf()->mon_initial_members);
 
     if (!initial_members.empty()) {
       dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
 
       monmap->set_initial_members(
 	g_ceph_context, initial_members, name, messenger->get_myaddrs(),
-	&extra_probe_peers);
+	extra_probe_peers);
 
       dout(10) << " monmap is " << *monmap << dendl;
       dout(10) << " extra probe peers " << extra_probe_peers << dendl;
@@ -2418,11 +2416,16 @@ std::string Monitor::get_leader_name() {
   return quorum.empty() ? std::string() : monmap->get_name(leader);
 }
 
-std::list<std::string> Monitor::get_quorum_names() {
-  std::list<std::string> q;
-  for (auto p = quorum.begin(); p != quorum.end(); ++p)
-    q.push_back(monmap->get_name(*p));
-  return q;
+std::vector<std::string> Monitor::get_quorum_names()
+{
+  std::vector<std::string> names;
+  names.reserve(std::size(quorum));
+
+  for (const auto rank : quorum) {
+    names.push_back(monmap->get_name(rank));
+  }
+
+  return names;
 }
 
 mon_feature_t Monitor::get_required_mon_features() const {
@@ -2883,10 +2886,11 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
     f->dump_int("mon", *p);
   f->close_section(); // quorum
 
-  list<string> quorum_names = get_quorum_names();
+  const auto quorum_names = get_quorum_names();
   f->open_array_section("quorum_names");
-  for (list<string>::iterator p = quorum_names.begin(); p != quorum_names.end(); ++p)
-    f->dump_string("mon", *p);
+  for (const auto& mon : quorum_names) {
+    f->dump_string("mon", mon);
+  }
   f->close_section(); // quorum_names
 
   f->dump_string("quorum_leader_name", quorum.empty() ? string() : monmap->get_name(leader));
@@ -3361,14 +3365,16 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
 	 << quorum_names << " (age " << timespan_str(mnow - quorum_since) << ")"
    << " [leader: " << get_leader_name() << "]";
       if (quorum_names.size() != mon_count) {
-	std::list<std::string> out_of_q;
+	vector<string> out_of_q;
+	out_of_q.reserve(std::size(monmap->ranks));
+
 	for (size_t i = 0; i < monmap->ranks.size(); ++i) {
 	  if (quorum.count(i) == 0) {
 	    out_of_q.push_back(monmap->ranks[i]);
 	  }
 	}
-	ss << ", out of quorum: " << joinify(out_of_q.begin(),
-					     out_of_q.end(), std::string(", "));
+	ss << ", out of quorum: " << joinify(std::begin(out_of_q),
+					     std::end(out_of_q), std::string(", "));
       }
       ss << "\n";
       if (mgrmon()->in_use()) {
@@ -4583,7 +4589,7 @@ void Monitor::resend_routed_requests()
 {
   dout(10) << "resend_routed_requests" << dendl;
   int mon = get_leader();
-  list<Context*> retry;
+  vector<Context*> retry;
   for (map<uint64_t, RoutedRequest*>::iterator p = routed_requests.begin();
        p != routed_requests.end();
        ++p) {
@@ -5805,7 +5811,7 @@ void Monitor::count_metadata(const string& field, Formatter *f)
   f->close_section();
 }
 
-void Monitor::get_all_versions(std::map<string, list<string> > &versions)
+void Monitor::get_all_versions(std::map<string, vector<string>>& versions)
 {
   // mon
   get_versions(versions);
@@ -5818,7 +5824,7 @@ void Monitor::get_all_versions(std::map<string, list<string> > &versions)
   dout(20) << __func__ << " all versions=" << versions << dendl;
 }
 
-void Monitor::get_versions(std::map<string, list<string> > &versions)
+void Monitor::get_versions(std::map<string, vector<string>>& versions)
 {
   for (auto& [rank, metadata] : mon_metadata) {
     auto q = metadata.find("ceph_version_short");
@@ -5832,7 +5838,7 @@ void Monitor::get_versions(std::map<string, list<string> > &versions)
 
 int Monitor::print_nodes(Formatter *f, ostream& err)
 {
-  map<string, list<string> > mons;	// hostname => mon
+  map<string, vector<string>> mons;	// hostname => mon
   for (map<int, Metadata>::iterator it = mon_metadata.begin();
        it != mon_metadata.end(); ++it) {
     const Metadata& m = it->second;

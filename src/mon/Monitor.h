@@ -28,6 +28,7 @@
 #include <cmath>
 #include <string>
 #include <array>
+#include <vector>
 
 #include "include/types.h"
 #include "include/health.h"
@@ -566,8 +567,8 @@ private:
    * @} // Synchronization
    */
 
-  std::list<Context*> waitfor_quorum;
-  std::list<Context*> maybe_wait_for_quorum;
+  std::vector<Context*> waitfor_quorum;
+  std::vector<Context*> maybe_wait_for_quorum;
 
   /**
    * @defgroup Monitor_h_TimeCheck Monitor Clock Drift Early Warning System
@@ -664,7 +665,7 @@ public:
   int get_leader() const { return leader; }
   std::string get_leader_name();
   const std::set<int>& get_quorum() const { return quorum; }
-  std::list<std::string> get_quorum_names();
+  std::vector<std::string> get_quorum_names();
   uint64_t get_quorum_con_features() const {
     return quorum_con_features;
   }
@@ -1019,8 +1020,8 @@ private:
   void count_metadata(const std::string& field, ceph::Formatter *f);
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
   // get_all_versions() gathers version information from daemons for health check
-  void get_all_versions(std::map<std::string, std::list<std::string>> &versions);
-  void get_versions(std::map<std::string, std::list<std::string>> &versions);
+  void get_all_versions(std::map<std::string, std::vector<std::string>>& versions);
+  void get_versions(std::map<std::string, std::vector<std::string>>& versions);
 
   // features
   static CompatSet get_initial_supported_features();

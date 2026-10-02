@@ -30,6 +30,7 @@
 #include <iosfwd>
 #include <map>
 #include <set>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -205,12 +206,12 @@ public:
   /**
    * Obtain list of public facing addresses
    *
-   * @param ls list to populate with the monitors' addresses
+   * @param addresses vector to populate with the monitors' addresses
    */
-  void list_addrs(std::list<entity_addr_t>& ls) const {
-    for (auto& i : mon_info) {
-      for (auto& j : i.second.public_addrs.v) {
-	ls.push_back(j);
+  void list_addrs(std::vector<entity_addr_t>& addresses) const {
+    for (const auto& i : mon_info) {
+      for (const auto& address : i.second.public_addrs.v) {
+	addresses.push_back(address);
       }
     }
   }
@@ -464,13 +465,13 @@ public:
    * @param initial_members list of initial member names
    * @param my_name name of self, can be blank
    * @param my_addr my addr
-   * @param removed optional pointer to set to insert removed mon addrs to
+   * @param removed set to insert removed mon addrs into
    */
   void set_initial_members(CephContext *cct,
-			   std::list<std::string>& initial_members,
+			   std::span<const std::string> initial_members,
 			   std::string my_name,
 			   const entity_addrvec_t& my_addrs,
-			   std::set<entity_addrvec_t> *removed);
+			   std::set<entity_addrvec_t>& removed);
 
   void print(std::ostream& out) const;
   void print_summary(std::ostream& out) const;
