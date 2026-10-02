@@ -954,7 +954,7 @@ class PgScrubber : public ScrubPgIF,
    */
   std::optional<uint64_t> select_range();
 
-  std::list<Context*> m_callbacks;
+  std::vector<Context*> m_callbacks;
 
   hobject_t m_max_end;	///< Largest end that may have been sent to replicas
   ScrubMapBuilder m_primary_scrubmap_pos;

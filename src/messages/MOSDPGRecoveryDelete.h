@@ -4,6 +4,8 @@
 #ifndef CEPH_MOSDPGRECOVERYDELETE_H
 #define CEPH_MOSDPGRECOVERYDELETE_H
 
+#include <vector>
+
 #include "MOSDFastDispatchOp.h"
 
 /*
@@ -18,7 +20,7 @@ public:
   pg_shard_t from;
   spg_t pgid;            ///< target spg_t
   epoch_t map_epoch, min_epoch;
-  std::list<std::pair<hobject_t, eversion_t>> objects;    ///< objects to remove
+  std::vector<std::pair<hobject_t, eversion_t>> objects;    ///< objects to remove
 
 private:
   uint64_t cost = 0;
