@@ -36,6 +36,7 @@
 #include <map>
 #include <list>
 #include <array>
+#include <deque>
 #include <vector>
 #include <unordered_map>
 
@@ -924,6 +925,8 @@ TEST_CASE("approximate range size composes with selections", "[fdb][query]")
  namespace fdbc = ceph::libfdb::layer::content;
  namespace lq = ceph::libfdb::query;
 
+ CHECK(0 == lfdb::approximate_range_size(lfdb::transaction_handle {}, lq::empty()));
+
  janitor dbh;
  const auto prefix = make_key_prefix("range-size");
  const auto object_root = fdbc::keyspace(test_key("range-size-content")) / "objects";
@@ -941,10 +944,131 @@ TEST_CASE("approximate range size composes with selections", "[fdb][query]")
   lfdb::approximate_range_size(dbh,
                                lq::set_union(lq::prefix(prefix),
                                              fdbc::prefix(object_root)));
+ const auto batched_selection = lq::set_union(
+   lq::prefix(test_key("range-size-batch-a")),
+   lq::set_union(
+     lq::prefix(test_key("range-size-batch-c")),
+     lq::set_union(
+       lq::prefix(test_key("range-size-batch-e")),
+       lq::set_union(
+         lq::prefix(test_key("range-size-batch-g")),
+         lq::prefix(test_key("range-size-batch-i"))))));
+ std::size_t interval_count = 0;
+
+ lq::for_each_interval(batched_selection,
+                       [&interval_count](const auto&) {
+                         ++interval_count;
+                       });
 
  CHECK(0 <= range_estimate);
  CHECK(0 <= union_estimate);
+ REQUIRE(5 == interval_count);
+ CHECK(0 <= lfdb::approximate_range_size(dbh, batched_selection));
  CHECK(0 == lfdb::approximate_range_size(dbh, lfdb::select { prefix, prefix }));
+}
+
+TEST_CASE("partitions produce algebra-compatible managed work ranges", "[fdb]")
+{
+ namespace lq = ceph::libfdb::query;
+
+ struct nondefault_partition_result final
+ {
+  std::vector<lfdb::select> values;
+
+  explicit nondefault_partition_result(std::vector<lfdb::select>&& source)
+   : values(std::move(source))
+  {}
+
+  auto begin() noexcept { return std::begin(values); }
+  auto end() noexcept { return std::end(values); }
+  auto size() const noexcept { return std::size(values); }
+ };
+
+ janitor dbh;
+ constexpr auto entries_per_group = 64;
+ constexpr std::int64_t target_bytes = 256;
+
+ write_monotonic_kvs(dbh, entries_per_group, "partition-a");
+ write_monotonic_kvs(dbh, entries_per_group, "partition-c");
+ write_monotonic_kvs(dbh, entries_per_group, "partition-gap");
+
+ const auto selection = lq::set_union(
+   lq::prefix(make_key_prefix("partition-a")),
+   lq::prefix(make_key_prefix("partition-c")));
+ auto read_keys = [&dbh](const auto& query) {
+  auto txn = lfdb::make_transaction(dbh);
+
+  return lfdb::scan(txn, query)
+       | std::views::keys
+       | std::ranges::to<std::vector<std::string>>();
+ };
+ const auto expected = read_keys(selection);
+ auto txn = lfdb::make_transaction(dbh);
+ const auto planned = lfdb::partitions(txn, selection, target_bytes);
+
+ STATIC_REQUIRE(lq::expression<
+   std::ranges::range_value_t<decltype(planned)>>);
+ REQUIRE(2 <= std::size(planned));
+ CHECK(2 * entries_per_group == std::size(expected));
+
+ std::vector<std::string> actual;
+
+ for (const auto& partition : planned) {
+  const auto within_selection = lq::intersection(partition, selection);
+  auto keys = read_keys(within_selection);
+
+  std::ranges::move(keys, std::back_inserter(actual));
+ }
+
+ CHECK_THAT(actual, Catch::Matchers::RangeEquals(expected));
+ CHECK(std::ranges::none_of(actual, [](const std::string_view key) {
+  return key.starts_with(make_key_prefix("partition-gap"));
+ }));
+
+ const auto deque_partitions =
+   lfdb::partitions<std::deque<lfdb::select>>(
+     dbh, selection, target_bytes);
+
+ CHECK(std::size(planned) == std::size(deque_partitions));
+ CHECK_THAT(deque_partitions, Catch::Matchers::RangeEquals(planned));
+
+ STATIC_REQUIRE_FALSE(std::default_initializable<nondefault_partition_result>);
+
+ const auto nondefault_partitions =
+   lfdb::partitions<nondefault_partition_result>(
+     dbh, selection, target_bytes);
+
+ CHECK(std::size(planned) == std::size(nondefault_partitions));
+
+ const auto reverse_selection = lq::with_options(
+   selection,
+   lq::query_options {
+    .result_limit = 7,
+    .reverse_order = true
+   });
+ const auto reverse_expected = read_keys(reverse_selection);
+ const auto reverse_partitions = lfdb::partitions(
+   dbh, reverse_selection, target_bytes);
+ std::vector<std::string> reverse_actual;
+
+ for (const auto& partition : reverse_partitions) {
+  CHECK(reverse_selection.options == partition.options);
+
+  auto keys = read_keys(partition);
+  std::ranges::move(keys, std::back_inserter(reverse_actual));
+ }
+
+ CHECK_THAT(reverse_actual,
+            Catch::Matchers::RangeEquals(reverse_expected));
+
+ const auto empty_selection = lq::difference(selection, selection);
+
+ CHECK(std::empty(lfdb::partitions(dbh, empty_selection, target_bytes)));
+ CHECK_THROWS_AS(lfdb::partitions(dbh, selection, 0),
+                 std::invalid_argument);
+ CHECK_THROWS_AS(lfdb::partitions(
+                   lfdb::transaction_handle {}, selection, target_bytes),
+                 std::invalid_argument);
 }
 
 static_assert(not std::default_initializable<lfdb::watch_handle>);
@@ -1175,6 +1299,15 @@ TEST_CASE("transaction watches", "[rgw][fdb]") {
   wait_thread.join();
 
   CHECK(lfdb::watch_event::cancelled == result);
+ }
+
+ SECTION("watch wait observes a pre-requested stop token") {
+  auto watch = lfdb::make_watch(dbh, watch_key);
+  std::stop_source stop;
+
+  stop.request_stop();
+
+  CHECK(lfdb::watch_event::cancelled == watch.wait_for_event(stop.get_token()));
  }
 
  SECTION("watch loop re-arms until stopped") {
@@ -1716,6 +1849,15 @@ TEST_CASE("query algebra examples execute against fdb", "[fdb][query][example]")
   CHECK_THAT(keys_from_blocks(reverse_active_cache),
              Catch::Matchers::RangeEquals(reverse_active_cache_keys));
 
+  const auto empty_then_active = lq::set_union(
+    lq::prefix(test_key("cache/absent/")),
+    lq::prefix(test_key("cache/warm/")));
+
+  CHECK_THAT(keys_from_blocks(empty_then_active),
+             Catch::Matchers::RangeEquals(std::vector {
+              test_key("cache/warm/a")
+             }));
+
   const auto visible_hot =
    lq::difference(lq::prefix(test_key("cache/hot/")),
                   lq::prefix(test_key("cache/hot/private/")));
@@ -1901,6 +2043,13 @@ TEST_CASE("FoundationDB C API argument conversion", "[fdb][rgw]")
 
   CHECK(std::empty(empty));
   CHECK(std::empty(lfdb::detail::as_string_view(empty)));
+ }
+
+ SECTION("nonempty NULL result buffers are rejected") {
+  const FDBKeyValue *data = nullptr;
+
+  CHECK_THROWS_WITH(lfdb::detail::result_span(data, 1),
+                    "FoundationDB returned a NULL result buffer");
  }
 }
 
@@ -3808,6 +3957,19 @@ SCENARIO("transactor", "[fdb]")
   CHECK_FALSE(lfdb::get(txn, key, out));
   CHECK(lfdb::commit(txn));
   CHECK(lfdb::key_exists(j, key));
+ }
+
+ SECTION("reset_for_replay discards failed-attempt version stamps") {
+  auto txn = lfdb::make_transaction(j);
+  lfdb::versionstamp abandoned_stamp;
+
+  lfdb::set(txn, test_key("abandoned-versionstamp"),
+            lfdb::versioned("", abandoned_stamp));
+  lfdb::reset_for_replay(txn, 1020);
+
+  lfdb::set(txn, test_key("replayed-without-versionstamp"), "value");
+  REQUIRE(lfdb::commit(txn));
+  CHECK_FALSE(abandoned_stamp.is_resolved());
  }
 
  SECTION("reset_for_replay rejects non-retryable errors") {
