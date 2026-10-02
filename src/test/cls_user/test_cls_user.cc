@@ -17,6 +17,8 @@
 #include "test/librados/test_pool_types.h"
 #include "gtest/gtest.h"
 
+#include <list>
+#include <iterator>
 #include <optional>
 #include <system_error>
 #include "include/expected.hpp"
@@ -24,6 +26,88 @@ using ceph::test::PoolType;
 using ceph::test::pool_type_name;
 using ceph::test::create_pool_by_type;
 using ceph::test::destroy_pool_by_type;
+
+namespace {
+
+std::list<cls_user_bucket_entry> make_legacy_bucket_entries()
+{
+  std::list<cls_user_bucket_entry> entries;
+
+  for (int i = 0; i < 3; ++i) {
+    auto& entry = entries.emplace_back();
+    cls_user_gen_test_bucket_entry(&entry, i);
+  }
+
+  return entries;
+}
+
+ceph::buffer::list encode_legacy_set_buckets(
+  const std::list<cls_user_bucket_entry>& entries, bool add,
+  ceph::real_time time)
+{
+  ceph::buffer::list encoded;
+  ENCODE_START(1, 1, encoded);
+  encode(entries, encoded);
+  encode(add, encoded);
+  encode(time, encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+ceph::buffer::list encode_legacy_bucket_list(
+  const std::list<cls_user_bucket_entry>& entries,
+  const std::string& marker, bool truncated)
+{
+  ceph::buffer::list encoded;
+  ENCODE_START(1, 1, encoded);
+  encode(entries, encoded);
+  encode(marker, encoded);
+  encode(truncated, encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+template <typename WIRE_T>
+void expect_legacy_wire_compatibility(const WIRE_T& value,
+                                      const ceph::buffer::list& legacy_bytes)
+{
+  ceph::buffer::list current_bytes;
+  encode(value, current_bytes);
+  ASSERT_TRUE(current_bytes.contents_equal(legacy_bytes));
+
+  WIRE_T decoded;
+  auto cursor = legacy_bytes.cbegin();
+  decode(decoded, cursor);
+
+  ceph::buffer::list decoded_bytes;
+  encode(decoded, decoded_bytes);
+  EXPECT_TRUE(decoded_bytes.contents_equal(legacy_bytes));
+}
+
+} // namespace
+
+TEST(ClsUserEncoding, BucketEntryContainersRemainWireCompatible)
+{
+  const auto legacy_entries = make_legacy_bucket_entries();
+
+  cls_user_set_buckets_op set;
+  set.entries.assign(std::cbegin(legacy_entries), std::cend(legacy_entries));
+  set.add = true;
+  set.time = ceph::real_clock::from_time_t(123);
+  expect_legacy_wire_compatibility(
+    set, encode_legacy_set_buckets(legacy_entries, set.add, set.time));
+
+  cls_user_list_buckets_ret listing;
+  listing.entries.assign(std::cbegin(legacy_entries),
+                         std::cend(legacy_entries));
+  listing.marker = "next";
+  listing.truncated = true;
+  expect_legacy_wire_compatibility(
+    listing, encode_legacy_bucket_list(
+      legacy_entries, listing.marker, listing.truncated));
+}
 
 // test fixture with helper functions
 class TestClsAccount : public ceph::test::ClsTestFixture {
