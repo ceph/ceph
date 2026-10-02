@@ -21,6 +21,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <list>
 #include <vector>
 #include <map>
@@ -2922,7 +2923,7 @@ WRITE_CLASS_ENCODER(pg_hit_set_info_t)
  */
 struct pg_hit_set_history_t {
   eversion_t current_last_update;  ///< last version inserted into current set
-  std::list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
+  std::deque<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
 
   friend bool operator==(const pg_hit_set_history_t& l,
 			 const pg_hit_set_history_t& r) {
@@ -5661,7 +5662,7 @@ WRITE_CLASS_ENCODER(pg_nls_response_t)
 // For backwards compatibility with older OSD requests
 struct pg_ls_response_t {
   collection_list_handle_t handle; 
-  std::list<std::pair<object_t, std::string> > entries;
+  std::vector<std::pair<object_t, std::string>> entries;
 
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
@@ -5681,10 +5682,10 @@ struct pg_ls_response_t {
   void dump(ceph::Formatter *f) const {
     f->dump_stream("handle") << handle;
     f->open_array_section("entries");
-    for (std::list<std::pair<object_t, std::string> >::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+    for (const auto& [object, key] : entries) {
       f->open_object_section("object");
-      f->dump_stream("object") << p->first;
-      f->dump_string("key", p->second);
+      f->dump_stream("object") << object;
+      f->dump_string("key", key);
       f->close_section();
     }
     f->close_section();
@@ -6852,7 +6853,7 @@ struct obj_watch_item_t {
  *
  */
 struct obj_list_watch_response_t {
-  std::list<watch_item_t> entries;
+  std::vector<watch_item_t> entries;
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
@@ -6866,9 +6867,9 @@ struct obj_list_watch_response_t {
   }
   void dump(ceph::Formatter *f) const {
     f->open_array_section("entries");
-    for (std::list<watch_item_t>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+    for (const auto& entry : entries) {
       f->open_object_section("watch");
-      p->dump(f);
+      entry.dump(f);
       f->close_section();
     }
     f->close_section();
