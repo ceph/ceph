@@ -24,3 +24,16 @@ target_link_libraries(ceph_test_objectcacher_misc
   )
 install(TARGETS ceph_test_objectcacher_misc
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# unittest_splitop
+add_executable(unittest_splitop
+  test_splitop.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_splitop)
+target_link_libraries(unittest_splitop
+  osdc
+  global
+  ${EXTRALIBS}
+  ${CMAKE_DL_LIBS}
+  )
