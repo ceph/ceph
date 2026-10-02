@@ -74,6 +74,21 @@
   ``mgr/orchestrator/fail_fs``). The two new ``cephadm`` commands can also be
   used by hand.
 
+* cephadm: The staged switch now has an OSD policy (add ``osd`` to
+  ``mgr/cephadm/upgrade_staged_switch_types``): every OSD still to upgrade
+  under one CRUSH bucket of the type given by
+  ``mgr/cephadm/upgrade_staged_switch_osd_crush_level`` (default ``host``;
+  ``auto`` picks the highest bucket type below the root that works, group by
+  group) is staged while serving, then restarted in one go, one bucket per
+  pass, provided ``ceph osd ok-to-stop`` on that exact set reports that every
+  PG stays active. ``noout`` is set on the group for the duration of the
+  restart (``mgr/cephadm/upgrade_staged_switch_osd_noout``), and the monitors
+  (osdmap ``up_from`` and ``osd metadata``) are what confirm the restart and
+  the version before the group is released. A failed OSD switch is never
+  rolled back: the upgrade pauses and resumes at the same group.
+  ``cephadm switch-staged`` now accepts ``--name`` several times and restarts
+  the daemons named around a single ``systemctl stop`` / ``start``.
+
 * cephadm: During ``ceph orch upgrade``, CephFS filesystems are now prepared
   and restored one at a time during the MDS phase, so at most one filesystem
   is offline (``fail_fs = true``) or degraded (scaled down to ``max_mds 1``)
