@@ -41,6 +41,8 @@
     bucket stats                     returns bucket statistics
     bucket suspend                   suspend a bucket
     bucket unsuspend                 unsuspend a bucket
+    bucket admin-lock                admin-lock a bucket
+    bucket admin-unlock              remove a bucket's admin lock
     bucket rm                        remove bucket
     bucket check                     check bucket index by verifying size and object count stats
     bucket check olh                 check for olh index entries and objects that are pending removal
