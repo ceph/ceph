@@ -1,0 +1,24 @@
+# the admin-lock workunit with static website on and a zonegroup sync policy,
+# so the website and replication lock checks are asserted, not skipped.
+# rgw/verify can't turn those on for its merged job.
+overrides:
+  ceph:
+    conf:
+      client:
+        # the race tests turn the delay on with rgw_inject_delay_pattern,
+        # nothing is delayed while the pattern is unset
+        rgw inject delay sec: 10
+tasks:
+- install:
+- ceph:
+- exec:
+    client.0:
+      # replication needs a zonegroup sync policy, read when rgw starts
+      - sudo radosgw-admin sync group create --group-id=admin-lock --status=allowed
+- rgw: [client.0]
+- workunit:
+    clients:
+      client.0:
+        - rgw/run-bucket-admin-lock.sh
+    env:
+      ADMIN_LOCK_REQUIRE_FEATURES: '1'
