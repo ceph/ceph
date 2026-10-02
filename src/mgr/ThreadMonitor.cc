@@ -229,6 +229,13 @@ bool ThreadMonitor::read_thread_stat(pid_t tid, long long& utime, long long& sti
   return true;
 }
 
+bool ThreadMonitor::parse_statm(std::istream& statm_stream, long long& rss_pages) {
+  // /proc/<pid>/statm format: size resident shared text lib data dt
+  // The second field (resident) is the RSS in pages.
+  long long vsize_pages;
+  return static_cast<bool>(statm_stream >> vsize_pages >> rss_pages);
+}
+
 bool ThreadMonitor::read_process_statm(long long& rss_pages) {
   std::string statm_path = "/proc/self/statm";
   std::ifstream statm_file(statm_path);
@@ -238,8 +245,10 @@ bool ThreadMonitor::read_process_statm(long long& rss_pages) {
     return false;
   }
 
-  long long vsize_pages;
-  statm_file >> vsize_pages >> rss_pages;
+  if (!parse_statm(statm_file, rss_pages)) {
+    dout(20) << __func__ << "Malformed statm file " << statm_path << dendl;
+    return false;
+  }
   return true;
 }
 
