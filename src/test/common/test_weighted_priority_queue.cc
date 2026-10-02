@@ -5,11 +5,11 @@
 #include "common/Formatter.h"
 #include "common/WeightedPriorityQueue.h"
 
-#include <numeric>
-#include <vector>
 #include <map>
-#include <list>
+#include <deque>
 #include <tuple>
+#include <vector>
+#include <numeric>
 
 #define CEPH_OP_CLASS_STRICT	0
 #define CEPH_OP_CLASS_NORMAL	0
@@ -26,10 +26,9 @@ protected:
   typedef unsigned Kost;
   typedef WeightedPriorityQueue<Item, Klass> WQ;
   // Simulate queue structure
-  typedef std::list<std::pair<Kost, Item> > ItemList;
+  typedef std::deque<std::pair<Kost, Item> > ItemList;
   typedef std::map<Klass, ItemList> KlassItem;
   typedef std::map<Prio, KlassItem> LQ;
-  typedef std::list<Item> Removed;
   const unsigned max_prios = 5; // (0-4) * 64
   const unsigned klasses = 37;  // Make prime to help get good coverage
 
@@ -197,14 +196,13 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_random) {
   test_queue(rand() % 500 + 500, true);
 } 
 
-TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class_null) {
+TEST_F(WeightedPriorityQueueTest, wpq_test_remove_missing_class) {
   WQ wq(0, 0);
   LQ strictq, normq;
   unsigned num_items = 10;
   fill_queue(wq, strictq, normq, num_items);
-  Removed wq_removed;
   // Pick a klass that was not enqueued
-  wq.remove_by_class(klasses + 1, &wq_removed);
+  auto wq_removed = wq.remove_by_class(klasses + 1);
   EXPECT_EQ(0u, wq_removed.size());
 }
 
@@ -224,17 +222,40 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class) {
        it != normq.end(); ++it) {
     num_to_remove += it->second[k].size();
   }
-  Removed wq_removed;
-  wq.remove_by_class(k, &wq_removed);
+  auto wq_removed = wq.remove_by_class(k);
   // Check that the right ops were removed.
   EXPECT_EQ(num_to_remove, wq_removed.size());
   EXPECT_EQ(num_items - num_to_remove, wq.get_size_slow());
-  for (Removed::iterator it = wq_removed.begin();
-       it != wq_removed.end(); ++it) {
-    EXPECT_EQ(k, std::get<1>(*it));
+  for (const auto& item : wq_removed) {
+    EXPECT_EQ(k, std::get<1>(item));
   }
   // Check that none were missed
   while (!(wq.empty())) {
     EXPECT_NE(k, std::get<1>(wq.dequeue()));
   }
+}
+
+TEST_F(WeightedPriorityQueueTest, wpq_remove_by_class_preserves_order) {
+  WQ wq(0, 0);
+  constexpr Klass k = 7;
+
+  wq.enqueue(k, 1, 1, Item {1, k, 10});
+  wq.enqueue(k, 1, 1, Item {1, k, 11});
+  wq.enqueue(k, 3, 1, Item {3, k, 30});
+  wq.enqueue(k, 3, 1, Item {3, k, 31});
+  wq.enqueue_strict(k, 2, Item {2, k, 20});
+  wq.enqueue_strict(k, 2, Item {2, k, 21});
+  wq.enqueue_strict(k, 4, Item {4, k, 40});
+
+  const std::vector<Item> expected {
+    {3, k, 30},
+    {3, k, 31},
+    {1, k, 10},
+    {1, k, 11},
+    {4, k, 40},
+    {2, k, 20},
+    {2, k, 21}
+  };
+  EXPECT_EQ(expected, wq.remove_by_class(k));
+  EXPECT_TRUE(wq.empty());
 }
