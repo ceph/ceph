@@ -771,9 +771,10 @@ public:
    * enumerate immediate children of given node
    *
    * @param id parent bucket or device id
+   * @param children sequence to append the child IDs to
    * @return number of items, or error
    */
-  int get_children(int id, std::list<int> *children) const;
+  int get_children(int id, std::vector<int>& children) const;
  /**
    * enumerate all children of given node
    *
@@ -809,7 +810,7 @@ public:
   int get_leaves(const std::string &name, std::set<int> *leaves) const;
 
 private:
-  int _get_leaves(int id, std::list<int> *leaves) const; // worker
+  int _get_leaves(int id, std::vector<int>& leaves) const; // worker
 
 public:
   /**
