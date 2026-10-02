@@ -18,6 +18,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <boost/optional.hpp>
+#include <deque>
 #include <iomanip>
 #include <fstream>
 
@@ -230,7 +231,7 @@ int action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool d
 }
 
 struct pgid_object_list {
-  list<pair<coll_t, ghobject_t> > _objects;
+  deque<pair<coll_t, ghobject_t> > _objects;
 
   void insert(coll_t coll, ghobject_t &ghobj) {
     _objects.push_back(make_pair(coll, ghobj));
@@ -239,7 +240,7 @@ struct pgid_object_list {
   void dump(Formatter *f, bool human_readable) const {
     if (!human_readable)
       f->open_array_section("pgid_objects");
-    for (list<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
+    for (deque<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
 	 i != _objects.end();
 	 ++i) {
       f->open_array_section("pgid_object");
@@ -300,7 +301,7 @@ struct lookup_ghobject : public action_on_object_t {
 };
 
 struct lookup_slow_ghobject : public action_on_object_t {
-  list<tuple<
+  vector<tuple<
     coll_t,
     ghobject_t,
     ceph::signedspan,
@@ -2197,12 +2198,13 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     pg_log_t::filter_log(pgid, ms.osdmap, g_ceph_context->_conf->osd_hit_set_namespace,
       ms.log, newlog, reject);
     if (debug) {
-      for (list<pg_log_entry_t>::iterator i = newlog.log.begin();
-           i != newlog.log.end(); ++i)
-        cerr << "Keeping log entry " << *i << std::endl;
-      for (list<pg_log_entry_t>::iterator i = reject.log.begin();
-           i != reject.log.end(); ++i)
-        cerr << "Skipping log entry " << *i << std::endl;
+      for (const auto& entry : newlog.log) {
+        cerr << "Keeping log entry " << entry << std::endl;
+      }
+
+      for (const auto& entry : reject.log) {
+        cerr << "Skipping log entry " << entry << std::endl;
+      }
     }
 
     divergent_priors_t newdp, rejectdp;

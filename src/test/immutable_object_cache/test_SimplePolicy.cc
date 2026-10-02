@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <vector>
 #include <sstream>
-#include <list>
 #include <gtest/gtest.h>
 
 #include "include/Context.h"
@@ -209,10 +209,10 @@ TEST_F(TestSimplePolicy, test_update_state_from_promoting_to_promoted) {
 }
 
 TEST_F(TestSimplePolicy, test_evict_list_0) {
-  std::list<std::string> evict_entry_list;
+  std::vector<std::string> evict_entry_list;
   // the default water mark is 0.9
   ASSERT_TRUE((float)m_simple_policy->get_free_size() > m_cache_size*0.1);
-  m_simple_policy->get_evict_list(&evict_entry_list);
+  m_simple_policy->get_evict_list(evict_entry_list);
   ASSERT_TRUE(evict_entry_list.size() == 0);
 }
 
@@ -222,8 +222,8 @@ TEST_F(TestSimplePolicy, test_evict_list_10) {
     insert_entry_into_promoted_lru(generate_file_name(m_entry_index));
   }
   ASSERT_TRUE(0 == m_simple_policy->get_free_size());
-  std::list<std::string> evict_entry_list;
-  m_simple_policy->get_evict_list(&evict_entry_list);
+  std::vector<std::string> evict_entry_list;
+  m_simple_policy->get_evict_list(evict_entry_list);
   // evict 10% of old entries
   ASSERT_TRUE(m_cache_size*0.1 == evict_entry_list.size());
   ASSERT_TRUE(m_cache_size - m_cache_size*0.1  == m_simple_policy->get_promoted_entry_num());

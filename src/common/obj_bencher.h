@@ -23,8 +23,10 @@
 
 #include <cfloat>
 #include <chrono>
+#include <deque>
 #include <iosfwd>
 #include <string>
+#include <vector>
 
 using ceph::mono_clock;
 
@@ -88,7 +90,7 @@ protected:
   int rand_read_bench(int secondsToRun, int num_ops, int num_objects, int concurrentios, int writePid, bool no_verify=false);
 
   int clean_up(int num_objects, int prevPid, int concurrentios);
-  bool more_objects_matching_prefix(const std::string& prefix, std::list<Object>* name);
+  bool more_objects_matching_prefix(const std::string& prefix, std::deque<Object>& objects);
 
   virtual int completions_init(int concurrentios) = 0;
   virtual void completions_done() = 0;
@@ -107,7 +109,7 @@ protected:
   virtual int sync_write(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_remove(const std::string& oid) = 0;
 
-  virtual bool get_objects(std::list< std::pair<std::string, std::string> >* objects, int num) = 0;
+  virtual bool get_objects(std::vector<Object>& objects, int num) = 0;
   virtual void set_namespace(const std::string&) {}
 
   std::ostream& out(std::ostream& os);
