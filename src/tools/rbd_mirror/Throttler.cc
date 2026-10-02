@@ -98,7 +98,7 @@ bool Throttler<I>::cancel_op(const std::string &ns,
     auto it = m_queued_ops.find(id);
     if (it != m_queued_ops.end()) {
       dout(20) << "canceled queued op for " << id << dendl;
-      m_queue.remove(id);
+      std::erase(m_queue, id);
       on_start = it->second;
       m_queued_ops.erase(it);
     }
@@ -155,10 +155,13 @@ void Throttler<I>::drain(const std::string &ns, int r) {
   std::map<Id, Context *> queued_ops;
   {
     std::lock_guard locker{m_lock};
+    std::erase_if(m_queue, [&ns](const auto& id) {
+      return id.first == ns;
+    });
+
     for (auto it = m_queued_ops.begin(); it != m_queued_ops.end(); ) {
       if (it->first.first == ns) {
         queued_ops[it->first] = it->second;
-        m_queue.remove(it->first);
         it = m_queued_ops.erase(it);
       } else {
         it++;
@@ -184,7 +187,7 @@ template <typename I>
 void Throttler<I>::set_max_concurrent_ops(uint32_t max) {
   dout(20) << "max=" << max << dendl;
 
-  std::list<Context *> ops;
+  std::vector<Context *> ops;
   {
     std::lock_guard locker{m_lock};
     m_max_concurrent_ops = max;
