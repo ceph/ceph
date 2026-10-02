@@ -528,6 +528,11 @@ namespace rgw {
     main.init_perfcounters();
     main.init_http_clients();
 
+    /* Before the driver is created:  librgw initialises with
+     * CODE_ENVIRONMENT_DAEMON, so a driver cannot otherwise tell it
+     * from the gateway.  See rgw::sal::embedded(). */
+    rgw::sal::set_embedded(true);
+
     main.init_storage();
     if (! main.get_driver()) {
       derr << "Couldn't init storage provider (RADOS)" << dendl;

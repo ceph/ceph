@@ -3411,6 +3411,15 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
 {
   int rc = 0;
 
+  /* An init that failed leaves no driver, and every path below needs
+   * one.  Returning the error is what the caller can act on;  the
+   * alternative was a null dereference in the DoutPrefix below, which
+   * crashed the whole embedding process -- ganesha, in the case that
+   * matters -- instead of reporting a configuration fault. */
+  if (! g_rgwlib || ! g_rgwlib->get_driver()) {
+    return -EIO;
+  }
+
   /* if the config has no value for path/root, choose "/" */
   RGWLibFS* new_fs{nullptr};
   if(root &&

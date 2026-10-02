@@ -2190,6 +2190,24 @@ public:
 };
 
 /** @} namespace rgw::sal in group RGWSAL */
+/* Is this process an embedding library rather than the gateway?
+ *
+ * librgw initialises with CODE_ENVIRONMENT_DAEMON (rgw_lib.cc), so
+ * `g_code_env` does not separate it from radosgw -- it separates both
+ * from radosgw-admin and nothing more.  A driver that must behave
+ * differently when embedded therefore has nothing to test, which is
+ * what this is for.
+ *
+ * Set once by the embedder before the driver is created, and read by
+ * whatever needs to know.  The case in hand is impersonation:  a
+ * gateway serves many authenticated identities per process and a
+ * misconfigured one must refuse to start, where librgw binds one uid
+ * at mount and has no per-request identity to assume, so refusing
+ * would take down every consumer of the library -- ganesha among
+ * them -- over a setting that cannot apply to it. */
+void set_embedded(bool on);
+bool embedded();
+
 } } // namespace rgw::sal
 
 /**

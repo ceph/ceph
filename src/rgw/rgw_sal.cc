@@ -22,6 +22,17 @@
 #include "common/errno.h"
 //#include "common/dout.h"
 
+namespace rgw { namespace sal {
+
+/* Written once during initialisation, before any thread that reads it
+ * exists, so it needs no synchronisation. */
+static bool is_embedded = false;
+
+void set_embedded(bool on) { is_embedded = on; }
+bool embedded() { return is_embedded; }
+
+} } // namespace rgw::sal
+
 #include "common/async/blocked_completion.h"
 
 #include "rgw_sal.h"

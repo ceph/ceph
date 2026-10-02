@@ -3605,9 +3605,16 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     std::string missing;
     const bool have = nsfs::have_credential_capabilities(&missing);
 
-    if (g_code_env != CODE_ENVIRONMENT_DAEMON) {
+    if (g_code_env != CODE_ENVIRONMENT_DAEMON || rgw::sal::embedded()) {
+      /* Not the gateway, so there is nothing to impersonate for:
+       * radosgw-admin runs as the operator, and librgw binds one uid
+       * at mount and has no per-request identity.  librgw needs the
+       * second test because it initialises with
+       * CODE_ENVIRONMENT_DAEMON and the first does not see it --
+       * refusing here would take down every consumer of the library
+       * over a setting that cannot apply to it. */
       ldpp_dout(dpp, 10) << "nsfs: impersonation is configured but this is"
-	" not the daemon;  operating as the invoking user" << dendl;
+	" not the gateway;  operating as the invoking user" << dendl;
     } else if (! have) {
       ldpp_dout(dpp, -1) << "ERROR: rgw_nsfs_impersonate is set but this"
 	" process lacks " << missing << ".  Grant them -- setcap"
