@@ -18,6 +18,8 @@
 #include "include/stringify.h"
 #include "crush/CrushWrapper.h"
 
+#include <iterator>
+
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/trim.hpp>
 
@@ -32,7 +34,6 @@ using std::cerr;
 using std::cout;
 using std::dec;
 using std::hex;
-using std::list;
 using std::map;
 using std::make_pair;
 using std::ostream;
@@ -244,9 +245,11 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       odata.append(ss.str());
     }
   } else if (prefix == "config dump") {
-    list<pair<string,Section*>> sections = {
-      make_pair("global", &config_map.global)
-    };
+    vector<pair<string,Section*>> sections;
+    sections.reserve(1 + std::size(config_map.by_type) +
+                     std::size(config_map.by_id));
+    sections.emplace_back("global", &config_map.global);
+
     for (string type : { "mon", "mgr", "osd", "mds", "client" }) {
       auto i = config_map.by_type.find(type);
       if (i != config_map.by_type.end()) {

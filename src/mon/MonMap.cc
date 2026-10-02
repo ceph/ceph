@@ -199,10 +199,10 @@ void MonMap::calc_addr_mons() {
   }
 }
 
-void MonMap::list_addrs(std::list<entity_addr_t>& ls) const {
-  for (auto& i : mon_info) {
-    for (auto& j : i.second.public_addrs.v) {
-      ls.push_back(j);
+void MonMap::list_addrs(std::vector<entity_addr_t>& addresses) const {
+  for (const auto& i : mon_info) {
+    for (const auto& address : i.second.public_addrs.v) {
+      addresses.push_back(address);
     }
   }
 }
