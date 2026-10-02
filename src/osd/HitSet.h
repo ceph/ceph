@@ -16,6 +16,7 @@
 #ifndef CEPH_OSD_HITSET_H
 #define CEPH_OSD_HITSET_H
 
+#include <vector>
 #include <string_view>
 #include <unordered_set>
 
@@ -111,7 +112,7 @@ public:
     void encode(ceph::buffer::list &bl) const;
     void decode(ceph::buffer::list::const_iterator& bl);
     void dump(ceph::Formatter *f) const;
-    static std::list<HitSet::Params> generate_test_instances();
+    static std::vector<HitSet::Params> generate_test_instances();
 
     friend std::ostream& operator<<(std::ostream& out, const HitSet::Params& p);
   };
@@ -164,7 +165,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<HitSet> generate_test_instances();
+  static std::vector<HitSet> generate_test_instances();
 
 private:
   void reset_to_type(impl_type_t type);
@@ -191,8 +192,8 @@ public:
     HitSet::Impl *get_new_impl() const override {
       return new ExplicitHashHitSet;
     }
-    static std::list<Params> generate_test_instances() {
-      std::list<Params> o;
+    static std::vector<Params> generate_test_instances() {
+      std::vector<Params> o;
       o.emplace_back();
       return o;
     }
@@ -239,8 +240,8 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const override;
-  static std::list<ExplicitHashHitSet> generate_test_instances() {
-    std::list<ExplicitHashHitSet> o;
+  static std::vector<ExplicitHashHitSet> generate_test_instances() {
+    std::vector<ExplicitHashHitSet> o;
     o.emplace_back();
     o.emplace_back();
     o.back().insert(hobject_t());
@@ -266,8 +267,8 @@ public:
     HitSet::Impl *get_new_impl() const override {
       return new ExplicitObjectHitSet;
     }
-    static std::list<Params> generate_test_instances() {
-      std::list<Params> o;
+    static std::vector<Params> generate_test_instances() {
+      std::vector<Params> o;
       o.emplace_back();
       return o;
     }
@@ -314,8 +315,8 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const override;
-  static std::list<ExplicitObjectHitSet> generate_test_instances() {
-    std::list<ExplicitObjectHitSet> o;
+  static std::vector<ExplicitObjectHitSet> generate_test_instances() {
+    std::vector<ExplicitObjectHitSet> o;
     o.emplace_back();
     o.emplace_back();
     o.back().insert(hobject_t());
@@ -387,8 +388,8 @@ public:
 	<< get_fpp() << ", target_size: " << target_size
 	<< ", seed: " << seed;
     }
-    static std::list<Params> generate_test_instances() {
-      std::list<Params> o;
+    static std::vector<Params> generate_test_instances() {
+      std::vector<Params> o;
       o.emplace_back();
       o.emplace_back();
       o.back().fpp_micro = 123456;
@@ -453,8 +454,8 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const override;
-  static std::list<BloomHitSet> generate_test_instances() {
-    std::list<BloomHitSet> o;
+  static std::vector<BloomHitSet> generate_test_instances() {
+    std::vector<BloomHitSet> o;
     o.emplace_back();
     o.push_back(BloomHitSet(10, .1, 1));
     o.back().insert(hobject_t());

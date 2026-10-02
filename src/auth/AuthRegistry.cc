@@ -13,6 +13,8 @@
 #include "common/debug.h"
 #include "auth/KeyRing.h"
 
+#include <iterator>
+
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix
 #define dout_prefix *_dout << "AuthRegistry(" << this << ") "
@@ -64,12 +66,15 @@ void AuthRegistry::handle_conf_change(
 void AuthRegistry::_parse_method_list(const string& s,
 				      std::vector<uint32_t> *v)
 {
-  std::list<std::string> sup_list;
-  get_str_list(s, sup_list);
+  const auto sup_list = get_str_vec(s);
+
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
+
   v->clear();
+  v->reserve(std::size(sup_list));
+
   for (auto& i : sup_list) {
     ldout(cct, 5) << "adding auth protocol: " << i << dendl;
     if (i == "cephx") {
@@ -82,21 +87,26 @@ void AuthRegistry::_parse_method_list(const string& s,
       lderr(cct) << "WARNING: unknown auth protocol defined: " << i << dendl;
     }
   }
+
   if (v->empty()) {
     lderr(cct) << "WARNING: no auth protocol defined" << dendl;
   }
+
   ldout(cct,20) << __func__ << " " << s << " -> " << *v << dendl;
 }
 
 void AuthRegistry::_parse_mode_list(const string& s,
 				    std::vector<uint32_t> *v)
 {
-  std::list<std::string> sup_list;
-  get_str_list(s, sup_list);
+  const auto sup_list = get_str_vec(s);
+
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
+
   v->clear();
+  v->reserve(std::size(sup_list));
+
   for (auto& i : sup_list) {
     ldout(cct, 5) << "adding con mode: " << i << dendl;
     if (i == "crc") {
@@ -107,9 +117,11 @@ void AuthRegistry::_parse_mode_list(const string& s,
       lderr(cct) << "WARNING: unknown connection mode " << i << dendl;
     }
   }
+
   if (v->empty()) {
     lderr(cct) << "WARNING: no connection modes defined" << dendl;
   }
+
   ldout(cct,20) << __func__ << " " << s << " -> " << *v << dendl;
 }
 
@@ -375,4 +387,3 @@ AuthAuthorizeHandler *AuthRegistry::get_handler(int peer_type, int method)
   }
   return ah;
 }
-

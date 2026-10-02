@@ -3,9 +3,11 @@
 
 #pragma once
 
-#include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
+#include <iostream>
+#include <iterator>
 #include <string_view>
 
 #include "include/buffer_fwd.h"
@@ -49,16 +51,19 @@ protected:
     no,
     yes,
   };
+  using instance_container = decltype(T::generate_test_instances());
+
+  ptr_type m_object = make_ptr(nullptr, do_delete::yes);
+  instance_container instances;
+  bool stray_okay;
+  bool nondeterministic;
+
   static ptr_type make_ptr(T* ptr, do_delete del) {
     auto deleter = (del == do_delete::yes ?
 		    deleter_type{std::default_delete<T>{}} :
 		    deleter_type{[](T*) {}});
     return ptr_type{ptr, deleter};
   }
-  ptr_type m_object = make_ptr(nullptr, do_delete::yes);
-  std::list<T> m_list;
-  bool stray_okay;
-  bool nondeterministic;
 public:
   DencoderBase(bool stray_okay, bool nondeterministic)
     : stray_okay(stray_okay),
@@ -91,18 +96,18 @@ public:
     m_object->dump(f);
   }
   void generate() override {
-    m_list = T::generate_test_instances();
+    instances = T::generate_test_instances();
   }
   int num_generated() override {
-    return m_list.size();
+    return std::size(instances);
   }
   std::string select_generated(unsigned i) override {
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
-      i = m_list.size();
-    if ((i == 0) || (i > m_list.size()))
+      i = std::size(instances);
+    if ((i == 0) || (i > std::size(instances)))
       return "invalid id for generated object";
-    m_object = make_ptr(std::addressof(*std::next(m_list.begin(), i-1)), do_delete::no);
+    m_object = make_ptr(std::addressof(instances[i - 1]), do_delete::no);
     return {};
   }
 
@@ -180,7 +185,7 @@ public:
 template<class T>
 class MessageDencoderImpl : public Dencoder {
   ref_t<T> m_object;
-  std::list<ref_t<T>> m_list;
+  std::vector<ref_t<T>> instances;
 
 public:
   MessageDencoderImpl() : m_object{make_message<T>()} {}
@@ -220,18 +225,18 @@ public:
     m_object->dump(f);
   }
   void generate() override {
-    //m_list = T::generate_test_instances();
+    //instances = T::generate_test_instances();
   }
   int num_generated() override {
-    return m_list.size();
+    return std::size(instances);
   }
   std::string select_generated(unsigned i) override {
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
-      i = m_list.size();
-    if ((i == 0) || (i > m_list.size()))
+      i = std::size(instances);
+    if ((i == 0) || (i > std::size(instances)))
       return "invalid id for generated object";
-    m_object = *(std::next(m_list.begin(), i-1));
+    m_object = instances[i - 1];
     return {};
   }
   bool is_deterministic() override {

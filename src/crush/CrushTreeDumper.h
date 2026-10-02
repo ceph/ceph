@@ -22,9 +22,10 @@
 #include "common/Formatter.h"
 #include "include/stringify.h"
 
-#include <list>
+#include <deque>
 #include <map>
 #include <string>
+#include <vector>
 
 /**
  * CrushTreeDumper:
@@ -60,7 +61,7 @@ namespace CrushTreeDumper {
     int parent;
     int depth;
     float weight;
-    std::list<int> children;
+    std::vector<int> children;
 
     Item() : id(0), parent(0), depth(0), weight(0) {}
     Item(int i, int p, int d, float w) : id(i), parent(p), depth(d), weight(w) {}
@@ -69,7 +70,7 @@ namespace CrushTreeDumper {
   };
 
   template <typename F>
-  class Dumper : public std::list<Item> {
+  class Dumper : public std::deque<Item> {
   public:
     explicit Dumper(const CrushWrapper *crush_,
 		    const name_map_t& weight_set_names_)
@@ -257,10 +258,8 @@ namespace CrushTreeDumper {
       return;
 
     f->open_array_section("children");
-    for (std::list<int>::const_iterator i = qi.children.begin();
-	 i != qi.children.end();
-	 ++i) {
-      f->dump_int("child", *i);
+    for (const auto child : qi.children) {
+      f->dump_int("child", child);
     }
     f->close_section();
   }

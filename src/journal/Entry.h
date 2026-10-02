@@ -9,7 +9,7 @@
 #include "include/encoding.h"
 
 #include <iosfwd>
-#include <list>
+#include <vector>
 #include <string>
 
 namespace ceph {
@@ -45,7 +45,7 @@ public:
   bool operator==(const Entry& rhs) const;
 
   static bool is_readable(bufferlist::const_iterator iter, uint32_t *bytes_needed);
-  static std::list<Entry> generate_test_instances();
+  static std::vector<Entry> generate_test_instances();
 
 private:
   static const uint64_t preamble = 0x3141592653589793;

@@ -18,12 +18,13 @@
 
 #include <dirent.h> // for IFTODT()
 
-#include <list>
 #include <map>
 #include <set>
+#include <list>
+#include <deque>
+#include <vector>
 #include <sstream>
 #include <string_view>
-#include <vector>
 
 #include "common/config.h"
 #include "common/ref.h" // for cref_t
@@ -225,7 +226,7 @@ public:
     InodeStoreBase::decode_bare(bl, snap_blob);
   }
 
-  static std::list<InodeStore> generate_test_instances();
+  static std::vector<InodeStore> generate_test_instances();
 
   using InodeStoreBase::inode;
   using InodeStoreBase::xattrs;
@@ -246,7 +247,7 @@ public:
   void decode(ceph::buffer::list::const_iterator &bl) {
     InodeStore::decode_bare(bl);
   }
-  static std::list<InodeStoreBare> generate_test_instances();
+  static std::vector<InodeStoreBare> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(InodeStoreBare)
 
@@ -809,7 +810,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void _encode_locks_state_for_rejoin(ceph::buffer::list& bl, int rep);
   void _decode_locks_state_for_replica(ceph::buffer::list::const_iterator& p, bool is_new);
   void _decode_locks_rejoin(ceph::buffer::list::const_iterator& p, std::vector<MDSContext*>& waiters,
-			    std::list<SimpleLock*>& eval_locks, bool survivor);
+			    std::deque<SimpleLock*>& eval_locks, bool survivor);
 
   // -- import/export --
   void encode_export(ceph::buffer::list& bl);

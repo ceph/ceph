@@ -16,6 +16,8 @@
 #ifndef CEPH_MDS_ESUBTREEMAP_H
 #define CEPH_MDS_ESUBTREEMAP_H
 
+#include <deque>
+
 #include "../LogEvent.h"
 #include "../SegmentBoundary.h"
 #include "EMetaBlob.h"
@@ -40,7 +42,7 @@ public:
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static std::list<ESubtreeMap> generate_test_instances();
+  static std::deque<ESubtreeMap> generate_test_instances();
 
   void replay(MDSRank *mds) override;
   bool is_major_segment_boundary() const override {

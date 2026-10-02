@@ -105,8 +105,8 @@ void Dependency::dump(Formatter *f) const {
   f->dump_unsigned("time_delta", time_delta);
 }
 
-std::list<Dependency> Dependency::generate_test_instances() {
-  std::list<Dependency> o;
+std::vector<Dependency> Dependency::generate_test_instances() {
+  std::vector<Dependency> o;
   o.push_back(Dependency());
   o.push_back(Dependency(1, 123456789));
   return o;
@@ -337,8 +337,8 @@ void ActionEntry::dump(Formatter *f) const {
   std::visit(DumpVisitor(f), action);
 }
 
-std::list<ActionEntry>  ActionEntry::generate_test_instances() {
-  std::list<ActionEntry> o;
+std::vector<ActionEntry>  ActionEntry::generate_test_instances() {
+  std::vector<ActionEntry> o;
 
   Dependencies dependencies;
   dependencies.push_back(Dependency(3, 123456789));

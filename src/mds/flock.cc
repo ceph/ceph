@@ -6,15 +6,45 @@
 #include "common/Formatter.h"
 #include "mdstypes.h"
 
+#include <boost/container/small_vector.hpp>
+
 #include <iostream>
+#include <iterator>
+#include <optional>
+#include <algorithm>
+#include <functional>
 
 #define dout_subsys ceph_subsys_mds
 
-using std::list;
 using std::pair;
 using std::multimap;
 
 static multimap<ceph_filelock, ceph_lock_state_t*> global_waiting_locks;
+
+struct ceph_lock_state_t::lock_overlaps final {
+  // File-lock operations normally overlap only a few ranges. Keep the common
+  // case allocation-free while allowing unusually fragmented ranges to grow.
+  static constexpr auto inline_capacity = 4;
+  using batch = boost::container::small_vector<lock_iterator, inline_capacity>;
+
+  batch other;
+  batch owned;
+  batch neighbors;
+
+  auto find_exclusive() const
+    -> std::optional<std::reference_wrapper<const ceph_filelock>>
+  {
+    const auto match = std::ranges::find_if(other, [](const auto current) {
+      return CEPH_LOCK_EXCL == current->second.type;
+    });
+
+    if (std::end(other) == match) {
+      return std::nullopt;
+    }
+
+    return std::cref((*match)->second);
+  }
+};
 
 std::ostream& operator<<(std::ostream& out, const ceph_filelock& l) {
   out << "start: " << l.start << ", length: " << l.length
@@ -85,8 +115,8 @@ void ceph_lock_state_t::dump(ceph::Formatter *f) const {
 }
 
 
-std::list<ceph_lock_state_t> ceph_lock_state_t::generate_test_instances() {
-  std::list<ceph_lock_state_t> ls;
+std::vector<ceph_lock_state_t> ceph_lock_state_t::generate_test_instances() {
+  std::vector<ceph_lock_state_t> ls;
   ls.push_back(ceph_lock_state_t(NULL, 0));
   ls.push_back(ceph_lock_state_t(NULL, 1));
   ls.back().held_locks.insert(std::make_pair(1, ceph_filelock()));
@@ -133,9 +163,9 @@ void ceph_lock_state_t::remove_waiting(const ceph_filelock& fl)
 }
 
 bool ceph_lock_state_t::is_deadlock(const ceph_filelock& fl,
-				    list<multimap<uint64_t, ceph_filelock>::iterator>&
-				      overlapping_locks,
-				    const ceph_filelock *first_fl, unsigned depth) const
+                                    const lock_overlaps& overlapping_locks,
+                                    const ceph_filelock *first_fl,
+                                    unsigned depth) const
 {
   ldout(cct,15) << "is_deadlock " << fl << dendl;
 
@@ -145,21 +175,18 @@ bool ceph_lock_state_t::is_deadlock(const ceph_filelock& fl,
 
   // find conflict locks' owners
   std::set<ceph_filelock> lock_owners;
-  for (auto p = overlapping_locks.begin();
-       p != overlapping_locks.end();
-       ++p) {
-
+  for (const auto current : overlapping_locks.other) {
     if (fl.type == CEPH_LOCK_SHARED &&
-	(*p)->second.type == CEPH_LOCK_SHARED)
+	current->second.type == CEPH_LOCK_SHARED)
       continue;
 
     // circle detected
-    if (first_fl && ceph_filelock_owner_equal(*first_fl, (*p)->second)) {
+    if (first_fl && ceph_filelock_owner_equal(*first_fl, current->second)) {
       ldout(cct,15) << " detect deadlock" << dendl;
       return true;
     }
 
-    ceph_filelock tmp = (*p)->second;
+    ceph_filelock tmp = current->second;
     tmp.start = 0;
     tmp.length = 0;
     tmp.type = 0;
@@ -181,15 +208,12 @@ bool ceph_lock_state_t::is_deadlock(const ceph_filelock& fl,
       if (!ceph_filelock_owner_equal(q->first, *p))
 	break;
 
-      list<multimap<uint64_t, ceph_filelock>::iterator>
-	_overlapping_locks, _self_overlapping_locks;
       ceph_lock_state_t& state = *(q->second);
-      if (state.get_overlapping_locks(q->first, _overlapping_locks)) {
-	state.split_by_owner(q->first, _overlapping_locks, _self_overlapping_locks);
-      }
-      if (!_overlapping_locks.empty()) {
-	if (is_deadlock(q->first, _overlapping_locks, first_fl, depth + 1))
-	  return true;
+      auto overlaps = state.get_overlapping_locks(q->first);
+
+      if (!std::empty(overlaps.other) &&
+          is_deadlock(q->first, overlaps, first_fl, 1 + depth)) {
+        return true;
       }
     }
   }
@@ -210,106 +234,85 @@ bool ceph_lock_state_t::add_lock(ceph_filelock& new_lock,
 				 bool *deadlock)
 {
   ldout(cct,15) << "add_lock " << new_lock << dendl;
-  bool ret = false;
-  list<multimap<uint64_t, ceph_filelock>::iterator>
-    overlapping_locks, self_overlapping_locks, neighbor_locks;
+  auto overlaps = get_overlapping_locks(new_lock, true);
 
-  // first, get any overlapping locks and split them into owned-by-us and not
-  if (get_overlapping_locks(new_lock, overlapping_locks, &neighbor_locks)) {
-    ldout(cct,15) << "got overlapping lock, splitting by owner" << dendl;
-    split_by_owner(new_lock, overlapping_locks, self_overlapping_locks);
-  }
-  if (!overlapping_locks.empty()) { //overlapping locks owned by others :(
-    if (CEPH_LOCK_EXCL == new_lock.type) {
-      //can't set, we want an exclusive
-      ldout(cct,15) << "overlapping lock, and this lock is exclusive, can't set"
-              << dendl;
-      if (wait_on_fail && !replay) {
-	if (is_deadlock(new_lock, overlapping_locks))
-	  *deadlock = true;
-	else
-	  add_waiting(new_lock);
-      }
-    } else { //shared lock, check for any exclusive locks blocking us
-      if (contains_exclusive_lock(overlapping_locks)) { //blocked :(
-        ldout(cct,15) << " blocked by exclusive lock in overlapping_locks" << dendl;
-	if (wait_on_fail && !replay) {
-	  if (is_deadlock(new_lock, overlapping_locks))
-	    *deadlock = true;
-	  else
-	    add_waiting(new_lock);
-	}
-      } else {
-        //yay, we can insert a shared lock
-        ldout(cct,15) << "inserting shared lock" << dendl;
-        remove_waiting(new_lock);
-        adjust_locks(self_overlapping_locks, new_lock, neighbor_locks);
-        held_locks.insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
-        ret = true;
-      }
+  const auto wait_for_lock = [&] {
+    if (!wait_on_fail || replay) {
+      return;
     }
-  } else { //no overlapping locks except our own
-    remove_waiting(new_lock);
-    adjust_locks(self_overlapping_locks, new_lock, neighbor_locks);
-    ldout(cct,15) << "no conflicts, inserting " << new_lock << dendl;
-    held_locks.insert(pair<uint64_t, ceph_filelock>
-                      (new_lock.start, new_lock));
-    ret = true;
+
+    if (is_deadlock(new_lock, overlaps)) {
+      *deadlock = true;
+      return;
+    }
+
+    add_waiting(new_lock);
+  };
+
+  if (!std::empty(overlaps.other)) {
+    if (CEPH_LOCK_EXCL == new_lock.type) {
+      ldout(cct,15) << "overlapping lock, and this lock is exclusive, can't set"
+                    << dendl;
+      wait_for_lock();
+      return false;
+    }
+
+    if (overlaps.find_exclusive()) {
+      ldout(cct,15) << " blocked by exclusive lock in overlapping_locks"
+                    << dendl;
+      wait_for_lock();
+      return false;
+    }
   }
-  if (ret) {
-    ++client_held_lock_counts[(client_t)new_lock.client];
-  }
-  return ret;
+
+  remove_waiting(new_lock);
+  adjust_locks(overlaps, new_lock);
+  ldout(cct,15) << "no conflicts, inserting " << new_lock << dendl;
+  held_locks.insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
+  ++client_held_lock_counts[(client_t)new_lock.client];
+
+  return true;
 }
 
 void ceph_lock_state_t::look_for_lock(ceph_filelock& testing_lock)
 {
-  list<multimap<uint64_t, ceph_filelock>::iterator> overlapping_locks,
-    self_overlapping_locks;
-  if (get_overlapping_locks(testing_lock, overlapping_locks)) {
-    split_by_owner(testing_lock, overlapping_locks, self_overlapping_locks);
-  }
-  if (!overlapping_locks.empty()) { //somebody else owns overlapping lock
+  const auto overlaps = get_overlapping_locks(testing_lock);
+
+  if (!std::empty(overlaps.other)) {
     if (CEPH_LOCK_EXCL == testing_lock.type) { //any lock blocks it
-      testing_lock = (*overlapping_locks.begin())->second;
-    } else {
-      ceph_filelock *blocking_lock;
-      if ((blocking_lock = contains_exclusive_lock(overlapping_locks))) {
-        testing_lock = *blocking_lock;
-      } else { //nothing blocking!
-        testing_lock.type = CEPH_LOCK_UNLOCK;
-      }
+      testing_lock = overlaps.other.front()->second;
+      return;
     }
-    return;
+
+    if (const auto blocking_lock = overlaps.find_exclusive()) {
+      testing_lock = blocking_lock->get();
+      return;
+    }
   }
-  //if we get here, only our own locks block
+
   testing_lock.type = CEPH_LOCK_UNLOCK;
 }
 
-void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock,
-                 list<ceph_filelock>& activated_locks)
+void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock)
 {
-  list<multimap<uint64_t, ceph_filelock>::iterator> overlapping_locks,
-    self_overlapping_locks;
-  if (get_overlapping_locks(removal_lock, overlapping_locks)) {
-    ldout(cct,15) << "splitting by owner" << dendl;
-    split_by_owner(removal_lock, overlapping_locks, self_overlapping_locks);
-  } else ldout(cct,15) << "attempt to remove lock at " << removal_lock.start
-                 << " but no locks there!" << dendl;
+  auto overlaps = get_overlapping_locks(removal_lock);
+
+  if (std::empty(overlaps.other) && std::empty(overlaps.owned)) {
+    ldout(cct,15) << "attempt to remove lock at " << removal_lock.start
+                  << " but no locks there!" << dendl;
+  }
+
   bool remove_to_end = (0 == removal_lock.length);
   uint64_t removal_start = removal_lock.start;
   uint64_t removal_end = removal_start + removal_lock.length - 1;
   __s64 old_lock_client = 0;
   ceph_filelock *old_lock;
 
-  ldout(cct,15) << "examining " << self_overlapping_locks.size()
+  ldout(cct,15) << "examining " << std::size(overlaps.owned)
           << " self-overlapping locks for removal" << dendl;
-  for (list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
-         iter = self_overlapping_locks.begin();
-       iter != self_overlapping_locks.end();
-       ++iter) {
-    ldout(cct,15) << "self overlapping lock " << (*iter)->second << dendl;
-    old_lock = &(*iter)->second;
+  for (const auto current : overlaps.owned) {
+    ldout(cct,15) << "self overlapping lock " << current->second << dendl;
+    old_lock = &current->second;
     bool old_lock_to_end = (0 == old_lock->length);
     uint64_t old_lock_end = old_lock->start + old_lock->length - 1;
     old_lock_client = old_lock->client;
@@ -317,8 +320,8 @@ void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock,
       if (old_lock->start < removal_start) {
         old_lock->length = removal_start - old_lock->start;
       } else {
-        ldout(cct,15) << "erasing " << (*iter)->second << dendl;
-        held_locks.erase(*iter);
+        ldout(cct,15) << "erasing " << current->second << dendl;
+        held_locks.erase(current);
         --client_held_lock_counts[old_lock_client];
       }
     } else if (old_lock_to_end) {
@@ -328,8 +331,8 @@ void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock,
                         (append_lock.start, append_lock));
       ++client_held_lock_counts[(client_t)old_lock->client];
       if (old_lock->start >= removal_start) {
-        ldout(cct,15) << "erasing " << (*iter)->second << dendl;
-        held_locks.erase(*iter);
+        ldout(cct,15) << "erasing " << current->second << dendl;
+        held_locks.erase(current);
         --client_held_lock_counts[old_lock_client];
       } else old_lock->length = removal_start - old_lock->start;
     } else {
@@ -344,8 +347,8 @@ void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock,
       if (old_lock->start < removal_start) {
         old_lock->length = removal_start - old_lock->start;
       } else {
-        ldout(cct,15) << "erasing " << (*iter)->second << dendl;
-        held_locks.erase(*iter);
+        ldout(cct,15) << "erasing " << current->second << dendl;
+        held_locks.erase(current);
         --client_held_lock_counts[old_lock_client];
       }
     }
@@ -387,20 +390,15 @@ bool ceph_lock_state_t::remove_all_from (client_t client)
   return cleared_any;
 }
 
-void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::iterator> old_locks,
-                  ceph_filelock& new_lock,
-                  list<multimap<uint64_t, ceph_filelock>::iterator>
-                  neighbor_locks)
+void ceph_lock_state_t::adjust_locks(const lock_overlaps& overlaps,
+                                     ceph_filelock& new_lock)
 {
   ldout(cct,15) << "adjust_locks" << dendl;
   bool new_lock_to_end = (0 == new_lock.length);
   __s64 old_lock_client = 0;
   ceph_filelock *old_lock;
-  for (list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
-         iter = old_locks.begin();
-       iter != old_locks.end();
-       ++iter) {
-    old_lock = &(*iter)->second;
+  for (const auto current : overlaps.owned) {
+    old_lock = &current->second;
     ldout(cct,15) << "adjusting lock: " << *old_lock << dendl;
     bool old_lock_to_end = (0 == old_lock->length);
     uint64_t old_lock_start = old_lock->start;
@@ -417,7 +415,7 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
         new_lock.start = (new_lock_start < old_lock_start) ? new_lock_start :
           old_lock_start;
         new_lock.length = 0;
-        held_locks.erase(*iter);
+        held_locks.erase(current);
         --client_held_lock_counts[old_lock_client];
       } else { //not same type, have to keep any remains of old lock around
         ldout(cct,15) << "shrinking old lock" << dendl;
@@ -425,7 +423,7 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
           if (old_lock_start < new_lock_start) {
             old_lock->length = new_lock_start - old_lock_start;
           } else {
-            held_locks.erase(*iter);
+            held_locks.erase(current);
             --client_held_lock_counts[old_lock_client];
           }
         } else { //old lock extends past end of new lock
@@ -437,7 +435,7 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
           if (old_lock_start < new_lock_start) {
             old_lock->length = new_lock_start - old_lock_start;
           } else {
-            held_locks.erase(*iter);
+            held_locks.erase(current);
             --client_held_lock_counts[old_lock_client];
           }
         }
@@ -447,11 +445,11 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
         ldout(cct,15) << "merging locks, they're the same type" << dendl;
         new_lock.start = (old_lock_start < new_lock_start ) ? old_lock_start :
           new_lock_start;
-        int new_end = (new_lock_end > old_lock_end) ? new_lock_end :
+        uint64_t new_end = (new_lock_end > old_lock_end) ? new_lock_end :
           old_lock_end;
         new_lock.length = new_end - new_lock.start + 1;
-        ldout(cct,15) << "erasing lock " << (*iter)->second << dendl;
-        held_locks.erase(*iter);
+        ldout(cct,15) << "erasing lock " << current->second << dendl;
+        held_locks.erase(current);
         --client_held_lock_counts[old_lock_client];
       } else { //we'll have to update sizes and maybe make new locks
         ldout(cct,15) << "locks aren't same type, changing sizes" << dendl;
@@ -467,7 +465,7 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
           old_lock->length = new_lock_start - old_lock_start;
         } else { //old_lock starts inside new_lock, so remove it
           //if it extended past new_lock_end it's been replaced
-          held_locks.erase(*iter);
+          held_locks.erase(current);
           --client_held_lock_counts[old_lock_client];
         }
       }
@@ -478,11 +476,8 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
   }
 
   //make sure to coalesce neighboring locks
-  for (list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
-         iter = neighbor_locks.begin();
-       iter != neighbor_locks.end();
-       ++iter) {
-    old_lock = &(*iter)->second;
+  for (const auto current : overlaps.neighbors) {
+    old_lock = &current->second;
     old_lock_client = old_lock->client;
     ldout(cct,15) << "lock to coalesce: " << *old_lock << dendl;
     /* because if it's a neighboring lock there can't be any self-overlapping
@@ -505,7 +500,7 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
           new_lock.length = old_lock->length + new_lock.length;
         }
       }
-      held_locks.erase(*iter);
+      held_locks.erase(current);
       --client_held_lock_counts[old_lock_client];
     }
     if (!client_held_lock_counts[old_lock_client]) {
@@ -514,59 +509,50 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
   }
 }
 
-multimap<uint64_t, ceph_filelock>::iterator
-ceph_lock_state_t::get_lower_bound(uint64_t start,
-                                   multimap<uint64_t, ceph_filelock>& lock_map)
+auto ceph_lock_state_t::get_last_before(uint64_t last_offset, lock_map& locks)
+  -> lock_iterator
 {
-   multimap<uint64_t, ceph_filelock>::iterator lower_bound =
-     lock_map.lower_bound(start);
-   if ((lower_bound->first != start)
-       && (start != 0)
-       && (lower_bound != lock_map.begin())) --lower_bound;
-   if (lock_map.end() == lower_bound)
-     ldout(cct,15) << "get_lower_dout(15)eturning end()" << dendl;
-   else ldout(cct,15) << "get_lower_bound returning iterator pointing to "
-                << lower_bound->second << dendl;
-   return lower_bound;
- }
+  auto last = locks.upper_bound(last_offset);
 
-multimap<uint64_t, ceph_filelock>::iterator
-ceph_lock_state_t::get_last_before(uint64_t end,
-                                   multimap<uint64_t, ceph_filelock>& lock_map)
-{
-  multimap<uint64_t, ceph_filelock>::iterator last =
-    lock_map.upper_bound(end);
-  if (last != lock_map.begin()) --last;
-  if (lock_map.end() == last)
+  if (last != std::begin(locks)) {
+    --last;
+  }
+
+  if (std::end(locks) == last) {
     ldout(cct,15) << "get_last_before returning end()" << dendl;
-  else ldout(cct,15) << "get_last_before returning iterator pointing to "
-               << last->second << dendl;
+    return last;
+  }
+
+  ldout(cct,15) << "get_last_before returning iterator pointing to "
+                 << last->second << dendl;
+
   return last;
 }
 
-bool ceph_lock_state_t::share_space(
-    multimap<uint64_t, ceph_filelock>::iterator& iter,
-    uint64_t start, uint64_t end)
+bool ceph_lock_state_t::share_space(const lock_iterator& iter,
+                                    uint64_t start, uint64_t last_offset)
 {
-  bool ret = ((iter->first >= start && iter->first <= end) ||
+  bool ret = ((iter->first >= start && iter->first <= last_offset) ||
               ((iter->first < start) &&
                (((iter->first + iter->second.length - 1) >= start) ||
                 (0 == iter->second.length))));
-  ldout(cct,15) << "share_space got start: " << start << ", end: " << end
+
+  ldout(cct,15) << "share_space got start: " << start << ", end: "
+          << last_offset
           << ", lock: " << iter->second << ", returning " << ret << dendl;
   return ret;
 }
 
-bool ceph_lock_state_t::get_overlapping_locks(const ceph_filelock& lock,
-                           list<multimap<uint64_t,
-                               ceph_filelock>::iterator> & overlaps,
-                           list<multimap<uint64_t,
-                               ceph_filelock>::iterator> *self_neighbors)
+auto ceph_lock_state_t::get_overlapping_locks(
+  const ceph_filelock& requested_lock, const bool collect_neighbors)
+  -> lock_overlaps
 {
   ldout(cct,15) << "get_overlapping_locks" << dendl;
+  lock_overlaps overlaps;
+
   // create a lock starting one earlier and ending one later
   // to check for neighbors
-  ceph_filelock neighbor_check_lock = lock;
+  ceph_filelock neighbor_check_lock = requested_lock;
   if (neighbor_check_lock.start != 0) {
     neighbor_check_lock.start = neighbor_check_lock.start - 1;
     if (neighbor_check_lock.length)
@@ -576,86 +562,48 @@ bool ceph_lock_state_t::get_overlapping_locks(const ceph_filelock& lock,
       neighbor_check_lock.length = neighbor_check_lock.length + 1;
   }
   //find the last held lock starting at the point after lock
-  uint64_t endpoint = lock.start;
-  if (lock.length) {
-    endpoint += lock.length;
+  uint64_t endpoint = requested_lock.start;
+  if (requested_lock.length) {
+    endpoint += requested_lock.length;
   } else {
     endpoint = uint64_t(-1); // max offset
   }
-  multimap<uint64_t, ceph_filelock>::iterator iter =
-    get_last_before(endpoint, held_locks);
-  bool cont = iter != held_locks.end();
-  while(cont) {
-    if (share_space(iter, lock)) {
-      overlaps.push_front(iter);
-    } else if (self_neighbors &&
-	       ceph_filelock_owner_equal(neighbor_check_lock, iter->second) &&
-               share_space(iter, neighbor_check_lock)) {
-      self_neighbors->push_front(iter);
-    }
-    if ((iter->first < lock.start) && (CEPH_LOCK_EXCL == iter->second.type)) {
-      //can't be any more overlapping locks or they'd interfere with this one
-      cont = false;
-    } else if (held_locks.begin() == iter) cont = false;
-    else --iter;
-  }
-  return !overlaps.empty();
-}
+  auto iter = get_last_before(endpoint, held_locks);
 
-bool ceph_lock_state_t::get_waiting_overlaps(const ceph_filelock& lock,
-                                             list<multimap<uint64_t,
-                                               ceph_filelock>::iterator>&
-                                               overlaps)
-{
-  ldout(cct,15) << "get_waiting_overlaps" << dendl;
-  multimap<uint64_t, ceph_filelock>::iterator iter =
-    get_last_before(lock.start + lock.length - 1, waiting_locks);
-  bool cont = iter != waiting_locks.end();
-  while(cont) {
-    if (share_space(iter, lock)) overlaps.push_front(iter);
-    if (waiting_locks.begin() == iter) cont = false;
+  while (iter != std::end(held_locks)) {
+    const auto overlaps_requested_range = share_space(iter, requested_lock);
+
+    if (overlaps_requested_range) {
+      auto& matching_locks = ceph_filelock_owner_equal(
+        requested_lock, iter->second)
+        ? overlaps.owned : overlaps.other;
+      matching_locks.push_back(iter);
+    }
+
+    if (!overlaps_requested_range && collect_neighbors &&
+	ceph_filelock_owner_equal(neighbor_check_lock, iter->second) &&
+        share_space(iter, neighbor_check_lock)) {
+      overlaps.neighbors.push_back(iter);
+    }
+
+    if ((iter->first < requested_lock.start) &&
+        (CEPH_LOCK_EXCL == iter->second.type)) {
+      //can't be any more overlapping locks or they'd interfere with this one
+      break;
+    }
+
+    if (std::begin(held_locks) == iter) {
+      break;
+    }
+
     --iter;
   }
-  return !overlaps.empty();
-}
 
-void ceph_lock_state_t::split_by_owner(const ceph_filelock& owner,
-                                       list<multimap<uint64_t,
-                                           ceph_filelock>::iterator>& locks,
-                                       list<multimap<uint64_t,
-                                           ceph_filelock>::iterator>&
-                                           owned_locks)
-{
-  list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
-    iter = locks.begin();
-  ldout(cct,15) << "owner lock: " << owner << dendl;
-  while (iter != locks.end()) {
-    ldout(cct,15) << "comparing to " << (*iter)->second << dendl;
-    if (ceph_filelock_owner_equal((*iter)->second, owner)) {
-      ldout(cct,15) << "success, pushing to owned_locks" << dendl;
-      owned_locks.push_back(*iter);
-      iter = locks.erase(iter);
-    } else {
-      ldout(cct,15) << "failure, something not equal in this group "
-              << (*iter)->second.client << ":" << owner.client << ","
-	      << (*iter)->second.owner << ":" << owner.owner << ","
-	      << (*iter)->second.pid << ":" << owner.pid << dendl;
-      ++iter;
-    }
-  }
-}
+  std::ranges::reverse(overlaps.other);
+  std::ranges::reverse(overlaps.owned);
+  std::ranges::reverse(overlaps.neighbors);
 
-ceph_filelock *
-ceph_lock_state_t::contains_exclusive_lock(list<multimap<uint64_t,
-                                               ceph_filelock>::iterator>& locks)
-{
-  for (list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
-         iter = locks.begin();
-       iter != locks.end();
-       ++iter) {
-    if (CEPH_LOCK_EXCL == (*iter)->second.type) return &(*iter)->second;
-  }
-  return NULL;
+  return overlaps;
 }
 
 std::ostream& operator<<(std::ostream &out, const ceph_lock_state_t &l) {

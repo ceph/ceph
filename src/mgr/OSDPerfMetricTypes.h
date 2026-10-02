@@ -12,7 +12,6 @@
 #include "mgr/Types.h"
 
 #include <iosfwd>
-#include <list>
 #include <map>
 #include <regex>
 #include <set>
@@ -83,8 +82,8 @@ struct OSDPerfMetricSubKeyDescriptor {
     f->dump_string("regex", regex_str);
   }
 
-  static std::list<OSDPerfMetricSubKeyDescriptor> generate_test_instances() {
-    std::list<OSDPerfMetricSubKeyDescriptor> o;
+  static std::vector<OSDPerfMetricSubKeyDescriptor> generate_test_instances() {
+    std::vector<OSDPerfMetricSubKeyDescriptor> o;
     o.push_back(OSDPerfMetricSubKeyDescriptor());
     o.push_back(OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::CLIENT_ID, ".*"));
     o.push_back(OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::CLIENT_ADDRESS, ".*"));
@@ -214,8 +213,8 @@ struct PerformanceCounterDescriptor {
     f->dump_unsigned("type", static_cast<uint8_t>(type));
   }
 
-  static std::list<PerformanceCounterDescriptor> generate_test_instances() {
-    std::list<PerformanceCounterDescriptor> o;
+  static std::vector<PerformanceCounterDescriptor> generate_test_instances() {
+    std::vector<PerformanceCounterDescriptor> o;
     o.push_back(PerformanceCounterDescriptor());
     o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::OPS));
     o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::WRITE_OPS));
@@ -357,8 +356,8 @@ struct OSDPerfMetricQuery {
                 performance_counter_descriptors, f);
   }
 
-  static std::list<OSDPerfMetricQuery> generate_test_instances() {
-    std::list<OSDPerfMetricQuery> o;
+  static std::vector<OSDPerfMetricQuery> generate_test_instances() {
+    std::vector<OSDPerfMetricQuery> o;
     o.push_back(OSDPerfMetricQuery());
     o.push_back(OSDPerfMetricQuery(OSDPerfMetricKeyDescriptor(),
 				   PerformanceCounterDescriptors()));
@@ -430,8 +429,8 @@ struct OSDPerfMetricReport {
                 group_packed_performance_counters, f);
   }
 
-  static std::list<OSDPerfMetricReport> generate_test_instances() {
-    std::list<OSDPerfMetricReport> o;
+  static std::vector<OSDPerfMetricReport> generate_test_instances() {
+    std::vector<OSDPerfMetricReport> o;
     o.emplace_back();
     o.emplace_back();
     o.back().performance_counter_descriptors.push_back(

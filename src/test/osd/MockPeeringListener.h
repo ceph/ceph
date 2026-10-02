@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include <map>
+#include <deque>
 #include <memory>
 #include <vector>
-#include <list>
-#include <map>
 #include "osd/PeeringState.h"
 #include "osd/osd_perf_counters.h"
 #include "common/HeartbeatMap.h"
@@ -61,13 +61,13 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   class EventLoop* event_loop = nullptr;
 
 #ifdef WITH_CRIMSON
-  std::map<int,std::list<MessageURef>> messages;
+  std::map<int,std::deque<MessageURef>> messages;
 #else
-  std::map<int,std::list<MessageRef>> messages;
+  std::map<int,std::deque<MessageRef>> messages;
 #endif
   std::vector<HeartbeatStampsRef> hb_stamps;
-  std::list<PGPeeringEventRef> events;
-  std::list<PGPeeringEventRef> stalled_events;
+  std::deque<PGPeeringEventRef> events;
+  std::deque<PGPeeringEventRef> stalled_events;
 
   bool inject_event_stall = false;         // route grants to stalled_events
   bool inject_keep_preempt = false;        // route preempt events to stalled_events
@@ -555,4 +555,3 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   int events_on_commit_scheduled = 0;
   bool first_write_in_interval = false;
 };
-

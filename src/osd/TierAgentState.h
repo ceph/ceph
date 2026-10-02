@@ -15,7 +15,6 @@
 #define CEPH_OSD_TIERAGENT_H
 
 #include <ctime>
-#include <list>
 #include <map>
 #include <utility>
 
@@ -39,9 +38,6 @@ struct TierAgentState {
 
   /// past HitSet(s) (not current)
   std::map<time_t,HitSetRef> hit_set_map;
-
-  /// a few recent things we've seen that are clean
-  std::list<hobject_t> recent_clean;
 
   enum flush_mode_t {
     FLUSH_MODE_IDLE,   // nothing to flush

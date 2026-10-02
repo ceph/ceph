@@ -13,6 +13,10 @@
  * 
  */
 
+#include <algorithm>
+#include <deque>
+#include <vector>
+
 #include "common/config.h"
 #include "common/debug.h"
 #include "osdc/Journaler.h"
@@ -69,7 +73,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".journal "
 
-using std::list;
 using std::map;
 using std::ostream;
 using std::pair;
@@ -390,12 +393,12 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 {
   MDSRank *mds = dir->mdcache->mds;
 
-  list<CDentry*> parents;
+  std::vector<CDentry*> parents;
 
   // it may be okay not to include the maybe items, if
   //  - we journaled the maybe child inode in this segment
   //  - that subtree turns out to be unambiguously auth
-  list<CDentry*> maybe;
+  std::vector<CDentry*> maybe;
   bool maybenot = false;
 
   while (true) {
@@ -436,7 +439,8 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 	  dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached ambig or !auth subtree, need " << maybe
 		   << " at " << *dir << dendl;
 	  // we need the maybe list after all!
-	  parents.splice(parents.begin(), maybe);
+	  parents.insert(std::end(parents), std::begin(maybe), std::end(maybe));
+	  maybe.clear();
 	  maybenot = false;
 	}
       }
@@ -462,16 +466,17 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 
     if (maybenot) {
       dout(25) << "EMetaBlob::add_dir_context(" << dir << ")      maybe " << *parent << dendl;
-      maybe.push_front(parent);
+      maybe.push_back(parent);
     } else {
       dout(25) << "EMetaBlob::add_dir_context(" << dir << ") definitely " << *parent << dendl;
-      parents.push_front(parent);
+      parents.push_back(parent);
     }
     
     dir = parent->get_dir();
   }
   
-  parents.splice(parents.begin(), maybe);
+  parents.insert(std::end(parents), std::begin(maybe), std::end(maybe));
+  std::ranges::reverse(parents);
 
   dout(20) << "EMetaBlob::add_dir_context final: " << parents << dendl;
   for (const auto& dentry : parents) {
@@ -619,9 +624,9 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   f->dump_string("alternate_name", alternate_name);
 }
 
-std::list<EMetaBlob::fullbit> EMetaBlob::fullbit::generate_test_instances()
+std::deque<EMetaBlob::fullbit> EMetaBlob::fullbit::generate_test_instances()
 {
-  std::list<EMetaBlob::fullbit> ls;
+  std::deque<EMetaBlob::fullbit> ls;
   auto _inode = CInode::allocate_inode();
   fragtree_t fragtree;
   auto _xattrs = CInode::allocate_xattr_map();
@@ -761,9 +766,9 @@ void EMetaBlob::remotebit::dump(Formatter *f) const
   f->dump_string("alternate_name", alternate_name);
 }
 
-std::list<EMetaBlob::remotebit> EMetaBlob::remotebit::generate_test_instances()
+std::vector<EMetaBlob::remotebit> EMetaBlob::remotebit::generate_test_instances()
 {
-  std::list<EMetaBlob::remotebit> ls;
+  std::vector<EMetaBlob::remotebit> ls;
   auto remote = remotebit("/test/dn", "", 0, 10, 15, 1, IFTODT(S_IFREG), false);
   ls.push_back(std::move(remote));
   remote = remotebit("/test/dn2", "foo", 0, 10, 15, 1, IFTODT(S_IFREG), false);
@@ -806,9 +811,9 @@ void EMetaBlob::nullbit::dump(Formatter *f) const
   f->dump_string("dirty", dirty ? "true" : "false");
 }
 
-auto EMetaBlob::nullbit::generate_test_instances() -> std::list<nullbit>
+auto EMetaBlob::nullbit::generate_test_instances() -> std::vector<nullbit>
 {
-  std::list<nullbit> ls;
+  std::vector<nullbit> ls;
   nullbit sample("/test/dentry", 0, 10, 15, false);
   nullbit sample2("/test/dirty", 10, 20, 25, true);
   ls.push_back(std::move(sample));
@@ -887,12 +892,23 @@ void EMetaBlob::dirlump::dump(Formatter *f) const
   f->close_section(); // null bits
 }
 
-auto EMetaBlob::dirlump::generate_test_instances() -> std::list<dirlump>
+auto EMetaBlob::dirlump::generate_test_instances() -> std::deque<dirlump>
 {
-  std::list<dirlump> ls;
+  std::deque<dirlump> ls;
   ls.emplace_back();
   dirlump& dl = ls.back();
   dl.fnode = CDir::allocate_fnode();
+
+  auto& populated = ls.emplace_back();
+  populated.fnode = CDir::allocate_fnode();
+  auto inode = CInode::allocate_inode();
+  fragtree_t fragtree;
+  auto xattrs = CInode::allocate_xattr_map();
+  bufferlist snapbl;
+
+  populated.add_dfull("/testdn", "", 0, 0, 0, inode, fragtree, xattrs,
+                      "", 0, snapbl, false, nullptr);
+
   return ls;
 }
 
@@ -964,11 +980,12 @@ void EMetaBlob::decode(bufferlist::const_iterator &bl)
   if (struct_v >= 2) {
     decode(client_reqs, bl);
   } else {
-    list<metareqid_t> r;
-    decode(r, bl);
-    while (!r.empty()) {
-	client_reqs.push_back(pair<metareqid_t,uint64_t>(r.front(), 0));
-	r.pop_front();
+    std::vector<metareqid_t> requests;
+    decode(requests, bl);
+    client_reqs.reserve(std::size(client_reqs) + std::size(requests));
+
+    for (const auto& request : requests) {
+	client_reqs.emplace_back(request, 0);
     }
   }
   if (struct_v >= 3) {
@@ -1228,9 +1245,9 @@ void EMetaBlob::dump(Formatter *f) const
   f->close_section(); // client requests
 }
 
-std::list<EMetaBlob> EMetaBlob::generate_test_instances()
+std::deque<EMetaBlob> EMetaBlob::generate_test_instances()
 {
-  std::list<EMetaBlob> ls;
+  std::deque<EMetaBlob> ls;
   ls.emplace_back();
   return ls;
 }
@@ -1998,9 +2015,9 @@ void ESession::dump(Formatter *f) const
   f->close_section();  // client_metadata
 }
 
-std::list<ESession> ESession::generate_test_instances()
+std::deque<ESession> ESession::generate_test_instances()
 {
-  std::list<ESession> ls;
+  std::deque<ESession> ls;
   ls.emplace_back();
   return ls;
 }
@@ -2053,9 +2070,9 @@ void ESessions::dump(Formatter *f) const
   f->close_section(); // client map
 }
 
-std::list<ESessions> ESessions::generate_test_instances()
+std::deque<ESessions> ESessions::generate_test_instances()
 {
-  std::list<ESessions> ls;
+  std::deque<ESessions> ls;
   ls.emplace_back();
   return ls;
 }
@@ -2121,9 +2138,9 @@ void ETableServer::dump(Formatter *f) const
   f->dump_int("version", version);
 }
 
-std::list<ETableServer> ETableServer::generate_test_instances()
+std::deque<ETableServer> ETableServer::generate_test_instances()
 {
-  std::list<ETableServer> ls;
+  std::deque<ETableServer> ls;
   ls.emplace_back();
   return ls;
 }
@@ -2215,9 +2232,9 @@ void ETableClient::dump(Formatter *f) const
   f->dump_int("tid", tid);
 }
 
-std::list<ETableClient> ETableClient::generate_test_instances()
+std::deque<ETableClient> ETableClient::generate_test_instances()
 {
-  std::list<ETableClient> ls;
+  std::deque<ETableClient> ls;
   ls.emplace_back();
   return ls;
 }
@@ -2315,9 +2332,9 @@ void EUpdate::dump(Formatter *f) const
   f->dump_string("had peers", had_peers ? "true" : "false");
 }
 
-std::list<EUpdate> EUpdate::generate_test_instances()
+std::deque<EUpdate> EUpdate::generate_test_instances()
 {
-  std::list<EUpdate> ls;
+  std::deque<EUpdate> ls;
   ls.emplace_back();
   return ls;
 }
@@ -2406,9 +2423,9 @@ void EOpen::dump(Formatter *f) const
   f->close_section(); // inos
 }
 
-std::list<EOpen> EOpen::generate_test_instances()
+std::deque<EOpen> EOpen::generate_test_instances()
 {
-  std::list<EOpen> ls;
+  std::deque<EOpen> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().add_ino(0);
@@ -2482,9 +2499,9 @@ void ECommitted::dump(Formatter *f) const {
   f->dump_stream("reqid") << reqid;
 }
 
-std::list<ECommitted> ECommitted::generate_test_instances()
+std::deque<ECommitted> ECommitted::generate_test_instances()
 {
-  std::list<ECommitted> ls;
+  std::deque<ECommitted> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().stamp = utime_t(1, 2);
@@ -2532,9 +2549,9 @@ void link_rollback::dump(Formatter *f) const
   f->dump_stream("old_dir_rctime") << old_dir_rctime;
 }
 
-std::list<link_rollback> link_rollback::generate_test_instances()
+std::vector<link_rollback> link_rollback::generate_test_instances()
 {
-  std::list<link_rollback> ls;
+  std::vector<link_rollback> ls;
   ls.push_back(link_rollback());
   return ls;
 }
@@ -2573,9 +2590,9 @@ void rmdir_rollback::dump(Formatter *f) const
   f->dump_string("destination dname", dest_dname);
 }
 
-std::list<rmdir_rollback> rmdir_rollback::generate_test_instances()
+std::vector<rmdir_rollback> rmdir_rollback::generate_test_instances()
 {
-  std::list<rmdir_rollback> ls;
+  std::vector<rmdir_rollback> ls;
   ls.push_back(rmdir_rollback());
   return ls;
 }
@@ -2632,9 +2649,9 @@ void rename_rollback::drec::dump(Formatter *f) const
   f->dump_stream("old ctime") << old_ctime;
 }
 
-auto rename_rollback::drec::generate_test_instances() -> std::list<drec>
+auto rename_rollback::drec::generate_test_instances() -> std::vector<drec>
 {
-  std::list<drec> ls;
+  std::vector<drec> ls;
   ls.push_back(drec());
   ls.back().remote_d_type = IFTODT(S_IFREG);
   return ls;
@@ -2683,9 +2700,9 @@ void rename_rollback::dump(Formatter *f) const
   f->dump_stream("ctime") << ctime;
 }
 
-std::list<rename_rollback> rename_rollback::generate_test_instances()
+std::vector<rename_rollback> rename_rollback::generate_test_instances()
 {
-  std::list<rename_rollback> ls;
+  std::vector<rename_rollback> ls;
   ls.push_back(rename_rollback());
   ls.back().orig_src.remote_d_type = IFTODT(S_IFREG);
   ls.back().orig_dest.remote_d_type = IFTODT(S_IFREG);
@@ -2736,9 +2753,9 @@ void EPeerUpdate::dump(Formatter *f) const
   f->dump_int("original op", origop);
 }
 
-std::list<EPeerUpdate> EPeerUpdate::generate_test_instances()
+std::deque<EPeerUpdate> EPeerUpdate::generate_test_instances()
 {
-  std::list<EPeerUpdate> ls;
+  std::deque<EPeerUpdate> ls;
   ls.emplace_back();
   return ls;
 }
@@ -2836,9 +2853,9 @@ void ESubtreeMap::dump(Formatter *f) const
   f->dump_int("expire position", expire_pos);
 }
 
-std::list<ESubtreeMap> ESubtreeMap::generate_test_instances()
+std::deque<ESubtreeMap> ESubtreeMap::generate_test_instances()
 {
-  std::list<ESubtreeMap> ls;
+  std::deque<ESubtreeMap> ls;
   ls.emplace_back();
   return ls;
 }
@@ -3066,9 +3083,9 @@ void EFragment::dump(Formatter *f) const
   f->dump_int("bits", bits);
 }
 
-std::list<EFragment> EFragment::generate_test_instances()
+std::deque<EFragment> EFragment::generate_test_instances()
 {
-  std::list<EFragment> ls;
+  std::deque<EFragment> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().op = OP_PREPARE;
@@ -3165,9 +3182,9 @@ void EExport::dump(Formatter *f) const
   f->close_section(); // bounds dirfrags
 }
 
-std::list<EExport> EExport::generate_test_instances()
+std::deque<EExport> EExport::generate_test_instances()
 {
-  std::list<EExport> ls;
+  std::deque<EExport> ls;
   ls.emplace_back();
   return ls;
 }
@@ -3265,9 +3282,9 @@ void EImportStart::dump(Formatter *f) const
   f->close_section();
 }
 
-std::list<EImportStart> EImportStart::generate_test_instances()
+std::deque<EImportStart> EImportStart::generate_test_instances()
 {
-  std::list<EImportStart> ls;
+  std::deque<EImportStart> ls;
   ls.emplace_back();
   return ls;
 }
@@ -3325,9 +3342,9 @@ void EImportFinish::dump(Formatter *f) const
   f->dump_stream("base dirfrag") << base;
   f->dump_string("success", success ? "true" : "false");
 }
-std::list<EImportFinish> EImportFinish::generate_test_instances()
+std::deque<EImportFinish> EImportFinish::generate_test_instances()
 {
-  std::list<EImportFinish> ls;
+  std::deque<EImportFinish> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().success = true;
@@ -3357,9 +3374,9 @@ void EResetJournal::dump(Formatter *f) const
   f->dump_stream("timestamp") << stamp;
 }
 
-std::list<EResetJournal> EResetJournal::generate_test_instances()
+std::deque<EResetJournal> EResetJournal::generate_test_instances()
 {
-  std::list<EResetJournal> ls;
+  std::deque<EResetJournal> ls;
   ls.emplace_back();
   return ls;
 }
@@ -3408,9 +3425,9 @@ void ESegment::dump(Formatter *f) const
   f->dump_int("seq", seq);
 }
 
-std::list<ESegment> ESegment::generate_test_instances()
+std::deque<ESegment> ESegment::generate_test_instances()
 {
-  std::list<ESegment> ls;
+  std::deque<ESegment> ls;
   ls.emplace_back();
   return ls;
 }
@@ -3439,9 +3456,9 @@ void ELid::dump(Formatter *f) const
   f->dump_int("seq", seq);
 }
 
-std::list<ELid> ELid::generate_test_instances()
+std::deque<ELid> ELid::generate_test_instances()
 {
-  std::list<ELid> ls;
+  std::deque<ELid> ls;
   ls.emplace_back();
   return ls;
 }

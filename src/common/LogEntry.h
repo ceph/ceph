@@ -27,11 +27,12 @@
 #include "ostream_temp.h"
 #include "LRUSet.h"
 
+#include <map>
+#include <deque>
+#include <string>
+#include <vector>
 #include <cstdint>
 #include <iostream>
-#include <list>
-#include <map>
-#include <string>
 #include <unordered_set>
 
 namespace ceph {
@@ -84,7 +85,7 @@ public:
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<LogEntryKey> generate_test_instances();
+  static std::vector<LogEntryKey> generate_test_instances();
 
   friend bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
     return l.rank == r.rank && l.stamp == r.stamp && l.seq == r.seq;
@@ -133,7 +134,7 @@ struct LogEntry {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<LogEntry> generate_test_instances();
+  static std::vector<LogEntry> generate_test_instances();
   static clog_type str_to_level(std::string const &str);
   static std::string_view level_to_str(clog_type t) {
     switch (t) {
@@ -160,7 +161,7 @@ struct LogSummary {
 
   // ---- pre-quincy ----
   // channel -> [(seq#, entry), ...]
-  std::map<std::string,std::list<std::pair<uint64_t,LogEntry>>> tail_by_channel;
+  std::map<std::string, std::deque<std::pair<uint64_t, LogEntry>>> tail_by_channel;
   uint64_t seq = 0;
   std::unordered_set<LogEntryKey> keys;
 
@@ -170,7 +171,7 @@ struct LogSummary {
 
   LogSummary() : version(0) {}
 
-  void build_ordered_tail_legacy(std::list<LogEntry> *tail) const;
+  void build_ordered_tail_legacy(std::vector<LogEntry>& tail) const;
 
   void add_legacy(const LogEntry& e) {
     keys.insert(e.key());
@@ -192,7 +193,7 @@ struct LogSummary {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<LogSummary> generate_test_instances();
+  static std::vector<LogSummary> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(LogSummary)
 

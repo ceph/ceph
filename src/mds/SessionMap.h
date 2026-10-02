@@ -19,6 +19,7 @@
 #include <deque>
 #include <functional>
 #include <list>
+#include <vector>
 #include <map>
 #include <ostream>
 #include <set>
@@ -416,7 +417,7 @@ public:
 
   xlist<Session*>::item item_session_list;
 
-  std::list<ceph::ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
+  std::deque<ceph::ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
 
   /* This is mutable to allow get_request_count to be const. elist does not
    * support const iterators yet.
@@ -554,7 +555,7 @@ public:
 
   Session* get_or_add_session(const entity_inst_t& i);
 
-  static std::list<SessionMapStore> generate_test_instances();
+  static std::vector<SessionMapStore> generate_test_instances();
   void reset_state()
   {
     session_map.clear();

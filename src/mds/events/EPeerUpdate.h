@@ -16,6 +16,8 @@
 #ifndef CEPH_MDS_EPEERUPDATE_H
 #define CEPH_MDS_EPEERUPDATE_H
 
+#include <deque>
+#include <vector>
 #include <string_view>
 
 #include "../LogEvent.h"
@@ -40,7 +42,7 @@ struct link_rollback {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static std::list<link_rollback> generate_test_instances();
+  static std::vector<link_rollback> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(link_rollback)
 
@@ -61,7 +63,7 @@ struct rmdir_rollback {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static std::list<rmdir_rollback> generate_test_instances();
+  static std::vector<rmdir_rollback> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rmdir_rollback)
 
@@ -80,7 +82,7 @@ struct rename_rollback {
     void encode(bufferlist& bl) const;
     void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
-    static std::list<drec> generate_test_instances();
+    static std::vector<drec> generate_test_instances();
   };
   WRITE_CLASS_MEMBER_ENCODER(drec)
 
@@ -94,7 +96,7 @@ struct rename_rollback {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static std::list<rename_rollback> generate_test_instances();
+  static std::vector<rename_rollback> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rename_rollback::drec)
 WRITE_CLASS_ENCODER(rename_rollback)
@@ -149,7 +151,7 @@ public:
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static std::list<EPeerUpdate> generate_test_instances();
+  static std::deque<EPeerUpdate> generate_test_instances();
 
   void replay(MDSRank *mds) override;
 };

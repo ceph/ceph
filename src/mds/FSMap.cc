@@ -117,8 +117,8 @@ void MirrorInfo::dump(ceph::Formatter *f) const {
   f->close_section(); // peers
 }
 
-std::list<MirrorInfo> MirrorInfo::generate_test_instances() {
-  std::list<MirrorInfo> ls;
+std::vector<MirrorInfo> MirrorInfo::generate_test_instances() {
+  std::vector<MirrorInfo> ls;
   ls.push_back(MirrorInfo());
   ls.push_back(MirrorInfo());
   ls.back().mirrored = true;
@@ -198,9 +198,9 @@ FSMap &FSMap::operator=(const FSMap &rhs)
   return *this;
 }
 
-std::list<FSMap> FSMap::generate_test_instances()
+std::vector<FSMap> FSMap::generate_test_instances()
 {
-  std::list<FSMap> ls;
+  std::vector<FSMap> ls;
 
   FSMap fsmap;
 
@@ -569,6 +569,10 @@ void FSMap::reset_filesystem(fs_cluster_id_t fscid)
   filesystems[new_fs.fscid] = new_fs;
 }
 
+// The compatibility API calls its equally deprecated component:
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void FSMap::get_health(list<pair<health_status_t,string> >& summary,
 			list<pair<health_status_t,string> > *detail) const
 {
@@ -587,6 +591,8 @@ void FSMap::get_health(list<pair<health_status_t,string> >& summary,
     summary.push_back(make_pair(HEALTH_WARN, css->str()));
   }
 }
+
+#pragma GCC diagnostic pop
 
 bool FSMap::check_health(void)
 {

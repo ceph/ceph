@@ -3298,7 +3298,7 @@ void Server::handle_peer_auth_pin(const MDRequestRef& mdr)
   dout(10) << "handle_peer_auth_pin " << *mdr << dendl;
 
   // build list of objects
-  list<MDSCacheObject*> objects;
+  vector<MDSCacheObject *> objects;
   CInode *auth_pin_freeze = NULL;
   bool nonblocking = mdr->peer_request->is_nonblocking();
   bool fail = false, wouldblock = false, readonly = false;
@@ -5377,7 +5377,6 @@ void Server::handle_client_file_setlock(const MDRequestRef& mdr)
 
   dout(10) << " state prior to lock change: " << *lock_state << dendl;
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
-    list<ceph_filelock> activated_locks;
     MDSContext::vec waiters;
     bool changed = false;
     if (lock_state->is_waiting(set_lock)) {
@@ -5387,7 +5386,7 @@ void Server::handle_client_file_setlock(const MDRequestRef& mdr)
     }
     if (!interrupt) {
       dout(10) << " unlock attempt on " << set_lock << dendl;
-      lock_state->remove_lock(set_lock, activated_locks);
+      lock_state->remove_lock(set_lock);
       changed = true;
     }
     if (changed)
@@ -9781,9 +9780,8 @@ version_t Server::_rename_prepare_import(const MDRequestRef& mdr, CDentry *srcdn
   encode(client_map, *client_map_bl, mds->mdsmap->get_up_features());
   encode(client_metadata_map, *client_map_bl);
 
-  list<ScatterLock*> updated_scatterlocks;
   mdcache->migrator->decode_import_inode(srcdn, blp, srcdn->authority().first, mdr->ls,
-					 mdr->more()->cap_imports, updated_scatterlocks);
+					 mdr->more()->cap_imports);
 
   // hack: force back to !auth and clean, temporarily
   srcdnl->get_inode()->state_clear(CInode::STATE_AUTH);
