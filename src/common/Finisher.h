@@ -16,12 +16,12 @@
 #ifndef CEPH_FINISHER_H
 #define CEPH_FINISHER_H
 
+#include <mutex>
 #include <atomic>
 #include <future>
-#include <list>
-#include <mutex>
 #include <string>
 #include <vector>
+#include <iterator>
 
 #include "include/Context.h"
 #include "common/Thread.h"
@@ -163,27 +163,33 @@ public:
 };
 
 class ContextQueue {
-  std::list<Context *> q;
-  std::mutex q_mutex;
+  std::vector<Context *> contexts;
+  std::mutex contexts_mutex;
   ceph::mutex& mutex;
   ceph::condition_variable& cond;
-  std::atomic_bool q_empty = true;
+  std::atomic_bool contexts_empty = true;
 public:
   ContextQueue(ceph::mutex& mut,
 	       ceph::condition_variable& con)
     : mutex(mut), cond(con) {}
 
-  void queue(std::list<Context *>& ls) {
+  void queue(std::vector<Context *>& incoming) {
+    if (std::empty(incoming)) {
+      return;
+    }
+
     bool was_empty = false;
     {
-      std::scoped_lock l(q_mutex);
-      if (q.empty()) {
-	q.swap(ls);
-	was_empty = true;
-      } else {
-	q.insert(q.end(), ls.begin(), ls.end());
+      std::scoped_lock l(contexts_mutex);
+      was_empty = std::empty(contexts);
+      if (was_empty) {
+        contexts.swap(incoming);
       }
-      q_empty = q.empty();
+
+      if (!was_empty) {
+        contexts.insert(std::end(contexts), std::begin(incoming), std::end(incoming));
+      }
+      contexts_empty = std::empty(contexts);
     }
 
     if (was_empty) {
@@ -191,20 +197,18 @@ public:
       cond.notify_all();
     }
 
-    ls.clear();
+    incoming.clear();
   }
 
-  void move_to(std::list<Context *>& ls) {
-    ls.clear();
-    std::scoped_lock l(q_mutex);
-    if (!q.empty()) {
-      q.swap(ls);
-    }
-    q_empty = true;
+  void move_to(std::vector<Context *>& destination) {
+    destination.clear();
+    std::scoped_lock l(contexts_mutex);
+    contexts.swap(destination);
+    contexts_empty = true;
   }
 
-  bool empty() {
-    return q_empty;
+  bool empty() const {
+    return contexts_empty.load();
   }
 };
 

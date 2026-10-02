@@ -1819,10 +1819,8 @@ protected:
       }
     }
 
-    void handle_oncommits(std::list<Context*>& oncommits) {
-      for (auto p : oncommits) {
-	p->complete(0);
-      }
+    void handle_oncommits(std::vector<Context *>& oncommits) {
+      finish_contexts(nullptr, oncommits);
     }
 
     double get_cost_per_io() const {
