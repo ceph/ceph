@@ -40,6 +40,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_bucket.h"
 #include "rgw_bucket_logging.h"
+#include "rgw_op.h"
 #include "rgw_crypt.h"
 #include "rgw_bl_rados.h"
 #include "rgw_lc.h"
@@ -395,13 +396,57 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
 			bool delete_children,
 			optional_yield y)
 {
+  return do_remove(dpp, delete_children, false, y);
+}
+
+int RadosBucket::remove_unless_admin_locked(const DoutPrefixProvider* dpp,
+                                            bool delete_children,
+                                            optional_yield y)
+{
+  return do_remove(dpp, delete_children, true, y);
+}
+
+int RadosBucket::do_remove(const DoutPrefixProvider* dpp,
+                           bool delete_children,
+                           bool refuse_admin_locked,
+                           optional_yield y)
+{
   int ret;
+
+  // bucket admin-lock sets the flag in the bucket instance, then rewrites the
+  // entrypoint. Reading the entrypoint version before the instance, and
+  // removing the entrypoint only at that version, means a lock either shows
+  // up in the instance below or makes the removal fail with -ECANCELED.
+  RGWObjVersionTracker ep_ot;
+  RGWBucketEntryPoint ep;
+  bool have_ep = false;
+  if (refuse_admin_locked) {
+    ret = store->ctl()->bucket->read_bucket_entrypoint_info(
+        info.bucket, &ep, y, dpp,
+        RGWBucketCtl::Bucket::GetParams().set_objv_tracker(&ep_ot));
+    if (ret < 0 && ret != -ENOENT) {
+      return ret;
+    }
+    have_ep = (ret == 0);
+  }
 
   // Refresh info
   ret = load_bucket(dpp, y);
   if (ret < 0) {
     return ret;
   }
+
+  if (refuse_admin_locked && info.admin_locked()) {
+    ldpp_dout(dpp, 4) << "bucket " << info.bucket.name
+        << " is admin-locked" << dendl;
+    return -EACCES;
+  }
+  if (!have_ep || ep.bucket.bucket_id != info.bucket.bucket_id) {
+    // the name doesn't point at this instance, delete_bucket() reads the
+    // entrypoint itself and leaves it alone
+    ep_ot = RGWObjVersionTracker();
+  }
+  rgw_inject_delay(dpp, "delay_bucket_remove", y);
 
   ListParams params;
   params.list_versions = true;
@@ -482,11 +527,29 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
     }
   }
 
-  RGWObjVersionTracker ot;
-
   // if we deleted children above we will force delete, as any that
   // remain is detritus from a prior bug
-  ret = store->getRados()->delete_bucket(info, get_attrs(), ot, y, dpp, !delete_children);
+  ret = store->getRados()->delete_bucket(info, get_attrs(), ep_ot, y, dpp, !delete_children);
+  if (ret == -ECANCELED && refuse_admin_locked) {
+    RGWBucketEntryPoint cur;
+    const int r = store->ctl()->bucket->read_bucket_entrypoint_info(
+        info.bucket, &cur, y, dpp);
+    if (r == 0 && cur.bucket.bucket_id == info.bucket.bucket_id) {
+      // the entrypoint changed and is still there, see if that was a lock
+      if (load_bucket(dpp, y) == 0 && info.admin_locked()) {
+        ldpp_dout(dpp, 4) << "bucket " << info.bucket.name
+            << " was admin-locked during the delete" << dendl;
+        return -EACCES;
+      }
+    } else if (r == -ENOENT && load_bucket(dpp, y) == 0) {
+      // the entrypoint is gone and the instance changed after it was
+      // loaded, such as by a lock that came too late (it fails without the
+      // entrypoint). remove the instance at its new version
+      RGWObjVersionTracker none;
+      ret = store->getRados()->delete_bucket(info, get_attrs(), none, y, dpp,
+                                             !delete_children);
+    }
+  }
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " <<
       info.bucket.name << dendl;

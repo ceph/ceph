@@ -462,6 +462,20 @@ int Object::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end)
   return 0;
 }
 
+int Bucket::remove_unless_admin_locked(const DoutPrefixProvider* dpp,
+                                       bool delete_children,
+                                       optional_yield y)
+{
+  int r = load_bucket(dpp, y);
+  if (r < 0) {
+    return r;
+  }
+  if (get_info().admin_locked()) {
+    return -EACCES;
+  }
+  return remove(dpp, delete_children, y);
+}
+
 
 std::string_view rgw_restore_status_dump(rgw::sal::RGWRestoreStatus status)
 {

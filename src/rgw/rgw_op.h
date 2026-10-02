@@ -178,6 +178,34 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
   return 0;
 }
 
+// true when the requester may change an admin-locked bucket: an admin or
+// system user, judged as the original user for requests another zone forwarded
+bool rgw_admin_lock_exempt(const req_state* s);
+// true when the bucket (default s->bucket) is admin-locked and the requester
+// isn't exempt
+bool rgw_bucket_admin_locked_for(const req_state* s,
+                                 rgw::sal::Bucket* bucket);
+bool rgw_bucket_admin_locked_for(const req_state* s);
+// true when the bucket admin lock applies to this op's type
+bool rgw_admin_lock_covers(RGWOp* op);
+// -EACCES when an op of this type may not change this admin-locked bucket
+int rgw_verify_bucket_admin_lock(const DoutPrefixProvider* dpp,
+                                 const req_state* s, RGWOpType type,
+                                 rgw::sal::Bucket* bucket);
+
+// For the admin API (/admin/...): -EACCES when the bucket is admin-locked and
+// the caller isn't exempt. A caller with only "buckets" or "ratelimit" caps
+// isn't an admin. radosgw-admin doesn't come through here. split_tenant: a
+// "tenant/name" bucket name names that tenant, as RGWBucket::init reads it.
+int rgw_admin_api_verify_bucket_lock(req_state* s, rgw::sal::Driver* driver,
+                                     std::string tenant, std::string bucket_name,
+                                     const std::string& bucket_id, optional_yield y,
+                                     bool split_tenant = true);
+
+// test hook: sleeps rgw_inject_delay_sec when rgw_inject_delay_pattern is point
+void rgw_inject_delay(const DoutPrefixProvider* dpp, std::string_view point,
+                      optional_yield y);
+
 // So! Now and then when we try to update bucket information, the
 // bucket has changed during the course of the operation. (Or we have
 // a cache consistency problem that Watch/Notify isn't ruling out
@@ -193,19 +221,43 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 //
 // The called function must return an integer, negative on error. In
 // general, they should just return op_ret.
-template<typename F, typename B=rgw::sal::Bucket>
-int retry_raced_bucket_write(const DoutPrefixProvider *dpp,
-                             B* b,
-                             const F &f,
-                             optional_yield y) {
-  auto r = f();
+//
+// check() runs before the first write and after every refresh, against the
+// bucket version the write is conditional on, and stops with its error. Ops
+// use retry_raced_bucket_write() below, which checks the bucket admin lock:
+// it may have been set after the op's permission check, and the op may write
+// a bucket it loaded itself.
+template<typename F, typename C, typename B=rgw::sal::Bucket>
+int retry_raced_bucket_write_checked(const DoutPrefixProvider *dpp,
+                                     B* b,
+                                     const F &f,
+                                     const C &check,
+                                     optional_yield y) {
+  auto r = check();
+  if (r >= 0) {
+    r = f();
+  }
   for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
     r = b->try_refresh_info(dpp, nullptr, y);
+    if (r >= 0) {
+      r = check();
+    }
     if (r >= 0) {
       r = f();
     }
   }
   return r;
+}
+
+// For writes that aren't made on behalf of a client request (radosgw-admin,
+// internal bookkeeping). Named so that an op can't pick it up by accident:
+// retry_raced_bucket_write() only takes an RGWOp.
+template<typename F, typename B=rgw::sal::Bucket>
+int retry_raced_bucket_write_unchecked(const DoutPrefixProvider *dpp,
+                                       B* b,
+                                       const F &f,
+                                       optional_yield y) {
+  return retry_raced_bucket_write_checked(dpp, b, f, [] { return 0; }, y);
 }
 
 /**
@@ -344,6 +396,26 @@ public:
   virtual dmc::Cost dmclock_cost() { return 1; }
   virtual void write_ops_log_entry(rgw_log_entry& entry) const {};
 };
+
+// Bucket config writes made by an op: a raced write re-checks the admin lock
+// with the op's type before it is retried.
+template<typename F, typename B=rgw::sal::Bucket>
+int retry_raced_bucket_write(RGWOp* op,
+                             B* b,
+                             const F &f,
+                             optional_yield y) {
+  // only ops that change bucket config come here, and the lock has to cover
+  // all of them: a new one missing from admin_lock_applies() would get past it
+  if (!rgw_admin_lock_covers(op)) {
+    ldpp_dout(op, 0) << "WARNING: op " << op->name() << " changes bucket config "
+        "but isn't covered by the bucket admin lock" << dendl;
+  }
+  rgw_inject_delay(op, "delay_raced_bucket_write", y);
+  return retry_raced_bucket_write_checked(op, b, f, [op, b] {
+      return rgw_verify_bucket_admin_lock(op, op->get_req_state(),
+                                          op->get_type(), b);
+    }, y);
+}
 
 class RGWDefaultResponseOp : public RGWOp {
 public:
