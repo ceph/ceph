@@ -7,10 +7,9 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
-#include <iosfwd>
-#include <list>
-#include <vector>
 #include <string>
+#include <vector>
+#include <iosfwd>
 
 namespace ceph {
 class Formatter;
@@ -56,7 +55,7 @@ struct ObjectPosition {
   static std::vector<ObjectPosition> generate_test_instances();
 };
 
-typedef std::list<ObjectPosition> ObjectPositions;
+using ObjectPositions = std::vector<ObjectPosition>;
 
 struct ObjectSetPosition {
   // stored in most-recent -> least recent committed entry order
