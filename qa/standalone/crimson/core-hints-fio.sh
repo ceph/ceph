@@ -16,7 +16,9 @@
 #     (objecter op_send_core vs op_send, from the fio clients' admin sockets);
 #   - the load of the OSDs' reactor cores: busy time over the measured part
 #     of the run (reactor_cpu_busy_ms), averaged over all of them, and of the
-#     busiest one. Per-core values are kept in <RESULTS_DIR>/<run>.cores.tsv.
+#     busiest one. Per-core values are kept in <RESULTS_DIR>/<run>.cores.tsv,
+#     and the client ops each core served (local: without a cross-core hop,
+#     remote: forwarded to it) in <RESULTS_DIR>/<run>.ops.tsv.
 #
 # Run with:
 #   cd build && ../qa/run-standalone.sh crimson/core-hints-fio.sh
@@ -37,6 +39,8 @@
 #                  first MiB is zeroed! Unset: a SEASTORE_SIZE block file per
 #                  OSD, in the test dir                         (default: unset)
 #   SEASTORE_SIZE  seastore block file size, without SEASTORE_DEVS (default: 10G)
+#   SEASTORE_BACKEND  rbm (random block: RANDOM_BLOCK_SSD devices) or
+#                  segmented (SSD devices)                      (default: rbm)
 #   POOL_PGS       the pool's PGs (PG_NUM is accepted too)      (default: 32)
 #   WORKLOADS      fio rw modes, from: randread randwrite randrw
 #                                     (default: all three; randrw is 70% reads)
@@ -52,7 +56,7 @@
 #                  connections (std::bad_alloc). Keep OSD_MEMORY / OSD_SMP
 #                  well above the data in flight per reactor.
 #   REPEAT         repetitions of every (workload, mode) pair   (default: 1)
-#   RESULTS_DIR    where fio outputs and the summary are kept
+#   RESULTS_DIR    where fio outputs, the summary and the OSD logs are kept
 #                  (default: ./fio-hints-results.<date> under the build dir)
 #   STRICT         1: fail unless the flag removes most of the OSD-side
 #                  cross-core hops (default: 0, only warn)
@@ -71,6 +75,7 @@ OSD_MEMORY=${OSD_MEMORY:-4G}
 STORE=${STORE:-seastore}
 SEASTORE_DEVS=${SEASTORE_DEVS:-}
 SEASTORE_SIZE=${SEASTORE_SIZE:-10G}
+SEASTORE_BACKEND=${SEASTORE_BACKEND:-rbm}
 WORKLOADS=${WORKLOADS:-"randread randwrite randrw"}
 FIO=${FIO:-fio}
 FIO_RUNTIME=${FIO_RUNTIME:-60}
@@ -113,11 +118,21 @@ function run() {
         echo "-------------- Prepare Test $func -------------------"
         setup $dir || return 1
         echo "-------------- Run Test $func -----------------------"
-        $func $dir || { teardown $dir 1; return 1; }
+        $func $dir || { _save_logs $dir; teardown $dir 1; return 1; }
+        _save_logs $dir
         echo "-------------- Teardown Test $func ------------------"
         teardown $dir || return 1
         echo "-------------- Complete Test $func ------------------"
     done
+}
+
+# keep the OSD and fio client logs (teardown() removes the test dir):
+# moved to <RESULTS_DIR>/logs
+function _save_logs() {
+    local dir=$1
+    mkdir -p $RESULTS_DIR/logs || return 1
+    mv $dir/osd.*.log $dir/fio-*.log $RESULTS_DIR/logs/ 2>/dev/null
+    echo "OSD and fio client logs saved in $RESULTS_DIR/logs"
 }
 
 #
@@ -200,12 +215,23 @@ function _osd_store_args() {
         cyanstore)
             echo "--osd_objectstore=cyanstore" ;;
         seastore)
-            if [ -n "$SEASTORE_DEVS" ]; then
-                # the device linked as 'block' by _prepare_osd_dev()
-                echo "--osd_objectstore=seastore"
-            else
-                echo "--osd_objectstore=seastore --seastore_device_size=$SEASTORE_SIZE"
-            fi ;;
+            local args="--osd_objectstore=seastore"
+            case "$SEASTORE_BACKEND" in
+                rbm)
+                    args+=" --seastore_hot_device_type=RANDOM_BLOCK_SSD"
+                    args+=" --seastore_hot_backend_type=RANDOM_BLOCK" ;;
+                segmented)
+                    args+=" --seastore_hot_device_type=SSD"
+                    args+=" --seastore_hot_backend_type=SEGMENTED" ;;
+                *)
+                    echo "ERROR: unknown SEASTORE_BACKEND '$SEASTORE_BACKEND'" >&2
+                    return 1 ;;
+            esac
+            # without SEASTORE_DEVS: a block file. With: the device linked
+            # as 'block' by _prepare_osd_dev()
+            [ -n "$SEASTORE_DEVS" ] ||
+                args+=" --seastore_device_size=$SEASTORE_SIZE"
+            echo "$args" ;;
         bluestore)
             echo "--osd_objectstore=bluestore" ;;
         *)
@@ -249,6 +275,30 @@ function _setup_cluster() {
             return 1
         }
     done
+    _check_store $dir || return 1
+}
+
+# record the OSDs' object store setup, and verify the seastore backend
+function _check_store() {
+    local dir=$1 id line
+    local want=
+    if [ "$STORE" = seastore ]; then
+        case "$SEASTORE_BACKEND" in
+            rbm) want="main device type: RANDOM_BLOCK_SSD, main backend type: RANDOM_BLOCK" ;;
+            segmented) want="main device type: SSD, main backend type: SEGMENTED" ;;
+        esac
+    fi
+    : > $RESULTS_DIR/osds.txt
+    for id in $(seq 0 $((NUM_OSDS - 1))); do
+        line=$(grep -m1 "main device type:" $dir/osd.$id.log)
+        echo "osd.$id: ${line:-no 'main device type' log line}" \
+            >> $RESULTS_DIR/osds.txt
+        if [ -n "$want" ] && [[ "$line" != *"$want"* ]]; then
+            echo "ERROR: osd.$id: expected '$want', got: '$line'"
+            return 1
+        fi
+    done
+    cat $RESULTS_DIR/osds.txt
 }
 
 #
@@ -374,25 +424,31 @@ function _check_fio_io() {
     fi
 }
 
-# sum of the client_request op_local / op_remote counters over all OSDs,
-# printed as "<local> <remote>"
-function _osd_hop_counters() {
-    local id local_sum=0 remote_sum=0 out l r
+# the client_request op_local / op_remote counters of every OSD reactor, as
+# "<osd> <shard> <local> <remote>" lines
+function _osd_shard_ops() {
+    local id
     for id in $(seq 0 $((NUM_OSDS - 1))); do
-        out=$(ceph tell osd.$id dump_metrics osd_pg_shard --format=json) ||
+        ceph tell osd.$id dump_metrics osd_pg_shard --format=json |
+            jq -r --arg osd $id '
+              [.metrics[] | to_entries[] |
+               select(.value.op_type == "client_request") |
+               {shard: .value.shard, key: .key, v: .value.value}] |
+              group_by(.shard)[] |
+              "\($osd) \(.[0].shard) " +
+              "\(map(select(.key == "osd_pg_shard_op_local") | .v) | add // 0) " +
+              "\(map(select(.key == "osd_pg_shard_op_remote") | .v) | add // 0)"' ||
             return 1
-        l=$(jq '[.metrics[] | to_entries[] |
-                 select(.key == "osd_pg_shard_op_local" and
-                        .value.op_type == "client_request") |
-                 .value.value] | add // 0' <<<"$out")
-        r=$(jq '[.metrics[] | to_entries[] |
-                 select(.key == "osd_pg_shard_op_remote" and
-                        .value.op_type == "client_request") |
-                 .value.value] | add // 0' <<<"$out")
-        local_sum=$((local_sum + l))
-        remote_sum=$((remote_sum + r))
     done
-    echo "$local_sum $remote_sum"
+}
+
+# per reactor client ops between two _osd_shard_ops snapshots, as
+# "<osd> <shard> <local> <remote>" lines
+function _shard_ops_delta() {
+    local before=$1 after=$2
+    awk 'NR == FNR { l[$1 " " $2] = $3; r[$1 " " $2] = $4; next }
+         { print $1, $2, $3 - l[$1 " " $2], $4 - r[$1 " " $2] }' \
+        $before $after | sort -n -k1 -k2
 }
 
 # 'perf dump <logger>' over an admin socket (the admin socket protocol:
@@ -481,8 +537,7 @@ function _fio_run() {
     _fio_job $conf $rw "${extra[@]}" > $dir/$tag.fio || return 1
 
     rm -f $dir/fio-$mode.*.asok
-    local before after
-    before=$(_osd_hop_counters) || return 1
+    _osd_shard_ops > $dir/$tag.ops0 || return 1
 
     _fio $dir $tag $dir/$tag.fio &
     local fio_pid=$!
@@ -506,7 +561,8 @@ function _fio_run() {
     _check_osds_memory $dir || return 1
     _check_fio_io $tag || return 1
 
-    after=$(_osd_hop_counters) || return 1
+    _osd_shard_ops > $dir/$tag.ops1 || return 1
+    _shard_ops_delta $dir/$tag.ops0 $dir/$tag.ops1 > $RESULTS_DIR/$tag.ops.tsv
 
     _reactor_util $dir/$tag.busy0 $dir/$tag.busy1 $((t1 - t0)) \
         > $RESULTS_DIR/$tag.cores.tsv
@@ -516,8 +572,10 @@ function _fio_run() {
     cpu_max=$(awk 'BEGIN { m = 0 } $3 > m { m = $3 } END { printf "%.1f", m }' \
               $RESULTS_DIR/$tag.cores.tsv)
 
-    local -a b=($before) a=($after) c=($client)
-    local d_local=$((a[0] - b[0])) d_remote=$((a[1] - b[1]))
+    local -a c=($client)
+    local d_local d_remote
+    d_local=$(awk '{ t += $3 } END { print t + 0 }' $RESULTS_DIR/$tag.ops.tsv)
+    d_remote=$(awk '{ t += $4 } END { print t + 0 }' $RESULTS_DIR/$tag.ops.tsv)
     local hop_pct client_pct=n/a
     hop_pct=$(awk -v l=$d_local -v r=$d_remote \
                   'BEGIN { t = l + r; printf "%.1f", t ? 100 * r / t : 0 }')
