@@ -2020,12 +2020,13 @@ void Objecter::_reopen_session(OSDSession *s)
   // shard connections share the session's fate: dropped here, and the
   // caller's _kick_requests() resends every op on s->con. The map is
   // forgotten too: after an OSD restart its reactor ports may differ, so
-  // they are reopened only once the first reply brings the new version.
+  // shard connections reopen only once the first reply brings the new map.
   _drop_shard_conns(s);
   s->shard_map = osd_shard_map_t{};
   s->shard_map_fetching = false;
   s->con = messenger->connect_to_osd(addrs);
   s->con->set_priv(RefCountedPtr{s});
+  _init_shard_slots(s);   // no map: no slots until it is fetched again
   s->incarnation++;
   logger->inc(l_osdc_osd_session_open);
 }
@@ -3742,9 +3743,11 @@ void Objecter::_send_op(Op *op)
 // each op on the connection of the reactor owning its PG. Anything else
 // (no map yet, no reactor ports, messenger cannot connect) uses s->con
 // and the OSD forwards it.
-// A reset of any connection of the session takes the normal reopen + kick
-// path, which drops them and the map; they are rebuilt once the map is
-// fetched again.
+// Shard connections open lazily, for reactors that own PGs we send to, up to
+// objecter_osd_max_shard_conns. A shard connection's reset (or idle close)
+// retires only that connection and resends only its ops; a reset of the
+// regular connection takes the normal reopen + kick path for everything,
+// which also forgets the map (an OSD restart may change its ports).
 
 ConnectionRef Objecter::_route_op(Op *op)
 {
@@ -3758,9 +3761,7 @@ ConnectionRef Objecter::_route_op(Op *op)
   auto &r = s->pg_routes[pgid];
   if (r.inflight == 0) {
     // idle PG: free to (re)pick; otherwise stay where its ops are
-    const uint16_t core = s->shard_map.get_core(pgid);  // NO_CORE if no map
-    r.con = core < s->shard_conns.size() && s->shard_conns[core]
-      ? s->shard_conns[core] : s->con;
+    r.con = _pick_connection(s, pgid);
   }
   ++r.inflight;
   op->con = r.con;
@@ -3792,29 +3793,121 @@ void Objecter::_maybe_fetch_shard_map(OSDSession *s, uint64_t version)
   s->con->send_message2(ceph::make_message<MOSDShardMapGet>(s->shard_map.version));
 }
 
-void Objecter::_open_shard_conns(OSDSession *s)
+void Objecter::_init_shard_slots(OSDSession *s)
 {
-  if (!shard_routing || s->shard_map.empty()) {
+  std::lock_guard l(s->conns_lock);
+  s->shard_conns.clear();
+  if (shard_routing && !s->shard_map.empty()) {
+    s->shard_conns.resize(s->shard_map.n_cores);
+  }
+}
+
+ConnectionRef Objecter::_pick_connection(OSDSession *s, const spg_t& pgid)
+{
+  // rwlock is locked; s->lock is locked unique
+  const uint16_t core = s->shard_map.get_core(pgid);  // NO_CORE if no map
+  if (core >= s->shard_conns.size()) {
+    return s->con;
+  }
+  if (s->shard_conns[core]) {
+    return s->shard_conns[core];
+  }
+  if (!messenger_can_steer) {
+    return s->con;
+  }
+  if (max_shard_conns) {
+    const auto open = std::count_if(s->shard_conns.begin(), s->shard_conns.end(),
+                                    [](const auto &c) { return bool(c); });
+    if (static_cast<uint64_t>(open) >= max_shard_conns) {
+      return s->con;  // past the cap: the OSD forwards
+    }
+  }
+  const uint16_t port = s->shard_map.get_shard_port(core);
+  if (port == 0) {
+    return s->con;  // the OSD published no port for this reactor
+  }
+  // non-blocking: messages queue until established; if it fails, its reset
+  // retires it and resends what was queued on it
+  auto c = messenger->connect_to_osd_shard(osdmap->get_addrs(s->osd), core,
+                                           port);
+  if (!c) {
+    messenger_can_steer = false;
+    return s->con;
+  }
+  c->set_priv(RefCountedPtr{s});
+  {
+    std::lock_guard l(s->conns_lock);
+    s->shard_conns[core] = c;
+  }
+  ldout(cct, 10) << __func__ << " osd." << s->osd << " opened " << c
+                 << " for reactor " << core << "/" << s->shard_map.n_cores
+                 << dendl;
+  return c;
+}
+
+void Objecter::_retire_shard_conn(OSDSession *s, int index,
+                                  map<uint64_t, LingerOp *>& lresend)
+{
+  // rwlock is locked unique; s->lock is locked unique
+  ConnectionRef dead;
+  {
+    std::lock_guard l(s->conns_lock);
+    dead.swap(s->shard_conns.at(index));
+  }
+  if (!dead) {
     return;
   }
-  const auto addrs = osdmap->get_addrs(s->osd);
-  std::vector<ConnectionRef> conns(s->shard_map.n_cores);
-  for (uint32_t core = 0; core < conns.size(); ++core) {
-    const uint16_t port = s->shard_map.get_shard_port(core);
-    if (port == 0) {
-      continue;  // no port for this reactor: its PGs stay on s->con
+  dead->set_priv(NULL);
+  ldout(cct, 5) << __func__ << " osd." << s->osd << " reactor " << index
+                << " con " << dead << dendl;
+
+  // forget the PGs pinned to it; their backoffs went away with it
+  std::set<spg_t> pgs;
+  std::erase_if(s->pg_routes, [&](const auto &kv) {
+    if (kv.second.con == dead) {
+      pgs.insert(kv.first);
+      return true;
     }
-    auto c = messenger->connect_to_osd_shard(addrs, core, port);
-    if (!c) {
-      break;  // messenger cannot steer: everything stays on s->con
+    return false;
+  });
+  for (const auto &pgid : pgs) {
+    if (auto p = s->backoffs.find(pgid); p != s->backoffs.end()) {
+      for (auto &[begin, b] : p->second) {
+        s->backoffs_by_id.erase(b.id);
+      }
+      s->backoffs.erase(p);
     }
-    c->set_priv(RefCountedPtr{s});
-    conns[core] = std::move(c);
   }
-  ldout(cct, 10) << __func__ << " osd." << s->osd << " " << conns.size()
-                 << " reactors" << dendl;
-  std::lock_guard l(s->conns_lock);
-  s->shard_conns.swap(conns);
+
+  // resend only its ops, in tid order (s->ops is tid-ordered); collect
+  // first, as cancelling may remove ops from s->ops
+  std::vector<Op*> affected;
+  for (auto &[tid, op] : s->ops) {
+    if (op->con == dead) {
+      op->con.reset();
+      affected.push_back(op);
+    }
+  }
+  for (Op *op : affected) {
+    if (op->should_resend) {
+      if (!op->target.paused) {
+        logger->inc(l_osdc_op_resend);
+        _send_op(op);
+      }
+    } else {
+      _op_cancel_map_check(op);
+      _cancel_linger_op(op);
+    }
+  }
+
+  // watches on PGs of that reactor lost their OSD-side session
+  for (auto &[id, lop] : s->linger_ops) {
+    if (s->shard_map.get_core(lop->target.actual_pgid) == index &&
+        !lresend.count(id)) {
+      lop->get();
+      lresend[id] = lop;
+    }
+  }
 }
 
 void Objecter::_drop_shard_conns(OSDSession *s)
@@ -3863,12 +3956,12 @@ void Objecter::handle_osd_shard_map(MOSDShardMap *m)
     if (had_conns) {
       // other reactor count or ports: rebuild and resend
       _drop_shard_conns(s);
-      _open_shard_conns(s);
+      _init_shard_slots(s);
       _kick_requests(s, lresend);
     } else {
       // first map: in-flight ops stay pinned to s->con; their PGs move
       // to shard connections once idle
-      _open_shard_conns(s);
+      _init_shard_slots(s);
     }
   }
   // otherwise only idle PGs move, via _route_op
@@ -5124,8 +5217,14 @@ bool Objecter::ms_handle_reset(Connection *con)
       }
       map<uint64_t, LingerOp *> lresend;
       unique_lock sl(session->lock);
-      _reopen_session(session);
-      _kick_requests(session, lresend);
+      if (int idx = shard_routing ? session->shard_conn_index(con) : -1;
+          idx >= 0) {
+        // a shard connection failed or idled out: the session stays up
+        _retire_shard_conn(session, idx, lresend);
+      } else {
+        _reopen_session(session);
+        _kick_requests(session, lresend);
+      }
       sl.unlock();
       _linger_ops_resend(lresend, wl);
       wl.unlock();
@@ -5679,6 +5778,7 @@ Objecter::Objecter(CephContext *cct,
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
   shard_routing = cct->_conf.get_val<bool>("objecter_shard_routing");
+  max_shard_conns = cct->_conf.get_val<uint64_t>("objecter_osd_max_shard_conns");
   min_split_replica_read_size
     = cct->_conf.get_val<uint64_t>("osd_min_split_replica_read_size");
   ceph_assert(min_split_replica_read_size >= SplitOp::REPLICA_MIN_SPLIT_SIZE ||

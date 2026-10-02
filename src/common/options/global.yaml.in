@@ -2507,6 +2507,19 @@ options:
   - startup
   see_also:
   - crimson_osd_client_shard_ports
+  - objecter_osd_max_shard_conns
+- name: objecter_osd_max_shard_conns
+  type: uint
+  level: advanced
+  desc: Maximum shard-steered connections per OSD (0 = one per reactor)
+  long_desc: Shard connections are opened lazily, only for reactors that own
+    PGs this client sends ops to, and are closed by the messenger when idle
+    (ms_connection_idle_timeout). PGs on reactors beyond the cap use the
+    regular connection and are forwarded inside the OSD. Bounds connections
+    per OSD at clients x (1 + cap).
+  default: 0
+  flags:
+  - startup
 # suppress watch pings
 - name: objecter_inject_no_watch_ping
   type: bool

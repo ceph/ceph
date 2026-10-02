@@ -2535,6 +2535,16 @@ public:
     /// a PG never has ops in flight on two connections (ordering)
     std::map<spg_t, pg_route_t> pg_routes;
 
+    /// index of c in shard_conns, or -1
+    int shard_conn_index(const Connection *c) const {
+      std::lock_guard l(conns_lock);
+      for (size_t i = 0; i < shard_conns.size(); ++i) {
+        if (shard_conns[i].get() == c) {
+          return static_cast<int>(i);
+        }
+      }
+      return -1;
+    }
     bool owns_connection(const ConnectionRef& c) const {
       if (c == con) {
         return true;
@@ -2601,6 +2611,8 @@ public:
   ceph::timespan mon_timeout;
   ceph::timespan osd_timeout;
   bool shard_routing = false;  ///< objecter_shard_routing
+  uint64_t max_shard_conns = 0;  ///< objecter_osd_max_shard_conns, 0 = all
+  bool messenger_can_steer = true;  ///< cleared once connect_to_osd_shard fails
 
   uint64_t min_split_replica_read_size;
 
@@ -2698,8 +2710,16 @@ private:
   ConnectionRef _route_op(Op *op);
   void _unroute_op(OSDSession *s, Op *op);
   void _maybe_fetch_shard_map(OSDSession *s, uint64_t version);
-  void _open_shard_conns(OSDSession *s);   ///< rwlock held
+  /// size shard_conns for the current map; connections open lazily
+  void _init_shard_slots(OSDSession *s);
+  /// the connection for an idle PG; opens its reactor's connection if
+  /// needed and allowed (rwlock held)
+  ConnectionRef _pick_connection(OSDSession *s, const spg_t& pgid);
   void _drop_shard_conns(OSDSession *s);   ///< caller resends
+  /// one shard connection reset or idled out: forget it and resend, in tid
+  /// order, only the ops that were on it (rwlock unique)
+  void _retire_shard_conn(OSDSession *s, int index,
+                          std::map<uint64_t, LingerOp *>& lresend);
   void _linger_ops_resend(std::map<uint64_t, LingerOp *>& lresend,
 			  std::unique_lock<ceph::shared_mutex>& ul);
 
