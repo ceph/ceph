@@ -570,6 +570,10 @@ void FSMap::reset_filesystem(fs_cluster_id_t fscid)
   filesystems[new_fs.fscid] = new_fs;
 }
 
+// The compatibility API calls its equally deprecated component:
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void FSMap::get_health(list<pair<health_status_t,string> >& summary,
 			list<pair<health_status_t,string> > *detail) const
 {
@@ -588,6 +592,8 @@ void FSMap::get_health(list<pair<health_status_t,string> >& summary,
     summary.push_back(make_pair(HEALTH_WARN, css->str()));
   }
 }
+
+#pragma GCC diagnostic pop
 
 bool FSMap::check_health(void)
 {
