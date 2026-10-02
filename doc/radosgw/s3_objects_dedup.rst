@@ -101,8 +101,9 @@ The dedup estimate process skips the following RGW objects:
   split-head which is unavailable on such pools)
 
 The full dedup process skips all of the above and additionally skips
-**user-encrypted** objects.  Server-side **compressed** objects can
-optionally be skipped by setting :confval:`rgw_dedup_skip_compressed`.
+**user-encrypted** objects, objects written with AppendObject and objects
+without a tail tag.  Server-side **compressed** objects can optionally be
+skipped by setting :confval:`rgw_dedup_skip_compressed`.
 
 The minimum RGW object size to be deduplicated is controlled by the following
 configuration option:

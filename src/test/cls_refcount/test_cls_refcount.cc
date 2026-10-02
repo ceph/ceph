@@ -3,6 +3,7 @@
 
 #include "include/types.h"
 #include "cls/refcount/cls_refcount_client.h"
+#include "cls/refcount/cls_refcount_ops.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
@@ -24,7 +25,89 @@ static librados::ObjectWriteOperation *new_op() {
 
 class TestClsRefcount : public ceph::test::ClsTestFixture {
   // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
+protected:
+  void get(const string& oid, const string& tag, const string& src_tag = "",
+           bool unique = false) {
+    librados::ObjectWriteOperation op;
+    cls_refcount_get(op, tag, true, src_tag, unique);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  void put(const string& oid, const string& tag) {
+    librados::ObjectWriteOperation op;
+    cls_refcount_put(op, tag, true);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  void check_refcount(const string& oid, const set<string>& refs,
+                      const set<string>& retired,
+                      const string& owner = "") {
+    bufferlist bl;
+    ASSERT_GT(ioctx.getxattr(oid, "refcount", bl), 0);
+    obj_refcount actual;
+    auto p = bl.cbegin();
+    decode(actual, p);
+    set<string> tags;
+    for (const auto& [tag, _] : actual.refs) {
+      tags.insert(tag);
+    }
+    EXPECT_EQ(refs, tags);
+    EXPECT_EQ(retired, actual.retired_refs);
+    EXPECT_EQ(owner, actual.wildcard_owner);
+  }
 };
+
+TEST_P(TestClsRefcount, owned_wildcard)
+{
+  const string oid = "owned_wildcard";
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  // the first source owns the wildcard, and unique puts retire nothing
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy", "source", true));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy2", "other", true));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy"));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy2"));
+  // a replayed put can't drop the owned wildcard
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy"));
+  ASSERT_NO_FATAL_FAILURE(check_refcount(oid, {""}, {}, "source"));
+
+  ASSERT_NO_FATAL_FAILURE(put(oid, "source"));
+  ASSERT_EQ(-ENOENT, ioctx.stat(oid, nullptr, nullptr));
+}
+
+TEST_P(TestClsRefcount, wildcard_without_owner)
+{
+  const string oid = "no_owner";
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "live"));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "retired"));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "retired"));
+
+  // a source with a ref of its own, live or retired, doesn't own the wildcard
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy", "live", true));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy2", "retired", true));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "self", "self", true));
+  // with no owner, a replayed put could still drop the wildcard
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy"));
+  ASSERT_NO_FATAL_FAILURE(check_refcount(oid, {"", "live", "copy2", "self"},
+                                         {"retired", "copy"}));
+}
+
+TEST_P(TestClsRefcount, shared_tag_stays_retired)
+{
+  const string oid = "shared_tag";
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "copy", "source", true));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "shared"));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "shared", "", true));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "shared"));
+  ASSERT_NO_FATAL_FAILURE(check_refcount(oid, {"", "copy"}, {"shared"},
+                                         "source"));
+
+  ASSERT_NO_FATAL_FAILURE(put(oid, "source"));
+  ASSERT_NO_FATAL_FAILURE(get(oid, "next", "other", true));
+  ASSERT_NO_FATAL_FAILURE(put(oid, "copy"));
+  ASSERT_NO_FATAL_FAILURE(check_refcount(oid, {"next"}, {"shared", "source"}));
+}
 
 TEST_P(TestClsRefcount, test_implicit) /* test refcount using implicit referencing of newly created objects */
 {

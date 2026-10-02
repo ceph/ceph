@@ -13,12 +13,15 @@ using std::string;
 using ceph::bufferlist;
 using namespace cls::refcount;
 
-void cls_refcount_get(librados::ObjectWriteOperation& op, const string& tag, bool implicit_ref)
+void cls_refcount_get(librados::ObjectWriteOperation& op, const string& tag, bool implicit_ref,
+                      const string& src_tag, bool unique)
 {
   bufferlist in;
   cls_refcount_get_op call;
   call.tag = tag;
   call.implicit_ref = implicit_ref;
+  call.src_tag = src_tag;
+  call.unique = unique;
   encode(call, in);
   op.exec(method::get, in);
 }

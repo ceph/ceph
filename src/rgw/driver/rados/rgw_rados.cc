@@ -5019,6 +5019,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   if (!keep_tags) {
     attrs.erase(RGW_ATTR_TAGS);
   }
+  attrs.erase(RGW_ATTR_TAIL_TAG);
   attrs.erase(RGW_ATTR_SHARE_MANIFEST);
   attrs.erase(RGW_ATTR_BLAKE3);
 
@@ -5422,6 +5423,12 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     copy_data = true;
   }
 
+  // no tail tag means no owner, and an appendable copy would append under the source's prefix
+  if (dest_obj != src_obj && (!astate->tail_tag.length() ||
+                              astate->attrset.count(RGW_ATTR_APPEND_PART_NUM))) {
+    copy_data = true;
+  }
+
   if (petag) {
     const auto iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
@@ -5482,10 +5489,12 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
       manifest.set_tail_placement(tail_placement.placement_rule, src_obj.bucket);
     }
     string ref_tag;
+    const string src_tag = astate->tail_tag.to_str();
     for (; miter != amanifest->obj_end(dpp); ++miter) {
       ObjectWriteOperation op;
       ref_tag = tag + '\0';
-      cls_refcount_get(op, ref_tag, true);
+      // each copy gets a tag of its own, so no other object reuses it
+      cls_refcount_get(op, ref_tag, true, src_tag, true);
 
       rgw_rados_ref obj;
       ret = rgw_get_rados_ref(dpp, driver->getRados()->get_rados_handle(),

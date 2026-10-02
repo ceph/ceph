@@ -236,6 +236,7 @@ namespace rgw::dedup {
     uint64_t ingress_skip_changed_objs = 0;
     uint64_t ingress_skip_explicit_objs = 0;
     uint64_t ingress_skip_alibaba = 0;
+    uint64_t ingress_skip_no_tail_tag = 0;
 
     uint64_t shared_manifest_dedup_bytes = 0;
     uint64_t skipped_shared_manifest = 0;

@@ -602,6 +602,7 @@ namespace rgw::dedup {
     this->ingress_skip_changed_objs     += other.ingress_skip_changed_objs;
     this->ingress_skip_explicit_objs    += other.ingress_skip_explicit_objs;
     this->ingress_skip_alibaba          += other.ingress_skip_alibaba;
+    this->ingress_skip_no_tail_tag      += other.ingress_skip_no_tail_tag;
     this->shared_manifest_dedup_bytes   += other.shared_manifest_dedup_bytes;
 
     this->skipped_shared_manifest += other.skipped_shared_manifest;
@@ -807,6 +808,9 @@ namespace rgw::dedup {
       if (this->ingress_skip_alibaba) {
         f->dump_unsigned("Skipped Alibaba Cloud OSS", this->ingress_skip_alibaba);
       }
+      if (this->ingress_skip_no_tail_tag) {
+        f->dump_unsigned("Skipped No Tail Tag", this->ingress_skip_no_tail_tag);
+      }
     }
 
     {
@@ -906,7 +910,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void encode(const md5_stats_t& m, ceph::bufferlist& bl)
   {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
 
     encode(m.big_objs_stat, bl);
     encode(m.ingress_slabs, bl);
@@ -985,13 +989,14 @@ namespace rgw::dedup {
     encode(m.write_slab_failure, bl);
 
     encode(m.duration, bl);
+    encode(m.ingress_skip_no_tail_tag, bl);
     ENCODE_FINISH(bl);
   }
 
   //---------------------------------------------------------------------------
   void decode(md5_stats_t& m, ceph::bufferlist::const_iterator& bl)
   {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(m.big_objs_stat, bl);
     decode(m.ingress_slabs, bl);
     decode(m.ingress_failed_load_bucket, bl);
@@ -1069,6 +1074,9 @@ namespace rgw::dedup {
     decode(m.write_slab_failure, bl);
 
     decode(m.duration, bl);
+    if (struct_v >= 2) {
+      decode(m.ingress_skip_no_tail_tag, bl);
+    }
     DECODE_FINISH(bl);
   }
 } //namespace rgw::dedup
