@@ -3120,9 +3120,9 @@ RGWLC::LCWorker::~LCWorker()
 {
 } /* ~LCWorker */
 
-list<RGWLifecycleConfiguration> RGWLifecycleConfiguration::generate_test_instances()
+vector<RGWLifecycleConfiguration> RGWLifecycleConfiguration::generate_test_instances()
 {
-  list<RGWLifecycleConfiguration> o;
+  vector<RGWLifecycleConfiguration> o;
   o.emplace_back();
   return o;
 }

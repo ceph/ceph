@@ -132,9 +132,9 @@ void mon_info_t::dump(ceph::Formatter *f) const
   encode_json("crush_location", crush_loc, f);
 }
 
-list<mon_info_t> mon_info_t::generate_test_instances()
+vector<mon_info_t> mon_info_t::generate_test_instances()
 {
-  list<mon_info_t> ls;
+  vector<mon_info_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().name = "noname";
@@ -368,9 +368,9 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-list<MonMap> MonMap::generate_test_instances()
+vector<MonMap> MonMap::generate_test_instances()
 {
-  list<MonMap> o;
+  vector<MonMap> o;
 
   o.emplace_back(); /* empty */
 

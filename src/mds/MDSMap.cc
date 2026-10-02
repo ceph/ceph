@@ -177,9 +177,9 @@ void MDSMap::mds_info_t::dump(std::ostream& o) const
   o << "]";
 }
 
-auto MDSMap::mds_info_t::generate_test_instances() -> std::list<mds_info_t>
+auto MDSMap::mds_info_t::generate_test_instances() -> std::vector<mds_info_t>
 {
-  std::list<mds_info_t> ls;
+  std::vector<mds_info_t> ls;
   mds_info_t sample;
   ls.push_back(std::move(sample));
   sample = mds_info_t();
@@ -278,9 +278,9 @@ void MDSMap::dump_flags_state(Formatter *f) const
     f->close_section();
 }
 
-std::list<MDSMap> MDSMap::generate_test_instances()
+std::vector<MDSMap> MDSMap::generate_test_instances()
 {
-  std::list<MDSMap> ls;
+  std::vector<MDSMap> ls;
   MDSMap m;
   m.max_mds = 1;
   m.data_pools.push_back(0);
