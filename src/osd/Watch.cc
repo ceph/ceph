@@ -19,7 +19,6 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-using std::list;
 using std::make_pair;
 using std::pair;
 using std::ostream;

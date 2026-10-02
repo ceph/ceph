@@ -30,7 +30,6 @@
 #include <ostream>
 using std::ostream;
 
-#include <list>
 #include <vector>
 #include <boost/optional.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
@@ -190,7 +189,7 @@ struct OSDCapGrant {
 
   // explicit grants that a profile grant expands to; populated as
   // needed by expand_profile() and cached here.
-  std::list<OSDCapGrant> profile_grants;
+  std::vector<OSDCapGrant> profile_grants;
 
   OSDCapGrant() {}
   OSDCapGrant(const OSDCapMatch& m, const OSDCapSpec& s,

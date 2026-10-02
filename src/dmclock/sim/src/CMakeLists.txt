@@ -2,7 +2,7 @@ set(local_flags "-Wall ${CMAKE_CXX_SIM_FLAGS}")
 
 set(ssched_sim_srcs test_ssched.cc test_ssched_main.cc)
 set(dmc_sim_srcs test_dmclock.cc test_dmclock_main.cc)
-set(config_srcs config.cc str_list.cc ConfUtils.cc)
+set(config_srcs config.cc ConfUtils.cc)
 
 set_source_files_properties(${ssched_sim_srcs} ${dmc_sim_srcs} ${dmc_srcs} ${config_srcs}
   PROPERTIES

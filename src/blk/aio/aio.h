@@ -12,6 +12,8 @@
 #include <sys/event.h>
 #endif
 
+#include <list>
+
 #include <boost/intrusive/list.hpp>
 #include <boost/container/small_vector.hpp>
 
@@ -95,13 +97,13 @@ typedef boost::intrusive::list<
     &aio_t::queue_item> > aio_list_t;
 
 struct io_queue_t {
-  typedef std::list<aio_t>::iterator aio_iter;
+  using aio_iter = std::list<aio_t>::iterator;
 
   virtual ~io_queue_t() {};
 
   virtual int init(std::vector<int> &fds) = 0;
   virtual void shutdown() = 0;
-  virtual int submit_batch(aio_iter begin, aio_iter end,
+  virtual int submit_batch(aio_iter first, aio_iter last,
 			   void *priv, int *retries, int submit_retries, int initial_delay_us) = 0;
   virtual int get_next_completed(int timeout_ms, aio_t **paio, int max) = 0;
 };
@@ -154,7 +156,7 @@ struct aio_queue_t final : public io_queue_t {
     }
   }
 
-  int submit_batch(aio_iter begin, aio_iter end,
+  int submit_batch(aio_iter first, aio_iter last,
 		   void *priv, int *retries, int submit_retries, int initial_delay_us) final;
   int get_next_completed(int timeout_ms, aio_t **paio, int max) final;
 };

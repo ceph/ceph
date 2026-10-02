@@ -15,12 +15,10 @@
 #include <string.h>
 #include <stdarg.h>
 
-#include <iostream>
 #include <vector>
-#include <list>
+#include <iostream>
 
 #include "config.h"
-#include "str_list.h"
 
 
 static void dashes_to_underscores(const char *input, char *output) {

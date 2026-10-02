@@ -8,6 +8,8 @@
 #include "include/stringify.h"
 #include "common/errno.h"
 
+#include <deque>
+
 #include <fuse_lowlevel.h>
 
 #include <sys/types.h>
@@ -27,8 +29,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "fuse "
 
+using std::deque;
 using std::less;
-using std::list;
 using std::map;
 using std::set;
 using std::string;
@@ -123,7 +125,7 @@ static int parse_fn(CephContext* cct, const char *path, coll_t *cid,
 		    ghobject_t *oid, string *key,
 		    uint32_t *hash, uint32_t *hash_bits)
 {
-  list<string> v;
+  deque<string> v;
   for (const char *p = path; *p; ++p) {
     if (*p == '/')
       continue;
