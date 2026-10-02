@@ -839,11 +839,11 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
 
   int ret_status;
 
-  list<string> sections;
-  list<string>::iterator sections_iter;
+  vector<string> sections;
+  vector<string>::iterator sections_iter;
 
   struct meta_list_result {
-    list<string> keys;
+    vector<string> keys;
     string marker;
     uint64_t count{0};
     bool truncated{false};
@@ -855,7 +855,7 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
       JSONDecoder::decode_json("truncated", truncated, obj);
     }
   } result;
-  list<string>::iterator iter;
+  vector<string>::iterator iter;
 
   std::unique_ptr<RGWShardedOmapCRManager> entries_index;
 
@@ -937,7 +937,7 @@ public:
                                                       sync_env->store->svc()->zone->get_zone_params().log_pool,
                                                       mdlog_sync_full_sync_index_prefix));
       yield {
-	call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
+	call(new RGWReadRESTResourceCR<vector<string> >(cct, conn, sync_env->http_manager,
 				       "/admin/metadata", NULL, &sections));
       }
       if (get_ret_status() < 0) {
