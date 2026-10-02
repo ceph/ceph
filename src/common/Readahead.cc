@@ -122,25 +122,29 @@ Readahead::extent_t Readahead::_compute_readahead(uint64_t limit) {
 
 void Readahead::inc_pending(int count) {
   ceph_assert(count > 0);
-  m_pending_lock.lock();
+
+  std::lock_guard locker{m_pending_lock};
   m_pending += count;
-  m_pending_lock.unlock();
 }
 
 void Readahead::dec_pending(int count) {
   ceph_assert(count > 0);
-  m_pending_lock.lock();
-  ceph_assert(m_pending >= count);
-  m_pending -= count;
-  if (m_pending == 0) {
-    std::list<Context *> pending_waiting(std::move(m_pending_waiting));
-    m_pending_lock.unlock();
 
-    for (auto ctx : pending_waiting) {
-      ctx->complete(0);
+  std::vector<Context *> pending_waiting;
+  {
+    std::lock_guard locker{m_pending_lock};
+    ceph_assert(m_pending >= count);
+    m_pending -= count;
+
+    if (m_pending != 0) {
+      return;
     }
-  } else {
-    m_pending_lock.unlock();
+
+    pending_waiting = std::move(m_pending_waiting);
+  }
+
+  for (auto ctx : pending_waiting) {
+    ctx->complete(0);
   }
 }
 
@@ -151,16 +155,18 @@ void Readahead::wait_for_pending() {
 }
 
 void Readahead::wait_for_pending(Context *ctx) {
-  m_pending_lock.lock();
-  if (m_pending > 0) {
-    m_pending_lock.unlock();
-    m_pending_waiting.push_back(ctx);
-    return;
+  {
+    std::lock_guard locker{m_pending_lock};
+
+    if (m_pending > 0) {
+      m_pending_waiting.push_back(ctx);
+      return;
+    }
   }
-  m_pending_lock.unlock();
 
   ctx->complete(0);
 }
+
 void Readahead::set_trigger_requests(int trigger_requests) {
   m_lock.lock();
   m_trigger_requests = trigger_requests;
