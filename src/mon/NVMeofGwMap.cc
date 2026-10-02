@@ -13,6 +13,7 @@
  */
 
 #include <boost/tokenizer.hpp>
+#include <vector>
 #include "include/stringify.h"
 #include "NVMeofGwMon.h"
 #include "NVMeofGwMap.h"
@@ -21,12 +22,12 @@
 #include "mon/health_check.h"
 #include "messages/MNVMeofGwBeacon.h"
 
-using std::list;
 using std::map;
 using std::make_pair;
 using std::ostream;
 using std::ostringstream;
 using std::string;
+using std::vector;
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -831,7 +832,7 @@ void NVMeofGwMap::check_relocate_ana_groups(const NvmeGroupKey& group_key,
             << group_key << dendl;
        return ;
   }
-  std::list<NvmeAnaGrpId>  reloc_list;
+  std::vector<NvmeAnaGrpId> reloc_list;
   std::unordered_set<NvmeLocation> locations_set;
   auto& gws_states = created_gws[group_key];
   for (auto& gw_state : gws_states) {// build locations set
@@ -1461,9 +1462,9 @@ struct CMonRequestProposal : public Context {
 
 void NVMeofGwMap::get_health_checks(health_check_map_t *checks) 
 {
-  list<string> singleGatewayDetail;
-  list<string> gatewayDownDetail;
-  list<string> gatewayInDeletingDetail;
+  vector<string> singleGatewayDetail;
+  vector<string> gatewayDownDetail;
+  vector<string> gatewayInDeletingDetail;
   int deleting_gateways = 0;
   for (const auto& [group_key, gw_created_map]: created_gws) {
     auto& group = group_key.second;

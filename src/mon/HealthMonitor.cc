@@ -51,7 +51,6 @@ using std::cerr;
 using std::cout;
 using std::dec;
 using std::hex;
-using std::list;
 using std::map;
 using std::make_pair;
 using std::ostream;
@@ -675,7 +674,7 @@ bool HealthMonitor::check_member_health()
       g_conf().get_val<bool>("auth_allow_insecure_global_id_reclaim")) {
     // Warn if there are any clients that are insecurely renewing their global_id
     std::lock_guard l(mon.session_map_lock);
-    list<std::string> detail;
+    vector<std::string> detail;
     for (auto p = mon.session_map.sessions.begin();
 	 p != mon.session_map.sessions.end();
 	 ++p) {
@@ -829,7 +828,7 @@ void HealthMonitor::check_for_older_version(health_check_map_t *checks)
   }
   const auto warn_delay = g_conf().get_val<std::chrono::seconds>("mon_warn_older_version_delay");
   if (now - old_version_first_time > warn_delay) {
-    std::map<string, std::list<string> > all_versions;
+    std::map<string, std::vector<string>> all_versions;
     mon.get_all_versions(all_versions);
     if (all_versions.size() > 1) {
       dout(20) << __func__ << " all_versions=" << all_versions << dendl;
@@ -884,7 +883,7 @@ void HealthMonitor::check_for_mon_down(health_check_map_t *checks, std::set<std:
 
   if (actual < max && ((rcnow - created) > mon_down_mkfs_grace) && ((mcnow - starttime) > mon_down_uptime_grace)) {
     auto q = mon.get_quorum();
-    std::list<std::string> details;
+    vector<std::string> details;
     for (int i=0; i<max; i++) {
       if (q.count(i) == 0) {
         ostringstream ss;
@@ -911,8 +910,8 @@ void HealthMonitor::check_for_mon_down(health_check_map_t *checks, std::set<std:
 void HealthMonitor::check_for_clock_skew(health_check_map_t *checks)
 {
   if (!mon.timecheck_skews.empty()) {
-    list<string> warns;
-    list<string> details;
+    vector<string> warns;
+    vector<string> details;
     for (auto& i : mon.timecheck_skews) {
       double skew = i.second;
       double latency = mon.timecheck_latencies[i.first];
@@ -930,10 +929,9 @@ void HealthMonitor::check_for_clock_skew(health_check_map_t *checks)
     if (!warns.empty()) {
       ostringstream ss;
       ss << "clock skew detected on";
-      while (!warns.empty()) {
-	ss << " mon." << warns.front();
-	warns.pop_front();
-	if (!warns.empty())
+      for (auto i = std::cbegin(warns); i != std::cend(warns); ++i) {
+	ss << " mon." << *i;
+	if (std::next(i) != std::cend(warns))
 	  ss << ",";
       }
       auto& d = checks->add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str(), details.size());
@@ -947,7 +945,7 @@ void HealthMonitor::check_if_msgr2_enabled(health_check_map_t *checks)
   if (g_conf().get_val<bool>("ms_bind_msgr2") &&
       mon.monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_NAUTILUS)) {
-    list<string> details;
+    vector<string> details;
     for (auto& i : mon.monmap->mon_info) {
       if (!i.second.public_addrs.has_msgr2()) {
 	ostringstream ds;
@@ -972,7 +970,7 @@ void HealthMonitor::check_mon_crush_loc_stretch_mode(health_check_map_t *checks)
   if (!mon.monmap->stretch_mode_enabled){
     return;
   }
-  list<string> details;
+  vector<string> details;
   for (auto& i : mon.monmap->mon_info) {
     // Skip the tiebreaker monitor
     if (i.second.name == mon.monmap->tiebreaker_mon) {
@@ -1207,7 +1205,7 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
   auto mon_netsplit_grace_period = g_conf().get_val<std::chrono::seconds>("mon_netsplit_grace_period");
   auto pending_location_netsplits_end = pending_location_netsplits.end();
   auto pending_mon_netsplits_end = pending_mon_netsplits.end();
-  list<string> details;
+  vector<string> details;
 
   // Process location-level netsplits
   for (const auto& nsp : detected_location_netsplits) {
@@ -1387,8 +1385,8 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
 
 void HealthMonitor::check_erasure_code_profiles(health_check_map_t *checks)
 {
-  list<string> blaum_roth_details;
-  list<string> deprecated_details;
+  vector<string> blaum_roth_details;
+  vector<string> deprecated_details;
   
   //This is a loop that will go through all the erasure code profiles 
   for (auto& erasure_code_profile : mon.osdmon()->osdmap.get_erasure_code_profiles()) {
