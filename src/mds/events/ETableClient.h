@@ -16,6 +16,7 @@
 #ifndef CEPH_MDS_ETABLECLIENT_H
 #define CEPH_MDS_ETABLECLIENT_H
 
+#include <deque>
 #include "common/config.h"
 #include "include/types.h"
 
@@ -35,7 +36,7 @@ struct ETableClient : public LogEvent {
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static std::list<ETableClient> generate_test_instances();
+  static std::deque<ETableClient> generate_test_instances();
 
   void print(std::ostream& out) const override {
     out << "ETableClient " << get_mdstable_name(table) << " " << get_mdstableserver_opname(op);

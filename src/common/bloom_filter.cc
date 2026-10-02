@@ -72,9 +72,9 @@ void bloom_filter::dump(Formatter *f) const
   f->close_section();
 }
 
-std::list<bloom_filter> bloom_filter::generate_test_instances()
+std::vector<bloom_filter> bloom_filter::generate_test_instances()
 {
-  std::list<bloom_filter> ls;
+  std::vector<bloom_filter> ls;
   ls.push_back(bloom_filter(10, .5, 1));
   ls.push_back(bloom_filter(10, .5, 1));
   ls.back().insert("foo");
@@ -131,9 +131,9 @@ void compressible_bloom_filter::dump(Formatter *f) const
   f->close_section();
 }
 
-std::list<compressible_bloom_filter> compressible_bloom_filter::generate_test_instances()
+std::vector<compressible_bloom_filter> compressible_bloom_filter::generate_test_instances()
 {
-  std::list<compressible_bloom_filter> ls;
+  std::vector<compressible_bloom_filter> ls;
   ls.push_back(compressible_bloom_filter(10, .5, 1));
   ls.push_back(compressible_bloom_filter(10, .5, 1));
   ls.back().insert("foo");

@@ -19,6 +19,7 @@
 #include <deque>
 #include <functional>
 #include <list>
+#include <vector>
 #include <map>
 #include <ostream>
 #include <set>
@@ -554,7 +555,7 @@ public:
 
   Session* get_or_add_session(const entity_inst_t& i);
 
-  static std::list<SessionMapStore> generate_test_instances();
+  static std::vector<SessionMapStore> generate_test_instances();
   void reset_state()
   {
     session_map.clear();

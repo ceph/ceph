@@ -4816,9 +4816,9 @@ void InodeStoreBase::old_indoes_cb(InodeStoreBase::mempool_old_inode_map& c, JSO
   c[s] = i;
 }
 
-std::list<InodeStore> InodeStore::generate_test_instances()
+std::vector<InodeStore> InodeStore::generate_test_instances()
 {
-  std::list<InodeStore> ls;
+  std::vector<InodeStore> ls;
   InodeStore populated;
   populated.get_inode()->ino = 0xdeadbeef;
   populated.get_inode()->mode = S_IFLNK | 0777;
@@ -4827,9 +4827,9 @@ std::list<InodeStore> InodeStore::generate_test_instances()
   return ls;
 }
 
-std::list<InodeStoreBare> InodeStoreBare::generate_test_instances()
+std::vector<InodeStoreBare> InodeStoreBare::generate_test_instances()
 {
-  std::list<InodeStoreBare> ls;
+  std::vector<InodeStoreBare> ls;
   InodeStoreBare populated;
   populated.get_inode()->ino = 0xdeadbeef;
   populated.get_inode()->mode = S_IFLNK | 0777;

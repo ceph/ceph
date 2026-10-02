@@ -41,7 +41,7 @@ struct SnapRealmInfo {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<SnapRealmInfo> generate_test_instances();
+  static std::vector<SnapRealmInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SnapRealmInfo)
 
@@ -76,7 +76,7 @@ struct SnapRealmInfoNew {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<SnapRealmInfoNew> generate_test_instances();
+  static std::vector<SnapRealmInfoNew> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SnapRealmInfoNew)
 
@@ -98,7 +98,7 @@ struct SnapContext {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<SnapContext> generate_test_instances();
+  static std::vector<SnapContext> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SnapContext)
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "boost/variant.hpp"
 
@@ -93,8 +94,8 @@ struct chunk_refs_t {
   void dump(Formatter *f) const {
     r->dump(f);
   }
-  static std::list<chunk_refs_t> generate_test_instances() {
-    std::list<chunk_refs_t> ls;
+  static std::vector<chunk_refs_t> generate_test_instances() {
+    std::vector<chunk_refs_t> ls;
     ls.emplace_back();
     return ls;
   }
@@ -147,8 +148,8 @@ struct chunk_refs_by_object_t : public chunk_refs_t::refs_t {
     }
     f->close_section();
   }
-  static std::list<chunk_refs_by_object_t> generate_test_instances() {
-    std::list<chunk_refs_by_object_t> ls;
+  static std::vector<chunk_refs_by_object_t> generate_test_instances() {
+    std::vector<chunk_refs_by_object_t> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().by_object.insert(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
@@ -396,8 +397,8 @@ struct chunk_refs_count_t : public chunk_refs_t::refs_t {
     f->dump_string("type", "count");
     f->dump_unsigned("count", total);
   }
-  static std::list<chunk_refs_count_t> generate_test_instances() {
-    std::list<chunk_refs_count_t> o;
+  static std::vector<chunk_refs_count_t> generate_test_instances() {
+    std::vector<chunk_refs_count_t> o;
     o.emplace_back();
     o.emplace_back();
     o.back().total = 123;

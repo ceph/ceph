@@ -17,8 +17,9 @@
 
 #include <stdio.h>
 
-#include <iostream> // for std::cout
+#include <deque>
 #include <numeric>
+#include <iostream> // for std::cout
 
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
@@ -332,6 +333,39 @@ TEST(denc, list)
   }
 }
 
+template<typename T>
+using default_deque = std::deque<T>;
+
+TEST(denc, deque)
+{
+  test_common_veclist<default_deque>("std::deque");
+  {
+    const list<int32_t> legacy {1, 2, 3};
+    const deque<int32_t> current(std::begin(legacy), std::end(legacy));
+    ASSERT_EQ(encode_to_string(legacy), encode_to_string(current));
+  }
+
+  {
+    counts.reset();
+    deque<denc_counter_bounded_t> values;
+    deque<denc_counter_bounded_t> decoded;
+
+    for (unsigned i = 0; i < 100; ++i) {
+      values.emplace_back();
+    }
+
+    {
+      bufferlist bl;
+      encode(values, bl);
+      decode(decoded, bl);
+    }
+
+    ASSERT_EQ(counts.num_bound_encode, 1);
+    ASSERT_EQ(counts.num_encode, 100);
+    ASSERT_EQ(counts.num_decode, 100);
+  }
+}
+
 template<template<class> class C>
 void test_setlike(const char* c) {
   {
@@ -465,7 +499,11 @@ TEST(denc, bar)
   test_denc_featured(a);
 }
 
-
+TEST(denc, featured_deque)
+{
+  deque<bar_t> values(3);
+  test_denc_featured(values);
+}
 
 TEST(denc, pair)
 {
