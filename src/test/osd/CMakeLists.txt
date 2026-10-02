@@ -332,3 +332,11 @@ add_custom_target(osd_unittests
   COMMENT "Building and running all OSD unit tests via ctest"
   VERBATIM
 )
+
+# unittest_io_sequence
+add_executable(unittest_io_sequence
+  test_io_sequence.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_io_sequence)
+target_link_libraries(unittest_io_sequence object_io_exerciser global)
