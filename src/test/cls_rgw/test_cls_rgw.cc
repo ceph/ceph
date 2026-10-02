@@ -3,16 +3,23 @@
 
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/rgw/cls_rgw_ops.h"
+#include "cls/timeindex/cls_timeindex_ops.h"
+#include "cls/otp/cls_otp_ops.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
 #include "test/librados/test_pool_types.h"
 #include "include/common_fwd.h"
 
+#include <map>
+#include <list>
+#include <deque>
 #include <cerrno>
 #include <string>
 #include <vector>
-#include <map>
+#include <cstdint>
+#include <utility>
+#include <iterator>
 
 #include <fmt/format.h>
 
@@ -23,10 +30,448 @@ using ceph::test::pool_type_name;
 using ceph::test::create_pool_by_type;
 using ceph::test::destroy_pool_by_type;
 
+namespace {
+
+struct legacy_bi_list_result {
+  std::list<rgw_cls_bi_entry> entries;
+  bool is_truncated = false;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    ceph::encode(entries, bl);
+    ceph::encode(is_truncated, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    ceph::decode(entries, bl);
+    ceph::decode(is_truncated, bl);
+    DECODE_FINISH(bl);
+  }
+};
+
+TEST(ClsRgwEncoding, BiListResultSequenceCompatibility)
+{
+  rgw_cls_bi_list_ret result;
+  auto& first = result.entries.emplace_back();
+  first.type = BIIndexType::Plain;
+  first.idx = "plain";
+  first.data.append("plain data");
+
+  auto& second = result.entries.emplace_back();
+  second.type = BIIndexType::OLH;
+  second.idx = "olh";
+  second.data.append("olh data");
+  result.is_truncated = true;
+
+  legacy_bi_list_result legacy;
+  for (const auto& entry : result.entries) {
+    legacy.entries.push_back(entry);
+  }
+  legacy.is_truncated = result.is_truncated;
+
+  const auto encode_result = [](const auto& value) {
+    ceph::buffer::list encoded;
+    value.encode(encoded);
+    return encoded;
+  };
+  const auto result_bytes = encode_result(result);
+  const auto legacy_bytes = encode_result(legacy);
+
+  EXPECT_EQ(result_bytes, legacy_bytes);
+
+  rgw_cls_bi_list_ret decoded_result;
+  auto legacy_iterator = legacy_bytes.cbegin();
+  decoded_result.decode(legacy_iterator);
+
+  legacy_bi_list_result decoded_legacy;
+  auto result_iterator = result_bytes.cbegin();
+  decoded_legacy.decode(result_iterator);
+
+  const auto expect_same = [](const auto& expected, const auto& decoded) {
+    ASSERT_EQ(std::size(expected.entries), std::size(decoded.entries));
+    EXPECT_EQ(expected.is_truncated, decoded.is_truncated);
+
+    auto expected_entry = std::cbegin(expected.entries);
+    auto decoded_entry = std::cbegin(decoded.entries);
+
+    for (; expected_entry != std::cend(expected.entries);
+         ++expected_entry, ++decoded_entry) {
+      EXPECT_EQ(expected_entry->type, decoded_entry->type);
+      EXPECT_EQ(expected_entry->idx, decoded_entry->idx);
+      EXPECT_EQ(expected_entry->data, decoded_entry->data);
+    }
+  };
+
+  expect_same(result, decoded_result);
+  expect_same(legacy, decoded_legacy);
+}
+
+struct legacy_bi_log_list_result {
+  std::list<rgw_bi_log_entry> entries;
+  bool truncated = false;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    ceph::encode(entries, bl);
+    ceph::encode(truncated, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    ceph::decode(entries, bl);
+    ceph::decode(truncated, bl);
+    DECODE_FINISH(bl);
+  }
+};
+
+TEST(ClsRgwEncoding, BiLogListResultSequenceCompatibility)
+{
+  cls_rgw_bi_log_list_ret result;
+  auto& first = result.entries.emplace_back();
+  first.id = "first";
+  first.object = "object-a";
+  first.instance = "instance-a";
+  first.index_ver = 17;
+  first.tag = "tag-a";
+
+  auto& second = result.entries.emplace_back();
+  second.id = "second";
+  second.object = "object-b";
+  second.instance = "instance-b";
+  second.index_ver = 23;
+  second.tag = "tag-b";
+  result.truncated = true;
+
+  legacy_bi_log_list_result legacy;
+  for (const auto& entry : result.entries) {
+    legacy.entries.push_back(entry);
+  }
+  legacy.truncated = result.truncated;
+
+  const auto encode_result = [](const auto& value) {
+    ceph::buffer::list encoded;
+    value.encode(encoded);
+    return encoded;
+  };
+  const auto result_bytes = encode_result(result);
+  const auto legacy_bytes = encode_result(legacy);
+
+  EXPECT_EQ(result_bytes, legacy_bytes);
+
+  cls_rgw_bi_log_list_ret decoded_result;
+  auto legacy_iterator = legacy_bytes.cbegin();
+  decoded_result.decode(legacy_iterator);
+
+  legacy_bi_log_list_result decoded_legacy;
+  auto result_iterator = result_bytes.cbegin();
+  decoded_legacy.decode(result_iterator);
+
+  EXPECT_EQ(result_bytes, encode_result(decoded_result));
+  EXPECT_EQ(legacy_bytes, encode_result(decoded_legacy));
+  EXPECT_EQ(2, std::size(decoded_result.entries));
+  EXPECT_TRUE(decoded_result.truncated);
+}
+
+ceph::buffer::list encode_complete_op_with_list(const rgw_cls_obj_complete_op& value)
+{
+  ceph::buffer::list encoded;
+  ENCODE_START(9, 7, encoded);
+  const auto operation = static_cast<std::uint8_t>(value.op);
+  encode(operation, encoded);
+  encode(value.ver.epoch, encoded);
+  encode(value.meta, encoded);
+  encode(value.op_tag, encoded);
+  encode(value.locator, encoded);
+
+  std::list<cls_rgw_obj_key> remove_objs;
+  for (const auto& key : value.remove_objs) {
+    remove_objs.push_back(key);
+  }
+
+  encode(remove_objs, encoded);
+  encode(value.ver, encoded);
+  encode(value.log_op, encoded);
+  encode(value.key, encoded);
+  encode(value.bilog_flags, encoded);
+  encode(value.zones_trace, encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+ceph::buffer::list encode_complete_op_v6(const rgw_cls_obj_complete_op& value)
+{
+  ceph::buffer::list encoded;
+  ENCODE_START(6, 3, encoded);
+  const auto operation = static_cast<std::uint8_t>(value.op);
+  encode(operation, encoded);
+  encode(value.key.name, encoded);
+  encode(value.ver.epoch, encoded);
+  encode(value.meta, encoded);
+  encode(value.op_tag, encoded);
+  encode(value.locator, encoded);
+
+  std::list<std::string> remove_objs;
+  for (const auto& key : value.remove_objs) {
+    remove_objs.push_back(key.name);
+  }
+
+  encode(remove_objs, encoded);
+  encode(value.ver, encoded);
+  encode(value.log_op, encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+TEST(ClsRgwEncoding, CompleteOpSequenceCompatibility)
+{
+  rgw_cls_obj_complete_op expected;
+  expected.op = CLS_RGW_OP_ADD;
+  expected.op_tag = "tag";
+  expected.locator = "locator";
+  expected.key = {"head", "instance"};
+  expected.ver.pool = 7;
+  expected.ver.epoch = 11;
+  expected.log_op = true;
+  expected.bilog_flags = 13;
+  expected.remove_objs.emplace_back("part-a", "instance-a");
+  expected.remove_objs.emplace_back("part-b", "instance-b");
+
+  ceph::buffer::list encoded;
+  expected.encode(encoded);
+  const auto legacy_encoded = encode_complete_op_with_list(expected);
+
+  EXPECT_EQ(legacy_encoded, encoded);
+
+  rgw_cls_obj_complete_op decoded;
+  auto input = legacy_encoded.cbegin();
+  decoded.decode(input);
+
+  ASSERT_EQ(2, std::size(decoded.remove_objs));
+  auto key = std::cbegin(decoded.remove_objs);
+  EXPECT_EQ("part-a", key->name);
+  EXPECT_EQ("instance-a", key->instance);
+  ++key;
+  EXPECT_EQ("part-b", key->name);
+  EXPECT_EQ("instance-b", key->instance);
+  EXPECT_EQ(0, input.get_remaining());
+}
+
+TEST(ClsRgwEncoding, CompleteOpDecodesVersionSixSequence)
+{
+  rgw_cls_obj_complete_op expected;
+  expected.op = CLS_RGW_OP_DEL;
+  expected.op_tag = "tag";
+  expected.locator = "locator";
+  expected.key = {"head", "ignored-instance"};
+  expected.ver.pool = 7;
+  expected.ver.epoch = 11;
+  expected.log_op = true;
+  expected.remove_objs.emplace_back("part-a", "ignored-instance-a");
+  expected.remove_objs.emplace_back("part-b", "ignored-instance-b");
+
+  const auto encoded = encode_complete_op_v6(expected);
+  auto input = encoded.cbegin();
+  rgw_cls_obj_complete_op decoded;
+  decoded.decode(input);
+
+  EXPECT_EQ(CLS_RGW_OP_DEL, decoded.op);
+  EXPECT_EQ("head", decoded.key.name);
+  EXPECT_TRUE(decoded.key.instance.empty());
+  ASSERT_EQ(2, std::size(decoded.remove_objs));
+  auto key = std::cbegin(decoded.remove_objs);
+  EXPECT_EQ("part-a", key->name);
+  EXPECT_TRUE(key->instance.empty());
+  ++key;
+  EXPECT_EQ("part-b", key->name);
+  EXPECT_TRUE(key->instance.empty());
+  EXPECT_EQ(0, input.get_remaining());
+}
+
+ceph::buffer::list encode_remove_op_with_list(const rgw_cls_obj_remove_op& value)
+{
+  const std::list<std::string> keep_attr_prefixes(
+    std::cbegin(value.keep_attr_prefixes), std::cend(value.keep_attr_prefixes));
+
+  ceph::buffer::list encoded;
+  ENCODE_START(1, 1, encoded);
+  encode(keep_attr_prefixes, encoded);
+  ENCODE_FINISH(encoded);
+
+  return encoded;
+}
+
+TEST(ClsRgwEncoding, RemoveOpSequenceCompatibility)
+{
+  rgw_cls_obj_remove_op expected;
+  expected.keep_attr_prefixes.emplace_back("user.rgw.olh.");
+  expected.keep_attr_prefixes.emplace_back("user.rgw.manifest.");
+
+  ceph::buffer::list encoded;
+  expected.encode(encoded);
+  const auto legacy_encoded = encode_remove_op_with_list(expected);
+
+  EXPECT_EQ(legacy_encoded, encoded);
+
+  rgw_cls_obj_remove_op decoded;
+  auto input = legacy_encoded.cbegin();
+  decoded.decode(input);
+
+  ASSERT_EQ(2, std::size(decoded.keep_attr_prefixes));
+  auto prefix = std::cbegin(decoded.keep_attr_prefixes);
+  EXPECT_EQ("user.rgw.olh.", *prefix);
+  ++prefix;
+  EXPECT_EQ("user.rgw.manifest.", *prefix);
+  EXPECT_EQ(0, input.get_remaining());
+}
+
+} // namespace
+
 // creates a temporary pool and initializes an IoCtx for each test
 class TestClsRgw : public ceph::test::ClsTestFixture {
   // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
 };
+
+TEST(ClsRgwReshardEncoding, EntrySequenceRemainsCompatible)
+{
+  cls_rgw_reshard_entry first;
+  first.tenant = "tenant";
+  first.bucket_name = "first";
+  cls_rgw_reshard_entry second;
+  second.tenant = "tenant";
+  second.bucket_name = "second";
+
+  const std::list<cls_rgw_reshard_entry> legacy {first, second};
+  const std::vector<cls_rgw_reshard_entry> current {first, second};
+  bufferlist legacy_encoding;
+  bufferlist current_encoding;
+
+  encode(legacy, legacy_encoding);
+  encode(current, current_encoding);
+
+  ASSERT_TRUE(legacy_encoding.contents_equal(current_encoding));
+
+  auto input = std::cbegin(legacy_encoding);
+  std::vector<cls_rgw_reshard_entry> decoded;
+  decode(decoded, input);
+
+  ASSERT_EQ(2, std::size(decoded));
+  EXPECT_EQ("first", decoded[0].bucket_name);
+  EXPECT_EQ("second", decoded[1].bucket_name);
+  EXPECT_EQ(0, input.get_remaining());
+}
+
+TEST(ClsTimeindexEncoding, EntrySequencesRemainCompatible)
+{
+  cls_timeindex_entry first;
+  first.key_ext = "first";
+  cls_timeindex_entry second;
+  second.key_ext = "second";
+
+  const std::list<cls_timeindex_entry> legacy {first, second};
+  const std::vector<cls_timeindex_entry> current {first, second};
+  bufferlist legacy_encoding;
+  bufferlist current_encoding;
+
+  encode(legacy, legacy_encoding);
+  encode(current, current_encoding);
+
+  ASSERT_TRUE(legacy_encoding.contents_equal(current_encoding));
+
+  auto input = std::cbegin(legacy_encoding);
+  std::vector<cls_timeindex_entry> decoded;
+  decode(decoded, input);
+
+  ASSERT_EQ(2, std::size(decoded));
+  EXPECT_EQ("first", decoded[0].key_ext);
+  EXPECT_EQ("second", decoded[1].key_ext);
+  EXPECT_EQ(0, input.get_remaining());
+}
+
+TEST(ClsTimeindexEncoding, ListingRoundTripsFollowingFields)
+{
+  cls_timeindex_entry first;
+  first.key_ext = "first";
+  cls_timeindex_entry second;
+  second.key_ext = "second";
+
+  cls_timeindex_list_ret expected;
+  expected.entries = {first, second};
+  expected.marker = "next";
+  expected.truncated = true;
+
+  bufferlist encoded;
+  encode(expected, encoded);
+
+  cls_timeindex_list_ret decoded;
+  auto input = std::cbegin(encoded);
+  decode(decoded, input);
+
+  ASSERT_EQ(2, std::size(decoded.entries));
+  EXPECT_EQ("first", decoded.entries[0].key_ext);
+  EXPECT_EQ("second", decoded.entries[1].key_ext);
+  EXPECT_EQ("next", decoded.marker);
+  EXPECT_TRUE(decoded.truncated);
+  EXPECT_EQ(0, input.get_remaining());
+}
+
+TEST(ClsOtpEncoding, EntrySequencesRemainCompatible)
+{
+  rados::cls::otp::otp_info_t first;
+  first.id = "first";
+  rados::cls::otp::otp_info_t second;
+  second.id = "second";
+
+  const std::list<rados::cls::otp::otp_info_t> legacy {first, second};
+  const std::vector<rados::cls::otp::otp_info_t> current {first, second};
+  bufferlist legacy_encoding;
+  bufferlist current_encoding;
+
+  encode(legacy, legacy_encoding);
+  encode(current, current_encoding);
+
+  ASSERT_TRUE(legacy_encoding.contents_equal(current_encoding));
+
+  auto input = std::cbegin(legacy_encoding);
+  std::vector<rados::cls::otp::otp_info_t> decoded;
+  decode(decoded, input);
+
+  ASSERT_EQ(2, std::size(decoded));
+  EXPECT_EQ("first", decoded[0].id);
+  EXPECT_EQ("second", decoded[1].id);
+  EXPECT_EQ(0, input.get_remaining());
+}
+
+TEST(ClsOtpEncoding, CheckHistoryRemainsCompatible)
+{
+  rados::cls::otp::otp_check_t first;
+  first.token = "first";
+  rados::cls::otp::otp_check_t second;
+  second.token = "second";
+
+  const std::list<rados::cls::otp::otp_check_t> legacy {first, second};
+  const std::deque<rados::cls::otp::otp_check_t> current {first, second};
+  bufferlist legacy_encoding;
+  bufferlist current_encoding;
+
+  encode(legacy, legacy_encoding);
+  encode(current, current_encoding);
+
+  ASSERT_TRUE(legacy_encoding.contents_equal(current_encoding));
+
+  auto input = std::cbegin(legacy_encoding);
+  std::deque<rados::cls::otp::otp_check_t> decoded;
+  decode(decoded, input);
+
+  ASSERT_EQ(2, std::size(decoded));
+  EXPECT_EQ("first", decoded[0].token);
+  EXPECT_EQ("second", decoded[1].token);
+  EXPECT_EQ(0, input.get_remaining());
+}
 
 
 string str_int(string s, int i)
@@ -79,7 +524,7 @@ void index_complete(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
   meta.accounted_size = meta.size;
-  cls_rgw_bucket_complete_op(op, index_op, tag, ver, key, meta, nullptr, log_op, bi_flags, nullptr);
+  cls_rgw_bucket_complete_op(op, index_op, tag, ver, key, meta, {}, log_op, bi_flags, nullptr);
   ASSERT_EQ(0, ioctx.operate(oid, &op));
   if (!key.instance.empty()) {
     bufferlist olh_tag;
@@ -626,6 +1071,34 @@ TEST_P(TestClsRgw, bi_list)
     ASSERT_EQ(entries.size(), num_objs);
   }
 
+  std::vector<rgw_cls_bi_entry> contiguous_entries(1);
+  contiguous_entries.front().idx = "must be replaced";
+  bool contiguous_is_truncated = !is_truncated;
+  ret = cls_rgw_bi_list(ioctx, bucket_oid, empty_name_filter, marker,
+                        num_objs + 10, contiguous_entries,
+                        contiguous_is_truncated);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(std::size(contiguous_entries), std::size(entries));
+  ASSERT_EQ(contiguous_is_truncated, is_truncated);
+
+  auto legacy_entry = std::cbegin(entries);
+  for (const auto& entry : contiguous_entries) {
+    EXPECT_EQ(entry.type, legacy_entry->type);
+    EXPECT_EQ(entry.idx, legacy_entry->idx);
+    EXPECT_EQ(entry.data, legacy_entry->data);
+    ++legacy_entry;
+  }
+
+  std::vector<rgw_cls_bi_entry> failed_entries(1);
+  failed_entries.front().idx = "unchanged";
+  bool failed_is_truncated = true;
+  ret = cls_rgw_bi_list(ioctx, bucket_oid + "-missing", empty_name_filter,
+                        marker, max, failed_entries, failed_is_truncated);
+  ASSERT_LT(ret, 0);
+  ASSERT_EQ(std::size(failed_entries), 1);
+  EXPECT_EQ(failed_entries.front().idx, "unchanged");
+  EXPECT_TRUE(failed_is_truncated);
+
   uint64_t num_entries = 0;
 
   is_truncated = true;
@@ -741,7 +1214,7 @@ static bool cmp_objs(cls_rgw_obj& obj1, cls_rgw_obj& obj2)
 }
 
 static int gc_list(librados::IoCtx& io_ctx, std::string& oid, std::string& marker, uint32_t max, bool expired_only,
-                   std::list<cls_rgw_gc_obj_info>& entries, bool& truncated, std::string& next_marker)
+                   std::vector<cls_rgw_gc_obj_info>& entries, bool& truncated, std::string& next_marker)
 {
   librados::ObjectReadOperation op;
   bufferlist bl;
@@ -779,7 +1252,7 @@ TEST_P(TestClsRgw, gc_set)
   }
 
   bool truncated;
-  list<cls_rgw_gc_obj_info> entries;
+  vector<cls_rgw_gc_obj_info> entries;
   string marker;
   string next_marker;
 
@@ -797,7 +1270,7 @@ TEST_P(TestClsRgw, gc_set)
   ASSERT_EQ(0, truncated);
  
   /* verify all chains are valid */
-  list<cls_rgw_gc_obj_info>::iterator iter = entries.begin();
+  auto iter = std::begin(entries);
   for (int i = 0; i < 10; i++, ++iter) {
     cls_rgw_gc_obj_info& entry = *iter;
 
@@ -855,8 +1328,8 @@ TEST_P(TestClsRgw, gc_list)
   }
 
   bool truncated;
-  list<cls_rgw_gc_obj_info> entries;
-  list<cls_rgw_gc_obj_info> entries2;
+  vector<cls_rgw_gc_obj_info> entries;
+  vector<cls_rgw_gc_obj_info> entries2;
   string marker;
   string next_marker;
 
@@ -872,10 +1345,10 @@ TEST_P(TestClsRgw, gc_list)
   ASSERT_EQ(2, (int)entries2.size());
   ASSERT_EQ(0, truncated);
 
-  entries.splice(entries.end(), entries2);
+  entries.insert(std::end(entries), std::begin(entries2), std::end(entries2));
 
   /* verify all chains are valid */
-  list<cls_rgw_gc_obj_info>::iterator iter = entries.begin();
+  auto iter = std::begin(entries);
   for (int i = 0; i < 10; i++, ++iter) {
     cls_rgw_gc_obj_info& entry = *iter;
 
@@ -933,7 +1406,7 @@ TEST_P(TestClsRgw, gc_defer)
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 
   bool truncated;
-  list<cls_rgw_gc_obj_info> entries;
+  vector<cls_rgw_gc_obj_info> entries;
   string marker;
   string next_marker;
 
@@ -1273,8 +1746,7 @@ TEST_P(TestClsRgw, bi_log_trim)
     // complete/olh entry for each
     EXPECT_EQ(20u, bilog.entries.size());
 
-    bilog1.assign(std::make_move_iterator(bilog.entries.begin()),
-                  std::make_move_iterator(bilog.entries.end()));
+    bilog1 = std::move(bilog.entries);
   }
   // trim front of bilog
   {
