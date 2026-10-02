@@ -58,9 +58,9 @@
 #ifndef CEPH_JOURNALER_H
 #define CEPH_JOURNALER_H
 
-#include <list>
-#include <vector>
+#include <iterator>
 #include <map>
+#include <vector>
 
 #include "Filer.h"
 
@@ -283,7 +283,7 @@ private:
 
   void _reread_head(Context *onfinish);
   void _set_layout(file_layout_t const *l);
-  std::list<Context*> waitfor_recover;
+  std::vector<Context *> waitfor_recover;
   void _read_head(Context *on_finish, bufferlist *bl);
   void _finish_read_head(int r, bufferlist& bl);
   void _finish_reread_head(int r, bufferlist& bl, Context *finish);
@@ -325,11 +325,11 @@ private:
 
   uint64_t waiting_for_zero_pos;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
-  std::list<Context*> waitfor_prezero;
+  std::vector<Context *> waitfor_prezero;
 
   std::map<uint64_t, uint64_t> pending_safe; // flush_pos -> safe_pos
   // when safe through given offset
-  std::map<uint64_t, std::list<Context*> > waitfor_safe;
+  std::map<uint64_t, std::vector<Context *>> waitfor_safe;
 
   void _flush(C_OnFinisher *onsafe);
   void _do_flush(unsigned amount=0);
