@@ -123,7 +123,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   };
   std::map<mds_gid_t, beacon_info_t> last_beacon;
 
-  std::list<std::shared_ptr<FileSystemCommandHandler> > handlers;
+  std::vector<std::shared_ptr<FileSystemCommandHandler>> handlers;
 
   bool maybe_promote_standby(FSMap& fsmap, const Filesystem& fs);
   bool maybe_resize_cluster(FSMap &fsmap, const Filesystem& fs);
@@ -146,7 +146,7 @@ public:
     get_fsmap().print_fs_summary(out);
   }
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
-  void get_versions(std::map<std::string, std::list<std::string>> &versions);
+  void get_versions(std::map<std::string, std::vector<std::string>>& versions);
 
 protected:
   // MDS daemon GID to latest health state from that GID
