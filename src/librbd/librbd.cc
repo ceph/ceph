@@ -52,6 +52,7 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
 #include <algorithm>
+#include <iterator>
 #include <shared_mutex> // for std::shared_lock
 #include <string>
 #include <utility>
@@ -71,7 +72,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd: "
 
-using std::list;
 using std::map;
 using std::pair;
 using std::set;
@@ -2034,13 +2034,29 @@ namespace librbd {
   }
 
   int Image::lock_get_owners(rbd_lock_mode_t *lock_mode,
-                             std::list<std::string> *lock_owners)
+                             std::vector<std::string>& lock_owners)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, lock_get_owners_enter, ictx);
     int r = librbd::lock_get_owners(ictx, lock_mode, lock_owners);
     tracepoint(librbd, lock_get_owners_exit, ictx, r);
     return r;
+  }
+
+  int Image::lock_get_owners(rbd_lock_mode_t *lock_mode,
+                             std::list<std::string> *lock_owners)
+  {
+    std::vector<std::string> contiguous_lock_owners;
+    int r = lock_get_owners(lock_mode, contiguous_lock_owners);
+    if (r < 0) {
+      return r;
+    }
+
+    lock_owners->assign(
+      std::make_move_iterator(std::begin(contiguous_lock_owners)),
+      std::make_move_iterator(std::end(contiguous_lock_owners)));
+
+    return 0;
   }
 
   int Image::lock_break(rbd_lock_mode_t lock_mode,
@@ -2310,20 +2326,35 @@ namespace librbd {
     return r;
   }
 
-  int Image::list_lockers(std::list<librbd::locker_t> *lockers,
-			  bool *exclusive, string *tag)
+  int Image::list_lockers(std::vector<librbd::locker_t>& lockers,
+                          bool *exclusive, string *tag)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, list_lockers_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
     int r = librbd::list_lockers(ictx, lockers, exclusive, tag);
     if (r >= 0) {
-      for (std::list<librbd::locker_t>::const_iterator it = lockers->begin();
-	   it != lockers->end(); ++it) {
-	tracepoint(librbd, list_lockers_entry, it->client.c_str(), it->cookie.c_str(), it->address.c_str());
+      for (const auto& locker : lockers) {
+        tracepoint(librbd, list_lockers_entry, locker.client.c_str(),
+                   locker.cookie.c_str(), locker.address.c_str());
       }
     }
     tracepoint(librbd, list_lockers_exit, r);
     return r;
+  }
+
+  int Image::list_lockers(std::list<librbd::locker_t> *lockers,
+                          bool *exclusive, string *tag)
+  {
+    std::vector<librbd::locker_t> contiguous_lockers;
+    int r = list_lockers(contiguous_lockers, exclusive, tag);
+    if (r < 0) {
+      return r;
+    }
+
+    lockers->assign(std::make_move_iterator(std::begin(contiguous_lockers)),
+                    std::make_move_iterator(std::end(contiguous_lockers)));
+
+    return 0;
   }
 
   int Image::lock_exclusive(const string& cookie)
@@ -3278,7 +3309,7 @@ namespace librbd {
     return r;
   }
 
-  int Image::list_watchers(std::list<librbd::image_watcher_t> &watchers) {
+  int Image::list_watchers(std::vector<librbd::image_watcher_t>& watchers) {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, list_watchers_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
     int r = librbd::list_watchers(ictx, watchers);
@@ -3291,6 +3322,19 @@ namespace librbd {
 #endif
     tracepoint(librbd, list_watchers_exit, r, watchers.size());
     return r;
+  }
+
+  int Image::list_watchers(std::list<librbd::image_watcher_t> &watchers) {
+    std::vector<librbd::image_watcher_t> contiguous_watchers;
+    int r = list_watchers(contiguous_watchers);
+    if (r < 0) {
+      return r;
+    }
+
+    watchers.assign(std::make_move_iterator(std::begin(contiguous_watchers)),
+                    std::make_move_iterator(std::end(contiguous_watchers)));
+
+    return 0;
   }
 
   int Image::config_list(std::vector<config_option_t> *options) {
@@ -5559,8 +5603,8 @@ extern "C" int rbd_lock_get_owners(rbd_image_t image,
   tracepoint(librbd, lock_get_owners_enter, ictx);
   // FIPS zeroization audit 20191117: this memset is not security related.
   memset(lock_owners, 0, sizeof(*lock_owners) * *max_lock_owners);
-  std::list<std::string> lock_owner_list;
-  int r = librbd::lock_get_owners(ictx, lock_mode, &lock_owner_list);
+  std::vector<std::string> lock_owner_list;
+  int r = librbd::lock_get_owners(ictx, lock_mode, lock_owner_list);
   if (r >= 0) {
     if (*max_lock_owners >= lock_owner_list.size()) {
       *max_lock_owners = 0;
@@ -6053,27 +6097,27 @@ extern "C" ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, list_lockers_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-  std::list<librbd::locker_t> lockers;
+  std::vector<librbd::locker_t> lockers;
   bool exclusive_bool;
   string tag_str;
 
-  int r = list_lockers(ictx, &lockers, &exclusive_bool, &tag_str);
+  int r = list_lockers(ictx, lockers, &exclusive_bool, &tag_str);
   if (r < 0) {
     tracepoint(librbd, list_lockers_exit, r);
     return r;
   }
 
-  ldout(ictx->cct, 20) << "list_lockers r = " << r << " lockers.size() = " << lockers.size() << dendl;
+  ldout(ictx->cct, 20) << "list_lockers r = " << r << " lockers.size() = "
+                       << std::size(lockers) << dendl;
 
   *exclusive = (int)exclusive_bool;
   size_t clients_total = 0;
   size_t cookies_total = 0;
   size_t addrs_total = 0;
-  for (list<librbd::locker_t>::const_iterator it = lockers.begin();
-       it != lockers.end(); ++it) {
-    clients_total += it->client.length() + 1;
-    cookies_total += it->cookie.length() + 1;
-    addrs_total += it->address.length() + 1;
+  for (const auto& locker : lockers) {
+    clients_total += locker.client.length() + 1;
+    cookies_total += locker.cookie.length() + 1;
+    addrs_total += locker.address.length() + 1;
   }
 
   bool too_short = ((clients_total > *clients_len) ||
@@ -6093,21 +6137,20 @@ extern "C" ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
   char *clients_p = clients;
   char *cookies_p = cookies;
   char *addrs_p = addrs;
-  for (list<librbd::locker_t>::const_iterator it = lockers.begin();
-       it != lockers.end(); ++it) {
-    const char* client = it->client.c_str();
+  for (const auto& locker : lockers) {
+    const char* client = locker.client.c_str();
     strcpy(clients_p, client);
-    clients_p += it->client.length() + 1;
-    const char* cookie = it->cookie.c_str();
+    clients_p += locker.client.length() + 1;
+    const char* cookie = locker.cookie.c_str();
     strcpy(cookies_p, cookie);
-    cookies_p += it->cookie.length() + 1;
-    const char* address = it->address.c_str();
+    cookies_p += locker.cookie.length() + 1;
+    const char* address = locker.address.c_str();
     strcpy(addrs_p, address);
-    addrs_p += it->address.length() + 1;
+    addrs_p += locker.address.length() + 1;
     tracepoint(librbd, list_lockers_entry, client, cookie, address);
   }
 
-  ssize_t ret = lockers.size();
+  ssize_t ret = std::size(lockers);
   tracepoint(librbd, list_lockers_exit, ret);
   return ret;
 }
@@ -7707,7 +7750,7 @@ extern "C" int rbd_snap_mirror_namespace_cleanup(
 extern "C" int rbd_watchers_list(rbd_image_t image,
 				 rbd_image_watcher_t *watchers,
 				 size_t *max_watchers) {
-  std::list<librbd::image_watcher_t> watcher_list;
+  std::vector<librbd::image_watcher_t> watcher_list;
   librbd::ImageCtx *ictx = (librbd::ImageCtx*)image;
 
   tracepoint(librbd, list_watchers_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);

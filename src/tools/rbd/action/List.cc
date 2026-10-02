@@ -11,6 +11,7 @@
 #include "common/Formatter.h"
 #include "common/TextTable.h"
 #include <iostream>
+#include <iterator>
 #include <boost/bind/bind.hpp>
 #include <boost/program_options.hpp>
 #include "global/global_context.h"
@@ -75,13 +76,13 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
   uint8_t old_format;
   w->img.old_format(&old_format);
 
-  std::list<librbd::locker_t> lockers;
+  std::vector<librbd::locker_t> lockers;
   bool exclusive;
-  r = w->img.list_lockers(&lockers, &exclusive, NULL);
+  r = w->img.list_lockers(lockers, &exclusive, nullptr);
   if (r < 0)
     return r;
   std::string lockstr;
-  if (!lockers.empty()) {
+  if (not std::empty(lockers)) {
     lockstr = (exclusive) ? "excl" : "shr";
   }
 
@@ -99,7 +100,7 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
       f->close_section();
     }
     f->dump_int("format", old_format ? 1 : 2);
-    if (!lockers.empty())
+    if (not std::empty(lockers))
       f->dump_string("lock_type", exclusive ? "exclusive" : "shared");
     f->close_section();
   } else {

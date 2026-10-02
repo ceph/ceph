@@ -63,6 +63,7 @@
 #include <boost/scope_exit.hpp>
 #include "include/ceph_assert.h"
 
+#include <iterator>
 #include <shared_mutex> // for std::shared_lock
 #include <variant>
 
@@ -1020,7 +1021,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   }
 
   int lock_get_owners(ImageCtx *ictx, rbd_lock_mode_t *lock_mode,
-                      std::list<std::string> *lock_owners)
+                      std::vector<std::string>& lock_owners)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
@@ -1048,8 +1049,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     *lock_mode = RBD_LOCK_MODE_EXCLUSIVE;
-    lock_owners->clear();
-    lock_owners->emplace_back(locker.address);
+    lock_owners.clear();
+    lock_owners.emplace_back(locker.address);
     return 0;
   }
 
@@ -1374,10 +1375,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return r;
   }
 
-  int list_lockers(ImageCtx *ictx,
-		   std::list<locker_t> *lockers,
-		   bool *exclusive,
-		   string *tag)
+  int list_lockers(ImageCtx *ictx, std::vector<locker_t>& lockers,
+                   bool *exclusive, string *tag)
   {
     ldout(ictx->cct, 20) << "list_locks on image " << ictx << dendl;
 
@@ -1386,21 +1385,23 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
 
     std::shared_lock locker{ictx->image_lock};
-    if (exclusive)
+    if (exclusive) {
       *exclusive = ictx->exclusive_locked;
-    if (tag)
+    }
+
+    if (tag) {
       *tag = ictx->lock_tag;
-    if (lockers) {
-      lockers->clear();
-      map<rados::cls::lock::locker_id_t,
-	  rados::cls::lock::locker_info_t>::const_iterator it;
-      for (it = ictx->lockers.begin(); it != ictx->lockers.end(); ++it) {
-	locker_t locker;
-	locker.client = stringify(it->first.locker);
-	locker.cookie = it->first.cookie;
-	locker.address = it->second.addr.get_legacy_str();
-	lockers->push_back(locker);
-      }
+    }
+
+    lockers.clear();
+    lockers.reserve(std::size(ictx->lockers));
+
+    for (const auto& [id, info] : ictx->lockers) {
+      lockers.push_back({
+        .client = stringify(id.locker),
+        .cookie = id.cookie,
+        .address = info.addr.get_legacy_str()
+      });
     }
 
     return 0;
@@ -1705,11 +1706,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   }
 
   int list_watchers(ImageCtx *ictx,
-		    std::list<librbd::image_watcher_t> &watchers)
+                    std::vector<librbd::image_watcher_t>& watchers)
   {
     int r;
     std::string header_oid;
-    std::list<obj_watch_t> obj_watchers;
+    std::vector<obj_watch_t> obj_watchers;
 
     if (ictx->old_format) {
       header_oid = util::old_header_name(ictx->name);
@@ -1717,19 +1718,20 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       header_oid = util::header_name(ictx->id);
     }
 
-    r = ictx->md_ctx.list_watchers(header_oid, &obj_watchers);
+    r = ictx->md_ctx.list_watchers(header_oid, obj_watchers);
     if (r < 0) {
       return r;
     }
 
     watchers.clear();
-    for (auto i = obj_watchers.begin(); i != obj_watchers.end(); ++i) {
-      librbd::image_watcher_t watcher;
-      watcher.addr = i->addr;
-      watcher.id = i->watcher_id;
-      watcher.cookie = i->cookie;
+    watchers.reserve(std::size(obj_watchers));
 
-      watchers.push_back(watcher);
+    for (const auto& watcher : obj_watchers) {
+      watchers.push_back({
+        .addr = watcher.addr,
+        .id = watcher.watcher_id,
+        .cookie = watcher.cookie
+      });
     }
 
     return 0;

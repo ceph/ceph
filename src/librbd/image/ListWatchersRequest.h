@@ -6,7 +6,7 @@
 
 #include "include/rados/rados_types.hpp"
 
-#include <list>
+#include <vector>
 
 class Context;
 
@@ -19,14 +19,14 @@ namespace image {
 enum {
   LIST_WATCHERS_FILTER_OUT_MY_INSTANCE = 1 << 0,
   LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES = 1 << 1,
-  LIST_WATCHERS_MIRROR_INSTANCES_ONLY = 1 << 3,
+  LIST_WATCHERS_MIRROR_INSTANCES_ONLY = 1 << 3
 };
 
 template<typename ImageCtxT = ImageCtx>
 class ListWatchersRequest {
 public:
   static ListWatchersRequest *create(ImageCtxT &image_ctx, int flags,
-                                     std::list<obj_watch_t> *watchers,
+                                     std::vector<obj_watch_t> *watchers,
                                      Context *on_finish) {
     return new ListWatchersRequest(image_ctx, flags, watchers, on_finish);
   }
@@ -51,19 +51,19 @@ private:
    * @endverbatim
    */
 
-  ListWatchersRequest(ImageCtxT &image_ctx, int flags, std::list<obj_watch_t> *watchers,
+  ListWatchersRequest(ImageCtxT &image_ctx, int flags, std::vector<obj_watch_t> *watchers,
                       Context *on_finish);
 
   ImageCtxT& m_image_ctx;
   int m_flags;
-  std::list<obj_watch_t> *m_watchers;
+  std::vector<obj_watch_t> *m_watchers;
   Context *m_on_finish;
 
   CephContext *m_cct;
   int m_ret_val;
   bufferlist m_out_bl;
-  std::list<obj_watch_t> m_object_watchers;
-  std::list<obj_watch_t> m_mirror_watchers;
+  std::vector<obj_watch_t> m_object_watchers;
+  std::vector<obj_watch_t> m_mirror_watchers;
 
   void list_image_watchers();
   void handle_list_image_watchers(int r);

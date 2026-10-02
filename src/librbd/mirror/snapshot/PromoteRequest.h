@@ -12,6 +12,7 @@
 
 #include <string>
 #include <set>
+#include <vector>
 
 struct Context;
 
@@ -101,7 +102,7 @@ private:
 
   } m_update_watch_ctx = {this};
 
-  std::list<obj_watch_t> m_watchers;
+  std::vector<obj_watch_t> m_watchers;
   uint64_t m_update_watcher_handle = 0;
   uint64_t m_scheduler_ticks = 0;
   SafeTimer *m_timer = nullptr;
