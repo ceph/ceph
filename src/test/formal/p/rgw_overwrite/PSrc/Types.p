@@ -92,10 +92,6 @@ type tCfg = (
 
 // a RADOS op's return code, or an RGW op's (op_ret), which may also be
 // one of RGW's own errors
-enum tRc { OK, EEXIST, ECANCELED, ENOENT, EBUSY, EIO, EINVAL,
-           ERR_PRECONDITION_FAILED, ERR_NO_SUCH_UPLOAD, ERR_INVALID_PART, ERR_INTERNAL_ERROR,
-           ERR_CONDITIONAL_REQUEST_CONFLICT }
-
 // An S3 answer: the HTTP status, and the error code in the body (S3_NONE
 // on success). S3_UNKNOWN_ERROR is RGW's answer to an errno it has no S3
 // error for; S3 defines no such code.
@@ -179,7 +175,7 @@ fun AnsOf(a: tAnswer): tAns {
   return A_ERR;
 }
 // key: the key written or deleted, or a copy's destination; src: a copy's source
-type tSpec = (kind: tKind, key: int, src: int, upload: int, num: int, etag: int, list: map[int, int],
+type tReq = (kind: tKind, key: int, src: int, upload: int, num: int, etag: int, list: map[int, int],
               cond: tCond);
 
 // Ids. rid < 100. An upload's base prefix is its id (1..9); a
@@ -244,7 +240,13 @@ fun MPETAG(list: map[int, int]): int {
 }
 
 // driver -> rgw -> driver
-event eDone: (rid: int, crashed: bool);
+// for common/Common.p: the Store starts with the keys that hold objects,
+// whether key 2's twins key 1, and the live uploads; requests hand nothing on
+type tInit = (objects: set[int], twins: bool, uploads: set[int]);
+type tOut = int;
+fun InSlot(r: tReq): int { return 0; }
+fun OutSlot(r: tReq): int { return 0; }
+fun FirstRid(): int { return 2; }
 
 // head objects
 event eReadHead: (from: machine, key: int);
@@ -313,8 +315,6 @@ event eMark: (rc: tRc, mark: int, slot: int);
 event eParts: (rc: tRc, parts: map[int, tPart]);
 event eCrashed: int;                            // a request's RGW died
 event eFinished: int;                           // a request was answered
-event eQuiesce: machine;
-event eQuiesced;
 
 // what the specs see at the end, after GC has run to completion
 type tFinal = (heads: map[int, tHead], ixs: map[int, tIx],

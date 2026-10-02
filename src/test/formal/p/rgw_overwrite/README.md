@@ -248,8 +248,8 @@ checked.
     - AbortMultipartUpload answers a lock held by a completion with 503
       `ServiceUnavailable` (`-EBUSY`), and an upload that is gone with
       `NoSuchUpload`.
-- **`Driver`**: runs a script of phases. The requests of a phase run
-  concurrently.
+- **`Driver`** (`../common/Common.p`): runs a script of phases. The
+  requests of a phase run concurrently.
 
 | Scenario | Script |
 |---|---|

@@ -75,7 +75,7 @@ machine Store {
   var waiters: seq[machine];
 
   start state Serve {
-    entry (p: (cfg: tCfg, objects: set[int], twins: bool, uploads: set[int])) {
+    entry (p: (cfg: tCfg, init: tInit)) {
       var k: int;
       var u: int;
       var num: int;
@@ -89,12 +89,12 @@ machine Store {
         k = k + 1;
       }
       // an object at each of these keys, PUT earlier
-      foreach (k in p.objects) {
+      foreach (k in p.init.objects) {
         epoch = epoch + 1;
         h = (present = true, tag = OLDWRITER(k), tailTag = OLDWRITER(k), manifest = default(set[int]),
              writer = OLDWRITER(k), etag = OLDWRITER(k), upload = 0, size = 1, ver = epoch,
              meta = 0, tags = 0);
-        if (p.twins) {
+        if (p.init.twins) {
           h.etag = OLDWRITER(1);  // the keys hold the same bytes
         }
         h.manifest += (OLDTAIL(k));
@@ -107,7 +107,7 @@ machine Store {
         announce mHeadState, (key = k, by = 0, present = true, etag = h.etag);
       }
       // uploads to key 1 with parts 1 and 2 uploaded once, at the base prefix
-      foreach (u in p.uploads) {
+      foreach (u in p.init.uploads) {
         ps = default(map[int, tPart]);
         num = 1;
         while (num <= 2) {

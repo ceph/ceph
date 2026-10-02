@@ -12,21 +12,21 @@ fun Main(): tCfg {
           lockHeld = true, writersPrompt = true);
 }
 
-fun Req(kind: tKind, key: int, src: int, upload: int): tSpec {
+fun Req(kind: tKind, key: int, src: int, upload: int): tReq {
   return (kind = kind, key = key, src = src, upload = upload, num = 0, etag = 0, list = default(map[int, int]),
           cond = default(tCond));
 }
-fun Put(key: int): tSpec { return Req(R_PUT, key, 0, 0); }
-fun Del(key: int): tSpec { return Req(R_DELETE, key, 0, 0); }
-fun Copy(src: int, dst: int): tSpec { return Req(R_COPY, dst, src, 0); }
-fun SetTags(key: int): tSpec { return Req(R_SET_TAGS, key, 0, 0); }
-fun List(): tSpec { return Req(R_LIST, 0, 0, 0); }
-fun Dedup(src: int, tgt: int): tSpec { return Req(R_DEDUP, tgt, src, 0); }
-fun Reshard(): tSpec { return Req(R_RESHARD, 0, 0, 0); }
-fun AbortMpu(u: int): tSpec { return Req(R_ABORT, MPKEY(), 0, u); }
-fun LcAbortMpu(u: int): tSpec { return Req(R_LC_ABORT, MPKEY(), 0, u); }
+fun Put(key: int): tReq { return Req(R_PUT, key, 0, 0); }
+fun Del(key: int): tReq { return Req(R_DELETE, key, 0, 0); }
+fun Copy(src: int, dst: int): tReq { return Req(R_COPY, dst, src, 0); }
+fun SetTags(key: int): tReq { return Req(R_SET_TAGS, key, 0, 0); }
+fun List(): tReq { return Req(R_LIST, 0, 0, 0); }
+fun Dedup(src: int, tgt: int): tReq { return Req(R_DEDUP, tgt, src, 0); }
+fun Reshard(): tReq { return Req(R_RESHARD, 0, 0, 0); }
+fun AbortMpu(u: int): tReq { return Req(R_ABORT, MPKEY(), 0, u); }
+fun LcAbortMpu(u: int): tReq { return Req(R_LC_ABORT, MPKEY(), 0, u); }
 // complete upload u with the ETags its parts were first uploaded with
-fun Complete(u: int): tSpec {
+fun Complete(u: int): tReq {
   var l: map[int, int];
   l[1] = PARTETAG(u, 1);
   l[2] = PARTETAG(u, 2);
@@ -34,14 +34,14 @@ fun Complete(u: int): tSpec {
           cond = default(tCond));
 }
 // complete upload u with part 1's ETag e1 and part 2's e2
-fun CompleteList(u: int, e1: int, e2: int): tSpec {
-  var r: tSpec;
+fun CompleteList(u: int, e1: int, e2: int): tReq {
+  var r: tReq;
   r = Complete(u);
   r.list[1] = e1;
   r.list[2] = e2;
   return r;
 }
-fun Reupload(u: int, num: int, etag: int): tSpec {
+fun Reupload(u: int, num: int, etag: int): tReq {
   return (kind = R_UPLOAD_PART, key = MPKEY(), src = 0, upload = u, num = num, etag = etag,
           list = default(map[int, int]), cond = default(tCond));
 }
@@ -49,29 +49,10 @@ fun Reupload(u: int, num: int, etag: int): tSpec {
 fun IfMatch(etag: int): tCond { return (kind = C_IF_MATCH, etag = etag); }
 fun IfMatchAny(): tCond { return (kind = C_IF_MATCH_ANY, etag = 0); }
 fun IfNoneMatchAny(): tCond { return (kind = C_IF_NONE_MATCH_ANY, etag = 0); }
-fun With(r: tSpec, c: tCond): tSpec {
+fun With(r: tReq, c: tCond): tReq {
   r.cond = c;
   return r;
 }
-fun One(a: tSpec): seq[tSpec] {
-  var s: seq[tSpec];
-  s += (0, a);
-  return s;
-}
-fun Two(a: tSpec, b: tSpec): seq[tSpec] {
-  var s: seq[tSpec];
-  s += (0, a);
-  s += (1, b);
-  return s;
-}
-fun Three(a: tSpec, b: tSpec, c: tSpec): seq[tSpec] {
-  var s: seq[tSpec];
-  s += (0, a);
-  s += (1, b);
-  s += (2, c);
-  return s;
-}
-
 enum tScenario {
   SC_PUTS,              // three PutObjects over an existing object
   SC_PUT_VS_COMPLETE,   // a PutObject and a completion over it
@@ -135,7 +116,7 @@ enum tScenario {
 machine Scenario {
   start state Init {
     entry (p: (cfg: tCfg, sc: tScenario)) {
-      var script: seq[seq[tSpec]];
+      var script: seq[seq[tReq]];
       var objects: set[int];
       var uploads: set[int];
       var etag: int;
@@ -312,7 +293,7 @@ machine Scenario {
           script += (1, One(Del(1)));
         }
       }
-      new Driver((cfg = p.cfg, objects = objects, twins = twins, uploads = uploads, script = script));
+      new Driver((cfg = p.cfg, init = (objects = objects, twins = twins, uploads = uploads), script = script));
     }
   }
 }

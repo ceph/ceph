@@ -2,11 +2,15 @@
 # deep.sh <model-dir> <test case> [schedules]: one test case under random, PCT and POS
 set -u
 dir=$(cd "$1" && pwd); tc=$2; N=${3:-100000}
-# P installs into ~/.dotnet/tools; a Homebrew dotnet@8 also needs DOTNET_ROOT
+# P installs into ~/.dotnet/tools; a Homebrew dotnet@8, or one in ~/.dotnet,
+# also needs DOTNET_ROOT
 export PATH=$PATH:$HOME/.dotnet/tools
 brew_dotnet=/opt/homebrew/opt/dotnet@8
 if [ -z "${DOTNET_ROOT:-}" ] && [ -d "$brew_dotnet" ]; then
   export DOTNET_ROOT=$brew_dotnet/libexec PATH=$brew_dotnet/bin:$PATH
+elif [ -z "${DOTNET_ROOT:-}" ] && [ -x "$HOME/.dotnet/dotnet" ]; then
+  # the dotnet-install script's default location
+  export DOTNET_ROOT=$HOME/.dotnet PATH=$HOME/.dotnet:$PATH
 fi
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 cd "$dir"

@@ -53,7 +53,7 @@ machine Rgw {
   var wTags: int;
 
   start state Serve {
-    entry (p: (cfg: tCfg, store: machine, driver: machine, rid: int, req: tSpec)) {
+    entry (p: (cfg: tCfg, store: machine, driver: machine, rid: int, req: tReq, input: tOut)) {
       cfg = p.cfg;
       store = p.store;
       driver = p.driver;
@@ -103,7 +103,7 @@ machine Rgw {
   }
 
   // the ETag a request's own write leaves on its key
-  fun OwnEtag(req: tSpec): int {
+  fun OwnEtag(req: tReq): int {
     if (req.kind == R_PUT) {
       return rid;
     }
@@ -1093,14 +1093,14 @@ machine Rgw {
     announce mAnswered, (rid = rid, ok = rc == OK);
     announce mReply, (rid = rid, ans = AnsOf(a));
     announce mResponse, (rid = rid, kind = kind, cond = cond, changed = changed, fault = fault, ans = a);
-    send driver, eDone, (rid = rid, crashed = false);
+    send driver, eDone, (rid = rid, crashed = false, out = 0);
   }
 
   // RGW dies: no answer, and the lock it holds expires
   fun Crash() {
     send store, eCrashed, rid;
     announce mCrashed, rid;
-    send driver, eDone, (rid = rid, crashed = true);
+    send driver, eDone, (rid = rid, crashed = true, out = 0);
   }
 
   // RADOS ops
