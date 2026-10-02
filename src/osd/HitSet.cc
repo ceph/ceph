@@ -17,7 +17,7 @@
 #include "common/Formatter.h"
 
 using std::ostream;
-using std::list;
+using std::vector;
 using ceph::Formatter;
 
 // -- HitSet --
@@ -95,9 +95,9 @@ void HitSet::dump(Formatter *f) const
     impl->dump(f);
 }
 
-list<HitSet> HitSet::generate_test_instances()
+vector<HitSet> HitSet::generate_test_instances()
 {
-  list<HitSet> o;
+  vector<HitSet> o;
   o.emplace_back();
   o.push_back(HitSet(new BloomHitSet(10, .1, 1)));
   o.back().insert(hobject_t());
@@ -193,9 +193,9 @@ void HitSet::Params::dump(Formatter *f) const
     impl->dump(f);
 }
 
-list<HitSet::Params> HitSet::Params::generate_test_instances()
+vector<HitSet::Params> HitSet::Params::generate_test_instances()
 {
-  list<HitSet::Params> o;
+  vector<HitSet::Params> o;
 #define loop_hitset_params(kind) \
 { \
   for (auto& i : kind::Params::generate_test_instances()) \

@@ -4,6 +4,7 @@
 #ifndef CEPH_CLS_REFCOUNT_OPS_H
 #define CEPH_CLS_REFCOUNT_OPS_H
 
+#include <vector>
 #include "include/types.h"
 #include "common/hobject.h"
 #include "include/rados/cls_traits.hpp"
@@ -28,7 +29,7 @@ struct cls_refcount_get_op {
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_refcount_get_op> generate_test_instances();
+  static std::vector<cls_refcount_get_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_refcount_get_op)
 
@@ -54,7 +55,7 @@ struct cls_refcount_put_op {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_refcount_put_op> generate_test_instances();
+  static std::vector<cls_refcount_put_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_refcount_put_op)
 
@@ -76,7 +77,7 @@ struct cls_refcount_set_op {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_refcount_set_op> generate_test_instances();
+  static std::vector<cls_refcount_set_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_refcount_set_op)
 
@@ -99,7 +100,7 @@ struct cls_refcount_read_op {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_refcount_read_op> generate_test_instances();
+  static std::vector<cls_refcount_read_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_refcount_read_op)
 
@@ -121,7 +122,7 @@ struct cls_refcount_read_ret {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_refcount_read_ret> generate_test_instances();
+  static std::vector<cls_refcount_read_ret> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_refcount_read_ret)
 
@@ -148,7 +149,7 @@ struct obj_refcount {
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<obj_refcount> generate_test_instances();
+  static std::vector<obj_refcount> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(obj_refcount)
 

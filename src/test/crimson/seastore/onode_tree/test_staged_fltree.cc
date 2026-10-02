@@ -203,6 +203,41 @@ TEST_F(a_basic_test_t, 2_node_sizes)
   });
 }
 
+TEST_F(a_basic_test_t, transaction_views_retain_identity)
+{
+  struct test_view final : trans_spec_view_t {
+    std::uint64_t value;
+
+    test_view(Transaction& transaction, const std::uint64_t value)
+      : trans_spec_view_t(transaction), value(value)
+    {}
+  };
+
+  // Force several relocations of the owning sequence:
+  constexpr std::size_t view_count = 64;
+  std::array<trans_spec_view_t::trans_view_set_t, view_count> indexes;
+  std::array<test_view *, view_count> addresses;
+  auto transaction = make_test_transaction();
+
+  for (std::size_t i = 0; i < view_count; ++i) {
+    auto& view = transaction->add_transactional_view<test_view>(
+      *transaction, i);
+    addresses[i] = &view;
+    indexes[i].insert(view);
+  }
+
+  for (std::size_t i = 0; i < view_count; ++i) {
+    EXPECT_EQ(addresses[i], &*std::begin(indexes[i]));
+    EXPECT_EQ(i, addresses[i]->value);
+  }
+
+  transaction.reset();
+
+  for (const auto& index : indexes) {
+    EXPECT_TRUE(index.empty());
+  }
+}
+
 struct b_dummy_tree_test_t : public seastar_test_suite_t {
   TransactionRef ref_t;
   std::unique_ptr<UnboundedBtree> tree;

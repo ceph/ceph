@@ -1298,9 +1298,9 @@ int DaemonServer::_populate_crush_bucket_osds(
   std::vector<std::string> bucket_names;
   // get candidate additions that are beneath this point in the tree
   if (bucket_type_str == "rack" || bucket_type_str == "chassis") {
-    std::list<int> crush_bucket_children;
+    std::vector<int> crush_bucket_children;
     // Get the list of children
-    if (osdmap.crush->get_children(item_id, &crush_bucket_children) <= 0) {
+    if (osdmap.crush->get_children(item_id, crush_bucket_children) <= 0) {
       ostringstream os;
       os << "crush bucket \"" << item_name << "\" of type: "
          << bucket_type_str << " has no children!";

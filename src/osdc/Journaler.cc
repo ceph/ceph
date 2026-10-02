@@ -281,9 +281,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
 
   if (r!=0) {
     ldout(cct, 0) << "error getting journal off disk" << dendl;
-    list<Context*> ls;
-    ls.swap(waitfor_recover);
-    finish_contexts(cct, ls, r);
+    finish_contexts(cct, waitfor_recover, r);
     return;
   }
 
@@ -291,9 +289,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
     ldout(cct, 1) << "_finish_read_head r=" << r
 		  << " read 0 bytes, assuming empty log" << dendl;
     state = STATE_ACTIVE;
-    list<Context*> ls;
-    ls.swap(waitfor_recover);
-    finish_contexts(cct, ls, 0);
+    finish_contexts(cct, waitfor_recover, 0);
     return;
   }
 
@@ -317,9 +313,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   }
 
   if (corrupt) {
-    list<Context*> ls;
-    ls.swap(waitfor_recover);
-    finish_contexts(cct, ls, -EINVAL);
+    finish_contexts(cct, waitfor_recover, -EINVAL);
     return;
   }
 
@@ -408,9 +402,7 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
 
 out:
   // done.
-  list<Context*> ls;
-  ls.swap(waitfor_recover);
-  finish_contexts(cct, ls, r);
+  finish_contexts(cct, waitfor_recover, r);
 }
 
 class Journaler::C_RereadHeadProbe : public Context
@@ -592,15 +584,22 @@ void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
 
   // kick waiters <= safe_pos
   if (!waitfor_safe.empty()) {
-    list<Context*> ls;
-    while (!waitfor_safe.empty()) {
-      auto it = waitfor_safe.begin();
-      if (it->first > safe_pos)
-	break;
-      ls.splice(ls.end(), it->second);
-      waitfor_safe.erase(it);
+    auto ready_end = waitfor_safe.upper_bound(safe_pos);
+    std::size_t waiter_count = 0;
+
+    for (auto i = std::begin(waitfor_safe); i != ready_end; ++i) {
+      waiter_count += std::size(i->second);
     }
-    finish_contexts(cct, ls);
+
+    std::vector<Context *> ready;
+    ready.reserve(waiter_count);
+
+    for (auto i = std::begin(waitfor_safe); i != ready_end; ++i) {
+      ready.insert(std::end(ready), std::begin(i->second), std::end(i->second));
+    }
+
+    waitfor_safe.erase(std::begin(waitfor_safe), ready_end);
+    finish_contexts(cct, ready);
   }
 }
 
@@ -900,9 +899,7 @@ void Journaler::_finish_prezero(int r, uint64_t start, uint64_t len)
 
     if (prezero_pos == prezeroing_pos &&
 	!waitfor_prezero.empty()) {
-      list<Context*> ls;
-      ls.swap(waitfor_prezero);
-      finish_contexts(cct, ls, 0);
+      finish_contexts(cct, waitfor_prezero, 0);
     }
   } else {
     pending_zero.insert(start, len);
@@ -1642,13 +1639,10 @@ void Journaler::shutdown()
     f->complete(-EAGAIN);
   }
 
-  list<Context*> ls;
-  ls.swap(waitfor_recover);
-  finish_contexts(cct, ls, -ESHUTDOWN);
+  finish_contexts(cct, waitfor_recover, -ESHUTDOWN);
 
-  std::map<uint64_t, std::list<Context*> >::iterator i;
-  for (i = waitfor_safe.begin(); i != waitfor_safe.end(); ++i) {
-    finish_contexts(cct, i->second, -EAGAIN);
+  for (auto& position_waiters : waitfor_safe) {
+    finish_contexts(cct, position_waiters.second, -EAGAIN);
   }
   waitfor_safe.clear();
 }

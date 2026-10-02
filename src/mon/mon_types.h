@@ -17,7 +17,7 @@
 #define CEPH_MON_TYPES_H
 
 #include <iomanip>
-#include <list>
+#include <vector>
 #include <map>
 #include <sstream>
 #include <string>
@@ -120,8 +120,8 @@ struct FeatureMap {
     }
   }
 
-  static std::list<FeatureMap> generate_test_instances() {
-    std::list<FeatureMap> ls;
+  static std::vector<FeatureMap> generate_test_instances() {
+    std::vector<FeatureMap> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_UID);
@@ -179,8 +179,8 @@ struct MonitorDBStoreStats {
     DECODE_FINISH(p);
   }
 
-  static std::list<MonitorDBStoreStats> generate_test_instances() {
-    std::list<MonitorDBStoreStats> ls;
+  static std::vector<MonitorDBStoreStats> generate_test_instances() {
+    std::vector<MonitorDBStoreStats> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().bytes_total = 1024*1024;
@@ -212,8 +212,8 @@ struct DataStats {
     store_stats.dump(f);
     f->close_section();
   }
-  static std::list<DataStats> generate_test_instances() {
-    std::list<DataStats> ls;
+  static std::vector<DataStats> generate_test_instances() {
+    std::vector<DataStats> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().fs_stats.byte_total = 1024*1024;
@@ -295,8 +295,8 @@ struct ScrubResult {
       f->dump_unsigned(p->first.c_str(), p->second);
     f->close_section();
   }
-  static std::list<ScrubResult> generate_test_instances() {
-    std::list<ScrubResult> ls;
+  static std::vector<ScrubResult> generate_test_instances() {
+    std::vector<ScrubResult> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().prefix_crc["foo"] = 123;
@@ -508,8 +508,8 @@ public:
     DECODE_FINISH(p);
   }
 
-  static std::list<mon_feature_t> generate_test_instances() {
-    std::list<mon_feature_t> ls;
+  static std::vector<mon_feature_t> generate_test_instances() {
+    std::vector<mon_feature_t> ls;
     ls.emplace_back();
     ls.emplace_back();
     ls.back().features = 1;
@@ -774,8 +774,8 @@ struct ProgressEvent {
     f->dump_float("progress", progress);
     f->dump_bool("add_to_ceph_s", add_to_ceph_s);
   }
-  static std::list<ProgressEvent> generate_test_instances() {
-    std::list<ProgressEvent> o;
+  static std::vector<ProgressEvent> generate_test_instances() {
+    std::vector<ProgressEvent> o;
     o.emplace_back();
     o.emplace_back();
     o.back().message = "test message";
@@ -836,8 +836,8 @@ struct PoolAvailability {
     DECODE_FINISH(p);
   }
 
-  static std::list<PoolAvailability> generate_test_instances() {
-    std::list<PoolAvailability> o;
+  static std::vector<PoolAvailability> generate_test_instances() {
+    std::vector<PoolAvailability> o;
     o.emplace_back();
     o.back().started_at = utime_t(123, 456);
     o.back().last_uptime = utime_t(123, 456);

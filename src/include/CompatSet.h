@@ -19,6 +19,7 @@
 #include <iosfwd>
 #include <map>
 #include <string>
+#include <vector>
 
 #include "include/buffer.h"
 #include "include/encoding.h"
@@ -202,7 +203,7 @@ struct CompatSet {
 
   void dump(ceph::Formatter *f) const;
 
-  static std::list<CompatSet> generate_test_instances();
+  static std::vector<CompatSet> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(CompatSet)
 

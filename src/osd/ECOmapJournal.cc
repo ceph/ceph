@@ -184,19 +184,6 @@ bool ECOmapJournal::has_omap_updates(const hobject_t &hoid) const {
   return false;
 }
 
-// Function to get specific object's entries, if not present, creates an empty list
-std::list<ECOmapJournalEntry>& ECOmapJournal::get_entries(const hobject_t &hoid) {
-  return entries[hoid];
-}
-
-std::list<ECOmapJournalEntry> ECOmapJournal::snapshot_entries(const hobject_t &hoid) const {
-  if (const auto it = entries.find(hoid);
-    it != entries.end()) {
-    return it->second;
-  }
-  return {};
-}
-
 ECOmapJournal::const_iterator ECOmapJournal::begin_entries(const hobject_t &hoid) const {
   return entries.at(hoid).begin();
 }
