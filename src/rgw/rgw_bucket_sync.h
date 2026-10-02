@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <deque>
+
 #include "rgw_common.h"
 #include "rgw_sync_policy.h"
 #include "rgw_zone.h"
@@ -138,7 +140,8 @@ public:
    * pipe_rules: deal with a set of pipes that have common endpoints_pair
    */
   class pipe_rules {
-    std::list<rgw_sync_bucket_pipe> pipes;
+    // References remain stable as rules are appended and indexed below:
+    std::deque<rgw_sync_bucket_pipe> pipes;
 
   public:
     using prefix_map_t = std::multimap<std::string, rgw_sync_bucket_pipe *>;

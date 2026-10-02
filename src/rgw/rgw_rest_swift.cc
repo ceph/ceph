@@ -33,9 +33,10 @@
 #include "services/svc_zone.h"
 
 #include <array>
-#include <string_view>
-#include <sstream>
 #include <memory>
+#include <sstream>
+#include <iterator>
+#include <string_view>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1286,7 +1287,7 @@ void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
 
 static void bulkdelete_respond(const unsigned num_deleted,
                                const unsigned int num_unfound,
-                               const std::list<RGWBulkDelete::fail_desc_t>& failures,
+                               const std::vector<RGWBulkDelete::fail_desc_t>& failures,
                                const int prot_flags,                  /* in  */
                                ceph::Formatter& formatter)            /* out */
 {
@@ -1687,7 +1688,7 @@ void RGWOptionsCORS_ObjStore_SWIFT::send_response()
 }
 
 int RGWBulkDelete_ObjStore_SWIFT::get_data(
-  list<RGWBulkDelete::acct_path_t>& items, bool * const is_truncated)
+  std::vector<RGWBulkDelete::acct_path_t>& items, bool& is_truncated)
 {
   constexpr size_t MAX_LINE_SIZE = 2048;
 
@@ -1721,16 +1722,16 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
         path.bucket_name = url_decode(path_str.substr(start_pos));
       }
 
-      items.push_back(path);
+      items.push_back(std::move(path));
     }
 
-    if (items.size() == MAX_CHUNK_ENTRIES) {
-      *is_truncated = true;
+    if (std::size(items) == MAX_CHUNK_ENTRIES) {
+      is_truncated = true;
       return 0;
     }
   }
 
-  *is_truncated = false;
+  is_truncated = false;
   return 0;
 }
 

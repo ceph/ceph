@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <deque>
+
 #include "common/config.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
@@ -145,6 +147,8 @@ public:
 
 
 class RGWOrphanSearch {
+  using sharded_oids = std::map<int, std::deque<std::string>>;
+
   rgw::sal::RadosStore* store;
 
   RGWOrphanStore orphan_store;
@@ -164,21 +168,18 @@ class RGWOrphanSearch {
 
   bool detailed_mode;
 
-  struct log_iter_info {
-    std::string oid;
-    std::list<std::string>::iterator cur;
-    std::list<std::string>::iterator end;
-  };
-
-  int log_oids(const DoutPrefixProvider *dpp, std::map<int, std::string>& log_shards, std::map<int, std::list<std::string> >& oids);
+  int log_oids(const DoutPrefixProvider *dpp, std::map<int, std::string>& log_shards,
+               const sharded_oids& oids);
 
 #define RGW_ORPHANSEARCH_HASH_PRIME 7877
   int orphan_shard(const std::string& str) {
     return ceph_str_hash_linux(str.c_str(), str.size()) % RGW_ORPHANSEARCH_HASH_PRIME % search_info.num_shards;
   }
 
-  int handle_stat_result(const DoutPrefixProvider *dpp, std::map<int, std::list<std::string> >& oids, RGWRados::Object::Stat::Result& result);
-  int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, std::map<int, std::list<std::string> >& oids, std::deque<RGWRados::Object::Stat>& ops);
+  int handle_stat_result(const DoutPrefixProvider *dpp, sharded_oids& oids,
+                         RGWRados::Object::Stat::Result& result);
+  int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, sharded_oids& oids,
+                             std::deque<RGWRados::Object::Stat>& ops);
 
   int remove_index(std::map<int, std::string>& index);
 public:
@@ -197,7 +198,9 @@ public:
 
   int build_all_oids_index(const DoutPrefixProvider *dpp);
   int build_buckets_instance_index(const DoutPrefixProvider *dpp);
-  int build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const std::string& bucket_instance_id, std::map<int, std::list<std::string> >& oids);
+  int build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
+                                   const std::string& bucket_instance_id,
+                                   std::map<int, std::deque<std::string>>& oids);
   int build_linked_oids_index(const DoutPrefixProvider *dpp);
   int compare_oid_indexes(const DoutPrefixProvider *dpp);
 
