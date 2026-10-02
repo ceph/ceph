@@ -65,7 +65,7 @@ struct cls_refcount_put_op {
 WRITE_CLASS_ENCODER(cls_refcount_put_op)
 
 struct cls_refcount_set_op {
-  std::list<std::string> refs;
+  std::vector<std::string> refs;
 
   cls_refcount_set_op() {}
 
@@ -110,7 +110,7 @@ struct cls_refcount_read_op {
 WRITE_CLASS_ENCODER(cls_refcount_read_op)
 
 struct cls_refcount_read_ret {
-  std::list<std::string> refs;
+  std::vector<std::string> refs;
 
   cls_refcount_read_ret() {}
 
