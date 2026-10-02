@@ -313,8 +313,8 @@ bool OSDMap::subtree_is_down(int id, set<int> *down_cache) const
     return true;
   }
 
-  list<int> children;
-  crush->get_children(id, &children);
+  vector<int> children;
+  crush->get_children(id, children);
   for (const auto &child : children) {
     if (!subtree_is_down(child, down_cache)) {
       return false;
@@ -390,8 +390,8 @@ bool OSDMap::subtree_type_is_down(
     return true;
   }
 
-  list<int> children;
-  crush->get_children(id, &children);
+  vector<int> children;
+  crush->get_children(id, children);
   for (const auto &child : children) {
     if (!subtree_type_is_down(
 	  cct, child, crush->get_bucket_type(child),
@@ -7667,9 +7667,9 @@ void OSDMap::check_health(CephContext *cct,
       for (auto j = subtree_type_down[type].begin();
 	   j != subtree_type_down[type].end();
 	   ++j) {
-	list<int> children;
+	vector<int> children;
 	int num = 0;
-	int num_children = crush->get_children(*j, &children);
+	int num_children = crush->get_children(*j, children);
 	if (num_children == 0)
 	  continue;
 	for (auto l = children.begin(); l != children.end(); ++l) {
