@@ -7,6 +7,8 @@
 #include "UserPerm.h"
 #include "mds/flock.h"
 
+#include <deque>
+
 class Inode;
 
 // file handle for any open file state
@@ -26,7 +28,7 @@ struct Fh {
   int       mode;       // the mode i opened the file with
 
   bool pos_locked = false;           // pos is currently in use
-  std::list<ceph::condition_variable*> pos_waiters;   // waiters for pos
+  std::deque<ceph::condition_variable *> pos_waiters;   // waiters for pos
 
   Readahead readahead;
 
