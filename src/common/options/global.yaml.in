@@ -2493,6 +2493,20 @@ options:
   level: dev
   default: 32
   with_legacy: true
+- name: objecter_shard_routing
+  type: bool
+  level: advanced
+  desc: Route OSD ops over per-reactor connections to Crimson OSDs
+  long_desc: For an OSD that publishes a shard map (Crimson), open one
+    connection per reactor, to the port the OSD published for that reactor
+    (crimson_osd_client_shard_ports), and send each op on the connection
+    whose reactor owns its PG, avoiding a cross-core hop in the OSD. Ops for one PG stay on one connection while any are in flight.
+    Until the map arrives, ops use the regular connection.
+  default: false
+  flags:
+  - startup
+  see_also:
+  - crimson_osd_client_shard_ports
 # suppress watch pings
 - name: objecter_inject_no_watch_ping
   type: bool
