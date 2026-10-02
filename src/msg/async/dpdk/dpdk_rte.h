@@ -19,11 +19,12 @@
 #define CEPH_DPDK_RTE_H_
 
 
-#include <condition_variable>
+#include <deque>
 #include <mutex>
-#include <thread>
-
 #include <bitset>
+#include <thread>
+#include <functional>
+#include <condition_variable>
 #include <rte_config.h>
 #include <rte_version.h>
 #include <boost/program_options.hpp>
@@ -72,7 +73,7 @@ class eal {
   std::thread t;
   std::mutex lock;
   std::condition_variable cond;
-  std::list<std::function<void()>> funcs;
+  std::deque<std::function<void()>> funcs;
 };
 
 } // namespace dpdk
