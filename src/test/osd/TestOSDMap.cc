@@ -2823,6 +2823,38 @@ TEST_F(OSDMapTest, blocklisting_ranges) {
   }
 }
 
+TEST_F(OSDMapTest, get_blocklist_appends)
+{
+  set_up_map();
+
+  entity_addr_t address;
+  address.parse("198.51.100.14");
+  address.set_type(entity_addr_t::TYPE_LEGACY);
+
+  entity_addr_t range;
+  range.parse("2001:db8::/48");
+  range.type = entity_addr_t::TYPE_CIDR;
+
+  const auto expires = ceph_clock_now();
+  OSDMap::Incremental incremental(osdmap.get_epoch() + 1);
+  incremental.new_blocklist[address] = expires;
+  incremental.new_range_blocklist[range] = expires;
+  osdmap.apply_incremental(incremental);
+
+  const pair<entity_addr_t, utime_t> sentinel;
+  vector<pair<entity_addr_t, utime_t>> blocklisted {sentinel};
+  vector<pair<entity_addr_t, utime_t>> range_blocklisted {sentinel};
+
+  osdmap.get_blocklist(blocklisted, range_blocklisted);
+
+  ASSERT_EQ(blocklisted.size(), 2);
+  EXPECT_EQ(blocklisted.front(), sentinel);
+  EXPECT_EQ(blocklisted.back(), make_pair(address, expires));
+  ASSERT_EQ(range_blocklisted.size(), 2);
+  EXPECT_EQ(range_blocklisted.front(), sentinel);
+  EXPECT_EQ(range_blocklisted.back(), make_pair(range, expires));
+}
+
 TEST_F(OSDMapTest, blocklisting_everything) {
   set_up_map(6); //whatever
   OSDMap::Incremental range_blocklist_inc(osdmap.get_epoch() + 1);
