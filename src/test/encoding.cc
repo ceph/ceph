@@ -980,6 +980,45 @@ TEST(EncodingCompatibility, LegacySequenceContainersRoundTrip)
     std::array<encoding_compat_record, 3> { alpha, bravo, charlie });
 }
 
+TEST(EncodingCompatibility, LegacySequenceContainersShareWireFormat)
+{
+  const std::list<encoding_compat_record> legacy { alpha, bravo, charlie };
+  const std::deque<encoding_compat_record> current_deque {
+    alpha, bravo, charlie };
+  const std::vector<encoding_compat_record> current_vector {
+    alpha, bravo, charlie };
+  buffer::list legacy_bl;
+  buffer::list deque_bl;
+  buffer::list vector_bl;
+
+  encode(legacy, legacy_bl, 123);
+  encode(current_deque, deque_bl, 123);
+  encode(current_vector, vector_bl, 123);
+  ASSERT_EQ(legacy_bl.to_str(), deque_bl.to_str());
+  ASSERT_EQ(legacy_bl.to_str(), vector_bl.to_str());
+
+  std::deque<encoding_compat_record> decoded_deque { bravo_alt };
+  auto legacy_p = legacy_bl.cbegin();
+  decode(decoded_deque, legacy_p);
+
+  EXPECT_TRUE(legacy_p.end());
+  EXPECT_TRUE(std::ranges::equal(legacy, decoded_deque));
+
+  std::list<encoding_compat_record> decoded_list { bravo_alt };
+  auto deque_p = deque_bl.cbegin();
+  decode(decoded_list, deque_p);
+
+  EXPECT_TRUE(deque_p.end());
+  EXPECT_TRUE(std::ranges::equal(current_deque, decoded_list));
+
+  std::vector<encoding_compat_record> decoded_vector { bravo_alt };
+  auto vector_p = vector_bl.cbegin();
+  decode(decoded_vector, vector_p);
+
+  EXPECT_TRUE(vector_p.end());
+  EXPECT_TRUE(std::ranges::equal(current_vector, decoded_vector));
+}
+
 TEST(EncodingCompatibility, BufferTypesRoundTrip)
 {
   bufferptr ptr_src("bufferptr-value", 15);
