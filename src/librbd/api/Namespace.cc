@@ -7,6 +7,10 @@
 #include "librbd/api/Namespace.h"
 #include "librbd/ImageCtx.h"
 
+#include <array>
+#include <iterator>
+#include <algorithm>
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::api::Namespace: " << __func__ << ": "
@@ -16,7 +20,7 @@ namespace api {
 
 namespace {
 
-const std::list<std::string> POOL_OBJECTS {
+const std::array<std::string, 7> POOL_OBJECTS {
   RBD_CHILDREN,
   RBD_GROUP_DIRECTORY,
   RBD_INFO,
@@ -205,21 +209,24 @@ int Namespace<I>::list(IoCtx& io_ctx, std::vector<std::string> *names)
   int max_read = 1024;
   std::string last_read = "";
   do {
-    std::list<std::string> name_list;
-    r = cls_client::namespace_list(&default_ns_ctx, last_read, max_read,
-                                   &name_list);
+    std::vector<std::string> page;
+    r = cls_client::namespace_list(default_ns_ctx, last_read, max_read,
+                                   page);
     if (r == -ENOENT) {
       return 0;
-    } else if (r < 0) {
+    }
+
+    if (r < 0) {
       lderr(cct) << "error listing namespaces: " << cpp_strerror(r) << dendl;
       return r;
     }
 
-    names->insert(names->end(), name_list.begin(), name_list.end());
-    if (!name_list.empty()) {
-      last_read = name_list.back();
+    if (!std::empty(page)) {
+      last_read = page.back();
     }
-    r = name_list.size();
+
+    r = std::size(page);
+    std::ranges::move(page, std::back_inserter(*names));
   } while (r == max_read);
 
   return 0;

@@ -12,6 +12,7 @@
 #include "include/types.h" // for byte_u_t
 #include "librbd/cache/Types.h"
 #include <iostream>
+#include <vector>
 #include <boost/program_options.hpp>
 
 namespace rbd {
@@ -25,7 +26,7 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
                           librbd::Image &image, Formatter *f)
 {
   int r;
-  std::list<librbd::image_watcher_t> watchers;
+  std::vector<librbd::image_watcher_t> watchers;
 
   r = image.list_watchers(watchers);
   if (r < 0)
