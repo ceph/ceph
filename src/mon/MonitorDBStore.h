@@ -130,8 +130,8 @@ class MonitorDBStore
 	4 + bl.length();
     }
 
-    static std::list<Op> generate_test_instances() {
-      std::list<Op> ls;
+    static std::vector<Op> generate_test_instances() {
+      std::vector<Op> ls;
       ls.emplace_back();
       // we get coverage here from the Transaction instances
       return ls;
@@ -218,8 +218,8 @@ class MonitorDBStore
       DECODE_FINISH(bl);
     }
 
-    static std::list<Transaction> generate_test_instances() {
-      std::list<Transaction> ls;
+    static std::vector<Transaction> generate_test_instances() {
+      std::vector<Transaction> ls;
       ls.emplace_back();
       ls.emplace_back();
       ceph::buffer::list bl;

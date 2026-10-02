@@ -83,8 +83,8 @@ struct creating_pgs_t {
       f->dump_object("pg_history", history);
       f->dump_object("past_intervals", past_intervals);
     }
-    static std::list<pg_create_info> generate_test_instances() {
-      std::list<pg_create_info> o;
+    static std::vector<pg_create_info> generate_test_instances() {
+      std::vector<pg_create_info> o;
       o.emplace_back();
       o.back().create_epoch = 10;
       o.emplace_back();
@@ -229,8 +229,8 @@ struct creating_pgs_t {
     }
     f->close_section();
   }
-  static std::list<creating_pgs_t> generate_test_instances() {
-    std::list<creating_pgs_t> o;
+  static std::vector<creating_pgs_t> generate_test_instances() {
+    std::vector<creating_pgs_t> o;
     auto c = creating_pgs_t{};
     c.last_scan_epoch = 17;
     c.pgs.emplace(pg_t{42, 2}, pg_create_info(31, utime_t{891, 113}));

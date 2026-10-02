@@ -164,7 +164,7 @@ struct RGWMetadataLogData {
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<RGWMetadataLogData> generate_test_instances();
+  static std::vector<RGWMetadataLogData> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWMetadataLogData)
 

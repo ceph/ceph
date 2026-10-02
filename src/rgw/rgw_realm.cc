@@ -77,9 +77,9 @@ int RGWRealm::find_zone(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-list<RGWRealm> RGWRealm::generate_test_instances()
+vector<RGWRealm> RGWRealm::generate_test_instances()
 {
-  list<RGWRealm> o;
+  vector<RGWRealm> o;
   o.emplace_back();
   o.emplace_back();
   return o;
