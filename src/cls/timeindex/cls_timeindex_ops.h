@@ -10,7 +10,7 @@
 #include "include/rados/cls_traits.hpp"
 
 struct cls_timeindex_add_op {
-  std::list<cls_timeindex_entry> entries;
+  std::vector<cls_timeindex_entry> entries;
 
   cls_timeindex_add_op() {}
 
@@ -80,7 +80,7 @@ struct cls_timeindex_list_op {
 WRITE_CLASS_ENCODER(cls_timeindex_list_op)
 
 struct cls_timeindex_list_ret {
-  std::list<cls_timeindex_entry> entries;
+  std::vector<cls_timeindex_entry> entries;
   std::string marker;
   bool truncated;
 
