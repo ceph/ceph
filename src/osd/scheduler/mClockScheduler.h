@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <deque>
 #include <functional>
 #include <ostream>
 #include <map>
@@ -54,7 +55,7 @@ class mClockScheduler : public OpScheduler {
     2>;
   using priority_t = unsigned;
   using SubQueue = std::map<priority_t,
-	std::list<OpSchedulerItem>,
+	std::deque<OpSchedulerItem>,
 	std::greater<priority_t>>;
   mclock_queue_t scheduler;
   /**
