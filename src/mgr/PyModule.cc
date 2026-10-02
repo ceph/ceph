@@ -111,7 +111,7 @@ std::string handle_pyerror(
   formatted = str("").join(formatted_list);
 
   if (crash_dump && !module.empty()) {
-    std::list<std::string> bt_strings;
+    std::vector<std::string> bt_strings;
     std::map<std::string, std::string> extra;
     
     extra["mgr_module"] = module;
@@ -122,15 +122,22 @@ std::string handle_pyerror(
 
     PyObject *l = get_managed_object(formatted_list, boost::python::tag);
     if (PyList_Check(l)) {
+      const auto frame_count = PyList_Size(l);
+
+      if (1 < frame_count) {
+        bt_strings.reserve(static_cast<std::size_t>(frame_count - 1));
+      }
+
       // skip first line, which is: "Traceback (most recent call last):\n"
-      for (unsigned i = 1; i < PyList_Size(l); ++i) {
-	PyObject *val = PyList_GET_ITEM(l, i);
-	std::string s = PyUnicode_AsUTF8(val);
-	s.resize(s.size() - 1);  // strip off newline character
-	bt_strings.push_back(s);
+      for (Py_ssize_t i = 1; i < frame_count; ++i) {
+        PyObject *val = PyList_GET_ITEM(l, i);
+        std::string frame = PyUnicode_AsUTF8(val);
+        frame.resize(frame.size() - 1);  // strip off newline character
+        bt_strings.push_back(std::move(frame));
       }
     }
-    PyBackTrace bt(bt_strings);
+
+    PyBackTrace bt(std::move(bt_strings));
     
     char crash_path[PATH_MAX];
     generate_crash_dump(crash_path, bt, &extra);
