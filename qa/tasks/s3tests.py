@@ -545,6 +545,8 @@ def run_tests(ctx, config):
             attrs += ['not sse_c_block_by_default']
         if not client_config.get('s3control', False):
             attrs += ["not s3control"]
+        if not client_config.get('s3select_tests', False):
+            attrs += ["not s3select"]
 
         attrs += client_config.get('extra_attrs', [])
         if 'bucket_logging' not in attrs:

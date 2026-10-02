@@ -55,7 +55,7 @@ options:
   type: bool
   level: advanced
   desc: Disable the s3select operation; RGW will report an error and will return ERR_INVALID_REQUEST.
-  default: false
+  default: true
   services:
   - rgw
   with_legacy: true
