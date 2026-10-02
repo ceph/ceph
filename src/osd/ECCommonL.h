@@ -15,8 +15,13 @@
 
 #pragma once
 
+#include <deque>
+
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
+#include <deque>
+#include <span>
+#include <vector>
 #include <fmt/format.h>
 
 #include "common/sharedptr_registry.hpp"
@@ -81,19 +86,19 @@ struct ECCommonL {
     ) = 0;
 
   virtual void objects_read_and_reconstruct(
-    const std::map<hobject_t, std::list<ec_align_t>> &reads,
+    const std::map<hobject_t, std::vector<ec_align_t>> &reads,
     bool fast_read,
     GenContextURef<ec_extents_t &&> &&func) = 0;
 
   struct read_request_t {
-    const std::list<ec_align_t> to_read;
+    std::vector<ec_align_t> to_read;
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
     bool want_attrs;
     read_request_t(
-      const std::list<ec_align_t> &to_read,
+      std::vector<ec_align_t> to_read,
       const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
       bool want_attrs)
-      : to_read(to_read), need(need), want_attrs(want_attrs) {}
+      : to_read(std::move(to_read)), need(need), want_attrs(want_attrs) {}
   };
   friend std::ostream &operator<<(std::ostream &lhs, const read_request_t &rhs);
   struct ReadOp;
@@ -122,7 +127,7 @@ struct ECCommonL {
     int r;
     std::map<pg_shard_t, int> errors;
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs;
-    std::list<
+    std::deque<
       boost::tuple<
 	uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > > returned;
     read_result_t() : r(0) {}
@@ -132,7 +137,7 @@ struct ECCommonL {
     virtual void finish_single_request(
       const hobject_t &hoid,
       read_result_t &res,
-      std::list<ec_align_t> to_read,
+      std::span<const ec_align_t> to_read,
       std::set<int> wanted_to_read) = 0;
 
     virtual void finish(int priority) && = 0;
@@ -226,7 +231,7 @@ struct ECCommonL {
   };
   struct ReadPipeline {
     void objects_read_and_reconstruct(
-      const std::map<hobject_t, std::list<ec_align_t>> &reads,
+      const std::map<hobject_t, std::vector<ec_align_t>> &reads,
       bool fast_read,
       GenContextURef<ec_extents_t &&> &&func);
 
@@ -266,7 +271,7 @@ struct ECCommonL {
 
     std::map<ceph_tid_t, ReadOp> tid_to_read_map;
     std::map<pg_shard_t, std::set<ceph_tid_t> > shard_to_read_map;
-    std::list<ClientAsyncReadStatus> in_progress_client_reads;
+    std::deque<ClientAsyncReadStatus> in_progress_client_reads;
 
     CephContext* cct;
     ceph::ErasureCodeInterfaceRef ec_impl;
@@ -392,7 +397,7 @@ struct ECCommonL {
       std::map<hobject_t, ObjectContextRef> obc_map;
 
       /// see call_write_ordered
-      std::list<std::function<void(void)> > on_write;
+      std::deque<std::function<void(void)>> on_write;
 
       /// Generated internally
       std::set<hobject_t> temp_added;
@@ -516,7 +521,7 @@ struct ECCommonL {
       const std::map<hobject_t,extent_set> &to_read,
       Func &&on_complete
     ) {
-      std::map<hobject_t, std::list<ec_align_t>> _to_read;
+      std::map<hobject_t, std::vector<ec_align_t>> _to_read;
       for (auto &&hpair: to_read) {
         auto &l = _to_read[hpair.first];
         for (auto extent: hpair.second) {

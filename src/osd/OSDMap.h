@@ -759,8 +759,9 @@ public:
 
   bool is_blocklisted(const entity_addr_t& a, CephContext *cct=nullptr) const;
   bool is_blocklisted(const entity_addrvec_t& a, CephContext *cct=nullptr) const;
-  void get_blocklist(std::list<std::pair<entity_addr_t,utime_t > > *bl,
-		     std::list<std::pair<entity_addr_t,utime_t> > *rl) const;
+  void get_blocklist(
+    std::vector<std::pair<entity_addr_t, utime_t>>& blocklisted,
+    std::vector<std::pair<entity_addr_t, utime_t>>& range_blocklisted) const;
   void get_blocklist(std::set<entity_addr_t> *bl,
 		     std::set<entity_addr_t> *rl) const;
 

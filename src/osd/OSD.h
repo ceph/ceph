@@ -43,6 +43,7 @@
 #include "osd/scheduler/OpScheduler.h"
 
 #include <atomic>
+#include <deque>
 #include <map>
 #include <memory>
 #include <string>
@@ -586,12 +587,12 @@ private:
   ceph::mutex recovery_lock = ceph::make_mutex("OSDService::recovery_lock");
 
   struct pg_awaiting_throttle_t {
-    const epoch_t epoch_queued;
+    epoch_t epoch_queued;
     PGRef pg;
-    const uint64_t cost_per_object;
-    const int priority;
+    uint64_t cost_per_object;
+    int priority;
   };
-  std::list<pg_awaiting_throttle_t> awaiting_throttle;
+  std::deque<pg_awaiting_throttle_t> awaiting_throttle;
 
   /// queue a scrub-related message for a PG
   template <class MSG_TYPE>
@@ -650,8 +651,9 @@ public:
   }
   void clear_queued_recovery(PG *pg) {
     std::lock_guard l(recovery_lock);
-    awaiting_throttle.remove_if(
-      [pg](decltype(awaiting_throttle)::const_reference awaiting ) {
+    std::erase_if(
+      awaiting_throttle,
+      [pg](const auto& awaiting) {
         return awaiting.pg.get() == pg;
       });
   }
@@ -2274,7 +2276,7 @@ private:
   MetricPayload get_perf_reports();
 
   ceph::mutex m_perf_queries_lock = ceph::make_mutex("OSD::m_perf_queries_lock");
-  std::list<OSDPerfMetricQuery> m_perf_queries;
+  std::vector<OSDPerfMetricQuery> m_perf_queries;
   std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> m_perf_limits;
 };
 
