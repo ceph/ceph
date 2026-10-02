@@ -346,7 +346,7 @@ struct object_data_handler_test_t:
       }
     }
   }
-  std::list<LBAMapping> get_mappings(
+  lba_mappings_t get_mappings(
     Transaction &t,
     objaddr_t offset,
     extent_len_t length) {
@@ -358,7 +358,7 @@ struct object_data_handler_test_t:
     }).unsafe_get();
     return ret;
   }
-  std::list<LBAMapping> get_mappings(objaddr_t offset, extent_len_t length) {
+  lba_mappings_t get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
       auto &layout = head.onode->get_layout();
