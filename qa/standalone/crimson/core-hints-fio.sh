@@ -245,7 +245,10 @@ function _osd_store_args() {
 function _setup_cluster() {
     local dir=$1
 
+    # allow the pool's PGs (mon_max_pg_per_osd defaults to 500)
+    local pgs_per_osd=$(( (POOL_PGS * POOL_SIZE + NUM_OSDS - 1) / NUM_OSDS ))
     run_mon $dir a --osd_pool_default_size=$POOL_SIZE \
+        --mon_max_pg_per_osd=$(( pgs_per_osd > 500 ? pgs_per_osd + 100 : 500 )) \
         --mon_allow_pool_size_one=true \
         --osd_pool_default_crimson=true \
         --osd_pool_default_pg_autoscale_mode=off || return 1
