@@ -305,11 +305,10 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
+  int DBBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, const std::vector<rgw_obj_index_key>& objs_to_unlink)
   {
     /* XXX: CHECK: Unlike RadosStore, there is no separate bucket index table.
-     * Delete all the object in the list from the object table of this
-     * bucket
+     * Delete all the objects from the object table of this bucket
      */
     return 0;
   }
@@ -754,7 +753,7 @@ namespace rgw::sal {
   int DBObject::delete_object(const DoutPrefixProvider* dpp,
       optional_yield y,
       uint32_t flags,
-      std::list<rgw_obj_index_key>* remove_objs,
+      std::vector<rgw_obj_index_key>* remove_objs,
       RGWObjVersionTracker* objv)
   {
     DB::Object del_target(store->getDB(), bucket->get_info(), get_obj());
@@ -889,7 +888,7 @@ namespace rgw::sal {
 				     int *next_marker, bool *truncated, optional_yield y,
 				     bool assume_unsorted)
   {
-    std::list<RGWUploadPartInfo> parts_map;
+    std::vector<RGWUploadPartInfo> part_infos;
 
     std::unique_ptr<rgw::sal::Object> obj = get_meta_obj();
 
@@ -898,22 +897,22 @@ namespace rgw::sal {
 
     DB::Object op_target(store->getDB(),
         obj->get_bucket()->get_info(), obj->get_obj());
-    ret = op_target.get_mp_parts_list(dpp, parts_map);
+    ret = op_target.get_mp_parts_list(dpp, part_infos);
     if (ret < 0) {
       return ret;
     }
 
     int last_num = 0;
 
-    while (!parts_map.empty()) {
-      std::unique_ptr<DBMultipartPart> part = std::make_unique<DBMultipartPart>();
-      RGWUploadPartInfo &pinfo = parts_map.front();
-      part->set_info(pinfo);
-      if ((int)pinfo.num > marker) {
-        last_num = pinfo.num;
-        parts[pinfo.num] = std::move(part);
+    for (const auto& part_info : part_infos) {
+      if (static_cast<int>(part_info.num) <= marker) {
+        continue;
       }
-      parts_map.pop_front();
+
+      auto part = std::make_unique<DBMultipartPart>();
+      part->set_info(part_info);
+      last_num = part_info.num;
+      parts[part_info.num] = std::move(part);
     }
 
     /* rebuild a map with only num_parts entries */
@@ -943,7 +942,7 @@ namespace rgw::sal {
   int DBMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				   optional_yield y, CephContext* cct,
 				   map<int, string>& part_etags,
-				   list<rgw_obj_index_key>& remove_objs,
+				   vector<rgw_obj_index_key>& remove_objs,
 				   uint64_t& accounted_size, bool& compressed,
 				   RGWCompressionInfo& cs_info, off_t& ofs,
 				   std::string& tag, ACLOwner& owner,
@@ -1062,7 +1061,7 @@ namespace rgw::sal {
   int DBMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
       CephContext *cct, optional_yield y,
       const rgw_obj& obj,
-      std::list<rgw_obj_index_key>& remove_objs,
+      std::vector<rgw_obj_index_key>& remove_objs,
       prefix_map_t& processed_prefixes)
   {
     return -ENOTSUP;
@@ -1875,7 +1874,7 @@ namespace rgw::sal {
   }
 
   int DBStore::list_all_zones(const DoutPrefixProvider* dpp,
-			      std::list<std::string>& zone_ids)
+			      std::vector<std::string>& zone_ids)
   {
     zone_ids.push_back(zone.get_id());
     return 0;
@@ -2107,7 +2106,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<string>& keys, bool* truncated)
+  int DBStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, vector<string>& keys, bool* truncated)
   {
     return 0;
   }

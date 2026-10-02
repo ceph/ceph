@@ -696,14 +696,14 @@ int RGWOwnerStatsCache::sync_all_owners(const DoutPrefixProvider *dpp,
   int max = 1000;
 
   do {
-    list<string> keys;
+    vector<string> keys;
     ret = driver->meta_list_keys_next(dpp, handle, max, keys, &truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
       break;
     }
-    for (list<string>::iterator iter = keys.begin();
-         iter != keys.end() && !going_down(); 
+    for (auto iter = std::begin(keys);
+         iter != std::end(keys) && !going_down();
          ++iter) {
       const rgw_owner owner = parse_owner(*iter);
       ldpp_dout(dpp, 20) << "RGWOwnerStatsCache: sync owner=" << owner << dendl;
@@ -1064,4 +1064,3 @@ void RGWQuotaInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("check_on_raw", check_on_raw, obj);
   JSONDecoder::decode_json("enabled", enabled, obj);
 }
-
