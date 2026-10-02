@@ -151,9 +151,8 @@ void FutureImpl::finish_unlock() {
   contexts.swap(m_contexts);
 
   m_lock.unlock();
-  for (Contexts::iterator it = contexts.begin();
-       it != contexts.end(); ++it) {
-    (*it)->complete(m_return_value);
+  for (auto *context : contexts) {
+    context->complete(m_return_value);
   }
 }
 
