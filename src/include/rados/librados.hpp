@@ -740,9 +740,14 @@ inline namespace v14_2_0 {
     /**
      * list_watchers: Get list watchers of object
      *
-     * @param out_watchers [out] place returned values in out_watchers on completion
+     * Appends results on completion. The output must remain valid until the
+     * read operation completes.
+     *
+     * @param out_watchers [out] append returned values here
      * @param prval [out] place error code in prval upon completion
      */
+    void list_watchers(std::vector<obj_watch_t> *out_watchers, int *prval);
+    /// Compatibility overload for list-based callers.
     void list_watchers(std::list<obj_watch_t> *out_watchers, int *prval);
 
     /**
@@ -1074,6 +1079,12 @@ inline namespace v14_2_0 {
     int break_lock(const std::string &oid, const std::string &name,
 		   const std::string &client, const std::string &cookie);
 
+    /// Return the current locker count, replacing outputs only after success.
+    int list_lockers(const std::string& oid, const std::string& name,
+		     int& exclusive,
+		     std::string& tag,
+		     std::vector<librados::locker_t>& lockers);
+
     int list_lockers(const std::string &oid, const std::string &name,
 		     int *exclusive,
 		     std::string *tag,
@@ -1119,11 +1130,21 @@ inline namespace v14_2_0 {
         ObjectCursor *split_finish);
 
     /**
-     * List available hit set objects
+     * List available hit set objects into contiguous storage.
      *
-     * @param uint32_t [in] hash position to query
+     * @param hash [in] hash position to query
      * @param c [in] completion
-     * @param pls [out] list of available intervals
+     * @param intervals [out] available intervals; replaced on success
+     */
+    int hit_set_vector(uint32_t hash, AioCompletion *c,
+                       std::vector<std::pair<time_t, time_t>>& intervals);
+
+    /**
+     * List available hit set objects.
+     *
+     * @param hash [in] hash position to query
+     * @param c [in] completion
+     * @param pls [out] list of available intervals; replaced on success
      */
     int hit_set_list(uint32_t hash, AioCompletion *c,
 		     std::list< std::pair<time_t, time_t> > *pls);
@@ -1390,6 +1411,9 @@ inline namespace v14_2_0 {
                                 std::vector<librados::notify_ack_t> *acks,
                                 std::vector<librados::notify_timeout_t> *timeouts);
 
+    /// Append the object's watchers to out_watchers.
+    int list_watchers(const std::string& o, std::vector<obj_watch_t>& out_watchers);
+    /// Compatibility overload for list-based callers.
     int list_watchers(const std::string& o, std::list<obj_watch_t> *out_watchers);
     int list_snaps(const std::string& o, snap_set_t *out_snaps);
     void set_notify_timeout(uint32_t timeout);
@@ -1603,9 +1627,17 @@ inline namespace v14_2_0 {
     void test_blocklist_self(bool set);
 
     /* pool info */
+    /// Replace names with the current pool names.
+    int pool_list(std::vector<std::string>& names);
+    /// Replace pools with the current pool IDs and names.
+    int pool_list(std::vector<std::pair<int64_t, std::string>>& pools);
     int pool_list(std::list<std::string>& v);
     int pool_list2(std::list<std::pair<int64_t, std::string> >& v);
-    int get_pool_stats(std::list<std::string>& v,
+    /// Fetch statistics for the named pools.
+    int get_pool_stats(const std::vector<std::string>& pools,
+		       stats_map& result);
+    /// Compatibility overload for list-based callers.
+    int get_pool_stats(std::list<std::string>& pools,
 		       stats_map& result);
     /// deprecated; use simpler form.  categories no longer supported.
     int get_pool_stats(std::list<std::string>& v,
@@ -1705,4 +1737,3 @@ inline namespace v14_2_0 {
 } // namespace librados
 
 #endif
-
