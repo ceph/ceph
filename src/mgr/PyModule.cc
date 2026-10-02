@@ -813,7 +813,7 @@ PyModule::~PyModule()
     Py_XDECREF(pClass);
     Py_XDECREF(pStandbyClass);
     Py_XDECREF(pPickleModule);
-    if (use_main_interpreter) {
+    if (!use_main_interpreter) {
       Py_EndInterpreter(pMyThreadState.ts);
     }
     pMyThreadState.ts = nullptr;
