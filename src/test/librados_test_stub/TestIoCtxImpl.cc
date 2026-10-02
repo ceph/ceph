@@ -11,6 +11,7 @@
 #include "common/valgrind.h"
 #include "objclass/objclass.h"
 #include <functional>
+#include <iterator>
 #include <errno.h>
 
 using namespace std;
@@ -179,13 +180,28 @@ int TestIoCtxImpl::exec_internal(const std::string& oid, TestClassHandler *handl
 }
 
 int TestIoCtxImpl::list_watchers(const std::string& o,
-                                 std::list<obj_watch_t> *out_watchers) {
+                                 std::vector<obj_watch_t> *out_watchers) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
 
   return m_client->get_watch_notify()->list_watchers(m_pool_id, get_namespace(),
                                                      o, out_watchers);
+}
+
+int TestIoCtxImpl::list_watchers(const std::string& o,
+                                 std::list<obj_watch_t> *out_watchers) {
+  std::vector<obj_watch_t> contiguous_watchers;
+  int r = list_watchers(o, &contiguous_watchers);
+  if (r < 0) {
+    return r;
+  }
+
+  out_watchers->insert(std::end(*out_watchers),
+                       std::make_move_iterator(std::begin(contiguous_watchers)),
+                       std::make_move_iterator(std::end(contiguous_watchers)));
+
+  return 0;
 }
 
 int TestIoCtxImpl::notify(const std::string& o, bufferlist& bl,
