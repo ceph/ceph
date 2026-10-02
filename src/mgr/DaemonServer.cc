@@ -1075,8 +1075,27 @@ void DaemonServer::_check_offlines_pgs(
   *report = offline_pg_report();
   report->osds = osds;
 
+  // whether one of the OSDs being checked is `osd`
+  auto in_set = [&osds](int osd) -> bool {
+    return std::visit([osd](auto& container) -> bool {
+      using T = std::decay_t<decltype(container)>;
+      if constexpr (std::is_same_v<T, std::set<int>>) {
+        return container.count(osd) > 0;
+      } else if constexpr (std::is_same_v<T, std::vector<int>>) {
+        return std::find(container.begin(), container.end(), osd) !=
+               container.end();
+      } else {
+        return false;
+      }
+    }, osds);
+  };
+
   for (const auto& q : pgmap.pg_stat) {
     std::set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
+    // true once ANY member of the acting set is one of the OSDs being
+    // checked: it must stick for the rest of the loop, not reflect the
+    // last member only, or a PG whose last acting OSD is not in the set
+    // would be skipped altogether.
     bool found = false;
     if (q.second.state == 0) {
       report->unknown.insert(q.first);
@@ -1084,16 +1103,8 @@ void DaemonServer::_check_offlines_pgs(
     }
     if (q.second.state & PG_STATE_DEGRADED) {
       for (auto& anm : q.second.avail_no_missing) {
-        std::visit([anm, &found](auto& container) {
-          using T = std::decay_t<decltype(container)>;
-          if constexpr (std::is_same_v<T, std::set<int>>) {
-            found = container.count(anm.osd);
-          } else if constexpr (std::is_same_v<T, std::vector<int>>) {
-            auto it = std::find(container.begin(), container.end(), anm.osd);
-            found = (it != container.end());
-          }
-        }, osds);
-        if (found) {
+        if (in_set(anm.osd)) {
+          found = true;
           continue;
         }
 	if (anm.osd != CRUSH_ITEM_NONE) {
@@ -1102,16 +1113,8 @@ void DaemonServer::_check_offlines_pgs(
       }
     } else {
       for (auto& a : q.second.acting) {
-        std::visit([a, &found](auto& container) {
-          using T = std::decay_t<decltype(container)>;
-          if constexpr (std::is_same_v<T, std::set<int>>) {
-            found = container.count(a);
-          } else if constexpr (std::is_same_v<T, std::vector<int>>) {
-            auto it = std::find(container.begin(), container.end(), a);
-            found = (it != container.end());
-          }
-        }, osds);
-        if (found) {
+        if (in_set(a)) {
+          found = true;
           continue;
         }
 	if (a != CRUSH_ITEM_NONE) {
