@@ -20,9 +20,10 @@
 
 #include <sys/eventfd.h>
 
-#include <list>
-#include <vector>
+#include <deque>
 #include <thread>
+#include <vector>
+#include <algorithm>
 #include <unordered_map>
 
 #include "common/ceph_context.h"
@@ -77,7 +78,7 @@ class RDMADispatcher {
   ceph::mutex w_lock =
     ceph::make_mutex("RDMADispatcher::for worker pending list");
   // fixme: lockfree
-  std::list<RDMAWorker*> pending_workers;
+  std::deque<RDMAWorker*> pending_workers;
   void enqueue_dead_qp_lockless(uint32_t qp);
   void enqueue_dead_qp(uint32_t qpn);
 
@@ -125,7 +126,7 @@ class RDMAWorker : public Worker {
   typedef std::vector<Chunk*>::iterator ChunkIter;
   std::shared_ptr<Infiniband> ib;
   EventCallbackRef tx_handler;
-  std::list<RDMAConnectedSocketImpl*> pending_sent_conns;
+  std::deque<RDMAConnectedSocketImpl*> pending_sent_conns;
   std::shared_ptr<RDMADispatcher> dispatcher;
   ceph::mutex lock = ceph::make_mutex("RDMAWorker::lock");
 
@@ -150,7 +151,7 @@ class RDMAWorker : public Worker {
   int get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes);
   void remove_pending_conn(RDMAConnectedSocketImpl *o) {
     ceph_assert(center.in_thread());
-    pending_sent_conns.remove(o);
+    std::erase(pending_sent_conns, o);
   }
   void handle_pending_message();
   void set_dispatcher(std::shared_ptr<RDMADispatcher>& dispatcher) { this->dispatcher = dispatcher; }
