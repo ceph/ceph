@@ -5,7 +5,7 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 
-using std::list;
+using std::vector;
 
 void cls_refcount_get_op::dump(ceph::Formatter *f) const
 {
@@ -13,9 +13,9 @@ void cls_refcount_get_op::dump(ceph::Formatter *f) const
   f->dump_int("implicit_ref", (int)implicit_ref);
 }
 
-list<cls_refcount_get_op> cls_refcount_get_op::generate_test_instances()
+vector<cls_refcount_get_op> cls_refcount_get_op::generate_test_instances()
 {
-  list<cls_refcount_get_op> ls;
+  vector<cls_refcount_get_op> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().tag = "foo";
@@ -30,9 +30,9 @@ void cls_refcount_put_op::dump(ceph::Formatter *f) const
   f->dump_int("implicit_ref", (int)implicit_ref);
 }
 
-list<cls_refcount_put_op> cls_refcount_put_op::generate_test_instances()
+vector<cls_refcount_put_op> cls_refcount_put_op::generate_test_instances()
 {
-  list<cls_refcount_put_op> ls;
+  vector<cls_refcount_put_op> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().tag = "foo";
@@ -47,9 +47,9 @@ void cls_refcount_set_op::dump(ceph::Formatter *f) const
   encode_json("refs", refs, f);
 }
 
-list<cls_refcount_set_op> cls_refcount_set_op::generate_test_instances()
+vector<cls_refcount_set_op> cls_refcount_set_op::generate_test_instances()
 {
-  list<cls_refcount_set_op> ls;
+  vector<cls_refcount_set_op> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().refs.push_back("foo");
@@ -63,9 +63,9 @@ void cls_refcount_read_op::dump(ceph::Formatter *f) const
   f->dump_int("implicit_ref", (int)implicit_ref);
 }
 
-list<cls_refcount_read_op> cls_refcount_read_op::generate_test_instances()
+vector<cls_refcount_read_op> cls_refcount_read_op::generate_test_instances()
 {
-  list<cls_refcount_read_op> ls;
+  vector<cls_refcount_read_op> ls;
   ls.emplace_back();
   ls.emplace_back();
   return ls;
@@ -80,9 +80,9 @@ void cls_refcount_read_ret::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-list<cls_refcount_read_ret> cls_refcount_read_ret::generate_test_instances()
+vector<cls_refcount_read_ret> cls_refcount_read_ret::generate_test_instances()
 {
-  list<cls_refcount_read_ret> ls;
+  vector<cls_refcount_read_ret> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().refs.push_back("foo");
@@ -107,9 +107,9 @@ void obj_refcount::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-list<obj_refcount> obj_refcount::generate_test_instances()
+vector<obj_refcount> obj_refcount::generate_test_instances()
 {
-  list<obj_refcount> ls;
+  vector<obj_refcount> ls;
   ls.emplace_back();
   ls.back().refs.emplace("foo",true);
   ls.back().retired_refs.emplace("bar");

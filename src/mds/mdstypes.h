@@ -169,7 +169,7 @@ struct fnode_t {
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static std::list<fnode_t> generate_test_instances();
+  static std::vector<fnode_t> generate_test_instances();
 
   version_t version = 0;
   snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
@@ -191,7 +191,7 @@ struct old_rstat_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<old_rstat_t> generate_test_instances();
+  static std::vector<old_rstat_t> generate_test_instances();
 
   void print(std::ostream& out) const;
 
@@ -261,7 +261,7 @@ public:
   void decode(ceph::buffer::list::const_iterator &p);
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
-  static std::list<feature_bitset_t> generate_test_instances();
+  static std::vector<feature_bitset_t> generate_test_instances();
 private:
   void init_array(const std::vector<size_t>& v);
 
@@ -300,7 +300,7 @@ struct metric_spec_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<metric_spec_t> generate_test_instances();
+  static std::vector<metric_spec_t> generate_test_instances();
   void print(std::ostream& out) const;
 
   // set of metrics that a client is capable of forwarding
@@ -347,7 +347,7 @@ struct client_metadata_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<client_metadata_t> generate_test_instances();
+  static std::vector<client_metadata_t> generate_test_instances();
 
   kv_map_t kv_map;
   feature_bitset_t features;
@@ -373,7 +373,7 @@ struct session_info_t {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<session_info_t> generate_test_instances();
+  static std::vector<session_info_t> generate_test_instances();
 
   entity_inst_t inst;
   std::map<ceph_tid_t,inodeno_t> completed_requests;
@@ -442,7 +442,7 @@ struct string_snap_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<string_snap_t> generate_test_instances();
+  static std::vector<string_snap_t> generate_test_instances();
 
   std::string name;
   snapid_t snapid;
@@ -468,7 +468,7 @@ struct mds_table_pending_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<mds_table_pending_t> generate_test_instances();
+  static std::vector<mds_table_pending_t> generate_test_instances();
 
   uint64_t reqid = 0;
   __s32 mds = 0;
@@ -497,7 +497,7 @@ struct cap_reconnect_t {
   void decode_old(ceph::buffer::list::const_iterator& bl);
 
   void dump(ceph::Formatter *f) const;
-  static std::list<cap_reconnect_t> generate_test_instances();
+  static std::vector<cap_reconnect_t> generate_test_instances();
 
   std::string path;
   mutable ceph_mds_cap_reconnect capinfo = {};
@@ -519,7 +519,7 @@ struct snaprealm_reconnect_t {
   void decode_old(ceph::buffer::list::const_iterator& bl);
 
   void dump(ceph::Formatter *f) const;
-  static std::list<snaprealm_reconnect_t> generate_test_instances();
+  static std::vector<snaprealm_reconnect_t> generate_test_instances();
 
   mutable ceph_mds_snaprealm_reconnect realm = {};
 };
@@ -576,7 +576,7 @@ struct dirfrag_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<dirfrag_t> generate_test_instances();
+  static std::vector<dirfrag_t> generate_test_instances();
 
   inodeno_t ino = 0;
   frag_t frag;
@@ -630,7 +630,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<inode_load_vec_t> generate_test_instances();
+  static std::vector<inode_load_vec_t> generate_test_instances();
 
 private:
   std::array<DecayCounter, NUM> vec;
@@ -665,7 +665,7 @@ public:
   void dump(ceph::Formatter *f) const;
   void dump(ceph::Formatter *f, const DecayRate& rate) const;
   void print(std::ostream& out) const;
-  static std::list<dirfrag_load_vec_t> generate_test_instances();
+  static std::vector<dirfrag_load_vec_t> generate_test_instances();
 
   const DecayCounter &get(int t) const {
     return vec[t];
@@ -738,7 +738,7 @@ struct mds_load_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<mds_load_t> generate_test_instances();
+  static std::vector<mds_load_t> generate_test_instances();
 };
 inline void encode(const mds_load_t &c, ceph::buffer::list &bl) {
   c.encode(bl);
@@ -765,7 +765,7 @@ public:
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
-  static std::list<MDSCacheObjectInfo> generate_test_instances();
+  static std::vector<MDSCacheObjectInfo> generate_test_instances();
 
   inodeno_t ino = 0;
   dirfrag_t dirfrag;
@@ -797,7 +797,7 @@ struct BlockDiff {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static std::list<BlockDiff> generate_test_instances();
+  static std::vector<BlockDiff> generate_test_instances();
   void print(std::ostream& out) const;
 };
 WRITE_CLASS_ENCODER(BlockDiff);

@@ -15,7 +15,7 @@
 #define CEPH_CLIENT_T_H
 
 #include <cstdint>
-#include <list>
+#include <vector>
 #include <iosfwd>
 
 #include "buffer.h"
@@ -43,7 +43,7 @@ struct client_t {
     decode(v, bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<client_t> generate_test_instances();
+  static std::vector<client_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(client_t)
 

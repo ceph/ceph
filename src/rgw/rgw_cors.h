@@ -17,6 +17,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 #include <include/types.h>
 #include "include/encoding.h" // for WRITE_CLASS_ENCODER()
 #include "include/str_list.h"
@@ -85,7 +86,7 @@ public:
     decode(exposable_hdrs, bl);
     DECODE_FINISH(bl);
   }
-  static std::list<RGWCORSRule> generate_test_instances();
+  static std::vector<RGWCORSRule> generate_test_instances();
   static int create_rule(const char *allow_origins, const char *allow_headers,
                   const char *expose_headers, const char* allowed_methods, std::optional<RGWCORSRule>& rule, const char *max_age="");
   bool has_wildcard_origin();

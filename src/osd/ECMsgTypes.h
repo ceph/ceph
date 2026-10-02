@@ -16,6 +16,8 @@
 #ifndef ECBMSGTYPES_H
 #define ECBMSGTYPES_H
 
+#include <deque>
+
 #include <fmt/format.h>
 
 #include "osd_types.h"
@@ -88,7 +90,7 @@ struct ECSubWrite {
   void decode(ceph::buffer::list::const_iterator &p_bl,
 	      ceph::buffer::list::const_iterator &d_bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ECSubWrite> generate_test_instances();
+  static std::deque<ECSubWrite> generate_test_instances();
 private:
   // no outside copying -- slow
   ECSubWrite(ECSubWrite& other);
@@ -107,7 +109,7 @@ struct ECSubWriteReply {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ECSubWriteReply> generate_test_instances();
+  static std::vector<ECSubWriteReply> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ECSubWriteReply)
 
@@ -130,7 +132,7 @@ struct ECSubRead {
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ECSubRead> generate_test_instances();
+  static std::vector<ECSubRead> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(ECSubRead)
 
@@ -151,7 +153,7 @@ struct ECSubReadReply {
   void decode(ceph::buffer::list::const_iterator &p_bl,
 	      ceph::buffer::list::const_iterator &d_pl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ECSubReadReply> generate_test_instances();
+  static std::vector<ECSubReadReply> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ECSubReadReply)
 
