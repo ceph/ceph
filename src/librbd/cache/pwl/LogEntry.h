@@ -9,6 +9,7 @@
 #include "librbd/cache/pwl/Types.h"
 #include <atomic>
 #include <memory>
+#include <vector>
 
 namespace librbd {
 namespace cache {
@@ -19,7 +20,7 @@ class SyncPointLogEntry;
 class GenericWriteLogEntry;
 class WriteLogEntry;
 
-typedef std::list<std::shared_ptr<GenericWriteLogEntry>> GenericWriteLogEntries;
+using GenericWriteLogEntries = std::vector<std::shared_ptr<GenericWriteLogEntry>>;
 
 class GenericLogEntry {
 public:

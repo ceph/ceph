@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_CACHE_RWL_LOG_MAP_H
 
 #include "librbd/BlockGuard.h"
-#include <list>
+#include <vector>
 
 namespace librbd {
 namespace cache {
@@ -32,7 +32,7 @@ public:
 };
 
 template <typename T>
-using LogMapEntries = std::list<LogMapEntry<T>>;
+using LogMapEntries = std::vector<LogMapEntry<T>>;
 
 template <typename T>
 class LogMap {
@@ -42,10 +42,10 @@ public:
   LogMap &operator=(const LogMap&) = delete;
 
   void add_log_entry(std::shared_ptr<T> log_entry);
-  void add_log_entries(std::list<std::shared_ptr<T>> &log_entries);
+  void add_log_entries(const std::vector<std::shared_ptr<T>> &log_entries);
   void remove_log_entry(std::shared_ptr<T> log_entry);
-  void remove_log_entries(std::list<std::shared_ptr<T>> &log_entries);
-  std::list<std::shared_ptr<T>> find_log_entries(BlockExtent block_extent);
+  void remove_log_entries(const std::vector<std::shared_ptr<T>> &log_entries);
+  std::vector<std::shared_ptr<T>> find_log_entries(BlockExtent block_extent);
   LogMapEntries<T> find_map_entries(BlockExtent block_extent);
 
 private:
@@ -55,7 +55,7 @@ private:
   void remove_map_entry_locked(LogMapEntry<T> &map_entry);
   void adjust_map_entry_locked(LogMapEntry<T> &map_entry, BlockExtent &new_extent);
   void split_map_entry_locked(LogMapEntry<T> &map_entry, BlockExtent &removed_extent);
-  std::list<std::shared_ptr<T>> find_log_entries_locked(const BlockExtent &block_extent);
+  std::vector<std::shared_ptr<T>> find_log_entries_locked(const BlockExtent &block_extent);
   LogMapEntries<T> find_map_entries_locked(const BlockExtent &block_extent);
 
   using LogMapEntryT = LogMapEntry<T>;
