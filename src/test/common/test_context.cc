@@ -21,17 +21,160 @@
  *
  */
 
+#include <vector>
+#include <utility>
 #include <iostream> // for std::cout
+#include <iterator>
 
 #include "gtest/gtest.h"
+#include "include/Context.h"
 #include "include/types.h"
 #include "include/msgr.h"
+#include "os/Transaction.h"
+#include "common/Finisher.h"
 #include "common/ceph_context.h"
 #include "common/config_proxy.h"
 #include "common/Formatter.h"
 #include "log/Log.h"
 
 using namespace std;
+
+TEST(Context, finish_contexts_vector_reentrancy)
+{
+  vector<pair<int, int>> completed;
+  vector<Context*> contexts;
+  contexts.push_back(make_lambda_context([&](int result) {
+    EXPECT_TRUE(std::empty(contexts));
+    completed.emplace_back(1, result);
+    contexts.push_back(make_lambda_context([&](int next_result) {
+      completed.emplace_back(3, next_result);
+    }));
+  }));
+  contexts.push_back(make_lambda_context([&](int result) {
+    completed.emplace_back(2, result);
+  }));
+
+  finish_contexts(nullptr, contexts, 7);
+  EXPECT_EQ((vector<pair<int, int>> {{1, 7}, {2, 7}}), completed);
+  ASSERT_EQ(1, std::size(contexts));
+
+  finish_contexts(nullptr, contexts, 8);
+  EXPECT_EQ((vector<pair<int, int>> {{1, 7}, {2, 7}, {3, 8}}), completed);
+  EXPECT_TRUE(std::empty(contexts));
+}
+
+TEST(Context, transaction_context_sequences_preserve_order)
+{
+  vector<int> completed;
+  auto record = [&completed](int id) {
+    return make_lambda_context([&completed, id](int) {
+      completed.push_back(id);
+    });
+  };
+
+  vector<ceph::os::Transaction> transactions(2);
+  transactions[0].register_on_applied(record(1));
+  transactions[0].register_on_commit(record(3));
+  transactions[0].register_on_applied_sync(record(5));
+  transactions[1].register_on_applied(record(2));
+  transactions[1].register_on_commit(record(4));
+  transactions[1].register_on_applied_sync(record(6));
+
+  ceph::os::Transaction::context_sequence applied {record(0)};
+  ceph::os::Transaction::context_sequence committed;
+  ceph::os::Transaction::context_sequence applied_sync;
+  ceph::os::Transaction::collect_contexts(
+    transactions, applied, committed, applied_sync);
+
+  EXPECT_FALSE(transactions[0].has_contexts());
+  EXPECT_FALSE(transactions[1].has_contexts());
+
+  finish_contexts(nullptr, applied);
+  finish_contexts(nullptr, committed);
+  finish_contexts(nullptr, applied_sync);
+  EXPECT_EQ((vector<int> {0, 1, 2, 3, 4, 5, 6}), completed);
+}
+
+TEST(Context, transaction_context_aggregation_owns_the_batch)
+{
+  vector<int> completed;
+  auto record = [&completed](int id) {
+    return make_lambda_context([&completed, id](int) {
+      completed.push_back(id);
+    });
+  };
+
+  vector<ceph::os::Transaction> transactions(2);
+  transactions[0].register_on_commit(record(1));
+  transactions[1].register_on_commit(record(2));
+
+  Context *applied = nullptr;
+  Context *committed = nullptr;
+  Context *applied_sync = nullptr;
+  ceph::os::Transaction::collect_contexts(
+    transactions, applied, committed, applied_sync);
+
+  EXPECT_EQ(nullptr, applied);
+  ASSERT_NE(nullptr, committed);
+  EXPECT_EQ(nullptr, applied_sync);
+  committed->complete(7);
+  EXPECT_EQ((vector<int> {1, 2}), completed);
+}
+
+TEST(Context, transaction_append_transfers_contexts_in_order)
+{
+  vector<int> completed;
+  auto record = [&completed](int id) {
+    return make_lambda_context([&completed, id](int) {
+      completed.push_back(id);
+    });
+  };
+
+  ceph::os::Transaction first;
+  first.register_on_applied(record(1));
+  first.register_on_commit(record(3));
+  ceph::os::Transaction second;
+  second.register_on_applied(record(2));
+  second.register_on_commit(record(4));
+  first.append(second);
+
+  EXPECT_FALSE(second.has_contexts());
+  auto *applied = first.get_on_applied();
+  auto *committed = first.get_on_commit();
+  ASSERT_NE(nullptr, applied);
+  ASSERT_NE(nullptr, committed);
+  applied->complete(0);
+  committed->complete(0);
+  EXPECT_EQ((vector<int> {1, 2, 3, 4}), completed);
+}
+
+TEST(Context, context_queue_appends_and_detaches_batches)
+{
+  auto mutex = ceph::make_mutex("ContextQueue test");
+  ceph::condition_variable condition;
+  ContextQueue queue(mutex, condition);
+
+  vector<Context *> first {new C_NoopContext};
+  vector<Context *> second {new C_NoopContext, new C_NoopContext};
+  const vector<Context *> expected {
+    first[0], second[0], second[1]
+  };
+  queue.queue(first);
+  queue.queue(second);
+
+  EXPECT_TRUE(std::empty(first));
+  EXPECT_TRUE(std::empty(second));
+  EXPECT_FALSE(queue.empty());
+
+  vector<Context *> detached;
+  queue.move_to(detached);
+  EXPECT_EQ(expected, detached);
+  EXPECT_TRUE(queue.empty());
+
+  for (auto *context : detached) {
+    delete context;
+  }
+}
 
 TEST(CephContext, do_command)
 {
