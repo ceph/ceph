@@ -29,7 +29,6 @@
 #include "scrub_backend.h"
 #include "scrub_machine.h"
 
-using std::list;
 using std::pair;
 using std::stringstream;
 using std::vector;
@@ -1505,11 +1504,11 @@ int PgScrubber::build_scrub_map_chunk(ScrubMap& map,
 
 void PgScrubber::run_callbacks()
 {
-  std::list<Context*> to_run;
+  vector<Context*> to_run;
   to_run.swap(m_callbacks);
 
-  for (auto& tr : to_run) {
-    tr->complete(0);
+  for (auto callback : to_run) {
+    callback->complete(0);
   }
 }
 

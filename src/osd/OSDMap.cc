@@ -1535,12 +1535,16 @@ bool OSDMap::is_blocklisted(const entity_addrvec_t& av, CephContext *cct) const
   return false;
 }
 
-void OSDMap::get_blocklist(list<pair<entity_addr_t,utime_t> > *bl,
-			   std::list<std::pair<entity_addr_t,utime_t> > *rl) const
+void OSDMap::get_blocklist(
+  vector<pair<entity_addr_t, utime_t>>& blocklisted,
+  vector<pair<entity_addr_t, utime_t>>& range_blocklisted) const
 {
-   std::copy(blocklist.begin(), blocklist.end(), std::back_inserter(*bl));
-   std::copy(range_blocklist.begin(), range_blocklist.end(),
-	     std::back_inserter(*rl));
+  blocklisted.reserve(blocklisted.size() + blocklist.size());
+  std::ranges::copy(blocklist, std::back_inserter(blocklisted));
+
+  range_blocklisted.reserve(
+    range_blocklisted.size() + range_blocklist.size());
+  std::ranges::copy(range_blocklist, std::back_inserter(range_blocklisted));
 }
 
 void OSDMap::get_blocklist(std::set<entity_addr_t> *bl,
