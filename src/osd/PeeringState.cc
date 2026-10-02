@@ -5595,12 +5595,6 @@ PeeringState::Start::Start(my_context ctx)
     post_event(MakePrimary());
   } else { //is_stray
     psdout(1) << "transitioning to Stray" << dendl;
-    // This OSD is not primary, so drop any in-progress active-rebuild span,
-    // armed or already paused-and-accmulated. This prevents reusing a stale
-    // rebuild_active_start/rebuild_active_accum from an OSD that loses
-    // primary mid-span and is later re-promoted for the same PG.
-    ps->rebuild_active_start = utime_t();
-    ps->rebuild_active_accum = utime_t();
     post_event(MakeStray());
   }
 }
@@ -5816,26 +5810,76 @@ void PeeringState::Peering::exit()
   pl->get_peering_perf().tinc(rs_peering_latency, dur);
 }
 
+#undef dout_prefix
+#define dout_prefix (dpp->gen_prefix(*_dout)) \
+        << "PeeringState::" << __func__ << " "
+
+void PeeringState::arm_rebuild_span()
+{
+  if (info.history.last_rebuild_active_start <=
+      info.history.rebuild_span_reported) {
+    info.history.last_rebuild_active_start = ceph_clock_now();
+    ldout(cct, 15) << "rebuild-stats: active-rebuild span armed for "
+                   << info.pgid << " at "
+                   << info.history.last_rebuild_active_start << dendl;
+    // Mark info dirty and let PG::publish_stats_to_osd() force an immediate,
+    // standalone write if nothing else is already about to.
+    dirty_info = true;
+  }
+}
+
 void PeeringState::pause_rebuild_span()
 {
-  if (rebuild_active_start != utime_t()) {
-    rebuild_active_accum += ceph_clock_now() - rebuild_active_start;
-    rebuild_active_start = utime_t();
+  // Only rebuild_span_reported advances here -- last_rebuild_active_start
+  // stays pinned (it gets overwritten by the next arm anyway) so merge()
+  // can tell "currently armed" (onset > reported) apart from "not
+  // currently armed" using the same single comparison it already uses
+  // for the vulnerability-window onset.
+  if (info.history.last_rebuild_active_start >
+      info.history.rebuild_span_reported) {
+    utime_t now = ceph_clock_now();
+    info.history.rebuild_active_accum +=
+      now - info.history.last_rebuild_active_start;
+    info.history.rebuild_span_reported = now;
+    ldout(cct, 15) << "rebuild-stats: paused rebuild span for " << info.pgid
+                   << " accumulated=" << info.history.rebuild_active_accum
+                   << dendl;
+    // Mark info dirty and let PG::publish_stats_to_osd() force an immediate,
+    // standalone write if nothing else is already about to.
+    dirty_info = true;
   }
 }
 
 void PeeringState::close_rebuild_span()
 {
+  // Fold any still-armed remainder in first. Guarded on
+  // rebuild_active_accum itself, not on whether something was *just*
+  // armed -- a span paused by an earlier call already advanced
+  // rebuild_span_reported (so pause_rebuild_span() above is a no-op by
+  // the time close fires), but its accumulated time is still waiting
+  // here to be recorded.
   pause_rebuild_span();
-  const utime_t dur = rebuild_active_accum;
-  if (dur.to_msec() > 0) {
-    PerfCounters &perf = pl->get_peering_perf();
-    perf.tinc_with_max(rs_pg_rebuild_duration, dur);
-    perf.set_min_nonzero(rs_pg_rebuild_duration_min, dur.to_nsec());
+  if (info.history.rebuild_active_accum != utime_t()) {
+    const utime_t dur = info.history.rebuild_active_accum;
+    if (dur.to_msec() > 0) {
+      PerfCounters &perf = pl->get_peering_perf();
+      perf.tinc_with_max(rs_pg_rebuild_duration, dur);
+      perf.set_min_nonzero(rs_pg_rebuild_duration_min, dur.to_nsec());
+      ldout(cct, 15) << "rebuild-stats: recorded rebuild span for "
+                     << info.pgid << " duration=" << dur << dendl;
+    } else {
+      ldout(cct, 15) << "rebuild-stats: discarded rebuild span for "
+                     << info.pgid << " duration=" << dur
+                     << " (below timer resolution)" << dendl;
+    }
+    info.history.rebuild_active_accum = utime_t();
+    dirty_info = true;
   }
-  rebuild_active_accum = utime_t();
 }
 
+#undef dout_prefix
+#define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \
+                    << "state<" << get_state_name() << ">: ")
 
 /*------Backfilling-------*/
 PeeringState::Backfilling::Backfilling(my_context ctx)
@@ -5851,10 +5895,7 @@ PeeringState::Backfilling::Backfilling(my_context ctx)
   ps->state_clear(PG_STATE_BACKFILL_WAIT);
   ps->state_set(PG_STATE_BACKFILLING);
   pl->on_backfill_reserved();
-  // Arm the active-rebuild latch unless a span is already in progress.
-  if (ps->rebuild_active_start == utime_t()) {
-    ps->rebuild_active_start = ceph_clock_now();
-  }
+  ps->arm_rebuild_span();
   pl->publish_stats_to_osd();
 }
 
@@ -6577,11 +6618,7 @@ PeeringState::Recovering::Recovering(my_context ctx)
   ps->state_set(PG_STATE_RECOVERING);
   pl->on_recovery_reserved();
   ceph_assert(!ps->state_test(PG_STATE_ACTIVATING));
-  // Arm the active-rebuild latch (rs_pg_rebuild_duration) unless a
-  // span is already in progress
-  if (ps->rebuild_active_start == utime_t()) {
-    ps->rebuild_active_start = ceph_clock_now();
-  }
+  ps->arm_rebuild_span();
   pl->publish_stats_to_osd();
 }
 
