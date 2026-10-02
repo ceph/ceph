@@ -21,6 +21,7 @@
 #include "BloomHitSet.h"
 
 #include <algorithm>
+#include <initializer_list>
 #include <list>
 #include <map>
 #include <ostream>
@@ -4426,13 +4427,8 @@ class pi_compact_rep : public PastIntervals::interval_rep {
   epoch_t first = 0;
   epoch_t last = 0; // inclusive
   set<pg_shard_t> all_participants;
+  // Compaction erases arbitrary superseded intervals in place.
   list<compact_interval_t> intervals;
-  pi_compact_rep(
-    bool ec_pool,
-    std::list<PastIntervals::pg_interval_t> &&intervals) {
-    for (auto &&i: intervals)
-      pi_compact_rep::add_interval(ec_pool, i);
-  }
 public:
   pi_compact_rep() = default;
   pi_compact_rep(const pi_compact_rep &) = default;
@@ -4535,31 +4531,33 @@ public:
   static vector<pi_compact_rep> generate_test_instances() {
     vector<pi_compact_rep> o;
     using ival = PastIntervals::pg_interval_t;
-    using ivallst = std::list<ival>;
-    o.push_back(
-      pi_compact_rep(
-	true, ivallst
-	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
-	, ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
-	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
-	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
-	}));
-    o.push_back(
-      pi_compact_rep(
-	false, ivallst
-	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
-	, ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
-	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
-	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
-	}));
-    o.push_back(
-      pi_compact_rep(
-	true, ivallst
-	{ ival{{2, 1, 0}, {2, 1, 0}, 10, 20,  true, 1, 1}
-	, ival{{   0, 2}, {   0, 2}, 21, 30,  true, 0, 0}
-	, ival{{   0, 2}, {2,    0}, 31, 35,  true, 2, 2}
-	, ival{{   0, 2}, {   0, 2}, 36, 50,  true, 0, 0}
-	}));
+    auto add_instance = [&o](bool ec_pool, std::initializer_list<ival> intervals) {
+      o.emplace_back();
+
+      for (const auto& interval : intervals) {
+        o.back().add_interval(ec_pool, interval);
+      }
+    };
+
+    add_instance(
+      true,
+      {ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0},
+       ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1},
+       ival{{      2}, {      2}, 31, 35, false, 2, 2},
+       ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}});
+    add_instance(
+      false,
+      {ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0},
+       ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1},
+       ival{{      2}, {      2}, 31, 35, false, 2, 2},
+       ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}});
+    add_instance(
+      true,
+      {ival{{2, 1, 0}, {2, 1, 0}, 10, 20,  true, 1, 1},
+       ival{{   0, 2}, {   0, 2}, 21, 30,  true, 0, 0},
+       ival{{   0, 2}, {2,    0}, 31, 35,  true, 2, 2},
+       ival{{   0, 2}, {   0, 2}, 36, 50,  true, 0, 0}});
+
     return o;
   }
   void iterate_mayberw_back_to(
@@ -5134,10 +5132,10 @@ void pg_ls_response_t::decode(ceph::buffer::list::const_iterator& bl) {
 void pg_ls_response_t::dump(ceph::Formatter *f) const {
   f->dump_stream("handle") << handle;
   f->open_array_section("entries");
-  for (std::list<std::pair<object_t, std::string> >::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+  for (const auto& [object, key] : entries) {
     f->open_object_section("object");
-    f->dump_stream("object") << p->first;
-    f->dump_string("key", p->second);
+    f->dump_stream("object") << object;
+    f->dump_string("key", key);
     f->close_section();
   }
   f->close_section();
@@ -7115,9 +7113,9 @@ void obj_list_watch_response_t::decode(ceph::buffer::list::const_iterator& bl) {
 
 void obj_list_watch_response_t::dump(ceph::Formatter *f) const {
   f->open_array_section("entries");
-  for (std::list<watch_item_t>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+  for (const auto& entry : entries) {
     f->open_object_section("watch");
-    p->dump(f);
+    entry.dump(f);
     f->close_section();
   }
   f->close_section();
