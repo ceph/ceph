@@ -327,18 +327,21 @@ void OSDCapGrant::expand_profile()
 {
   if (profile.name == "read-only") {
     // grants READ-ONLY caps to the OSD
+    profile_grants.reserve(1);
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_R)));
     return;
   }
   if (profile.name == "read-write") {
     // grants READ-WRITE caps to the OSD
+    profile_grants.reserve(1);
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_R | OSD_CAP_W)));
   }
 
   if (profile.name == "rbd") {
     // RBD read-write grant
+    profile_grants.reserve(5);
     profile_grants.emplace_back(OSDCapMatch(string(), "rbd_info"),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_R)));
     profile_grants.emplace_back(OSDCapMatch(string(), "rbd_children"),
@@ -355,6 +358,7 @@ void OSDCapGrant::expand_profile()
   }
   if (profile.name == "rbd-read-only") {
     // RBD read-only grant
+    profile_grants.reserve(4);
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace.pool_name,
                                             "", "rbd_info"),
                                 OSDCapSpec("rbd", "metadata_list"));
@@ -370,6 +374,7 @@ void OSDCapGrant::expand_profile()
   }
   if (profile.name == "rgw") {
     // rwx on pools tagged with the rgw application, like 'allow rwx tag rgw *=*'
+    profile_grants.reserve(1);
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace,
                                             OSDCapPoolTag("rgw", "*", "*")),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_R |
