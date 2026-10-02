@@ -5,6 +5,8 @@
 #include "common/Clock.h" // for ceph_clock_now()
 #include "log/Log.h"
 
+#include <deque>
+#include <vector>
 #include <shared_mutex> // for std::shared_lock
 
 #undef dout_prefix
@@ -468,7 +470,7 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
   }
 
   size_t duplicated_size = 0;
-  std::list<chunk_t> redundant_chunks;
+  std::vector<chunk_t> redundant_chunks;
   for (auto &chunk : chunks) {
     auto &chunk_data = std::get<0>(chunk);
     std::string fingerprint = generate_fingerprint(chunk_data);
@@ -650,9 +652,8 @@ int run_crawling_daemon(const po::variables_map &opts)
 
   std::string fp_algo = get_opts_fp_algo(opts);
 
-  std::list<std::string> pool_names;
+  const std::vector<std::string> pool_names {base_pool_name};
   IoCtx io_ctx, chunk_io_ctx;
-  pool_names.push_back(base_pool_name);
   ret = rados.ioctx_create(base_pool_name.c_str(), io_ctx);
   if (ret < 0) {
     derr << "error opening base pool "
@@ -692,7 +693,7 @@ int run_crawling_daemon(const po::variables_map &opts)
     ObjectCursor begin = io_ctx.object_list_begin();
     ObjectCursor end = io_ctx.object_list_end();
 
-    std::list<SampleDedupWorkerThread> threads;
+    std::deque<SampleDedupWorkerThread> threads;
     size_t total_size = 0;
     size_t total_duplicate_size = 0;
     for (unsigned i = 0; i < max_thread; i++) {
