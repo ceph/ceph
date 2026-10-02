@@ -81,6 +81,21 @@ add_ceph_unittest(unittest_mgr_map_cache)
 target_link_libraries(unittest_mgr_map_cache ceph-common
   Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
 
+# unittest_mgr_mgroprequest
+add_executable(unittest_mgr_mgroprequest
+  test_mgroprequest.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MgrOpRequest.cc
+)
+add_ceph_unittest(unittest_mgr_mgroprequest)
+if(WITH_LTTNG)
+  add_dependencies(unittest_mgr_mgroprequest mgr_op_tp)
+endif()
+target_link_libraries(unittest_mgr_mgroprequest
+  ceph-common
+  global
+  Python3::Python
+)
+
 #scripts
 if(WITH_MGR_DASHBOARD_FRONTEND)
   if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
