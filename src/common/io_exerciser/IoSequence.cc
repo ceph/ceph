@@ -837,6 +837,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq15::_next() {
       break;
     case Stage::COPY_FROM_SECONDARY:
       r = CopyOp::generate();
+      barrier = true;
       next_stage();
       break;
     case Stage::READ_SECONDARY:
@@ -850,6 +851,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq15::_next() {
     case Stage::TRUNCATE_PRIMARY:
       obj_size = obj_size + 2;
       r = TruncateOp::generate(obj_size);
+      barrier = true;
       next_stage();
       break;
     case Stage::READ_PRIMARY:
