@@ -15,13 +15,13 @@
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
-#include <functional>
-#include <list>
 #include <map>
-#include <memory>
 #include <set>
+#include <deque>
+#include <memory>
 #include <string>
 #include <vector>
+#include <functional>
 
 #include <boost/asio/append.hpp>
 #include <boost/asio/consign.hpp>
@@ -369,7 +369,7 @@ private:
   int authenticate_err = 0;
   bool authenticated = false;
 
-  std::list<MessageRef> waiting_for_session;
+  std::deque<MessageRef> waiting_for_session;
   utime_t last_rotating_renew_sent;
   bool had_a_connection;
   double reopen_interval_multiplier;

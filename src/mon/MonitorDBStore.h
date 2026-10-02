@@ -19,6 +19,8 @@
 #include <set>
 #include <map>
 #include <string>
+#include <vector>
+#include <iterator>
 #include <boost/scoped_ptr.hpp>
 #include <sstream>
 #include <fstream>
@@ -335,7 +337,7 @@ class MonitorDBStore
       }
     }
 
-    std::list<std::pair<std::string, std::pair<std::string,std::string>>> compact;
+    std::vector<std::pair<std::string, std::pair<std::string, std::string>>> compactions;
     for (auto it = t->ops.begin(); it != t->ops.end(); ++it) {
       const Op& op = *it;
       switch (op.type) {
@@ -349,7 +351,7 @@ class MonitorDBStore
 	dbt->rm_range_keys(op.prefix, op.key, op.endkey);
 	break;
       case Transaction::OP_COMPACT:
-	compact.push_back(make_pair(op.prefix, make_pair(op.key, op.endkey)));
+	compactions.push_back(make_pair(op.prefix, make_pair(op.key, op.endkey)));
 	break;
       default:
 	derr << __func__ << " unknown op type " << op.type << dendl;
@@ -359,13 +361,13 @@ class MonitorDBStore
     }
     int r = db->submit_transaction_sync(dbt);
     if (r >= 0) {
-      while (!compact.empty()) {
-	if (compact.front().second.first == std::string() &&
-	    compact.front().second.second == std::string())
-	  db->compact_prefix_async(compact.front().first);
-	else
-	  db->compact_range_async(compact.front().first, compact.front().second.first, compact.front().second.second);
-	compact.pop_front();
+      for (const auto& [prefix, bounds] : compactions) {
+        if (std::empty(bounds.first) && std::empty(bounds.second)) {
+          db->compact_prefix_async(prefix);
+          continue;
+        }
+
+        db->compact_range_async(prefix, bounds.first, bounds.second);
       }
     } else {
       ceph_abort_msg("failed to write to db");
