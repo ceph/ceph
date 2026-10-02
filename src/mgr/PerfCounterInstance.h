@@ -66,6 +66,10 @@ class PerfCounterInstance
   }
   const AvgDataPoint& get_latest_data_avg() const
   {
+    static const AvgDataPoint empty{utime_t{}, 0, 0};
+    if (avg_buffer.empty()) {
+      return empty;
+    }
     return avg_buffer.back();
   }
   void push(utime_t t, uint64_t const &v);
