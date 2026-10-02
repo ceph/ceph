@@ -455,7 +455,7 @@ function _shard_ops_delta() {
 # a JSON command, NUL terminated; the reply is prefixed by its length)
 function _asok_perf_dump() {
     local asok=$1 logger=$2
-    python3 - "$asok" "$logger" <<'EOF'
+    python3 - "$asok" "$logger" 2>&1 <<'EOF'
 import json, socket, struct, sys
 s = socket.socket(socket.AF_UNIX)
 s.settimeout(10)
@@ -483,8 +483,9 @@ function _client_counters() {
     : > $out
     for asok in $dir/fio-$mode.*.asok; do
         [ -S "$asok" ] || continue
-        if ! dump=$(_asok_perf_dump $asok objecter 2>>$out); then
-            echo "$asok: perf dump failed" >> $out
+        # (python's errors to stdout: stderr also carries the shell's trace)
+        if ! dump=$(_asok_perf_dump $asok objecter 2>/dev/null); then
+            echo "$asok: perf dump failed: $dump" >> $out
             continue
         fi
         s=$(jq '.objecter.op_send // 0' <<<"$dump")
