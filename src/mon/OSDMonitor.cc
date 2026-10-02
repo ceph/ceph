@@ -20299,7 +20299,7 @@ void OSDMonitor::check_unconverted_stretch_pools(const OSDMap& osdmap,
                                                  health_check_map_t* checks)
 {
   const bool committed = osdmap.stretch_zones();
-  list<string> detail;
+  vector<string> detail;
   for (const auto& [id, p] : osdmap.get_pools()) {
     if (keeps_one_zone(osdmap, p)) {
       detail.push_back("pool '" + osdmap.get_pool_name(id) + "' has size " +
