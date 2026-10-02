@@ -10,7 +10,7 @@
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/set.hpp>
 #include <deque>
-#include <list>
+#include <vector>
 #include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -52,7 +52,7 @@ private:
   struct DetainedBlockExtent;
 
 public:
-  typedef std::list<BlockOperation> BlockOperations;
+  typedef std::vector<BlockOperation> BlockOperations;
 
   BlockGuard(CephContext *cct)
     : m_cct(cct) {
