@@ -3299,7 +3299,7 @@ void Server::handle_peer_auth_pin(const MDRequestRef& mdr)
   dout(10) << "handle_peer_auth_pin " << *mdr << dendl;
 
   // build list of objects
-  list<MDSCacheObject*> objects;
+  vector<MDSCacheObject *> objects;
   CInode *auth_pin_freeze = NULL;
   bool nonblocking = mdr->peer_request->is_nonblocking();
   bool fail = false, wouldblock = false, readonly = false;
@@ -9912,9 +9912,8 @@ version_t Server::_rename_prepare_import(const MDRequestRef& mdr, CDentry *srcdn
   encode(client_map, *client_map_bl, mds->mdsmap->get_up_features());
   encode(client_metadata_map, *client_map_bl);
 
-  list<ScatterLock*> updated_scatterlocks;
   mdcache->migrator->decode_import_inode(srcdn, blp, srcdn->authority().first, mdr->ls,
-					 mdr->more()->cap_imports, updated_scatterlocks);
+					 mdr->more()->cap_imports);
 
   // hack: force back to !auth and clean, temporarily
   srcdnl->get_inode()->state_clear(CInode::STATE_AUTH);
