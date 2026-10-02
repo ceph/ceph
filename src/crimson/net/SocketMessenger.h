@@ -135,6 +135,9 @@ public:
 
   void register_conn(SocketConnectionRef);
 
+  /// lossy connection from a client (may be made multi-session)
+  static bool is_lossy_client(const SocketConnection &conn);
+
   void unregister_conn(SocketConnectionRef);
 
   void closing_conn(SocketConnectionRef);
@@ -154,6 +157,16 @@ public:
 #endif
 
   seastar::future<> mark_down(const entity_addr_t& a) final {
+    if (!multi_session_conns.empty()) {
+      return mark_down_multi_session(a).then([this, a] {
+        return mark_down_registered(a);
+      });
+    }
+    return mark_down_registered(a);
+  }
+private:
+  seastar::future<> mark_down_multi_session(const entity_addr_t& a);
+  seastar::future<> mark_down_registered(const entity_addr_t& a) {
     auto conn = lookup_conn(a);
     if (conn) {
       return seastar::smp::submit_to(
@@ -188,6 +201,10 @@ private:
   ShardedServerSocket *listener = nullptr;
   ChainedDispatchers dispatchers;
   std::map<entity_addr_t, SocketConnectionRef> connections;
+  /// Multi-session connections are not keyed by address: one client
+  /// (one entity_addr incl. nonce) may hold several concurrent sessions,
+  /// e.g. shard-steered connections, and none replaces another.
+  std::set<SocketConnectionRef> multi_session_conns;
   std::set<SocketConnectionRef> accepting_conns;
   std::vector<SocketConnectionRef> closing_conns;
   ceph::net::PolicySet<Throttle> policy_set;

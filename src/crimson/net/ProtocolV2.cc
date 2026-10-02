@@ -1414,9 +1414,11 @@ ProtocolV2::server_connect()
     }
 
     // Looks good so far, let's check if there is already an existing connection
-    // to this peer.
+    // to this peer. A multi-session connection never replaces (or is
+    // replaced by) another session from the same address.
 
-    SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
+    SocketConnectionRef existing_conn =
+      conn.multi_session ? nullptr : messenger.lookup_conn(conn.peer_addr);
 
     if (existing_conn) {
       return handle_existing_connection(existing_conn);
