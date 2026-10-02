@@ -99,7 +99,7 @@ void PyModuleRegistry::init()
   pMainThreadState = PyEval_SaveThread();
   ceph_assert(pMainThreadState != nullptr);
 
-  std::list<std::string> failed_modules;
+  std::vector<std::string> failed_modules;
   thread_monitor->start_monitoring();
 
   const std::string module_path = g_conf().get_val<std::string>("mgr_module_path");
