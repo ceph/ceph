@@ -5,13 +5,13 @@
 #include "test/journal/RadosTestFixture.h"
 #include "common/Cond.h"
 #include <map>
+#include <vector>
 
 class TestJournalMetadata : public RadosTestFixture {
 public:
   void TearDown() override {
-    for (MetadataList::iterator it = m_metadata_list.begin();
-         it != m_metadata_list.end(); ++it) {
-      (*it)->remove_listener(&m_listener);
+    for (const auto& metadata : m_metadata_list) {
+      metadata->remove_listener(&m_listener);
     }
     m_metadata_list.clear();
 
@@ -29,8 +29,7 @@ public:
     return metadata;
   }
 
-  typedef std::list<ceph::ref_t<journal::JournalMetadata>> MetadataList;
-  MetadataList m_metadata_list;
+  std::vector<ceph::ref_t<journal::JournalMetadata>> m_metadata_list;
 };
 
 TEST_F(TestJournalMetadata, JournalDNE) {
