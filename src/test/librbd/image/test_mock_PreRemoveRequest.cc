@@ -15,7 +15,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <arpa/inet.h>
-#include <list>
+#include <vector>
 #include <boost/scope_exit.hpp>
 
 namespace librbd {
@@ -65,7 +65,7 @@ public:
   Context *on_finish = nullptr;
 
   static ListWatchersRequest *create(MockTestImageCtx &image_ctx, int flags,
-                                     std::list<obj_watch_t> *watchers,
+                                     std::vector<obj_watch_t> *watchers,
                                      Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
