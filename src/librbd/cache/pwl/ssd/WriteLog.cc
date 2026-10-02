@@ -18,6 +18,9 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
+
+#include <algorithm>
+#include <iterator>
 #include <map>
 #include <vector>
 
@@ -34,6 +37,17 @@ namespace ssd {
 
 using namespace std;
 using namespace librbd::cache::pwl;
+
+namespace {
+
+bool has_sync_point_log(const auto& operations)
+{
+  return std::ranges::any_of(operations, [](const auto& operation) {
+    return operation->get_log_entry()->is_sync_point();
+  });
+}
+
+} // namespace
 
 static bool is_valid_pool_root(const WriteLogPoolRoot& root) {
   return root.pool_size % MIN_WRITE_ALLOC_SSD_SIZE == 0 &&
@@ -368,17 +382,6 @@ bool WriteLog<I>::alloc_resources(C_BlockIORequestT *req) {
 }
 
 template <typename I>
-bool WriteLog<I>::has_sync_point_logs(GenericLogOperations &ops) {
-  for (auto &op : ops) {
-    if (op->get_log_entry()->is_sync_point()) {
-      return true;
-      break;
-    }
-  }
-  return false;
-}
-
-template<typename I>
 void WriteLog<I>::enlist_op_appender() {
   this->m_async_append_ops++;
   this->m_async_op_tracker.start_op();
@@ -393,12 +396,10 @@ void WriteLog<I>::enlist_op_appender() {
  * and have their on_write_persist contexts completed once they and
  * all prior log entries are persisted everywhere.
  */
-template<typename I>
-void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops, C_BlockIORequestT *req) {
+template <typename I>
+void WriteLog<I>::schedule_append_ops(GenericLogOperationBatch ops,
+                                      C_BlockIORequestT *req) {
   bool need_finisher = false;
-  GenericLogOperationsVector appending;
-
-  std::copy(std::begin(ops), std::end(ops), std::back_inserter(appending));
   {
     std::lock_guard locker(m_lock);
 
@@ -409,9 +410,10 @@ void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops, C_BlockIOReques
 
     // Only flush logs into SSD when there is internal/external flush request
     if (!need_finisher) {
-      need_finisher = has_sync_point_logs(ops);
+      need_finisher = has_sync_point_log(ops);
     }
-    this->m_ops_to_append.splice(this->m_ops_to_append.end(), ops);
+    this->m_ops_to_append.insert(std::end(this->m_ops_to_append),
+                                 std::begin(ops), std::end(ops));
 
     // To preserve the order of overlapping IOs, release_cell() may be
     // called only after the ops are added to m_ops_to_append.
@@ -429,13 +431,13 @@ void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops, C_BlockIOReques
     this->enlist_op_appender();
   }
 
-  for (auto &op : appending) {
+  for (auto &op : ops) {
     op->appending();
   }
 }
 
 template <typename I>
-void WriteLog<I>::setup_schedule_append(pwl::GenericLogOperationsVector &ops,
+void WriteLog<I>::setup_schedule_append(pwl::GenericLogOperationBatch &ops,
                                         bool do_early_flush,
                                         C_BlockIORequestT *req) {
   this->schedule_append(ops, req);
@@ -443,20 +445,22 @@ void WriteLog<I>::setup_schedule_append(pwl::GenericLogOperationsVector &ops,
 
 template <typename I>
 void WriteLog<I>::append_scheduled_ops(void) {
-  GenericLogOperations ops;
+  GenericLogOperationBatch ops;
+
   ldout(m_image_ctx.cct, 20) << dendl;
 
   bool ops_remain = false;  // unused, no-op variable for SSD
   bool appending = false;   // unused, no-op variable for SSD
   this->append_scheduled(ops, ops_remain, appending);
 
-  if (ops.size()) {
-    alloc_op_log_entries(ops);
-    append_op_log_entries(ops);
-  } else {
+  if (ops.empty()) {
     this->m_async_append_ops--;
     this->m_async_op_tracker.finish_op();
+    return;
   }
+
+  alloc_op_log_entries(ops);
+  append_op_log_entries(std::move(ops));
 }
 
 /*
@@ -465,15 +469,18 @@ void WriteLog<I>::append_scheduled_ops(void) {
  * of these must already have been persisted to its reserved area.
  */
 template <typename I>
-void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
+void WriteLog<I>::append_op_log_entries(GenericLogOperationBatch ops) {
   ceph_assert(!ops.empty());
   ldout(m_image_ctx.cct, 20) << dendl;
-  Context *ctx = new LambdaContext([this, ops](int r) {
+
+  // Both asynchronous completions need this batch, so share it without
+  // copying its elements:
+  const auto operations = std::make_shared<GenericLogOperationBatch>(std::move(ops));
+  Context *ctx = new LambdaContext([this, operations](int r) {
     assert(r == 0);
     ldout(m_image_ctx.cct, 20) << "Finished root update " << dendl;
 
-    auto captured_ops = std::move(ops);
-    this->complete_op_log_entries(std::move(captured_ops), r);
+    this->complete_op_log_entries(std::move(*operations), r);
 
     bool need_finisher = false;
     {
@@ -483,7 +490,7 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
                        !persist_on_flush);
 
       if (!need_finisher) {
-        need_finisher = has_sync_point_logs(this->m_ops_to_append);
+        need_finisher = has_sync_point_log(this->m_ops_to_append);
       }
     }
 
@@ -495,13 +502,13 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
   });
   uint64_t *new_first_free_entry = new(uint64_t);
   Context *append_ctx = new LambdaContext(
-    [this, new_first_free_entry, ops, ctx](int r) {
+    [this, new_first_free_entry, operations, ctx](int r) {
       std::shared_ptr<WriteLogPoolRoot> new_root;
       {
         ldout(m_image_ctx.cct, 20) << "Finished appending at "
                                    << *new_first_free_entry << dendl;
         utime_t now = ceph_clock_now();
-        for (auto &operation : ops) {
+        for (auto &operation : *operations) {
           operation->log_append_comp_time = now;
         }
 
@@ -519,7 +526,7 @@ void WriteLog<I>::append_op_log_entries(GenericLogOperations &ops) {
       this->m_async_op_tracker.finish_op();
     });
   // Append logs and update first_free_update
-  append_ops(ops, append_ctx, new_first_free_entry);
+  append_ops(*operations, append_ctx, new_first_free_entry);
 }
 
 template <typename I>
@@ -528,7 +535,7 @@ void WriteLog<I>::release_ram(std::shared_ptr<GenericLogEntry> log_entry) {
 }
 
 template <typename I>
-void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops) {
+void WriteLog<I>::alloc_op_log_entries(const GenericLogOperationBatch &ops) {
   std::unique_lock locker(m_lock);
 
   for (auto &operation : ops) {
@@ -545,8 +552,7 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops) {
 }
 
 template <typename I>
-void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
-					  DeferredContexts &post_unlock,
+void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntryBatch entries_to_flush,
 					  bool has_write_entry) {
   // snapshot so we behave consistently
   bool invalidating = this->m_invalidating;
@@ -592,7 +598,8 @@ void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntries entries_to_flus
     }
 
     Context *ctx = new LambdaContext(
-      [this, entries_to_flush, read_bls](int r) {
+      [this, entries_to_flush = std::move(entries_to_flush),
+       read_bls = std::move(read_bls)](int r) {
         int i = 0;
 	GuardedRequestFunctionContext *guarded_ctx = nullptr;
 
@@ -690,7 +697,7 @@ void WriteLog<I>::process_work() {
 template <typename I>
 bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
   CephContext *cct = m_image_ctx.cct;
-  GenericLogEntriesVector retiring_entries;
+  GenericLogEntryBatch retiring_entries;
   uint64_t initial_first_valid_entry;
   uint64_t first_valid_entry;
 
@@ -703,7 +710,7 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
     initial_first_valid_entry = m_first_valid_entry;
     first_valid_entry = m_first_valid_entry;
     while (retiring_entries.size() < frees_per_tx && !m_log_entries.empty()) {
-      GenericLogEntriesVector retiring_subentries;
+      GenericLogEntryBatch retiring_subentries;
       uint64_t control_block_pos = m_log_entries.front()->log_entry_index;
       uint64_t data_length = 0;
       for (auto it = m_log_entries.begin(); it != m_log_entries.end(); ++it) {
@@ -854,12 +861,15 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
 }
 
 template <typename I>
-void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
+void WriteLog<I>::append_ops(const GenericLogOperationBatch &ops, Context *ctx,
                              uint64_t* new_first_free_entry) {
-  GenericLogEntriesVector log_entries;
+  GenericLogEntryBatch log_entries;
   CephContext *cct = m_image_ctx.cct;
   uint64_t span_payload_len = 0;
   uint64_t bytes_to_free = 0;
+
+  log_entries.reserve(std::min<std::size_t>(std::size(ops),
+                                            CONTROL_BLOCK_MAX_LOG_ENTRIES));
   ldout(cct, 20) << "Appending " << ops.size() << " log entries." << dendl;
 
   *new_first_free_entry = pool_root.first_free_entry;
@@ -900,7 +910,7 @@ void WriteLog<I>::append_ops(GenericLogOperations &ops, Context *ctx,
 }
 
 template <typename I>
-void WriteLog<I>::write_log_entries(GenericLogEntriesVector log_entries,
+void WriteLog<I>::write_log_entries(const GenericLogEntryBatch &log_entries,
                                     AioTransContext *aio, uint64_t *pos) {
   CephContext *cct = m_image_ctx.cct;
   ldout(m_image_ctx.cct, 20) << "pos=" << *pos << dendl;
@@ -1006,9 +1016,8 @@ template <typename I>
 void WriteLog<I>::update_root_scheduled_ops() {
   ldout(m_image_ctx.cct, 20) << dendl;
 
-  std::shared_ptr<WriteLogPoolRoot> root;
-  WriteLogPoolRootUpdateList root_updates;
-  Context *ctx = nullptr;
+  WriteLogPoolRootUpdates root_updates;
+
   {
     std::lock_guard locker(m_lock);
     if (m_updating_pool_root) {
@@ -1017,23 +1026,24 @@ void WriteLog<I>::update_root_scheduled_ops() {
                                  << dendl;
       return;
     }
-    if (m_poolroot_to_update.size()) {
+
+    if (!m_poolroot_to_update.empty()) {
       m_updating_pool_root = true;
       root_updates.swap(m_poolroot_to_update);
     }
   }
+
   ceph_assert(!root_updates.empty());
   ldout(m_image_ctx.cct, 15) << "Update root number: " << root_updates.size()
                              << dendl;
   // We just update the last one, and call all the completions.
-  auto entry = root_updates.back();
-  root = entry->root;
+  const auto root = root_updates.back()->root;
 
-  ctx = new LambdaContext([this, updates = std::move(root_updates)](int r) {
+  auto ctx = new LambdaContext([this, updates = std::move(root_updates)](int r) {
     ldout(m_image_ctx.cct, 15) << "Start to callback." << dendl;
-    for (auto it = updates.begin(); it != updates.end(); it++) {
-      Context *it_ctx = (*it)->ctx;
-      it_ctx->complete(r);
+
+    for (const auto &update : updates) {
+      update->ctx->complete(r);
     }
   });
   Context *append_ctx = new LambdaContext([this, ctx](int r) {
