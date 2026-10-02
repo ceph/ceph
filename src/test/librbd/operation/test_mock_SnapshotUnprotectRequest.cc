@@ -73,7 +73,7 @@ public:
     librados::MockTestMemRadosClient *rados_client =
       io_ctx_impl.get_mock_rados_client();
 
-    std::list<std::pair<int64_t, std::string> > pools;
+    std::vector<std::pair<int64_t, std::string>> pools;
     int r = rados_client->pool_list(pools);
     if (r < 0) {
       ADD_FAILURE() << "failed to list pools";

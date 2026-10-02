@@ -393,7 +393,7 @@ TEST_F(TestInternal, WriteFailsToLockImageBlocklisted) {
                                    false);
   ASSERT_EQ(0, ictx->state->open(0));
 
-  std::list<librbd::image_watcher_t> watchers;
+  std::vector<librbd::image_watcher_t> watchers;
   ASSERT_EQ(0, librbd::list_watchers(ictx, watchers));
   ASSERT_EQ(1U, watchers.size());
 
@@ -426,7 +426,7 @@ TEST_F(TestInternal, WriteFailsToLockImageBlocklistedWatch) {
                                    false);
   ASSERT_EQ(0, ictx->state->open(0));
 
-  std::list<librbd::image_watcher_t> watchers;
+  std::vector<librbd::image_watcher_t> watchers;
   ASSERT_EQ(0, librbd::list_watchers(ictx, watchers));
   ASSERT_EQ(1U, watchers.size());
 
@@ -716,10 +716,9 @@ TEST_F(TestInternal, SnapshotCopyup)
   bufferlist read_bl;
   read_bl.push_back(read_ptr);
 
-  std::list<std::string> snaps = {"snap1", "snap2", ""};
+  const std::vector<std::string> snaps = {"snap1", "snap2", ""};
   librbd::io::ReadResult read_result{&read_bl};
-  for (std::list<std::string>::iterator it = snaps.begin();
-       it != snaps.end(); ++it) {
+  for (auto it = std::cbegin(snaps); it != std::cend(snaps); ++it) {
     const char *snap_name = it->empty() ? NULL : it->c_str();
     ASSERT_EQ(0, librbd::api::Image<>::snap_set(
                    ictx2, cls::rbd::UserSnapshotNamespace(), snap_name));
@@ -854,11 +853,10 @@ TEST_F(TestInternal, SnapshotCopyupZeros)
   bufferlist read_bl;
   read_bl.push_back(read_ptr);
 
-  std::list<std::string> snaps = {"snap1", ""};
+  const std::vector<std::string> snaps = {"snap1", ""};
   librbd::io::ReadResult read_result{&read_bl};
-  for (std::list<std::string>::iterator it = snaps.begin();
-       it != snaps.end(); ++it) {
-    const char *snap_name = it->empty() ? NULL : it->c_str();
+  for (const auto& snap : snaps) {
+    const char *snap_name = snap.empty() ? NULL : snap.c_str();
     ASSERT_EQ(0, librbd::api::Image<>::snap_set(
                    ictx2, cls::rbd::UserSnapshotNamespace(), snap_name));
 
@@ -939,11 +937,10 @@ TEST_F(TestInternal, SnapshotCopyupZerosMigration)
   bufferlist read_bl;
   read_bl.push_back(read_ptr);
 
-  std::list<std::string> snaps = {"snap1", ""};
+  const std::vector<std::string> snaps = {"snap1", ""};
   librbd::io::ReadResult read_result{&read_bl};
-  for (std::list<std::string>::iterator it = snaps.begin();
-       it != snaps.end(); ++it) {
-    const char *snap_name = it->empty() ? NULL : it->c_str();
+  for (const auto& snap : snaps) {
+    const char *snap_name = snap.empty() ? NULL : snap.c_str();
     ASSERT_EQ(0, librbd::api::Image<>::snap_set(
                    ictx2, cls::rbd::UserSnapshotNamespace(), snap_name));
 
