@@ -468,6 +468,8 @@ singleton keys, and explicit open/closed boundaries.
 | Read one exact key without adding a read conflict | `lfdb::get(dbh, key, value, lfdb::read_mode::snapshot)` | `bool` | Useful for advisory reads where the value is not part of the transaction's correctness condition. |
 | Read one exact key as bytes | `lfdb::get(dbh, key, callback)` | `bool` | Lets the callback copy or decode the raw value while the FDB buffer is valid. |
 | Read a small range into an existing output | `lfdb::get(dbh, query, out)` | `std::size_t` | Materializes decoded string pairs, publishes them after a successful managed read, and reports how many records were found. |
+| Visit one transaction's range as borrowed bytes | `lfdb::for_each(lfdb::raw, txn, query, callback)` | `std::size_t` | Avoids decoding and allocation while preserving one transaction's read version. |
+| Visit a managed range as borrowed bytes | `lfdb::for_each(lfdb::raw, dbh, query, callback)` | `std::size_t` | Retries result windows before exposing their bytes, without replaying callbacks. |
 | Read a flat stream in an existing transaction | `lfdb::scan(txn, query)` | generator of key/value pairs | Keeps transaction lifetime under caller control. |
 | Read a flat stream without adding read conflicts | `lfdb::scan(txn, query, lfdb::read_mode::snapshot)` | generator of key/value pairs | Leaves specialized read-then-write policy visible at the call site. |
 | Read a flat stream with managed transactions | `lfdb::scan(dbh, query)` | generator of key/value pairs | Hides transaction-window management while preserving streaming syntax. |
@@ -864,6 +866,37 @@ Use `collect()` when a materialized container is exactly what the caller needs:
 ```cpp
 auto people = lfdb::collect<person_record>(dbh, q::prefix("person/"));
 ```
+
+### Borrowing Raw Range Results
+
+Use `for_each(lfdb::raw, ...)` when an operation can consume FoundationDB
+bytes immediately and should not pay to construct decoded key/value objects. The
+explicit `raw` tag makes that lifetime choice visible at the call site:
+
+```cpp
+const auto object_blocks =
+  fdbc::keyspace("d4n") / "block" / bucket_id / object_name;
+
+const auto nread = lfdb::for_each(
+  lfdb::raw, dbh, fdbc::prefix(object_blocks),
+  [](std::span<const std::uint8_t> key,
+     std::span<const std::uint8_t> value) {
+    inspect_cached_block(key, value);
+  });
+
+fmt::println("inspected {} cached blocks", nread);
+```
+
+The spans borrow FoundationDB-owned memory and expire when the callback returns;
+copy anything that must outlive that call. Callback exceptions stop traversal
+and propagate normally.
+
+The database-handle form retries each result window before exposing it and never
+replays a callback. A retry may move later windows to a newer read version. Use
+the transaction-handle overload when the whole traversal must share one read
+version. If that operation is itself placed inside a transactor, a transactor
+replay invokes its callbacks again, so externally visible effects must be
+idempotent or staged.
 
 Use `for_each()` when the operation is naturally callback-shaped and you do not
 need a composable generator. The callback is a row consumer and must return
