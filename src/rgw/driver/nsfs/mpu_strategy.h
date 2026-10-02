@@ -57,9 +57,9 @@ namespace rgw { namespace sal { namespace nsfs {
  * better layout.  Both answers are known and they differ, so the chooser
  * asks FSStrategy.
  *
- * Two implementations:  PerPartMPUStrategy, one file per part, and
+ * Three implementations:  PerPartMPUStrategy, one file per part;
  * StridedMPUStrategy, which derives from it and adds the shared data
- * file.  A NooBaa one is not written yet. */
+ * file;  and NooBaaMPUStrategy, their size-keyed layout. */
 class MPUStrategy {
 public:
   virtual ~MPUStrategy() = default;
