@@ -17,6 +17,8 @@
 #include "conversion.h"
 #include "transaction.h"
 
+#include <boost/container/small_vector.hpp>
+
 #include <span>
 #include <tuple>
 #include <string>
@@ -165,6 +167,16 @@ inline void create_snapshot(database_handle dbh,
 
 namespace detail {
 
+// Scalar writes keep typical metadata encodings local while retaining heap
+// fallback for larger values:
+using scalar_encoding_buffer = boost::container::small_vector<std::uint8_t, 256>;
+
+inline auto encode_scalar_value(const auto& value,
+                                scalar_encoding_buffer& buffer)
+{
+ return convert_to_buffer(value, buffer, zpp::bits::exact_enlarger {});
+}
+
 template <typename OutValuesT>
 struct value_collector_t final
 {
@@ -243,7 +255,10 @@ inline void set(transaction_handle txn,
 {
  return detail::commit_noreplay(txn, commit_after,
           [key = detail::as_byte_view(k), &v](const transaction_handle& active_txn) {
-            return detail::transaction_set_kv_bytes(active_txn, key, ceph::libfdb::to::convert(v));
+            detail::scalar_encoding_buffer encoded;
+
+            return detail::transaction_set_kv_bytes(
+              active_txn, key, detail::encode_scalar_value(v, encoded));
           });
 }
 
@@ -326,7 +341,10 @@ inline void set(transaction_handle txn,
 {
  return detail::commit_noreplay(txn, commit_after,
           [key = detail::as_byte_view(k), value = std::string_view(v)](const transaction_handle& active_txn) {
-            return detail::transaction_set_kv_bytes(active_txn, key, ceph::libfdb::to::convert(value));
+            detail::scalar_encoding_buffer encoded;
+
+            return detail::transaction_set_kv_bytes(
+              active_txn, key, detail::encode_scalar_value(value, encoded));
           });
 }
 
@@ -354,7 +372,10 @@ inline void set(transaction_handle txn,
 {
  return detail::commit_noreplay(txn, commit_after,
           [&k, &v](const transaction_handle& active_txn) {
-            return active_txn->set(k, ceph::libfdb::to::convert(v));
+            detail::scalar_encoding_buffer encoded;
+
+            return active_txn->set(
+              k, detail::encode_scalar_value(v, encoded));
           });
 }
 
