@@ -213,7 +213,7 @@ int Capability::confirm_receipt(ceph_seq_t seq, unsigned caps) {
       _revokes.pop_front();
     if (!_revokes.empty()) {
       if (_revokes.front().seq == seq)
-        _revokes.begin()->before = caps;
+        _revokes.front().before = caps;
       calc_issued();
     } else {
       // seq < last_sent
