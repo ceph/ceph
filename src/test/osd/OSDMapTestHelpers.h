@@ -274,6 +274,25 @@ public:
     clear_pool_flag(*osdmap, pool_id, flag);
   }
 
+  static void set_pool_min_size(OSDMap& osdmap, int64_t pool_id, unsigned new_min_size)
+  {
+    const pg_pool_t* existing = osdmap.get_pg_pool(pool_id);
+    ceph_assert(existing != nullptr);
+
+    pg_pool_t updated = *existing;
+    updated.min_size = new_min_size;
+
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    inc.new_pools[pool_id] = updated;
+    osdmap.apply_incremental(inc);
+  }
+
+  static void set_pool_min_size(std::shared_ptr<OSDMap> osdmap, int64_t pool_id, unsigned new_min_size)
+  {
+    set_pool_min_size(*osdmap, pool_id, new_min_size);
+  }
+
   // OSD state manipulation methods
   
   /**

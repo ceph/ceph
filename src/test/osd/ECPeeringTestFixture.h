@@ -135,6 +135,8 @@ public:
   void mark_osd_down(int osd_id);
   void mark_osd_up(int osd_id);
   void mark_osds_down(const std::vector<int>& osd_ids);
+  // Change the pool's min_size in a new epoch and re-peer.
+  void set_pool_min_size(unsigned new_min_size);
   void advance_epoch();
 
   bool all_shards_active();
