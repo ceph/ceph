@@ -50,7 +50,7 @@ void RadosTestFixture::SetUp() {
 }
 
 void RadosTestFixture::TearDown() {
-  for (auto metadata : m_metadatas) {
+  for (const auto& metadata : m_metadatas) {
     C_SaferCond ctx;
     metadata->shut_down(&ctx);
     ASSERT_EQ(0, ctx.wait());
