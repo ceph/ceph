@@ -5162,32 +5162,44 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  list<string> expressions;
-  get_str_list(iter->second, ",", expressions);
+  for (const auto expression : ceph::split(iter->second, ",")) {
+    const auto args = ceph::split(expression, ";");
+    auto arg = std::begin(args);
+    const auto end = std::end(args);
 
-  for (auto& expression : expressions) {
-    vector<string> args;
-    get_str_vec(expression, ";", args);
-
-    if (args.empty()) {
+    if (arg == end) {
       s->err.message = "invalid empty expression";
       ldpp_dout(this, 5) << s->err.message << dendl;
       return -EINVAL;
     }
-    if (args.size() > 2) {
-      s->err.message = string("invalid expression: ") + expression;
+
+    const auto key_arg = *arg;
+    std::optional<std::string_view> value_arg;
+
+    ++arg;
+    if (arg != end) {
+      value_arg = *arg;
+      ++arg;
+    }
+
+    if (arg != end) {
+      s->err.message = string("invalid expression: ") + std::string {expression};
       ldpp_dout(this, 5) << s->err.message << dendl;
       return -EINVAL;
     }
 
-    string key = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[0]));
+    string key = boost::algorithm::to_lower_copy(
+      std::string {rgw_trim_whitespace(key_arg)});
     string val;
-    if (args.size() > 1) {
-      val = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[1]));
+    if (value_arg) {
+      val = boost::algorithm::to_lower_copy(
+        std::string {rgw_trim_whitespace(*value_arg)});
     }
 
     if (!boost::algorithm::starts_with(key, RGW_AMZ_META_PREFIX)) {
-      s->err.message = string("invalid expression, key must start with '" RGW_AMZ_META_PREFIX "' : ") + expression;
+      s->err.message =
+        string("invalid expression, key must start with '" RGW_AMZ_META_PREFIX
+               "' : ") + std::string {expression};
       ldpp_dout(this, 5) << s->err.message << dendl;
       return -EINVAL;
     }

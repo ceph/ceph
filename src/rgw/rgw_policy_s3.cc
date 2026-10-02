@@ -131,10 +131,8 @@ bool RGWPolicyEnv::match_policy_vars(
 
 RGWPolicy::~RGWPolicy()
 {
-  list<RGWPolicyCondition *>::iterator citer;
-  for (citer = conditions.begin(); citer != conditions.end(); ++citer) {
-    RGWPolicyCondition *cond = *citer;
-    delete cond;
+  for (auto condition : conditions) {
+    delete condition;
   }
 }
 
@@ -204,11 +202,7 @@ int RGWPolicy::check(RGWPolicyEnv *env, string& err_msg)
     return -EACCES; // change to condition about expired policy following S3
   }
 
-  list<pair<string, string> >::iterator viter;
-  for (viter = var_checks.begin(); viter != var_checks.end(); ++viter) {
-    pair<string, string>& p = *viter;
-    const string& name = p.first;
-    const string& check_val = p.second;
+  for (const auto& [name, check_val] : var_checks) {
     string val;
     if (!env->get_var(name, val)) {
       dout(20) << " policy check failed, variable not found: '" << name << "'" << dendl;
@@ -228,10 +222,8 @@ int RGWPolicy::check(RGWPolicyEnv *env, string& err_msg)
     }
   }
 
-  list<RGWPolicyCondition *>::iterator citer;
-  for (citer = conditions.begin(); citer != conditions.end(); ++citer) {
-    RGWPolicyCondition *cond = *citer;
-    if (!cond->check(env, checked_vars, err_msg)) {
+  for (auto condition : conditions) {
+    if (!condition->check(env, checked_vars, err_msg)) {
       return -EACCES;
     }
   }

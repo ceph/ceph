@@ -966,11 +966,11 @@ const RGWZoneGroup* find_zonegroup_by_id(const RGWZoneGroup& local_zonegroup,
 int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
                       const RGWZoneParams& zone_params,
                       const bool *pis_master, const bool *pread_only,
-                      const std::list<std::string>& endpoints,
+                      const std::vector<std::string>& endpoints,
                       const std::string *ptier_type,
                       const bool *psync_from_all,
-                      const std::list<std::string>& sync_from,
-                      const std::list<std::string>& sync_from_rm,
+                      const std::vector<std::string>& sync_from,
+                      const std::vector<std::string>& sync_from_rm,
                       const std::string *predirect_zone,
                       std::optional<int> bucket_index_max_shards,
                       const rgw::zone_features::set& enable_features,
@@ -1045,7 +1045,7 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
   }
 
   // add/remove sync_from
-  for (auto add : sync_from) {
+  for (const auto& add : sync_from) {
     zone.sync_from.insert(add);
   }
 
@@ -1586,11 +1586,11 @@ static int create_default_zonegroup(const DoutPrefixProvider* dpp,
 
   // add the zone to the zonegroup
   bool is_master = true;
-  std::list<std::string> empty_list;
+  const std::vector<std::string> no_values;
   rgw::zone_features::set disable_features; // empty
   int r = add_zone_to_group(dpp, info, default_zone, &is_master, nullptr,
-                            empty_list, nullptr, nullptr, empty_list,
-                            empty_list, nullptr, std::nullopt,
+                            no_values, nullptr, nullptr, no_values,
+                            no_values, nullptr, std::nullopt,
                             info.enabled_features, disable_features);
   if (r < 0) {
     return r;
@@ -2388,4 +2388,3 @@ std::vector<RGWNameToId> RGWNameToId::generate_test_instances() {
   o.emplace_back();
   return o;
 }
-

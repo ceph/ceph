@@ -1206,7 +1206,7 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     }
   }
 
-  std::list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
+  std::vector<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
   uint64_t accounted_size = 0;
   bool compressed = false;
   RGWCompressionInfo cs_info;

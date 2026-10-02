@@ -16,6 +16,7 @@
 #include <cerrno>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 #include <unistd.h>
 
@@ -112,12 +113,11 @@ static constexpr size_t listing_max_entries = 1000;
 const std::string pubsub_oid_prefix = "pubsub.";
 const std::string pubsub_bucket_oid_infix  = ".bucket.";
 
-static int drain_aio(std::list<librados::AioCompletion*>& handles)
+static int drain_aio(std::vector<librados::AioCompletion *>& handles)
 {
   int ret = 0;
-  while (!handles.empty()) {
-    librados::AioCompletion* handle = handles.front();
-    handles.pop_front();
+
+  for (auto *handle : handles) {
     handle->wait_for_complete();
     int r = handle->get_return_value();
     handle->release();
@@ -125,6 +125,9 @@ static int drain_aio(std::list<librados::AioCompletion*>& handles)
       ret = r;
     }
   }
+
+  handles.clear();
+
   return ret;
 }
 
@@ -548,7 +551,7 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
   params.list_versions = true;
   params.allow_unordered = true;
 
-  std::list<librados::AioCompletion*> handles;
+  std::vector<librados::AioCompletion *> handles;
 
   int max_aio = concurrent_max;
   results.is_truncated = true;
@@ -1055,7 +1058,7 @@ int RadosBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
   return store->getRados()->trim_usage(dpp, *user, get_name(), start_epoch, end_epoch, y);
 }
 
-int RadosBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
+int RadosBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, const std::vector<rgw_obj_index_key>& objs_to_unlink)
 {
   return store->getRados()->remove_objs_from_index(dpp, info, objs_to_unlink);
 }
@@ -2403,7 +2406,7 @@ int RadosStore::get_zonegroup(const std::string& id,
   return 0;
 }
 
-int RadosStore::list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids)
+int RadosStore::list_all_zones(const DoutPrefixProvider* dpp, std::vector<std::string>& zone_ids)
 {
   return svc()->zone->list_zones(dpp, zone_ids);
 }
@@ -2766,7 +2769,7 @@ int RadosStore::meta_list_keys_init(const DoutPrefixProvider *dpp, const std::st
   return ctl()->meta.mgr->list_keys_init(dpp, section, marker, phandle);
 }
 
-int RadosStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<std::string>& keys, bool* truncated)
+int RadosStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, vector<std::string>& keys, bool* truncated)
 {
   return ctl()->meta.mgr->list_keys_next(dpp, handle, max, keys, truncated);
 }
@@ -2991,7 +2994,7 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
 
   std::string marker;
   bool truncated;
-  list<rgw_bi_log_entry> entries;
+  vector<rgw_bi_log_entry> entries;
 
   const int shard_id = RGWSI_BucketIndex_RADOS::bucket_shard_index(get_key(), shard_count);
 
@@ -3982,7 +3985,7 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
 int RadosObject::delete_object(const DoutPrefixProvider* dpp,
 			       optional_yield y,
 			       uint32_t flags,
-			       std::list<rgw_obj_index_key>* remove_objs,
+			       std::vector<rgw_obj_index_key>* remove_objs,
 			       RGWObjVersionTracker* objv)
 {
   RGWRados::Object del_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
@@ -4098,7 +4101,7 @@ int RadosObject::swift_versioning_copy(const ACLOwner& owner, const rgw_user& re
 int RadosMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
                                                  CephContext *cct, optional_yield y,
                                                  const rgw_obj& obj,
-                                                 list<rgw_obj_index_key>& remove_objs,
+                                                 vector<rgw_obj_index_key>& remove_objs,
                                                  prefix_map_t& processed_prefixes)
 {
   bool truncated;
@@ -4163,7 +4166,7 @@ int RadosMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
 int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
                                                optional_yield y,
                                                RadosMultipartPart *part,
-                                               list<rgw_obj_index_key>& remove_objs,
+                                               vector<rgw_obj_index_key>& remove_objs,
                                                boost::container::flat_set<std::string>& processed_prefixes)
 {
   cls_rgw_obj_chain chain;
@@ -4214,7 +4217,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   meta_obj->set_in_extra_data(true);
   meta_obj->set_hash_source(mp_obj.get_key());
   cls_rgw_obj_chain chain;
-  list<rgw_obj_index_key> remove_objs;
+  vector<rgw_obj_index_key> remove_objs;
   bool truncated;
   int marker = 0;
   int ret;
@@ -4495,7 +4498,7 @@ int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
 int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				   optional_yield y, CephContext* cct,
 				   map<int, string>& part_etags,
-				   list<rgw_obj_index_key>& remove_objs,
+				   vector<rgw_obj_index_key>& remove_objs,
 				   uint64_t& accounted_size, bool& compressed,
 				   RGWCompressionInfo& cs_info, off_t& ofs,
 				   std::string& tag, ACLOwner& owner,
@@ -5583,13 +5586,16 @@ int RadosZoneGroup::get_zone_by_name(const std::string& name, std::unique_ptr<Zo
   return 0;
 }
 
-int RadosZoneGroup::list_zones(std::list<std::string>& zone_ids)
+std::vector<std::string> RadosZoneGroup::list_zones() const
 {
-  for (const auto& entry : group.zones)
-    {
-      zone_ids.push_back(entry.second.id);
-    }
-  return 0;
+  std::vector<std::string> zone_ids;
+  zone_ids.reserve(std::size(group.zones));
+
+  for (const auto& entry : group.zones) {
+    zone_ids.push_back(entry.second.id);
+  }
+
+  return zone_ids;
 }
 
 std::unique_ptr<Zone> RadosZone::clone()

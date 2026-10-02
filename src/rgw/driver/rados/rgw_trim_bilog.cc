@@ -1302,7 +1302,7 @@ class AsyncMetadataList : public RGWAsyncRadosRequest {
 int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
 {
   void* handle = nullptr;
-  std::list<std::string> keys;
+  std::vector<std::string> keys;
   bool truncated{false};
   std::string marker;
 

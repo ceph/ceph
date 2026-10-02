@@ -228,8 +228,8 @@ struct rgw_sync_pipe_filter {
 
   void set_prefix(std::optional<std::string> opt_prefix,
                   bool prefix_rm);
-  void set_tags(std::list<std::string>& tags_add,
-                std::list<std::string>& tags_rm);
+  void set_tags(const std::vector<std::string>& tags_add,
+                const std::vector<std::string>& tags_rm);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -710,5 +710,4 @@ struct rgw_sync_policy_info {
                                      std::set<rgw_bucket> *dests) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_policy_info)
-
 

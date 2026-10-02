@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <iterator>
+#include <algorithm>
+
 #include "driver/rados/rgw_metadata.h"
 
 #include "driver/rados/rgw_mdlog.h"
@@ -111,8 +114,8 @@ std::vector<RGWMetadataLogData> RGWMetadataLogData::generate_test_instances() {
 
 class RGWMetadataTopHandler : public RGWMetadataHandler {
   struct iter_data {
-    set<string> sections;
-    set<string>::iterator iter;
+    vector<string> sections;
+    vector<string>::iterator iter;
   };
 
   RGWMetadataManager *mgr;
@@ -151,24 +154,21 @@ public:
 
   int list_keys_init(const DoutPrefixProvider *dpp, const string& marker, void **phandle) override {
     iter_data *data = new iter_data;
-    list<string> sections;
-    mgr->get_sections(sections);
-    for (auto& s : sections) {
-      data->sections.insert(s);
-    }
-    data->iter = data->sections.lower_bound(marker);
+    data->sections = mgr->get_sections();
+    data->iter = std::ranges::lower_bound(data->sections, marker);
 
     *phandle = data;
 
     return 0;
   }
-  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated) override  {
+  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, vector<string>& keys, bool *truncated) override  {
     iter_data *data = static_cast<iter_data *>(handle);
-    for (int i = 0; i < max && data->iter != data->sections.end(); ++i, ++(data->iter)) {
+    for (int i = 0; i < max && data->iter != std::end(data->sections);
+         ++i, ++(data->iter)) {
       keys.push_back(*data->iter);
     }
 
-    *truncated = (data->iter != data->sections.end());
+    *truncated = (data->iter != std::end(data->sections));
 
     return 0;
   }
@@ -181,7 +181,7 @@ public:
   virtual string get_marker(void *handle) override {
     iter_data *data = static_cast<iter_data *>(handle);
 
-    if (data->iter != data->sections.end()) {
+    if (data->iter != std::end(data->sections)) {
       return *(data->iter);
     }
 
@@ -434,7 +434,7 @@ int RGWMetadataManager::list_keys_init(const DoutPrefixProvider *dpp, const stri
   return 0;
 }
 
-int RGWMetadataManager::list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, list<string>& keys, bool *truncated)
+int RGWMetadataManager::list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, vector<string>& keys, bool *truncated)
 {
   list_keys_handle *h = static_cast<list_keys_handle *>(handle);
 
@@ -480,15 +480,20 @@ void RGWMetadataManager::dump_log_entry(cls::log::entry& entry, Formatter *f)
   f->close_section();
 }
 
-void RGWMetadataManager::get_sections(list<string>& sections)
+vector<string> RGWMetadataManager::get_sections()
 {
-  for (map<string, RGWMetadataHandler *>::iterator iter = handlers.begin(); iter != handlers.end(); ++iter) {
+  vector<string> sections;
+  sections.reserve(std::size(handlers));
+
+  for (const auto& [name, handler] : handlers) {
     // sections that are not synced are not listed. this is the list that the
     // metadata sync of the other zones is fetching to know what to sync
-    if (!iter->second->is_synced()) {
+    if (!handler->is_synced()) {
       continue;
     }
-    sections.push_back(iter->first);
-  }
-}
 
+    sections.push_back(name);
+  }
+
+  return sections;
+}

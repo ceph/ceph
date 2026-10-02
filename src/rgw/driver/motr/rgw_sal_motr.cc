@@ -45,7 +45,6 @@ using std::string;
 using std::map;
 using std::vector;
 using std::set;
-using std::list;
 
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static struct m0_ufid_generator ufid_gr;
@@ -880,11 +879,10 @@ int MotrBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, 
   return 0;
 }
 
-int MotrBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
+int MotrBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, const std::vector<rgw_obj_index_key>& objs_to_unlink)
 {
   /* XXX: CHECK: Unlike RadosStore, there is no separate bucket index table.
-   * Delete all the object in the list from the object table of this
-   * bucket
+   * Delete all the objects from the object table of this bucket
    */
   return 0;
 }
@@ -1507,7 +1505,7 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
 int MotrObject::delete_object(const DoutPrefixProvider* dpp,
     optional_yield y,
     uint32_t flags,
-    std::list<rgw_obj_index_key>* remove_objs,
+    std::vector<rgw_obj_index_key>* remove_objs,
     RGWObjVersionTracker* objv)
 {
   MotrObject::MotrDeleteOp del_op(this);
@@ -2670,7 +2668,7 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				   optional_yield y, CephContext* cct,
 				   map<int, string>& part_etags,
-				   list<rgw_obj_index_key>& remove_objs,
+				   vector<rgw_obj_index_key>& remove_objs,
 				   uint64_t& accounted_size, bool& compressed,
 				   RGWCompressionInfo& cs_info, off_t& off,
 				   std::string& tag, ACLOwner& owner,
@@ -2888,7 +2886,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
 int MotrMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
     CephContext *cct, optional_yield y,
     const rgw_obj& obj,
-    std::list<rgw_obj_index_key>& remove_objs,
+    std::vector<rgw_obj_index_key>& remove_objs,
     prefix_map_t& processed_prefixes)
 {
   return -ENOTSUP;
@@ -3321,7 +3319,7 @@ int MotrStore::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* 
 }
 
 int MotrStore::list_all_zones(const DoutPrefixProvider* dpp,
-                            std::list<std::string>& zone_ids)
+                            std::vector<std::string>& zone_ids)
 {
   zone_ids.push_back(zone.get_id());
     return 0;
@@ -3439,7 +3437,7 @@ int MotrStore::meta_list_keys_init(const DoutPrefixProvider *dpp, const string& 
   return 0;
 }
 
-int MotrStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, list<string>& keys, bool* truncated)
+int MotrStore::meta_list_keys_next(const DoutPrefixProvider *dpp, void* handle, int max, vector<string>& keys, bool* truncated)
 {
   return 0;
 }

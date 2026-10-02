@@ -749,15 +749,11 @@ static void send_log_record(const DoutPrefixProvider* dpp,
 static bool zonegroup_lc_check(const DoutPrefixProvider *dpp, rgw::sal::Zone* zone)
 {
   auto& zonegroup = zone->get_zonegroup();
-  std::list<std::string> ids;
-  int ret = zonegroup.list_zones(ids);
-  if (ret < 0) {
-    return false;
-  }
+  const auto ids = zonegroup.list_zones();
 
-  return std::all_of(ids.begin(), ids.end(), [&](const auto& id) {
+  return std::ranges::all_of(ids, [&](const auto& id) {
     std::unique_ptr<rgw::sal::Zone> zone;
-    ret = zonegroup.get_zone_by_id(id, &zone);
+    const int ret = zonegroup.get_zone_by_id(id, &zone);
     if (ret < 0) {
       return false;
     }
@@ -3597,4 +3593,3 @@ void RGWLifecycleConfiguration::dump(Formatter *f) const
   }
   f->close_section();
 }
-

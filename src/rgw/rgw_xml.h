@@ -4,9 +4,12 @@
 #pragma once
 
 #include <map>
-#include <stdexcept>
-#include <string>
 #include <iosfwd>
+#include <ranges>
+#include <string>
+#include <utility>
+#include <stdexcept>
+#include "common/container_concepts.h"
 #include "include/buffer_fwd.h"
 #include <include/types.h>
 #include <common/Formatter.h>
@@ -105,7 +108,7 @@ private:
   int buf_len;
   XMLObj *cur_obj;
   std::vector<XMLObj *> objs;
-  std::list<XMLObj *> allocated_objs;
+  std::vector<XMLObj *> allocated_objs;
   std::list<XMLObj> unallocated_objs;
   bool success;
   bool init_called;
@@ -201,18 +204,20 @@ void decode_xml_obj(std::optional<T>& val, XMLObj *obj)
   decode_xml_obj(*val, obj);
 }
 
-template<class T>
-void do_decode_xml_obj(std::list<T>& l, const std::string& name, XMLObj *obj)
+template <typename ContainerT>
+requires ceph::concepts::has_clear<ContainerT> &&
+         ceph::concepts::has_push_back<ContainerT, typename ContainerT::value_type>
+void do_decode_xml_obj(ContainerT& values, const std::string& name, XMLObj *obj)
 {
-  l.clear();
+  values.clear();
 
   XMLObjIter iter = obj->find(name);
   XMLObj *o;
 
   while ((o = iter.get_next())) {
-    T val;
-    decode_xml_obj(val, o);
-    l.push_back(val);
+    typename ContainerT::value_type value;
+    decode_xml_obj(value, o);
+    values.push_back(std::move(value));
   }
 }
 
@@ -346,12 +351,14 @@ void encode_xml(const char *name, const utime_t& val, ceph::Formatter *f);
 void encode_xml(const char *name, const ceph::bufferlist& bl, ceph::Formatter *f);
 void encode_xml(const char *name, long long unsigned val, ceph::Formatter *f);
 
-template<class T>
-static void do_encode_xml(const char *name, const std::list<T>& l, const char *entry_name, ceph::Formatter *f)
+template <typename RangeT>
+requires std::ranges::input_range<const RangeT>
+static void do_encode_xml(const char *name, const RangeT& values,
+                          const char *entry_name, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  for (typename std::list<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
-    encode_xml(entry_name, *iter, f);
+  for (const auto& value : values) {
+    encode_xml(entry_name, value, f);
   }
   f->close_section();
 }

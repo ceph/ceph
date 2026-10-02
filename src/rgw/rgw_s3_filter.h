@@ -7,6 +7,7 @@
 #include <boost/container/flat_map.hpp>
 
 #include "include/types.h"
+#include "rgw_sal_fwd.h"
 
 class XMLObj;
 
