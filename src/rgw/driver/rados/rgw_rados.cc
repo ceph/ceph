@@ -8,6 +8,12 @@
 #include <sstream>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/context/protected_fixedsize_stack.hpp>
+#include <boost/system/system_error.hpp>
 #include <string_view>
 
 #include <boost/container/flat_set.hpp>
@@ -68,11 +74,13 @@
 #include "common/Clock.h"
 
 #include <string>
+#include <exception>
 #include <iostream>
 #include <vector>
 #include <atomic>
 #include <list>
 #include <map>
+#include <memory>
 #include "include/random.h"
 
 #include "rgw_gc.h"
@@ -857,6 +865,14 @@ int RGWRados::get_max_chunk_size(const rgw_placement_rule& placement_rule, const
 
 class RGWIndexCompletionManager;
 
+namespace {
+
+auto make_complete_op_stack_allocator() {
+  return boost::context::protected_fixedsize_stack{128 * 1024};
+}
+
+} // namespace
+
 struct complete_op_data {
   ceph::mutex lock = ceph::make_mutex("complete_op_data");
   AioCompletion *rados_completion{nullptr};
@@ -882,6 +898,11 @@ struct complete_op_data {
 };
 
 class RGWIndexCompletionManager {
+  // track each spawned coroutine for cancellation.
+  struct child {
+    boost::asio::cancellation_signal signal;
+  };
+
   RGWRados* const store;
   const uint32_t num_shards;
   ceph::containers::tiny_vector<ceph::mutex> locks;
@@ -898,11 +919,64 @@ class RGWIndexCompletionManager {
   // around back to 0 without issue
   std::atomic<uint32_t> cur_shard {0};
 
+  std::mutex spawn_lock;
+  std::condition_variable drained;
+  uint64_t next_id{0};
+  uint64_t spawned{0};
+  bool stopping{false};
+  std::map<uint64_t, std::shared_ptr<child>> outstanding;
+
   void process();
   
   void add_completion(complete_op_data *completion);
-  
+
+  // complete the given child coroutine.
+  void on_complete(uint64_t id, std::exception_ptr eptr) {
+    if (eptr) {
+      try {
+        std::rethrow_exception(eptr);
+      } catch (const std::exception& e) {
+        ldout(store->ctx(), 0) << "ERROR: index complete_op spawn: "
+                               << e.what() << dendl;
+      } catch (...) {
+        ldout(store->ctx(), 0) << "ERROR: index complete_op spawn: "
+                               << "unknown exception" << dendl;
+      }
+    }
+    std::lock_guard l{spawn_lock};
+    outstanding.erase(id);
+    --spawned;
+    drained.notify_all();
+  }
+
+  // cancel all outstanding coroutines.
+  void cancel() {
+    std::unique_lock l{spawn_lock};
+    stopping = true;
+    // hold refs before cancellation, which may invoke on_complete()
+    // directly and remove the child from outstanding.
+    std::vector<std::shared_ptr<child>> to_cancel;
+    to_cancel.reserve(outstanding.size());
+    for (auto& p : outstanding) {
+      to_cancel.push_back(p.second);
+    }
+    l.unlock();
+    for (auto& c : to_cancel) {
+      c->signal.emit(boost::asio::cancellation_type::terminal);
+    }
+  }
+
+  // wait for all outstanding completions before returning.
+  void wait() {
+    std::unique_lock l{spawn_lock};
+    drained.wait(l, [this] { return spawned == 0; });
+  }
+
+  // cancel outstanding coroutines, then join the aio retry thread.
   void stop() {
+    cancel();
+    wait();
+
     if (retry_thread.joinable()) {
       _stop = true;
       cond.notify_all();
@@ -938,6 +1012,44 @@ public:
 
   ~RGWIndexCompletionManager() {
     stop();
+  }
+
+  template <typename F>
+  void spawn(F&& f) {
+    std::unique_lock l{spawn_lock};
+    if (stopping) {
+      ldout(store->ctx(), 5)
+          << "RGWIndexCompletionManager: dropping complete_op during shutdown"
+          << dendl;
+      return;
+    }
+    const uint64_t id = next_id++;
+    outstanding[id] = std::make_shared<child>();
+    auto slot = outstanding[id]->signal.slot();
+    ++spawned;
+    l.unlock();
+
+    try {
+      auto ex = store->driver->get_io_context().get_executor();
+      boost::asio::spawn(
+          ex, std::allocator_arg, make_complete_op_stack_allocator(),
+          [f = std::decay_t<F>(std::forward<F>(f))]
+          (boost::asio::yield_context y) mutable {
+            f(y);
+          },
+          boost::asio::bind_cancellation_slot(
+              slot,
+              boost::asio::bind_executor(
+                  ex, [this, id](std::exception_ptr eptr) {
+                    on_complete(id, eptr);
+                  })));
+    } catch (...) {
+      std::lock_guard g{spawn_lock};
+      outstanding.erase(id);
+      --spawned;
+      drained.notify_all();
+      throw;
+    }
   }
 
   void create_completion(const rgw_obj& obj,
@@ -8646,10 +8758,32 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
 
   const bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-  ret = store->cls_obj_complete_add(dpp, target->bucket_info, *bs, obj, optag,
-                                    poolid, epoch, ent, category,
-                                    remove_objs, bilog_flags, y, zones_trace,
-                                    log_op);
+  store->index_completion_manager->spawn(
+      [store,
+       bucket_info = target->bucket_info,
+       obj = obj,
+       tag = optag,
+       pool = poolid,
+       epoch,
+       ent = std::move(ent),
+       category,
+       remove_objs = remove_objs ? *remove_objs : std::list<rgw_obj_index_key>{},
+       bilog_flags = bilog_flags,
+       zones_trace = zones_trace ? *zones_trace : rgw_zone_set{},
+       log_op](boost::asio::yield_context y) mutable {
+        DoutPrefix dpp(store->ctx(), dout_subsys, "rgw complete_op: ");
+        optional_yield oy{y};
+        RGWRados::BucketShard bs(store);
+        int r = bs.init(obj.bucket, obj, &bucket_info, &dpp, oy);
+        if (r < 0) {
+          ldpp_dout(&dpp, 0) << "ERROR: BucketShard init failed obj="
+                             << obj << " r=" << r << dendl;
+          return;
+        }
+        std::ignore = store->cls_obj_complete_add(
+            &dpp, bucket_info, bs, obj, tag, pool, epoch, ent, category,
+            &remove_objs, bilog_flags, oy, &zones_trace, log_op);
+      });
   if (add_log) {
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
 			    target->bucket_info, obj.get_hash_object(),
@@ -8680,10 +8814,31 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
 
   const bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-  ret = store->cls_obj_complete_del(dpp, target->bucket_info, *bs, optag,
-                                    poolid, epoch, obj, removed_mtime,
-                                    remove_objs, bilog_flags, y, zones_trace,
-                                    log_op);
+  store->index_completion_manager->spawn(
+      [store,
+       bucket_info = target->bucket_info,
+       obj = obj,
+       tag = optag,
+       pool = poolid,
+       epoch,
+       removed_mtime,
+       remove_objs = remove_objs ? *remove_objs : std::list<rgw_obj_index_key>{},
+       bilog_flags = bilog_flags,
+       zones_trace = zones_trace ? *zones_trace : rgw_zone_set{},
+       log_op](boost::asio::yield_context y) mutable {
+        DoutPrefix dpp(store->ctx(), dout_subsys, "rgw complete_op: ");
+        optional_yield oy{y};
+        RGWRados::BucketShard bs(store);
+        int r = bs.init(obj.bucket, obj, &bucket_info, &dpp, oy);
+        if (r < 0) {
+          ldpp_dout(&dpp, 0) << "ERROR: BucketShard init failed obj="
+                             << obj << " r=" << r << dendl;
+          return;
+        }
+        std::ignore = store->cls_obj_complete_del(
+            &dpp, bucket_info, bs, tag, pool, epoch, obj, removed_mtime,
+            &remove_objs, bilog_flags, oy, &zones_trace, log_op);
+      });
   if (add_log) {
     ret = add_datalog_entry(dpp, store->svc.datalog_rados,
 			    target->bucket_info, obj.get_hash_object(),
@@ -8707,12 +8862,34 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp,
 
   const bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-  int ret = guard_reshard(dpp, obj, &bs, [&](BucketShard *bs) -> int {
-				 return store->cls_obj_complete_cancel(dpp, target->bucket_info,
-				                                       *bs, optag, obj, remove_objs,
-				                                       bilog_flags, y, zones_trace,
-				                                       log_op);
-			       }, y);
+  int ret = get_bucket_shard(&bs, dpp, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << "failed to get BucketShard object: ret=" << ret << dendl;
+    return ret;
+  }
+
+  store->index_completion_manager->spawn(
+      [store,
+       bucket_info = target->bucket_info,
+       obj = obj,
+       tag = optag,
+       remove_objs = remove_objs ? *remove_objs : std::list<rgw_obj_index_key>{},
+       bilog_flags = bilog_flags,
+       zones_trace = zones_trace ? *zones_trace : rgw_zone_set{},
+       log_op](boost::asio::yield_context y) mutable {
+        DoutPrefix dpp(store->ctx(), dout_subsys, "rgw complete_op: ");
+        optional_yield oy{y};
+        RGWRados::BucketShard bs(store);
+        int r = bs.init(obj.bucket, obj, &bucket_info, &dpp, oy);
+        if (r < 0) {
+          ldpp_dout(&dpp, 0) << "ERROR: BucketShard init failed obj="
+                             << obj << " r=" << r << dendl;
+          return;
+        }
+        std::ignore = store->cls_obj_complete_cancel(
+            &dpp, bucket_info, bs, tag, obj, &remove_objs, bilog_flags,
+            oy, &zones_trace, log_op);
+      });
 
   if (add_log) {
     /*

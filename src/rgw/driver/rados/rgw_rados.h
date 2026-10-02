@@ -357,6 +357,7 @@ class RGWRados
   friend class rgw::sal::MPRadosSerializer;
   friend class rgw::sal::LCRadosSerializer;
   friend class rgw::sal::RadosStore;
+  friend class RGWIndexCompletionManager;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx(const DoutPrefixProvider *dpp);
@@ -1149,6 +1150,7 @@ public:
       }
     }; // class RGWRados::Bucket::List
   }; // class RGWRados::Bucket
+  friend class Bucket::UpdateIndex;
 
   static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 		       RGWRados* store, RGWBucketInfo& bucket_info,
