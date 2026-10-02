@@ -35,6 +35,7 @@
 #   FIO_RUNTIME, FIO_RAMP   seconds per run, and warm-up        (default: 60, 10)
 #   FIO_BS, FIO_IODEPTH, FIO_NUMJOBS                            (default: 4k, 16, 4)
 #   FIO_NRFILES, FIO_FILESIZE  objects per fio job, and their size (default: 32, 4m)
+#                  (a job's fio 'size' is their product)
 #   REPEAT         repetitions of every (workload, mode) pair   (default: 1)
 #   RESULTS_DIR    where fio outputs and the summary are kept
 #                  (default: ./fio-hints-results.<date> under the build dir)
@@ -218,6 +219,10 @@ EOF
 function _fio_job() {
     local conf=$1 rw=$2
     shift 2
+    # the rados engine ignores 'filesize': it splits a job's 'size' evenly
+    # among its 'nrfiles' objects (without 'size', it does no I/O at all)
+    local object_bytes
+    object_bytes=$(numfmt --from=iec "${FIO_FILESIZE^^}") || return 1
     cat <<EOF
 [global]
 ioengine=rados
@@ -228,7 +233,7 @@ bs=$FIO_BS
 iodepth=$FIO_IODEPTH
 numjobs=$FIO_NUMJOBS
 nrfiles=$FIO_NRFILES
-filesize=$FIO_FILESIZE
+size=$((FIO_NRFILES * object_bytes))
 file_service_type=random
 group_reporting=1
 $(printf '%s\n' "$@")
@@ -242,9 +247,22 @@ function _fio_prefill() {
     local dir=$1
     local conf
     conf=$(_client_conf $dir off) || return 1
-    _fio_job $conf write > $dir/prefill.fio
+    _fio_job $conf write > $dir/prefill.fio || return 1
     "$FIO" --output-format=json --output=$RESULTS_DIR/prefill.json \
         $dir/prefill.fio || return 1
+    _check_fio_io prefill || return 1
+}
+
+# fail if a fio run completed no I/O (fio itself does not)
+function _check_fio_io() {
+    local tag=$1
+    local ios
+    ios=$(jq '.jobs[0] | .read.total_ios + .write.total_ios' \
+          $RESULTS_DIR/$tag.json) || return 1
+    if [ "$ios" -eq 0 ]; then
+        echo "ERROR: fio $tag completed no I/O; see $RESULTS_DIR/$tag.json"
+        return 1
+    fi
 }
 
 # sum of the client_request op_local / op_remote counters over all OSDs,
@@ -272,9 +290,10 @@ function _osd_hop_counters() {
 # fio clients, printed as "<op_send> <op_send_core>"
 function _client_counters() {
     local dir=$1 mode=$2
-    local asok out send=0 core=0 s c
+    local asok out send=0 core=0 s c found=0
     for asok in $dir/fio-$mode.*.asok; do
         [ -S "$asok" ] || continue
+        found=$((found + 1))
         out=$(ceph --admin-daemon $asok perf dump objecter 2>/dev/null) ||
             continue
         s=$(jq '.objecter.op_send // 0' <<<"$out")
@@ -282,6 +301,8 @@ function _client_counters() {
         send=$((send + s))
         core=$((core + c))
     done
+    [ $found -gt 0 ] ||
+        echo "WARNING: no admin socket of a running fio client ($mode)" >&2
     echo "$send $core"
 }
 
@@ -292,9 +313,12 @@ function _fio_run() {
     local tag=$rw-$mode-$rep
     local conf
     conf=$(_client_conf $dir $mode) || return 1
-    local extra=(time_based=1 runtime=$FIO_RUNTIME ramp_time=$FIO_RAMP)
+    # the objects exist (see _fio_prefill()): do not touch them again, as
+    # that is not part of the workload
+    local extra=(time_based=1 runtime=$FIO_RUNTIME ramp_time=$FIO_RAMP
+                 touch_objects=0)
     [ $rw = randrw ] && extra+=(rwmixread=70)
-    _fio_job $conf $rw "${extra[@]}" > $dir/$tag.fio
+    _fio_job $conf $rw "${extra[@]}" > $dir/$tag.fio || return 1
 
     rm -f $dir/fio-$mode.*.asok
     local before after
@@ -308,6 +332,7 @@ function _fio_run() {
     local client
     client=$(_client_counters $dir $mode)
     wait $fio_pid || { echo "ERROR: fio $tag failed"; return 1; }
+    _check_fio_io $tag || return 1
 
     after=$(_osd_hop_counters) || return 1
 
