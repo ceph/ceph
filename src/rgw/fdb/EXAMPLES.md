@@ -81,6 +81,19 @@ single logical operation:
 lfdb::set(dbh, "person/barbara-moo/name", "Barbara Moo");
 ```
 
+Managed operations accept transaction options immediately after the database
+handle. libfdb applies them to every transaction and restores nonpersistent
+options before a retry:
+
+```cpp
+const lfdb::transaction_options batch_options {
+  {FDB_TR_OPTION_PRIORITY_BATCH, lfdb::option_flag}
+};
+
+lfdb::set(dbh, batch_options,
+          "person/barbara-moo/title", "performance engineer");
+```
+
 Single-key `get()` returns whether the key was found:
 
 ```cpp
@@ -255,21 +268,31 @@ for (const auto& object : objects_to_index) {
 }
 ```
 
-Create an explicit transaction with transaction options:
+Create an explicit transaction with transaction options. The transaction owns a
+copy of the options. After a successful `on_error()`, libfdb reapplies the
+options FoundationDB resets before the caller replays the operation:
 
 ```cpp
-lfdb::transaction_options opts{
-  { FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag },
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
 };
 
-auto txn = lfdb::make_transaction(dbh, opts);
+auto txn = lfdb::make_transaction(dbh, options);
 
-lfdb::set(txn, "person/hypatia/name", "Hypatia");
+for (;;) {
+  lfdb::set(txn, "person/hypatia/name", "Hypatia");
 
-if (not lfdb::commit(txn)) {
-  retry_transaction_body();
+  if (lfdb::commit(txn)) {
+    break;
+  }
 }
 ```
+
+Options set directly through the raw FoundationDB handle cannot be tracked or
+restored by libfdb. Pass replay-sensitive options to `make_transaction()`,
+`make_transactor()`, or a managed operation instead. Options which FoundationDB
+already preserves are not reapplied, so timeout and retry budgets remain
+cumulative.
 
 `reset_for_replay()` is the lower-level hook for application-managed replay. Most
 callers should use a transactor instead; use this when the application needs to
@@ -409,11 +432,11 @@ if (not result.committed) {
 Options are applied to each transaction the transactor creates:
 
 ```cpp
-lfdb::transaction_options opts{
-  { FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag },
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
 };
 
-auto txr = lfdb::make_transactor(dbh, opts);
+auto txr = lfdb::make_transactor(dbh, options);
 
 txr([](auto& txn) {
   lfdb::set(txn, "person/zenobia/name", "Zenobia");
@@ -861,6 +884,36 @@ for (const auto& [key, value] : lfdb::scan(dbh, q::prefix("person/"))) {
 }
 ```
 
+Pass transaction options after the database handle when every transaction made
+by a managed operation needs the same configuration. The lazy operation owns a
+copy, so the caller's option map need not outlive the returned generator:
+
+```cpp
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
+};
+
+for (const auto& [key, value] :
+     lfdb::scan(dbh, options, q::prefix("person/"))) {
+  fmt::println("{}: {}", key, value);
+}
+```
+
+Transaction options configure transactions, query options configure range
+requests, and `read_mode` chooses serializable or snapshot reads. They remain
+separate even when all three are used:
+
+```cpp
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
+};
+auto people = q::prefix("person/");
+people.options.result_limit = 256;
+
+auto rows = lfdb::collect(
+  dbh, options, people, lfdb::read_mode::snapshot);
+```
+
 Use `collect()` when a materialized container is exactly what the caller needs:
 
 ```cpp
@@ -874,11 +927,14 @@ bytes immediately and should not pay to construct decoded key/value objects. The
 explicit `raw` tag makes that lifetime choice visible at the call site:
 
 ```cpp
+const lfdb::transaction_options options {
+  {FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag}
+};
 const auto object_blocks =
   fdbc::keyspace("d4n") / "block" / bucket_id / object_name;
 
 const auto nread = lfdb::for_each(
-  lfdb::raw, dbh, fdbc::prefix(object_blocks),
+  lfdb::raw, dbh, options, fdbc::prefix(object_blocks),
   [](std::span<const std::uint8_t> key,
      std::span<const std::uint8_t> value) {
     inspect_cached_block(key, value);
@@ -891,12 +947,14 @@ The spans borrow FoundationDB-owned memory and expire when the callback returns;
 copy anything that must outlive that call. Callback exceptions stop traversal
 and propagate normally.
 
-The database-handle form retries each result window before exposing it and never
-replays a callback. A retry may move later windows to a newer read version. Use
-the transaction-handle overload when the whole traversal must share one read
-version. If that operation is itself placed inside a transactor, a transactor
-replay invokes its callbacks again, so externally visible effects must be
-idempotent or staged.
+The database-handle form creates and independently retries one configured
+transaction per result window before exposing it, and never replays a callback.
+A later window may therefore use a newer read version. Use the
+transaction-handle overload when the whole traversal must share one read
+version. Each window pays transaction setup, so avoid artificially small result
+limits unless their memory or latency bound is useful. If that operation is
+itself placed inside a transactor, a transactor replay invokes its callbacks
+again, so externally visible effects must be idempotent or staged.
 
 Use `for_each()` when the operation is naturally callback-shaped and you do not
 need a composable generator. The callback is a row consumer and must return
