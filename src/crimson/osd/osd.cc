@@ -970,6 +970,9 @@ OSD::do_ms_dispatch(
     return handle_osd_map(boost::static_pointer_cast<MOSDMap>(m));
   case CEPH_MSG_OSD_OP:
     return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
+  case CEPH_MSG_PING:
+    // clients ping connections with laggy ops, only to detect their reset
+    return seastar::now();
   case MSG_OSD_PG_CREATE2:
     return handle_pg_create(
       conn, boost::static_pointer_cast<MOSDPGCreate2>(m));
