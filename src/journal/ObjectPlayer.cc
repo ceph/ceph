@@ -216,11 +216,16 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
 
     EntryKey entry_key(std::make_pair(entry.get_tag_tid(),
                                       entry.get_entry_tid()));
-    if (m_entry_keys.find(entry_key) == m_entry_keys.end()) {
-      m_entry_keys[entry_key] = m_entries.insert(m_entries.end(), entry);
-    } else {
+    auto [position, inserted] = m_entry_keys.emplace(entry_key, nullptr);
+
+    if (inserted) {
+      m_entries.push_back(entry);
+      position->second = &m_entries.back();
+    }
+
+    if (!inserted) {
       ldout(m_cct, 10) << ": " << entry << " is duplicate, replacing" << dendl;
-      *m_entry_keys[entry_key] = entry;
+      *position->second = entry;
     }
 
     // prune decoded / corrupted journal entries from front of bl
