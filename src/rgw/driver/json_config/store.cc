@@ -129,9 +129,9 @@ void sanity_check_config(const DoutPrefixProvider* dpp, DecodedConfig& config)
     // add the zone to the group
     const bool is_master = true;
     const bool read_only = false;
-    std::list<std::string> endpoints;
-    std::list<std::string> sync_from;
-    std::list<std::string> sync_from_rm;
+    std::vector<std::string> endpoints;
+    std::vector<std::string> sync_from;
+    std::vector<std::string> sync_from_rm;
     rgw::zone_features::set enable_features;
     rgw::zone_features::set disable_features;
 

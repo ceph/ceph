@@ -74,7 +74,7 @@ int index_complete(librados::IoCtx& ioctx, const std::string& oid,
                    const cls_rgw_obj_key& key, const std::string& tag,
                    RGWModifyOp type, const rgw_bucket_entry_ver& ver,
                    const rgw_bucket_dir_entry_meta& meta,
-                   const std::deque<cls_rgw_obj_key>& remove_objs)
+                   const std::vector<cls_rgw_obj_key>& remove_objs)
 {
   librados::ObjectWriteOperation op;
   constexpr bool log_op = false;
@@ -474,7 +474,7 @@ int simulator::init_multipart(const operation& op)
   }
 
   // prepare part uploads
-  std::deque<cls_rgw_obj_key> remove_objs;
+  std::vector<cls_rgw_obj_key> remove_objs;
   size_t part_id = 0;
 
   size_t remaining = op.meta.size;
@@ -509,7 +509,7 @@ void simulator::complete_multipart(const operation& op)
 
   // try to finish part uploads
   size_t part_id = 0;
-  std::deque<cls_rgw_obj_key> remove_objs;
+  std::vector<cls_rgw_obj_key> remove_objs;
 
   RGWModifyOp type = op.type; // OP_ADD, or OP_CANCEL for abort
 

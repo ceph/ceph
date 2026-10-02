@@ -149,7 +149,7 @@ int RGWSI_Cls::MFA::get_mfa(const DoutPrefixProvider *dpp, const rgw_user& user,
   return 0;
 }
 
-int RGWSI_Cls::MFA::list_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, list<rados::cls::otp::otp_info_t> *result,
+int RGWSI_Cls::MFA::list_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, vector<rados::cls::otp::otp_info_t> *result,
 			     optional_yield y)
 {
   rgw_rados_ref ref;
@@ -185,7 +185,7 @@ int RGWSI_Cls::MFA::otp_get_current_time(const DoutPrefixProvider *dpp, const rg
   return 0;
 }
 
-int RGWSI_Cls::MFA::set_mfa(const DoutPrefixProvider *dpp, const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
+int RGWSI_Cls::MFA::set_mfa(const DoutPrefixProvider *dpp, const string& oid, const vector<rados::cls::otp::otp_info_t>& entries,
 			    bool reset_obj, RGWObjVersionTracker *objv_tracker,
 			    const real_time& mtime,
 			    optional_yield y)
@@ -215,7 +215,7 @@ int RGWSI_Cls::MFA::set_mfa(const DoutPrefixProvider *dpp, const string& oid, co
   return 0;
 }
 
-int RGWSI_Cls::MFA::list_mfa(const DoutPrefixProvider *dpp, const string& oid, list<rados::cls::otp::otp_info_t> *result,
+int RGWSI_Cls::MFA::list_mfa(const DoutPrefixProvider *dpp, const string& oid, vector<rados::cls::otp::otp_info_t> *result,
 			     RGWObjVersionTracker *objv_tracker, ceph::real_time *pmtime,
 			     optional_yield y)
 {

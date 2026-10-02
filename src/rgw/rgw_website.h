@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include <list>
 #include <string>
+#include <vector>
 
 #include "common/ceph_json.h"
 
@@ -148,7 +148,7 @@ WRITE_CLASS_ENCODER(RGWBWRoutingRule)
 
 struct RGWBWRoutingRules
 {
-  std::list<RGWBWRoutingRule> rules;
+  std::vector<RGWBWRoutingRule> rules;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
