@@ -24,6 +24,7 @@
 #include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
 
+#include <vector>
 #include <shared_mutex> // for std::shared_lock
 
 void register_test_image_sync() {
@@ -282,9 +283,11 @@ TEST_F(TestImageSync, Discard) {
 }
 
 TEST_F(TestImageSync, SnapshotStress) {
-  std::list<std::string> snap_names;
+  std::vector<std::string> snap_names;
 
   const int num_snaps = 4;
+  snap_names.reserve(1 + num_snaps);
+
   for (int idx = 0; idx <= num_snaps; ++idx) {
     scribble(m_remote_image_ctx, 10, 102400);
 
