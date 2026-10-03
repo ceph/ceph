@@ -1,5 +1,8 @@
 
-* If you're looking for some information about how to use the library, interface.h is the "user interface".
+* Include fdb.h for the complete public interface. Lower-level ownership lives
+  in base.h; transactions, transactors, and staged output live in transaction.h;
+  direct key operations live in interface.h; and range traversal lives in
+  scan.h.
 
 ----
 Network and Database Options:
