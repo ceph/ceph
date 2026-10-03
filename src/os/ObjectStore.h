@@ -63,13 +63,14 @@ const int SKIP_JOURNAL_REPLAY = 1 << 0;
 const int SKIP_MOUNT_OMAP = 1 << 1;
 
 class ObjectStore {
-protected:
-  std::string path;
 
 public:
   using Transaction = ceph::os::Transaction;
 
+  const std::string path;
+
   CephContext* cct;
+
   /**
    * create - create an ObjectStore instance.
    *
