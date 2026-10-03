@@ -4,6 +4,8 @@ import logging
 import mgr_util
 import inspect
 import functools
+import os
+import concurrent.futures
 from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
@@ -16,14 +18,19 @@ from mgr_util import CephfsClient
 
 from .fs_util import listdir, has_subdir
 from .stats_util import get_stats
+from .async_cloner import get_clone_state
 
 from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
 from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
-    get_pending_subvol_deletions_count, get_all_pending_clones_count
+    get_pending_subvol_deletions_count, get_all_pending_clones_count, \
+    open_volume_lockless
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone, open_subvol_in_group, open_subvol_in_vol
+from .operations.resolver import resolve_group_and_subvolume_name
+from .operations.clone_index import open_clone_index
+from .operations.versions.subvolume_attrs import SubvolumeStates
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, \
@@ -293,6 +300,27 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def _fetch_entries(self, fs_handle, volname, clone_index, state):
+        clone_index_path = clone_index.path
+        jobs = []
+        for entry in clone_index.list_entries_by_ctime_order():
+            entry_path = os.path.join(clone_index_path, entry)
+        # XXX: This may raise ObjectNotFound exception. As soon as cloning is
+        # finished, clone entry is deleted by cloner thread. This exception is
+        # handled in _get_info_for_all_clones().
+            subvol_base_path = fs_handle.readlink(entry_path, 4096).decode('utf-8')
+
+            group_name, subvol_name = \
+                resolve_group_and_subvolume_name(self.volspec, subvol_base_path)       
+
+            clone_state = get_clone_state(self, self.volspec, volname,
+                                      group_name, subvol_name)
+
+            if clone_state != state:
+                continue
+            jobs.append((volname, subvol_name, group_name))
+        return jobs
+
     def remove_subvolume(self, **kwargs):
         ret         = 0, "", ""
         volname     = kwargs['vol_name']
@@ -317,6 +345,26 @@ class VolumeClient(CephfsClient["Module"]):
             elif not (ve.errno == -errno.ENOENT and force):
                 ret = self.volume_exception_to_retval(ve)
         return ret
+
+    def bulk_canceled_clones_rm(self, **kwargs):
+        ret = 0, "", ""
+        volname     = kwargs['vol_name']
+
+        MAX_CLONES = 15 # for parallel execution, not high value to avoid stress
+
+        try:
+             with open_volume_lockless(self, volname) as fs_handle:
+                with open_clone_index(fs_handle, self.volspec) as clone_index:
+                    jobs = self._fetch_entries(fs_handle, volname, clone_index, SubvolumeStates.STATE_CANCELED)
+                    if not jobs:
+                        return 0, "No Cancelled clones", ""
+                    with concurrent.futures.ThreadPoolExecutor(max_workers = MAX_CLONES) as exc:
+                        res = [exc.submit(remove_subvolume, volname, subvol, group, '--force')
+                                for volname, subvol, group in jobs]
+        except VolumeException as ve:
+            return self.volume_exception_to_retval(ve)
+        return ret
+
 
     def authorize_subvolume(self, **kwargs):
         ret = 0, "", ""
@@ -1141,6 +1189,25 @@ class VolumeClient(CephfsClient["Module"]):
             self.cloner.cancel_job(volname, (clonename, groupname))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
+        return ret
+                        
+    def clone_bulk_cancel(self, **kwargs):
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+
+        MAX_CLONES = 15 # for parallel execution not high value avoid stress
+
+        try:
+             with open_volume_lockless(self, volname) as fs_handle:
+                with open_clone_index(fs_handle, self.volspec) as clone_index:
+                    jobs = self._fetch_entries(fs_handle, volname, clone_index, SubvolumeStates.STATE_PENDING)
+                    if not jobs:
+                        return 0, "No Pending clones", ""
+                    with concurrent.futures.ThreadPoolExecutor(max_workers = MAX_CLONES) as exc:
+                        res = [exc.submit(self.cloner.cancel_job, volname, [subvol_name, group_name])
+                                for volname, subvol_name, group_name in jobs]
+        except VolumeException as ve:
+            return self.volume_exception_to_retval(ve)
         return ret
 
     ### group operations
