@@ -31,7 +31,6 @@ sensible.
     Dashboard module <dashboard>
     Ceph RESTful API <ceph_api/index>
     Alerts module <alerts>
-    DiskPrediction module <diskprediction>
     Local pool module <localpool>
     Prometheus module <prometheus>
     Influx module <influx>
