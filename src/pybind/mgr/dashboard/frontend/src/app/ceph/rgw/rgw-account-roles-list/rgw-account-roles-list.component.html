@@ -5,7 +5,9 @@
   [columns]="columns"
   selectionType="single"
   columnMode="flex"
+  [hasDetails]="true"
   (updateSelection)="updateSelection($event)"
+  (setExpandedRow)="setExpandedRow($event)"
   identifier="RoleName"
 >
   <cd-table-actions
@@ -15,4 +17,29 @@
     [tableActions]="tableActions"
   >
   </cd-table-actions>
+
+  <cd-rgw-account-role-details
+    *cdTableDetail
+    [selection]="expandedRow"
+    [accountId]="accountId"
+    (policySelected)="openPolicyPanel($event.roleName, $event.policyName)"
+  >
+  </cd-rgw-account-role-details>
 </cd-table>
+
+<cd-rgw-account-role-policies-modal
+  [expanded]="policyPanelOpen"
+  [accountId]="accountId"
+  [roleName]="selectedPolicyRoleName"
+  [policyName]="selectedPolicyName"
+  (closed)="closePolicyPanel()"
+  (changed)="onPolicyPanelChanged()"
+>
+</cd-rgw-account-role-policies-modal>
+
+<ng-template
+  #policiesCountTpl
+  let-row="data.row"
+>
+  <span>{{ row.policies_count || 0 }}</span>
+</ng-template>

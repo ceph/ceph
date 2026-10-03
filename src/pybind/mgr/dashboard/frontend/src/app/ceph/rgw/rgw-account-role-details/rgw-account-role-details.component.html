@@ -1,0 +1,79 @@
+<div
+  cdsGrid
+  [useCssGrid]="true"
+  [narrow]="true"
+  [fullWidth]="true"
+  class="cds-py-4 cds-pl-7 cds-pr-7"
+>
+  <!-- Left Column: Role ARN & Path -->
+  <div
+    cdsCol
+    [columnNumbers]="{ md: 7, lg: 7 }"
+    cdsStack="vertical"
+  >
+    <div class="cds-mb-4">
+      <div class="cds-mb-1">
+        <span
+          class="cds--type-heading-01"
+          i18n
+          >Role ARN</span
+        >
+        <cd-helper i18n>The hierarchical location used to organize roles.</cd-helper>
+      </div>
+      <div class="cds--type-body-compact-01">
+        {{ roleArn || '-' }}
+      </div>
+    </div>
+    <div>
+      <div
+        class="cds--type-heading-01 cds-mb-1"
+        i18n
+      >
+        Path
+      </div>
+      <div class="cds--type-body-compact-01">
+        {{ rolePath || '/' }}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Attached policies -->
+  <div
+    cdsCol
+    [columnNumbers]="{ md: 9, lg: 9 }"
+    cdsStack="vertical"
+  >
+    <div class="cds-mb-1">
+      <span
+        class="cds--type-heading-01"
+        i18n
+        >Attached policies</span
+      >
+      <cd-helper i18n>Inline policies attached to this role. </cd-helper>
+    </div>
+
+    @if (policies$ | async; as policies) {
+      @if (policies.length === 0) {
+        <div
+          class="cds--type-body-compact-01 cds--text-secondary"
+          i18n
+        >
+          There are no attached policies.
+        </div>
+      }
+
+      @for (policy of policies; track policy.name) {
+        <div class="cds-mb-2 cds--type-body-compact-01">
+          <a
+            cdsLink
+            href="#"
+            (click)="onPolicyClick(policy.name); $event.preventDefault(); $event.stopPropagation()"
+            (keydown.enter)="onPolicyClick(policy.name); $event.preventDefault()"
+          >
+            {{ policy.name }}
+          </a>
+        </div>
+      }
+    }
+  </div>
+</div>

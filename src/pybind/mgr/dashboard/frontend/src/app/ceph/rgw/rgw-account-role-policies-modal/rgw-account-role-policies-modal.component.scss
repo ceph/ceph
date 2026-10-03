@@ -1,0 +1,91 @@
+@use '@carbon/layout';
+
+.policies-panel-content {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: layout.$spacing-05;
+  min-block-size: 0;
+  overflow: hidden;
+  padding-block: layout.$spacing-05;
+}
+
+.policies-panel-form {
+  width: 100%;
+}
+
+.policies-panel-snippet {
+  align-self: stretch;
+  background-color: var(--cds-layer-01);
+  box-sizing: border-box;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-block-size: 0;
+  overflow: auto;
+  padding: layout.$spacing-05;
+  width: 100%;
+}
+
+:host ::ng-deep {
+  cds-panel .cds--header-panel--expanded,
+  .panel-header,
+  .panel-content,
+  .panel-footer {
+    background-color: var(--cds-background);
+  }
+
+  .policies-panel-snippet {
+    cds-code-snippet,
+    cds-code-snippet.cds--snippet,
+    .cds--snippet,
+    .cds--snippet-container,
+    .cds--snippet--multi,
+    pre,
+    code {
+      background-color: var(--cds-layer-01) !important;
+    }
+
+    cds-code-snippet,
+    cds-code-snippet.cds--snippet,
+    .cds--snippet {
+      display: flex !important;
+      flex: 1 1 auto;
+      flex-direction: column;
+      max-inline-size: none !important;
+      min-block-size: 0;
+      width: 100% !important;
+    }
+
+    .cds--snippet-container {
+      flex: 1 1 auto;
+      min-block-size: 0;
+      overflow: auto;
+      padding-block: layout.$spacing-03;
+      padding-inline: layout.$spacing-03;
+    }
+  }
+
+  .policies-panel-form {
+    cds-text-label,
+    cds-textarea-label,
+    .cds--text-input,
+    .cds--text-area,
+    .cds--text-area__wrapper {
+      max-inline-size: none;
+      width: 100%;
+    }
+
+    .cds--text-input,
+    .cds--text-input[readonly],
+    .cds--text-area,
+    textarea.cds--text-area {
+      background-color: var(--cds-field-01) !important;
+    }
+
+    textarea {
+      min-block-size: layout.rem(280px);
+      width: 100%;
+    }
+  }
+}
