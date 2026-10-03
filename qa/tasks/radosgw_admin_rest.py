@@ -943,6 +943,14 @@ def task(ctx, config):
     user_ratelimit = out['user_ratelimit']
     assert user_ratelimit['max_delete_ops'] == 50
 
+    # TESTCASE 'ratelimit' 'user' 'modify' 'max-list-time = 10' 'succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, ['ratelimit', 'modify'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user, 'max-list-time' : '10'})
+    assert ret == 200
+    (ret, out) = rgwadmin_rest(endpoint, ['ratelimit', 'info'], {'ratelimit-scope' : 'user', 'uid' : ratelimit_user})
+    assert ret == 200
+    user_ratelimit = out['user_ratelimit']
+    assert user_ratelimit['max_list_time'] == 10
+
     # TESTCASE 'ratelimit' 'bucket' 'modify' 'max-list-ops = 200' 'succeeds'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket, 'max-list-ops' : '200'})
     assert ret == 200
@@ -958,6 +966,14 @@ def task(ctx, config):
     assert ret == 200
     bucket_ratelimit = out['bucket_ratelimit']
     assert bucket_ratelimit['max_delete_ops'] == 75
+
+    # TESTCASE 'ratelimit' 'bucket' 'modify' 'max-list-time = 20' 'succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket, 'max-list-time' : '20'})
+    assert ret == 200
+    (ret, out) = rgwadmin_rest(endpoint, ['ratelimit', 'info'], {'ratelimit-scope' : 'bucket', 'bucket' : ratelimit_bucket})
+    assert ret == 200
+    bucket_ratelimit = out['bucket_ratelimit']
+    assert bucket_ratelimit['max_list_time'] == 20
 
     # TESTCASE 'ratelimit' 'global' 'modify' 'bucket' 'max-list-ops = 500' 'succeeds'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'global': 'true', 'max-list-ops' : '500'})
@@ -977,6 +993,15 @@ def task(ctx, config):
     assert 'bucket_ratelimit' in out
     assert out['bucket_ratelimit']['max_delete_ops'] == 300
 
+    # TESTCASE 'ratelimit' 'global' 'modify' 'bucket' 'max-list-time = 50' 'succeeds'
+    (ret, out) = rgwadmin_rest(endpoint, ['ratelimit', 'modify'], {'ratelimit-scope' : 'bucket', 'global': 'true', 'max-list-time' : '50'})
+    assert ret == 200
+    (ret, out) = rgwadmin_rest(endpoint, ['ratelimit', 'info'], {'global' : 'true'})
+    assert ret == 200
+    # Check that global bucket ratelimit has the list ops set
+    assert 'bucket_ratelimit' in out
+    assert out['bucket_ratelimit']['max_list_time'] == 50
+
     # TESTCASE 'ratelimit' 'user' 'modify' 'multiple ops at once' 'succeeds'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['ratelimit', 'modify'], {
         'ratelimit-scope' : 'user',
@@ -985,6 +1010,7 @@ def task(ctx, config):
         'max-write-ops' : '800',
         'max-list-ops' : '600',
         'max-delete-ops' : '400',
+        'max-list-time' : '40',
         'enabled' : 'true'
     })
     assert ret == 200
@@ -996,6 +1022,7 @@ def task(ctx, config):
     assert user_ratelimit['max_write_ops'] == 800
     assert user_ratelimit['max_list_ops'] == 600
     assert user_ratelimit['max_delete_ops'] == 400
+    assert user_ratelimit['max_list_time'] == 40
 
     # TESTCASE 'create account' 'account' 'post' 'creating a new account' 'succeeds'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['account', 'post'], {'id' : account_id, 'name': account_id})

@@ -46,7 +46,8 @@ int main(int argc, char **argv)
     {
         std::string tenant = "uuser" + std::to_string(i);
         auto time = ceph::coarse_real_clock::now();
-        ratelimit->get_active()->should_rate_limit("PUT", tenant, time, &info, "");
+        RGWRateLimitOp op;
+        ratelimit->get_active()->should_rate_limit("PUT", tenant, time, &info, "", op);
     }
 
 }
