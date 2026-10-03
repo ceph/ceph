@@ -1576,6 +1576,73 @@ TEST_F(TestLibRBD, TestCopyPP)
   ioctx.close();
 }
 
+TEST_F(TestLibRBD, TestCopyClone)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string parent_name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(), size, &order));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  {
+    librbd::Image parent_image;
+    ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+    ASSERT_EQ((ssize_t)bl.length(), parent_image.write(0, bl.length(), bl));
+    ASSERT_EQ(0, parent_image.snap_create("snap1"));
+    ASSERT_EQ(0, parent_image.snap_protect("snap1"));
+  }
+
+  uint64_t features;
+  {
+    librbd::Image parent_image;
+    ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+    ASSERT_EQ(0, parent_image.features(&features));
+  }
+
+  std::string clone_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "snap1", ioctx,
+                         clone_name.c_str(), features, &order));
+
+  std::string copy_name = get_temp_image_name();
+  {
+    librbd::Image clone_image;
+    ASSERT_EQ(0, rbd.open(ioctx, clone_image, clone_name.c_str(), NULL));
+
+    // the object map only tracks objects belonging to the clone itself, so
+    // nothing inherited from the parent is marked as existing in it.  Take
+    // the exclusive lock so that the object map, if any, is loaded before
+    // the copy -- otherwise the copy can't be fooled by it.  With object map
+    // disabled this just exercises the plain copy path.
+    if (is_feature_enabled(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+      ASSERT_EQ(0, clone_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE));
+      bool is_owner;
+      ASSERT_EQ(0, clone_image.is_exclusive_lock_owner(&is_owner));
+      ASSERT_TRUE(is_owner);
+    }
+
+    bufferlist clone_bl;
+    ASSERT_EQ((ssize_t)bl.length(), clone_image.read(0, bl.length(), clone_bl));
+    ASSERT_TRUE(bl.contents_equal(clone_bl));
+
+    ASSERT_EQ(0, clone_image.copy(ioctx, copy_name.c_str()));
+  }
+
+  // the copy must carry the data the clone inherited from its parent
+  librbd::Image copy_image;
+  ASSERT_EQ(0, rbd.open(ioctx, copy_image, copy_name.c_str(), NULL));
+
+  bufferlist copy_bl;
+  ASSERT_EQ((ssize_t)bl.length(), copy_image.read(0, bl.length(), copy_bl));
+  ASSERT_TRUE(bl.contents_equal(copy_bl));
+}
+
 TEST_F(TestLibRBD, TestDeepCopy)
 {
   REQUIRE_FORMAT_V2();
@@ -9187,6 +9254,73 @@ TEST_F(TestLibRBD, Flatten)
   ASSERT_PASSED(validate_object_map, clone_image);
 }
 
+TEST_F(TestLibRBD, FlattenWhenOpenedSnap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_DEEP_FLATTEN);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string parent_name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(), size, &order));
+
+  librbd::Image parent_image;
+  ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  ASSERT_EQ((ssize_t)bl.length(), parent_image.write(0, bl.length(), bl));
+
+  ASSERT_EQ(0, parent_image.snap_create("snap1"));
+  ASSERT_EQ(0, parent_image.snap_protect("snap1"));
+
+  uint64_t features;
+  ASSERT_EQ(0, parent_image.features(&features));
+
+  std::string clone_name = get_temp_image_name();
+  EXPECT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "snap1", ioctx,
+       clone_name.c_str(), features, &order));
+
+  librbd::Image clone_image;
+  ASSERT_EQ(0, rbd.open(ioctx, clone_image, clone_name.c_str(), NULL));
+  ASSERT_EQ(0, clone_image.snap_create("clone_snap"));
+
+  // keep a handle open at the clone's snapshot across the parent flatten
+  librbd::Image snap_image;
+  ASSERT_EQ(0, rbd.open(ioctx, snap_image, clone_name.c_str(), "clone_snap"));
+
+  bufferlist read_bl;
+  ASSERT_EQ((ssize_t)bl.length(), snap_image.read(0, bl.length(), read_bl));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+
+  ASSERT_EQ(0, clone_image.flatten());
+
+  // flatten's watch notification only marks snap_image as needing a
+  // refresh; force the actual reload via any call that checks for one
+  // (e.g. stat), the same way a real client would before its next
+  // operation on the image
+  librbd::image_info_t info;
+  ASSERT_EQ(0, snap_image.stat(info, sizeof(info)));
+
+  read_bl.clear();
+  ASSERT_EQ((ssize_t)bl.length(), snap_image.read(0, bl.length(), read_bl));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+
+  // a freshly opened handle at the same snapshot should also see the
+  // correct data
+  librbd::Image reopened_snap_image;
+  ASSERT_EQ(0, rbd.open(ioctx, reopened_snap_image, clone_name.c_str(),
+                        "clone_snap"));
+
+  read_bl.clear();
+  ASSERT_EQ((ssize_t)bl.length(),
+            reopened_snap_image.read(0, bl.length(), read_bl));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+}
+
 TEST_F(TestLibRBD, Sparsify)
 {
   rados_ioctx_t ioctx;
@@ -10477,6 +10611,62 @@ TEST_F(TestLibRBD, CheckObjectMap)
 
   ASSERT_EQ(0, image1.get_flags(&flags));
   ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
+}
+
+TEST_F(TestLibRBD, ObjectMapOnCloneSnap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_OBJECT_MAP);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string parent_name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(), size, &order));
+
+  librbd::Image parent_image;
+  ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  ASSERT_EQ((ssize_t)bl.length(), parent_image.write(0, bl.length(), bl));
+
+  ASSERT_EQ(0, parent_image.snap_create("snap1"));
+  ASSERT_EQ(0, parent_image.snap_protect("snap1"));
+
+  uint64_t features;
+  ASSERT_EQ(0, parent_image.features(&features));
+
+  std::string clone_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "snap1", ioctx,
+                         clone_name.c_str(), features, &order));
+
+  librbd::Image clone_image;
+  ASSERT_EQ(0, rbd.open(ioctx, clone_image, clone_name.c_str(), NULL));
+
+  // copy up an object so that the snapshot object map has a mix of
+  // existent and non-existent objects to verify
+  bl.clear();
+  bl.append(std::string(4096, '2'));
+  ASSERT_EQ((ssize_t)bl.length(), clone_image.write(0, bl.length(), bl));
+
+  ASSERT_EQ(0, clone_image.snap_create("clone_snap"));
+  ASSERT_EQ(0, clone_image.close());
+
+  // the clone snapshot still has a live parent overlap, so librbd doesn't
+  // load its object map into the image context -- check and rebuild must
+  // still be able to get at the on-disk map
+  librbd::Image snap_image;
+  ASSERT_EQ(0, rbd.open(ioctx, snap_image, clone_name.c_str(), "clone_snap"));
+
+  PrintProgress prog_ctx;
+  ASSERT_EQ(0, snap_image.check_object_map(prog_ctx));
+  ASSERT_PASSED(validate_object_map, snap_image);
+
+  ASSERT_EQ(0, snap_image.rebuild_object_map(prog_ctx));
+  ASSERT_PASSED(validate_object_map, snap_image);
 }
 
 TEST_F(TestLibRBD, BlockingAIO)
