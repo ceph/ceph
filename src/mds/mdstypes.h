@@ -136,6 +136,8 @@ std::ostream& operator<<(std::ostream &out, const vinodeno_t &vino);
 
 typedef uint32_t damage_flags_t;
 
+typedef std::bitset<MAX_MDS> max_mds_bitset_t;
+
 template<template<typename> class Allocator>
 using alloc_string = std::basic_string<char,std::char_traits<char>,Allocator<char>>;
 
