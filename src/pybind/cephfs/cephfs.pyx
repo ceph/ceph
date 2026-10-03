@@ -2590,7 +2590,7 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in link")    
     
-    def readlink(self, path, size) -> bytes:
+    def readlink(self, path, size=4096) -> bytes:
         """
         Read a symbolic link.
       
