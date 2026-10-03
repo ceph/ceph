@@ -76,6 +76,7 @@ public:
     return std::make_pair(r,SchedulerCompleter(std::bind(&Scheduler::request_complete,this)));
   }
   virtual void request_complete() {};
+  virtual void report_completion(std::chrono::nanoseconds rtt, bool dropped) {};
 
   virtual ~Scheduler() {};
 private:
