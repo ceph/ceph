@@ -19,6 +19,7 @@
 
 #include "include/rados/librgw.h"
 #include "rgw_acl.h"
+#include "perfglue/heap_profiler.h"
 
 #include "include/str_list.h"
 #include "global/signal_handler.h"
@@ -106,6 +107,7 @@ namespace rgw {
 	if (cur_gen != gen)
 	  goto restart; /* invalidated */
       }
+      ceph_heap_mark_thread_temporarily_idle();
       cv.wait_for(uniq, std::chrono::seconds(delay_s));
       uniq.unlock();
     }
