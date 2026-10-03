@@ -86,6 +86,13 @@ int ec_init(const std::string &profile_str,
     return 0;
   }
 
+  if ((*ec_impl)->get_supported_optimizations() &
+      ceph::ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) {
+    usage("invalid profile: plugins using sub-chunks are not supported",
+          std::cerr);
+    return 1;
+  }
+
   uint64_t stripe_unit = atoi(stripe_unit_str.c_str());
   if (stripe_unit <= 0) {
     usage("invalid stripe unit", std::cerr);
@@ -95,6 +102,12 @@ int ec_init(const std::string &profile_str,
   uint64_t stripe_size = atoi(profile["k"].c_str());
   ceph_assert(stripe_size > 0);
   uint64_t stripe_width = stripe_size * stripe_unit;
+  uint64_t chunk_size = (*ec_impl)->get_chunk_size(stripe_width);
+  if (chunk_size != stripe_unit) {
+    usage("invalid stripe unit: the plugin rounds it up to " +
+          stringify(chunk_size), std::cerr);
+    return 1;
+  }
   sinfo->reset(new ECUtil::stripe_info_t(*ec_impl, nullptr, stripe_width));
 
   return 0;
@@ -125,7 +138,7 @@ int do_validate_profile(const std::vector<const char*> &args) {
 
   ceph::ErasureCodeInterfaceRef ec_impl;
   int r = ec_init(args[0], {}, &ec_impl, nullptr);
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
@@ -168,7 +181,7 @@ int do_calc_chunk_size(const std::vector<const char*> &args) {
 
   ceph::ErasureCodeInterfaceRef ec_impl;
   int r = ec_init(args[0], {}, &ec_impl, nullptr);
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
@@ -191,7 +204,7 @@ int do_encode(const std::vector<const char*> &args) {
   ceph::ErasureCodeInterfaceRef ec_impl;
   std::unique_ptr<ECUtil::stripe_info_t> sinfo;
   int r = ec_init(args[0], args[1], &ec_impl, &sinfo);
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
@@ -266,15 +279,20 @@ int do_decode(const std::vector<const char*> &args) {
       std::cerr << "failed to read " << name << ": " << error << std::endl;
       return 1;
     }
-    shard_id_t shard = sinfo->get_shard(raw_shard_id_t(atoi(shard_str.c_str())));
+    shard_id_t shard(atoi(shard_str.c_str()));
     encoded_data.insert_in_shard(shard, 0, bl);
   }
 
+  // encode works on full stripes, so the missing shards cover whole
+  // stripes, not just the range of the shards present
+  uint64_t ro_start = sinfo->ro_offset_to_prev_stripe_ro_offset(
+    encoded_data.get_ro_start());
+  uint64_t ro_end = sinfo->ro_offset_to_next_stripe_ro_offset(
+    encoded_data.get_ro_end());
   ECUtil::shard_extent_set_t wanted(sinfo->get_k_plus_m());
-  sinfo->ro_range_to_shard_extent_set(encoded_data.get_ro_start(),
-    encoded_data.get_ro_end() - encoded_data.get_ro_start(), wanted);
+  sinfo->ro_range_to_shard_extent_set(ro_start, ro_end - ro_start, wanted);
 
-  r = encoded_data.decode(ec_impl, wanted, encoded_data.get_ro_end());
+  r = encoded_data.decode(ec_impl, wanted, ro_end);
   if (r < 0) {
     std::cerr << "failed to decode: " << cpp_strerror(r) << std::endl;
     return 1;
