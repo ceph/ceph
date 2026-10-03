@@ -123,6 +123,83 @@ TEST_P(TestClsRgw, index_basic)
 	     obj_size * NUM_OBJS);
 }
 
+// link an instance, written with a plain complete, under a condition on the
+// current version
+static int link_with_cond(librados::IoCtx& ioctx, const string& oid,
+                          const cls_rgw_obj_key& key, bool delete_marker,
+                          const cls_rgw_link_olh_cond& cond, uint64_t epoch)
+{
+  if (!delete_marker) {
+    ObjectWriteOperation op;
+    cls_rgw_bucket_prepare_op(op, CLS_RGW_OP_ADD, "tag-" + key.instance, key, "");
+    int r = ioctx.operate(oid, &op);
+    if (r < 0) {
+      return r;
+    }
+    ObjectWriteOperation cop;
+    rgw_bucket_entry_ver ver;
+    ver.pool = ioctx.get_id();
+    ver.epoch = epoch;
+    rgw_bucket_dir_entry_meta meta;
+    cls_rgw_bucket_complete_op(cop, CLS_RGW_OP_ADD, "tag-" + key.instance, ver, key, meta,
+                               nullptr, true, 0, nullptr);
+    r = ioctx.operate(oid, &cop);
+    if (r < 0) {
+      return r;
+    }
+  }
+  bufferlist olh_tag;
+  olh_tag.append("olh-tag"); // one olh tag for the key's links
+  rgw_bucket_dir_entry_meta meta;
+  rgw_zone_set zones;
+  ObjectWriteOperation op;
+  cls_rgw_bucket_link_olh(op, key, olh_tag, delete_marker, "op-" + key.instance, &meta,
+                          0, ceph::real_time{}, false, true, zones, nullptr, &cond);
+  return ioctx.operate(oid, &op);
+}
+
+TEST_P(TestClsRgw, link_olh_cond)
+{
+  string bucket_oid = str_int("bucket", 20);
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  const int refused = -CLS_RGW_ERR_PRECONDITION_FAILED;
+  cls_rgw_link_olh_cond no_current;
+  no_current.type = cls_rgw_link_olh_cond::NO_CURRENT;
+  auto current_is = [] (const cls_rgw_obj_key& key) {
+    cls_rgw_link_olh_cond c;
+    c.type = cls_rgw_link_olh_cond::CURRENT_IS;
+    c.key = key;
+    return c;
+  };
+  const cls_rgw_obj_key v1{"obj", "v1"}, v2{"obj", "v2"}, v3{"obj", "v3"}, dm{"obj", "dm"};
+
+  // a key with no version: If-None-Match: * links
+  ASSERT_EQ(0, link_with_cond(ioctx, bucket_oid, v1, false, no_current, 1));
+  // two creates: the second finds v1 current
+  ASSERT_EQ(refused, link_with_cond(ioctx, bucket_oid, v2, false, no_current, 2));
+  // If-Match checked against a version that is no longer current
+  ASSERT_EQ(refused, link_with_cond(ioctx, bucket_oid, v2, false, current_is({"obj", "v0"}), 2));
+  // If-Match checked against the current version
+  ASSERT_EQ(0, link_with_cond(ioctx, bucket_oid, v2, false, current_is(v1), 2));
+  // a conditional delete marker, over the version it checked
+  ASSERT_EQ(refused, link_with_cond(ioctx, bucket_oid, dm, true, current_is(v1), 3));
+  ASSERT_EQ(0, link_with_cond(ioctx, bucket_oid, dm, true, current_is(v2), 3));
+  // under a delete marker the key has no current version
+  ASSERT_EQ(0, link_with_cond(ioctx, bucket_oid, v3, false, no_current, 4));
+
+  // a plain entry from before versioning is the key's current version
+  const cls_rgw_obj_key plain{"plain"};
+  rgw_bucket_dir_entry_meta meta;
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, "plain-tag", plain, "");
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, "plain-tag", 5, plain, meta);
+  const cls_rgw_obj_key p1{"plain", "p1"};
+  ASSERT_EQ(refused, link_with_cond(ioctx, bucket_oid, p1, false, no_current, 6));
+  ASSERT_EQ(0, link_with_cond(ioctx, bucket_oid, p1, false, current_is({"plain", "null"}), 6));
+}
+
 TEST_P(TestClsRgw, index_multiple_obj_writers)
 {
   string bucket_oid = str_int("bucket", 1);

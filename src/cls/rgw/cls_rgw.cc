@@ -1801,6 +1801,58 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
  *  generate instance entry for deletion markers here, as they are not
  *  created prior.
  */
+// the null version's instance, "null" or empty
+static cls_rgw_obj_key null_instance_as_empty(cls_rgw_obj_key key)
+{
+  if (key.instance == "null") {
+    key.instance.clear();
+  }
+  return key;
+}
+
+// A conditional write links only if the key's current version is still the
+// one it checked its condition against: none, or a given instance. Without
+// an olh entry, the current version is the plain entry from before
+// versioning, if there is one, which the link turns into the null version.
+static int check_link_olh_cond(cls_method_context_t hctx, const rgw_cls_link_olh_op& op,
+                               BIOLHEntry& olh, bool olh_found)
+{
+  if (op.cond.type == cls_rgw_link_olh_cond::NONE) {
+    return 0;
+  }
+  bool has_current = false;
+  cls_rgw_obj_key current;
+  if (olh_found) {
+    const rgw_bucket_olh_entry& entry = olh.get_entry();
+    has_current = olh.exists() && !entry.delete_marker;
+    current = entry.key;
+  } else {
+    cls_rgw_obj_key plain_key(op.key.name);
+    rgw_bucket_dir_entry plain;
+    string plain_idx;
+    int ret = read_key_entry(hctx, plain_key, &plain_idx, &plain);
+    if (ret < 0 && ret != -ENOENT) {
+      return ret;
+    }
+    has_current = (ret == 0 && plain.exists);
+    current = plain_key;
+  }
+  bool met = false;
+  if (op.cond.type == cls_rgw_link_olh_cond::NO_CURRENT) {
+    met = !has_current;
+  } else if (op.cond.type == cls_rgw_link_olh_cond::CURRENT_IS) {
+    met = has_current &&
+        null_instance_as_empty(current) == null_instance_as_empty(op.cond.key);
+  }
+  if (!met) {
+    CLS_LOG(10, "%s: key=%s: the current version (%s) fails the link's condition (type %d)",
+            __func__, op.key.to_string().c_str(),
+            has_current ? current.to_string().c_str() : "none", (int)op.cond.type);
+    return -CLS_RGW_ERR_PRECONDITION_FAILED;
+  }
+  return 0;
+}
+
 static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -1858,6 +1910,11 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   BIOLHEntry olh(hctx, op.key);
   bool olh_found = false;
   ret = olh.init(&olh_found);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = check_link_olh_cond(hctx, op, olh, olh_found);
   if (ret < 0) {
     return ret;
   }

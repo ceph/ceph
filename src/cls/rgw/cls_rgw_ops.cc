@@ -215,6 +215,8 @@ void rgw_cls_link_olh_op::dump(Formatter *f) const
   encode_json("unmod_since", ut, f);
   encode_json("high_precision_time", high_precision_time, f);
   encode_json("zones_trace", zones_trace, f);
+  encode_json("cond_type", (uint32_t)cond.type, f);
+  encode_json("cond_key", cond.key, f);
 }
 
 list<rgw_cls_refresh_instance_op> rgw_cls_refresh_instance_op::generate_test_instances()

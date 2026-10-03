@@ -24,6 +24,7 @@
 #define CEPH_RGW_DIR_SUGGEST_OP_MASK 0x7f
 
 #define CLS_RGW_ERR_BUSY_RESHARDING 2300 // also in rgw_common.h, don't change!
+#define CLS_RGW_ERR_PRECONDITION_FAILED 2015 // ERR_PRECONDITION_FAILED in rgw_common.h, don't change!
 
 constexpr uint64_t CEPH_RGW_DEFAULT_TAG_TIMEOUT = 120; // in seconds
 
@@ -370,6 +371,20 @@ struct rgw_bucket_entry_ver {
 WRITE_CLASS_ENCODER(rgw_bucket_entry_ver)
 
 typedef rgw_obj_index_key cls_rgw_obj_key;
+
+// A condition on a key's current version, which link_olh checks before it
+// links a new version. The write of a conditional request (If-Match,
+// If-None-Match) links only if the current version is still the one it
+// checked its condition against, so that the check and the link are atomic.
+struct cls_rgw_link_olh_cond {
+  enum Type : uint8_t {
+    NONE = 0,
+    NO_CURRENT = 1, // the key has no current version, or a delete marker
+    CURRENT_IS = 2, // the key's current version is key
+  };
+  uint8_t type = NONE;
+  cls_rgw_obj_key key;
+};
 
 inline std::ostream& operator<<(std::ostream& out, const cls_rgw_obj_key& o) {
   out << o.name;
