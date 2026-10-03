@@ -38,6 +38,7 @@ class FileSystemAuthorizer:
             'filesystem': volume,
             'entity': entity,
             'caps': caps,
+            'key_type': 'aes256k',
         }
         log.info('Requesting fs authorzation: %r', cmd)
         ret, _, status = self._mc.mon_command(cmd)
