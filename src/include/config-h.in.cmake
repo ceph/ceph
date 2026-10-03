@@ -396,9 +396,6 @@
 /* Define if libcephsqlite is enabled */
 #cmakedefine WITH_LIBCEPHSQLITE
 
-/* Define if RWL is enabled */
-#cmakedefine WITH_RBD_RWL
-
 /* Define if PWL-SSD is enabled */
 #cmakedefine WITH_RBD_SSD_CACHE
 
