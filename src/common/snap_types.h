@@ -1,6 +1,12 @@
 #ifndef __CEPH_SNAP_TYPES_H
 #define __CEPH_SNAP_TYPES_H
 
+#include <iosfwd>
+#include <list>
+#include <vector>
+
+#include "include/ceph_fs.h" // for struct ceph_mds_snap_realm
+#include "include/encoding.h" // for WRITE_CLASS_ENCODER
 #include "include/object.h" // for struct snapid_t
 #include "include/utime.h"
 #include "include/fs_types.h" // for struct inodeno_t
