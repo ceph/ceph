@@ -942,6 +942,17 @@ public:
   void corrupt_shard_data(const hobject_t& obj, pg_shard_t shard);
 
   /**
+   * Move a shard's copy of an object aside, as if the shard had lost it,
+   * and put it back.
+   */
+  void hide_shard_object(const hobject_t& obj, pg_shard_t shard);
+  void restore_shard_object(const hobject_t& obj, pg_shard_t shard);
+
+  // Errors per shard id from the last scrub_object() that found the object
+  // inconsistent
+  std::map<int, uint64_t> last_scrub_shard_errors;
+
+  /**
    * Create a bufferlist filled with random data.
    *
    * This utility method generates a buffer of the specified size filled with
