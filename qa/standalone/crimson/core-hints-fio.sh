@@ -124,6 +124,7 @@ function run() {
     # fio uses the librados it is linked with: make it this build's
     export LD_LIBRARY_PATH=$PWD/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
     mkdir -p "$RESULTS_DIR" || return 1
+    _save_params > $RESULTS_DIR/params.txt
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -136,6 +137,19 @@ function run() {
         teardown $dir || return 1
         echo "-------------- Complete Test $func ------------------"
     done
+}
+
+# the test's settings, as NAME=value lines
+function _save_params() {
+    local v
+    for v in NUM_OSDS POOL_SIZE POOL_PGS OSD_SMP OSD_CPU_BASE OSD_MEMORY \
+             OSD_EXTRA_ARGS STORE SEASTORE_BACKEND SEASTORE_DEVS SEASTORE_SIZE \
+             CLIENT_CPUS CLIENT_CONF_EXTRA WORKLOADS REPEAT FIO_RUNTIME FIO_RAMP \
+             FIO_BS FIO_IODEPTH FIO_NUMJOBS FIO_NRFILES FIO_FILESIZE \
+             FIO_PREFILL_BS FIO_PREFILL_IODEPTH; do
+        echo "$v=${!v}"
+    done
+    echo "git=$(git -C $CEPH_ROOT describe --always --dirty 2>/dev/null)"
 }
 
 # keep the OSD and fio client logs (teardown() removes the test dir):
