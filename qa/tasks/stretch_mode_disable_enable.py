@@ -472,6 +472,12 @@ class TestStretchMode(MgrTestCase):
         """
         # Create a pool
         self._setup_pool(self.POOL, 16, 'replicated', self.STRETCH_CRUSH_RULE, 4, 2)
+        # all PGs are active + clean
+        self.wait_until_true_and_hold(
+            lambda: self.mgr_cluster.mon_manager.pg_all_active_clean(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
+        )
         # Write some data to the pool
         self._write_some_data(self.WRITE_PERIOD)
         # disable stretch mode without --yes-i-really-mean-it (expects -EPERM 1)
@@ -528,6 +534,12 @@ class TestStretchMode(MgrTestCase):
                 self.STRETCH_CRUSH_RULE,
                 self.STRETCH_BUCKET_TYPE
             ))
+        #  Wait for all I/O to complete and PGs to stabilize
+        self.wait_until_true_and_hold(
+            lambda: self.mgr_cluster.mon_manager.pg_all_active_clean(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
+        )
         self._stretch_mode_enabled_correctly()
         # all PGs are active + clean
         self.wait_until_true_and_hold(
