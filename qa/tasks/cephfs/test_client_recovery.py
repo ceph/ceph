@@ -3,6 +3,7 @@
 Teuthology task for exercising CephFS client recovery
 """
 
+import json
 import logging
 import random
 import signal
@@ -888,3 +889,159 @@ class TestClientOnLaggyOSD(CephFSTestCase):
             self.mount_a.mount_wait()
             self.mount_a.create_destroy()
             self.clear_laggy_params(osd)
+
+
+class TestReplayCapReconnect(CephFSTestCase):
+    """
+    Two clients hold caps on one inode while a replayed setattr names that
+    inode. Rejoin must not load it (it is in cap_imports_missing), so both
+    reconnect records are still in cap_imports when clientreplay calls
+    try_reconnect_cap().
+
+    https://tracker.ceph.com/issues/60014
+    """
+
+    CLIENTS_REQUIRED = 2
+    MDSS_REQUIRED = 1
+
+    TEST_FILE = "reconnect_test"
+
+    def _hold_open(self, mount):
+        """
+        Open TEST_FILE and hold the fd until stdin is closed.
+
+        Wait until the open has completed. open_background() returns as soon
+        as the path is visible, which is already true for an existing file.
+        """
+        path = os.path.join(mount.hostfs_mntpt, self.TEST_FILE)
+        pyscript = dedent("""
+            import fcntl
+            import os
+            import sys
+            import time
+
+            fcntl.fcntl(sys.stdin, fcntl.F_SETFL,
+                        fcntl.fcntl(sys.stdin, fcntl.F_GETFL) | os.O_NONBLOCK)
+            fd = os.open("{path}", os.O_RDONLY)
+            print("opened", flush=True)
+            while True:
+                try:
+                    if os.read(0, 4096) == b"":
+                        break
+                except BlockingIOError:
+                    pass
+                time.sleep(1)
+            os.close(fd)
+            """).format(path=path)
+        proc = mount._run_python(pyscript)
+        mount.background_procs.append(proc)
+        self.wait_until_true(
+            lambda: "opened" in proc.stdout.getvalue(),
+            timeout=30, period=1)
+        return proc
+
+    def _release_hold(self, mount, proc):
+        if proc is None:
+            return
+        mount._kill_background(proc)
+        if proc in mount.background_procs:
+            mount.background_procs.remove(proc)
+
+    def _client_cap_ids(self, ino):
+        last = None
+        for _ in range(10):
+            try:
+                dumped = self.fs.rank_tell(["dump", "inode", str(ino)])
+            except json.decoder.JSONDecodeError as exc:
+                last = str(exc)
+                time.sleep(1)
+                continue
+            inode = dumped.get("inode", dumped)
+            caps = inode.get("client_caps") or []
+            if caps:
+                return {int(cap["client_id"]) for cap in caps}
+            last = dumped
+            time.sleep(1)
+        self.fail("inode {0} has no client caps: {1}".format(ino, last))
+
+    def test_multi_client_replay_cap_reconnect(self):
+        """
+        Fail the MDS with two deferred cap reconnects for one inode and one
+        unsafe setattr. Both caps must be imported, and the MDS must not
+        abort in remove_replay_cap_reconnect().
+        """
+        holder_a = holder_b = None
+        chmod_proc = None
+        log_paused = False
+
+        try:
+            self.mount_a.run_shell(["touch", self.TEST_FILE])
+            # Drop every cap so the flushed open-file table does not list
+            # this inode. Otherwise rejoin prefetches it and imports every
+            # cap before clientreplay.
+            self.mount_a.umount_wait(require_clean=True)
+            self.mount_b.umount_wait(require_clean=True)
+
+            # The trim thread commits a dirty open-file table about once a
+            # second. Stretch that past this test so the opens below stay
+            # out of the on-disk table. Let one upkeep observe the new
+            # interval before the file is opened again.
+            self.fs.mds_asok(["config", "set", "mds_log_trim_upkeep_interval",
+                              "3600000"])
+            time.sleep(3)
+
+            self.fs.mds_asok(["flush", "journal"])
+
+            self.mount_a.mount_wait(mntopts=["noatime"])
+            self.mount_b.mount_wait(mntopts=["noatime"])
+
+            ino = self.mount_a.path_to_ino(self.TEST_FILE)
+            holder_a = self._hold_open(self.mount_a)
+            holder_b = self._hold_open(self.mount_b)
+            client_a = self.mount_a.get_global_id()
+            client_b = self.mount_b.get_global_id()
+            log.info("ino=%s client_a=%s client_b=%s", ino, client_a, client_b)
+            self.assert_session_count(2)
+
+            # Early-reply the setattr, then kill the MDS before it is
+            # journaled. The client resends it with CEPH_MDS_FLAG_REPLAY and
+            # head.ino, which pins the inode in cap_imports_missing.
+            self.fs.mds_asok(["config", "set", "mds_log_pause", "1"])
+            log_paused = True
+            chmod_proc = self.mount_a.run_shell(
+                ["timeout", "180", "chmod", "600", self.TEST_FILE], wait=False)
+            time.sleep(10)
+
+            with self.assert_cluster_log(
+                    "failed to reconnect caps for missing inodes",
+                    present=False, timeout=20):
+                self.fs.rank_fail()
+                log_paused = False
+                self.fs.wait_for_daemons()
+
+            crashes = self.get_ceph_cmd_stdout("crash", "ls")
+            self.assertEqual(
+                crashes.strip(), "",
+                "MDS crashed during cap reconnect: {0}".format(crashes))
+
+            mode = self.mount_a.run_shell(
+                ["stat", "-c", "%a", self.TEST_FILE]).stdout.getvalue().strip()
+            self.assertEqual(mode, "600")
+
+            caps = self._client_cap_ids(ino)
+            log.info("client caps on inode %s: %s", ino, caps)
+            self.assertIn(int(client_a), caps)
+            self.assertIn(int(client_b), caps)
+        finally:
+            if log_paused:
+                try:
+                    self.fs.mds_asok(["config", "set", "mds_log_pause", "0"])
+                except Exception:
+                    log.exception("failed to clear mds_log_pause")
+            if chmod_proc is not None:
+                try:
+                    chmod_proc.wait()
+                except CommandFailedError:
+                    pass
+            self._release_hold(self.mount_a, holder_a)
+            self._release_hold(self.mount_b, holder_b)
