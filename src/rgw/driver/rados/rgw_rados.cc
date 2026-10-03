@@ -7071,9 +7071,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
 
       using namespace std::string_literals;
       if (params.if_match && params.if_match != "*"sv) {
-        string if_match = rgw_string_unquote(params.if_match);
-        ldpp_dout(dpp, 10) << "checking precondtion if_match: " << if_match << ", etag: " << dirent.meta.etag << dendl;
-        if(dirent.meta.etag != if_match) {
+        ldpp_dout(dpp, 10) << "checking precondtion if_match: " << params.if_match << ", etag: " << dirent.meta.etag << dendl;
+        if (!rgw_etag_matches(params.if_match, dirent.meta.etag, false)) {
           return -ERR_PRECONDITION_FAILED;
         }
       }
@@ -7862,10 +7861,9 @@ int RGWRados::Object::check_preconditions(const DoutPrefixProvider *dpp, std::op
     } else {
       bufferlist bl;
       if (current_state.get_attr(RGW_ATTR_ETAG, bl)) {
-        string if_match_str = rgw_string_unquote(if_match);
-        string etag = string(bl.c_str(), bl.length());
-        ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions if_match: " << if_match_str << ", etag: " << etag << dendl;
-        if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+        const string etag = rgw_bl_str(bl);
+        ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions if_match: " << if_match << ", etag: " << etag << dendl;
+        if (!rgw_etag_matches(if_match, etag, false)) {
           return -ERR_PRECONDITION_FAILED;
         }
       } else {
@@ -7884,10 +7882,9 @@ int RGWRados::Object::check_preconditions(const DoutPrefixProvider *dpp, std::op
     } else {
       bufferlist bl;
       if (current_state.get_attr(RGW_ATTR_ETAG, bl)) {
-        string if_nomatch_str = rgw_string_unquote(if_nomatch);
-        string etag = string(bl.c_str(), bl.length());
-        ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions if_match: " << if_nomatch_str << ", etag: " << etag << dendl;
-        if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
+        const string etag = rgw_bl_str(bl);
+        ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions if_nomatch: " << if_nomatch << ", etag: " << etag << dendl;
+        if (rgw_etag_matches(if_nomatch, etag, true)) {
           return -ERR_PRECONDITION_FAILED;
         }
       }
@@ -8456,7 +8453,7 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       string if_match_str = rgw_string_unquote(conds.if_match);
       if (if_match_str.compare("*") != 0) {
         ldpp_dout(dpp, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-Match: " << if_match_str << dendl;
-        if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+        if (!rgw_etag_matches(conds.if_match, rgw_bl_str(etag), false)) {
           return -ERR_PRECONDITION_FAILED;
         }
       } else {
@@ -8471,7 +8468,7 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
         return -ERR_NOT_MODIFIED;
       }
       ldpp_dout(dpp, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-NoMatch: " << if_nomatch_str << dendl;
-      if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
+      if (rgw_etag_matches(conds.if_nomatch, rgw_bl_str(etag), true)) {
         return -ERR_NOT_MODIFIED;
       }
     }

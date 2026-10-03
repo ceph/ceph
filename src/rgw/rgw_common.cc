@@ -12,6 +12,7 @@
 #include "common/versioned_variant.h"
 
 #include "rgw_op.h"
+#include "common/split.h"
 #include "rgw_common.h"
 #include "rgw_acl.h"
 #include "rgw_string.h"
@@ -527,6 +528,29 @@ bool rgw_set_amz_meta_header(
     x_meta_map[k] = v;
   }
   return r;
+}
+
+bool rgw_etag_matches(std::string_view header, std::string_view etag, bool weak)
+{
+  // an ETag attribute may end with a NUL
+  while (!etag.empty() && etag.back() == '\0') {
+    etag.remove_suffix(1);
+  }
+  for (std::string_view tag : ceph::split(header, ", \t")) {
+    if (tag.starts_with("W/")) {
+      if (!weak) {
+        continue;
+      }
+      tag.remove_prefix(2);
+    }
+    if (tag.size() >= 2 && tag.front() == '"' && tag.back() == '"') {
+      tag = tag.substr(1, tag.size() - 2);
+    }
+    if (tag == etag) {
+      return true;
+    }
+  }
+  return false;
 }
 
 string rgw_string_unquote(const string& s)
