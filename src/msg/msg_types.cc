@@ -384,7 +384,7 @@ void entity_addrvec_t::decode(ceph::buffer::list::const_iterator& bl)
       decode(ss_family, bl);
       sa->sa_family = ss_family;
       elen -= sizeof(ss_family);
-      if (elen > addr.get_sockaddr_len() - sizeof(sa->sa_family)) {
+      if (elen > addr.get_sockaddr_len() - offsetof(struct sockaddr, sa_data)) {
         throw ceph::buffer::malformed_input("elen exceeds sockaddr len");
       }
       bl.copy(elen, sa->sa_data);
