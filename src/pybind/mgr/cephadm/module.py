@@ -4573,7 +4573,7 @@ Then run the following:
         return {
             'service_name': spec.service_name(),
             'service_type': spec.service_type,
-            'add': [hs.hostname for hs in to_add],
+            'add': [f'{spec.service_name()}.{hs.hostname}' for hs in to_add],
             'remove': [d.name() for d in to_remove]
         }
 
