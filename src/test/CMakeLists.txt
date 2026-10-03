@@ -591,6 +591,12 @@ if(WITH_FUSE)
   target_link_libraries(ceph_test_cfuse_cache_invalidate
     ceph-common
   )
+  if(WITH_RBD)
+    add_ceph_test(rbd-fuse-options
+      ${CMAKE_CURRENT_SOURCE_DIR}/rbd_fuse/options.sh
+      $<TARGET_FILE:rbd-fuse>)
+    add_dependencies(tests rbd-fuse)
+  endif()
 endif(WITH_FUSE)
 
 if(${WITH_CEPHFS})
