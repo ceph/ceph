@@ -425,18 +425,26 @@ class CLICommandBase(object):
         self.func = None  # type: Optional[Callable]
         self.arg_spec = {}    # type: Dict[str, Any]
         self.first_default = -1
+        self.defaulted_args = set()  # type: Set[str]
 
     KNOWN_ARGS = '_', 'self', 'mgr', 'inbuf', 'return'
 
     @classmethod
-    def _load_func_metadata(cls: Any, f: HandlerFuncType) -> Tuple[str, Dict[str, Any], int, str]:
+    def _load_func_metadata(
+        cls: Any, f: HandlerFuncType
+    ) -> Tuple[str, Dict[str, Any], int, str, Set[str]]:
         f, extra_args = _extract_target_func(f)
         desc = (inspect.getdoc(f) or '').replace('\n', ' ')
         full_argspec = inspect.getfullargspec(f)
         arg_spec = full_argspec.annotations
-        first_default = len(arg_spec)
-        if full_argspec.defaults:
-            first_default -= len(full_argspec.defaults)
+        # first_default indexes into full_argspec.args, so it has to be
+        # counted there: len(arg_spec) only lines up when exactly one of
+        # the self/mgr argument and the return type is annotated, and a
+        # fully annotated handler taking mgr positionally has both.
+        first_default = len(full_argspec.args) - len(full_argspec.defaults or ())
+        # arg_spec is keyed by name and skips the unannotated self/mgr, so
+        # it does not share that indexing; ask for the names instead
+        defaulted_args = set(full_argspec.args[first_default:])
         args = []
         positional = True
         for index, arg in enumerate(full_argspec.args):
@@ -459,7 +467,7 @@ class CLICommandBase(object):
                 positional = False
             assert arg in arg_spec, \
                 f"'{arg}' is not annotated for {f}: {full_argspec}"
-            has_default = index >= first_default
+            has_default = arg in defaulted_args
             args.append(CephArgtype.to_argdesc(arg_spec[arg],
                                                dict(name=arg),
                                                has_default,
@@ -469,14 +477,15 @@ class CLICommandBase(object):
             if argname in arg_spec:
                 continue
             arg_spec[argname] = argtype
+            defaulted_args.add(argname)
             args.append(CephArgtype.to_argdesc(
                 argtype, dict(name=argname), has_default=True, positional=False
             ))
-        return desc, arg_spec, first_default, ' '.join(args)
+        return desc, arg_spec, first_default, ' '.join(args), defaulted_args
 
     def store_func_metadata(self, f: HandlerFuncType) -> None:
-        self.desc, self.arg_spec, self.first_default, self.args = \
-            self._load_func_metadata(f)
+        (self.desc, self.arg_spec, self.first_default, self.args,
+         self.defaulted_args) = self._load_func_metadata(f)
 
     def _register_handler(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
@@ -508,15 +517,14 @@ class CLICommandBase(object):
         kwargs = {}
         special_args = set()
         kwargs_switch = False
-        for index, (name, tp) in enumerate(self.arg_spec.items()):
+        for name, tp in self.arg_spec.items():
             if name in self.KNOWN_ARGS:
                 special_args.add(name)
                 continue
             assert self.first_default >= 0
             raw_v = cmd_dict.get(name)
-            if index >= self.first_default:
-                if raw_v is None:
-                    continue
+            if raw_v is None and name in self.defaulted_args:
+                continue
             kwargs_switch, k, v = self._get_arg_value(kwargs_switch,
                                                       name, raw_v)
             kwargs[k] = CephArgtype.cast_to(tp, v)
