@@ -242,6 +242,7 @@ static const actpair actpairs[] =
  { "s3vectors:DeleteVectorBucketPolicy", s3vectorsDeleteVectorBucketPolicy},
  { "s3vectors:DeleteVectors", s3vectorsDeleteVectors},
  { "s3vectors:GetIndex", s3vectorsGetIndex},
+ { "s3vectors:GetIndexStats", s3vectorsGetIndexStats},
  { "s3vectors:GetVectorBucket", s3vectorsGetVectorBucket},
  { "s3vectors:GetVectorBucketPolicy", s3vectorsGetVectorBucketPolicy},
  { "s3vectors:GetVectors", s3vectorsGetVectors},
@@ -1914,7 +1915,8 @@ std::string_view action_bit_string(action_t action) {
 
   case s3vectorsGetIndex:
     return "s3vectors:GetIndex";
-
+  case s3vectorsGetIndexStats:
+    return "s3vectors:GetIndexStats";
   case s3vectorsGetVectorBucket:
     return "s3vectors:GetVectorBucket";
 
