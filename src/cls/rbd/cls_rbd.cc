@@ -2365,7 +2365,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   r = read_key(hctx, "snap_limit", &snap_limit);
   if (r == -ENOENT) {
-    snap_limit = UINT64_MAX;
+    snap_limit = RBD_DEFAULT_SNAP_LIMIT;
   } else if (r < 0) {
     CLS_ERR("Could not read snapshot limit off disk: %s", cpp_strerror(r).c_str());
     return r;
@@ -3876,7 +3876,7 @@ int snapshot_get_limit(cls_method_context_t hctx, bufferlist *in,
   uint64_t snap_limit;
   int r = read_key(hctx, "snap_limit", &snap_limit);
   if (r == -ENOENT) {
-    snap_limit = UINT64_MAX;
+    snap_limit = RBD_DEFAULT_SNAP_LIMIT;
   } else if (r < 0) {
     CLS_ERR("error retrieving snapshot limit: %s", cpp_strerror(r).c_str());
     return r;
@@ -3902,10 +3902,12 @@ int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
   } catch (const ceph::buffer::error &err) {
     return -EINVAL;
   }
-
+  // UINT64_MAX means unlimited. Persist it explicitly so clearing the
+  // limit stays unlimited; absence of the key means RBD_DEFAULT_SNAP_LIMIT.
   if (new_limit == UINT64_MAX) {
-    CLS_LOG(20, "remove snapshot limit\n");
-    rc = cls_cxx_map_remove_key(hctx, "snap_limit");
+    CLS_LOG(20, "set snapshot limit to unlimited\n");
+    encode(new_limit, bl);
+    rc = cls_cxx_map_set_val(hctx, "snap_limit", &bl);
     return rc;
   }
 
@@ -4385,7 +4387,7 @@ int old_snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   uint64_t snap_limit;
   rc = read_key(hctx, "snap_limit", &snap_limit);
   if (rc == -ENOENT) {
-    snap_limit = UINT64_MAX;
+    snap_limit = RBD_DEFAULT_SNAP_LIMIT;
   } else if (rc < 0) {
     return rc;
   }
