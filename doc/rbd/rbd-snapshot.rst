@@ -71,8 +71,19 @@ snapshots using the ``rbd`` command.
 Create Snapshot
 ---------------
 
-To create a snapshot, use the ``rbd snap create`` command and specify the pool
-name, the image name, and the snap name:
+To create a snapshot, use the ``rbd snap create`` command (see
+:doc:`rbd(8) </man/8/rbd>`):
+
+.. The command entry below is included from doc/man/8/rbd.rst, between
+   the rbd-snap-create-begin and rbd-snap-create-end markers. Edit the
+   command description there, not here, so this page and the man page
+   stay in sync.
+
+.. include:: ../man/8/rbd.rst
+   :start-after: .. rbd-snap-create-begin
+   :end-before: .. rbd-snap-create-end
+
+Specify the pool name, the image name, and the snap name:
 
 .. prompt:: bash $
 
