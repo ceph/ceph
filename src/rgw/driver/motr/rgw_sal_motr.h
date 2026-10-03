@@ -1036,7 +1036,7 @@ class MotrStore : public StoreDriver {
     virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;
     virtual int register_to_service_map(const DoutPrefixProvider *dpp, const std::string& daemon_type,
         const std::map<std::string, std::string>& meta) override;
-    virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
+    virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& account_ratelimit, RGWRateLimitInfo& anon_ratelimit) override;
     virtual void get_quota(RGWQuota& quota) override;
     virtual int set_buckets_enabled(const DoutPrefixProvider *dpp, std::vector<rgw_bucket>& buckets, bool enabled) override;
     virtual int get_sync_policy_handler(const DoutPrefixProvider *dpp,
