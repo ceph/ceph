@@ -366,9 +366,6 @@
 /* Backend dbstore for Rados Gateway */
 #cmakedefine WITH_RADOSGW_DBSTORE
 
-/* Backend CORTX-Motr for Rados Gateway */
-#cmakedefine WITH_RADOSGW_MOTR
-
 /* Backend CORTX-DAOS for Rados Gateway */
 #cmakedefine WITH_RADOSGW_DAOS
 
