@@ -1522,6 +1522,92 @@ TEST_F(TestECActingStretch3Zone, ZoneTransition_ThreeToTwo) {
 }
 
 
+// Growing a 2-zone pool to 3 zones: the old acting set has 6 entries, the
+// new zone's OSDs have empty infos and the shards' logs start at log_tail.
+static void calc_two_to_three(const OSDMapRef& osdmap, int64_t pool_id,
+                              const vector<int>& up, eversion_t log_tail,
+                              vector<int>* want, set<pg_shard_t>* backfill,
+                              ostringstream& ss)
+{
+  const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
+  PGPool pgpool(osdmap, pool_id, *pool, "test_ec_pool_3z");
+  vector<int> acting = {0,1,2, 3,4,5};
+  map<pg_shard_t, pg_info_t> all_info;
+  pg_history_t history;
+  history.epoch_created = 1;
+  history.same_interval_since = 1;
+  for (unsigned i = 0; i < 6; i++) {
+    pg_shard_t shard(i, shard_id_t(i));
+    pg_info_t info(spg_t(pg_t(1, pool_id), shard_id_t(i)));
+    info.history = history;
+    info.last_update = eversion_t(1, 10);
+    info.log_tail = log_tail;
+    all_info[shard] = info;
+  }
+  // the new zone's OSDs answer the primary's query with an empty info
+  for (unsigned i = 6; i < 9; i++) {
+    pg_info_t info(spg_t(pg_t(1, pool_id), shard_id_t(i)));
+    info.history = history;
+    all_info[pg_shard_t(up[i], shard_id_t(i))] = info;
+  }
+  auto auth_log_shard = all_info.find(pg_shard_t(0, shard_id_t(0)));
+  set<pg_shard_t> acting_backfill;
+  PeeringState::calc_ec_acting_stretch(
+    auth_log_shard, pool->size, acting, up, all_info, false,
+    want, backfill, &acting_backfill, osdmap, pgpool, ss);
+}
+
+TEST_F(TestECActingStretch3Zone, ZoneTransition_TwoToThree) {
+  vector<int> want;
+  set<pg_shard_t> backfill;
+  ostringstream ss;
+  const vector<int> up = {0,1,2, 3,4,5, 6,7,8};
+
+  // the log goes back far enough to recover the new zone from it
+  calc_two_to_three(osdmap, pool_id, up, eversion_t(), &want, &backfill, ss);
+  EXPECT_EQ(want, up) << ss.str();
+  EXPECT_TRUE(backfill.empty()) << backfill << "\n" << ss.str();
+
+  // with a trimmed log the new zone is backfilled, and serves nothing yet
+  want.clear();
+  backfill.clear();
+  calc_two_to_three(osdmap, pool_id, up, eversion_t(1, 5), &want, &backfill, ss);
+  EXPECT_EQ(want, (vector<int>{0,1,2, 3,4,5, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE,
+                               CRUSH_ITEM_NONE})) << ss.str();
+  EXPECT_EQ(backfill, (set<pg_shard_t>{
+    pg_shard_t(6, shard_id_t(6)), pg_shard_t(7, shard_id_t(7)),
+    pg_shard_t(8, shard_id_t(8))})) << ss.str();
+}
+
+// CRUSH can put the new zone first; want must still keep each zone block in
+// one datacenter, never use an OSD twice and keep the OSDs that hold data.
+TEST_F(TestECActingStretch3Zone, ZoneTransition_TwoToThree_NewZoneFirst) {
+  vector<int> want;
+  set<pg_shard_t> backfill;
+  ostringstream ss;
+  calc_two_to_three(osdmap, pool_id, {6,7,8, 0,1,2, 3,4,5}, eversion_t(1, 5),
+                    &want, &backfill, ss);
+  ASSERT_EQ(9u, want.size()) << ss.str();
+  set<int> seen;
+  for (int osd : want) {
+    if (osd != CRUSH_ITEM_NONE) {
+      EXPECT_TRUE(seen.insert(osd).second) << "osd." << osd << " twice\n" << ss.str();
+    }
+  }
+  for (int zone = 0; zone < 3; ++zone) {
+    set<int> dcs;
+    for (int i = zone * 3; i < zone * 3 + 3; ++i) {
+      if (want[i] != CRUSH_ITEM_NONE) {
+        dcs.insert(osdmap->crush->get_parent_of_type(want[i], 9, 0));
+      }
+    }
+    EXPECT_LE(dcs.size(), 1u) << "zone block " << zone << "\n" << ss.str();
+  }
+  for (int osd = 0; osd < 6; ++osd) {
+    EXPECT_TRUE(seen.contains(osd)) << "osd." << osd << " holds data\n" << ss.str();
+  }
+}
+
 /*
  * The two tests below cover a zone whose whole block of up positions is
  * CRUSH_ITEM_NONE, so its zone cannot be taken from up.
