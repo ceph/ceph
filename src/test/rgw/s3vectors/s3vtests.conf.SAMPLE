@@ -6,7 +6,7 @@ cluster = noname
 # s3vector_backend: Storage backend for s3vector data. Options: local or rgw (default)
 # When set to 'rgw', tests will create a regular S3 bucket with the same name
 # as the vector bucket before vector operations.
-# s3vector_backend = loca
+# s3vector_backend = local
 #
 # backend options.
 # when not set, a value that fits the tested zone is used:

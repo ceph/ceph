@@ -57,6 +57,9 @@ def setup():
     global main_secret_key
     main_secret_key = cfg.get('s3 main',"secret_key")
 
+    global main_tenant
+    main_tenant = cfg.get('s3 main', "tenant", fallback="")
+
     # vars from the secondary section
     global secondary_host
     global secondary_port
@@ -129,6 +132,17 @@ def get_access_key():
 def get_secret_key():
     global main_secret_key
     return main_secret_key
+
+
+def get_tenant():
+    global main_tenant
+    return main_tenant
+
+
+def get_test_user_id():
+    global main_user_id
+    global main_tenant
+    return f'{main_tenant}${main_user_id}' if main_tenant else main_user_id
 
 
 def get_config_host2():
