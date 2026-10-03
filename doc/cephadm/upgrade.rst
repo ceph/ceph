@@ -287,6 +287,33 @@ the following commands:
   ceph orch upgrade start --ceph-version <version>
 
 
+``UPGRADE_INCOMPATIBLE_HOST_CPU``
+---------------------------------
+
+This alert (``UPGRADE_INCOMPATIBLE_HOST_CPU``) means that one or more hosts
+in the cluster have a CPU that does not support the x86-64
+microarchitecture level that the target release's official builds are
+compiled for. For example, official builds of Umbrella (21.x) and later
+require CPUs that support ``x86-64-v3``. Running the target release's
+binaries on the listed hosts would crash with an illegal instruction error
+(SIGILL), so cephadm refuses to proceed.
+
+A host's detected microarchitecture level can be checked by running the
+following command on the host itself:
+
+.. prompt:: bash #
+
+  cephadm gather-facts | grep cpu_isa_level
+
+To proceed with the upgrade, replace or remove the listed hosts. If you are
+using custom-built container images compiled for an older CPU generation,
+you can disable this check by running the following command:
+
+.. prompt:: bash #
+
+  ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false
+
+
 Using Customized Container Images
 =================================
 

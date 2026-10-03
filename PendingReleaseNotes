@@ -1,5 +1,14 @@
 >=22.0.0
 
+* Cephadm: ``ceph orch upgrade start`` and ``ceph orch upgrade check`` now
+  verify that every host's CPU supports the x86-64 microarchitecture level
+  required by the target release (official builds of 21.x and later require
+  ``x86-64-v3``). An upgrade that would deploy binaries a host's CPU cannot
+  execute is refused, or paused with a new ``UPGRADE_INCOMPATIBLE_HOST_CPU``
+  health alert. cephadm now reports the host's detected level as a new
+  ``cpu_isa_level`` host fact (e.g. ``x86-64-v2``). The check can be disabled
+  with ``ceph config set mgr mgr/cephadm/upgrade_cpu_isa_check false``, e.g.
+  when running custom-built images targeting an older CPU generation.
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
   hold the lock, instead of an empty list. Callers should check the

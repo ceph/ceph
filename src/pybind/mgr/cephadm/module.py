@@ -236,6 +236,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='How frequently to perform a host check',
         ),
         Option(
+            'upgrade_cpu_isa_check',
+            type='bool',
+            default=True,
+            desc='Before upgrading, verify that host CPUs support the x86-64 '
+            'microarchitecture level required by the target release; set to '
+            'false to skip the check (e.g. when using custom-built images '
+            'targeting an older CPU generation)',
+        ),
+        Option(
             'stray_daemon_check_interval',
             type='secs',
             default=30 * 60,
@@ -611,6 +620,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.allow_lo_routes = False
             self.allow_bgp_routes = False
             self.host_check_interval = 0
+            self.upgrade_cpu_isa_check = True
             self.stray_daemon_check_interval = 0
             self.max_count_per_host = 0
             self.mode = ''
@@ -5000,6 +5010,11 @@ Then run the following:
         version_error = self.upgrade._check_target_version(ceph_image_version)
         if version_error:
             return f'Incompatible upgrade: {version_error}'
+        isa_errors = self.upgrade.check_host_cpu_isa_level(ceph_image_version)
+        if isa_errors:
+            return ('Incompatible upgrade: found host(s) with a CPU that '
+                    f'cannot run ceph version {ceph_image_version}:\n'
+                    + '\n'.join(self.upgrade._host_cpu_isa_error_detail(isa_errors)))
 
         self.log.debug(f'image info {image} -> {image_info}')
         r: dict = {
