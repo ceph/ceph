@@ -54,7 +54,8 @@ class TestNFS:
             })
 
             nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
-                                      monitoring_ip_addrs={'test': '1.2.3.1'})
+                                      monitoring_ip_addrs={'test': '1.2.3.1'},
+                                      enable_nfs_metrics=True)
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
                     DaemonDeployContext(CephadmDaemonDeploySpec(
@@ -64,7 +65,8 @@ class TestNFS:
                 assert "Monitoring_Addr = 1.2.3.1" in ganesha_conf
 
             nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
-                                      monitoring_networks=['1.2.3.0/24'])
+                                      monitoring_networks=['1.2.3.0/24'],
+                                      enable_nfs_metrics=True)
             with with_service(cephadm_module, nfs_spec) as _:
                 nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
                     DaemonDeployContext(CephadmDaemonDeploySpec(
@@ -829,6 +831,84 @@ class TestNFS:
                 assert "client_oc_size = 1048576;" in ganesha_conf
                 assert "client_oc_max_dirty = 0;" in ganesha_conf
 
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_enable_metrics(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """NFS metrics: Monitoring_Port and Enable_Metrics rendered only when enable_nfs_metrics=True."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            # Default (enable_nfs_metrics=False): no monitoring config
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']))
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                                                service_name=nfs_spec.service_name(),
+                                                                rank=0)))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Monitoring_Port" not in ganesha_conf
+                assert "Enable_Metrics" not in ganesha_conf
+
+            # Explicit enable_nfs_metrics=True: monitoring config rendered
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
+                                      enable_nfs_metrics=True)
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0',
+                                                                service_name=nfs_spec.service_name(),
+                                                                rank=0)))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Monitoring_Port = 9587;" in ganesha_conf
+                assert "Enable_Metrics = true;" in ganesha_conf
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_colocation_metrics_disabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """Colocated NFS daemon with metrics disabled: no monitoring port in config or firewall."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['test']),
+                enable_nfs_metrics=False,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                daemon_spec = CephadmDaemonDeploySpec(
+                    host='test', daemon_id='foo.test.0.0',
+                    service_name=nfs_spec.service_name(),
+                    rank=0,
+                    ports=[3049, 9588, 31312],
+                )
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    DaemonDeployContext(daemon_spec))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                assert "Monitoring_Port" not in ganesha_conf
+                assert "Enable_Metrics" not in ganesha_conf
+                assert '9588' not in str(daemon_spec.port_ips)
+
+
+def test_nfs_enable_nfs_metrics_spec_roundtrip():
+    """Verify enable_nfs_metrics survives JSON serialization round-trip."""
+    from ceph.deployment.service_spec import ServiceSpec
+    spec = NFSServiceSpec(service_id="foo", enable_nfs_metrics=True)
+    json_data = spec.to_json()
+    assert json_data['spec']['enable_nfs_metrics'] is True
+
+    restored = ServiceSpec.from_json(json_data)
+    assert restored.enable_nfs_metrics is True
+
+    # Default (False) should not appear in serialized output
+    spec_default = NFSServiceSpec(service_id="bar")
+    json_default = spec_default.to_json()
+    assert 'enable_nfs_metrics' not in json_default.get('spec', {})
+
 
 def test_nfs_placement_count_per_host_rejected():
     spec = NFSServiceSpec(
@@ -1174,3 +1254,25 @@ def test_nfs_get_dependencies_rdma_and_tls_options(cephadm_module: CephadmOrches
         'tls_min_version: 1.3',
         'tls_ciphers: TLS_AES_256_GCM_SHA384',
     ])
+
+
+def test_nfs_get_dependencies_enable_nfs_metrics(cephadm_module: CephadmOrchestrator):
+    """enable_nfs_metrics is included in deps only when True."""
+    nfs_svc = service_registry.get_service('nfs')
+
+    default_spec = NFSServiceSpec(service_id='foo')
+    deps = nfs_svc.get_dependencies(cephadm_module, default_spec)
+    assert not any(d.startswith('enable_nfs_metrics:') for d in deps)
+
+    metrics_spec = NFSServiceSpec(service_id='foo', enable_nfs_metrics=True)
+    deps = nfs_svc.get_dependencies(cephadm_module, metrics_spec)
+    assert 'enable_nfs_metrics: True' in deps
+
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        metrics_spec,
+        curr_deps=deps,
+        last_deps=[],
+    )
+    assert step.action is utils.Action.REDEPLOY
