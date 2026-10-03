@@ -1,7 +1,10 @@
 from typing import Dict
 from unittest import TestCase, mock
 
-from prometheus.module import Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict
+import pytest
+
+from prometheus.module import (
+    Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict, Module)
 import threading
 
 
@@ -589,3 +592,20 @@ class RgwSyncMetricsTest(TestCase):
         # No new data-sync-from-zone.* key should appear for non-sync metrics
         sync_keys = [k for k in self.module.metrics if k.startswith('data-sync-from-zone')]
         self.assertEqual(sync_keys, [])
+
+
+@pytest.mark.parametrize(
+    'daemon_id, expected',
+    [
+        ('host1.rgw.0', '0'),
+        # One dot used to raise IndexError: the guard only checked for a
+        # dot, then indexed split()[2], which needs two dots.
+        ('host1.rgw0', 'host1.rgw0'),
+        ('rgw0', 'rgw0'),
+        ('', ''),
+        (None, ''),
+        ('host1.rgw.foo.bar', 'foo'),
+    ],
+)
+def test_parse_rgw_instance_id(daemon_id, expected):
+    assert Module._parse_rgw_instance_id(daemon_id) == expected
