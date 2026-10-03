@@ -746,6 +746,17 @@ applying a YAML spec with custom config files specified and having cephadm
 redeploy the daemons for which the config files are specified, these files will
 be mounted within the daemon's container at the specified location.
 
+.. note::
+
+   If the chosen ``mount_path`` lies inside a directory that cephadm already
+   deploys as a whole-directory bind mount for that service (for example,
+   ``/etc/ganesha/`` for the ``nfs`` service), the custom config file will be
+   silently masked: the file is written to the daemon directory on the host,
+   but the service's directory mount covers it inside the container. Choose a
+   ``mount_path`` outside the service's auto-managed directories (for
+   example, ``/etc/ganesha-override.conf`` rather than
+   ``/etc/ganesha/override.conf``).
+
 Example service spec:
 
 .. code-block:: yaml
