@@ -184,6 +184,58 @@ TEST(CallOnceAsync, call_wait_exception)
   EXPECT_THROW(std::rethrow_exception(*cached_eptr), std::bad_alloc);
 }
 
+// f() may throw a type that does not derive from std::exception. rgw's auth
+// engines report errors this way, throwing an int that
+// rgw::auth::Strategy::authenticate() catches as 'const int'. do_init() must
+// store it like any other, or the waiters queued behind the call are never
+// woken and this test hangs.
+TEST(CallOnceAsync, call_wait_exception_non_std)
+{
+  boost::asio::io_context context;
+  once_result<int> once;
+  yield_waiter<void> waiter;
+
+  std::optional<std::exception_ptr> call_eptr;
+  boost::asio::spawn(context, [&] (boost::asio::yield_context yield) {
+        call_once(once, yield, [&] {
+            waiter.async_wait(yield);
+            throw 42;
+            return 0;
+          });
+      }, capture(call_eptr));
+
+  std::optional<std::exception_ptr> wait_eptr;
+  boost::asio::spawn(context, [&] (boost::asio::yield_context yield) {
+        call_once(once, yield, [] { return 0; });
+      }, capture(wait_eptr));
+
+  context.poll();
+  EXPECT_FALSE(context.stopped());
+  ASSERT_FALSE(call_eptr);
+  ASSERT_FALSE(wait_eptr);
+
+  waiter.complete(boost::system::error_code{});
+
+  context.poll();
+  EXPECT_TRUE(context.stopped());
+  ASSERT_TRUE(call_eptr);
+  EXPECT_THROW(std::rethrow_exception(*call_eptr), int);
+  // the waiter must be woken, and must see the original type
+  ASSERT_TRUE(wait_eptr);
+  EXPECT_THROW(std::rethrow_exception(*wait_eptr), int);
+
+  std::optional<std::exception_ptr> cached_eptr;
+  boost::asio::spawn(context, [&] (boost::asio::yield_context yield) {
+        call_once(once, yield, [] { return 0; });
+      }, capture(cached_eptr));
+
+  context.restart();
+  context.poll();
+  EXPECT_TRUE(context.stopped());
+  ASSERT_TRUE(cached_eptr);
+  EXPECT_THROW(std::rethrow_exception(*cached_eptr), int);
+}
+
 TEST(CallOnceSync, call_immediate_result)
 {
   once_result<int> once;
@@ -286,6 +338,45 @@ TEST(CallOnceSync, call_wait_exception)
 
   // rethrow cached exception
   EXPECT_THROW(call_once(once, null_yield, [] { return 0; }), std::bad_alloc);
+}
+
+// as call_wait_exception_non_std, for callers that block instead of suspending
+TEST(CallOnceSync, call_wait_exception_non_std)
+{
+  once_result<int> once;
+
+  std::future<int> call_future;
+  std::future<int> wait_future;
+  std::latch call_latch{1};
+  std::latch wait_latch{2};
+
+  call_future = std::async(std::launch::async, [&] {
+      return call_once(once, null_yield, [&] {
+          wait_future = std::async(std::launch::async, [&] {
+              wait_latch.count_down();
+              return call_once(once, null_yield, [] { return 0; });
+            });
+          wait_latch.count_down();
+          call_latch.wait();
+          throw 42;
+          return 0;
+        });
+    });
+
+  wait_latch.wait();
+
+  using namespace std::chrono_literals;
+  EXPECT_NE(wait_future.wait_for(0s), std::future_status::ready);
+
+  call_latch.count_down(); // let call return
+
+  EXPECT_THROW(call_future.get(), int);
+  // the waiter must be woken rather than blocking on its condition_variable
+  // forever, and must see the original type
+  EXPECT_THROW(wait_future.get(), int);
+
+  // rethrow cached exception
+  EXPECT_THROW(call_once(once, null_yield, [] { return 0; }), int);
 }
 
 } // namespace ceph::async
