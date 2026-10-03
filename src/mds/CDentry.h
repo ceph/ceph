@@ -156,7 +156,7 @@ public:
   }
 
   dentry_key_t key() {
-    return dentry_key_t(last, name.c_str(), hash);
+    return dentry_key_t(last, name, hash);
   }
 
   bool check_corruption(bool load);
