@@ -53,6 +53,6 @@ describe('AuthService', () => {
     expect(req.request.method).toBe('POST');
     req.flush({ redirect_url: '#/login' });
     expect(localStorage.getItem(LocalStorage.DASHBOARD_USERNAME)).toBe(null);
-    expect(router.navigate).toBeCalledTimes(1);
+    expect(router.navigate).toHaveBeenCalledTimes(1);
   });
 });
