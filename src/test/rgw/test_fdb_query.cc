@@ -77,8 +77,8 @@ auto emitted_intervals(const lq::expression auto& expr)
 
 struct described_int_interval final
 {
- int begin;
- int end;
+ int lower;
+ int upper;
  bool begin_inclusive;
  bool end_inclusive;
 
@@ -88,8 +88,8 @@ struct described_int_interval final
 auto describe(const li::query<int_domain>& interval)
 {
  return described_int_interval {
-  .begin = interval.lower().finite_key(),
-  .end = interval.upper().finite_key(),
+  .lower = interval.lower().finite_key(),
+  .upper = interval.upper().finite_key(),
   .begin_inclusive = interval.lower().inclusive(),
   .end_inclusive = interval.upper().inclusive()
  };
@@ -274,7 +274,14 @@ using configured_difference =
  decltype(lq::with_options(lq::difference(lq::empty(), lq::universal()),
                            lq::query_options {}));
 
+template <typename T>
+concept exposes_rvalue_boundaries = requires(T value) {
+ std::move(value).lower();
+ std::move(value).upper();
+};
+
 static_assert(lq::expression<lq::interval>);
+static_assert(not exposes_rvalue_boundaries<lq::interval>);
 static_assert(lq::expression<decltype(lq::difference(lq::empty(), lq::universal()))>);
 static_assert(lq::expression<decltype(lq::set_union(lq::empty(), lq::universal()))>);
 static_assert(lq::expression<decltype(lq::after("m"))>);
