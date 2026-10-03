@@ -14,6 +14,7 @@ from typing import (
 
 import errno
 
+from .internal import resource_key
 from .proto import Self, Simplified
 from .resources import ConversionOp, SMBResource
 from .utils import one
@@ -73,11 +74,14 @@ class ResourceResult(BaseResult):
         success: bool,
         msg: str = '',
         status: Union[ResourceStatus, Simplified, None] = None,
+        *,
+        warnings: Optional[List[str]] = None,
     ) -> None:
         self.src = src
         self.success = success
         self.msg = msg
         self.status = status
+        self.warnings: List[str] = warnings or []
         self._check_status()
 
     _allowed_status: Any = ResourceStatus
@@ -94,11 +98,19 @@ class ResourceResult(BaseResult):
                 f'unknown keys in status: {", ".join(sorted(other_keys))}'
             )
 
+    def record_warning(self, warning: str) -> None:
+        """Record a new warning associated with this resource.
+        Warnings are non-fatal issues we want to notify the user about.
+        """
+        self.warnings.append(warning)
+
     def to_simplified(self) -> Simplified:
         ds: Simplified = {}
         ds['resource'] = self.src.to_simplified()
         if self.status:
             ds.update(self.status)
+        if self.warnings:
+            ds['warnings'] = self.warnings
         if self.msg:
             ds['msg'] = self.msg
         ds['success'] = self.success
@@ -110,6 +122,23 @@ class ResourceResult(BaseResult):
             success=self.success,
             msg=self.msg,
             status=self.status,
+            warnings=self.warnings,
+        )
+
+    def combine(self, other: 'ResourceResult') -> Self:
+        assert self.src == other.src
+        if self.msg and other.msg:
+            raise ValueError('unable to combine two result messages')
+        status = dict(self.status or {}) | dict(other.status or {})
+        if 'checked' in status and 'state' in status:
+            # checked is irrelevant if state is set, so lose it
+            del status['checked']
+        return self.__class__(
+            src=self.src,
+            success=self.success and other.success,
+            msg=self.msg or other.msg,
+            status=status or None,
+            warnings=self.warnings + other.warnings,
         )
 
     @classmethod
@@ -125,6 +154,26 @@ class ResourceResult(BaseResult):
         resource has been checked for validity.
         """
         return cls(src, success=True, status={'checked': True})
+
+    @classmethod
+    def pending(cls, src: SMBResource) -> Self:
+        """Return a new ResourceResult with metadata indicating that the
+        resource has NOT been checked for validity and thus is still pending
+        getting checked.
+        """
+        return cls(src, success=False, status={'checked': False})
+
+    @classmethod
+    def checked_from_result(cls, other: 'ResourceResult') -> Self:
+        """Return a new ResourceResult with metadata indicating that the
+        resource has been checked for validity.
+        """
+        return cls(
+            other.src,
+            success=True,
+            status={'checked': True},
+            warnings=other.warnings,
+        )
 
 
 class ResourceErrorStatus(TypedDict, total=False):
@@ -247,10 +296,33 @@ class ResultGroup:
         return all(r.success for r in self._contents)
 
     def to_simplified(self) -> Simplified:
-        return {
-            'results': [r.to_simplified() for r in self._contents],
+        warnings: List[str] = []
+        res = []
+        for result in self:
+            res.append(result.to_simplified())
+            warnings.extend(getattr(result, 'warnings', None) or [])
+        out = {
+            'results': res,
             'success': self.success,
         }
+        # add a warnings summary section to inform of warnings and recap them
+        # so that the user "sees" something unusual at the end of the results
+        # group output (vs needing to scroll back to the specific output of
+        # one share out of N with a warning).
+        if warnings:
+            recap = warnings[:5]
+            wslen = len(recap)
+            wlen = len(warnings)
+            if wslen < wlen:
+                recap.append(
+                    f'{wlen - wslen} other warning(s) detected'
+                    ' (see resource result for details)'
+                )
+            out['warnings_summary'] = {
+                'count': len(warnings),
+                'recap': recap,
+            }
+        return out
 
     def mgr_return_value(self) -> int:
         return 0 if self.success else -errno.EAGAIN
@@ -272,6 +344,28 @@ class ResultGroup:
                 for result in self._contents
             ]
         )
+
+    def _rkey(self, result: Result) -> str:
+        if not isinstance(result, ResourceResult):
+            return ''  # to be ignored by caller
+        ns, rk = resource_key(result.src)
+        return f'ResourceResult:{ns}:{rk}'
+
+    def merge(self, other: Iterable[Result]) -> None:
+        icache = {}
+        for idx, result in enumerate(self):
+            if rkey := self._rkey(result):
+                icache[rkey] = idx
+        for result in other:
+            rkey = self._rkey(result)
+            if rkey in icache:
+                idx = icache[rkey]
+                rr = self._contents[idx]
+                assert isinstance(result, ResourceResult)
+                assert isinstance(rr, ResourceResult)
+                self._contents[idx] = rr.combine(result)
+            else:
+                self._contents.append(result)
 
 
 def _replace_resource(result: Result, operation: ConversionOp) -> Result:

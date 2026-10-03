@@ -152,6 +152,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=earmark,type=CephString,req=false '
                    'name=normalization,type=CephChoices,strings=nfd|nfc|nfkd|nfkc,req=false '
                    'name=casesensitive,type=CephBool,req=false '
+                   'name=protocols,type=CephChoices,strings=default|smb,req=false '
                    'name=enctag,type=CephString,req=false ',
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
                     "with a specific size (in bytes), a specific data pool layout, "
@@ -820,11 +821,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         pool_layout=cmd.get('pool_layout', None),
                                         uid=cmd.get('uid', None),
                                         gid=cmd.get('gid', None),
-                                        mode=cmd.get('mode', '755'),
+                                        mode=cmd.get('mode', None),
                                         namespace_isolated=cmd.get('namespace_isolated', False),
                                         earmark=cmd.get('earmark', None),
                                         normalization=cmd.get('normalization', None),
                                         casesensitive=cmd.get('casesensitive', None),
+                                        protocols=cmd.get('protocols', None),
                                         enctag=cmd.get('enctag', None))
 
     @mgr_cmd_wrap
