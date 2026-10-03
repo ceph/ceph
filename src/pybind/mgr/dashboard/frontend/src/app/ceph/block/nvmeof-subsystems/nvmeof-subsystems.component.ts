@@ -206,7 +206,10 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
             task: new FinishedTask('nvmeof/subsystem/delete', { nqn: subsystem.nqn }),
             call: this.nvmeofService.deleteSubsystem(subsystem.nqn, this.groupHandler.group)
           })
-          .pipe(tap({ complete: () => this.nvmeofStateService.requestRefresh() }))
+          .pipe(
+            tap({ complete: () => this.nvmeofStateService.requestRefresh() }),
+            finalize(() => this.table?.refreshBtn())
+          )
     });
   }
 

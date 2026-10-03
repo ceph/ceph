@@ -27,6 +27,7 @@ import { switchMap } from 'rxjs/operators';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { HttpResponse } from '@angular/common/http';
+import { NvmeofStateService } from '../nvmeof-state.service';
 
 @Component({
   selector: 'cd-nvmeof-namespaces-form',
@@ -71,7 +72,8 @@ export class NvmeofNamespacesFormComponent implements OnInit {
     private route: ActivatedRoute,
     private cdr: ChangeDetectorRef,
     public formatterService: FormatterService,
-    public dimlessBinaryPipe: DimlessBinaryPipe
+    public dimlessBinaryPipe: DimlessBinaryPipe,
+    private nvmeofStateService: NvmeofStateService
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
     this.poolPermission = this.authStorageService.getPermissions().pool;
@@ -487,6 +489,7 @@ export class NvmeofNamespacesFormComponent implements OnInit {
         component.nsForm.setErrors({ cdSubmitButton: true });
       },
       complete: () => {
+        this.nvmeofStateService.requestRefresh();
         this.router.navigate([this.pageURL], {
           queryParams: { group: this.group }
         });

@@ -1,9 +1,10 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NvmeofSubsystemNamespace } from '~/app/shared/models/nvmeof';
@@ -16,7 +17,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { NvmeofStateService } from '../nvmeof-state.service';
 import { combineLatest, Subject } from 'rxjs';
-import { catchError, takeUntil, tap } from 'rxjs/operators';
+import { catchError, finalize, takeUntil, tap } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-nvmeof-subsystem-namespaces-list',
@@ -25,6 +26,9 @@ import { catchError, takeUntil, tap } from 'rxjs/operators';
   standalone: false
 })
 export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy {
+  @ViewChild(TableComponent)
+  table: TableComponent;
+
   subsystemNQN: string;
   group: string;
   namespacesColumns: any;
@@ -60,6 +64,10 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
           this.listNamespaces();
         }
       });
+
+    this.nvmeofStateService.refresh$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.listNamespaces());
 
     this.setupColumns();
     this.setupTableActions();
@@ -186,7 +194,10 @@ export class NvmeofSubsystemNamespacesListComponent implements OnInit, OnDestroy
             }),
             call: this.nvmeofService.deleteNamespace(this.subsystemNQN, namespace.nsid, this.group)
           })
-          .pipe(tap({ complete: () => this.nvmeofStateService.requestRefresh() }))
+          .pipe(
+            tap({ complete: () => this.nvmeofStateService.requestRefresh() }),
+            finalize(() => this.table?.refreshBtn())
+          )
     });
   }
 
