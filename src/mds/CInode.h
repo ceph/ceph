@@ -225,7 +225,7 @@ public:
     InodeStoreBase::decode_bare(bl, snap_blob);
   }
 
-  static std::list<InodeStore> generate_test_instances();
+  static std::vector<InodeStore> generate_test_instances();
 
   using InodeStoreBase::inode;
   using InodeStoreBase::xattrs;
@@ -246,7 +246,7 @@ public:
   void decode(ceph::buffer::list::const_iterator &bl) {
     InodeStore::decode_bare(bl);
   }
-  static std::list<InodeStoreBare> generate_test_instances();
+  static std::vector<InodeStoreBare> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(InodeStoreBare)
 

@@ -53,8 +53,8 @@ void client_t::dump(ceph::Formatter *f) const {
   f->dump_int("id", v);
 }
 
-std::list<client_t> client_t::generate_test_instances() {
-  std::list<client_t> ls;
+std::vector<client_t> client_t::generate_test_instances() {
+  std::vector<client_t> ls;
   ls.emplace_back();
   ls.push_back(client_t(1));
   ls.push_back(client_t(123));
@@ -117,8 +117,8 @@ void shard_id_t::dump(ceph::Formatter *f) const {
   f->dump_int("id", id);
 }
 
-std::list<shard_id_t> shard_id_t::generate_test_instances() {
-  std::list<shard_id_t> ls;
+std::vector<shard_id_t> shard_id_t::generate_test_instances() {
+  std::vector<shard_id_t> ls;
   ls.push_back(shard_id_t(1));
   ls.push_back(shard_id_t(2));
   return ls;
@@ -128,8 +128,8 @@ void errorcode32_t::dump(ceph::Formatter *f) const {
   f->dump_int("code", code);
 }
 
-std::list<errorcode32_t> errorcode32_t::generate_test_instances() {
-  std::list<errorcode32_t> ls;
+std::vector<errorcode32_t> errorcode32_t::generate_test_instances() {
+  std::vector<errorcode32_t> ls;
   ls.push_back(errorcode32_t(1));
   ls.push_back(errorcode32_t(2));
   return ls;

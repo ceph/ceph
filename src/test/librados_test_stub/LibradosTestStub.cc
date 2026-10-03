@@ -221,20 +221,20 @@ extern "C" int rados_ioctx_create2(rados_t cluster, int64_t pool_id,
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
 
-  std::list<std::pair<int64_t, std::string> > pools;
+  std::vector<std::pair<int64_t, std::string>> pools;
   int r = client->pool_list(pools);
   if (r < 0) {
     return r;
   }
 
-  for (std::list<std::pair<int64_t, std::string> >::iterator it =
-       pools.begin(); it != pools.end(); ++it) {
-    if (it->first == pool_id) {
+  for (const auto& pool : pools) {
+    if (pool.first == pool_id) {
       *ioctx = reinterpret_cast<rados_ioctx_t>(
-	client->create_ioctx(pool_id, it->second));
+	client->create_ioctx(pool_id, pool.second));
       return 0;
     }
   }
+
   return -ENOENT;
 }
 
@@ -573,8 +573,21 @@ int IoCtx::list_snaps(const std::string& o, snap_set_t *out_snaps) {
 int IoCtx::list_watchers(const std::string& o,
                          std::list<obj_watch_t> *out_watchers) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  using list_watchers_fn = int (TestIoCtxImpl::*)(
+    const std::string&, std::list<obj_watch_t>*);
   return ctx->execute_operation(
-    o, std::bind(&TestIoCtxImpl::list_watchers, _1, _2, out_watchers));
+    o, std::bind(static_cast<list_watchers_fn>(&TestIoCtxImpl::list_watchers),
+                 _1, _2, out_watchers));
+}
+
+int IoCtx::list_watchers(const std::string& o,
+                         std::vector<obj_watch_t>& out_watchers) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  using list_watchers_fn = int (TestIoCtxImpl::*)(
+    const std::string&, std::vector<obj_watch_t>*);
+  return ctx->execute_operation(
+    o, std::bind(static_cast<list_watchers_fn>(&TestIoCtxImpl::list_watchers),
+                 _1, _2, &out_watchers));
 }
 
 int IoCtx::notify(const std::string& o, uint64_t ver, bufferlist& bl) {
@@ -881,8 +894,27 @@ void ObjectReadOperation::list_watchers(std::list<obj_watch_t> *out_watchers,
                                         int *prval) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
 
-  ObjectOperationTestImpl op = std::bind(&TestIoCtxImpl::list_watchers, _1,
-                                           _2, out_watchers);
+  using list_watchers_fn = int (TestIoCtxImpl::*)(
+    const std::string&, std::list<obj_watch_t>*);
+  ObjectOperationTestImpl op = std::bind(
+    static_cast<list_watchers_fn>(&TestIoCtxImpl::list_watchers), _1, _2,
+    out_watchers);
+  if (prval != NULL) {
+    op = std::bind(save_operation_result,
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
+  }
+  o->ops.push_back(op);
+}
+
+void ObjectReadOperation::list_watchers(std::vector<obj_watch_t> *out_watchers,
+                                        int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  using list_watchers_fn = int (TestIoCtxImpl::*)(
+    const std::string&, std::vector<obj_watch_t>*);
+  ObjectOperationTestImpl op = std::bind(
+    static_cast<list_watchers_fn>(&TestIoCtxImpl::list_watchers), _1, _2,
+    out_watchers);
   if (prval != NULL) {
     op = std::bind(save_operation_result,
                      std::bind(op, _1, _2, _3, _4, _5, _6), prval);
@@ -1194,26 +1226,60 @@ int Rados::pool_get_base_tier(int64_t pool, int64_t* base_tier) {
   return impl->pool_get_base_tier(pool, base_tier);
 }
 
-int Rados::pool_list(std::list<std::string>& v) {
+int Rados::pool_list(std::vector<std::string>& names) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
-  std::list<std::pair<int64_t, std::string> > pools;
+  std::vector<std::pair<int64_t, std::string>> pools;
   int r = impl->pool_list(pools);
   if (r < 0) {
     return r;
   }
 
-  v.clear();
-  for (std::list<std::pair<int64_t, std::string> >::iterator it = pools.begin();
-       it != pools.end(); ++it) {
-    v.push_back(it->second);
+  std::vector<std::string> result;
+  result.reserve(std::size(pools));
+
+  for (auto& pool : pools) {
+    result.push_back(std::move(pool.second));
   }
+
+  names = std::move(result);
+
   return 0;
 }
 
-int Rados::pool_list2(std::list<std::pair<int64_t, std::string> >& v)
+int Rados::pool_list(std::vector<std::pair<int64_t, std::string>>& pools)
 {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
-  return impl->pool_list(v);
+  return impl->pool_list(pools);
+}
+
+int Rados::pool_list(std::list<std::string>& names)
+{
+  std::vector<std::string> contiguous_names;
+  int r = pool_list(contiguous_names);
+  if (r < 0) {
+    return r;
+  }
+
+  names.assign(std::make_move_iterator(std::begin(contiguous_names)),
+               std::make_move_iterator(std::end(contiguous_names)));
+
+  return 0;
+}
+
+int Rados::pool_list2(
+  std::list<std::pair<int64_t, std::string>>& pools)
+{
+  std::vector<std::pair<int64_t, std::string>> contiguous_pools;
+  int r = pool_list(contiguous_pools);
+  if (r < 0) {
+    return r;
+  }
+
+  pools.insert(std::end(pools),
+               std::make_move_iterator(std::begin(contiguous_pools)),
+               std::make_move_iterator(std::end(contiguous_pools)));
+
+  return 0;
 }
 
 int64_t Rados::pool_lookup(const char *name) {
@@ -1461,7 +1527,7 @@ int cls_cxx_list_watchers(cls_method_context_t hctx,
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
 
-  std::list<obj_watch_t> obj_watchers;
+  std::vector<obj_watch_t> obj_watchers;
   int r = ctx->io_ctx_impl->list_watchers(ctx->oid, &obj_watchers);
   if (r < 0) {
     return r;

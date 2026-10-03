@@ -172,7 +172,7 @@ struct MirrorInfo {
   Peers peers;
 
   void dump(ceph::Formatter *f) const;
-  static std::list<MirrorInfo> generate_test_instances();
+  static std::vector<MirrorInfo> generate_test_instances();
   void print(std::ostream& out) const;
 
   void encode(ceph::buffer::list &bl) const;
@@ -681,7 +681,7 @@ public:
   void print_fs_summary(std::ostream& out) const;
 
   void dump(ceph::Formatter *f) const;
-  static std::list<FSMap> generate_test_instances();
+  static std::vector<FSMap> generate_test_instances();
 
 protected:
   iterator begin() {

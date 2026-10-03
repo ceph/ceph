@@ -79,8 +79,8 @@ void MirrorPeer::dump(Formatter *f) const {
   f->dump_stream("last_seen") << last_seen;
 }
 
-std::list<MirrorPeer> MirrorPeer::generate_test_instances() {
-  std::list<MirrorPeer> o;
+std::vector<MirrorPeer> MirrorPeer::generate_test_instances() {
+  std::vector<MirrorPeer> o;
   o.push_back(MirrorPeer());
   o.push_back(MirrorPeer("uuid-123", MIRROR_PEER_DIRECTION_RX, "site A",
                          "client name", ""));
@@ -161,8 +161,8 @@ void MirrorImage::dump(Formatter *f) const {
   f->dump_stream("state") << state;
 }
 
-std::list<MirrorImage> MirrorImage::generate_test_instances() {
-  std::list<MirrorImage> o;
+std::vector<MirrorImage> MirrorImage::generate_test_instances() {
+  std::vector<MirrorImage> o;
   o.push_back(MirrorImage());
   o.push_back(MirrorImage(MIRROR_IMAGE_MODE_JOURNAL, "uuid-123",
                           MIRROR_IMAGE_STATE_ENABLED));
@@ -310,8 +310,8 @@ std::string MirrorImageSiteStatus::state_to_string() const {
   return ss.str();
 }
 
-std::list<MirrorImageSiteStatus> MirrorImageSiteStatus::generate_test_instances() {
-  std::list<MirrorImageSiteStatus> o;
+std::vector<MirrorImageSiteStatus> MirrorImageSiteStatus::generate_test_instances() {
+  std::vector<MirrorImageSiteStatus> o;
   o.push_back(MirrorImageSiteStatus());
   o.push_back(MirrorImageSiteStatus("", MIRROR_IMAGE_STATUS_STATE_REPLAYING,
                                     ""));
@@ -362,8 +362,8 @@ void MirrorImageSiteStatusOnDisk::decode(bufferlist::const_iterator &it) {
   cls::rbd::MirrorImageSiteStatus::decode(it);
 }
 
-std::list<MirrorImageSiteStatusOnDisk> MirrorImageSiteStatusOnDisk::generate_test_instances() {
-  std::list<MirrorImageSiteStatusOnDisk> o;
+std::vector<MirrorImageSiteStatusOnDisk> MirrorImageSiteStatusOnDisk::generate_test_instances() {
+  std::vector<MirrorImageSiteStatusOnDisk> o;
   o.push_back(MirrorImageSiteStatusOnDisk());
   o.push_back(MirrorImageSiteStatusOnDisk(
     {"", MIRROR_IMAGE_STATUS_STATE_ERROR, "error"}));
@@ -475,8 +475,8 @@ bool MirrorImageStatus::operator==(const MirrorImageStatus &rhs) const {
   return (mirror_image_site_statuses == rhs.mirror_image_site_statuses);
 }
 
-std::list<MirrorImageStatus> MirrorImageStatus::generate_test_instances() {
-  std::list<MirrorImageStatus> o;
+std::vector<MirrorImageStatus> MirrorImageStatus::generate_test_instances() {
+  std::vector<MirrorImageStatus> o;
   o.push_back(MirrorImageStatus());
   o.push_back(MirrorImageStatus({{"", MIRROR_IMAGE_STATUS_STATE_ERROR, ""}}));
   o.push_back(MirrorImageStatus({{"", MIRROR_IMAGE_STATUS_STATE_STOPPED, ""},
@@ -537,8 +537,8 @@ void ParentImageSpec::dump(Formatter *f) const {
   f->dump_unsigned("snap_id", snap_id);
 }
 
-std::list<ParentImageSpec> ParentImageSpec::generate_test_instances() {
-  std::list<ParentImageSpec> o;
+std::vector<ParentImageSpec> ParentImageSpec::generate_test_instances() {
+  std::vector<ParentImageSpec> o;
   o.emplace_back();
   o.push_back(ParentImageSpec{1, "", "foo", 3});
   o.push_back(ParentImageSpec{1, "ns", "foo", 3});
@@ -579,8 +579,8 @@ void ChildImageSpec::dump(Formatter *f) const {
   f->dump_string("image_id", image_id);
 }
 
-std::list<ChildImageSpec> ChildImageSpec::generate_test_instances() {
-  std::list<ChildImageSpec> o;
+std::vector<ChildImageSpec> ChildImageSpec::generate_test_instances() {
+  std::vector<ChildImageSpec> o;
   o.push_back(ChildImageSpec());
   o.push_back(ChildImageSpec(123, "", "abc"));
   o.push_back(ChildImageSpec(123, "ns", "abc"));
@@ -648,8 +648,8 @@ std::string GroupImageSpec::image_key() {
   }
 }
 
-std::list<GroupImageSpec> GroupImageSpec::generate_test_instances() {
-  std::list<GroupImageSpec> o;
+std::vector<GroupImageSpec> GroupImageSpec::generate_test_instances() {
+  std::vector<GroupImageSpec> o;
   o.push_back(GroupImageSpec("10152ae8944a", 0));
   o.push_back(GroupImageSpec("1018643c9869", 3));
   return o;
@@ -685,8 +685,8 @@ void GroupImageStatus::dump(Formatter *f) const {
   f->dump_string("state", state_to_string());
 }
 
-std::list<GroupImageStatus> GroupImageStatus::generate_test_instances() {
-  std::list<GroupImageStatus> o;
+std::vector<GroupImageStatus> GroupImageStatus::generate_test_instances() {
+  std::vector<GroupImageStatus> o;
   o.push_back(GroupImageStatus(GroupImageSpec("10152ae8944a", 0), GROUP_IMAGE_LINK_STATE_ATTACHED));
   o.push_back(GroupImageStatus(GroupImageSpec("1018643c9869", 3), GROUP_IMAGE_LINK_STATE_ATTACHED));
   o.push_back(GroupImageStatus(GroupImageSpec("10152ae8944a", 0), GROUP_IMAGE_LINK_STATE_INCOMPLETE));
@@ -718,8 +718,8 @@ bool GroupSpec::is_valid() const {
   return (!group_id.empty()) && (pool_id != -1);
 }
 
-std::list<GroupSpec> GroupSpec::generate_test_instances() {
-  std::list<GroupSpec> o;
+std::vector<GroupSpec> GroupSpec::generate_test_instances() {
+  std::vector<GroupSpec> o;
   o.push_back(GroupSpec("10152ae8944a", 0));
   o.push_back(GroupSpec("1018643c9869", 3));
   return o;
@@ -898,8 +898,8 @@ void SnapshotInfo::dump(Formatter *f) const {
   f->dump_stream("timestamp") << timestamp;
 }
 
-std::list<SnapshotInfo> SnapshotInfo::generate_test_instances() {
-  std::list<SnapshotInfo> o;
+std::vector<SnapshotInfo> SnapshotInfo::generate_test_instances() {
+  std::vector<SnapshotInfo> o;
   o.push_back(SnapshotInfo(1ULL, UserSnapshotNamespace{}, "snap1", 123,
                            {123456, 0}, 12));
   o.push_back(SnapshotInfo(2ULL,
@@ -956,8 +956,8 @@ void SnapshotNamespace::dump(Formatter *f) const {
   visit(DumpSnapshotNamespaceVisitor(f, "snapshot_namespace_type"));
 }
 
-std::list<SnapshotNamespace> SnapshotNamespace::generate_test_instances() {
-  std::list<SnapshotNamespace> o;
+std::vector<SnapshotNamespace> SnapshotNamespace::generate_test_instances() {
+  std::vector<SnapshotNamespace> o;
   o.push_back(SnapshotNamespace(UserSnapshotNamespace()));
   o.push_back(SnapshotNamespace(GroupSnapshotNamespace(0, "10152ae8944a",
                                                        "2118643c9732")));
@@ -1094,8 +1094,8 @@ void ImageSnapshotSpec::dump(Formatter *f) const {
   f->dump_int("snap_id", snap_id);
 }
 
-std::list<ImageSnapshotSpec> ImageSnapshotSpec::generate_test_instances() {
-  std::list<ImageSnapshotSpec> o;
+std::vector<ImageSnapshotSpec> ImageSnapshotSpec::generate_test_instances() {
+  std::vector<ImageSnapshotSpec> o;
   o.push_back(ImageSnapshotSpec(0, "myimage", 2));
   o.push_back(ImageSnapshotSpec(1, "testimage", 7));
   return o;
@@ -1127,8 +1127,8 @@ void GroupSnapshot::dump(Formatter *f) const {
   f->dump_int("state", state);
 }
 
-std::list<GroupSnapshot> GroupSnapshot::generate_test_instances() {
-  std::list<GroupSnapshot> o;
+std::vector<GroupSnapshot> GroupSnapshot::generate_test_instances() {
+  std::vector<GroupSnapshot> o;
   o.push_back(GroupSnapshot("10152ae8944a", "groupsnapshot1", GROUP_SNAPSHOT_STATE_INCOMPLETE));
   o.push_back(GroupSnapshot("1018643c9869", "groupsnapshot2", GROUP_SNAPSHOT_STATE_COMPLETE));
   return o;
@@ -1187,8 +1187,8 @@ void MirrorImageMap::dump(Formatter *f) const {
   f->dump_string("data", data_ss.str());
 }
 
-std::list<MirrorImageMap> MirrorImageMap::generate_test_instances() {
-  std::list<MirrorImageMap> o;
+std::vector<MirrorImageMap> MirrorImageMap::generate_test_instances() {
+  std::vector<MirrorImageMap> o;
   bufferlist data;
   data.append(std::string(128, '1'));
 
@@ -1333,8 +1333,8 @@ void MigrationSpec::dump(Formatter *f) const {
   f->dump_stream("mirror_image_mode") << mirror_image_mode;
 }
 
-std::list<MigrationSpec> MigrationSpec::generate_test_instances() {
-  std::list<MigrationSpec> o;
+std::vector<MigrationSpec> MigrationSpec::generate_test_instances() {
+  std::vector<MigrationSpec> o;
   o.push_back(MigrationSpec());
   o.push_back(MigrationSpec(MIGRATION_HEADER_TYPE_SRC, 1, "ns",
                             "image_name", "image_id", "", {{1, 2}}, 123,

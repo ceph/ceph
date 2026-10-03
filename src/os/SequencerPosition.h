@@ -8,6 +8,7 @@
 #include "include/encoding.h"
 #include "common/Formatter.h"
 
+#include <vector>
 #include <ostream>
 
 /**
@@ -41,8 +42,8 @@ struct SequencerPosition {
     f->dump_unsigned("trans", trans);
     f->dump_unsigned("op", op);
   }
-  static std::list<SequencerPosition> generate_test_instances() {
-    std::list<SequencerPosition> o;
+  static std::vector<SequencerPosition> generate_test_instances() {
+    std::vector<SequencerPosition> o;
     o.emplace_back();
     o.push_back(SequencerPosition(1, 2, 3));
     o.push_back(SequencerPosition(4, 5, 6));

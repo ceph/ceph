@@ -18,6 +18,7 @@
 #include <fcntl.h>
 
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <sstream>
 #include <pthread.h>
@@ -602,28 +603,50 @@ int librados::RadosClient::wait_for_latest_osdmap()
   return ceph::from_error_code(ec);
 }
 
-int librados::RadosClient::pool_list(std::list<std::pair<int64_t, string> >& v)
+int librados::RadosClient::pool_list(
+  std::vector<std::pair<int64_t, string>>& pools)
 {
   int r = wait_for_osdmap();
   if (r < 0)
     return r;
 
+  std::vector<std::pair<int64_t, string>> result;
   objecter->with_osdmap([&](const OSDMap& o) {
-      for (auto p : o.get_pools())
-	v.push_back(std::make_pair(p.first, o.get_pool_name(p.first)));
+      result.reserve(std::size(o.get_pools()));
+
+      for (const auto& pool : o.get_pools()) {
+        result.emplace_back(pool.first, o.get_pool_name(pool.first));
+      }
     });
+
+  pools = std::move(result);
+
   return 0;
 }
 
-int librados::RadosClient::get_pool_stats(std::list<string>& pools,
-					  map<string,::pool_stat_t> *result,
+int librados::RadosClient::pool_list(
+  std::list<std::pair<int64_t, string>>& pools)
+{
+  std::vector<std::pair<int64_t, string>> contiguous_pools;
+  int r = pool_list(contiguous_pools);
+  if (r < 0) {
+    return r;
+  }
+
+  pools.insert(std::end(pools),
+               std::make_move_iterator(std::begin(contiguous_pools)),
+               std::make_move_iterator(std::end(contiguous_pools)));
+
+  return 0;
+}
+
+int librados::RadosClient::get_pool_stats(const std::vector<string>& pools,
+					  map<string, ::pool_stat_t> *result,
 					  bool *pper_pool)
 {
   bs::error_code ec;
 
-  std::vector<std::string> v(pools.begin(), pools.end());
-
-  auto [res, per_pool] = objecter->get_pool_stats(v, ca::use_blocked[ec]);
+  auto [res, per_pool] = objecter->get_pool_stats(pools, ca::use_blocked[ec]);
   if (ec)
     return ceph::from_error_code(ec);
 
@@ -633,6 +656,15 @@ int librados::RadosClient::get_pool_stats(std::list<string>& pools,
     result->insert(res.begin(), res.end());
 
   return 0;
+}
+
+int librados::RadosClient::get_pool_stats(std::list<string>& pools,
+					  map<string, ::pool_stat_t> *result,
+					  bool *pper_pool)
+{
+  const std::vector<string> vector_pools(std::begin(pools), std::end(pools));
+
+  return get_pool_stats(vector_pools, result, pper_pool);
 }
 
 int librados::RadosClient::pool_is_in_selfmanaged_snaps_mode(

@@ -66,8 +66,8 @@ void frag_t::dump(ceph::Formatter *f) const {
   f->dump_unsigned("bits", bits());
 }
 
-std::list<frag_t> frag_t::generate_test_instances() {
-  std::list<frag_t> ls;
+std::vector<frag_t> frag_t::generate_test_instances() {
+  std::vector<frag_t> ls;
   ls.emplace_back();
   ls.push_back(frag_t((1<<22), 2));
   ls.push_back(frag_t((1<<21), 3));
@@ -207,8 +207,8 @@ void fragtree_t::dump(ceph::Formatter *f) const {
   f->close_section(); // splits
 }
 
-std::list<fragtree_t> fragtree_t::generate_test_instances() {
-  std::list<fragtree_t> ls;
+std::vector<fragtree_t> fragtree_t::generate_test_instances() {
+  std::vector<fragtree_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   return ls;

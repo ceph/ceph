@@ -6,11 +6,13 @@
 #include "msg/Messenger.h"
 #include "ObjectCacher.h"
 #include "WritebackHandler.h"
+#include "common/container_concepts.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
 
 #include "include/ceph_assert.h"
 
+#include <iterator>
 #include <unordered_map>
 
 #ifdef WITH_CRIMSON
@@ -24,7 +26,7 @@
 				 /// while holding the lock
 
 using std::chrono::seconds;
-using std::list;
+using std::deque;
 using std::map;
 using std::make_pair;
 using std::pair;
@@ -35,6 +37,15 @@ using std::vector;
 using ceph::bufferlist;
 
 using namespace std::literals;
+
+static void claim_grouped_waiters(std::vector<Context *>& ready, auto& grouped_waiters)
+{
+  for (auto& position_waiters : grouped_waiters) {
+    ceph::util::append_range(ready, position_waiters.second);
+  }
+
+  grouped_waiters.clear();
+}
 
 /*** ObjectCacher::BufferHead ***/
 
@@ -203,9 +214,11 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   // waiters
   for (auto p = right->waitfor_read.begin();
        p != right->waitfor_read.end();
-       ++p)
-    left->waitfor_read[p->first].splice(left->waitfor_read[p->first].begin(),
-					p->second );
+       ++p) {
+    auto& destination = left->waitfor_read[p->first];
+
+    destination.insert(std::begin(destination), std::begin(p->second), std::end(p->second));
+  }
 
   // hose right
   delete right;
@@ -577,7 +590,7 @@ void ObjectCacher::Object::truncate(loff_t s)
   ceph_assert(ceph_mutex_is_locked(oc->lock));
   ldout(oc->cct, 10) << "truncate " << *this << " to " << s << dendl;
 
-  std::list<Context*> waiting_for_read;
+  std::vector<Context *> waiting_for_read;
   while (!data.empty()) {
     BufferHead *bh = data.rbegin()->second;
     if (bh->end() <= s)
@@ -592,10 +605,7 @@ void ObjectCacher::Object::truncate(loff_t s)
 
     // remove bh entirely
     ceph_assert(bh->start() >= s);
-    for ([[maybe_unused]] auto& [off, ctxs] : bh->waitfor_read) {
-      waiting_for_read.splice(waiting_for_read.end(), ctxs);
-    }
-    bh->waitfor_read.clear();
+    claim_grouped_waiters(waiting_for_read, bh->waitfor_read);
     replace_journal_tid(bh, 0);
     oc->bh_remove(this, bh);
     delete bh;
@@ -622,7 +632,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
     complete = false;
   }
 
-  std::list<Context*> waiting_for_read;
+  std::vector<Context *> waiting_for_read;
   auto p = data_lower_bound(off);
   while (p != data.end()) {
     BufferHead *bh = p->second;
@@ -660,10 +670,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
       // we should mark all Rx bh to zero
       continue;
     } else {
-      for ([[maybe_unused]] auto& [off, ctxs] : bh->waitfor_read) {
-        waiting_for_read.splice(waiting_for_read.end(), ctxs);
-      }
-      bh->waitfor_read.clear();
+      claim_grouped_waiters(waiting_for_read, bh->waitfor_read);
     }
 
     oc->bh_remove(this, bh);
@@ -859,7 +866,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
     bl.append_zero(length - bl.length());
   }
 
-  list<Context*> ls;
+  vector<Context *> ls;
   int err = 0;
 
   if (objects[poolid].count(oid) == 0) {
@@ -877,11 +884,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
       bool allzero = true;
       for (auto p = ob->data.begin(); p != ob->data.end(); ++p) {
 	BufferHead *bh = p->second;
-	for (auto p = bh->waitfor_read.begin();
-	     p != bh->waitfor_read.end();
-	     ++p)
-	  ls.splice(ls.end(), p->second);
-	bh->waitfor_read.clear();
+	claim_grouped_waiters(ls, bh->waitfor_read);
 	if (!bh->is_zero() && !bh->is_rx())
 	  allzero = false;
       }
@@ -940,11 +943,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
       ldout(cct, 20) << "checking bh " << *bh << dendl;
 
       // finishers?
-      for (auto it = bh->waitfor_read.begin();
-	   it != bh->waitfor_read.end();
-	   ++it)
-	ls.splice(ls.end(), it->second);
-      bh->waitfor_read.clear();
+      claim_grouped_waiters(ls, bh->waitfor_read);
 
       if (bh->start() > opos) {
 	ldout(cct, 1) << "bh_read_finish skipping gap "
@@ -1018,7 +1017,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
 					int64_t *max_amount, int *max_count)
 {
-  list<BufferHead*> blist;
+  deque<BufferHead *> buffer_heads;
 
   int count = 0;
   int64_t total_len = 0;
@@ -1031,7 +1030,7 @@ void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
     if (obh->ob != bh->ob)
       break;
     if (obh->is_dirty() && obh->last_write <= cutoff) {
-      blist.push_back(obh);
+      buffer_heads.push_back(obh);
       ++count;
       total_len += obh->length();
       if ((max_count && count > *max_count) ||
@@ -1046,7 +1045,7 @@ void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
     if (obh->ob != bh->ob)
       break;
     if (obh->is_dirty() && obh->last_write <= cutoff) {
-      blist.push_front(obh);
+      buffer_heads.push_front(obh);
       ++count;
       total_len += obh->length();
       if ((max_count && count > *max_count) ||
@@ -1059,7 +1058,7 @@ void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
   if (max_amount)
     *max_amount -= total_len;
 
-  bh_write_scattered(blist);
+  bh_write_scattered(buffer_heads);
 }
 
 class ObjectCacher::C_WriteCommit : public Context {
@@ -1085,11 +1084,11 @@ public:
     trace.event("finish");
   }
 };
-void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
+void ObjectCacher::bh_write_scattered(const deque<BufferHead *>& buffer_heads)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
 
-  Object *ob = blist.front()->ob;
+  Object *ob = buffer_heads.front()->ob;
   ob->get();
 
   ceph::real_time last_write;
@@ -1097,12 +1096,11 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
   vector<pair<loff_t, uint64_t> > ranges;
   vector<pair<uint64_t, bufferlist> > io_vec;
 
-  ranges.reserve(blist.size());
-  io_vec.reserve(blist.size());
+  ranges.reserve(std::size(buffer_heads));
+  io_vec.reserve(std::size(buffer_heads));
 
   uint64_t total_len = 0;
-  for (list<BufferHead*>::iterator p = blist.begin(); p != blist.end(); ++p) {
-    BufferHead *bh = *p;
+  for (auto *bh : buffer_heads) {
     ldout(cct, 7) << "bh_write_scattered " << *bh << dendl;
     ceph_assert(bh->ob == ob);
     ceph_assert(bh->bl.length() == bh->length());
@@ -1128,8 +1126,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
 					   oncommit);
   oncommit->tid = tid;
   ob->last_write_tid = tid;
-  for (list<BufferHead*>::iterator p = blist.begin(); p != blist.end(); ++p) {
-    BufferHead *bh = *p;
+  for (auto *bh : buffer_heads) {
     bh->last_write_tid = tid;
     mark_tx(bh);
   }
@@ -1266,10 +1263,10 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
   ob->last_commit_tid = tid;
 
   // waiters?
-  list<Context*> ls;
-  if (ob->waitfor_commit.count(tid)) {
-    ls.splice(ls.begin(), ob->waitfor_commit[tid]);
-    ob->waitfor_commit.erase(tid);
+  vector<Context *> ls;
+  if (auto i = ob->waitfor_commit.find(tid); i != ob->waitfor_commit.end()) {
+    ls.swap(i->second);
+    ob->waitfor_commit.erase(i);
   }
 
   // is the entire object set now clean and fully committed?
@@ -1464,7 +1461,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 					      ex_it->length, soid.snap)) {
 	ldout(cct, 20) << "readx  may copy on write" << dendl;
 	bool wait = false;
-	list<BufferHead*> blist;
+	deque<BufferHead *> buffer_heads;
 	for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
 	     bh_it != o->data.end();
 	     ++bh_it) {
@@ -1474,14 +1471,14 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	    wait = true;
 	    if (bh->is_dirty()) {
 	      if (scattered_write)
-		blist.push_back(bh);
+		buffer_heads.push_back(bh);
 	      else
 		bh_write(bh, *trace);
 	    }
 	  }
 	}
-	if (scattered_write && !blist.empty())
-	  bh_write_scattered(blist);
+	if (scattered_write && !buffer_heads.empty())
+	  bh_write_scattered(buffer_heads);
 	if (wait) {
 	  ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid
 			 << " on " << *o << dendl;
@@ -1735,7 +1732,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
 void ObjectCacher::retry_waiting_reads()
 {
-  list<Context *> ls;
+  std::deque<Context *> ls;
   ls.swap(waitfor_read);
 
   while (!ls.empty() && waitfor_read.empty()) {
@@ -1743,7 +1740,8 @@ void ObjectCacher::retry_waiting_reads()
     ls.pop_front();
     ctx->complete(0);
   }
-  waitfor_read.splice(waitfor_read.end(), ls);
+  ceph::util::append_range(waitfor_read, ls);
+  ls.clear();
 }
 
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
@@ -1763,7 +1761,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
     trace.event("start");
   }
 
-  list<Context*> wait_for_reads;
+  vector<Context *> wait_for_reads;
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
        ++ex_it) {
@@ -1778,10 +1776,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
     bh->snapc = wr->snapc;
 
     // readers that need to be woken up due to an overwrite
-    for (auto& [_, wait_for_read] : bh->waitfor_read) {
-      wait_for_reads.splice(wait_for_reads.end(), wait_for_read);
-    }
-    bh->waitfor_read.clear();
+    claim_grouped_waiters(wait_for_reads, bh->waitfor_read);
 
     bytes_written += ex_it->length;
     if (bh->is_tx()) {
@@ -2135,7 +2130,7 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length,
 {
   ceph_assert(trace != nullptr);
   ceph_assert(ceph_mutex_is_locked(lock));
-  list<BufferHead*> blist;
+  deque<BufferHead *> buffer_heads;
   bool clean = true;
   ldout(cct, 10) << "flush " << *ob << " " << offset << "~" << length << dendl;
   for (map<loff_t,BufferHead*>::const_iterator p = ob->data_lower_bound(offset);
@@ -2155,13 +2150,13 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length,
     }
 
     if (scattered_write)
-      blist.push_back(bh);
+      buffer_heads.push_back(bh);
     else
       bh_write(bh, *trace);
     clean = false;
   }
-  if (scattered_write && !blist.empty())
-    bh_write_scattered(blist);
+  if (scattered_write && !buffer_heads.empty())
+    bh_write_scattered(buffer_heads);
 
   return clean;
 }
@@ -2199,7 +2194,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   C_GatherBuilder gather(cct);
   set<Object*> waitfor_commit;
 
-  list<BufferHead*> blist;
+  deque<BufferHead *> buffer_heads;
   Object *last_ob = NULL;
   set<BufferHead*, BufferHead::ptr_lt>::const_iterator it, p, q;
 
@@ -2225,13 +2220,13 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
     if (bh->is_dirty()) {
       if (scattered_write) {
 	if (last_ob != bh->ob) {
-	  if (!blist.empty()) {
-	    bh_write_scattered(blist);
-	    blist.clear();
+	  if (!buffer_heads.empty()) {
+	    bh_write_scattered(buffer_heads);
+	    buffer_heads.clear();
 	  }
 	  last_ob = bh->ob;
 	}
-	blist.push_back(bh);
+	buffer_heads.push_back(bh);
       } else {
 	bh_write(bh, {});
       }
@@ -2251,13 +2246,13 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
       if (bh->is_dirty()) {
 	if (scattered_write) {
 	  if (last_ob != bh->ob) {
-	    if (!blist.empty()) {
-	      bh_write_scattered(blist);
-	      blist.clear();
+	    if (!buffer_heads.empty()) {
+	      bh_write_scattered(buffer_heads);
+	      buffer_heads.clear();
 	    }
 	    last_ob = bh->ob;
 	  }
-	  blist.push_front(bh);
+	  buffer_heads.push_front(bh);
 	} else {
 	  bh_write(bh, {});
 	}
@@ -2267,8 +2262,8 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
     }
   }
 
-  if (scattered_write && !blist.empty())
-    bh_write_scattered(blist);
+  if (scattered_write && !buffer_heads.empty())
+    bh_write_scattered(buffer_heads);
 
   for (set<Object*>::iterator i = waitfor_commit.begin();
        i != waitfor_commit.end(); ++i) {
@@ -2339,7 +2334,7 @@ bool ObjectCacher::flush_all(Context *onfinish)
   C_GatherBuilder gather(cct);
   set<Object*> waitfor_commit;
 
-  list<BufferHead*> blist;
+  deque<BufferHead *> buffer_heads;
   Object *last_ob = NULL;
   set<BufferHead*, BufferHead::ptr_lt>::iterator next, it;
   next = it = dirty_or_tx_bh.begin();
@@ -2351,13 +2346,13 @@ bool ObjectCacher::flush_all(Context *onfinish)
     if (bh->is_dirty()) {
       if (scattered_write) {
 	if (last_ob != bh->ob) {
-	  if (!blist.empty()) {
-	    bh_write_scattered(blist);
-	    blist.clear();
+	  if (!buffer_heads.empty()) {
+	    bh_write_scattered(buffer_heads);
+	    buffer_heads.clear();
 	  }
 	  last_ob = bh->ob;
 	}
-	blist.push_back(bh);
+	buffer_heads.push_back(bh);
       } else {
 	bh_write(bh, {});
       }
@@ -2366,8 +2361,8 @@ bool ObjectCacher::flush_all(Context *onfinish)
     it = next;
   }
 
-  if (scattered_write && !blist.empty())
-    bh_write_scattered(blist);
+  if (scattered_write && !buffer_heads.empty())
+    bh_write_scattered(buffer_heads);
 
   for (set<Object*>::iterator i = waitfor_commit.begin();
        i != waitfor_commit.end();
@@ -2412,7 +2407,7 @@ void ObjectCacher::purge_set(ObjectSet *oset)
 loff_t ObjectCacher::release(Object *ob)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
-  list<BufferHead*> clean;
+  vector<BufferHead *> clean;
   loff_t o_unclean = 0;
 
   for (map<loff_t,BufferHead*>::iterator p = ob->data.begin();
@@ -2425,11 +2420,9 @@ loff_t ObjectCacher::release(Object *ob)
       o_unclean += bh->length();
   }
 
-  for (list<BufferHead*>::iterator p = clean.begin();
-       p != clean.end();
-       ++p) {
-    bh_remove(ob, *p);
-    delete *p;
+  for (auto *bh : clean) {
+    bh_remove(ob, bh);
+    delete bh;
   }
 
   if (ob->can_close()) {
@@ -2719,6 +2712,7 @@ void ObjectCacher::bh_stat_add(BufferHead *bh)
     stat_cond.notify_all();
 }
 
+
 void ObjectCacher::bh_stat_sub(BufferHead *bh)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
@@ -2833,4 +2827,3 @@ void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
   if (get_stat_dirty_waiting() > 0)
     stat_cond.notify_all();
 }
-

@@ -17,6 +17,7 @@
 #define CEPH_UTIME_H
 
 #include <math.h>
+#include <vector>
 #include <sys/time.h>
 #include <time.h>
 
@@ -184,7 +185,7 @@ public:
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<utime_t> generate_test_instances();
+  static std::vector<utime_t> generate_test_instances();
   
   void encode_timeval(struct ceph_timespec *t) const {
     t->tv_sec = tv.tv_sec;

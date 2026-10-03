@@ -3910,9 +3910,9 @@ auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
 }
 #endif
 
-list<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()
+vector<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()
 {
-  list<RGWBucketEntryPoint> o;
+  vector<RGWBucketEntryPoint> o;
   RGWBucketEntryPoint bp;
   init_bucket(&bp.bucket, "tenant", "bucket", "pool", ".index.pool", "marker", "10");
   bp.owner = "owner";
