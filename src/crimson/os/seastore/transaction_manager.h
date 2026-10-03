@@ -889,9 +889,11 @@ public:
     ).handle_error_interruptible(
       move_region_iertr::pass_further(),
       crimson::ct_error::assert_all("invalid error"));
-    extent->rewrite(t, src_extent, 0);
     extent->set_laddr(dst_key);
-    extent->set_last_committed_crc(extent->calc_crc32c());
+    src_extent.get_bptr().copy_out(
+      0,
+      extent->get_length(),
+      extent->get_bptr().c_str());
   }
 
   /**
