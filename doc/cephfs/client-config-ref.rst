@@ -62,6 +62,7 @@ Client Config Reference
 .. confval:: client_snapdir
 .. confval:: client_tick_interval
 .. confval:: client_use_random_mds
+.. confval:: client_force_lazyio
 .. confval:: fuse_default_permissions
 .. confval:: fuse_max_write
 .. confval:: fuse_disable_pagecache
