@@ -5,6 +5,7 @@ import json
 import random
 import sys
 import threading
+import time
 from code import InteractiveInterpreter
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
@@ -142,6 +143,48 @@ class Module(MgrModule):
             return -1, '', "Test failed: {0}".format(e)
         else:
             return 0, str(r), "Self-test OK"
+
+    def remote_mutate(self, container: List[Any], value: Any) -> int:
+        """Same as influx.remote_mutate(); used by the self-call test below."""
+        container.append(value)
+        return len(container)
+
+    def _remote_mutation_check(self, target: str) -> Dict[str, Any]:
+        container: List[Any] = []
+        returned_len = self.remote(target, "remote_mutate", container, "marker")
+        return {
+            "caller_container_len": len(container),
+            "returned_len": returned_len,
+            "same_interpreter": len(container) == returned_len,
+        }
+
+    @SelftestCLICommand('mgr self-test remote-mutation')
+    def test_remote_mutation(self) -> Tuple[int, str, str]:
+        '''Pass-by-reference check against influx.'''
+        return 0, json.dumps(self._remote_mutation_check("influx")), ''
+
+    @SelftestCLICommand('mgr self-test remote-self-mutation')
+    def test_remote_self_mutation(self) -> Tuple[int, str, str]:
+        '''Same check, against this module's own name (identity check in shares_interpreter()).'''
+        return 0, json.dumps(self._remote_mutation_check("selftest")), ''
+
+    @SelftestCLICommand('mgr self-test remote-benchmark')
+    def test_remote_benchmark(
+        self, iterations: int = 1000, payload_size: int = 100
+    ) -> Tuple[int, str, str]:
+        '''Benchmark remote() dispatch overhead against influx.'''
+        payload = {"data": list(range(payload_size)), "text": "x" * payload_size}
+        start = time.monotonic()
+        for _ in range(iterations):
+            self.remote("influx", "remote_bench_echo", payload)
+        elapsed = time.monotonic() - start
+        result = {
+            "iterations": iterations,
+            "payload_size": payload_size,
+            "elapsed_s": elapsed,
+            "per_call_us": (elapsed / iterations) * 1e6,
+        }
+        return 0, json.dumps(result), ''
 
     @SelftestCLICommand('mgr self-test cluster-log')
     def do_cluster_log(self,
