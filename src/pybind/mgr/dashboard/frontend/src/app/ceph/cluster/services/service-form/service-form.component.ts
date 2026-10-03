@@ -62,6 +62,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   readonly SNMP_DESTINATION_PATTERN = /^[^\:]+:[0-9]/;
   readonly SNMP_ENGINE_ID_PATTERN = /^[0-9A-Fa-f]{10,64}/g;
   readonly INGRESS_SUPPORTED_SERVICE_TYPES = ['rgw', 'nfs'];
+  // Matches cephadm allow_colo()
+  readonly ALLOW_COLO_SERVICE_TYPES = ['mds', 'mgr', 'rgw', 'nfs', 'rbd-mirror'];
   readonly SMB_CONFIG_URI_PATTERN = /^(http:|https:|rados:|rados:mon-config-key:)/;
   readonly OAUTH2_ISSUER_URL_PATTERN =
     /^(https?:\/\/)?([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+)(:[0-9]{1,5})?(\/.*)?$/;
@@ -218,7 +220,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         ]
       ],
       hosts: [[]],
-      count: [null, [CdValidators.number(false), Validators.min(1)]],
+      count: [
+        null,
+        [
+          CdValidators.number(false),
+          Validators.min(1),
+          CdValidators.custom('maxHosts', (count: number) => this.countExceedsSelectedHosts(count))
+        ]
+      ],
       unmanaged: [false],
       // iSCSI
       // NVMe/TCP
@@ -732,6 +741,11 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         labels: labels.map((label: string) => ({ content: label }))
       }))
     );
+    ['hosts', 'placement', 'service_type'].forEach((controlName) => {
+      this.serviceForm.get(controlName).valueChanges.subscribe(() => {
+        this.refreshCountValidation();
+      });
+    });
     this.poolService.getList().subscribe((resp: Pool[]) => {
       this.pools = resp;
       this.rbdPools = this.pools.filter(this.rbdService.isRBDPool);
@@ -1378,6 +1392,52 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     if (selected === 'label') {
       this.serviceForm.get('count').setValue(null);
     }
+    this.refreshCountValidation();
+  }
+
+  get countMax(): number | undefined {
+    return this.getPlacementHostCountLimit() ?? undefined;
+  }
+
+  private getSelectedHostCount(): number {
+    const hosts = this.serviceForm?.get('hosts')?.value;
+    if (!Array.isArray(hosts)) {
+      return 0;
+    }
+    return hosts.filter((host: ListItem | string) => {
+      if (!host) {
+        return false;
+      }
+      if (typeof host === 'string') {
+        return true;
+      }
+      return host.selected !== false;
+    }).length;
+  }
+
+  private getPlacementHostCountLimit(): number | null {
+    if (this.serviceForm?.get('placement')?.value !== 'hosts') {
+      return null;
+    }
+    const serviceType = this.serviceForm.get('service_type')?.value;
+    if (this.ALLOW_COLO_SERVICE_TYPES.includes(serviceType)) {
+      return null;
+    }
+    const hostCount = this.getSelectedHostCount();
+    return hostCount > 0 ? hostCount : null;
+  }
+
+  private countExceedsSelectedHosts(count: number): boolean {
+    const limit = this.getPlacementHostCountLimit();
+    return limit != null && Number(count) > limit;
+  }
+
+  private refreshCountValidation(): void {
+    const countControl = this.serviceForm.get('count');
+    countControl.updateValueAndValidity({ emitEvent: false });
+    if (countControl.hasError('maxHosts')) {
+      countControl.markAsDirty();
+    }
   }
 
   disableForEditing(serviceType: string) {
@@ -1789,6 +1849,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
   multiSelector(event: any) {
     this.selectedHosts = event.map((host: any) => host.content);
+    this.refreshCountValidation();
   }
 
   get isPrefixedNamedService(): boolean {
