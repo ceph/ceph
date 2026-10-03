@@ -789,6 +789,27 @@ def test_enough_mds_for_ok_to_stop(get, get_daemons_by_service, cephadm_module: 
         DaemonDescription(daemon_type='mds', daemon_id='myfs.test.host1.gfknd', service_name='mds.myfs.test'))
 
 
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_enough_mds_for_ok_to_stop_uses_actual_fs_membership(
+        get, get_daemons_by_service, cephadm_module: CephadmOrchestrator):
+    # A daemon from service mds.fs2 currently holds a rank in fs1 (standby
+    # takeover: mds_join_fs is only a preference). The filesystem actually
+    # served (fs1, max_mds=2) must be evaluated, not the service's (fs2,
+    # max_mds=1).
+    fsmap = {'filesystems': [
+        {'mdsmap': {'fs_name': 'fs1', 'max_mds': 2,
+                    'info': {'gid_1': {'name': 'fs2.host1.gfknd'}}}},
+        {'mdsmap': {'fs_name': 'fs2', 'max_mds': 1, 'info': {}}},
+    ]}
+    get.side_effect = [fsmap]
+    get_daemons_by_service.side_effect = [[DaemonDescription(), DaemonDescription()]]
+    assert not cephadm_module.upgrade._enough_mds_for_ok_to_stop(
+        DaemonDescription(daemon_type='mds', daemon_id='fs2.host1.gfknd',
+                          service_name='mds.fs2'))
+
+
 def _mds_need_upgrade_entries() -> List[Tuple[DaemonDescription, bool]]:
     return [
         (DaemonDescription(
