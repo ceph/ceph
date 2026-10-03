@@ -256,6 +256,7 @@ struct Inode : RefCountedObject {
 
   //int open_by_mode[CEPH_FILE_MODE_NUM];
   std::map<int,int> open_by_mode;
+  int append_open_refs = 0; // number of fds opened with O_APPEND
   std::map<int,int> cap_refs;
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino

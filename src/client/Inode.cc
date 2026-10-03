@@ -366,6 +366,11 @@ int Inode::caps_file_wanted()
       }
 #endif
     }
+  if (append_open_refs) {
+    // An O_APPEND writer needs Fx so that Client::_write() knows no
+    // other writer can extend the file under it.
+    want |= CEPH_CAP_FILE_EXCL;
+  }
   return want;
 }
 
