@@ -1014,10 +1014,18 @@ public:
     osd_op_params_t&& oop,
     std::vector<pg_log_entry_t>&& log_entries);
 
-private:
-  interruptible_future<> repair_object(
+  /// Repair a corrupt object discovered on read: mark it missing locally,
+  /// leave the Clean state and start recovery, which pulls the authoritative
+  /// copy from a replica. Invoked by ClientRequest when a read returns
+  /// object_corrupted (tracker #77070); the caller then waits for the object
+  /// with do_recover_missing(). Returns false, having done nothing, when the
+  /// PG cannot take a repair right now (not clean, trimming snaps, or no
+  /// peer to pull from).
+  bool repair_object(
     const hobject_t& oid,
-    eversion_t& v);
+    const eversion_t& v);
+
+private:
   void check_blocklisted_obc_watchers(ObjectContextRef &obc);
   interruptible_future<seastar::stop_iteration> trim_snap(
     snapid_t to_trim,
