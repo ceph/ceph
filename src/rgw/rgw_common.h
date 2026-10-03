@@ -1888,6 +1888,20 @@ bool verify_bucket_permission(
   const std::vector<rgw::IAM::Policy>& identity_policies,
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
+// as above, but determine cross-account access against an explicit bucket
+// owner rather than s->bucket_owner. CopyObject passes the SOURCE bucket's
+// owner so the source-object check is not evaluated against the destination.
+bool verify_bucket_permission(
+  const DoutPrefixProvider* dpp,
+  req_state * const s,
+  const rgw_owner& bucket_owner,
+  const rgw::ARN& arn,
+  const RGWAccessControlPolicy& user_acl,
+  const RGWAccessControlPolicy& bucket_acl,
+  const boost::optional<rgw::IAM::Policy>& bucket_policy,
+  const std::vector<rgw::IAM::Policy>& identity_policies,
+  const std::vector<rgw::IAM::Policy>& session_policies,
+  const uint64_t op);
 bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state* s,
                               const rgw::ARN& arn, uint64_t op);
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
