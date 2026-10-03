@@ -1635,8 +1635,15 @@ int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const st
     return r;
   }
 
-  r = ceph_chownat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_uid, stx.stx_gid,
-                   AT_SYMLINK_NOFOLLOW);
+  return 0;
+}
+
+int PeerReplayer::SyncMechanism::remote_dir_setattr(const std::string &epath,
+                                                    const struct ceph_statx &stx) {
+  dout(10) << ": remote epath=" << epath << dendl;
+
+  int r = ceph_chownat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_uid, stx.stx_gid,
+                       AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
     derr << ": failed to chown remote directory=" << epath << ": " << cpp_strerror(r)
          << dendl;
@@ -2736,6 +2743,7 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
                << dendl;
             return r;
           }
+          m_sync_stack.top().need_remote_attrs = true;
           //Fill epath to avoid caller treat this as failure and breaking the loop early.
           *epath = _epath;
           *stx = estx;
@@ -2752,6 +2760,12 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
 
     if (r == 0) {
       dout(10) << ": done for directory=" << entry.epath << dendl;
+      if (entry.need_remote_attrs) {
+        r = remote_dir_setattr(entry.epath, entry.stx);
+        if (r < 0) {
+          return r;
+        }
+      }
       fini_directory(entry);
       m_sync_stack.pop();
       continue;
@@ -2988,6 +3002,7 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
                << dendl;
             return r;
           }
+          m_sync_stack.top().need_remote_attrs = true;
           //Fill epath to avoid caller treat this as failure and breaking the loop early.
           *epath = _epath;
           *stx = cstx;
@@ -3000,6 +3015,12 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
 
     if (r == 0) {
       dout(10) << ": done for directory=" << entry.epath << dendl;
+      if (entry.need_remote_attrs) {
+        r = remote_dir_setattr(entry.epath, entry.stx);
+        if (r < 0) {
+          return r;
+        }
+      }
       if (ceph_closedir(m_local, entry.dirp) < 0) {
         derr << ": failed to close local directory=" << entry.epath << dendl;
       }
