@@ -5444,7 +5444,11 @@ PeeringState::Crashed::Crashed(my_context ctx)
     NamedState(context< PeeringMachine >().state_history, "Crashed")
 {
   context< PeeringMachine >().log_enter(state_name);
-  ceph_abort_msg("we got a bad state machine event");
+  auto& machine = context< PeeringMachine >();
+  ceph_abort_msg(
+    std::string("bad state machine event in state '") +
+    (machine.last_exited_state ? machine.last_exited_state : "unknown") +
+    "': " + machine.last_event_desc);
 }
 
 
