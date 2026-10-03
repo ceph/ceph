@@ -52,6 +52,13 @@ private:
   std::unique_ptr<StandbyPyModules> standby_modules;
   std::unique_ptr<ThreadMonitor> thread_monitor;
 
+  // Modules whose shutdown() timed out during a standby->active
+  // promotion. Deliberately never cleared/inspected again -- a bounded,
+  // rare leak (memory + one abandoned OS thread each) is the accepted
+  // tradeoff for not blocking promotion forever or risking a
+  // use-after-free on a still-running background task.
+  std::vector<std::unique_ptr<StandbyPyModule>> leaked_standby_modules;
+
   PyThreadState *pMainThreadState;
 
   // We have our own copy of MgrMap, because we are constructed
