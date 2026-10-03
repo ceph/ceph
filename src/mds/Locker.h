@@ -203,7 +203,8 @@ public:
 			      bool *max_increased=nullptr);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
                             uint64_t newmax=0, uint64_t newsize=0,
-			    utime_t mtime=utime_t());
+			    utime_t mtime=utime_t(),
+                            uint64_t new_change_attr=0);
   void share_inode_max_size(CInode *in, Capability *only_cap=0);
 
   // -- client leases --

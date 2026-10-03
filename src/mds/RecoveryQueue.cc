@@ -40,9 +40,10 @@ public:
 
   uint64_t size = 0;
   utime_t mtime;
+  uint64_t change_attr = 0;
 protected:
   void finish(int r) override {
-    rq->_recovered(in, r, size, mtime);
+    rq->_recovered(in, r, size, mtime, change_attr);
   }
 
   MDSRank *get_mds() override {
@@ -110,7 +111,8 @@ void RecoveryQueue::_start(CInode *in)
       C_MDC_Recover *fin = new C_MDC_Recover(this, in);
       auto layout = pi->layout;
       filer.probe(in->ino(), &layout, in->last,
-		  pi->get_max_size(), &fin->size, &fin->mtime, false,
+		  pi->get_max_size(), &fin->size, &fin->mtime,
+                  &fin->change_attr, false,
 		  0, fin);
     } else {
       p->second = true;
@@ -184,7 +186,7 @@ void RecoveryQueue::enqueue(CInode *in)
 /**
  * Call back on completion of Filer probe on an inode.
  */
-void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
+void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime, uint64_t change_attr)
 {
   dout(10) << "_recovered r=" << r << " size=" << size << " mtime=" << mtime
 	   << " for " << *in << dendl;
@@ -229,7 +231,7 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
     _start(in);
   } else if (!_is_in_any_recover_queue(in)) {
     // journal
-    mds->locker->check_inode_max_size(in, true, 0,  size, mtime);
+    mds->locker->check_inode_max_size(in, true, 0,  size, mtime, change_attr);
     mds->locker->eval(in, CEPH_LOCK_IFILE);
     in->auth_unpin(this);
   }
