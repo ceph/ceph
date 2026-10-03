@@ -113,9 +113,9 @@ KMSCache::KMSCache(CephContext* _cct, std::unique_ptr<Keyring> _keyring)
 
   std::error_code ec;
   if (!keyring->supported(&ec)) {
-    ldout(cct, 1) << "KMS Cache: " << keyring->name() << " unsupported (error "
-                  << ec << "). Disabling Cache." << dendl;
-    cct->_conf->rgw_crypt_s3_kms_cache_enabled = false;
+    ldout(cct, 1) << "KMS Cache: " << keyring->name() << " unsupported ("
+                  << ec.message() << "). Disabling Cache." << dendl;
+    cct->_conf.set_val("rgw_crypt_s3_kms_cache_enabled", "false");
   }
 }
 
@@ -223,7 +223,7 @@ int KMSCache::do_cache(
         if (!keyring_secret) {
           ldpp_dout(dpp, 5)
               << "KMS Cache: " << cache_key << " keyring add error ("
-              << keyring_secret.error()
+              << keyring_secret.error().message()
               << "). removing from cache. disabling cache." << dendl;
           cache->remove_if(cache_key, value);
           disable_cache();
@@ -241,7 +241,8 @@ int KMSCache::do_cache(
   if (result) {
     if (auto ret = result.value()->read(actual_key); ret.value() != 0) {
       ldpp_dout(dpp, 5) << "KMS Cache: " << cache_key << " keyring "
-                        << *result.value() << " read error (" << ret
+                        << *result.value() << " read error ("
+                        << ret.message()
                         << "). removing from cache. disabling cache." << dendl;
       cache->remove_if(cache_key, value);
       disable_cache();
