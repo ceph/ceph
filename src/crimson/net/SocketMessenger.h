@@ -71,6 +71,13 @@ public:
   ConnectionRef connect(const entity_addr_t& peer_addr,
                         const entity_name_t& peer_name) override;
 
+  // Outbound session whose socket and IOHandler live on io_shard.
+  // Resolves when that session is READY. Must run on the messenger shard.
+  seastar::future<ConnectionRef> connect_on_shard(
+      const entity_addr_t& peer_addr,
+      const entity_name_t& peer_name,
+      seastar::shard_id io_shard);
+
   bool owns_connection(Connection &conn) const override {
     assert(seastar::this_shard_id() == sid);
     return this == &static_cast<SocketConnection&>(conn).get_messenger();
@@ -128,6 +135,11 @@ public:
                     const SocketConnection& conn);
 
   SocketConnectionRef lookup_conn(const entity_addr_t& addr);
+  // Same peer address can have a base-port session and an exclusive
+  // reactor-port session. Match the local port so one does not replace
+  // the other.
+  SocketConnectionRef lookup_conn_on_port(const entity_addr_t& addr,
+                                          uint16_t local_port);
 
   void accept_conn(SocketConnectionRef);
 
@@ -153,18 +165,7 @@ public:
   Interceptor *interceptor = nullptr;
 #endif
 
-  seastar::future<> mark_down(const entity_addr_t& a) final {
-    auto conn = lookup_conn(a);
-    if (conn) {
-      return seastar::smp::submit_to(
-	conn->get_shard_id(),
-	[conn=conn.get()] {
-	conn->mark_down();
-	return seastar::now();
-      }).then([conn] { return seastar::now(); });
-    }
-    return seastar::now();
-  }
+  seastar::future<> mark_down(const entity_addr_t& a) final;
 private:
   seastar::future<> accept(SocketFRef &&, const entity_addr_t &);
 
@@ -187,7 +188,10 @@ private:
 
   ShardedServerSocket *listener = nullptr;
   ChainedDispatchers dispatchers;
-  std::map<entity_addr_t, SocketConnectionRef> connections;
+  // One peer address can own several outbound sessions, one per local
+  // reactor. Accepted sessions are keyed by the peer's (possibly
+  // shard-stamped) identity and normally have a single entry.
+  std::map<entity_addr_t, std::vector<SocketConnectionRef>> connections;
   std::set<SocketConnectionRef> accepting_conns;
   std::vector<SocketConnectionRef> closing_conns;
   ceph::net::PolicySet<Throttle> policy_set;

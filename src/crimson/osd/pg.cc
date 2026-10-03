@@ -1412,6 +1412,7 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
     req.get(), pg_whoami, 0,
     map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
   reply->set_last_complete_ondisk(lcod);
+  reply->sender_shard = seastar::this_shard_id();
   co_return handle_rep_op_ret(std::move(commit_fut), std::move(reply));
 }
 

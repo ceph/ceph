@@ -30,9 +30,11 @@
 
 class MOSDRepOpReply final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 public:
+  // Crimson reactor that sent this reply. Unknown on older peers.
+  static constexpr uint32_t UNKNOWN_SENDER_SHARD = 0xffffffffu;
   epoch_t map_epoch, min_epoch;
 
   // subop metadata
@@ -46,6 +48,9 @@ public:
 
   // piggybacked osd state
   eversion_t last_complete_ondisk;
+
+  // Seastar reactor on the sender. Not a PG shard index.
+  uint32_t sender_shard = UNKNOWN_SENDER_SHARD;
 
   ceph::buffer::list::const_iterator p;
   // Decoding flags. Decoding is only needed for messages caught by pipe reader.
@@ -84,6 +89,9 @@ public:
     decode(last_complete_ondisk, p);
 
     decode(from, p);
+    if (header.version >= 3) {
+      decode(sender_shard, p);
+    }
     final_decode_needed = false;
   }
   void encode_payload(uint64_t features) override {
@@ -98,6 +106,7 @@ public:
     encode(result, payload);
     encode(last_complete_ondisk, payload);
     encode(from, payload);
+    encode(sender_shard, payload);
   }
 
   spg_t get_pg() { return pgid; }

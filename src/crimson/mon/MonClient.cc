@@ -570,6 +570,11 @@ Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 
 void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replace */)
 {
+  // The mon session lives on shard 0. Resets of OSD sessions pinned to
+  // other reactors must not touch it.
+  if (seastar::this_shard_id() != 0) {
+    return;
+  }
   gates.dispatch_in_background(__func__, *this, [this, conn] {
     auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
 			      [peer_addr = conn->get_peer_addr()](auto& mc) {

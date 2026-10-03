@@ -20,6 +20,7 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/net/Connection.h"
+#include "crimson/net/SocketMessenger.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/pg.h"
@@ -300,6 +301,130 @@ OSDSingletonState::OSDSingletonState(
 
   recoverystate_perf = build_recoverystate_perf(&cct);
   cct.get_perfcounters_collection()->add(recoverystate_perf);
+}
+
+seastar::future<> ShardServices::send_to_osd(
+  int peer, MessageURef m, epoch_t from_epoch,
+  std::optional<seastar::shard_id> dest_core)
+{
+  LOG_PREFIX(ShardServices::send_to_osd);
+  const auto& osdmap = local_state.osdmap;
+  if (osdmap->is_down(peer)) {
+    INFO("osd.{} is_down", peer);
+    return seastar::now();
+  }
+  if (osdmap->get_info(peer).up_from > from_epoch) {
+    INFO("osd.{} {} > {}", peer,
+         osdmap->get_info(peer).up_from, from_epoch);
+    return seastar::now();
+  }
+
+  const uint32_t dest_key = dest_core
+      ? static_cast<uint32_t>(*dest_core)
+      : std::numeric_limits<uint32_t>::max();
+  const auto key = std::make_pair(peer, dest_key);
+  if (auto found = osd_peer_conns.find(key); found != osd_peer_conns.end()) {
+    auto& conn = found->second;
+    if (conn->get_shard_id() == seastar::this_shard_id()) {
+      // Queue on the session we already have. A standby session
+      // reconnects only when a message is queued; opening another
+      // connection and waiting for READY never wakes it, so the
+      // peering log that creates the replica PG is never sent.
+      return conn->send_with_throttling(std::move(m));
+    }
+  }
+
+  const auto my_sid = seastar::this_shard_id();
+  entity_addr_t addr = osdmap->get_cluster_addrs(peer).front();
+  if (dest_core) {
+    addr = crimson::net::with_osd_shard_port(addr, *dest_core);
+    if (addr.get_port() == 0) {
+      ERROR("osd.{} shard {} port overflow", peer, *dest_core);
+      return seastar::now();
+    }
+  }
+  auto msg = seastar::make_lw_shared<MessageURef>(std::move(m));
+  return osd_singleton_state.invoke_on(
+    PRIMARY_CORE,
+    [addr, my_sid, peer](OSDSingletonState& singleton) {
+      auto& msgr = static_cast<crimson::net::SocketMessenger&>(
+          singleton.cluster_msgr);
+      return msgr.connect_on_shard(
+          addr, entity_name_t(CEPH_ENTITY_TYPE_OSD, peer), my_sid
+      ).then([](crimson::net::ConnectionRef conn) {
+        return conn.get_foreign();
+      });
+    }).then([this, key, msg](auto fconn) {
+      auto conn = crimson::make_local_shared_foreign(std::move(fconn));
+      osd_peer_conns[key] = conn;
+      return conn->send_with_throttling(std::move(*msg));
+    }).handle_exception(
+      [this, peer, key, msg, from_epoch, dest_core, FNAME](std::exception_ptr eptr) {
+      osd_peer_conns.erase(key);
+      std::ignore = eptr;
+      if (dest_core && *msg) {
+        ERROR("osd.{} shard {} connect_on_shard failed",
+              peer, *dest_core);
+        return seastar::now();
+      }
+      ERROR("osd.{} connect_on_shard failed", peer);
+      return seastar::now();
+    });
+}
+
+seastar::future<std::optional<seastar::shard_id>>
+ShardServices::begin_ordered_peer_send(int osd, pg_t pg)
+{
+  auto& route = ordered_routes[std::make_pair(osd, pg)];
+  const auto want = get_peer_pg_core(osd, pg);
+  const std::optional<uint32_t> want_u =
+      want ? std::optional<uint32_t>(static_cast<uint32_t>(*want))
+           : std::nullopt;
+  if (route.active_set && route.active != want_u && route.inflight > 0) {
+    return route.drained.get_shared_future().then([this, osd, pg] {
+      return begin_ordered_peer_send(osd, pg);
+    });
+  }
+  if (!route.active_set || route.inflight == 0) {
+    route.active = want_u;
+    route.active_set = true;
+  }
+  ++route.inflight;
+  if (!route.active) {
+    return seastar::make_ready_future<std::optional<seastar::shard_id>>(
+        std::nullopt);
+  }
+  return seastar::make_ready_future<std::optional<seastar::shard_id>>(
+      seastar::shard_id(*route.active));
+}
+
+void ShardServices::finish_ordered_peer_send(int osd, pg_t pg)
+{
+  auto it = ordered_routes.find(std::make_pair(osd, pg));
+  if (it == ordered_routes.end() || it->second.inflight == 0) {
+    return;
+  }
+  auto& route = it->second;
+  --route.inflight;
+  if (route.inflight == 0 && !route.drained.available()) {
+    route.drained.set_value();
+    route.drained = seastar::shared_promise<>();
+  }
+}
+
+void ShardServices::reset_ordered_peer_sends(pg_t pg)
+{
+  for (auto it = ordered_routes.begin(); it != ordered_routes.end();) {
+    if (it->first.second != pg) {
+      ++it;
+      continue;
+    }
+    it->second.inflight = 0;
+    if (!it->second.drained.available()) {
+      it->second.drained.set_value();
+    }
+    it = ordered_routes.erase(it);
+  }
 }
 
 seastar::future<> OSDSingletonState::send_to_osd(
