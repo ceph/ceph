@@ -378,6 +378,11 @@ class CephadmService(metaclass=ABCMeta):
         if spec.ssl_ca_cert:
             deps.append(f'ssl_ca_cert: {str(utils.config_hash(spec.ssl_ca_cert))}')
 
+        # Secret references are independent from TLS. Any secret used by the
+        # service spec must participate in dependency tracking so that changing
+        # the secret triggers a daemon reconfiguration.
+        deps.extend(mgr.cephadm_secrets.deps_for_spec(spec))
+
         return sorted(deps)
 
     @classmethod

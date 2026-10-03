@@ -305,6 +305,7 @@ class AlertmanagerService(CephadmService):
     DEFAULT_SERVICE_PORT = 9093
     USER_CFG_KEY = 'alertmanager/web_user'
     PASS_CFG_KEY = 'alertmanager/web_password'
+    BASIC_AUTH_CREDS = 'alertmanager_basic_auth_credentials'
 
     @property
     def needs_monitoring(self) -> bool:
@@ -529,6 +530,7 @@ class PrometheusService(CephadmService):
     DEFAULT_MGR_PROMETHEUS_PORT = 9283
     USER_CFG_KEY = 'prometheus/web_user'
     PASS_CFG_KEY = 'prometheus/web_password'
+    BASIC_AUTH_CREDS = 'prometheus_basic_auth_credentials'
 
     def config(self, spec: ServiceSpec) -> None:
         # make sure module is enabled
