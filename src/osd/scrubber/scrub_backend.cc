@@ -861,41 +861,14 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
 
     if (available_shards.size() != 0) {
       if (m_pg.ec_can_decode(available_shards)) {
-        // Decode missing data shards needed to do an encode
-        // Only bother doing this if the number of missing shards is less than
-        // the number of parity shards
-
-        int missing_shards =
-            std::count_if(m_pg.get_ec_sinfo().get_data_shards().begin(),
-                          m_pg.get_ec_sinfo().get_data_shards().end(),
-                          [&available_shards](const auto& shard_id) {
-                            return !available_shards.contains(shard_id);
-                          });
-
-        const int num_redundancy_shards = m_pg.get_ec_sinfo().get_m();
-        if (missing_shards > 0 && missing_shards < num_redundancy_shards) {
+        if (!m_pg.get_ec_sinfo().can_check_crcs(available_shards)) {
           dout(10) << fmt::format(
-                          "{}: Decoding {} missing shards for pg {} "
-                          "as only received shards were ({}).",
-                          __func__, missing_shards, m_pg_whoami,
-                          available_shards)
+                          "{}: {} - cannot check parity CRC, only received "
+                          "shards ({})",
+                          __func__, ho, available_shards)
                    << dendl;
-          this_chunk->m_ec_digest_map =
-              m_pg.ec_decode_acting_set(this_chunk->m_ec_digest_map,
-                                        m_pg.get_ec_sinfo().get_chunk_size());
-        } else if (missing_shards != 0) {
-          dout(10) << fmt::format(
-                          "{}: Cannot decode {} shards from pg {} "
-                          "when only shards {} were received. Ignoring.",
-                          __func__, missing_shards, m_pg_whoami,
-                          available_shards)
-                   << dendl;
-        } else {
-          dout(30) << fmt::format(
-                          "{}: All shards received for pg {}. "
-                          "skipping decoding.",
-                          __func__, m_pg_whoami)
-                   << dendl;
+          this_chunk->m_ec_digest_map.clear();
+          return;
         }
 
         // Create a crc for a zero buffer the size of the auth shard
@@ -1385,9 +1358,9 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
     shard_id_set shards;
     digests.populate_bitset_set(shards);
 
-    if (!m_pg.ec_can_decode(shards)) {
+    if (!m_pg.get_ec_sinfo().can_check_crcs(shards)) {
       dout(10) << fmt::format(
-                      "{}: {} - Cannot decode from available shards ({})",
+                      "{}: {} - Cannot check CRCs from available shards ({})",
                       __func__, ho, shards)
                << dendl;
     } else if (std::any_of(
