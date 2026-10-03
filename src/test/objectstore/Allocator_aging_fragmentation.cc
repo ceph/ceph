@@ -5,21 +5,23 @@
  * Bitmap allocator fragmentation benchmarks.
  * Author: Adam Kupczyk, akupczyk@redhat.com
  */
+#include <gtest/gtest.h>
+
 #include <bit>
 #include <iostream>
-#include <boost/scoped_ptr.hpp>
-#include <gtest/gtest.h>
-#include <boost/random/triangle_distribution.hpp>
 
-#include "common/ceph_mutex.h"
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/triangle_distribution.hpp>
+#include <boost/random/uniform_int.hpp>
+#include <boost/scoped_ptr.hpp>
+
 #include "common/Cond.h"
+#include "common/ceph_mutex.h"
 #include "common/errno.h"
 #include "global/global_init.h"
-#include "include/stringify.h"
 #include "include/Context.h"
+#include "include/stringify.h"
 #include "os/bluestore/Allocator.h"
-
-#include <boost/random/uniform_int.hpp>
 
 typedef boost::mt11213b gen_type;
 
@@ -293,7 +295,7 @@ void AllocTest::doAgingTest(
     cnt++;
     sum+=len;
   };
-  alloc->dump(list_free);
+  alloc->foreach (list_free);
   ASSERT_EQ(sum, capacity);
   if (verbose)
     std::cout << "free chunks sum=" << sum << " free chunks count=" << cnt << std::endl;
@@ -309,7 +311,7 @@ void AllocTest::doAgingTest(
 
 void AllocTest::SetUpTestSuite()
 {
-  vector<const char*> args;
+  std::vector<const char*> args;
   cct = global_init(NULL, args,
 		    CEPH_ENTITY_TYPE_CLIENT,
 		    CODE_ENVIRONMENT_UTILITY,
