@@ -212,6 +212,70 @@ async fn aros_stream_get() {
     integration::stream_get(b.store()).await;
 }
 
+#[tokio::test]
+async fn aros_list_with_offset_exclusivity() {
+    // This test verifies that list_with_offset returns an exclusive list (not including
+    // the offset value itself). It requires PaginatedListStore trait implementation.
+    // RGWObjectStore uses the default list implementation which may have different semantics.
+    let b = TestBucket::new("list-offset-exclusivity");
+    integration::list_with_offset_exclusivity(b.store()).await;
+}
+
+#[tokio::test]
+async fn aros_multipart_out_of_order() {
+    // This test uploads multipart chunks out of order (e.g., part 2 before part 1),
+    // verifying that the RGW SAL backend accepts out-of-order part uploads as
+    // allowed by the S3 spec.
+    let b = TestBucket::new("multipart-out-of-order");
+    integration::multipart_out_of_order(b.store()).await;
+}
+
+#[tokio::test]
+async fn aros_multipart_race_condition() {
+    // This test creates a race condition with 2 threads performing multipart writes
+    // to the same path simultaneously, verifying that RGW SAL handles concurrent
+    // multipart uploads to the same key safely (last writer wins).
+    let b = TestBucket::new("multipart-race");
+    integration::multipart_race_condition(b.store(), true).await;
+}
+
+#[tokio::test]
+async fn aros_put_get_attributes() {
+    // This test verifies reading and writing object Attributes (custom metadata).
+    // RGW user metadata (x-amz-meta-* headers) is exposed through the SAL wrapper
+    // and mapped to the ObjectStore Attributes API.
+    let b = TestBucket::new("put-get-attributes");
+    integration::put_get_attributes(b.store()).await;
+}
+
+// ----------------------------------------
+// Skipped arrow-rs integration tests
+// ----------------------------------------
+// The following tests from the arrow-rs integration suite are not currently
+// executed. Each is marked with #[ignore] and includes an explanation.
+
+#[tokio::test]
+#[ignore = "list_paginated requires PaginatedListStore trait which RGWObjectStore does not implement"]
+async fn aros_list_paginated() {
+    // This test requires implementing the PaginatedListStore trait, which provides
+    // more granular control over list pagination. RGWObjectStore currently uses
+    // the default ObjectStore::list implementation which handles pagination internally.
+    // TODO: Evaluate if implementing PaginatedListStore would provide benefits for RGW.
+    // let b = TestBucket::new("list-paginated");
+    // integration::list_paginated(b.store(), b.store()).await;
+}
+
+#[tokio::test]
+#[ignore = "multipart requires MultipartStore trait which RGWObjectStore does not implement"]
+async fn aros_multipart() {
+    // The arrow-rs multipart() test is a comprehensive test of MultipartStore trait.
+    // We have custom multipart tests (multipart_basic, multipart_abort) that provide
+    // equivalent coverage with more explicit control over test scenarios.
+    // This avoids duplication while maintaining test clarity.
+    // let b = TestBucket::new("multipart");
+    // integration::multipart(b.store(), b.store()).await;
+}
+
 // ----------------------------------------
 // Coverage beyond the conformance suite
 // ----------------------------------------
@@ -266,6 +330,7 @@ async fn list_pagination() {
 }
 
 #[tokio::test]
+// below additional tests may not be needed once we add support for aros_multipart
 async fn multipart_basic() {
     let b = TestBucket::new("multipart-basic");
     let key = Path::from("multipart");
