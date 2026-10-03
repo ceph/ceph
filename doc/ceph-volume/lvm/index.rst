@@ -21,6 +21,8 @@ Implements the functionality needed to deploy OSDs from the ``lvm`` subcommand:
 
 * :ref:`ceph-volume-lvm-newwal`
 
+* :ref:`ceph-volume-lvm-rotate-dmcrypt-key`
+
 .. not yet implemented
 .. * :ref:`ceph-volume-lvm-scan`
 
