@@ -1839,7 +1839,7 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
 }
 
 void PeeringState::calc_ec_acting(
-  map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+  const eversion_t &log_tail,
   unsigned size,
   const vector<int> &acting,
   const vector<int> &up,
@@ -1862,7 +1862,7 @@ void PeeringState::calc_ec_acting(
     if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE &&
 	!all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.is_incomplete() &&
 	all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.last_update >=
-	auth_log_shard->second.log_tail) {
+	log_tail) {
       ss << " selecting up[i]: " << pg_shard_t(up[i], shard_id_t(i)) << std::endl;
       want[i] = up[i];
       continue;
@@ -1876,7 +1876,7 @@ void PeeringState::calc_ec_acting(
     if (acting.size() > (unsigned)i && acting[i] != CRUSH_ITEM_NONE &&
 	!all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.is_incomplete() &&
 	all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.last_update >=
-	auth_log_shard->second.log_tail) {
+	log_tail) {
       ss << " selecting acting[i]: " << pg_shard_t(acting[i], shard_id_t(i)) << std::endl;
       want[i] = acting[i];
     } else if (!restrict_to_up_acting) {
@@ -1886,7 +1886,7 @@ void PeeringState::calc_ec_acting(
 	ceph_assert(static_cast<int>(j->shard) == i);
 	if (!all_info.find(*j)->second.is_incomplete() &&
 	    all_info.find(*j)->second.last_update >=
-	    auth_log_shard->second.log_tail) {
+	    log_tail) {
 	  ss << " selecting stray: " << *j << std::endl;
 	  want[i] = j->osd;
 	  break;
@@ -2678,8 +2678,27 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 	ss);
     }
   } else {
+    // A shard can only be recovered from the log if it is not behind the
+    // tail of the log the primary will have after GetLog. With optimized
+    // EC that log comes from get_log_shard, which need not be
+    // auth_log_shard, and GetLog only extends the primary's log back as
+    // far as get_log_shard's tail. So a longer log on auth_log_shard (a
+    // parity shard, say) must not make a shard look contiguous.
+    eversion_t ec_log_tail = auth_log_shard->second.log_tail;
+    if (pool.info.allows_ecoptimizations()) {
+      const eversion_t built_tail =
+	std::min(info.log_tail, get_log_shard->second.log_tail);
+      if (built_tail > ec_log_tail) {
+	psdout(10) << "judging contiguity against log tail " << built_tail
+		   << " (primary " << info.log_tail << ", osd."
+		   << get_log_shard->first << " "
+		   << get_log_shard->second.log_tail << ") instead of osd."
+		   << auth_log_shard->first << " " << ec_log_tail << dendl;
+	ec_log_tail = built_tail;
+      }
+    }
     calc_ec_acting(
-      auth_log_shard,
+      ec_log_tail,
       get_osdmap()->get_pg_size(info.pgid.pgid),
       acting,
       up,
@@ -3392,26 +3411,56 @@ void PeeringState::proc_primary_info(
 
 void PeeringState::consider_adjusting_pwlc(eversion_t last_complete)
 {
-  for (const auto & [shard, versionrange] :
+  const auto &log = pg_log.get_log().log;
+  for (auto & [shard, versionrange] :
 	 info.partial_writes_last_complete) {
     auto [fromversion, toversion] = versionrange;
     if (last_complete > toversion) {
-      // Full writes are being rolled forward, eventually
+      // Entries up to last_complete are being rolled forward, eventually
       // partial_write will be called to advance pwlc, but we need
       // to preempt that here before proc_master_log considers
-      // rolling forward partial writes
-      info.partial_writes_last_complete[shard] = std::pair(last_complete,
-							   last_complete);
+      // rolling forward partial writes. Advance pwlc the way
+      // partial_write will: an entry that wrote this shard restarts the
+      // range at that entry, an entry that skipped it extends the range.
+      // Resetting to (last_complete, last_complete) would assume every
+      // entry was a full write, and a shard that partial writes skipped
+      // would lose the range that covers its own older last_update.
+      auto e = std::find_if(log.begin(), log.end(),
+			    [&](const pg_log_entry_t &le) {
+			      return le.version > toversion;
+			    });
+      const eversion_t prev = (e == log.begin()) ?
+	pg_log.get_tail() : std::prev(e)->version;
+      if (prev == toversion) {
+	for (; e != log.end() && e->version <= last_complete; ++e) {
+	  if (e->is_written_shard(shard)) {
+	    fromversion = e->version;
+	  }
+	  toversion = e->version;
+	}
+      }
+      if (toversion == last_complete) {
+	versionrange = std::pair(fromversion, toversion);
+      } else {
+	// The log does not hold every entry in the range (e.g. after a
+	// split): fall back to treating them as full writes.
+	versionrange = std::pair(last_complete, last_complete);
+      }
       psdout(10) << "shard " << shard << " pwlc rolled forward to "
-		 << info.partial_writes_last_complete[shard] << dendl;
+		 << versionrange << dendl;
     } else if (last_complete < toversion) {
       // A divergent update has advanced pwlc adhead of last_complete,
-      // roll backwards to the last completed full write and then
-      // let proc_master_log roll forward partial writes
-      info.partial_writes_last_complete[shard] = std::pair(last_complete,
-							   last_complete);
+      // roll backwards to last_complete and then let proc_master_log
+      // roll forward partial writes. Entries up to last_complete that
+      // skipped this shard still did, so keep the start of the range
+      // unless it is past last_complete.
+      if (fromversion <= last_complete) {
+	versionrange = std::pair(fromversion, last_complete);
+      } else {
+	versionrange = std::pair(last_complete, last_complete);
+      }
       psdout(10) << "shard " << shard << " pwlc rolled backward to "
-		 << info.partial_writes_last_complete[shard] << dendl;
+		 << versionrange << dendl;
     }
   }
 }
@@ -8247,6 +8296,17 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
   DECLARE_LOCALS;
   ps->log_weirdness();
   ceph_assert(!ps->acting_recovery_backfill.empty());
+  // Optimized EC: activate() would reset a shard that is behind the log
+  // tail to empty, and backfill it only if it is a backfill target. Catch
+  // any acting or async recovery shard that choose_acting() judged
+  // contiguous but that is behind the log we now have.
+  for (const auto &s : ps->acting_recovery_backfill) {
+    if (s != ps->get_primary() &&
+	rechoose_acting_for(s, "before requesting logs")) {
+      post_event(RechooseActing());
+      return;
+    }
+  }
   eversion_t since;
   for (auto i = ps->acting_recovery_backfill.begin();
        i != ps->acting_recovery_backfill.end();
@@ -8336,6 +8396,15 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
 		       std::move(logevt.msg->missing),
 		       logevt.from);
 
+  // Optimized EC: when choose_acting() ran, the pwlc known then may have
+  // advanced this shard's last_update past the log tail, making a shard
+  // that is behind look contiguous. A newer pwlc adopted with the
+  // authoritative log may no longer cover it, and proc_replica_log() has
+  // just applied the current pwlc to the shard's own info.
+  if (rechoose_acting_for(logevt.from, "under the current pwlc")) {
+    return transit< GetLog >();
+  }
+
   if (peer_missing_requested.empty()) {
     if (ps->need_up_thru) {
       psdout(10) << " still need up_thru update before going active"
@@ -8348,6 +8417,45 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
     }
   }
   return discard_event();
+}
+
+bool PeeringState::GetMissing::rechoose_acting_for(const pg_shard_t &shard,
+						 const char *why)
+{
+  DECLARE_LOCALS;
+  const pg_info_t &pi = ps->peer_info[shard];
+  if (!ps->pool.info.allows_ecoptimizations() ||
+      ps->is_backfill_target(shard) ||
+      pi.is_empty() ||
+      pi.last_update >= ps->pg_log.get_tail()) {
+    return false;
+  }
+  // An acting or async recovery shard that is not a backfill target is
+  // behind the log tail: activate() would reset it to empty without
+  // backfilling it, and the PG would go clean with that shard empty (and
+  // the first write to it would assert in should_send_op). Choose the
+  // acting set again: choose_acting() now sees the shard as not
+  // contiguous and makes it a backfill target.
+  auto &count = context< Peering >().rechoose_acting;
+  if (count >= 3) {
+    psdout(0) << "osd." << shard << " last_update " << pi.last_update
+	      << " is behind the log tail " << ps->pg_log.get_tail()
+	      << " " << why << " but the acting set was already chosen again "
+	      << count << " times this interval; not choosing it again"
+	      << dendl;
+    return false;
+  }
+  ++count;
+  psdout(1) << "osd." << shard << " last_update " << pi.last_update
+	    << " is behind the log tail " << ps->pg_log.get_tail()
+	    << " " << why << "; choosing the acting set again" << dendl;
+  ps->clear_recovery_state();
+  return true;
+}
+
+boost::statechart::result PeeringState::GetMissing::react(const RechooseActing&)
+{
+  return transit< GetLog >();
 }
 
 boost::statechart::result PeeringState::GetMissing::react(const QueryState& q)
