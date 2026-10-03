@@ -1344,6 +1344,10 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
   ceph_assert(dname.size() > 0);
   alternate_name = "";
 
+  if (dname.size() > NAME_MAX) {
+    return -ENAMETOOLONG;
+  }
+
   if (dname == cct->_conf->client_snapdir) {
     ldout(cct, 25) << __func__ << ": is special name" << dendl;
     return true;
@@ -1447,6 +1451,10 @@ bool Client::_wrap_name(Inode& diri, std::string& dname, std::string& alternate_
     }
   }
 #endif
+
+  if (dname.size() > NAME_MAX) {
+    return -ENAMETOOLONG;
+  }
 
   return true;
 }
@@ -8037,11 +8045,6 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
         goto out;
       }
       caps = CEPH_CAP_AUTH_SHARED;
-    }
-
-    if (dname.size() > NAME_MAX) {
-      rc = -ENAMETOOLONG;
-      goto out;
     }
 
     // N.B.: we don't validate alternate_name we generate during wrapping
