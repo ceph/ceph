@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "include/denc.h"
@@ -452,10 +453,16 @@ public:
     }
 
   public:
-    std::string get_key() const {
-      return std::string(
+    // Valid as long as the node's buffer is alive. Prefer this over get_key()
+    // on scan paths: get_key() heap-allocates for every entry it touches.
+    std::string_view get_key_view() const {
+      return std::string_view(
 	get_node_val_ptr(),
 	get_node_key().key_len);
+    }
+
+    std::string get_key() const {
+      return std::string(get_key_view());
     }
 
     ceph::bufferlist get_val() const {
@@ -846,7 +853,7 @@ struct LogNode
   void append_remove(ceph::bufferlist bl);
 
   // Remove all matching keys in LogNode
-  bool remove_entry(const std::string key);
+  bool remove_entry(std::string_view key);
 
   void set_cur_bitmap(uint32_t begin, uint32_t end);
   d_bitmap_t get_cur_bitmap();
@@ -901,8 +908,31 @@ struct LogNode
   range_t has_between(const std::optional<std::string>& start,
     const std::optional<std::string>& end);
 
+  // The deletion bitmap in effect for this transaction, i.e. including any
+  // pending delta.
+  d_bitmap_t get_live_bitmap();
+
+  /*
+   * Invoke fn(entry, index) for every entry of this node that is not marked
+   * deleted, stopping early if fn returns true. Defined here rather than in
+   * the .cc so that callers outside log_node.cc can scan a node without
+   * materialising its keys.
+   */
   template <typename F>
-  void for_each_live_entry(F&& fn);
+  void for_each_live_entry(F&& fn) {
+    d_bitmap_t bitmap = get_live_bitmap();
+    uint32_t index = 0;
+    auto iter = iter_begin();
+    while (iter != iter_end()) {
+      if (!bitmap.is_set(index)) {
+	if (fn(*iter, index)) {
+	  return;
+	}
+      }
+      ++iter;
+      ++index;
+    }
+  }
 
   void list(const std::optional<std::string> &first,
     const std::optional<std::string> &last,
@@ -956,6 +986,11 @@ struct LogNode
 
   size_t get_max_val_length(size_t ksize) {
     return (capacity() - get_entry_size(ksize, 0));
+  }
+
+  // Only valid on a non-empty node, as with has_multi_block_kv().
+  std::string_view get_first_key() const {
+    return iter_begin()->get_key_view();
   }
 
   bool is_first_multi_block(const std::string &key) const {
