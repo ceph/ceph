@@ -6,6 +6,9 @@
 
 #include "include/Context.h"
 #include "include/rados/librados_fwd.hpp"
+#include "librbd/AsioEngine.h"
+#include "librbd/asio/ContextWQExecutor.h"
+#include <boost/asio/bind_executor.hpp>
 #include <boost/system/error_code.hpp>
 
 namespace librbd {
@@ -24,6 +27,24 @@ auto get_callback_adapter(T&& t) {
   return [t = std::move(t)](boost::system::error_code ec, auto&& ... args) {
       t(-ec.value(), std::forward<decltype(args)>(args)...);
     };
+}
+
+/**
+ * Neorados completion token that delivers onto the image ContextWQ.
+ *
+ * @p channel pins delivery when non-null. When null, the caller's current channel
+ * is used. Queues that do not distinguish channels deliver onto the general executor.
+ */
+template <typename Callback>
+auto get_completion_token(AsioEngine& asio_engine, Callback&& cb,
+                          ContextWQ::Channel channel = nullptr) {
+  auto* work_queue = asio_engine.get_work_queue();
+  if (channel == nullptr) {
+    channel = work_queue->current_channel();
+  }
+  return boost::asio::bind_executor(
+    ContextWQExecutor{work_queue, channel},
+    get_callback_adapter(std::forward<Callback>(cb)));
 }
 
 } // namespace util
