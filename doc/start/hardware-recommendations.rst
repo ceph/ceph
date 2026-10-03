@@ -15,6 +15,9 @@ page gives the principles. :ref:`Minimum Hardware per Daemon
 <hardware-networks>` give the numbers. No two clusters are alike: benchmark
 before you buy.
 
+.. _failure-domains:
+.. _hardware-failure-domains:
+
 Keep Failure Domains Small
 ==========================
 
@@ -33,7 +36,7 @@ These principles keep failure domains small:
   or Kubernetes, run on separate hosts.
 - More, smaller nodes are safer than fewer, denser nodes: when a host with a
   large share of the cluster's capacity fails, recovery can push OSDs past
-  the full ratio (:confval:`mon_osd_full_ratio`), and Ceph halts operations
+  the :ref:`full ratio <storage-capacity>`, and Ceph halts operations
   to prevent data loss.
 
 Balance Cost, Performance, and Risk

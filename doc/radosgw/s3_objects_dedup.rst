@@ -130,7 +130,7 @@ The dedup estimate process does not access the object payload
 data, which means that processing time won't be significantly affected by the
 underlying media (SSD/HDD) storing the objects. Best practice places bucket
 index pools on fast storage: SSDs
-:ref:`are recommended <hardware-recommendations>` and they are cached heavily
+:ref:`are recommended <hardware-storage-devices>` and they are cached heavily
 in memory.
 
 Administrators can throttle the estimate process by setting a limit on the

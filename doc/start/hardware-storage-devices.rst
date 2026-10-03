@@ -55,7 +55,7 @@ Drive Layout
    * - Many OSDs per host
      - Most hosts run many OSDs, so weigh each host's share of the cluster's
        capacity against the full ratio (see :ref:`Failure Domains
-       <hardware-recommendations>`) and the aggregate throughput of its
+       <hardware-failure-domains>`) and the aggregate throughput of its
        drives against its links (see :ref:`Network Sizing
        <hardware-networks>`).
 
@@ -121,8 +121,9 @@ Notes:
 - ``sdparm`` can view or change the volatile write cache on several
   devices at once, for example ``sdparm --get WCE /dev/sd*`` and
   ``sdparm --clear WCE /dev/sd*``.
-- This udev rule, for systemd-based distributions, sets all SATA and SAS
-  devices to ``write through``:
+- This udev rule, for systemd-based distributions, sets every SATA and SAS
+  device to ``write through``, SSDs included. Use it only on hosts whose SATA
+  and SAS drives are all HDDs:
 
   .. code-block:: console
 

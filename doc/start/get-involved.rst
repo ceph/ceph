@@ -1,4 +1,3 @@
-.. _Get Involved:
 .. _get-involved:
 
 =========================
@@ -6,7 +5,7 @@
 =========================
 
 .. meta::
-   :description: The mailing lists, chat channels, meetings, and trackers of the Ceph community.
+   :description: The mailing lists, chat channels, events, and trackers of the Ceph community.
    :ceph-page-type: reference
 
 The Ceph community talks in these places. Pick the channel that fits
