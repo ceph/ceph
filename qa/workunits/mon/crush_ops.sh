@@ -234,4 +234,65 @@ done
 ceph osd crush rm r1
 ceph osd crush weight-set rm-compat
 
+# weight shift: rescaling changes the raw weights but not the ones the CLI
+# shows
+function nominal_weight() {
+    ceph osd tree -f json | python3 -c \
+	"import json,sys; print([n['crush_weight'] for n in json.load(sys.stdin)['nodes'] if n['name']=='$1'][0])"
+}
+function raw_weight() {
+    ceph osd crush dump | python3 -c \
+	"import json,sys; print([b['weight'] for b in json.load(sys.stdin)['buckets'] if b['name']=='$1'][0])"
+}
+
+ceph osd crush dump | grep -q '"weight_shift": 0'
+o6=`ceph osd create`
+ceph osd crush add $o6 8 root=default host=shifthost
+test "`nominal_weight osd.$o6`" = "8.0"
+raw_before=`raw_weight shifthost`
+
+if ceph osd crush set-weight-shift 3 2> /tmp/ws.$$ ; then
+    ceph osd crush dump | grep -q '"weight_shift": 3'
+    # the weight an operator sees is unchanged ...
+    test "`nominal_weight osd.$o6`" = "8.0"
+    # ... while the raw weight stored in the map shrank by 2^3
+    test $(( raw_before / 8 )) -eq `raw_weight shifthost`
+
+    # reweight uses the same scale, and the largest single weight grows with
+    # the shift: 32767 at shift 0, 8 times that at shift 3
+    ceph osd crush reweight osd.$o6 100000
+    expect_false ceph osd crush reweight osd.$o6 1000000
+    ceph osd crush reweight osd.$o6 12
+    test "`nominal_weight osd.$o6`" = "12.0"
+
+    # the text format round trips the shift
+    ceph osd getcrushmap -o /tmp/crush.$$
+    crushtool -d /tmp/crush.$$ -o /tmp/crush.$$.txt
+    grep -q 'tunable weight_shift 3' /tmp/crush.$$.txt
+    crushtool -c /tmp/crush.$$.txt -o /tmp/crush.$$.new
+    crushtool -d /tmp/crush.$$.new | grep -q 'tunable weight_shift 3'
+
+    # a map that drops the shift would reinterpret every weight in it
+    grep -v 'tunable weight_shift' /tmp/crush.$$.txt > /tmp/crush.$$.noshift.txt
+    crushtool -c /tmp/crush.$$.noshift.txt -o /tmp/crush.$$.noshift
+    expect_false ceph osd setcrushmap -i /tmp/crush.$$.noshift
+    rm -f /tmp/crush.$$ /tmp/crush.$$.txt /tmp/crush.$$.new \
+          /tmp/crush.$$.noshift.txt /tmp/crush.$$.noshift
+
+    expect_false ceph osd crush set-weight-shift 17
+
+    ceph osd crush set-weight-shift 0
+    ceph osd crush dump | grep -q '"weight_shift": 0'
+    test "`nominal_weight osd.$o6`" = "12.0"
+    # back on the original scale, 12.0 is 12 * 0x10000 again
+    test $(( 12 * 65536 )) -eq `raw_weight shifthost`
+else
+    # refused until require_osd_release supports weight_shift
+    grep -q require_osd_release /tmp/ws.$$
+fi
+rm -f /tmp/ws.$$
+ceph osd crush rm osd.$o6
+ceph osd rm osd.$o6
+ceph osd crush rm shifthost
+
 echo OK
