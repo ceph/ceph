@@ -2391,6 +2391,103 @@ public:
   }
 };
 
+// https://tracker.ceph.com/issues/72848
+//
+// merge_blob() moves csum data in whole csum chunks, so each pextent it
+// moves must be csum chunk aligned.  With a csum chunk larger than
+// min_alloc_size (alloc hint SEQUENTIAL_READ + IMMUTABLE/APPEND_ONLY, see
+// _choose_write_options()) a fragmented allocation breaks this.
+// can_merge_blob() used to accept such a blob, and merge_blob() then
+// asserted on (len % (1 << csum_chunk_order)) == 0.
+TEST_F(ExtentMapFixture, merge_blob_csum_chunk_unaligned) {
+  constexpr uint32_t csum_chunk_order = 15;               // 32K csum chunks
+  constexpr uint32_t csum_chunk = 1 << csum_chunk_order;
+
+  // Emulates a write of one csum chunk at blob offset 'b_off' of a blob
+  // starting at logical offset 'blob_start'.  'fragments' is how the
+  // allocator split the space; they must add up to csum_chunk.
+  auto write_blob = [&](t_onode& o, uint32_t blob_start, uint32_t b_off,
+                        uint32_t blob_length,
+                        const std::vector<uint32_t>& fragments) {
+    BlueStore::BlobRef b(coll->new_blob());
+    bluestore_blob_t& bb = b->dirty_blob();
+    bb.init_csum(Checksummer::CSUM_CRC32C, csum_chunk_order, blob_length);
+    bb.set_csum_item(b_off / csum_chunk, 0x11111111 + b_off);
+    PExtentVector pex;
+    uint32_t total = 0;
+    for (auto len : fragments) {
+      ceph_assert((len % au_size) == 0);
+      pex.emplace_back(allocate(len / au_size) * au_size, len);
+      total += len;
+    }
+    ceph_assert(total == csum_chunk);
+    bb.allocated(b_off, csum_chunk, pex);
+    auto* e = new BlueStore::Extent(blob_start + b_off, b_off, csum_chunk, b);
+    o.onode->extent_map.extent_map.insert(*e);
+    b->get_ref(coll.get(), b_off, csum_chunk);
+    return b;
+  };
+  auto clone = [&](t_onode& from, t_onode& to, uint64_t len) {
+    BlueStore::TransContext txc(store.cct, coll.get(), nullptr, nullptr);
+    uint64_t off = 0, dstoff = 0;
+    from.onode->extent_map.dup_esb(&store, &txc, coll, from.onode, to.onode,
+                                   off, len, dstoff);
+  };
+  auto blob_at = [&](t_onode& o, uint32_t logical_offset) {
+    return o.onode->extent_map.seek_lextent(logical_offset)->blob.get();
+  };
+
+  // 1. blobs that are csum chunk aligned still do get merged.
+  //    Blob #2 lives at blob offset 32K of a 64K blob that starts at logical
+  //    0 - this is what the 'suggested_boff' logic in _do_alloc_write() does
+  //    to keep blobs aligned with max_blob_size.
+  {
+    t_onode a = create();
+    write_blob(a, 0, 0, csum_chunk, {csum_chunk});
+    t_onode c1 = create();
+    clone(a, c1, csum_chunk);                     // makes blob #1 shared
+    ASSERT_TRUE(blob_at(a, 0)->get_blob().is_shared());
+
+    write_blob(a, 0, csum_chunk, 2 * csum_chunk, {csum_chunk});
+    uint32_t blob_width = 0;
+    ASSERT_NE(blob_at(a, 0), blob_at(a, csum_chunk));
+    ASSERT_TRUE(blob_at(a, 0)->can_merge_blob(blob_at(a, csum_chunk),
+                                              blob_width));
+
+    t_onode c2 = create();
+    clone(a, c2, 2 * csum_chunk);
+    // blob #2 got dissolved into the shared blob #1
+    ASSERT_EQ(blob_at(a, 0), blob_at(a, csum_chunk));
+    ASSERT_TRUE(blob_at(a, csum_chunk)->get_blob().is_shared());
+  }
+
+  // 2. same layout, but blob #2's 32K got allocated as 12K + 20K, so its
+  //    pextents do not align with the 32K csum chunk.  The merge has to be
+  //    refused - before the fix merge_blob() asserted here.
+  {
+    t_onode a = create();
+    write_blob(a, 0, 0, csum_chunk, {csum_chunk});
+    t_onode c1 = create();
+    clone(a, c1, csum_chunk);                     // makes blob #1 shared
+    ASSERT_TRUE(blob_at(a, 0)->get_blob().is_shared());
+
+    write_blob(a, 0, csum_chunk, 2 * csum_chunk, {0x3000, 0x5000});
+    BlueStore::Blob* shared = blob_at(a, 0);
+    BlueStore::Blob* fragmented = blob_at(a, csum_chunk);
+    uint32_t blob_width = 0;
+    ASSERT_FALSE(shared->can_merge_blob(fragmented, blob_width));
+
+    t_onode c2 = create();
+    clone(a, c2, 2 * csum_chunk);
+    // blob #2 was left alone and converted to a shared blob of its own
+    ASSERT_EQ(blob_at(a, 0), shared);
+    ASSERT_EQ(blob_at(a, csum_chunk), fragmented);
+    ASSERT_TRUE(fragmented->get_blob().is_shared());
+    // and its csum data is still where it belongs
+    ASSERT_EQ(fragmented->get_blob().get_csum_item(1), 0x11111111 + csum_chunk);
+  }
+}
+
 TEST_F(ExtentMapFixture, walk) {
   std::vector<t_onode> X;
   for (size_t i = 0; i < 100; i++) {
