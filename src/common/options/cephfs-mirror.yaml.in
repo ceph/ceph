@@ -115,6 +115,19 @@ options:
   services:
   - cephfs-mirror
   min: 1
+- name: cephfs_mirror_checkpoint_keep_count
+  type: uint
+  level: advanced
+  desc: maximum number of completed mirroring checkpoints retained per directory
+  long_desc: when more than this many COMPLETE checkpoints exist under a mirrored
+    directory, initialize_checkpoints() removes the oldest ones (by snapshot id),
+    keeping only the newest. That path runs lazily from the tick thread when a
+    directory is acquired or a checkpoint is added (not on every tick). CREATED
+    and FAILED checkpoints are never pruned.
+  default: 10
+  services:
+  - cephfs-mirror
+  min: 1
 - name: cephfs_mirror_max_consecutive_failures_per_directory
   type: uint
   level: advanced

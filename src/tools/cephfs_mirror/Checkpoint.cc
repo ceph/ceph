@@ -166,5 +166,20 @@ int write_checkpoint_metadata(CephContext *cct, MountRef mnt,
   return 0;
 }
 
+int remove_checkpoint_metadata(MountRef mnt, const std::string &snap_path,
+                               const std::map<std::string, std::string> &snap_metadata) {
+  for (const auto &key : CHECKPOINT_METADATA_KEY_LIST) {
+    if (!snap_metadata.count(key)) {
+      continue;
+    }
+    int r = ceph_do_snap_md_op(mnt, snap_path.c_str(), key.c_str(), "",
+                               CEPH_SNAP_MD_OP_REMOVE);
+    if (r < 0) {
+      return r;
+    }
+  }
+  return 0;
+}
+
 } // namespace mirror
 } // namespace cephfs
