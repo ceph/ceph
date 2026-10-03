@@ -7045,6 +7045,15 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       r = target->get_current_version_state(dpp, current_state, y);
       if (r == -ENOENT) {
         current_state = target->state;
+        // the key's olh has no current version: its current version is a
+        // delete marker. a condition cannot hold for a delete marker, and
+        // the olh's own head would answer for it; S3 answers 412, If-Match: *
+        // included
+        if (current_state->exists && current_state->is_olh &&
+            (params.if_match || params.size_match ||
+             !real_clock::is_zero(params.last_mod_time_match))) {
+          return -ERR_PRECONDITION_FAILED;
+        }
       } else if (r < 0) {
         return r;
       }
@@ -7258,6 +7267,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     // leaving that pending entry in the index so that bucket listing can recover with check_disk_state() and cls_rgw_suggest_changes()
     ldpp_dout(dpp, 0) << "ERROR: rgw_rados_operate returned r=" << r << dendl;
   } else if (r >= 0 || r == -ENOENT) {
+    // -ENOENT: the head was gone, removed by a racing delete
+    const bool removed_nothing = (r == -ENOENT);
     tombstone_cache_t *obj_tombstone_cache = store->get_tombstone_cache();
     if (obj_tombstone_cache) {
       tombstone_entry entry{*state};
@@ -7270,6 +7281,12 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       ldpp_dout(dpp, 0) << "ERROR: complete_atomic_modification returned ret=" << ret << dendl;
     }
     /* other than that, no need to propagate error */
+
+    // a conditional delete that removed nothing found no object to delete,
+    // like one that found no head to begin with
+    if (r >= 0 && removed_nothing && params.if_match) {
+      r = -ENOENT;
+    }
   } else {
     int ret = index_op.cancel(dpp, params.remove_objs, y, log_op);
     if (ret < 0) {
