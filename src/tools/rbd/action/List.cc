@@ -262,17 +262,27 @@ int do_list(const std::string &pool_name, const std::string& namespace_name,
 	  r = comp->completion->get_return_value();
 	  comp->completion->release();
 	  if (r < 0) {
-	    std::cerr << "rbd: error opening " << comp->name << ": "
-                      << cpp_strerror(r) << std::endl;
+	    if (r == -ENOENT) {
+	      utils::warn_if_image_being_removed(rbd, ioctx, comp->name,
+	                                         comp->id);
+	      r = 0;
+	    } else {
+	      std::cerr << "rbd: error opening " << comp->name << ": "
+	                << cpp_strerror(r) << std::endl;
+	    }
 
 	    // in any event, continue to next image
 	    comp->state = STATE_IDLE;
 	    continue;
 	  }
-	  r = list_process_image(&rados, comp, lflag, f, tbl);
-	  if (r < 0) {
+	  if (comp->id.empty() || utils::image_id(comp->img) == comp->id) {
+	    r = list_process_image(&rados, comp, lflag, f, tbl);
+	    if (r < 0) {
 	      std::cerr << "rbd: error processing image " << comp->name << ": "
-                        << cpp_strerror(r) << std::endl;
+	                << cpp_strerror(r) << std::endl;
+	    }
+	  } else {
+	    utils::warn_if_image_being_removed(rbd, ioctx, comp->name, comp->id);
 	  }
 	  comp->completion = new librbd::RBD::AioCompletion(nullptr, nullptr);
 	  r = comp->img.aio_close(comp->completion);

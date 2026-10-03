@@ -133,15 +133,25 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     if (imgname != NULL && image_spec.name != imgname) {
       continue;
     }
-    found = true;
 
     librbd::Image image;
     r = rbd.open_read_only(io_ctx, image, image_spec.name.c_str(), NULL);
+    if (r == -ENOENT) {
+      utils::warn_if_image_being_removed(rbd, io_ctx, image_spec.name,
+                                         image_spec.id);
+      r = 0;
+      continue;
+    }
+    if (r == 0 && !image_spec.id.empty() &&
+        utils::image_id(image) != image_spec.id) {
+      utils::warn_if_image_being_removed(rbd, io_ctx, image_spec.name,
+                                         image_spec.id);
+      continue;
+    }
+    found = true;
     if (r < 0) {
-      if (r != -ENOENT) {
-        std::cerr << "rbd: error opening " << image_spec.name << ": "
-                  << cpp_strerror(r) << std::endl;
-      }
+      std::cerr << "rbd: error opening " << image_spec.name << ": "
+                << cpp_strerror(r) << std::endl;
       continue;
     }
 
