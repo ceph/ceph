@@ -3793,6 +3793,8 @@ options:
   default: true
   services:
   - rgw
+  flags:
+  - startup
   see_also:
   - rgw_max_objs_per_shard
   - rgw_max_dynamic_shards
