@@ -24,6 +24,22 @@ static const std::string CEPHFS_MIRROR_SYNC_STAT_OMAP_PREFIX("sync_stat");
 typedef std::variant<bool, uint64_t, std::string> AttributeValue;
 typedef std::map<std::string, AttributeValue> Attributes;
 
+// priority mode for a mirrored directory -- controls whether the directory
+// shares the crawler and data sync thread pools with other mirrored
+// directories (the default) or gets a crawler thread and a data sync thread
+// pool of its own.
+enum class PriorityMode {
+  THREAD_SHARED,
+  PER_THREAD,
+};
+
+static const std::string PRIORITY_MODE_THREAD_SHARED("thread-shared");
+static const std::string PRIORITY_MODE_PER_THREAD("per-thread");
+
+const std::string &priority_mode_name(PriorityMode mode);
+bool priority_mode_from_name(std::string_view name, PriorityMode *mode);
+std::ostream& operator<<(std::ostream& out, PriorityMode mode);
+
 // distinct filesystem identifier
 struct Filesystem {
   fs_cluster_id_t fscid;

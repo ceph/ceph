@@ -292,7 +292,8 @@ class TestMirroring(CephFSTestCase):
         self.run_ceph_cmd("fs", "snapshot", "mirror", "peer_bootstrap",
                           "import", fs_name, token)
 
-    def add_directory(self, fs_name, fs_id, dir_name, check_perf_counter=True):
+    def add_directory(self, fs_name, fs_id, dir_name, check_perf_counter=True,
+                      priority_mode=None):
         if check_perf_counter:
             res = self.mirror_daemon_command(f'counter dump for fs: {fs_name}', 'counter', 'dump')
             vbefore = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_FS][0]
@@ -303,7 +304,10 @@ class TestMirroring(CephFSTestCase):
         dir_count = res['snap_dirs']['dir_count']
         log.debug(f'initial dir_count={dir_count}')
 
-        self.run_ceph_cmd("fs", "snapshot", "mirror", "add", fs_name, dir_name)
+        cmd = ["fs", "snapshot", "mirror", "add", fs_name, dir_name]
+        if priority_mode is not None:
+            cmd.append(priority_mode)
+        self.run_ceph_cmd(*cmd)
 
         time.sleep(10)
         # verify via asok
@@ -835,6 +839,32 @@ class TestMirroring(CephFSTestCase):
         return json.loads(self.get_ceph_cmd_stdout(
             'fs', 'snapshot', 'mirror', 'dirmap', fs_name, dir_name))
 
+    def get_directory_priority(self, fs_name, dir_name):
+        return json.loads(self.get_ceph_cmd_stdout(
+            'fs', 'snapshot', 'mirror', 'priority', 'get',
+            fs_name, dir_name))['priority_mode']
+
+    def set_directory_priority(self, fs_name, dir_name, priority_mode):
+        self.run_ceph_cmd('fs', 'snapshot', 'mirror', 'priority', 'set',
+                          fs_name, dir_name, priority_mode)
+
+    def peer_directory_priority(self, fs_name, fs_id, peer_spec, dir_name):
+        """Priority mode the mirror daemon is actually running @dir_name in."""
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        res = self.peer_status(fs_name, fs_id, peer_uuid)
+        return self.peer_dir_status(res, dir_name, peer_uuid)['priority_mode']
+
+    @retry_assert(timeout=120, interval=5)
+    def verify_directory_priority(self, fs_name, fs_id, peer_spec, dir_name,
+                                  priority_mode):
+        """The daemon applies a priority change only once the directory goes
+        idle, so poll until the effective mode catches up with the configured
+        one.
+        """
+        self.assertEqual(
+            self.peer_directory_priority(fs_name, fs_id, peer_spec, dir_name),
+            priority_mode)
+
     @retry_assert(timeout=60, interval=5)
     def assert_snapshot_not_synced(self, dir_name, snap_name):
         """Assert a snapshot on the primary has not appeared on the secondary."""
@@ -1244,6 +1274,156 @@ class TestMirroring(CephFSTestCase):
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.mount_a.run_shell(["rmdir", dir1])
         self.mount_a.run_shell(["rmdir",  dir2])
+
+    def test_directory_priority_commands(self):
+        """priority get/set CLI surface and its validation."""
+        dir_name = 'dprio1'
+        self.mount_a.run_shell(["mkdir", dir_name])
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        try:
+            self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+            # directories default to thread-shared
+            self.assertEqual(
+                self.get_directory_priority(self.primary_fs_name, f'/{dir_name}'),
+                'thread-shared')
+
+            self.set_directory_priority(self.primary_fs_name, f'/{dir_name}', 'per-thread')
+            self.assertEqual(
+                self.get_directory_priority(self.primary_fs_name, f'/{dir_name}'),
+                'per-thread')
+            # setting the same mode again is a no-op, not an error
+            self.set_directory_priority(self.primary_fs_name, f'/{dir_name}', 'per-thread')
+
+            self.set_directory_priority(self.primary_fs_name, f'/{dir_name}', 'thread-shared')
+            self.assertEqual(
+                self.get_directory_priority(self.primary_fs_name, f'/{dir_name}'),
+                'thread-shared')
+
+            # 'ls' reports the mode
+            dirs_list = json.loads(self.get_ceph_cmd_stdout(
+                "fs", "snapshot", "mirror", "ls", self.primary_fs_name))
+            self.assertEqual(dirs_list[f'/{dir_name}']['priority_mode'], 'thread-shared')
+
+            # bogus mode
+            try:
+                self.set_directory_priority(self.primary_fs_name, f'/{dir_name}', 'bogus')
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.EINVAL)
+            else:
+                raise RuntimeError('expected priority set with an invalid mode to fail')
+
+            # untracked directory
+            try:
+                self.set_directory_priority(self.primary_fs_name, '/nosuchdir', 'per-thread')
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.ENOENT)
+            else:
+                raise RuntimeError('expected priority set on an untracked directory to fail')
+        finally:
+            self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+            self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+            self.mount_a.run_shell(["rmdir", dir_name])
+
+    def test_directory_priority_add_per_thread(self):
+        """A directory added in per-thread mode syncs through its own threads."""
+        dir_name = 'dprio2'
+        self.mount_a.run_shell(["mkdir", dir_name])
+        self.mount_a.run_shell(["mkdir", f'{dir_name}/d0'])
+        self.mount_a.create_n_files(f'{dir_name}/d0/file', 10, sync=True)
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      "client.mirror_remote@ceph", self.secondary_fs_name)
+        try:
+            self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}',
+                               priority_mode='per-thread')
+            self.assertEqual(
+                self.get_directory_priority(self.primary_fs_name, f'/{dir_name}'),
+                'per-thread')
+            self.verify_directory_priority(self.primary_fs_name, self.primary_fs_id,
+                                           "client.mirror_remote@ceph", f'/{dir_name}',
+                                           'per-thread')
+
+            self.mount_a.run_shell(["mkdir", f'{dir_name}/.snap/snap0'])
+            time.sleep(30)
+            self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                                   "client.mirror_remote@ceph", f'/{dir_name}',
+                                   'snap0', 1)
+            self.verify_snapshot(f'/{dir_name}', 'snap0')
+        finally:
+            self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+            self.peer_remove(self.primary_fs_name, self.primary_fs_id,
+                             "client.mirror_remote@ceph")
+            self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_directory_priority_mode_switch_keeps_syncing(self):
+        """Switching modes back and forth does not break (or abort) mirroring."""
+        dir_name = 'dprio3'
+        self.mount_a.run_shell(["mkdir", dir_name])
+        self.mount_a.run_shell(["mkdir", f'{dir_name}/d0'])
+        self.mount_a.create_n_files(f'{dir_name}/d0/file', 10, sync=True)
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      "client.mirror_remote@ceph", self.secondary_fs_name)
+        try:
+            self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+            self.mount_a.run_shell(["mkdir", f'{dir_name}/.snap/snap0'])
+            time.sleep(30)
+            self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                                   "client.mirror_remote@ceph", f'/{dir_name}',
+                                   'snap0', 1)
+
+            # thread-shared -> per-thread
+            self.set_directory_priority(self.primary_fs_name, f'/{dir_name}', 'per-thread')
+            self.verify_directory_priority(self.primary_fs_name, self.primary_fs_id,
+                                           "client.mirror_remote@ceph", f'/{dir_name}',
+                                           'per-thread')
+            self.mount_a.create_n_files(f'{dir_name}/d0/more', 10, sync=True)
+            self.mount_a.run_shell(["mkdir", f'{dir_name}/.snap/snap1'])
+            time.sleep(30)
+            self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                                   "client.mirror_remote@ceph", f'/{dir_name}',
+                                   'snap1', 2)
+            self.verify_snapshot(f'/{dir_name}', 'snap1')
+
+            # per-thread -> thread-shared
+            self.set_directory_priority(self.primary_fs_name, f'/{dir_name}', 'thread-shared')
+            self.verify_directory_priority(self.primary_fs_name, self.primary_fs_id,
+                                           "client.mirror_remote@ceph", f'/{dir_name}',
+                                           'thread-shared')
+            self.mount_a.create_n_files(f'{dir_name}/d0/evenmore', 10, sync=True)
+            self.mount_a.run_shell(["mkdir", f'{dir_name}/.snap/snap2'])
+            time.sleep(30)
+            self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                                   "client.mirror_remote@ceph", f'/{dir_name}',
+                                   'snap2', 3)
+            self.verify_snapshot(f'/{dir_name}', 'snap2')
+        finally:
+            self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+            self.peer_remove(self.primary_fs_name, self.primary_fs_id,
+                             "client.mirror_remote@ceph")
+            self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_directory_priority_persisted_across_mgr_module_restart(self):
+        """The priority mode lives in the dir_map omap, so it survives a reload."""
+        dir_name = 'dprio4'
+        self.mount_a.run_shell(["mkdir", dir_name])
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        try:
+            self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}',
+                               priority_mode='per-thread')
+            self.disable_mirroring_module()
+            self.wait_mirroring_module_disabled()
+            self.enable_mirroring_module()
+            self.wait_mirroring_module_reload(self.primary_fs_name, f'/{dir_name}')
+            self.assertEqual(
+                self.get_directory_priority(self.primary_fs_name, f'/{dir_name}'),
+                'per-thread')
+        finally:
+            self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+            self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+            self.mount_a.run_shell(["rmdir", dir_name])
 
     def test_checkpoint_cli_add_list_remove_now(self):
         """Test mgr checkpoint add/list/remove/now on snapshot metadata."""
