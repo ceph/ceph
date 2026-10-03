@@ -121,10 +121,46 @@ private:
   }
 };
 
+int encode_trash_namespace(
+  librbd::Image &image,
+  uint64_t snap_id,
+  int export_format,
+  bufferlist &bl)
+{
+  librbd::snap_trash_namespace_t trash_namespace;
+  int r = image.snap_get_trash_namespace2(
+    snap_id, &trash_namespace, sizeof(trash_namespace));
+  if (r < 0) {
+    return r;
+  }
+  if (trash_namespace.original_namespace_type ==
+        librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_GROUP ||
+      trash_namespace.original_namespace_type ==
+        librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_MIRROR) {
+    std::cerr << "snap_id corresponds to a trashed snapshot that"
+              << "corresponds to the group namespace"
+              << ", which export-diff doesn't allow"
+              << std::endl;
+    return -EINVAL;
+  }
+  // although trash_namespace.original_namespace_type must be USER for now,
+  // we still encode it, in case of any future namespace type expansion.
+  encode(trash_namespace.original_namespace_type, bl);
+  if (export_format == 2) {
+    uint64_t len = trash_namespace.original_name.length() + 4;
+    encode(len, bl);
+  }
+  encode(trash_namespace.original_name, bl);
+  return r;
+}
 
 int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
-		   const char *endsnapname, bool whole_object,
-		   int fd, bool no_progress, int export_format)
+                      const char *endsnapname, uint64_t from_snap_id,
+                      uint64_t snap_id,
+                      librbd::snap_namespace_type_t from_snap_ns_type,
+                      librbd::snap_namespace_type_t snap_ns_type,
+                      bool whole_object, int fd,
+                      bool no_progress, int export_format)
 {
   int r;
   librbd::image_info_t info;
@@ -146,26 +182,39 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
     if (fromsnapname) {
       tag = RBD_DIFF_FROM_SNAP;
       encode(tag, bl);
+      encode(from_snap_ns_type, bl);
       std::string from(fromsnapname);
       if (export_format == 2) {
 	len = from.length() + 4;
 	encode(len, bl);
       }
       encode(from, bl);
+      if (from_snap_ns_type ==
+            librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_TRASH) {
+        encode_trash_namespace(image, from_snap_id, export_format, bl);
+      }
     }
 
     if (endsnapname) {
       tag = RBD_DIFF_TO_SNAP;
       encode(tag, bl);
+      encode(snap_ns_type, bl);
       std::string to(endsnapname);
       if (export_format == 2) {
         len = to.length() + 4;
         encode(len, bl);
       }
       encode(to, bl);
+      if (snap_ns_type ==
+            librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_TRASH) {
+        encode_trash_namespace(image, snap_id, export_format, bl);
+      }
     }
 
-    if (endsnapname && export_format == 2) {
+    if (snap_ns_type ==
+          librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER &&
+        endsnapname &&
+        export_format == 2) {
       tag = RBD_SNAP_PROTECTION_STATUS;
       encode(tag, bl);
       bool is_protected = false;
@@ -195,7 +244,14 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
   ExportDiffContext edc(&image, fd, info.size,
                         g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
                         no_progress, export_format);
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
+  uint32_t flags = RBD_DIFF_ITERATE_FLAG_INCLUDE_PARENT;
+  if (whole_object) {
+    flags |= RBD_DIFF_ITERATE_FLAG_WHOLE_OBJECT;
+  }
+  if (from_snap_id > CEPH_MAXSNAP) {
+    from_snap_id = 0;
+  }
+  r = image.diff_iterate3(from_snap_id, 0, info.size, flags,
                           &C_ExportDiff::export_diff_cb, (void *)&edc);
   if (r < 0) {
     goto out;
@@ -223,8 +279,11 @@ out:
 }
 
 int do_export_diff(librbd::Image& image, const char *fromsnapname,
-                const char *endsnapname, bool whole_object,
-                const char *path, bool no_progress)
+                   const char *endsnapname, uint64_t from_snap_id,
+                   uint64_t snap_id,
+                   librbd::snap_namespace_type_t from_snap_ns_type,
+                   librbd::snap_namespace_type_t snap_ns_type,
+                   bool whole_object, const char *path, bool no_progress)
 {
   int r;
   int fd;
@@ -236,7 +295,9 @@ int do_export_diff(librbd::Image& image, const char *fromsnapname,
   if (fd < 0)
     return -errno;
 
-  r = do_export_diff_fd(image, fromsnapname, endsnapname, whole_object, fd, no_progress, 1);
+  r = do_export_diff_fd(image, fromsnapname, endsnapname, from_snap_id,
+                        snap_id, from_snap_ns_type, snap_ns_type,
+                        whole_object, fd, no_progress, 1);
 
   if (fd != 1)
     close(fd);
@@ -257,9 +318,12 @@ void get_arguments_diff(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_SOURCE);
   at::add_path_options(positional, options,
                        "export file (or '-' for stdout)");
+  at::add_snap_id_option(options, at::ARGUMENT_MODIFIER_DEST);
   options->add_options()
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
      "snapshot starting point")
+    (at::FROM_SNAPSHOT_ID.c_str(), po::value<uint64_t>(),
+     "snapshot starting id")
     (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object");
   at::add_no_progress_option(options);
 }
@@ -290,18 +354,104 @@ int execute_diff(const po::variables_map &vm,
     from_snap_name = vm[at::FROM_SNAPSHOT_NAME].as<std::string>();
   }
 
+  uint64_t from_snap_id = CEPH_NOSNAP;
+  if (vm.count(at::FROM_SNAPSHOT_ID)) {
+    if (!from_snap_name.empty()) {
+      std::cerr << "--from-snap and --from-snap-id can't be set at the same time"
+        << std::endl;
+      return -EINVAL;
+    }
+    from_snap_id = vm[at::FROM_SNAPSHOT_ID].as<uint64_t>();
+    if (from_snap_id >= CEPH_MAXSNAP) {
+      std::cerr << "invalid --from-snap-id" << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  uint64_t snap_id = CEPH_NOSNAP;
+  if (vm.count(at::SNAPSHOT_ID)) {
+    if (!snap_name.empty()) {
+      std::cerr << "--snap and --snap-id can't be set at the same time"
+        << std::endl;
+      return -EINVAL;
+    }
+    snap_id = vm[at::SNAPSHOT_ID].as<uint64_t>();
+    if (snap_id >= CEPH_MAXSNAP) {
+      std::cerr << "invalid --snap-id" << std::endl;
+      return -EINVAL;
+    }
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
-                                 snap_name, true, &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name,
+                                 image_name, "",
+                                 snap_name, true, &rados,
+                                 &io_ctx, &image, snap_id);
   if (r < 0) {
     return r;
+  }
+
+  librbd::snap_namespace_type_t from_snap_ns_type =
+    librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER;
+  if (from_snap_id != CEPH_NOSNAP) {
+    r = image.snap_get_name(from_snap_id, &from_snap_name);
+    if (r < 0) {
+      return r;
+    }
+    r = image.snap_get_namespace_type(from_snap_id, &from_snap_ns_type);
+    if (r < 0) {
+      return r;
+    }
+    if (from_snap_ns_type ==
+          librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_MIRROR) {
+      std::cerr << "from_snap_id corresponds to a snapshot in the mirror namespace"
+                << ", which export-diff doesn't allow"
+                << std::endl;
+      return -EINVAL;
+    }
+    if (from_snap_ns_type ==
+          librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_GROUP) {
+      std::cerr << "from_snap_id corresponds to a snapshot in the group namespace"
+                << ", which export-diff doesn't allow"
+                << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  librbd::snap_namespace_type_t snap_ns_type =
+    librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER;
+  if (snap_id != CEPH_NOSNAP) {
+    r = image.snap_get_name(snap_id, &snap_name);
+    if (r < 0) {
+      return r;
+    }
+    r = image.snap_get_namespace_type(snap_id, &snap_ns_type);
+    if (r < 0) {
+      return r;
+    }
+    if (snap_ns_type ==
+          librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_MIRROR) {
+      std::cerr << "snap_id corresponds to a snapshot in the mirror namespace"
+                << ", which export-diff doesn't allow"
+                << std::endl;
+      return -EINVAL;
+    }
+    if (snap_ns_type ==
+          librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_GROUP) {
+      std::cerr << "snap_id corresponds to a snapshot in the group namespace"
+                << ", which export-diff doesn't allow"
+                << std::endl;
+      return -EINVAL;
+    }
   }
 
   r = do_export_diff(image,
                      from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
                      snap_name.empty() ? nullptr : snap_name.c_str(),
+                     from_snap_id, snap_id,
+                     from_snap_ns_type, snap_ns_type,
                      vm[at::WHOLE_OBJECT].as<bool>(), path.c_str(),
                      vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
@@ -499,17 +649,35 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   }
 
   const char *last_snap = NULL;
+  uint64_t last_snap_id = CEPH_NOSNAP;
+  librbd::snap_namespace_type_t last_snap_ns_type =
+    librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER;
   for (size_t i = 0; i < snaps.size(); ++i) {
-    utils::snap_set(image, snaps[i].name.c_str());
-    r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), false, fd, true, 2);
+    utils::snap_set(image, snaps[i].id);
+    librbd::snap_namespace_type_t snap_ns_type =
+      librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER;
+    r = image.snap_get_namespace_type(snaps[i].id, &snap_ns_type);
+    if (r < 0) {
+      return r;
+    }
+
+    r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(),
+                          last_snap_id, snaps[i].id,
+                          last_snap_ns_type, snap_ns_type,
+                          false, fd, true, 2);
+    last_snap_ns_type = snap_ns_type;
     if (r < 0) {
       return r;
     }
     pc.update_progress(i, snaps.size() + 1);
     last_snap = snaps[i].name.c_str();
+    last_snap_id = snaps[i].id;
   }
-  utils::snap_set(image, std::string(""));
-  r = do_export_diff_fd(image, last_snap, nullptr, false, fd, true, 2);
+  utils::snap_set(image, CEPH_NOSNAP);
+  r = do_export_diff_fd(image, last_snap, nullptr, last_snap_id,
+                        CEPH_NOSNAP, last_snap_ns_type,
+                        librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER,
+                        false, fd, true, 2);
   if (r < 0) {
     return r;
   }
@@ -599,6 +767,7 @@ void get_arguments(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_SOURCE);
   at::add_path_options(positional, options,
                        "export file (or '-' for stdout)");
+  at::add_snap_id_option(options, at::ARGUMENT_MODIFIER_DEST);
   at::add_no_progress_option(options);
   at::add_export_format_option(options);
 }
@@ -624,13 +793,41 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
+  uint64_t snap_id = CEPH_NOSNAP;
+  if (vm.count(at::SNAPSHOT_ID)) {
+    if (!snap_name.empty()) {
+      std::cerr << "snap names and snap ids can't be set at the same time"
+        << std::endl;
+      return -EINVAL;
+    }
+    snap_id = vm[at::SNAPSHOT_ID].as<uint64_t>();
+    if (snap_id >= CEPH_MAXSNAP) {
+      std::cerr << "invalid --snap-id" << std::endl;
+      return -EINVAL;
+    }
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
   r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
-                                 snap_name, true, &rados, &io_ctx, &image);
+                                 snap_name, true, &rados, &io_ctx,
+                                 &image, snap_id);
   if (r < 0) {
     return r;
+  }
+
+  librbd::snap_namespace_type_t snap_ns_type =
+    librbd::snap_namespace_type_t::RBD_SNAP_NAMESPACE_TYPE_USER;
+  if (snap_id != CEPH_NOSNAP) {
+    r = image.snap_get_name(snap_id, &snap_name);
+    if (r < 0) {
+      return r;
+    }
+    r = image.snap_get_namespace_type(snap_id, &snap_ns_type);
+    if (r < 0) {
+      return r;
+    }
   }
 
   int format = 1;
