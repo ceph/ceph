@@ -90,6 +90,19 @@
 
 using namespace std;
 
+/*
+ * The room left for one inodestat, in the form encode_inodestat() wants it:
+ * unsigned, with zero meaning "no limit".  A negative remainder must not be
+ * handed over as either a huge unsigned or as zero, because both disable the
+ * -ENOSPC check that argument exists to drive.  One byte is the honest
+ * answer: nothing fits.
+ */
+static unsigned inodestat_room(int bytes_left, unsigned encoded_so_far)
+{
+  int room = bytes_left - (int)encoded_so_far;
+  return room > 0 ? (unsigned)room : 1;
+}
+
 class ServerContext : public MDSContext {
   protected:
   Server *server;
@@ -5234,7 +5247,9 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     }
     ceph_assert(in);
 
-    if ((int)(dnbl.length() + dn->get_name().length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
+    const unsigned entry_bytes = sizeof(__u32) + dn->get_name().length() +
+      Locker::lease_encoded_size(mdr->session->info, dn->get_alternate_name());
+    if ((int)(dnbl.length() + entry_bytes) > bytes_left) {
       dout(10) << " ran out of room, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
       break;
     }
@@ -5248,7 +5263,8 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 
     // inode
     dout(12) << "including inode in " << *in << " snap " << snapid << dendl;
-    int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid, bytes_left - (int)dnbl.length());
+    int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid,
+				 inodestat_room(bytes_left, dnbl.length()));
     if (r < 0) {
       // chop off dn->name, lease
       dout(10) << " ran out of room, stopping at " << start_len << " < " << bytes_left << dendl;
@@ -11434,18 +11450,24 @@ void Server::handle_client_lssnap(const MDRequestRef& mdr)
       snap_name = p->second->get_long_name();
 
     unsigned start_len = dnbl.length();
-    if (int(start_len + snap_name.length() + sizeof(__u32) + sizeof(LeaseStat)) > max_bytes)
+    const unsigned entry_bytes = sizeof(__u32) + snap_name.length() +
+      Locker::lease_encoded_size(mdr->session->info, p->second->alternate_name);
+    if ((int)(start_len + entry_bytes) > max_bytes)
       break;
 
     encode(snap_name, dnbl);
 
     //infinite lease
-    LeaseStat e(CEPH_LEASE_VALID, -1, 0);
-    e.alternate_name = std::string(p->second->alternate_name);
+    LeaseStatView e(CEPH_LEASE_VALID, -1, 0);
+    e.alternate_name = p->second->alternate_name;
     mds->locker->encode_lease(dnbl, mdr->session->info, e);
     dout(20) << "encode_infinite_lease" << dendl;
 
-    int r = diri->encode_inodestat(dnbl, mdr->session, realm, p->first, max_bytes - (int)dnbl.length());
+    // we already resolved the SnapInfo for this snapid above; hand it over
+    // rather than have encode_inodestat() walk the realm chain again per snap.
+    int r = diri->encode_inodestat(dnbl, mdr->session, realm, p->first,
+				   inodestat_room(max_bytes, dnbl.length()),
+				   0, p->second);
     if (r < 0) {
       bufferlist keep;
       keep.substr_of(dnbl, 0, start_len);
@@ -12382,7 +12404,9 @@ void Server::_readdir_diff(
       // the last one for existent ones
       effective_snapid = exists ? snapid : snapid_prev;
       name.append(dn_name);
-      if ((int)(dnbl.length() + name.length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
+      const unsigned entry_bytes = sizeof(__u32) + name.length() +
+	Locker::lease_encoded_size(mdr->session->info, dn->get_alternate_name());
+      if ((int)(dnbl.length() + entry_bytes) > bytes_left) {
 	dout(10) << " ran out of room for name, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
         if (name == last_name) {
 	  bufferlist keep;
@@ -12408,7 +12432,8 @@ void Server::_readdir_diff(
 
       // inode
       dout(10) << "inc inode " << *in << " snap "	<< effective_snapid << dendl;
-      int r = in->encode_inodestat(dnbl, mdr->session, realm, effective_snapid, bytes_left - (int)dnbl.length());
+      int r = in->encode_inodestat(dnbl, mdr->session, realm, effective_snapid,
+				   inodestat_room(bytes_left, dnbl.length()));
       if (r < 0) {
 	// chop off dn->name, lease
 	dout(10) << " ran out of room, stopping at "

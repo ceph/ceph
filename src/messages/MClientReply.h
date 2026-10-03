@@ -48,15 +48,21 @@
  */
 
 
-struct LeaseStat {
+/*
+ * The alternate name is owned on the decode side and borrowed on the encode
+ * side: the MDS already holds it in the CDentry (or the SnapInfo) and only
+ * needs it long enough to encode it, and readdir issues a lease per dentry.
+ */
+template<class S>
+struct lease_stat_t {
   // this matches ceph_mds_reply_lease
   __u16 mask = 0;
   __u32 duration_ms = 0;
   __u32 seq = 0;
-  std::string alternate_name;
+  S alternate_name;
 
-  LeaseStat() = default;
-  LeaseStat(__u16 msk, __u32 dur, __u32 sq) : mask{msk}, duration_ms{dur}, seq{sq} {}
+  lease_stat_t() = default;
+  lease_stat_t(__u16 msk, __u32 dur, __u32 sq) : mask{msk}, duration_ms{dur}, seq{sq} {}
 
   void decode(ceph::buffer::list::const_iterator &bl, const uint64_t features) {
     using ceph::decode;
@@ -77,7 +83,11 @@ struct LeaseStat {
   }
 };
 
-inline std::ostream& operator<<(std::ostream& out, const LeaseStat& l) {
+using LeaseStat = lease_stat_t<std::string>;           ///< decoded (client side)
+using LeaseStatView = lease_stat_t<std::string_view>;  ///< encoded (MDS side)
+
+template<class S>
+inline std::ostream& operator<<(std::ostream& out, const lease_stat_t<S>& l) {
   out << "lease(mask " << l.mask << " dur " << l.duration_ms;
   if (l.alternate_name.size()) {
     out << " altn " << binstrprint(l.alternate_name, 128) << ")";
