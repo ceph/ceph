@@ -2056,6 +2056,10 @@ option. These commands include but are not limited to:
 * ``config-dump``: Dump configuration data
 * ``get-debug-level``: Get the current debug level of an smb subsystem
 * ``set-debug-level``: Set the debug level of an smb subsystem
+* ``clusterlevel-show``: Report the cluster's active Cluster Functional Level (CFL)
+* ``clusterlevel-showall``: Report the active CFL plus per-node supported ranges
+* ``clusterlevel-upgrade``: Report on (or, with ``--apply``, perform) a CFL upgrade
+* ``clusterlevel-features``: Report this node's own CFL support info
 
 For example:
 
@@ -2071,6 +2075,37 @@ Reports on the status of the smb services in a JSON representation.
 
 Demonstrates the use of ``ceph-smb-ctl`` to request ``smbd`` terminate any
 established connection it has to the client with IP address ``192.168.76.145``.
+
+.. prompt:: bash #
+
+   cephadm shell ceph-smb-ctl clusterlevel-show
+
+Reports the cluster's active Cluster Functional Level (CFL), with no
+per-node detail. Needs a clustered (CTDB) deployment.
+
+.. prompt:: bash #
+
+   cephadm shell ceph-smb-ctl clusterlevel-showall
+
+Reports the cluster's active CFL, the CFL ranges each node supports, and
+whether an upgrade to a higher CFL is currently possible. Needs a
+clustered (CTDB) deployment.
+
+.. prompt:: bash #
+
+   cephadm shell ceph-smb-ctl clusterlevel-upgrade
+
+Reports what a CFL upgrade would do, without making any change. Add
+``--apply`` to actually raise the cluster's active CFL to the highest level
+all nodes agree on; this is a one-way change, so review the dry-run output
+first. Needs a clustered (CTDB) deployment.
+
+.. prompt:: bash #
+
+   cephadm shell ceph-smb-ctl clusterlevel-features
+
+Reports this node's own CFL support: whether it participates in a cluster,
+its CTDB socket and protocol version, and the CFL ranges it supports.
 
 In addition to operating on the local smb server instance, it can also
 use TCP & mTLS to connect to a remote sidecar server. Note that making
