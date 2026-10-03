@@ -130,6 +130,7 @@ import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw
 import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
+import { smbChildRoutes } from '../smb/smb.routes';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicResourceSidebarComponent } from './rgw-topic-resource-sidebar/rgw-topic-resource-sidebar.component';
 import { RgwTopicResourcePageComponent } from './rgw-topic-resource-page/rgw-topic-resource-page.component';
@@ -580,6 +581,21 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
+  },
+  {
+    path: 'smb',
+    canActivate: [ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'smb',
+        redirectTo: 'error',
+        header: 'SMB module is not enabled',
+        module_name: 'smb',
+        navigate_to: 'rgw/smb'
+      },
+      breadcrumbs: 'SMB'
+    },
+    children: smbChildRoutes
   },
   {
     path: 'configuration',

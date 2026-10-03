@@ -1,10 +1,11 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { SmbShareFormComponent } from './smb-share-form.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
+import { of } from 'rxjs';
 
 import {
   CheckboxModule,
@@ -14,6 +15,7 @@ import {
   NumberModule,
   SelectModule
 } from 'carbon-components-angular';
+import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
@@ -34,7 +36,8 @@ describe('SmbShareFormComponent', () => {
         NumberModule,
         SelectModule,
         ComboBoxModule,
-        CheckboxModule
+        CheckboxModule,
+        NgbTypeaheadModule
       ],
       declarations: [SmbShareFormComponent],
       providers: [SmbService, TaskWrapperService]
@@ -89,6 +92,8 @@ describe('SmbShareFormComponent', () => {
       subvolume: 'subvol1',
       prefixedPath: '/volumes/fs1/group1/subvol1',
       inputPath: '/',
+      bucket: '',
+      user_id: '',
       browseable: true,
       readonly: false,
       read_iops_limit: 0,
@@ -137,5 +142,53 @@ describe('SmbShareFormComponent', () => {
       expect(request.share_resource.cephfs.qos.read_bw_limit).toBe(100 * 1024 * 1024);
       expect(request.share_resource.cephfs.qos.write_burst_mult).toBe(60);
     });
+  });
+
+  describe('RGW share', () => {
+    it('should require bucket and omit cephfs in the request', () => {
+      component.isRgw = true;
+      component.createForm();
+      expect(component.smbShareForm.get('bucket').hasValidator(Validators.required)).toBe(true);
+      expect(component.smbShareForm.get('volume').hasValidator(Validators.required)).toBe(false);
+      component.clusterId = 'cluster1';
+      component.smbShareForm.patchValue({
+        share_id: 'share1',
+        name: 'Share1',
+        bucket: 'my-bucket',
+        browseable: true,
+        readonly: false
+      });
+      const request = component.buildRequest();
+      expect(request.share_resource.rgw.bucket).toBe('my-bucket');
+      expect(request.share_resource.rgw.user_id).toBeUndefined();
+      expect(request.share_resource.cephfs).toBeUndefined();
+    });
+
+    it('should include optional user_id in the request when set', () => {
+      component.isRgw = true;
+      component.createForm();
+      component.clusterId = 'cluster1';
+      component.smbShareForm.patchValue({
+        share_id: 'share1',
+        name: 'Share1',
+        bucket: 'my-bucket',
+        user_id: 's3user',
+        browseable: true,
+        readonly: false
+      });
+      const request = component.buildRequest();
+      expect(request.share_resource.rgw.bucket).toBe('my-bucket');
+      expect(request.share_resource.rgw.user_id).toBe('s3user');
+    });
+
+    it('should suggest matching bucket names', fakeAsync(() => {
+      jest
+        .spyOn(component['rgwBucketService'], 'list')
+        .mockReturnValue(of(['logs', 'photos', 'backup-logs']) as any);
+      let names: string[];
+      component.bucketDataSource(of('log')).subscribe((result) => (names = result));
+      tick(200);
+      expect(names).toEqual(['logs', 'backup-logs']);
+    }));
   });
 });

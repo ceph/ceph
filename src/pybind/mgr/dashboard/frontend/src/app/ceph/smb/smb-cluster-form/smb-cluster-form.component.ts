@@ -35,8 +35,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SmbDomainSettingModalComponent } from '../smb-domain-setting-modal/smb-domain-setting-modal.component';
 import { CephServicePlacement } from '~/app/shared/models/service.interface';
 import { UpperFirstPipe } from '~/app/shared/pipes/upper-first.pipe';
-import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
-import { USERSGROUPS_PATH } from '../smb-usersgroups-list/smb-usersgroups-list.component';
+import { getClusterPath, getUsersGroupsPath } from '../utils';
 import { Host } from '~/app/shared/models/host.interface';
 
 @Component({
@@ -86,7 +85,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   ngOnInit() {
     this.action = this.actionLabels.CREATE;
     this.usersGroups$ = this.smbService.listUsersGroups();
-    if (this.router.url.startsWith(`/${CLUSTER_PATH}/${URLVerbs.EDIT}`)) {
+    if (this.router.url.startsWith(`/${getClusterPath(this.router.url)}/${URLVerbs.EDIT}`)) {
       this.isEdit = true;
     }
     this.smbService.modalData$.subscribe((data: DomainSettings) => {
@@ -306,12 +305,12 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(`${CLUSTER_PATH}/${urlVerb}`, { cluster_id }),
+        task: new FinishedTask(`${getClusterPath(this.router.url)}/${urlVerb}`, { cluster_id }),
         call: this.smbService.createCluster(requestModel)
       })
       .subscribe({
         complete: () => {
-          this.router.navigate([CLUSTER_PATH]);
+          this.router.navigate([getClusterPath(this.router.url)]);
         },
         error: () => {
           component.smbForm.setErrors({ cdSubmitButton: true });
@@ -442,7 +441,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   navigateCreateUsersGroups() {
-    this.router.navigate([`${USERSGROUPS_PATH}/${URLVerbs.CREATE}`]);
+    this.router.navigate([`${getUsersGroupsPath(this.router.url)}/${URLVerbs.CREATE}`]);
   }
 
   addCustomDns() {

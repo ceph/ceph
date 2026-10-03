@@ -31,6 +31,12 @@ interface SMBCephfs {
   qos?: SMBShareQoS;
 }
 
+export interface SMBRgw {
+  bucket: string;
+  user_id?: string;
+  credential_ref?: string;
+}
+
 interface SMBShareLoginControl {
   name: string;
   access: 'read' | 'read-write' | 'none' | 'admin';
@@ -91,7 +97,8 @@ export interface SMBShare {
   resource_type: string;
   cluster_id: string;
   share_id: string;
-  cephfs: SMBCephfs;
+  cephfs?: SMBCephfs;
+  rgw?: SMBRgw;
   intent?: string;
   name?: string;
   readonly?: boolean;

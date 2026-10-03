@@ -17,112 +17,172 @@
       </div>
 
       <!-- Share Id -->
-      <div
-        class="form-item form-item-append"
-        cdsRow
-      >
-        <div cdsCol>
-          <cds-text-label
-            labelInputID="share_id"
-            i18n
-            helperText="A unique identifier for share"
-            i18n-helperText
-            cdRequiredField="Share ID"
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="share_id"
+          i18n
+          helperText="A unique identifier for share"
+          i18n-helperText
+          cdRequiredField="Share ID"
+          [invalid]="smbShareForm.controls.share_id.invalid && smbShareForm.controls.share_id.dirty"
+          [invalidText]="shareError"
+          >Share ID
+          <input
+            cdsText
+            type="text"
+            id="share_id"
+            formControlName="share_id"
             [invalid]="
               smbShareForm.controls.share_id.invalid && smbShareForm.controls.share_id.dirty
             "
             [invalidText]="shareError"
-            >Share ID
-            <input
-              cdsText
-              type="text"
-              id="share_id"
-              formControlName="share_id"
-              [invalid]="
-                smbShareForm.controls.share_id.invalid && smbShareForm.controls.share_id.dirty
-              "
-              [invalidText]="shareError"
-            />
-          </cds-text-label>
-          <ng-template #shareError>
-            @if (smbShareForm.showError('share_id', formDir, 'required')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >This field is required.</span
-              >
-            }
-          </ng-template>
-        </div>
-
-        <!-- Share Name -->
-        <div cdsCol>
-          <cds-text-label
-            labelInputID="name"
+          />
+        </cds-text-label>
+        <ng-template #shareError>
+          <span
+            class="invalid-feedback"
+            *ngIf="smbShareForm.showError('share_id', formDir, 'required')"
             i18n
-            helperText="Name of the Share"
-            i18n-helperText
-            >Share Name
-            <input
-              cdsText
-              type="text"
-              id="name"
-              formControlName="name"
-            />
-          </cds-text-label>
-        </div>
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+
+      <!-- Share Name -->
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="name"
+          i18n
+          helperText="Name of the Share"
+          i18n-helperText
+          >Share Name
+          <input
+            cdsText
+            type="text"
+            id="name"
+            formControlName="name"
+          />
+        </cds-text-label>
+      </div>
+
+      <!-- Bucket -->
+      <div
+        class="form-item"
+        *ngIf="isRgw"
+      >
+        <cds-text-label
+          labelInputID="bucket"
+          i18n
+          helperText="Name of the RGW bucket to share"
+          i18n-helperText
+          cdRequiredField="Bucket name"
+          [invalid]="smbShareForm.controls.bucket.invalid && smbShareForm.controls.bucket.dirty"
+          [invalidText]="bucketError"
+          >Bucket name
+          <input
+            cdsText
+            type="text"
+            placeholder="Bucket name..."
+            i18n-placeholder
+            id="bucket"
+            formControlName="bucket"
+            [ngbTypeahead]="bucketDataSource"
+            [invalid]="smbShareForm.controls.bucket.invalid && smbShareForm.controls.bucket.dirty"
+          />
+        </cds-text-label>
+        <ng-template #bucketError>
+          <span
+            class="invalid-feedback"
+            *ngIf="smbShareForm.showError('bucket', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+          <span
+            class="invalid-feedback"
+            *ngIf="smbShareForm.showError('bucket', formDir, 'bucketNameNotAllowed')"
+            i18n
+            >The bucket does not exist or is not in the default realm (if multiple realms are
+            configured). To continue,
+            <a
+              routerLink="/rgw/bucket/create"
+              class="btn-link"
+              >create a new bucket</a
+            >.</span
+          >
+        </ng-template>
+      </div>
+
+      <!-- User ID -->
+      <div
+        class="form-item"
+        *ngIf="isRgw"
+      >
+        <cds-text-label
+          labelInputID="user_id"
+          i18n
+          helperText="Optional. The RGW user ID that owns the bucket. If not provided, the system will attempt to determine the bucket owner automatically."
+          i18n-helperText
+          >User ID
+          <input
+            cdsText
+            type="text"
+            id="user_id"
+            formControlName="user_id"
+            placeholder="User ID..."
+            i18n-placeholder
+          />
+        </cds-text-label>
       </div>
 
       <!-- Volume -->
-      <div class="form-item">
-        <cds-select
-          formControlName="volume"
-          label="Volume"
-          cdRequiredField="Volume"
-          id="volume"
-          (change)="volumeChangeHandler()"
-          [invalid]="smbShareForm.controls.volume.invalid && smbShareForm.controls.volume.dirty"
-          [invalidText]="volumeError"
-          i18n-label
-        >
-          @if (allFsNames?.length === 0) {
+      <ng-container *ngIf="!isRgw">
+        <div class="form-item">
+          <cds-select
+            formControlName="volume"
+            label="Volume"
+            cdRequiredField="Volume"
+            id="volume"
+            (change)="volumeChangeHandler()"
+            [invalid]="smbShareForm.controls.volume.invalid && smbShareForm.controls.volume.dirty"
+            [invalidText]="volumeError"
+            i18n-label
+          >
             <option
+              *ngIf="allFsNames?.length === 0"
               value=""
               i18n
             >
               -- No filesystem available --
             </option>
-          }
-          @if (allFsNames !== null && allFsNames?.length > 0) {
             <option
+              *ngIf="allFsNames !== null && allFsNames?.length > 0"
               value=""
               i18n
             >
               -- Select the filesystem --
             </option>
-          }
-          @for (filesystem of allFsNames; track filesystem) {
             <option
+              *ngFor="let filesystem of allFsNames"
               [value]="filesystem.name"
               i18n
             >
               {{ filesystem.name }}
             </option>
-          }
-        </cds-select>
-        <ng-template #volumeError>
-          @if (smbShareForm.showError('volume', formDir, 'required')) {
+          </cds-select>
+          <ng-template #volumeError>
             <span
               class="invalid-feedback"
+              *ngIf="smbShareForm.showError('volume', formDir, 'required')"
               i18n
               >This field is required.</span
             >
-          }
-        </ng-template>
-      </div>
+          </ng-template>
+        </div>
 
-      @if (smbShareForm.getValue('volume')) {
-        <div class="form-item">
+        <div
+          class="form-item"
+          *ngIf="smbShareForm.getValue('volume')"
+        >
           <cds-select
             formControlName="subvolume_group"
             label="Subvolume Group"
@@ -131,37 +191,35 @@
             [skeleton]="allsubvolgrps === null"
             i18n-label
           >
-            @if (allsubvolgrps === null) {
-              <option
-                value=""
-                i18n
-              >
-                Loading...
-              </option>
-            }
-            @if (allsubvolgrps !== null && allsubvolgrps.length >= 0) {
-              <option
-                value=""
-                i18n
-              >
-                -- Select the CephFS subvolume group --
-              </option>
-            }
-            @for (subvol_grp of allsubvolgrps; track subvol_grp) {
-              <option
-                [value]="subvol_grp.name"
-                [selected]="subvol_grp.name === smbShareForm.get('subvolume_group').value"
-                i18n
-              >
-                {{ subvol_grp.name }}
-              </option>
-            }
+            <option
+              *ngIf="allsubvolgrps === null"
+              value=""
+              i18n
+            >
+              Loading...
+            </option>
+            <option
+              *ngIf="allsubvolgrps !== null && allsubvolgrps.length >= 0"
+              value=""
+              i18n
+            >
+              -- Select the CephFS subvolume group --
+            </option>
+            <option
+              *ngFor="let subvol_grp of allsubvolgrps"
+              [value]="subvol_grp.name"
+              [selected]="subvol_grp.name === smbShareForm.get('subvolume_group').value"
+              i18n
+            >
+              {{ subvol_grp.name }}
+            </option>
           </cds-select>
         </div>
-      }
 
-      @if (smbShareForm.getValue('volume')) {
-        <div class="form-group row">
+        <div
+          class="form-group row"
+          *ngIf="smbShareForm.getValue('volume')"
+        >
           <cds-select
             formControlName="subvolume"
             label="Subvolume"
@@ -169,94 +227,89 @@
             (change)="setSubVolPath()"
             [skeleton]="allsubvols === null"
           >
-            @if (allsubvols === null) {
-              <option
-                value=""
-                i18n
-              >
-                Loading...
-              </option>
-            }
-            @if (allsubvols !== null && allsubvols.length === 0) {
-              <option
-                value=""
-                i18n
-              >
-                -- No SMB subvolume available --
-              </option>
-            }
-            @if (allsubvols !== null && allsubvols.length > 0) {
-              <option
-                value=""
-                i18n
-              >
-                -- Select the SMB subvolume --
-              </option>
-            }
-            @for (subvolume of allsubvols; track subvolume) {
-              <option
-                [value]="subvolume.name"
-                [selected]="subvolume.name === smbShareForm.get('subvolume').value"
-                i18n
-              >
-                {{ subvolume.name }}
-              </option>
-            }
+            <option
+              *ngIf="allsubvols === null"
+              value=""
+              i18n
+            >
+              Loading...
+            </option>
+            <option
+              *ngIf="allsubvols !== null && allsubvols.length === 0"
+              value=""
+              i18n
+            >
+              -- No SMB subvolume available --
+            </option>
+            <option
+              *ngIf="allsubvols !== null && allsubvols.length > 0"
+              value=""
+              i18n
+            >
+              -- Select the SMB subvolume --
+            </option>
+            <option
+              *ngFor="let subvolume of allsubvols"
+              [value]="subvolume.name"
+              [selected]="subvolume.name === smbShareForm.get('subvolume').value"
+              i18n
+            >
+              {{ subvolume.name }}
+            </option>
           </cds-select>
         </div>
-      }
 
-      <!-- Path -->
-      <div
-        class="form-item form-item-append"
-        cdsRow
-      >
-        <div cdsCol>
-          <cds-text-label
-            labelInputID="prefixedPath"
-            i18n
-            helperText="A path is a relative path."
-            >Prefixed Path
-            <input
-              cdsText
-              type="text"
-              id="prefixedPath"
-              formControlName="prefixedPath"
-            />
-          </cds-text-label>
-        </div>
-        <div cdsCol>
-          <cds-text-label
-            labelInputID="inputPath"
-            i18n
-            [invalid]="
-              smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
-            "
-            [invalidText]="pathError"
-            helperText="A relative path in a cephFS file system."
-            cdRequiredField="Path"
-            >Input Path
-            <input
-              cdsText
-              type="text"
-              id="inputPath"
-              formControlName="inputPath"
+        <!-- Path -->
+        <div
+          class="form-item form-item-append"
+          cdsRow
+        >
+          <div cdsCol>
+            <cds-text-label
+              labelInputID="prefixedPath"
+              i18n
+              helperText="A path is a relative path."
+              >Prefixed Path
+              <input
+                cdsText
+                type="text"
+                id="prefixedPath"
+                formControlName="prefixedPath"
+              />
+            </cds-text-label>
+          </div>
+          <div cdsCol>
+            <cds-text-label
+              labelInputID="inputPath"
+              i18n
               [invalid]="
                 smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
               "
-            />
-          </cds-text-label>
-          <ng-template #pathError>
-            @if (smbShareForm.showError('inputPath', formDir, 'required')) {
+              [invalidText]="pathError"
+              helperText="A relative path in a cephFS file system."
+              cdRequiredField="Path"
+              >Input Path
+              <input
+                cdsText
+                type="text"
+                id="inputPath"
+                formControlName="inputPath"
+                [invalid]="
+                  smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
+                "
+              />
+            </cds-text-label>
+            <ng-template #pathError>
               <span
                 class="invalid-feedback"
+                *ngIf="smbShareForm.showError('inputPath', formDir, 'required')"
                 i18n
                 >This field is required.</span
               >
-            }
-          </ng-template>
+            </ng-template>
+          </div>
         </div>
-      </div>
+      </ng-container>
 
       <!-- Browseable -->
       <div class="form-item">
@@ -284,127 +337,129 @@
       </div>
 
       <!-- QoS rate limiting -->
-      <div
-        class="form-header"
-        i18n
-      >
-        Rate limiting
-      </div>
-      <div
-        class="form-item form-item-append"
-        cdsRow
-      >
-        <div cdsCol>
-          <cds-number
-            formControlName="read_iops_limit"
-            cdValidate
-            #readIopsRef="cdValidate"
-            label="Read IOPS limit"
-            i18n-label
-            [min]="0"
-            [max]="1000000"
-            helperText="Max read operations per second (0 = disabled)"
-            i18n-helperText
-            [invalid]="readIopsRef.isInvalid"
-            invalidText="Value must be between 0 and 1,000,000"
-            i18n-invalidText
-          >
-          </cds-number>
+      <ng-container *ngIf="!isRgw">
+        <div
+          class="form-header"
+          i18n
+        >
+          Rate limiting
         </div>
-        <div cdsCol>
-          <cds-number
-            formControlName="write_iops_limit"
-            cdValidate
-            #writeIopsRef="cdValidate"
-            label="Write IOPS limit"
-            i18n-label
-            [min]="0"
-            [max]="1000000"
-            helperText="Max write operations per second (0 = disabled)"
-            i18n-helperText
-            [invalid]="writeIopsRef.isInvalid"
-            invalidText="Value must be between 0 and 1,000,000"
-            i18n-invalidText
-          >
-          </cds-number>
+        <div
+          class="form-item form-item-append"
+          cdsRow
+        >
+          <div cdsCol>
+            <cds-number
+              formControlName="read_iops_limit"
+              cdValidate
+              #readIopsRef="cdValidate"
+              label="Read IOPS limit"
+              i18n-label
+              [min]="0"
+              [max]="1000000"
+              helperText="Max read operations per second (0 = disabled)"
+              i18n-helperText
+              [invalid]="readIopsRef.isInvalid"
+              invalidText="Value must be between 0 and 1,000,000"
+              i18n-invalidText
+            >
+            </cds-number>
+          </div>
+          <div cdsCol>
+            <cds-number
+              formControlName="write_iops_limit"
+              cdValidate
+              #writeIopsRef="cdValidate"
+              label="Write IOPS limit"
+              i18n-label
+              [min]="0"
+              [max]="1000000"
+              helperText="Max write operations per second (0 = disabled)"
+              i18n-helperText
+              [invalid]="writeIopsRef.isInvalid"
+              invalidText="Value must be between 0 and 1,000,000"
+              i18n-invalidText
+            >
+            </cds-number>
+          </div>
         </div>
-      </div>
-      <div
-        class="form-item form-item-append"
-        cdsRow
-      >
-        <div cdsCol>
-          <cd-number-with-unit
-            [form]="smbShareForm"
-            valueControlName="read_bw_limit"
-            unitControlName="read_bw_limit_unit"
-            label="Read bandwidth limit"
-            i18n-label
-            helperText="Max read bandwidth (0 = disabled)"
-            i18n-helperText
-            [units]="qosBwUnits"
-            [min]="0"
-            [max]="readBwMax"
-            invalidText="Value must be between 0 and {{ readBwMax | number }}"
-            i18n-invalidText
-          ></cd-number-with-unit>
+        <div
+          class="form-item form-item-append"
+          cdsRow
+        >
+          <div cdsCol>
+            <cd-number-with-unit
+              [form]="smbShareForm"
+              valueControlName="read_bw_limit"
+              unitControlName="read_bw_limit_unit"
+              label="Read bandwidth limit"
+              i18n-label
+              helperText="Max read bandwidth (0 = disabled)"
+              i18n-helperText
+              [units]="qosBwUnits"
+              [min]="0"
+              [max]="readBwMax"
+              invalidText="Value must be between 0 and {{ readBwMax | number }}"
+              i18n-invalidText
+            ></cd-number-with-unit>
+          </div>
+          <div cdsCol>
+            <cd-number-with-unit
+              [form]="smbShareForm"
+              valueControlName="write_bw_limit"
+              unitControlName="write_bw_limit_unit"
+              label="Write bandwidth limit"
+              i18n-label
+              helperText="Max write bandwidth (0 = disabled)"
+              i18n-helperText
+              [units]="qosBwUnits"
+              [min]="0"
+              [max]="writeBwMax"
+              invalidText="Value must be between 0 and {{ writeBwMax | number }}"
+              i18n-invalidText
+            ></cd-number-with-unit>
+          </div>
         </div>
-        <div cdsCol>
-          <cd-number-with-unit
-            [form]="smbShareForm"
-            valueControlName="write_bw_limit"
-            unitControlName="write_bw_limit_unit"
-            label="Write bandwidth limit"
-            i18n-label
-            helperText="Max write bandwidth (0 = disabled)"
-            i18n-helperText
-            [units]="qosBwUnits"
-            [min]="0"
-            [max]="writeBwMax"
-            invalidText="Value must be between 0 and {{ writeBwMax | number }}"
-            i18n-invalidText
-          ></cd-number-with-unit>
+        <div
+          class="form-item form-item-append"
+          cdsRow
+        >
+          <div cdsCol>
+            <cds-number
+              formControlName="read_burst_mult"
+              cdValidate
+              #readBurstRef="cdValidate"
+              label="Read burst mult"
+              i18n-label
+              [min]="10"
+              [max]="100"
+              helperText="Burst multiplier for read operations, allowing temporary bursts above the configured limit."
+              i18n-helperText
+              [invalid]="readBurstRef.isInvalid"
+              invalidText="Value must be between 10 and 100"
+              i18n-invalidText
+            >
+            </cds-number>
+          </div>
+          <div cdsCol>
+            <cds-number
+              formControlName="write_burst_mult"
+              cdValidate
+              #writeBurstRef="cdValidate"
+              label="Write burst mult"
+              i18n-label
+              [min]="10"
+              [max]="100"
+              helperText="Burst multiplier for write operations, allowing temporary bursts above the configured limit."
+              i18n-helperText
+              [invalid]="writeBurstRef.isInvalid"
+              invalidText="Value must be between 10 and 100"
+              i18n-invalidText
+            >
+            </cds-number>
+          </div>
         </div>
-      </div>
-      <div
-        class="form-item form-item-append"
-        cdsRow
-      >
-        <div cdsCol>
-          <cds-number
-            formControlName="read_burst_mult"
-            cdValidate
-            #readBurstRef="cdValidate"
-            label="Read burst mult"
-            i18n-label
-            [min]="10"
-            [max]="100"
-            helperText="Burst multiplier for read operations, allowing temporary bursts above the configured limit."
-            i18n-helperText
-            [invalid]="readBurstRef.isInvalid"
-            invalidText="Value must be between 10 and 100"
-            i18n-invalidText
-          >
-          </cds-number>
-        </div>
-        <div cdsCol>
-          <cds-number
-            formControlName="write_burst_mult"
-            cdValidate
-            #writeBurstRef="cdValidate"
-            label="Write burst mult"
-            i18n-label
-            [min]="10"
-            [max]="100"
-            helperText="Burst multiplier for write operations, allowing temporary bursts above the configured limit."
-            i18n-helperText
-            [invalid]="writeBurstRef.isInvalid"
-            invalidText="Value must be between 10 and 100"
-            i18n-invalidText
-          >
-          </cds-number>
-        </div>
-      </div>
+      </ng-container>
 
       <cd-form-button-panel
         (submitActionEvent)="submitAction()"

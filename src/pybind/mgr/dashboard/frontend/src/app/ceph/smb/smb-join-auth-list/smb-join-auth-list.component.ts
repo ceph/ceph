@@ -18,14 +18,19 @@ import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-
-export const JOIN_AUTH_PATH = 'cephfs/smb/active-directory';
+import { getJoinAuthPath } from '../utils';
 
 @Component({
   selector: 'cd-smb-join-auth-list',
   templateUrl: './smb-join-auth-list.component.html',
   styleUrls: ['./smb-join-auth-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(JOIN_AUTH_PATH) }],
+  providers: [
+    {
+      provide: URLBuilderService,
+      useFactory: (router: Router) => new URLBuilderService(getJoinAuthPath(router.url)),
+      deps: [Router]
+    }
+  ],
   standalone: false
 })
 export class SmbJoinAuthListComponent implements OnInit {
@@ -120,7 +125,7 @@ export class SmbJoinAuthListComponent implements OnInit {
       itemNames: [authId],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${JOIN_AUTH_PATH}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${getJoinAuthPath(this.router.url)}/${URLVerbs.DELETE}`, {
             authId: authId
           }),
           call: this.smbService.deleteJoinAuth(authId)
