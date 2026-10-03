@@ -495,7 +495,7 @@ The response has the following format:
 
     {
         "vectorBucket": {
-            "creationTime": "<iso-8601-timestamp>",
+            "creationTime": <number>,
             "vectorBucketArn": "<vector-bucket-arn>",
             "vectorBucketName": "<vector-bucket>"
         }
@@ -532,7 +532,7 @@ The response has the following format:
         "nextToken": "<token>",
         "vectorBuckets": [
             {
-                "creationTime": "<iso-8601-timestamp>",
+                "creationTime": <number>,
                 "vectorBucketArn": "<vector-bucket-arn>",
                 "vectorBucketName": "<vector-bucket>"
             }
