@@ -210,9 +210,9 @@ def task(ctx, config):
     if config.get('balance_reads', False):
         args.extend(['--balance-reads'])
         pct_update_delay = config.get('pct_update_delay', 5)
-        if config.get('osd_min_split_replica_read_size', None) is not None:
-            args.extend(['--min-split-size',
-                         str(config.get('osd_min_split_replica_read_size'))])
+    if config.get('osd_min_split_replica_read_size', None) is not None:
+        args.extend(['--min-split-size',
+                     str(config.get('osd_min_split_replica_read_size'))])
     if config.get('localize_reads', False):
         args.extend(['--localize-reads'])
     if config.get('max_attr_len', None):

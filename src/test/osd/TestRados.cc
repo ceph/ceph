@@ -567,7 +567,7 @@ int main(int argc, char **argv)
   bool no_sparse = false;
   bool balance_reads = false;
   bool localize_reads = false;
-  uint64_t min_split_size = 0;
+  uint64_t min_split_size = UINT64_MAX;
   uint8_t offlen_randomization_ratio = 50;
   bool set_redirect = false;
   bool set_chunk = false;
