@@ -52,10 +52,15 @@ class TestMount {
 
   unsigned diff_mask = 0;
 public:
-  TestMount( const char* root_dir_name = "dir0", unsigned mask = 0) : diff_mask(mask) {
+  TestMount( const char* root_dir_name = "dir0", unsigned mask = 0,
+             const std::vector<std::pair<const char*, const char*>>& conf = {})
+    : diff_mask(mask) {
     ceph_create(&cmount, NULL);
     ceph_conf_read_file(cmount, NULL);
     ceph_conf_parse_env(cmount, NULL);
+    for (const auto& kv : conf) {
+      ceph_assert(0 == ceph_conf_set(cmount, kv.first, kv.second));
+    }
     ceph_assert(0 == ceph_mount(cmount, NULL));
 
     sprintf(dir_path, "/%s_%d", root_dir_name, getpid());
@@ -222,10 +227,24 @@ public:
       }
       ceph_fsync(cmount, fd, 0);
     }
-    return r;
-
     ceph_close(cmount, fd);
     return r;
+  }
+  // Unlike write_full(), these leave the data dirty on the client: no fsync(),
+  // no close(). Both would push size/mtime to the MDS and hide any bug that
+  // depends on the MDS not yet knowing about the change.
+  int open_write(const char* relpath)
+  {
+    auto file_path = make_file_path(relpath);
+    return ceph_open(cmount, file_path.c_str(), O_WRONLY | O_CREAT, 0666);
+  }
+  int write_fd(int fd, const string& data, int64_t offset = 0)
+  {
+    return ceph_write(cmount, fd, data.c_str(), data.size(), offset);
+  }
+  int close_fd(int fd)
+  {
+    return ceph_close(cmount, fd);
   }
   void generate_random_string_n(uint64_t count, uint64_t block_size,
 				const std::function<void(const std::string&)> &f)
@@ -2446,4 +2465,168 @@ TEST(LibCephFS, SnapDiffStatDelta) {
 
   test_mount.rmsnap("snap1");
   test_mount.rmsnap("snap2");
+}
+
+/*
+ * A file modified between two snapshots must appear in the snapdiff even while
+ * the modifying client still has an unflushed capsnap.
+ *
+ * While the client is writing back the buffered data the capsnap keeps
+ * dirty_data set, so no FLUSHSNAP has been sent.  The MDS has therefore neither
+ * COWed the inode nor learned the new size/mtime: the head inode still spans
+ * both snapids and Server::build_snap_diff() takes its "skipping unchanged"
+ * fast path, dropping the entry.
+ *
+ * The window closes as soon as writeback finishes and the FLUSHSNAP lands, so
+ * the modification below must NOT be fsync()ed or close()d -- either pushes the
+ * metadata to the MDS and hides the bug.  Size does not matter: the window is
+ * the RADOS round trip the FLUSHSNAP waits on, and the snapdiff request beats
+ * it.  The conf overrides only keep the client's periodic cap flush and the
+ * background writeback out of the way.
+ *
+ * The second pass exists to make a negative result meaningful: once the
+ * snapflush lands the entry must appear.  If pass 1 and pass 2 both find the
+ * file, the race was simply lost and the run proves nothing -- retry rather
+ * than concluding the bug is absent.
+ */
+TEST(LibCephFS, SnapDiffPendingCapsnap)
+{
+  TestMount test_mount("snapdiff_pending_capsnap", 0,
+                       {{"client_oc_max_dirty_age", "600"},
+                        {"client_caps_release_delay", "600"}});
+
+  // baseline, fully flushed to the MDS
+  ASSERT_LE(0, test_mount.write_full("fileA", "v1"));
+  ASSERT_LE(0, test_mount.write_full("fileB", "untouched"));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  // Modify fileA, leaving the data dirty on the client. The size is
+  // deliberately tiny: the window is not the writeback of a large buffer, it is
+  // the RADOS round trip the FLUSHSNAP must wait on, which the snapdiff request
+  // beats. A large write instead runs into the sync() caveat noted below.
+  const size_t dirty_bytes = 4096;
+  string payload(dirty_bytes, 'x');
+  int fd = test_mount.open_write("fileA");
+  ASSERT_LE(0, fd);
+  ASSERT_EQ((int)dirty_bytes, test_mount.write_fd(fd, payload));
+
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  auto collect = [&](vector<pair<string, uint64_t>>& out) {
+    return test_mount.for_each_readdir_snapdiff(
+      "", "snap1", "snap2",
+      [&](const dirent* dire, uint64_t snapid) {
+        out.emplace_back(dire->d_name, snapid);
+        return true;
+      });
+  };
+
+  // pass #1: snapflush still outstanding or the cap update reached the
+  // MDS first. Nothing else may talk to the MDS between mksnap and
+  // here, or the race window closes.
+  vector<pair<string, uint64_t>> racy;
+  ASSERT_EQ(0, collect(racy));
+
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  auto expected = std::make_pair(string("fileA"), snapid2);
+  bool found_racy = std::find(racy.begin(), racy.end(), expected) != racy.end();
+
+  // pass #2: this "sync" check is here for:
+  // - to validate that the file surely gets reported even if pass #1 fails
+  // -there seems to be a bug in client fsync/sync_fs where it _could_
+  // skip waiting for snap caps to be sent to the MDS.
+  bool found_settled = false;
+  vector<pair<string, uint64_t>> settled;
+  for (int attempt = 0; attempt < 30 && !found_settled; ++attempt) {
+    ASSERT_EQ(0, test_mount.sync());
+    settled.clear();
+    ASSERT_EQ(0, collect(settled));
+    found_settled =
+      std::find(settled.begin(), settled.end(), expected) != settled.end();
+    if (!found_settled) {
+      sleep(1);
+    }
+  }
+
+  ASSERT_TRUE(found_settled)
+    << "fileA changed between snap1 and snap2 but is absent even after sync";
+  EXPECT_TRUE(found_racy)
+    << "fileA changed between snap1 and snap2 but is missing from the diff "
+       "taken before the MDS committed the snapflush";
+
+  ASSERT_EQ(0, test_mount.close_fd(fd));
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+/*
+ * readdir_snapdiff must complete while the client still holds write caps.
+ *
+ * An open-for-write descriptor keeps Fw in caps_wanted(), so the MDS re-grants
+ * EXCL as soon as any rdlock taken on the file is released. Any predicate
+ * gating rdlock_file_start() in build_snap_diff() therefore has to be one that
+ * the flush it forces actually clears -- a predicate keyed on steady-state cap
+ * ownership never converges. The walk blocks, _readdir_diff() discards the
+ * partial reply, the retry restarts from the client's offset, and the files
+ * behind it have already reverted to EXCL.
+ *
+ * NOTE: a regression here HANGS rather than fails. gtest has no per-test
+ * timeout, and an in-process watchdog would have to block on the same stuck
+ * call, so if this test stops producing output that is the failure. Confirm by
+ * looking for repeated "rdlock_start waiting on" against the same inodes in the
+ * MDS log.
+ */
+TEST(LibCephFS, SnapDiffWithOpenWriteFds)
+{
+  TestMount test_mount("snapdiff_open_write_fds");
+
+  ASSERT_LE(0, test_mount.write_full("fileA", "v1"));
+  ASSERT_LE(0, test_mount.write_full("fileB", "v1"));
+  ASSERT_LE(0, test_mount.write_full("fileC", "never modified"));
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  ASSERT_LE(0, test_mount.write_full("fileA", "v2"));
+  ASSERT_LE(0, test_mount.write_full("fileB", "v2"));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+
+  // Held across the diff on purpose; not closed until it has returned. The
+  // writes make the cap state unambiguous -- Fw and Fb in use, not just wanted.
+  int fdA = test_mount.open_write("fileA");
+  int fdB = test_mount.open_write("fileB");
+  ASSERT_LE(0, fdA);
+  ASSERT_LE(0, fdB);
+  ASSERT_LT(0, test_mount.write_fd(fdA, "still writing"));
+  ASSERT_LT(0, test_mount.write_fd(fdB, "still writing"));
+
+  vector<pair<string, uint64_t>> diff;
+  ASSERT_EQ(0, test_mount.for_each_readdir_snapdiff(
+    "", "snap1", "snap2",
+    [&](const dirent* dire, uint64_t snapid) {
+      diff.emplace_back(dire->d_name, snapid);
+      return true;
+    }));
+
+  auto changed = [&](const char* name) {
+    return std::find(diff.begin(), diff.end(),
+                     std::make_pair(string(name), snapid2)) != diff.end();
+  };
+  EXPECT_TRUE(changed("fileA"));
+  EXPECT_TRUE(changed("fileB"));
+  EXPECT_EQ(diff.end(),
+            std::find_if(diff.begin(), diff.end(),
+                         [](const pair<string, uint64_t>& e) {
+                           return e.first == "fileC";
+                         }));
+
+  ASSERT_EQ(0, test_mount.close_fd(fdA));
+  ASSERT_EQ(0, test_mount.close_fd(fdB));
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }
