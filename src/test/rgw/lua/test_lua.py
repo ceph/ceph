@@ -11,6 +11,7 @@ import stat
 import string
 import pytest
 import boto3
+import botocore
 
 from . import(
     configfile,
@@ -620,8 +621,21 @@ end
             assert result[1] == 0
 
 
-@pytest.mark.example_test
-def test_interrupt_request():
+# the lua background thread compiles scripts into bytecode every 5 seconds
+LUA_BYTECODE_CACHE_SYNC_TIME = 10
+
+
+def assert_request_interrupted(conn, bucket_name, key):
+    """ put_object() must be rejected with AccessDenied by a script returning RGW_ABORT_REQUEST """
+    try:
+        conn.put_object(Body="this should be blocked".encode("ascii"), Bucket=bucket_name, Key=key)
+    except botocore.exceptions.ClientError as e:
+        assert e.response['Error']['Code'] == 'AccessDenied'
+    else:
+        pytest.fail("The put_object operation was not blocked by the Lua script.")
+
+
+def interrupt_request(context):
     script = '''
         return RGW_ABORT_REQUEST
     '''
@@ -629,57 +643,42 @@ def test_interrupt_request():
     conn = connection()
     bucket_name = gen_bucket_name()
     conn.create_bucket(Bucket=bucket_name)
-    
-    result = put_script(script, "prerequest")
+
+    result = put_script(script, context)
     assert result[1] == 0
     key = "hello"
-    
-    try:
-        conn.put_object(Body="this should be blocked".encode("ascii"), Bucket=bucket_name, Key=key)
-        pytest.fail("The put_object operation was not blocked by the Lua script.")
-    except Exception as e:
-        pass
 
-    out, err = admin(['script', 'rm', '--context', 'prerequest'])
-    assert err == 0
+    try:
+        # the first request executes the script from source
+        assert_request_interrupted(conn, bucket_name, key)
+
+        # wait for the background thread to compile the script into bytecode
+        time.sleep(LUA_BYTECODE_CACHE_SYNC_TIME)
+
+        # the second request executes the cached bytecode, and must be blocked as well
+        assert_request_interrupted(conn, bucket_name, key)
+    finally:
+        out, err = admin(['script', 'rm', '--context', context])
+        assert err == 0
+
+    # wait for the background thread to evict the removed script from the bytecode cache
+    time.sleep(LUA_BYTECODE_CACHE_SYNC_TIME)
 
     try:
         conn.get_object(Bucket=bucket_name, Key=key)
         pytest.fail("The object was written to the bucket despite the error.")
-    except Exception as e:
+    except botocore.exceptions.ClientError as e:
         assert e.response['Error']['Code'] == 'NoSuchKey'
         log.info("Successfully confirmed that the request was interrupted.")
 
     conn.delete_bucket(Bucket=bucket_name)
+
+
+@pytest.mark.example_test
+def test_interrupt_request():
+    interrupt_request("prerequest")
+
 
 @pytest.mark.example_test
 def test_interrupt_request_postauth():
-    script = '''
-        return RGW_ABORT_REQUEST
-    '''
-
-    conn = connection()
-    bucket_name = gen_bucket_name()
-    conn.create_bucket(Bucket=bucket_name)
-    
-    result = put_script(script, "postauth")
-    assert result[1] == 0
-    key = "hello"
-    
-    try:
-        conn.put_object(Body="this should be blocked".encode("ascii"), Bucket=bucket_name, Key=key)
-        pytest.fail("The put_object operation was not blocked by the Lua script.")
-    except Exception as e:
-        pass
-
-    out, err = admin(['script', 'rm', '--context', 'postauth'])
-    assert err == 0
-
-    try:
-        conn.get_object(Bucket=bucket_name, Key=key)
-        pytest.fail("The object was written to the bucket despite the error.")
-    except Exception as e:
-        assert e.response['Error']['Code'] == 'NoSuchKey'
-        log.info("Successfully confirmed that the request was interrupted.")
-
-    conn.delete_bucket(Bucket=bucket_name)
+    interrupt_request("postauth")
