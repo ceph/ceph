@@ -940,7 +940,7 @@ groups:
         annotations:
           description: "Typically, high CPU may indicate degraded performance. Consider increasing the number of reactor cores"
           summary: "CPU used by {{ $labels.instance }} NVMe-oF Gateway is high on cluster {{ $labels.cluster }}"
-        expr: "label_replace(avg by(instance, cluster) (rate(ceph_nvmeof_reactor_seconds_total{mode=\"busy\"}[1m])),\"instance\",\"$1\",\"instance\",\"(.*):.*\") > 80.00"
+        expr: "100 * label_replace(avg by(instance, cluster) (rate(ceph_nvmeof_reactor_seconds_total{mode=\"busy\"}[1m])),\"instance\",\"$1\",\"instance\",\"(.*):.*\") > 80.00"
         for: "10m"
         labels:
           severity: "warning"
