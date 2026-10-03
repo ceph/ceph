@@ -33,6 +33,7 @@ class NVMeofGwMonitorGroupClient {
       : stub_(MonitorGroup::NewStub(channel)) {}
 
   bool set_group_id(const uint32_t& id);
+  bool apply_config(const config_snapshot& snapshot, config_apply_reply* reply);
 
  private:
   std::unique_ptr<MonitorGroup::Stub> stub_;
