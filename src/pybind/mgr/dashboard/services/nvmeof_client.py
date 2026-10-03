@@ -203,7 +203,7 @@ else:
         field_values = {}
         for field, field_type in zip(target_type._fields,
                                      target_type.__annotations__.values()):
-            if get_origin(field_type) == Annotated:
+            if get_origin(field_type) is Annotated:
                 field_type = get_args(field_type)[0]
             # these conditions are complex since we need to navigate between dicts,
             # empty dicts and objects
