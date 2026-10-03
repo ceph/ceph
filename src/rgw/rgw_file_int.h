@@ -1002,7 +1002,7 @@ namespace rgw {
     int authorize(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver) {
       int ret = driver->get_user_by_access_key(dpp, key.id, null_yield, &user);
       if (ret == 0) {
-	RGWAccessKey* k = user->get_info().get_key(key.id);
+	const RGWAccessKey* k = user->get_info().get_key(key.id);
 	if (!k || (k->key != key.key))
 	  return -EINVAL;
 	if (user->get_info().suspended)
@@ -1310,7 +1310,7 @@ namespace rgw {
 
     uint64_t get_fsid() { return root_fh.state.dev; }
 
-    RGWUserInfo* get_user() { return &user->get_info(); }
+    const RGWUserInfo* get_user() { return &user->get_info(); }
 
     void update_user(const DoutPrefixProvider *dpp) {
       (void) g_rgwlib->get_driver()->get_user_by_access_key(dpp, key.id, null_yield, &user);
