@@ -9,7 +9,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "common/ceph_json.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "rgw_common.h"
 #include "driver/rados/rgw_user.h"
 #include "rgw_acl_swift.h"

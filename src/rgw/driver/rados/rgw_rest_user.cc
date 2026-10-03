@@ -9,7 +9,7 @@
 #include "rgw_rest_user.h"
 #include "rgw_sal.h"
 
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/ceph_assert.h"
 
 #include "services/svc_zone.h"
@@ -266,9 +266,9 @@ void RGWOp_User_Create::execute(optional_yield y)
   }
 
   if (!placement_tags_str.empty()) {
-    list<string> placement_tags_list;
-    get_str_list(placement_tags_str, ",", placement_tags_list);
-    op_state.set_placement_tags(placement_tags_list);
+    op_state.set_placement_tags(
+      ceph::util::collect_as<list<string>>(
+        ceph::split(placement_tags_str, ',')));
   }
 
   if (!s->penv.site->is_meta_master()) {
@@ -424,9 +424,9 @@ void RGWOp_User_Modify::execute(optional_yield y)
   }
 
   if (!placement_tags_str.empty()) {
-    list<string> placement_tags_list;
-    get_str_list(placement_tags_str, ",", placement_tags_list);
-    op_state.set_placement_tags(placement_tags_list);
+    op_state.set_placement_tags(
+      ceph::util::collect_as<list<string>>(
+        ceph::split(placement_tags_str, ',')));
   }
   
   if (!s->penv.site->is_meta_master()) {
@@ -1185,4 +1185,3 @@ RGWOp *RGWHandler_User::op_delete()
 
   return new RGWOp_User_Remove;
 }
-

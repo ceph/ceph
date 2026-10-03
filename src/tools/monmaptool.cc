@@ -22,7 +22,7 @@
 #include "auth/Crypto.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "mon/MonMap.h"
 #include "mon/mon_types.h" // for ceph::features::mon::*
 
@@ -335,10 +335,9 @@ int main(int argc, const char **argv)
       auth_service_cipher = c;
       modified_ciphers |= SET_SERVICE_CIPHER;
     } else if (ceph_argparse_witharg(args, i, &val, "--auth-allowed-ciphers", (char*)NULL)) {
-      std::vector<std::string> v;
+      const auto v = ceph::split_strings(val, ", ");
       std::vector<int> ciphers;
-      get_str_vec(val, ", ", v);
-      for (auto& cipher : v) {
+      for (const auto& cipher : v) {
         int c = CryptoManager::get_key_type(cipher);
         if (c < 0) {
           cerr << me << ": invalid cipher: " << val << std::endl;
@@ -437,8 +436,8 @@ int main(int argc, const char **argv)
 
   if (filter) {
     // apply initial members
-    list<string> initial_members;
-    get_str_list(g_conf()->mon_initial_members, initial_members);
+    auto initial_members = ceph::util::collect_as<list<string>>(
+      ceph::split(g_conf()->mon_initial_members));
     if (!initial_members.empty()) {
       cout << "initial_members " << initial_members << ", filtering seed monmap" << std::endl;
       set<entity_addrvec_t> removed;
