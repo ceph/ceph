@@ -966,8 +966,11 @@ temporarily freezing their states:
 
 .. prompt:: bash
 
-   ceph osd set noup      # prevent OSDs from getting marked up
-   ceph osd set nodown    # prevent OSDs from getting marked down
+   ceph osd set noup nodown
+
+``noup`` prevents OSDs from getting marked ``up``, and ``nodown`` prevents OSDs
+from getting marked ``down``. Naming both flags in a single command applies them
+together in one OSD map update.
 
 These flags are recorded in the osdmap:
 
@@ -977,14 +980,13 @@ These flags are recorded in the osdmap:
 
 ::
 
-   flags no-up,no-down
+   flags noup,nodown
 
 You can clear these flags with:
 
 .. prompt:: bash
 
-   ceph osd unset noup
-   ceph osd unset nodown
+   ceph osd unset noup nodown
 
 Two other flags are available, ``noin`` and ``noout``, which prevent booting
 OSDs from being marked ``in`` (allocated data) or protect OSDs from eventually
