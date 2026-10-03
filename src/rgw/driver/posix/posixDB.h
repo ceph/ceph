@@ -27,30 +27,25 @@
 
 namespace rgw { namespace store {
 
-class POSIXUserDB;
-class POSIXAccountDB;
+class POSIXDB;
 
-struct POSIXUserDBOpUserInfo : DBOpUserInfo {};
+struct POSIXDBOpUserInfo : DBOpUserInfo {};
 
-struct POSIXUserDBOpInfo : DBOpInfo {};
+struct POSIXDBOpInfo : DBOpInfo {};
 
-struct POSIXUserDBOpUserPrepareInfo : DBOpUserPrepareInfo {};
+struct POSIXDBOpUserPrepareInfo : DBOpUserPrepareInfo {};
 
-struct POSIXUserDBOpPrepareInfo : DBOpPrepareInfo {};
+struct POSIXDBOpPrepareInfo : DBOpPrepareInfo {};
 
-struct POSIXUserDBOpPrepareParams : DBOpPrepareParams {};
+struct POSIXDBOpPrepareParams : DBOpPrepareParams {};
 
-struct POSIXAccountDBOpAccountInfo : DBOpAccountInfo {};
+struct POSIXDBOpAccountInfo : DBOpAccountInfo {};
 
-struct POSIXAccountDBOpInfo : DBOpInfo {};
+struct POSIXDBOpAccountPrepareParams : DBOpPrepareParams {};
 
-struct POSIXAccountDBOpPrepareInfo : DBOpPrepareInfo {};
+struct POSIXDBOps : DBOps {};
 
-struct POSIXAccountDBOpPrepareParams : DBOpPrepareParams {};
-
-struct POSIXAccountDBOps : DBOps {};
-
-class POSIXAccountDBOp : public DBOp {
+class POSIXDBOp : public DBOp {
   private:
     static constexpr std::string_view CreateAccountTableQ =
       /* Corresponds to RGWAccountInfo
@@ -76,22 +71,6 @@ class POSIXAccountDBOp : public DBOp {
       MaxAccessKeys INTEGER ,	\
       PRIMARY KEY (AccountID) \n);";
 
-  public:
-    POSIXAccountDBOp() : DBOp() {}
-    virtual ~POSIXAccountDBOp() {}
-    std::mutex mtx; // to protect prepared stmt
-};
-
-class InsertPOSIXAccountOp : public SQLInsertAccount {};
-
-class RemovePOSIXAccountOp: public SQLRemoveAccount {};
-
-class GetPOSIXAccountOp: public SQLGetAccount {};
-
-struct POSIXUserDBOps : DBOps {};
-
-class POSIXUserDBOp : public DBOp {
-  private:
     static constexpr std::string_view CreateUserTableQ =
       /* Corresponds to rgw::sal::User
        *
@@ -139,16 +118,22 @@ class POSIXUserDBOp : public DBOp {
       PRIMARY KEY (UserID) \n);";
 
   public:
-    POSIXUserDBOp() : DBOp() {}
-    virtual ~POSIXUserDBOp() {}
+    POSIXDBOp() : DBOp() {}
+    virtual ~POSIXDBOp() {}
     std::mutex mtx; // to protect prepared stmt
 };
+
+class InsertPOSIXAccountOp : public SQLInsertAccount {};
+
+class RemovePOSIXAccountOp: public SQLRemoveAccount {};
+
+class GetPOSIXAccountOp: public SQLGetAccount {};
 
 class InsertPOSIXUserOp : public SQLInsertUser {};
 
 class RemovePOSIXUserOp: public SQLRemoveUser {};
 
-class POSIXUserDB : public SQLiteDB {
+class POSIXDB : public SQLiteDB {
   private:
     const std::string db_name;
     const std::string lc_head_table;
@@ -166,14 +151,13 @@ class POSIXUserDB : public SQLiteDB {
   public:
     struct DBOps dbops;
 
-    POSIXUserDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
+    POSIXDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
 		db_name(db_name),
 		lc_head_table(db_name+"_lc_head_table"),
 		lc_entry_table(db_name+"_lc_entry_table"),
 		cct(_cct),
-		dp(_cct, ceph_subsys_rgw, "rgw POSIXUserDBStore backend: ")
+		dp(_cct, ceph_subsys_rgw, "rgw POSIXDBStore backend: ")
                 { DB::set_context(cct); }
-    /* POSIXUserDB() {}*/
 
     int Initialize(std::string logfile, int loglevel);
     int ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params);
@@ -187,53 +171,6 @@ class POSIXUserDB : public SQLiteDB {
     virtual int createLCTables(const DoutPrefixProvider *dpp) override { return SQLiteDB::createLCTables(dpp); }
     const std::string getLCHeadTable() { return lc_head_table; }
     const std::string getLCEntryTable() { return lc_entry_table; }
-
-    virtual int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
-    virtual int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
-    virtual int ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
-};
-
-class POSIXAccountDB : public SQLiteDB {
-  private:
-    const std::string db_name;
-    const std::string account_table;
-    const std::string user_table;
-    const std::string bucket_table;
-    const std::string quota_table;
-    const std::string lc_head_table;
-    const std::string lc_entry_table;
-
-    rgw::sal::Driver* driver;
-
-  protected:
-    void *db;
-    CephContext *cct;
-    const DoutPrefix dp;
-    // Below mutex is to protect objectmap and other shared
-    // objects if any.
-    std::mutex mtx;
-
-  public:
-    struct DBOps dbops;
-
-    POSIXAccountDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
-		db_name(db_name),
-		account_table(db_name+"_account_table"),
-		user_table(db_name+"_user_table"),
-		cct(_cct),
-		dp(_cct, ceph_subsys_rgw, "rgw POSIXAccountDBStore backend: ")
-                { DB::set_context(cct); }
-
-    int Initialize(std::string logfile, int loglevel);
-    int ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params);
-    int Destroy(const DoutPrefixProvider *dpp);
-
-    CephContext* ctx() { return this->cct; }
-
-    virtual int InitPrepareParams(const DoutPrefixProvider *dpp,
-                                  DBOpPrepareParams &p_params,
-                                  DBOpParams* params) override { return 0; }
-    virtual int createLCTables(const DoutPrefixProvider *dpp) override { return 0; }
 
     virtual int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
     virtual int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
