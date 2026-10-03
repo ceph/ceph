@@ -63,6 +63,13 @@ enum class select_labeled_t {
   unlabeled
 };
 
+/// Used to specify how histogram counters relate to the dump
+enum class select_histograms_t {
+  exclude,  // scalar counters only
+  only,     // histogram counters only
+  include   // both
+};
+
 /* Class for constructing a PerfCounters object.
  *
  * This class performs some validation that the parameters we have supplied are
@@ -119,6 +126,18 @@ public:
     const char *description=nullptr,
     const char* nick = nullptr,
     int prio=0, int unit=UNIT_NONE);
+  void add_u64_counter_histogram(
+    int key, const char* name,
+    PerfHistogramCommon::axis_config_d x_axis_config,
+    const char *description=nullptr,
+    const char* nick = nullptr,
+    int prio=0, int unit=UNIT_NONE);
+  void add_time_histogram(
+    int key, const char* name,
+    PerfHistogramCommon::axis_config_d x_axis_config,
+    const char *description=nullptr,
+    const char* nick = nullptr,
+    int prio=0);
 
   void set_prio_default(int prio_)
   {
@@ -131,7 +150,7 @@ private:
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
   void add_impl(int idx, const char *name,
                 const char *description, const char *nick, int prio, int ty, int unit=UNIT_NONE,
-                std::unique_ptr<PerfHistogram<>> histogram = nullptr);
+                std::unique_ptr<PerfHistogramCommon> histogram = nullptr);
 
   PerfCounters *m_perf_counters;
 
@@ -185,7 +204,7 @@ public:
       avgcount2 = avgcount.load();
 
       if (other.histogram) {
-        histogram.reset(new PerfHistogram<>(*other.histogram));
+        histogram = other.histogram->clone();
       }
     }
 
@@ -199,7 +218,7 @@ public:
     std::atomic<uint64_t> max_u64_inc = { 0 };
     std::atomic<uint64_t> avgcount = { 0 };
     std::atomic<uint64_t> avgcount2 = { 0 };
-    std::unique_ptr<PerfHistogram<>> histogram;
+    std::unique_ptr<PerfHistogramCommon> histogram;
 
     void reset()
     {
@@ -269,6 +288,9 @@ public:
   utime_t tget(int idx) const;
 
   void hinc(int idx, int64_t x, int64_t y);
+  void hinc(int idx, int64_t x);
+  void htinc(int idx, ceph::timespan x);
+  void htinc(int idx, utime_t x);
 
   void reset();
   void dump_formatted(
@@ -276,13 +298,15 @@ public:
       bool schema,
       select_labeled_t dump_labeled,
       const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, false, dump_labeled, counter);
+    dump_formatted_generic(f, schema, select_histograms_t::exclude,
+                           dump_labeled, counter);
   }
   void dump_formatted_histograms(
       ceph::Formatter *f,
       bool schema,
       const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, true, select_labeled_t::unlabeled, counter);
+    dump_formatted_generic(f, schema, select_histograms_t::only,
+                           select_labeled_t::unlabeled, counter);
   }
   std::pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
@@ -307,11 +331,14 @@ private:
 	     int lower_bound, int upper_bound);
   PerfCounters(const PerfCounters &rhs);
   PerfCounters& operator=(const PerfCounters &rhs);
-  void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
+  void dump_formatted_generic(ceph::Formatter *f, bool schema,
+                              select_histograms_t histograms,
                               select_labeled_t dump_labeled,
                               const std::string &counter = "") const;
 
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
+
+  perf_counter_data_any_d* histogram_get(int idx, perfcounter_type_d type, int dims);
 
   CephContext *m_cct;
   int m_lower_bound;
@@ -365,10 +392,11 @@ public:
       ceph::Formatter *f,
       bool schema,
       select_labeled_t dump_labeled,
+      select_histograms_t histograms,
       const std::string &logger = "",
       const std::string &counter = "") const {
     dump_formatted_generic(
-	f, schema, false, dump_labeled, logger, counter);
+	f, schema, histograms, dump_labeled, logger, counter);
   }
 
   void dump_formatted_histograms(
@@ -377,7 +405,8 @@ public:
       const std::string &logger = "",
       const std::string &counter = "") const {
     dump_formatted_generic(
-	f, schema, true, select_labeled_t::unlabeled, logger, counter);
+	f, schema, select_histograms_t::only, select_labeled_t::unlabeled,
+	logger, counter);
   }
 
   // A reference to a perf_counter_data_any_d, with an accompanying
@@ -398,7 +427,7 @@ private:
   void dump_formatted_generic(
       Formatter *f,
       bool schema,
-      bool histograms,
+      select_histograms_t histograms,
       select_labeled_t dump_labeled,
       const std::string &logger,
       const std::string &counter) const;
