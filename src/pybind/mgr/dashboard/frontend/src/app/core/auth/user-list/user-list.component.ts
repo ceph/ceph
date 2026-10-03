@@ -58,7 +58,8 @@ export class UserListComponent implements OnInit {
     private settingsService: SettingsService,
     public actionLabels: ActionLabelsI18n
   ) {
-    this.permission = this.authStorageService.getPermissions().user;
+    const permissions = this.authStorageService.getPermissions();
+    this.permission = permissions.user;
     const addAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
@@ -121,10 +122,9 @@ export class UserListComponent implements OnInit {
         cellTemplate: this.durationTpl
       }
     ];
-    const settings: string[] = ['USER_PWD_EXPIRATION_WARNING_1', 'USER_PWD_EXPIRATION_WARNING_2'];
-    this.settingsService.getValues(settings).subscribe((data) => {
-      this.expirationWarningAlert = data['USER_PWD_EXPIRATION_WARNING_1'];
-      this.expirationDangerAlert = data['USER_PWD_EXPIRATION_WARNING_2'];
+    this.settingsService.getStandardSettings().subscribe((data) => {
+      this.expirationWarningAlert = data['user_pwd_expiration_warning_1'];
+      this.expirationDangerAlert = data['user_pwd_expiration_warning_2'];
     });
   }
 

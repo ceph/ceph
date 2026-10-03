@@ -8,6 +8,7 @@ import { OsdService } from '~/app/shared/api/osd.service';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 
 @Component({
@@ -33,7 +34,8 @@ export class CreateClusterReviewComponent implements OnInit {
     public cephServiceService: CephServiceService,
     private dimlessBinary: DimlessBinaryPipe,
     public hostService: HostService,
-    private osdService: OsdService
+    private osdService: OsdService,
+    private authStorageService: AuthStorageService
   ) {}
 
   ngOnInit() {
@@ -72,7 +74,7 @@ export class CreateClusterReviewComponent implements OnInit {
       dbDeviceCapacity = this.osdService.osdDevices['db']['capacity'];
     }
 
-    if (this.isSimpleDeployment) {
+    if (this.isSimpleDeployment && this.authStorageService.getPermissions().osd?.read) {
       this.osdService.getDeploymentOptions().subscribe((optionsObj) => {
         if (!_.isEmpty(optionsObj)) {
           Object.keys(optionsObj.options).forEach((option) => {
