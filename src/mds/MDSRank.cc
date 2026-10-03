@@ -4185,6 +4185,8 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_log_max_events",
     "mds_log_max_segments",
     "mds_log_pause",
+    "mds_log_safe_batch_max",
+    "mds_log_safe_batch_max_us",
     "mds_log_skip_corrupt_events",
     "mds_log_skip_unbounded_events",
     "mds_log_trim_decay_rate",

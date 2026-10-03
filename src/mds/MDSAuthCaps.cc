@@ -519,6 +519,17 @@ string MDSAuthCaps::to_string()
   return str;
 }
 
+bool MDSAuthCaps::path_restricted() const
+{
+  for (const auto& grant : grants) {
+    if (!grant.match.path.empty()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 bool MDSAuthCaps::allow_all() const
 {
   for (const auto& grant : grants) {
