@@ -953,6 +953,8 @@ void CDir::steal_dentry(CDentry *dn)
     num_dirty++;
   }
 
+  _get_fnode()->frag_bytes += dn->counted_size;
+
   dn->dir = this;
 }
 
@@ -1036,7 +1038,30 @@ void CDir::init_fragment_pins()
 bool CDir::should_split() const {
   uint64_t split_size = mdcache->mds->balancer->get_bal_split_size();
   uint64_t items = get_frag_size() + get_num_snap_items();
-  return split_size > 0 && items > split_size;
+  if (split_size > 0 && items > split_size) {
+    return true;
+  }
+
+  uint64_t split_bytes = mdcache->mds->balancer->get_bal_split_bytes();
+  int64_t bytes = get_frag_bytes();
+  return split_bytes > 0 && bytes >= 0 && static_cast<uint64_t>(bytes) > split_bytes;
+}
+
+int64_t CDir::get_frag_bytes() const
+{
+  if (is_frag_bytes_untrusted()) {
+    return -1;
+  }
+  return get_projected_fnode()->frag_bytes;
+}
+
+int64_t CDir::get_dentries_counted_bytes() const
+{
+  int64_t total = 0;
+  for (const auto& p : items) {
+    total += p.second->get_counted_size();
+  }
+  return total;
 }
 
 void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, bool replay)
@@ -1064,6 +1089,7 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
   dout(10) << " rstatdiff " << rstatdiff << " fragstatdiff " << fragstatdiff << dendl;
 
   map<string_snap_t, MDSContext::vec > dentry_waiters;
+  const bool bytes_known = fnode->frag_bytes >= 0 && is_complete();
   prepare_old_fragment(dentry_waiters, replay);
 
   // create subfrag dirs
@@ -1123,6 +1149,12 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
     CDir *f = subfrags[i];
     auto _fnode = f->_get_fnode();
     _fnode->version = f->projected_version = get_version();
+    if (!bytes_known || is_frag_bytes_untrusted()) {
+      _fnode->frag_bytes = -1;
+    }
+    if (is_frag_bytes_untrusted()) {
+      f->mark_frag_bytes_untrusted();
+    }
     _fnode->rstat.version = rstat_version;
     _fnode->accounted_rstat = _fnode->rstat;
     _fnode->fragstat.version = dirstat_version;
@@ -1168,9 +1200,17 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
 
   map<string_snap_t, MDSContext::vec > dentry_waiters;
 
+  bool bytes_known = true;
   for (const auto& dir : subs) {
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
     ceph_assert(!dir->is_auth() || dir->is_complete() || replay);
+    if (dir->get_fnode()->frag_bytes < 0 || !dir->is_complete()) {
+      bytes_known = false;
+    }
+    if (dir->is_frag_bytes_untrusted()) {
+      bytes_known = false;
+      mark_frag_bytes_untrusted();
+    }
 
     if (dir->get_fnode()->accounted_rstat.version == rstat_version)
       rstatdiff.add_delta(dir->get_fnode()->accounted_rstat, dir->get_fnode()->rstat);
@@ -1221,6 +1261,11 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
   _fnode->fragstat.version = dirstat_version;
   _fnode->accounted_fragstat = _fnode->fragstat;
   _fnode->accounted_fragstat.add(fragstatdiff);
+
+  // since the subfrag was incomplete or its total was unknown
+  if (!bytes_known) {
+    _fnode->frag_bytes = -1;
+  }
 
   init_fragment_pins();
 }
@@ -1405,6 +1450,10 @@ CDir::fnode_ptr CDir::project_fnode(const MutationRef& mut)
     return std::const_pointer_cast<fnode_t>(projected_fnode.back());
 
   auto pf = allocate_fnode(*get_projected_fnode());
+  // an untrusted total is journaled as unknown
+  if (frag_bytes_untrusted) {
+    pf->frag_bytes = -1;
+  }
 
   if (scrub_infop && scrub_infop->last_scrub_dirty) {
     pf->localized_scrub_stamp = scrub_infop->last_local.time;
@@ -1433,6 +1482,11 @@ void CDir::pop_and_dirty_projected_fnode(LogSegmentRef const& ls, const Mutation
     mut->remove_projected_node(this);
 
   reset_fnode(std::move(pf));
+  if (frag_bytes_untrusted && fnode->frag_bytes >= 0) {
+    auto _fnode = allocate_fnode(*get_fnode());
+    _fnode->frag_bytes = -1;
+    reset_fnode(std::move(_fnode));
+  }
   _mark_dirty(ls);
 }
 
@@ -1917,6 +1971,7 @@ CDentry *CDir::_load_dentry(
     } else {
       // (remote) link
       dn = add_remote_dentry(dname, ino, d_type, std::move(alternate_name), first, last);
+      dn->counted_size = bl.length();
 
       // link to inode?
       CInode *in = mdcache->get_inode(ino);   // we may or may not have it.
@@ -2017,6 +2072,7 @@ CDentry *CDir::_load_dentry(
 	  mdcache->insert_taken_inos(in->ino());
           dn = add_primary_dentry(dname, in, std::move(alternate_name), first, last); // link
         }
+        dn->counted_size = bl.length();
         dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
 
         if (in->get_inode()->is_dirty_rstat())
@@ -2029,6 +2085,7 @@ CDentry *CDir::_load_dentry(
       } else if (g_conf().get_val<bool>("mds_hack_allow_loading_invalid_metadata")) {
 	dout(20) << "hack: adding duplicate dentry for " << *in << dendl;
 	dn = add_primary_dentry(dname, in, std::move(alternate_name), first, last);
+	dn->counted_size = bl.length();
       } else {
         dout(0) << "_fetched  badness: got (but i already had) " << *in
                 << " mode " << in->get_inode()->mode
@@ -2577,6 +2634,12 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
       ENCODE_FINISH(bl);
     }
 
+    if (item.expected_len && item.expected_len != bl.length()) {
+      derr << __func__ << " " << item.key << " computed length "
+           << item.expected_len << " but encoded " << bl.length() << dendl;
+      ceph_abort_msg("dentry value length does not match its encoding");
+    }
+
     unsigned size = item.key.length() + bl.length() + 2 * sizeof(__u32);
     if (write_size > 0 && write_size + size > max_write_size) {
       if (!_set.empty() || !_rm.empty()) {
@@ -2670,6 +2733,10 @@ void CDir::_omap_commit(int op_prio)
       item.key = std::move(key);
       _parse_dentry(dn, item, snaps, dfts);
       item.dft_len = dfts.length() - off;
+
+      if (mdcache->get_verify_frag_bytes()) {
+        item.expected_len = dentry_value_length(dn, false);
+      }
     }
   };
 
@@ -2752,6 +2819,63 @@ void CDir::_parse_dentry(CDentry *dn, dentry_commit_item &item,
   } else {
     ceph_assert(!linkage.is_null());
   }
+}
+
+uint64_t CDir::dentry_value_length(CDentry *dn, bool projected)
+{
+  CDentry::linkage_t *linkage = projected ?
+    dn->get_projected_linkage() : dn->get_linkage();
+  if (linkage->is_null())
+    return 0; // the commit removes the key
+
+  using ceph::encode;
+  // struct_v, struct_compat and struct_len, as ENCODE_START writes them
+  constexpr uint64_t struct_header_len = sizeof(__u8) + sizeof(__u8) + sizeof(__u32);
+  uint64_t len;
+  if (linkage->is_remote()) {
+    // small, so encode it
+    bufferlist bl;
+    inodeno_t ino = linkage->get_remote_ino();
+    encode(dn->first, bl);
+    CDentry::encode_remote(ino, linkage->get_remote_d_type(),
+                           dn->get_alternate_name(), bl);
+    len = bl.length();
+  } else {
+    // this is following _omap_commit_ops() and _encode_primary_inode_base().
+    // the inode, dirfragtree and snaprealm are encoded to learn their length while
+    // the xattrs and old_inodes, which can be large, are not encoded.
+    CInode *in = linkage->get_inode();
+    ceph_assert(in);
+    const uint64_t features = mdcache->mds->mdsmap->get_up_features();
+    const auto& pi = projected ? in->get_projected_inode() : in->inode;
+    const auto& px = projected ? in->get_projected_xattrs() : in->xattrs;
+    const sr_t *srnode = projected ? in->get_projected_srnode() :
+      (in->snaprealm ? &in->snaprealm->srnode : nullptr);
+
+    bufferlist bl;
+    encode(*pi, bl, features);
+    encode(in->dirfragtree, bl);
+    if (srnode) {
+      encode(*srnode, bl);
+    }
+
+    len = sizeof(uint64_t)                                  // first
+      + 1                                                   // 'i'
+      + struct_header_len                                   // ENCODE_START(2, 1)
+      + sizeof(__u32) + dn->get_alternate_name().length()
+      + struct_header_len                                   // ENCODE_START(6, 4)
+      + bl.length()                                         // inode, dirfragtree, snaprealm
+      + ((pi->is_symlink() && !in->symlink.empty()) ?
+         sizeof(__u32) + in->symlink.length() : 0)
+      + InodeStoreBase::get_xattrs_len(px.get())
+      + sizeof(__u32)                                       // snaprealm blob length
+      + in->get_old_inodes_len(features)
+      + sizeof(uint64_t)                                    // oldest_snap
+      + sizeof(damage_flags_t);
+  }
+  dout(20) << __func__ << " " << len << " (projected=" << projected << ") "
+           << *dn << dendl;
+  return len;
 }
 
 void CDir::_commit(version_t want, int op_prio)
@@ -3706,6 +3830,10 @@ void CDir::dump(Formatter *f, int flags) const
   if (flags & DUMP_REP) {
     f->dump_bool("is_rep", is_rep());
   }
+  if (flags & DUMP_FRAG_BYTES) {
+    f->dump_int("frag_bytes", get_projected_fnode()->frag_bytes);
+    f->dump_bool("frag_bytes_untrusted", is_frag_bytes_untrusted());
+  }
   if (flags & DUMP_DIR_AUTH) {
     if (get_dir_auth() != CDIR_AUTH_DEFAULT) {
       if (get_dir_auth().second == CDIR_AUTH_UNKNOWN) {
@@ -3837,11 +3965,20 @@ bool CDir::scrub_local()
 {
   ceph_assert(is_complete());
   bool good = check_rstats(true);
+  const bool bytes_good = inode->is_stray() ||
+                          get_frag_bytes() == get_dentries_counted_bytes();
+  if (!bytes_good) {
+    dout(10) << __func__ << " frag_bytes " << get_frag_bytes() << ", counted "
+             << get_dentries_counted_bytes() << dendl;
+  }
   if (!good && scrub_infop->header->get_repair()) {
     mdcache->repair_dirfrag_stats(this);
     scrub_infop->header->set_repaired();
     good = true;
     mdcache->mds->damage_table.remove_dentry_damage_entry(this);
+  }
+  if (!bytes_good && scrub_infop->header->get_repair()) {
+    mdcache->repair_dirfrag_bytes(this);
   }
   return good;
 }
@@ -3875,6 +4012,13 @@ bool CDir::should_split_fast() const
   auto split_size = balancer->get_bal_split_size();
   auto fragment_fast_factor = balancer->get_bal_fragment_fast_factor();
   int64_t fast_limit = split_size * fragment_fast_factor;
+
+  auto split_bytes = balancer->get_bal_split_bytes();
+  int64_t bytes = get_frag_bytes();
+  if (split_bytes > 0 && bytes >= 0 &&
+      static_cast<double>(bytes) > split_bytes * fragment_fast_factor) {
+    return true;
+  }
 
   // Fast path: the sum of accounted size and null dentries does not
   // exceed threshold: we definitely are not over it.
@@ -3911,6 +4055,13 @@ bool CDir::should_merge() const
   if (inode->is_ephemeral_dist()) {
     unsigned min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
     if (min_frag_bits > 0 && get_frag().bits() < min_frag_bits + 1)
+      return false;
+  }
+
+  if (mdcache->mds->balancer->get_bal_split_bytes() > 0) {
+    int64_t bytes = get_frag_bytes();
+    if (bytes < 0 ||
+        static_cast<uint64_t>(bytes) > mdcache->mds->balancer->get_bal_merge_bytes())
       return false;
   }
 

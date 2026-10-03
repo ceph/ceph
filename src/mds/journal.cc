@@ -1235,6 +1235,36 @@ std::list<EMetaBlob> EMetaBlob::generate_test_instances()
   return ls;
 }
 
+// A repair_dirfrag_bytes event sets frag_bytes to the sum of the counted sizes
+// of the dirfrag's dentries on the active MDS. Replay rebuilds a counted size
+// from the dentry's journaled state, which gives the same value, except for a
+// snapshot dentry that a commit on the active MDS trimmed or removed as a
+// stale key without journaling it. This MDS can still cache such a dentry and
+// write it back later, so a dirfrag caching snapshot dentries can't take the
+// total.
+void EMetaBlob::check_frag_bytes_repair(MDSRank *mds) const
+{
+  for (const auto& df : lump_order) {
+    const dirlump& lump = lump_map.at(df);
+    if (!lump.is_dirty()) {
+      continue;  // the path to the repaired dirfrag
+    }
+    CDir *dir = mds->mdcache->get_dirfrag(df);
+    if (!dir || dir->get_fnode()->frag_bytes == lump.fnode->frag_bytes) {
+      continue;  // nothing cached or the repair kept the same total
+    }
+    for (const auto& p : *dir) {
+      const CDentry *dn = p.second;
+      if (dn->last != CEPH_NOSNAP) {
+        dout(10) << "EMetaBlob.replay " << *dn << " may be written back, "
+                 << "frag_bytes unknown for " << *dir << dendl;
+        dir->mark_frag_bytes_untrusted();
+        break;
+      }
+    }
+  }
+}
+
 void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPeerUpdate *peerup)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
@@ -1314,6 +1344,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
       dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;  
     }
     dir->reset_fnode(std::move(lump.fnode));
+    if (dir->is_frag_bytes_untrusted() && dir->get_fnode()->frag_bytes >= 0) {
+      // later events still carry the total that check_frag_bytes_repair()
+      // could not trust
+      auto _fnode = CDir::allocate_fnode(*dir->get_fnode());
+      _fnode->frag_bytes = -1;
+      dir->reset_fnode(std::move(_fnode));
+    }
     dir->update_projected_version();
 
     if (lump.is_importing()) {
@@ -1434,6 +1471,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
 	in->state_set(CInode::STATE_AUTH);
       else
 	in->state_clear(CInode::STATE_AUTH);
+      // this event's fnode counts the dentry at its replayed length
+      dn->set_counted_size(dir->dentry_value_length(dn, false));
       ceph_assert(g_conf()->mds_kill_journal_replay_at != 2);
 
       {
@@ -1482,6 +1521,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
       ceph_assert(dn->get_alternate_name() == rb.alternate_name);
       if (lump.is_importing())
 	dn->mark_auth();
+      dn->set_counted_size(dir->dentry_value_length(dn, false));
 
       if (!(++count % mds->heartbeat_reset_grace()))
         mds->heartbeat_reset();
@@ -1517,6 +1557,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
       olddir = dir;
       if (lump.is_importing())
 	dn->mark_auth();
+      // a renamed directory can still be linked here; its key is removed
+      dn->set_counted_size(0);
 
       // Make null dentries the first things we trim
       dout(10) << "EMetaBlob.replay pushing to bottom of lru " << *dn << dendl;
@@ -2339,6 +2381,9 @@ void EUpdate::replay(MDSRank *mds)
 {
   auto&& segment = get_segment();
   dout(10) << "EUpdate::replay" << dendl;
+  if (type == "repair_dirfrag_bytes") {
+    metablob.check_frag_bytes_repair(mds);
+  }
   metablob.replay(mds, segment, EVENT_UPDATE);
   
   if (had_peers) {

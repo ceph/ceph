@@ -4140,6 +4140,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_bal_replicate_threshold",
     "mds_bal_sample_interval",
     "mds_bal_split_bits",
+    "mds_bal_split_bytes",
     "mds_bal_split_rd",
     "mds_bal_split_size",
     "mds_bal_split_wr",
@@ -4210,7 +4211,8 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_session_max_caps_throttle_ratio",
     "mds_session_metadata_threshold",
     "mds_symlink_recovery",
-    "mds_use_global_snaprealm_seq_for_subvol"
+    "mds_use_global_snaprealm_seq_for_subvol",
+    "mds_verify_frag_bytes"
   });
   static_assert(std::is_sorted(as_sv.begin(), as_sv.end()),
                 "keys are not sorted!");

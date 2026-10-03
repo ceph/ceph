@@ -1642,6 +1642,17 @@ void InodeStoreBase::encode_xattrs(bufferlist &bl) const {
     encode((__u32)0, bl);
 }
 
+uint64_t InodeStoreBase::get_xattrs_len(const mempool_xattr_map *xattrs) {
+  // this should match how ceph encodes string + the length
+  uint64_t len = sizeof(__u32);
+  if (xattrs) {
+    for (const auto& [name, value] : *xattrs) {
+      len += sizeof(__u32) + name.length() + sizeof(__u32) + value.length();
+    }
+  }
+  return len;
+}
+
 void InodeStoreBase::decode_xattrs(bufferlist::const_iterator &p) {
   using ceph::decode;
   mempool_xattr_map tmp;
@@ -1659,6 +1670,29 @@ void InodeStoreBase::encode_old_inodes(bufferlist &bl, uint64_t features) const 
     encode(*old_inodes, bl, features);
   else
     encode((__u32)0, bl);
+}
+
+uint64_t InodeStoreBase::get_old_inode_entry_len(snapid_t last,
+                                                 const mempool_old_inode& old,
+                                                 uint64_t features)
+{
+  using ceph::encode;
+  bufferlist bl;
+  encode(last, bl);
+  encode(old, bl, features);
+  return bl.length();
+}
+
+uint64_t InodeStoreBase::get_old_inodes_len(uint64_t features) {
+  if (!old_inodes || old_inodes->empty())
+    return sizeof(__u32);
+  if (old_inodes_len < 0 || old_inodes_len_features != features) {
+    bufferlist bl;
+    encode_old_inodes(bl, features);
+    old_inodes_len = bl.length();
+    old_inodes_len_features = features;
+  }
+  return old_inodes_len;
 }
 
 void InodeStoreBase::decode_old_inodes(bufferlist::const_iterator &p) {
@@ -3171,6 +3205,9 @@ const CInode::mempool_old_inode& CInode::cow_old_inode(snapid_t follows, bool co
   const auto& pi = cow_head ? get_projected_inode() : get_previous_projected_inode();
   const auto& px = cow_head ? get_projected_xattrs() : get_previous_projected_xattrs();
 
+  // read before reset_old_inodes() below marks the length unknown
+  const int64_t prev_len = old_inodes_len;
+
   auto _old_inodes = allocate_old_inode_map();
   if (old_inodes)
     *_old_inodes = *old_inodes;
@@ -3199,6 +3236,16 @@ const CInode::mempool_old_inode& CInode::cow_old_inode(snapid_t follows, bool co
 	   << *this << dendl;
 
   reset_old_inodes(std::move(_old_inodes));
+
+  const uint64_t features = mdcache->mds->mdsmap->get_up_features();
+  if (prev_len >= 0 &&
+       // this is a minor optimization to execute this fast path i.e. when a dir is newly created
+       // so old_inodes_len_features is 0 while the mdsmap has some feature bits
+      (prev_len == static_cast<int64_t>(sizeof(__u32)) ||
+       old_inodes_len_features == features)) {
+    old_inodes_len = prev_len + get_old_inode_entry_len(follows, old, features);
+    old_inodes_len_features = features;
+  }
   return old;
 }
 
@@ -3278,10 +3325,22 @@ void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
   if (to_remove.size() == get_old_inodes()->size()) {
     reset_old_inodes(old_inode_map_ptr());
   } else if (!to_remove.empty()) {
+    const uint64_t features = mdcache->mds->mdsmap->get_up_features();
+    const int64_t prev_len = old_inodes_len;
+    const bool known = prev_len >= 0 && old_inodes_len_features == features;
+    int64_t removed = 0;
+    if (known) {
+      for (auto id : to_remove) {
+        removed += get_old_inode_entry_len(id, get_old_inodes()->at(id), features);
+      }
+    }
     auto _old_inodes = allocate_old_inode_map(*get_old_inodes());
     for (auto id : to_remove)
       _old_inodes->erase(id);
     reset_old_inodes(std::move(_old_inodes));
+    if (known && prev_len - removed >= static_cast<int64_t>(sizeof(__u32))) {
+      old_inodes_len = prev_len - removed;
+    }
   }
 }
 
