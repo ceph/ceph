@@ -12415,13 +12415,16 @@ void Server::_readdir_diff(
 	         << start_len << " < " << bytes_left << dendl;
 	bufferlist keep;
 
-	keep.substr_of(dnbl, 0,
-          name == last_name ? rollback_pos : start_len);
+	if (name == last_name) {
+	  keep.substr_of(dnbl, 0, rollback_pos);
+	  numfiles = rollback_num;
+	} else {
+	  keep.substr_of(dnbl, 0, start_len);
+	}
 	dnbl.swap(keep);
 
         last_name.clear();
         rollback_pos = 0;
-        numfiles = rollback_num;
         rollback_num = 0;
 	return false;
       }
@@ -12606,8 +12609,8 @@ bool Server::build_snap_diff(
     // better for the MDS to do the work, if we think the client will stat any of these files.
     if (dnl->is_remote() && !in) {
       in = mdcache->get_inode(dnl->get_remote_ino());
-      dout(20) << __func__ << " remote in: " << *in << " ino " << std::hex << dnl->get_remote_ino() << std::dec << dendl;
       if (in) {
+	dout(20) << __func__ << " remote in: " << *in << dendl;
 	dn->link_remote(dnl, in);
       } else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
 	dout(10) << "skipping bad remote ino on " << *dn << dendl;
@@ -12627,6 +12630,8 @@ bool Server::build_snap_diff(
 	} else {
 	  mds->locker->drop_locks(mdr.get());
 	  mdr->drop_local_auth_pins();
+	  if (waiting)
+	    *waiting = true;
 	  mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
 	}
 	return false;
@@ -12640,7 +12645,7 @@ bool Server::build_snap_diff(
       // hence need to insert the previous entry if any immediately.
       if (before.dn) {
 	if (!insert_deleted(before)) {
-	  break;
+	  return false;
 	}
       }
 
@@ -12657,7 +12662,7 @@ bool Server::build_snap_diff(
       }
       bool r = add_result_cb(dn, in, exists);
       if (!r) {
-	break;
+	return false;
       }
     } else {
       if (snapid_prev >= dn->first && snapid <= dn->last) {
@@ -12669,7 +12674,7 @@ bool Server::build_snap_diff(
         bool locked = false;
         if (snapflush_pending(in)) {
           if (before.valid() && !insert_deleted(before))
-            break;
+            return false;
           if (!rdlock_file_start(in))
             return false;
           locked = true;
@@ -12718,7 +12723,7 @@ bool Server::build_snap_diff(
 
         // Preserve hash/name ordering if a deleted entry is pending.
         if (before.valid() && !insert_deleted(before))
-          break;
+          return false;
 
         if (attrs_known) {
           dout(20) << __func__
@@ -12736,7 +12741,7 @@ bool Server::build_snap_diff(
         }
 
         if (!add_result_cb(dn, in, true))
-          break;
+          return false;
         continue;
       } else if (snapid_prev < dn->first && snapid > dn->last) {
 	dout(20) << __func__ << " skipping inner modification " << dn->get_name() << " "
@@ -12745,7 +12750,7 @@ bool Server::build_snap_diff(
       }
       if (before.valid() && before.dn->get_name() != dn->get_name()) {
         if (!insert_deleted(before)) {
-          break;
+          return false;
         }
         before.reset();
       }
@@ -12761,7 +12766,7 @@ bool Server::build_snap_diff(
 		     << dn->first << "/" << dn->last
 		     << dendl;
 	    if (!insert_deleted(before)) {
-	      break;
+	      return false;
 	    }
 	    before.reset();
 	  } else {
@@ -12810,12 +12815,12 @@ bool Server::build_snap_diff(
 	ceph_assert(snapid >= dn->first && snapid <= dn->last);
       }
       if (!add_result_cb(dn, in, true)) {
-	break;
+	return false;
       }
     }
   }
-  if (before.dn) {
-    insert_deleted(before);
+  if (before.dn && !insert_deleted(before)) {
+    return false;
   }
-  return it == dir->end();
+  return true;
 }
