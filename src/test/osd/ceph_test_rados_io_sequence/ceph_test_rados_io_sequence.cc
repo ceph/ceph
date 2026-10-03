@@ -1636,6 +1636,9 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test() {
           }
         }
       }
+      if (need_wait) {
+        cond.wait(l);
+      }
       need_wait = true;
     }
   }
