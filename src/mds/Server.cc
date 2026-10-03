@@ -5162,6 +5162,19 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   int bytes_left = max_bytes - front_bytes;
   bytes_left -= get_snap_trace(session, realm).length();
 
+  /* The client picks the page size and the page is encoded under mds_lock,
+   * so optionally cap it; 0 keeps the client's request.  The first entry may
+   * always use the client's budget, so a cap cannot produce an empty page. */
+  if (auto cap = g_conf().get_val<uint64_t>("mds_max_readdir_entries");
+      cap > 0 && (max == 0 || max > cap)) {
+    max = cap;
+  }
+  const int first_bytes_left = bytes_left;
+  if (auto cap = g_conf().get_val<uint64_t>("mds_max_readdir_bytes");
+      cap > 0 && bytes_left > 0 && (uint64_t)bytes_left > cap) {
+    bytes_left = (int)cap;
+  }
+
   // build dir contents
   bufferlist dnbl;
   __u32 numfiles = 0;
@@ -5169,6 +5182,9 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
   dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
   auto it = start ? dir->begin() : dir->lower_bound(skip_key);
+  const double yield_budget =
+    g_conf().get_val<double>("mds_readdir_yield_budget");
+  const auto yield_start = ceph::mono_clock::now();
   bool end = (it == dir->end());
   for (; !end && numfiles < max; end = (it == dir->end())) {
     CDentry *dn = it->second;
@@ -5234,8 +5250,9 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     }
     ceph_assert(in);
 
-    if ((int)(dnbl.length() + dn->get_name().length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
-      dout(10) << " ran out of room, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
+    const int room = numfiles ? bytes_left : first_bytes_left;
+    if ((int)(dnbl.length() + dn->get_name().length() + sizeof(__u32) + sizeof(LeaseStat)) > room) {
+      dout(10) << " ran out of room, stopping at " << dnbl.length() << " < " << room << dendl;
       break;
     }
 
@@ -5248,10 +5265,10 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 
     // inode
     dout(12) << "including inode in " << *in << " snap " << snapid << dendl;
-    int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid, bytes_left - (int)dnbl.length());
+    int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid, room - (int)dnbl.length());
     if (r < 0) {
       // chop off dn->name, lease
-      dout(10) << " ran out of room, stopping at " << start_len << " < " << bytes_left << dendl;
+      dout(10) << " ran out of room, stopping at " << start_len << " < " << room << dendl;
       bufferlist keep;
       keep.substr_of(dnbl, 0, start_len);
       dnbl.swap(keep);
@@ -5262,6 +5279,21 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
 
     // touch dn
     mdcache->lru.lru_touch(dn);
+
+    /* Requests arriving meanwhile wait in the dispatch queue, not on
+     * mds_lock.  Once this page has run for the budget and something has
+     * waited that long, end it: the walker gets at least the budget per
+     * page, and everyone else waits at most about that long behind it. */
+    if (yield_budget > 0 && (numfiles % 16) == 0 &&
+        ceph::mono_clock::now() - yield_start >=
+          ceph::make_timespan(yield_budget)) {
+      if (double age = mds->get_dispatch_queue_max_age(ceph_clock_now());
+          age >= yield_budget) {
+        dout(15) << "yielding readdir page after " << numfiles << " entries, "
+                 << "oldest queued message waited " << age << "s" << dendl;
+        break;
+      }
+    }
   }
   __u16 flags = 0;
   // client only understand END and COMPLETE flags ?
