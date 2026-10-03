@@ -46,9 +46,9 @@ export class HostService extends ApiClient {
     super();
   }
 
-  list(params: any, facts: string): Observable<object[]> {
+  list(params: any, facts: string, includeServiceInstances = false): Observable<object[]> {
     params = params.set('facts', facts);
-    params = params.set('include_service_instances', false);
+    params = params.set('include_service_instances', includeServiceInstances);
     return this.http
       .get<object[]>(this.baseURL, {
         headers: { Accept: this.getVersionHeaderValue(1, 2) },
