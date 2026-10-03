@@ -688,6 +688,8 @@ void ImageFlushRequest<I>::send_request() {
   // ensure all in-flight IOs are settled if non-user flush request
   if (m_flush_source == FLUSH_SOURCE_WRITEBACK) {
     ctx->complete(0);
+  } else if (m_flush_source == FLUSH_SOURCE_INTERNAL_WRITES) {
+    aio_comp->async_op.flush_writes(ctx);
   } else {
     aio_comp->async_op.flush(ctx);
   }

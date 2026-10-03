@@ -123,7 +123,11 @@ void AioCompletion::start_op() {
   }
 
   ceph_assert(!async_op.started());
-  async_op.start_op(*ictx);
+  // AIO_TYPE_GENERIC is used by list-snaps
+  bool writes = (aio_type != AIO_TYPE_READ &&
+                 aio_type != AIO_TYPE_FLUSH &&
+                 aio_type != AIO_TYPE_GENERIC);
+  async_op.start_op(*ictx, writes);
 }
 
 void AioCompletion::queue_complete() {
