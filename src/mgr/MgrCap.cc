@@ -27,6 +27,7 @@
 #include "include/ipaddr.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "global/global_context.h"
 
 #include <algorithm>
 #include <regex>
@@ -368,12 +369,22 @@ void MgrCap::encode(ceph::buffer::list& bl) const {
 }
 
 void MgrCap::decode(ceph::buffer::list::const_iterator& bl) {
-  // remain backwards compatible w/ MgrCap
   std::string s;
   DECODE_START(4, bl);
   decode(s, bl);
   DECODE_FINISH(bl);
-  parse(s, NULL);
+
+  std::ostringstream err;
+  if (!parse(s, &err)) {
+    if (g_ceph_context) {
+      lgeneric_derr(g_ceph_context) << "failed to decode mgr capability '" << s
+                                    << "': " << err.str() << dendl;
+    }
+    // parse() does not clear grants on every failure path; ensure a failed
+    // decode never leaves partially-populated grants or stale text behind.
+    grants.clear();
+    text.clear();
+  }
 }
 
 void MgrCap::dump(ceph::Formatter *f) const {
