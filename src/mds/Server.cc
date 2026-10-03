@@ -12505,12 +12505,18 @@ bool Server::build_snap_diff(
       return res_mask != 0;
     }
 
+    // Compare projected state.  Locker::_do_snap_update() applies a FLUSHSNAP
+    // by projecting onto the inode and journalling; the projection is only
+    // popped when that EUpdate commits, and the FLUSHSNAP path does not flush
+    // the mdlog.  Until then get_inode() still returns the pre-snapflush
+    // values, which makes a changed file compare equal to its own snapshot.
     bool meta_differs(const CInode* _in,
                       unsigned mask,
                       unsigned& res_mask) const {
       ceph_assert(in);
       ceph_assert(_in);
-      return meta_differs(*in->get_inode(), *_in->get_inode(),
+      return meta_differs(*in->get_projected_inode(),
+                          *_in->get_projected_inode(),
                           mask, res_mask);
     }
   } before;
@@ -12557,12 +12563,18 @@ bool Server::build_snap_diff(
   // Return the inode metadata visible at @snapid. Multiversion inodes keep
   // their historical versions in old_inodes, keyed by the version's last
   // snapshot.
+  //
+  // The head is read through its projection for the same reason as
+  // EntryInfo::meta_differs(): a FLUSHSNAP that has been applied but not yet
+  // committed lives only in the projection. old_inodes needs no such care --
+  // Locker::_do_snap_update() installs it with reset_old_inodes() up front
+  // rather than projecting it.
   auto inode_at_snap = [](const CInode* head, snapid_t snapid)
       -> const CInode::mempool_inode* {
     ceph_assert(head->is_head());
 
     if (snapid >= head->first)
-      return head->get_inode().get();
+      return head->get_projected_inode().get();
 
     snapid_t old_last = head->pick_old_inode(snapid);
     if (!old_last)
@@ -12573,6 +12585,34 @@ bool Server::build_snap_diff(
     auto it = old_inodes->find(old_last);
     ceph_assert(it != old_inodes->end());
     return &it->second.inode;
+  };
+
+  // Compare before.in (visible at snapid_prev) with @in (visible at snapid).
+  // Relinked hardlink versions resolve to the same head CInode, so compare
+  // CInodes directly only if both are auth (a replica's first can lag) and
+  // cover their snapshots; otherwise use the auth head's per-snapshot attrs.
+  auto snap_meta_differs = [&](CInode* in, unsigned& res_mask) -> bool {
+    CInode* prev_in = before.in;
+    if (prev_in->is_auth() && in->is_auth() &&
+        prev_in->first <= snapid_prev && snapid_prev <= prev_in->last &&
+        in->first <= snapid && snapid <= in->last)
+      return before.meta_differs(in, diff_mask, res_mask);
+
+    CInode* head = in->is_head() ? in : mdcache->get_inode(in->ino());
+    const CInode::mempool_inode* prev_inode = nullptr;
+    const CInode::mempool_inode* snap_inode = nullptr;
+    if (head && head->is_auth()) {
+      prev_inode = inode_at_snap(head, snapid_prev);
+      snap_inode = inode_at_snap(head, snapid);
+    }
+    if (!prev_inode || !snap_inode) {
+      dout(10) << __func__ << " unknown snapshot attrs, reporting " << *in
+               << " snap " << snapid_prev << " vs. " << snapid << dendl;
+      res_mask = 0;
+      return true;
+    }
+    return EntryInfo::meta_differs(*prev_inode, *snap_inode, diff_mask,
+                                   res_mask);
   };
 
   auto it = !skip_key ? dir->begin() : dir->upper_bound(*skip_key);
@@ -12766,7 +12806,7 @@ bool Server::build_snap_diff(
 	    before.reset();
 	  } else {
 	    unsigned res_mask = 0;
-	    if (before.meta_differs(in, diff_mask, res_mask) ) {
+	    if (snap_meta_differs(in, res_mask) ) {
 	      dout(30) << __func__ << " attrs changed " << dn->get_name() << " "
 		<< dn->first << "/" << dn->last
 		<< " result mask: 0x" << std::hex << res_mask << std::dec
@@ -12784,7 +12824,7 @@ bool Server::build_snap_diff(
            */
           if (!rdlock_file_start(in))
             return false;
-          bool differs = before.meta_differs(in, diff_mask, res_mask);
+          bool differs = snap_meta_differs(in, res_mask);
           rdlock_file_finish(in);
           if (differs) {
             dout(30) << __func__ << " attrs changed " << dn->get_name() << " "
