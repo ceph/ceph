@@ -308,6 +308,88 @@ txr([](auto& txn) {
 });
 ```
 
+### Staged Proxies
+
+A transactor may run its body more than once. Mutating a captured output
+variable directly can therefore append or count the same result several times.
+Staged Proxies give each attempt a private value and publish only the attempt
+whose commit is confirmed.
+
+Choose the parameter form according to its role:
+
+| Parameter | Use it for | Replay behavior |
+| --- | --- | --- |
+| `input` | An input that the transaction reads but does not modify. | The transactor copies it once and presents the same value to every attempt. |
+| `lfdb::staged(output)` | An output that modifies or extends its existing value. | Each attempt lazily copies the existing value before its first mutation. |
+| `lfdb::staged(output, std::in_place)` | An output rebuilt entirely from transaction results. | Each attempt starts with a fresh value; the previous contents are never copied. |
+
+Treat ordinary bound parameters as read-only. Mutating one changes only the
+transactor's private argument and that mutation carries into later attempts;
+it does not update the caller's object.
+
+In-place construction happens before each attempt, so a successful query that
+finds no values still replaces stale output with an empty value.
+
+Prefer an ordinary return value when the callback produces one new value.
+Staging is useful for output parameters or several existing local values.
+
+```cpp
+// Recompute a D4N bucket's cached-byte count without counting a replay twice.
+std::uint64_t cached_bytes = 0;
+auto txr = lfdb::make_transactor(dbh);
+
+txr([](auto& txn, auto& bytes, std::string_view bucket_id) {
+  bytes = 0;
+
+  for (const auto& block :
+       lfdb::scan<CacheBlock>(txn, object_range(bucket_id)) |
+         std::views::values) {
+    bytes += block.size;
+  }
+}, lfdb::staged(cached_bytes), bucket_id);
+```
+
+If you declare a proxy ahead of time, move it into the transactor because it
+represents exactly one invocation's staging state:
+
+```cpp
+// Rebuild a D4N block listing without copying its previous contents.
+std::vector<CacheBlock> blocks;
+auto blocks_prx = lfdb::staged(blocks, std::in_place);
+auto txr = lfdb::make_transactor(dbh);
+
+txr([](auto& txn, auto& blocks, std::string_view bucket_id) {
+  for (auto block : read_blocks(txn, bucket_id)) {
+    blocks.push_back(std::move(block));
+  }
+}, std::move(blocks_prx), bucket_id);
+```
+
+The proxy covers assignment, `+=`, common sequence updates, and
+`insert_or_assign()`; use `get_target()` for an uncommon operation. Mutating
+operations deliberately return no iterator or reference into attempt-local
+storage.
+
+Gotchas:
+
+- An ordinarily staged target must be copy-constructible; an in-place target
+  must be default-initializable. Both must be nothrow move-assignable, alive for
+  the call, and not accessed concurrently. Binding the same target more than
+  once is rejected with an exception; overlapping targets are also invalid.
+
+- Accept the proxy by lvalue reference (`auto& output`, as above). Do not
+  capture and mutate the original target or retain the proxy after the callback.
+  Any pointer, reference, or iterator obtained through `get_target()` is
+  attempt-local and must not escape the callback.
+
+- Staging protects only the bound C++ value. Logging, I/O, other captured state,
+  and non-idempotent database writes after `commit_unknown_result` still need
+  their own replay-safe design.
+
+Any outcome without a confirmed commit leaves the target unchanged. An ordinary
+transactor throws on retry exhaustion; `with_result` reports it with
+`committed == false`.
+
 Use `with_result` when application code needs to report or resume after retry
 exhaustion. The transaction body must return `void` because the result describes
 transaction progress rather than an application value:
@@ -386,6 +468,8 @@ singleton keys, and explicit open/closed boundaries.
 | Read one exact key without adding a read conflict | `lfdb::get(dbh, key, value, lfdb::read_mode::snapshot)` | `bool` | Useful for advisory reads where the value is not part of the transaction's correctness condition. |
 | Read one exact key as bytes | `lfdb::get(dbh, key, callback)` | `bool` | Lets the callback copy or decode the raw value while the FDB buffer is valid. |
 | Read a small range into an existing output | `lfdb::get(dbh, query, out)` | `std::size_t` | Materializes decoded string pairs, publishes them after a successful managed read, and reports how many records were found. |
+| Visit one transaction's range as borrowed bytes | `lfdb::for_each(lfdb::raw, txn, query, callback)` | `std::size_t` | Avoids decoding and allocation while preserving one transaction's read version. |
+| Visit a managed range as borrowed bytes | `lfdb::for_each(lfdb::raw, dbh, query, callback)` | `std::size_t` | Retries result windows before exposing their bytes, without replaying callbacks. |
 | Read a flat stream in an existing transaction | `lfdb::scan(txn, query)` | generator of key/value pairs | Keeps transaction lifetime under caller control. |
 | Read a flat stream without adding read conflicts | `lfdb::scan(txn, query, lfdb::read_mode::snapshot)` | generator of key/value pairs | Leaves specialized read-then-write policy visible at the call site. |
 | Read a flat stream with managed transactions | `lfdb::scan(dbh, query)` | generator of key/value pairs | Hides transaction-window management while preserving streaming syntax. |
@@ -393,10 +477,11 @@ singleton keys, and explicit open/closed boundaries.
 | Read directly into a chosen container type | `lfdb::collect<T, AssocT>(dbh, query)` | `AssocT` | Keeps materialization explicit when the caller wants a map or custom container. |
 | Process very large result sets | `lfdb::blocks<T>(dbh, query)` | generator of containers | Reads block-at-a-time to avoid one oversized, aging transaction. |
 | Select everything under one key prefix | `q::prefix(prefix)` | `lfdb::select` | Handles FDB prefix successor rules without hand-built byte bounds. |
-| Select an explicit half-open key interval | `q::between(begin, end)` | `lfdb::select` | Matches the usual FoundationDB `[begin, end)` range shape. |
+| Select an explicit half-open key interval | `q::between(lower, upper)` | `lfdb::select` | Matches the usual FoundationDB `[lower, upper)` range shape. |
 | Combine or subtract selections | `q::intersection()`, `q::set_union()`, `q::difference()` | query expression or selector | Lets the query compiler normalize intervals before execution. |
 | Add an explicit conflict check | `lfdb::mark_conflict_read(txn, query)` | `void` | Records transaction correctness dependencies that ordinary operations did not express. |
 | Run several dependent operations atomically | `lfdb::make_transactor(dbh)` | callable transaction runner | Replays retryable transactions while keeping user code explicit. |
+| Publish local output after a replayable transaction | `lfdb::staged(output)` | callback proxy | Prevents retries from applying the same local mutation more than once. |
 
 ### Key Selectors
 
@@ -781,6 +866,37 @@ Use `collect()` when a materialized container is exactly what the caller needs:
 ```cpp
 auto people = lfdb::collect<person_record>(dbh, q::prefix("person/"));
 ```
+
+### Borrowing Raw Range Results
+
+Use `for_each(lfdb::raw, ...)` when an operation can consume FoundationDB
+bytes immediately and should not pay to construct decoded key/value objects. The
+explicit `raw` tag makes that lifetime choice visible at the call site:
+
+```cpp
+const auto object_blocks =
+  fdbc::keyspace("d4n") / "block" / bucket_id / object_name;
+
+const auto nread = lfdb::for_each(
+  lfdb::raw, dbh, fdbc::prefix(object_blocks),
+  [](std::span<const std::uint8_t> key,
+     std::span<const std::uint8_t> value) {
+    inspect_cached_block(key, value);
+  });
+
+fmt::println("inspected {} cached blocks", nread);
+```
+
+The spans borrow FoundationDB-owned memory and expire when the callback returns;
+copy anything that must outlive that call. Callback exceptions stop traversal
+and propagate normally.
+
+The database-handle form retries each result window before exposing it and never
+replays a callback. A retry may move later windows to a newer read version. Use
+the transaction-handle overload when the whole traversal must share one read
+version. If that operation is itself placed inside a transactor, a transactor
+replay invokes its callbacks again, so externally visible effects must be
+idempotent or staged.
 
 Use `for_each()` when the operation is naturally callback-shaped and you do not
 need a composable generator. The callback is a row consumer and must return
