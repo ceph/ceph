@@ -2254,6 +2254,11 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
                     group[r.ei].rules[r.ri].execute(
                         *r.a, group[r.ei].obj, dpp,
                         &batch_counters, tags[r.ei].ptr, skip_olh, y);
+                  },
+                  [&](const rgw_obj_key& key, boost::asio::yield_context y) {
+                    uint32_t flags = zonegroup_lc_check(dpp, dpp->driver->get_zone())
+                                     ? 0 : rgw::sal::FLAG_LOG_OP;
+                    bucket->get_object(key)->update_olh(dpp, y, flags);
                   });
 
               for (size_t i = 0; i < group.size(); ++i)
