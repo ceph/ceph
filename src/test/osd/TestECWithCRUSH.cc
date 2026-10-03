@@ -151,12 +151,12 @@ class TestLocalZoneForActingSet : public ::testing::Test {
 protected:
   std::shared_ptr<OSDMap> osdmap;
   static constexpr int zone_size = 6;
-  static constexpr int num_zones = 2;
+  int num_zones = 2;
 
   void SetUp() override
   {
     CephContext* cct = g_ceph_context;
-    constexpr int num_osds = 12;
+    const int num_osds = zone_size * num_zones;
 
     osdmap = std::make_shared<OSDMap>();
     uuid_d fsid;
@@ -164,10 +164,10 @@ protected:
     int r = osdmap->build_simple(cct, 1, fsid, num_osds);
     ceph_assert(r == 0);
 
-    // Build a 2-zone CRUSH map:
+    // One datacenter per zone:
     //   root "default"
     //     ├─ datacenter "zone-0" → host "host-0" → osd.0 … osd.5
-    //     └─ datacenter "zone-1" → host "host-1" → osd.6 … osd.11
+    //     └─ datacenter "zone-1" → host "host-1" → osd.6 … osd.11 (…)
     CrushWrapper crush;
     crush.create();
     OSDMap::_build_crush_types(crush);
@@ -180,13 +180,13 @@ protected:
     ceph_assert(r == 0);
     crush.set_item_name(rootid, "default");
 
-    for (int z = 0; z < 2; z++) {
+    for (int z = 0; z < num_zones; z++) {
       std::map<std::string, std::string> loc;
       loc["root"]       = "default";
       loc["datacenter"] = "zone-" + std::to_string(z);
       loc["host"]       = "host-" + std::to_string(z);
-      for (int i = 0; i < 6; i++) {
-        int osd = z * 6 + i;
+      for (int i = 0; i < zone_size; i++) {
+        int osd = z * zone_size + i;
         crush.insert_item(cct, osd, 1.0, "osd." + std::to_string(osd), loc);
       }
     }
@@ -207,14 +207,50 @@ protected:
     return loc;
   }
 
-  // acting = [osd.0..5 (zone-0), osd.6..11 (zone-1)]
+  // acting = [osd.0..5 (zone-0), osd.6..11 (zone-1), …]
   std::vector<int> make_acting()
   {
-    std::vector<int> acting(12);
-    for (int i = 0; i < 12; ++i) acting[i] = i;
+    std::vector<int> acting(zone_size * num_zones);
+    for (int i = 0; i < (int)acting.size(); ++i) acting[i] = i;
     return acting;
   }
 };
+
+class TestLocalZoneForActingSet3Zone : public TestLocalZoneForActingSet {
+protected:
+  TestLocalZoneForActingSet3Zone() { num_zones = 3; }
+};
+
+TEST_F(TestLocalZoneForActingSet3Zone, ClientInZone2ReturnsTwo)
+{
+  auto loc = make_loc(2);
+  auto acting = make_acting();
+  EXPECT_EQ(2, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
+
+TEST_F(TestLocalZoneForActingSet3Zone, ClientZoneDownTieGoesToLowestZone)
+{
+  // zone-0 and zone-1 match only at root level, so neither is closer
+  std::multimap<std::string, std::string> loc;
+  loc.emplace("datacenter", "zone-2");
+  loc.emplace("root", "default");
+  auto acting = make_acting();
+  for (int i = 2 * zone_size; i < 3 * zone_size; ++i) acting[i] = CRUSH_ITEM_NONE;
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
+
+TEST_F(TestLocalZoneForActingSet3Zone, MiddleZoneDownClientThereFallsBack)
+{
+  std::multimap<std::string, std::string> loc;
+  loc.emplace("datacenter", "zone-1");
+  loc.emplace("root", "default");
+  auto acting = make_acting();
+  for (int i = zone_size; i < 2 * zone_size; ++i) acting[i] = CRUSH_ITEM_NONE;
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
 
 TEST_F(TestLocalZoneForActingSet, ClientInZone0ReturnsZero)
 {
