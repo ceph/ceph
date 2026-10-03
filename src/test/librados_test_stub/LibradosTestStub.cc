@@ -611,6 +611,13 @@ int IoCtx::omap_rm_keys(const std::string& oid,
     oid, std::bind(&TestIoCtxImpl::omap_rm_keys, _1, _2, keys));
 }
 
+int IoCtx::omap_set(const std::string& oid,
+                    const std::map<std::string, bufferlist>& m) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, std::bind(&TestIoCtxImpl::omap_set, _1, _2, boost::ref(m)));
+}
+
 int IoCtx::operate(const std::string& oid, ObjectWriteOperation *op) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
