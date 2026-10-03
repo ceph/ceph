@@ -1,0 +1,12 @@
+module(name = "ceph_tcmalloc")
+bazel_dep(name = "rules_cc", version = "0.2.9")
+bazel_dep(name = "tcmalloc", version = "0", repo_name = "com_google_tcmalloc")
+single_version_override(
+    module_name = "abseil-cpp",
+    version = "20260526.0",
+)
+git_override(
+    module_name = "tcmalloc",
+    remote = "https://github.com/google/tcmalloc.git",
+    commit = "3baafb6d19b0c7e695a31322b33e5cb5d61c93fa",
+)
