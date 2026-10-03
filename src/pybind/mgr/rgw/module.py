@@ -501,7 +501,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                             tier_type)
                 if rgw_spec.rgw_zone is not None:
                     created_zones.append(rgw_spec.rgw_zone)
-                    return created_zones
         except RGWAMException as e:
             err_msg = 'cmd run exception: (%d) %s' % (e.retcode, e.message)
             self.log.error(err_msg)
