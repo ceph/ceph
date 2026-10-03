@@ -37,7 +37,8 @@ class DaemonMetricCollector {
 public:
   void main();
   std::string get_metrics();
-  labels_t get_extra_labels(std::string daemon_name);
+  labels_t get_extra_labels(std::string daemon_name,
+                            const std::string &service_unique_id = "");
   void dump_asok_metrics(bool sort_metrics, int64_t counter_prio,
                          bool sockClientsPing, std::string &dump_response,
                          std::string &schema_response,
