@@ -13,6 +13,11 @@ from cephadm.upgrade import (
     parse_ok_to_upgrade_mon_json,
     request_osd_ok_to_upgrade_report,
 )
+from cephadm.image_prepull import (
+    PrePullBatchResult,
+    UpgradeImageMirrorMethod,
+    UpgradeImagePrePull,
+)
 from cephadm.ssh import HostConnectionError
 from cephadm.utils import ContainerInspectInfo
 from orchestrator import OrchestratorError, DaemonDescription
@@ -20,6 +25,14 @@ from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
 
 from typing import List, Tuple, Optional
+
+
+def _upgrade_test_daemon(hostname: str = 'host1') -> DaemonDescription:
+    return DaemonDescription(
+        hostname=hostname,
+        daemon_type='mgr',
+        daemon_id='0',
+    )
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -1209,3 +1222,338 @@ def test_do_upgrade_limit_exhausted_marks_complete_without_scope_check(
 
     mark_complete.assert_called_once()
     filtered_scope.assert_not_called()
+
+
+def test_upgrade_image_mirror_method_from_config():
+    assert UpgradeImageMirrorMethod.from_config('') is UpgradeImageMirrorMethod.NONE
+    assert UpgradeImageMirrorMethod.from_config(' ') is UpgradeImageMirrorMethod.NONE
+    assert UpgradeImageMirrorMethod.from_config('none') is UpgradeImageMirrorMethod.NONE
+    assert UpgradeImageMirrorMethod.from_config('NONE') is UpgradeImageMirrorMethod.NONE
+    assert UpgradeImageMirrorMethod.from_config('registry') is UpgradeImageMirrorMethod.REGISTRY
+    with pytest.raises(ValueError):
+        UpgradeImageMirrorMethod.from_config('bogus')
+
+
+def test_upgrade_state_pre_pull_hosts_roundtrip():
+    u = UpgradeState('target', 'pid', target_image_pre_pull_hosts=['h1', 'h2'])
+    restored = UpgradeState.from_json(u.to_json())
+    assert restored
+    assert restored.target_image_pre_pull_hosts == ['h1', 'h2']
+
+
+def test_inspect_info_matches_target_image_id():
+    upgrade = CephadmUpgrade.__new__(CephadmUpgrade)
+    upgrade.upgrade_state = UpgradeState(
+        '192.168.100.254:5000/ceph/ceph:main2.0',
+        'pid',
+        target_id='acf49863d4a5ce75d68464d3924f3d3f8a7af21544e7bd9430805f04d70eed8c',
+        target_digests=['192.168.100.254:5000/ceph/ceph@sha256:abc'],
+    )
+    prepull = UpgradeImagePrePull.__new__(UpgradeImagePrePull)
+    prepull.upgrade = upgrade
+    assert prepull._inspect_info_matches_target_image(
+        {'image_id': 'acf49863d4a5ce75d68464d3924f3d3f8a7af21544e7bd9430805f04d70eed8c',
+         'repo_digests': []},
+        ['192.168.100.254:5000/ceph/ceph@sha256:abc'],
+    )
+
+
+def _prepull_state(cephadm_module: CephadmOrchestrator, hosts_done: Optional[List[str]] = None):
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'quay.io/ceph/ceph:vtest',
+        'pid',
+        target_id='sha256:targetdigest',
+        target_digests=['quay.io/ceph/ceph@sha256:targetdigest'],
+        target_version='19.2.0',
+        target_image_pre_pull_hosts=hosts_done or [],
+    )
+    cephadm_module.use_repo_digest = True
+    cephadm_module.upgrade_image_mirror_max_parallel = 8
+    cephadm_module.default_cephadm_command_timeout = 900
+
+
+_PULL_OK = json.dumps({
+    'image_id': 'sha256:targetdigest',
+    'repo_digests': ['quay.io/ceph/ceph@sha256:targetdigest'],
+    'ceph_version': 'ceph version 19.2.0 (abc) squid (stable)',
+})
+
+
+def _fake_pull(out=_PULL_OK, code=0, err='', record=None):
+    async def fake_run(self, host, entity, command, args, image=None,
+                       no_fsid=None, error_ok=None, timeout=None, **kwargs):
+        if record is not None:
+            record.append({
+                'host': host,
+                'command': command,
+                'image': image,
+                'timeout': timeout,
+            })
+        return ([out], [err], code)
+    return fake_run
+
+
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(UpgradeImagePrePull, 'get_upgrade_scope_hosts', return_value=['host1'])
+@mock.patch.object(UpgradeImagePrePull, 'pre_pull_next_batch',
+                   return_value=PrePullBatchResult.COMPLETE)
+def test_do_upgrade_calls_pre_pull_before_daemons(
+    batch_mock: mock.MagicMock,
+    _get_upgrade_scope_hosts: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    cephadm_module.upgrade_image_mirror_method = UpgradeImageMirrorMethod.REGISTRY.value
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        'pid',
+        target_id='image_id',
+        target_digests=['target_image@digest'],
+        target_version='19.3.0-0',
+        target_image_pre_pull_hosts=[],
+    )
+    upgrade_daemon = _upgrade_test_daemon()
+    with mock.patch.object(CephadmUpgrade, '_detect_need_upgrade', return_value=(False, [], [], 0)), \
+            mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, [])), \
+            mock.patch.object(CephadmUpgrade, '_get_filtered_daemons', return_value=[upgrade_daemon]), \
+            mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={}), \
+            mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle'), \
+            mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', '')), \
+            mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+                'min_mon_release': 19,
+                'require_osd_release': 'tentacle',
+                'have_local_config_map': True,
+            }), \
+            mock.patch(
+                "cephadm.module.CephadmOrchestrator.version",
+                new_callable=mock.PropertyMock,
+                return_value='ceph version 19.3.0-0 (hash)'), \
+            mock.patch("cephadm.module.HostCache.get_daemons", return_value=[upgrade_daemon]):
+        cephadm_module.upgrade._do_upgrade()
+    batch_mock.assert_called_once()
+    assert batch_mock.call_args[0][0] == 'target_image@digest'
+
+
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(UpgradeImagePrePull, 'pre_pull_next_batch')
+def test_do_upgrade_skips_pre_pull_when_hosts_done(
+    batch_mock: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    cephadm_module.upgrade_image_mirror_method = UpgradeImageMirrorMethod.REGISTRY.value
+    upgrade_daemon = _upgrade_test_daemon()
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        'pid',
+        target_id='image_id',
+        target_digests=['target_image@digest'],
+        target_version='19.3.0-0',
+        target_image_pre_pull_hosts=[upgrade_daemon.hostname],
+    )
+    with mock.patch.object(CephadmUpgrade, '_detect_need_upgrade', return_value=(False, [], [], 0)), \
+            mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, [])), \
+            mock.patch.object(CephadmUpgrade, '_get_filtered_daemons', return_value=[upgrade_daemon]), \
+            mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={}), \
+            mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle'), \
+            mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', '')), \
+            mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+                'min_mon_release': 19,
+                'require_osd_release': 'tentacle',
+                'have_local_config_map': True,
+            }), \
+            mock.patch(
+                "cephadm.module.CephadmOrchestrator.version",
+                new_callable=mock.PropertyMock,
+                return_value='ceph version 19.3.0-0 (hash)'), \
+            mock.patch("cephadm.module.HostCache.get_daemons", return_value=[upgrade_daemon]):
+        cephadm_module.upgrade._do_upgrade()
+    batch_mock.assert_not_called()
+
+
+@mock.patch.object(CephadmUpgrade, '_update_upgrade_progress')
+@mock.patch.object(UpgradeImagePrePull, 'pre_pull_next_batch')
+def test_do_upgrade_skips_pre_pull_when_method_disabled(
+    batch_mock: mock.MagicMock,
+    _update_upgrade_progress: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    for disabled in ('', 'none', 'NONE', ' None '):
+        cephadm_module.upgrade_image_mirror_method = disabled
+        cephadm_module.upgrade.upgrade_state = UpgradeState(
+            'target_image',
+            'pid',
+            target_id='image_id',
+            target_digests=['target_image@digest'],
+            target_version='19.3.0-0',
+        )
+        upgrade_daemon = _upgrade_test_daemon()
+        with mock.patch.object(CephadmUpgrade, '_detect_need_upgrade', return_value=(False, [], [], 0)), \
+                mock.patch.object(CephadmUpgrade, '_to_upgrade', return_value=(True, [])), \
+                mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={}), \
+                mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle'), \
+                mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", return_value=(0, '{}', '')), \
+                mock.patch("cephadm.module.CephadmOrchestrator.get", return_value={
+                    'min_mon_release': 19,
+                    'require_osd_release': 'tentacle',
+                    'have_local_config_map': True,
+                }), \
+                mock.patch(
+                    "cephadm.module.CephadmOrchestrator.version",
+                    new_callable=mock.PropertyMock,
+                    return_value='ceph version 19.3.0-0 (hash)'), \
+                mock.patch("cephadm.module.HostCache.get_daemons", return_value=[upgrade_daemon]):
+            cephadm_module.upgrade._do_upgrade()
+        assert batch_mock.call_count == 0
+
+
+def test_parse_method_or_fail_rejects_unknown_method(
+    cephadm_module: CephadmOrchestrator,
+):
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+    cephadm_module.upgrade_image_mirror_method = 'bogus'
+    assert cephadm_module.upgrade.image_prepull.parse_method_or_fail() is None
+    assert 'UPGRADE_FAILED_PULL' in cephadm_module.health_checks
+    detail = ' '.join(cephadm_module.health_checks['UPGRADE_FAILED_PULL']['detail'])
+    assert 'bogus' in detail
+
+
+@mock.patch.object(UpgradeImagePrePull, '_registry_login_if_needed', new_callable=mock.AsyncMock)
+def test_pre_pull_passes_timeout_to_run_cephadm(
+    _registry_login: mock.AsyncMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    _prepull_state(cephadm_module)
+    recorded: List[dict] = []
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=_fake_pull(record=recorded)):
+        result = cephadm_module.upgrade.image_prepull.pre_pull_next_batch(
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1', 'h2'],
+        )
+    assert result is PrePullBatchResult.COMPLETE
+    assert recorded
+    assert all(c['command'] == 'pull' for c in recorded)
+    assert all(c['timeout'] == 7200 for c in recorded)
+    assert all(c['image'] == 'quay.io/ceph/ceph@sha256:targetdigest' for c in recorded)
+    assert sorted(cephadm_module.upgrade.upgrade_state.target_image_pre_pull_hosts) == ['h1', 'h2']
+
+
+@mock.patch.object(UpgradeImagePrePull, '_registry_login_if_needed', new_callable=mock.AsyncMock)
+def test_pre_pull_timeout_is_failed_pull(
+    _registry_login: mock.AsyncMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    _prepull_state(cephadm_module)
+    with mock.patch.object(
+            cephadm_module, 'wait_async',
+            side_effect=OrchestratorError('Command "cephadm pull (upgrade pre-pull)" timed out')):
+        result = cephadm_module.upgrade.image_prepull.pre_pull_next_batch(
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1'],
+        )
+    assert result is PrePullBatchResult.FAILED
+    assert 'UPGRADE_FAILED_PULL' in cephadm_module.health_checks
+    assert 'UPGRADE_EXCEPTION' not in cephadm_module.health_checks
+    detail = ' '.join(cephadm_module.health_checks['UPGRADE_FAILED_PULL']['detail'])
+    assert 'h1' in detail
+    assert 'timed out' in detail
+
+
+@mock.patch.object(UpgradeImagePrePull, '_registry_login_if_needed', new_callable=mock.AsyncMock)
+def test_pre_pull_detects_digest_mismatch(
+    _registry_login: mock.AsyncMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    _prepull_state(cephadm_module)
+    bad = json.dumps({
+        'image_id': 'sha256:other',
+        'repo_digests': ['quay.io/ceph/ceph@sha256:other'],
+    })
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=_fake_pull(out=bad)):
+        result = cephadm_module.upgrade.image_prepull.pre_pull_next_batch(
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1'],
+        )
+    assert result is PrePullBatchResult.FAILED
+    assert 'UPGRADE_FAILED_PULL' in cephadm_module.health_checks
+    detail = ' '.join(cephadm_module.health_checks['UPGRADE_FAILED_PULL']['detail'])
+    assert 'h1' in detail
+    assert 'mismatched digests' in detail
+
+
+@mock.patch.object(UpgradeImagePrePull, '_registry_login_if_needed', new_callable=mock.AsyncMock)
+def test_pre_pull_pause_is_not_a_failure(
+    _registry_login: mock.AsyncMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    _prepull_state(cephadm_module)
+
+    async def fake_run(self, host, entity, command, args, image=None,
+                       no_fsid=None, error_ok=None, timeout=None, **kwargs):
+        cephadm_module.upgrade.upgrade_state.paused = True
+        return ([_PULL_OK], [], 0)
+
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=fake_run):
+        result = cephadm_module.upgrade.image_prepull.pre_pull_next_batch(
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1', 'h2'],
+        )
+    assert result is PrePullBatchResult.IN_PROGRESS
+    assert 'UPGRADE_FAILED_PULL' not in cephadm_module.health_checks
+    assert cephadm_module.upgrade.upgrade_state.paused is True
+    assert cephadm_module.upgrade.upgrade_state.error in (None, '')
+
+
+@mock.patch.object(UpgradeImagePrePull, '_registry_login_if_needed', new_callable=mock.AsyncMock)
+def test_pre_pull_one_batch_per_serve_iteration(
+    _registry_login: mock.AsyncMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    _prepull_state(cephadm_module)
+    cephadm_module.upgrade_image_mirror_max_parallel = 2
+    recorded: List[dict] = []
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=_fake_pull(record=recorded)):
+        result = cephadm_module.upgrade.image_prepull.pre_pull_next_batch(
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1', 'h2', 'h3'],
+        )
+    assert result is PrePullBatchResult.IN_PROGRESS
+    assert sorted(c['host'] for c in recorded) == ['h1', 'h2']
+    assert sorted(cephadm_module.upgrade.upgrade_state.target_image_pre_pull_hosts) == ['h1', 'h2']
+
+    recorded.clear()
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=_fake_pull(record=recorded)):
+        result = cephadm_module.upgrade.image_prepull.pre_pull_next_batch(
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1', 'h2', 'h3'],
+        )
+    assert result is PrePullBatchResult.COMPLETE
+    assert [c['host'] for c in recorded] == ['h3']
+
+
+@mock.patch.object(UpgradeImagePrePull, '_registry_login_if_needed', new_callable=mock.AsyncMock)
+def test_pre_pull_stop_during_batch_is_not_a_failure(
+    _registry_login: mock.AsyncMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    _prepull_state(cephadm_module)
+
+    async def fake_run(self, host, entity, command, args, image=None,
+                       no_fsid=None, error_ok=None, timeout=None, **kwargs):
+        cephadm_module.upgrade.upgrade_state = None
+        return ([_PULL_OK], [], 0)
+
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=fake_run):
+        result = cephadm_module.upgrade.image_prepull.pre_pull_next_batch(
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1'],
+        )
+    assert result is PrePullBatchResult.IN_PROGRESS
+    assert 'UPGRADE_FAILED_PULL' not in cephadm_module.health_checks
