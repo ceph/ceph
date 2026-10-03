@@ -8,7 +8,7 @@ import {
   inject
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { BehaviorSubject, forkJoin, Observable, of, Subscription } from 'rxjs';
+import { BehaviorSubject, of, Subscription } from 'rxjs';
 import { catchError, finalize, map, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
@@ -303,8 +303,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
             fsName: this.fsName,
             path
           }),
-          call: this.deleteSnapshotSchedulesForPath(path).pipe(
-            switchMap(() => this.cephfsService.removeMirrorDirectory(this.fsName, path)),
+          call: this.cephfsService.removeMirrorDirectory(this.fsName, path).pipe(
             tap(() => {
               if (this.selectedPath?.path === path) {
                 this.closeSidePanel();
@@ -1024,48 +1023,6 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     }
 
     return nextSync.toLocaleString();
-  }
-
-  private deleteSnapshotSchedulesForPath(path: string): Observable<void> {
-    return this.snapshotScheduleService.getSnapshotSchedule(path, this.fsName, false).pipe(
-      catchError(() => of([])),
-      switchMap((policies) => {
-        const normalizedPath = this.normalizePath(path);
-        const schedules = policies.filter(
-          (policy) =>
-            this.normalizePath(policy.path) === normalizedPath ||
-            this.normalizePath(policy.rel_path) === normalizedPath
-        );
-        if (!schedules.length) {
-          return of(undefined);
-        }
-
-        return forkJoin(
-          schedules.map((policy) => {
-            const retentionPolicy = this.buildRetentionPolicyString(policy.retention);
-
-            return this.snapshotScheduleService
-              .delete({
-                path: policy.path,
-                schedule: policy.schedule,
-                start: policy.start,
-                fs: policy.fs || this.fsName,
-                retentionPolicy,
-                subvol: policy.subvol,
-                group: policy.group
-              })
-              .pipe(catchError(() => of(undefined)));
-          })
-        ).pipe(map(() => undefined));
-      })
-    );
-  }
-
-  private normalizePath(path?: string): string {
-    if (!path) {
-      return '';
-    }
-    return path.replace(/([/](\.\.?)){1,}\s*$/, '').replace(/\/$/, '') || '/';
   }
 
   private toTitleCase(value: string): string {
