@@ -47,3 +47,15 @@
   >
   </cd-table>
 </div>
+
+<ng-template 
+  #publicAddressesTpl 
+  let-value="data.value">
+  @if (value?.length) {
+    <div cdsStack="vertical" [gap]="2">
+      @for (addr of value; track addr) {
+        <div data-testid="address">{{ addr }}</div>
+      }
+    </div>
+  }
+</ng-template>

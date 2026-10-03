@@ -1,4 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { provideRouter, RouterModule } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
@@ -15,10 +16,10 @@ describe('MonitorComponent', () => {
   let getMonitorSpy: jasmine.Spy;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, SharedModule],
+    imports: [HttpClientTestingModule, SharedModule, RouterModule.forRoot([])],
     declarations: [MonitorComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    providers: [MonitorService]
+    providers: [MonitorService, provideRouter([])]
   });
 
   beforeEach(() => {
@@ -27,9 +28,11 @@ describe('MonitorComponent', () => {
     const getMonitorPayload: Record<string, any> = {
       in_quorum: [
         {
+          public_addrs: { addrvec: [] },
           stats: { num_sessions: [[1, 5]] }
         },
         {
+          public_addrs: { addrvec: [] },
           stats: {
             num_sessions: [
               [1, 1],
@@ -39,6 +42,7 @@ describe('MonitorComponent', () => {
           }
         },
         {
+          public_addrs: { addrvec: [] },
           stats: {
             num_sessions: [
               [1, 0],
@@ -47,6 +51,7 @@ describe('MonitorComponent', () => {
           }
         },
         {
+          public_addrs: { addrvec: [] },
           stats: {
             num_sessions: [
               [1, 2],
@@ -70,6 +75,7 @@ describe('MonitorComponent', () => {
   });
 
   it('should sort by open sessions column correctly', () => {
+    fixture.detectChanges();
     component.refresh();
 
     expect(getMonitorSpy).toHaveBeenCalled();
@@ -101,5 +107,57 @@ describe('MonitorComponent', () => {
         component.quorum.data[1].cdOpenSessions
       )
     ).toBe(1);
+  });
+
+  it('should normalize monitor public addresses for v1/v2 entries only', () => {
+    const normalizePublicAddresses: any = (MonitorComponent as any).publicAddressArray;
+
+    expect(
+      normalizePublicAddresses({
+        addrvec: [
+          { type: 'v2', addr: '10.0.0.1:6789/1234' },
+          { type: 'v1', addr: '10.0.0.1:6789/1235' },
+          { type: 'msgr2', addr: '10.0.0.1:6789/9999' }
+        ]
+      })
+    ).toEqual(['v1: 10.0.0.1:6789/1235', 'v2: 10.0.0.1:6789/1234']);
+  });
+
+  it('should return an empty list when public addresses are missing', () => {
+    const normalizePublicAddresses: any = (MonitorComponent as any).publicAddressArray;
+
+    expect(normalizePublicAddresses(undefined)).toEqual([]);
+    expect(normalizePublicAddresses({})).toEqual([]);
+    expect(normalizePublicAddresses({ addrvec: [] })).toEqual([]);
+  });
+
+  it('should render all monitor public addresses in the custom cell template', () => {
+    const payload = {
+      in_quorum: [
+        {
+          name: 'mon-a',
+          public_addrs: {
+            addrvec: [
+              { type: 'v2', addr: '10.0.0.1:6789/1234' },
+              { type: 'v1', addr: '10.0.0.1:6789/1235' }
+            ]
+          },
+          stats: { num_sessions: [[1, 5]] }
+        }
+      ],
+      mon_status: null,
+      out_quorum: []
+    };
+    getMonitorSpy.and.returnValue(of(payload));
+
+    fixture.detectChanges();
+    component.refresh();
+    fixture.detectChanges();
+
+    const addresses = fixture.nativeElement.querySelectorAll('[data-testid="address"]');
+
+    expect(addresses.length).toBe(2);
+    expect(addresses[0].textContent).toContain('v1: 10.0.0.1:6789/1235');
+    expect(addresses[1].textContent).toContain('v2: 10.0.0.1:6789/1234');
   });
 });
