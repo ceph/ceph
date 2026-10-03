@@ -257,6 +257,7 @@
 // *** gw daemons -> nvmeof mon  ***
 #define MSG_MNVMEOF_GW_BEACON     0x801
 
+
 // ======================================================
 
 // abstract Message class
