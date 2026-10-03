@@ -74,6 +74,38 @@ example spec file:
     spec:
       rgw_frontend_port: 8080
 
+Port Sharing
+------------
+
+The RGW service frontend has a feature that allows multiple RGW instances on a
+host to listen on the same TCP port. To set this up the RGW frontend for multiple
+RGW daemons on the same host must specify the same port and set so_reuseport=1.
+For example two RGW daemons deployed on the same host could have this frontend config
+
+.. prompt:: bash #
+
+  beast port=80 so_reuseport=1
+
+and they would share port 80. This can be set up by cephadm through the RGW spec file using
+the ``allow_port_reuse`` setting combined with a placement that specifies ``count_per_host`` as
+a value greater than 1. For example
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: foo
+    placement:
+      hosts:
+      - host1
+      - host2
+      count_per_host: 2
+    spec:
+      rgw_frontend_port: 80
+      allow_port_reuse: true
+
+would cause cephadm to deploy two RGW daemons each on host1 and host2 that would both
+listen on port 80.
+
 Passing Frontend Extra Arguments
 --------------------------------
 
