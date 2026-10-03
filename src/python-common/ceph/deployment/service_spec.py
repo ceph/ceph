@@ -2600,6 +2600,8 @@ class IngressSpec(ServiceSpec):
                  monitor_ip_addrs: Optional[Dict[str, str]] = None,
                  use_tcp_mode_over_rgw: bool = False,
                  haproxy_peer_communication_port: Optional[int] = None,
+                 haproxy_log_target: Optional[str] = 'journald',
+                 haproxy_log_level: Optional[str] = 'info',
                  ):
         assert service_type == 'ingress'
 
@@ -2646,6 +2648,8 @@ class IngressSpec(ServiceSpec):
         self.monitor_ip_addrs = monitor_ip_addrs
         self.use_tcp_mode_over_rgw = use_tcp_mode_over_rgw
         self.haproxy_peer_communication_port = haproxy_peer_communication_port
+        self.haproxy_log_target = (haproxy_log_target or 'journald').lower()
+        self.haproxy_log_level = (haproxy_log_level or 'info').lower()
 
     def get_port_start(self) -> List[int]:
         ports = []
@@ -2716,6 +2720,10 @@ class IngressSpec(ServiceSpec):
                     'To enable monitor_ssl, both monitor_ssl_cert and monitor_ssl_key '
                     'must be provided.'
                 )
+
+        verify_enum(self.haproxy_log_target, 'haproxy_log_target', ['journald', 'none'])
+        verify_enum(self.haproxy_log_level, 'haproxy_log_level',
+                    ['debug', 'info', 'notice', 'warning', 'err'])
 
 
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
