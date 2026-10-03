@@ -40,6 +40,7 @@
 #include "os/kv.h"
 #include "include/compat.h"
 #include "include/intarith.h"
+#include "include/random.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
 #include "include/util.h"
@@ -5806,6 +5807,110 @@ void BlueStore::MempoolThread::_update_cache_settings()
                 << dendl;
 }
 
+// =======================================================
+
+// ClaimRangeStressThread
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.ClaimRangeStressThread "
+#undef dout_context
+#define dout_context store->cct
+
+void BlueStore::ClaimRangeStressThread::init()
+{
+  auto& conf = store->cct->_conf;
+  if (!conf.get_val<bool>("bluestore_debug_claim_range_stress")) {
+    return;
+  }
+  max_claims = conf.get_val<uint64_t>(
+    "bluestore_debug_claim_range_stress_max_claims");
+  claim_len = conf.get_val<Option::size_t>(
+    "bluestore_debug_claim_range_stress_claim_length");
+  free_p = conf.get_val<uint64_t>(
+    "bluestore_debug_claim_range_stress_max_free_percent");
+  min_free = conf.get_val<Option::size_t>(
+    "bluestore_debug_claim_range_stress_min_free");
+  interval = conf.get_val<double>(
+    "bluestore_debug_claim_range_stress_interval");
+  // claim_range() asserts on a misaligned length;
+  ceph_assert(claim_len % store->alloc->get_block_size() == 0);
+  ceph_assert(claim_len <= store->bdev->get_size());
+  ceph_assert(!stop);
+  create("bstore_claim_st");
+}
+
+void *BlueStore::ClaimRangeStressThread::entry()
+{
+  std::unique_lock l{lock};
+
+  struct held_claim {
+    PExtentVector exts;
+    uint64_t bytes;
+  };
+  std::deque<held_claim> pool;
+  uint64_t held = 0, claimed_total = 0, released_total = 0;
+  // claim_range() calls made
+  uint64_t claims = 0;
+  const uint64_t bs = store->block_size;
+  bufferlist sentinel;
+  sentinel.append(std::string(bs, char(0xAB)));
+
+  auto release_front = [&] {
+    auto &claimed_range = pool.front();
+    store->alloc->release(claimed_range.exts);
+    released_total += claimed_range.bytes;
+    held -= claimed_range.bytes;
+    pool.pop_front();
+  };
+
+  while (!stop) {
+    if (pool.size() == max_claims) {
+      release_front();
+    }
+    uint64_t free = store->alloc->get_free();
+
+    if (held + claim_len <= free_p * (held + free) / 100 &&
+        free >= min_free + claim_len) {
+      // pick a whole claim_len slot, so [off, off + claim_len) never runs
+      // past the allocator's capacity
+      uint64_t slots = store->alloc->get_capacity() / claim_len;
+      uint64_t off =
+        ceph::util::generate_random_number<uint64_t>(0, slots - 1) * claim_len;
+      PExtentVector exts;
+      uint64_t n = store->alloc->claim_range(off, claim_len, &exts);
+      dout(20) << __func__ << " claimed 0x" << std::hex << n << " of 0x"
+               << off << "~" << claim_len << std::dec << dendl;
+      ++claims;
+      if (n > 0) {
+        // write sentinel to the first and the last block of the extent
+        for (auto& e : exts) {
+          int r = store->bdev->write(e.offset, sentinel, false);
+          ceph_assert(r == 0);
+          r = store->bdev->write(e.offset + e.length - bs, sentinel, false);
+          ceph_assert(r == 0);
+        }
+        claimed_total += n;
+        held += n;
+        pool.push_back({std::move(exts), n});
+      }
+    }
+    cond.wait_for(l, ceph::make_timespan(interval));
+  }
+
+  // Thread stopped, release all claims
+  while (!pool.empty()) {
+    release_front();
+  }
+
+  dout(1) << __func__ << " claims " << claims
+          << " claimed 0x" << std::hex << claimed_total
+          << " released 0x" << released_total << std::dec << dendl;
+  ceph_assert(held == 0);
+  ceph_assert(claimed_total == released_total);
+  stop = false;
+  return nullptr;
+}
+
 // =====================================
 
 #undef dout_prefix
@@ -5848,7 +5953,8 @@ BlueStore::BlueStore(CephContext *cct,
     kv_finalize_thread(this),
     min_alloc_size(_min_alloc_size),
     min_alloc_size_order(std::countr_zero(_min_alloc_size)),
-    mempool_thread(this)
+    mempool_thread(this),
+    claim_range_stress_thread(this)
 {
   _init_logger();
   cct->_conf.add_observer(this);
@@ -9824,6 +9930,8 @@ int BlueStore::_mount()
     bluefs->spillover_cleaner_start();
   }
 
+  claim_range_stress_thread.init();
+
   mounted = true;
   return 0;
 }
@@ -9832,6 +9940,7 @@ int BlueStore::umount()
 {
   dout(5) << __func__ << dendl;
   ceph_assert(_kv_only || mounted);
+  claim_range_stress_thread.shutdown();
   _osr_drain_all();
 
   if (bluefs) {

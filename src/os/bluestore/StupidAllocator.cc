@@ -2,6 +2,9 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "StupidAllocator.h"
+
+#include <limits>
+
 #include "bluestore_types.h"
 #include "common/debug.h"
 
@@ -401,6 +404,73 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
   ceph_assert(num_free >= 0);
 }
 
+int64_t StupidAllocator::claim_range(uint64_t offset, uint64_t length, PExtentVector *extents)
+{
+  if (length == 0) {
+    return 0;
+  }
+
+  ceph_assert(p2aligned(offset, (uint64_t)block_size));
+  ceph_assert(p2aligned(length, (uint64_t)block_size));
+  ceph_assert(offset <= uint64_t(device_size));
+  ceph_assert(length <= uint64_t(device_size) - offset);
+
+  // bluestore_pextent_t::length is 32 bit, so a longer run has to be reported
+  // as several extents. Round down and align - the cap itself is not a
+  // multiple of block_size.
+  constexpr auto cap =
+    std::numeric_limits<decltype(bluestore_pextent_t::length)>::max();
+  const uint64_t max_extent_len = p2align(uint64_t(cap), (uint64_t)block_size);
+
+  std::lock_guard l(lock);
+  uint64_t sum = 0;
+  ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
+	   	 << std::dec << dendl;
+  interval_set_t rm;
+  rm.insert(offset, length);
+  for (unsigned i = 0; i < free.size() && !rm.empty(); ++i) {
+    interval_set_t overlap;
+    overlap.intersection_of(rm, free[i]);
+    if (!overlap.empty()) {
+      ldout(cct, 20) << __func__ << " bin " << i << " rm 0x" << std::hex << overlap
+		     << std::dec << dendl;
+      auto it = overlap.begin();
+      auto it_end = overlap.end();
+      while (it != it_end) {
+        auto o = it.get_start();
+        auto l = it.get_len();
+
+        free[i].erase(o, l,
+          [&](uint64_t off, uint64_t len) {
+            unsigned newbin = _choose_bin(len);
+            if (newbin != i) {
+              ldout(cct, 30) << __func__ << " demoting1 0x" << std::hex << off << "~" << len
+                             << std::dec << " to bin " << newbin << dendl;
+              _insert_free(off, len);
+              return true;
+            }
+            return false;
+          });
+        
+        // Add the allocated extent to the PExtentVector
+        sum += l;
+        while (l > max_extent_len) {
+          extents->emplace_back(o, max_extent_len);
+          o += max_extent_len;
+          l -= max_extent_len;
+        }
+        extents->emplace_back(o, l);
+
+        ++it;
+      }
+
+      rm.subtract(overlap);
+    }
+  }
+  ceph_assert(uint64_t(num_free) >= sum);
+  num_free -= sum;
+  return sum;
+}
 
 void StupidAllocator::shutdown()
 {

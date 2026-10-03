@@ -2909,6 +2909,33 @@ private:
     mono_clock::time_point last_fragmentation_check;
   } mempool_thread;
 
+  struct ClaimRangeStressThread : public Thread {
+  public:
+    BlueStore *store;
+    ceph::condition_variable cond;
+    ceph::mutex lock = ceph::make_mutex("Bluestore::ClaimRangeStressThread::lock");
+    bool stop = false;
+
+    // bluestore_debug_claim_range_stress_*, read by init() at every mount
+    uint64_t max_claims = 0, claim_len = 0, free_p = 0, min_free = 0;
+    double interval = 0;
+
+    explicit ClaimRangeStressThread(BlueStore *s) : store(s) {}
+
+    void *entry() override;
+    void init();
+    void shutdown() {
+      if (!is_started()) {
+        return;
+      }
+      lock.lock();
+      stop = true;
+      cond.notify_all();
+      lock.unlock();
+      join();
+    }
+  } claim_range_stress_thread;
+
 #ifdef WITH_BLKIN
   ZTracer::Endpoint trace_endpoint {"0.0.0.0", 0, "BlueStore"};
 #endif
