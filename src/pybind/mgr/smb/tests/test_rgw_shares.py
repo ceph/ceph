@@ -934,3 +934,337 @@ def test_rgw_share_acl_configuration(thandler):
     # Verify ACL xattr security name is configured
     assert 'acl_xattr:security_acl_name' in share_opts
     assert share_opts['acl_xattr:security_acl_name'] == 'user.NTACL'
+
+
+# Tests for tenant-aware RGW operations
+class _TenantAwareFakeToolExecer:
+    """Mock tool executor that handles tenant-aware RGW operations."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec supporting tenant-aware bucket and user operations."""
+        # Check for bucket stats command
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            # Extract bucket name from command
+            bucket_idx = (
+                cmd.index('--bucket') + 1 if '--bucket' in cmd else -1
+            )
+            bucket_name = cmd[bucket_idx] if bucket_idx > 0 else 'my-bucket'
+
+            # Handle tenant-aware bucket names (format: "tenant/bucket")
+            if '/' in bucket_name:
+                tenant, bucket = bucket_name.split('/', 1)
+                owner = f"{tenant}$tenantuser"
+            else:
+                tenant = None
+                bucket = bucket_name
+                owner = 'testuser'
+
+            bucket_stats = json.dumps(
+                {'owner': owner, 'bucket': bucket, 'usage': {}}
+            )
+            return (0, bucket_stats, '')
+
+        # Check for user info command
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            # Extract user_id from command
+            uid_idx = cmd.index('--uid') + 1 if '--uid' in cmd else -1
+            user_id = cmd[uid_idx] if uid_idx > 0 else 'testuser'
+
+            # For tenant-aware users, return credentials
+            user_info = json.dumps(
+                {
+                    'user_id': user_id,
+                    'keys': [
+                        {
+                            'access_key': f'TENANT_ACCESS_KEY_{user_id}',
+                            'secret_key': f'TENANT_SECRET_KEY_{user_id}',
+                        }
+                    ],
+                }
+            )
+            return (0, user_info, '')
+
+        # Default response for other commands
+        return (0, '{}', '')
+
+
+def test_tenant_aware_rgw_share_creation(thandler):
+    """Test creating RGW share with tenant-aware user_id (format: tenant$user)."""
+    cluster = _cluster(
+        cluster_id='tenantcluster',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    # Create share with tenant-aware user_id format
+    share = smb.resources.Share(
+        cluster_id='tenantcluster',
+        share_id='tenantshare',
+        name='Tenant Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='tenant-bucket',
+            user_id='mytenant$tenantuser',
+        ),
+    )
+
+    # Use tenant-aware mock executor
+    ext_store = smb.config_store.MemConfigStore()
+    handler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_TenantAwareFakeToolExecer(),
+    )
+
+    rg = handler.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+
+    # Verify share was created with tenant-aware user_id
+    assert (
+        'shares',
+        'tenantcluster.tenantshare',
+    ) in handler.internal_store.data
+    share_dict = handler.internal_store.data[
+        ('shares', 'tenantcluster.tenantshare')
+    ]
+    # Verify credential_ref was set to full tenant$user format
+    assert share_dict['rgw']['credential_ref'] == 'mytenant$tenantuser'
+    assert share_dict['rgw']['bucket'] == 'tenant-bucket'
+
+    # Verify credential was created with proper key
+    assert ('rgw_creds', 'mytenant$tenantuser') in handler.internal_store.data
+    cred_dict = handler.internal_store.data[
+        ('rgw_creds', 'mytenant$tenantuser')
+    ]
+    assert cred_dict['user_id'] == 'mytenant$tenantuser'
+
+
+def test_tenant_user_extraction():
+    """Test that tenant is properly extracted from user_id format."""
+    from smb.rgw import _split_tenant_user_id
+
+    # Test tenant$user format
+    tenant, user = _split_tenant_user_id('mytenant$myuser')
+    assert tenant == 'mytenant'
+    assert user == 'myuser'
+
+    # Test plain user format (no tenant)
+    tenant, user = _split_tenant_user_id('plainuser')
+    assert tenant == ''
+    assert user == 'plainuser'
+
+    # Test empty string
+    tenant, user = _split_tenant_user_id('')
+    assert tenant == ''
+    assert user == ''
+
+
+def test_tenant_aware_bucket_validation():
+    """Test bucket validation with tenant-aware user_id."""
+    from smb.rgw import validate_rgw_bucket
+
+    executor = _TenantAwareFakeToolExecer()
+
+    # Validate bucket with tenant-aware user_id
+    result = validate_rgw_bucket(
+        executor, 'tenant-bucket', user_id='mytenant$tenantuser'
+    )
+    assert result is True
+
+    # Validate bucket with plain user_id
+    result = validate_rgw_bucket(executor, 'my-bucket', user_id='testuser')
+    assert result is True
+
+
+def test_fetch_rgw_credentials_with_tenant():
+    """Test fetching credentials for tenant-aware user."""
+    from smb.rgw import fetch_rgw_credentials
+
+    executor = _TenantAwareFakeToolExecer()
+
+    # Fetch credentials with tenant-aware user_id
+    user_id, access_key, secret_key = fetch_rgw_credentials(
+        executor, 'tenant-bucket', user_id='mytenant$tenantuser'
+    )
+
+    # Verify user_id is returned in same format as input (with tenant prefix)
+    assert user_id == 'mytenant$tenantuser'
+    assert access_key == 'TENANT_ACCESS_KEY_tenantuser'
+    assert secret_key == 'TENANT_SECRET_KEY_tenantuser'
+
+    # Fetch credentials with plain user_id
+    user_id, access_key, secret_key = fetch_rgw_credentials(
+        executor, 'my-bucket', user_id='testuser'
+    )
+
+    # Verify user_id is returned in same format as input (without tenant)
+    assert user_id == 'testuser'
+    assert access_key == 'TENANT_ACCESS_KEY_testuser'
+    assert secret_key == 'TENANT_SECRET_KEY_testuser'
+
+
+def test_reject_bucket_with_slash_in_name():
+    """Test that bucket names containing "/" are rejected as invalid."""
+    from smb.rgw import fetch_rgw_credentials
+
+    executor = _TenantAwareFakeToolExecer()
+
+    # Test fetch_rgw_credentials rejects bucket with "/"
+    with pytest.raises(ValueError) as exc_info:
+        fetch_rgw_credentials(executor, 'tenantA/bkt1', user_id='testuser')
+    error_msg = str(exc_info.value)
+    assert 'tenantA/bkt1' in error_msg
+    assert 'should not contain' in error_msg
+
+
+def test_tenant_aware_bucket_with_slash_error():
+    """Test error when bucket name includes tenant prefix (e.g., tenantA/bucket)."""
+    # Create RGWStorage with invalid bucket name containing "/"
+    rgw_storage = smb.resources.RGWStorage(
+        bucket='tenantA/bucket',  # Invalid: tenant should not be in bucket name
+        user_id='testuser',
+    )
+
+    # Validation should fail due to "/" in bucket name
+    with pytest.raises(ValueError) as exc_info:
+        rgw_storage.validate()
+    error_msg = str(exc_info.value)
+    assert 'tenantA/bucket' in error_msg
+    assert 'should not contain' in error_msg
+
+
+def test_tenant_option_with_user_id():
+    """Test tenant-aware setup with proper tenant$user format in user_id."""
+    from smb.rgw import fetch_rgw_credentials
+
+    executor = _TenantAwareFakeToolExecer()
+
+    # Test with tenant in user_id (correct format)
+    user_id, access_key, secret_key = fetch_rgw_credentials(
+        executor, 'my-bucket', user_id='prodtenant$produser'
+    )
+
+    # Should return user_id in same format as input
+    assert user_id == 'prodtenant$produser'
+    assert access_key == 'TENANT_ACCESS_KEY_produser'
+    assert secret_key == 'TENANT_SECRET_KEY_produser'
+
+
+def test_tenant_aware_share_creation_with_proper_format():
+    """Test RGW share creation with correct tenant$user format (not in bucket name)."""
+    # Correct: tenant in user_id, not in bucket name
+    share = smb.resources.Share(
+        cluster_id='tenantshare',
+        share_id='s1',
+        name='Tenant Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='my-bucket',  # Plain bucket name
+            user_id='mytenant$myuser',  # Tenant in user_id
+        ),
+    )
+
+    # This should validate successfully
+    share.rgw.validate()
+
+    # Verify the structure is correct
+    assert share.rgw.bucket == 'my-bucket'
+    assert share.rgw.user_id == 'mytenant$myuser'
+
+
+def test_wrong_tenant_format_in_bucket_name():
+    """Test various wrong bucket name formats with "/" character."""
+    executor = _TenantAwareFakeToolExecer()
+
+    # Test various invalid bucket formats
+    invalid_buckets = [
+        'tenantA/bkt1',
+        'tenant/bucket',
+        'prod/photos-bucket',
+        'dev/my_bucket_name',
+    ]
+
+    # fetch_rgw_credentials should raise ValueError for buckets with "/"
+    from smb.rgw import fetch_rgw_credentials
+
+    for invalid_bucket in invalid_buckets:
+        with pytest.raises(ValueError) as exc_info:
+            fetch_rgw_credentials(
+                executor, invalid_bucket, user_id='testuser'
+            )
+        error_msg = str(exc_info.value)
+        assert invalid_bucket in error_msg
+        assert 'should not contain' in error_msg
+
+
+def test_rgw_credential_id_validation():
+    """Test that tenant$user format is accepted for RGW credential IDs."""
+    import smb.validation as validation
+
+    # Test cases that should PASS
+    valid_cases = [
+        "testuser",
+        "mytenant$testuser",
+        "tenant123$user456",
+        "a$b",
+        "tenant-name$user-name",
+    ]
+
+    for test_id in valid_cases:
+        # Should not raise ValueError
+        validation.check_rgw_credential_id(test_id)
+
+    # Test cases that should FAIL
+    invalid_cases = ["", "tenant$", "tenant$$user", "$tenant"]
+
+    for test_id in invalid_cases:
+        with pytest.raises(ValueError):
+            validation.check_rgw_credential_id(test_id)
+
+
+def test_regular_id_still_rejects_dollar_sign():
+    """Verify that regular IDs still reject $ character."""
+    import smb.validation as validation
+
+    # Regular IDs should NOT accept $
+    with pytest.raises(ValueError):
+        validation.check_id("tenant$user")
+
+    # Regular IDs should accept normal format
+    validation.check_id("testuser")  # Should not raise
+
+
+class _TenantOnlyFakeToolExecer:
+    """Mock executor where the bucket only exists under a tenant prefix.
+
+    A plain (no-tenant) bucket stats lookup returns an error, simulating
+    a real RGW deployment where the bucket belongs exclusively to a tenant.
+    """
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_idx = (
+                cmd.index('--bucket') + 1 if '--bucket' in cmd else -1
+            )
+            bucket_name = cmd[bucket_idx] if bucket_idx > 0 else ''
+            # Only succeed when bucket is looked up with tenant prefix
+            if '/' in bucket_name:
+                tenant, bucket = bucket_name.split('/', 1)
+                owner = f"{tenant}$tenantuser"
+                return (0, json.dumps({'owner': owner, 'bucket': bucket}), '')
+            # Plain lookup fails — bucket does not exist without tenant
+            return (1, '', f'bucket {bucket_name} not found')
+        raise AssertionError(f"Unexpected command in mock: {cmd}")
+
+
+def test_tenant_bucket_without_user_id_fails():
+    """Test that omitting user_id for a tenant-only bucket raises ValueError."""
+    from smb.rgw import fetch_rgw_credentials
+
+    executor = _TenantOnlyFakeToolExecer()
+
+    with pytest.raises(ValueError):
+        fetch_rgw_credentials(executor, 'tenant-bucket', user_id='')

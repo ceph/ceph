@@ -411,6 +411,10 @@ class RGWStorage(_RBase):
     def validate(self) -> None:
         if not self.bucket:
             raise ValueError('bucket requires a value')
+        if '/' in self.bucket:
+            raise ValueError(
+                f"Invalid bucket name '{self.bucket}': bucket name should not contain /."
+            )
 
     def convert(self, operation: ConversionOp) -> Self:
         """Convert password fields based on the operation."""
@@ -1203,7 +1207,7 @@ class RGWCredential(_RBase):
     def validate(self) -> None:
         if not self.rgw_credential_id:
             raise ValueError('rgw_credential_id requires a value')
-        validation.check_id(self.rgw_credential_id)
+        validation.check_rgw_credential_id(self.rgw_credential_id)
         if self.linked_to_cluster is not None:
             validation.check_id(self.linked_to_cluster)
         if self.intent is Intent.PRESENT:

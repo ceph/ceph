@@ -407,7 +407,7 @@ share_name
     the ``share_id`` will be used automatically
 user_id
     Optional. The RGW user ID that owns the bucket. If not provided, the system
-    will attempt to determine the bucket owner automatically
+    will attempt to determine the bucket owner automatically.
 readonly
     Creates a read-only share
 
@@ -426,6 +426,13 @@ Create a share with a custom name and a specific user:
 
     ceph smb share create rgw test1 photos my-photos-bucket \
         --share-name="Photo Archive" --user-id=s3user
+
+Create a tenant-aware RGW share (for multi-tenant RGW deployments):
+
+.. prompt:: bash #
+
+    ceph smb share create rgw test1 photos my-photos-bucket \
+        --share-name="Tenant Photos" --user-id='mytenant$s3user'
 
 
 .. _qos-parameters:
@@ -1345,6 +1352,38 @@ Another example of an RGW-backed share with an explicit ``user_id``:
     rgw:
       bucket: my-bucket
       user_id: s3user
+
+Tenant-Aware RGW Shares
+^^^^^^^^^^^^^^^^^^^^^^^
+
+RGW supports multi-tenant deployments where user IDs and buckets can be isolated
+by tenant. Tenant-aware RGW user IDs must be of the form tenant$user, for example
+``ops$user1``.
+
+The SMB module automatically handles tenant extraction and passes the appropriate
+tenant information to RGW commands. Users should not need to manage tenant
+awareness separately, it is transparent to the share configuration.
+
+Example of a tenant-aware RGW share:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.share
+    cluster_id: tango
+    share_id: tenant-s3share
+    name: "Tenant S3 Storage"
+    rgw:
+      bucket: tenant-bucket
+      user_id: mytenant$s3user
+
+In this example, the ``user_id`` is in the format ``mytenant$s3user``, where:
+
+- ``mytenant`` is the tenant name
+- ``s3user`` is the user name within that tenant
+
+The system will automatically extract the tenant information and use it when
+fetching credentials and validating the bucket. The returned ``credential_ref``
+will be set to the user_id (``mytenant$s3user`` in this case).
 
 The following is an example of a CephFS share with QoS settings including burst
 multipliers and human-readable bandwidth limits:
