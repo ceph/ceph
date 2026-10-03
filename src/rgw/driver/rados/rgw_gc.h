@@ -14,6 +14,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 
 #include <atomic>
+#include <string_view>
 
 class RGWGCIOManager;
 
@@ -25,9 +26,17 @@ class RGWGC : public DoutPrefixProvider {
   std::atomic<bool> down_flag = { false };
 
   static constexpr uint64_t seed = 8675309;
+  static constexpr std::string_view fifo_oid_prefix = "gc.fifo";
 
   int tag_index(const std::string& tag);
+  std::string fifo_oid(int index) const;
   int send_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
+
+  int fifo_push(int index, const cls_rgw_gc_obj_info& info, optional_yield y);
+  int fifo_list(int index, const std::string& marker, uint32_t max, bool expired_only,
+                std::list<cls_rgw_gc_obj_info>& entries, bool* truncated,
+                std::string* next_marker, optional_yield y);
+  int fifo_trim(int index, const std::string& marker, optional_yield y);
 
   class GCWorker : public Thread {
     const DoutPrefixProvider *dpp;
@@ -49,11 +58,9 @@ public:
     stop_processor();
     finalize();
   }
-  std::vector<bool> transitioned_objects_cache;
   int get_max_objs() const { return max_objs; }
   std::tuple<int, std::optional<cls_rgw_obj_chain>> send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
 
-  int remove(int index, const std::vector<std::string>& tags, librados::AioCompletion **pc, optional_yield y);
   int remove(int index, int num_entries, optional_yield y);
 
   void initialize(CephContext *_cct, RGWRados *_store, optional_yield y);
