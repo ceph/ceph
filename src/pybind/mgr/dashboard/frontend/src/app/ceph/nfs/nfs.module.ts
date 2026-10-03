@@ -10,13 +10,16 @@ import { NfsDetailsComponent } from './nfs-details/nfs-details.component';
 import { NfsFormClientComponent } from './nfs-form-client/nfs-form-client.component';
 import { NfsFormComponent } from './nfs-form/nfs-form.component';
 import { NfsListComponent } from './nfs-list/nfs-list.component';
+import { NfsClusterFormComponent } from './nfs-cluster-form/nfs-cluster-form.component';
 import {
   ButtonModule,
   CheckboxModule,
+  ComboBoxModule,
   GridModule,
   IconModule,
   IconService,
   InputModule,
+  NumberModule,
   RadioModule,
   SelectModule,
   TabsModule,
@@ -24,6 +27,8 @@ import {
 } from 'carbon-components-angular';
 
 import Close from '@carbon/icons/es/close/32';
+import ChevronDown from '@carbon/icons/es/chevron--down/16';
+import ChevronUp from '@carbon/icons/es/chevron--up/16';
 import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
 import { ClusterModule } from '../cluster/cluster.module';
 import { NfsClusterDetailsComponent } from './nfs-cluster-details/nfs-cluster-details.component';
@@ -39,8 +44,10 @@ import { NfsClusterDetailsComponent } from './nfs-cluster-details/nfs-cluster-de
     NgbTooltipModule,
     GridModule,
     TagModule,
+    ComboBoxModule,
     SelectModule,
     InputModule,
+    NumberModule,
     RadioModule,
     CheckboxModule,
     ButtonModule,
@@ -55,11 +62,12 @@ import { NfsClusterDetailsComponent } from './nfs-cluster-details/nfs-cluster-de
     NfsFormComponent,
     NfsFormClientComponent,
     NfsClusterComponent,
-    NfsClusterDetailsComponent
+    NfsClusterDetailsComponent,
+    NfsClusterFormComponent
   ]
 })
 export class NfsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([Close]);
+    this.iconService.registerAll([Close, ChevronDown, ChevronUp]);
   }
 }
