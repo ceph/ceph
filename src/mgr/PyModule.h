@@ -159,6 +159,9 @@ public:
     std::lock_guard l(lock);
     failed = true;
     error_string = reason;
+    if (perfcounter) {
+      perfcounter->set(l_pym_alive, 0);
+    }
   }
 
   bool is_enabled() const {
