@@ -18,7 +18,14 @@
 #     of the run (reactor_cpu_busy_ms), averaged over all of them, and of the
 #     busiest one. Per-core values are kept in <RESULTS_DIR>/<run>.cores.tsv,
 #     and the client ops each core served (local: without a cross-core hop,
-#     remote: forwarded to it) in <RESULTS_DIR>/<run>.ops.tsv.
+#     remote: forwarded to it) in <RESULTS_DIR>/<run>.ops.tsv;
+#   - per client op (over all OSD reactors): reactor tasks run and pollers
+#     executed, and TCP segments sent (system wide: on loopback, every
+#     unbatched send is a segment), as indications of batching; and the CPU
+#     the fio clients used (cores). Per-reactor deltas (busy %, polls, tasks,
+#     network bytes sent/received) are in <RESULTS_DIR>/<run>.reactor.tsv.
+#   All but the fio figures are measured over the same window: from about
+#   the end of the ramp to about the end of the run.
 #
 # Run with:
 #   cd build && ../qa/run-standalone.sh crimson/core-hints-fio.sh
@@ -32,6 +39,9 @@
 #                  OSD_SMP CPUs from OSD_CPU_BASE + i * OSD_SMP on
 #                  (crimson_cpu_set)                            (default: unset)
 #   CLIENT_CPUS    the CPUs (taskset list) to run fio on        (default: any)
+#   OSD_EXTRA_ARGS more OSD command line options, e.g. "--ms_tcp_nodelay=false"
+#   CLIENT_CONF_EXTRA  more [client] settings, ';'-separated, e.g.
+#                  "ms tcp nodelay = false; ms async op threads = 6"
 #   OSD_MEMORY     memory per OSD (crimson_memory)              (default: 4G)
 #   STORE          cyanstore | seastore | bluestore (alienstore) (default: seastore)
 #   SEASTORE_DEVS  seastore: comma-separated block devices, one per OSD (in
@@ -71,6 +81,8 @@ POOL_SIZE=${POOL_SIZE:-3}
 OSD_SMP=${OSD_SMP:-4}
 OSD_CPU_BASE=${OSD_CPU_BASE:-}
 CLIENT_CPUS=${CLIENT_CPUS:-}
+OSD_EXTRA_ARGS=${OSD_EXTRA_ARGS:-}
+CLIENT_CONF_EXTRA=${CLIENT_CONF_EXTRA:-}
 OSD_MEMORY=${OSD_MEMORY:-4G}
 STORE=${STORE:-seastore}
 SEASTORE_DEVS=${SEASTORE_DEVS:-}
@@ -264,7 +276,7 @@ function _setup_cluster() {
             $(_osd_cpu_args $id) \
             --crimson_memory=$OSD_MEMORY \
             --crimson_osd_core_listeners=true \
-            $store_args || return 1
+            $store_args $OSD_EXTRA_ARGS || return 1
     done
 
     create_pool $POOL $POOL_PGS $POOL_PGS || return 1
@@ -324,6 +336,7 @@ auth client required = none
 objecter use osd core hints = $([ $mode = on ] && echo true || echo false)
 admin socket = $abs_dir/fio-$mode.\$pid.\$cctid.asok
 log file = $abs_dir/fio-$mode.\$pid.log
+$(tr ';' '\n' <<<"$CLIENT_CONF_EXTRA" | sed -e 's/^ *//')
 EOF
     echo $conf
 }
@@ -505,25 +518,61 @@ function _client_counters() {
     echo "$send $core $found"
 }
 
-# the reactors' busy time of all OSDs, as "<osd> <shard> <busy ms>" lines
-function _reactor_busy() {
+# per reactor counters of all OSDs, as lines of
+# "<osd> <shard> <busy ms> <polls> <tasks> <net bytes sent> <net bytes received>"
+function _reactor_stats() {
     local id
     for id in $(seq 0 $((NUM_OSDS - 1))); do
-        ceph tell osd.$id dump_metrics reactor_cpu_busy_ms --format=json |
-            jq -r --arg osd $id '.metrics[] | to_entries[] |
-                   select(.key == "reactor_cpu_busy_ms") |
-                   "\($osd) \(.value.shard) \(.value.value)"' || return 1
+        { ceph tell osd.$id dump_metrics reactor_ --format=json &&
+          ceph tell osd.$id dump_metrics network_ --format=json; } |
+            jq -s -r --arg osd $id '
+              def total(name): map(select(.k == name) | .v) | add // 0;
+              [.[].metrics[] | to_entries[] |
+               {k: .key, s: (.value.shard | tonumber), v: .value.value}] |
+              group_by(.s)[] |
+              "\($osd) \(.[0].s) \(total("reactor_cpu_busy_ms")) " +
+              "\(total("reactor_polls")) \(total("reactor_tasks_processed")) " +
+              "\(total("network_bytes_sent")) \(total("network_bytes_received"))"' ||
+            return 1
     done
 }
 
-# per reactor utilization (%) between two _reactor_busy snapshots taken
-# <ms> apart, as "<osd> <shard> <util>" lines
-function _reactor_util() {
+# per reactor deltas between two _reactor_stats snapshots taken <ms> apart,
+# as "<osd> <shard> <busy %> <polls> <tasks> <bytes sent> <bytes received>"
+function _reactor_delta() {
     local before=$1 after=$2 ms=$3
-    awk -v ms=$ms 'NR == FNR { b[$1 " " $2] = $3; next }
-                   ($1 " " $2) in b {
-                       printf "%s %s %.1f\n", $1, $2, 100 * ($3 - b[$1 " " $2]) / ms
+    awk -v ms=$ms 'NR == FNR { for (i = 3; i <= 7; i++) b[$1 " " $2, i] = $i; next }
+                   ($1 " " $2, 3) in b {
+                       printf "%s %s %.1f", $1, $2, 100 * ($3 - b[$1 " " $2, 3]) / ms
+                       for (i = 4; i <= 7; i++) printf " %d", $i - b[$1 " " $2, i]
+                       printf "\n"
                    }' $before $after | sort -n -k1 -k2
+}
+
+# the system's TCP segments, as "<in> <out>"
+function _tcp_segs() {
+    awk '/^Tcp:/ { if (!hdr) { for (i = 2; i <= NF; i++) col[$i] = i; hdr = 1 }
+                   else { print $col["InSegs"], $col["OutSegs"] } }' /proc/net/snmp
+}
+
+# the CPU time (clock ticks) used so far by the running fio processes
+function _client_cpu_ticks() {
+    local pid total=0
+    for pid in $(pgrep -x fio); do
+        # utime and stime: fields 14 and 15 (the command, field 2, is "(fio)")
+        total=$((total + $(awk '{ print $14 + $15 }' /proc/$pid/stat 2>/dev/null || echo 0)))
+    done
+    echo $total
+}
+
+# snapshot of everything measured over the window, into <prefix>.*
+function _snapshot() {
+    local prefix=$1
+    date +%s%3N > $prefix.time
+    _osd_shard_ops > $prefix.ops || return 1
+    _reactor_stats > $prefix.reactor || return 1
+    _tcp_segs > $prefix.tcp
+    _client_cpu_ticks > $prefix.client_cpu
 }
 
 # one fio run: workload rw, client mode (off/on), repetition rep.
@@ -541,20 +590,16 @@ function _fio_run() {
     _fio_job $conf $rw "${extra[@]}" > $dir/$tag.fio || return 1
 
     rm -f $dir/fio-$mode.*.asok
-    _osd_shard_ops > $dir/$tag.ops0 || return 1
 
     _fio $dir $tag $dir/$tag.fio &
     local fio_pid=$!
-    # the measured part of the run starts after the ramp: sample the
-    # reactors' load from (about) then, and until (about) its end - when
-    # the fio clients are still alive to be sampled too
+    # the measured part of the run starts after the ramp: sample from
+    # (about) then, and until (about) its end - when the fio clients are
+    # still alive to be sampled too
     sleep $((FIO_RAMP + 2))
-    local t0 t1
-    t0=$(date +%s%3N)
-    _reactor_busy > $dir/$tag.busy0 || return 1
+    _snapshot $dir/$tag.s0 || return 1
     sleep $((FIO_RUNTIME - 5))
-    t1=$(date +%s%3N)
-    _reactor_busy > $dir/$tag.busy1 || return 1
+    _snapshot $dir/$tag.s1 || return 1
     local client
     client=$(_client_counters $dir $mode $RESULTS_DIR/$tag.client.txt)
     wait $fio_pid || {
@@ -565,10 +610,11 @@ function _fio_run() {
     _check_osds_memory $dir || return 1
     _check_fio_io $tag || return 1
 
-    _osd_shard_ops > $dir/$tag.ops1 || return 1
-    _shard_ops_delta $dir/$tag.ops0 $dir/$tag.ops1 > $RESULTS_DIR/$tag.ops.tsv
-
-    _reactor_util $dir/$tag.busy0 $dir/$tag.busy1 $((t1 - t0)) \
+    local ms=$(( $(cat $dir/$tag.s1.time) - $(cat $dir/$tag.s0.time) ))
+    _shard_ops_delta $dir/$tag.s0.ops $dir/$tag.s1.ops > $RESULTS_DIR/$tag.ops.tsv
+    _reactor_delta $dir/$tag.s0.reactor $dir/$tag.s1.reactor $ms \
+        > $RESULTS_DIR/$tag.reactor.tsv
+    awk '{ print $1, $2, $3 }' $RESULTS_DIR/$tag.reactor.tsv \
         > $RESULTS_DIR/$tag.cores.tsv
     local cpu_avg cpu_max
     cpu_avg=$(awk '{ t += $3; n++ } END { printf "%.1f", n ? t / n : 0 }' \
@@ -583,6 +629,19 @@ function _fio_run() {
     local hop_pct client_pct=n/a
     hop_pct=$(awk -v l=$d_local -v r=$d_remote \
                   'BEGIN { t = l + r; printf "%.1f", t ? 100 * r / t : 0 }')
+    # per client op, over the window
+    local ops=$((d_local + d_remote))
+    local tasks_op polls_op segs_op clnt_cores
+    tasks_op=$(awk -v ops=$ops '{ t += $5 } END { printf "%.1f", ops ? t / ops : 0 }' \
+               $RESULTS_DIR/$tag.reactor.tsv)
+    polls_op=$(awk -v ops=$ops '{ t += $4 } END { printf "%.1f", ops ? t / ops : 0 }' \
+               $RESULTS_DIR/$tag.reactor.tsv)
+    local -a seg0=($(cat $dir/$tag.s0.tcp)) seg1=($(cat $dir/$tag.s1.tcp))
+    segs_op=$(awk -v d=$((seg1[1] - seg0[1])) -v ops=$ops \
+                  'BEGIN { printf "%.2f", ops ? d / ops : 0 }')
+    clnt_cores=$(awk -v d=$(( $(cat $dir/$tag.s1.client_cpu) - $(cat $dir/$tag.s0.client_cpu) )) \
+                     -v hz=$(getconf CLK_TCK) -v ms=$ms \
+                     'BEGIN { printf "%.1f", ms ? d / hz / (ms / 1000) : 0 }')
     if [ ${c[2]} -gt 0 ] && [ ${c[0]} -gt 0 ]; then
         client_pct=$(awk -v s=${c[0]} -v k=${c[1]} \
                          'BEGIN { printf "%.1f", 100 * k / s }')
@@ -590,7 +649,9 @@ function _fio_run() {
 
     jq -r --arg rw $rw --arg mode $mode --arg rep $rep \
           --arg hop $hop_pct --arg client $client_pct \
-          --arg cpu_avg $cpu_avg --arg cpu_max $cpu_max '
+          --arg cpu_avg $cpu_avg --arg cpu_max $cpu_max \
+          --arg tasks_op $tasks_op --arg polls_op $polls_op \
+          --arg segs_op $segs_op --arg clnt_cores $clnt_cores '
         .jobs[0] as $j |
         [$rw, $mode, $rep,
          ($j.read.iops | floor), ($j.write.iops | floor),
@@ -598,14 +659,15 @@ function _fio_run() {
          (($j.read.clat_ns.percentile["99.000000"] // 0) / 1000 | floor),
          ($j.write.clat_ns.mean / 1000 | floor),
          (($j.write.clat_ns.percentile["99.000000"] // 0) / 1000 | floor),
-         $hop, $client, $cpu_avg, $cpu_max] | @tsv' \
+         $hop, $client, $cpu_avg, $cpu_max,
+         $tasks_op, $polls_op, $segs_op, $clnt_cores] | @tsv' \
         $RESULTS_DIR/$tag.json >> $RESULTS_DIR/summary.tsv || return 1
     echo "$d_remote $((d_local + d_remote))" > $dir/$tag.hops
 }
 
 function _print_summary() {
     {
-        printf 'workload\tmode\trep\trd_iops\twr_iops\trd_lat_us\trd_p99_us\twr_lat_us\twr_p99_us\tosd_hop_%%\tcore_send_%%\tcpu_avg_%%\tcpu_max_%%\n'
+        printf 'workload\tmode\trep\trd_iops\twr_iops\trd_lat_us\trd_p99_us\twr_lat_us\twr_p99_us\tosd_hop_%%\tcore_send_%%\tcpu_avg_%%\tcpu_max_%%\ttasks/op\tpolls/op\tsegs/op\tclnt_cores\n'
         cat $RESULTS_DIR/summary.tsv
     } | column -t -s $'\t' | tee $RESULTS_DIR/summary.txt
     echo "fio outputs and summary in $RESULTS_DIR"
