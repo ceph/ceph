@@ -130,6 +130,15 @@ static int conf_stringify(const Option::value_t& v, string *out)
   return 0;
 }
 
+// Check to see if we should guard modifying a value
+
+bool md_config_t::unsafe_runtime_change(const Option& opt,
+                                        const ConfigTracker& observers)
+{
+  return (!opt.can_update_at_runtime() && safe_to_start_threads &&
+          !observers.is_tracking(opt.name));
+}
+
 md_config_t::md_config_t(ConfigValues& values,
 			 const ConfigTracker& tracker,
 			 bool is_daemon)
@@ -333,11 +342,15 @@ int md_config_t::set_mon_vals(CephContext *cct,
     ldout(cct,10) << __func__ << " " << name
 		  << " cleared (was " << Option::to_str(config->second) << ")"
 		  << dendl;
+    const Option *o = find_option(name);
+    if (o && unsafe_runtime_change(*o, tracker)) {
+      ldout(cct,10) << __func__ << " " << name << " skipped, not runtime changeable." << dendl;
+      return;
+    }
     values.rm_val(name, CONF_MON);
-    // if this is a debug option, it needs to propagate to teh subsys;
+    // if this is a debug option, it needs to propagate to the subsys;
     // this isn't covered by update_legacy_vals() below.  similarly,
     // we want to trigger a config notification for these items.
-    const Option *o = find_option(name);
     _refresh(values, *o);
   });
   values_bl.clear();
@@ -953,9 +966,10 @@ int md_config_t::set_val(ConfigValues& values,
   return -ENOENT;
 }
 
-int md_config_t::rm_val(ConfigValues& values, const std::string_view key)
+int md_config_t::rm_val(ConfigValues& values, const ConfigTracker& observers,
+                        const std::string_view key)
 {
-  return _rm_val(values, key, CONF_OVERRIDE);
+  return _rm_val(values, observers, key, CONF_OVERRIDE);
 }
 
 void md_config_t::get_defaults_bl(const ConfigValues& values,
@@ -1409,10 +1423,7 @@ int md_config_t::_set_val(
     return r;
   }
 
-  // unsafe runtime change?
-  if (!opt.can_update_at_runtime() &&
-      safe_to_start_threads &&
-      !observers.is_tracking(opt.name)) {
+  if (unsafe_runtime_change(opt, observers)) {
     // accept value if it is not actually a change
     if (new_value != _get_val_nometa(values, opt)) {
       *error_message = string("Configuration option '") + opt.name +
@@ -1456,12 +1467,18 @@ void md_config_t::_refresh(ConfigValues& values, const Option& opt)
 }
 
 int md_config_t::_rm_val(ConfigValues& values,
+                         const ConfigTracker& observers,
 			 const std::string_view key,
 			 int level)
 {
   if (schema.count(key) == 0) {
     return -EINVAL;
   }
+  const Option *opt = find_option(key);
+  if (opt && unsafe_runtime_change(*opt, observers)) {
+    return -EPERM;
+  }
+
   auto ret = values.rm_val(std::string{key}, level);
   if (ret < 0) {
     return ret;
