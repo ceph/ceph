@@ -440,8 +440,7 @@
      --hide-progress               when specified, per-shard progress details are not printed to stderr
   
   radoslist options:
-     --rgw-obj-fs                  the field separator that will separate the rados object name from the rgw object name;
-                                   additionally rados objects for incomplete multipart uploads will not be output
+     --rgw-obj-fs                  the field separator that will separate the rados object name from the rgw object name
   
   Bucket list objects options:
      --max-entries                 max number of entries listed (default 1000)
