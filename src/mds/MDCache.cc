@@ -234,15 +234,28 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     /* copy to vector to avoid removals during iteration */
     ephemeral_pin_config_changed = true;
   }
+  if (changed.count("mds_export_ephemeral_random_max")) {
+    export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
+    dout(10) << "Re-evaluating any ephemeral random pinned inodes" << dendl;
+    ephemeral_pin_config_changed = true;
+  }
+  if (changed.count("mds_export_ephemeral_frag_factor") ||
+      changed.count("mds_export_ephemeral_distributed_factor")) {
+    unsigned old_frag_bits = export_ephemeral_frag_bits;
+    handle_mdsmap(mdsmap, mdsmap);
+    if (export_ephemeral_frag_bits != old_frag_bits) {
+      dout(10) << "ephemeral frag bits changed " << old_frag_bits << " -> "
+               << export_ephemeral_frag_bits
+               << ", requeueing ephemerally pinned inodes" << dendl;
+      ephemeral_pin_config_changed = true;
+    }
+  }
   if (ephemeral_pin_config_changed) {
     std::vector<CInode*> migrate;
     migrate.assign(export_ephemeral_pins.begin(), export_ephemeral_pins.end());
     for (auto& in : migrate) {
       in->maybe_export_pin(true);
     }
-  }
-  if (changed.count("mds_export_ephemeral_random_max")) {
-    export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
   }
 
   if (changed.count("mds_kill_dirfrag_at")) {
@@ -276,7 +289,6 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     use_global_snaprealm_seq = g_conf().get_val<bool>("mds_use_global_snaprealm_seq_for_subvol");
     dout(20) << __func__ << " mds_use_global_snaprealm_seq_for_subvol now " << use_global_snaprealm_seq << dendl;
   }
-
   migrator->handle_conf_change(changed, mdsmap);
   mds->balancer->handle_conf_change(changed, mdsmap);
 }
@@ -14496,8 +14508,42 @@ void MDCache::dump_dir(Formatter *f, CDir *dir, bool dentry_dump) {
   f->close_section();
 }
 
+double MDCache::get_effective_ephemeral_frag_factor() const
+{
+  double factor = g_conf().get_val<double>("mds_export_ephemeral_frag_factor");
+
+  auto default_opt = g_conf().get_val_default("mds_export_ephemeral_frag_factor");
+  if (default_opt) {
+    double default_factor = std::stod(*default_opt);
+    if (factor == default_factor) {
+      auto legacy_default_opt = g_conf().get_val_default("mds_export_ephemeral_distributed_factor");
+      if (legacy_default_opt) {
+        double legacy_default = std::stod(*legacy_default_opt);
+        double legacy_factor = g_conf().get_val<double>("mds_export_ephemeral_distributed_factor");
+        if (legacy_factor != legacy_default) {
+          factor = legacy_factor;
+        }
+      }
+    }
+  }
+  return factor;
+}
+
 void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   const mds_rank_t max_mds = mdsmap.get_max_mds();
+
+  // update the ephemeral pin split floor before (re)queueing any export pins
+  // below, since queue_export_pin() consults it to decide whether a
+  // directory needs to be split further
+  if (max_mds <= 1) {
+    export_ephemeral_frag_bits = 0;
+  } else {
+    double want = get_effective_ephemeral_frag_factor() * max_mds;
+    unsigned n = 0;
+    while ((1U << n) < (unsigned)want)
+      ++n;
+    export_ephemeral_frag_bits = n;
+  }
 
   // process export_pin_delayed_queue whenever a new MDSMap received
   auto &q = export_pin_delayed_queue;
@@ -14524,17 +14570,6 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
     for (auto& in : migrate) {
       in->maybe_export_pin();
     }
-  }
-
-  if (max_mds <= 1) {
-    export_ephemeral_dist_frag_bits = 0;
-  } else {
-    double want = g_conf().get_val<double>("mds_export_ephemeral_distributed_factor");
-    want *= max_mds;
-    unsigned n = 0;
-    while ((1U << n) < (unsigned)want)
-      ++n;
-    export_ephemeral_dist_frag_bits = n;
   }
 }
 
