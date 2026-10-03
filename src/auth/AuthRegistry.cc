@@ -72,14 +72,11 @@ void AuthRegistry::_parse_method_list(const string& s,
   v->clear();
   for (auto& i : sup_list) {
     ldout(cct, 5) << "adding auth protocol: " << i << dendl;
-    if (i == "cephx") {
-      v->push_back(CEPH_AUTH_CEPHX);
-    } else if (i == "none") {
-      v->push_back(CEPH_AUTH_NONE);
-    } else if (i == "gss") {
-      v->push_back(CEPH_AUTH_GSS);
-    } else {
+    auto method = AuthMethodList::parse_method(i);
+    if (method == CEPH_AUTH_UNKNOWN) {
       lderr(cct) << "WARNING: unknown auth protocol defined: " << i << dendl;
+    } else {
+      v->push_back(method);
     }
   }
   if (v->empty()) {
