@@ -17,6 +17,7 @@
 #include <mutex>
 #include <thread>
 
+#include "common/condition_variable_debug.h"
 #include "common/mutex_debug.h"
 
 #include "gtest/gtest.h"
@@ -32,7 +33,11 @@ static bool test_try_lock(Mutex* m) {
 
 template<typename Mutex>
 static void test_lock() {
+#ifdef CEPH_LOCKSTAT
+  Mutex m(LOCKSTAT("mutex"));
+#else
   Mutex m("mutex");
+#endif
   auto ttl = &test_try_lock<Mutex>;
 
   m.lock();
@@ -59,7 +64,11 @@ TEST(MutexDebug, Lock) {
 }
 
 TEST(MutexDebugDeathTest, NotRecursive) {
+#ifdef CEPH_LOCKSTAT
+  ceph::mutex_debug m(LOCKSTAT("foo"));
+#else
   ceph::mutex_debug m("foo");
+#endif
   // avoid assert during test cleanup where the mutex is locked and cannot be
   // pthread_mutex_destroy'd
   std::unique_lock locker{m};
@@ -73,7 +82,11 @@ TEST(MutexRecursiveDebug, Lock) {
 
 
 TEST(MutexRecursiveDebug, Recursive) {
+#ifdef CEPH_LOCKSTAT
+  ceph::mutex_recursive_debug m(LOCKSTAT("m"));
+#else
   ceph::mutex_recursive_debug m("m");
+#endif
   auto ttl = &test_try_lock<mutex_recursive_debug>;
 
   ASSERT_NO_THROW(m.lock());
@@ -91,4 +104,34 @@ TEST(MutexRecursiveDebug, Recursive) {
   ASSERT_NO_THROW(m.unlock());
   ASSERT_FALSE(m.is_locked());
   ASSERT_TRUE(std::async(std::launch::async, ttl, &m).get());
+}
+
+TEST(MutexAdaptiveDebug, Lock) { test_lock<ceph::mutex_adaptive_debug>(); }
+
+TEST(MutexAdaptiveDebugDeathTest, NotRecursive)
+{
+  ceph::mutex_adaptive_debug m("foo");
+  std::unique_lock locker{m};
+  ASSERT_TRUE(m.is_locked());
+  ASSERT_DEATH(m.lock(), "FAILED ceph_assert(recursive || !is_locked_by_me())");
+}
+
+TEST(ConditionVariableAdaptiveDebug, WaitNotify)
+{
+  ceph::mutex_adaptive_debug m("cv_mutex");
+  ceph::condition_variable_adaptive_debug cv;
+  bool ready = false;
+
+  std::thread waiter([&] {
+    std::unique_lock lock{m};
+    cv.wait(lock, [&] { return ready; });
+    ASSERT_TRUE(ready);
+  });
+
+  {
+    std::unique_lock lock{m};
+    ready = true;
+  }
+  cv.notify_one();
+  waiter.join();
 }

@@ -60,6 +60,20 @@ int clock_gettime(int clk_id, struct timespec *tp)
 }
 #endif
 
+#if defined __x86_64__ or defined __i386__
+#include <cpuid.h>
+#endif // __x86_64__ or __i386__
+
+#ifdef __linux__
+#include <linux/perf_event.h>
+#include <linux/version.h>
+#include <sys/mman.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <memory>
+#endif // __linux__
+
 using namespace std::literals;
 
 namespace ceph {
@@ -348,6 +362,188 @@ to_pretty_timedelta(timespan duration)
   }
   return fmt::format("{}y", duration_seconds / (3600 * 24 * 365));
 }
+
+#if defined __x86_64__ or defined __i386__
+
+const bool tsc_clock::is_available = tsc_clock::has_tsc() and
+                                       tsc_clock::tsc_allowed();
+const bool tsc_clock::is_steady = tsc_clock::has_invariant_tsc();
+
+// check if the processor has a TSC (Time Stamp Counter) and supports the RDTSC instruction
+bool
+tsc_clock::has_tsc()
+{
+  unsigned int eax, ebx, ecx, edx;
+  if (__get_cpuid(0x01, &eax, &ebx, &ecx, &edx))
+    return (edx & bit_TSC) != 0;
+  else
+    return false;
+}
+
+// check if the processor supports the Invariant TSC feature (constant frequency TSC)
+bool
+tsc_clock::has_invariant_tsc()
+{
+  unsigned int eax, ebx, ecx, edx;
+  if (__get_cpuid(0x80000007, &eax, &ebx, &ecx, &edx))
+    return (edx & bit_InvariantTSC) != 0;
+  else
+    return false;
+}
+
+// calibrate TSC with respect to std::chrono::high_resolution_clock
+double
+tsc_clock::calibrate_tsc_hz_chrono()
+{
+  if (not has_tsc() or not tsc_allowed())
+    return 0;
+
+  constexpr unsigned int sample_size = 1000; // 1000 samples
+  constexpr unsigned int sleep_time = 1000; //    1 ms
+  unsigned long long ticks[sample_size];
+  double times[sample_size];
+
+  auto reference = std::chrono::high_resolution_clock::now();
+  for (unsigned int i = 0; i < sample_size; ++i) {
+    usleep(sleep_time);
+    ticks[i] = rdtsc();
+    times[i] = std::chrono::duration_cast<std::chrono::duration<double>>(
+                   std::chrono::high_resolution_clock::now() - reference)
+                   .count();
+  }
+
+  double mean_x = 0, mean_y = 0;
+  for (unsigned int i = 0; i < sample_size; ++i) {
+    mean_x += (double)times[i];
+    mean_y += (double)ticks[i];
+  }
+  mean_x /= (double)sample_size;
+  mean_y /= (double)sample_size;
+
+  double sigma_xy = 0, sigma_xx = 0;
+  for (unsigned int i = 0; i < sample_size; ++i) {
+    sigma_xx += (double)(times[i] - mean_x) * (double)(times[i] - mean_x);
+    sigma_xy += (double)(times[i] - mean_x) * (double)(ticks[i] - mean_y);
+  }
+
+  // ticks per second
+  return sigma_xy / sigma_xx;
+}
+
+#if defined __linux__
+double
+tsc_clock::calibrate_tsc_hz_perf()
+{
+  if (not has_tsc() or not tsc_allowed())
+    return 0;
+
+  struct perf_event_attr pe = {
+      .type = PERF_TYPE_SOFTWARE,
+      .size = sizeof(struct perf_event_attr),
+      .config = PERF_COUNT_SW_CPU_CLOCK,
+      .disabled = 1,
+      .exclude_kernel = 1,
+      .exclude_hv = 1};
+
+  const int raw_fd = syscall(SYS_perf_event_open, &pe, 0, -1, -1, 0);
+  if (raw_fd < 0) {
+    return calibrate_tsc_hz_chrono();
+  }
+
+  // Use std::unique_ptr to manage the file descriptor.
+  // Value -1 is considered an invalid file descriptor.
+  struct FdDeleter {
+    void operator()(int* f) const {
+      if (f) {
+        if (*f >= 0) {
+          close(*f);
+        }
+        delete f;
+      }
+    }
+  };
+  std::unique_ptr<int, FdDeleter> fd(new int(raw_fd));
+
+  void* addr = mmap(NULL, 4 * 1024, PROT_READ, MAP_SHARED, *fd, 0);
+  if (addr == MAP_FAILED) {
+    return calibrate_tsc_hz_chrono();
+  }
+
+  // Use std::unique_ptr to manage the mmap'ed memory.
+  struct MmapDeleter {
+    void operator()(void* a) const {
+      if (a != MAP_FAILED) {
+        munmap(a, 4 * 1024);
+      }
+    }
+  };
+  std::unique_ptr<void, MmapDeleter> mmap_guard(addr);
+
+  const struct perf_event_mmap_page* pc =
+      reinterpret_cast<perf_event_mmap_page*>(mmap_guard.get());
+  if (pc->cap_user_time != 1) {
+    // If cap_user_time is not supported, we can't use this method.
+    // We should not recurse indefinitely if it keeps failing.
+    // The previous code was calling calibrate_tsc_hz_perf() again,
+    // which seems risky if cap_user_time is never 1.
+    return calibrate_tsc_hz_chrono();
+  } else {
+    __u32 mult_factor = pc->time_mult;
+    __u16 shift_factor = pc->time_shift;
+    uint64_t _cpu_ticks_per_sec = (1ULL << shift_factor) * 1000ULL * 1000ULL *
+                                  1000ULL / mult_factor;
+    return (double)_cpu_ticks_per_sec;
+  }
+}
+#endif // __linux__
+
+double
+tsc_clock::calibrate_tsc_hz()
+{
+#if defined __linux__
+  return calibrate_tsc_hz_perf();
+#else
+  return calibrate_tsc_hz_chrono();
+#endif
+}
+
+// Check if the RDTSC and RDTSCP instructions are allowed in user space.
+// This is controlled by the x86 control register 4, bit 4 (CR4.TSD), but that is only readable by the kernel.
+// On Linux, the flag can be read (and possibly set) via the prctl interface.
+#ifdef __linux__
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
+#define _HAS_PR_TSC_ENABLE
+#endif // LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
+#endif // __linux__
+
+bool
+tsc_clock::tsc_allowed()
+{
+#if defined __linux__ and defined _HAS_PR_TSC_ENABLE
+  int tsc_val = 0;
+  prctl(PR_SET_TSC, PR_TSC_ENABLE);
+  prctl(PR_GET_TSC, &tsc_val);
+  return (tsc_val == PR_TSC_ENABLE);
+#else
+  return true;
+#endif
+}
+
+#undef _HAS_PR_TSC_ENABLE
+
+// tsc_tick definitions
+const double tsc_tick::ticks_per_second = tsc_clock::calibrate_tsc_hz();
+const double tsc_tick::seconds_per_tick = 1. / tsc_tick::ticks_per_second;
+// Fixed-point value for nanoseconds per tick with a 32-bit shift
+const int64_t tsc_tick::nanoseconds_per_tick_shifted =
+    (1000000000ll << 32) / tsc_tick::ticks_per_second;
+// Fixed-point value for ticks per nanosecond with a 32-bit shift.
+// Note: 4.294967296 is 2^32 / 10^9.
+//const int64_t tsc_tick::ticks_per_nanosecond_shifted = (int64_t) ((((__int128_t) tsc_tick::ticks_per_second) << 32) / 1000000000ll);
+const int64_t tsc_tick::ticks_per_nanosecond_shifted =
+    (int64_t)llrint(tsc_tick::ticks_per_second * 4.294967296);
+#endif
+
 }
 
 namespace std {
