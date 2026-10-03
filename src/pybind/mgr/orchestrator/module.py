@@ -344,6 +344,7 @@ def preview_table_services(data: List) -> str:
     table.align = 'l'
     table.left_padding_width = 0
     table.right_padding_width = 2
+    table.max_width = 30
     for item in data:
         if item.get('warning'):
             continue
