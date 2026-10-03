@@ -12,8 +12,13 @@
  */
 
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/asio/post.hpp>
 #include <fmt/format.h>
 
+#include <chrono>
+#include <thread>
+
+#include "common/config.h"
 #include "common/errno.h"
 #include "common/signal.h"
 #include "common/ceph_argparse.h"
@@ -38,6 +43,48 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix *_dout << "nvmeofgw " << __PRETTY_FUNCTION__ << " "
+
+namespace {
+
+struct live_key_t {
+  const char *section;
+  const char *name;
+  const char *option;
+  config_type type;
+};
+
+const live_key_t live_keys[] = {
+  {"gateway", "allowed_consecutive_spdk_ping_failures",
+   "nvmeof_gateway_allowed_consecutive_spdk_ping_failures", CONFIG_TYPE_INT},
+  {"gateway", "spdk_ping_interval_in_seconds",
+   "nvmeof_gateway_spdk_ping_interval_in_seconds", CONFIG_TYPE_FLOAT},
+  {"gateway", "ping_spdk_under_lock",
+   "nvmeof_gateway_ping_spdk_under_lock", CONFIG_TYPE_BOOL},
+  {"gateway", "rebalance_period_sec",
+   "nvmeof_gateway_rebalance_period_sec", CONFIG_TYPE_INT},
+  {"gateway", "max_ns_to_change_lb_grp",
+   "nvmeof_gateway_max_ns_to_change_lb_grp", CONFIG_TYPE_INT},
+  {"gateway", "state_update_interval_sec",
+   "nvmeof_gateway_state_update_interval_sec", CONFIG_TYPE_INT},
+  {"gateway", "break_update_interval_sec",
+   "nvmeof_gateway_break_update_interval_sec", CONFIG_TYPE_INT},
+  {"gateway-logs", "log_level",
+   "nvmeof_gateway_log_level", CONFIG_TYPE_STR},
+  {"gateway-logs", "log_files_rotation_enabled",
+   "nvmeof_gateway_log_files_rotation_enabled", CONFIG_TYPE_BOOL},
+  {"gateway-logs", "verbose_log_messages",
+   "nvmeof_gateway_verbose_log_messages", CONFIG_TYPE_BOOL},
+  {"gateway-logs", "max_log_file_size_in_mb",
+   "nvmeof_gateway_max_log_file_size_in_mb", CONFIG_TYPE_INT},
+  {"gateway-logs", "max_log_files_count",
+   "nvmeof_gateway_max_log_files_count", CONFIG_TYPE_INT},
+  {"spdk", "timeout",
+   "nvmeof_spdk_timeout", CONFIG_TYPE_FLOAT},
+  {"spdk", "notifications_interval",
+   "nvmeof_spdk_notifications_interval", CONFIG_TYPE_INT},
+};
+
+}
 
 NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
   Dispatcher(g_ceph_context),
@@ -156,8 +203,9 @@ int NVMeofGwMonitorClient::init()
       dout(10) << "nvmeof config_callback: " << k << " : " << v << dendl;
       return false;
     });
-  monc.register_config_notify_callback([]() {
+  monc.register_config_notify_callback([this]() {
       dout(4) << "nvmeof monc config notify callback" << dendl;
+      schedule_config_push();
     });
   dout(4) << "nvmeof Registered monc callback" << dendl;
 
@@ -361,8 +409,72 @@ void NVMeofGwMonitorClient::schedule_next_tick()
 }
 
 
+void NVMeofGwMonitorClient::schedule_config_push()
+{
+  if (stopping) {
+    return;
+  }
+  std::lock_guard l(config_lock);
+  config_push_needed = true;
+  if (config_push_scheduled) {
+    return;
+  }
+  config_push_scheduled = true;
+  boost::asio::post(poolctx.get_executor(), [this] { push_config_snapshot(); });
+}
+
+void NVMeofGwMonitorClient::push_config_snapshot()
+{
+  using namespace std::chrono_literals;
+  std::this_thread::sleep_for(20ms);
+  while (!stopping) {
+    {
+      std::lock_guard l(config_lock);
+      config_push_needed = false;
+    }
+    config_snapshot snapshot;
+    auto values = g_conf().get_config_values();
+    for (const auto& key : live_keys) {
+      auto* entry = snapshot.add_entries();
+      entry->set_section(key.section);
+      entry->set_key(key.name);
+      entry->set_type(key.type);
+      auto got = values.get_value(key.option, CONF_MON);
+      if (got.second) {
+        entry->set_present(true);
+        entry->set_value(Option::to_str(got.first));
+      } else {
+        entry->set_present(false);
+      }
+    }
+    NVMeofGwMonitorGroupClient client(
+        grpc::CreateChannel(monitor_address, gw_creds()));
+    config_apply_reply reply;
+    if (!client.apply_config(snapshot, &reply)) {
+      dout(4) << "nvmeof config apply failed to reach gateway, retrying" << dendl;
+      std::this_thread::sleep_for(50ms);
+      continue;
+    }
+    for (const auto& reject : reply.rejects()) {
+      dout(1) << "nvmeof config rejected " << reject.section() << " "
+              << reject.key() << ": " << reject.error() << dendl;
+    }
+    std::lock_guard l(config_lock);
+    if (config_push_needed) {
+      continue;
+    }
+    config_push_scheduled = false;
+    if (config_push_needed) {
+      config_push_scheduled = true;
+      continue;
+    }
+    return;
+  }
+}
+
 void NVMeofGwMonitorClient::shutdown()
 {
+  stopping = true;
   std::lock_guard l(lock);
 
   dout(4) << "nvmeof Shutting down" << dendl;
