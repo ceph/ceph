@@ -126,3 +126,40 @@ def test_offline_watcher_uses_cephadm_check_online(run_cephadm, cephadm_module):
         'test', cephadmNoImage, ['_orch', 'check-online'], [],
         no_fsid=True, log_output=cephadm_module.log_refresh_metadata
     )
+
+
+class TestHostConnectionErrorPickle:
+    """Verify HostConnectionError survives pickle round-trip (deserialization).
+
+    The orchestrator uses pickle to serialize exceptions across mgr sub-interpreters
+    via OrchResult. If __reduce__ is missing or wrong, pickle.loads() will fail with
+    TypeError because __init__ requires hostname and addr beyond the base message.
+    """
+
+    def test_pickle_round_trip_preserves_attributes(self):
+        import pickle
+        from cephadm.ssh import HostConnectionError
+
+        original = HostConnectionError('connection refused', 'ceph-node-01', '192.168.100.101')
+
+        data = pickle.dumps(original)
+        restored = pickle.loads(data)
+
+        assert type(restored) is HostConnectionError
+        assert str(restored) == 'connection refused'
+        assert restored.hostname == 'ceph-node-01'
+        assert restored.addr == '192.168.100.101'
+        assert restored.errno == original.errno
+
+    def test_pickle_round_trip_with_orch_result(self):
+        """End-to-end: exception through OrchResult serialization matches production path."""
+        from cephadm.ssh import HostConnectionError
+        from orchestrator._interface import OrchResult, completion_to_result
+
+        err = HostConnectionError('host unreachable', 'node-02', '10.0.0.2')
+        result = OrchResult(None, exception=err)
+
+        assert result.serialized_exception is not None
+        cmd_result = completion_to_result(result)
+        assert cmd_result.retval != 0
+        assert 'host unreachable' in cmd_result.stderr
