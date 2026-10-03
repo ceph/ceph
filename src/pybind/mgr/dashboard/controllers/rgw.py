@@ -536,9 +536,11 @@ class RgwBucket(RgwRESTController):
         if replication:
             zonegroup_name = RgwClient.admin_instance(
                 daemon_name=daemon_name).get_default_zonegroup()
-            policy_exists = multisite.policy_group_exists(_SYNC_GROUP_ID, zonegroup_name)
+            policy_exists = multisite.policy_group_exists(
+                _SYNC_GROUP_ID, zonegroup_name, daemon_name=daemon_name)
             if not policy_exists:
-                multisite.create_dashboard_admin_sync_group(zonegroup_name=zonegroup_name)
+                multisite.create_dashboard_admin_sync_group(
+                    zonegroup_name=zonegroup_name, daemon_name=daemon_name)
             return rgw_client.set_bucket_replication(bucket_name)
 
         return rgw_client.delete_bucket_replication(bucket_name)
@@ -554,7 +556,8 @@ class RgwBucket(RgwRESTController):
         # Check for sync policies
         sync_policy_active = False
         try:
-            sync_policy = multisite.get_sync_policy(bucket_name=bucket_name)
+            sync_policy = multisite.get_sync_policy(
+                bucket_name=bucket_name, daemon_name=daemon_name)
             # Check if there are sync policy groups with 'enabled' status
             groups = sync_policy.get('groups', [])
             sync_policy_active = any(g.get('status', '').lower() == 'enabled' for g in groups)
@@ -880,27 +883,32 @@ class RgwBucket(RgwRESTController):
     @Endpoint(method='GET', path='/ratelimit')
     @EndpointDoc("Get the bucket global rate limit")
     @ReadPermission
-    def get_global_rate_limit(self):
+    def get_global_rate_limit(self, daemon_name: Optional[str] = None):
+        realm_name = RgwMultisite().get_realm_from_daemon(daemon_name) if daemon_name else None
         rgwBucketRateLimit_instance = RgwRateLimit()
-        return rgwBucketRateLimit_instance.get_global_rateLimit()
+        return rgwBucketRateLimit_instance.get_global_rateLimit(realm_name=realm_name)
 
     @Endpoint(method='GET', path='{uid}/ratelimit')
     @EndpointDoc("Get the bucket rate limit")
     @ReadPermission
-    def get_rate_limit(self, uid: str):
+    def get_rate_limit(self, uid: str, daemon_name: Optional[str] = None):
+        realm_name = RgwMultisite().get_realm_from_daemon(daemon_name) if daemon_name else None
         rgwBucketRateLimit_instance = RgwRateLimit()
-        return rgwBucketRateLimit_instance.get_rateLimit('bucket', uid)
+        return rgwBucketRateLimit_instance.get_rateLimit('bucket', uid, realm_name=realm_name)
 
     @Endpoint(method='PUT', path='{uid}/ratelimit')
     @UpdatePermission
     @allow_empty_body
     @EndpointDoc("Update the bucket rate limit")
     def set_rate_limit(self, enabled: bool, uid: str, max_read_ops: int,
-                       max_write_ops: int, max_read_bytes: int, max_write_bytes: int):
+                       max_write_ops: int, max_read_bytes: int, max_write_bytes: int,
+                       daemon_name: Optional[str] = None):
+        realm_name = RgwMultisite().get_realm_from_daemon(daemon_name) if daemon_name else None
         rgwBucketRateLimit_instance = RgwRateLimit()
         return rgwBucketRateLimit_instance.set_rateLimit('bucket', enabled, uid,
                                                          max_read_ops, max_write_ops,
-                                                         max_read_bytes, max_write_bytes)
+                                                         max_read_bytes, max_write_bytes,
+                                                         realm_name=realm_name)
 
 
 @UIRouter('/rgw/bucket', Scope.RGW)
@@ -1241,27 +1249,32 @@ class RgwUser(RgwRESTController):
     @Endpoint(method='GET', path='/ratelimit')
     @EndpointDoc("Get the user global rate limit")
     @ReadPermission
-    def get_global_rate_limit(self):
+    def get_global_rate_limit(self, daemon_name: Optional[str] = None):
+        realm_name = RgwMultisite().get_realm_from_daemon(daemon_name) if daemon_name else None
         rgwUserRateLimit_instance = RgwRateLimit()
-        return rgwUserRateLimit_instance.get_global_rateLimit()
+        return rgwUserRateLimit_instance.get_global_rateLimit(realm_name=realm_name)
 
     @Endpoint(method='GET', path='{uid}/ratelimit')
     @EndpointDoc("Get the user rate limit")
     @ReadPermission
-    def get_rate_limit(self, uid: str):
+    def get_rate_limit(self, uid: str, daemon_name: Optional[str] = None):
+        realm_name = RgwMultisite().get_realm_from_daemon(daemon_name) if daemon_name else None
         rgwUserRateLimit_instance = RgwRateLimit()
-        return rgwUserRateLimit_instance.get_rateLimit('user', uid)
+        return rgwUserRateLimit_instance.get_rateLimit('user', uid, realm_name=realm_name)
 
     @Endpoint(method='PUT', path='{uid}/ratelimit')
     @UpdatePermission
     @allow_empty_body
     @EndpointDoc("Update the user rate limit")
     def set_rate_limit(self, uid: str, enabled: bool = False, max_read_ops: int = 0,
-                       max_write_ops: int = 0, max_read_bytes: int = 0, max_write_bytes: int = 0):
+                       max_write_ops: int = 0, max_read_bytes: int = 0, max_write_bytes: int = 0,
+                       daemon_name: Optional[str] = None):
+        realm_name = RgwMultisite().get_realm_from_daemon(daemon_name) if daemon_name else None
         rgwUserRateLimit_instance = RgwRateLimit()
         return rgwUserRateLimit_instance.set_rateLimit('user', enabled,
                                                        uid, max_read_ops, max_write_ops,
-                                                       max_read_bytes, max_write_bytes)
+                                                       max_read_bytes, max_write_bytes,
+                                                       realm_name=realm_name)
 
 
 class RGWRoleEndpoints:
