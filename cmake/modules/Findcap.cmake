@@ -27,7 +27,7 @@ find_package_handle_standard_args (cap
     cap_INCLUDE_DIR)
 
 if(cap_FOUND AND NOT TARGET cap::cap)
-  add_library(cap::cap UNKNOWN IMPORTED)
+  add_library(cap::cap UNKNOWN IMPORTED GLOBAL)
   set_target_properties(cap::cap
     PROPERTIES
       IMPORTED_LOCATION ${cap_LIBRARY}
