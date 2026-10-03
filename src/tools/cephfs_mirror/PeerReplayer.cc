@@ -1625,7 +1625,8 @@ int PeerReplayer::propagate_snap_renames(
   return 0;
 }
 
-int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const struct ceph_statx &stx) {
+int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const struct ceph_statx &stx,
+                                              bool *created) {
   dout(10) << ": remote epath=" << epath << dendl;
 
   int r = ceph_mkdirat(m_remote, m_fh->r_fd_dir_root, epath.c_str(), stx.stx_mode & ~S_IFDIR);
@@ -1635,6 +1636,9 @@ int PeerReplayer::SyncMechanism::remote_mkdir(const std::string &epath, const st
     return r;
   }
 
+  if (created) {
+    *created = (r == 0);
+  }
   return 0;
 }
 
@@ -2946,12 +2950,15 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     }
 
     // entry is a directory -- propagate deletes for missing entries
-    // (and changed inode types) to the remote filesystem.
+    // (and changed inode types) to the remote filesystem. Skip for
+    // directories created in this crawl; they are empty on the remote.
     if (!entry.needs_remote_sync()) {
-      int r = dirsync_func(entry.epath);
-      if (r < 0 && r != -ENOENT) {
-        derr << ": failed to propagate missing dirs: " << cpp_strerror(r) << dendl;
-        return r;
+      if (!entry.skip_dirsync) {
+        int r = dirsync_func(entry.epath);
+        if (r < 0 && r != -ENOENT) {
+          derr << ": failed to propagate missing dirs: " << cpp_strerror(r) << dendl;
+          return r;
+        }
       }
       entry.set_remote_synced();
     }
@@ -2996,13 +3003,15 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
 
           m_sync_stack.emplace(SyncEntry(_epath, dirp, cstx));
           dout(20) << ": Added directory to stack =" << _epath << dendl;
-          r = remote_mkdir(_epath, cstx);
+          bool created = false;
+          r = remote_mkdir(_epath, cstx, &created);
           if (r < 0) {
             derr << ": mkdir failed on remote. epath=" << _epath << ": " << cpp_strerror(r)
                << dendl;
             return r;
           }
           m_sync_stack.top().need_remote_attrs = true;
+          m_sync_stack.top().skip_dirsync = created;
           //Fill epath to avoid caller treat this as failure and breaking the loop early.
           *epath = _epath;
           *stx = cstx;

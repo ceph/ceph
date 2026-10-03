@@ -179,6 +179,8 @@ private:
     bool purged_or_itype_changed = false;
     bool is_snapdiff = false;
     bool sync_check = true;
+    // newly created on the remote; skip propagate_deleted_entries
+    bool skip_dirsync = false;
     // mkdir'd during this crawl; apply owner/mode/times when the directory is done
     bool need_remote_attrs = false;
 
@@ -329,7 +331,8 @@ private:
     }
     bool wait_for_sync();
 
-    int remote_mkdir(const std::string &epath, const struct ceph_statx &stx);
+    int remote_mkdir(const std::string &epath, const struct ceph_statx &stx,
+                     bool *created = nullptr);
     int remote_dir_setattr(const std::string &epath, const struct ceph_statx &stx);
   protected:
     PeerReplayer& m_peer_replayer;
