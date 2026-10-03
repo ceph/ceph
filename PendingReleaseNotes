@@ -1,5 +1,7 @@
 >=22.0.0
 
+* RGW: ``rgw_cache_expiry_interval`` now has a maximum of ``17_G`` seconds. A larger value previously overflowed the 64-bit nanosecond cache-expiry timespan and silently shortened expiry to near-zero (a re-fetch storm) or disabled it entirely.
+
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
   hold the lock, instead of an empty list. Callers should check the
