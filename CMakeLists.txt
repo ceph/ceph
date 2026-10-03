@@ -787,6 +787,9 @@ endif()
 
 option(WITH_TSAN "build with TSAN" OFF)
 if(WITH_TSAN)
+  if(WITH_ASAN OR WITH_ASAN_LEAK)
+    message(FATAL_ERROR "WITH_TSAN cannot be combined with WITH_ASAN or WITH_ASAN_LEAK")
+  endif()
   list(APPEND sanitizers "thread")
 endif()
 
@@ -877,11 +880,13 @@ else()
   include(BuildBoost)
   build_boost(1.87
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
+  # Boost.Context is built ucontext-only under ASan/TSan (the backend that
+  # reports stack switches to the sanitizer); define it tree-wide so all
+  # consumers agree.
   if(WITH_ASAN)
-    # Boost.Context is built ucontext-only here (context-impl=ucontext); define
-    # the matching backend tree-wide so every Boost.Context/Coroutine2 consumer
-    # agrees on it, instead of relying on per-target propagation that is easy to miss.
     add_compile_definitions(BOOST_USE_ASAN BOOST_USE_UCONTEXT)
+  elseif(WITH_TSAN)
+    add_compile_definitions(BOOST_USE_TSAN BOOST_USE_UCONTEXT)
   endif()
 endif()
 # Set tree-wide: the macro changes the type of bp::filesystem::path in inline
