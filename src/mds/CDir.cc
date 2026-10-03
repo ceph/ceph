@@ -2929,7 +2929,7 @@ mds_rank_t CDir::get_export_pin(bool inherit) const
 {
   mds_rank_t export_pin = inode->get_export_pin(inherit);
   if (export_pin == MDS_RANK_EPHEMERAL_DIST)
-    export_pin = mdcache->hash_into_rank_bucket(ino(), get_frag());
+    export_pin = inode->get_ephemeral_dist_rank(get_frag());
   else if (export_pin == MDS_RANK_EPHEMERAL_RAND)
     export_pin = mdcache->hash_into_rank_bucket(ino());
   return export_pin;

@@ -199,7 +199,7 @@ void MDBalancer::handle_export_pins(void)
 	  remove = false;
 	  continue;
 	}
-	target = mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
+	target = in->get_ephemeral_dist_rank(dir->get_frag());
       }
 
       if (target == MDS_RANK_NONE) {
@@ -261,7 +261,7 @@ void MDBalancer::handle_export_pins(void)
     cd->inode->check_pin_policy(export_pin);
 
     if (export_pin == MDS_RANK_EPHEMERAL_DIST) {
-      export_pin = mdcache->hash_into_rank_bucket(cd->ino(), cd->get_frag());
+      export_pin = cd->inode->get_ephemeral_dist_rank(cd->get_frag());
     } else if (export_pin == MDS_RANK_EPHEMERAL_RAND) {
       export_pin = mdcache->hash_into_rank_bucket(cd->ino());
     }
@@ -1347,7 +1347,13 @@ void MDBalancer::hit_dir(CDir *dir, int type, double amount)
 
     dout(20) << type << " pop " << dir_pop << " spread in " << *dir << dendl;
     if (dir->is_auth() && !dir->is_ambiguous_auth() && dir->can_rep()) {
-      if (dir_pop >= bal_replicate_threshold) {
+      // An ephemerally pinned directory (distributed or random) is already
+      // spread over the ranks by its policy.  Replicating its fragments as
+      // well only makes clients send lookups to replicas that rarely hold
+      // the dentry, and those get forwarded back to the auth.
+      if (dir_pop >= bal_replicate_threshold &&
+	  !dir->inode->is_ephemeral_dist() &&
+	  !dir->inode->is_ephemeral_rand()) {
 	// replicate
 	double rdp = dir->pop_me.get(META_POP_IRD).get();
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;

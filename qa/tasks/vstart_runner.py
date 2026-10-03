@@ -1077,8 +1077,17 @@ class LocalContext(object):
     def __del__(self):
         test_path = self.teuthology_config['test_path']
         # opt_create_cluster_only does not create the test path
-        if test_path:
-            shutil.rmtree(test_path)
+        if not test_path:
+            return
+        # A context can be collected while a test still has its file system
+        # mounted under test_path, and rmtree would then empty that file
+        # system in the middle of the test.
+        with open('/proc/self/mounts') as f:
+            mounts = [l.split()[1] for l in f]
+        prefix = os.path.realpath(test_path) + os.sep
+        if any(m.startswith(prefix) for m in mounts):
+            return
+        shutil.rmtree(test_path)
 
 
 #########################################

@@ -450,6 +450,177 @@ done
         self.assertGreaterEqual(len(rank1)/nsubtrees, 0.15)
         self.assertGreaterEqual(len(rank2)/nsubtrees, 0.15)
 
+    def _setup_big_dir(self, path="tree/a/big", count=1000, tree=None):
+        """
+        Create @path with @count files, small split sizes so that it gets
+        fragmented, and optionally set ceph.dir.pin.distributed.tree on
+        @tree first.
+        """
+        self.config_set('mds', 'mds_bal_split_size', 100)
+        self.config_set('mds', 'mds_bal_merge_size', 1)
+        self.config_set('mds', 'mds_bal_fragment_interval', 1)
+        self.mount_a.run_shell_payload(f"""
+set -ex
+mkdir -p {path}
+{f"setfattr -n ceph.dir.pin.distributed.tree -v 1 {tree}" if tree else ""}
+for ((i = 0; i < {count}; i++)); do
+    touch "{path}/f$i"
+done
+""")
+
+    def _wait_dist_tree(self, path, nranks, timeout=150):
+        """
+        Wait until the dirfrags of @path are distributed subtrees, each on
+        its target rank, over @nranks ranks.  Returns those subtrees.
+        """
+        try:
+            with safe_while(sleep=5, tries=timeout//5) as proceed:
+                while proceed():
+                    subtrees = self._get_subtrees(status=self.status, rank="all", path=path)
+                    subtrees = [s for s in subtrees if s['dir']['path'] == path]
+                    dist = [s for s in subtrees if s['distributed_ephemeral_pin'] and
+                                                   s['auth_first'] == s['export_pin_target']]
+                    ranks = set(s['auth_first'] for s in dist)
+                    log.info(f"{path}: {len(subtrees)} subtrees, {len(dist)} distributed on ranks {ranks}")
+                    if subtrees and len(dist) == len(subtrees) and len(ranks) >= nranks:
+                        return dist
+        except MaxWhileTries as e:
+            raise RuntimeError(f"{path} was not distributed over {nranks} ranks") from e
+
+    @staticmethod
+    def _dist_map(subtrees):
+        return sorted((s['dir']['dirfrag'], s['auth_first']) for s in subtrees)
+
+    def _wait_dist_stable(self, path, nranks, timeout=150):
+        """
+        Like _wait_dist_tree, but also wait until the dirfrags stop
+        splitting and moving: the same map twice in a row, 10s apart.
+        """
+        prev = None
+        try:
+            with safe_while(sleep=10, tries=timeout//10) as proceed:
+                while proceed():
+                    dist = self._wait_dist_tree(path, nranks, timeout=timeout)
+                    cur = self._dist_map(dist)
+                    if cur == prev:
+                        return dist
+                    prev = cur
+        except MaxWhileTries as e:
+            raise RuntimeError(f"{path} distribution did not settle") from e
+
+    def _wait_no_dist_tree(self, path, timeout=150):
+        """
+        Wait until no dirfrag of @path is an ephemerally distributed subtree.
+        """
+        try:
+            with safe_while(sleep=5, tries=timeout//5) as proceed:
+                while proceed():
+                    subtrees = self._get_subtrees(status=self.status, rank="all", path=path)
+                    dist = [s for s in subtrees if s['dir']['path'] == path and
+                                                   s['distributed_ephemeral_pin']]
+                    log.info(f"{path}: {len(dist)} distributed subtrees left")
+                    if not dist:
+                        return
+        except MaxWhileTries as e:
+            raise RuntimeError(f"{path} is still distributed") from e
+
+    def test_ephemeral_pin_dist_tree(self):
+        """
+        That ceph.dir.pin.distributed.tree distributes the dirfrags of a
+        fragmented directory two levels below it over all the ranks.
+        """
+
+        self._setup_big_dir(tree="tree")
+        self.mount_a.run_shell_payload("mkdir -p tree/small && touch tree/small/f")
+        self._wait_dist_tree("/tree/a/big", 3)
+        # a directory that is not fragmented is not distributed
+        for s in self._get_subtrees(status=self.status, rank="all", path="/tree/small"):
+            self.assertFalse(s['distributed_ephemeral_pin'])
+
+    def test_ephemeral_pin_dist_tree_getfattr(self):
+        """
+        That ceph.dir.pin.distributed.tree can be read back, rejects bad
+        values and is only accepted on directories.
+        """
+
+        self.mount_a.run_shell_payload("mkdir -p tree && touch tree/file")
+        self.assertEqual(self.mount_a.getfattr("tree", "ceph.dir.pin.distributed.tree"), "0")
+        self.mount_a.setfattr("tree", "ceph.dir.pin.distributed.tree", "1")
+        self.assertEqual(self.mount_a.getfattr("tree", "ceph.dir.pin.distributed.tree"), "1")
+        self.mount_a.setfattr("tree", "ceph.dir.pin.distributed.tree", "0")
+        self.assertEqual(self.mount_a.getfattr("tree", "ceph.dir.pin.distributed.tree"), "0")
+        with self.assertRaises(CommandFailedError):
+            self.mount_a.setfattr("tree", "ceph.dir.pin.distributed.tree", "foo")
+        with self.assertRaises(CommandFailedError):
+            self.mount_a.setfattr("tree/file", "ceph.dir.pin.distributed.tree", "1")
+
+    def test_ephemeral_pin_dist_tree_set_after(self):
+        """
+        That setting ceph.dir.pin.distributed.tree above a directory that is
+        already fragmented distributes it.
+        """
+
+        self._setup_big_dir()
+        self.mount_a.setfattr("tree", "ceph.dir.pin.distributed.tree", "1")
+        self._wait_dist_tree("/tree/a/big", 3)
+
+    def test_ephemeral_pin_dist_tree_off(self):
+        """
+        That clearing ceph.dir.pin.distributed.tree stops distributing the
+        fragmented directories below it.
+        """
+
+        self._setup_big_dir(tree="tree")
+        self._wait_dist_tree("/tree/a/big", 3)
+        self.mount_a.setfattr("tree", "ceph.dir.pin.distributed.tree", "0")
+        self._wait_no_dist_tree("/tree/a/big")
+
+    def test_ephemeral_pin_dist_tree_override_pin(self):
+        """
+        That an export pin between the tree policy and a fragmented
+        directory takes precedence.
+        """
+
+        self._setup_big_dir(tree="tree")
+        self._wait_dist_tree("/tree/a/big", 3)
+        self.mount_a.setfattr("tree/a", "ceph.dir.pin", "1")
+        self._wait_subtrees([("/tree/a", 1)], timeout=120, status=self.status, rank="all", path="/tree/a")
+
+    def test_ephemeral_pin_dist_tree_failover(self):
+        """
+        That after an MDS failover the distributed dirfrags end up on the
+        same ranks as before.  (The restarted rank hands the imports it has
+        not loaded yet back to the inode's auth, like any empty import, and
+        the policy then moves them back.)
+        """
+
+        self._setup_big_dir(tree="tree")
+        before = self._dist_map(self._wait_dist_stable("/tree/a/big", 3))
+        self.fs.rank_fail(rank=1)
+        self.status = self.fs.wait_for_daemons()
+        self.mount_a.run_shell_payload("ls -l tree/a/big > /dev/null")
+        try:
+            with safe_while(sleep=5, tries=30) as proceed:
+                while proceed():
+                    after = self._dist_map(self._wait_dist_tree("/tree/a/big", 3))
+                    log.info(f"before={before}\nafter={after}")
+                    if after == before:
+                        break
+        except MaxWhileTries as e:
+            raise RuntimeError("distribution not restored after failover") from e
+
+    def test_ephemeral_pin_dist_tree_shrink_mds(self):
+        """
+        That shrinking max_mds moves the distributed dirfrags off the
+        stopped rank and keeps them distributed over the rest.
+        """
+
+        self._setup_big_dir(tree="tree")
+        self._wait_dist_tree("/tree/a/big", 3)
+        self.fs.set_max_mds(2)
+        self.status = self.fs.wait_for_daemons()
+        dist = self._wait_dist_tree("/tree/a/big", 2)
+        self.assertTrue(all(s['auth_first'] < 2 for s in dist))
 
     def test_ephemeral_random(self):
         """
