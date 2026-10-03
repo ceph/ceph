@@ -76,5 +76,18 @@ static constexpr uint64_t BLUEFS_SUPER_POSITION = 4096;
 static constexpr uint64_t BLUEFS_SUPER_BLOCK_SIZE = 4096;
 static constexpr uint64_t SUPER_RESERVED = BDEV_LABEL_BLOCK_SIZE + BLUEFS_SUPER_BLOCK_SIZE;
 
+enum {
+  // This is both reformatting engine identifier and its priority,
+  // which determines the order the engines are validated/executed in.
+  // Engines are inherited from OnodeReformatEngine class.
+  // All enabled engines are validated via OnodeReformatEngine::validate() call
+  // prior to execution.
+  // Then the engines passed the validation are offered to execution
+  // by OnodeReformatEngine::execute() call.
+  // And the first successful one terminates the enumeration.
+  RECOMPRESS_ENGINE = 0,
+  DEFRAGMENT_ENGINE = 1,
+  MAX_REFORMAT_ENGINES
+};
 
 #endif

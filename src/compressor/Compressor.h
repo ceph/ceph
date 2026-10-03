@@ -65,7 +65,10 @@ public:
     COMP_NONE,                  ///< compress never
     COMP_PASSIVE,               ///< compress if hinted COMPRESSIBLE
     COMP_AGGRESSIVE,            ///< compress unless hinted INCOMPRESSIBLE
-    COMP_FORCE                  ///< compress always
+    COMP_FORCE,                 ///< compress always
+    COMP_PASSIVE_LAZY,          ///< delayed compression during reformatting if hinted COMPRESSIBLE
+    COMP_AGGRESSIVE_LAZY,       ///< delayed_compression during reformatting unless hinted INCOMPRESSIBLE
+    COMP_FORCE_LAZY             ///< unconditional delayed_compression during reformatting
   };
 
   static const char* get_comp_alg_name(int a);
