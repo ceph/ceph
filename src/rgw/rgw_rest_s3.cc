@@ -2901,9 +2901,9 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
   int ret;
 
   map_qs_metadata(s, true);
-  ret = get_encryption_defaults(s);
+  ret = rgw_prepare_encryption_defaults(s);
   if (ret < 0) {
-    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+    ldpp_dout(this, 5) << __func__ << "(): rgw_prepare_encryption_defaults() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -3274,10 +3274,10 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     }
   } /* each part */
 
-  int r = get_encryption_defaults(s);
+  int r = rgw_prepare_encryption_defaults(s);
   if (r < 0) {
     ldpp_dout(this, 5)
-      << __func__ << "(): get_encryption_defaults() returned ret=" << r << dendl;
+      << __func__ << "(): rgw_prepare_encryption_defaults() returned ret=" << r << dendl;
     return r;
   }
 
@@ -4711,9 +4711,9 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
 {
   int ret;
 
-  ret = get_encryption_defaults(s);
+  ret = rgw_prepare_encryption_defaults(s);
   if (ret < 0) {
-    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+    ldpp_dout(this, 5) << __func__ << "(): rgw_prepare_encryption_defaults() returned ret=" << ret << dendl;
     return ret;
   }
 
