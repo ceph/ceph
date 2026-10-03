@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <boost/optional.hpp>
@@ -19,6 +21,19 @@ namespace keystone {
 /* Dedicated namespace for Keystone-related auth engines. We need it because
  * Keystone offers three different authentication mechanisms (token, EC2 and
  * regular user/pass). RadosGW actually does support the first two. */
+
+namespace detail {
+/* Match a request path against an application-credential access-rule
+ * pattern. Exposed for unit testing. See rgw_auth_keystone.cc for the
+ * full pattern syntax. */
+bool path_matches_pattern(std::string_view pattern, std::string_view path);
+
+/* Return whether a rule's service type identifies this RGW endpoint and is
+ * present in the validated token's service catalog. Exposed for testing. */
+bool service_type_matches(std::span<const std::string> accepted_service_types,
+                          std::span<const rgw::keystone::TokenEnvelope::CatalogService> catalog,
+                          std::string_view service_type);
+} // namespace detail
 
 class TokenEngine : public rgw::auth::Engine {
   CephContext* const cct;

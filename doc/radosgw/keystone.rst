@@ -170,6 +170,56 @@ the ``AUTH_%(project_id)s`` suffix:
   | service_type | object-store                                                 |
   +--------------+--------------------------------------------------------------+
 
+Application Credentials and Access Rules
+-----------------------------------------
+
+OpenStack Keystone supports `Application Credentials`_, which allow users to
+create tokens with a limited subset of their permissions. An application
+credential may optionally carry *access rules* that restrict which HTTP methods
+and URL paths are permitted for the ``object-store`` service.
+
+RGW enforces these rules automatically when
+:confval:`rgw_keystone_verify_access_rules` is enabled (the default). When
+validating a token, RGW sends the ``OpenStack-Identity-Access-Rules: 1.0``
+request header to opt in to receiving access rules from Keystone. If the
+validated token belongs to an application credential that carries access
+rules, RGW checks every incoming request against those rules and returns
+``401 Unauthorized`` if validation fails. This matches
+``keystonemiddleware``, which treats a request rejected by an access rule as
+using an invalid token.
+
+By default, only rules for the ``object-store`` service type can authorize a
+request. :confval:`rgw_keystone_accepted_service_types` can specify additional
+registered service types. The matching service type must be present in the
+validated token's service catalog. A rule for an unlisted or uncataloged
+service type cannot authorize a request, and an empty accepted-service list
+matches no rules.
+
+No additional configuration is required. Tokens that do not belong to an
+application credential, or application credentials without an
+``access_rules`` field, are unaffected. An application credential whose
+``access_rules`` field is present but empty (``[]``) is a deliberate empty
+whitelist: every request from such a token is denied with
+``401 Unauthorized``, matching the OpenStack ``keystonemiddleware`` behavior.
+Both access-rule options require an RGW restart after a configuration change.
+Disabling :confval:`rgw_keystone_verify_access_rules` prevents RGW from
+advertising access-rule support. A conforming Keystone server consequently
+rejects validation of credentials that contain access rules; it does not return
+such credentials without their rules.
+
+Access rule path patterns follow the `keystonemiddleware reference matcher`_:
+
+* ``*`` matches one path segment (no ``/`` characters)
+* ``**`` matches any number of path segments (including zero)
+* ``{tag}`` matches one path segment (named placeholder)
+
+For example, a rule with path ``/v1/AUTH_*/mycontainer/**`` permits requests
+to any object inside ``mycontainer`` for any account, while ``/v1/*`` permits
+requests only to the top-level account endpoint.
+
+.. _Application Credentials: https://docs.openstack.org/keystone/latest/user/application_credentials.html
+.. _keystonemiddleware reference matcher: https://opendev.org/openstack/keystonemiddleware/src/branch/master/keystonemiddleware/auth_token/__init__.py
+
 Keystone Integration with the S3 API
 ------------------------------------
 
