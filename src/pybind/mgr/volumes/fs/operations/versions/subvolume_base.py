@@ -29,6 +29,13 @@ class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
 
     def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False):
+        # Normalize subvolname to str if it was passed as bytes
+        subvol_name_str = subvolname.decode('utf-8') if isinstance(subvolname, bytes) else subvolname
+
+        # Reject empty names or path traversal tokens ('.', '..')
+        if not subvol_name_str or subvol_name_str in ('.', '..'):
+            raise VolumeException(-errno.EINVAL, f"invalid subvolume name '{subvolname}'")
+
         self.mgr = mgr
         self.fs = fs
         self.auth_mdata_mgr = AuthMetadataManager(fs)
@@ -39,6 +46,13 @@ class SubvolumeBase(object):
         self.group = group
         self.subvolname = subvolname
         self.legacy_mode = legacy
+
+        # Sanity check: Ensure base_path stays inside the target group directory
+        resolved_base = os.path.normpath(self.base_path)
+        resolved_group = os.path.normpath(self.group.path)
+        if resolved_base == resolved_group or not resolved_base.startswith(resolved_group + b'/'):
+            raise VolumeException(-errno.EINVAL, f"invalid subvolume path resolution for '{subvolname}'")
+
         self.load_config()
 
     @property
