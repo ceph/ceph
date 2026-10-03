@@ -160,6 +160,12 @@ class NFSService(CephService):
         # choose_next_action() ignores False/None in the symmetric diff, so
         # False <-> None transitions do not trigger reconfig or redeploy.
 
+        # BYOK related
+        if (nfs_spec.kmip_cert and nfs_spec.kmip_key and nfs_spec.kmip_ca_cert and nfs_spec.kmip_host_list):
+            deps.append(f'kmip_cert: {str(utils.config_hash(nfs_spec.kmip_cert))}')
+            deps.append(f'kmip_key: {str(utils.config_hash(nfs_spec.kmip_key))}')
+            deps.append(f'kmip_ca_cert: {str(utils.config_hash(nfs_spec.kmip_ca_cert))}')
+            deps.append(f'kmip_host_list: {nfs_spec.kmip_host_list}')
         # RDMA related
         if nfs_spec.enable_rdma:
             deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
@@ -326,6 +332,8 @@ class NFSService(CephService):
         elif nfs_spec.cluster_qos_port:
             cluster_qos_port = nfs_spec.cluster_qos_port
 
+        add_kmip_block = (nfs_spec.kmip_cert and nfs_spec.kmip_key and nfs_spec.kmip_ca_cert and nfs_spec.kmip_host_list)
+
         # generate the ganesha config
         rdma_port = None
         if nfs_spec.enable_rdma and daemon_spec.ports and len(daemon_spec.ports) > 3:
@@ -358,6 +366,7 @@ class NFSService(CephService):
                 "tls_min_version": nfs_spec.tls_min_version,
                 "tls_ktls": nfs_spec.tls_ktls,
                 "tls_debug": nfs_spec.tls_debug,
+                "kmip_addrs": nfs_spec.kmip_host_list if add_kmip_block else None,
                 "ceph_nodes": ceph_nodes,
                 "protocols": "3, 4" if nfs_spec.enable_nfsv3 else "4",
                 "use_old_nodeid": False if nodeid.isdigit() else True,
@@ -403,6 +412,15 @@ class NFSService(CephService):
                 'ganesha.conf': get_ganesha_conf(),
                 'idmap.conf': get_idmap_conf()
             }
+
+            if add_kmip_block:
+                for kmip_cert_key_field in [
+                    'kmip_cert',
+                    'kmip_key',
+                    'kmip_ca_cert',
+                ]:
+                    config['files'][f'{kmip_cert_key_field}.pem'] = getattr(nfs_spec, kmip_cert_key_field)
+
             if nfs_spec.ssl:
                 tls_creds = self.get_certificates(
                     daemon_spec,
@@ -414,6 +432,7 @@ class NFSService(CephService):
                     'tls_key.pem': tls_creds.key,
                     'tls_ca_cert.pem': tls_creds.ca_cert,
                 })
+
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
@@ -795,4 +814,10 @@ class NFSService(CephService):
         only_kmip_updated = all(s.startswith('kmip') for s in sym_diff)
         if not only_kmip_updated:
             action = utils.Action.REDEPLOY
+        else:
+            return utils.NextDaemonStep(
+                utils.Action.RECONFIG,
+                skip_restart_for_reconfig=True,
+                send_signal_to_daemon='SIGHUP',
+            )
         return utils.NextDaemonStep(action)
