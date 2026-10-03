@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+#do check to see if cwd has fscrypt configured
+getfattr -n ceph.fscrypt.auth . > /dev/null 2>&1
+rval=$?
+
+if [ $rval == "0" ] ; then
+    echo This directory has fscrypt enabled and layout changing is not supported, skipping!
+    exit 0
+fi
+
 set -e
 
 touch foo.$$
