@@ -303,11 +303,13 @@ fe80000000000000505400fffe04c154 03 40 20 80     eth1
         ipv6_addr = get_ipv6_address('eth1')
         assert ipv6_addr == 'fe80::5054:ff:fe04:c154/64'
 
-    @mock.patch('cephadmlib.host_facts.call_throws')
-    @mock.patch('cephadmlib.host_facts.find_executable')
-    def test_command_list_networks(self, _find_exe, _call_throws, cephadm_fs, capsys):
-        _call_throws.return_value = ('10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n', '', '')
-        _find_exe.return_value = 'ip'
+    @mock.patch('cephadmlib.host_facts.host_ip')
+    def test_command_list_networks(self, _host_ip, cephadm_fs, capsys):
+        _host_ip.side_effect = [
+            '10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n',
+            '',  # ipv6 route
+            '',  # ipv6 addr
+        ]
         with with_cephadm_ctx([]) as ctx:
             _cephadm.command_list_networks(ctx)
             assert json.loads(capsys.readouterr().out) == {
