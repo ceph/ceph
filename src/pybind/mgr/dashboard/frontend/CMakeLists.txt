@@ -76,19 +76,13 @@ else(WITH_SYSTEM_NPM)
   add_custom_command(
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install "nodeenv>=1.11.0"
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv --verbose ${node_mirror_opt} -p --node=24.19.0
-    # ensure that the files that nodeenv unpacks from tarballs are owned by
-    # the current user. This can be an issue due to the node tarball using
-    # uid 1000 and running the unpack in a id-mapped namespace (container)
-    # that lets tar set the uid to a "bad" uid outside the namespace.
-    # nodeenv >= 1.11.0 no longer leaves the src directory behind after a
-    # prebuilt node install, so tolerate it being absent
-    COMMAND bash -c 'test ! -e ${mgr-dashboard-nodeenv-dir}/src || chown -R `id -u`:`id -g` ${mgr-dashboard-nodeenv-dir}/src'
     COMMAND ${CMAKE_COMMAND} -E make_directory ${npm-cache-dir}
     DEPENDS ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    COMMENT "dashboard nodeenv is being installed")
+    COMMENT "dashboard nodeenv is being installed"
+    VERBATIM)
   if(DEFINED ENV{NPM_REGISTRY})
     set(npm_registry_opts "OPTION" "registry=$ENV{NPM_REGISTRY}")
   endif()
