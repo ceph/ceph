@@ -1,5 +1,9 @@
 >=22.0.0
 
+* OSD: The default value of ``osd_max_pg_per_osd_hard_ratio`` changed from
+  ``3`` to ``10``. The previous value was too easily hit during routine
+  operations such as adding a host, leaving PGs stuck in ``activating``.
+
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
   hold the lock, instead of an empty list. Callers should check the
