@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/osd', id: 'cd-osd-list' },
-  create: { url: '#/osd/create', id: 'cd-osd-form' }
+  create: { url: '#/osd/(modal:create)', id: 'cd-osd-form' }
 };
 
 export class OSDsPageHelper extends PageHelper {
@@ -12,6 +12,27 @@ export class OSDsPageHelper extends PageHelper {
     id: 3,
     status: 5
   };
+
+  /**
+   * Opens the Create OSDs form tearsheet via the Create button.
+   * Caller must ensure Create is enabled (Orchestrator + eligible devices).
+   */
+  @PageHelper.restrictTo(pages.index.url)
+  openCreateTearsheet() {
+    cy.get('#osd-actions [data-testid="primary-action"][aria-label="Create"]')
+      .should('be.enabled')
+      .click();
+    cy.get(pages.create.id).should('exist');
+    cy.get('[data-testid="osd-create-tearsheet-header"]').should('be.visible');
+    cy.location('hash').should('eq', '#/osd/(modal:create)');
+  }
+
+  closeCreateTearsheet() {
+    cy.get('cd-osd-form cd-tearsheet').contains('button', 'Cancel').click();
+    cy.get(pages.create.id).should('not.exist');
+    cy.get('cd-osd-list').should('exist');
+    cy.location('hash').should('eq', '#/osd');
+  }
 
   create(deviceType: 'hdd' | 'ssd', hostname?: string, expandCluster = false) {
     cy.get('[aria-label="toggle advanced mode"]').click();

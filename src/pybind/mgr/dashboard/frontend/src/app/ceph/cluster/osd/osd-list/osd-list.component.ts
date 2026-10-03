@@ -12,11 +12,13 @@ import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { forkJoin as observableForkJoin, Observable } from 'rxjs';
-import { take } from 'rxjs/operators';
+import { forkJoin as observableForkJoin, Observable, of } from 'rxjs';
+import { catchError, switchMap, take, tap } from 'rxjs/operators';
 
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
+import { HostService } from '~/app/shared/api/host.service';
+import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -102,6 +104,12 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     create: [OrchestratorFeature.OSD_CREATE],
     delete: [OrchestratorFeature.OSD_DELETE]
   };
+  /**
+   * Optimistic default so Create stays enabled until inventory confirms
+   * there are no eligible devices.
+   */
+  hasEligibleDevices = true;
+  noEligibleDevicesMessage = $localize`No eligible devices found for OSD creation. Physical disks may be present, but none meet the requirements (unused, unformatted, and not already configured by Ceph).`;
 
   protected static collectStates(osd: any) {
     const states = [osd['in'] ? 'in' : 'out'];
@@ -125,6 +133,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService,
     private orchService: OrchestratorService,
+    private hostService: HostService,
     private cdsModalService: ModalCdsService
   ) {
     super();
@@ -368,7 +377,29 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       }
     ];
 
-    this.orchService.status().subscribe((status: OrchestratorStatus) => (this.orchStatus = status));
+    this.orchService
+      .status()
+      .pipe(
+        tap((status: OrchestratorStatus) => {
+          this.orchStatus = status;
+        }),
+        switchMap((status: OrchestratorStatus) => {
+          if (!status.available) {
+            return of(null as InventoryDevice[] | null);
+          }
+          return this.hostService.inventoryDeviceList().pipe(
+            catchError(() => {
+              this.hasEligibleDevices = false;
+              return of(null);
+            })
+          );
+        })
+      )
+      .subscribe((devices) => {
+        if (devices) {
+          this.hasEligibleDevices = _.filter(devices, 'available').length > 0;
+        }
+      });
 
     this.osdService
       .getOsdSettings()
@@ -393,10 +424,17 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         }
       }
     }
-    return this.orchService.getTableActionDisableDesc(
+    const orchDisableDesc = this.orchService.getTableActionDisableDesc(
       this.orchStatus,
       this.actionOrchFeatures[action]
     );
+    if (orchDisableDesc) {
+      return orchDisableDesc;
+    }
+    if (action === 'create' && !this.hasEligibleDevices) {
+      return this.noEligibleDevicesMessage;
+    }
+    return false;
   }
 
   /**
