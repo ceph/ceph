@@ -2217,6 +2217,47 @@ Then run the following:
             raise OrchestratorError(str(e))
         return ip_addr
 
+    def _validate_host_mtu(self, hostname: str, addr: str, skip_mtu_check: bool = False) -> None:
+        """Don't-fragment ping from the active mgr host to the new host, using the mgr host MTU."""
+        if skip_mtu_check:
+            return
+        try:
+            dest_ip = utils.resolve_ip(addr)
+        except OrchestratorError as e:
+            raise OrchestratorError(
+                f'MTU check failed for {hostname}: unable to resolve address {addr}: {e}\n'
+                'Use --skip-mtu-check to add anyway.')
+        try:
+            if ipaddress.ip_address(dest_ip).is_loopback:
+                return
+        except ValueError as e:
+            raise OrchestratorError(
+                f'MTU check failed for {hostname}: {dest_ip} is not a valid IP address: {e}\n'
+                'Use --skip-mtu-check to add anyway.')
+
+        ref_host = self.get_active_mgr().hostname
+        if not ref_host or ref_host == hostname or ref_host not in self.inventory:
+            return
+
+        try:
+            with self.async_timeout_handler(ref_host, f'cephadm check-mtu --target-ip {dest_ip}'):
+                out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
+                    ref_host, cephadmNoImage, 'check-mtu',
+                    ['--target-ip', dest_ip],
+                    error_ok=True, no_fsid=True))
+        except ssh.HostConnectionError as e:
+            raise OrchestratorError(
+                f'MTU check failed for {hostname} ({dest_ip}): {e}\n'
+                'Use --skip-mtu-check to add anyway.')
+        if code:
+            details = '\n'.join(err) if err else '\n'.join(out)
+            errors = [_i.replace('ERROR: ', '') for _i in err if _i.startswith('ERROR')]
+            if errors:
+                details = '; '.join(errors)
+            raise OrchestratorError(
+                f'MTU check failed for {hostname} ({dest_ip}): {details}\n'
+                'Use --skip-mtu-check to add anyway.')
+
     def _get_cephadm_version_for_host_prep(self) -> Optional[str]:
         """Extract cephadm version from cluster version string."""
         try:
@@ -2258,12 +2299,12 @@ Then run the following:
             )
         self.log.info('Successfully prepared host %s for sudo hardening', hostname)
 
-    def _add_host(self, spec):
-        # type: (HostSpec) -> str
+    def _add_host(self, spec: HostSpec, skip_mtu_check: bool = False) -> str:
         """
         Add a host to be managed by the orchestrator.
 
-        :param host: host name
+        :param spec: host specification
+        :param skip_mtu_check: skip path MTU validation when adding the host
         """
         HostSpec.validate(spec)
         # Drop the cached SSH connection when re-adding a host with a new
@@ -2282,6 +2323,8 @@ Then run the following:
             raise
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr
+
+        self._validate_host_mtu(spec.hostname, spec.addr, skip_mtu_check=skip_mtu_check)
 
         if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
             self.cache.refresh_all_host_info(spec.hostname)
@@ -2328,8 +2371,8 @@ Then run the following:
         return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
 
     @handle_orch_error
-    def add_host(self, spec: HostSpec) -> str:
-        return self._add_host(spec)
+    def add_host(self, spec: HostSpec, skip_mtu_check: bool = False) -> str:
+        return self._add_host(spec, skip_mtu_check=skip_mtu_check)
 
     @handle_orch_error
     def hardware_light(self, light_type: str, action: str, hostname: str, device: Optional[str] = None) -> Dict[str, Any]:

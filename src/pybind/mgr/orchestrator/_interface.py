@@ -307,11 +307,12 @@ class Orchestrator(object):
     def resume(self) -> None:
         raise NotImplementedError()
 
-    def add_host(self, host_spec: HostSpec) -> OrchResult[str]:
+    def add_host(self, host_spec: HostSpec, skip_mtu_check: bool = False) -> OrchResult[str]:
         """
         Add a host to the orchestrator inventory.
 
-        :param host: hostname
+        :param host_spec: host specification
+        :param skip_mtu_check: skip path MTU validation when adding the host
         """
         raise NotImplementedError()
 
