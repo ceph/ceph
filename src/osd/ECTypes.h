@@ -15,7 +15,13 @@
 
 #pragma once
 
-#include "include/types.h"
+#include <cstdint>
+#include <list>
+#include <ostream>
+#include <utility>
+
+#include "include/shard_id.h"
+#include "common/Formatter.h"
 #include "common/mini_flat_map.h"
 
 struct ec_align_t {

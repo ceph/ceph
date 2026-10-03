@@ -18,6 +18,8 @@
 
 #include "msg/Message.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs_encoder.h"
+#include "include/container_ios.h"
 
 /*
  * compatibility with old crap
