@@ -98,11 +98,14 @@ options:
   min: 0
   max: 65535
   desc: Base TCP port for the Prometheus metrics endpoint. 0 disables it.
-  long_desc: When non-zero, OSD N listens on this value plus N and serves
-             Seastar metrics at /metrics. Set it once on the osd config
-             section so every OSD gets a distinct port on a shared host
-             network. The endpoint does not authenticate clients.
-             Changes apply when the OSD restarts.
+  long_desc: When non-zero, OSD N listens on the TCP port equal to this
+             value plus N and serves Seastar metrics at /metrics.
+             The endpoint does not authenticate clients.
+             Changes only apply when the OSD restarts.
+             Ports below 1024 are privileged. Choose a base so that
+             every base plus OSD id is at least 1024. An OSD that would
+             bind a privileged port fails to start unless it can bind
+             privileged ports.
   flags:
   - startup
 
@@ -111,9 +114,10 @@ options:
   level: advanced
   default: "0.0.0.0"
   desc: Address the Prometheus metrics endpoint binds.
-  long_desc: Bind address for the Prometheus text endpoint. Set a specific
-             address to avoid exposing metrics on every interface.
-             Changes apply when the OSD restarts.
+  long_desc: Bind address for the Prometheus endpoint. The default 0.0.0.0
+             listens on every network interface. Set a specific address
+             to expose the endpoint on that interface only.
+             Changes only apply when the OSD restarts.
   flags:
   - startup
 
@@ -124,7 +128,7 @@ options:
   desc: Prefix prepended to Prometheus metric names.
   long_desc: Seastar inserts an underscore between this prefix and the metric
              family. With the default, reactor_utilization is exported as
-             osd_reactor_utilization. Changes apply when the OSD restarts.
+             osd_reactor_utilization. Changes only apply when the OSD restarts.
   flags:
   - startup
 
