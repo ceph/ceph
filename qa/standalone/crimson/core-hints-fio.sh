@@ -445,7 +445,7 @@ function _check_fio_io() {
 function _osd_shard_ops() {
     local id
     for id in $(seq 0 $((NUM_OSDS - 1))); do
-        ceph tell osd.$id dump_metrics osd_pg_shard --format=json |
+        _osd_metrics $id osd_pg_shard |
             jq -r --arg osd $id '
               [.metrics[] | to_entries[] |
                select(.value.op_type == "client_request") |
@@ -467,17 +467,17 @@ function _shard_ops_delta() {
         $before $after | sort -n -k1 -k2
 }
 
-# 'perf dump <logger>' over an admin socket (the admin socket protocol:
-# a JSON command, NUL terminated; the reply is prefixed by its length)
-function _asok_perf_dump() {
-    local asok=$1 logger=$2
-    python3 - "$asok" "$logger" 2>&1 <<'EOF'
-import json, socket, struct, sys
+# a JSON command over an admin socket (the admin socket protocol: the
+# command, NUL terminated; the reply is prefixed by its length). Much faster
+# than the ceph CLI, which matters when sampling during a run.
+function _asok_cmd() {
+    local asok=$1 cmd=$2
+    python3 - "$asok" "$cmd" 2>&1 <<'EOF'
+import socket, struct, sys
 s = socket.socket(socket.AF_UNIX)
 s.settimeout(10)
 s.connect(sys.argv[1])
-s.sendall(json.dumps({"prefix": "perf dump", "logger": sys.argv[2]}).encode()
-          + b"\0")
+s.sendall(sys.argv[2].encode() + b"\0")
 def recv(n):
     buf = b""
     while len(buf) < n:
@@ -488,6 +488,18 @@ def recv(n):
     return buf
 print(recv(struct.unpack(">I", recv(4))[0]).decode())
 EOF
+}
+
+function _asok_perf_dump() {
+    local asok=$1 logger=$2
+    _asok_cmd $asok "{\"prefix\": \"perf dump\", \"logger\": \"$logger\"}"
+}
+
+# an OSD's seastar metrics whose names start with <group>, via its admin socket
+function _osd_metrics() {
+    local id=$1 group=$2
+    _asok_cmd $(get_asok_path osd.$id) \
+        "{\"prefix\": \"dump_metrics\", \"group\": \"$group\", \"format\": \"json\"}"
 }
 
 # sum of the objecter op_send / op_send_core counters of a mode's running
@@ -523,8 +535,7 @@ function _client_counters() {
 function _reactor_stats() {
     local id
     for id in $(seq 0 $((NUM_OSDS - 1))); do
-        { ceph tell osd.$id dump_metrics reactor_ --format=json &&
-          ceph tell osd.$id dump_metrics network_ --format=json; } |
+        { _osd_metrics $id reactor_ && _osd_metrics $id network_; } |
             jq -s -r --arg osd $id '
               def total(name): map(select(.k == name) | .v) | add // 0;
               [.[].metrics[] | to_entries[] |
@@ -569,10 +580,17 @@ function _client_cpu_ticks() {
 function _snapshot() {
     local prefix=$1
     date +%s%3N > $prefix.time
+    _client_cpu_ticks > $prefix.client_cpu
+    _tcp_segs > $prefix.tcp
     _osd_shard_ops > $prefix.ops || return 1
     _reactor_stats > $prefix.reactor || return 1
-    _tcp_segs > $prefix.tcp
-    _client_cpu_ticks > $prefix.client_cpu
+}
+
+# sleep until <epoch ms>
+function _sleep_until() {
+    local ms=$(( $1 - $(date +%s%3N) ))
+    [ $ms -gt 0 ] && sleep $(awk -v ms=$ms 'BEGIN { printf "%.3f", ms / 1000 }')
+    return 0
 }
 
 # one fio run: workload rw, client mode (off/on), repetition rep.
@@ -591,17 +609,23 @@ function _fio_run() {
 
     rm -f $dir/fio-$mode.*.asok
 
+    local launched
+    launched=$(date +%s%3N)
     _fio $dir $tag $dir/$tag.fio &
     local fio_pid=$!
     # the measured part of the run starts after the ramp: sample from
     # (about) then, and until (about) its end - when the fio clients are
-    # still alive to be sampled too
-    sleep $((FIO_RAMP + 2))
+    # still alive to be sampled too (and first)
+    _sleep_until $((launched + (FIO_RAMP + 2) * 1000))
     _snapshot $dir/$tag.s0 || return 1
-    sleep $((FIO_RUNTIME - 5))
-    _snapshot $dir/$tag.s1 || return 1
+    _sleep_until $((launched + (FIO_RAMP + FIO_RUNTIME - 3) * 1000))
     local client
     client=$(_client_counters $dir $mode $RESULTS_DIR/$tag.client.txt)
+    _snapshot $dir/$tag.s1 || return 1
+    if ! pgrep -x fio > /dev/null; then
+        echo "WARNING: fio $tag ended before the end of the measured" \
+             "window: its per-op and client figures are not reliable" >&2
+    fi
     wait $fio_pid || {
         echo "ERROR: fio $tag failed"
         _check_osds_memory $dir
