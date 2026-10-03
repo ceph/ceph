@@ -8347,7 +8347,11 @@ int Client::_readlink(const InodeRef& diri, const char* relpath, char *buf, size
   }
 
   auto& in = wdr.target;
+  return _readlink(in.get(), buf, size);
+}
 
+int Client::_readlink(Inode *in, char *buf, size_t size)
+{
   if (!in->is_symlink())
     return -EINVAL;
 
@@ -9198,7 +9202,18 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     st->st_blocks = 1;
 #endif
   } else {
-    st->st_size = in->effective_size();
+    if (in->is_symlink()) {
+      char buf[PATH_MAX];
+      int rc = _readlink(in, buf, sizeof(buf));
+      if (rc >= 0) {
+        st->st_size = rc;
+      } else {
+        return rc;
+      }
+    } else {
+      st->st_size = in->effective_size();
+    }
+
 #ifndef _WIN32
     st->st_blocks = (in->effective_size() + 511) >> 9;
 #endif
@@ -9286,7 +9301,17 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
       }
       stx->stx_blocks = 1;
     } else {
-      stx->stx_size = in->effective_size();
+      if (in->is_symlink()) {
+        char buf[PATH_MAX];
+        int rc = _readlink(in, buf, sizeof(buf));
+        if (rc >= 0) {
+          stx->stx_size = rc;
+        } else {
+          return;
+        }
+      } else {
+        stx->stx_size = in->effective_size();
+      }
       stx->stx_blocks = (in->size + 511) >> 9;
     }
     stx->stx_mask |= (CEPH_STATX_ATIME|CEPH_STATX_MTIME|
