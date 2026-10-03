@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch, ANY, MagicMock
 
 from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext, _get_dashboard_server_addr
 from cephadm.services.monitoring import AlertmanagerService, PrometheusService
 from cephadm.services.smb import SMBSpec
 from cephadm.module import CephadmOrchestrator
@@ -1959,6 +1959,22 @@ spec:
         svc.generate_config(DaemonDeployContext(daemon_spec))
 
         cephadm_module.check_mon_command.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "server_addr,expected",
+        [
+            ('192.168.200.100', '192.168.200.100'),
+            ('::', 'host1.example.com'),
+            ('0.0.0.0', 'host1.example.com'),
+            (None, 'host1.example.com'),
+            ('', 'host1.example.com'),
+        ],
+    )
+    def test_get_dashboard_server_addr(self, server_addr, expected):
+        svc = Mock()
+        svc.mgr._ceph_get_module_option.return_value = server_addr
+        svc.mgr.get_fqdn.return_value = 'host1.example.com'
+        assert _get_dashboard_server_addr(svc, 'mgr.host1.abcdef', 'host1') == expected
 
 
 def _dependency_test_mgr():
