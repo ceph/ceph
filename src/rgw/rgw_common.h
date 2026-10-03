@@ -1710,6 +1710,14 @@ parse_key_value(const std::string_view& in_str,
 extern boost::optional<std::pair<std::string_view,std::string_view>>
 parse_key_value(const std::string_view& in_str);
 
+/* Apply a tenant specified separately from uid_str to the uid parsed from
+ * uid_str. An empty tenant is a no-op; a non-empty tenant with an empty
+ * uid_str, or one conflicting with the tenant embedded in uid_str, fails
+ * with -EINVAL and a description in err_msg. */
+extern int rgw_apply_tenant_to_uid(const std::string& tenant,
+                                   const std::string& uid_str,
+                                   rgw_user& uid, std::string& err_msg);
+
 struct rgw_name_to_flag {
   const char *type_name;
   uint32_t flag;
