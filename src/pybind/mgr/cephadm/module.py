@@ -4885,6 +4885,30 @@ Then run the following:
                     raise e
         return results
 
+    @CephadmCLICommand.Read('orch spec last-success get')
+    def _spec_last_success_get(
+            self,
+            service_name: str,
+            format: Format = Format.yaml,
+    ) -> HandleCommandResult:
+        """Show the last successfully applied spec for a service.
+ 
+        The last-success spec is only updated when a deployment succeeds.
+        A failed apply never overwrites it, so you can always roll back:
+
+            ceph orch spec last-success get <service_name>
+            ceph orch spec last-success get <service_name> -f json
+        """
+        spec = self.spec_store.get_last_working_spec(service_name)
+        if spec is None:
+            return HandleCommandResult(
+                retval=-errno.ENOENT,
+                stderr=f"No successful apply recorded yet for '{service_name}'",
+            )
+        return HandleCommandResult(
+            stdout=to_format(spec, format, many=False, cls=ServiceSpec),
+        )
+
     @handle_orch_error
     def apply_mgr(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
