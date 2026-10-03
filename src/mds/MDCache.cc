@@ -10362,8 +10362,8 @@ int MDCache::scan_stray_dir(dirfrag_t next, C_MDS_DumpStrayDirCtx *cmd_ctx)
           if (cmd_ctx) {
             cmd_ctx->begin_dump();
             cmd_ctx->get_formatter()->open_object_section("stray_inode");
-            cmd_ctx->get_formatter()->dump_int("ino: ", in->ino());
-            cmd_ctx->get_formatter()->dump_string("stray_prior_path: ",
+            cmd_ctx->get_formatter()->dump_int("ino", in->ino());
+            cmd_ctx->get_formatter()->dump_string("stray_prior_path",
                                                   in->get_inode()->stray_prior_path);
             in->dump(cmd_ctx->get_formatter(), CInode::DUMP_CAPS);
             cmd_ctx->get_formatter()->close_section();
