@@ -84,6 +84,26 @@ EXPORT
     }
 }
 """
+    export_with_server_addrs = """
+EXPORT {
+    Export_Id = 20;
+    Path = /;
+    Pseudo = /fencetest;
+    Access_Type = RW;
+    Protocols = 4;
+    Transports = TCP;
+    Security_Label = true;
+    Squash = No_Root_Squash;
+    Server_Addrs = "192.168.1.10", "192.168.1.20";
+
+    FSAL {
+        Name = CEPH;
+        Filesystem = "a";
+        User_Id = "ganesha";
+    }
+}
+"""
+
     export_3 = """
 EXPORT {
     FSAL {
@@ -509,6 +529,30 @@ NFS_CORE_PARAM {
         assert len(blocks) == 1
         export = Export.from_export_block(blocks[0], self.cluster_id)
         self._validate_export_3(export)
+
+    def test_server_addrs_parsed_from_export_block(self) -> None:
+        blocks = GaneshaConfParser(self.export_with_server_addrs).parse()
+        export = Export.from_export_block(blocks[0], self.cluster_id)
+        assert export.server_addrs == ["192.168.1.10", "192.168.1.20"]
+        ex_dict = export.to_dict()
+        assert ex_dict['server_addrs'] == ["192.168.1.10", "192.168.1.20"]
+
+    def test_server_addrs_from_dict(self) -> None:
+        export = Export.from_dict(1, {
+            'path': '/',
+            'cluster_id': self.cluster_id,
+            'pseudo': '/fencetest',
+            'access_type': 'RW',
+            'squash': 'no_root_squash',
+            'security_label': True,
+            'protocols': [4],
+            'transports': ['TCP'],
+            'fsal': {'name': 'CEPH', 'fs_name': 'a', 'user_id': 'ganesha'},
+            'clients': [],
+            'server_addrs': ['192.168.1.10'],
+        })
+        assert export.server_addrs == ['192.168.1.10']
+        assert export.to_dict()['server_addrs'] == ['192.168.1.10']
 
     def test_daemon_conf_parser(self) -> None:
         blocks = GaneshaConfParser(self.conf_nfs_foo).parse()
