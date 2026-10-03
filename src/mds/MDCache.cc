@@ -6849,31 +6849,79 @@ void MDCache::start_purge_inodes(){
   }
 }
 
+struct MDCache::PurgeInodes {
+  PurgeInodes(const interval_set<inodeno_t>& i, LogSegmentRef const& l)
+    : inos(i), left(i), ls(l) {}
+  const interval_set<inodeno_t> inos;
+  interval_set<inodeno_t> left;       // not issued yet
+  LogSegmentRef ls;
+  unsigned batches = 0;               // issued, not completed
+};
+
 void MDCache::purge_inodes(const interval_set<inodeno_t>& inos, LogSegmentRef const& ls)
 {
   dout(10) << __func__ << " purging inos " << inos << " logseg " << ls->seq << dendl;
   // FIXME: handle non-default data pool and namespace
+  purge_inodes_queue.push_back(std::make_shared<PurgeInodes>(inos, ls));
+  kick_purge_inodes();
+}
 
-  auto cb = new LambdaContext([this, inos, ls](int r){
-      ceph_assert(r == 0 || r == -2);
-      mds->inotable->project_release_ids(inos);
-      version_t piv = mds->inotable->get_projected_version();
-      ceph_assert(piv != 0);
-      mds->mdlog->submit_entry(new EPurged(inos, ls->seq, piv),
-				     new C_MDS_purge_completed_finish(this, inos, ls, piv));
-      mds->mdlog->flush();
-    });
-  
-  C_GatherBuilder gather(g_ceph_context,
-			  new C_OnFinisher(new MDSIOContextWrapper(mds, cb), mds->finisher));
+// Issue deletes for the queued purge_inodes() jobs, in order, while fewer
+// than mds_purge_inodes_max_ops are in flight. Each closed session can leave
+// tens of thousands of delegated inos; sent all at once, with those of other
+// sessions closing at the same time, they fill the OSD queues and the journal
+// writes of this rank wait behind them.
+void MDCache::kick_purge_inodes()
+{
+  uint64_t max_ops = g_conf().get_val<uint64_t>("mds_purge_inodes_max_ops");
   SnapContext nullsnapc;
-  for (const auto& [start, len] : inos) {
-    for (auto i = start; i < start + len ; i += 1) {
-      filer.purge_range(i, &default_file_layout, nullsnapc, 0, 1,
-			ceph::real_clock::now(), 0, gather.new_sub());
+  while (!purge_inodes_queue.empty() &&
+	 (max_ops == 0 || purge_inodes_inflight < max_ops)) {
+    auto p = purge_inodes_queue.front();
+    C_GatherBuilder gather(g_ceph_context);
+    uint64_t n = 0;
+    while (!p->left.empty() &&
+	   (max_ops == 0 || purge_inodes_inflight + n < max_ops)) {
+      inodeno_t start = p->left.range_start();
+      uint64_t len = p->left.begin().get_len();
+      if (max_ops)
+	len = std::min<uint64_t>(len, max_ops - purge_inodes_inflight - n);
+      for (auto i = start; i < start + len; i += 1) {
+	filer.purge_range(i, &default_file_layout, nullsnapc, 0, 1,
+			  ceph::real_clock::now(), 0, gather.new_sub());
+      }
+      p->left.erase(start, len);
+      n += len;
     }
+    purge_inodes_inflight += n;
+    p->batches++;
+    dout(20) << __func__ << " issued " << n << " for logseg " << p->ls->seq << ", "
+	     << p->left.size() << " left, " << purge_inodes_inflight << " in flight" << dendl;
+    gather.set_finisher(new C_OnFinisher(new MDSIOContextWrapper(mds,
+      new LambdaContext([this, p, n](int r) {
+	ceph_assert(r == 0 || r == -2);
+	finish_purge_inodes_batch(p, n);
+      })), mds->finisher));
+    gather.activate();
+    if (p->left.empty())
+      purge_inodes_queue.pop_front();
   }
-  gather.activate();
+}
+
+void MDCache::finish_purge_inodes_batch(std::shared_ptr<PurgeInodes> p, uint64_t n)
+{
+  ceph_assert(purge_inodes_inflight >= n);
+  purge_inodes_inflight -= n;
+  ceph_assert(p->batches > 0);
+  if (--p->batches == 0 && p->left.empty()) {
+    mds->inotable->project_release_ids(p->inos);
+    version_t piv = mds->inotable->get_projected_version();
+    ceph_assert(piv != 0);
+    mds->mdlog->submit_entry(new EPurged(p->inos, p->ls->seq, piv),
+			     new C_MDS_purge_completed_finish(this, p->inos, p->ls, piv));
+    mds->mdlog->flush();
+  }
+  kick_purge_inodes();
 }
 
 // ================================================================================

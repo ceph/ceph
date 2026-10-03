@@ -182,6 +182,8 @@ public:
         return 0;
       if (delegated_inos.contains(ino)) {
 	delegated_inos.erase(ino);
+	if (claimed_inos.contains(ino))
+	  claimed_inos.erase(ino);
       } else if (free_prealloc_inos.contains(ino)) {
 	free_prealloc_inos.erase(ino);
       } else {
@@ -192,6 +194,13 @@ public:
       free_prealloc_inos.erase(ino);
     }
     return ino;
+  }
+
+  // The client named a delegated ino in a request: it may have written
+  // objects under it, so it must be purged if it is never used.
+  void claim_delegated_ino(inodeno_t ino) {
+    if (delegated_inos.contains(ino) && !claimed_inos.contains(ino))
+      claimed_inos.insert(ino);
   }
 
   void delegate_inos(int want, interval_set<inodeno_t>& inos) {
@@ -400,6 +409,7 @@ public:
     pending_prealloc_inos.clear();
     free_prealloc_inos.clear();
     delegated_inos.clear();
+    claimed_inos.clear();
     info.clear_meta();
 
     cap_push_seq = 0;
@@ -426,6 +436,7 @@ public:
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
   interval_set<inodeno_t> free_prealloc_inos; //
   interval_set<inodeno_t> delegated_inos; // hand these out to client
+  interval_set<inodeno_t> claimed_inos; // delegated inos named in a request, not yet taken
 
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
   xlist<ClientLease*> leases;  // metadata leases to clients
