@@ -117,6 +117,16 @@ if(WITH_BLUESTORE)
   set_target_properties(unittest_hybrid_allocator PROPERTIES COMPILE_FLAGS
   "${UNITTEST_CXX_FLAGS}")
 
+  add_executable(unittest_alloc_try_remove_from_tree
+    allocator_try_remove_from_tree_test.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_alloc_try_remove_from_tree)
+  target_link_libraries(unittest_alloc_try_remove_from_tree os global)
+
+  set_target_properties(unittest_alloc_try_remove_from_tree PROPERTIES COMPILE_FLAGS
+  "${UNITTEST_CXX_FLAGS}")
+
   add_executable(unittest_alloc_aging EXCLUDE_FROM_ALL
     Allocator_aging_fragmentation.cc)
   target_link_libraries(unittest_alloc_aging os global GTest::Main)
