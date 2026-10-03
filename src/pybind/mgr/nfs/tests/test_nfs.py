@@ -378,8 +378,7 @@ QOS_BLOCK {
                 "dir_chunk": 0
             }),
             RawBlock('NFSV4', values={
-                "recoverybackend": "rados_cluster",
-                "minor_versions": [1, 2]
+                "recoverybackend": "rados_cluster"
             }),
             RawBlock('RADOS_KV', values={
                 "pool": NFS_POOL_NAME,
@@ -409,7 +408,6 @@ NFS_CORE_PARAM {
 
         NFSv4 {
            RecoveryBackend = rados_cluster;
-           Minor_Versions = 1, 2;
         }
 
         RADOS_KV {
