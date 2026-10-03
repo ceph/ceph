@@ -3,21 +3,33 @@ tasks:
     mon.a:
     - |
       set -ex
-      for f in osd.0 osd.1 osd.2 osd.3 osd.4 osd.5 osd.6 osd.7 mgr.y mgr.x
+
+      rotate_and_redeploy() {
+        echo "rotating key for $f"
+        K=$(ceph auth get-key $1)
+        NK="$K"
+        ceph auth rotate --entity=$1 --key-type=aes256k
+        ceph orch daemon redeploy $1
+        while [ "$K" == "$NK" ]; do
+            sleep 10
+            NK=$(ceph auth get-key $1)
+        done
+      }
+
+      for f in osd.0 osd.1 osd.2 osd.3 osd.4 osd.5 osd.6 osd.7 
       do
-          echo "rotating key for $f"
-          K=$(ceph auth get-key $f)
-          NK="$K"
-          ceph auth rotate --entity=$f --key-type=aes256k
-          ceph orch daemon redeploy $f
-          while [ "$K" == "$NK" ]; do
-              sleep 5
-              NK=$(ceph auth get-key $f)
-          done
-          
-          if [[ "$f" == mgr* ]]; then
-              # Waiting for active/standby MGR ($f) redeploy to fully complete
-              ceph orch ps --refresh
-              sleep 60
-          fi
+          rotate_and_redeploy $f
       done
+      
+      standby_mgr=$(ceph mgr stat | jq -r .standbys[].name)
+      rotate_and_redeploy "mgr.$standby_mgr"
+      ceph orch ps --refresh
+      sleep 60
+      timeout 60 bash -c "while ! ceph orch ps --refresh  --daemon_type mgr --daemon_id $standby_mgr | grep -q running; do sleep 5; done"
+      ceph mgr fail
+      sleep 60
+      timeout 60 bash -c "while ceph mgr stat | jq -r .standbys[].name | grep -q $standby_mgr; do sleep 5; done"
+      standby_mgr=$(ceph mgr stat | jq -r .standbys[].name)
+      rotate_and_redeploy "mgr.$standby_mgr"
+      ceph orch ps --refresh
+      timeout 60 bash -c "while ! ceph orch ps --refresh  --daemon_type mgr --daemon_id $standby_mgr | grep -q running; do sleep 5; done"
