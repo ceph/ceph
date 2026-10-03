@@ -5708,11 +5708,10 @@ int RadosLuaManager::watch_script(const DoutPrefixProvider* dpp, const std::stri
     if (r < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to watch " << script_oid
                         << ". error: " << cpp_strerror(r) << dendl;
-      if (r == -ENOENT) {
-        // Let the background thread know to update the script cache
-        lua_background->process_script_add(script_oid);
-      }
-    // Return error?
+      // the script is either removed, or we cannot get notified when it is updated.
+      // remove it from the cache, so that the next request would read it again
+      // (and start watching it) if it exists
+      lua_background->process_script_remove(script_oid);
       return r;
     }
     ldpp_dout(dpp, 20) << "INFO: inited watch on " << script_oid  << " with handle " << w_handle << dendl;
@@ -6210,7 +6209,13 @@ void RadosLuaManager::ScriptsWatcher::handle_error(uint64_t cookie, int err)
                      << script_oid << ", err:" << err << dendl;
 
   parent->unwatch_script(this, script_oid);
-  parent->watch_script(this, script_oid);
+  const auto r = parent->watch_script(this, script_oid);
+  if (r == 0 && parent->lua_background) {
+    // the watch was re-established, however, an update notification could have
+    // been sent before that (e.g. when a script is overwritten, its object is
+    // deleted and created again). make sure that the cache holds the current script
+    parent->lua_background->process_script_add(script_oid);
+  }
 }
 
 int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
