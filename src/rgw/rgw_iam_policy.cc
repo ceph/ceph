@@ -781,14 +781,14 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
 			   std::string_view{s, l}));
       return false;
     }
-  } else if (w->id == TokenID::Principal && *s == '*') {
+  } else if (w->id == TokenID::Principal && std::string_view{s, l} == "*") {
     t->princ.emplace(Principal::wildcard());
-  } else if (w->id == TokenID::NotPrincipal && *s == '*') {
+  } else if (w->id == TokenID::NotPrincipal && std::string_view{s, l} == "*") {
     t->noprinc.emplace(Principal::wildcard());
   } else if ((w->id == TokenID::Action) ||
 	     (w->id == TokenID::NotAction)) {
     is_action = true;
-    if (*s == '*') {
+    if (std::string_view{s, l} == "*") {
       is_valid_action = true;
       (w->id == TokenID::Action ?
         t->action = allValue : t->notaction = allValue);
