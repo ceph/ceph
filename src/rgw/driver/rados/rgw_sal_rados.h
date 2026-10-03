@@ -435,7 +435,7 @@ class RadosStore : public StoreDriver {
     int list_vector_buckets(const DoutPrefixProvider* dpp,
 			     const rgw_owner& owner, const std::string& tenant,
 			     const std::string& marker, const std::string& end_marker,
-			     uint64_t max, BucketList& listing,
+			     uint64_t max, bool need_stats, BucketList& listing,
 			     optional_yield y) override;
 
     virtual void shutdown(void) override;
@@ -711,8 +711,9 @@ class RadosObject : public StoreObject {
 };
 
 class RadosBucket : public StoreBucket {
-  private:
+  protected:
     RadosStore* store;
+  private:
     RGWAccessControlPolicy acls;
     std::string topics_oid() const;
 
@@ -830,33 +831,42 @@ class RadosBucket : public StoreBucket {
     friend class RadosUser;
 };
 
-class RadosVectorBucket : public StoreVectorBucket {
-  private:
-    RadosStore* store;
-
+// a vector bucket is a regular RadosBucket kept in a separate metadata namespace
+// (ctl().vector_bucket). it reuses all of RadosBucket's object machinery, so LanceDB
+// can store its data in the vector bucket itself.
+// The bucket-level operations that touch metadata are overridden here to use the
+// vector-bucket namespace.
+class RadosVectorBucket : public RadosBucket {
   public:
-    RadosVectorBucket(RadosStore *_st)
-      : store(_st) {}
-
-    RadosVectorBucket(RadosStore *_st, const rgw_bucket& _b)
-      : StoreVectorBucket(_b),
-	store(_st) {}
-
-    RadosVectorBucket(RadosStore *_st, const RGWBucketInfo& _i)
-      : StoreVectorBucket(_i),
-	store(_st) {}
-
+    using RadosBucket::RadosBucket; // inherit RadosBucket's constructors
     ~RadosVectorBucket() override = default;
+
     int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) override;
     int create(const DoutPrefixProvider* dpp, const CreateParams& params,
                optional_yield y) override;
     int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
-    int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
-    std::unique_ptr<VectorBucket> clone() override {
+    std::unique_ptr<Bucket> clone() override {
       return std::make_unique<RadosVectorBucket>(*this);
     }
     int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
     int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
+    int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y, RGWBucketEnt* ent) override;
+    int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) override;
+
+    // XXX: S3 ACLs do not apply to vector buckets but instead vector bucket policy will be supported.
+    int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
+                optional_yield y) override { return -ENOTSUP; }
+    int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
+              const std::string& new_owner_name, optional_yield y) override;
+    // check_quota is inherited from RadosBucket: the quota primitive keys on
+    // owner + bucket key and is namespace-agnostic, so it works unchanged.
+    int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
+    // usage is emitted under the ARN resource form ("bucket/<name>"), so read/trim
+    // must use the same key rather than the plain bucket name (see .cc).
+    int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
+                   uint32_t max_entries, bool* is_truncated, RGWUsageIter& usage_iter,
+                   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
+    int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
 
   private:
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);

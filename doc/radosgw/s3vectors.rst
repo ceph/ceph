@@ -38,7 +38,8 @@ Two backends are supported:
 
 - ``rgw`` (the default): LanceDB files are stored in the same Ceph cluster,
   through the RGW storage abstraction layer. No external service and no extra
-  configuration are needed.
+  configuration are needed. Where exactly the files are placed is selected by
+  :confval:`rgw_s3vector_default_storage`. See: `Backing Buckets`_.
 - ``local``: LanceDB files are stored on the local filesystem of the RGW
   process. This backend is intended for testing and single RGW setups only:
   vector buckets created on one RGW will not be usable from another one.
@@ -56,21 +57,39 @@ The ``local`` backend is configured with:
 Backing Buckets
 ~~~~~~~~~~~~~~~
 
-With the ``rgw`` backend, LanceDB stores its files inside a regular S3 bucket.
-The name of that bucket is identical to the name of the vector bucket.
-**This bucket is not created automatically**: it must be created before
-``CreateVectorBucket`` is called.
+With the ``rgw`` backend, the location of the LanceDB files is chosen by:
 
-For example, to create a vector bucket named ``my-vectors``, first create a
-regular S3 bucket named ``my-vectors`` at the RGW endpoint, and only then call
-``CreateVectorBucket``.
+.. confval:: rgw_s3vector_default_storage
+
+This option has two values:
+
+- ``vector_bucket`` (the default): LanceDB stores its files **inside the vector
+  bucket itself**. This raw data cannot be read by S3 user directly but accessible
+  within RGW internally. This is the recommended mode.
+- ``regular_bucket``: LanceDB stores its files in a **regular S3 bucket whose
+  name is identical to the name of the vector bucket**. **This bucket is not
+  created automatically**: it must be created before ``CreateVectorBucket`` is
+  called. For example, to create a vector bucket named ``my-vectors``, first
+  create a regular S3 bucket named ``my-vectors`` at the RGW endpoint, and only
+  then call ``CreateVectorBucket``. This mode preserves the behavior of earlier
+  releases.
+
+The value of :confval:`rgw_s3vector_default_storage` is read **once, when the
+vector bucket is created**, and is then recorded on the vector bucket. It never
+changes for that bucket, even if the option is later changed. Every operation on
+a vector bucket uses the mode that was recorded when the bucket was created, so
+changing the option only affects vector buckets created afterwards.
 
 .. note:: S3 buckets are kept in separate namespaces, and a name may be used by both
    at the same time. Listing S3 buckets does not show vector buckets,
    and listing vector buckets does not show S3 buckets.
 
-Ownership
-`````````
+Ownership (``regular_bucket`` mode)
+```````````````````````````````````
+
+The considerations below apply only to the ``regular_bucket`` mode, where the
+vector data lives in a separate regular S3 bucket. In ``vector_bucket`` mode the
+data is not exposed through the S3 object API and these do not apply.
 
 Since the credentials used for the S3 bucket are the same as the credentials
 used in the S3 vectors request, it is advised that the same user will be owner of both.
@@ -82,10 +101,12 @@ passing through the S3 Vectors API and its permission checks. Write access to th
 backing bucket should therefore be restricted to its owner, or to the users
 performing the vector bucket operations.
 
-Recommended Bucket Configuration
-````````````````````````````````
+Recommended Bucket Configuration (``regular_bucket`` mode)
+``````````````````````````````````````````````````````````
 
-The following is recommended for any bucket that backs a vector bucket:
+The following is recommended for any regular S3 bucket that backs a vector
+bucket in ``regular_bucket`` mode. In ``vector_bucket`` mode the vector bucket
+is created with sync already disabled, so no manual configuration is required.
 
 - **Disable sync on the bucket.** In a multisite configuration, each zone
   maintains its own copy of the vector data (see `Multisite`_ below).
@@ -116,9 +137,11 @@ Each zone has its own vector buckets, and a vector bucket has to be created in
 every zone in which it is needed. A vector bucket of the same name may exist in
 more than one zone, holding different indexes and vectors.
 
-The backing bucket of a vector bucket is a regular S3 bucket, and its own sync
-configuration applies to it. It should not be synced. See:
-`Recommended Bucket Configuration`_.
+In ``vector_bucket`` mode the vector bucket holds the data itself and is created
+with sync disabled, so nothing further is needed. In ``regular_bucket`` mode the
+backing bucket is a regular S3 bucket, and its own sync configuration applies to
+it; it should not be synced. See: `Recommended Bucket Configuration
+(regular_bucket mode)`_.
 
 Metadata Filtering
 ------------------
@@ -457,8 +480,9 @@ Create Vector Bucket
 ````````````````````
 
 Creates a new vector bucket. The bucket name must be between 3 and 63
-characters long. With the ``rgw`` backend, a regular S3 bucket with the same
-name must already exist. See: `Backing Buckets`_.
+characters long. With the ``rgw`` backend in ``regular_bucket`` mode, a regular
+S3 bucket with the same name must already exist; in the default
+``vector_bucket`` mode no separate bucket is needed. See: `Backing Buckets`_.
 
 ::
 
@@ -560,8 +584,9 @@ deleted before the vector bucket itself can be deleted.
    bucket nor its indexes are modified. Use `Delete Index`_ on each of the
    indexes of the bucket, and then delete the bucket.
 
-.. note:: The backing S3 bucket itself is not deleted, and should be removed
-   separately if it is no longer needed.
+.. note:: In ``vector_bucket`` mode the data is held by the vector bucket and is
+   removed with it. In ``regular_bucket`` mode the backing S3 bucket itself is not
+   deleted, and should be removed separately if it is no longer needed.
 
 Vector Bucket Policy
 ````````````````````

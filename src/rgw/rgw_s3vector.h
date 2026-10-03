@@ -82,11 +82,53 @@ inline bool is_rgw_backend(BackendType type) {
   return type == BackendType::RGW;
 }
 
+// Where the LanceDB data of a vector bucket is stored, when the backend is "rgw".
+// The choice is made when the vector bucket is created (from the
+// rgw_s3vector_backend_storage option) and then recorded on the bucket as an
+// immutable attribute; it never changes afterwards.
+enum class StorageMode {
+  VECTOR_BUCKET,  // store the data inside the vector bucket itself (default)
+  REGULAR_BUCKET, // store the data in a same-name regular S3 bucket (legacy)
+};
+
+// canonical strings, used both for the config option and the bucket attribute
+constexpr const char* storage_mode_vector = "vector_bucket";
+constexpr const char* storage_mode_regular = "regular_bucket";
+
+inline const char* to_string(StorageMode mode) {
+  return mode == StorageMode::REGULAR_BUCKET ? storage_mode_regular : storage_mode_vector;
+}
+
+// Convert string to storage mode. Returns 0 on success, -EINVAL otherwise.
+inline int get_storage_mode(const std::string& str, StorageMode& mode) {
+  if (boost::iequals(str, storage_mode_vector)) {
+    mode = StorageMode::VECTOR_BUCKET;
+    return 0;
+  }
+  if (boost::iequals(str, storage_mode_regular)) {
+    mode = StorageMode::REGULAR_BUCKET;
+    return 0;
+  }
+  return -EINVAL;
+}
+
+inline bool uses_vector_bucket_storage(StorageMode mode) {
+  return mode == StorageMode::VECTOR_BUCKET;
+}
+
+// The storage mode of an existing vector bucket, read from its attributes.
+// Falls back to REGULAR_BUCKET when the attribute is absent;
+StorageMode get_bucket_storage_mode(const DoutPrefixProvider* dpp,
+    rgw::sal::Driver* driver, const std::string* tenant,
+    const std::string& vector_bucket_name, optional_yield y);
+
 // Create a LanceDB session with RGW provider. the session is per tenant, since
-// two tenants may use the same vector bucket name
+// two tenants may use the same vector bucket name. use_vector_bucket selects the
+// metadata namespace of the object operations (see get_bucket_storage_mode).
 LanceDBSession* create_rgw_session(const DoutPrefixProvider* dpp,
     rgw::sal::Driver* driver,
     const std::string& tenant,
+    bool use_vector_bucket,
     const void* options = nullptr);
 
 /*

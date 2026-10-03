@@ -98,6 +98,7 @@ namespace rgw::s3vector {
   LanceDBSession* create_rgw_session(const DoutPrefixProvider* dpp,
       rgw::sal::Driver* driver,
       const std::string& tenant,
+      bool use_vector_bucket,
       const void* options) {
 #ifdef WITH_RADOSGW_LANCEDB
     if (!driver) {
@@ -111,7 +112,7 @@ namespace rgw::s3vector {
       return nullptr;
     }
 
-    LanceDBObjectStoreProvider* provider = rgw_lancedb_store_create_provider(driver, dpp, tenant.c_str());
+    LanceDBObjectStoreProvider* provider = rgw_lancedb_store_create_provider(driver, dpp, tenant.c_str(), use_vector_bucket);
     if (!provider) {
       ldpp_dout(dpp, 1) << "ERROR: failed to create RGW LanceDB provider" << dendl;
       lancedb_registry_free(registry);
@@ -145,6 +146,37 @@ namespace rgw::s3vector {
   // the tenant is not part of the URI, it is stored in the session
   std::string make_rgw_uri(const std::string& bucket) {
     return fmt::format("{}://{}/", RGW_PROVIDER_SCHEME, bucket);
+  }
+
+  // read the immutable storage mode recorded on the vector bucket. this decides
+  // whether LanceDB data is stored inside the vector bucket itself or in a same-name
+  // regular S3 bucket.
+  StorageMode get_bucket_storage_mode(const DoutPrefixProvider* dpp,
+      rgw::sal::Driver* driver, const std::string* tenant,
+      const std::string& vector_bucket_name, optional_yield y) {
+    const std::string tenant_str = tenant ? *tenant : std::string();
+    std::unique_ptr<rgw::sal::VectorBucket> bucket;
+    int ret = driver->load_vector_bucket(dpp,
+        rgw_bucket(tenant_str, vector_bucket_name), &bucket, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 5) << "WARNING: s3vector could not load vector bucket "
+                        << vector_bucket_name << " to read its storage mode (ret="
+                        << ret << "), defaulting to " << storage_mode_regular << dendl;
+      return StorageMode::REGULAR_BUCKET;
+    }
+    const auto& attrs = bucket->get_attrs();
+    const auto it = attrs.find(RGW_ATTR_S3VECTOR_STORAGE);
+    if (it == attrs.end()) {
+      return StorageMode::REGULAR_BUCKET;
+    }
+    StorageMode mode = StorageMode::REGULAR_BUCKET;
+    if (get_storage_mode(it->second.to_str(), mode) < 0) {
+      ldpp_dout(dpp, 5) << "WARNING: s3vector vector bucket " << vector_bucket_name
+                        << " has an invalid storage mode attribute, defaulting to "
+                        << storage_mode_regular << dendl;
+      return StorageMode::REGULAR_BUCKET;
+    }
+    return mode;
   }
 
   // the tenant of a vector bucket, or an empty string for the default tenant
@@ -214,9 +246,14 @@ namespace rgw::s3vector {
     // connect() is used for vector bucket and index operations and therfore is using a short-lived session
     // for vector operations that needs a loned lived session with a cache, use: connect_with_session_handle()
     LanceDBSessionOptions opts = {1, 1};
-    // the RGW backend needs a session with the object store registry of the SAL
+    // the RGW backend needs a session with the object store registry of the SAL.
+    // the session is bound to the bucket's immutable storage mode: whether the
+    // LanceDB data lives inside the vector bucket or in a same-name regular S3 bucket
+    const bool use_vector_bucket = is_rgw_backend(backend_type) &&
+        uses_vector_bucket_storage(
+            get_bucket_storage_mode(dpp, driver, tenant, vector_bucket_name, null_yield));
     LanceDBSession* session = is_rgw_backend(backend_type) ?
-        create_rgw_session(dpp, driver, tenant_name(tenant), &opts) : lancedb_session_new(&opts);
+        create_rgw_session(dpp, driver, tenant_name(tenant), use_vector_bucket, &opts) : lancedb_session_new(&opts);
     if (!session) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create session for: " << uri << dendl;
       lancedb_connect_builder_free(builder);

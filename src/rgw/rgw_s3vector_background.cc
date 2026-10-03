@@ -204,7 +204,12 @@ private:
               const LanceDBSessionOptions* options = nullptr;
 
               if (is_rgw_backend(backend_type)) {
-                session = create_rgw_session(this, driver, session_name.first, options);
+                // read the bucket's immutable storage mode once, when its cached
+                // session is created, and bind the session to it
+                const bool use_vector_bucket = uses_vector_bucket_storage(
+                    get_bucket_storage_mode(this, driver, &session_name.first,
+                                            session_name.second, null_yield));
+                session = create_rgw_session(this, driver, session_name.first, use_vector_bucket, options);
               } else {
                 session = lancedb_session_new(options);
               }
@@ -397,7 +402,7 @@ void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver) {
 
 bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name, const std::string& index_name) {
   if (!s_manager) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table update: manager is not initialized" << dendl;
+    ldpp_dout(dpp, 20) << "s3vectors manager not initialized; skipping table update notification" << dendl;
     return false;
   }
   return s_manager->notify_index(dpp, tenant, bucket_name, index_name, Manager::message_t::Op::UPDATE);
@@ -405,7 +410,7 @@ bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& tenan
 
 bool notify_index_remove(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name, const std::string& index_name) {
   if (!s_manager) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table remove: manager is not initialized" << dendl;
+    ldpp_dout(dpp, 20) << "s3vectors manager not initialized; skipping table remove notification" << dendl;
     return false;
   }
   return s_manager->notify_index(dpp, tenant, bucket_name, index_name, Manager::message_t::Op::REMOVE);
@@ -413,7 +418,7 @@ bool notify_index_remove(const DoutPrefixProvider* dpp, const std::string& tenan
 
 std::shared_ptr<const LanceDBSession> get_session(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name) {
   if (!s_manager) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get LanceDB session for bucket: manager is not initialized" << dendl;
+    ldpp_dout(dpp, 20) << "s3vectors manager not initialized; no LanceDB session available" << dendl;
     return nullptr;
   }
   return s_manager->get_session(tenant, bucket_name);
@@ -421,7 +426,7 @@ std::shared_ptr<const LanceDBSession> get_session(const DoutPrefixProvider* dpp,
 
 bool notify_session_create(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name) {
   if (!s_manager) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about session creation: manager is not initialized" << dendl;
+    ldpp_dout(dpp, 20) << "s3vectors manager not initialized; skipping session creation notification" << dendl;
     return false; 
   }
   return s_manager->notify_session(dpp, tenant, bucket_name, Manager::message_t::Op::SESSION_CREATE);
@@ -429,7 +434,7 @@ bool notify_session_create(const DoutPrefixProvider* dpp, const std::string& ten
 
 bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name) {
   if (!s_manager) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about session deletion: manager is not initialized" << dendl;
+    ldpp_dout(dpp, 20) << "s3vectors manager not initialized; skipping session deletion notification" << dendl;
     return false;
   }
   return s_manager->notify_session(dpp, tenant, bucket_name, Manager::message_t::Op::SESSION_DELETE);

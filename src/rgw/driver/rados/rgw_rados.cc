@@ -872,6 +872,9 @@ struct complete_op_data {
   bool log_op;
   uint16_t bilog_op;
   rgw_zone_set zones_trace;
+  // a vector bucket's instance lives in the vector namespace/pool; carried here
+  // so the async retry path can route its instance read through ctl.vector_bucket.
+  bool is_vector{false};
 
   bool stopped{false};
 
@@ -948,7 +951,8 @@ public:
                          list<cls_rgw_obj_key> *remove_objs, bool log_op,
                          uint16_t bilog_op,
                          rgw_zone_set *zones_trace,
-                         complete_op_data **result);
+                         complete_op_data **result,
+                         bool is_vector = false);
 
   bool handle_completion(completion_t cb, complete_op_data *arg);
 
@@ -996,7 +1000,8 @@ void RGWIndexCompletionManager::process()
       RGWRados::BucketShard bs(store);
       RGWBucketInfo bucket_info;
 
-      int r = bs.init(c->obj.bucket, c->obj, &bucket_info, &dpp, null_yield);
+      int r = bs.init(c->obj.bucket, c->obj, &bucket_info, &dpp, null_yield,
+                      c->is_vector);
       if (r < 0) {
         ldpp_dout(&dpp, 0) << "ERROR: " << __func__ << "(): failed to initialize BucketShard, obj=" << c->obj << " r=" << r << dendl;
         /* not much to do */
@@ -1051,7 +1056,8 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
                                                   list<cls_rgw_obj_key> *remove_objs, bool log_op,
                                                   uint16_t bilog_op,
                                                   rgw_zone_set *zones_trace,
-                                                  complete_op_data **result)
+                                                  complete_op_data **result,
+                                                  bool is_vector)
 {
   complete_op_data *entry = new complete_op_data;
 
@@ -1067,6 +1073,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
   entry->dir_meta = dir_meta;
   entry->log_op = log_op;
   entry->bilog_op = bilog_op;
+  entry->is_vector = is_vector;
 
   if (remove_objs) {
     for (auto iter = remove_objs->begin(); iter != remove_objs->end(); ++iter) {
@@ -2656,6 +2663,7 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
                             const rgw_owner& owner,
                             const std::string& zonegroup_id,
                             const rgw_placement_rule& placement_rule,
+                            const RGWZonePlacementInfo* zone_placement,
                             const std::map<std::string, bufferlist>& attrs,
                             const std::optional<RGWQuotaInfo>& quota,
                             std::optional<ceph::real_time> creation_time,
@@ -2664,7 +2672,7 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
                             obj_version* pep_objv,
                             RGWBucketInfo& info)
 {
-  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::create_vector_bucke called" << dendl;
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::create_vector_bucket called" << dendl;
   int ret = 0;
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
@@ -2682,12 +2690,24 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
     info.owner = owner;
     info.zonegroup = zonegroup_id;
     info.placement_rule = placement_rule;
+    // vector data is maintained independently by each zone and is never synced,
+    // so a vector bucket always has data sync disabled
+    info.flags |= BUCKET_DATASYNC_DISABLED;
+    // mark this as a vector bucket so the write path routes bucket-instance
+    // reads through ctl.vector_bucket (vector namespace/pool); the bit rides on
+    // the already-serialized flags field and survives instance re-reads.
+    info.flags |= BUCKET_VECTOR;
 
-    // vector buckets have no bucket index, so no index is initialized here.
-    // the layout still needs to be filled in, otherwise it defaults to a
-    // Normal index layout that does not exist
-    init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
-                               index_type, index_shards);
+    if (zone_placement) {
+      if (!index_type) {
+        index_type = zone_placement->index_type;
+      }
+      // unlike an ordinary bucket, a vector bucket used to be indexless. it now
+      // carries a real bucket index so that LanceDB can store its data inside the
+      // vector bucket itself, like any other object bucket
+      init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
+                                 index_type, index_shards);
+    }
 
     if (creation_time) {
       info.creation_time = *creation_time;
@@ -2696,6 +2716,13 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
     }
     if (quota) {
       info.quota = *quota;
+    }
+
+    if (zone_placement) {
+      ret = svc.bi->init_index(dpp, y, info, info.layout.current_index);
+      if (ret < 0) {
+        return ret;
+      }
     }
 
     constexpr bool exclusive = true;
@@ -3069,7 +3096,8 @@ int RGWRados::fix_tail_obj_locator(const DoutPrefixProvider *dpp,
 int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
 				const rgw_obj& obj,
 				RGWBucketInfo* bucket_info_out,
-                                const DoutPrefixProvider *dpp, optional_yield y)
+                                const DoutPrefixProvider *dpp, optional_yield y,
+                                bool is_vector)
 {
   bucket = _bucket;
 
@@ -3077,7 +3105,7 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
   RGWBucketInfo* bucket_info_p =
     bucket_info_out ? bucket_info_out : &bucket_info;
 
-  int ret = store->get_bucket_instance_info(bucket, *bucket_info_p, NULL, NULL, y, dpp);
+  int ret = store->get_bucket_instance_info(bucket, *bucket_info_p, NULL, NULL, y, dpp, is_vector);
   if (ret < 0) {
     return ret;
   }
@@ -10721,9 +10749,14 @@ int RGWRados::get_bucket_instance_info(const string& meta_key,
 
 int RGWRados::get_bucket_instance_info(const rgw_bucket& bucket, RGWBucketInfo& info,
                                        real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y,
-                                       const DoutPrefixProvider *dpp)
+                                       const DoutPrefixProvider *dpp, bool is_vector)
 {
-  return ctl.bucket->read_bucket_instance_info(bucket, &info,
+  // a vector bucket keeps its instance in the vector namespace/pool, so its read
+  // must go through ctl.vector_bucket; fall back to the regular ctl if the vector
+  // ctl is unavailable rather than crashing.
+  RGWBucketCtl* bucket_ctl =
+    (is_vector && ctl.vector_bucket) ? ctl.vector_bucket : ctl.bucket;
+  return bucket_ctl->read_bucket_instance_info(bucket, &info,
 					       y,
                                                dpp,
 					       RGWBucketCtl::BucketInstance::GetParams()
@@ -11310,7 +11343,8 @@ int RGWRados::cls_obj_complete_op(const DoutPrefixProvider* dpp,
       complete_op_data *arg;
       index_completion_manager->create_completion(
         obj, op_issuer.op, tag, ver, key, dir_meta, remove_objs,
-        op_issuer.log_op, bilog_flags, &zones_trace, &arg);
+        op_issuer.log_op, bilog_flags, &zones_trace, &arg,
+        bucket_info.is_vector());
       librados::AioCompletion *completion = arg->rados_completion;
       int ret = bs.bucket_obj.aio_operate(arg->rados_completion, &o);
       completion->release(); /* can't reference arg here, as it might have already been released */
