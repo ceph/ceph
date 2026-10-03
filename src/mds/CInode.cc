@@ -149,6 +149,7 @@ std::string_view CInode::pin_name(int p) const
     case PIN_DIRTYRSTAT: return "dirtyrstat";
     case PIN_DIRTYPARENT: return "dirtyparent";
     case PIN_DIRWAITER: return "dirwaiter";
+    case PIN_DIRFETCH_UNDEF: return "dirfetchundef";
     default: return generic_pin_name(p);
   }
 }

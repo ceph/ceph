@@ -347,6 +347,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
+  static const int PIN_DIRFETCH_UNDEF =   25;
 
   // -- dump flags --
   static const int DUMP_INODE_STORE_BASE = (1 << 0);
