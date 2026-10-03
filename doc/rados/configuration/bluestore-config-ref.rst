@@ -531,6 +531,25 @@ the OSD is destroyed and redeployed with the appropriate option value(s).
 Upgrading to a later Ceph release will *not* change the value used by OSDs that
 were deployed under older releases or with other settings.
 
+Because the value must be in effect when the OSD is created, it can be supplied
+in an OSD service spec, which applies it only to the OSDs that spec deploys.
+This is useful for coarse indirection-unit QLC SSDs, whose allocation unit is
+larger than the 4 KiB default:
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: coarse_iu_qlc
+    placement:
+      host_pattern: '*'
+    data_devices:
+      model: SBFPF2BV614T
+    min_alloc_size: 16384
+
+Setting this as a config option masked by device class does not work, because a
+device class is not assigned until after an OSD is running, which is after the
+value would have to have been applied.
+
 .. confval:: bluestore_min_alloc_size
 .. confval:: bluestore_min_alloc_size_hdd
 .. confval:: bluestore_min_alloc_size_ssd

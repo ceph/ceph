@@ -175,7 +175,8 @@ class DriveGroupSpec(ServiceSpec):
 
     _supported_features = [
         "encrypted", "tpm2", "block_wal_size", "osds_per_device",
-        "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
+        "db_slots", "wal_slots", "block_db_size", "min_alloc_size", "placement",
+        "service_id", "service_type",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
         "journal_size", "unmanaged", "filter_logic", "preview_only", "extra_container_args",
@@ -200,6 +201,7 @@ class DriveGroupSpec(ServiceSpec):
                  wal_slots=None,  # type: Optional[int]
                  osd_id_claims=None,  # type: Optional[Dict[str, List[str]]]
                  block_db_size=None,  # type: Union[int, str, None]
+                 min_alloc_size=None,  # type: Union[int, str, None]
                  block_wal_size=None,  # type: Union[int, str, None]
                  journal_size=None,  # type: Union[int, str, None]
                  service_type=None,  # type: Optional[str]
@@ -245,6 +247,16 @@ class DriveGroupSpec(ServiceSpec):
 
         #: Set (or override) the "bluestore_block_db_size" value, in bytes
         self.block_db_size: Union[int, str, None] = block_db_size
+
+        #: Set bluestore_min_alloc_size for each OSD this spec creates, in
+        #: bytes. It is applied at mkfs of each individual OSD and cannot be
+        #: changed for that OSD afterwards, so to take effect it must be supplied at
+        #: creation time. It
+        #: cannot be expressed as a config option masked by device class,
+        #: because the device class does not exist until after the OSD is
+        #: running. Coarse indirection-unit QLC SSDs want this set to their
+        #: indirection unit.
+        self.min_alloc_size: Union[int, str, None] = min_alloc_size
 
         #: set journal_size in bytes
         self.journal_size: Union[int, str, None] = journal_size
@@ -374,6 +386,11 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'block_wal_size must be of type int or string')
+        if self.min_alloc_size is not None and type(self.min_alloc_size) not in [int, str]:
+            raise DriveGroupValidationError(
+                self.service_id,
+                'min_alloc_size must be of type int or string')
+
         if self.block_db_size is not None and type(self.block_db_size) not in [int, str]:
             raise DriveGroupValidationError(
                 self.service_id,
