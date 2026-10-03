@@ -245,6 +245,9 @@ class MDCache {
   uint64_t cache_size(void) const {
     return mempool::get_pool(mempool::mds_co::id).allocated_bytes();
   }
+  ceph::timespan get_readdir_keep_complete_interval() const {
+    return readdir_keep_complete_interval;
+  }
   bool cache_overfull(void) const {
     return cache_size() > cache_memory_limit*cache_health_threshold;
   }
@@ -1582,6 +1585,7 @@ private:
   uint64_t cache_memory_limit;
   double cache_reservation;
   double cache_health_threshold;
+  ceph::timespan readdir_keep_complete_interval;
   std::array<CInode *, NUM_STRAY> strays{}; // my stray dir
 
   bool export_ephemeral_distributed_config;

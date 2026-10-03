@@ -823,9 +823,11 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void decode_import(ceph::buffer::list::const_iterator& p, LogSegmentRef const& ls);
   
   // for giving to clients
+  // With 'new_caps' false, a client that holds no cap on the inode is not
+  // given one.
   int encode_inodestat(ceph::buffer::list& bl, Session *session, SnapRealm *realm,
 		       snapid_t snapid=CEPH_NOSNAP, unsigned max_bytes=0,
-		       int getattr_wants=0);
+		       int getattr_wants=0, bool new_caps=true);
   void encode_cap_message(const ceph::ref_t<MClientCaps> &m, Capability *cap);
 
   SimpleLock* get_lock(int type) override;

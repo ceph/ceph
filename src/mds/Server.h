@@ -255,6 +255,8 @@ public:
   void _lookup_snap_ino(const MDRequestRef& mdr);
   void _lookup_ino_2(const MDRequestRef& mdr, int r);
   void handle_client_readdir(const MDRequestRef& mdr);
+  bool throttle_readdir_caps(const MDRequestRef& mdr, Session *session,
+			     std::string_view op);
   void handle_client_file_setlock(const MDRequestRef& mdr);
   void handle_client_file_readlock(const MDRequestRef& mdr);
 
