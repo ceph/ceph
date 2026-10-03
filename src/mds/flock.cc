@@ -286,8 +286,7 @@ void ceph_lock_state_t::look_for_lock(ceph_filelock& testing_lock)
   testing_lock.type = CEPH_LOCK_UNLOCK;
 }
 
-void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock,
-                 list<ceph_filelock>& activated_locks)
+void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock)
 {
   list<multimap<uint64_t, ceph_filelock>::iterator> overlapping_locks,
     self_overlapping_locks;
