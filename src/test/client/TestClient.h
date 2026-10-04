@@ -25,6 +25,7 @@
 #include "client/MetaRequest.h"
 #include "client/Client.h"
 #include "client/FSCrypt.h"
+#include "client/Inode.h"
 #include "messages/MClientReclaim.h"
 #include "messages/MClientSession.h"
 #include "common/Cond.h"
@@ -127,6 +128,24 @@ public:
 
     int walk(std::string_view path, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true) {
       return Client::walk(path, result, perms, followsym);
+    }
+    /* Pretend that a writeback on this file failed with err, the way
+     * C_Client_FlushComplete or _handle_full_flag would report it.
+     */
+    int inject_async_err(const char *path, int err, const UserPerm& perms) {
+      RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+      if (!mref_reader.is_state_satisfied()) {
+        return -ENOTCONN;
+      }
+      std::scoped_lock l(client_lock);
+      // Release wdr's dentry reference before unlocking client_lock.
+      struct walk_dentry_result wdr;
+      int r = path_walk(cwd, path, &wdr, perms, {.followsym = true});
+      if (r < 0) {
+        return r;
+      }
+      wdr.target->set_async_err(err);
+      return 0;
     }
 #if defined(__linux__)
     bool encrypt(const UserPerm& myperm) {
