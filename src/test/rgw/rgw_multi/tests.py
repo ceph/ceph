@@ -7,7 +7,7 @@ import logging
 import errno
 import contextlib
 import dateutil.parser
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import threading
 from typing import Dict, List, Any
 
@@ -6934,6 +6934,159 @@ def test_object_lock_sync():
             conn = z.get_conn(user.credentials)
             response = conn.s3_client.get_object_lock_configuration(Bucket=bucket.name)
             assert response['ObjectLockConfiguration'] == lock_config
+
+def object_lock_retain_until(seconds):
+    return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).replace(microsecond=0)
+
+def create_object_lock_bucket(zone_conn, lock_config=None):
+    bucket_name = gen_bucket_name()
+    zone_conn.s3_client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    if lock_config:
+        zone_conn.s3_client.put_object_lock_configuration(
+            Bucket=bucket_name, ObjectLockConfiguration=lock_config)
+    return bucket_name
+
+def object_lock_peer_zones(zonegroup_conns, primary):
+    return [z for z in zonegroup_conns.rw_zones if z != primary and z.zone.has_buckets()]
+
+def check_version_delete_denied(zone_conn, bucket_name, key, version_id, bypass=False):
+    try:
+        zone_conn.s3_client.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id,
+                                          BypassGovernanceRetention=bypass)
+        assert False, 'Expected AccessDenied deleting locked version in zone %s' % zone_conn.name
+    except ClientError as e:
+        assert e.response['Error']['Code'] == 'AccessDenied'
+
+def test_object_lock_retention_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.master_zone
+
+    bucket_name = create_object_lock_bucket(primary)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    retentions = {'gov': {'Mode': 'GOVERNANCE', 'RetainUntilDate': object_lock_retain_until(3600)},
+                  'comp': {'Mode': 'COMPLIANCE', 'RetainUntilDate': object_lock_retain_until(300)}}
+    versions = {}
+    for key, retention in retentions.items():
+        versions[key] = primary.s3_client.put_object(
+            Bucket=bucket_name, Key=key, Body=key, ObjectLockMode=retention['Mode'],
+            ObjectLockRetainUntilDate=retention['RetainUntilDate'])['VersionId']
+
+    for zone in object_lock_peer_zones(zonegroup_conns, primary):
+        zone_bucket_checkpoint(zone.zone, primary.zone, bucket_name)
+        for key, retention in retentions.items():
+            response = zone.s3_client.get_object_retention(
+                Bucket=bucket_name, Key=key, VersionId=versions[key])
+            eq(response['Retention'], retention)
+            # the replica must be protected in its own right
+            check_version_delete_denied(zone, bucket_name, key, versions[key])
+        check_version_delete_denied(zone, bucket_name, 'comp', versions['comp'], bypass=True)
+
+def test_object_lock_legal_hold_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.master_zone
+
+    bucket_name = create_object_lock_bucket(primary)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    key = 'held'
+    version_id = primary.s3_client.put_object(
+        Bucket=bucket_name, Key=key, Body=key, ObjectLockLegalHoldStatus='ON')['VersionId']
+
+    for zone in object_lock_peer_zones(zonegroup_conns, primary):
+        zone_bucket_checkpoint(zone.zone, primary.zone, bucket_name)
+        response = zone.s3_client.get_object_legal_hold(
+            Bucket=bucket_name, Key=key, VersionId=version_id)
+        eq(response['LegalHold']['Status'], 'ON')
+        check_version_delete_denied(zone, bucket_name, key, version_id, bypass=True)
+
+    # flip the hold quickly; every zone must converge on the final state
+    for status in ['OFF', 'ON', 'OFF']:
+        primary.s3_client.put_object_legal_hold(
+            Bucket=bucket_name, Key=key, VersionId=version_id, LegalHold={'Status': status})
+
+    for zone in object_lock_peer_zones(zonegroup_conns, primary):
+        zone_bucket_checkpoint(zone.zone, primary.zone, bucket_name)
+        response = zone.s3_client.get_object_legal_hold(
+            Bucket=bucket_name, Key=key, VersionId=version_id)
+        eq(response['LegalHold']['Status'], 'OFF')
+
+def test_object_lock_retention_extend_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.master_zone
+
+    bucket_name = create_object_lock_bucket(primary)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    key = 'obj'
+    retain_until = object_lock_retain_until(300)
+    version_id = primary.s3_client.put_object(
+        Bucket=bucket_name, Key=key, Body=key,
+        ObjectLockMode='COMPLIANCE', ObjectLockRetainUntilDate=retain_until)['VersionId']
+
+    extended = {'Mode': 'COMPLIANCE', 'RetainUntilDate': retain_until + timedelta(seconds=60)}
+    primary.s3_client.put_object_retention(
+        Bucket=bucket_name, Key=key, VersionId=version_id, Retention=extended)
+
+    for zone in object_lock_peer_zones(zonegroup_conns, primary):
+        zone_bucket_checkpoint(zone.zone, primary.zone, bucket_name)
+        response = zone.s3_client.get_object_retention(
+            Bucket=bucket_name, Key=key, VersionId=version_id)
+        eq(response['Retention'], extended)
+
+def test_object_lock_multi_delete_on_secondary():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.master_zone
+
+    bucket_name = create_object_lock_bucket(primary)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    comp_version = primary.s3_client.put_object(
+        Bucket=bucket_name, Key='comp', Body='comp', ObjectLockMode='COMPLIANCE',
+        ObjectLockRetainUntilDate=object_lock_retain_until(300))['VersionId']
+    held_version = primary.s3_client.put_object(
+        Bucket=bucket_name, Key='held', Body='held',
+        ObjectLockLegalHoldStatus='ON')['VersionId']
+
+    for zone in object_lock_peer_zones(zonegroup_conns, primary):
+        zone_bucket_checkpoint(zone.zone, primary.zone, bucket_name)
+        response = zone.s3_client.delete_objects(
+            Bucket=bucket_name,
+            Delete={'Objects': [{'Key': 'comp', 'VersionId': comp_version},
+                                {'Key': 'held', 'VersionId': held_version}]},
+            BypassGovernanceRetention=True)
+        eq(response.get('Deleted', []), [])
+        eq([err['Code'] for err in response['Errors']], ['AccessDenied', 'AccessDenied'])
+
+def test_object_lock_default_retention_secondary_write():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.master_zone
+
+    lock_config = {'ObjectLockEnabled': 'Enabled',
+                   'Rule': {'DefaultRetention': {'Mode': 'GOVERNANCE', 'Days': 1}}}
+    bucket_name = create_object_lock_bucket(primary, lock_config)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone in object_lock_peer_zones(zonegroup_conns, primary):
+        # an object written directly to a secondary zone gets the bucket default
+        key = 'written-in-' + zone.name
+        version_id = zone.s3_client.put_object(Bucket=bucket_name, Key=key, Body=key)['VersionId']
+        response = zone.s3_client.head_object(Bucket=bucket_name, Key=key, VersionId=version_id)
+        eq(response['ObjectLockMode'], 'GOVERNANCE')
+        delta = response['ObjectLockRetainUntilDate'] - response['LastModified']
+        assert abs(delta - timedelta(days=1)) <= timedelta(minutes=1)
+
+        # and the replica on the primary carries the same retention
+        zone_bucket_checkpoint(primary.zone, zone.zone, bucket_name)
+        primary_response = primary.s3_client.get_object_retention(
+            Bucket=bucket_name, Key=key, VersionId=version_id)
+        eq(primary_response['Retention']['RetainUntilDate'], response['ObjectLockRetainUntilDate'])
+
 
 def test_period_update_commit():
     wkld_concurrency = 10
