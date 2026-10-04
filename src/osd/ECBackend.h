@@ -294,6 +294,10 @@ class ECBackend : public ECCommon {
       read);
   struct JournalState;
   std::unique_ptr<JournalState> journal_state;
+  // Defers the RMW pipeline's roll-forward kick by
+  // osd_ec_rollforward_delay_ms (RMWPipeline::defer_rollforward).
+  struct RollforwardKick;
+  std::unique_ptr<RollforwardKick> rollforward_kick;
   void init_journal();
   void pump_journal();
   void remove_journal_slots();

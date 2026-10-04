@@ -396,6 +396,68 @@ struct ECBackend::JournalState final : md_config_obs_t {
   }
 };
 
+// The RMW pipeline's roll-forward kick, deferred: only on a pool enrolled in
+// the EC journal (the constructor creates this for no other pool, which
+// keeps the immediate kick). finish_rmw asks schedule()
+// instead of sending the dummy op at once; the PG timer then calls
+// RMWPipeline::kick_rollforward under the PG lock, which sends it only if
+// the pipeline is still idle and still has something to roll forward. The
+// delay is a runtime option kept in an atomic by a config observer, like the
+// journal's, so the per-op path takes no ConfigProxy lock.
+struct ECBackend::RollforwardKick final : md_config_obs_t,
+                                          common::intrusive_timer::callback_t {
+  ECBackend* backend;
+  std::atomic<uint64_t> delay_ms{0};
+
+  explicit RollforwardKick(ECBackend* backend) : backend(backend) {
+    delay_ms = backend->cct->_conf.get_val<uint64_t>(
+      "osd_ec_rollforward_delay_ms");
+    backend->cct->_conf.add_observer(this);
+  }
+  ~RollforwardKick() override {
+    backend->cct->_conf.remove_observer(this);
+  }
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {"osd_ec_rollforward_delay_ms"};
+  }
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set<std::string>&) override {
+    delay_ms = conf.get_val<uint64_t>("osd_ec_rollforward_delay_ms");
+  }
+
+  void lock() override { backend->parent->pg_lock(); }
+  void unlock() override { backend->parent->pg_unlock(); }
+  void add_ref() override { backend->parent->pg_add_ref(); }
+  void dec_ref() override { backend->parent->pg_dec_ref(); }
+  void invoke() override { backend->rmw_pipeline.kick_rollforward(); }
+
+  // Under the PG lock, from finish_rmw: true if the kick is left to the
+  // timer. Each request starts the delay again, so the kick goes out only
+  // once the pipeline has been quiet for the whole delay, and it sends the
+  // committed_to of that moment. (A timer left running from the first
+  // request fired in the gaps of a steady load: on a journaled pool, whose
+  // pipeline carries only the writes the journal does not take, after about
+  // every second one of them, and the next write's acknowledgement queued
+  // behind the kick's commit on every shard.)
+  bool schedule() {
+    const uint64_t delay = delay_ms.load(std::memory_order_relaxed);
+    if (delay == 0) {
+      return false;
+    }
+    auto& timer = backend->get_parent()->get_pg_timer();
+    if (is_scheduled()) {
+      timer.cancel(*this);
+    }
+    timer.schedule_after(*this, std::chrono::milliseconds(delay));
+    return true;
+  }
+  void cancel() {
+    if (is_scheduled()) {
+      backend->get_parent()->get_pg_timer().cancel(*this);
+    }
+  }
+};
+
 ECBackend::ECBackend(
   PGBackend::Listener *pg,
   CephContext *cct,
@@ -425,6 +487,16 @@ ECBackend::ECBackend(
     ec_impl->get_chunk_size(stripe_width)) == stripe_width);
   // All enrollment settings are startup-only; no lookups on disabled writes.
   init_journal();
+  // Only a pool enrolled in the journal defers its roll-forward kick: there
+  // the pipeline carries just the writes the journal does not take and is
+  // idle between them. Every other pool keeps the immediate kick, exactly
+  // as without this code (RMWPipeline::finish_rmw with no defer_rollforward).
+  if (journal_state) {
+    rollforward_kick = std::make_unique<RollforwardKick>(this);
+    rmw_pipeline.defer_rollforward = [this] {
+      return rollforward_kick->schedule();
+    };
+  }
 }
 
 PGBackend::RecoveryHandle *ECBackend::open_recovery_op() {
@@ -1429,6 +1501,12 @@ void ECBackend::check_recovery_sources(const OSDMapRef &osdmap) {
 void ECBackend::on_change() {
   ec_omap_journal.clear_all();
   reset_journal();
+  // A kick pending from the old interval has nothing to send: the pipeline
+  // forgets committed_to below, and the next interval's first write rolls
+  // every shard forward itself.
+  if (rollforward_kick) {
+    rollforward_kick->cancel();
+  }
   rmw_pipeline.on_change();
   read_pipeline.on_change();
   rmw_pipeline.on_change2();

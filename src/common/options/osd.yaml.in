@@ -92,6 +92,27 @@ options:
   see_also:
   - osd_ec_journal_enable
   with_legacy: false
+- name: osd_ec_rollforward_delay_ms
+  type: uint
+  level: advanced
+  desc: How long a PG of the EC journal pool stays quiet before its roll-forward kick
+  long_desc: Applies only to the pool enrolled in the EC write journal;
+    every other pool sends the kick at once, as without this option.
+    Once the last write in flight has committed, the primary of an
+    optimized EC pool sends every shard that still holds rollback state an
+    empty transaction carrying pg_committed_to, so that it can discard that
+    state. Under load the pipeline is idle for a moment after about a third
+    of the writes, and each kick costs those shards a transaction with a full
+    PG info write and a message pair, and the next write's acknowledgement
+    queues behind its commit. With a nonzero delay the kick goes out only
+    after the pipeline has been quiet for that long (each write that finishes
+    starts the delay again), since every write carries pg_committed_to
+    itself. 0 sends it at once.
+  default: 200
+  min: 0
+  max: 10000
+  flags:
+  - runtime
 - name: osd_numa_prefer_iface
   type: bool
   level: advanced
