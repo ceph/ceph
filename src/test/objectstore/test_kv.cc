@@ -32,6 +32,8 @@
 #include "include/stringify.h"
 #include <gtest/gtest.h>
 #include <fmt/format.h>
+#include <filesystem>
+#include <fstream>
 
 using namespace std;
 
@@ -562,6 +564,83 @@ TEST_P(KVTest, RocksDBShardingIteratorTest) {
     ASSERT_EQ(it->valid(), false);
   }
   fini();
+}
+
+TEST_P(KVTest, RocksDBShardingIteratorReadError) {
+  if(string(GetParam()) != "rocksdb")
+    return;
+
+  namespace fs = std::filesystem;
+  const std::string cfs("B(3)");
+  const int nkeys = 300;
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout, cfs));
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    for (int i = 0; i < nkeys; i++) {
+      std::string key = fmt::format("{:04}", i);
+      bufferlist val;
+      val.append(key + std::string(100, 'x'));
+      t->set("A", key, val);
+      t->set("B", key, val);
+    }
+    ASSERT_EQ(0, db->submit_transaction_sync(t));
+  }
+  db->compact();
+  fini();
+
+  std::vector<fs::path> ssts;
+  for (auto& e : fs::directory_iterator("kv_test_temp_dir")) {
+    if (e.path().extension() == ".sst") {
+      ssts.push_back(e.path());
+    }
+  }
+  std::sort(ssts.begin(), ssts.end());
+  ASSERT_EQ(4u, ssts.size());
+  fs::remove_all("kv_test_temp_dir.orig");
+  fs::copy("kv_test_temp_dir", "kv_test_temp_dir.orig",
+           fs::copy_options::recursive);
+
+  // a listing that stops early because a block cannot be read must report it
+  for (auto& sst : ssts) {
+    cout << "corrupting the first block of " << sst << std::endl;
+    fs::remove_all("kv_test_temp_dir");
+    fs::copy("kv_test_temp_dir.orig", "kv_test_temp_dir",
+             fs::copy_options::recursive);
+    {
+      std::fstream f(sst, std::ios::in | std::ios::out | std::ios::binary);
+      char buf[32];
+      ASSERT_TRUE(f.read(buf, sizeof(buf)));
+      for (auto& c : buf) {
+        c = ~c;
+      }
+      f.seekp(0);
+      ASSERT_TRUE(f.write(buf, sizeof(buf)));
+    }
+    init();
+    ASSERT_EQ(0, db->open(cout, cfs));
+    {
+      int n = 0;
+      KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
+      for (it->seek_to_first(); it->valid(); it->next()) {
+        n++;
+      }
+      ASSERT_LT(n, 2 * nkeys);
+      ASSERT_NE(0, it->status());
+    }
+    {
+      int n = 0;
+      KeyValueDB::Iterator it = db->get_iterator("B");
+      for (it->seek_to_first(); it->valid(); it->next()) {
+        n++;
+      }
+      if (n < nkeys) {
+        ASSERT_NE(0, it->status());
+      }
+    }
+    fini();
+  }
+  fs::remove_all("kv_test_temp_dir.orig");
 }
 
 TEST_P(KVTest, RocksDBCFMerge) {
