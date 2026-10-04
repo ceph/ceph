@@ -588,7 +588,10 @@ void PeeringState::advance_map(
   AdvMap evt(
     osdmap, lastmap, newup, up_primary,
     newacting, acting_primary);
+  bool saved_dispatching = dispatching_peering_event;
+  dispatching_peering_event = true;
   handle_event(evt, &rctx);
+  dispatching_peering_event = saved_dispatching;
   if (pool.info.last_change == osdmap_ref->get_epoch()) {
     pl->on_pool_change();
   }
@@ -600,7 +603,10 @@ void PeeringState::activate_map(PeeringCtx &rctx)
 {
   psdout(10) << dendl;
   ActMap evt;
+  bool saved_dispatching = dispatching_peering_event;
+  dispatching_peering_event = true;
   handle_event(evt, &rctx);
+  dispatching_peering_event = saved_dispatching;
   if (osdmap_ref->get_epoch() - last_persisted_osdmap >
     cct->_conf->osd_pg_epoch_persisted_max_stale) {
     psdout(20) << ": Dirtying info: last_persisted is "

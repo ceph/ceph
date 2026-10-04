@@ -1480,6 +1480,11 @@ public:
   bool dirty_info = false;          ///< small info structu on disk out of date
   bool dirty_big_info = false;      ///< big info structure on disk out of date
 
+  /// true while handle_event() is dispatching a peering event from
+  /// do_peering_event()/advance_map()/activate_map(), each of which already
+  /// calls write_if_dirty(rctx.transaction) right after the dispatch
+  bool dispatching_peering_event = false;
+
   pg_info_t info;                   ///< current pg info
   pg_info_t last_written_info;      ///< last written info
   PastIntervals past_intervals;     ///< information about prior pg mappings
@@ -2586,6 +2591,16 @@ public:
 
   bool debug_has_dirty_state() const {
     return dirty_info || dirty_big_info;
+  }
+
+  /// true while a peering-event dispatch (do_peering_event()/advance_map()/
+  /// activate_map()) is in progress and will flush dirty state itself
+  bool is_dispatching_peering_event() const {
+    return dispatching_peering_event;
+  }
+
+  void set_dispatching_peering_event(bool b) {
+    dispatching_peering_event = b;
   }
 
   std::string get_pg_state_string() const {
