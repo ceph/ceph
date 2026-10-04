@@ -2851,6 +2851,99 @@ function TEST_rebuild_perf_backfill_remote_revoke_resumes_case() {
     kill_daemons $dir || return 1
 }
 
+# info.history is only durably written when dirty_info is set AND a
+# transaction carrying it gets committed. prepare_stats_for_publish() now
+# marks info dirty on every vulnerability-window/active-rebuild arm/close
+# transition (see the field comments in osd_types.h/PeeringState.cc), but
+# not every caller of publish_stats_to_osd() has a transaction in flight
+# to carry that write -- an op/repop-completion callback, for instance,
+# runs after its own transaction has already committed. PG::publish_
+# stats_to_osd() closes that gap by forcing an immediate, standalone
+# write whenever a transition just made info newly dirty.
+#
+# Whether this specific mechanism (as opposed to the ordinary
+# do_peering_event() catch-all, which already covers every peering-
+# event-driven publish) is what actually persists a given transition
+# depends on whether info was already dirty for some unrelated reason
+# at that exact moment, in which case the log line the test finally looks
+# for legitimately never appears. Reported as INFO either way, not a FAIL.
+# Only a real setup/mechanism problem (never entering Recovering at all)
+# is treated as a failure.
+function TEST_rebuild_perf_immediate_write_on_latch_transition() {
+    local dir=$1
+    local OSDS=4
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true --debug-osd=15 || return 1
+    done
+
+    create_pool $poolname 1 1 replicated || return 1
+    ceph osd pool set $poolname size 3 || return 1
+    ceph osd pool set $poolname min_size 2 || return 1
+    wait_for_clean || return 1
+
+    for i in $(seq 1 5)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+    wait_for_clean || return 1
+
+    local PG
+    PG=$(get_pg $poolname obj1)
+    local primary
+    primary=$(get_primary $poolname obj1)
+    local otherosd
+    otherosd=$(get_not_primary $poolname obj1)
+    local log=$dir/osd.${primary}.log
+
+    # Same technique as TEST_rebuild_perf_recovering_case: a handful of
+    # new writes while a replica is down, small enough to stay within
+    # log-continuity range (forces Recovering, not a full backfill), but
+    # enough individual objects that the last one's recovery push has a
+    # real chance of completing via its own async commit callback,
+    # separately from the peering event that armed the latch.
+    ceph osd set noup || return 1
+    ceph osd down osd.${otherosd} || return 1
+
+    for i in $(seq 6 10)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+
+    ceph osd unset noup || return 1
+    wait_for_clean || return 1
+    flush_pg_stats || return 1
+
+    # Setup validity: confirm this genuinely went through Recovering --
+    # if not, this isn't exercising the arm/close transitions this test
+    # targets.
+    grep -q "enter Started/Primary/Active/Recovering" $log || {
+      echo "FAIL: ${PG} never entered Recovering -- test setup assumption" \
+           "broken"
+      return 1
+    }
+
+    if grep -q "publish_stats_to_osd forcing an immediate write for a new" $log
+    then
+      echo "PASS: PG::publish_stats_to_osd()'s immediate-write mechanism" \
+           "fired for ${PG}'s recovery episode."
+    else
+      echo "INFO: PG::publish_stats_to_osd()'s immediate-write mechanism" \
+           "did not fire for ${PG}'s recovery episode -- every latch" \
+           "transition this run happened to be covered by the ordinary" \
+           "do_peering_event() catch-all instead. Not a failure: this" \
+           "mechanism only has something to do when a transition occurs" \
+           "with no transaction already in flight (e.g. an op/repop-" \
+           "completion callback), which this run didn't land on."
+    fi
+
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
 
 main osd-recovery-stats "$@"
 

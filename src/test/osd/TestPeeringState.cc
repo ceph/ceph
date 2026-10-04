@@ -2901,6 +2901,84 @@ TEST_F(PeeringStateTest, VulnerabilityWindowNewReplicaDoesNotInheritOpenWindow) 
 }
 
 // ============================================================================
+// Test 9: PG::publish_stats_to_osd()'s force-write of a new vulnerability/
+// rebuild latch transition must not fire while a peering-event dispatch
+// (PG::do_peering_event()/PeeringState::advance_map()/activate_map()) is in
+// progress -- those dispatchers already call write_if_dirty(rctx.transaction)
+// right after the dispatch, so a standalone write from inside the same
+// dispatch is both redundant and, for a brand-new PG whose own collection-
+// creation transaction is still pending, unsafe (it can reach BlueStore for
+// a collection that doesn't exist yet).
+//
+// PeeringState::is_dispatching_peering_event() must be true for
+// every publish_stats_to_osd() call inside advance_map()'s/activate_map()'s
+// handle_event(), false after -- the guard behind PG::publish_stats_to_osd()'s
+// ObjectStore-race fix, unreachable from this harness, so checked here.
+// Single-OSD pool keeps GetInfo synchronous; dispatch_all()/dispatch_events()
+// are skipped since they'd bypass PG::do_peering_event() (the guard's real
+// home) via a raw handle_event() call. Checks last_state_entered, not
+// is_active(), since PG_STATE_ACTIVE needs an on-commit event only
+// dispatch_events() delivers.
+// ============================================================================
+TEST_F(PeeringStateTest, DispatchGuardCoversAdvanceAndActivateMap) {
+  dout(0) << "== DispatchGuardCoversAdvanceAndActivateMap ==" << dendl;
+  create_rep_pool(1);
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+
+  MockPeeringListener *pl = get_listener(acting_primary);
+  pl->publish_stats_call_count = 0;
+  pl->saw_publish_stats_outside_dispatch = false;
+
+  // Drives the PG through its initial peering cascade (Peering -> GetInfo
+  // -> GetLog -> GetMissing -> Active) via repeated advance_map()/
+  // activate_map() calls -- the same dispatchers OSD::handle_pg_create_
+  // info() uses for a brand-new PG -- stopping as soon as Active is
+  // reached rather than looping to full convergence.
+  test_append_log_entry();
+  for (int i = 0; i < 4 &&
+       pl->last_state_entered != "Started/Primary/Active/Activating"; i++) {
+    test_event_advance_map();
+    test_event_activate_map();
+    new_epoch(false);
+  }
+
+  ASSERT_EQ(pl->last_state_entered, "Started/Primary/Active/Activating")
+      << "test setup assumption broken: the PG never reached Active via "
+         "advance_map()/activate_map() alone";
+
+  EXPECT_GT(pl->publish_stats_call_count, 0)
+      << "peering never called publish_stats_to_osd() -- test setup "
+         "assumption broken";
+  EXPECT_FALSE(pl->saw_publish_stats_outside_dispatch)
+      << "a publish_stats_to_osd() call during peering observed "
+         "is_dispatching_peering_event() == false -- every call reachable "
+         "from the statechart should only ever run from inside "
+         "advance_map()'s or activate_map()'s own handle_event() dispatch";
+  EXPECT_FALSE(get_ps(acting_primary)->is_dispatching_peering_event())
+      << "the guard must be cleared once peering settles";
+
+  // A later, independent advance_map() call (e.g. a routine epoch bump)
+  // reaching Active::react(AdvMap), which unconditionally republishes,
+  // must also see the guard engaged while it runs. Active::react(AdvMap)
+  // applies to any of Active's sub-states, so this holds even though the
+  // PG is only just-Active here, not yet Clean.
+  pl->publish_stats_call_count = 0;
+  pl->saw_publish_stats_outside_dispatch = false;
+  test_event_advance_map(acting_primary);
+
+  EXPECT_GT(pl->publish_stats_call_count, 0)
+      << "advance_map() on an already-active PG never called "
+         "publish_stats_to_osd() -- test setup assumption broken";
+  EXPECT_FALSE(pl->saw_publish_stats_outside_dispatch)
+      << "a publish_stats_to_osd() call during advance_map()'s dispatch "
+         "observed is_dispatching_peering_event() == false";
+  EXPECT_FALSE(get_ps(acting_primary)->is_dispatching_peering_event())
+      << "the guard must be cleared once advance_map() returns";
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
