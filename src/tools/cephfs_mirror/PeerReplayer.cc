@@ -2991,10 +2991,11 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     };
     while (true) {
       struct dirent de;
-      r = ceph_readdirplus_r(m_local, entry.dirp, &de, NULL,
+      struct ceph_statx cstx;
+      r = ceph_readdirplus_r(m_local, entry.dirp, &de, &cstx,
                              CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                              CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                             AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW, NULL);
+                             AT_SYMLINK_NOFOLLOW, NULL);
       if (r < 0) {
         derr << ": failed to local read directory=" << entry.epath << dendl;
         break;
@@ -3005,17 +3006,7 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
 
       auto d_name = std::string(de.d_name);
       if (d_name != "." && d_name != "..") {
-        struct ceph_statx cstx;
         auto _epath = entry_path(entry.epath, d_name);
-        r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &cstx,
-                         CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
-                         CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
-                         AT_SYMLINK_NOFOLLOW);
-        if (r < 0) {
-          derr << ": failed to stat epath=" << _epath << ": " << cpp_strerror(r)
-               << dendl;
-          return r;
-        }
 
         if (S_ISDIR(cstx.stx_mode)) {
           ceph_dir_result *dirp;
