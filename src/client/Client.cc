@@ -14109,15 +14109,27 @@ int Client::_sync_fs()
 
   wait_sync_caps(flush_tid);
 
+  int r = 0;
   if (nullptr != cond) {
     client_lock.unlock();
     ldout(cct, 15) << __func__ << " waiting on data to flush" << dendl;
-    cond->wait();
-    ldout(cct, 15) << __func__ << " flush finished" << dendl;
+    r = cond->wait();
+    ldout(cct, 15) << __func__ << " flush finished: " << r << dendl;
     client_lock.lock();
   }
 
-  return 0;
+  // Report writeback errors that happened since the last sync_fs, including
+  // those that came back after the file was closed and so could not be
+  // returned by close() or fsync(). If the flush itself failed, report that
+  // and keep the saved error for the next sync_fs.
+  if (r == 0) {
+    r = std::exchange(sync_fs_err, 0);
+  }
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " caught writeback error: "
+                  << cpp_strerror(r) << dendl;
+  }
+  return r;
 }
 
 int Client::sync_fs()
