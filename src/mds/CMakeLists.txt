@@ -46,8 +46,8 @@ set(mds_srcs
   QuiesceDbManager.cc
   QuiesceAgent.cc
   MDSRankQuiesce.cc
-  MDSDmclockScheduler.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
+  MDSRankQuarantine.cc
+  MDSDmclockScheduler.cc  ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc)
