@@ -14943,6 +14943,533 @@ def test_object_lock_changing_mode_from_compliance():
     assert status == 403
     assert error_code == 'AccessDenied'
 
+def _object_lock_retain_until(seconds):
+    return datetime.datetime.now(pytz.utc) + datetime.timedelta(seconds=seconds)
+
+def _object_lock_wait_until(retain_until, margin=2):
+    remaining = (retain_until - datetime.datetime.now(pytz.utc)).total_seconds()
+    if remaining > 0:
+        time.sleep(remaining + margin)
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_delete_object_with_compliance_retention():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    response = client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='COMPLIANCE',
+                                 ObjectLockRetainUntilDate=_object_lock_retain_until(10))
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket_name, Key=key, VersionId=response['VersionId'])
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_delete_object_with_compliance_retention_bypass():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    response = client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='COMPLIANCE',
+                                 ObjectLockRetainUntilDate=_object_lock_retain_until(10))
+    # BypassGovernanceRetention must not apply to COMPLIANCE mode
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket_name, Key=key,
+                      VersionId=response['VersionId'], BypassGovernanceRetention=True)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_multi_delete_object_with_compliance_retention_bypass():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    response = client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='COMPLIANCE',
+                                 ObjectLockRetainUntilDate=_object_lock_retain_until(10))
+    version_id = response['VersionId']
+
+    delete_response = client.delete_objects(
+        Bucket=bucket_name,
+        Delete={'Objects': [{'Key': key, 'VersionId': version_id}]},
+        BypassGovernanceRetention=True
+    )
+
+    assert ('Deleted' not in delete_response) or (len(delete_response['Deleted']) == 0)
+    assert len(delete_response['Errors']) == 1
+    failed_object = delete_response['Errors'][0]
+    assert failed_object['Code'] == 'AccessDenied'
+    assert failed_object['Key'] == key
+    assert failed_object['VersionId'] == version_id
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_put_obj_retention_shorten_compliance_bypass():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    retain_until = _object_lock_retain_until(15)
+    client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='COMPLIANCE',
+                      ObjectLockRetainUntilDate=retain_until)
+    retention = {'Mode':'COMPLIANCE', 'RetainUntilDate':retain_until - datetime.timedelta(seconds=10)}
+    e = assert_raises(ClientError, client.put_object_retention, Bucket=bucket_name, Key=key,
+                      Retention=retention, BypassGovernanceRetention=True)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_put_obj_retention_extend_compliance():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    retain_until = _object_lock_retain_until(5)
+    client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='COMPLIANCE',
+                      ObjectLockRetainUntilDate=retain_until)
+    # extending a COMPLIANCE retention period is always allowed
+    retention = {'Mode':'COMPLIANCE', 'RetainUntilDate':retain_until + datetime.timedelta(seconds=5)}
+    response = client.put_object_retention(Bucket=bucket_name, Key=key, Retention=retention)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    response = client.get_object_retention(Bucket=bucket_name, Key=key)
+    assert response['Retention']['Mode'] == 'COMPLIANCE'
+    assert response['Retention']['RetainUntilDate'] > retain_until
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_compliance_retention_expiry():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    retain_until = _object_lock_retain_until(5)
+    response = client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='COMPLIANCE',
+                                 ObjectLockRetainUntilDate=retain_until)
+    version_id = response['VersionId']
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket_name, Key=key, VersionId=version_id)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    # once the retain-until date has passed, the version is deletable without bypass
+    _object_lock_wait_until(retain_until)
+    response = client.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 204
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_put_obj_retention_remove():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    client.put_object(Bucket=bucket_name, Body='abc', Key=key)
+    retention = {'Mode':'GOVERNANCE', 'RetainUntilDate':datetime.datetime(2030,1,1,tzinfo=pytz.UTC)}
+    client.put_object_retention(Bucket=bucket_name, Key=key, Retention=retention)
+
+    # a Retention element without Mode and RetainUntilDate cannot remove retention
+    e = assert_raises(ClientError, client.put_object_retention, Bucket=bucket_name, Key=key,
+                      Retention={}, BypassGovernanceRetention=True)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'MalformedXML'
+
+    response = client.get_object_retention(Bucket=bucket_name, Key=key)
+    assert response['Retention'] == retention
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_put_object_mode_without_date():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Body='abc', Key='file1',
+                      ObjectLockMode='GOVERNANCE')
+    status = _get_status(e.response)
+    assert status == 400
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_put_object_date_without_mode():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Body='abc', Key='file1',
+                      ObjectLockRetainUntilDate=datetime.datetime(2030,1,1,tzinfo=pytz.UTC))
+    status = _get_status(e.response)
+    assert status == 400
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_put_object_past_retain_until():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Body='abc', Key='file1',
+                      ObjectLockMode='COMPLIANCE',
+                      ObjectLockRetainUntilDate=datetime.datetime.now(pytz.utc) - datetime.timedelta(hours=1))
+    status = _get_status(e.response)
+    assert status == 400
+
+def _object_lock_check_default_retention(client, bucket_name, key, mode, min_delta, max_delta):
+    response = client.head_object(Bucket=bucket_name, Key=key)
+    assert response['ObjectLockMode'] == mode
+    delta = response['ObjectLockRetainUntilDate'] - response['LastModified']
+    assert min_delta <= delta <= max_delta
+    return response['VersionId']
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_default_retention_applied_days():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    conf = {'ObjectLockEnabled':'Enabled',
+            'Rule': {
+                'DefaultRetention':{
+                    'Mode':'GOVERNANCE',
+                    'Days':1
+                }
+            }}
+    client.put_object_lock_configuration(Bucket=bucket_name, ObjectLockConfiguration=conf)
+    key = 'file1'
+    client.put_object(Bucket=bucket_name, Body='abc', Key=key)
+    # retain-until is the object's creation time plus the default period
+    tolerance = datetime.timedelta(seconds=60)
+    _object_lock_check_default_retention(client, bucket_name, key, 'GOVERNANCE',
+                                         datetime.timedelta(days=1) - tolerance,
+                                         datetime.timedelta(days=1) + tolerance)
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_default_retention_applied_years():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    conf = {'ObjectLockEnabled':'Enabled',
+            'Rule': {
+                'DefaultRetention':{
+                    'Mode':'GOVERNANCE',
+                    'Years':1
+                }
+            }}
+    client.put_object_lock_configuration(Bucket=bucket_name, ObjectLockConfiguration=conf)
+    key = 'file1'
+    client.put_object(Bucket=bucket_name, Body='abc', Key=key)
+    # allow for either calendar-year or average-year arithmetic
+    tolerance = datetime.timedelta(seconds=60)
+    _object_lock_check_default_retention(client, bucket_name, key, 'GOVERNANCE',
+                                         datetime.timedelta(days=365) - tolerance,
+                                         datetime.timedelta(days=366) + tolerance)
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_default_retention_not_retroactive():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    response = client.put_object(Bucket=bucket_name, Body='abc', Key=key)
+    old_version_id = response['VersionId']
+
+    conf = {'ObjectLockEnabled':'Enabled',
+            'Rule': {
+                'DefaultRetention':{
+                    'Mode':'GOVERNANCE',
+                    'Days':1
+                }
+            }}
+    client.put_object_lock_configuration(Bucket=bucket_name, ObjectLockConfiguration=conf)
+
+    # the existing version does not pick up the new default
+    e = assert_raises(ClientError, client.get_object_retention, Bucket=bucket_name, Key=key, VersionId=old_version_id)
+    status = _get_status(e.response)
+    assert status == 404
+
+    # a new version does
+    response = client.put_object(Bucket=bucket_name, Body='abc', Key=key)
+    new_version_id = response['VersionId']
+    response = client.get_object_retention(Bucket=bucket_name, Key=key, VersionId=new_version_id)
+    assert response['Retention']['Mode'] == 'GOVERNANCE'
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_legal_hold_outlives_retention():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    retain_until = _object_lock_retain_until(5)
+    response = client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='COMPLIANCE',
+                                 ObjectLockRetainUntilDate=retain_until, ObjectLockLegalHoldStatus='ON')
+    version_id = response['VersionId']
+    try:
+        _object_lock_wait_until(retain_until)
+
+        # retention has expired but the legal hold still protects the version
+        e = assert_raises(ClientError, client.delete_object, Bucket=bucket_name, Key=key, VersionId=version_id)
+        status, error_code = _get_status_and_error_code(e.response)
+        assert status == 403
+        assert error_code == 'AccessDenied'
+    finally:
+        client.put_object_legal_hold(Bucket=bucket_name, Key=key, VersionId=version_id, LegalHold={'Status':'OFF'})
+
+    response = client.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 204
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_legal_hold_bypass_denied():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    response = client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockLegalHoldStatus='ON')
+    version_id = response['VersionId']
+    try:
+        # BypassGovernanceRetention does not override a legal hold
+        e = assert_raises(ClientError, client.delete_object, Bucket=bucket_name, Key=key,
+                          VersionId=version_id, BypassGovernanceRetention=True)
+        status, error_code = _get_status_and_error_code(e.response)
+        assert status == 403
+        assert error_code == 'AccessDenied'
+    finally:
+        client.put_object_legal_hold(Bucket=bucket_name, Key=key, VersionId=version_id, LegalHold={'Status':'OFF'})
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_delete_marker_preserves_locked_version():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    response = client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='COMPLIANCE',
+                                 ObjectLockRetainUntilDate=_object_lock_retain_until(10))
+    version_id = response['VersionId']
+
+    # a delete without a version id succeeds and only adds a delete marker
+    response = client.delete_object(Bucket=bucket_name, Key=key)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 204
+    assert response['DeleteMarker'] == True
+    marker_id = response['VersionId']
+
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key)
+    status = _get_status(e.response)
+    assert status == 404
+
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert [v['VersionId'] for v in response['Versions']] == [version_id]
+    assert [m['VersionId'] for m in response['DeleteMarkers']] == [marker_id]
+
+    response = client.get_object(Bucket=bucket_name, Key=key, VersionId=version_id)
+    assert _get_body(response) == 'abc'
+
+    # removing the delete marker reinstates the locked version
+    client.delete_object(Bucket=bucket_name, Key=key, VersionId=marker_id)
+    response = client.get_object(Bucket=bucket_name, Key=key)
+    assert response['VersionId'] == version_id
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_disable_lock_rejected():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    e = assert_raises(ClientError, client.put_object_lock_configuration, Bucket=bucket_name,
+                      ObjectLockConfiguration={'ObjectLockEnabled':'Disabled'})
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'MalformedXML'
+    response = client.get_object_lock_configuration(Bucket=bucket_name)
+    assert response['ObjectLockConfiguration']['ObjectLockEnabled'] == 'Enabled'
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_copy_does_not_inherit_retention():
+    src_bucket = get_new_bucket_name()
+    dst_bucket = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=src_bucket, ObjectLockEnabledForBucket=True)
+    client.create_bucket(Bucket=dst_bucket, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    response = client.put_object(Bucket=src_bucket, Body='abc', Key=key, ObjectLockMode='GOVERNANCE',
+                                 ObjectLockRetainUntilDate=datetime.datetime(2030,1,1,tzinfo=pytz.UTC),
+                                 ObjectLockLegalHoldStatus='ON')
+    src_version_id = response['VersionId']
+
+    try:
+        client.copy_object(Bucket=dst_bucket, Key=key, CopySource={'Bucket': src_bucket, 'Key': key})
+        # retention and legal hold must be applied to the copy separately
+        response = client.head_object(Bucket=dst_bucket, Key=key)
+        assert 'ObjectLockMode' not in response
+        assert 'ObjectLockRetainUntilDate' not in response
+        assert response.get('ObjectLockLegalHoldStatus', 'OFF') == 'OFF'
+    finally:
+        # nuke_bucket() can't delete a version under legal hold
+        client.put_object_legal_hold(Bucket=src_bucket, Key=key, VersionId=src_version_id, LegalHold={'Status':'OFF'})
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_copy_into_default_retention_bucket():
+    src_bucket = get_new_bucket_name()
+    dst_bucket = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=src_bucket)
+    client.create_bucket(Bucket=dst_bucket, ObjectLockEnabledForBucket=True)
+    conf = {'ObjectLockEnabled':'Enabled',
+            'Rule': {
+                'DefaultRetention':{
+                    'Mode':'GOVERNANCE',
+                    'Days':1
+                }
+            }}
+    client.put_object_lock_configuration(Bucket=dst_bucket, ObjectLockConfiguration=conf)
+    key = 'file1'
+    client.put_object(Bucket=src_bucket, Body='abc', Key=key)
+    client.copy_object(Bucket=dst_bucket, Key=key, CopySource={'Bucket': src_bucket, 'Key': key})
+    # the copy gets the destination bucket's default retention
+    tolerance = datetime.timedelta(seconds=60)
+    _object_lock_check_default_retention(client, dst_bucket, key, 'GOVERNANCE',
+                                         datetime.timedelta(days=1) - tolerance,
+                                         datetime.timedelta(days=1) + tolerance)
+
+@pytest.mark.object_lock
+@pytest.mark.fails_on_dbstore
+def test_object_lock_multipart_with_compliance_retention():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    retain_until = _object_lock_retain_until(15).replace(microsecond=0)
+    response = client.create_multipart_upload(Bucket=bucket_name, Key=key, ObjectLockMode='COMPLIANCE',
+                                              ObjectLockRetainUntilDate=retain_until)
+    upload_id = response['UploadId']
+    response = client.upload_part(UploadId=upload_id, Bucket=bucket_name, Key=key, PartNumber=1, Body='abc')
+    parts = [{'ETag': response['ETag'].strip('"'), 'PartNumber': 1}]
+    response = client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id,
+                                                MultipartUpload={'Parts': parts})
+    version_id = response['VersionId']
+
+    response = client.head_object(Bucket=bucket_name, Key=key, VersionId=version_id)
+    assert response['ObjectLockMode'] == 'COMPLIANCE'
+    assert response['ObjectLockRetainUntilDate'] == retain_until
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket_name, Key=key,
+                      VersionId=version_id, BypassGovernanceRetention=True)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+@pytest.mark.object_lock
+@pytest.mark.bucket_policy
+@pytest.mark.fails_on_dbstore
+def test_object_lock_bypass_denied_by_bucket_policy():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+    # short retention so cleanup can wait it out, since the policy also denies bypass to the cleanup
+    response = client.put_object(Bucket=bucket_name, Body='abc', Key=key, ObjectLockMode='GOVERNANCE',
+                                 ObjectLockRetainUntilDate=_object_lock_retain_until(10))
+    version_id = response['VersionId']
+
+    resource = _make_arn_resource("{}/{}".format(bucket_name, "*"))
+    policy_document = make_json_policy("s3:BypassGovernanceRetention", resource, effect="Deny")
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy_document)
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket_name, Key=key,
+                      VersionId=version_id, BypassGovernanceRetention=True)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+    client.delete_bucket_policy(Bucket=bucket_name)
+
+def _object_lock_put_noncurrent_expiration(client, bucket_name, days=1):
+    lifecycle_config = {
+        'Rules': [
+            {
+                'NoncurrentVersionExpiration': {
+                    'NoncurrentDays': days,
+                },
+                'ID': 'noncurrent',
+                'Filter': {
+                    'Prefix': '',
+                },
+                'Status': 'Enabled',
+            },
+        ]
+    }
+    response = client.put_bucket_lifecycle_configuration(Bucket=bucket_name,
+                                                         LifecycleConfiguration=lifecycle_config)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+@pytest.mark.object_lock
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_expiration
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_lifecycle_noncurrent_expiration_skips_locked_version():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+
+    plain = client.put_object(Bucket=bucket_name, Body='v0', Key=key)['VersionId']
+    retained = client.put_object(Bucket=bucket_name, Body='v1', Key=key, ObjectLockMode='GOVERNANCE',
+                                 ObjectLockRetainUntilDate=datetime.datetime(2030,1,1,tzinfo=pytz.UTC))['VersionId']
+    held = client.put_object(Bucket=bucket_name, Body='v2', Key=key, ObjectLockLegalHoldStatus='ON')['VersionId']
+    current = client.put_object(Bucket=bucket_name, Body='v3', Key=key)['VersionId']
+
+    try:
+        _object_lock_put_noncurrent_expiration(client, bucket_name)
+
+        lc_interval = get_lc_debug_interval()
+        time.sleep(3*lc_interval)
+
+        response = client.list_object_versions(Bucket=bucket_name)
+        remaining = set(v['VersionId'] for v in response['Versions'])
+    finally:
+        client.put_object_legal_hold(Bucket=bucket_name, Key=key, VersionId=held, LegalHold={'Status':'OFF'})
+
+    # the unprotected noncurrent version expires, the retained and held versions do not
+    assert plain not in remaining
+    assert remaining == set([retained, held, current])
+
+@pytest.mark.object_lock
+@pytest.mark.lifecycle
+@pytest.mark.lifecycle_expiration
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_lifecycle_expiration_after_retention_lapses():
+    bucket_name = get_new_bucket_name()
+    client = get_client()
+    client.create_bucket(Bucket=bucket_name, ObjectLockEnabledForBucket=True)
+    key = 'file1'
+
+    lc_interval = get_lc_debug_interval()
+    retain_until = _object_lock_retain_until(2*lc_interval)
+    locked = client.put_object(Bucket=bucket_name, Body='v0', Key=key, ObjectLockMode='COMPLIANCE',
+                               ObjectLockRetainUntilDate=retain_until)['VersionId']
+    current = client.put_object(Bucket=bucket_name, Body='v1', Key=key)['VersionId']
+
+    _object_lock_put_noncurrent_expiration(client, bucket_name)
+
+    # lifecycle may not remove the version while it is retained
+    time.sleep(lc_interval)
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert locked in [v['VersionId'] for v in response['Versions']]
+
+    # once the retention lapses, lifecycle expires it
+    _object_lock_wait_until(retain_until)
+    time.sleep(3*lc_interval)
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert [v['VersionId'] for v in response['Versions']] == [current]
+
 @pytest.mark.fails_on_dbstore
 def test_copy_object_ifmatch_good():
     bucket_name = get_new_bucket()
