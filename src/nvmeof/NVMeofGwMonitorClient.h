@@ -67,8 +67,15 @@ private:
   // written by the dispatch thread, read by the timer thread (send_beacon);
   // tracks cluster features for beacon encoding
   std::atomic<bool> cluster_beacon_diff_included = false;
+  std::atomic<bool> stopping{false};
+  std::atomic<bool> config_push_needed{false};
+  std::atomic<bool> config_push_scheduled{false};
+  ceph::mutex config_lock = ceph::make_mutex("NVMeofGw::config_lock");
+
   // init gw ssl opts
   void init_gw_ssl_opts();
+  void schedule_config_push();
+  void push_config_snapshot();
 
   // returns gateway grpc credentials
   std::shared_ptr<grpc::ChannelCredentials> gw_creds();
