@@ -320,6 +320,8 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
 
   con->mark_down();
   pinger->mc.reset();
+  // ~AsyncConnection uses its messenger, so drop ours before deleting it
+  con.reset();
   smsgr->shutdown();
   smsgr->wait();
   delete smsgr;
