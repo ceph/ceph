@@ -59,3 +59,16 @@ overrides:
       - AUTH_INSECURE_SERVICE_KEY_TYPE
       - AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE
       - all OSDs are running umbrella
+      # Transient during orchestrated upgrade (synced with upgrade/*/parallel/0-start.yaml)
+      - OSD_UPGRADE_FINISHED
+      - OSDMAP_FLAGS
+      - PG_DEGRADED
+      - OBJECT_UNFOUND
+      - OSD_HOST_DOWN
+      - Reduced data availability
+      - Degraded data redundancy
+      - pg .* is stuck inactive
+      - pg .* is stuck peering
+      - pool full
+      - pool\(s\) full
+      - but it is still running
