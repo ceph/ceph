@@ -82,6 +82,25 @@ inline bool is_rgw_backend(BackendType type) {
   return type == BackendType::RGW;
 }
 
+// the namespace of a vector bucket. the name of a vector bucket is unique in the
+// account that owns it, or in the tenant of its owner when the owner does not
+// belong to an account
+struct bucket_namespace_t {
+  // the tenant of the owner. with the RGW backend, this is also the tenant of
+  // the backing S3 bucket
+  std::string tenant;
+  // the ID of the account that owns the vector bucket. empty when the owner
+  // does not belong to an account
+  std::string account;
+
+  // the ID of the account when there is one, and the tenant otherwise.
+  // this is the "account" of the ARNs of the vector bucket, and the "tenant"
+  // of its metadata key
+  const std::string& name() const {
+    return account.empty() ? tenant : account;
+  }
+};
+
 // Create a LanceDB session with RGW provider. the session is per tenant, since
 // two tenants may use the same vector bucket name
 LanceDBSession* create_rgw_session(const DoutPrefixProvider* dpp,
@@ -621,20 +640,20 @@ inline key_name_validation validate_declared_metadata_key_name(const std::string
   return {};
 }
 
-int create_index(const create_index_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors);
-int create_vector_bucket(const create_vector_bucket_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y);
-int delete_index(const delete_index_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y);
-int remove_indexes(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const std::string* tenant, const std::string& vector_bucket_name, bool delete_indexes, optional_yield y);
+int create_index(const create_index_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors);
+int create_vector_bucket(const create_vector_bucket_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y);
+int delete_index(const delete_index_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y);
+int remove_indexes(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const bucket_namespace_t& ns, const std::string& vector_bucket_name, bool delete_indexes, optional_yield y);
 int delete_vector_bucket_policy(const delete_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int put_vectors(const put_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors);
-int get_vectors(const get_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply);
-int list_vectors(const list_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, list_vectors_reply_t& reply);
-int get_index(const get_index_t& configuration, const std::string& region, const std::string& account, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_index_reply_t& reply);
-int list_indexes(const list_indexes_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, list_indexes_reply_t& reply);
+int put_vectors(const put_vectors_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors);
+int get_vectors(const get_vectors_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply);
+int list_vectors(const list_vectors_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, list_vectors_reply_t& reply);
+int get_index(const get_index_t& configuration, const std::string& region, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, get_index_reply_t& reply);
+int list_indexes(const list_indexes_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, list_indexes_reply_t& reply);
 int put_vector_bucket_policy(const put_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int get_vector_bucket_policy(const get_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int delete_vectors(const delete_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y);
-int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply, std::vector<validation_error_t>& errors);
+int delete_vectors(const delete_vectors_t& configuration, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y);
+int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, rgw::sal::Driver* driver, const bucket_namespace_t& ns, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply, std::vector<validation_error_t>& errors);
 
 }
 
