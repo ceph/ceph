@@ -2617,6 +2617,15 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
     int r;
     snapid_t snapid;
     std::string e_name;
+    std::vector<SyncEntry> children;
+    bool children_pushed = false;
+    BOOST_SCOPE_EXIT_ALL(&) {
+      if (!children_pushed) {
+        for (auto &c : children) {
+          fini_directory(c);
+        }
+      }
+    };
     while (true) {
       e_name.clear();
       r = next_entry(entry, &e_name, &snapid);
@@ -2656,8 +2665,7 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
           }
 
           m_deleted[entry.epath].emplace(e_name);
-          r = 1; //Continue with the outer loop
-          break;
+          continue;
         }
 
         struct ceph_statx estx;
@@ -2739,19 +2747,16 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
             se.set_purged_or_itype_changed();
           }
 
-          m_sync_stack.emplace(se);
-          dout(20) << ": Added directory to stack =" << _epath << dendl;
           r = remote_mkdir(_epath, estx);
           if (r < 0) {
             derr << ": mkdir failed on remote. epath=" << _epath << ": " << cpp_strerror(r)
                << dendl;
+            fini_directory(se);
             return r;
           }
-          m_sync_stack.top().need_remote_attrs = true;
-          //Fill epath to avoid caller treat this as failure and breaking the loop early.
-          *epath = _epath;
-          *stx = estx;
-          return r; // New directory added to stack
+          se.need_remote_attrs = true;
+          dout(20) << ": Added directory to pending children =" << _epath << dendl;
+          children.emplace_back(std::move(se));
         } else {
           push_dataq_entry(SyncEntry(_epath, estx, !pic));
           dout(10) << ": sync_check=" << *sync_check << " for epath=" << _epath << dendl;
@@ -2763,6 +2768,15 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
       continue;
 
     if (r == 0) {
+      if (!children.empty()) {
+        for (auto it = children.rbegin(); it != children.rend(); ++it) {
+          m_sync_stack.push(std::move(*it));
+        }
+        children_pushed = true;
+        *epath = m_sync_stack.top().epath;
+        *stx = m_sync_stack.top().stx;
+        return 0;
+      }
       dout(10) << ": done for directory=" << entry.epath << dendl;
       if (entry.need_remote_attrs) {
         r = remote_dir_setattr(entry.epath, entry.stx);
@@ -2964,6 +2978,17 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     }
 
     int r;
+    std::vector<SyncEntry> children;
+    bool children_pushed = false;
+    BOOST_SCOPE_EXIT_ALL(&) {
+      if (!children_pushed) {
+        for (auto &c : children) {
+          if (ceph_closedir(m_local, c.dirp) < 0) {
+            derr << ": failed to close local directory=" << c.epath << dendl;
+          }
+        }
+      }
+    };
     while (true) {
       struct dirent de;
       r = ceph_readdirplus_r(m_local, entry.dirp, &de, NULL,
@@ -3001,21 +3026,21 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
             return r;
           }
 
-          m_sync_stack.emplace(SyncEntry(_epath, dirp, cstx));
-          dout(20) << ": Added directory to stack =" << _epath << dendl;
+          SyncEntry se(_epath, dirp, cstx);
           bool created = false;
           r = remote_mkdir(_epath, cstx, &created);
           if (r < 0) {
             derr << ": mkdir failed on remote. epath=" << _epath << ": " << cpp_strerror(r)
                << dendl;
+            if (ceph_closedir(m_local, dirp) < 0) {
+              derr << ": failed to close local directory=" << _epath << dendl;
+            }
             return r;
           }
-          m_sync_stack.top().need_remote_attrs = true;
-          m_sync_stack.top().skip_dirsync = created;
-          //Fill epath to avoid caller treat this as failure and breaking the loop early.
-          *epath = _epath;
-          *stx = cstx;
-          return r; // New directory added to stack
+          se.need_remote_attrs = true;
+          se.skip_dirsync = created;
+          dout(20) << ": Added directory to pending children =" << _epath << dendl;
+          children.emplace_back(std::move(se));
         } else {
           push_dataq_entry(SyncEntry(_epath, cstx));
         }
@@ -3023,6 +3048,15 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
     }
 
     if (r == 0) {
+      if (!children.empty()) {
+        for (auto it = children.rbegin(); it != children.rend(); ++it) {
+          m_sync_stack.push(std::move(*it));
+        }
+        children_pushed = true;
+        *epath = m_sync_stack.top().epath;
+        *stx = m_sync_stack.top().stx;
+        return 0;
+      }
       dout(10) << ": done for directory=" << entry.epath << dendl;
       if (entry.need_remote_attrs) {
         r = remote_dir_setattr(entry.epath, entry.stx);
