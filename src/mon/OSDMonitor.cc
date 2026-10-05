@@ -8712,6 +8712,9 @@ int OSDMonitor::prepare_new_pool(string& name,
       pi->min_size = pi->min_size / 2;
     }
   }
+  // enabled only once every check has passed, so a failed create changes nothing
+  bool stretch_mons = false;
+  bool stretch_pool = false;
   if (num_zones == 2 && !mon.monmap->global_stretch_mode_enabled) {
     // Check if monitor stretch mode is already enabled in pending state
     // This prevents infinite election loops when pool create command is retried
@@ -8741,23 +8744,7 @@ int OSDMonitor::prepare_new_pool(string& name,
       *ss << "Failed to validate monitor stretch mode: " << monmap_ss.str();
       return monmap_errcode;
     }
-
-    // Validation passed, now apply with commit=true to modify pending_map
-    monmap_ss.str("");
-    mon.monmon()->try_enable_stretch_mode(
-        monmap_ss,
-        &monmap_okay,
-        &monmap_errcode,
-        true,                // commit = true (apply to pending_map)
-        "",
-        effective_zone_failure_domain,
-        crush,
-        false);
-
-      ceph_assert(monmap_okay == true);  // Should not fail since we validated
-
-      // Request MonmapMonitor to propose its pending changes
-      request_proposal(mon.monmon());
+      stretch_mons = true;
     } else {
       dout(20) << __func__ 
         << " monmap stretch mode enabled currently committing"
@@ -8789,25 +8776,7 @@ int OSDMonitor::prepare_new_pool(string& name,
       *ss << "Failed to validate pool stretch mode: " << osd_ss.str();
       return osd_errcode;
     }
-
-    // Apply pool stretch mode configuration
-    osd_ss.str("");
-    try_enable_stretch_mode(
-        osd_ss,
-        &osd_okay,
-        &osd_errcode,
-        true,                // commit = true (apply changes)
-        effective_zone_failure_domain,
-        num_zones,
-        pools_to_configure,
-        "",
-        crush,
-        false);
-
-    ceph_assert(osd_okay == true);  // Should not fail since we already validated
-
-    dout(20) << __func__ << " enabled stretch mode for pool " << name
-             << " across " << num_zones << " " << effective_zone_failure_domain << " zones" << dendl;
+    stretch_pool = true;
   }
   if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
         g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode"));
@@ -8917,6 +8886,27 @@ int OSDMonitor::prepare_new_pool(string& name,
       (pool_type == pg_pool_t::TYPE_REPLICATED ||
        (pi->allows_ecoptimizations() && !crimson))) {
     pi->set_flag(pg_pool_t::FLAG_OMAP);
+  }
+
+  if (stretch_pool) {
+    CrushWrapper crush = _get_pending_crush();
+    stringstream stretch_ss;
+    bool okay = false;
+    int errcode = 0;
+    if (stretch_mons) {
+      mon.monmon()->try_enable_stretch_mode(stretch_ss, &okay, &errcode, true, "",
+                                            effective_zone_failure_domain, crush,
+                                            false);
+      ceph_assert(okay);
+      request_proposal(mon.monmon());
+    }
+    try_enable_stretch_mode(stretch_ss, &okay, &errcode, true,
+                            effective_zone_failure_domain, num_zones,
+                            set<pg_pool_t*>{pi}, "", crush, false);
+    ceph_assert(okay);
+    dout(20) << __func__ << " enabled stretch mode for pool " << name
+             << " across " << num_zones << " " << effective_zone_failure_domain
+             << " zones" << dendl;
   }
 
   pending_inc.new_pool_names[pool] = name;
