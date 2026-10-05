@@ -1683,8 +1683,12 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
            << num_blocks << dendl;
   int l_fd;
   int r_fd;
-  void *ptr;
+  void *ptr = nullptr;
   struct iovec iov[NR_IOVECS];
+  static thread_local char *copy_buf = nullptr;
+  static thread_local uint64_t copy_buf_cap = 0;
+  const uint64_t max_buf = (uint64_t)NR_IOVECS * IOVEC_SIZE;
+  uint64_t buf_len = 0;
 
   uint64_t bytes_read = 0;
   uint64_t bytes_written = 0;
@@ -1710,11 +1714,24 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   }
 
   r_fd = r;
-  ptr = malloc(NR_IOVECS * IOVEC_SIZE);
-  if (!ptr) {
-    r = -ENOMEM;
-    derr << ": failed to allocate memory" << dendl;
-    goto close_remote_fd;
+  // Reuse a per-thread buffer. Cap at 64 MiB for large files; avoid
+  // malloc(64 MiB)/free per small file (kernel-untar ~16 KiB).
+  buf_len = stx.stx_size;
+  if (buf_len > max_buf) {
+    buf_len = max_buf;
+  }
+  if (buf_len > 0) {
+    if (copy_buf_cap < buf_len) {
+      void *n = realloc(copy_buf, buf_len);
+      if (!n) {
+        r = -ENOMEM;
+        derr << ": failed to allocate memory" << dendl;
+        goto close_remote_fd;
+      }
+      copy_buf = (char *)n;
+      copy_buf_cap = buf_len;
+    }
+    ptr = copy_buf;
   }
 
   while (num_blocks > 0) {
@@ -1735,9 +1752,12 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
         break;
       }
 
+      if (buf_len == 0) {
+        break;
+      }
       auto cut_off = len;
-      if (cut_off > NR_IOVECS*IOVEC_SIZE) {
-        cut_off = NR_IOVECS*IOVEC_SIZE;
+      if (cut_off > buf_len) {
+        cut_off = buf_len;
       }
 
       int num_buffers = cut_off / IOVEC_SIZE;
@@ -1809,12 +1829,9 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
     if (r < 0) {
       derr << ": failed to truncate remote file path=" << epath << ": "
            << cpp_strerror(r) << dendl;
-      goto freeptr;
+      goto close_remote_fd;
     }
   }
-
-freeptr:
-  free(ptr);
 
 close_remote_fd:
   if (ceph_close(m_remote_mount, r_fd) < 0) {
