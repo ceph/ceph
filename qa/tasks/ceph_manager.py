@@ -2270,8 +2270,6 @@ class CephManager:
 
                 if num_zones is not None:
                     cmd_args.extend(['--num_zones', str(num_zones)])
-                    if osd_failure_domain is not None:
-                        cmd_args.extend(['--osd_failure_domain', osd_failure_domain])
                 self.raw_cluster_cmd(*cmd_args)
             else:
                 cmd_args = ['osd', 'pool', 'create',
