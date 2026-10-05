@@ -38,6 +38,7 @@
 #include <boost/asio/io_context.hpp>
 
 #include "common/Cond.h"
+#include "crush/CrushWrapper.h"
 #include "global/global_context.h"
 #include "include/rados.h"
 #include "messages/MOSDMap.h"
@@ -47,6 +48,7 @@
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "osdc/Objecter.h"
+#include "osdc/SplitOp.h"
 #include "test/osd/MockConnection.h"
 #include "test/osd/OSDMapTestHelpers.h"
 
@@ -287,4 +289,142 @@ TEST_F(TestSplitOpMapChange, ECDirectReadRedrivesWhenPrimaryMoves)
 TEST_F(TestSplitOpMapChange, ECDirectReadRedrivesWhenMinSizeChanges)
 {
   direct_read_redriven_on_new_interval([this] { raise_min_size(); }, primary);
+}
+
+// A balanced read of a pool over two zones whose acting set holds only one
+// zone, as when CRUSH finds one zone, reads from that zone
+TEST_F(TestSplitOpMapChange, ECBalancedShardWithOneZoneInActingSet)
+{
+  constexpr int64_t two_zone_pool_id = 2;
+  auto pool = objecter->with_osdmap([](const OSDMap& o) {
+    return *o.get_pg_pool(ec_pool_id);
+  });
+  pool.num_zones = 2;
+  pool.size = 6;
+  advance_map([&](OSDMap::Incremental& inc) {
+    inc.new_pool_max = two_zone_pool_id;
+    inc.new_pools[two_zone_pool_id] = pool;
+  });
+
+  Objecter::op_target_t target(object_t("obj"),
+                               object_locator_t(two_zone_pool_id), 0);
+  target.acting = acting;
+  std::optional<int> local_zone;
+  for (int i = 0; i < 20; i++) {
+    EXPECT_EQ(shard_id_t(1), ECSplitOp::choose_read_shard(
+      *objecter, g_ceph_context, target, false, shard_id_t(1), local_zone));
+  }
+}
+
+// A localized read of a replicated pool over two zones is split between the
+// replicas in the client's zone. A replicated acting set is not ordered by
+// zone, so the zone of each replica must come from CRUSH, not its position.
+class TestReplicaLocalizedSplitRead : public ::testing::Test {
+protected:
+  static constexpr int num_osds = 4;
+  static constexpr int64_t pool_id = 1;
+  // primary osd.2 in dc1, then the zones interleaved
+  const std::vector<int> acting = {2, 0, 3, 1};
+  boost::asio::io_context ioc;
+  MonClient monc{g_ceph_context, ioc};
+  std::unique_ptr<Messenger> msgr{
+    Messenger::create_client_messenger(g_ceph_context, "client")};
+  std::unique_ptr<Objecter> objecter;
+  std::map<int, ceph::ref_t<RecordingConnection>> cons;
+  C_SaferCond done;
+
+  void SetUp() override
+  {
+    g_ceph_context->_conf.set_val_or_die("osd_min_split_replica_read_size",
+                                         "4096");
+    objecter = std::make_unique<Objecter>(g_ceph_context, msgr.get(), &monc, ioc);
+    objecter->init();
+
+    OSDMap map;
+    uuid_d fsid;
+    fsid.generate_random();
+    ceph_assert(map.build_simple(g_ceph_context, 1, fsid, num_osds) == 0);
+    for (int i = 0; i < num_osds; i++) {
+      map.set_state(i, CEPH_OSD_EXISTS | CEPH_OSD_UP);
+    }
+
+    // datacenter dc0 holds osd.0 and osd.1, dc1 osd.2 and osd.3
+    CrushWrapper crush;
+    crush.create();
+    OSDMap::_build_crush_types(crush);
+    int rootid = 0;
+    ceph_assert(crush.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                                 crush.get_type_id("root"), 0, nullptr,
+                                 nullptr, &rootid) == 0);
+    crush.set_item_name(rootid, "default");
+    for (int osd = 0; osd < num_osds; osd++) {
+      std::map<std::string, std::string> loc = {
+        {"root", "default"},
+        {"datacenter", "dc" + std::to_string(osd / 2)},
+        {"host", "host" + std::to_string(osd)}};
+      crush.insert_item(g_ceph_context, osd, 1.0, "osd." + std::to_string(osd),
+                        loc);
+    }
+    crush.finalize();
+    OSDMap::Incremental crush_inc(map.get_epoch() + 1);
+    crush_inc.fsid = map.get_fsid();
+    crush.encode(crush_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    map.apply_incremental(crush_inc);
+
+    pg_pool_t rep;
+    rep.type = pg_pool_t::TYPE_REPLICATED;
+    rep.size = 4;
+    rep.min_size = 1;
+    rep.num_zones = 2;
+    rep.replica = 2;
+    rep.peering_crush_bucket_count = 2;
+    rep.peering_crush_bucket_target = 2;
+    rep.peering_crush_bucket_barrier = crush.get_type_id("datacenter");
+    rep.set_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS);
+    rep.set_pg_num(1);
+    rep.set_pgp_num(1);
+    OSDMapTestHelpers::add_pool(map, pool_id, rep);
+    OSDMapTestHelpers::set_pg_acting(map, pg_t(0, pool_id), acting);
+
+    objecter->start(&map);
+    objecter->crush_location = {{"datacenter", "dc0"}};
+
+    for (int osd = 0; osd < num_osds; osd++) {
+      auto s = new Objecter::OSDSession(g_ceph_context, osd, ioc.get_executor());
+      cons[osd] = ceph::make_ref<RecordingConnection>(osd);
+      s->con = cons[osd];
+      s->con->set_priv(RefCountedPtr{s});
+      objecter->osd_sessions[osd] = s;
+    }
+  }
+
+  void TearDown() override
+  {
+    objecter->shutdown();
+    objecter.reset();
+    g_ceph_context->_conf.set_val_or_die("osd_min_split_replica_read_size",
+                                         "0");
+  }
+};
+
+TEST_F(TestReplicaLocalizedSplitRead, ReadsOnlyLocalZoneReplicas)
+{
+  osdc_opvec ops(1);
+  ops[0].op.op = CEPH_OSD_OP_READ;
+  ops[0].op.extent.offset = 0;
+  ops[0].op.extent.length = 1 << 20;
+  ceph_tid_t tid = 0;
+  objecter->op_submit(
+    new Objecter::Op(object_t("obj"), object_locator_t(pool_id),
+                     std::move(ops),
+                     CEPH_OSD_FLAG_READ | CEPH_OSD_FLAG_LOCALIZE_READS,
+                     &done, nullptr),
+    &tid);
+  ioc.restart();
+  ioc.poll();
+
+  EXPECT_FALSE(cons[0]->sent.empty());
+  EXPECT_FALSE(cons[1]->sent.empty());
+  EXPECT_TRUE(cons[2]->sent.empty()) << "osd.2 is in dc1";
+  EXPECT_TRUE(cons[3]->sent.empty()) << "osd.3 is in dc1";
 }
