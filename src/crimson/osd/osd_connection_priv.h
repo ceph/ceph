@@ -27,6 +27,10 @@ struct OSDConnectionPriv : public crimson::net::Connection::user_private_t {
   ConnectionPipeline replicated_request_conn_pipeline;
   crosscore_ordering_t crosscore_ordering;
 
+  // The OSD map epoch at which we last sent an MOSDShardMap to this client.
+  // When the OSD's bind epoch advances past this value we re-send the table.
+  epoch_t last_shard_map_sent = 0;
+
   // Per-connection registry of the watches reachable over this connection,
   // used by OSD::ms_handle_reset() to disconnect them on reset. Lazily created
   // on the first watch (most connections never watch anything).

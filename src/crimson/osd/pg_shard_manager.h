@@ -408,9 +408,25 @@ public:
     }).then([&logger, &opref](auto epoch) {
       logger.debug("{}: got map {}, entering get_pg_mapping", opref, epoch);
       return opref.template enter_stage<>(
-	opref.get_connection_pipeline().get_pg_mapping);
+ opref.get_connection_pipeline().get_pg_mapping);
     }).then([this, &opref] {
-      return get_pg_to_shard_mapping().get_or_create_pg_mapping(opref.get_pgid());
+      // Fast path: if the local shard already has a mapping for this PG
+      // (either from a previous request or from a client-supplied shard_hint)
+      // we can avoid the core-0 round-trip entirely.
+      if (auto cached = get_pg_to_shard_mapping().get_pg_mapping_pair(
+              opref.get_pgid())) {
+        return seastar::make_ready_future<
+            std::pair<core_id_t, store_index_t>>(*cached);
+      }
+      // Hint path: client told us which core owns the PG; pass it through so
+      // that PGShardMapping on core 0 can validate/accept it without doing
+      // its own load-balancing search.  Only ClientRequest carries a hint.
+      core_id_t hint = NULL_CORE;
+      if constexpr (std::is_same_v<T, ClientRequest>) {
+        hint = static_cast<core_id_t>(opref.template get_req<MOSDOp>()->get_shard_hint());
+      }
+      return get_pg_to_shard_mapping().get_or_create_pg_mapping(
+          opref.get_pgid(), hint);
     }).then_wrapped([this, &logger, op=std::move(op)](auto fut) mutable {
       if (unlikely(fut.failed())) {
         logger.error("{}: failed before with_pg", *op);
