@@ -858,8 +858,12 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
 void ECCommon::ReadPipeline::kick_reads() {
   while (in_progress_client_reads.size() &&
          in_progress_client_reads.front().is_complete()) {
-         in_progress_client_reads.front().run();
-         in_progress_client_reads.pop_front();
+    // Off the list before it runs: the callback may issue another read, and
+    // a read that completes inside the call that issues it kicks again,
+    // which would run this entry a second time.
+    ClientAsyncReadStatus status = std::move(in_progress_client_reads.front());
+    in_progress_client_reads.pop_front();
+    status.run();
   }
 }
 
