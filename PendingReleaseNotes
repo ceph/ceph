@@ -1,5 +1,14 @@
 >=22.0.0
 
+* CephFS: Added the MDS option ``mds_defer_client_range_shrink``, off by
+  default.  When a client gives up its write caps on a file and nothing else
+  about the inode changed, the MDS then drops the client's writeable range in
+  memory instead of journaling an inode update for it, which removes a journal
+  event from every file created and closed without data.  The trade-off is
+  that an MDS failure before the dropped range is committed with the
+  inode's directory fragment makes recovery probe the size of such files
+  whose clients no longer hold caps on them.
+
 * RBD: The Python ``Image.list_lockers()`` method now returns a dictionary
   containing ``tag``, ``exclusive``, and ``lockers`` fields even when no clients
   hold the lock, instead of an empty list. Callers should check the
