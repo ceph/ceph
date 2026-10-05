@@ -1561,6 +1561,12 @@ For a K=2, M=1, --num-zones 2 pool: ``min_size = 5 − 3 = 2``.
 Also set ``peering_crush_bucket_count`` and
 ``peering_crush_mandatory_member`` as for replicated pools.
 
+A replicated pool created after ``ceph mon enable_stretch_mode`` while the
+cluster is in degraded stretch mode keeps its full ``size`` and
+``peering_crush_bucket_target``, as the existing stretch pools do, and is given
+the degraded ``peering_crush_bucket_count`` and halved ``min_size``, so the
+healthy transition (11.4.4) restores it with the other stretch pools.
+
 **11.4.4 Healthy Stretch Mode** (``trigger_healthy_stretch_mode``)
 
 *Currently reads* ``mon_stretch_pool_min_size`` *config for replica pools.*
@@ -1654,7 +1660,7 @@ The existing ``pg_pool_t`` fields remain unchanged:
      - zones (zones) in healthy; reduced during degraded
    * - ``peering_crush_bucket_target``
      - Target CRUSH buckets for ``bucket_max`` calc
-     - zones (zones) in healthy; reduced during degraded
+     - zones; not changed by the stretch mode transitions
    * - ``peering_crush_bucket_barrier``
      - CRUSH type level (e.g., datacenter)
      - Same as replica — the failure domain
@@ -1679,13 +1685,13 @@ The existing ``pg_pool_t`` fields remain unchanged:
      - NONE
    * - Degraded
      - 1
-     - 1
-     - 6
+     - 2
+     - 3
      - surviving_site
    * - Recovery
      - 1
-     - 1
-     - 6
+     - 2
+     - 3
      - surviving_site
    * - Healthy (restored)
      - 2
@@ -1693,8 +1699,10 @@ The existing ``pg_pool_t`` fields remain unchanged:
      - 3
      - NONE
 
-``bucket_max = ceil(size / bucket_target)`` — in healthy mode, ``6 / 2 = 3 =
-K+M``. This naturally prevents more than one copy of each shard per zone.
+``bucket_max = ceil(size / bucket_target)`` — ``6 / 2 = 3 = K+M``. The stretch
+mode transitions do not change ``bucket_target``, so this holds in every state
+and naturally prevents more than one copy of each shard per zone, also in the
+surviving zone while a zone is down.
 
 11.7 Network Partition Handling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
