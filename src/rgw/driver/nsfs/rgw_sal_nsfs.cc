@@ -6540,7 +6540,7 @@ int NSFSBucket::mark_extensions(const DoutPrefixProvider* dpp,
     /* The attribute is written and names nothing we serve.  Only a
      * caller passing a set we do not implement reaches this, and the
      * bucket is now unservable, which the next load reports. */
-    ldpp_dout(dpp, 0) << "ERROR: stamped bucket " << get_name()
+    ldpp_dout(dpp, 0) << "ERROR: marked bucket " << get_name()
       << " with extension set " << version << ", which resolves to no "
       << "profile" << dendl;
     return -EINVAL;
@@ -8310,7 +8310,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     if (build_fd < 0) {
       return FSIOResult{-errno, nullptr};
     }
-    /* stamp default private ACL (owner with FULL_CONTROL) */
+    /* store a default private ACL (owner with FULL_CONTROL) */
     RGWAccessControlPolicy policy;
     ACLOwner acl_owner;
     acl_owner.id = bucket->get_owner();
@@ -8456,7 +8456,7 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 
   ::fsync(shadow_fd);
 
-  /* fixup pass: stamp the etag as an xattr.
+  /* fixup pass: store the etag as an xattr.
    *
    * no trailing NUL, in either branch:  RGW_ATTR_ETAG is stored as bare
    * hex, the way the S3 PUT path stores it (rgw_op.cc), and dump_etag()
@@ -8476,7 +8476,7 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
      * Use the same mtime-ino string nsfs gives version ids.  Setting an
      * xattr updates ctime, not mtime, and the renameat() below moves the
      * name rather than the file -- so this is the value the version-id
-     * stamp further down computes as well, and ETag matches versionId
+     * write further down computes as well, and ETag matches versionId
      * exactly as it does on the S3 path. */
     if (dpp->get_cct()->_conf->rgw_non_md5_etag &&
 	statx(shadow_fd, "", AT_EMPTY_PATH, STATX_ALL, &estx) == 0) {
@@ -8542,7 +8542,8 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
    * one entry instead of accumulating.
    *
    * shadow_fd still refers to this inode -- the rename moved the name,
-   * not the file -- so it stamps the published object. */
+   * not the file -- so writing through it reaches the published
+   * object. */
   std::string ver_id;
   if (binfo.versioned()) {
     ver_id = NULL_VERSION_ID;
@@ -8570,7 +8571,7 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
       bde.ver.epoch = 1;
       bde.exists = true;
       if (binfo.versioned()) {
-	/* the id stamped above:  without it every publish writes the
+	/* the id written above:  without it every publish writes the
 	 * same cache key and a new version replaces its predecessor's
 	 * row rather than taking a place beside it */
 	bde.key.instance = ver_id;
@@ -8590,7 +8591,7 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 	    bde.meta.owner = to_string(acl_owner.id);
 	    bde.meta.owner_display_name = acl_owner.display_name;
 	  }
-	  /* the digest stamped above, which is what HEAD returns;  the
+	  /* the digest written above, which is what HEAD returns;  the
 	   * synthesized change token is for objects that carry no etag,
 	   * i.e. sideloaded files, and reporting it here disagreed with
 	   * HEAD for every object published from NFS */
