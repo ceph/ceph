@@ -5018,6 +5018,91 @@ TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
       << "a versioning value that is none of theirs was accepted";
 }
 
+/* Every listing row reports the same owner for an object nothing wrote
+ * through RGW.
+ *
+ * On a base bucket ownership is answered from the file's uid
+ * (NooBaaXattrStrategy::object_owner), which is the only answer an
+ * object with no extended attributes has.  object_owner() takes the
+ * statx that carries the uid, and the version-entry row used to pass
+ * nullptr for it -- so a sideloaded object listed with its owner while
+ * its own versions listed as "unknown".
+ *
+ * Two controls, because without them the comparison could not fail.
+ * The first asserts the files carry no extended attribute at all, so
+ * no recorded ACL can be supplying the answer.  The second asserts the
+ * expected owner is this process's uid rather than anything RGW
+ * stamped. */
+TEST_F(NSFSNooBaaStateTest, EveryListingRowAgreesOnASideloadedOwner)
+{
+  forget_our_state();
+  their_record("ENABLED");
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_TRUE(bucket->get_info().versioned())
+      << "the version rows are only walked on a versioned bucket";
+
+  const sf::path leaf = bucket_path() / "external.txt";
+  const sf::path vdir = bucket_path() / ".versions";
+  sf::create_directories(vdir);
+  write_file(leaf, "sideloaded content");
+  /* a real version-id suffix, not _null:  the current object with no
+   * version-id attribute already reads as the null version, so a
+   * .versions/ entry named _null would collide with it on the cache
+   * key (name '\0' instance) and one row would replace the other. */
+  const std::string vent = "external.txt_mtime-zzzz-ino-zzzz";
+  write_file(vdir / vent, "an older sideloaded body");
+
+  /* control one:  neither file carries a user.* attribute, so no
+   * recorded ACL can be supplying the answer.  Only user.* is tested
+   * because the kernel supplies security.selinux on every file here,
+   * and that is not a name any strategy reads. */
+  auto no_user_xattrs = [](const sf::path& f) {
+    char names[4096];
+    ssize_t len = ::listxattr(f.c_str(), names, sizeof(names));
+    if (len < 0) {
+      return std::string{"listxattr failed on "} + f.string();
+    }
+    for (ssize_t i = 0; i < len; i += (ssize_t)strlen(names + i) + 1) {
+      if (std::string_view(names + i).starts_with("user.")) {
+        return std::string{names + i} + " on " + f.string();
+      }
+    }
+    return std::string{};
+  };
+  ASSERT_EQ(no_user_xattrs(leaf), "");
+  ASSERT_EQ(no_user_xattrs(vdir / vent), "");
+
+  /* control two:  the answer is the filesystem's, not RGW's */
+  const std::string expect = std::to_string(::getuid());
+
+  rgw::sal::Bucket::ListParams params;
+  params.list_versions = true;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 1000, results, null_yield), 0);
+
+  std::string current_owner, version_owner;
+  for (const auto& e : results.objs) {
+    if (e.key.name != "external.txt") {
+      continue;
+    }
+    const bool is_noncurrent =
+        (e.flags & rgw_bucket_dir_entry::FLAG_VER) &&
+        !(e.flags & rgw_bucket_dir_entry::FLAG_CURRENT);
+    if (is_noncurrent) {
+      version_owner = e.meta.owner;
+    } else {
+      current_owner = e.meta.owner;
+    }
+  }
+  ASSERT_FALSE(current_owner.empty()) << "no row for the object itself";
+  ASSERT_FALSE(version_owner.empty()) << "no row for its version";
+
+  EXPECT_EQ(current_owner, expect) << "the object's own row";
+  EXPECT_EQ(version_owner, expect) << "the version row under .versions/";
+  EXPECT_EQ(current_owner, version_owner)
+      << "two rows for one object disagree about who owns it";
+}
+
 /* An upload NooBaa started, enumerated by us.
  *
  * The tree is written by hand in their shape -- not through their

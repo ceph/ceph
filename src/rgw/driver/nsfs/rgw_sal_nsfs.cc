@@ -2805,7 +2805,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
         return ret;
 
       ACLOwner acl_owner;
-      if (xattr_strategy->object_owner(attrs, nullptr, acl_owner) >= 0) {
+      if (xattr_strategy->object_owner(attrs, &ent->get_stx(),
+				       acl_owner) >= 0) {
         bde.meta.owner = to_string(acl_owner.id);
         bde.meta.owner_display_name = acl_owner.display_name;
       } else {
@@ -2867,11 +2868,13 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 	  bde.meta.accounted_size = dobj.size;
 	  bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
 
+	  subdir->stat(dpp);
 	  Attrs dattrs;
 	  if (get_x_attrs(y, dpp, subdir->get_fd(), dattrs, name,
 			  xattr_strategy, xattr_fallback) == 0) {
 	    ACLOwner acl_owner;
-	    if (xattr_strategy->object_owner(dattrs, nullptr, acl_owner) >= 0) {
+	    if (xattr_strategy->object_owner(dattrs, &subdir->get_stx(),
+					     acl_owner) >= 0) {
 	      bde.meta.owner = to_string(acl_owner.id);
 	      bde.meta.owner_display_name = acl_owner.display_name;
 	    }
@@ -3000,7 +3003,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 			      xattr_fallback);
 
             ACLOwner acl_owner;
-            if (xattr_strategy->object_owner(attrs, nullptr, acl_owner) >= 0) {
+            if (xattr_strategy->object_owner(attrs, &vstx, acl_owner) >= 0) {
               bde.meta.owner = to_string(acl_owner.id);
               bde.meta.owner_display_name = acl_owner.display_name;
             }
@@ -7835,7 +7838,8 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                     rgw_bucket_dir_entry::FLAG_CURRENT;
     {
       ACLOwner acl_owner;
-      if (xattr_strategy()->object_owner(dobj->get_attrs(), nullptr, acl_owner) >= 0) {
+      if (xattr_strategy()->object_owner(dobj->get_attrs(), &new_stx,
+                                         acl_owner) >= 0) {
         new_bde.meta.owner = to_string(acl_owner.id);
         new_bde.meta.owner_display_name = acl_owner.display_name;
       }
@@ -8588,7 +8592,8 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 	Attrs shadow_attrs;
 	if (fgetattrs(dpp, shadow_attrs, 0) == 0) {
 	  ACLOwner acl_owner;
-	  if (src_obj->xattr_strategy()->object_owner(shadow_attrs, nullptr, acl_owner) >= 0) {
+	  if (src_obj->xattr_strategy()->object_owner(shadow_attrs, &pub_stx,
+						      acl_owner) >= 0) {
 	    bde.meta.owner = to_string(acl_owner.id);
 	    bde.meta.owner_display_name = acl_owner.display_name;
 	  }
@@ -9400,8 +9405,17 @@ int NSFSObject::make_ent(ObjectType type)
 
 int NSFSObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner)
 {
+  /* The statx matters here:  a NooBaa-format bucket answers ownership
+   * from the file's uid, which is the only answer an object nothing
+   * wrote through RGW has.  Without it HEAD reports unknown where the
+   * listing row reports the owner. */
+  const struct statx* stx = nullptr;
+  if (ent) {
+    ent->stat(dpp);
+    stx = &ent->get_stx();
+  }
   ACLOwner acl_owner;
-  int ret = xattr_strategy()->object_owner(get_attrs(), nullptr, acl_owner);
+  int ret = xattr_strategy()->object_owner(get_attrs(), stx, acl_owner);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__
         << ": No " RGW_ATTR_ACL " attr" << dendl;
@@ -10196,7 +10210,7 @@ static void cache_promoted_current(NSFSDriver* driver,
     bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
   }
   ACLOwner acl_owner;
-  if (xs->object_owner(pattrs, nullptr, acl_owner) >= 0) {
+  if (xs->object_owner(pattrs, &pstx, acl_owner) >= 0) {
     bde.meta.owner = to_string(acl_owner.id);
     bde.meta.owner_display_name = acl_owner.display_name;
   }
@@ -10776,7 +10790,9 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
     {
       ACLOwner acl_owner;
-      if (source->xattr_strategy()->object_owner(source->get_attrs(), nullptr, acl_owner) >= 0) {
+      if (source->xattr_strategy()->object_owner(source->get_attrs(),
+                                                 &ent->get_stx(),
+                                                 acl_owner) >= 0) {
         dem_bde.meta.owner = to_string(acl_owner.id);
         dem_bde.meta.owner_display_name = acl_owner.display_name;
       }
@@ -11528,7 +11544,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
                       rgw_bucket_dir_entry::FLAG_CURRENT;
       {
         ACLOwner acl_owner;
-        if (xattr_strategy()->object_owner(target_obj->get_attrs(), nullptr, acl_owner) >= 0) {
+        if (xattr_strategy()->object_owner(target_obj->get_attrs(),
+                                           &new_stx, acl_owner) >= 0) {
           new_bde.meta.owner = to_string(acl_owner.id);
           new_bde.meta.owner_display_name = acl_owner.display_name;
         }
@@ -11559,7 +11576,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
 	? eit2->second.to_str() : synthesize_etag(new_stx);
       {
         ACLOwner acl_owner;
-        if (xattr_strategy()->object_owner(target_obj->get_attrs(), nullptr, acl_owner) >= 0) {
+        if (xattr_strategy()->object_owner(target_obj->get_attrs(),
+                                           &new_stx, acl_owner) >= 0) {
           bde.meta.owner = to_string(acl_owner.id);
           bde.meta.owner_display_name = acl_owner.display_name;
         }

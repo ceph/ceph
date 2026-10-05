@@ -190,7 +190,11 @@ protected:
   bool read_only{false};
   bool need_fsync{false};
   bool exist{false};
-  struct statx stx;
+  /* Zero-initialized so that get_stx() on an entry which has not been
+   * stat()ed reads as "no information":  statx reports what it filled
+   * in stx_mask, and a zero mask is what XattrStrategy::object_owner()
+   * and its kin test before touching a field. */
+  struct statx stx{};
   bool stat_done{false};
   CephContext* ctx;
   FSStrategy* fs_strategy;
