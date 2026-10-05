@@ -9624,6 +9624,11 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
   if (pending_inc.new_pools.count(pool))
     p = pending_inc.new_pools[pool];
 
+  if (p.is_erasure()) {
+    ss << "stretched pools must be replicated; '" << pool_name << "' is erasure-coded";
+    return -EINVAL;
+  }
+
   int64_t bucket_count = cmd_getval_or<int64_t>(cmdmap, "peering_crush_bucket_count", 0);
   if (bucket_count <= 0) {
     ss << "peering_crush_bucket_count must be >= 0! FYI use 'ceph osd pool stretch unset' to unset the stretch values";
@@ -9769,6 +9774,22 @@ int OSDMonitor::prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
   if (pool_min_size < 0) {
     ss << "pool min_size must be non-negative";
     return -EINVAL;
+  }
+
+  // only an older mon could have stretched an EC pool; let unset repair it
+  if (p.is_erasure()) {
+    ErasureCodeInterfaceRef erasure_code;
+    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &ss);
+    if (err < 0) {
+      return err;
+    }
+    int64_t k = erasure_code->get_data_chunk_count();
+    int64_t k_plus_m = erasure_code->get_chunk_count();
+    if (pool_size != k_plus_m || pool_min_size < k || pool_min_size > k_plus_m) {
+      ss << "'" << pool_name << "' is erasure-coded: size must be " << k_plus_m
+         << " (k+m) and min_size between " << k << " (k) and " << k_plus_m;
+      return -EINVAL;
+    }
   }
 
   // unset stretch values

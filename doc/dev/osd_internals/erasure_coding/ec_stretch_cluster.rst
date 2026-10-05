@@ -1404,7 +1404,7 @@ several places. These gaps must be filled for EC pools with ``zones > 1``.
 **11.4.1 Pool Stretch Set / Unset** (``prepare_command_pool_stretch_set``,
 ``prepare_command_pool_stretch_unset``)
 
-``stretch_set`` currently works for any pool type, setting
+``stretch_set`` refuses EC pools. Otherwise it sets
 ``peering_crush_bucket_*``, ``crush_rule``, ``size``, ``min_size``.
 
 For EC pools with ``zones > 1``, add validation:
@@ -1412,8 +1412,9 @@ For EC pools with ``zones > 1``, add validation:
 - Validate ``min_size ∈ [num_zones×(K+M)−M, num_zones×(K+M)]``
 - If ``size`` is provided, validate it matches ``zones × (K+M)``
 
-``stretch_unset`` clears all ``peering_crush_*`` fields. No EC-specific
-changes required.
+``stretch_unset`` clears all ``peering_crush_*`` fields. It accepts an EC
+pool only with ``size`` ``k+m`` and ``min_size`` between ``k`` and ``k+m``,
+to clear a pool an older release stretched.
 
 **11.4.2 Enable/Disable Stretch Mode** (``try_enable_stretch_mode_pools``)
 
@@ -1663,8 +1664,10 @@ recovery traverse the inter-zone link via the Primary.
    Broken into the following sub-stories (see Sections 11.1–11.6):
 
    a. **Pool Stretch Set/Unset for EC** (OSDMonitor): Allow ``osd pool
-      stretch set/unset`` on EC pools with ``zones > 1``. Add EC-specific
-      ``min_size`` range validation (Section 11.4.1).
+      stretch set/unset`` on EC pools with ``zones > 1``. The refusal of EC
+      pools in Section 11.4.1 must be relaxed for such pools, and the
+      ``stretch_unset`` size check must allow ``zones × (K+M)``. Add
+      EC-specific ``min_size`` range validation (Section 11.4.1).
    b. **Enable/Disable Stretch Mode for EC** (OSDMonitor): Allow
       ``mon enable_stretch_mode`` when the cluster has EC pools with
       ``zones > 1``. Set ``min_size = r × (k+m) − m`` (Section 11.4.2).

@@ -103,6 +103,9 @@ providing a more granular level of control.
 Limitations
 -----------
 
+Individual stretch pools must be replicated pools:
+``ceph osd pool stretch set`` refuses erasure-coded pools.
+
 Individual stretch pools do not support I/O operations during a netsplit
 scenario between two or more zones. While the cluster remains accessible for
 basic Ceph commands, I/O remains unavailable until the netsplit is
