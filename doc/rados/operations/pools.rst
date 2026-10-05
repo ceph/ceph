@@ -191,7 +191,9 @@ following:
 
    For ``erasure`` pools only. Instructs Ceph to use the specified :ref:`erasure
    code profile <erasure-code-profiles>`. This profile must be an existing profile as defined via
-   the dashboard or invoking ``osd erasure-code-profile set``.  Note that
+   the dashboard or invoking ``osd erasure-code-profile set``. Alternatively,
+   pass ``--k`` and ``--m`` instead of a profile to have a profile created for
+   the pool (see :ref:`erasure-code-profile-lifecycle`).  Note that
    changes to the EC profile of a pool after creation do *not* take effect.
    To change the EC profile of an existing pool one must modify the pool to
    use a different CRUSH rule defined with the desired profile.
@@ -274,6 +276,11 @@ in central configuration, otherwise the Ceph  monitors will refuse to remove
 pools.
 
 For more information, see :ref:`Monitor Configuration <monitor-config-reference>`.
+
+Deleting the last erasure-coded pool that uses an erasure code profile also
+deletes that profile (unless it is the ``default`` profile), and deletes the
+pool's CRUSH rule if no other pool uses it. See
+:ref:`erasure-code-profile-lifecycle`.
 
 If there are custom CRUSH rules that are no longer in use or needed, consider
 deleting those rules.

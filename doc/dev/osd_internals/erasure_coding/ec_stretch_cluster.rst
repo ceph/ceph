@@ -92,8 +92,9 @@ issues with the current CLI design:
 
 * Create-then-set flow.  A typical setup procedure of a pool requires multiple CLI
   commands (e.g. create replica, then set num copies, then set stretched, etc... )
-* Remove the need for an EC profile.  Indeed, stretch mode EC pools will be mutually
-  exclusive with the use of a profile.
+* Remove the need to create an EC profile before the pool: ``--k`` and ``--m`` generate one
+  for the pool (Section 2.1.5). An existing profile can still be used, for multi-zone pools
+  too; this stays supported.
 
 The current CLI behaviour of accepting either positional or non-positional arguments
 will be maintained, however no positional arguments will be added for the new
@@ -246,9 +247,11 @@ These parameters are intended for advanced users and offer finer control over th
   - *Note*: Mutually exclusive with ``--root``, ``--osd_failure_domain`` and ``--zone_failure_domain``
 
 **--erasure_code_profile**
-  - *Definition*: The legacy EC Profile to use.
-  - *Note*: Mutually exclusive with ``--num_zones``: Cannot be used with multi-zone configurations. Also
-    mutually exclusive with ``--k``/``--m``.
+  - *Definition*: An existing EC profile to use, instead of one generated from ``--k`` and ``--m``.
+  - *Note*: Can be used with any ``--num_zones``, multi-zone configurations included. This is
+    permanent, not a transitional measure. Mutually exclusive with ``--k``/``--m`` and with
+    ``--root``, ``--zone_failure_domain``, ``--osd_failure_domain`` and ``--class``. See
+    Section 2.1.5.
 
 **--replica**
   - *Definition*: For replicated pools, the number of replicas within each zone. (Replica only)
@@ -294,6 +297,260 @@ These parameters are intended for advanced users and offer finer control over th
 **--yes_i_really_mean_it**
   - *Definition*: Internal safety override flag. In the context of pool creation, it is specifically used to allow the creation of hidden or system-reserved pools whose names begin with a dot (e.g., ``.rgw.root``).
 
+
+2.1.5 Erasure Code Profiles
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Every erasure coded pool, stretched or not, has an EC profile. The pool records its name in
+``erasure_code_profile``. The profile supplies the plugin, ``k``, ``m``, technique and the
+``crush-*`` keys used to build the pool's CRUSH rule. Two things are
+new: ``ceph osd pool create`` can generate the profile from ``--k`` and ``--m``, and a profile
+is deleted with the last pool that uses it. The user documentation describes the same
+behaviour in :ref:`erasure-code-profile-lifecycle`.
+
+**How a pool gets its profile**
+
+An erasure coded pool takes its profile from one of three sources:
+
+* **Generated** (``--k`` and ``--m``): the profile ``<pool_name>-k<k>-m<m>``, created if it does
+  not exist (see *Generated profiles* below).
+* **Named** (``--erasure_code_profile <name>`` or the positional equivalent): an existing
+  profile, normally created with ``ceph osd erasure-code-profile set``. The command does not
+  create the profile and does not check it when it is selected. If it does not exist, the
+  command fails with "cannot determine the erasure code plugin because there is no 'plugin'
+  entry in the erasure_code_profile {}".
+* **Default** (neither): the ``default`` profile. If ``default`` does not exist, for example
+  after ``ceph osd erasure-code-profile rm default``, it is created from
+  ``osd_pool_default_erasure_code_profile`` as written, without plugin normalization.
+  ``--erasure_code_profile default`` has the same effect.
+
+A profile from any of these sources can be used with ``--num_zones`` greater than 1, and this
+stays supported: multi-zone pools do not have to be created from ``--k`` and ``--m``. The
+profile's CRUSH keys and ``num_zones`` build the pool's rule (*CRUSH rule* below).
+
+**Parameter combinations**
+
+For an erasure pool, ``ceph osd pool create`` rejects these with EINVAL:
+
+* ``--erasure_code_profile`` with ``--k`` and ``--m``: "cannot specify both
+  erasure_code_profile and k/m parameters".
+* Only one of ``--k`` and ``--m``: "erasure_code_profile requires both k and m".
+* ``--erasure_code_profile`` with any of ``--root``, ``--zone_failure_domain``,
+  ``--osd_failure_domain`` or ``--class``: "cannot specify both erasure_code_profile and crush
+  parameters (crush_root, zone_failure_domain, osd_failure_domain, crush_device_class)".
+* Any of those CRUSH options without ``--k``/``--m``, even with a value equal to the default:
+  "crush parameters (crush_root, zone_failure_domain, osd_failure_domain, crush_device_class)
+  require k and m". Without ``--k``/``--m`` the pool shares the ``default`` profile and the
+  ``erasure-code`` rule, which cannot honour per-pool options.
+* ``k`` less than 2: "k=<k> must be >= 2". ``k+m`` greater than 127: "(k+m)=<k+m> must be
+  <= 127", because shard ids are 8-bit signed integers.
+
+For any pool type:
+
+* ``--rule`` with any of ``--root``, ``--zone_failure_domain``, ``--osd_failure_domain`` or
+  ``--class``: "cannot specify both crush rule and crush parameters (crush_root,
+  zone_failure_domain, osd_failure_domain, crush_device_class)".
+* ``--num_zones`` less than 1: "num_zones must be >= 1".
+
+For a replicated pool, ``--k`` or ``--m`` is rejected: "cannot specify k/m parameters for
+replicated pools".
+
+``--rule`` may be combined with ``--k``/``--m`` or with ``--erasure_code_profile``. ``m``
+greater than ``k`` is allowed. The plugin can reject further values when it normalizes the
+profile (for example, ISA rejects ``m`` greater than 32). ``m`` at least 1 is enforced only
+by the ``ceph`` CLI.
+
+The existing-pool check runs first: if a pool of that name and type already exists, the
+command succeeds with "pool '<pool>' already exists", whatever profile options are given.
+
+**Generated profiles**
+
+With ``--k`` and ``--m`` the monitor looks for a profile named ``<pool_name>-k<k>-m<m>`` in the
+committed OSDMap.
+
+* **Not found**: the monitor copies every key of ``osd_pool_default_erasure_code_profile``
+  (default ``plugin=isa technique=reed_sol_van k=2 m=2``), sets ``k`` and ``m``, and records
+  the CRUSH options given on the command line:
+
+  - ``--root`` as ``crush-root``
+  - ``--zone_failure_domain`` as ``crush-zone-failure-domain``
+  - ``--osd_failure_domain`` as ``crush-osd-failure-domain`` if the default profile has that
+    key, otherwise as ``crush-failure-domain``
+  - ``--class`` as ``crush-device-class``
+
+  The plugin then normalizes the profile. This fills in unset keys (``crush-root=default``,
+  ``crush-zone-failure-domain=datacenter``, ``crush-failure-domain=host`` and so on) and can
+  rewrite others (ISA switches ``reed_sol_van`` to ``cauchy`` for some ``k`` and ``m``). If
+  normalization fails, the command fails and nothing is proposed.
+  The profile is committed in its own OSDMap update and the command is retried. The CRUSH rule
+  and then the pool follow in later updates.
+* **Found, same** ``k`` **and** ``m``: the profile is used as it is. Only the ``k`` and ``m``
+  values are compared, so a profile created in advance with
+  ``ceph osd erasure-code-profile set`` keeps its own plugin, technique and ``crush-*`` keys.
+* **Found, different** ``k`` **or** ``m``: the command fails with EEXIST, "EC profile
+  '<pool_name>-k<k>-m<m>' already exists with different k/m parameters".
+
+Each CRUSH option given on the command line must then equal the matching profile key
+(``crush-osd-failure-domain``, else ``crush-failure-domain``, for ``--osd_failure_domain``). A
+missing key counts as different. Otherwise the command fails with EINVAL, "EC profile
+'<profile>' already exists with different crush parameters than specified
+(crush_root/zone_failure_domain/osd_failure_domain/device_class)". A newly generated profile
+always matches, so this only fails for a reused profile.
+
+No command-line option sets the plugin, technique or other plugin keys of a generated
+profile. They come from ``osd_pool_default_erasure_code_profile``, or from a profile
+of the generated name created in advance. ``num_zones`` is not stored in the profile.
+
+Pool names may contain characters that ``ceph osd erasure-code-profile get`` and ``rm`` do not
+accept from the ``ceph`` CLI (it allows only ``[A-Za-z0-9-_.]``). The generated profile of such
+a pool can then only be removed by deleting the pool.
+
+**How the profile shapes the pool**
+
+At creation the monitor loads the plugin named by the profile and sets:
+
+* ``size`` to ``num_zones`` × the plugin's chunk count (``k+m`` for jerasure and ISA).
+  ``--size`` is ignored for EC pools.
+* ``min_size`` to ``k + min(1, m-1)``, not scaled by ``num_zones``: it applies to each zone's
+  block of ``k+m`` shards (Section 11.2).
+* ``ec_data_shard_count`` and ``ec_coding_shard_count`` to ``k`` and ``m``.
+* ``nonprimary_shards``, when FastEC is enabled: raw shards ``1`` to ``k-1`` (through the
+  plugin's chunk mapping) in every zone, that is shard ``s + (k+m) × zone``. For ``k=4``,
+  ``m=2`` and two zones this is ``{1,2,3,7,8,9}``.
+
+**CRUSH rule**
+
+Without ``--rule`` the rule is named after the pool, or ``erasure-code`` for the ``default``
+profile. If a committed rule of that name already exists it is reused, without checking that it
+fits ``k+m``, ``num_zones`` or the CRUSH options. Otherwise the plugin builds it:
+
+* ``num_zones`` greater than 1: a stretch rule that takes every bucket of the zone type under
+  the root (``choose firstn 0``), then ``k+m`` OSD failure domains (``chooseleaf_indep``) in each. The root, zone type,
+  OSD failure domain type and device class are the command-line values, else the profile's
+  ``crush-root``, ``crush-zone-failure-domain``, ``crush-osd-failure-domain`` (or
+  ``crush-failure-domain``) and ``crush-device-class``. ``crush-num-failure-domains``,
+  ``crush-num-osd-failure-domains`` and ``crush-osds-per-failure-domain`` are ignored. The root must have exactly ``num_zones``
+  buckets of the zone type, each with at least ``k+m`` OSD failure domains that contain an OSD;
+  otherwise the command fails, for example with "number of zones <n> for type <type> is not
+  equal to num_failure_domains <num_zones>". LRC rejects ``num_zones`` greater than 1.
+* ``num_zones`` equal to 1: the rule is built from the profile's keys only, as before. The
+  command-line values take effect because the generated profile records them.
+  ``--zone_failure_domain`` has no effect on such a rule.
+
+With ``--rule`` the named rule must already exist ("specified rule <rule> doesn't exist") and is
+used unchanged: ``num_zones`` and the profile's CRUSH keys are not applied to it.
+``ceph osd crush rule create-erasure <name> [<profile>] [<num_zones>]`` builds the same kind of
+rule from the profile's keys alone.
+
+**Multi-zone pools**
+
+* An erasure pool with ``num_zones`` greater than 1 must have FastEC. Creation enables
+  ``allow_ec_optimizations`` and fails if that fails, with "Multi-zone erasure coded pools
+  require FastEC support. The erasure code profile '<profile>' does not support FastEC:
+  <reason> Please use a FastEC-compatible profile (e.g., plugin=jerasure
+  technique=reed_sol_van, or plugin=isa)." The reason is one of: ``require_osd_release`` older
+  than tentacle; a plugin without FastEC support (ISA supports it with any technique and
+  jerasure only with ``reed_sol_van``; shec, clay and LRC do not); a plugin whose FastEC support
+  is marked experimental.
+* A multi-zone pool is created from ``--k``/``--m`` or from a profile. With ``--k``/``--m`` its
+  plugin and technique come from ``osd_pool_default_erasure_code_profile``, or from a profile of
+  the generated name created in advance. With neither ``--k``/``--m`` nor
+  ``--erasure_code_profile``, it uses the ``default`` profile and the shared ``erasure-code``
+  rule.
+* This FastEC check at creation is the only release check. The OSD feature bit of Section 15
+  is not implemented.
+
+**num_zones is set per pool**
+
+``num_zones`` is set on every pool, at creation with ``--num_zones`` (default 2 in global
+stretch mode, otherwise ``osd_pool_default_num_zones``, 1), and is never part of an erasure code
+profile.
+``ceph osd pool get <pool> num_zones`` shows it, and ``ceph osd pool set <pool> num_zones <n>``
+changes it (Section 13.2). A ``num_zones`` key set in a profile with
+``ceph osd erasure-code-profile set`` is ignored.
+
+**Changes after creation**
+
+* ``ceph osd pool set <pool> size`` is refused for EC pools ("can not change the size of an
+  erasure-coded pool"). ``ceph mon disable_stretch_mode`` is the exception: it resets every
+  pool, EC pools included, to ``osd_pool_default_size``.
+* ``ceph osd pool stretch set`` and ``unset`` are refused while stretch mode is enabled
+  (Section 11.4.1).
+* A pool's profile cannot be replaced. ``erasure_code_profile`` can be read with
+  ``ceph osd pool get`` but is not a ``ceph osd pool set`` variable.
+* ``ceph osd erasure-code-profile set <name> ... --force --yes-i-really-mean-it`` overwrites a
+  profile even if pools use it. The pools are not updated: ``size``, ``min_size``, the shard
+  counts and ``nonprimary_shards`` keep their values, while OSDs
+  build a PG's EC backend from the profile in the OSDMap they load, so this is unsafe.
+* ``ceph osd pool rename`` does not rename a generated profile or the CRUSH rule named after
+  the pool. A pool created later with the old name and the same ``k`` and ``m`` reuses both,
+  which are then shared by the two pools.
+
+**Lifetime**
+
+When an erasure coded pool is deleted, with ``ceph osd pool delete`` or through librados, the
+monitor deletes its profile in the same OSDMap update as the pool, unless:
+
+* the profile is ``default``;
+* another erasure coded pool in the committed OSDMap uses it; or
+* a pool in the pending OSDMap update uses it. The pending update holds pools being created and
+  pending changes to existing pools.
+
+This applies to every profile, whether ``ceph osd pool create`` generated it or it was created
+with ``ceph osd erasure-code-profile set``. Only erasure coded pools count as users. The command
+output does not mention the deletion; the monitor logs the decision at ``debug_mon`` 10.
+
+The pool's CRUSH rule is removed in the same update if no other pool in the committed OSDMap
+uses it, as it was before this change. The two decisions are independent: the rule check counts
+pools of any type but not pending pools, while the profile check counts only erasure coded pools
+but includes pending ones. One can be removed while the other is kept.
+
+Only a pool deletion removes a profile automatically. A profile stays when:
+
+* no pool has ever used it, for example a profile that was set but never used;
+* ``mon_fake_pool_delete`` is set and the deletion is faked: the pool is only renamed to
+  ``<name>.<id>.DELETED``, and the profile and the rule both stay;
+* ``ceph osd pool create`` fails after the generated profile was committed, for example on a
+  CRUSH topology error, a ``--rule`` that does not exist, stretch mode validation, the FastEC
+  check, the PG limit or global stretch mode. The profile stays, and so does the rule named after the pool if the failure came
+  after the rule was created. A retry with the same ``k``, ``m`` and CRUSH options reuses both.
+  A retry with different CRUSH options fails until the profile is removed. A retry with a
+  different ``k`` or ``m`` generates a new profile but reuses the leftover rule without checking
+  it. Remove them with ``ceph osd erasure-code-profile rm`` and ``ceph osd crush rule rm``.
+
+OSDs store a deleted pool's profile with its final ``pg_pool_t``, so deleting the profile in the
+same epoch as the pool does not affect PG removal.
+
+**Profile commands**
+
+* ``ceph osd erasure-code-profile set`` is unchanged. Keys are merged onto
+  ``osd_pool_default_erasure_code_profile`` (a different ``plugin`` discards the default keys),
+  ``crush-failure-domain`` must name an existing CRUSH type, and the plugin normalizes the
+  profile. ``crush-osd-failure-domain`` and ``crush-zone-failure-domain`` are not checked here;
+  a bad value fails at rule creation with "unknown type <type>" if a new rule uses the key, and
+  is never reported otherwise. Setting an existing
+  profile to identical contents succeeds without a change. Different contents need ``--force``
+  and ``--yes-i-really-mean-it``. Normalization now also adds ``crush-zone-failure-domain``
+  (default ``datacenter``), so ``ceph osd erasure-code-profile get`` shows that key.
+* ``ceph osd erasure-code-profile rm`` waits while a pool in the pending update uses the profile,
+  and fails with EBUSY, "<pool> pool(s) are using the erasure code profile '<name>'", while a
+  committed erasure coded pool uses it. Removing a profile that does not exist succeeds (return
+  code 0) with "erasure-code-profile <name> does not exist". ``default`` can be removed when no
+  pool uses it; ``ceph osd pool create`` and ``ceph osd crush rule create-erasure`` re-create it
+  when needed.
+* ``ceph osd erasure-code-profile get`` and ``ls`` show only committed profiles. ``get`` of a
+  profile deleted with its last pool fails with ENOENT, "unknown erasure code profile '<name>'".
+
+**Change of behaviour**
+
+In earlier releases a profile created with ``ceph osd erasure-code-profile set`` remained until
+``ceph osd erasure-code-profile rm`` removed it, and could be used again for later pools. Now it
+is deleted with the last pool that uses it. Creating a pool with a deleted profile fails with
+"cannot determine the erasure code plugin because there is no 'plugin' entry in the
+erasure_code_profile {}". Scripts and tests that set a profile once and reuse it after deleting
+its pools must set it again before each reuse. Scripts that run
+``ceph osd erasure-code-profile rm`` after deleting the pool keep working, because removing a
+missing profile succeeds, but the ``rm`` no longer does anything.
 
 2.2 Examples
 ~~~~~~~~~~~~
@@ -1794,16 +2051,15 @@ Migration from an existing EC pool to a replicated EC stretch cluster pool will
 leverage the **Pool Migration** design, which is being implemented for the
 Umbrella release. This document does not define a separate migration mechanism.
 
-13.2 In-Place Replica Count Modification — *Later Release*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+13.2 In-Place Replica Count Modification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In a later release, users will be able to modify ``num_zones`` for an existing pool by
-swapping in a new EC profile that is otherwise identical (same ``k``, ``m``,
-plugin, etc.) but specifies a different ``num_zones`` value. Upon profile change, the
-CRUSH rule will be updated to reflect the new replica count, and the standard
-recovery process will automatically perform all necessary expansion (or
-contraction) to match the new configuration — no manual data migration is
-required.
+``ceph osd pool set <pool> num_zones <n>`` changes ``num_zones`` for an existing pool,
+between 1 and 2, outside global stretch mode (see *Changing Per-Pool Zone and Replica Counts*
+in the stretch mode user documentation). ``num_zones`` is set per pool, not in the profile
+(Section 2.1.5). Upon the change, the pool gets a new CRUSH rule for the new zone count, and the
+standard recovery process performs all necessary expansion (or contraction) to match the
+new configuration — no manual data migration is required.
 
 
 14. Implementation Order
@@ -1824,10 +2080,10 @@ recovery traverse the inter-zone link via the Primary.
    ``zone_failure_domain`` pool parameters (Section 4). Validate that the acting
    set places ``k+m`` shards per ``num_zones``.
 
-2. **EC Profile Extension: ``num_zones`` and ``zone_failure_domain`` Parameters**
-   Extend the EC profile and pool configuration to accept and validate ``num_zones``
-   and ``zone_failure_domain``. Wire these into pool creation and ``ceph osd pool``
-   commands (Section 2).
+2. **Pool Parameters: ``num_zones`` and ``zone_failure_domain``**
+   Extend pool creation and configuration to accept and validate ``num_zones``
+   and ``zone_failure_domain``. Wire these into ``ceph osd pool`` commands
+   (Section 2). Neither is part of the EC profile.
 
 3. **Primary-Capable Shard Selection for Replicated EC**
    Extend the non-primary shard selection algorithm to designate the first data
@@ -1964,11 +2220,7 @@ bandwidth optimizations.
    Implement removal of residual online OSDs from the up set when their zone
    is offline (Section 11.8).
 
-5. **In-Place Replica Count Modification**
-   Allow ``num_zones`` to be changed on an existing pool via EC profile swap
-   (Section 13.2).
-
-6. **3-Zone (``num_zones=3``) Full Integration Testing**
+5. **3-Zone (``num_zones=3``) Full Integration Testing**
    Full integration and real-world testing of 3-zone configurations
    (Section 5).
 
@@ -1987,8 +2239,8 @@ new CRUSH rules, and — in later releases — new inter-OSD messages
 (Replicate Transaction, Read Permissions, etc.). To prevent mixed-version
 clusters from misinterpreting these pools:
 
-- A new **OSD feature bit** will gate the creation of ``num_zones > 1`` profiles. The
-  monitor will reject pool creation or EC profile changes that set ``num_zones > 1``
+- A new **OSD feature bit** will gate the creation of ``num_zones > 1`` pools. The
+  monitor will reject pool creation or ``num_zones`` changes that set ``num_zones > 1``
   unless all OSDs in the cluster advertise this feature bit.
 - This ensures that every OSD in the cluster understands the extended acting
   set semantics, shard numbering, and any new message types before an ``num_zones > 1``

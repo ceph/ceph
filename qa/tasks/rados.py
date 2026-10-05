@@ -380,12 +380,10 @@ def task(ctx, config):
         if config.get('ec_pool', False):
             profile = config.get('erasure_code_profile', {})
             profile_name = profile.get('name', 'teuthologyprofile')
-            manager.create_erasure_code_profile(profile_name, profile)
             crush_prof = config.get('erasure_code_crush', {})
             crush_name = None
             if crush_prof:
                 crush_name = crush_prof.get('name', 'teuthologycrush')
-                manager.create_erasure_code_crush_rule(crush_name, crush_prof)
 
         else:
             profile_name = None
@@ -395,6 +393,13 @@ def task(ctx, config):
 
         for i in range(int(config.get('runs', '1'))):
             log.info("starting run %s out of %s", str(i), config.get('runs', '1'))
+            # the profile and the CRUSH rule of an erasure coded pool are
+            # deleted with the last pool that uses them, so set them up for
+            # every run
+            if profile_name:
+                manager.create_erasure_code_profile(profile_name, profile)
+            if crush_name:
+                manager.create_erasure_code_crush_rule(crush_name, crush_prof)
             tests = {}
             existing_pools = config.get('pools', [])
             created_pools = []
