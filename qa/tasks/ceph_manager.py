@@ -2193,12 +2193,22 @@ class CephManager:
             args = cmd_erasure_code_profile(profile_name, profile)
             self.raw_cluster_cmd(*args)
 
-    def create_erasure_code_crush_rule(self, rule_name, profile):
+    def create_erasure_code_crush_rule(self, rule_name, profile,
+                                       num_zones=None,
+                                       erasure_code_profile_name=None):
         """
         Create an erasure code crush rule that can be used as a parameter
         when creating an erasure coded pool.
+        :param num_zones: if > 1, build a stretch rule that places the k+m
+                          shards of erasure_code_profile_name in each zone,
+                          as a multi-zone pool needs
         """
         with self.lock:
+            if num_zones is not None and int(num_zones) > 1:
+                self.raw_cluster_cmd(
+                    'osd', 'crush', 'rule', 'create-erasure', rule_name,
+                    erasure_code_profile_name, '--num_zones', str(num_zones))
+                return
             args = cmd_ec_crush_profile(rule_name, profile)
             self.raw_cluster_cmd(*args)
 

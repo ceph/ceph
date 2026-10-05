@@ -184,7 +184,10 @@ def task(ctx, config):
             crush_name = None
             if crush_prof:
                 crush_name = crush_prof.get('name', 'teuthologycrush')
-                manager.create_erasure_code_crush_rule(crush_name, crush_prof)
+                manager.create_erasure_code_crush_rule(
+                    crush_name, crush_prof,
+                    num_zones=config.get('num_zones', None),
+                    erasure_code_profile_name=profile_name)
         else:
             profile_name = None
             crush_name = None

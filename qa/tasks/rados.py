@@ -399,7 +399,10 @@ def task(ctx, config):
             if profile_name:
                 manager.create_erasure_code_profile(profile_name, profile)
             if crush_name:
-                manager.create_erasure_code_crush_rule(crush_name, crush_prof)
+                manager.create_erasure_code_crush_rule(
+                    crush_name, crush_prof,
+                    num_zones=config.get('num_zones', None),
+                    erasure_code_profile_name=profile_name)
             tests = {}
             existing_pools = config.get('pools', [])
             created_pools = []
