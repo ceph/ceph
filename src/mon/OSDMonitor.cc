@@ -9609,9 +9609,25 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
   return _command_pool_application(prefix, cmdmap, ss, nullptr, true);
 }
 
+static bool refuse_in_stretch_mode(const OSDMap& osdmap,
+                                   const string& command,
+                                   stringstream& ss)
+{
+  if (osdmap.stretch_mode_enabled) {
+    ss << command << " is for individual stretch pools and cannot be used "
+       << "while stretch mode is enabled";
+    return true;
+  }
+  return false;
+}
+
 int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
                                                     stringstream& ss)
 {
+  if (refuse_in_stretch_mode(osdmap, "osd pool stretch set", ss)) {
+    return -EINVAL;
+  }
+
   string pool_name;
   cmd_getval(cmdmap, "pool", pool_name);
   int64_t pool = osdmap.lookup_pg_pool_name(pool_name);
@@ -9726,6 +9742,10 @@ int OSDMonitor::prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
   * Command syntax:
   *   ceph osd pool stretch unset <pool>
   */
+  if (refuse_in_stretch_mode(osdmap, "osd pool stretch unset", ss)) {
+    return -EINVAL;
+  }
+
   string pool_name;
   cmd_getval(cmdmap, "pool", pool_name);
   int64_t pool = osdmap.lookup_pg_pool_name(pool_name);
