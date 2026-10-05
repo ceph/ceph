@@ -715,12 +715,14 @@ TEST_P(KVTest, RocksDBShardingIteratorReadError) {
   init();
   ASSERT_EQ(0, db->open(cout, cfs));
   {
-    KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
+    KeyValueDB::WholeSpaceIterator it =
+      db->get_wholespace_iterator(KeyValueDB::ITERATOR_NOABORT);
     EXPECT_EQ(nkeys, count_keys(it));
     EXPECT_NE(0, it->status());
   }
   {
-    KeyValueDB::Iterator it = db->get_iterator("B");
+    KeyValueDB::Iterator it =
+      db->get_iterator("B", KeyValueDB::ITERATOR_NOABORT);
     EXPECT_EQ(nkeys, count_keys(it));
     EXPECT_EQ(0, it->status());
   }
@@ -734,12 +736,14 @@ TEST_P(KVTest, RocksDBShardingIteratorReadError) {
   init();
   ASSERT_EQ(0, db->open(cout, cfs));
   {
-    KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
+    KeyValueDB::WholeSpaceIterator it =
+      db->get_wholespace_iterator(KeyValueDB::ITERATOR_NOABORT);
     EXPECT_EQ(nkeys, count_keys(it));
     EXPECT_NE(0, it->status());
   }
   {
-    KeyValueDB::Iterator it = db->get_iterator("B");
+    KeyValueDB::Iterator it =
+      db->get_iterator("B", KeyValueDB::ITERATOR_NOABORT);
     EXPECT_EQ(0, count_keys(it));
     EXPECT_NE(0, it->status());
   }
@@ -763,7 +767,8 @@ TEST_P(KVTest, RocksDBIteratorReadError) {
       init();
       ASSERT_EQ(0, db->open(cout, cfs));
       {
-        KeyValueDB::Iterator it = db->get_iterator("B");
+        KeyValueDB::Iterator it =
+          db->get_iterator("B", KeyValueDB::ITERATOR_NOABORT);
         EXPECT_NE(0, it->seek_to_first());
         EXPECT_FALSE(it->valid());
         EXPECT_NE(0, it->status());
@@ -776,7 +781,8 @@ TEST_P(KVTest, RocksDBIteratorReadError) {
       init();
       ASSERT_EQ(0, db->open(cout, cfs));
       {
-        KeyValueDB::Iterator it = db->get_iterator("B");
+        KeyValueDB::Iterator it =
+          db->get_iterator("B", KeyValueDB::ITERATOR_NOABORT);
         EXPECT_LT(count_keys(it), nkeys);
         EXPECT_NE(0, it->status());
         int n = 0;
@@ -867,7 +873,8 @@ TEST_P(KVTest, RocksDBSeekToLastReadError) {
   init();
   ASSERT_EQ(0, db->open(cout));
   {
-    KeyValueDB::Iterator it = db->get_iterator("B");
+    KeyValueDB::Iterator it =
+      db->get_iterator("B", KeyValueDB::ITERATOR_NOABORT);
     EXPECT_NE(0, it->seek_to_last());
     EXPECT_FALSE(it->valid());
     EXPECT_NE(0, it->status());
