@@ -3790,6 +3790,11 @@ int RocksDBStore::reshard_cleanup(const RocksDBStore::columns_t& current_columns
       db->NewIterator(rocksdb::ReadOptions(), handle.get())};
     ceph_assert(it);
     it->SeekToFirst();
+    if (!it->status().ok()) {
+      derr << __func__ << " cannot read column " << name << ": "
+           << it->status().ToString() << dendl;
+      return -EIO;
+    }
     ceph_assert(!it->Valid());
 
     if (rocksdb::Status status = db->DropColumnFamily(handle.get()); !status.ok()) {
@@ -3845,6 +3850,9 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
 	it.reset(db->NewIterator(rocksdb::ReadOptions(), handle));
 	ceph_assert(it);
 	it->Seek(raw_key_str);
+        if (!it->status().ok()) {
+          break;
+        }
 	ceph_assert(it->Valid());
 	raw_key = it->key();
       }
@@ -3892,6 +3900,10 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
 	  return -1000;
 	}
       }
+    }
+    if (!it->status().ok()) {
+      derr << "reshard read error: " << it->status().ToString() << dendl;
+      return -EIO;
     }
     if (bat.Count() > 0) {
       flush_batch(&bat);
