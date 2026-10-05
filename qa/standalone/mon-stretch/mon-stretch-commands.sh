@@ -144,4 +144,60 @@ function TEST_stretch_pool_commands_in_stretch_mode() {
     test "$(pool_field stretched size)" == 4 || return 1
 }
 
+function wait_for_stretch_state() {
+    local degraded=$1
+    local recovering=$2
+    for i in $(seq 1 120); do
+        local s=$(ceph osd dump -f json | jq -c '.stretch_mode|[.degraded_stretch_mode,.recovering_stretch_mode]')
+        if [ "$s" == "[$degraded,$recovering]" ]; then
+            return 0
+        fi
+        sleep 2
+    done
+    ceph osd dump -f json | jq '.stretch_mode'
+    ceph -s
+    return 1
+}
+
+function lose_zone_pze() {
+    local dir=$1
+
+    kill_daemons $dir KILL mon.b || return 1
+    kill_daemons $dir KILL osd.2 || return 1
+    kill_daemons $dir KILL osd.3 || return 1
+    ceph osd down osd.2 osd.3
+    wait_for_stretch_state 1 0 || return 1
+}
+
+function restore_zone_pze() {
+    local dir=$1
+
+    activate_mon $dir b --public-addr $CEPH_MON_B || return 1
+    wait_for_quorum 300 3 || return 1
+    # keep restarted OSDs in their zones
+    ceph config set osd osd_crush_update_on_start false || return 1
+    activate_osd $dir 2 || return 1
+    activate_osd $dir 3 || return 1
+}
+
+# force_healthy_stretch_mode only ends recovery stretch mode, and must fail
+# rather than claim to do something in any other state.
+function TEST_force_healthy_stretch_mode_requires_recovery() {
+    local dir=$1
+
+    stretch_cluster $dir || return 1
+    ceph config set mon mon_stretch_recovery_min_wait 3600 || return 1
+
+    expect_failure $dir "recovery stretch mode" \
+        ceph osd force_healthy_stretch_mode --yes-i-really-mean-it || return 1
+    lose_zone_pze $dir || return 1
+    expect_failure $dir "recovery stretch mode" \
+        ceph osd force_healthy_stretch_mode --yes-i-really-mean-it || return 1
+
+    restore_zone_pze $dir || return 1
+    wait_for_stretch_state 1 1 || return 1
+    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it || return 1
+    wait_for_stretch_state 0 0 || return 1
+}
+
 main mon-stretch-commands "$@"

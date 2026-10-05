@@ -15010,6 +15010,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
   } else if (prefix == "osd force_healthy_stretch_mode") {
+    if (!mon.is_degraded_stretch_mode() || !mon.is_recovering_stretch_mode()) {
+      ss << "the cluster is not in recovery stretch mode; "
+         << "force_healthy_stretch_mode only ends recovery stretch mode";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
     bool sure = false;
     cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
     if (!sure) {
