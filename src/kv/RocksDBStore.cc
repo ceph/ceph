@@ -3292,23 +3292,27 @@ public:
       delete it;
     }
   }
+  // a failed shard is moved to iters[0], so that valid() is false
+  int check_shards() {
+    for (auto& it : iters) {
+      if (!it->status().ok()) {
+        std::swap(iters[0], it);
+        return -1;
+      }
+    }
+    return 0;
+  }
   int seek_to_first() override {
     for (auto& it : iters) {
       it->SeekToFirst();
-      if (!it->status().ok()) {
-	return -1;
-      }
     }
     //all iterators seeked, sort
     std::sort(iters.begin(), iters.end(), keyless);
-    return 0;
+    return check_shards();
   }
   int seek_to_last() override {
     for (auto& it : iters) {
       it->SeekToLast();
-      if (!it->status().ok()) {
-	return -1;
-      }
     }
     for (size_t i = 1; i < iters.size(); i++) {
       if (iters[0]->Valid()) {
@@ -3330,7 +3334,7 @@ public:
       }
     }
     //no need to sort, as at most 1 iterator is valid now
-    return 0;
+    return check_shards();
   }
   int upper_bound(const string &after) override {
     rocksdb::Slice slice_bound(after);
@@ -3339,23 +3343,17 @@ public:
       if (it->Valid() && it->key() == after) {
 	it->Next();
       }
-      if (!it->status().ok()) {
-	return -1;
-      }
     }
     std::sort(iters.begin(), iters.end(), keyless);
-    return 0;
+    return check_shards();
   }
   int lower_bound(const string &to) override {
     rocksdb::Slice slice_bound(to);
     for (auto& it : iters) {
       it->Seek(slice_bound);
-      if (!it->status().ok()) {
-	return -1;
-      }
     }
     std::sort(iters.begin(), iters.end(), keyless);
-    return 0;
+    return check_shards();
   }
   int next() override {
     int r = -1;
@@ -3395,7 +3393,7 @@ public:
 	it->Prev();
 	if (it->Valid()) {
 	  prev_done.push_back(it);
-	} else {
+        } else if (it->status().ok()) {
 	  it->SeekToFirst();
 	}
       } else {
@@ -3411,7 +3409,7 @@ public:
 	iters[0]->Prev();
 	ceph_assert(!iters[0]->Valid());
       }
-      return 0;
+      return check_shards();
     }
     //2,3
     rocksdb::Iterator* highest = prev_done[0];
@@ -3432,7 +3430,7 @@ public:
       if (hold == highest) break;
     }
     ceph_assert(hold == highest);
-    return 0;
+    return check_shards();
   }
   bool valid() override {
     return iters[0]->Valid();
@@ -3461,7 +3459,12 @@ public:
     return std::string_view{val.data(), val.size()};
   }
   int status() override {
-    return iters[0]->status().ok() ? 0 : -1;
+    for (auto& it : iters) {
+      if (!it->status().ok()) {
+        return -1;
+      }
+    }
+    return 0;
   }
 };
 
