@@ -558,4 +558,4 @@ recovered), run the following command:
    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it
 
 This command can be used to to remove the ``HEALTH_WARN`` state, which recovery
-mode raises.
+mode raises. It fails if the cluster is not in recovery mode.
