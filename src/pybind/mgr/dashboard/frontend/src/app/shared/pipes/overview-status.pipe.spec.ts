@@ -33,7 +33,7 @@ describe('OverviewStatusPipe', () => {
 
   it('falls back to info mappings for info, undefined, null, and unknown statuses', () => {
     const expectedInfoMeta = {
-      icon: ICON_TYPE.infoCircle,
+      icon: 'infoCircle',
       textClass: 'cd-status-text--info'
     };
 

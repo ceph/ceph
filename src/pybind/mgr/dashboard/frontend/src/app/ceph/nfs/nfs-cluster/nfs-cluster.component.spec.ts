@@ -1,10 +1,15 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { Router } from '@angular/router';
+import { RouterTestingModule } from '@angular/router/testing';
 import { of, throwError } from 'rxjs';
 import { take } from 'rxjs/operators';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 
@@ -20,7 +25,7 @@ describe('NfsClusterComponent', () => {
 
   configureTestBed({
     declarations: [NfsClusterComponent],
-    imports: [HttpClientTestingModule, SharedModule]
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule]
   });
 
   beforeEach(() => {
@@ -49,6 +54,11 @@ describe('NfsClusterComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should refresh the cluster table every 5 seconds', () => {
+    const table = fixture.debugElement.query(By.directive(TableComponent));
+    expect(table.componentInstance.autoReload).toBe(5000);
   });
 
   describe('columns', () => {
@@ -242,6 +252,28 @@ describe('NfsClusterComponent', () => {
           protocol: 'NFSv3, NFSv4'
         })
       ]);
+    });
+  });
+
+  it('should link cluster name to the cephfs cluster overview page', () => {
+    Object.defineProperty(TestBed.inject(Router), 'url', {
+      get: () => '/cephfs/nfs/cluster'
+    });
+    component.ngOnInit();
+    expect(component.columns[0].prop).toBe('name');
+    expect(component.columns[0].cellTransformation).toBe(CellTemplate.redirect);
+    expect(component.columns[0].customTemplateConfig).toEqual({
+      redirectLink: ['/cephfs/nfs/cluster', '::prop', 'overview']
+    });
+  });
+
+  it('should link cluster name to the rgw cluster overview page', () => {
+    Object.defineProperty(TestBed.inject(Router), 'url', {
+      get: () => '/rgw/nfs/cluster'
+    });
+    component.ngOnInit();
+    expect(component.columns[0].customTemplateConfig).toEqual({
+      redirectLink: ['/rgw/nfs/cluster', '::prop', 'overview']
     });
   });
 });

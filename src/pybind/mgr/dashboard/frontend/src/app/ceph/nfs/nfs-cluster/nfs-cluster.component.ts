@@ -8,6 +8,7 @@ import { NfsService } from '~/app/shared/api/nfs.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -21,6 +22,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
 import { NFSBackend, NFSCluster, NFSShare } from '../models/nfs.model';
+import { getFsalFromRoute, getPathfromFsal } from '../utils';
 
 interface NFSClusterRow extends NFSCluster {
   status: string;
@@ -84,11 +86,16 @@ export class NfsClusterComponent implements OnInit {
       switchMap(() => forkJoin({ clusters: this.loadClusters(), exports: this.loadShares() })),
       map(({ clusters, exports }) => this.mapClusterRows(clusters, exports))
     );
+    const nfsBasePath = `/${getPathfromFsal(getFsalFromRoute(this.router.url))}/nfs/cluster`;
     this.columns = [
       {
         name: $localize`Name`,
         prop: 'name',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.redirect,
+        customTemplateConfig: {
+          redirectLink: [nfsBasePath, '::prop', 'overview']
+        }
       },
       {
         name: $localize`Status`,

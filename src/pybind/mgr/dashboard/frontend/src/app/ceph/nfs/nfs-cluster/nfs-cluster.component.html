@@ -1,9 +1,9 @@
 @if (orchStatus?.available) {
   <cd-table
     headerTitle="Service clusters"
+    identifier="name"
     [autoReload]="5000"
     [data]="clusters$ | async"
-    identifier="name"
     columnMode="flex"
     [columns]="columns"
     selectionType="single"
