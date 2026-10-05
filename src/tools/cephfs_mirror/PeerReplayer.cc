@@ -1757,6 +1757,8 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   static thread_local uint64_t copy_buf_cap = 0;
   const uint64_t max_buf = (uint64_t)NR_IOVECS * IOVEC_SIZE;
   uint64_t buf_len = 0;
+  bool whole_file = num_blocks == 1 && b && b->offset == 0 &&
+                    b->len == stx.stx_size;
 
   uint64_t bytes_read = 0;
   uint64_t bytes_written = 0;
@@ -1773,8 +1775,12 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   }
 
   l_fd = r;
+  int oflags = O_CREAT | O_WRONLY | O_NOFOLLOW;
+  if (whole_file) {
+    oflags |= O_TRUNC;
+  }
   r = ceph_openat(m_remote_mount, fh.r_fd_dir_root, epath.c_str(),
-                  O_CREAT | O_WRONLY | O_NOFOLLOW, stx.stx_mode);
+                  oflags, stx.stx_mode);
   if (r < 0) {
     derr << ": failed to create remote file path=" << epath << ": "
          << cpp_strerror(r) << dendl;
@@ -1891,13 +1897,15 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   add_io(dir_root, bytes_read, bytes_written, read_time.count(), write_time.count());
 
   if (num_blocks == 0 && r >= 0) { // handle blocklist case
-    dout(20) << ": truncating epath=" << epath << " to " << stx.stx_size << " bytes"
-             << dendl;
-    r = ceph_ftruncate(m_remote_mount, r_fd, stx.stx_size);
-    if (r < 0) {
-      derr << ": failed to truncate remote file path=" << epath << ": "
-           << cpp_strerror(r) << dendl;
-      goto close_remote_fd;
+    if (!whole_file || bytes_written != stx.stx_size) {
+      dout(20) << ": truncating epath=" << epath << " to " << stx.stx_size << " bytes"
+               << dendl;
+      r = ceph_ftruncate(m_remote_mount, r_fd, stx.stx_size);
+      if (r < 0) {
+        derr << ": failed to truncate remote file path=" << epath << ": "
+             << cpp_strerror(r) << dendl;
+        goto close_remote_fd;
+      }
     }
   }
 
