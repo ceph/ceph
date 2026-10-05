@@ -2377,6 +2377,11 @@ Then run the following:
         return f'Powercycle scheduled on {hostname}'
 
     @handle_orch_error
+    def node_proxy_list_hosts(self) -> List[str]:
+        # Returns hosts with node-proxy data — no blobs loaded.
+        return self.node_proxy_cache.list_hosts()
+
+    @handle_orch_error
     def node_proxy_fullreport(self, hostname: Optional[str] = None) -> Dict[str, Any]:
         return self.node_proxy_cache.fullreport(hostname=hostname)
 
