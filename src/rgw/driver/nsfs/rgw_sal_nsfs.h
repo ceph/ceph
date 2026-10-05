@@ -1544,6 +1544,10 @@ public:
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
                        ceph::real_time mtime, optional_yield y) override;
   virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
+  /* whether this bucket's directory exists for it or predates it, and
+   * what remove() does when it predates it -- see OWNS_STORAGE_XATTR */
+  bool owns_storage(const DoutPrefixProvider* dpp);
+  int unadopt(const DoutPrefixProvider* dpp);
   virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
   virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
   virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,

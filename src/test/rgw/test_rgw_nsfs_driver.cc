@@ -2758,6 +2758,60 @@ TEST_F(NSFSBucketTest, SideloadedList)
   }
 }
 
+/* Deleting a bucket the gateway made removes its directory.
+ *
+ * The control for the test below:  without it, a directory surviving
+ * a delete would prove nothing about the attribute, since it might
+ * never have been removed by this path at all. */
+TEST_F(NSFSBucketTest, DeletingABucketTheGatewayMadeRemovesTheDirectory)
+{
+  const sf::path d = bp / "root" / testname;
+  ASSERT_TRUE(sf::is_directory(d));
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->remove(env->dpp, false, null_yield), 0);
+  EXPECT_FALSE(sf::exists(d));
+}
+
+/* Deleting a bucket adopted over a directory that predates it leaves
+ * the directory, and its contents, alone.
+ *
+ * The directory may be a fileset junction or anything else an
+ * administrator made and pointed the gateway at;  removing it is the
+ * one unrecoverable thing this path can do.  What goes instead is
+ * everything the gateway wrote -- the whole user.nsfs. namespace --
+ * which returns the directory to the state it was in before it was
+ * adopted. */
+TEST_F(NSFSBucketTest, DeletingAnAdoptedBucketLeavesItsDirectory)
+{
+  const sf::path d = bp / "root" / testname;
+  {
+    const sf::path f = d / "predates.txt";
+    int fd = ::open(f.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GT(fd, 0);
+    const char* data = "written before the bucket existed";
+    ASSERT_EQ(::write(fd, data, strlen(data)), (ssize_t)strlen(data));
+    ::close(fd);
+  }
+  ASSERT_EQ(::setxattr(d.c_str(), nsfs::OWNS_STORAGE_XATTR, "0", 1, 0), 0);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->remove(env->dpp, false, null_yield), 0);
+
+  EXPECT_TRUE(sf::is_directory(d))
+      << "removed a directory the bucket was only lent";
+  EXPECT_TRUE(sf::is_regular_file(d / "predates.txt"))
+      << "removed contents the bucket did not put there";
+
+  char buf[8192];
+  const ssize_t len = ::listxattr(d.c_str(), buf, sizeof(buf));
+  ASSERT_GE(len, 0);
+  for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
+    EXPECT_FALSE(std::string_view(q).starts_with("user.nsfs."))
+	<< q << " survived the delete";
+  }
+}
+
 TEST_F(NSFSBucketTest, DirectoryObjectPut)
 {
   auto obj = bucket->get_object(rgw_obj_key("photos/"));

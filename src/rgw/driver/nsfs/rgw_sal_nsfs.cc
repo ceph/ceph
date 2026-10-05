@@ -1745,12 +1745,20 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       fs_strategy->get_xattrs(dpp, fd, old_raw, identity);
 
       for (auto& [disk_name, _] : old_raw) {
-        /* The extensions marker is not object metadata and no attribute
-         * write owns it.  It parses as one of ours -- it is under
-         * user.nsfs. -- so without this it would be pruned by the next
-         * REPLACE_ALL, and a bucket would silently lose its profile a
-         * moment after being marked. */
-        if (disk_name == nsfs::EXTENSIONS_XATTR) {
+        /* Facts about the bucket that no attribute write owns.  Each
+         * parses as one of ours -- they are under user.nsfs. -- so
+         * without this they would be pruned by the next REPLACE_ALL:
+         * a bucket would lose its profile a moment after being marked,
+         * or forget that its directory predates it and delete a tree
+         * it was only lent.
+         *
+         * The converting marker is here for completeness.  A bucket
+         * write cannot land mid-conversion today, because BucketGate
+         * holds mutations off, so it has never been reachable -- which
+         * is a reason to list it rather than to leave it out. */
+        if ((disk_name == nsfs::EXTENSIONS_XATTR) ||
+            (disk_name == nsfs::CONVERTING_XATTR) ||
+            (disk_name == nsfs::OWNS_STORAGE_XATTR)) {
           continue;
         }
         /* Through the fallback as well.  A superseded attribute of
@@ -5226,7 +5234,8 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   if (mg.result() < 0) {
     return mg.result();
   }
-  int ret = dir->remove(dpp, y, delete_children);
+  int ret = owns_storage(dpp) ? dir->remove(dpp, y, delete_children)
+			      : unadopt(dpp);
   if (ret < 0) {
     return ret;
   }
@@ -5234,6 +5243,74 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   driver->get_bucket_cache()->invalidate_bucket(dpp, get_name());
 
   return ret;
+}
+
+/* Does this bucket's directory exist for it, or did it predate it?
+ *
+ * Absent means it owns the directory, which is what every bucket
+ * created by the gateway is;  see OWNS_STORAGE_XATTR.  Anything other
+ * than "0" is read as owning, so a value nobody wrote and nobody
+ * understands does not make a bucket undeletable. */
+bool NSFSBucket::owns_storage(const DoutPrefixProvider* dpp)
+{
+  if (dir->open(dpp) < 0) {
+    return true;
+  }
+  char buf[8];
+  ssize_t len = ::fgetxattr(dir->get_fd(), nsfs::OWNS_STORAGE_XATTR,
+			    buf, sizeof(buf));
+  if (len <= 0) {
+    return true;
+  }
+  return std::string_view(buf, len) != "0";
+}
+
+/* Remove the bucket without removing the directory it was adopted
+ * over.
+ *
+ * Deleting what adoption wrote is the inverse of adopting, and it
+ * leaves the directory in the state it was in beforehand:  present,
+ * found by the data root's readdir, and carrying nothing of ours.
+ * That is the same state every directory an operator has not adopted
+ * is in, so this introduces no condition the driver did not already
+ * have to answer for.
+ *
+ * Our whole namespace goes, not a list of names.  user.nsfs. is
+ * exactly what the gateway wrote, so naming the prefix cannot leave
+ * behind an attribute a later version adds;  anything of NooBaa's,
+ * or anyone else's, is not ours to remove. */
+int NSFSBucket::unadopt(const DoutPrefixProvider* dpp)
+{
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  nsfs::xattr_map_t present;
+  ret = driver->get_fs_strategy()->get_xattrs(dpp, dir->get_fd(), present,
+					      nsfs::FSIdentity{});
+  if (ret < 0) {
+    return ret;
+  }
+
+  static constexpr std::string_view ours{"user.nsfs."};
+  for (const auto& [name, _] : present) {
+    if (! std::string_view(name).starts_with(ours)) {
+      continue;
+    }
+    if ((::fremovexattr(dir->get_fd(), name.c_str()) < 0) &&
+	(errno != ENODATA)) {
+      ret = -errno;
+      ldpp_dout(dpp, 0) << "ERROR: removing " << name << " from bucket "
+	<< get_name() << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+
+  ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name()
+    << " removed;  its directory predates the bucket and is left in "
+    << "place with its contents" << dendl;
+  return 0;
 }
 
 int NSFSBucket::remove_bypass_gc(int concurrent_max,

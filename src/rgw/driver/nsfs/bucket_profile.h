@@ -107,6 +107,35 @@ inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs.extensions";
 inline constexpr const char* CONVERTING_XATTR = "user.nsfs.converting";
 inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
 
+/* WHETHER THE DIRECTORY EXISTS FOR THIS BUCKET, OR PREDATES IT.
+ *
+ * A bucket the gateway created owns its directory:  the directory
+ * exists only because a bucket was wanted, so deleting the bucket
+ * removes it.  A bucket adopted over a directory that was already
+ * there does not, and deleting that bucket must leave the directory
+ * and its contents alone -- it may be a fileset junction, or anything
+ * else an administrator made and pointed the gateway at.
+ *
+ * Nothing on disk distinguishes the two afterwards.  A directory that
+ * exists says nothing about who made it, which is why NooBaa records
+ * the same fact as `should_create_underlying_storage`:  their create
+ * path doubles as adopt, so they have to write down which one
+ * happened.  Splitting the operations makes it obvious when it
+ * happens and no more recoverable later, so it still has to be
+ * written down.
+ *
+ * ABSENT MEANS THE BUCKET OWNS IT.  Every bucket that existed before
+ * this attribute did was created by the gateway, so the absent case
+ * has to be the owning one or they would all become undeletable.
+ * Only adoption over a pre-existing directory writes it, with "0".
+ *
+ * Their value carries across on adoption, and it is not always 0:  a
+ * bucket NooBaa created has a directory that exists only because a
+ * gateway made it for that bucket, and taking it over does not change
+ * that.  Defaulting adopted buckets to 0 would leave every migrated
+ * bucket undeletable. */
+inline constexpr const char* OWNS_STORAGE_XATTR = "user.nsfs.owns_storage";
+
 /* THE VALUE IS A SET, NOT A LEVEL.
  *
  * A decimal integer in the attribute, read as a bitmask:  one bit per
