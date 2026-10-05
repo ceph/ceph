@@ -48,6 +48,10 @@ CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 # when upgrade completes as they could be handled by the
 # upgrade process.
 #
+# Mutes an operator already applied are left alone. Cephadm records
+# the warnings it mutes itself and clears only those when the upgrade
+# finishes or is stopped, so an existing sticky mute is not removed.
+#
 # TODO: need a better way to handle these for staggered upgrades
 # currently they just disappear and re-appear as each bit of the
 # staggered upgrade starts and stops
@@ -59,6 +63,32 @@ MID_UPGRADE_MUTED_WARNINGS = [
     'AUTH_INSECURE_SERVICE_KEY_TYPE',
     'AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE'
 ]
+
+
+def health_mute_flags_from_report(health: Any) -> Optional[Dict[str, bool]]:
+    """Map muted health-check code to its sticky flag.
+
+    ``None`` means the report has no usable ``mutes`` array. An empty
+    dict means nothing is currently muted.
+    """
+    if not isinstance(health, dict):
+        return None
+    if 'mutes' in health:
+        mutes = health.get('mutes')
+    elif isinstance(health.get('health'), dict) and 'mutes' in health['health']:
+        mutes = health['health'].get('mutes')
+    else:
+        return None
+    if not isinstance(mutes, list):
+        return None
+    flags: Dict[str, bool] = {}
+    for mute in mutes:
+        if not isinstance(mute, dict):
+            continue
+        code = mute.get('code')
+        if isinstance(code, str) and code:
+            flags[code] = bool(mute.get('sticky', False))
+    return flags
 
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
@@ -235,6 +265,7 @@ class UpgradeState:
                  rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
                  has_set_cephx_allowed_ciphers: Optional[bool] = False,
                  health_warnings_muted: Optional[bool] = False,
+                 health_warnings_muted_by_upgrade: Optional[List[str]] = None,
                  ):
 
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -260,6 +291,9 @@ class UpgradeState:
         self.rotated_mgr_mon_auth_key_daemons = rotated_mgr_mon_auth_key_daemons
         self.has_set_cephx_allowed_ciphers = has_set_cephx_allowed_ciphers
         self.health_warnings_muted = health_warnings_muted
+        # Warnings this upgrade muted. None means the upgrade started
+        # before that list was stored, so every mid-upgrade mute is cleared.
+        self.health_warnings_muted_by_upgrade = health_warnings_muted_by_upgrade
 
     def to_json(self) -> dict:
         return {
@@ -285,6 +319,7 @@ class UpgradeState:
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
             'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
             'health_warnings_muted': self.health_warnings_muted,
+            'health_warnings_muted_by_upgrade': self.health_warnings_muted_by_upgrade,
         }
 
     @classmethod
@@ -330,6 +365,7 @@ class CephadmUpgrade:
         # report (``osds_in_crush_bucket``). Used so ok-to-stop ``known`` (cluster-wide)
         # cannot schedule OSDs outside the bucket.
         self._ok_to_upgrade_osds_in_crush_bucket: Optional[Set[str]] = None
+        self._logged_health_mute_read_failure = False
 
     @property
     def target_image(self) -> str:
@@ -558,10 +594,65 @@ class CephadmUpgrade:
         """
         return f'retval: {-errno.ENOENT}' in str(err)
 
-    def _mute_upgrade_related_health_warnings(self) -> None:
+    def _current_health_mute_flags(self) -> Optional[Dict[str, bool]]:
+        """Return code -> sticky for mutes currently set on the cluster.
+
+        ``None`` means the current mutes could not be read. Callers must
+        not add or remove mutes in that case.
+        """
+        try:
+            _, out, _ = self.mgr.check_mon_command({
+                'prefix': 'health',
+                'format': 'json',
+            })
+            health = json.loads(out)
+        except Exception as e:
+            self._log_health_mute_read_failure(str(e))
+            return None
+        flags = health_mute_flags_from_report(health)
+        if flags is None:
+            self._log_health_mute_read_failure('health report has no mutes array')
+        return flags
+
+    def _log_health_mute_read_failure(self, reason: str) -> None:
+        # _do_upgrade retries until this succeeds, so log the first failure
+        # loudly and keep later ones quiet.
+        message = 'Failed to read health mutes before changing them for upgrade: %s'
+        if self._logged_health_mute_read_failure:
+            self.mgr.log.debug(message, reason)
+            return
+        self._logged_health_mute_read_failure = True
+        self.mgr.log.error(message, reason)
+
+    def _ensure_upgrade_health_mutes(self) -> None:
+        """Mute upgrade warnings that the operator has not already muted.
+
+        The list of warnings muted here is stored before the mute commands
+        run, so a mgr restart still clears only those mutes afterward.
+        """
+        assert self.upgrade_state
+        if self.upgrade_state.health_warnings_muted:
+            return
+        already_muted = self._current_health_mute_flags()
+        if already_muted is None:
+            return
+        to_mute: List[str] = []
         for health_warning_name in MID_UPGRADE_MUTED_WARNINGS:
+            if health_warning_name in already_muted:
+                self.mgr.log.info(
+                    'Leaving existing mute for %s (sticky=%s) in place during upgrade',
+                    health_warning_name, already_muted[health_warning_name])
+                continue
+            to_mute.append(health_warning_name)
+        self.upgrade_state.health_warnings_muted_by_upgrade = list(to_mute)
+        self.upgrade_state.health_warnings_muted = True
+        self._save_upgrade_state()
+        muted: List[str] = []
+        for health_warning_name in to_mute:
             try:
-                self.mgr.log.info('Muting %s warning for the duration of the upgrade', health_warning_name)
+                self.mgr.log.info(
+                    'Muting %s warning for the duration of the upgrade',
+                    health_warning_name)
                 self.mgr.check_mon_command({
                     'prefix': 'health mute',
                     'code': health_warning_name,
@@ -571,11 +662,26 @@ class CephadmUpgrade:
                 self.mgr.log.error(
                     f'Failed to mute health warning {health_warning_name} during upgrade: {str(e)}'
                 )
+            else:
+                muted.append(health_warning_name)
+        if muted != to_mute:
+            self.upgrade_state.health_warnings_muted_by_upgrade = muted
+            self._save_upgrade_state()
+
+    def _warnings_muted_by_this_upgrade(self) -> List[str]:
+        assert self.upgrade_state
+        recorded = self.upgrade_state.health_warnings_muted_by_upgrade
+        if not isinstance(recorded, list):
+            # Upgrade began before the added mutes were recorded.
+            return list(MID_UPGRADE_MUTED_WARNINGS)
+        return [code for code in recorded if isinstance(code, str)]
 
     def _unmute_upgrade_related_health_warnings(self) -> None:
-        for health_warning_name in MID_UPGRADE_MUTED_WARNINGS:
+        for health_warning_name in self._warnings_muted_by_this_upgrade():
             try:
-                self.mgr.log.info('Unmuting %s warning as upgrade is completed or has been stopped', health_warning_name)
+                self.mgr.log.info(
+                    'Unmuting %s warning as upgrade is completed or has been stopped',
+                    health_warning_name)
                 self.mgr.check_mon_command({
                     'prefix': 'health unmute',
                     'code': health_warning_name,
@@ -2171,10 +2277,7 @@ class CephadmUpgrade:
         if self.upgrade_state.hosts is not None:
             logger.debug(f'Filtering daemons to upgrade by hosts: {self.upgrade_state.hosts}')
             daemons = [d for d in daemons if d.hostname in self.upgrade_state.hosts]
-        if not self.upgrade_state.health_warnings_muted:
-            self._mute_upgrade_related_health_warnings()
-            self.upgrade_state.health_warnings_muted = True
-            self._save_upgrade_state()
+        self._ensure_upgrade_health_mutes()
         upgraded_daemon_count: int = 0
         for daemon_type in CEPH_UPGRADE_ORDER:
             if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0:
