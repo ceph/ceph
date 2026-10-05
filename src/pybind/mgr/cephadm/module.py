@@ -444,6 +444,51 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                  'Set to false to skip it on a busy metadata pool.'
         ),
         Option(
+            'upgrade_staged_switch_osd_crush_level',
+            type='str',
+            default='host',
+            desc='With the staged switch for OSDs (osd listed in '
+                 'upgrade_staged_switch_types), the CRUSH bucket type whose OSDs '
+                 'are switched together: every OSD still to upgrade under one '
+                 'bucket of that type is staged, then restarted in one go, one '
+                 'bucket per pass, provided `osd ok-to-stop` on that exact set '
+                 'reports that every PG stays active. With `auto`, the highest '
+                 'bucket type below the root for which such a bucket exists is '
+                 'used, re-evaluated for every group (a rack that cannot go as a '
+                 'whole is done host by host).'
+        ),
+        Option(
+            'upgrade_staged_switch_osd_noout',
+            type='bool',
+            default=True,
+            desc='With the staged switch for OSDs, set the noout flag on the OSDs '
+                 'of the group (`osd set-group noout`) right before they are '
+                 'restarted and clear it once they are back, so a restart that '
+                 'outlasts mon_osd_down_out_interval does not mark them out.'
+        ),
+        Option(
+            'upgrade_staged_switch_osd_timeout',
+            type='int',
+            default=600,
+            desc='With the staged switch for OSDs, seconds to wait, after the '
+                 'OSDs of a group are switched, for the osdmap to show every one '
+                 'of them up again and `osd metadata` to report the target version. '
+                 'On timeout the upgrade is paused (UPGRADE_SWITCH_FAILED) with '
+                 'the OSDs left as they are - never switched back, a store the '
+                 'new release has opened is not reopened by the previous one - '
+                 'and `ceph orch upgrade resume` re-verifies the same group.'
+        ),
+        Option(
+            'upgrade_staged_switch_osd_max_group',
+            type='int',
+            default=0,
+            desc='With the staged switch for OSDs, the most OSDs a group may '
+                 'hold; a bucket with more OSDs still to upgrade is skipped (with '
+                 '`auto` as the level, the next level down is tried). 0 means no '
+                 'limit: a whole bucket, whatever its size, as long as every PG '
+                 'stays active.'
+        ),
+        Option(
             'config_checks_enabled',
             type='bool',
             default=False,
@@ -737,6 +782,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.upgrade_staged_switch_max_parallel = 16
             self.upgrade_staged_switch_stage_ahead = True
             self.upgrade_staged_switch_flush_mds_journal = True
+            self.upgrade_staged_switch_osd_crush_level = 'host'
+            self.upgrade_staged_switch_osd_noout = True
+            self.upgrade_staged_switch_osd_timeout = 600
+            self.upgrade_staged_switch_osd_max_group = 0
             self.config_checks_enabled = False
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0

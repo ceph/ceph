@@ -15,14 +15,15 @@ out of the outage window:
            image is executed once. Anything that can go wrong with the
            image goes wrong here.
   down     the policy takes the group out of service (MDS: ``fs fail``,
-           optionally preceded by a journal flush of the active ranks).
+           optionally preceded by a journal flush of the active ranks;
+           OSD: ``osd set-group noout`` on the group).
   switch   ``cephadm switch-staged`` on every daemon, hosts in parallel:
            one container stop/start each.
   verify   the policy asks the monitors - not cephadm's daemon cache -
            whether every daemon is back on the target version.
   restore  the policy puts the group back into service (MDS: ``fs set
-           joinable true``), and cephadm's cache is refreshed for the
-           hosts involved.
+           joinable true``; OSD: ``osd unset-group noout``), and cephadm's
+           cache is refreshed for the hosts involved.
   settle   the policy says whether the group has settled enough for the
            next one to be chosen. Not a failure when it takes long: no
            timeout, the upgrade is not paused, the next serve() pass asks
@@ -37,10 +38,10 @@ between two groups.
 
 If staging fails nothing has been restarted and the upgrade pauses with
 UPGRADE_STAGE_FAILED. If the switch or the verification fails, a policy
-with ``rollback_on_failure`` (the default, right for daemons that keep no
-local state the new release may have touched) has every daemon switched
-back to its previous unit files and the group restored on the previous
-release; one without leaves the daemons as they are and the upgrade
+with ``rollback_on_failure`` (MDS) has every daemon switched back to its
+previous unit files and the group restored on the previous release; one
+without (OSD: a store a newer ceph-osd has opened is not to be reopened
+by the previous release) leaves the daemons as they are and the upgrade
 resumes at the same phase once the admin has dealt with them. Either way
 the upgrade pauses with UPGRADE_SWITCH_FAILED. Progress is persisted in
 UpgradeState.staged_switch so a mgr failover resumes at the right phase;
@@ -48,16 +49,20 @@ every phase is idempotent.
 
 A policy can also answer "not now" (StagedSwitchNotReady): nothing is
 staged, the upgrade is not paused, and the next serve() pass asks again.
+This is how the OSD policy waits for the PGs to recover between groups.
 
 The runner is daemon-type agnostic. What a "group" is, how it is taken
-down, verified and restored is a StagedSwitchPolicy; MdsStagedSwitchPolicy
-is the one shipped here (one filesystem at a time, behind ``fail_fs``).
+down, verified and restored is a StagedSwitchPolicy. Two are shipped here:
+MdsStagedSwitchPolicy (one filesystem at a time, behind ``fail_fs``) and
+OsdStagedSwitchPolicy (every OSD still to upgrade under one CRUSH bucket of
+a given type, when ``osd ok-to-stop`` says every PG stays active).
 """
 
 import asyncio
 import hashlib
 import json
 import logging
+import re
 import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Type
@@ -91,8 +96,8 @@ SETTLE_POLL_SECONDS = 30
 
 class StagedSwitchNotReady(Exception):
     """Raised by a policy when there is nothing it can safely switch *right
-    now* (a group that must wait for the cluster to recover from the
-    previous one, say). Not an error: the runner leaves the upgrade
+    now* (e.g. no CRUSH bucket of OSDs is ok-to-stop while the PGs of the
+    previous group recover). Not an error: the runner leaves the upgrade
     running and the next serve() pass asks again."""
 
 
@@ -124,10 +129,10 @@ class StagedSwitchPolicy(ABC):
     # Whether a switch that does not complete (switch-staged failed, or the
     # group is not back on the target version in time) is undone by putting
     # the previous unit files back. Right for daemons that keep no local
-    # state the new release may have touched (MDS); a policy for daemons
-    # whose stores the new release may have upgraded on boot sets it to
-    # False: the runner then pauses the upgrade and keeps its state, so
-    # `ceph orch upgrade resume` picks the group up again at the same phase.
+    # state the new release may have touched (MDS); wrong for OSDs, whose
+    # stores a newer ceph-osd may have upgraded on boot. With False the
+    # runner pauses the upgrade and keeps its state, so `ceph orch upgrade
+    # resume` picks the group up again at the same phase.
     rollback_on_failure: bool = True
 
     def __init__(self, upgrade: 'CephadmUpgrade') -> None:
@@ -274,6 +279,10 @@ class StagedSwitchRunner:
         if d.daemon_type != 'osd':
             spec = service_registry.get_service(
                 daemon_type_to_service(d.daemon_type)).prepare_create(ctx)
+        else:
+            # like _daemon_action: OSDs get their config refreshed but not
+            # the full prepare_create
+            spec.final_config, spec.deps = self.mgr.osd_service.generate_config(ctx)
         return spec
 
     def _ahead(self, target_image: str) -> Dict[str, str]:
@@ -296,6 +305,13 @@ class StagedSwitchRunner:
         staged: Dict[str, str] = {}
         skipped: List[str] = []
         already = already or {}
+        # one osdmap read for the whole call rather than one per OSD
+        osd_uuid_map: Optional[Dict[str, Any]] = None
+        if any(d.daemon_type == 'osd' for d in daemons):
+            try:
+                osd_uuid_map = self.mgr.get_osd_uuid_map()
+            except Exception as e:
+                logger.debug('Upgrade: could not read the osd uuid map up front: %s', e)
 
         async def one(d: DaemonDescription) -> None:
             try:
@@ -304,7 +320,8 @@ class StagedSwitchRunner:
                 if already.get(d.name()) == fp:
                     skipped.append(d.name())
                     return
-                await CephadmServe(self.mgr)._create_daemon(spec, stage=True)
+                await CephadmServe(self.mgr)._create_daemon(
+                    spec, osd_uuid_map=osd_uuid_map, stage=True)
                 staged[d.name()] = fp
             except Exception as e:
                 errors[d.name()] = str(e)
@@ -367,31 +384,33 @@ class StagedSwitchRunner:
 
     async def _switch_all(self, group: StagedGroup, target_image: str,
                           rollback: bool = False) -> Dict[str, str]:
-        """cephadm switch-staged every daemon, up to max_parallel hosts at a
-        time (cephadm's per-host lock serializes the daemons of one host
-        anyway). name -> error."""
+        """cephadm switch-staged, one call per host naming every daemon of
+        the group on it (one stop / one start for all of them), up to
+        max_parallel hosts at a time. name -> error."""
         sem = asyncio.Semaphore(max(1, int(self.mgr.upgrade_staged_switch_max_parallel)))
         errors: Dict[str, str] = {}
 
-        async def one(d: DaemonDescription) -> None:
-            assert d.hostname is not None
-            args = ['--name', d.name()]
+        async def host(hostname: str, daemons: List[DaemonDescription]) -> None:
+            args: List[str] = []
+            for d in daemons:
+                args += ['--name', d.name()]
             args += ['--rollback'] if rollback else ['--expected-image', target_image]
-            try:
-                out, err, code = await CephadmServe(self.mgr)._run_cephadm(
-                    d.hostname, d.name(), 'switch-staged', args,
-                    image=target_image, error_ok=True)
-                if code:
-                    errors[d.name()] = '\n'.join(err) or f'exit code {code}'
-            except Exception as e:
-                errors[d.name()] = str(e)
-
-        async def host(daemons: List[DaemonDescription]) -> None:
             async with sem:
-                for d in daemons:
-                    await one(d)
+                try:
+                    out, err, code = await CephadmServe(self.mgr)._run_cephadm(
+                        hostname, daemons[0].name(), 'switch-staged', args,
+                        image=target_image, error_ok=True)
+                    if code:
+                        # the command checks every daemon before stopping
+                        # any; a failure is the host's, attribute it to each
+                        why = '\n'.join(err) or f'exit code {code}'
+                        for d in daemons:
+                            errors[d.name()] = why
+                except Exception as e:
+                    for d in daemons:
+                        errors[d.name()] = str(e)
 
-        await asyncio.gather(*[host(ds) for ds in self._by_host(group).values()])
+        await asyncio.gather(*[host(h, ds) for h, ds in self._by_host(group).items()])
         return errors
 
     async def _refresh_hosts(self, hosts: List[str]) -> None:
@@ -566,8 +585,8 @@ class StagedSwitchRunner:
                 st['data'] = group.data
                 self._set_phase(PHASE_DOWN)
             except StagedSwitchNotReady as e:
-                # The cluster changed under us since the group was chosen.
-                # Nothing
+                # The cluster changed under us since the group was chosen
+                # (OSD: a bucket that was ok-to-stop no longer is). Nothing
                 # was restarted; the staged files are inert and get
                 # overwritten by the next staging. Start over next pass so
                 # the policy can pick another group.
@@ -598,9 +617,9 @@ class StagedSwitchRunner:
                 try:
                     self.policy.before_switch(group)
                 except StagedSwitchNotReady as e:
-                    # Nothing switched yet (e.g. a failover brought us here
-                    # long after take_down and the policy no longer agrees).
-                    # Put it back, start over next pass.
+                    # Nothing switched yet (OSD: the group is no longer
+                    # ok-to-stop, e.g. a failover brought us here long after
+                    # take_down). Put it back, start over next pass.
                     self.policy.restore(group)
                     self._drop_image_pins(group)
                     self._clear()
@@ -658,7 +677,7 @@ class StagedSwitchRunner:
         pause the upgrade and keep the group's state at its current phase,
         so `ceph orch upgrade resume` retries the switch (idempotent) or
         the verification right there, once the daemons listed are dealt
-        with. The group stays out of service meanwhile."""
+        with. The group stays out of service meanwhile (OSD: noout set)."""
         logger.error('Upgrade: the staged switch of %s did not complete: %s; pausing, '
                      'the upgrade resumes at this group', group.label, reason)
         self._fail('UPGRADE_SWITCH_FAILED',
@@ -954,8 +973,445 @@ class MdsStagedSwitchPolicy(StagedSwitchPolicy):
         self.upgrade._complete_mds_upgrade(fs_names=list(group.data['fs_names']))
 
 
+# ======================================================================
+# OSD: every OSD still to upgrade under one CRUSH bucket, when the
+# monitors say the whole set can be stopped with every PG staying active
+# ======================================================================
+
+OSD_CRUSH_LEVEL_AUTO = 'auto'
+# like CephadmUpgrade._wait_for_ok_to_stop: a few tries within one pass,
+# then let the next pass ask again
+OSD_OK_TO_STOP_TRIES = 4
+OSD_OK_TO_STOP_RETRY_SECONDS = 15
+
+
+def _natural_key(name: str) -> List[Any]:
+    """host2 before host10."""
+    return [(0, int(p), '') if p.isdigit() else (1, 0, p) for p in re.split(r'(\d+)', name)]
+
+
+class CrushTree:
+    """Read-only view of the mgr's `osd_map_tree`: buckets, their types, and
+    the OSDs under each of them. Device-class shadow buckets are not part of
+    that dump, so a bucket is seen once whatever classes it mixes."""
+
+    def __init__(self, tree: Dict[str, Any]) -> None:
+        self.nodes: Dict[int, Dict[str, Any]] = {}
+        self.by_name: Dict[str, Dict[str, Any]] = {}
+        self.osd_ids: Set[int] = set()
+        has_parent: Set[int] = set()
+        for n in tree.get('nodes', []) or []:
+            nid = int(n['id'])
+            if nid >= 0:
+                self.osd_ids.add(nid)
+                continue
+            self.nodes[nid] = n
+            self.by_name[str(n.get('name'))] = n
+            for c in n.get('children', []) or []:
+                has_parent.add(int(c))
+        self.roots: List[int] = [i for i in self.nodes if i not in has_parent]
+
+    def osds_under(self, bucket_id: int) -> List[int]:
+        out: List[int] = []
+        seen: Set[int] = set()
+        stack = [bucket_id]
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            if cur >= 0:
+                out.append(cur)
+                continue
+            node = self.nodes.get(cur)
+            if node:
+                stack.extend(int(c) for c in (node.get('children') or []))
+        return sorted(out)
+
+    def buckets_of_type(self, btype: str) -> List[Dict[str, Any]]:
+        return sorted((n for n in self.nodes.values() if n.get('type') == btype),
+                      key=lambda n: _natural_key(str(n.get('name'))))
+
+    def bucket_types_top_down(self) -> List[str]:
+        """Bucket types present below a root, highest first (by type id):
+        the levels `auto` tries, in order. Roots themselves are left out -
+        stopping a whole hierarchy is never what an upgrade wants."""
+        by_type: Dict[str, int] = {}
+        for i, n in self.nodes.items():
+            if i in self.roots:
+                continue
+            by_type[str(n.get('type'))] = max(by_type.get(str(n.get('type')), -1), int(n.get('type_id', 0)))
+        return [t for t, _ in sorted(by_type.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+class OsdStagedSwitchPolicy(StagedSwitchPolicy):
+    """One CRUSH bucket per group: all the OSDs under it that still need the
+    upgrade, restarted together, provided `osd ok-to-stop` on that exact set
+    says every PG stays active (>= min_size) without them. The bucket type
+    is `upgrade_staged_switch_osd_crush_level` (default `host`), or with
+    `auto` the highest type below the root for which such a bucket exists
+    right now, re-evaluated for every group: a rack whose hosts hold too many
+    replicas of a pool is upgraded host by host while the others go in one
+    go, and nothing is ever restarted that the monitors did not clear."""
+
+    daemon_type = 'osd'
+    # An OSD that booted on the new release may have upgraded its store
+    # (BlueStore/RocksDB formats, omap layouts); starting the previous
+    # ceph-osd on it is a downgrade Ceph does not support. Never roll a
+    # group back: pause and resume from the same phase instead.
+    rollback_on_failure = False
+
+    def __init__(self, upgrade: 'CephadmUpgrade') -> None:
+        super().__init__(upgrade)
+        # (osd id, up_from) -> ceph_version_short, so `osd metadata` is asked
+        # once per OSD restart, not once per verify poll
+        self._versions: Dict[Tuple[int, int], str] = {}
+
+    # -------------------------------------------------------------- options
+    def _level(self) -> str:
+        return str(getattr(self.mgr, 'upgrade_staged_switch_osd_crush_level', 'host') or 'host').strip().lower()
+
+    def _noout(self) -> bool:
+        return bool(getattr(self.mgr, 'upgrade_staged_switch_osd_noout', True))
+
+    def _max_group(self) -> int:
+        return max(0, int(getattr(self.mgr, 'upgrade_staged_switch_osd_max_group', 0) or 0))
+
+    def verify_timeout(self) -> int:
+        # a host of OSDs booting at once takes longer than an MDS group:
+        # store open, PG load, on-disk conversions on a major upgrade
+        return int(getattr(self.mgr, 'upgrade_staged_switch_osd_timeout', 600) or 600)
+
+    # -------------------------------------------------------------- helpers
+    def _tree(self) -> CrushTree:
+        return CrushTree(self.mgr.get('osd_map_tree') or {})
+
+    def _osdmap(self) -> Dict[str, Any]:
+        return self.mgr.get('osd_map') or {}
+
+    def _osds(self, osdmap: Optional[Dict[str, Any]] = None) -> Dict[int, Dict[str, Any]]:
+        return {int(o['osd']): o for o in (osdmap or self._osdmap()).get('osds', []) or []}
+
+    @staticmethod
+    def _names(ids: Iterable[int]) -> List[str]:
+        return [f'osd.{i}' for i in ids]
+
+    @staticmethod
+    def _up_fingerprint(osds: Dict[int, Dict[str, Any]], excluding: Iterable[int]) -> str:
+        """Which OSDs outside the group the monitors see up, as a digest:
+        compared between the choice of the group and the switch, it tells
+        whether an OSD the ok-to-stop verdict counted on has gone down
+        (or come back) meanwhile, whatever the PG stats say yet."""
+        skip = set(excluding)
+        up = sorted(i for i, o in osds.items() if o.get('up') and i not in skip)
+        return hashlib.sha1(','.join(str(i) for i in up).encode()).hexdigest()
+
+    def _ok_to_stop(self, ids: List[int]) -> Tuple[bool, str]:
+        """Ask the monitors whether *exactly* this set can be stopped with
+        every PG staying active. `max` = len(ids) keeps the mgr from adding
+        OSDs of its own to the set."""
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'osd ok-to-stop', 'ids': [str(i) for i in ids], 'max': len(ids)})
+        if ret == 0:
+            return True, ''
+        why = (err or '').strip() or f'osd ok-to-stop returned {ret}'
+        try:
+            report = json.loads(out or '{}')
+            report = report.get('ok_to_stop', report) if isinstance(report, dict) else {}
+            inactive = report.get('bad_become_inactive') or []
+            already = report.get('bad_already_inactive') or []
+            unknown = report.get('unknown_pgs') or []
+            no_pool = report.get('bad_no_pool_pgs') or []
+            bits = []
+            if inactive:
+                bits.append(f'{len(inactive)} PG(s) would become inactive')
+            if already:
+                bits.append(f'{len(already)} PG(s) already inactive')
+            if unknown:
+                bits.append(f'{len(unknown)} PG(s) unknown')
+            if no_pool:
+                bits.append(f'{len(no_pool)} PG(s) of a pool being created or deleted')
+            if bits:
+                why = ', '.join(bits)
+        except (ValueError, TypeError, AttributeError):
+            pass
+        return False, why
+
+    def _paused(self) -> bool:
+        return bool(self.upgrade.upgrade_state is None or self.upgrade.upgrade_state.paused)
+
+    def _version(self, osd_id: int, up_from: int) -> str:
+        """ceph_version_short of osd_id as the monitors recorded it at its
+        last boot (`osd metadata`), not cephadm's cache nor the mgr's
+        daemon state, which can miss a boot epoch."""
+        key = (osd_id, up_from)
+        if key in self._versions:
+            return self._versions[key]
+        ret, out, err = self.mgr.mon_command({'prefix': 'osd metadata', 'id': osd_id, 'format': 'json'})
+        if ret != 0:
+            return ''
+        try:
+            md = json.loads(out or '{}')
+        except ValueError:
+            return ''
+        v = str(md.get('ceph_version_short') or '')
+        if not v and str(md.get('ceph_version', '')).startswith('ceph version '):
+            v = str(md['ceph_version']).split(' ')[2]
+        if v:
+            self._versions[key] = v
+        return v
+
+    # --------------------------------------------------------------- policy
+    def _levels(self, tree: CrushTree) -> List[str]:
+        level = self._level()
+        if level == OSD_CRUSH_LEVEL_AUTO:
+            levels = tree.bucket_types_top_down()
+            if not levels:
+                raise OrchestratorError('the CRUSH map has no bucket below a root')
+            return levels
+        if level == 'osd':
+            raise OrchestratorError(
+                "mgr/cephadm/upgrade_staged_switch_osd_crush_level 'osd' makes no sense "
+                "for a staged switch (one OSD at a time is the regular upgrade path)")
+        present = {str(n.get('type')) for n in tree.nodes.values()}
+        if level not in present:
+            # a map without that level (hosts straight under the root with
+            # level 'rack', say): nothing to group by, let the regular path
+            # do its job rather than stall the upgrade
+            logger.warning('Upgrade: mgr/cephadm/upgrade_staged_switch_osd_crush_level %r is not a '
+                           'bucket type of the CRUSH map (found: %s); OSDs are upgraded the '
+                           'regular way', level, ', '.join(sorted(present)) or 'none')
+            return []
+        if all(int(n['id']) in tree.roots for n in tree.nodes.values() if n.get('type') == level):
+            raise OrchestratorError(
+                f'mgr/cephadm/upgrade_staged_switch_osd_crush_level {level!r} is only used by '
+                f'root buckets; a whole hierarchy cannot be switched at once')
+        return [level]
+
+    def _pending(self, need_upgrade: List[DaemonDescription], tree: CrushTree,
+                 osds: Dict[int, Dict[str, Any]]) -> Dict[int, DaemonDescription]:
+        """OSDs of need_upgrade this policy will handle: in the upgrade's
+        CRUSH scope, on an online host, up, and placed in the CRUSH map. The
+        others are left to the regular path, which has its own handling."""
+        state = self.upgrade.upgrade_state
+        assert state is not None
+        pending: Dict[int, DaemonDescription] = {}
+        for d in need_upgrade:
+            if d.daemon_type == 'osd' and str(d.daemon_id).isdigit():
+                pending[int(str(d.daemon_id))] = d
+        if not pending:
+            return {}
+        if state.crush_bucket_name:
+            node = tree.by_name.get(state.crush_bucket_name)
+            if node is None:
+                raise OrchestratorError(
+                    f'CRUSH bucket {state.crush_bucket_name!r} (--crush_bucket_name) not found')
+            scope = set(tree.osds_under(int(node['id'])))
+            pending = {i: d for i, d in pending.items() if i in scope}
+        skipped: List[str] = []
+        for i in sorted(pending):
+            why = None
+            if pending[i].hostname in self.mgr.offline_hosts:
+                why = 'host offline'
+            elif not osds.get(i, {}).get('up'):
+                why = 'not up'
+            elif i not in tree.osd_ids:
+                why = 'not in the CRUSH map'
+            if why:
+                skipped.append(f'osd.{i} ({why})')
+                del pending[i]
+        if skipped:
+            logger.info('Upgrade: staged switch leaves %s to the regular upgrade path',
+                        ', '.join(skipped))
+        return pending
+
+    def _pick(self, tree: CrushTree, levels: List[str], pending: Dict[int, DaemonDescription],
+              limit: Optional[int]) -> Tuple[Optional[StagedGroup], List[str], bool]:
+        """First bucket, highest level first, whose pending OSDs are
+        ok-to-stop as a set. Returns (group, reasons it skipped the others,
+        whether any bucket of these levels holds a pending OSD at all)."""
+        reasons: List[str] = []
+        any_bucket = False
+        for btype in levels:
+            for bucket in tree.buckets_of_type(btype):
+                ids = [i for i in tree.osds_under(int(bucket['id'])) if i in pending]
+                if not ids:
+                    continue
+                any_bucket = True
+                if limit is not None and len(ids) > limit:
+                    ids = ids[:limit]
+                if self._max_group() and len(ids) > self._max_group():
+                    reasons.append(f'{btype} {bucket["name"]}: {len(ids)} OSDs, more than '
+                                   f'upgrade_staged_switch_osd_max_group ({self._max_group()})')
+                    continue
+                ok, why = self._ok_to_stop(ids)
+                if ok:
+                    label = f'{btype} {bucket["name"]}'
+                    group = StagedGroup(str(bucket['id']), label, [pending[i] for i in ids], {
+                        'bucket': bucket['name'], 'type': btype, 'osd_ids': ids,
+                        'noout': False, 'committed': False,
+                        'up_fingerprint': self._up_fingerprint(self._osds(), ids)})
+                    return group, reasons, True
+                reasons.append(f'{btype} {bucket["name"]} ({len(ids)} OSDs): {why}')
+            if reasons and self._level() == OSD_CRUSH_LEVEL_AUTO:
+                logger.info('Upgrade: no %s can be switched as a whole right now (%s); '
+                            'trying the next CRUSH level down', btype, '; '.join(reasons[-3:]))
+        return None, reasons, any_bucket
+
+    def groups(self, need_upgrade: List[DaemonDescription]) -> List[StagedGroup]:
+        state = self.upgrade.upgrade_state
+        assert state is not None
+        tree = self._tree()
+        pending = self._pending(need_upgrade, tree, self._osds())
+        if not pending:
+            return []
+        levels = self._levels(tree)
+        if not levels:
+            return []
+        limit = state.remaining_count if state.remaining_count is not None and state.remaining_count > 0 else None
+        reasons: List[str] = []
+        for attempt in range(OSD_OK_TO_STOP_TRIES):
+            if attempt:
+                if self._paused():
+                    raise StagedSwitchNotReady('upgrade paused')
+                time.sleep(OSD_OK_TO_STOP_RETRY_SECONDS)
+            group, reasons, any_bucket = self._pick(tree, levels, pending, limit)
+            if group is not None:
+                logger.info('Upgrade: staged switch picked %s: %d OSD(s) %s', group.label,
+                            len(group.daemons), ', '.join(group.names))
+                return [group]
+            if not any_bucket:
+                # e.g. level 'rack' on a map whose hosts hang off the root
+                logger.info('Upgrade: no %s bucket holds an OSD still to upgrade; '
+                            'the regular upgrade path takes over', '/'.join(levels))
+                return []
+        summary = (f'no {"/".join(levels)} bucket can be switched as a whole right now, every PG '
+                   f'must stay active ({"; ".join(reasons[:3])}{"; ..." if len(reasons) > 3 else ""})')
+        if self._some_osd_ok_to_stop_alone(tree, levels, pending):
+            # Not the PGs of the previous group recovering (then no OSD
+            # sharing a PG with them passes either) but buckets that cannot
+            # go as a whole: a pool with an `osd` failure domain, two copies
+            # of a PG on one host... Rather than wait for a verdict that
+            # will not change, let the regular path upgrade OSDs one by one
+            # (`osd ok-to-stop` batches) this pass; the buckets are tried
+            # again next pass with fewer OSDs left in them.
+            logger.info('Upgrade: %s; single OSDs are, so the regular upgrade path '
+                        'handles this pass', summary)
+            return []
+        raise StagedSwitchNotReady(summary)
+
+    def _some_osd_ok_to_stop_alone(self, tree: CrushTree, levels: List[str],
+                                   pending: Dict[int, DaemonDescription], probes: int = 8) -> bool:
+        """Whether one OSD, alone, of some bucket that was refused as a whole
+        is ok-to-stop. A few probes at most, lowest level, so a large map
+        does not turn into hundreds of PG scans."""
+        tried = 0
+        for bucket in tree.buckets_of_type(levels[-1]):
+            ids = [i for i in tree.osds_under(int(bucket['id'])) if i in pending]
+            if not ids:
+                continue
+            ok, _ = self._ok_to_stop(ids[:1])
+            if ok:
+                return True
+            tried += 1
+            if tried >= probes:
+                break
+        return False
+
+    def take_down(self, group: StagedGroup) -> None:
+        ids = [int(i) for i in group.data['osd_ids']]
+        if self._noout():
+            # Keep the monitors from marking the group out should the
+            # restart outlast mon_osd_down_out_interval. Idempotent.
+            self.mgr.check_mon_command({
+                'prefix': 'osd set-group', 'flags': 'noout', 'who': self._names(ids)})
+            group.data['noout'] = True
+        group.data['committed'] = True
+
+    def before_switch(self, group: StagedGroup) -> None:
+        # Staging took a while - or a mgr failover brought us back here long
+        # after take_down: make sure the window can still be opened. Not
+        # called once a switch has started (PGs are degraded by then).
+        ids = [int(i) for i in group.data['osd_ids']]
+        # Any OSD outside the group down (or back) since the group was
+        # chosen means the ok-to-stop verdict was given for another
+        # cluster: start over, whatever a fresh verdict would say. ok-to-stop
+        # works from PG stats, which trail an OSD failure by the heartbeat
+        # grace and a stats report; the osdmap's up set is the earliest
+        # the monitors can tell us about one.
+        fp = group.data.get('up_fingerprint')
+        if fp and self._up_fingerprint(self._osds(), ids) != fp:
+            raise StagedSwitchNotReady(
+                f'the set of up OSDs changed since {group.label} was chosen')
+        for attempt in range(OSD_OK_TO_STOP_TRIES):
+            ok, why = self._ok_to_stop(ids)
+            if ok:
+                return
+            if attempt == OSD_OK_TO_STOP_TRIES - 1 or self._paused():
+                raise StagedSwitchNotReady(f'{group.label} is no longer ok-to-stop: {why}')
+            time.sleep(OSD_OK_TO_STOP_RETRY_SECONDS)
+
+    def forget(self, state: Dict[str, Any], names: List[str]) -> None:
+        gone = {int(n.split('.', 1)[1]) for n in names if n.split('.', 1)[1].isdigit()}
+        data = state.get('data') or {}
+        data['osd_ids'] = [i for i in data.get('osd_ids', []) if int(i) not in gone]
+        snap = state.get('snapshot') or {}
+        if 'up_from' in snap:
+            snap['up_from'] = {k: v for k, v in snap['up_from'].items() if int(k) not in gone}
+
+    def is_down(self, group: StagedGroup) -> bool:
+        if not group.data.get('committed'):
+            return False
+        if not group.data.get('noout'):
+            return True
+        osds = self._osds()
+        return all('noout' in (osds.get(int(i), {}).get('state') or []) for i in group.data['osd_ids'])
+
+    def snapshot(self, group: StagedGroup) -> Dict[str, Any]:
+        osdmap = self._osdmap()
+        osds = self._osds(osdmap)
+        return {'epoch': int(osdmap.get('epoch', 0)),
+                'up_from': {str(i): int(osds.get(int(i), {}).get('up_from', 0)) for i in group.data['osd_ids']}}
+
+    def verify(self, group: StagedGroup, snapshot: Dict[str, Any],
+               target_version: Optional[str]) -> Tuple[bool, str]:
+        ids = [int(i) for i in group.data['osd_ids']]
+        snapshot_up_from = snapshot.get('up_from') or {}
+        pre = {int(k): int(v) for k, v in snapshot_up_from.items()}
+        osds = self._osds()
+        # the osdmap first (cheap, and `osd metadata` only means something
+        # once the OSD has booted again)
+        for i in ids:
+            o = osds.get(i)
+            if not o or not o.get('up'):
+                return False, f'osd.{i} is not up yet'
+            if int(o.get('up_from', 0)) <= pre.get(i, 0):
+                return False, f'osd.{i} has not re-registered with the monitors yet (up_from {o.get("up_from")})'
+        if target_version:
+            for i in ids:
+                v = self._version(i, int(osds[i].get('up_from', 0)))
+                if v != target_version:
+                    return False, f'osd.{i} reports version {v!r}, want {target_version!r}'
+        return True, ''
+
+    def restore(self, group: StagedGroup) -> None:
+        if group.data.get('noout'):
+            ids = [int(i) for i in group.data['osd_ids']]
+            try:
+                self.mgr.check_mon_command({
+                    'prefix': 'osd unset-group', 'flags': 'noout', 'who': self._names(ids)})
+                group.data['noout'] = False
+            except Exception as e:
+                # The group is switched either way; a leftover per-OSD noout
+                # shows up as OSD_FLAGS in `ceph health detail`.
+                logger.warning('Upgrade: could not unset noout on %s (%s); run '
+                               '`ceph osd unset-group noout %s` to clear it', group.label, e,
+                               ' '.join(self._names(ids)))
+
+
 POLICIES: Dict[str, Type[StagedSwitchPolicy]] = {
     MdsStagedSwitchPolicy.daemon_type: MdsStagedSwitchPolicy,
+    OsdStagedSwitchPolicy.daemon_type: OsdStagedSwitchPolicy,
 }
 
 
