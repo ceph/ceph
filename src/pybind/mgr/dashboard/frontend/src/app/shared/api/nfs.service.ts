@@ -94,6 +94,12 @@ export class NfsService extends ApiClient {
     });
   }
 
+  getCluster(clusterId: string): Observable<NFSCluster> {
+    return this.http.get<NFSCluster>(`${this.apiPath}/cluster/${encodeURIComponent(clusterId)}`, {
+      headers: { Accept: this.getVersionHeaderValue(0, 1) }
+    });
+  }
+
   lsDir(fs_name: string, root_dir: string): Observable<Directory> {
     if (!fs_name) {
       return throwError($localize`Please specify a filesystem volume.`);
