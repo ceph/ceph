@@ -435,7 +435,7 @@ public:
   TransactionManager &tm;
 };
 
-inline bool is_log_key(const std::string &s) {
+inline bool is_log_key(std::string_view s) {
   pg_log_entry_t e;
   return (s.size() == e.get_key_name().size() &&
       (s[0] >= (0 + '0') && s[0] <= (9 + '0'))) ||
