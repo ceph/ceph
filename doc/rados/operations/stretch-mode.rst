@@ -91,7 +91,7 @@ Individual Stretch Pools
 
 Setting individual *stretch pool* attributes allows for
 specific pools to be distributed across two or more data centers.
-This is done by executing the ``ceph osd pool stretch set`` command on each desired pool,
+This is done by executing the ``ceph osd pool set {pool-name} num_zones {N}`` command on each desired pool,
 or by creating a pool with stretch mode enabled using the ``zone`` parameter
 in the ``ceph osd pool create`` command.
 See :ref:`setting_values_for_a_stretch_pool` and :ref:`creating_stretch_pools`
@@ -193,7 +193,7 @@ Or in JSON format:
 **Per-Pool Stretch Mode:**
 
 Enabled by creating pools with the ``zone=N`` parameter (see :ref:`creating_stretch_pools`)
-or by using ``ceph osd pool stretch set`` on existing pools. With per-pool stretch
+or by using ``ceph osd pool set {pool-name} num_zones {N}`` on existing pools. With per-pool stretch
 mode, only the specified pools operate in stretch mode while other pools remain
 unaffected. This provides more granular control and is useful when only specific
 pools require cross-datacenter redundancy.

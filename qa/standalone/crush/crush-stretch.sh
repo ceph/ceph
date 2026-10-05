@@ -676,9 +676,6 @@ function TEST_stretch_ec_stretch_set() {
 
     ceph osd pool set data0 allow_ec_optimizations true
     ceph osd pool set data1 allow_ec_optimizations true
-
-    ceph osd pool stretch set data0 2 6 datacenter stretch_ec 12 4 --yes-i-really-mean-it || return 1
-    ceph osd pool stretch set data1 2 6 datacenter stretch_ec 12 4 --yes-i-really-mean-it || return 1
 }
 
 function TEST_stretch_diff_bucket_barrier() {

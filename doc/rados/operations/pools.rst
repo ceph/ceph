@@ -778,12 +778,18 @@ See :ref:`managing_bulk_flagged_pools`.
 .. _setting_values_for_a_stretch_pool:
 
 Setting values for a stretch pool
-=================================
+==================================
 To set values for a stretch pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} {peering_crush_bucket_target} {peering_crush_bucket_barrier} {crush_rule} {size} {min_size} [--yes-i-really-mean-it]
+
+.. note::
+
+   This command is only supported for replicated pools. For EC (erasure-coded)
+   pools, use ``ceph osd pool set {pool-name} num_zones {N}`` instead.
+   ``num_zones`` works for both replicated and EC pools.
 
 Here are the breakdowns of the arguments:
 

@@ -10100,31 +10100,9 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
   }
 
   if (p.is_erasure()) {
-    if (!p.has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
-      ss << "EC pool must have allow_ec_optimizations=true for stretch mode";
-      return -EINVAL;
-    }
-
-    ErasureCodeInterfaceRef erasure_code;
-    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &ss);
-    if (err == 0) {
-      unsigned base_size = erasure_code->get_chunk_count();
-      int expected_size = bucket_count * base_size;
-      int k = erasure_code->get_data_chunk_count();
-      if (pool_size != expected_size) {
-        ss << "For EC pool in stretch mode, size must be " << expected_size
-        << " (num_zones * (k+m) = num_zones * " << base_size << "), got " << pool_size;
-        return -EINVAL;
-      }
-      if (static_cast<__u8>(pool_min_size) < k || static_cast<__u8>(pool_min_size) > base_size) {
-         ss << "For EC pool in stretch mode, min_size must be between " << k
-            << " (k) and " << base_size << " (k+m), got " << pool_min_size;
-         return -EINVAL;
-      }
-    } else {
-      ss << "get_erasure_code() failed";
-      return -EINVAL;
-    }
+    ss << "osd pool stretch set is not supported for EC pools; "
+       << "use 'ceph osd pool set " << pool_name << " num_zones <N>' instead";
+    return -EOPNOTSUPP;
   }
 
   p.peering_crush_bucket_count = static_cast<uint32_t>(bucket_count);
