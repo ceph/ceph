@@ -15,7 +15,7 @@ from cephadm.upgrade import (
 )
 from cephadm.image_prepull import (
     PrePullBatchResult,
-    UpgradeImageMirrorMethod,
+    UpgradeImagePrePullMethod,
     UpgradeImagePrePull,
 )
 from cephadm.ssh import HostConnectionError
@@ -1388,14 +1388,14 @@ def test_upgrade_start_blocks_on_insufficient_cpu_isa_level(cephadm_module: Ceph
                             '', '21.2.0', host_placement='test2')
                         ).startswith('Initiating upgrade')
 
-def test_upgrade_image_mirror_method_from_config():
-    assert UpgradeImageMirrorMethod.from_config('') is UpgradeImageMirrorMethod.NONE
-    assert UpgradeImageMirrorMethod.from_config(' ') is UpgradeImageMirrorMethod.NONE
-    assert UpgradeImageMirrorMethod.from_config('none') is UpgradeImageMirrorMethod.NONE
-    assert UpgradeImageMirrorMethod.from_config('NONE') is UpgradeImageMirrorMethod.NONE
-    assert UpgradeImageMirrorMethod.from_config('registry') is UpgradeImageMirrorMethod.REGISTRY
+def test_upgrade_prepull_method_from_config():
+    assert UpgradeImagePrePullMethod.from_config('') is UpgradeImagePrePullMethod.NONE
+    assert UpgradeImagePrePullMethod.from_config(' ') is UpgradeImagePrePullMethod.NONE
+    assert UpgradeImagePrePullMethod.from_config('none') is UpgradeImagePrePullMethod.NONE
+    assert UpgradeImagePrePullMethod.from_config('NONE') is UpgradeImagePrePullMethod.NONE
+    assert UpgradeImagePrePullMethod.from_config('registry') is UpgradeImagePrePullMethod.REGISTRY
     with pytest.raises(ValueError):
-        UpgradeImageMirrorMethod.from_config('bogus')
+        UpgradeImagePrePullMethod.from_config('bogus')
 
 
 def test_upgrade_state_pre_pull_hosts_roundtrip():
@@ -1432,7 +1432,7 @@ def _prepull_state(cephadm_module: CephadmOrchestrator, hosts_done: Optional[Lis
         target_image_pre_pull_hosts=hosts_done or [],
     )
     cephadm_module.use_repo_digest = True
-    cephadm_module.upgrade_image_mirror_max_parallel = 8
+    cephadm_module.upgrade_prepull_max_parallel = 8
     cephadm_module.default_cephadm_command_timeout = 900
 
 
@@ -1467,7 +1467,7 @@ def test_do_upgrade_calls_pre_pull_before_daemons(
     _update_upgrade_progress: mock.MagicMock,
     cephadm_module: CephadmOrchestrator,
 ):
-    cephadm_module.upgrade_image_mirror_method = UpgradeImageMirrorMethod.REGISTRY.value
+    cephadm_module.upgrade_prepull_method = UpgradeImagePrePullMethod.REGISTRY.value
     cephadm_module.upgrade.upgrade_state = UpgradeState(
         'target_image',
         'pid',
@@ -1505,7 +1505,7 @@ def test_do_upgrade_skips_pre_pull_when_hosts_done(
     _update_upgrade_progress: mock.MagicMock,
     cephadm_module: CephadmOrchestrator,
 ):
-    cephadm_module.upgrade_image_mirror_method = UpgradeImageMirrorMethod.REGISTRY.value
+    cephadm_module.upgrade_prepull_method = UpgradeImagePrePullMethod.REGISTRY.value
     upgrade_daemon = _upgrade_test_daemon()
     cephadm_module.upgrade.upgrade_state = UpgradeState(
         'target_image',
@@ -1543,7 +1543,7 @@ def test_do_upgrade_skips_pre_pull_when_method_disabled(
     cephadm_module: CephadmOrchestrator,
 ):
     for disabled in ('', 'none', 'NONE', ' None '):
-        cephadm_module.upgrade_image_mirror_method = disabled
+        cephadm_module.upgrade_prepull_method = disabled
         cephadm_module.upgrade.upgrade_state = UpgradeState(
             'target_image',
             'pid',
@@ -1575,7 +1575,7 @@ def test_parse_method_or_fail_rejects_unknown_method(
     cephadm_module: CephadmOrchestrator,
 ):
     cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
-    cephadm_module.upgrade_image_mirror_method = 'bogus'
+    cephadm_module.upgrade_prepull_method = 'bogus'
     assert cephadm_module.upgrade.image_prepull.parse_method_or_fail() is None
     assert 'UPGRADE_FAILED_PULL' in cephadm_module.health_checks
     detail = ' '.join(cephadm_module.health_checks['UPGRADE_FAILED_PULL']['detail'])
@@ -1678,7 +1678,7 @@ def test_pre_pull_one_batch_per_serve_iteration(
     cephadm_module: CephadmOrchestrator,
 ):
     _prepull_state(cephadm_module)
-    cephadm_module.upgrade_image_mirror_max_parallel = 2
+    cephadm_module.upgrade_prepull_max_parallel = 2
     recorded: List[dict] = []
     with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=_fake_pull(record=recorded)):
         result = cephadm_module.upgrade.image_prepull.pre_pull_next_batch(
@@ -1721,3 +1721,65 @@ def test_pre_pull_stop_during_batch_is_not_a_failure(
         )
     assert result is PrePullBatchResult.IN_PROGRESS
     assert 'UPGRADE_FAILED_PULL' not in cephadm_module.health_checks
+
+
+@mock.patch.object(UpgradeImagePrePull, '_registry_login_if_needed', new_callable=mock.AsyncMock)
+def test_pre_pull_stale_batch_does_not_touch_new_upgrade(
+    _registry_login: mock.AsyncMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    _prepull_state(cephadm_module)
+    new_state = UpgradeState(
+        'quay.io/ceph/ceph:vnext',
+        'new-pid',
+        target_id='sha256:otherdigest',
+        target_digests=['quay.io/ceph/ceph@sha256:otherdigest'],
+        target_version='19.2.1',
+        target_image_pre_pull_hosts=[],
+    )
+
+    async def fake_run(self, host, entity, command, args, image=None,
+                       no_fsid=None, error_ok=None, timeout=None, **kwargs):
+        cephadm_module.upgrade.upgrade_state = new_state
+        return ([_PULL_OK], [], 0)
+
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", new=fake_run):
+        result = cephadm_module.upgrade.image_prepull.pre_pull_next_batch(
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1'],
+        )
+    assert result is PrePullBatchResult.IN_PROGRESS
+    assert 'UPGRADE_FAILED_PULL' not in cephadm_module.health_checks
+    assert cephadm_module.upgrade.upgrade_state is new_state
+    assert cephadm_module.upgrade.upgrade_state.target_image_pre_pull_hosts == []
+
+
+@mock.patch.object(UpgradeImagePrePull, '_registry_login_if_needed', new_callable=mock.AsyncMock)
+def test_pre_pull_timeout_ignored_after_upgrade_replaced(
+    _registry_login: mock.AsyncMock,
+    cephadm_module: CephadmOrchestrator,
+):
+    _prepull_state(cephadm_module)
+    new_state = UpgradeState(
+        'quay.io/ceph/ceph:vnext',
+        'new-pid',
+        target_id='sha256:otherdigest',
+        target_digests=['quay.io/ceph/ceph@sha256:otherdigest'],
+        target_version='19.2.1',
+    )
+
+    def wait_async_timeout(*args, **kwargs):
+        cephadm_module.upgrade.upgrade_state = new_state
+        raise OrchestratorError('Command "cephadm pull (upgrade pre-pull)" timed out')
+
+    with mock.patch.object(cephadm_module, 'wait_async', side_effect=wait_async_timeout):
+        result = cephadm_module.upgrade.image_prepull.pre_pull_next_batch(
+            'quay.io/ceph/ceph@sha256:targetdigest',
+            ['quay.io/ceph/ceph@sha256:targetdigest'],
+            ['h1'],
+        )
+    assert result is PrePullBatchResult.IN_PROGRESS
+    assert 'UPGRADE_FAILED_PULL' not in cephadm_module.health_checks
+    assert cephadm_module.upgrade.upgrade_state is new_state
+    assert cephadm_module.upgrade.upgrade_state.error in (None, '')

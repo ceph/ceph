@@ -461,7 +461,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Maximum number of OSD daemons upgraded in parallel.'
         ),
         Option(
-            'upgrade_image_mirror_method',
+            'upgrade_prepull_method',
             type='str',
             default='',
             enum_allowed=['', 'none', 'registry'],
@@ -471,11 +471,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                  'cluster registry (requires registry reachability from hosts).',
         ),
         Option(
-            'upgrade_image_mirror_max_parallel',
+            'upgrade_prepull_max_parallel',
             type='int',
             default=8,
             desc='Maximum number of hosts pulling the upgrade image in parallel '
-                 'when upgrade_image_mirror_method is registry.',
+                 'when upgrade_prepull_method is registry.',
         ),
         Option(
             'pg_autoscale_during_upgrade',
@@ -687,8 +687,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
             self.pg_autoscale_during_upgrade = False
-            self.upgrade_image_mirror_method = ''
-            self.upgrade_image_mirror_max_parallel = 8
             self.ssh_user: Optional[str] = None
             self._ssh_options: Optional[str] = None
             self.tkey = NamedTemporaryFile()
@@ -709,6 +707,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
             self.max_parallel_osd_upgrades = 16
+            self.upgrade_prepull_method = ''
+            self.upgrade_prepull_max_parallel = 8
             self.device_enhanced_scan = False
             self.inventory_list_all = False
             self.cgroups_split = True

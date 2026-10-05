@@ -22,12 +22,12 @@ SHA256_REPO_DIGEST_SEPARATOR = '@sha256:'
 UPGRADE_IMAGE_PRE_PULL_MIN_TIMEOUT_SEC = 7200
 
 
-class UpgradeImageMirrorMethod(str, Enum):
+class UpgradeImagePrePullMethod(str, Enum):
     NONE = 'none'
     REGISTRY = 'registry'
 
     @classmethod
-    def from_config(cls, raw: Optional[str]) -> 'UpgradeImageMirrorMethod':
+    def from_config(cls, raw: Optional[str]) -> 'UpgradeImagePrePullMethod':
         """Normalize config to a method. Empty string is a default, not a method."""
         value = (raw or '').strip().lower()
         if not value:
@@ -52,19 +52,19 @@ class UpgradeImagePrePull:
         self.upgrade = upgrade
         self.mgr: 'CephadmOrchestrator' = upgrade.mgr
 
-    def parse_method_or_fail(self) -> Optional[UpgradeImageMirrorMethod]:
-        raw = getattr(self.mgr, 'upgrade_image_mirror_method', '') or ''
+    def parse_method_or_fail(self) -> Optional[UpgradeImagePrePullMethod]:
+        raw = getattr(self.mgr, 'upgrade_prepull_method', '') or ''
         try:
-            return UpgradeImageMirrorMethod.from_config(raw)
+            return UpgradeImagePrePullMethod.from_config(raw)
         except ValueError:
             self.upgrade._fail_upgrade('UPGRADE_FAILED_PULL', {
                 'severity': 'error',
-                'summary': 'Upgrade: invalid upgrade_image_mirror_method',
+                'summary': 'Upgrade: invalid upgrade_prepull_method',
                 'count': 1,
                 'detail': [
-                    f'unknown upgrade_image_mirror_method {str(raw).strip().lower()!r}; '
-                    f'expected empty/{UpgradeImageMirrorMethod.NONE.value!r} '
-                    f'(disabled) or {UpgradeImageMirrorMethod.REGISTRY.value!r}',
+                    f'unknown upgrade_prepull_method {str(raw).strip().lower()!r}; '
+                    f'expected empty/{UpgradeImagePrePullMethod.NONE.value!r} '
+                    f'(disabled) or {UpgradeImagePrePullMethod.REGISTRY.value!r}',
                 ],
             })
             return None
@@ -86,6 +86,10 @@ class UpgradeImagePrePull:
 
     def all_hosts_done(self, hosts: List[str]) -> bool:
         return set(hosts).issubset(set(self.done_hosts()))
+
+    def _is_same_upgrade(self, progress_id: Optional[str]) -> bool:
+        st = self.upgrade.upgrade_state
+        return bool(progress_id and st and st.progress_id == progress_id)
 
     def mark_host_done(self, host: Optional[str]) -> None:
         if not host or not self.upgrade.upgrade_state:
@@ -152,6 +156,10 @@ class UpgradeImagePrePull:
         if not hosts or self.all_hosts_done(hosts):
             return PrePullBatchResult.COMPLETE
 
+        origin_id = (
+            self.upgrade.upgrade_state.progress_id
+            if self.upgrade.upgrade_state else None
+        )
         timeout = self.pull_timeout_sec()
         # Give cephadm --timeout a chance to fire before wait_async.
         wait_timeout = timeout + 60
@@ -166,8 +174,10 @@ class UpgradeImagePrePull:
                         target_image, target_digests, hosts, timeout),
                     timeout=wait_timeout)
         except OrchestratorError as e:
+            if not self._is_same_upgrade(origin_id):
+                return PrePullBatchResult.IN_PROGRESS
             remaining = [h for h in hosts if h not in self.done_hosts()]
-            batch = remaining[:max(1, self.mgr.upgrade_image_mirror_max_parallel)]
+            batch = remaining[:max(1, self.mgr.upgrade_prepull_max_parallel)]
             self.upgrade._fail_upgrade('UPGRADE_FAILED_PULL', {
                 'severity': 'warning',
                 'summary': 'Upgrade: failed to pre-pull target image',
@@ -186,11 +196,12 @@ class UpgradeImagePrePull:
         pull_timeout: int,
     ) -> PrePullBatchResult:
         assert self.upgrade.upgrade_state is not None
+        origin_id = self.upgrade.upgrade_state.progress_id
         remaining = [h for h in hosts if h not in self.done_hosts()]
         if not remaining:
             return PrePullBatchResult.COMPLETE
 
-        max_parallel = max(1, self.mgr.upgrade_image_mirror_max_parallel)
+        max_parallel = max(1, self.mgr.upgrade_prepull_max_parallel)
         batch = remaining[:max_parallel]
         logger.info(
             'Upgrade: pre-pulling image %s on %d host(s) this serve iteration '
@@ -207,7 +218,7 @@ class UpgradeImagePrePull:
         results: Dict[str, Tuple[int, Optional[Dict[str, Any]], str]] = {}
 
         async def _pull_on_host(host: str) -> None:
-            if not self.upgrade.upgrade_state or self.upgrade.upgrade_state.paused:
+            if not self._is_same_upgrade(origin_id) or self.upgrade.upgrade_state.paused:
                 return
             try:
                 await self._registry_login_if_needed(host)
@@ -232,8 +243,9 @@ class UpgradeImagePrePull:
 
         await asyncio.gather(*[_pull_on_host(host) for host in batch])
 
-        if not self.upgrade.upgrade_state:
+        if not self._is_same_upgrade(origin_id):
             return PrePullBatchResult.IN_PROGRESS
+        assert self.upgrade.upgrade_state is not None
         if self.upgrade.upgrade_state.paused:
             return PrePullBatchResult.IN_PROGRESS
 

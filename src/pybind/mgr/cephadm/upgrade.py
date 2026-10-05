@@ -11,7 +11,7 @@ from cephadm.services.service_registry import service_registry
 import orchestrator
 from cephadm.image_prepull import (
     PrePullBatchResult,
-    UpgradeImageMirrorMethod,
+    UpgradeImagePrePullMethod,
     UpgradeImagePrePull,
 )
 from cephadm.registry import Registry
@@ -2376,7 +2376,7 @@ class CephadmUpgrade:
             })
             return
 
-        if method == UpgradeImageMirrorMethod.REGISTRY:
+        if method == UpgradeImagePrePullMethod.REGISTRY:
             daemons = self._get_filtered_daemons()
             hosts = self.image_prepull.get_upgrade_scope_hosts(daemons)
             if first and first_host and first_host in hosts:

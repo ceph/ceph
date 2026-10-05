@@ -63,8 +63,8 @@ The automated upgrade process follows Ceph best practices.  For example:
    to turn autoscaling on for the duration of the upgrade).
 
 
-Upgrade image pre-distribution
-==============================
+Upgrade image pre-pull
+======================
 
 On clusters with many hosts and large container images, pulling the target
 image from a registry on each host during the upgrade can add significant
@@ -73,7 +73,7 @@ already be offline while a host still downloads the image.
 
 When enabled, cephadm pre-pulls the target image to in-scope hosts
 **before any daemon is upgraded**. Configure this with
-``mgr/cephadm/upgrade_image_mirror_method``:
+``mgr/cephadm/upgrade_prepull_method``:
 
 ``''`` / ``none`` (default)
   Disabled. Upgrade behaves as before (per-host pull on demand during
@@ -93,21 +93,21 @@ Enable pre-pull:
 
 .. prompt:: bash #
 
-   ceph config set mgr mgr/cephadm/upgrade_image_mirror_method registry
+   ceph config set mgr mgr/cephadm/upgrade_prepull_method registry
 
 Disable again (either form):
 
 .. prompt:: bash #
 
-   ceph config set mgr mgr/cephadm/upgrade_image_mirror_method none
+   ceph config set mgr mgr/cephadm/upgrade_prepull_method none
    # or clear to empty
-   ceph config set mgr mgr/cephadm/upgrade_image_mirror_method ''
+   ceph config set mgr mgr/cephadm/upgrade_prepull_method ''
 
 Optional tuning (hosts pulled per serve iteration):
 
 .. prompt:: bash #
 
-   ceph config set mgr mgr/cephadm/upgrade_image_mirror_max_parallel 8
+   ceph config set mgr mgr/cephadm/upgrade_prepull_max_parallel 8
 
 
 Starting the Upgrade
