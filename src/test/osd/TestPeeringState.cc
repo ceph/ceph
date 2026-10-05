@@ -3110,6 +3110,141 @@ TEST_F(PeeringStateTest, ActiveRebuildLatchMarksInfoDirty) {
 }
 
 // ============================================================================
+// Test 12: Recording a window marks it for sharing
+// (rebuild_stats_close_unshared), and the replicas receive the post-close
+// history (vuln_window_reported) on the next Active AdvMap. try_mark_clean()
+// itself always shares right after publishing, but prepare_stats_for_publish()
+// is reachable from other contexts (e.g. an op's on-commit callback) that don't
+// -- a replica left holding the pre-close history would, if promoted, see the
+// already-recorded window as still open and record it again.
+// ============================================================================
+TEST_F(PeeringStateTest, VulnerabilityWindowCloseSharesWithReplicasOnAdvMap) {
+  dout(0) << "== VulnerabilityWindowCloseSharesWithReplicasOnAdvMap ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  call_prepare_stats(acting_primary);
+
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  call_prepare_stats(acting_primary);  // window opens on the primary
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, v);
+  test_recover_got(9, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+
+  call_prepare_stats(acting_primary);  // window closes and is recorded
+  auto *primary = get_ps(acting_primary);
+  const utime_t reported = primary->get_info().history.vuln_window_reported;
+  ASSERT_GT(reported, primary->get_info().history.last_degraded);
+  EXPECT_TRUE(primary->rebuild_stats_close_unshared);
+
+  for (auto osd : acting) {
+    if (osd == acting_primary) continue;
+    EXPECT_LT(get_ps(osd)->get_info().history.vuln_window_reported, reported)
+        << "osd." << osd << " has not been told about the close yet";
+  }
+
+  // Drain whatever unrelated dirty state (e.g. dirty_big_info from
+  // activation) is still set, so only rebuild_stats_close_unshared can
+  // trigger the retry-share below.
+  {
+    ObjectStore::Transaction t;
+    primary->write_if_dirty(t);
+  }
+  test_event_advance_map(acting_primary);  // same map: Active AdvMap
+  dispatch_all();
+
+  EXPECT_FALSE(primary->rebuild_stats_close_unshared);
+  for (auto osd : acting) {
+    if (osd == acting_primary) continue;
+    const auto &h = get_ps(osd)->get_info().history;
+    EXPECT_EQ(h.vuln_window_reported, reported)
+        << "osd." << osd << " must learn the window was recorded";
+    EXPECT_LE(h.last_degraded, h.vuln_window_reported)
+        << "osd." << osd << " must not see the recorded window as open";
+  }
+}
+
+// ============================================================================
+// Test 13: Same gap as VulnerabilityWindowCloseSharesWithReplicasOnAdvMap
+// above, for the other rebuild-stats counter: close_rebuild_span() (reached
+// from Recovered::Recovered()) records unconditionally, but nothing there
+// guarantees a share_pg_info() follows soon -- the publish right after is
+// itself conditional, and GoClean (the path to try_mark_clean()'s
+// unconditional share) only posts once every replica is activated. Calls
+// close_rebuild_span() directly, the same way call_prepare_stats() drives
+// the vulnerability-window close above, to isolate this one call from
+// whatever else the full recover/activate/GoClean sequence would otherwise
+// trigger alongside it.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildSpanCloseSharesWithReplicasOnAdvMap) {
+  dout(0) << "== RebuildSpanCloseSharesWithReplicasOnAdvMap ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  // Introduce a missing replica: swap acting[1] from OSD 1 to OSD 9.
+  // test_peering() drives the PG straight into Recovering, arming the
+  // active-rebuild latch.
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  auto *primary = get_ps(acting_primary);
+  const utime_t onset = primary->get_info().history.last_rebuild_active_start;
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  primary->close_rebuild_span();  // span closes and is recorded
+  const utime_t reported = primary->get_info().history.rebuild_span_reported;
+  ASSERT_GT(reported, onset);
+  EXPECT_TRUE(primary->rebuild_stats_close_unshared);
+
+  for (auto osd : acting) {
+    if (osd == acting_primary) continue;
+    EXPECT_LT(get_ps(osd)->get_info().history.rebuild_span_reported, reported)
+        << "osd." << osd << " has not been told about the close yet";
+  }
+
+  // Drain whatever unrelated dirty state (e.g. dirty_big_info from
+  // activation) is still set, so only rebuild_stats_close_unshared can
+  // trigger the retry-share below.
+  {
+    ObjectStore::Transaction t;
+    primary->write_if_dirty(t);
+  }
+  test_event_advance_map(acting_primary);  // same map: Active AdvMap
+  dispatch_all();
+
+  EXPECT_FALSE(primary->rebuild_stats_close_unshared);
+  for (auto osd : acting) {
+    if (osd == acting_primary) continue;
+    const auto &h = get_ps(osd)->get_info().history;
+    EXPECT_EQ(h.rebuild_span_reported, reported)
+        << "osd." << osd << " must learn the span was recorded";
+    EXPECT_LE(h.last_rebuild_active_start, h.rebuild_span_reported)
+        << "osd." << osd << " must not see the recorded span as open";
+  }
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
