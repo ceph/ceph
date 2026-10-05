@@ -248,6 +248,31 @@ SSD Selection
        reduce performance and endurance. For details and example commands,
        see `Werner Fischer's blog post on partition alignment`_.
 
+HDD Selection
+=============
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Criterion
+     - Recommendation
+   * - Recording technology
+     - Use CMR (conventional magnetic recording) drives for OSDs. Avoid
+       SMR (shingled magnetic recording) drives: the drive-managed rewrite
+       of overlapping tracks stalls under the sustained random writes that
+       BlueStore, RocksDB compaction, and recovery and backfill generate.
+       On SMR media this can slow recovery dramatically and, in the worst
+       case, stall an OSD under load. Vendors seldom label the recording
+       technology on the data sheet, so confirm a model is CMR before
+       buying.
+   * - Capacity and cost
+     - HDDs remain attractive for bulk OSD data mainly on price per
+       terabyte (see Choosing Between HDD and SSD). When sizing large CMR
+       drives, weigh the per-capacity `cost per terabyte
+       <https://hddhunt.com/cheapest-hdd-per-tb/>`_ against the recovery,
+       interface, and chassis trade-offs noted above.
+
 Choosing a Controller (HBA)
 ===========================
 
