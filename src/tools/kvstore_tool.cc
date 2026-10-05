@@ -88,7 +88,8 @@ int StoreTool::traverse(const string& prefix,
                         ostream *out,
                         uint32_t *crc_out)
 {
-  KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+  KeyValueDB::WholeSpaceIterator iter =
+    db->get_wholespace_iterator(KeyValueDB::ITERATOR_NOABORT);
 
   if (prefix.empty())
     iter->seek_to_first();
@@ -348,7 +349,8 @@ int StoreTool::copy_store_to(const string& type, const string& other_path,
   }
   other.reset(other_ptr);
 
-  KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
+  KeyValueDB::WholeSpaceIterator it =
+    db->get_wholespace_iterator(KeyValueDB::ITERATOR_NOABORT);
   it->seek_to_first();
   uint64_t total_keys = 0;
   uint64_t total_size = 0;

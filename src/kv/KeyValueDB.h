@@ -384,6 +384,8 @@ protected:
 public:
   typedef uint32_t IteratorOpts;
   static const uint32_t ITERATOR_NOCACHE = 1;
+  // read errors are reported by status() instead of aborting
+  static const uint32_t ITERATOR_NOABORT = 2;
 
   struct IteratorBounds {
     std::optional<std::string> lower_bound;
