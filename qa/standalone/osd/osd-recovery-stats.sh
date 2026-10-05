@@ -2031,6 +2031,20 @@ function TEST_rebuild_perf_backfill_toofull_pause_case() {
       return 1
     }
 
+    # The avgcount check above is OSD-wide and can only assert "-ge 1"
+    # (this test's own two pools can legitimately share the same primary
+    # OSD, see the fake_statfs_for_testing comment above, so the other
+    # pool's own concurrent backfill completing around the same time
+    # would also bump it). The new per-PG rebuild-stats log line lets
+    # this one be exact instead.
+    local recorded_count
+    recorded_count=$(grep -c "rebuild-stats: recorded rebuild span for ${PG} " $log)
+    test "$recorded_count" -eq 1 || {
+      echo "FAIL: expected ${PG}'s toofull-rejected-then-granted episode" \
+           "to be recorded as exactly one rebuild span, got $recorded_count"
+      return 1
+    }
+
     local vuln_avgcount_after
     dump=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
            perf dump) || return 1
@@ -3121,6 +3135,178 @@ function TEST_rebuild_perf_active_rebuild_handover() {
       return 1
     }
 
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
+# Test stale Replica-history fix: try_mark_clean() used to call share_pg_info()
+# BEFORE publish_stats_to_osd(), so a just-closed vulnerability-window or
+# active-rebuild episode's close was shared to peers as still open
+# (vuln_window_reported/rebuild_span_reported hadn't advanced yet when
+# info.history went out). If this OSD then stopped being primary before anything
+# else re-shared info (a scrub, an interval change), a promoted peer inherited
+# that stale, still-open view and recorded a second, inflated duration for the
+# SAME already-closed episode, spanning back to the original onset.
+#
+# Deterministic, not timing-dependent: reaching "clean" externally
+# (wait_for_clean) requires try_mark_clean() to have already run to completion.
+# By that point the replicas' view of info.history is already fixed, correct or
+# not, for good; there is no race to catch mid-function. noscrub/nodeep-scrub
+# are set so nothing else gets a chance to re-share info (and incidentally
+# correct a stale replica) before the deliberate handover below.
+function TEST_rebuild_perf_replica_history_survives_handover_after_close() {
+    local dir=$1
+    local OSDS=3
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true --debug-osd=15 || return 1
+    done
+
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+
+    create_pool $poolname 1 1 replicated || return 1
+    ceph osd pool set $poolname size 3 || return 1
+    ceph osd pool set $poolname min_size 2 || return 1
+    wait_for_clean || return 1
+
+    for i in $(seq 1 5)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+    wait_for_clean || return 1
+
+    local PG
+    PG=$(get_pg $poolname obj1)
+    local primary_a
+    primary_a=$(get_primary $poolname obj1)
+    local otherosd
+    otherosd=$(get_not_primary $poolname obj1)
+
+    # Degrade: hold a replica down with a growing backlog, forcing a
+    # genuine recovery episode (same technique as
+    # TEST_rebuild_perf_recovering_case) so both counters have a real,
+    # non-trivial episode to close.
+    ceph osd set noup || return 1
+    ceph osd down osd.${otherosd} || return 1
+
+    for i in $(seq 6 10)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+
+    ceph osd unset noup || return 1
+
+    # By the time this returns, osd.${primary_a} has already run
+    # try_mark_clean() to completion -- the replicas' view of
+    # info.history is already fixed, correct or not, right now.
+    wait_for_clean || return 1
+
+    # --- Immediately force a handover, before anything else gets a
+    # chance to re-share info and mask the bug on its own. Use
+    # primary-affinity, not a kill: all three OSDs stay up+in, so this
+    # introduces no new degradation of its own (same technique as
+    # TEST_divergent_vulnerability_window in divergent-priors.sh). A kill
+    # would drop the acting set to 2 of 3 and legitimately re-arm a new
+    # vulnerability window on the new primary, making this check
+    # indistinguishable from the real bug it's meant to catch.
+    ceph osd primary-affinity osd.${primary_a} 0 || return 1
+
+    local primary_b=""
+    for i in $(seq 1 30)
+    do
+      primary_b=$(get_primary $poolname obj1)
+      test -n "$primary_b" -a "$primary_b" != "$primary_a" && break
+      sleep 1
+    done
+    test -n "$primary_b" -a "$primary_b" != "$primary_a" || {
+      echo "FAIL: primary never changed after osd.${primary_a}'s" \
+           "primary-affinity was lowered"
+      return 1
+    }
+
+    # The new primary must show both episodes as already closed, not
+    # still open -- each reported marker must have caught up to (or
+    # passed) its onset. If either still looks open, this new primary
+    # inherited the old primary's stale, pre-close share.
+    local last_degraded="" vuln_window_reported=""
+    local last_rebuild_active_start="" rebuild_span_reported=""
+    for i in $(seq 1 30)
+    do
+      flush_pg_stats || return 1
+      local q
+      q=$(ceph pg $PG query 2>/dev/null) || { sleep 1; continue; }
+      last_degraded=$(jq -r '.info.history.last_degraded' <<< "$q")
+      vuln_window_reported=$(jq -r '.info.history.vuln_window_reported' <<< "$q")
+      last_rebuild_active_start=$(jq -r '.info.history.last_rebuild_active_start' <<< "$q")
+      rebuild_span_reported=$(jq -r '.info.history.rebuild_span_reported' <<< "$q")
+      test -n "$last_degraded" -a "$last_degraded" != "null" && break
+      sleep 1
+    done
+    test -n "$last_degraded" -a "$last_degraded" != "null" || {
+      echo "FAIL: couldn't read info.history from osd.${primary_b} via" \
+           "'ceph pg ${PG} query'"
+      return 1
+    }
+
+    test "$(awk -v a="$vuln_window_reported" -v b="$last_degraded" 'BEGIN { print (a >= b) }')" = 1 || {
+      echo "FAIL: osd.${primary_b} inherited a stale, still-open" \
+           "vulnerability window (last_degraded=${last_degraded}," \
+           "vuln_window_reported=${vuln_window_reported}) -- the old" \
+           "primary's close was not shared before the handover"
+      return 1
+    }
+    test "$(awk -v a="$rebuild_span_reported" -v b="$last_rebuild_active_start" 'BEGIN { print (a >= b) }')" = 1 || {
+      echo "FAIL: osd.${primary_b} inherited a stale, still-open active-" \
+           "rebuild span (last_rebuild_active_start=" \
+           "${last_rebuild_active_start}, rebuild_span_reported=" \
+           "${rebuild_span_reported}) -- the old primary's close was not" \
+           "shared before the handover"
+      return 1
+    }
+
+    # --- Restore osd.${primary_a}'s primary-affinity so the cluster ends
+    # this test in its default state.
+    ceph osd primary-affinity osd.${primary_a} 1 || return 1
+    wait_for_clean || return 1
+    flush_pg_stats || return 1
+
+    # Cross-check the OSD-wide perf counters too: this episode must
+    # still be recorded exactly ONCE, not a second time by osd.${primary_b}
+    # off the stale onset.
+    local vuln_avgcount=0 rebuild_avgcount=0
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      test -S $(get_asok_path osd.${osd}) || continue
+      local d
+      d=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${osd}) perf dump 2>/dev/null) || continue
+      local vc rc
+      vc=$(jq '.recoverystate_perf.pg_vulnerability_duration.avgcount' <<< "$d")
+      rc=$(jq '.recoverystate_perf.pg_rebuild_duration.avgcount' <<< "$d")
+      vuln_avgcount=$(expr $vuln_avgcount + ${vc:-0})
+      rebuild_avgcount=$(expr $rebuild_avgcount + ${rc:-0})
+    done
+
+    echo "INFO: summed pg_vulnerability_duration.avgcount=${vuln_avgcount}," \
+         "pg_rebuild_duration.avgcount=${rebuild_avgcount}"
+    test "$vuln_avgcount" = 1 || {
+      echo "FAIL: expected summed pg_vulnerability_duration.avgcount=1 for" \
+           "${PG}'s single episode, got $vuln_avgcount -- likely double-" \
+           "recorded across the handover"
+      return 1
+    }
+    test "$rebuild_avgcount" = 1 || {
+      echo "FAIL: expected summed pg_rebuild_duration.avgcount=1 for" \
+           "${PG}'s single episode, got $rebuild_avgcount -- likely" \
+           "double-recorded across the handover"
+      return 1
+    }
+
+    ceph osd unset noscrub || return 1
+    ceph osd unset nodeep-scrub || return 1
     delete_pool $poolname
     kill_daemons $dir || return 1
 }
