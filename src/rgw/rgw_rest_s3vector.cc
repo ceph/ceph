@@ -279,17 +279,6 @@ private:
       createparams.zone_placement = rgw::find_zone_placement(
           this, s->penv.site->get_zone_params(), createparams.placement_rule);
 
-      if (!driver->is_meta_master()) {
-        // apply bucket creation on the master zone first
-        JSONParser jp;
-        op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                             &in_data, &jp, s->info, s->err, y);
-        if (op_ret < 0) {
-          ldpp_dout(this, 1) << "ERROR: failed to forward create of s3vector bucket " << bucket_id << " to master. error: " << op_ret << dendl;
-          return;
-        }
-      }
-
       op_ret = bucket->create(this, createparams, y);
       if (op_ret < 0) {
         ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
@@ -1314,20 +1303,13 @@ RGWOp* RGWHandler_REST_s3Vector::op_post() {
 
 namespace {
 
-// Format a coarse_real_time as an ISO-8601 UTC string with millisecond
-// precision (e.g. "2026-08-01T12:00:12.500Z").
+// Format a coarse_real_time as an ISO-8601 UTC string via the shared
+// ceph::to_iso_8601 helper (nanosecond precision, e.g.
+// "2026-08-01T12:00:12.500000000Z"). coarse_real_clock and real_clock share
+// the same timespan duration and both count from the Unix epoch, so the
+// time_since_epoch() duration transfers directly.
 std::string s3v_iso8601(ceph::coarse_real_time t) {
-  const time_t tt = ceph::coarse_real_clock::to_time_t(t);
-  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-      t.time_since_epoch()).count() % 1000;
-  struct tm bdt;
-  gmtime_r(&tt, &bdt);
-  char buf[32];
-  const size_t n = strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &bdt);
-  char out[48];
-  snprintf(out, sizeof(out), "%.*s.%03dZ", static_cast<int>(n), buf,
-           static_cast<int>(ms));
-  return out;
+  return ceph::to_iso_8601(ceph::real_time{t.time_since_epoch()});
 }
 
 // GET /admin/vectorbucket?rebuild=true[&vectorbucket=<name>][&since=<epoch>]
@@ -1373,16 +1355,8 @@ void RGWOp_VectorBucket_Rebuild_Status::execute(optional_yield y) {
   f->dump_int("tables_tracked", status.tables_tracked);
   f->close_section();
 
-  f->open_object_section("counters");
-  f->dump_unsigned("total_rebuilds_started", status.total_rebuilds_started);
-  f->dump_unsigned("total_rebuilds_completed", status.total_rebuilds_completed);
-  f->dump_unsigned("total_rebuilds_failed", status.total_rebuilds_failed);
-  f->dump_int("peak_active_rebuilds", status.peak_active_rebuilds);
-  f->dump_unsigned("limit_reached_count", status.limit_reached_count);
-  f->dump_unsigned("lock_refresh_count", status.lock_refresh_count);
-  f->dump_unsigned("lock_lost_count", status.lock_lost_count);
-  f->dump_unsigned("lock_refresh_fail_count", status.lock_refresh_fail_count);
-  f->close_section();
+  // Aggregate "since boot" counters are exposed via Ceph PerfCounters
+  // ("rgw_s3vector_background", scraped by the prometheus stack), not here.
 
   const auto now = ceph::coarse_real_clock::now();
   f->open_array_section("active_builds");

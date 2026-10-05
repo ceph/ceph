@@ -2246,6 +2246,231 @@ def test_list_vectors_exact_pagination():
     _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
+def put_vectors_in_fragments(conn, bucket_name, index_name, num_fragments, vectors_per_fragment,
+                             dimension, with_metadata=False):
+    """
+    Put vectors in several requests, each with its own keys.
+    Every request is a separate commit that adds a fragment to the index, and a
+    query that reads from more than one fragment returns more than one record batch.
+    """
+    vectors = []
+    for fragment in range(num_fragments):
+        fragment_vectors = []
+        for i in range(vectors_per_fragment):
+            index = fragment*vectors_per_fragment + i
+            v = {
+                'key': f'frag-{fragment}-vec-{i}',
+                'data': generate_data(dimension, index)
+            }
+            if with_metadata:
+                v['metadata'] = json.dumps({'color': 'red', 'fragment': fragment})
+            fragment_vectors.append(v)
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=fragment_vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vectors.extend(fragment_vectors)
+    return vectors
+
+
+@pytest.mark.vector_test
+def test_get_vectors_multiple_fragments():
+    """
+    Vectors that were written by different requests must all be returned.
+    """
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = put_vectors_in_fragments(conn, bucket_name, index_name, 5, 10, dimension)
+
+    # all keys in one request
+    vector_ids = [v['key'] for v in vectors]
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension)
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids)
+
+    # one key from each fragment
+    vector_ids = [f'frag-{fragment}-vec-0' for fragment in range(5)]
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension)
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_list_vectors_multiple_fragments():
+    """
+    A page of the listing must be full even when its vectors were written by
+    different requests.
+    """
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = put_vectors_in_fragments(conn, bucket_name, index_name, 5, 10, dimension)
+
+    # a single page that holds all fragments
+    _, page_count = verify_list_vectors_pagination(
+        conn, bucket_name, index_name, vectors, 100, expected_dimension=dimension)
+    assert page_count == 1, f"expected 1 pages but got {page_count}"
+
+    # 50 vectors with page size 15 = 4 pages (15, 15, 15, 5)
+    # none of the pages fit in a single fragment
+    _, page_count = verify_list_vectors_pagination(
+        conn, bucket_name, index_name, vectors, 15, expected_dimension=dimension)
+    assert page_count == 4, f"expected 4 pages but got {page_count}"
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_query_vectors_multiple_fragments():
+    """
+    A query must consider the vectors of all fragments, with and without a filter.
+    """
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = put_vectors_in_fragments(conn, bucket_name, index_name, 5, 10, dimension,
+                                       with_metadata=True)
+    expected_keys = sorted(v['key'] for v in vectors)
+    query_vector = generate_data(dimension, 0)
+    query_args = dict(vectorBucketName=bucket_name, indexName=index_name,
+                      queryVector=query_vector, topK=len(vectors))
+
+    result = conn.query_vectors(**query_args)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert sorted(v['key'] for v in result['vectors']) == expected_keys
+
+    # "color" is not a filterable key, so the filter is applied on the results
+    result = conn.query_vectors(filter={'color': 'red'}, **query_args)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert sorted(v['key'] for v in result['vectors']) == expected_keys
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_put_vectors_max_vectors():
+    """
+    A request with more vectors than "rgw_s3vector_max_put_vectors" is rejected.
+    """
+    max_vectors = 10
+    set_rgw_config_option('rgw_s3vector_max_put_vectors', max_vectors)
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 2
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = generate_vectors(max_vectors + 1, dimension)
+    assert_put_vectors_validation_error(conn,
+        'vectors',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    # verify no vectors were inserted
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result.get('vectors', [])) == 0
+
+    vectors = generate_vectors(max_vectors, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    verify_get_vectors(conn, bucket_name, index_name, [v['key'] for v in vectors],
+                       expected_dimension=dimension)
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+    set_rgw_config_option('rgw_s3vector_max_put_vectors', 500)
+
+@pytest.mark.vector_test
+def test_vectors_large_fragment():
+    """
+    Vectors that were written by a single large request must all be returned.
+    The vectors are in one fragment, that is larger than a record batch.
+    """
+    num_vectors = 10000
+    set_rgw_config_option('rgw_s3vector_max_put_vectors', num_vectors)
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 2
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # the vectors are small, so that the request is not larger than "rgw_max_put_param_size"
+    vectors = [{'key': f'vec-{i}',
+                'data': {'float32': [float(i), float(i % 10)]},
+                'metadata': json.dumps({'color': 'red'})}
+               for i in range(num_vectors)]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # keys from all parts of the fragment
+    vector_ids = [f'vec-{i}' for i in range(0, num_vectors, 100)]
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension)
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids)
+
+    # 10000 vectors with page size 1000 = 10 pages
+    _, page_count = verify_list_vectors_pagination(
+        conn, bucket_name, index_name, vectors, 1000, expected_dimension=dimension)
+    assert page_count == 10, f"expected 10 pages but got {page_count}"
+
+    expected_keys = sorted(v['key'] for v in vectors)
+    query_args = dict(vectorBucketName=bucket_name, indexName=index_name,
+                      queryVector={'float32': [0.0, 0.0]}, topK=num_vectors)
+
+    result = conn.query_vectors(**query_args)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert sorted(v['key'] for v in result['vectors']) == expected_keys
+
+    # "color" is not a filterable key, so the filter is applied on the results
+    result = conn.query_vectors(filter={'color': 'red'}, **query_args)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert sorted(v['key'] for v in result['vectors']) == expected_keys
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+    set_rgw_config_option('rgw_s3vector_max_put_vectors', 500)
+
 @pytest.mark.vector_test
 def test_delete_vectors():
     conn = connection()
@@ -5418,13 +5643,26 @@ def test_explain_plan_ivf_nprobes():
 
 
 def test_lock_timestamp_refresh_during_rebuild():
-    """Test that the main loop refreshes the distributed lock timestamp
-    during an active rebuild. Uses a short lock TTL (9s) and refresh
-    interval (TTL/3 = 3s). Inserts enough vectors (2000) so the rebuild
-    takes long enough for at least one refresh to occur.
+    """Prove the main loop refreshes the distributed lock *while* an index
+    rebuild is in flight. This is the critical coordination point between two
+    sub-systems running on different threads:
+      - the index build  — worker thread, blocked in the synchronous,
+        non-cancellable LanceDB FFI, rebuilding the *entire* table from scratch
+        (vec_config.replace=1), so its duration grows with total row count; and
+      - the distributed-lock refresh — dedicated main-loop thread, ticking every
+        1s, that re-stamps the lock once TTL/3 has elapsed since the last refresh.
+    If the refresh is ever starved by a build, the lock goes stale, another
+    instance steals it, and the same index is rebuilt twice.
 
-    Observes the refresh through the ceph admin REST API rebuild event log
-    (lock_refresh events).
+    Because a build only becomes refresh-eligible after it has run for >= TTL/3
+    (last_refresh is seeded at build start), a *single* rebuild must outlast the
+    refresh interval to emit a lock_refresh event. The time one rebuild takes is
+    hardware-dependent, so instead of hard-coding a vector count we ESCALATE the
+    table size in rounds: each round adds more rows, every rebuild re-indexes the
+    whole (now larger) table and therefore takes longer, until one rebuild spans
+    a refresh tick. We stop at the first observed refresh, or fail at a row cap.
+
+    Observes refreshes through the ceph admin REST API rebuild event log.
     """
     # allow the test user to query the admin rebuild-status endpoint
     _grant_admin_caps()
@@ -5434,10 +5672,41 @@ def test_lock_timestamp_refresh_during_rebuild():
     dimension = 128
     index_name = 'lock-refresh-test'
 
-    # set a short lock TTL (6s) so refresh fires at TTL/3 = 2s
-    # lower the rebuild cooldown to avoid delays
+    # short lock TTL => refresh interval (TTL/3) = 2s; with the 1s main-loop tick
+    # a rebuild lasting ~3s or more reliably spans at least one refresh. low
+    # cooldown so the background picks up each round's inserts promptly.
     set_rgw_config_option('rgw_s3vector_index_lock_ttl_seconds', 6)
     set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 1)
+
+    # escalation parameters. hardware-adaptive: slow hardware catches a refresh in
+    # the first round; fast hardware grows the table until a rebuild is slow
+    # enough. the cap bounds runtime so the test fails loudly rather than hanging.
+    # batch_size is bounded by request *body* size, not the max_put_vectors count:
+    # at dimension=128 a 500-vector PutVectors body (~1.2 MB) trips RGW's large-body
+    # path and returns 405, so keep batches small (100 x 128 floats is well within).
+    batch_size = 100
+    round_step = 10000        # vectors added per escalation round
+    max_total = 80000         # give up (fail) beyond this many vectors
+
+    before_time = int(time.time())
+
+    def _lock_events():
+        """current (refresh, lost, fail) lock events for this bucket/index.
+
+        NOTE: the admin API reads the rebuild event ring buffer of the *single*
+        RGW instance it is queried against. This test implicitly assumes that
+        instance is the one performing the rebuild — true for single-RGW vstart.
+        In a multi-RGW deployment a refresh performed by a different instance
+        would not appear here, so this assertion would need to query (or
+        aggregate across) the instance that actually holds the lock.
+        """
+        status = get_rebuild_admin_status(since=before_time, bucket=bucket_name)
+        evs = status['rebuild_events']
+        refresh = [e for e in evs if e['type'] == 'lock_refresh'
+                   and e['bucket'] == bucket_name and e['index'] == index_name]
+        lost = [e for e in evs if e['type'] == 'lock_lost']
+        fail = [e for e in evs if e['type'] == 'lock_refresh_fail']
+        return refresh, lost, fail
 
     try:
         _ensure_s3_bucket_for_vector_bucket(bucket_name)
@@ -5449,48 +5718,53 @@ def test_lock_timestamp_refresh_during_rebuild():
             distanceMetric='euclidean')
         assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-        # record start time before inserting vectors (event filter)
-        before_time = int(time.time())
+        refresh_events, lost_events, fail_events = [], [], []
+        total = 0
+        while total < max_total:
+            # grow the table — the next full-table rebuild will be slower
+            target = min(total + round_step, max_total)
+            for batch_start in range(total, target, batch_size):
+                batch_end = min(batch_start + batch_size, target)
+                vectors = generate_vectors(batch_end - batch_start, dimension)
+                for i, v in enumerate(vectors):
+                    v['key'] = f'vec-{batch_start + i}'
+                result = conn.put_vectors(
+                    vectorBucketName=bucket_name, indexName=index_name,
+                    vectors=vectors)
+                assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            total = target
+            log.info("inserted up to %d vectors; watching this round's rebuild", total)
 
-        # insert enough vectors so the rebuild takes >20s (TTL/3 refresh interval)
-        # 5000 vectors with dimension=128 should take 25-60s to index
-        batch_size = 200
-        total_vectors = 5000
-        for batch_start in range(0, total_vectors, batch_size):
-            batch_end = min(batch_start + batch_size, total_vectors)
-            vectors = generate_vectors(batch_end - batch_start, dimension)
-            for i, v in enumerate(vectors):
-                v['key'] = f'vec-{batch_start + i}'
-            result = conn.put_vectors(
-                vectorBucketName=bucket_name, indexName=index_name,
-                vectors=vectors)
-            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            # wait out this round's rebuild: succeed the instant a refresh (or a
+            # lost/fail — also meaningful) shows up; otherwise wait until the
+            # rebuild settles below the unindexed threshold, then escalate.
+            deadline = time.time() + 180
+            while time.time() < deadline:
+                refresh_events, lost_events, fail_events = _lock_events()
+                if refresh_events or lost_events or fail_events:
+                    break
+                stats = get_index_stats(conn, bucket_name, index_name)
+                tot = stats['numIndexedRows'] + stats['numUnindexedRows']
+                settled = (stats['numIndexSegments'] > 0 and tot > 0
+                           and stats['numUnindexedRows'] / tot < 0.10)
+                if settled:
+                    break  # rebuild done this round, no refresh yet -> escalate
+                time.sleep(0.5)
 
-        # wait for the rebuild to complete
-        stats = wait_for_index_rebuild(conn, bucket_name, index_name, timeout=120)
-        log.info('rebuild complete: %s', stats)
-        assert stats['numIndexedRows'] >= total_vectors * 0.9
+            if refresh_events or lost_events or fail_events:
+                break
 
-        # give a moment for the final event to be recorded
-        time.sleep(2)
+        log.info('lock events after %d vectors: %d refresh, %d lost, %d fail',
+                 total, len(refresh_events), len(lost_events), len(fail_events))
 
-        # query the admin API for lock refresh events (filtered to this bucket)
-        status = get_rebuild_admin_status(since=before_time, bucket=bucket_name)
-        events = status['rebuild_events']
-        refresh_events = [e for e in events if e['type'] == 'lock_refresh']
-        lost_events = [e for e in events if e['type'] == 'lock_lost']
-        fail_events = [e for e in events if e['type'] == 'lock_refresh_fail']
-
-        log.info('lock refresh events: %d refreshes, %d lost, %d failures',
-                 len(refresh_events), len(lost_events), len(fail_events))
-
-        # verify that at least one lock refresh occurred during the rebuild
+        # the behaviour under test: a refresh fired *during* an active rebuild.
         assert len(refresh_events) >= 1, (
-            f'expected at least 1 lock refresh event for {bucket_name}.{index_name}, '
-            f'got {len(refresh_events)}. The rebuild may have been too fast for the '
-            f'refresh interval (TTL/3 = 2s).')
+            f'no lock_refresh observed for {bucket_name}.{index_name} even after '
+            f'growing to {total} vectors. Either no single rebuild outlasted the '
+            f'refresh interval (raise max_total for faster hardware) or the '
+            f'main-loop refresh is not running during builds (regression).')
 
-        # verify no lock was lost or failed to refresh
+        # and the lock must have stayed healthy throughout
         assert len(lost_events) == 0, (
             f'lock was lost during rebuild: {lost_events}')
         assert len(fail_events) == 0, (
@@ -5501,8 +5775,8 @@ def test_lock_timestamp_refresh_during_rebuild():
             assert event['bucket'] == bucket_name
             assert event['index'] == index_name
 
-        log.info('PASS: lock timestamp was refreshed %d time(s) during rebuild',
-                 len(refresh_events))
+        log.info('PASS: lock refreshed %d time(s) during an active rebuild '
+                 '(reached %d vectors)', len(refresh_events), total)
 
     finally:
         _clean_s3_objects_for_vector_bucket(bucket_name)

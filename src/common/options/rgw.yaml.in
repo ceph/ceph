@@ -5080,6 +5080,24 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: rgw_s3vector_max_put_vectors
+  type: uint
+  level: advanced
+  desc: Maximum number of vectors in a single PutVectors request
+  long_desc: A PutVectors request that holds more vectors than this value is
+    rejected. All the vectors of a request are written together, so higher values
+    allow for fewer and larger writes, at the cost of larger requests. Note that
+    the size of the request is also limited by rgw_max_put_param_size.
+  default: 500
+  services:
+  - rgw
+  min: 1
+  max: 10000
+  flags:
+  - runtime
+  see_also:
+  - rgw_max_put_param_size
+  with_legacy: true
 - name: rgw_usage_log_key_transition
   type: bool
   level: advanced
@@ -5174,42 +5192,6 @@ options:
   - runtime
   with_legacy: true
 # s3vector background index rebuild options
-- name: rgw_s3vector_index_unindexed_threshold
-  type: uint
-  level: advanced
-  desc: Number of unindexed rows that triggers a background vector index rebuild
-  long_desc: When the number of unindexed rows in a LanceDB table exceeds this
-    threshold, the background manager will rebuild the vector index. IVF-based
-    index types require a minimum of 256 vectors. Set to 0 to disable automatic
-    rebuilds.
-  default: 256
-  min: 0
-  services:
-  - rgw
-- name: rgw_s3vector_index_stats_interval
-  type: uint
-  level: advanced
-  desc: Minimum interval in seconds between index stats checks for a given table
-  long_desc: Controls how often the background manager calls
-    lancedb_table_index_stats for a particular table. This rate-limits the
-    overhead of reading the LanceDB manifest during bursts of put-vector and
-    delete-vector operations.
-  default: 30
-  min: 1
-  services:
-  - rgw
-- name: rgw_s3vector_index_build_lease_seconds
-  type: uint
-  level: advanced
-  desc: Maximum expected duration of a vector index build in seconds
-  long_desc: If a build has been in progress for longer than this value, the
-    background manager considers it crashed and resets the build state. This
-    acts as a lease for crash recovery. Must be long enough to cover the
-    largest expected index build.
-  default: 600
-  min: 60
-  services:
-  - rgw
 - name: rgw_s3vector_index_lock_ttl_seconds
   type: uint
   level: advanced
@@ -5218,8 +5200,9 @@ options:
     and can be reclaimed by another RGW instance. During active builds, the
     main loop automatically refreshes the lock timestamp every TTL/3 seconds,
     preventing premature reclamation regardless of build duration. A shorter
-    TTL (e.g. 120s) enables faster crash recovery. Lock refresh requires
-    rgw_s3vector_background_workers >= 2.
+    TTL (e.g. 120s) enables faster crash recovery. Lock refresh runs on the
+    manager's dedicated main-loop thread, so it is not starved by in-flight
+    builds.
   default: 120
   min: 6
   services:
@@ -5314,13 +5297,15 @@ options:
 - name: rgw_s3vector_background_workers
   type: int
   level: advanced
-  desc: Number of worker threads for the s3vectors background manager
-  long_desc: Controls how many threads run the background io_context for vector
-    index rebuilds and session management. At least 2 workers are required so
-    that the main loop can refresh lock timestamps while rebuild coroutines
-    block their worker threads with the LanceDB FFI call. With only 1 worker,
-    lock refresh cannot run during builds and the lock TTL must exceed the
-    maximum expected build duration.
+  desc: Number of build-worker threads for the s3vectors background manager
+  long_desc: Controls how many threads run the background io_context that executes
+    the per-table vector index rebuilds (each rebuild blocks its worker thread for
+    the whole synchronous LanceDB FFI build). This pool is separate from the
+    manager's main loop, which scans for rebuilds and refreshes the distributed
+    locks on its own dedicated thread - so lock refresh is never starved by
+    in-flight builds regardless of this value. For full build parallelism, set this
+    to at least rgw_s3vector_max_concurrent_rebuilds; a smaller pool simply
+    serializes some builds. Values below 1 are raised to 1 at startup.
   default: 2
   min: 1
   services:

@@ -59,15 +59,10 @@ namespace rgw::s3vector {
     int max_concurrent_rebuilds = 0;
     int num_workers = 0;
     int tables_tracked = 0;
-    // counters
-    uint64_t total_rebuilds_started = 0;
-    uint64_t total_rebuilds_completed = 0;
-    uint64_t total_rebuilds_failed = 0;
-    int peak_active_rebuilds = 0;
-    uint64_t limit_reached_count = 0;
-    uint64_t lock_refresh_count = 0;
-    uint64_t lock_lost_count = 0;
-    uint64_t lock_refresh_fail_count = 0;
+    // NOTE: aggregate "since boot" counters (rebuilds started/completed/failed,
+    // lock refresh/lost/fail, limit reached, peak active) are no longer reported
+    // here — they are published via Ceph PerfCounters ("rgw_s3vector_background")
+    // and scraped by the prometheus stack.
     // active builds
     std::vector<active_build_info_t> active_builds_list;
   };
