@@ -56,7 +56,7 @@ struct Format {
  *
  * THE UNMARKED CASE IS NOOBAA'S.  A bucket directory with no marker is
  * read as NooBaa would write it and we add nothing to it:  no shadow
- * subtree, no positional layout, no S3 ACL attribute.  Marking is a
+ * subtree, no S3 ACL attribute.  Marking is a
  * declared act -- at creation, or by adopting an existing tree -- and it
  * is what buys the structure our own drivers want.
  *
@@ -133,14 +133,19 @@ inline constexpr uint32_t EXTENSIONS_NONE = 0;
  * rewriting.
  *
  * A bit is declared here as soon as it is named, but it belongs in
- * EXTENSIONS_KNOWN only once this build can actually serve a bucket that
- * carries it.  POSITIONAL is the live example:  named, not implemented,
- * and therefore a bucket carrying it is refused rather than served
- * wrongly. */
+ * EXTENSIONS_KNOWN only once this build can actually serve a bucket
+ * that carries it;  a bucket carrying a bit we cannot serve is
+ * refused rather than served wrongly.  No bit is in that state
+ * today.
+ *
+ * 0x4 was EXT_POSITIONAL, reserved for a "positional IO layout" that
+ * was never specified -- the name appeared in feature lists beside
+ * the shadow subtree and nowhere else, and nothing recorded what it
+ * would mean that FSIO does not already do.  Removed 2026-10-05.  It
+ * was never written to a tree:  the only mask we write is
+ * EXTENSIONS_KNOWN, which never contained it. */
 inline constexpr uint32_t EXT_SHADOW      = 0x1;  /* .shadow, FSIO */
 inline constexpr uint32_t EXT_ACLS        = 0x2;  /* S3 access control lists */
-inline constexpr uint32_t EXT_POSITIONAL  = 0x4;  /* positional IO layout --
-                                                   * NOT IMPLEMENTED */
 /* Object metadata in RGW's representation:  our attribute names and our
  * packing, on NooBaa's layout.
  *
@@ -185,10 +190,11 @@ inline constexpr uint32_t EXTENSIONS_KNOWN =
  *            spelling differs is covered by EXT_RGW_META, so a feature
  *            both formats have needs nothing added when it is mapped.
  *            Object tags landed that way and so will object lock.
- * strong  -- everything this build can serve.  Not everything named:
- *            POSITIONAL is declared and unbuilt, so it is not here, and
- *            a bucket must never be marked with an extension the writer
- *            cannot produce.
+ * strong  -- everything this build can serve, which is everything
+ *            named.  Should a bit ever be declared ahead of its
+ *            implementation it stays out of here, because a bucket
+ *            must never be marked with an extension the writer cannot
+ *            produce.
  *
  * A tree is handable back to NooBaa only at `base`. */
 inline constexpr uint32_t EXTENSIONS_BASE   = EXTENSIONS_NONE;
