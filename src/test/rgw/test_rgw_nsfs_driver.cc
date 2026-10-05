@@ -4327,12 +4327,12 @@ public:
   /* A tree we did not write.  The fixture creates its bucket through
    * the SAL, which is the only way to get a Bucket, and that writes our
    * attribute;  a bucket NooBaa made carries no such thing. */
-  void forget_our_state() {
+  void remove_our_bucket_info() {
     ASSERT_EQ(::removexattr((bp / "root" / testname).c_str(),
 			    "user.nsfs.bucket_info"), 0);
   }
 
-  void their_record(const char* versioning,
+  void write_their_record(const char* versioning,
 		    const std::string& extra = std::string{},
 		    const char* created = "2026-01-02T03:04:05.000Z") {
     std::string doc = std::string(
@@ -4345,6 +4345,34 @@ public:
       extra + "}";
     write_file(conf_root() / "buckets" / (testname + ".json"), doc);
   }
+
+  /* Read the record write_their_record() wrote, through the strategy
+   * that reads it.  No bucket is involved and no fallback.
+   *
+   * NooBaaBucketStateStrategy::load() takes a dir_fd and ignores it --
+   * it finds <config_root>/buckets/<name>.json from the name alone --
+   * so -1 is passed here.  This is the call the adopt step makes.
+   *
+   * load_bucket() reaches the same strategy through
+   * bucket_state_fallback(), but that read happens on the request
+   * path and the interchange design moves it to adopt time.  A test
+   * which reached the translation only that way would have to be
+   * rewritten when the fallback goes.  Tests of the fallback itself --
+   * that it is consulted for a base bucket and not for a marked one --
+   * are about the wiring and stay on load_bucket(). */
+  int read_their_record(RGWBucketInfo& info, Attrs& attrs) {
+    /* Cleared first, so a test which reads twice does not see the
+     * first read's keys in the second result.  load() adds what the
+     * record carries and removes nothing. */
+    info = RGWBucketInfo{};
+    attrs.clear();
+
+    auto* theirs = driver->get_noobaa_bucket_state_strategy();
+    if (! theirs) {
+      return -ENOENT;
+    }
+    return theirs->load(env->dpp, -1, testname, attrs, info);
+  }
 };
 
 /* Their versioning reaches RGW, which is what a base bucket loses today.
@@ -4354,18 +4382,19 @@ public:
  * data loss and not a missing feature. */
 TEST_F(NSFSNooBaaStateTest, VersioningComesFromTheirRecord)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
-  /* the control:  with no record it is unversioned, so the assertion
-   * below can fail */
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  ASSERT_FALSE(bucket->get_info().versioned())
-      << "unversioned without a record is the premise of this test";
+  /* Nothing has written a record yet, so the read finds none and says
+   * so.  That is a different outcome from a record which says
+   * unversioned, and the assertion below depends on the difference. */
+  ASSERT_EQ(read_their_record(info, attrs), -ENOENT)
+      << "a record was read where this test wrote none";
 
-  their_record("ENABLED");
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  EXPECT_TRUE(bucket->get_info().versioned());
-  EXPECT_TRUE(bucket->get_info().versioning_enabled());
+  write_their_record("ENABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  EXPECT_TRUE(info.versioned());
+  EXPECT_TRUE(info.versioning_enabled());
 }
 
 /* Converting a base bucket must not drop the state their record was
@@ -4383,8 +4412,8 @@ TEST_F(NSFSNooBaaStateTest, VersioningComesFromTheirRecord)
  * it is able to fail. */
 TEST_F(NSFSNooBaaStateTest, ConversionKeepsTheVersioningTheirRecordSupplied)
 {
-  forget_our_state();
-  their_record("ENABLED");
+  remove_our_bucket_info();
+  write_their_record("ENABLED");
 
   ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
   ASSERT_TRUE(bucket->get_info().versioned())
@@ -4416,12 +4445,14 @@ TEST_F(NSFSNooBaaStateTest, ConversionKeepsTheVersioningTheirRecordSupplied)
  * still holds versions. */
 TEST_F(NSFSNooBaaStateTest, SuspendedIsVersionedAndSuspended)
 {
-  forget_our_state();
-  their_record("SUSPENDED");
+  RGWBucketInfo info;
+  Attrs attrs;
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  EXPECT_TRUE(bucket->get_info().versioned());
-  EXPECT_FALSE(bucket->get_info().versioning_enabled());
+  write_their_record("SUSPENDED");
+
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  EXPECT_TRUE(info.versioned());
+  EXPECT_FALSE(info.versioning_enabled());
 }
 
 /* Ours wins where it exists.
@@ -4431,7 +4462,7 @@ TEST_F(NSFSNooBaaStateTest, SuspendedIsVersionedAndSuspended)
  * wherever we have written any. */
 TEST_F(NSFSNooBaaStateTest, OurStateWinsOverTheirs)
 {
-  their_record("ENABLED");
+  write_their_record("ENABLED");
 
   /* our attribute is still there, from create(), and says nothing
    * about versioning */
@@ -4447,22 +4478,22 @@ TEST_F(NSFSNooBaaStateTest, OurStateWinsOverTheirs)
  * delete. */
 TEST_F(NSFSNooBaaStateTest, ObjectLockComesFromTheirRecord)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
-  /* the control:  their record without a lock leaves the bucket
-   * unlocked, so the assertion below can fail */
-  their_record("ENABLED");
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  ASSERT_FALSE(bucket->get_info().obj_lock_enabled());
+  /* A record without a lock reads as unlocked, so the assertion after
+   * the next one is able to fail. */
+  write_their_record("ENABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_FALSE(info.obj_lock_enabled());
 
-  their_record("ENABLED",
+  write_their_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"days":10,)"
 	       R"("mode":"GOVERNANCE"}}})");
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_EQ(read_their_record(info, attrs), 0);
 
-  const auto& info = bucket->get_info();
   EXPECT_TRUE(info.obj_lock_enabled());
   ASSERT_TRUE(info.obj_lock.has_rule());
   EXPECT_EQ(info.obj_lock.get_mode(), "GOVERNANCE");
@@ -4478,28 +4509,31 @@ TEST_F(NSFSNooBaaStateTest, ObjectLockComesFromTheirRecord)
  * mode. */
 TEST_F(NSFSNooBaaStateTest, AnUnknownRetentionModeFailsClosed)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"days":10,)"
 	       R"("mode":"ADVISORY"}}})");
 
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 }
 
 /* Years rather than days, and the other mode. */
 TEST_F(NSFSNooBaaStateTest, ObjectLockInYearsAndCompliance)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"years":7,)"
 	       R"("mode":"COMPLIANCE"}}})");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  const auto& info = bucket->get_info();
+  ASSERT_EQ(read_their_record(info, attrs), 0);
   EXPECT_TRUE(info.obj_lock_enabled());
   ASSERT_TRUE(info.obj_lock.has_rule());
   EXPECT_EQ(info.obj_lock.get_mode(), "COMPLIANCE");
@@ -4513,14 +4547,16 @@ TEST_F(NSFSNooBaaStateTest, ObjectLockInYearsAndCompliance)
  * rule:  the bucket is locked and objects carry their own retention. */
 TEST_F(NSFSNooBaaStateTest, ObjectLockWithoutARule)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled"})");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  EXPECT_TRUE(bucket->get_info().obj_lock_enabled());
-  EXPECT_FALSE(bucket->get_info().obj_lock.has_rule());
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  EXPECT_TRUE(info.obj_lock_enabled());
+  EXPECT_FALSE(info.obj_lock.has_rule());
 }
 
 /* "Disabled" is their internal state for a bucket that is not locked,
@@ -4528,13 +4564,15 @@ TEST_F(NSFSNooBaaStateTest, ObjectLockWithoutARule)
  * on the wire. */
 TEST_F(NSFSNooBaaStateTest, TheirDisabledLockIsNoLock)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Disabled"})");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  EXPECT_FALSE(bucket->get_info().obj_lock_enabled());
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  EXPECT_FALSE(info.obj_lock_enabled());
 }
 
 /* A retention we cannot honour fails the bucket closed rather than
@@ -4542,21 +4580,22 @@ TEST_F(NSFSNooBaaStateTest, TheirDisabledLockIsNoLock)
  * one of days or years. */
 TEST_F(NSFSNooBaaStateTest, AnImpossibleRetentionFailsClosed)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
-  their_record("ENABLED",
+  write_their_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"days":10,"years":7,)"
 	       R"("mode":"GOVERNANCE"}}})");
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG)
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG)
       << "a retention naming both days and years was accepted";
 
-  their_record("ENABLED",
+  write_their_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"mode":"GOVERNANCE"}}})");
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG)
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG)
       << "a retention naming neither days nor years was accepted";
 }
 
@@ -4564,24 +4603,24 @@ TEST_F(NSFSNooBaaStateTest, AnImpossibleRetentionFailsClosed)
  * own parser the way one set through S3 would be. */
 TEST_F(NSFSNooBaaStateTest, BucketPolicyComesFromTheirRecord)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
   /* the control:  no policy in their record, none in the attributes */
-  their_record("ENABLED");
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_IAM_POLICY),
-	    bucket->get_attrs().end());
+  write_their_record("ENABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(attrs.find(RGW_ATTR_IAM_POLICY), attrs.end());
 
-  their_record("ENABLED",
+  write_their_record("ENABLED",
 	       R"(,"s3_policy":{"Version":"2012-10-17","Statement":[)"
 	       R"({"Sid":"one","Effect":"Allow","Principal":{"AWS":"*"},)"
 	       R"("Action":["s3:GetObject"],)"
 	       R"("Resource":["arn:aws:s3:::)" + std::string(testname) +
 	       R"(/*"]}]})");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  auto i = bucket->get_attrs().find(RGW_ATTR_IAM_POLICY);
-  ASSERT_NE(i, bucket->get_attrs().end())
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto i = attrs.find(RGW_ATTR_IAM_POLICY);
+  ASSERT_NE(i, attrs.end())
       << "their policy did not reach the attribute map";
 
   /* stored as a document RGW's own parser accepts, which is the thing
@@ -4589,7 +4628,7 @@ TEST_F(NSFSNooBaaStateTest, BucketPolicyComesFromTheirRecord)
   const std::string stored = i->second.to_str();
   EXPECT_NE(stored.find("s3:GetObject"), std::string::npos);
   CephContext* cct = env->cct.get();
-  EXPECT_NO_THROW(rgw::IAM::Policy(cct, &bucket->get_info().bucket.tenant,
+  EXPECT_NO_THROW(rgw::IAM::Policy(cct, &info.bucket.tenant,
 				   stored, false));
 }
 
@@ -4598,12 +4637,14 @@ TEST_F(NSFSNooBaaStateTest, BucketPolicyComesFromTheirRecord)
  * it. */
 TEST_F(NSFSNooBaaStateTest, AnUnparsablePolicyFailsClosed)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"s3_policy":{"Version":"2012-10-17",)"
 	       R"("Statement":[{"Effect":"Perhaps"}]})");
 
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 }
 
 /* Their public access block reaches the attribute map.
@@ -4611,22 +4652,22 @@ TEST_F(NSFSNooBaaStateTest, AnUnparsablePolicyFailsClosed)
  * Four booleans, the same four, snake_case against PascalCase. */
 TEST_F(NSFSNooBaaStateTest, PublicAccessBlockComesFromTheirRecord)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
   /* the control:  no block in their record, none in the attributes */
-  their_record("ENABLED");
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_PUBLIC_ACCESS),
-	    bucket->get_attrs().end());
+  write_their_record("ENABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(attrs.find(RGW_ATTR_PUBLIC_ACCESS), attrs.end());
 
-  their_record("ENABLED",
+  write_their_record("ENABLED",
 	       R"(,"public_access_block":{"block_public_acls":true,)"
 	       R"("ignore_public_acls":false,"block_public_policy":true,)"
 	       R"("restrict_public_buckets":false})");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  auto i = bucket->get_attrs().find(RGW_ATTR_PUBLIC_ACCESS);
-  ASSERT_NE(i, bucket->get_attrs().end());
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto i = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
+  ASSERT_NE(i, attrs.end());
 
   PublicAccessBlockConfiguration conf;
   auto bi = i->second.cbegin();
@@ -4641,13 +4682,15 @@ TEST_F(NSFSNooBaaStateTest, PublicAccessBlockComesFromTheirRecord)
  * not send. */
 TEST_F(NSFSNooBaaStateTest, AnOmittedPublicAccessFieldIsFalse)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"public_access_block":{"restrict_public_buckets":true})");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  auto i = bucket->get_attrs().find(RGW_ATTR_PUBLIC_ACCESS);
-  ASSERT_NE(i, bucket->get_attrs().end());
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto i = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
+  ASSERT_NE(i, attrs.end());
 
   PublicAccessBlockConfiguration conf;
   auto bi = i->second.cbegin();
@@ -4664,27 +4707,31 @@ TEST_F(NSFSNooBaaStateTest, AnOmittedPublicAccessFieldIsFalse)
  * that exception reaches RGW from the request path. */
 TEST_F(NSFSNooBaaStateTest, AMisshapenFieldFailsClosed)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"object_lock_configuration":{)"
 	       R"("object_lock_enabled":"Enabled",)"
 	       R"("rule":{"default_retention":{"days":"ten",)"
 	       R"("mode":"GOVERNANCE"}}})");
 
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 }
 
 /* Their website configuration, index-document branch. */
 TEST_F(NSFSNooBaaStateTest, WebsiteComesFromTheirRecord)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
-  /* the control:  no website in their record, none on the bucket */
-  their_record("ENABLED");
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  ASSERT_FALSE(bucket->get_info().has_website);
+  /* A record with no website configures none, so the assertion after
+   * the next one is able to fail. */
+  write_their_record("ENABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_FALSE(info.has_website);
 
-  their_record("ENABLED",
+  write_their_record("ENABLED",
 	       R"(,"website":{"website_configuration":{)"
 	       R"("index_document":{"suffix":"index.html"},)"
 	       R"("error_document":{"key":"oops.html"},)"
@@ -4695,9 +4742,9 @@ TEST_F(NSFSNooBaaStateTest, WebsiteComesFromTheirRecord)
 	       R"("replace_key_prefix_with":"documents/",)"
 	       R"("http_redirect_code":"301"}}]}})");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  const auto& w = bucket->get_info().website_conf;
-  ASSERT_TRUE(bucket->get_info().has_website);
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  const auto& w = info.website_conf;
+  ASSERT_TRUE(info.has_website);
   EXPECT_FALSE(w.is_redirect_all);
   EXPECT_TRUE(w.is_set_index_doc);
   EXPECT_EQ(w.index_doc_suffix, "index.html");
@@ -4716,15 +4763,17 @@ TEST_F(NSFSNooBaaStateTest, WebsiteComesFromTheirRecord)
 /* The other branch of their anyOf, which is S3's own exclusion. */
 TEST_F(NSFSNooBaaStateTest, WebsiteRedirectAllBranch)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"website":{"website_configuration":{)"
 	       R"("redirect_all_requests_to":{"host_name":"elsewhere.net",)"
 	       R"("protocol":"HTTPS"}}})");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  const auto& w = bucket->get_info().website_conf;
-  ASSERT_TRUE(bucket->get_info().has_website);
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  const auto& w = info.website_conf;
+  ASSERT_TRUE(info.has_website);
   EXPECT_TRUE(w.is_redirect_all);
   EXPECT_EQ(w.redirect_all.hostname, "elsewhere.net");
   EXPECT_EQ(w.redirect_all.protocol, "HTTPS");
@@ -4739,34 +4788,36 @@ TEST_F(NSFSNooBaaStateTest, WebsiteRedirectAllBranch)
  * any. */
 TEST_F(NSFSNooBaaStateTest, ANonNumericRedirectCodeFailsClosed)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"website":{"website_configuration":{)"
 	       R"("index_document":{"suffix":"index.html"},)"
 	       R"("routing_rules":[{"redirect":{)"
 	       R"("http_redirect_code":"moved"}}]}})");
 
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 }
 
 /* Their default encryption reaches the attribute map. */
 TEST_F(NSFSNooBaaStateTest, EncryptionComesFromTheirRecord)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
   /* the control:  no encryption in their record, none in the attrs */
-  their_record("ENABLED");
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY),
-	    bucket->get_attrs().end());
+  write_their_record("ENABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY), attrs.end());
 
-  their_record("ENABLED",
+  write_their_record("ENABLED",
 	       R"(,"encryption":{"algorithm":"aws:kms",)"
 	       R"("kms_key_id":"key-1234","bucket_key_enabled":true})");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  auto i = bucket->get_attrs().find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
-  ASSERT_NE(i, bucket->get_attrs().end());
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto i = attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+  ASSERT_NE(i, attrs.end());
 
   RGWBucketEncryptionConfig conf;
   auto bi = i->second.cbegin();
@@ -4781,12 +4832,13 @@ TEST_F(NSFSNooBaaStateTest, EncryptionComesFromTheirRecord)
  * algorithm configures nothing.  That is not a failure. */
 TEST_F(NSFSNooBaaStateTest, AnEmptyEncryptionRecordConfiguresNothing)
 {
-  forget_our_state();
-  their_record("ENABLED", R"(,"encryption":{})");
+  RGWBucketInfo info;
+  Attrs attrs;
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  EXPECT_EQ(bucket->get_attrs().find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY),
-	    bucket->get_attrs().end());
+  write_their_record("ENABLED", R"(,"encryption":{})");
+
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  EXPECT_EQ(attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY), attrs.end());
 }
 
 /* An algorithm that is neither of theirs is kept, not refused.
@@ -4798,14 +4850,16 @@ TEST_F(NSFSNooBaaStateTest, AnEmptyEncryptionRecordConfiguresNothing)
  * that are sitting there perfectly readable. */
 TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsKeptNotRefused)
 {
-  forget_our_state();
-  their_record("ENABLED", R"(,"encryption":{"algorithm":"rot13"})");
+  RGWBucketInfo info;
+  Attrs attrs;
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0)
+  write_their_record("ENABLED", R"(,"encryption":{"algorithm":"rot13"})");
+
+  ASSERT_EQ(read_their_record(info, attrs), 0)
       << "the bucket was refused over an algorithm that only affects writes";
 
-  auto i = bucket->get_attrs().find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
-  ASSERT_NE(i, bucket->get_attrs().end());
+  auto i = attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+  ASSERT_NE(i, attrs.end());
   RGWBucketEncryptionConfig conf;
   auto bi = i->second.cbegin();
   ASSERT_NO_THROW(decode(conf, bi));
@@ -4815,21 +4869,21 @@ TEST_F(NSFSNooBaaStateTest, AnUnknownEncryptionAlgorithmIsKeptNotRefused)
 /* Their bucket tag set reaches the attribute map. */
 TEST_F(NSFSNooBaaStateTest, BucketTagsComeFromTheirRecord)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
   /* the control:  no tags in their record, none in the attributes */
-  their_record("ENABLED");
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_TAGS),
-	    bucket->get_attrs().end());
+  write_their_record("ENABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(attrs.find(RGW_ATTR_TAGS), attrs.end());
 
-  their_record("ENABLED",
+  write_their_record("ENABLED",
 	       R"(,"tag":[{"key":"team","value":"storage"},)"
 	       R"({"key":"env","value":"prod"}])");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  auto i = bucket->get_attrs().find(RGW_ATTR_TAGS);
-  ASSERT_NE(i, bucket->get_attrs().end());
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto i = attrs.find(RGW_ATTR_TAGS);
+  ASSERT_NE(i, attrs.end());
 
   RGWObjTags tags;
   auto bi = i->second.cbegin();
@@ -4849,7 +4903,8 @@ TEST_F(NSFSNooBaaStateTest, BucketTagsComeFromTheirRecord)
  * would deny everything over metadata that gates nothing. */
 TEST_F(NSFSNooBaaStateTest, ATagSetOverTheApiLimitIsKept)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
   std::string arr{",\"tag\":["};
   for (int n = 0; n < 60; ++n) {
@@ -4859,13 +4914,13 @@ TEST_F(NSFSNooBaaStateTest, ATagSetOverTheApiLimitIsKept)
     arr += "{\"key\":\"k" + std::to_string(n) + "\",\"value\":\"v\"}";
   }
   arr += "]";
-  their_record("ENABLED", arr);
+  write_their_record("ENABLED", arr);
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0)
+  ASSERT_EQ(read_their_record(info, attrs), 0)
       << "the bucket was refused over a tag count";
 
-  auto i = bucket->get_attrs().find(RGW_ATTR_TAGS);
-  ASSERT_NE(i, bucket->get_attrs().end());
+  auto i = attrs.find(RGW_ATTR_TAGS);
+  ASSERT_NE(i, attrs.end());
   RGWObjTags tags;
   auto bi = i->second.cbegin();
   ASSERT_NO_THROW(decode(tags, bi));
@@ -4876,33 +4931,35 @@ TEST_F(NSFSNooBaaStateTest, ATagSetOverTheApiLimitIsKept)
  * the record is unreadable rather than partly usable. */
 TEST_F(NSFSNooBaaStateTest, AKeylessTagFailsClosed)
 {
-  forget_our_state();
-  their_record("ENABLED", R"(,"tag":[{"key":"","value":"orphan"}])");
+  RGWBucketInfo info;
+  Attrs attrs;
 
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  write_their_record("ENABLED", R"(,"tag":[{"key":"","value":"orphan"}])");
+
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 }
 
 /* Their lifecycle rules reach the attribute map, through the same
  * parser PutBucketLifecycle uses. */
 TEST_F(NSFSNooBaaStateTest, LifecycleComesFromTheirRecord)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
   /* the control:  no rules in their record, no attribute */
-  their_record("ENABLED");
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_LC),
-	    bucket->get_attrs().end());
+  write_their_record("ENABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(attrs.find(RGW_ATTR_LC), attrs.end());
 
-  their_record("ENABLED",
+  write_their_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"expire-logs","status":"Enabled",)"
 	       R"("filter":{"prefix":"logs/"},)"
 	       R"("expiration":{"days":30}}])");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  auto i = bucket->get_attrs().find(RGW_ATTR_LC);
-  ASSERT_NE(i, bucket->get_attrs().end());
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto i = attrs.find(RGW_ATTR_LC);
+  ASSERT_NE(i, attrs.end());
 
   RGWLifecycleConfiguration lc(env->cct.get());
   auto bi = i->second.cbegin();
@@ -4923,17 +4980,19 @@ TEST_F(NSFSNooBaaStateTest, LifecycleComesFromTheirRecord)
  * makes a prefix-and-tag filter read back as one. */
 TEST_F(NSFSNooBaaStateTest, LifecycleFilterWithPrefixAndTag)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"cold","status":"Enabled",)"
 	       R"("filter":{"and":true,"prefix":"data/",)"
 	       R"("tags":[{"key":"class","value":"cold"}]},)"
 	       R"("expiration":{"days":90}}])");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  auto i = bucket->get_attrs().find(RGW_ATTR_LC);
-  ASSERT_NE(i, bucket->get_attrs().end());
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto i = attrs.find(RGW_ATTR_LC);
+  ASSERT_NE(i, attrs.end());
 
   RGWLifecycleConfiguration lc(env->cct.get());
   auto bi = i->second.cbegin();
@@ -4956,17 +5015,19 @@ TEST_F(NSFSNooBaaStateTest, LifecycleFilterWithPrefixAndTag)
  * 1767225600000 is 2026-01-01T00:00:00Z. */
 TEST_F(NSFSNooBaaStateTest, ALifecycleDateKeepsItsDay)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"newyear","status":"Enabled","filter":{},)"
 	       R"("expiration":{"date":1767225600000}}])");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0)
+  ASSERT_EQ(read_their_record(info, attrs), 0)
       << "a midnight date was refused";
 
-  auto i = bucket->get_attrs().find(RGW_ATTR_LC);
-  ASSERT_NE(i, bucket->get_attrs().end());
+  auto i = attrs.find(RGW_ATTR_LC);
+  ASSERT_NE(i, attrs.end());
   RGWLifecycleConfiguration lc(env->cct.get());
   auto bi = i->second.cbegin();
   ASSERT_NO_THROW(decode(lc, bi));
@@ -4985,39 +5046,43 @@ TEST_F(NSFSNooBaaStateTest, ALifecycleDateKeepsItsDay)
  * deletes objects on the wrong day. */
 TEST_F(NSFSNooBaaStateTest, ALifecycleRuleRgwWouldRefuseFailsClosed)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"both","status":"Enabled","filter":{},)"
 	       R"("expiration":{"days":30,"date":1767225600000}}])");
 
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 }
 
 /* A rule with no action at all is one RGW refuses too. */
 TEST_F(NSFSNooBaaStateTest, ALifecycleRuleWithNoActionFailsClosed)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"lifecycle_configuration_rules":[{)"
 	       R"("id":"empty","status":"Enabled","filter":{}}])");
 
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 }
 
 /* Their CORS rules reach the attribute map, through the same parser
  * PutBucketCors uses. */
 TEST_F(NSFSNooBaaStateTest, CorsComesFromTheirRecord)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
 
   /* the control:  no rules in their record, no attribute */
-  their_record("ENABLED");
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  ASSERT_EQ(bucket->get_attrs().find(RGW_ATTR_CORS),
-	    bucket->get_attrs().end());
+  write_their_record("ENABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  ASSERT_EQ(attrs.find(RGW_ATTR_CORS), attrs.end());
 
-  their_record("ENABLED",
+  write_their_record("ENABLED",
 	       R"(,"cors_configuration_rules":[{"id":"web",)"
 	       R"("allowed_methods":["GET","PUT"],)"
 	       R"("allowed_origins":["https://example.com"],)"
@@ -5025,9 +5090,9 @@ TEST_F(NSFSNooBaaStateTest, CorsComesFromTheirRecord)
 	       R"("expose_headers":["ETag"],)"
 	       R"("max_age_seconds":3000}])");
 
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  auto i = bucket->get_attrs().find(RGW_ATTR_CORS);
-  ASSERT_NE(i, bucket->get_attrs().end());
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto i = attrs.find(RGW_ATTR_CORS);
+  ASSERT_NE(i, attrs.end());
 
   RGWCORSConfiguration cors;
   auto bi = i->second.cbegin();
@@ -5048,13 +5113,15 @@ TEST_F(NSFSNooBaaStateTest, CorsComesFromTheirRecord)
  * reach. */
 TEST_F(NSFSNooBaaStateTest, AnUnknownCorsMethodFailsClosed)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"cors_configuration_rules":[{)"
 	       R"("allowed_methods":["TRACE"],)"
 	       R"("allowed_origins":["https://example.com"]}])");
 
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 }
 
 /* A rule with no origin is one their own schema requires and RGW
@@ -5062,26 +5129,35 @@ TEST_F(NSFSNooBaaStateTest, AnUnknownCorsMethodFailsClosed)
  * that matches nothing. */
 TEST_F(NSFSNooBaaStateTest, ACorsRuleWithNoOriginFailsClosed)
 {
-  forget_our_state();
-  their_record("ENABLED",
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("ENABLED",
 	       R"(,"cors_configuration_rules":[{)"
 	       R"("allowed_methods":["GET"],"allowed_origins":[]}])");
 
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 }
 
 /* A record we cannot make sense of fails the bucket closed, the same
  * as unreadable state of our own. */
 TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
 {
-  forget_our_state();
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  /* A well-formed record is read first, so the -EBADMSG below is this
+   * record being rejected rather than the reader refusing everything
+   * it is given. */
+  write_their_record("ENABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
 
   write_file(conf_root() / "buckets" / (testname + ".json"),
 	     "this is not JSON");
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG);
 
-  their_record("PERHAPS");
-  EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG)
+  write_their_record("PERHAPS");
+  EXPECT_EQ(read_their_record(info, attrs), -EBADMSG)
       << "a versioning value that is none of theirs was accepted";
 }
 
@@ -5102,8 +5178,8 @@ TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
  * stamped. */
 TEST_F(NSFSNooBaaStateTest, EveryListingRowAgreesOnASideloadedOwner)
 {
-  forget_our_state();
-  their_record("ENABLED");
+  remove_our_bucket_info();
+  write_their_record("ENABLED");
   ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
   ASSERT_TRUE(bucket->get_info().versioned())
       << "the version rows are only walked on a versioned bucket";
