@@ -5620,7 +5620,41 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
 
   /* Leaving base:  the upgrade.
    *
-   * The marker goes down before the mask, and the order is the crash
+   * First, persist the bucket state this bucket is being served with.
+   *
+   * A base bucket's state comes from NooBaa's record through
+   * bucket_state_fallback(), and that fallback is consulted only for
+   * EXTENSIONS_NONE -- so the moment the mask goes down their record
+   * stops being read.  Without this write, load_bucket() then finds
+   * nothing of ours, falls back to the seeded defaults, and a
+   * versioned bucket reads as unversioned:  the next PUT overwrites in
+   * place instead of demoting into .versions/, and object lock, policy
+   * and the public access block all revert to permissive.
+   *
+   * Before the markers, not after, because the failure is then
+   * harmless:  the bucket stays base and keeps reading their record.
+   * Writing after the mask would leave a marked bucket with no state
+   * if it failed, and re-issuing set_profile() would not retry it --
+   * the re-issue takes the target == current path, not this one.
+   *
+   * The spelling works out either way.  bucket_info is a key of ours
+   * with no counterpart, so NooBaaXattrStrategy::disk_name() puts it
+   * under user.nsfs. as well;  the attribute set written alongside it
+   * lands under base spellings and convert_attrs() below rewrites
+   * those, which NSFSUpgradeTest.ConvertsTheBucketsOwnAttributes
+   * covers. */
+  if (current == nsfs::EXTENSIONS_BASE) {
+    ret = write_attrs(dpp, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: refusing to convert bucket " << get_name()
+	<< ":  its state could not be written, and converting would lose "
+	<< "what NooBaa's record was supplying: " << cpp_strerror(-ret)
+	<< dendl;
+      return ret;
+    }
+  }
+
+  /* The marker goes down before the mask, and the order is the crash
    * order.  Marked with no marker is a bucket in our format full of
    * objects in theirs, with no reader that can see them;  the marker
    * with no mask is a base bucket carrying an attribute base does not

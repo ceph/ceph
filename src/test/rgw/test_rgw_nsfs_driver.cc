@@ -4368,6 +4368,50 @@ TEST_F(NSFSNooBaaStateTest, VersioningComesFromTheirRecord)
   EXPECT_TRUE(bucket->get_info().versioning_enabled());
 }
 
+/* Converting a base bucket must not drop the state their record was
+ * supplying.
+ *
+ * bucket_state_fallback() returns null the moment the bucket carries
+ * an extension bit, so after the conversion their record is no longer
+ * read.  set_profile() therefore has to leave our own bucket_info
+ * behind -- or the bucket loads from seeded defaults and a versioned
+ * bucket comes back unversioned, after which the next PUT overwrites
+ * in place instead of demoting into .versions/.
+ *
+ * The control is the assertion before the conversion:  the bucket is
+ * versioned there, and only from their record, so the assertion after
+ * it is able to fail. */
+TEST_F(NSFSNooBaaStateTest, ConversionKeepsTheVersioningTheirRecordSupplied)
+{
+  forget_our_state();
+  their_record("ENABLED");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_TRUE(bucket->get_info().versioned())
+      << "not versioned before the conversion;  the premise is gone";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  ASSERT_STREQ(b->profile_name(), "shared");
+
+  /* A fresh handle, which is what a request gets.  Re-loading the
+   * handle used above would prove nothing:  load_bucket() keeps the
+   * info it already holds when nothing on disk answers
+   * (`info = bak_info`), so the versioning read from their record the
+   * first time would survive in memory whatever the conversion did. */
+  RGWBucketInfo fresh_info;
+  fresh_info.bucket.name = testname;
+  auto fresh = driver->get_bucket(fresh_info);
+  ASSERT_NE(fresh.get(), nullptr);
+  ASSERT_EQ(fresh->load_bucket(env->dpp, null_yield), 0);
+
+  EXPECT_TRUE(fresh->get_info().versioned())
+      << "the conversion dropped the versioning their record supplied;  "
+	 "the next PUT overwrites in place instead of demoting";
+  EXPECT_TRUE(fresh->get_info().versioning_enabled())
+      << "versioned but not enabled after the conversion";
+}
+
 /* Suspended is versioned and suspended, not unversioned:  the bucket
  * still holds versions. */
 TEST_F(NSFSNooBaaStateTest, SuspendedIsVersionedAndSuspended)
