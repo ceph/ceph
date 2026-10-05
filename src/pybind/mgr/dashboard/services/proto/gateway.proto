@@ -146,6 +146,9 @@ service Gateway {
 	// Gets connection's IO statistics
 	rpc get_connection_io_statistics(get_connection_io_statistics_req) returns (connection_io_statistics) {}
 
+	// Gets connection's extended IO statistics
+	rpc get_connection_extended_io_statistics(get_connection_extended_io_statistics_req) returns (connection_extended_io_statistics) {}
+
 	// Creates a listener for a subsystem at a given IP/Port
 	rpc create_listener(create_listener_req) returns(req_status) {}
 
@@ -418,6 +421,13 @@ message get_connection_io_statistics_req {
 	optional bool reset = 3;
 }
 
+message get_connection_extended_io_statistics_req {
+	string subsystem_nqn = 1;
+	string host_nqn = 2;
+	optional bool reset = 3;
+	optional bool verbose = 4;
+}
+
 message remove_host_req {
 	string subsystem_nqn = 1;
 	string host_nqn = 2;
@@ -428,6 +438,7 @@ message remove_host_req {
 message set_keep_host_connected_req {
 	string subsystem_nqn = 1;
 	string host_nqn = 2;
+	optional bool keep_connected = 3;
 }
 
 message list_hosts_req {
@@ -760,6 +771,20 @@ message connection_io_statistics {
 	repeated bucket_info buckets = 6;
 }
 
+message statistics_entry {
+	optional string subsystem_nqn = 1;
+	optional string host_nqn = 2;
+	uint64 total_num_ios = 3;
+	repeated bucket_info buckets = 4;
+}
+
+message connection_extended_io_statistics {
+	int32 status = 1;
+	string error_message = 2;
+	optional string category = 3;
+	repeated statistics_entry statistics_entries = 4;
+}
+
 message hosts_info {
 	int32 status = 1;
 	string error_message = 2;
@@ -794,6 +819,8 @@ message connections_info {
 }
 
 message namespace_cli {
+	reserved 25;
+	reserved "encryption_algorithm";
 	uint32 nsid = 1;
 	string bdev_name = 2;
 	string rbd_image_name = 3;
@@ -818,7 +845,6 @@ message namespace_cli {
 	optional string rbd_data_pool_name = 22;
 	optional string location = 23;
 	optional string rados_namespace_name = 24;
-	optional EncryptionAlgorithm encryption_algorithm = 25;
 	repeated encryption_entry encryption_entries = 26;
 	optional bool degraded = 27;
 	optional bool pinned = 28;
