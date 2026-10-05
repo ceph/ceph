@@ -3891,6 +3891,14 @@ options:
     to be an issue mostly for large numbers of RGW instances under heavy use. If you
     would like to turn off cache expiry, set this value to zero.
   default: 900
+  # The value is widened to a ceph::timespan (a 64-bit nanosecond count) at use,
+  # so seconds are multiplied by 1e9. Cap it below the point where that product
+  # overflows 2^64 (floor((2^64-1)/1e9) = 18446744073 s); an out-of-range value
+  # is then rejected instead of silently wrapping to a near-zero or never-expiring
+  # interval. 17_G (18253611008 s, ~578 yr) is the largest 2^30-second multiple
+  # that stays safe (18_G would overflow) and is far beyond any real expiry.
+  min: 0
+  max: 17_G
   tags:
   - performance
   services:
