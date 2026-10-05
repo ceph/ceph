@@ -1060,6 +1060,8 @@ void PeeringState::clear_primary_state()
   peer_missing.clear();
   peer_last_complete_ondisk.clear();
   peer_activated.clear();
+  // the next activation shares our full info (history included) anyway
+  rebuild_stats_close_unshared = false;
   min_last_complete_ondisk = eversion_t();
   pg_trim_to = eversion_t();
   might_have_unfound.clear();
@@ -3277,6 +3279,7 @@ void PeeringState::share_pg_info()
 
   info.history.refresh_prior_readable_until_ub(pl->get_mnow(),
 					       prior_readable_until_ub);
+  rebuild_stats_close_unshared = false;
 
   // share new pg_info_t with replicas
   ceph_assert(!acting_recovery_backfill.empty());
@@ -3772,8 +3775,16 @@ void PeeringState::try_mark_clean()
 
   state_clear(PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
 
-  share_pg_info();
+  // publish_stats_to_osd() must run before share_pg_info(): it's what
+  // actually closes/records a just-finished vulnerability-window or
+  // active-rebuild episode. share_pg_info() sends info.history to every
+  // peer wholesale. Otherwise, replicas would receive the pre-close view
+  // and if this OSD then stops being primary before anything else re-shares
+  // info (a scrub, an interval change), a promoted peer inherits that stale,
+  // still-open state and records a second, inflated duration for the same
+  // already-closed episode, spanning all the way back to the original onset.
   pl->publish_stats_to_osd();
+  share_pg_info();
   clear_recovery_state();
 }
 
@@ -4611,7 +4622,12 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
         info.history.vuln_window_reported = info.history.last_clean;
          // Mark dirty so a standalone write can be forced if needed, rather
          // than relying on an unrelated future transaction to pick this up.
+         // Also flag that replicas don't know about this close yet: not every
+         // caller of publish_stats_to_osd() is try_mark_clean() (which always
+         // shares right after), so Active::react(AdvMap) retries
+         // share_pg_info() on our behalf until one actually goes out.
         dirty_info = true;
+        rebuild_stats_close_unshared = true;
       }
       // pg_history_t is the source of truth; mirror it into pg_stat_t for
       // external reporting (ceph pg query/pg dump), and resend immediately
@@ -5874,6 +5890,7 @@ void PeeringState::close_rebuild_span()
     }
     info.history.rebuild_active_accum = utime_t();
     dirty_info = true;
+    rebuild_stats_close_unshared = true;
   }
 }
 
@@ -6877,10 +6894,12 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
   psdout(10) << "Active advmap" << dendl;
 
   pl->on_active_advmap(advmap.osdmap);
-  if (ps->dirty_big_info) {
+  if (ps->dirty_big_info || ps->rebuild_stats_close_unshared) {
     // share updated purged_snaps to mgr/mon so that we (a) stop reporting
     // purged snaps and (b) perhaps share more snaps that we have purged
-    // but didn't fit in pg_stat_t.
+    // but didn't fit in pg_stat_t. Also share a rebuild-stats episode
+    // (vulnerability window or active-rebuild) recorded with no share
+    // followed yet (see rebuild_stats_close_unshared).
     ps->share_pg_info();
   }
 
