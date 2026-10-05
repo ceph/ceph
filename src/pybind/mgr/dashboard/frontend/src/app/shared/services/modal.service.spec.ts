@@ -36,7 +36,7 @@ describe('ModalService', () => {
 
     const modaRef = service.show(MockComponent, { foo: 'bar' });
 
-    expect(ngbModal.open).toBeCalled();
+    expect(ngbModal.open).toHaveBeenCalled();
     expect(modaRef.componentInstance.foo).toBe('bar');
     expect(modaRef.componentInstance.activeModal).toBeTruthy();
   });
@@ -54,7 +54,7 @@ describe('ModalService', () => {
     tick();
     expect(service.hasOpenModals()).toBeFalsy();
 
-    expect(ngbModal.dismissAll).toBeCalled();
-    expect(ngbModal.hasOpenModals).toBeCalled();
+    expect(ngbModal.dismissAll).toHaveBeenCalled();
+    expect(ngbModal.hasOpenModals).toHaveBeenCalled();
   }));
 });

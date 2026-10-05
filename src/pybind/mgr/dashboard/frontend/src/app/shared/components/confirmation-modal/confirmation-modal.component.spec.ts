@@ -123,7 +123,7 @@ describe('ConfirmationModalComponent', () => {
     const expectError = (config: object, expected: string) => {
       mockComponent.basicModal();
       component = Object.assign(component, config);
-      expect(() => component.ngOnInit()).toThrowError(expected);
+      expect(() => component.ngOnInit()).toThrow(expected);
     };
 
     it('has no submit action defined', () => {
