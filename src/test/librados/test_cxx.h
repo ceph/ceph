@@ -11,9 +11,9 @@ std::string create_one_pool_pp(const std::string &pool_name,
 std::string create_one_pool_pp(const std::string &pool_name,
 			       librados::Rados &cluster,
 			       const std::map<std::string, std::string> &config);
-// k_per_zone > 0 activates stretch-pool mode: the function will also
-// set num_zones=2, allow_ec_optimizations, and run "osd pool stretch set".
-// The cluster CRUSH map must already have two datacenter-type buckets.
+// k_per_zone > 0 creates a two-zone stretch pool with num_zones=2 and k/m per
+// zone instead. The cluster must be set up for stretch mode across two
+// datacenter-type buckets.
 std::string create_one_ec_pool_pp(
   const std::string &pool_name,
   librados::Rados &cluster,
