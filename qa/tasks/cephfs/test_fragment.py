@@ -3,8 +3,10 @@ from io import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra import run
 
+import json
 import logging
 import os
+import re
 import time
 log = logging.getLogger(__name__)
 
@@ -42,6 +44,25 @@ class TestFragmentation(CephFSTestCase):
                 break
         self.assertIsNotNone(dir_ino)
         return dir_ino
+
+    def get_dirfrag_object(self, dirfrag):
+        """
+        The metadata pool object of a dirfrag as the MDS dumps it, e.g.
+        "0x10000000000.01*" ("0x10000000000" when not fragmented):
+        "<ino>.<frag>" with the frag's bits count in the top byte and its
+        value below.
+        """
+        ino, _, bits = dirfrag.partition(".")
+        bits = bits.rstrip("*")
+        value = int(bits, 2) << (24 - len(bits)) if bits else 0
+        return "{0:x}.{1:08x}".format(int(ino, 16), (len(bits) << 24) | value)
+
+    def get_omap_values_bytes(self, obj):
+        """
+        The sum of the lengths of an object's omap values.
+        """
+        vals = self.fs.radosmo(["listomapvals", obj], stdout=StringIO())
+        return sum(int(n) for n in re.findall(r"^value \((\d+) bytes\)", vals, re.M))
 
     def _configure(self, **kwargs):
         """
@@ -408,6 +429,98 @@ class TestFragmentation(CephFSTestCase):
 
         self.assertEqual(self.get_merges(), 0)
         self.assertEqual(len(self.get_dir_ino("/splitdir")["dirfrags"]), 2)
+
+    def test_split_on_bytes_with_snapshots(self):
+        """
+        That a directory is split when its omap values grow past
+        mds_bal_split_bytes through snapshots, long before it has
+        mds_bal_split_size entries, and that each fragment's frag_bytes is
+        never below what its object holds.
+
+        After a snapshot, a change to a subdirectory copies its inode and
+        xattrs into its dentry value (old_inodes), so every snapshot and touch
+        makes each value larger while the number of entries stays the same.
+        Without splitting on bytes, the dirfrag object becomes a large omap
+        object.
+        """
+
+        split_bytes = 256 * 1024
+        num_dirs = 100
+        rounds = 8
+
+        self._configure(
+            mds_bal_split_bytes=split_bytes,
+            mds_bal_split_bits=1,
+            mds_bal_fragment_interval=1,
+            # no temperature-based splits: only the bytes can split the dir
+            mds_bal_split_rd=1000000,
+            mds_bal_split_wr=1000000,
+            # every committed value's length is checked against the
+            # accounting behind frag_bytes
+            mds_verify_frag_bytes=True,
+        )
+
+        self.mount_a.run_shell_payload(f"""
+            mkdir -p top/splitdir
+            cd top/splitdir
+            for i in $(seq 1 {num_dirs}); do
+                mkdir d$i
+                setfattr -n user.dummy -v "$(seq 0 300)" d$i
+            done
+        """)
+        self.assertEqual(self.get_splits(), 0)
+
+        def frags():
+            return self.get_dir_ino("/top/splitdir")['dirfrags']
+
+        def under_limit():
+            return all(0 <= f['frag_bytes'] <= split_bytes for f in frags())
+
+        for r in range(rounds):
+            self.mount_a.run_shell_payload(f"""
+                mkdir top/.snap/s{r}
+                touch top/splitdir/d*
+            """)
+            self.wait_until_true(under_limit, timeout=60)
+            log.info("round {0}: {1}".format(
+                r, [(f['dirfrag'], f['frag_bytes']) for f in frags()]))
+
+        self.assertGreater(self.get_splits(), 0)
+        self.assertGreater(len(frags()), 1)
+        # Every fragment here came from a split of more than
+        # mds_bal_split_bytes, so none is merged back, even with fewer than
+        # mds_bal_merge_size entries
+        self.assertEqual(self.get_merges(), 0)
+
+        self.fs.rank_asok(['flush', 'journal'])
+        objs = {}
+        for f in frags():
+            obj = self.get_dirfrag_object(f['dirfrag'])
+            objs[obj] = self.get_omap_values_bytes(obj)
+            log.info("{0}: frag_bytes {1}, object values {2}".format(
+                f['dirfrag'], f['frag_bytes'], objs[obj]))
+            self.assertLessEqual(objs[obj], split_bytes)
+            self.assertGreaterEqual(f['frag_bytes'], objs[obj])
+
+        # a deep scrub flags an object whose omap values add up to more than
+        # osd_deep_scrub_large_omap_object_value_sum_threshold. with it set to
+        # mds_bal_split_bytes, the directory does hold more than that in total
+        # but not concentrated into a single object and get flagged
+        self.assertGreater(sum(objs.values()), split_bytes)
+        self.config_set('osd', 'osd_deep_scrub_large_omap_object_value_sum_threshold',
+                        split_bytes)
+        pool = self.fs.get_metadata_pool_name()
+        pgids = {json.loads(self.get_ceph_cmd_stdout(
+                     "osd", "map", pool, obj, "--format=json"))['pgid']
+                 for obj in objs}
+        for pgid in pgids:
+            # waits until the scrub is done, so the pg's stats are from it
+            self.fs.mon_manager.do_pg_scrub(pool, pgid.split(".")[1], "deep-scrub")
+            stats = self.fs.mon_manager.get_single_pg_stats(pgid)
+            self.assertEqual(stats['stat_sum']['num_large_omap_objects'], 0,
+                             "pg {0} has a large omap object".format(pgid))
+        health = self.fs.mon_manager.get_mon_health()
+        self.assertNotIn('LARGE_OMAP_OBJECTS', health['checks'])
 
     def _run_dir_frag(self, killpoint):
         self._test_oversize(killpoint=killpoint)
