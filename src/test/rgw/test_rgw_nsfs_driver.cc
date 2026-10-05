@@ -3399,6 +3399,29 @@ TEST(NooBaaXattr, NamesRoundTrip)
   }
 }
 
+/* The contrast with OwnerComesFromTheInode below, and the reason
+ * adopting a tree of unattributed files leaves the bucket base.
+ *
+ * PrefixedXattrStrategy -- what shared and strong both resolve to --
+ * answers from the recorded ACL and never consults the statx.  A file
+ * written by cp or over NFS has no ACL, so a marked profile reports no
+ * owner for it however the statx is passed, while base reports the
+ * uid.  See docs/NSFS_ADOPTION.md 5. */
+TEST(PrefixedXattr, OwnerDoesNotComeFromTheStatx)
+{
+  nsfs::PrefixedXattrStrategy ours;
+  const rgw::sal::Attrs none;
+
+  struct statx stx{};
+  stx.stx_mask = STATX_UID;
+  stx.stx_uid = 4242;
+
+  ACLOwner owner;
+  EXPECT_EQ(ours.object_owner(none, &stx, owner), -EINVAL)
+      << "a marked profile reported an owner for a file with no ACL";
+  EXPECT_EQ(ours.object_owner(none, nullptr, owner), -EINVAL);
+}
+
 /* Three answers, and the third is the one worth pinning.  An ACL has
  * nowhere to go, so the name is empty and the write path skips it --
  * which is what their own gateway does.  Ours with no counterpart
