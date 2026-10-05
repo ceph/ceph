@@ -11,14 +11,22 @@ std::string create_one_pool_pp(const std::string &pool_name,
 std::string create_one_pool_pp(const std::string &pool_name,
 			       librados::Rados &cluster,
 			       const std::map<std::string, std::string> &config);
+// k_per_zone > 0 creates a two-zone stretch pool with num_zones=2 and k/m per
+// zone instead. The cluster must be set up for stretch mode across two
+// datacenter-type buckets.
 std::string create_one_ec_pool_pp(
   const std::string &pool_name,
   librados::Rados &cluster,
-  bool fast_ec = false);
+  bool fast_ec = false,
+  int k_per_zone = 0,
+  int m_per_zone = 0);
 std::string create_ec_pool_pp(
   const std::string &pool_name,
   librados::Rados &cluster,
-  bool fast_ec = false);
+  bool fast_ec = false,
+  bool enable_omap = true,
+  int k_per_zone = 0,
+  int m_per_zone = 0);
 std::string create_pool_pp(const std::string &pool_name,
                             librados::Rados &cluster,
                             int size = 0);

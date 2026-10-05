@@ -8,6 +8,7 @@
 #include "gtest/gtest.h"
 #include "include/rados/librados.hpp"
 #include "test/librados/test_cxx.h"
+#include "test/librados/testcase_cxx.h"
 
 using namespace librados;
 
@@ -195,28 +196,16 @@ int set_pool_num_zones(Rados &cluster, const std::string &pool_name,
 
 
 
-// Whether the CRUSH map has the two datacenters that a pool over two zones
-// needs. The tests that create one are skipped on other clusters.
-bool has_two_datacenters(Rados &cluster) {
-  bufferlist outbl;
-  if (cluster.mon_command(
-        "{\"prefix\": \"osd crush tree\", \"format\": \"json\"}",
-        {}, &outbl, nullptr) != 0) {
-    return false;
-  }
-  const std::string tree = outbl.to_str();
-  const std::string datacenter = "\"type\":\"datacenter\"";
-  int count = 0;
-  for (size_t pos = tree.find(datacenter); pos != std::string::npos;
-       pos = tree.find(datacenter, pos + 1)) {
-    ++count;
-  }
-  return count == 2;
+// Whether the CRUSH map has the two zones that a pool over two zones needs:
+// two buckets of the type osd_pool_default_zone_failure_domain names. The
+// tests that create one are skipped on other clusters.
+bool has_two_zones(Rados &cluster) {
+  return get_zone_topology(cluster).zones.size() == 2;
 }
 
-#define SKIP_WITHOUT_TWO_DATACENTERS(cluster)                         \
-  if (!has_two_datacenters(cluster)) {                                 \
-    GTEST_SKIP() << "the CRUSH map does not have two datacenters";     \
+#define SKIP_WITHOUT_TWO_ZONES(cluster)                               \
+  if (!has_two_zones(cluster)) {                                       \
+    GTEST_SKIP() << "the CRUSH map does not have two zones";           \
   }
 
 // Test basic EC pool creation with K and M parameters
@@ -245,7 +234,7 @@ TEST(ECPoolCreatePP, BasicKM) {
 TEST(ECPoolCreatePP, StretchECWithNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
-  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
+  SKIP_WITHOUT_TWO_ZONES(cluster);
 
   const std::string pool_name = get_temp_pool_name("ec_stretch_");
   constexpr int k = 2, m = 1, num_zones = 2;
@@ -472,7 +461,7 @@ TEST(ECPoolCreatePP, DefaultProfile) {
 TEST(ECPoolCreatePP, ReplicatedPoolStoresNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
-  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
+  SKIP_WITHOUT_TWO_ZONES(cluster);
 
   const std::string pool_name = get_temp_pool_name("repl_num_zones_");
   std::string cmd = "{\"prefix\": \"osd pool create\", \"pool\": \"" +
@@ -518,7 +507,7 @@ TEST(ECPoolCreatePP, AutoProfileAndAutoCrushRule) {
 TEST(ECPoolCreatePP, AutoProfileAndRuleWithNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
-  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
+  SKIP_WITHOUT_TWO_ZONES(cluster);
 
   const std::string pool_name = get_temp_pool_name("ec_auto_stretch_");
   constexpr int k = 2, m = 1, num_zones = 2;
@@ -585,7 +574,7 @@ TEST(ECPoolCreatePP, SharedProfileRetention) {
 TEST(ECPoolCreatePP, ErasurePoolSetNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
-  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
+  SKIP_WITHOUT_TWO_ZONES(cluster);
 
   const std::string pool_name = get_temp_pool_name("ec_set_num_zones_");
   constexpr int k = 2;
@@ -628,9 +617,8 @@ TEST(ECPoolCreatePP, ErasurePoolSetNumZones) {
 TEST(ECPoolCreatePP, SetNumZonesFailureLeavesPoolUnchanged) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
-  if (has_two_datacenters(cluster)) {
-    GTEST_SKIP() << "the CRUSH map has the two datacenters that the "
-                 << "change needs";
+  if (has_two_zones(cluster)) {
+    GTEST_SKIP() << "the CRUSH map has the two zones that the change needs";
   }
 
   const std::string pool_name = get_temp_pool_name("ec_set_num_zones_fail_");
@@ -644,7 +632,7 @@ TEST(ECPoolCreatePP, SetNumZonesFailureLeavesPoolUnchanged) {
   ASSERT_FALSE(initial_crush_rule.empty());
   ASSERT_EQ(k + m, get_pool_size(cluster, pool_name));
 
-  // two zones need two datacenters, the default zone type
+  // two zones need two buckets of the default zone type
   ASSERT_EQ(-EINVAL, set_pool_num_zones(cluster, pool_name, 2));
 
   ASSERT_EQ(1, get_pool_num_zones(cluster, pool_name));
@@ -658,7 +646,7 @@ TEST(ECPoolCreatePP, SetNumZonesFailureLeavesPoolUnchanged) {
 TEST(ECPoolCreatePP, ReplicatedPoolSetNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
-  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
+  SKIP_WITHOUT_TWO_ZONES(cluster);
 
   const std::string pool_name = get_temp_pool_name("repl_set_num_zones_");
   std::string cmd = "{\"prefix\": \"osd pool create\", \"pool\": \"" +
