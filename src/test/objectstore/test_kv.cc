@@ -30,6 +30,7 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"
+#include "include/coredumpctl.h"
 #include <gtest/gtest.h>
 #include <fmt/format.h>
 #include <filesystem>
@@ -103,6 +104,15 @@ public:
     delete rdb;
   }
 
+  void list_ssts(std::vector<std::filesystem::path>* out) {
+    std::map<std::filesystem::path, std::string> ssts;
+    ASSERT_NO_FATAL_FAILURE(sst_column_families(&ssts));
+    out->clear();
+    for (auto& [sst, cf] : ssts) {
+      out->push_back(sst);
+    }
+  }
+
   void save_store() {
     namespace fs = std::filesystem;
     fs::remove_all("kv_test_temp_dir.orig");
@@ -130,6 +140,12 @@ public:
     ASSERT_TRUE(f.write(buf, sizeof(buf)));
   }
 
+  void corrupt_store(const std::filesystem::path& sst, std::streamoff offset) {
+    fini();
+    restore_store();
+    flip_bytes(sst, offset);
+  }
+
   template <typename Iterator>
   int count_keys(Iterator& it) {
     int n = 0;
@@ -137,6 +153,31 @@ public:
       n++;
     }
     return n;
+  }
+
+  // incompressible values, so that each SST has many data blocks
+  void write_keys(const std::string& prefix, int nkeys) {
+    KeyValueDB::Transaction t = db->get_transaction();
+    for (int i = 0; i < nkeys; i++) {
+      bufferlist val;
+      val.append(gen_random_string(1000));
+      t->set(prefix, fmt::format("{:04}", i), val);
+    }
+    ASSERT_EQ(0, db->submit_transaction_sync(t));
+  }
+
+  void make_store_b(const std::string& cfs, int nkeys,
+                    std::vector<std::filesystem::path>* ssts) {
+    fini();
+    std::filesystem::remove_all("kv_test_temp_dir");
+    init();
+    ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+    ASSERT_EQ(0, db->create_and_open(cout, cfs));
+    ASSERT_NO_FATAL_FAILURE(write_keys("B", nkeys));
+    db->compact();
+    fini();
+    save_store();
+    ASSERT_NO_FATAL_FAILURE(list_ssts(ssts));
   }
 
   void SetUp() override {
@@ -703,6 +744,181 @@ TEST_P(KVTest, RocksDBShardingIteratorReadError) {
     EXPECT_NE(0, it->status());
   }
   fini();
+  fs::remove_all("kv_test_temp_dir.orig");
+}
+
+TEST_P(KVTest, RocksDBIteratorReadError) {
+  if(string(GetParam()) != "rocksdb")
+    return;
+
+  namespace fs = std::filesystem;
+  const int nkeys = 300;
+  for (const std::string cfs : {"B(3)", "B", ""}) {
+    std::vector<fs::path> ssts;
+    ASSERT_NO_FATAL_FAILURE(make_store_b(cfs, nkeys, &ssts));
+    ASSERT_EQ(cfs == "B(3)" ? 3u : 1u, ssts.size());
+    cout << "sharding '" << cfs << "'" << std::endl;
+    for (auto& sst : ssts) {
+      ASSERT_NO_FATAL_FAILURE(corrupt_store(sst, 0));
+      init();
+      ASSERT_EQ(0, db->open(cout, cfs));
+      {
+        KeyValueDB::Iterator it = db->get_iterator("B");
+        EXPECT_NE(0, it->seek_to_first());
+        EXPECT_FALSE(it->valid());
+        EXPECT_NE(0, it->status());
+        EXPECT_NE(0, it->lower_bound("0000"));
+        EXPECT_FALSE(it->valid());
+        EXPECT_NE(0, it->status());
+      }
+
+      ASSERT_NO_FATAL_FAILURE(corrupt_store(sst, fs::file_size(sst) / 2));
+      init();
+      ASSERT_EQ(0, db->open(cout, cfs));
+      {
+        KeyValueDB::Iterator it = db->get_iterator("B");
+        EXPECT_LT(count_keys(it), nkeys);
+        EXPECT_NE(0, it->status());
+        int n = 0;
+        for (it->seek_to_last(); it->valid() && n < nkeys; it->prev()) {
+          n++;
+        }
+        EXPECT_LT(n, nkeys);
+        EXPECT_NE(0, it->status());
+      }
+      fini();
+    }
+  }
+  fs::remove_all("kv_test_temp_dir.orig");
+}
+
+TEST_P(KVTest, RocksDBReadErrorAborts) {
+  if(string(GetParam()) != "rocksdb")
+    return;
+
+  PrCtl unset_dumpable;
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  namespace fs = std::filesystem;
+  const int nkeys = 300;
+  for (const std::string cfs : {"B(3)", "B", ""}) {
+    std::vector<fs::path> ssts;
+    ASSERT_NO_FATAL_FAILURE(make_store_b(cfs, nkeys, &ssts));
+    ASSERT_FALSE(ssts.empty());
+    const fs::path sst = ssts.back();
+    auto open = [&] {
+      init();
+      db->open(cout, cfs);
+      return db->get_iterator("B");
+    };
+    auto get_all = [&] {
+      open();
+      for (int i = 0; i < nkeys; i++) {
+        std::map<std::string, bufferlist> out;
+        db->get("B", {fmt::format("{:04}", i)}, &out);
+      }
+    };
+    auto list_forward = [&] {
+      auto it = open();
+      for (it->seek_to_first(); it->valid(); it->next()) {}
+    };
+    auto list_backward = [&] {
+      auto it = open();
+      int n = 0;
+      for (it->seek_to_last(); it->valid() && n < nkeys; it->prev()) {
+        n++;
+      }
+    };
+
+    cout << "sharding '" << cfs << "'" << std::endl;
+    ASSERT_NO_FATAL_FAILURE(corrupt_store(sst, 0));
+    EXPECT_DEATH(open()->seek_to_first(), "checksum mismatch");
+    EXPECT_DEATH(open()->lower_bound("0000"), "checksum mismatch");
+    EXPECT_DEATH(get_all(), "checksum mismatch");
+
+    ASSERT_NO_FATAL_FAILURE(corrupt_store(sst, fs::file_size(sst) / 2));
+    EXPECT_DEATH(list_forward(), "checksum mismatch");
+    EXPECT_DEATH(list_backward(), "checksum mismatch");
+  }
+  fs::remove_all("kv_test_temp_dir.orig");
+}
+
+TEST_P(KVTest, RocksDBSeekToLastReadError) {
+  if(string(GetParam()) != "rocksdb")
+    return;
+
+  PrCtl unset_dumpable;
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  namespace fs = std::filesystem;
+  const int nkeys = 300;
+  std::vector<fs::path> ssts;
+  ASSERT_NO_FATAL_FAILURE(make_store_b("", nkeys, &ssts));
+  init();
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->open(cout));
+  ASSERT_NO_FATAL_FAILURE(write_keys("C", nkeys));
+  db->compact_prefix("C");
+  fini();
+  save_store();
+  ASSERT_NO_FATAL_FAILURE(list_ssts(&ssts));
+  ASSERT_EQ(2u, ssts.size());
+
+  // seek_to_last("B") seeks to the first key of C
+  ASSERT_NO_FATAL_FAILURE(corrupt_store(ssts.back(), 0));
+  init();
+  ASSERT_EQ(0, db->open(cout));
+  {
+    KeyValueDB::Iterator it = db->get_iterator("B");
+    EXPECT_NE(0, it->seek_to_last());
+    EXPECT_FALSE(it->valid());
+    EXPECT_NE(0, it->status());
+  }
+  fini();
+  EXPECT_DEATH({
+      init();
+      db->open(cout);
+      db->get_iterator("B")->seek_to_last();
+    }, "checksum mismatch");
+  fs::remove_all("kv_test_temp_dir.orig");
+}
+
+TEST_P(KVTest, RocksDBReshardReadError) {
+  if(string(GetParam()) != "rocksdb")
+    return;
+
+  namespace fs = std::filesystem;
+  const int nkeys = 300;
+  for (const auto& [from, to] : {std::pair{"", "B(3)"}, std::pair{"B", ""}}) {
+    std::vector<fs::path> ssts;
+    ASSERT_NO_FATAL_FAILURE(make_store_b(from, nkeys, &ssts));
+    ASSERT_EQ(1u, ssts.size());
+    const fs::path sst = ssts[0];
+    const auto offset = fs::file_size(sst) / 2;
+    cout << "resharding '" << from << "' to '" << to << "'" << std::endl;
+    ASSERT_NO_FATAL_FAILURE(corrupt_store(sst, offset));
+    init();
+    auto rdb = dynamic_cast<RocksDBStore*>(db.get());
+    ASSERT_NE(nullptr, rdb);
+    ASSERT_EQ(0, rdb->init(g_conf()->bluestore_rocksdb_options));
+    // reshard() needs the Env that open() sets up
+    ASSERT_EQ(0, rdb->open(cout));
+    rdb->close();
+    EXPECT_GT(0, rdb->reshard(to));
+    // locked, as after an interrupted reshard
+    EXPECT_NE(0, rdb->open(cout));
+    rdb->close();
+
+    // once the block can be read, the reshard completes with every key
+    ASSERT_TRUE(fs::exists(sst));
+    ASSERT_NO_FATAL_FAILURE(flip_bytes(sst, offset));
+    ASSERT_EQ(0, rdb->reshard(to));
+    ASSERT_EQ(0, rdb->open(cout));
+    {
+      KeyValueDB::Iterator it = db->get_iterator("B");
+      EXPECT_EQ(nkeys, count_keys(it));
+      EXPECT_EQ(0, it->status());
+    }
+    fini();
+  }
   fs::remove_all("kv_test_temp_dir.orig");
 }
 
