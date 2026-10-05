@@ -562,6 +562,10 @@ public:
     return is_repair();
   }
 
+  bool pg_is_degraded_or_undersized() const override {
+    return is_degraded() || is_undersized();
+  }
+
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
     eversion_t lcod) override {

@@ -844,7 +844,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     }
   }
 
-  if (size_change || clear_whiteout || first_write_in_interval) {
+  if (size_change || clear_whiteout || first_write_in_interval ||
+      plan.write_all_shards) {
     all_shards_written();
     first_write_in_interval = false;
   } else {
