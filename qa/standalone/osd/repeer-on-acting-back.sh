@@ -26,7 +26,7 @@ function run() {
     export testobjects=100
     export loglen=12
     export trim=$(expr $loglen / 2)
-    export CEPH_MON="127.0.0.1:7115" # git grep '\<7115\>' : there must be only one
+    export CEPH_MON="127.0.0.1:7237" # git grep '\<7237\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
