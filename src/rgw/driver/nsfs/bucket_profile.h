@@ -94,15 +94,16 @@ inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs.extensions";
  *
  * Set by the upgrade from base to a named profile and cleared when that
  * upgrade finishes, so it is the upgrade's progress flag and not a
- * steady state.  Its presence is what turns the read chain on:  a
- * bucket we created never pays for one, and a bucket that has finished
- * converting stops paying.
+ * steady state.  Its presence is what brings the fallback strategies
+ * into play:  a bucket we created never pays for one, and a bucket
+ * that has finished converting stops paying.
  *
  * The value is the format the tree is being converted FROM -- today
  * only "noobaa", which is the only other format that exists.  A name
  * rather than a flag because a reader has to know which fallback to
- * chain, and guessing from the one that happens to be compiled in is
- * how the wrong parser gets applied to the right bytes. */
+ * fall back to, and guessing from the one that happens to be
+ * compiled in is how the wrong parser gets applied to the right
+ * bytes. */
 inline constexpr const char* CONVERTING_XATTR = "user.nsfs.converting";
 inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
 

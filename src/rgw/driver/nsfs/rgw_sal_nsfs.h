@@ -58,9 +58,9 @@ namespace nsfs {
  *
  * Three phases, because the interesting state is inside an item and
  * not between two of them.  `before` is the old format, which the read
- * chain's fallback serves.  `written` is the only genuinely new state
+ * fallback strategy serves.  `written` is the only genuinely new state
  * -- the target format is on disk and the old spelling has not gone --
- * and it is where "ours first" in the chain stops being incidental.
+ * and it is where asking ours first stops being incidental.
  * `pruned` is one spelling left, and the item is native.
  *
  * A non-zero return stops the conversion with the marker still set, so
@@ -203,7 +203,7 @@ protected:
    * built from its parent */
   XattrStrategy* xattr_strategy{nullptr};
   PathStrategy* path_strategy{nullptr};
-  /* the other end of the read chain, null unless the bucket is
+  /* the fallback strategies, null unless the bucket is
    * mid-upgrade;  carried and inherited for the same reason as the
    * others.  See NSFSBucket::xattr_fallback(). */
   XattrStrategy* xattr_fallback{nullptr};
@@ -584,7 +584,8 @@ protected:
    * wait bounded -- and converts.
    *
    * Reads are not gated.  A half-converted tree is readable through
-   * the chain, which is why the chain exists, and blocking reads for
+   * the fallback strategies, which is why they exist, and blocking
+   * reads for
    * the length of a conversion is the cost we set out to avoid.
    *
    * Per process.  A gate one gateway closes is invisible to the one
@@ -1444,9 +1445,10 @@ public:
   nsfs::PathStrategy* path_strategy() const;
   nsfs::MPUStrategy* mpu_strategy() const;
   nsfs::BucketStateStrategy* bucket_state_strategy() const;
-  /* The other end of the bucket-state chain, or null.
+  /* The fallback bucket-state strategy, or null.
    *
-   * Runs the opposite way to the object chain, and deliberately.  A
+   * Runs the opposite way round to the object strategies, and
+   * deliberately.  A
    * base bucket's *objects* are in NooBaa's format, so theirs is the
    * primary there.  A base bucket's *state* is ours where it exists,
    * because bucket configuration is the one thing written in our form
@@ -1454,19 +1456,20 @@ public:
    * their store answers only for a bucket that has none. */
   nsfs::BucketStateStrategy* bucket_state_fallback() const;
 
-  /* The other end of the read chain, or null.
+  /* The fallback strategies, or null.
    *
    * A bucket being converted holds objects in two formats and its mark
    * cannot say which an individual object is in, so a reader asks the
    * bucket's own strategy first and these second.  Null on every
    * bucket that is not mid-conversion, which is every bucket we
    * created and every one whose conversion has finished -- so the
-   * chain costs nothing to have and the fallbacks are unreachable
-   * rather than merely unused.
+   * fallback costs nothing to have and is unreachable rather than
+   * merely unused.
    *
-   * Not a vector.  Two formats exist, the chain is two long, and a
-   * container would put an indirection on a path that has one element
-   * in every case but this one. */
+   * Not a vector.  Two formats exist, so there is one fallback and
+   * never a sequence of them, and a container would put an
+   * indirection on a path that has one element in every case but
+   * this one. */
   nsfs::XattrStrategy* xattr_fallback() const;
   nsfs::PathStrategy* path_fallback() const;
   nsfs::MPUStrategy* mpu_fallback() const;

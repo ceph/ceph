@@ -1283,7 +1283,7 @@ static inline int copy_dir_fd(int old_fd)
 
 /* Read an object's attributes, through one format or through two.
  *
- * `alt` is the other end of the read chain and is null everywhere but
+ * `alt` is the fallback strategy and is null everywhere but
  * a bucket mid-upgrade -- see NSFSBucket::xattr_fallback().  It is
  * asked only about a name the bucket's own format declines, so a tree
  * with nothing foreign left runs the loop it ran before:  no extra
@@ -1400,8 +1400,8 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 
   /* What the per-name pass could not place.
    *
-   * Ours first here too, and for the same reason the chain reads that
-   * way:  an attribute a converting object carries in our format is
+   * Ours first here too, and for the same reason the read asks that
+   * way round:  an attribute a converting object carries in our format is
    * the later word.  In practice ours claims nothing at this stage --
    * every logical attribute of ours is one attribute on disk -- so
    * this costs a virtual call and no syscall on a tree of ours. */
@@ -1753,7 +1753,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
         if (disk_name == nsfs::EXTENSIONS_XATTR) {
           continue;
         }
-        /* Through the chain as well.  A superseded attribute of
+        /* Through the fallback as well.  A superseded attribute of
          * theirs then resolves to the key we are about to write and
          * lands in to_remove, which is how a converting object stops
          * carrying both spellings of the same fact. */
@@ -1794,7 +1794,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
      * is not available here.  What is needed is narrower:  a key we
      * are writing may already be on this file under the other
      * format's name, and leaving it there gives the object two
-     * spellings of one fact.  The chain would keep reading ours, so
+     * spellings of one fact.  The read would keep finding ours, so
      * nothing would look wrong, and the conversion would never finish
      * because the foreign attribute never goes away.
      *
@@ -3491,7 +3491,7 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	 * would mean load_bucket() and its I/O underneath the cache.
 	 * So each layout is asked where it stages and the one whose
 	 * directory is there is the one that wrote the parts --
-	 * recognition, chained, as everywhere else.
+	 * recognition, with a fallback, as everywhere else.
 	 *
 	 * Before this the driver's own strategies were used
 	 * unconditionally.  A base bucket stages somewhere they do not
@@ -5498,9 +5498,9 @@ void NSFSBucket::apply_format()
   dir->set_path_fallback(path_fallback());
 }
 
-/* The other end of the chain.  Null unless the bucket is mid-upgrade,
- * so on every other bucket the fallback is not merely unused -- there
- * is nothing there to call. */
+/* The fallback strategy.  Null unless the bucket is mid-upgrade, so
+ * on every other bucket it is not merely unused -- there is nothing
+ * there to call. */
 nsfs::XattrStrategy* NSFSBucket::xattr_fallback() const
 {
   return converting ? driver->get_noobaa_xattr_strategy() : nullptr;
@@ -5961,8 +5961,8 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
  * thing that would keep the bucket mixed after the walk had finished
  * -- for three operations that would then be reading the wrong layout,
  * which is worse than a fallback because it is a lie rather than a
- * chain.  Aborting is the alternative and throws away work the client
- * already did.
+ * fallback.  Aborting is the alternative and throws away work the
+ * client already did.
  *
  * Re-staged one file per part, whatever our layout is.  The stride
  * exists because parts arrive one at a time and a writer can place
@@ -6274,7 +6274,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 /* Rewrite whatever in this tree is still in the other format.
  *
  * Runs with the bucket already marked -- so writes go in our format
- * and the read chain is on -- and clears the marker when it gets to
+ * and the fallback strategies are in play -- and clears the marker
+ * when it gets to
  * the end.  A run that stops leaves the marker, which is what makes
  * it resumable:  the state on disk is "some of this is still theirs",
  * and that is exactly what the marker says.
@@ -6433,8 +6434,8 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
    * ones already running are waited for.  A write arriving between an
    * object's `before` and its `written` is lost:  the converter read
    * the attributes before it and writes them back after.  Reads are
-   * not held -- a half-converted tree reads through the chain, which
-   * is the whole reason the chain exists. */
+   * not held -- a half-converted tree reads through the fallback
+   * strategies, which is the whole reason they exist. */
   int ret = driver->gate_close(dpp, get_name());
   if (ret < 0) {
     return ret;
@@ -6623,7 +6624,7 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   if (ret == -ENOENT) {
     /* Nothing of ours.  A base bucket may still have a record in
      * NooBaa's store, and that is where its versioning lives.  When
-     * the chain is consulted is decided here and not inside either
+     * the fallback is consulted is decided here and not inside either
      * strategy, so that authoritative-with-ours-as-cache and
      * recovery-only remain reachable without redesign. */
     auto* theirs = bucket_state_fallback();
@@ -8121,8 +8122,8 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
    *
    * Taken before anything is resolved or created, so a refusal costs
    * nothing and leaves nothing behind.  A read handle takes none --
-   * reads are served throughout a conversion, which is what the read
-   * chain is for. */
+   * reads are served throughout a conversion, which is what the
+   * fallback strategies are for. */
   std::optional<NSFSMutationGuard> gate;
   if (flags & FSIOObject::OPEN_FLAG_WRITE) {
     gate.emplace(dpp, driver, get_bucket()->get_name());
