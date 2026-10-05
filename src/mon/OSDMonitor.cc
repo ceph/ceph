@@ -14506,10 +14506,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "rule", rule_name);
     string erasure_code_profile;
     cmd_getval(cmdmap, "erasure_code_profile", erasure_code_profile);
-    int64_t k = 0, m = 0, num_zones = 1;
+    int64_t k = 0, m = 0, num_zones = 0;
     cmd_getval(cmdmap, "k", k);
     cmd_getval(cmdmap, "m", m);
-    cmd_getval(cmdmap, "num_zones", num_zones);
+    if (!cmd_getval(cmdmap, "num_zones", num_zones)) {
+      num_zones = g_conf().get_val<int64_t>("osd_pool_default_num_zones");
+    }
     string root, zone_failure_domain, osd_failure_domain, device_class;
     cmd_getval(cmdmap, "root", root);
     cmd_getval(cmdmap, "zone_failure_domain", zone_failure_domain);

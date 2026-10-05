@@ -2866,6 +2866,21 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: osd_pool_default_num_zones
+  type: int
+  level: advanced
+  desc: Default number of zones for new pools
+  long_desc: Sets the default number of zones used when creating a new pool. A value
+    of 1 (the default) means no zone-based stretch layout. A value of 2 enables a
+    two-zone stretch pool, requiring a matching stretch-mode CRUSH rule and a stretch-mode
+    enabled cluster. This value can be overridden at pool creation time by passing
+    the ``num_zones`` argument explicitly.
+  default: 1
+  services:
+  - mon
+  min: 1
+  flags:
+  - runtime
 # min target size for a HitSet
 - name: osd_hit_set_min_size
   type: int
