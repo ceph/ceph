@@ -67,6 +67,7 @@ CLUSTER_SCHEMA = {
         'count': (int, 'Number of daemons', True),
         'label': (str, 'Host label', True)
     }, 'Orchestrator placement specification'),
+    'enable_nfsv3': (bool, 'Whether NFSv3 is enabled for the cluster'),
     'enable_rdma': (bool, 'Whether RDMA transport is enabled for the cluster'),
     'ingress_mode': (str, 'Ingress mode', True),
     'port': (int, 'Ingress port', True),
@@ -113,7 +114,7 @@ class NFSGaneshaCluster(RESTController):
     @EndpointDoc("List NFS-Ganesha clusters",
                  parameters={
                      'info': (bool, 'If true, return detailed cluster info including '
-                              'backends, placement, and enable_rdma')
+                              'backends, placement, enable_nfsv3, and enable_rdma')
                  },
                  responses={200: [CLUSTER_SCHEMA]})
     def list(self, info: Optional[bool] = False):
