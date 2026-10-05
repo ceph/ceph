@@ -4255,7 +4255,11 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 							      ack, client));
   if (need_flush && !*need_flush &&
       ((change_max && new_max) || // max INCREASE
-       _need_flush_mdlog(in, dirty)))
+       _need_flush_mdlog(in, dirty) ||
+       // a filelock state change is waiting for the wrlock held above
+       // until this update is journaled
+       ((change_max || (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR))) &&
+	!in->filelock.is_stable())))
     *need_flush = true;
 
   return true;
