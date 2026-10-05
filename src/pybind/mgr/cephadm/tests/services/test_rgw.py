@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 
 from orchestrator import OrchestratorError
 
+from cephadm.services.cephadmservice import RgwService
 from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.module import CephadmOrchestrator
@@ -755,6 +756,45 @@ def test_rgw_dependencies_include_legacy_frontend_certificate_hash():
 
     cert = "CERT\nCHAIN"
 
-    assert RgwService.get_dependencies(MagicMock(), spec, 'rgw') == [
-        f'ssl-cert:{utils.config_hash(cert)}'
-    ]
+    deps = RgwService.get_dependencies(MagicMock(), spec, 'rgw')
+    assert any(d.startswith('ssl-cert:') for d in deps)
+    assert f'ssl-cert:{utils.config_hash(cert)}' in deps
+
+
+def test_rgw_deps_change_on_frontend_extra_args():
+    spec_no_reuse = RGWSpec(service_id="foo", rgw_frontend_port=8300)
+    spec_with_reuse = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                              rgw_frontend_extra_args=['so_reuseport=1'])
+
+    deps_before = RgwService.get_dependencies(MagicMock(), spec_no_reuse)
+    deps_after = RgwService.get_dependencies(MagicMock(), spec_with_reuse)
+    assert deps_before != deps_after
+
+
+def test_rgw_deps_change_on_frontend_type():
+    spec_beast = RGWSpec(service_id="foo", rgw_frontend_type='beast')
+    spec_civetweb = RGWSpec(service_id="foo", rgw_frontend_type='civetweb')
+
+    deps_beast = RgwService.get_dependencies(MagicMock(), spec_beast)
+    deps_civetweb = RgwService.get_dependencies(MagicMock(), spec_civetweb)
+    assert deps_beast != deps_civetweb
+
+
+def test_rgw_deps_stable_when_frontend_unchanged():
+    spec = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                   rgw_frontend_extra_args=['so_reuseport=1'])
+
+    deps1 = RgwService.get_dependencies(MagicMock(), spec)
+    deps2 = RgwService.get_dependencies(MagicMock(), spec)
+    assert deps1 == deps2
+
+
+def test_rgw_deps_stable_with_reordered_extra_args():
+    spec_a = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                     rgw_frontend_extra_args=['so_reuseport=1', 'tcp_nodelay=1'])
+    spec_b = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                     rgw_frontend_extra_args=['tcp_nodelay=1', 'so_reuseport=1'])
+
+    deps_a = RgwService.get_dependencies(MagicMock(), spec_a)
+    deps_b = RgwService.get_dependencies(MagicMock(), spec_b)
+    assert deps_a == deps_b
