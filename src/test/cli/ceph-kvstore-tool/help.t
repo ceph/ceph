@@ -14,7 +14,7 @@
     set <prefix> <key> [ver <N>|in <file>]
     rm <prefix> <key>
     rm-prefix <prefix>
-    store-copy <path> [num-keys-per-tx] [rocksdb|...] 
+    store-copy <path> [num-keys-per-tx] [rocksdb|...]  (type required for bluestore-kv)
     store-crc <path>
     compact
     compact-prefix <prefix>
