@@ -11,7 +11,7 @@ function run() {
     export CEPH_MON_C="127.0.0.1:7161" # git grep '\<7161\>' : there must be only one
     export CEPH_MON="$CEPH_MON_A,$CEPH_MON_B,$CEPH_MON_C"
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     #
     # Disable auto-class, so we can inject device class manually below
