@@ -12459,6 +12459,26 @@ void Server::_readdir_diff(
       ++numfiles;
       return true;
     },
+    [&](CDentry* dn) {
+      // build_snap_diff() ends the reply before dn without encoding it.
+      // If the reply ends with entries of the same name, drop them as
+      // well, or the next request would resume after that name and skip
+      // dn. Only the encoding needs undoing: entries of a snapshot get
+      // null leases and no caps. If the reply is left empty, the request
+      // waits for dn's inode instead.
+      if (dn->get_name() != last_name)
+        return;
+      dout(10) << " dropping entries for " << last_name
+               << " before stopping, " << dnbl.length() << " -> "
+               << rollback_pos << dendl;
+      bufferlist keep;
+      keep.substr_of(dnbl, 0, rollback_pos);
+      dnbl.swap(keep);
+      last_name.clear();
+      rollback_pos = 0;
+      numfiles = rollback_num;
+      rollback_num = 0;
+    },
     &waiting);
 
   if (waiting)
@@ -12485,6 +12505,7 @@ bool Server::build_snap_diff(
   unsigned diff_mask,
   const bufferlist& dnbl,
   std::function<bool (CDentry*, CInode*, bool)> add_result_cb,
+  std::function<void (CDentry*)> stop_before_cb,
   bool *waiting)
 {
   struct EntryInfo {
@@ -12640,6 +12661,9 @@ bool Server::build_snap_diff(
 	  if (!p.second->get_linkage()->is_null())
 	    mdcache->lru.lru_touch(p.second);
 	}
+
+	// don't split the entries with dn's name between two replies
+	stop_before_cb(dn);
 
 	// already issued caps and leases, reply immediately.
 	if (dnbl.length() > 0) {
