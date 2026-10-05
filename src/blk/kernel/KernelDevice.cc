@@ -72,6 +72,17 @@ using ceph::make_timespan;
 using ceph::mono_clock;
 using ceph::operator <<;
 
+// A disk is a block device on Linux. FreeBSD has no block devices: every
+// disk, including GEOM providers and zvols, is a character device.
+static bool is_disk(const struct stat& st)
+{
+#ifdef __FreeBSD__
+  return S_ISCHR(st.st_mode);
+#else
+  return S_ISBLK(st.st_mode);
+#endif
+}
+
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv, const char* dev_name)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
@@ -353,9 +364,9 @@ int KernelDevice::refresh_size()
 	    << block_size << " anyway" << dendl;
   }
 
-  // logic taken from open() for block vs file
-  int64_t new_size;
-  if (S_ISBLK(st.st_mode)) {
+  int64_t new_size = 0;
+
+  if (is_disk(st)) {
     BlkDev blkdev(fd_directs[WRITE_LIFE_NOT_SET]);
     r = blkdev.get_size(&new_size);
     if (r < 0) {
@@ -368,6 +379,11 @@ int KernelDevice::refresh_size()
 
   // round size down to an even block
   size = p2align(new_size, int64_t(block_size));
+  if (size <= 0) {
+    derr << __func__ << " backing device/file has no usable size ("
+         << new_size << " bytes)" << dendl;
+    return -EINVAL;
+  }
   return 0;
 }
 
@@ -433,7 +449,7 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   int r = ::fstat(fd_buffereds[WRITE_LIFE_NOT_SET], &st);
   if (r < 0)
     return -errno;
-  if (S_ISBLK(st.st_mode)) {
+  if (is_disk(st)) {
     (*pm)[prefix + "access_mode"] = "blk";
 
     char buffer[1024] = {0};
