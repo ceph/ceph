@@ -1744,6 +1744,37 @@ int PeerReplayer::SyncMechanism::remote_dir_setattr(const std::string &epath,
 
 #define NR_IOVECS 8 // # iovecs
 #define IOVEC_SIZE (8 * 1024 * 1024) // buffer size for each iovec
+
+namespace {
+// Per-thread copy scratch for copy_to_remote(). Grows on demand up to
+// NR_IOVECS*IOVEC_SIZE and is freed when the thread exits.
+struct CopyBuffer {
+  char *data = nullptr;
+  uint64_t capacity = 0;
+
+  CopyBuffer() = default;
+  ~CopyBuffer() {
+    free(data);
+  }
+
+  CopyBuffer(const CopyBuffer&) = delete;
+  CopyBuffer& operator=(const CopyBuffer&) = delete;
+
+  int ensure(uint64_t size) {
+    if (capacity >= size) {
+      return 0;
+    }
+    void *n = realloc(data, size);
+    if (!n) {
+      return -ENOMEM;
+    }
+    data = static_cast<char *>(n);
+    capacity = size;
+    return 0;
+  }
+};
+} // anonymous namespace
+
 int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string &epath,
                                  const struct ceph_statx &stx, const FHandles &fh,
                                  uint64_t num_blocks, struct cblock *b) {
@@ -1751,8 +1782,11 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
            << num_blocks << dendl;
   int l_fd;
   int r_fd;
-  void *ptr;
+  void *ptr = nullptr;
   struct iovec iov[NR_IOVECS];
+  static thread_local CopyBuffer copy_buf;
+  const uint64_t max_buf = (uint64_t)NR_IOVECS * IOVEC_SIZE;
+  uint64_t buf_len = 0;
 
   uint64_t bytes_read = 0;
   uint64_t bytes_written = 0;
@@ -1778,11 +1812,19 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
   }
 
   r_fd = r;
-  ptr = malloc(NR_IOVECS * IOVEC_SIZE);
-  if (!ptr) {
-    r = -ENOMEM;
-    derr << ": failed to allocate memory" << dendl;
-    goto close_remote_fd;
+  // Reuse a per-thread buffer. Cap at 64 MiB for large files; avoid
+  // malloc(64 MiB)/free per small file (kernel-untar ~16 KiB).
+  buf_len = stx.stx_size;
+  if (buf_len > max_buf) {
+    buf_len = max_buf;
+  }
+  if (buf_len > 0) {
+    r = copy_buf.ensure(buf_len);
+    if (r < 0) {
+      derr << ": failed to allocate memory" << dendl;
+      goto close_remote_fd;
+    }
+    ptr = copy_buf.data;
   }
 
   while (num_blocks > 0) {
@@ -1803,9 +1845,12 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
         break;
       }
 
+      if (buf_len == 0) {
+        break;
+      }
       auto cut_off = len;
-      if (cut_off > NR_IOVECS*IOVEC_SIZE) {
-        cut_off = NR_IOVECS*IOVEC_SIZE;
+      if (cut_off > buf_len) {
+        cut_off = buf_len;
       }
 
       int num_buffers = cut_off / IOVEC_SIZE;
@@ -1877,12 +1922,9 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
     if (r < 0) {
       derr << ": failed to truncate remote file path=" << epath << ": "
            << cpp_strerror(r) << dendl;
-      goto freeptr;
+      goto close_remote_fd;
     }
   }
-
-freeptr:
-  free(ptr);
 
 close_remote_fd:
   if (ceph_close(m_remote_mount, r_fd) < 0) {
