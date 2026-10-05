@@ -5,6 +5,8 @@
 
 #include "rgw_tools.h"
 #include "common/Clock.h" // for ceph_clock_now()
+#include "common/errno.h"
+#include "common/error_code.h"
 #include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw_gc/cls_rgw_gc_client.h"
@@ -13,9 +15,14 @@
 #include "cls/lock/cls_lock_client.h"
 #include "include/random.h"
 #include "rgw_gc_log.h"
+#include "rgw_sal_rados.h"
+#include "yield_completion.h"
 
+#include <algorithm>
 #include <list> // XXX
 #include <sstream>
+#include <vector>
+#include <boost/system/system_error.hpp>
 #include "xxhash.h"
 
 #define dout_context g_ceph_context
@@ -27,13 +34,24 @@ using namespace librados;
 static string gc_oid_prefix = "gc";
 static string gc_index_lock_name = "gc_process";
 
-void RGWGC::initialize(CephContext *_cct, RGWRados *_store, optional_yield y) {
+int RGWGC::initialize(CephContext *_cct, RGWRados *_store, optional_yield y) {
   cct = _cct;
   store = _store;
 
   max_objs = min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max());
 
   obj_names = new string[max_objs];
+  fifos.clear();
+  fifos.reserve(max_objs);
+
+  // max_entry: FIFO max record size, matching send_split_chain.
+  const uint64_t max_entry = cct->_conf->rgw_max_chunk_size ?
+    static_cast<uint64_t>(cct->_conf->rgw_max_chunk_size) :
+    neorados::cls::fifo::FIFO::default_max_entry_size;
+  // max_part: max size of one FIFO part object. must exceed max_entry plus per-entry
+  // header.
+  const uint64_t max_part = std::max(neorados::cls::fifo::FIFO::default_max_part_size,
+                                     max_entry * 2);
 
   for (int i = 0; i < max_objs; i++) {
     obj_names[i] = gc_oid_prefix;
@@ -46,12 +64,34 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store, optional_yield y) {
     const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size;
     gc_log_init2(op, queue_size, 0);
     store->gc_operate(this, obj_names[i], std::move(op), y);
+
+    try {
+      auto fifo_tmp = neorados::cls::fifo::FIFO::create(
+        this, store->driver->get_neorados(), fifo_oid(i),
+        *store->get_gc_pool_neo_ctx(), rgw::maybe_yield(this, y),
+        std::nullopt, std::nullopt, false, max_part, max_entry);
+      if (!fifo_tmp) {
+        ldpp_dout(this, -1) << "creating gc fifo " << fifo_oid(i)
+                            << " returned empty handle" << dendl;
+        finalize();
+        return -ENOMEM;
+      }
+      fifos.push_back(std::move(fifo_tmp));
+    } catch (const boost::system::system_error& e) {
+      ldpp_dout(this, -1) << "creating gc fifo " << fifo_oid(i)
+                          << " failed: " << e.what() << dendl;
+      finalize();
+      return ceph::from_error_code(e.code());
+    }
   }
+  return 0;
 }
 
 void RGWGC::finalize()
 {
   delete[] obj_names;
+  obj_names = nullptr;
+  fifos.clear();
 }
 
 int RGWGC::tag_index(const string& tag)
@@ -66,7 +106,20 @@ std::string RGWGC::fifo_oid(int index) const
 
 int RGWGC::fifo_push(int index, const cls_rgw_gc_obj_info& info, optional_yield y)
 {
-  // stub
+  if (index < 0 || static_cast<size_t>(index) >= fifos.size() || !fifos[index]) {
+    return -ENOENT;
+  }
+
+  bufferlist bl;
+  encode(info, bl);
+
+  try {
+    fifos[index]->push(this, std::move(bl), rgw::maybe_yield(this, y));
+  } catch (const boost::system::system_error& e) {
+    ldpp_dout(this, 0) << "ERROR: fifo_push failed oid=" << fifo_oid(index)
+                       << ": " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
   return 0;
 }
 
@@ -74,7 +127,6 @@ int RGWGC::fifo_list(int index, const std::string& marker, uint32_t max,
                      bool expired_only, std::list<cls_rgw_gc_obj_info>& entries,
                      bool* truncated, std::string* next_marker, optional_yield y)
 {
-  // stub
   entries.clear();
   if (truncated) {
     *truncated = false;
@@ -82,12 +134,75 @@ int RGWGC::fifo_list(int index, const std::string& marker, uint32_t max,
   if (next_marker) {
     next_marker->clear();
   }
+  if (max == 0) {
+    return 0;
+  }
+  if (index < 0 || static_cast<size_t>(index) >= fifos.size() || !fifos[index]) {
+    return -ENOENT;
+  }
+
+  std::vector<neorados::cls::fifo::entry> fifo_entries(max);
+  try {
+    auto [lentries, lmarker] = fifos[index]->list(this, marker, fifo_entries,
+                                                rgw::maybe_yield(this, y));
+    const auto now = ceph::real_clock::now();
+    std::string last;
+    for (const auto& e : lentries) {
+      cls_rgw_gc_obj_info info;
+      auto iter = e.data.cbegin();
+      try {
+        decode(info, iter);
+      } catch (const buffer::error&) {
+        ldpp_dout(this, 0) << "ERROR: fifo_list failed to decode entry oid="
+                           << fifo_oid(index) << dendl;
+        return -EIO;
+      }
+      // grace period (rgw_gc_obj_min_wait) not over. stop listing
+      if (expired_only && info.time > now) {
+        if (truncated) {
+          *truncated = false;
+        }
+        if (next_marker) {
+          *next_marker = last; // last expired record or empty
+        }
+        return 0;
+      }
+      entries.push_back(std::move(info));
+      last = e.marker;
+    }
+    if (truncated) {
+      *truncated = !lmarker.empty();
+    }
+    if (next_marker) {
+      *next_marker = last;
+    }
+  } catch (const boost::system::system_error& e) {
+    if (e.code() == boost::system::errc::no_such_file_or_directory) {
+      return 0;
+    }
+    ldpp_dout(this, 0) << "ERROR: fifo_list failed oid=" << fifo_oid(index)
+                       << ": " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
   return 0;
 }
 
 int RGWGC::fifo_trim(int index, const std::string& marker, optional_yield y)
 {
-  // stub
+  if (marker.empty()) {
+    return 0;
+  }
+  if (index < 0 || static_cast<size_t>(index) >= fifos.size() || !fifos[index]) {
+    return -ENOENT;
+  }
+
+  try {
+    fifos[index]->trim(this, marker, false, rgw::maybe_yield(this, y));
+  } catch (const boost::system::system_error& e) {
+    ldpp_dout(this, 0) << "ERROR: fifo_trim failed oid=" << fifo_oid(index)
+                       << " marker=" << marker << ": " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
   return 0;
 }
 

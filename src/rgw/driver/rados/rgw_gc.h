@@ -12,9 +12,12 @@
 #include "rgw_sal.h"
 #include "rgw_rados.h"
 #include "cls/rgw/cls_rgw_types.h"
+#include "neorados/cls/fifo.h"
 
 #include <atomic>
+#include <memory>
 #include <string_view>
+#include <vector>
 
 class RGWGCIOManager;
 
@@ -23,6 +26,7 @@ class RGWGC : public DoutPrefixProvider {
   RGWRados *store;
   int max_objs;
   std::string *obj_names;
+  std::vector<std::unique_ptr<neorados::cls::fifo::FIFO>> fifos;
   std::atomic<bool> down_flag = { false };
 
   static constexpr uint64_t seed = 8675309;
@@ -63,7 +67,7 @@ public:
 
   int remove(int index, int num_entries, optional_yield y);
 
-  void initialize(CephContext *_cct, RGWRados *_store, optional_yield y);
+  int initialize(CephContext *_cct, RGWRados *_store, optional_yield y);
   void finalize();
 
   int list(int& index, std::string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool& truncated, bool& processing_queue, std::optional<int> shard_id = std::nullopt);

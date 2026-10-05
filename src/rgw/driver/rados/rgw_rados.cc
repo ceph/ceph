@@ -1373,7 +1373,11 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
 
   if (use_gc) {
     gc = new RGWGC();
-    gc->initialize(cct, this, y);
+    ret = gc->initialize(cct, this, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: GC initialize failed: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
   } else {
     ldpp_dout(dpp, 5) << "note: GC not initialized" << dendl;
   }
