@@ -110,4 +110,24 @@ describe('ModuleStatusGuardService', () => {
   it('should skip backend check for user without config-opt permission', fakeAsync(() => {
     testCanActivate({ available: true, message: 'foo' }, true, '/', 'rook', false);
   }));
+
+  it('should allow nested child routes without moduleStatusGuardConfig', fakeAsync(() => {
+    const child = new ActivatedRouteSnapshot();
+    child.url = [];
+    child.data = { breadcrumbs: 'Overview', section: 'overview' };
+    // Simulate a root snapshot (i.e. one with no parent) the way the real
+    // router would, since a standalone snapshot has no `_routerState` set.
+    (child as any)._routerState = { parent: () => null };
+
+    spyOn(httpClient, 'get').and.returnValue(observableOf({ available: true, message: 'foo' }));
+    let result: boolean;
+    ngZone.run(() => {
+      service.canActivateChild(child).subscribe((resp) => {
+        result = resp;
+      });
+    });
+    tick();
+    expect(result).toBe(true);
+    expect(httpClient.get).not.toHaveBeenCalled();
+  }));
 });

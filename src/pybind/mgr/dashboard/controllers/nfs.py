@@ -90,6 +90,7 @@ CLUSTER_SCHEMA = {
         'count': (int, 'Number of daemons', True),
         'label': (str, 'Host label', True)
     }, 'Orchestrator placement specification'),
+    'enable_nfsv3': (bool, 'Whether NFSv3 is enabled for the cluster', True),
     'enable_rdma': (bool, 'Whether RDMA transport is enabled for the cluster', True),
     'error': (str, 'Error encountered while fetching the cluster info', True),
     'ingress_mode': (str, 'Ingress mode', True),
@@ -139,7 +140,7 @@ class NFSGaneshaCluster(RESTController):
     @EndpointDoc("List NFS-Ganesha clusters",
                  parameters={
                      'info': (bool, 'If true, return detailed cluster info including '
-                              'backends, placement, and enable_rdma')
+                              'backends, placement, enable_nfsv3, and enable_rdma')
                  },
                  responses={200: [CLUSTER_SCHEMA]})
     def list(self, info: Optional[bool] = False):
@@ -152,6 +153,19 @@ class NFSGaneshaCluster(RESTController):
                 {"name": key, **value} for key, value in cluster_info.items()
             ]
         return mgr.remote('nfs', 'cluster_ls')
+
+    @ReadPermission
+    @RESTController.MethodMap(version=APIVersion.EXPERIMENTAL)
+    @EndpointDoc("Get a single NFS-Ganesha cluster",
+                 parameters={
+                     'cluster_id': (str, 'Cluster identifier')
+                 },
+                 responses={200: CLUSTER_SCHEMA})
+    def get(self, cluster_id: str) -> Optional[Dict[str, Any]]:
+        info = mgr.remote('nfs', 'cluster_info', cluster_id)
+        if not info or cluster_id not in info:
+            return None
+        return {"name": cluster_id, **info[cluster_id]}
 
     @raise_on_failure
     @CreatePermission

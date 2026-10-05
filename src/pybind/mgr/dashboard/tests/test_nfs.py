@@ -245,6 +245,20 @@ class NFSGaneshaUiControllerTest(ControllerTestCase):
 
 
 class NFSGaneshaClusterTest(ControllerTestCase):
+    _cluster_info = {
+        'mycluster': {
+            'virtual_ip': None,
+            'backend': [{'hostname': 'host1', 'ip': '10.0.0.1', 'port': 2049, 'status': 'running'}],
+            'placement': {'count': 1},
+            'enable_nfsv3': False,
+            'enable_rdma': False,
+            'deployment_type': 'standalone',
+            'ingress_mode': None,
+            'port': None,
+            'monitor_port': None
+        }
+    }
+
     @classmethod
     def setup_server(cls):
         NotificationQueue.start_queue()
@@ -394,3 +408,17 @@ class NFSGaneshaClusterTest(ControllerTestCase):
         self._delete('/api/nfs-ganesha/cluster/myc',
                      version=APIVersion(1, 0))
         self.assertStatus(400)
+
+    def test_get_cluster(self):
+        mgr.remote = Mock(return_value=self._cluster_info)
+
+        self._get('/api/nfs-ganesha/cluster/mycluster', version=APIVersion.EXPERIMENTAL)
+        self.assertStatus(200)
+        self.assertJsonBody({'name': 'mycluster', **self._cluster_info['mycluster']})
+
+    def test_get_cluster_not_found(self):
+        mgr.remote = Mock(return_value={})
+
+        self._get('/api/nfs-ganesha/cluster/nonexistent', version=APIVersion.EXPERIMENTAL)
+        self.assertStatus(200)
+        self.assertJsonBody(None)
