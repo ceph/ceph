@@ -17,6 +17,7 @@
 
 #include "BlueStore.h"
 #include "BlueStore_objects.h"
+#include "BlueStore_components.h"
 #include "BlueStore_inlines.h"
 #include "Compression.h"
 #include "os/bluestore/bluestore_common.h"

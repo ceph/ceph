@@ -37,7 +37,6 @@
 #include "BlueStore_objects.h"
 #include "BlueStore_inlines.h"
 #include "bluestore_common.h"
-#include "os/bluestore/bluestore_types.h"
 #include "simple_bitmap.h"
 #include "os/kv.h"
 #include "include/compat.h"

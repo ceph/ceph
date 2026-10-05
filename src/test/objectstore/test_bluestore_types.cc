@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "include/types.h"
-#include "os/bluestore/bluestore_types.h"
 #include "gtest/gtest.h"
 #include "include/stringify.h"
 #include "common/ceph_time.h"
@@ -10,7 +9,7 @@
 #include "os/bluestore/BlueStore_objects.h"
 #include "os/bluestore/BlueStore_inlines.h"
 #include "os/bluestore/simple_bitmap.h"
-#include "os/bluestore/AvlAllocator.h"
+#include "os/bluestore/AvlAllocator.h" // for range_seg_t, FIXME: remove?
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/global_context.h"

@@ -16,7 +16,7 @@
 #define CEPH_OSD_BLUESTORE_BLUESTORE_COMPONENTS_H
 
 #include "BlueStore_objects_impl.h"
-#include "BlueStore.h"
+#include "BlueStore_objects.h"
 
 namespace bluestore {
 
