@@ -27,7 +27,8 @@ describe('NvmeofSubsystemsDetailsComponent', () => {
       subtype: 'NVMe',
       nqn: 'nqn.2001-07.com.ceph:1720603703820',
       namespace_count: 1,
-      max_namespaces: 4096
+      max_namespaces: 4096,
+      has_dhchap_key: false
     };
     component.permissions = new Permissions({
       grafana: ['read']

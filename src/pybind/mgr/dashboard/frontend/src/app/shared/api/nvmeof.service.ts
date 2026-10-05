@@ -162,7 +162,12 @@ export class NvmeofService {
 
         if (hosts?.length) {
           return allHosts.filter((host: Host) => hosts.includes(host.hostname));
-        } else if (label) {
+        } else if (label && (!Array.isArray(label) || (label as string[]).length > 0)) {
+          if (Array.isArray(label)) {
+            return allHosts.filter((host: Host) =>
+              (label as string[]).every((l) => host?.labels?.includes(l))
+            );
+          }
           return allHosts.filter((host: Host) => host?.labels?.includes(label as string));
         }
         return [];

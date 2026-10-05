@@ -1,4 +1,5 @@
-export type CephCertificateStatus = 'valid' | 'expiring' | 'expiring_soon' | 'expired' | 'not_configured' | 'invalid';
+export type CephCertificateStatus =
+  'valid' | 'expiring' | 'expiring_soon' | 'expired' | 'not_configured' | 'invalid';
 
 export const CERTIFICATE_STATUS_ICON_MAP: Record<string, string> = {
   valid: 'success',

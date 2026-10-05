@@ -5,14 +5,15 @@
   (submitRequested)="onSubmit($event)"
   [isSubmitLoading]="isSubmitLoading"
   submitButtonLabel="Add"
-  i18n-submitButtonLabel>
-
+  i18n-submitButtonLabel
+>
   <cd-tearsheet-step>
     <cd-nvmeof-subsystem-step-two
       #tearsheetStep
-               modal-primary-focus
+      modal-primary-focus
       [group]="group"
       [allowAllHosts]="allowAllHosts"
-      [existingHosts]="existingHosts"></cd-nvmeof-subsystem-step-two>
+      [existingHosts]="existingHosts"
+    ></cd-nvmeof-subsystem-step-two>
   </cd-tearsheet-step>
 </cd-tearsheet>

@@ -19,6 +19,8 @@ import { NvmeofGatewayGroupFilterComponent } from '../nvmeof-gateway-group-filte
 const mockNamespaces = [
   {
     nsid: 1,
+    ns_subsystem_nqn: 'nqn.2001-07.com.ceph:1721040751436',
+    unique_id: '1_nqn.2001-07.com.ceph:1721040751436',
     uuid: 'f4396245-186f-401a-b71c-945ccf0f0cc9',
     bdev_name: 'bdev_f4396245-186f-401a-b71c-945ccf0f0cc9',
     rbd_image_name: 'string',
@@ -55,7 +57,25 @@ const mockFormattedGwGroups = [
 
 class MockNvmeOfService {
   gatewayGroupsResponse: any = [[{ id: 'g1' }]];
-  namespacesResponse: any = { namespaces: mockNamespaces };
+  namespacesResponse: any = {
+    namespaces: [
+      {
+        nsid: 1,
+        ns_subsystem_nqn: 'nqn.2001-07.com.ceph:1721040751436',
+        uuid: 'f4396245-186f-401a-b71c-945ccf0f0cc9',
+        bdev_name: 'bdev_f4396245-186f-401a-b71c-945ccf0f0cc9',
+        rbd_image_name: 'string',
+        rbd_pool_name: 'rbd',
+        load_balancing_group: 1,
+        rbd_image_size: 1024,
+        block_size: 512,
+        rw_ios_per_second: 0,
+        rw_mbytes_per_second: 0,
+        r_mbytes_per_second: 0,
+        w_mbytes_per_second: 0
+      }
+    ]
+  };
 
   listGatewayGroups() {
     return of(mockGroups);

@@ -5,7 +5,6 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { Router } from '@angular/router';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
-import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
@@ -48,8 +47,7 @@ describe('NvmeofGroupFormComponent', () => {
         SharedModule,
         GridModule,
         InputModule,
-        SelectModule,
-        ToastrModule.forRoot()
+        SelectModule
       ],
       schemas: [CUSTOM_ELEMENTS_SCHEMA]
     }).compileComponents();

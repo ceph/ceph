@@ -21,10 +21,9 @@ import { NvmeofSubsystemsStepThreeComponent } from '../nvmeof-subsystems-form/nv
 describe('NvmeofEditAuthenticationComponent', () => {
   let component: NvmeofEditAuthenticationComponent;
   let fixture: ComponentFixture<NvmeofEditAuthenticationComponent>;
-  let nvmeofService: jest.Mocked<Pick<
-    NvmeofService,
-    'getInitiators' | 'getSubsystem' | 'updateAuthenticationKey'
-  >>;
+  let nvmeofService: jest.Mocked<
+    Pick<NvmeofService, 'getInitiators' | 'getSubsystem' | 'updateAuthenticationKey'>
+  >;
   let notificationService: { show: jest.Mock };
   let modalService: { dismissAll: jest.Mock };
 
@@ -36,38 +35,36 @@ describe('NvmeofEditAuthenticationComponent', () => {
   ];
   const mockHostsWithKey = [{ nqn: 'nqn.2014-08.org.nvmexpress:uuid:host-1', use_dhchap: true }];
 
-  beforeEach(
-    waitForAsync(() => {
-      nvmeofService = {
-        getInitiators: jest.fn().mockReturnValue(of([])),
-        getSubsystem: jest.fn().mockReturnValue(of({ has_dhchap_key: false })),
-        updateAuthenticationKey: jest.fn().mockReturnValue(of(undefined))
-      };
-      notificationService = { show: jest.fn() };
-      modalService = { dismissAll: jest.fn() };
+  beforeEach(waitForAsync(() => {
+    nvmeofService = {
+      getInitiators: jest.fn().mockReturnValue(of([])),
+      getSubsystem: jest.fn().mockReturnValue(of({ has_dhchap_key: false })),
+      updateAuthenticationKey: jest.fn().mockReturnValue(of(undefined))
+    };
+    notificationService = { show: jest.fn() };
+    modalService = { dismissAll: jest.fn() };
 
-      TestBed.configureTestingModule({
-        declarations: [NvmeofEditAuthenticationComponent, NvmeofSubsystemsStepThreeComponent],
-        imports: [
-          ReactiveFormsModule,
-          HttpClientTestingModule,
-          RouterTestingModule,
-          SharedModule,
-          GridModule,
-          InputModule,
-          RadioModule,
-          TagModule
-        ],
-        providers: [
-          { provide: NvmeofService, useValue: nvmeofService },
-          { provide: NotificationService, useValue: notificationService },
-          { provide: ModalCdsService, useValue: modalService },
-          { provide: SUBSYSTEM_NQN_TOKEN, useValue: mockSubsystemNQN },
-          { provide: GROUP_NAME_TOKEN, useValue: mockGroupName }
-        ]
-      }).compileComponents();
-    })
-  );
+    TestBed.configureTestingModule({
+      declarations: [NvmeofEditAuthenticationComponent, NvmeofSubsystemsStepThreeComponent],
+      imports: [
+        ReactiveFormsModule,
+        HttpClientTestingModule,
+        RouterTestingModule,
+        SharedModule,
+        GridModule,
+        InputModule,
+        RadioModule,
+        TagModule
+      ],
+      providers: [
+        { provide: NvmeofService, useValue: nvmeofService },
+        { provide: NotificationService, useValue: notificationService },
+        { provide: ModalCdsService, useValue: modalService },
+        { provide: SUBSYSTEM_NQN_TOKEN, useValue: mockSubsystemNQN },
+        { provide: GROUP_NAME_TOKEN, useValue: mockGroupName }
+      ]
+    }).compileComponents();
+  }));
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NvmeofEditAuthenticationComponent);

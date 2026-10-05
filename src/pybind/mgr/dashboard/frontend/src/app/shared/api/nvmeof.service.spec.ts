@@ -177,7 +177,7 @@ describe('NvmeofService', () => {
     it('should call deleteSubsystem', () => {
       service.deleteSubsystem(mockNQN, mockGroupName).subscribe();
       const req = httpTesting.expectOne(
-        `${API_PATH}/subsystem/${mockNQN}?gw_group=${mockGroupName}`
+        `${API_PATH}/subsystem/${mockNQN}?gw_group=${mockGroupName}&force=true`
       );
       expect(req.request.method).toBe('DELETE');
     });
@@ -190,7 +190,12 @@ describe('NvmeofService', () => {
   });
 
   describe('test initiators APIs', () => {
-    let request = { host_nqn: '', gw_group: mockGroupName };
+    const addRequest = {
+      hosts: [{ host_nqn: '', dhchap_key: '' }],
+      allow_all: false,
+      gw_group: mockGroupName
+    };
+    const removeRequest = { host_nqn: '', gw_group: mockGroupName };
     it('should call getInitiators', () => {
       service.getInitiators(mockNQN, mockGroupName).subscribe();
       const req = httpTesting.expectOne(
@@ -199,14 +204,14 @@ describe('NvmeofService', () => {
       expect(req.request.method).toBe('GET');
     });
     it('should call addInitiators', () => {
-      service.addInitiators(mockNQN, request).subscribe();
+      service.addSubsystemInitiators(mockNQN, addRequest).subscribe();
       const req = httpTesting.expectOne(`${UI_API_PATH}/subsystem/${mockNQN}/host`);
       expect(req.request.method).toBe('POST');
     });
     it('should call removeInitiators', () => {
-      service.removeInitiators(mockNQN, request).subscribe();
+      service.removeInitiators(mockNQN, removeRequest).subscribe();
       const req = httpTesting.expectOne(
-        `${UI_API_PATH}/subsystem/${mockNQN}/host/${request.host_nqn}/${mockGroupName}`
+        `${UI_API_PATH}/subsystem/${mockNQN}/host/${removeRequest.host_nqn}/${mockGroupName}`
       );
       expect(req.request.method).toBe('DELETE');
     });
@@ -247,7 +252,9 @@ describe('NvmeofService', () => {
     const mockNsid = '1';
     it('should call listNamespaces', () => {
       service.listNamespaces(mockGroupName).subscribe();
-      const req = httpTesting.expectOne(`${API_PATH}/subsystem/*/namespace?gw_group=${mockGroupName}`);
+      const req = httpTesting.expectOne(
+        `${API_PATH}/subsystem/*/namespace?gw_group=${mockGroupName}`
+      );
       expect(req.request.method).toBe('GET');
     });
     it('should call getNamespace', () => {

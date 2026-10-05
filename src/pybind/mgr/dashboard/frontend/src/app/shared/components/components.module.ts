@@ -231,7 +231,7 @@ import { ProductiveCardComponent } from './productive-card/productive-card.compo
     TearsheetComponent,
     TearsheetStepComponent,
     SidebarLayoutComponent,
-    UpgradableComponent,
+    UpgradableComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
