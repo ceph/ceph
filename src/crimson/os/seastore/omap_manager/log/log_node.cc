@@ -196,7 +196,7 @@ LogNode::get_value_ret LogNode::get_value(const std::string &key, copy_t c)
   bufferlist bl;
   bool found = false;
   for_each_live_entry([&](const auto& ent, uint32_t index) -> bool {
-    const auto k = ent.get_key();
+    const auto k = ent.get_key_view();
     if (k == key) {
       if (c == copy_t::SHALLOW) {
 	bl = ent.get_val_shallow();
