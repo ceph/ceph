@@ -2,7 +2,7 @@
 from typing import List, Optional
 
 from ..services.hardware import HardwareService
-from . import APIDoc, APIRouter, EndpointDoc, RESTController
+from . import APIDoc, APIRouter, EndpointDoc, Param, RESTController
 from ._version import APIVersion
 
 
@@ -19,3 +19,17 @@ class Hardware(RESTController):
         :param hostname: The host to retrieve from, all of them by default
         """
         return HardwareService.get_summary(categories, hostname)
+
+
+@APIRouter('/hardware/compression')
+@APIDoc("Hardware compression API", "Hardware")
+class HardwareCompression(RESTController):
+
+    @EndpointDoc(
+        "Retrieve cluster-wide FCM hardware compression statistics. "
+        "compression_ratio, savings_bytes and efficiency_percent are null when "
+        "total physical used is below 100 GiB to avoid misleading values on "
+        "fresh or lightly-loaded clusters."
+    )
+    def list(self):
+        return HardwareService.get_compression()

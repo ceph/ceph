@@ -99,6 +99,89 @@ class HardwareService(object):
         return output
 
     @staticmethod
+    def get_compression() -> Dict[str, Any]:
+        """
+        GET /api/hardware/compression -- cluster-wide FCM hardware compression stats.
+
+        Aggregates FCM data from node-proxy cache across all hosts and drives.
+        FCM data shape: status['fcm'][sys_id][device] = {
+            compression_ratio, savings_bytes, phy_util_percent, log_util_percent, ...
+        }
+
+        compression_ratio, savings_bytes and efficiency_percent are gated on
+        total physical used > 100 GiB to avoid misleading values from metadata
+        on fresh/small clusters (mirrors Grafana dashboard behaviour).
+        """
+        MIN_PHY_UTIL_BYTES = 107_374_182_400  # 100 GiB
+
+        fcm_data = OrchClient.instance().hardware.common('fcm')
+
+        total_phy_util_bytes = 0
+        total_log_util_bytes = 0
+        total_phy_size_bytes = 0
+        fcm_drive_count = 0
+
+        for host_fcm in fcm_data.values():
+            for sys_drives in host_fcm.values():
+                if not isinstance(sys_drives, dict):
+                    continue
+                for drive in sys_drives.values():
+                    if not isinstance(drive, dict):
+                        continue
+                    fcm_drive_count += 1
+                    total_phy_util_bytes += drive.get('phy_util_bytes') or 0
+                    total_log_util_bytes += drive.get('log_util_bytes') or 0
+                    total_phy_size_bytes += drive.get('phy_size_bytes') or 0
+
+        if fcm_drive_count == 0:
+            return {
+                'fcm_drive_count': 0,
+                'phy_util_percent': None,
+                'log_util_percent': None,
+                'savings_bytes': None,
+                'compression_ratio': None,
+                'efficiency_percent': None,
+            }
+
+        phy_util_percent = round(
+            (total_phy_util_bytes / total_phy_size_bytes) * 100, 2
+        ) if total_phy_size_bytes else None
+
+        # Gate ratio/savings/efficiency on minimum physical utilisation.
+        if total_phy_util_bytes < MIN_PHY_UTIL_BYTES:
+            return {
+                'fcm_drive_count': fcm_drive_count,
+                'phy_util_percent': phy_util_percent,
+                'log_util_percent': None,
+                'savings_bytes': None,
+                'compression_ratio': None,
+                'efficiency_percent': None,
+            }
+
+        compression_ratio = (
+            round(total_log_util_bytes / total_phy_util_bytes, 2)
+            if total_phy_util_bytes > 0 else None
+        )
+        savings_bytes = total_log_util_bytes - total_phy_util_bytes
+        efficiency_percent = (
+            round(100 * (1 - total_phy_util_bytes / total_log_util_bytes), 2)
+            if total_log_util_bytes > 0 else None
+        )
+        log_util_percent = (
+            round((total_log_util_bytes / total_phy_size_bytes) * 100, 2)
+            if total_phy_size_bytes else None
+        )
+
+        return {
+            'fcm_drive_count': fcm_drive_count,
+            'phy_util_percent': phy_util_percent,
+            'log_util_percent': log_util_percent,
+            'savings_bytes': savings_bytes,
+            'compression_ratio': compression_ratio,
+            'efficiency_percent': efficiency_percent,
+        }
+
+    @staticmethod
     def validate_categories(categories: Optional[List[str]]) -> List[str]:
         categories_list = ['memory', 'storage', 'processors',
                            'network', 'power', 'fans', 'temperatures']
