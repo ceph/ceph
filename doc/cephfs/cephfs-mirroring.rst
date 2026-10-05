@@ -183,6 +183,11 @@ To remove a peer, run a command of the following form:
 
    ceph fs snapshot mirror peer_remove <fs_name> <peer_uuid>
 
+Removing a peer clears replicated checkpoint state. Checkpoints that were
+``complete`` or ``failed`` return to ``created`` and are not reported as
+synced until a peer has the snapshots again. See
+:doc:`cephfs-mirroring-checkpoints`.
+
 To list file system mirror peers, run a command of the following form:
 
 .. prompt:: bash $
