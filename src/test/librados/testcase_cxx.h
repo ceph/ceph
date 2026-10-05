@@ -195,6 +195,16 @@ protected:
   std::string nspace;
 };
 
+// The CRUSH zones that a pool over zones created from the defaults uses: the
+// bucket type that osd_pool_default_zone_failure_domain names, the buckets of
+// that type, and the one that holds each OSD
+struct ZoneTopology {
+  std::string type;
+  std::vector<std::string> zones;
+  std::map<int, std::string> osd_zone;
+};
+ZoneTopology get_zone_topology(librados::Rados &cluster);
+
 class RadosTestECPP : public RadosTestPPBase,
                       public ::testing::TestWithParam<std::tuple<bool, bool>> {
   bool ec_overwrites_set = false;
@@ -208,13 +218,25 @@ protected:
   uint64_t get_ec_stripe_unit();
   static std::string pool_name_default;
   static std::string pool_name_fast;
+  static std::string pool_name_stretch;
+
+  // Inject/clear an EIO read error on every shard of objname.
   void inject_ec_read_error(const std::string &objname);
   void clear_ec_read_error(const std::string &objname);
+
+  // Inject/clear an EIO read error on a specific shard of objname.
+  void inject_ec_read_error_on_shard(const std::string &objname, shard_id_t shard);
+  void clear_ec_read_error_on_shard(const std::string &objname, shard_id_t shard);
+
   void inject_ec_write_error(const std::string &objname, int error_type, shard_id_t shard);
   void inject_ec_write_error_all_osds(const std::string &objname, int error_type);
   void clear_ec_write_error(const std::string &objname, int error_type, shard_id_t shard);
   void clear_ec_write_error_all_osds(const std::string &objname, int error_type);
   void wait_for_stable_acting_set(const std::string &objname);
+
+  // Whether the CRUSH map has two zones (get_zone_topology()).
+  // Checked once in SetUpTestCase() to decide whether to create the stretch pool.
+  static bool has_two_zone_topology();
 
   std::string pool_name;
   void SetUp() override;
@@ -223,4 +245,7 @@ protected:
   std::string nspace;
   uint64_t alignment = 0;
   bool fast_ec = false;
+  int ec_k = -1;
+  int ec_m = -1;
+  int ec_num_zones = -1;
 };
