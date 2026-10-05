@@ -101,6 +101,10 @@ configuration across the entire cluster. Conversely, opt for a stretch pool
 when you need only a particular pool to be replicated across more than two data centers,
 providing a more granular level of control.
 
+Individual stretch pools and stretch mode cannot be combined. While stretch
+mode is enabled, it manages the stretch values of every pool itself, and
+``ceph osd pool stretch set`` and ``ceph osd pool stretch unset`` fail.
+
 
 Limitations
 -----------
