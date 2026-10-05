@@ -8115,6 +8115,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 				  const string &erasure_code_profile,
                                   uint8_t repl_size,
 				  int64_t num_zones,
+                                  int num_replica_per_zone,
 				  unsigned *size, unsigned *min_size,
 				  ostream *ss)
 {
@@ -8132,6 +8133,9 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
       }
       *min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
       set_min_size = true;
+    }
+    if (repl_size == 0 && num_zones > 1) {
+      repl_size = num_zones * num_replica_per_zone;
     }
     if (repl_size == 0) {
       repl_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
@@ -8586,7 +8590,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   unsigned size, min_size;
   r = prepare_pool_size(pool_type, erasure_code_profile, repl_size,
-                        num_zones, &size, &min_size, ss);
+                        num_zones, num_replica_per_zone, &size, &min_size, ss);
   if (r) {
     dout(10) << "prepare_pool_size returns " << r << dendl;
     return r;

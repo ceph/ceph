@@ -560,6 +560,7 @@ private:
 			const std::string &erasure_code_profile,
                         uint8_t repl_size,
 			int64_t num_zones,
+                        int num_replica_per_zone,
 			unsigned *size, unsigned *min_size,
 			std::ostream *ss);
   int prepare_pool_stripe_width(const unsigned pool_type,

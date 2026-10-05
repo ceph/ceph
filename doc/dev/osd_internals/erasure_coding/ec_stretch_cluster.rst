@@ -198,7 +198,10 @@ These are the primary parameters required for standard deployments.
   - *Behavior*: Setting this to >1 creates a stretched pool.
      A non-stretched pool achieves redundancy across OSDs.  A stretched pool creates redundancy
      across ``num_zones``.
-  - *Pool Size*: The resulting pool ``size`` is ``num_zones × (k + m)``.
+  - *Pool Size*: For an EC pool, the resulting pool ``size`` is ``num_zones × (k + m)``. For a
+    replicated pool created with ``num_zones`` greater than 1 and without ``--size``, it is
+    ``num_zones × num_replica_per_zone`` (4 for 2 zones of 2 replicas). In global stretch mode
+    (``ceph mon enable_stretch_mode``) a replicated pool's size is ``mon_stretch_pool_size``.
 
 
 2.1.4 Advanced Parameters
