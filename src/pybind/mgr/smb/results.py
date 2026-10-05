@@ -201,6 +201,7 @@ class ResourceErrorStatus(TypedDict, total=False):
     other_cluster_id: str
     shares: List[str]
     unknown_id: str
+    existing_values: List[Dict]
 
 
 class ErrorResult(ResourceResult, Exception):
