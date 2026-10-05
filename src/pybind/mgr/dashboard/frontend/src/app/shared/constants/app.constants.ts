@@ -104,6 +104,7 @@ export class ActionLabelsI18n {
   ADD: string;
   REMOVE: string;
   EDIT: string;
+  SAVE_CHANGES: string;
   CANCEL: string;
   PREVIEW: string;
   MOVE: string;
@@ -192,6 +193,7 @@ export class ActionLabelsI18n {
 
     /* Make changes to an existing item */
     this.EDIT = $localize`Edit`;
+    this.SAVE_CHANGES = $localize`Save changes`;
     this.UPDATE = $localize`Update`;
     this.CANCEL = $localize`Cancel`;
     this.PREVIEW = $localize`Preview`;
