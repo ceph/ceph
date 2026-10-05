@@ -12,7 +12,16 @@ function(build_qatzip)
   # build a static library with -fPIC that we can link into crypto/compressor plugins
   list(APPEND configure_cmd --with-pic --enable-static --disable-shared)
 
-  set(CFLAGS "-Wno-error=strict-prototypes -Wno-error=unused-but-set-variable")
+  # qatzip builds with -Werror so we need to suppress several warnings. some warnings are specific
+  # to clang, so we have to check whether our compiler supports them first
+  include(CheckCCompilerFlag)
+  foreach(WARNING strict-prototypes unused-but-set-variable)
+    check_c_compiler_flag("-Wno-error=${WARNING}" SUPPORTS_${WARNING})
+    if(SUPPORTS_${WARNING})
+      list(APPEND CFLAGS "-Wno-error=${WARNING}")
+    endif()
+  endforeach()
+
   if(QATDRV_INCLUDE_DIR)
     list(APPEND configure_cmd --with-ICP_ROOT=${QATDRV_INCLUDE_DIR})
   endif()
