@@ -5872,6 +5872,15 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, const MConstRef<
     }
     // reflush any/all caps (if we are now the auth_cap)
     kick_flushing_caps(in, session);
+
+    /*
+     * A cap message sent to the exporting MDS while the export was in
+     * progress, such as the one that gives up Fx/Fw and the wanted caps
+     * after the last close, is dropped there, and the importing MDS hands
+     * back the caps and wanted from before it.  Nothing would send it
+     * again, and other clients then have to revoke those caps from us.
+     */
+    check_caps(in, 0);
   }
 }
 
