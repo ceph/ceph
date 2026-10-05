@@ -2,6 +2,8 @@
 
 from typing import Optional
 
+import cherrypy
+
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
@@ -70,7 +72,8 @@ class MgrModules(RESTController):
         :return: The values of the module options.
         :rtype: dict
         """
-        assert self._is_module_managed(module_name)
+        if not self._is_module_managed(module_name):
+            raise cherrypy.HTTPError(404, f"Module '{module_name}' not found")
         options = self._get_module_options(module_name)
         result = {}
         for name, option in options.items():
@@ -87,7 +90,8 @@ class MgrModules(RESTController):
         :param config: The values of the module options to be stored.
         :type config: dict
         """
-        assert self._is_module_managed(module_name)
+        if not self._is_module_managed(module_name):
+            raise cherrypy.HTTPError(404, f"Module '{module_name}' not found")
         options = self._get_module_options(module_name)
         for name in options.keys():
             if name in config:
@@ -112,7 +116,8 @@ class MgrModules(RESTController):
         :param force: Force enablement when not all mgr daemons support the module.
         :type force: bool
         """
-        assert self._is_module_managed(module_name)
+        if not self._is_module_managed(module_name):
+            raise cherrypy.HTTPError(404, f"Module '{module_name}' not found")
         cmd_kwargs = {'module': module_name}
         if force:
             cmd_kwargs['force'] = True
@@ -127,7 +132,8 @@ class MgrModules(RESTController):
         :param module_name: The name of the Ceph Mgr module.
         :type module_name: str
         """
-        assert self._is_module_managed(module_name)
+        if not self._is_module_managed(module_name):
+            raise cherrypy.HTTPError(404, f"Module '{module_name}' not found")
         CephService.send_command(
             'mon', 'mgr module disable', module=module_name)
 
@@ -140,7 +146,8 @@ class MgrModules(RESTController):
         :return: The module options as list of dicts.
         :rtype: list
         """
-        assert self._is_module_managed(module_name)
+        if not self._is_module_managed(module_name):
+            raise cherrypy.HTTPError(404, f"Module '{module_name}' not found")
         return self._get_module_options(module_name)
 
     def _is_module_managed(self, module_name):

@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import { OverviewHealthCardComponent } from './overview-health-card.component';
 import { SummaryService } from '~/app/shared/services/summary.service';
@@ -459,6 +459,67 @@ describe('OverviewHealthCardComponent (no permissions)', () => {
   it('should emit false for enabled$ when no configOpt read permission', (done) => {
     component.enabled$.subscribe((enabled) => {
       expect(enabled).toBe(false);
+      done();
+    });
+  });
+});
+
+describe('OverviewHealthCardComponent (cephadm module missing)', () => {
+  let component: OverviewHealthCardComponent;
+  let fixture: ComponentFixture<OverviewHealthCardComponent>;
+  let errorResp: { status: number; preventDefault: jest.Mock };
+
+  beforeEach(async () => {
+    errorResp = { status: 404, preventDefault: jest.fn() };
+
+    await TestBed.configureTestingModule({
+      imports: [
+        OverviewHealthCardComponent,
+        CommonModule,
+        ProductiveCardComponent,
+        SkeletonModule,
+        ButtonModule,
+        RouterModule,
+        ComponentsModule,
+        LinkModule,
+        PipesModule
+      ],
+      providers: [
+        {
+          provide: SummaryService,
+          useValue: { summaryData$: of({ version: 'ceph version 18.0.0 reef (dev)' }) }
+        },
+        { provide: UpgradeService, useValue: { listCached: jest.fn(() => of(null)) } },
+        {
+          provide: AuthStorageService,
+          useValue: { getPermissions: jest.fn(() => ({ configOpt: { read: true } })) }
+        },
+        {
+          provide: MgrModuleService,
+          useValue: { getConfig: jest.fn(() => throwError(errorResp)) }
+        },
+        { provide: HardwareService, useValue: { getSummary: jest.fn(() => of(null)) } },
+        { provide: HealthService, useValue: { getTelemetryStatus: jest.fn(() => of(false)) } },
+        { provide: PrometheusAlertService, useValue: { totalAlerts$: of(0), alerts: [] } },
+        provideRouter([])
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(OverviewHealthCardComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('should emit false for enabled$ when cephadm module is not available', (done) => {
+    component.enabled$.subscribe((enabled) => {
+      expect(enabled).toBe(false);
+      done();
+    });
+  });
+
+  it('should call preventDefault to suppress the error notification', (done) => {
+    component.enabled$.subscribe(() => {
+      expect(errorResp.preventDefault).toHaveBeenCalled();
       done();
     });
   });

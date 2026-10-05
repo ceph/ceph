@@ -26,6 +26,7 @@ import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { UpgradeInfoInterface } from '~/app/shared/models/upgrade.interface';
 import { UpgradeService } from '~/app/shared/api/upgrade.service';
 import { catchError, filter, map, shareReplay, startWith, switchMap } from 'rxjs/operators';
+import { CdHttpErrorResponse } from '~/app/shared/services/api-interceptor.service';
 import {
   HealthCardTabSection,
   HealthCardVM,
@@ -129,7 +130,10 @@ export class OverviewHealthCardComponent {
   readonly enabled$: Observable<boolean> = this.permissions?.configOpt?.read
     ? this.mgrModuleService.getConfig('cephadm').pipe(
         map((resp: any) => !!resp?.hw_monitoring),
-        catchError(() => of(false)),
+        catchError((resp: CdHttpErrorResponse) => {
+          resp.preventDefault?.();
+          return of(false);
+        }),
         shareReplay({ bufferSize: 1, refCount: true })
       )
     : of(false);
