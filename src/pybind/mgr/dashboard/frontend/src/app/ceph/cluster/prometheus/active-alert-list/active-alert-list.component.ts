@@ -1,5 +1,8 @@
-import { Component, Inject, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Inject, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+
+import { Subscription } from 'rxjs';
+import { filter, first } from 'rxjs/operators';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -13,6 +16,7 @@ import { AlertState } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { DocService } from '~/app/shared/services/doc.service';
 
 const BASE_URL = 'silences'; // as only silence actions can be used
 
@@ -29,9 +33,11 @@ const SeverityMap = {
   styleUrls: ['./active-alert-list.component.scss'],
   standalone: false
 })
-export class ActiveAlertListComponent extends PrometheusListHelper implements OnInit {
+export class ActiveAlertListComponent extends PrometheusListHelper implements OnInit, OnDestroy {
   @ViewChild('externalLinkTpl', { static: true })
   externalLinkTpl: TemplateRef<any>;
+  @ViewChild('docLinkTpl', { static: true })
+  docLinkTpl: TemplateRef<any>;
   columns: CdTableColumn[];
   innerColumns: CdTableColumn[];
   tableActions: CdTableAction[];
@@ -39,7 +45,11 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
   selection = new CdTableSelection();
   icons = Icons;
   expandedInnerRow: any;
+  alertDocUrls: Record<string, string | null> = {};
+  hasDocUrls = false;
   multilineTextKeys = ['description', 'impact', 'fix'];
+  private cephRelease = '';
+  private alertsSub: Subscription;
 
   filters: CdTableColumn[] = [
     {
@@ -74,10 +84,21 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
     public prometheusAlertService: PrometheusAlertService,
     private urlBuilder: URLBuilderService,
     private route: ActivatedRoute,
+    private docService: DocService,
     @Inject(PrometheusService) prometheusService: PrometheusService
   ) {
     super(prometheusService);
     this.permission = this.authStorageService.getPermissions().prometheus;
+    this.docService.releaseData$
+      .pipe(
+        filter((v) => !!v),
+        first()
+      )
+      .subscribe((release) => {
+        this.cephRelease = release;
+        this.hasDocUrls = !!this.docService.urlGenerator('managing-alerts', release);
+        this.alertDocUrls = {};
+      });
     this.tableActions = [
       {
         permission: 'create',
@@ -151,18 +172,42 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         flexGrow: 1
       },
       {
-        name: $localize`URL`,
+        name: $localize`Query`,
         prop: 'generatorURL',
         flexGrow: 1,
         sortable: false,
         cellTemplate: this.externalLinkTpl
-      }
+      },
+      ...(this.hasDocUrls
+        ? [
+            {
+              name: $localize`Learn more`,
+              prop: 'labels.alertname',
+              flexGrow: 1,
+              sortable: false,
+              cellTemplate: this.docLinkTpl
+            }
+          ]
+        : [])
     ];
+    this.alertsSub = this.prometheusAlertService.totalAlerts$.subscribe(() => {
+      if (!this.hasDocUrls) return;
+      this.alertDocUrls = Object.fromEntries(
+        this.prometheusAlertService.alerts.map((a) => [
+          a.labels.alertname,
+          this.docService.alertDocUrl(a.labels.alertname, this.cephRelease)
+        ])
+      );
+    });
     this.prometheusAlertService.getGroupedAlerts(true);
     this.route.queryParams.subscribe((params) => {
       const severity = params['severity'];
       this.filters[1].filterInitValue = SeverityMap[severity];
     });
+  }
+
+  ngOnDestroy() {
+    this.alertsSub?.unsubscribe();
   }
 
   setExpandedInnerRow(row: any) {
