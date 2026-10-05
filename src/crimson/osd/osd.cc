@@ -33,6 +33,7 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "messages/MOSDShardMap.h"
 #include "messages/MOSDPGPCT.h"
 #include "messages/MPGStats.h"
 
@@ -503,7 +504,11 @@ seastar::future<> OSD::start()
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   DEBUG("starting store");
   uint32_t store_shards_num = co_await store.start();
-  co_await pg_to_shard_mappings.start(0, seastar::this_smp_shard_count(), store_shards_num);
+  // When more than one reactor is available, exclude PRIMARY_CORE (0) from
+  // PG placement so that the singleton OSDSingletonState traffic and mapping
+  // arbitration on reactor 0 do not compete with PG workloads.
+  core_id_t pg_min_core = (seastar::this_smp_shard_count() > 1) ? 1 : 0;
+  co_await pg_to_shard_mappings.start(pg_min_core, seastar::this_smp_shard_count(), store_shards_num);
   co_await osd_singleton_state.start_single(
         whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
         std::ref(*monc), std::ref(*mgrc));
@@ -1388,10 +1393,48 @@ seastar::future<> OSD::committed_osd_maps(
   INFO("osd.{}: now {}", whoami, pg_shard_manager.get_osd_state_string());
 }
 
+seastar::future<> OSD::maybe_send_shard_map(crimson::net::ConnectionRef conn)
+{
+  LOG_PREFIX(OSD::maybe_send_shard_map);
+
+  // Only send to peers that understand MOSDShardMap (SERVER_TENTACLE+).
+  // Classic clients (librbd, kernel, older ceph-osd) do not have a handler
+  // for this message type and will log errors if we push it to them.
+  if (!conn->has_feature(CEPH_FEATUREMASK_SERVER_TENTACLE)) {
+    return seastar::now();
+  }
+
+  auto &priv = get_osd_priv(conn.get());
+  epoch_t current_epoch = osdmap->get_epoch();
+  if (priv.last_shard_map_sent >= current_epoch) {
+    return seastar::now();  // already up-to-date
+  }
+  priv.last_shard_map_sent = current_epoch;
+
+  // Snapshot the current PG→core table on this reactor.
+  std::map<spg_t, uint32_t> pg_map;
+  pg_shard_manager.for_each_pgid([&pg_map, this](const spg_t &pgid) {
+    core_id_t core = pg_shard_manager.get_pg_to_shard_mapping().get_pg_mapping(pgid);
+    if (core != NULL_CORE) {
+      pg_map.emplace(pgid, static_cast<uint32_t>(core));
+    }
+  });
+
+  DEBUG("sending shard_map to {} epoch={} pgs={}",
+        conn->get_peer_addr(), current_epoch, pg_map.size());
+  auto msg = crimson::make_message<MOSDShardMap>(whoami, current_epoch,
+                                                 std::move(pg_map));
+  return conn->send(std::move(msg));
+}
+
 seastar::future<> OSD::handle_osd_op(
   crimson::net::ConnectionRef conn,
   Ref<MOSDOp> m)
 {
+  // Fire-and-forget a shard map update if needed; this races harmlessly
+  // with the op itself since it only adds information the client caches.
+  gate.dispatch_in_background("send_shard_map", *this,
+    [this, conn] { return maybe_send_shard_map(conn); });
   return pg_shard_manager.start_pg_operation<ClientRequest>(
     get_shard_services(),
     conn,

@@ -223,6 +223,7 @@
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 
+#include "messages/MOSDShardMap.h"
 #include "messages/MOSDPGPCT.h"
 
 #include "messages/MNVMeofGwBeacon.h"
@@ -554,6 +555,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     m = make_message<MOSDPGUpdateLogMissingReply>();
+    break;
+  case MSG_OSD_SHARD_MAP:
+    m = make_message<MOSDShardMap>();
     break;
   case MSG_OSD_PG_PCT:
     m = make_message<MOSDPGPCT>();

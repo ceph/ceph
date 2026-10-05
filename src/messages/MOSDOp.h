@@ -40,7 +40,7 @@ namespace _mosdop {
 template<typename V>
 class MOSDOp final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 9;
+  static constexpr int HEAD_VERSION = 10;
   static constexpr int COMPAT_VERSION = 3;
 
 private:
@@ -68,6 +68,10 @@ private:
   uint64_t features;
   bool bdata_encode;
   osd_reqid_t reqid; // reqid explicitly set by sender
+  // Hint from the client indicating which crimson reactor core owns the PG.
+  // Set to NULL_CORE when unknown (e.g. old clients or first request).
+  // Only meaningful for Crimson OSD; classic OSD ignores it.
+  uint32_t shard_hint = std::numeric_limits<uint32_t>::max();
 
 public:
   friend MOSDOpReply;
@@ -86,6 +90,8 @@ public:
   void set_spg(spg_t p) {
     pgid = p;
   }
+  uint32_t get_shard_hint() const { return shard_hint; }
+  void set_shard_hint(uint32_t core) { shard_hint = core; }
 
   // Fields decoded in partial decoding
   pg_t get_pg() const {
@@ -398,9 +404,9 @@ struct ceph_osd_request_head {
 
       encode(retry_attempt, payload);
       encode(features, payload);
-    } else {
-      // latest v9 opentelemetry trace
-      header.version = HEAD_VERSION;
+    } else if (!HAVE_FEATURE(features, SERVER_TENTACLE)) {
+      // v9: opentelemetry trace, no shard_hint
+      header.version = 9;
 
       encode(pgid, payload);
       encode(hobj.get_hash(), payload);
@@ -420,7 +426,38 @@ struct ceph_osd_request_head {
       __u16 num_ops = ops.size();
       encode(num_ops, payload);
       for (unsigned i = 0; i < ops.size(); i++)
-	encode(ops[i].op, payload);
+ encode(ops[i].op, payload);
+
+      encode(hobj.snap, payload);
+      encode(snap_seq, payload);
+      encode(snaps, payload);
+
+      encode(retry_attempt, payload);
+      encode(features, payload);
+    } else {
+      // latest v10: adds shard_hint for Crimson reactor routing
+      header.version = HEAD_VERSION;
+
+      encode(pgid, payload);
+      encode(hobj.get_hash(), payload);
+      encode(osdmap_epoch, payload);
+      encode(flags, payload);
+      encode(reqid, payload);
+      encode_trace(payload, features);
+      encode_otel_trace(payload, features);
+      encode(shard_hint, payload);
+
+      // -- above decoded up front; below decoded post-dispatch thread --
+
+      encode(client_inc, payload);
+      encode(mtime, payload);
+      encode(get_object_locator(), payload);
+      encode(hobj.oid, payload);
+
+      __u16 num_ops = ops.size();
+      encode(num_ops, payload);
+      for (unsigned i = 0; i < ops.size(); i++)
+ encode(ops[i].op, payload);
 
       encode(hobj.snap, payload);
       encode(snap_seq, payload);
@@ -447,6 +484,18 @@ struct ceph_osd_request_head {
       decode(reqid, p);
       decode_trace(p);
       decode_otel_trace(p);
+      decode(shard_hint, p);
+    } else if (header.version == 9) {
+      decode(pgid, p);
+      uint32_t hash;
+      decode(hash, p);
+      hobj.set_hash(hash);
+      decode(osdmap_epoch, p);
+      decode(flags, p);
+      decode(reqid, p);
+      decode_trace(p);
+      decode_otel_trace(p);
+      // shard_hint absent in v9; leave default (NULL_CORE sentinel)
     } else if (header.version == 8) {
       decode(pgid, p);      // actual pgid
       uint32_t hash;
