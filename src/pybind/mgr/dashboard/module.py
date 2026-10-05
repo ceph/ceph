@@ -398,6 +398,7 @@ class Module(MgrModule, CherryPyConfig):
         PLUGIN_MANAGER.hook.setup()
 
         NotificationQueue.start_queue()
+        DashboardTelemetryService.start_worker()
         TaskManager.init()
         logger.info('Engine started.')
         update_dashboards = str_to_bool(
@@ -414,6 +415,7 @@ class Module(MgrModule, CherryPyConfig):
         self.shutdown_event.wait()
         self.shutdown_event.clear()
         self.stop_adapter()
+        DashboardTelemetryService.stop_worker()
         NotificationQueue.stop()
         logger.info('Engine stopped')
 

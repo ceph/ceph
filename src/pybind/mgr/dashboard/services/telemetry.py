@@ -2,12 +2,15 @@
 
 import json
 import logging
+import queue
+import threading
 from typing import TypedDict
 
 from .. import mgr
-from ..plugins.ttl_cache import ttl_cache
 
 logger = logging.getLogger('services.telemetry')
+
+_LOGIN_EVENT = 'login'
 
 
 class AuthenticationUserSignals(TypedDict):  # pylint: disable=inherit-non-class
@@ -24,21 +27,79 @@ class DashboardTelemetryService:
     )
     KV_LOGIN_COUNT = 'telemetry/login_count'
 
+    # Bounded queue: drops telemetry rather than blocking the login path.
+    _queue: queue.Queue = queue.Queue(maxsize=10_000)
+    _worker_thread: threading.Thread = None  # type: ignore[assignment]
+    _running: bool = False
+
+    # ---------- lifecycle --------------------------------------------------
+
     @classmethod
-    @ttl_cache(300, label='authentication_user_signals')
-    def get_authentication_user_signals(cls) -> AuthenticationUserSignals:
-        auth_signal = mgr.get_store(cls.KV_AUTHENTICATION_USER_SIGNALS)
+    def start_worker(cls):
+        """Start the background telemetry worker. Called once at module start."""
+        cls._running = True
+        cls._worker_thread = threading.Thread(
+            target=cls._worker, daemon=True, name='telemetry-worker'
+        )
+        cls._worker_thread.start()
 
-        if not auth_signal:
-            return cls._detect_and_cache_authentication_user_signals()
-
+    @classmethod
+    def stop_worker(cls):
+        """Stop the background telemetry worker. Called once at module shutdown."""
+        cls._running = False
         try:
-            return json.loads(auth_signal)
-        except (TypeError, json.JSONDecodeError):
-            logger.warning(
-                'telemetry: invalid cached authentication data; recomputing'
-            )
-            return cls._detect_and_cache_authentication_user_signals()
+            cls._queue.put_nowait(None)  # sentinel to unblock the worker
+        except queue.Full:
+            pass
+        if cls._worker_thread is not None:
+            cls._worker_thread.join(timeout=5)
+
+    # ---------- worker loop ------------------------------------------------
+
+    @classmethod
+    def _worker_process_one(cls, event: str):
+        """Process a single telemetry event. Extracted for testability."""
+        if event == _LOGIN_EVENT:
+            count = cls.get_login_count() + 1
+            mgr.set_store(cls.KV_LOGIN_COUNT, str(count))
+
+    @classmethod
+    def _worker(cls):
+        while cls._running:
+            try:
+                event = cls._queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            if event is None:  # sentinel — stop
+                cls._queue.task_done()
+                break
+            try:
+                cls._worker_process_one(event)
+            except Exception as e:  # pylint: disable=broad-except
+                logger.warning('failed to process telemetry event %r: %s', event, e)
+            finally:
+                cls._queue.task_done()
+
+    # ---------- producers --------------------------------------------------
+
+    @classmethod
+    def increment_login_count(cls):
+        """
+        Enqueue a login event. Returns immediately; never blocks the login path.
+        Drops the event silently when the queue is full.
+        """
+        try:
+            cls._queue.put_nowait(_LOGIN_EVENT)
+        except queue.Full:
+            logger.warning('queue full; login event dropped')
+
+    # ---------- refresh (called at startup / periodically) -----------------
+
+    @classmethod
+    def refresh_authentication_user_signals(
+        cls
+    ) -> AuthenticationUserSignals:
+        return cls._detect_and_cache_authentication_user_signals()
 
     @classmethod
     def _detect_and_cache_authentication_user_signals(
@@ -61,9 +122,7 @@ class DashboardTelemetryService:
                 else 0
             )
         except Exception as e:  # pylint: disable=broad-except
-            logger.warning(
-                'telemetry: failed to detect authentication signals: %s', e
-            )
+            logger.warning('failed to detect authentication signals: %s', e)
 
         result: AuthenticationUserSignals = {
             'oauth2_enabled': oauth2_enabled,
@@ -79,42 +138,13 @@ class DashboardTelemetryService:
 
         return result
 
+    # ---------- helpers ----------------------------------------------------
+
     @classmethod
-    def refresh_authentication_user_signals(
-        cls
-    ) -> AuthenticationUserSignals:
-        return cls._detect_and_cache_authentication_user_signals()
-
-    @staticmethod
-    def get_login_count() -> int:
-        """
-        Read the persistent login counter.
-
-        Returns cumulative login count stored in the manager KV store.
-        """
+    def get_login_count(cls) -> int:
         try:
-            count_raw = mgr.get_store(
-                DashboardTelemetryService.KV_LOGIN_COUNT, '0'
-            )
+            count_raw = mgr.get_store(cls.KV_LOGIN_COUNT, '0')
             return int(count_raw)
         except (ValueError, TypeError) as e:
-            logger.warning('telemetry: failed to read login count: %s', e)
+            logger.warning('failed to read login count: %s', e)
             return 0
-
-    @classmethod
-    def increment_login_count(cls):
-        """
-        Increment the persistent login counter.
-        Called after successful authentication.
-
-        Note: This uses a read-modify-write pattern which may lose
-        increments during concurrent logins. Minor race is acceptable
-        since this is telemetry and login_count is an approximate
-        aggregate metric. Telemetry should never break dashboard
-        functionality, hence the broad exception handling.
-        """
-        try:
-            count = cls.get_login_count() + 1
-            mgr.set_store(cls.KV_LOGIN_COUNT, str(count))
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning('telemetry: failed to increment login count: %s', e)
