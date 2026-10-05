@@ -60,7 +60,10 @@ export class ModuleStatusGuardService {
     if (route.url.length > 0 && ModuleStatusGuardService.ALLOWLIST.includes(route.url[0].path)) {
       return observableOf(true);
     }
-    const config = route.data['moduleStatusGuardConfig'];
+    const config = this.getGuardConfig(route);
+    if (!config?.uiApiPath) {
+      return observableOf(true);
+    }
     let backendCheck = false;
     if (config.backend && this.authStorageService.getPermissions().configOpt?.read) {
       this.mgrModuleService.getConfig('orchestrator').subscribe(
@@ -104,5 +107,20 @@ export class ModuleStatusGuardService {
         return observableOf(false);
       })
     );
+  }
+
+  private getGuardConfig(route: ActivatedRouteSnapshot): any {
+    let current: ActivatedRouteSnapshot | null = route;
+    while (current) {
+      if (current.data?.['moduleStatusGuardConfig']) {
+        return current.data['moduleStatusGuardConfig'];
+      }
+      try {
+        current = current.parent;
+      } catch {
+        break;
+      }
+    }
+    return undefined;
   }
 }

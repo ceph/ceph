@@ -1,0 +1,24 @@
+@if (selection) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Cluster settings"
+        [columns]="3"
+        [loading]="isOverviewLoading"
+        [fields]="overviewFields"
+      >
+      </cd-resource-overview-card>
+
+      <section class="cds-mt-6">
+        <cd-nfs-list [clusterId]="selection.name"></cd-nfs-list>
+      </section>
+    }
+  }
+} @else if (loadError) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No NFS cluster found.</cd-alert-panel
+  >
+}

@@ -658,6 +658,8 @@ class NFSCluster:
 
         deployment_type = "standalone"
         placement = None
+        enable_nfsv3 = False
+        enable_rdma = False
 
         nfs_sc = self.mgr.describe_service(
             service_type='nfs',
@@ -667,6 +669,8 @@ class NFSCluster:
         for svc in nfs_services:
             if svc.spec.service_id == cluster_id:
                 placement = svc.spec.placement
+                enable_nfsv3 = bool(getattr(svc.spec, 'enable_nfsv3', False))
+                enable_rdma = bool(getattr(svc.spec, 'enable_rdma', False))
                 break
 
         if ingress_mode:
@@ -682,6 +686,8 @@ class NFSCluster:
             'virtual_ip': virtual_ip,
             'backend': backends,
             'placement': placement.to_json() if placement else {},
+            'enable_nfsv3': enable_nfsv3,
+            'enable_rdma': enable_rdma,
         }
 
         if ingress_mode:

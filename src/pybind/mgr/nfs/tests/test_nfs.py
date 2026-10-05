@@ -1611,7 +1611,9 @@ EXPORT {
             "deployment_type": "standalone",
             "virtual_ip": None,
             "backend": [],
-            "placement": {}
+            "placement": {},
+            "enable_nfsv3": False,
+            "enable_rdma": False,
         }}
 
     def test_cluster_info(self):
