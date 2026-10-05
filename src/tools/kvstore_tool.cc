@@ -334,6 +334,11 @@ int StoreTool::copy_store_to(const string& type, const string& other_path,
   KeyValueDB *other_ptr = KeyValueDB::create(g_ceph_context,
 					     other_type,
 					     other_path);
+  if (!other_ptr) {
+    std::cerr << "cannot create a store of type '" << other_type
+              << "'; pass a store type such as rocksdb" << std::endl;
+    return -EINVAL;
+  }
   if (int err = other_ptr->create_and_open(std::cerr); err < 0) {
     return err;
   }
