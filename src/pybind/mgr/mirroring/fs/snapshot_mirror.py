@@ -659,6 +659,11 @@ class FSSnapshotMirror:
                     log.error(f'mon command to remove peer failed: {err}')
                     raise Exception(-errno.EINVAL)
                 self.config_set(FSSnapshotMirror.peer_config_key(filesystem, peer_uuid))
+                # Mirroring is single-peer. Checkpoint status means "synced to
+                # the current peer", so drop that state before the command
+                # returns. The mirror daemon resets again after its replayer
+                # stops, in case it marked a checkpoint complete in between.
+                self._reset_checkpoints_after_peer_remove(filesystem)
                 return 0, json.dumps({}), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
@@ -1009,6 +1014,29 @@ class FSSnapshotMirror:
                     return 0, json.dumps(daemons), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
+
+    def _reset_checkpoints_after_peer_remove(self, filesystem):
+        """Demote complete/failed checkpoints now that the peer is gone."""
+        fspolicy = self.pool_policy.get(filesystem, None)
+        if not fspolicy:
+            return
+        with fspolicy.policy.lock:
+            dir_paths = list(fspolicy.policy.dir_states.keys())
+        if not dir_paths:
+            return
+
+        failed = []
+        with open_filesystem(self.local_fs, filesystem) as fsh:
+            for dir_path in dir_paths:
+                try:
+                    self.checkpoint.reset_peer_checkpoints(fsh, dir_path)
+                except (MirrorException, cephfs.Error) as e:
+                    log.error(f'failed to reset checkpoints under {dir_path}: {e}')
+                    failed.append(dir_path)
+        if failed:
+            raise MirrorException(
+                -errno.EIO,
+                'peer removed, but failed to reset checkpoints for: ' + ', '.join(failed))
 
     def _validate_checkpoint_dir(self, fs_name, dir_path):
         """Validate filesystem and mirrored directory; return normalized dir path."""
