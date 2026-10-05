@@ -36,41 +36,34 @@ using std::string;
 using std::unique_lock;
 using std::unique_ptr;
 
-const std::string BENCH_LASTRUN_METADATA = "benchmark_last_metadata";
-const std::string BENCH_PREFIX = "benchmark_data";
-const std::string BENCH_OBJ_NAME = BENCH_PREFIX + "_%s_%d_object%d";
-
-static char cached_hostname[30] = {0};
+static std::string cached_hostname;
 int cached_pid = 0;
 
 static std::string generate_object_prefix_nopid() {
-  if (cached_hostname[0] == 0) {
-    gethostname(cached_hostname, sizeof(cached_hostname)-1);
-    cached_hostname[sizeof(cached_hostname)-1] = 0;
+  if (cached_hostname.empty()) {
+    cached_hostname = ceph::bench::get_local_hostname();
   }
 
-  std::ostringstream oss;
-  oss << BENCH_PREFIX << "_" << cached_hostname;
-  return oss.str();
+  return ceph::bench::generate_object_prefix_nopid(cached_hostname);
 }
 
 static std::string generate_object_prefix(int pid = 0) {
+  if (cached_hostname.empty()) {
+    cached_hostname = ceph::bench::get_local_hostname();
+  }
   if (pid)
     cached_pid = pid;
   else if (!cached_pid)
     cached_pid = getpid();
 
-  std::ostringstream oss;
-  oss << generate_object_prefix_nopid() << "_" << cached_pid;
-  return oss.str();
+  return ceph::bench::generate_object_prefix(cached_hostname, cached_pid);
 }
 
 // this is 8x faster than previous impl based on chained, deduped functions call
 static std::string generate_object_name_fast(int objnum, int pid = 0)
 {
-  if (cached_hostname[0] == 0) {
-	gethostname(cached_hostname, sizeof(cached_hostname)-1);
-	cached_hostname[sizeof(cached_hostname)-1] = 0;
+  if (cached_hostname.empty()) {
+    cached_hostname = ceph::bench::get_local_hostname();
   }
 
   if (pid)
@@ -78,10 +71,7 @@ static std::string generate_object_name_fast(int objnum, int pid = 0)
   else if (!cached_pid)
 	cached_pid = getpid();
 
-  char name[512];
-  int n = snprintf(&name[0], sizeof(name),  BENCH_OBJ_NAME.c_str(), cached_hostname, cached_pid, objnum);
-  ceph_assert(n > 0 && n < (int)sizeof(name));
-  return std::string(&name[0], (size_t)n);
+  return ceph::bench::generate_object_name_fast(cached_hostname, cached_pid, objnum);
 }
 
 static void sanitize_object_contents (bench_data *data, size_t length) {
@@ -279,6 +269,8 @@ int ObjBencher::aio_bench(
       if (r == -ENOENT) {
         if (reuse_bench)
           cerr << "Must write data before using reuse_bench for a write benchmark!" << std::endl;
+        else if (operation == OP_ROLLBACK)
+          cerr << "Must write data before running a rollback benchmark!" << std::endl;
         else
           cerr << "Must write data before running a read benchmark!" << std::endl;
       }
@@ -320,6 +312,10 @@ int ObjBencher::aio_bench(
   }
   else if (OP_RAND_READ == operation) {
     r = rand_read_bench(secondsToRun, num_ops, num_objects, concurrentios, prev_pid, no_verify);
+    if (r != 0) goto out;
+  }
+  else if (OP_ROLLBACK == operation) {
+    r = rollback_bench(secondsToRun, num_ops, num_objects, concurrentios, prev_pid);
     if (r != 0) goto out;
   }
 
@@ -385,15 +381,8 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
     }
     return r;
   }
-  auto p = object_data.cbegin();
-  decode(*object_size, p);
-  decode(*num_ops, p);
-  decode(*prevPid, p);
-  if (!p.end()) {
-    decode(*op_size, p);
-  } else {
-    *op_size = *object_size;
-  }
+  ceph::bench::decode_bench_metadata(object_data, object_size, num_ops, prevPid, op_size);
+
   unsigned ops_per_object = 1;
   // make sure *op_size value is reasonable
   if (*op_size > 0 && *object_size > *op_size) {
@@ -412,11 +401,11 @@ int ObjBencher::write_bench(int secondsToRun,
 
   if (!formatter) {
     out(cout) << "Maintaining " << concurrentios << " concurrent writes of "
-	      << data.op_size << " bytes to objects of size "
-	      << data.object_size << " for up to "
-	      << secondsToRun << " seconds or "
-	      << max_objects << " objects"
-	      << std::endl;
+              << data.op_size << " bytes to objects of size "
+              << data.object_size << " for up to "
+              << secondsToRun << " seconds or "
+              << max_objects << " objects"
+              << std::endl;
   } else {
     formatter->dump_format("concurrent_ios", "%d", concurrentios);
     formatter->dump_format("object_size", "%d", data.object_size);
@@ -424,6 +413,7 @@ int ObjBencher::write_bench(int secondsToRun,
     formatter->dump_format("seconds_to_run", "%d", secondsToRun);
     formatter->dump_format("max_objects", "%d", max_objects);
   }
+
   bufferlist* newContents = 0;
 
   std::string prefix = prev_pid ? generate_object_prefix(prev_pid) : generate_object_prefix();
@@ -470,7 +460,7 @@ int ObjBencher::write_bench(int secondsToRun,
     if (r < 0)
       goto ERR;
     r = aio_write(name[i], i, *contents[i], data.op_size,
-		  data.op_size * (i % writes_per_object));
+                    data.op_size * (i % writes_per_object));
     if (r < 0) {
       goto ERR;
     }
@@ -634,15 +624,235 @@ int ObjBencher::write_bench(int secondsToRun,
     formatter->dump_format("min_latency", "%f", data.min_latency);
   }
   //write object size/number data for read benchmarks
-  encode(data.object_size, b_write);
-  encode(data.finished, b_write);
-  encode(prev_pid ? prev_pid : getpid(),  b_write);
-  encode(data.op_size, b_write);
-
+  ceph::bench::encode_bench_metadata(&b_write, data.object_size, data.finished,
+                        prev_pid ? prev_pid : getpid(), data.op_size);
   // persist meta-data for further cleanup or read
   sync_write(run_name_meta, b_write, sizeof(int)*3);
 
   completions_done();
+
+  return 0;
+
+ ERR:
+  locker.lock();
+  data.done = 1;
+  locker.unlock();
+  pthread_join(print_thread, NULL);
+  return r;
+}
+
+int ObjBencher::rollback_bench(int secondsToRun,
+                               int num_ops, int num_objects,
+                               int concurrentios, int prev_pid) {
+  if (concurrentios <= 0)
+    return -EINVAL;
+
+  // num_ops is the previous write's op count. The object count derived
+  // from it is what bounds this sweep.
+  (void)num_ops;
+  if (num_objects <= 0)
+    return -EINVAL;
+
+  // One in-flight rollback per object. A larger concurrency window would
+  // name objects the write bench never created.
+  if (concurrentios > num_objects)
+    concurrentios = num_objects;
+
+  if (!formatter) {
+    out(cout) << "Rolling back all " << num_objects << " objects, "
+              << concurrentios << " at a time, for up to "
+              << secondsToRun << " seconds"
+              << std::endl;
+  } else {
+    formatter->dump_format("concurrent_ios", "%d", concurrentios);
+    formatter->dump_format("object_size", "%d", data.object_size);
+    formatter->dump_format("seconds_to_run", "%d", secondsToRun);
+    formatter->dump_format("num_objects", "%d", num_objects);
+  }
+
+  std::string prefix = prev_pid ? generate_object_prefix(prev_pid) : generate_object_prefix();
+  if (!formatter)
+    out(cout) << "Object prefix: " << prefix << std::endl;
+  else
+    formatter->dump_string("object_prefix", prefix);
+
+  std::vector<string> name(concurrentios);
+  std::string newName;
+  int r = 0;
+  bool timed_out = false;
+  bufferlist b_write;
+  lock_cond lc(&lock);
+  double total_latency = 0;
+  std::vector<mono_time> start_times(concurrentios);
+  mono_time stopTime;
+  std::chrono::duration<double> timePassed;
+
+  r = completions_init(concurrentios);
+
+  // Write bench names object N as benchmark_data_<host>_<pid>_objectN.
+  // Rollback is one op per object, so N is the object ordinal in
+  // [0, num_objects), not op_index / writes_per_object.
+  for (int i = 0; i<concurrentios; ++i) {
+    name[i] = generate_object_name_fast(i, prev_pid);
+  }
+
+  pthread_t print_thread;
+
+  pthread_create(&print_thread, NULL, ObjBencher::status_printer, (void *)this);
+  std::unique_lock locker{lock};
+  data.finished = 0;
+  data.start_time = mono_clock::now();
+  locker.unlock();
+  for (int i = 0; i<concurrentios; ++i) {
+    start_times[i] = mono_clock::now();
+    r = create_completion(i, _aio_cb, (void *)&lc);
+    if (r < 0)
+      goto ERR;
+    r = aio_rollback(name[i], i);
+    if (r < 0) {
+      goto ERR;
+    }
+    locker.lock();
+    ++data.started;
+    ++data.in_flight;
+    locker.unlock();
+  }
+
+  // Issue the next object's rollback as each one completes. Mutation
+  // does not record which objects it overwrote, so the sweep has to
+  // cover the whole set. Stopping at the time limit is a failure.
+  int slot;
+
+  //don't need locking for reads because other thread doesn't write
+
+  stopTime = data.start_time + std::chrono::seconds(secondsToRun);
+  slot = 0;
+  locker.lock();
+  while (data.finished < data.started) {
+    bool found = false;
+    while (1) {
+      int old_slot = slot;
+      do {
+        if (completion_is_done(slot)) {
+            found = true;
+            break;
+        }
+        slot++;
+        if (slot == concurrentios) {
+          slot = 0;
+        }
+      } while (slot != old_slot);
+      if (found)
+        break;
+      lc.cond.wait(locker);
+    }
+    locker.unlock();
+
+    completion_wait(slot);
+    locker.lock();
+    r = completion_ret(slot);
+    if (r != 0) {
+      locker.unlock();
+      goto ERR;
+    }
+    data.cur_latency = mono_clock::now() - start_times[slot];
+    total_latency += data.cur_latency.count();
+    if (data.cur_latency.count() > data.max_latency) {
+      data.max_latency = data.cur_latency.count();
+    }
+    if (data.cur_latency.count() < data.min_latency) {
+      data.min_latency = data.cur_latency.count();
+    }
+    ++data.finished;
+    double delta = data.cur_latency.count() - data.avg_latency;
+    data.avg_latency = total_latency / data.finished;
+    data.latency_diff_sum += delta * (data.cur_latency.count() - data.avg_latency);
+    --data.in_flight;
+    locker.unlock();
+    release_completion(slot);
+
+    // data.started is the next object index. Stop at num_objects so the
+    // sweep does not wrap onto the first window or run off the end.
+    const bool more = data.started < num_objects;
+    if (more && (!secondsToRun || mono_clock::now() >= stopTime))
+      timed_out = true;
+    const bool start_new = more && !timed_out;
+    if (start_new)
+      newName = generate_object_name_fast(data.started, prev_pid);
+
+    if (!start_new) {
+      locker.lock();
+      continue;
+    }
+
+    start_times[slot] = mono_clock::now();
+    r = create_completion(slot, _aio_cb, &lc);
+    if (r < 0)
+      goto ERR;
+    r = aio_rollback(newName, slot);
+    if (r < 0) {
+      goto ERR;
+    }
+    name[slot] = newName;
+    locker.lock();
+    ++data.started;
+    ++data.in_flight;
+  }
+  locker.unlock();
+
+  timePassed = mono_clock::now() - data.start_time;
+  locker.lock();
+  data.done = true;
+  locker.unlock();
+
+  pthread_join(print_thread, NULL);
+
+  double iops_stddev;
+  double latency_stddev;
+  if (data.idata.iops_cycles > 1) {
+    iops_stddev = std::sqrt(data.idata.iops_diff_sum / (data.idata.iops_cycles - 1));
+  } else {
+    iops_stddev = 0;
+  }
+  if (data.finished > 1) {
+    latency_stddev = std::sqrt(data.latency_diff_sum / (data.finished - 1));
+  } else {
+    latency_stddev = 0;
+  }
+
+  if (!formatter) {
+    out(cout) << "Total time run:         " << timePassed.count() << std::endl
+       << "Total rollbacks made:      " << data.finished << std::endl
+       << "Object size:            " << data.object_size << std::endl
+       << "Average IOPS:           " << (int)(data.finished/timePassed.count()) << std::endl
+       << "Stddev IOPS:            " << iops_stddev << std::endl
+       << "Max IOPS:               " << data.idata.max_iops << std::endl
+       << "Min IOPS:               " << data.idata.min_iops << std::endl
+       << "Average Latency(s):     " << data.avg_latency << std::endl
+       << "Stddev Latency(s):      " << latency_stddev << std::endl
+       << "Max latency(s):         " << data.max_latency << std::endl
+       << "Min latency(s):         " << data.min_latency << std::endl;
+  } else {
+    formatter->dump_format("total_time_run", "%f", timePassed.count());
+    formatter->dump_format("total_rollbacks_made", "%d", data.finished);
+    formatter->dump_format("object_size", "%d", data.object_size);
+    formatter->dump_format("average_iops", "%d", (int)(data.finished/timePassed.count()));
+    formatter->dump_format("stddev_iops", "%f", iops_stddev);
+    formatter->dump_format("max_iops", "%d", data.idata.max_iops);
+    formatter->dump_format("min_iops", "%d", data.idata.min_iops);
+    formatter->dump_format("average_latency", "%f", data.avg_latency);
+    formatter->dump_format("stddev_latency", "%f", latency_stddev);
+    formatter->dump_format("max_latency", "%f", data.max_latency);
+    formatter->dump_format("min_latency", "%f", data.min_latency);
+  }
+
+  completions_done();
+
+  if (data.finished < num_objects) {
+    cerr << "error: rolled back " << data.finished << " of " << num_objects
+         << " objects before the time limit" << std::endl;
+    return -ETIMEDOUT;
+  }
 
   return 0;
 
