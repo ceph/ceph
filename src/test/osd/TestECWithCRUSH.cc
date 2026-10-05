@@ -129,6 +129,240 @@ TEST_P(TestECWithCRUSH, BasicWriteVerify)
   create_and_write_verify(obj_name, data);
 }
 
+// ===========================================================================
+// SplitOp::local_zone_for_acting_set() tests
+//
+// Tests zone resolution: one arbitrary OSD per zone is picked as a
+// representative, its CRUSH distance to the client is computed, and the zone
+// with the closest representative wins.
+//
+// A minimal 2-zone CRUSH map is built inline (no PG, no peering, no store)
+// so that the CRUSH lookups produce real results.
+// ===========================================================================
+
+class TestLocalZoneForActingSet : public ::testing::Test {
+protected:
+  std::shared_ptr<OSDMap> osdmap;
+  static constexpr int zone_size = 6;
+  int num_zones = 2;
+
+  void SetUp() override
+  {
+    CephContext* cct = g_ceph_context;
+    const int num_osds = zone_size * num_zones;
+
+    osdmap = std::make_shared<OSDMap>();
+    uuid_d fsid;
+    fsid.generate_random();
+    int r = osdmap->build_simple(cct, 1, fsid, num_osds);
+    ceph_assert(r == 0);
+
+    // One datacenter per zone:
+    //   root "default"
+    //     ├─ datacenter "zone-0" → host "host-0" → osd.0 … osd.5
+    //     └─ datacenter "zone-1" → host "host-1" → osd.6 … osd.11 (…)
+    CrushWrapper crush;
+    crush.create();
+    OSDMap::_build_crush_types(crush);
+
+    int root_type = crush.get_type_id("root");
+    ceph_assert(root_type >= 0);
+    int rootid = 0;
+    r = crush.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                         root_type, 0, nullptr, nullptr, &rootid);
+    ceph_assert(r == 0);
+    crush.set_item_name(rootid, "default");
+
+    for (int z = 0; z < num_zones; z++) {
+      std::map<std::string, std::string> loc;
+      loc["root"]       = "default";
+      loc["datacenter"] = "zone-" + std::to_string(z);
+      loc["host"]       = "host-" + std::to_string(z);
+      for (int i = 0; i < zone_size; i++) {
+        int osd = z * zone_size + i;
+        crush.insert_item(cct, osd, 1.0, "osd." + std::to_string(osd), loc);
+      }
+    }
+    crush.finalize();
+
+    OSDMap::Incremental crush_inc(osdmap->get_epoch() + 1);
+    crush_inc.fsid = osdmap->get_fsid();
+    crush.encode(crush_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    osdmap->apply_incremental(crush_inc);
+  }
+
+  std::multimap<std::string, std::string> make_loc(int zone_index)
+  {
+    std::multimap<std::string, std::string> loc;
+    if (zone_index >= 0) {
+      loc.emplace("datacenter", "zone-" + std::to_string(zone_index));
+    }
+    return loc;
+  }
+
+  // acting = [osd.0..5 (zone-0), osd.6..11 (zone-1), …]
+  std::vector<int> make_acting()
+  {
+    std::vector<int> acting(zone_size * num_zones);
+    for (int i = 0; i < (int)acting.size(); ++i) acting[i] = i;
+    return acting;
+  }
+};
+
+class TestLocalZoneForActingSet3Zone : public TestLocalZoneForActingSet {
+protected:
+  TestLocalZoneForActingSet3Zone() { num_zones = 3; }
+};
+
+TEST_F(TestLocalZoneForActingSet3Zone, ClientInZone2ReturnsTwo)
+{
+  auto loc = make_loc(2);
+  auto acting = make_acting();
+  EXPECT_EQ(2, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
+
+TEST_F(TestLocalZoneForActingSet3Zone, ClientZoneDownTieGoesToLowestZone)
+{
+  // zone-0 and zone-1 match only at root level, so neither is closer
+  std::multimap<std::string, std::string> loc;
+  loc.emplace("datacenter", "zone-2");
+  loc.emplace("root", "default");
+  auto acting = make_acting();
+  for (int i = 2 * zone_size; i < 3 * zone_size; ++i) acting[i] = CRUSH_ITEM_NONE;
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
+
+TEST_F(TestLocalZoneForActingSet3Zone, MiddleZoneDownClientThereFallsBack)
+{
+  std::multimap<std::string, std::string> loc;
+  loc.emplace("datacenter", "zone-1");
+  loc.emplace("root", "default");
+  auto acting = make_acting();
+  for (int i = zone_size; i < 2 * zone_size; ++i) acting[i] = CRUSH_ITEM_NONE;
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
+
+TEST_F(TestLocalZoneForActingSet, ClientInZone0ReturnsZero)
+{
+  auto loc = make_loc(0);
+  auto acting = make_acting();
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
+
+TEST_F(TestLocalZoneForActingSet, ClientInZone1ReturnsOne)
+{
+  auto loc = make_loc(1);
+  auto acting = make_acting();
+  EXPECT_EQ(1, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
+
+TEST_F(TestLocalZoneForActingSet, NoCrushLocationReturnsZero)
+{
+  std::multimap<std::string, std::string> empty_loc;
+  auto acting = make_acting();
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, empty_loc));
+}
+
+TEST_F(TestLocalZoneForActingSet, AllZone0OsdsDownFallsBackToZero)
+{
+  auto loc = make_loc(0);
+  auto acting = make_acting();
+  // Mark all zone-0 OSDs as -1 so no representative can be found for zone-0.
+  // With crush_location only specifying datacenter=zone-0,
+  // get_common_ancestor_distance returns -ERANGE for zone-1's representative
+  // (different datacenter, no higher-level match in loc).
+  // Result: neither zone scores → returns 0 (default; falls back to zone 0).
+  for (int i = 0; i < zone_size; ++i) acting[i] = CRUSH_ITEM_NONE;
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
+
+TEST_F(TestLocalZoneForActingSet, AllZone0OsdsDownWithRootLocPrefersZone1)
+{
+  // With root=default in crush_location, zone-1's representative OSD matches
+  // at root level even though it is in a different datacenter.  Zone-0 has no
+  // representative (all OSDs CRUSH_ITEM_NONE), so zone-1 is the only zone with
+  // a finite score and wins.
+  std::multimap<std::string, std::string> loc;
+  loc.emplace("datacenter", "zone-0");
+  loc.emplace("root", "default");
+  auto acting = make_acting();
+  for (int i = 0; i < zone_size; ++i) acting[i] = CRUSH_ITEM_NONE;
+  EXPECT_EQ(1, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
+
+// NOTE: num_zones<2 and acting-too-small guard cases are intentionally not
+// duplicated here - they are already covered, without needing a real CRUSH
+// map, by TestLocalZoneGuards.SingleZoneReturnsZero and
+// TestLocalZoneGuards.ActingTooSmallReturnsZero in TestSplitOpsUT.cc (see
+// the comment on that fixture: guard-path cases belong there, CRUSH-
+// dependent cases belong here).
+
+TEST_F(TestLocalZoneForActingSet, BalanceReadsPicksZoneFromActingSet)
+{
+  auto acting = make_acting();
+  // With crush_location in zone-0, function returns 0.
+  auto loc = make_loc(0);
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+  // Remove zone-0 OSDs from acting set; function falls back to 0 (default).
+  for (int i = 0; i < zone_size; ++i) acting[i] = CRUSH_ITEM_NONE;
+  EXPECT_EQ(0, SplitOp::local_zone_for_acting_set(
+    acting, num_zones, zone_size, osdmap->crush.get(), g_ceph_context, loc));
+}
+
+TEST_F(TestLocalZoneForActingSet, ValidateFlagsAcceptsLocalizeReadsRegardlessOfECOptimizations)
+{
+  // The previous version of this test ("NonFastECBypassesZoneRouting")
+  // claimed to check that non-fast-EC pools bypass zone routing, but its
+  // only assertions were ASSERT_FALSE on the flags of a just-constructed
+  // pg_pool_t - true for any default pool, and true regardless of what
+  // validate_flags() or zone routing actually do.  Its comment also
+  // asserted a "guard...in init_read" for FLAG_EC_OPTIMIZATIONS that does
+  // not exist: grep over SplitOp.cc finds no reference to
+  // FLAG_EC_OPTIMIZATIONS at all, and get_num_zones() (osd_types.h), which
+  // drives zone routing in ECSplitOp::init_read(), is unconditional on that
+  // flag. So "non-fast-EC pools bypass zone routing" is not a property this
+  // module implements today, and cannot honestly be tested here.
+  //
+  // What IS real and testable is that SplitOp::validate_flags() accepts
+  // LOCALIZE_READS on a multi-zone pool independently of
+  // FLAG_EC_OPTIMIZATIONS - assert that directly, with the flag both absent
+  // and present, rather than asserting facts about a pool that was never
+  // passed to validate_flags().
+  pg_pool_t pool;
+  pool.type = pg_pool_t::TYPE_ERASURE;
+  pool.num_zones = 2;
+
+  EXPECT_TRUE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_LOCALIZE_READS, g_ceph_context));
+
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  EXPECT_TRUE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_LOCALIZE_READS, g_ceph_context));
+}
+
+TEST_F(TestLocalZoneForActingSet, FastECLocalizeBothFlagsAccepted)
+{
+  pg_pool_t pool;
+  pool.type = pg_pool_t::TYPE_ERASURE;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  pool.set_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS);
+  pool.num_zones = 2;
+  // Both BALANCE_READS and LOCALIZE_READS should pass flag validation.
+  EXPECT_TRUE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_BALANCE_READS, g_ceph_context));
+  EXPECT_TRUE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_LOCALIZE_READS, g_ceph_context));
+  // Neither should pass for writes.
+  EXPECT_FALSE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_WRITE, g_ceph_context));
+  EXPECT_FALSE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_LOCALIZE_READS | CEPH_OSD_FLAG_WRITE, g_ceph_context));
+  // No read flag at all should fail.
+  EXPECT_FALSE(SplitOp::validate_flags(&pool, 0, g_ceph_context));
+}
 
 // ===========================================================================
 // Peering on a real stretch EC pool (2 zones, 2+1, per-zone min_size k+m).
