@@ -1549,6 +1549,15 @@ changes required.
 stretch mode is not already enabled on the cluster. This is validated in
 ``OSDMonitor::prepare_new_pool``.
 
+Creating a pool with ``num_zones = 2`` while stretch mode is already enabled
+configures only the new pool; it does not change the cluster's stretch mode
+state. In degraded or recovery stretch mode the new pool is given the degraded
+``peering_crush_bucket_count`` and the ``peering_crush_mandatory_member`` that
+the existing stretch pools have (Section 11.6), so it can go active in the
+surviving zone, and the healthy transition (11.4.4) restores it with them.
+After ``ceph mon enable_stretch_mode`` the new pool's
+``peering_crush_mandatory_member`` is not yet set this way.
+
 **11.4.3 Degraded Stretch Mode** (``trigger_degraded_stretch_mode``)
 
 *Currently sets* ``newp.min_size = pgi.second.min_size / 2`` *for replica

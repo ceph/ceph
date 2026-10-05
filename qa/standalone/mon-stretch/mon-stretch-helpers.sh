@@ -83,7 +83,7 @@ function ec_stretch_cluster_without_dc2() {
     for osd in 3 4 5; do
         kill_daemons $dir KILL osd.$osd || return 1
     done
-    ceph osd down osd.3 osd.4 osd.5
+    ceph osd down osd.3 osd.4 osd.5 || return 1
     wait_for_stretch_state 1 0 || return 1
 }
 

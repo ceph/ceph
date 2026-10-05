@@ -16730,6 +16730,19 @@ int OSDMonitor::validate_stretch_mode_new_pool(CrushWrapper& crush, int new_crus
   return 0;
 }
 
+// the surviving bucket that degraded stretch mode made mandatory for the
+// existing stretch pools
+static int degraded_stretch_mandatory_member(const OSDMap& osdmap)
+{
+  for (const auto& [id, p] : osdmap.get_pools()) {
+    if (p.peering_crush_bucket_count == osdmap.degraded_stretch_mode &&
+        p.peering_crush_mandatory_member != CRUSH_ITEM_NONE) {
+      return p.peering_crush_mandatory_member;
+    }
+  }
+  return CRUSH_ITEM_NONE;
+}
+
 void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 					 int *errcode, bool commit,
 					 const string& dividing_bucket,
@@ -16798,6 +16811,9 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   }
   // TODO: check CRUSH rules for pools so that we are appropriately divided
   if (commit) {
+    // a pool joining an enabled stretch mode must not reset its state,
+    // which may be degraded or recovering
+    bool already_enabled = !set_global_stretch_mode && osdmap.stretch_mode_enabled;
     for (auto pool : pools) {
       if (!new_crush_rule.empty()) {
       pool->crush_rule = new_rule;
@@ -16806,6 +16822,11 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
       pool->peering_crush_bucket_target = bucket_count;
       pool->peering_crush_bucket_barrier = dividing_id;
       pool->peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+      if (already_enabled && osdmap.degraded_stretch_mode) {
+        pool->peering_crush_bucket_count = osdmap.degraded_stretch_mode;
+        pool->peering_crush_mandatory_member =
+          degraded_stretch_mandatory_member(osdmap);
+      }
       // Set size/min_size for replicated pools (only for global stretch mode)
       if (set_global_stretch_mode && pool->is_replicated()) {
       pool->size = g_conf().get_val<uint64_t>("mon_stretch_pool_size");
@@ -16813,11 +16834,13 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
       }
       // else for erasure-coded pools, size is determined by the erasure code profile
     }
-    pending_inc.change_stretch_mode = true;
-    pending_inc.stretch_mode_enabled = true;
-    pending_inc.new_stretch_bucket_count = bucket_count;
-    pending_inc.new_degraded_stretch_mode = 0;
-    pending_inc.new_stretch_mode_bucket = dividing_id;
+    if (!already_enabled) {
+      pending_inc.change_stretch_mode = true;
+      pending_inc.stretch_mode_enabled = true;
+      pending_inc.new_stretch_bucket_count = bucket_count;
+      pending_inc.new_degraded_stretch_mode = 0;
+      pending_inc.new_stretch_mode_bucket = dividing_id;
+    }
   }
   *okay = true;
   return;
