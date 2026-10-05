@@ -344,6 +344,21 @@ def _check_cluster_modifications(
             'value': opt_terms[prev_clustering],
         }
         raise ErrorResult(cluster, msg, status={'hint': hint})
+    acl_support = prev_acl_support = None
+    if cluster.share_defaults and cluster.share_defaults.acl_support:
+        acl_support = cluster.share_defaults.acl_support
+    if prev.share_defaults and prev.share_defaults.acl_support:
+        prev_acl_support = prev.share_defaults.acl_support
+    if acl_support != prev_acl_support:
+        # Toggling acl support can really mess up perms on your system. Block
+        # changing this setting. If you know what you are doing you can point
+        # two shares at the same place instead.
+        existing_values = [{'acl_support': prev_acl_support}]
+        raise ErrorResult(
+            cluster,
+            'acl_support value may not be changed',
+            status={'existing_values': existing_values},
+        )
 
 
 def _check_cluster_keybridge(cluster: resources.Cluster) -> None:
@@ -385,6 +400,8 @@ def _check_share_resource(
             status={"cluster_id": share.cluster_id},
         )
 
+    if not staging.is_new(share):
+        _check_share_modifications(share, staging)
     # Handle RGW shares
     if share.rgw is not None:
         _check_share_rgw(share, staging)
@@ -700,6 +717,32 @@ def _check_case_sensitivity_settings(
         share,
         msg=f'CephFS subvolume {desc}; case insensitive mode is required',
     )
+
+
+def _check_share_modifications(
+    share: resources.Share, staging: Staging
+) -> None:
+    """share has some fields we do not permit changing after it has
+    been created.
+    """
+    prev = ShareEntry.from_store(
+        staging.destination_store, share.cluster_id, share.share_id
+    ).get_share()
+    acl_support = prev_acl_support = None
+    if share.acl_support:
+        acl_support = share.acl_support
+    if prev.acl_support:
+        prev_acl_support = prev.acl_support
+    if acl_support != prev_acl_support:
+        # Toggling acl support can really mess up perms on your system. Block
+        # changing this setting. If you know what you are doing you can point
+        # two shares at the same place instead.
+        existing_values = [{'acl_support': prev_acl_support}]
+        raise ErrorResult(
+            share,
+            'acl_support value may not be changed',
+            status={'existing_values': existing_values},
+        )
 
 
 @cross_check_resource.register
