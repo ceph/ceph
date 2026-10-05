@@ -1920,7 +1920,7 @@ int RocksDBStore::get(
 			    &value);
       if (status.ok()) {
 	(*out)[key].append(value.data(), value.size());
-      } else if (status.IsIOError()) {
+      } else if (!status.IsNotFound()) {
 	ceph_abort_msg(status.getState());
       }
       value.Reset();
@@ -1934,7 +1934,7 @@ int RocksDBStore::get(
 			    &value);
       if (status.ok()) {
 	(*out)[key].append(value.data(), value.size());
-      } else if (status.IsIOError()) {
+      } else if (!status.IsNotFound()) {
 	ceph_abort_msg(status.getState());
       }
       value.Reset();
