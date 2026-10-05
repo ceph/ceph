@@ -8,7 +8,7 @@ from nfs.export import AppliedExportResults
 
 from .. import mgr
 from ..controllers._version import APIVersion
-from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
+from ..controllers.nfs import NFSGaneshaCluster, NFSGaneshaExports, NFSGaneshaUi
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 
@@ -242,3 +242,37 @@ class NFSGaneshaUiControllerTest(ControllerTestCase):
         self._get('/ui-api/nfs-ganesha/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False, 'message': 'Test'})
+
+
+class NFSGaneshaClusterTest(ControllerTestCase):
+    _cluster_info = {
+        'mycluster': {
+            'virtual_ip': None,
+            'backend': [{'hostname': 'host1', 'ip': '10.0.0.1', 'port': 2049, 'status': 'running'}],
+            'placement': {'count': 1},
+            'enable_nfsv3': False,
+            'enable_rdma': False,
+            'deployment_type': 'standalone',
+            'ingress_mode': None,
+            'port': None,
+            'monitor_port': None
+        }
+    }
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([NFSGaneshaCluster])
+
+    def test_get_cluster(self):
+        mgr.remote = Mock(return_value=self._cluster_info)
+
+        self._get('/api/nfs-ganesha/cluster/mycluster')
+        self.assertStatus(200)
+        self.assertJsonBody({'name': 'mycluster', **self._cluster_info['mycluster']})
+
+    def test_get_cluster_not_found(self):
+        mgr.remote = Mock(return_value={})
+
+        self._get('/api/nfs-ganesha/cluster/nonexistent')
+        self.assertStatus(200)
+        self.assertJsonBody(None)
