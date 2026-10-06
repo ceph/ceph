@@ -620,7 +620,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 #ifdef WITH_RADOSGW_CUOBJ
   if (rdma_active && get_data) {
     dump_content_length(s, 0);
-    dump_header(s, "x-amz-rdma-reply", "200");
+    // Match the HTTP status for ordinary and ranged GET responses.
+    dump_header(s, "x-amz-rdma-reply",
+                (partial_content && !custom_http_ret) ? "206" : "200");
     dump_header(s, "x-amz-rdma-bytes-transferred", s->rdma_bytes_transferred);
   } else
 #endif
