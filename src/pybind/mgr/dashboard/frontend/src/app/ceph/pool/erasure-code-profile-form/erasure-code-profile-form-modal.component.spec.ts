@@ -69,20 +69,13 @@ describe('ErasureCodeProfileFormModalComponent', () => {
        */
       nodes: [
         // Root node
-        Mocks.getCrushNode('default', -1, 'root', 11, [
-          -2,
-          -3,
-          -6,
-          -7,
-          -8,
-          -9,
-          -10,
-          -11,
-          -12,
-          -13,
-          -14,
-          -15
-        ]),
+        Mocks.getCrushNode(
+          'default',
+          -1,
+          'root',
+          11,
+          [-2, -3, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15]
+        ),
         // SSD host
         Mocks.getCrushNode('ssd-host', -2, 'host', 1, [1, 0, 2]),
         Mocks.getCrushNode('osd.0', 0, 'osd', 0, undefined, 'ssd'),

@@ -213,8 +213,9 @@ describe('RgwUserFormComponent', () => {
     beforeEach(() => {
       component.loading = LoadingStatus.Ready;
       fixture.detectChanges();
-      childComponent = fixture.debugElement.query(By.directive(RgwRateLimitComponent))
-        .componentInstance;
+      childComponent = fixture.debugElement.query(
+        By.directive(RgwRateLimitComponent)
+      ).componentInstance;
     });
     it('disable creation (create)', () => {
       spyOn(rgwUserService, 'create');
@@ -334,8 +335,9 @@ describe('RgwUserFormComponent', () => {
       notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show');
       fixture.detectChanges();
-      let childComponent = fixture.debugElement.query(By.directive(RgwRateLimitComponent))
-        .componentInstance;
+      let childComponent = fixture.debugElement.query(
+        By.directive(RgwRateLimitComponent)
+      ).componentInstance;
       jest.spyOn(childComponent, 'getRateLimitFormValue');
     });
 
@@ -706,8 +708,9 @@ describe('RgwUserFormComponent', () => {
     beforeEach(() => {
       component.loading = LoadingStatus.Ready;
       fixture.detectChanges();
-      childComponent = fixture.debugElement.query(By.directive(RgwRateLimitComponent))
-        .componentInstance;
+      childComponent = fixture.debugElement.query(
+        By.directive(RgwRateLimitComponent)
+      ).componentInstance;
     });
     it('create with account id & account root user', () => {
       spyOn(rgwUserService, 'create');

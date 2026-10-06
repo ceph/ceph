@@ -43,7 +43,10 @@ export class GrafanaComponent implements OnInit, OnChanges {
   @Input()
   scrollable: string = 'yes';
 
-  constructor(private sanitizer: DomSanitizer, private settingsService: SettingsService) {
+  constructor(
+    private sanitizer: DomSanitizer,
+    private settingsService: SettingsService
+  ) {
     this.grafanaTimes = [
       {
         name: $localize`Last 5 minutes`,

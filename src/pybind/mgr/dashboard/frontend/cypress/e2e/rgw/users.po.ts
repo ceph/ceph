@@ -75,13 +75,13 @@ export class UsersPageHelper extends PageHelper {
     cy.get('#tenant').type(tenant).should('have.class', 'ng-invalid');
     cy.get('cds-text-label[for=tenant]')
       .find('.invalid-feedback')
-      .should('have.text', 'The chosen user ID exists in this tenant.');
+      .should('contain.text', 'The chosen user ID exists in this tenant.');
 
     // check that username field is marked invalid if username has been cleared off
     cy.get('#user_id').clear().blur().should('have.class', 'ng-invalid');
     cy.get('cds-text-label[for=user_id]')
       .find('.invalid-feedback')
-      .should('have.text', 'This field is required.');
+      .should('contain.text', 'This field is required.');
 
     // Full name
     cy.get('#display_name')
@@ -94,13 +94,13 @@ export class UsersPageHelper extends PageHelper {
       .should('have.class', 'ng-invalid');
     cy.get('cds-text-label[for=display_name]')
       .find('.invalid-feedback')
-      .should('have.text', 'This field is required.');
+      .should('contain.text', 'This field is required.');
 
     // put invalid email to make field invalid
     cy.get('#email').type('a').blur().should('have.class', 'ng-invalid');
     cy.get('cds-text-label[for=email]')
       .find('.invalid-feedback')
-      .should('have.text', 'This is not a valid email address.');
+      .should('contain.text', 'This is not a valid email address.');
 
     // put negative max buckets to make field invalid
     this.expectSelectOption('max_buckets_mode', 'Custom');
@@ -108,7 +108,7 @@ export class UsersPageHelper extends PageHelper {
     cy.get('#max_buckets').should('have.class', 'ng-invalid');
     cy.get('cds-number[for=max_buckets]')
       .find('.invalid-feedback')
-      .should('have.text', 'The entered value must be >= 1.');
+      .should('contain.text', 'The entered value must be >= 1.');
 
     this.navigateTo();
     this.delete(tenant + '$' + uname, null, null, true, false, false, true);
@@ -133,13 +133,13 @@ export class UsersPageHelper extends PageHelper {
 
     cy.get('cds-text-label[for=email]')
       .find('.invalid-feedback')
-      .should('have.text', 'This is not a valid email address.');
+      .should('contain.text', 'This is not a valid email address.');
 
     // empty the display name field making it invalid
     cy.get('#display_name').clear({ force: true }).blur().should('have.class', 'ng-invalid');
     cy.get('cds-text-label[for=display_name]')
       .find('.invalid-feedback')
-      .should('have.text', 'This field is required.');
+      .should('contain.text', 'This field is required.');
 
     // put negative max buckets to make field invalid
     this.selectOption('max_buckets_mode', 'Disabled');
@@ -150,7 +150,7 @@ export class UsersPageHelper extends PageHelper {
     cy.get('#max_buckets').should('have.class', 'ng-invalid');
     cy.get('cds-number[for=max_buckets]')
       .find('.invalid-feedback')
-      .should('have.text', 'The entered value must be >= 1.');
+      .should('contain.text', 'The entered value must be >= 1.');
 
     this.navigateTo();
     this.delete(tenant + '$' + uname, null, null, true, false, false, true);
@@ -178,13 +178,13 @@ export class UsersPageHelper extends PageHelper {
     cy.get(`select[id=${selection_name}]`).should('exist');
     cy.get(`select[id=${selection_name}]`).select(account_id);
     cy.get(`select[id=${selection_name}] option:checked`).should(
-      'have.text',
+      'contain.text',
       `${account_name} - ${tenant}`
     );
     cy.contains('button', 'Edit User').click();
 
     this.getTableRow(tenant + '$' + user_id).as('AccountUser');
-    cy.get('@AccountUser').find('td').eq(3).should('have.text', `${account_name}`);
+    cy.get('@AccountUser').find('td').eq(3).should('contain.text', `${account_name}`);
 
     // check table details if we have all the details there
     this.getExpandCollapseElement(username).should('be.visible').click();
@@ -198,29 +198,29 @@ export class UsersPageHelper extends PageHelper {
         .eq(0)
         .within(() => {
           cy.wait(500);
-          cy.get('td').eq(0).should('have.text', 'Account ID');
-          cy.get('td').eq(1).should('have.text', account_id);
+          cy.get('td').eq(0).should('contain.text', 'Account ID');
+          cy.get('td').eq(1).should('contain.text', account_id);
         });
       cy.get('tr')
         .eq(1)
         .within(() => {
           cy.wait(500);
-          cy.get('td').eq(0).should('have.text', 'Name');
-          cy.get('td').eq(1).should('have.text', account_name);
+          cy.get('td').eq(0).should('contain.text', 'Name');
+          cy.get('td').eq(1).should('contain.text', account_name);
         });
       cy.get('tr')
         .eq(2)
         .within(() => {
           cy.wait(500);
-          cy.get('td').eq(0).should('have.text', 'Tenant');
-          cy.get('td').eq(1).should('have.text', tenant);
+          cy.get('td').eq(0).should('contain.text', 'Tenant');
+          cy.get('td').eq(1).should('contain.text', tenant);
         });
       cy.get('tr')
         .eq(3)
         .within(() => {
           cy.wait(500);
-          cy.get('td').eq(0).should('have.text', 'User type');
-          cy.get('td').eq(1).should('have.text', 'rgw user');
+          cy.get('td').eq(0).should('contain.text', 'User type');
+          cy.get('td').eq(1).should('contain.text', 'rgw user');
         });
     });
   }
@@ -231,7 +231,7 @@ export class UsersPageHelper extends PageHelper {
     this.navigateEdit(username);
     cy.get(`select[id=${selection_name}]`).should('exist').should('be.disabled');
     cy.get(`select[id=${selection_name}] option:checked`).should(
-      'have.text',
+      'contain.text',
       `${account_name} - ${tenant}`
     );
     cy.get('input#account_root_user_input').check({ force: true });
@@ -250,8 +250,8 @@ export class UsersPageHelper extends PageHelper {
         .eq(3)
         .within(() => {
           cy.wait(500);
-          cy.get('td').eq(0).should('have.text', 'User type');
-          cy.get('td').eq(1).should('have.text', 'Account root user');
+          cy.get('td').eq(0).should('contain.text', 'User type');
+          cy.get('td').eq(1).should('contain.text', 'Account root user');
         });
     });
   }

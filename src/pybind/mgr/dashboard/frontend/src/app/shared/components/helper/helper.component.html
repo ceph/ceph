@@ -1,36 +1,49 @@
 <ng-template #tooltipTemplate>
   <div class="cds--popover-scroll-container">
-    <div [class]="class"
-         [innerHtml]="html">
-    </div>
+    <div
+      [class]="class"
+      [innerHtml]="html"
+    ></div>
     <ng-container *ngTemplateOutlet="content"></ng-container>
   </div>
 </ng-template>
 @if (type === helperType.tooltip) {
-  <cds-tooltip [description]="tooltipTemplate"
-               [autoAlign]="true"
-               [id]="tooltipId">
-    <svg [cdsIcon]="iconType"
-         [size]="iconSize"></svg>
+  <cds-tooltip
+    [description]="tooltipTemplate"
+    [autoAlign]="true"
+    [id]="tooltipId"
+  >
+    <svg
+      [cdsIcon]="iconType"
+      [size]="iconSize"
+    ></svg>
   </cds-tooltip>
 } @else {
-  <div class="inline-block"
-       [ngClass]="class">
+  <div
+    class="inline-block"
+    [ngClass]="class"
+  >
     <div
       cdsPopover
       [isOpen]="isPopoverOpen"
       [autoAlign]="true"
       (click)="togglePopover()"
       (keydown.enter)="togglePopover()"
-      tabindex="0">
+      tabindex="0"
+    >
       <div class="popover-trigger">
         <svg
           [cdsIcon]="iconType"
-          [size]="iconSize"></svg>
+          [size]="iconSize"
+        ></svg>
       </div>
       <cds-popover-content>
-        <div class="cds--popover-scroll-container"
-             (click)="$event.stopPropagation()">
+        <div
+          class="cds--popover-scroll-container"
+          (click)="$event.stopPropagation()"
+          tabindex="0"
+          (keydown.enter)="$event.stopPropagation()"
+        >
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </div>
       </cds-popover-content>

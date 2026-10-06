@@ -36,7 +36,10 @@ export class NvmeofGatewaySubsystemComponent implements OnInit {
   authType = NvmeofSubsystemAuthType;
   emptyStateImage = EMPTY_STATE_IMAGE;
 
-  constructor(private nvmeofService: NvmeofService, private route: ActivatedRoute) {}
+  constructor(
+    private nvmeofService: NvmeofService,
+    private route: ActivatedRoute
+  ) {}
 
   ngOnInit(): void {
     this.columns = [

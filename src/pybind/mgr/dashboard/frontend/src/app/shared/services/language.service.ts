@@ -7,7 +7,10 @@ import { environment } from '~/environments/environment';
   providedIn: 'root'
 })
 export class LanguageService {
-  constructor(private http: HttpClient, @Inject(LOCALE_ID) protected localeId: string) {}
+  constructor(
+    private http: HttpClient,
+    @Inject(LOCALE_ID) protected localeId: string
+  ) {}
 
   getLocale(): string {
     return this.localeId || environment.default_lang;

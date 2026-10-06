@@ -27,7 +27,7 @@ describe('VerticalNavigationComponent', () => {
     component.title = 'testTitle';
     fixture.detectChanges();
     const title = fixture.debugElement.query(By.css('h3'));
-    expect(title.nativeElement.textContent).toEqual('testTitle');
+    expect(title.nativeElement.textContent.trim()).toEqual('testTitle');
   });
 
   it('should select the first item as active if no item is selected', () => {

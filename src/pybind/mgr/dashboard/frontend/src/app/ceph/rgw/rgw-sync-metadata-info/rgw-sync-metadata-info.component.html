@@ -1,70 +1,117 @@
 @if (metadataSyncInfo === 'no sync (zone is master)') {
   <div class="sync-info">
-    <span class="cds--type-label-01" i18n>Status:</span>
-    <span class="cds--type-label-01"
-          style="color: var(--cds-text-secondary)">No Sync</span>
+    <span
+      class="cds--type-label-01"
+      i18n
+      >Status:</span
+    >
+    <span
+      class="cds--type-label-01"
+      style="color: var(--cds-text-secondary)"
+      >No Sync</span
+    >
   </div>
 } @else {
   <div class="sync-info">
-    <cds-toggletip [dropShadow]="true"
-                   [align]="align">
-      <div cdsToggletipButton
-           class="toggleTipBtn">
-        <span class="cds--type-label-01" i18n>Status:</span>
-        @if (metadataSyncInfo.syncstatus?.includes('failed') || metadataSyncInfo.syncstatus?.includes('error')) {
+    <cds-toggletip
+      [dropShadow]="true"
+      [align]="align"
+    >
+      <div
+        cdsToggletipButton
+        class="toggleTipBtn"
+      >
+        <span
+          class="cds--type-label-01"
+          i18n
+          >Status:</span
+        >
+        @if (
+          metadataSyncInfo.syncstatus?.includes('failed') ||
+          metadataSyncInfo.syncstatus?.includes('error')
+        ) {
           <span class="sync-info__status">
-            <svg [cdsIcon]="icons.danger"
-                 [size]="icons.size16"
-                 class="cds-danger-color"></svg>
-            <a class="cds--link cds--type-label-01 cds-danger-color sync-status-link"
-               i18n>Error</a>
+            <svg
+              [cdsIcon]="icons.danger"
+              [size]="icons.size16"
+              class="cds-danger-color"
+            ></svg>
+            <a
+              class="cds--link cds--type-label-01 cds-danger-color sync-status-link"
+              i18n
+              >Error</a
+            >
           </span>
         } @else {
           @if (metadataSyncInfo.syncstatus === 'Not Syncing From Zone') {
-            <a class="cds--link cds--type-label-01 sync-status-link"
-               i18n>Not Syncing</a>
+            <a
+              class="cds--link cds--type-label-01 sync-status-link"
+              i18n
+              >Not Syncing</a
+            >
           } @else {
-            <a class="cds--link cds--type-label-01 sync-status-link"
-               i18n>{{ metadataSyncInfo.syncstatus | titlecase }}</a>
+            <a
+              class="cds--link cds--type-label-01 sync-status-link"
+              i18n
+              >{{ metadataSyncInfo.syncstatus | titlecase }}</a
+            >
           }
         }
       </div>
       <div cdsToggletipContent>
         <div class="cds--popover-scroll-container">
           <div class="toggletip-content">
-              @for (status of metadataSyncInfo.fullSyncStatus; track status; let last = $last) {
-                @if (status?.includes('failed') || status?.includes('error')) {
+            @for (status of metadataSyncInfo.fullSyncStatus; track status; let last = $last) {
+              @if (status?.includes('failed') || status?.includes('error')) {
+                <div class="toggletip-content__item">
+                  <span class="cds--type-body-compact-01 cds-danger-color">{{
+                    status | titlecase
+                  }}</span>
+                </div>
+              } @else if (!status?.includes(metadataSyncInfo.syncstatus) && status?.trim()) {
+                @if (status?.includes(':')) {
                   <div class="toggletip-content__item">
-                    <span class="cds--type-body-compact-01 cds-danger-color">{{ status | titlecase }}</span>
+                    <span class="cds--type-label-01">{{ status.split(':')[0] | titlecase }}</span>
+                    <span class="cds--type-body-compact-01">{{
+                      status.split(':')[1] | titlecase
+                    }}</span>
                   </div>
-                } @else if (!status?.includes(metadataSyncInfo.syncstatus) && status?.trim()) {
-                  @if (status?.includes(':')) {
-                    <div class="toggletip-content__item">
-                      <span class="cds--type-label-01">{{ status.split(':')[0] | titlecase }}</span>
-                      <span class="cds--type-body-compact-01">{{ status.split(':')[1] | titlecase }}</span>
-                    </div>
-                  } @else {
-                    <div class="toggletip-content__item">
-                      <span class="cds--type-label-01" i18n>Summary</span>
-                      <span class="cds--type-body-compact-01">{{ status | titlecase }}</span>
-                    </div>
-                  }
+                } @else {
+                  <div class="toggletip-content__item">
+                    <span
+                      class="cds--type-label-01"
+                      i18n
+                      >Summary</span
+                    >
+                    <span class="cds--type-body-compact-01">{{ status | titlecase }}</span>
+                  </div>
                 }
               }
+            }
           </div>
         </div>
       </div>
     </cds-toggletip>
     <div class="sync-info__last-synced cds-mt-3">
-      <span class="cds--type-label-01" i18n>Last Synced:</span>
+      <span
+        class="cds--type-label-01"
+        i18n
+        >Last Synced:</span
+      >
       @if (metadataSyncInfo.timestamp) {
-        <cds-tag class="tag-info" size="sm">
+        <cds-tag
+          class="tag-info"
+          size="sm"
+        >
           {{ metadataSyncInfo.timestamp | relativeDate }}
         </cds-tag>
       } @else {
-        <cds-tag class="tag-success"
-                 size="sm"
-                 i18n>Up to Date</cds-tag>
+        <cds-tag
+          class="tag-success"
+          size="sm"
+          i18n
+          >Up to Date</cds-tag
+        >
       }
     </div>
   </div>

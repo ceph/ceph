@@ -4,7 +4,7 @@ export class CrushMapPageHelper extends PageHelper {
   pages = { index: { url: '#/crush-map', id: 'cd-crushmap' } };
 
   getPageTitle() {
-    return cy.get('cd-crushmap .card-header').text();
+    return cy.get('cd-crushmap .card-header');
   }
 
   getCrushNode(idx: number) {

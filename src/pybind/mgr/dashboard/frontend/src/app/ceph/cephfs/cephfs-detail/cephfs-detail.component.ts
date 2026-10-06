@@ -33,7 +33,10 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
 
   objectValues = Object.values;
 
-  constructor(private dimlessBinary: DimlessBinaryPipe, private dimless: DimlessPipe) {}
+  constructor(
+    private dimlessBinary: DimlessBinaryPipe,
+    private dimless: DimlessPipe
+  ) {}
 
   ngOnChanges() {
     this.setStandbys();
