@@ -79,7 +79,9 @@ Container Hosts
 
 **Table legend:**
 
-- **H**: Ceph tests its container image with this distribution as the host. The image itself is built on Rocky 10; see below.
+- **H**: Ceph tests its container image with this distribution as the host. The image is built on Rocky 10 from Umbrella onwards, and on CentOS 9 Stream before that; see Container Base Image.
+
+.. _umbrella-container-base-image:
 
 Container Base Image
 ====================
@@ -91,6 +93,9 @@ distribution marked H above works.
 .. note:: ARM architecture containers provide a limited set of daemons.
    Check that the daemons you need are available before you plan an ARM
    deployment.
+
+.. _linux-kernel:
+.. _ceph-dependencies:
 
 Kernel Version for Clients
 ==========================
@@ -107,7 +112,7 @@ Kernel Version for Clients
      - Older kernels need :ref:`CRUSH tunables <crush-map-tunables>` and
        image features disabled on the cluster.
    * - CephFS
-     - See :ref:`cephfs_which_kernel_version`
+     - See :ref:`kernel versions for CephFS <cephfs_which_kernel_version>`
      -
    * - Both
      - Use a "stable" or "long-term maintenance" series from kernel.org or
