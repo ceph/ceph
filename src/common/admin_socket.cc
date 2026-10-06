@@ -427,6 +427,17 @@ void AdminSocket::do_accept()
   retry_sys_call(::compat_closesocket, connection_fd);
 }
 
+template <typename MessageT>
+static uint64_t get_peer_features(const ceph::cref_t<MessageT>& m)
+{
+#ifdef WITH_CRIMSON
+  // TODO: crimson: tell commands are not answered yet, see do_tell_queue()
+  return CEPH_FEATURES_ALL;
+#else
+  return m->get_connection()->get_features();
+#endif
+}
+
 void AdminSocket::do_tell_queue()
 {
   ldout(m_cct,10) << __func__ << dendl;
@@ -451,7 +462,8 @@ void AdminSocket::do_tell_queue()
 #else
 	m->get_connection()->send_message(reply);
 #endif
-      });
+      },
+      get_peer_features(m));
   }
   for (auto& m : lq) {
     bufferlist outbl;
@@ -467,7 +479,8 @@ void AdminSocket::do_tell_queue()
 #else
 	m->get_connection()->send_message(reply);
 #endif
-      });
+      },
+      get_peer_features(m));
   }
 }
 
@@ -505,7 +518,8 @@ int AdminSocket::execute_command(
 void AdminSocket::execute_command(
   const std::vector<std::string>& cmdvec,
   const bufferlist& inbl,
-  asok_finisher on_finish)
+  asok_finisher on_finish,
+  uint64_t peer_features)
 {
   cmdmap_t cmdmap;
   string format;
@@ -580,8 +594,7 @@ void AdminSocket::execute_command(
     assert(retval == 0);
   }
 
-  hook->call_async(
-    prefix, cmdmap, f, inbl,
+  auto on_hook_finish =
     [f, output, on_finish, m_cct=m_cct](int r, std::string_view err, bufferlist& out) {
       // handle either existing output in bufferlist *or* via formatter
       ldout(m_cct, 10) << __func__ << ": command completed with result " << r << dendl;
@@ -606,7 +619,18 @@ void AdminSocket::execute_command(
       }
       delete f;
       on_finish(r, err, out);
-    });
+    };
+
+  if (hook == getdescs_hook.get()) {
+    // a tell peer may run an older release whose parser rejects newer
+    // descriptor fields (e.g. pre-quincy clients and "positional"), so
+    // describe the commands in a form that peer understands.
+    bufferlist out;
+    dump_command_descriptions(f, peer_features);
+    on_hook_finish(0, "", out);
+  } else {
+    hook->call_async(prefix, cmdmap, f, inbl, on_hook_finish);
+  }
 
   std::unique_lock l(lock);
   in_hook = false;
@@ -750,25 +774,31 @@ public:
 	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
-    int cmdnum = 0;
-    f->open_object_section("command_descriptions");
-    for (const auto& [command, info] : m_as->hooks) {
-      // GCC 8 actually has [[maybe_unused]] on a structured binding
-      // do what you'd expect. GCC 7 does not.
-      (void)command;
-      ostringstream secname;
-      secname << "cmd" << std::setfill('0') << std::setw(3) << cmdnum;
-      dump_cmd_and_help_to_json(f,
-                                CEPH_FEATURES_ALL,
-				secname.str().c_str(),
-				info.desc,
-				info.help);
-      cmdnum++;
-    }
-    f->close_section(); // command_descriptions
+    // unused: execute_command() intercepts this to pass the peer's features
+    m_as->dump_command_descriptions(f, CEPH_FEATURES_ALL);
     return 0;
   }
 };
+
+void AdminSocket::dump_command_descriptions(Formatter *f, uint64_t features)
+{
+  int cmdnum = 0;
+  f->open_object_section("command_descriptions");
+  for (const auto& [command, info] : hooks) {
+    // GCC 8 actually has [[maybe_unused]] on a structured binding
+    // do what you'd expect. GCC 7 does not.
+    (void)command;
+    ostringstream secname;
+    secname << "cmd" << std::setfill('0') << std::setw(3) << cmdnum;
+    dump_cmd_and_help_to_json(f,
+                              features,
+                              secname.str().c_str(),
+                              info.desc,
+                              info.help);
+    cmdnum++;
+  }
+  f->close_section(); // command_descriptions
+}
 
 // Define a macro to simplify adding signals to the map
 #define ADD_SIGNAL(signalName)                 \

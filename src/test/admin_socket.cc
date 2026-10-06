@@ -211,6 +211,46 @@ TEST(AdminSocket, RegisterCommandPrefixes) {
   ASSERT_EQ(true, asoct.shutdown());
 }
 
+TEST(AdminSocket, GetdescsPeerFeatures) {
+  std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
+  std::unique_ptr<AdminSocketHook> my_test_asok = std::make_unique<MyTest>();
+  AdminSocketTest asoct(asokc.get());
+  ASSERT_EQ(true, asoct.shutdown());
+  ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
+  ASSERT_EQ(0, asoct.m_asokc->register_command(
+    "test opts "
+    "name=foo,type=CephString,req=false "
+    "-- "
+    "name=bar,type=CephString,req=false",
+    my_test_asok.get(), ""));
+
+  auto get_descs = [&](uint64_t features) {
+    std::string descs;
+    asoct.m_asokc->execute_command(
+      {"{\"prefix\":\"get_command_descriptions\",\"format\":\"json\"}"},
+      {},
+      [&descs](int r, std::string_view err, bufferlist& out) {
+        EXPECT_EQ(0, r);
+        descs = out.to_str();
+      },
+      features);
+    return descs;
+  };
+
+  // quincy+ peers understand "positional" and boolean "req"
+  string descs = get_descs(CEPH_FEATURES_ALL);
+  ASSERT_NE(string::npos, descs.find("\"positional\":false"));
+  ASSERT_NE(string::npos, descs.find("\"req\":false"));
+
+  // pre-quincy peers' ceph_argparse fails on "positional"
+  descs = get_descs(CEPH_FEATURES_ALL & ~CEPH_FEATURE_SERVER_QUINCY);
+  ASSERT_NE(string::npos, descs.find("\"name\":\"bar\""));
+  ASSERT_EQ(string::npos, descs.find("positional"));
+  ASSERT_EQ(string::npos, descs.find("\"req\":false"));
+  ASSERT_NE(string::npos, descs.find("\"req\":\"false\""));
+  ASSERT_EQ(true, asoct.shutdown());
+}
+
 class BlockingHook : public AdminSocketHook {
 public:
   ceph::mutex _lock = ceph::make_mutex("BlockingHook::_lock");
