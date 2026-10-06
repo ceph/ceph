@@ -663,7 +663,7 @@ struct RGWUserInfo
       type(TYPE_NONE) {
   }
 
-  RGWAccessKey* get_key(const std::string& access_key) {
+  const RGWAccessKey* get_key(const std::string& access_key) const {
     if (access_keys.empty())
       return nullptr;
 

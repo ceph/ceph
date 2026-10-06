@@ -329,7 +329,7 @@ out:
 }
 
 int DB::store_user(const DoutPrefixProvider *dpp,
-    RGWUserInfo& uinfo, bool exclusive, map<string, bufferlist> *pattrs,
+    const RGWUserInfo& uinfo, bool exclusive, map<string, bufferlist> *pattrs,
     RGWObjVersionTracker *pobjv, RGWUserInfo* pold_info)
 {
   DBOpParams params = {};
@@ -393,7 +393,7 @@ out:
 }
 
 int DB::remove_user(const DoutPrefixProvider *dpp,
-    RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv)
+    const RGWUserInfo& uinfo, RGWObjVersionTracker *pobjv)
 {
   DBOpParams params = {};
   InitializeParams(dpp, &params);
