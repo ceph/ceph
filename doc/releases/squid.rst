@@ -12,7 +12,7 @@ This is the seventh backport release in the Squid series. We recommend that all 
 Release Date
 ------------
 
-September 10, 2026
+October 12, 2026
 
 Notable Changes
 ----------------
