@@ -614,7 +614,12 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
             pass
 
         def read(self):
-            return json.dumps({'valid': 'output', 'result': '400'})
+            return json.dumps({
+                'valid': 'output',
+                'result': '400',
+                'refresh_period': 60,
+                'jitter_seconds': 15,
+            })
 
     _port_in_use.side_effect = _fake_port_in_use
     _is_alive.return_value = False
@@ -671,6 +676,8 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
         _listener_start.assert_called()
         _gatherer_start.assert_called()
         _urlopen.assert_called()
+        assert agent.loop_interval == 60
+        assert agent.jitter_seconds == 15
 
         # agent should not go down if connections fail
         _urlopen.side_effect = Exception()

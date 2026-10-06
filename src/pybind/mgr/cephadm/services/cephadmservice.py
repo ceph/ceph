@@ -2261,15 +2261,16 @@ class CephadmAgent(CephService):
             'device_enhanced_scan',
             'agent_metadata_compresion_enabled',
             'agent_starting_port',
+            'agent_refresh_rate',
+            'agent_avg_concurrency',
+            'agent_initial_startup_delay_max',
+            'agent_jitter_seconds',
         ]
+        # Dependencies must reflect user configuration, not auto-computed
+        # values derived from the current host count. Otherwise routine host
+        # additions/removals invalidate every agent's deps and trigger a
+        # cluster-wide config push.
         agent_static_cfg_opts = [f"{opt}: {mgr.get_module_option(opt)}" for opt in agent_options]
-
-        agent = mgr.http_server.agent
-        agent_dynamic_cfg_opts = [
-            f'refresh_period: {agent.compute_agents_refrsh_rate()}',
-            f'initial_startup_delay_max: {agent.get_initial_delay()}',
-            f'jitter_seconds: {agent.get_jitter()}'
-        ]
 
         return sorted(
             [
@@ -2279,7 +2280,6 @@ class CephadmAgent(CephService):
                 str(mgr.get_module_option("device_enhanced_scan")),
                 container_image,
                 *agent_static_cfg_opts,
-                *agent_dynamic_cfg_opts,
             ]
         )
 
@@ -2330,7 +2330,7 @@ class CephadmAgent(CephService):
                'initial_startup_delay_max': agent.get_initial_delay(),
                'jitter_seconds': agent.get_jitter()}
 
-      g  tls_creds = self.get_certificates(daemon_spec)
+        tls_creds = self.get_certificates(daemon_spec)
         config = {
             'agent.json': json.dumps(cfg),
             'keyring': daemon_spec.keyring,

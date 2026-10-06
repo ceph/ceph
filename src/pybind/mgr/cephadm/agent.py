@@ -845,6 +845,11 @@ class HostData:
             # host agent is reporting on is marked offline, it shouldn't be any more
             self.mgr.offline_hosts_remove(host)
             results['result'] = self.handle_metadata(data)
+            # Auto-derived pacing values are runtime policy, not daemon
+            # dependencies. Return the current values on normal reports so
+            # agents adopt host-count changes without a config fan-out.
+            results['refresh_period'] = self.mgr.http_server.agent.compute_agents_refrsh_rate()
+            results['jitter_seconds'] = self.mgr.http_server.agent.get_jitter()
         return results
 
     def check_request_fields(self, data: Dict[str, Any]) -> None:
