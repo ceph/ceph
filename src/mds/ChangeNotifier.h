@@ -38,6 +38,8 @@ class CDentry;
 class ConfigProxy;
 namespace ceph { class Formatter; }
 class LogEvent;
+struct rd_kafka_s;
+struct rd_kafka_topic_s;
 
 /**
  * NotifyEndpoint - destination for accepted change events.
@@ -81,6 +83,48 @@ private:
   std::mutex lock;
 };
 
+/// Kafka endpoint configuration, straight from the mds_notify_kafka_* options.
+struct KafkaOptions {
+  std::string brokers;
+  std::string topic;
+  uint32_t message_timeout_ms = 5000;
+  uint64_t max_queue = 0;
+};
+
+/// Kafka endpoint: fire-and-forget librdkafka producer.
+///
+/// librdkafka retries and buffers internally (message.timeout.ms bounds the
+/// retries); a full internal queue makes rd_kafka_produce() fail, which is
+/// reported as a drop. Nothing here blocks the caller.
+class KafkaEndpoint : public NotifyEndpoint {
+public:
+  KafkaEndpoint(CephContext *cct, const KafkaOptions &opts);
+  ~KafkaEndpoint() override;
+
+  bool ok() const { return producer != nullptr; }
+  bool send(const std::string &json) override;
+  void flush() override;
+  std::string type() const override { return "kafka"; }
+  void dump_status(ceph::Formatter *f) const override;
+  std::string last_error() const override;
+
+  /// serve librdkafka delivery reports / keep protocol state moving
+  void poll(int timeout_ms) override;
+
+private:
+  void set_error(const std::string &err);
+
+  CephContext *const cct;
+  rd_kafka_s *producer = nullptr;
+  rd_kafka_topic_s *topic = nullptr;
+  std::string brokers;
+  std::string topic_name;
+  uint32_t message_timeout_ms = 5000;
+  uint64_t max_queue = 0;
+  mutable std::mutex err_lock;
+  std::string err;
+};
+
 /**
  * ChangeNotifier - MDS-side change notification producer.
  *
@@ -101,6 +145,13 @@ private:
  *   - mds_notify_root            paths are emitted relative to this (runtime)
  *   - mds_notify_queue_size      bound on the in-memory queue (startup)
  *   - mds_notify_file            debug/test file endpoint (startup)
+ *   - mds_notify_kafka_brokers   Kafka bootstrap servers (startup)
+ *   - mds_notify_kafka_topic     Kafka topic (startup)
+ *   - mds_notify_kafka_message_timeout  librdkafka message.timeout.ms (startup)
+ *   - mds_notify_kafka_max_queue librdkafka queue.buffering.max.messages (startup)
+ *
+ * The file endpoint wins when both it and Kafka are configured; it exists
+ * so tests can assert the emitted records without a broker.
  */
 class ChangeNotifier {
 public:
