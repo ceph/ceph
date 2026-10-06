@@ -39,7 +39,7 @@
 #include <memory>
 #include <utility>
 
-#include <boost/container/small_vector.hpp>
+#include <boost/container/container_fwd.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tuple/tuple.hpp>
 

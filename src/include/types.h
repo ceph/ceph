@@ -42,8 +42,7 @@ extern "C" {
 #include <list>
 #include <set>
 #include <span>
-#include <boost/container/flat_set.hpp>
-#include <boost/container/flat_map.hpp>
+#include <boost/container/container_fwd.hpp>
 #include "boost/tuple/tuple.hpp"
 #include <map>
 #include <vector>
