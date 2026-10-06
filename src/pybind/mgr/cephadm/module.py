@@ -439,7 +439,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         Option(
             'agent_metadata_compresion_enabled',
             type='bool',
-            default=True,
+            default=False,
             desc='Enable compression of metadata sent from agent to reduce payload size'
         ),
         Option(
