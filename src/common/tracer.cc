@@ -8,6 +8,7 @@
 #ifdef HAVE_JAEGER
 #include "opentelemetry/sdk/trace/batch_span_processor.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
+#include "opentelemetry/trace/provider.h"
 #include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
 
 #define dout_subsys ceph_subsys_trace
