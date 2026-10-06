@@ -332,7 +332,7 @@ options:
   type: size
   level: advanced
   desc: Size in bytes per second written to cold devices, 0 indicates no limit
-  default: 100_M
+  default: 0
 - name: seastore_cbjournal_size
   type: size
   level: dev
