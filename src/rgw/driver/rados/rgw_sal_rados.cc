@@ -97,6 +97,7 @@
 #include "topic.h"
 #include "topics.h"
 #include "users.h"
+#include "rgw_lua_background.h"
 
 #define dout_subsys ceph_subsys_rgw
 

@@ -35,6 +35,7 @@
 
 #include "common/errno.h"
 #include "include/ceph_assert.h"
+#include "cls/rgw/cls_rgw_client.h"
 
 #define dout_context g_ceph_context
 #define LOG_CLASS_LIST_MAX_ENTRIES (1000)
