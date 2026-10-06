@@ -17,6 +17,7 @@
 #include "Striper.h"
 
 #include <algorithm>
+#include <future>
 #include <sstream>
 
 #include "osd/OSDMap.h"
@@ -502,6 +503,8 @@ void Objecter::shutdown()
   wl.unlock();
   cct->_conf.remove_observer(this);
   wl.lock();
+
+  _cancel_all_budget_waiters();
 
   while (!osd_sessions.empty()) {
     auto p = osd_sessions.begin();
@@ -2558,9 +2561,20 @@ void Objecter::_op_submit_with_budget(Op *op,
   ceph_assert(op->ops.size() == op->out_handler.size());
 
   // throttle.  before we look at any state, because
-  // _take_op_budget() may drop our lock while it blocks.
+  // _throttle_op() may drop our lock while it blocks (off the asio
+  // service), or return false so we can defer without blocking.
   if (!op->ctx_budgeted || (ctx_budget && (*ctx_budget == -1))) {
-    int op_budget = _take_op_budget(op, sul);
+    int op_budget = calc_op_budget(op->ops);
+    if (keep_balanced_budget) {
+      if (!_throttle_op(op, sul, op_budget)) {
+        _wait_for_budget(op, op_budget, ctx_budget, ptid);
+        return;
+      }
+    } else {
+      op_throttle_bytes.take(op_budget);
+      op_throttle_ops.take(1);
+    }
+    op->budget = op_budget;
     // take and pass out the budget for the first OP
     // in the context session
     if (ctx_budget && (*ctx_budget == -1)) {
@@ -3008,6 +3022,10 @@ start:
 
   ldout(cct, 5) << __func__ << ": tid " << tid
 		<< " not found in homeless session" << dendl;
+
+  if (_cancel_budget_waiter(tid, r)) {
+    return 0;
+  }
 
   return ret;
 }
@@ -3811,42 +3829,166 @@ int Objecter::calc_op_budget(const bc::small_vector_base<OSDOp>& ops)
   return op_budget;
 }
 
-void Objecter::_throttle_op(Op *op,
-			    shunique_lock<ceph::shared_mutex>& sul,
-			    int op_budget)
-{
+bool Objecter::_throttle_op(Op *op, shunique_lock<ceph::shared_mutex> &sul,
+                            int op_budget) {
   ceph_assert(sul && sul.mutex() == &rwlock);
-  bool locked_for_write = sul.owns_lock();
 
   if (!op_budget)
     op_budget = calc_op_budget(op->ops);
-  if (!op_throttle_bytes.get_or_fail(op_budget)) { //couldn't take right now
-    sul.unlock();
-    op_throttle_bytes.get(op_budget);
-    if (locked_for_write)
-      sul.lock();
-    else
-      sul.lock_shared();
+  // Never block in Throttle::get(). Completions that release budget are
+  // often posted to the same asio service that calls into submit; blocking
+  // that service deadlocks. Callers must defer via _wait_for_budget (or an
+  // equivalent waiter) when this returns false.
+  if (!op_throttle_bytes.get_or_fail(op_budget)) {
+    return false;
   }
-  if (!op_throttle_ops.get_or_fail(1)) { //couldn't take right now
-    sul.unlock();
-    op_throttle_ops.get(1);
-    if (locked_for_write)
+  if (!op_throttle_ops.get_or_fail(1)) {
+    op_throttle_bytes.put(op_budget);
+    return false;
+  }
+  return true;
+}
+
+void Objecter::_wait_for_budget(Op *op, int op_budget, int *ctx_budget,
+                                ceph_tid_t *ptid) {
+  // rwlock held
+  if (op->tid == 0) {
+    op->tid = ++last_tid;
+  }
+  if (ptid) {
+    *ptid = op->tid;
+  }
+
+  ldout(cct, 10) << __func__ << " deferring tid " << op->tid << " for budget "
+                 << op_budget << dendl;
+
+  op->get();
+  waiting_for_budget.push_back(budget_waiter_t{op, op_budget, ctx_budget, {}});
+  budget_waiter_count.fetch_add(1, std::memory_order_release);
+}
+
+void Objecter::_dispatch_budget_waiters() {
+  shunique_lock sul(rwlock, acquire_unique);
+
+  while (!waiting_for_budget.empty()) {
+    auto &front = waiting_for_budget.front();
+    if (!op_throttle_bytes.get_or_fail(front.op_budget)) {
+      break;
+    }
+    if (!op_throttle_ops.get_or_fail(1)) {
+      op_throttle_bytes.put(front.op_budget);
+      break;
+    }
+
+    budget_waiter_t w = std::move(waiting_for_budget.front());
+    waiting_for_budget.pop_front();
+    budget_waiter_count.fetch_sub(1, std::memory_order_release);
+
+    if (w.on_budget) {
+      sul.unlock();
+      std::move(w.on_budget)();
       sul.lock();
-    else
-      sul.lock_shared();
+      continue;
+    }
+
+    Op *op = w.op;
+    ceph_assert(op);
+    ceph_assert(initialized);
+    op->budget = w.op_budget;
+    if (w.ctx_budget && *w.ctx_budget == -1) {
+      *w.ctx_budget = w.op_budget;
+    }
+
+    if (osd_timeout > timespan(0) && op->ontimeout == 0) {
+      auto tid = op->tid;
+      op->ontimeout = timer.add_event(
+          osd_timeout, [this, tid]() { op_cancel(tid, -ETIMEDOUT); });
+    }
+
+    ldout(cct, 10) << __func__ << " resuming tid " << op->tid << " budget "
+                   << w.op_budget << dendl;
+    _op_submit(op, sul, nullptr);
+    op->put(); // drop wait-queue ref
   }
 }
 
-void Objecter::throttle_op_budget_for_test(int op_budget) {
+bool Objecter::_cancel_budget_waiter(ceph_tid_t tid, int r) {
+  // rwlock held for write
+  for (auto it = waiting_for_budget.begin(); it != waiting_for_budget.end();
+       ++it) {
+    if (!it->op || it->op->tid != tid) {
+      continue;
+    }
+    Op *op = it->op;
+    waiting_for_budget.erase(it);
+    budget_waiter_count.fetch_sub(1, std::memory_order_release);
+
+    ldout(cct, 10) << __func__ << " canceled waiting tid " << tid << " r=" << r
+                   << dendl;
+    if (op->has_completion()) {
+      op->complete(osdcode(r), r, service.get_executor());
+    }
+    // budget was never taken
+    op->put(); // wait-queue ref
+    op->put(); // creation ref (never reached _finish_op)
+    return true;
+  }
+  return false;
+}
+
+void Objecter::_cancel_all_budget_waiters() {
+  // rwlock held for write
+  while (!waiting_for_budget.empty()) {
+    budget_waiter_t w = std::move(waiting_for_budget.front());
+    waiting_for_budget.pop_front();
+    budget_waiter_count.fetch_sub(1, std::memory_order_release);
+
+    if (w.on_budget) {
+      // Test waiter: drop without invoking (Objecter is shutting down)
+      continue;
+    }
+    Op *op = w.op;
+    ceph_assert(op);
+    if (op->has_completion()) {
+      op->complete(osdcode(-ECANCELED), -ECANCELED, service.get_executor());
+    }
+    op->put();
+    op->put();
+  }
+}
+
+void Objecter::throttle_op_budget_for_test(
+    int op_budget, fu2::unique_function<void() &&> on_budget) {
   ceph_assert(op_budget > 0);
-  // Op is unused when op_budget is provided, but _throttle_op requires one.
   Op *op = new Op(object_t("throttle_test"), object_locator_t(), osdc_opvec{},
                   0, static_cast<Context *>(nullptr), nullptr);
   shunique_lock sul(rwlock, acquire_unique);
-  _throttle_op(op, sul, op_budget);
-  sul.unlock();
+  if (_throttle_op(op, sul, op_budget)) {
+    sul.unlock();
+    op->put();
+    if (on_budget) {
+      std::move(on_budget)();
+    }
+    return;
+  }
   op->put();
+
+  if (on_budget) {
+    waiting_for_budget.push_back(
+        budget_waiter_t{nullptr, op_budget, nullptr, std::move(on_budget)});
+    budget_waiter_count.fetch_add(1, std::memory_order_release);
+    return;
+  }
+
+  // Synchronous wait for callers off the asio pool (e.g. test setup).
+  std::promise<void> p;
+  auto fut = p.get_future();
+  waiting_for_budget.push_back(
+      budget_waiter_t{nullptr, op_budget, nullptr,
+                      [p = std::move(p)]() mutable { p.set_value(); }});
+  budget_waiter_count.fetch_add(1, std::memory_order_release);
+  sul.unlock();
+  fut.wait();
 }
 
 void Objecter::put_op_budget_for_test(int op_budget) {

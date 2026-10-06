@@ -2709,16 +2709,26 @@ private:
    * handle a budget for in-flight ops
    * budget is taken whenever an op goes into the ops std::map
    * and returned whenever an op is removed from the std::map
-   * If throttle_op needs to throttle it will unlock client_lock.
+   * If throttle_op needs to throttle it will unlock client_lock
+   * unless called on the Objecter asio service (see _throttle_op).
    */
   int calc_op_budget(const boost::container::small_vector_base<OSDOp>& ops);
-  void _throttle_op(Op *op, ceph::shunique_lock<ceph::shared_mutex>& sul,
-		    int op_size = 0);
+  /**
+   * Take byte/op budget for a balanced-budget submit.
+   * @return true if budget was acquired immediately.
+   * @return false if budget is unavailable — caller must queue via
+   *         _wait_for_budget and must not block (completions that free
+   *         budget often run on the same asio service).
+   */
+  bool _throttle_op(Op *op, ceph::shunique_lock<ceph::shared_mutex> &sul,
+                    int op_size = 0);
   int _take_op_budget(Op *op, ceph::shunique_lock<ceph::shared_mutex>& sul) {
     ceph_assert(sul && sul.mutex() == &rwlock);
     int op_budget = calc_op_budget(op->ops);
     if (keep_balanced_budget) {
-      _throttle_op(op, sul, op_budget);
+      // Must acquire synchronously (may block off the asio service).
+      // Service-thread deferral is handled in _op_submit_with_budget.
+      ceph_assert(_throttle_op(op, sul, op_budget));
     } else { // update take_linger_budget to match this!
       op_throttle_bytes.take(op_budget);
       op_throttle_ops.take(1);
@@ -2727,10 +2737,31 @@ private:
     return op_budget;
   }
   int take_linger_budget(LingerOp *info);
+
+  /// Op deferred until inflight budget is available (service-thread path)
+  struct budget_waiter_t {
+    Op *op = nullptr;
+    int op_budget = 0;
+    int *ctx_budget = nullptr;
+    /// Test-only: signaled when budget is taken without submitting an Op
+    fu2::unique_function<void() &&> on_budget;
+  };
+  std::list<budget_waiter_t> waiting_for_budget;
+  std::atomic<unsigned> budget_waiter_count{0};
+
+  void _wait_for_budget(Op *op, int op_budget, int *ctx_budget,
+                        ceph_tid_t *ptid);
+  void _dispatch_budget_waiters();
+  bool _cancel_budget_waiter(ceph_tid_t tid, int r);
+  void _cancel_all_budget_waiters();
+
   void put_op_budget_bytes(int op_budget) {
     ceph_assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);
     op_throttle_ops.put(1);
+    if (budget_waiter_count.load(std::memory_order_acquire) > 0) {
+      boost::asio::post(service, [this] { _dispatch_budget_waiters(); });
+    }
   }
   void put_nlist_context_budget(NListContext *list_context);
   Throttle op_throttle_bytes{cct, "objecter_bytes",
@@ -2770,23 +2801,25 @@ private:
     return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
   }
 
-
   /**
    * Tell the objecter to throttle outgoing ops according to its
-   * budget (in _conf). If you do this, ops can block, in
-   * which case it will unlock client_lock and sleep until
-   * incoming messages reduce the used budget low enough for
-   * the ops to continue going; then it will lock client_lock again.
+   * budget (in _conf). If budget is unavailable, ops are deferred on
+   * a wait queue and resumed from put_op_budget_bytes (via the asio
+   * service) instead of blocking the calling thread.
    */
   void set_balanced_budget() { keep_balanced_budget = true; }
   void unset_balanced_budget() { keep_balanced_budget = false; }
 
   /**
-   * Test helpers for the balanced-budget throttle path. May block the
-   * calling thread in Throttle::get until put_op_budget_for_test frees
-   * space (same failure mode as _op_submit_with_budget on the asio pool).
+   * Test helpers for the balanced-budget throttle path.
+   * If on_budget is provided and budget is unavailable, queues and
+   * invokes on_budget when budget is taken (never blocks).
+   * If on_budget is empty, waits synchronously via the same queue
+   * (for setup on non-pool threads only).
    */
-  void throttle_op_budget_for_test(int op_budget);
+  void
+  throttle_op_budget_for_test(int op_budget,
+                              fu2::unique_function<void() &&> on_budget = {});
   void put_op_budget_for_test(int op_budget);
 
   void set_honor_pool_full() { honor_pool_full = true; }
