@@ -1198,7 +1198,6 @@ class TestIngressService:
             '        Enable_UDP = false;\n'
             '        NFS_Port = 2049;\n'
             '        allow_set_io_flusher_fail = true;\n'
-            '        Monitoring_Port = 9587;\n'
             '}\n'
             '\n'
             'NFSv4 {\n'
