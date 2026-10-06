@@ -2,6 +2,7 @@
 #include "global/global_context.h"
 
 #include "osdc/Striper.h"
+#include "osd/osd_types_client.h"
 
 #include <iostream> // for std::cout
 
