@@ -26,6 +26,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -56,6 +57,19 @@ using cephfs_notify::NOTIFY_CLOSE_WRITE;
 using cephfs_notify::NOTIFY_MOVED_FROM;
 using cephfs_notify::NOTIFY_MOVED_TO;
 using cephfs_notify::NOTIFY_ONLYDIR;
+
+namespace {
+
+/// Overwrite a secret in memory once it has been handed to librdkafka (which
+/// keeps its own copy). Best effort: a std::string can have been reallocated
+/// away, but this removes the common case.
+void wipe_secret(std::string &s)
+{
+  std::fill(s.begin(), s.end(), '\0');
+  std::atomic_signal_fence(std::memory_order_seq_cst);
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // FileEndpoint
@@ -102,10 +116,35 @@ void FileEndpoint::dump_status(ceph::Formatter *f) const
 // KafkaEndpoint
 // ---------------------------------------------------------------------------
 
+bool KafkaEndpoint::read_secret(const std::string &path, std::string &out)
+{
+  std::ifstream f(path);
+  if (!f) {
+    set_error("cannot open secret file " + path);
+    return false;
+  }
+  std::getline(f, out);
+  while (!out.empty() && (out.back() == '\n' || out.back() == '\r'))
+    out.pop_back();
+  if (out.empty()) {
+    set_error("secret file " + path + " is empty");
+    return false;
+  }
+  return true;
+}
+
 KafkaEndpoint::KafkaEndpoint(CephContext *cct, const KafkaOptions &opts)
   : cct(cct), brokers(opts.brokers), topic_name(opts.topic),
     partition_key("mds." + std::to_string(opts.rank)),
-    message_timeout_ms(opts.message_timeout_ms), max_queue(opts.max_queue)
+    message_timeout_ms(opts.message_timeout_ms), max_queue(opts.max_queue),
+    security_protocol(opts.security_protocol),
+    ssl_ca_location(opts.ssl_ca_location),
+    ssl_certificate_location(opts.ssl_certificate_location),
+    ssl_key_location(opts.ssl_key_location),
+    ssl_key_password_file(opts.ssl_key_password_file),
+    ssl_verify(opts.ssl_verify), sasl_mechanism(opts.sasl_mechanism),
+    sasl_username(opts.sasl_username),
+    sasl_password_file(opts.sasl_password_file)
 {
   char errstr[512] = {0};
 
@@ -128,11 +167,40 @@ KafkaEndpoint::KafkaEndpoint(CephContext *cct, const KafkaOptions &opts)
     }
     return true;
   };
+  // for values that are secret: librdkafka's error text for some properties
+  // echoes the offending value, so it is replaced with a fixed message
+  auto conf_set_secret = [&](const char *key, const std::string &val) -> bool {
+    if (rd_kafka_conf_set(conf, key, val.c_str(), errstr, sizeof(errstr)) !=
+        RD_KAFKA_CONF_OK) {
+      set_error(std::string(key) + ": rejected by librdkafka (value withheld)");
+      return false;
+    }
+    return true;
+  };
+
+  std::string proto = security_protocol.empty() ? "PLAINTEXT" : security_protocol;
+  ssl_protocol = (proto == "SSL" || proto == "SASL_SSL");
+  sasl_protocol = (proto == "SASL_PLAINTEXT" || proto == "SASL_SSL");
+  if (!ssl_protocol && !sasl_protocol && proto != "PLAINTEXT") {
+    set_error("unknown security.protocol '" + proto +
+              "' (PLAINTEXT, SSL, SASL_PLAINTEXT or SASL_SSL)");
+    return;
+  }
+  if (sasl_protocol && (sasl_username.empty() || sasl_password_file.empty())) {
+    // PLAIN and SCRAM both need both; GSSAPI (Kerberos) is not wired up here
+    set_error("security.protocol " + proto + " needs "
+              "mds_notify_kafka_sasl_username and "
+              "mds_notify_kafka_sasl_password_file");
+    return;
+  }
+
   if (!conf_set("bootstrap.servers", brokers))
     return;
   if (!conf_set("message.timeout.ms", std::to_string(message_timeout_ms)))
     return;
   if (!conf_set("client.id", "ceph-mds"))
+    return;
+  if (!conf_set("security.protocol", proto))
     return;
   if (max_queue > 0 &&
       !conf_set("queue.buffering.max.messages", std::to_string(max_queue)))
@@ -140,6 +208,47 @@ KafkaEndpoint::KafkaEndpoint(CephContext *cct, const KafkaOptions &opts)
   // a broker outage is not a connection error to shout about: the producer
   // retries in the background and we count drops
   conf_set("log.connection.close", "false");
+
+  if (ssl_protocol) {
+    // no ca.location means librdkafka's default: the system CA bundle
+    if (!ssl_ca_location.empty() &&
+        !conf_set("ssl.ca.location", ssl_ca_location))
+      return;
+    if (!ssl_certificate_location.empty() &&
+        !conf_set("ssl.certificate.location", ssl_certificate_location))
+      return;
+    if (!ssl_key_location.empty() &&
+        !conf_set("ssl.key.location", ssl_key_location))
+      return;
+    if (!ssl_key_password_file.empty()) {
+      std::string pw;
+      if (!read_secret(ssl_key_password_file, pw))
+        return;
+      bool ok = conf_set_secret("ssl.key.password", pw);
+      wipe_secret(pw);
+      if (!ok)
+        return;
+    }
+    if (!conf_set("enable.ssl.certificate.verification",
+                  ssl_verify ? "true" : "false"))
+      return;
+  }
+
+  if (sasl_protocol) {
+    if (!sasl_mechanism.empty() &&
+        !conf_set("sasl.mechanism", sasl_mechanism))
+      return;
+    if (!conf_set("sasl.username", sasl_username))
+      return;
+    std::string pw;
+    if (!read_secret(sasl_password_file, pw))
+      return;
+    bool ok = conf_set_secret("sasl.password", pw);
+    wipe_secret(pw);
+    if (!ok)
+      return;
+    sasl_password_set = true;
+  }
 
   producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
   if (!producer) {
@@ -159,6 +268,7 @@ KafkaEndpoint::KafkaEndpoint(CephContext *cct, const KafkaOptions &opts)
   }
   dout(1) << "kafka endpoint rank " << opts.rank << " brokers " << brokers
           << " topic " << topic_name
+          << " security.protocol " << proto
           << " message.timeout.ms " << message_timeout_ms << dendl;
 }
 
@@ -224,11 +334,29 @@ std::string KafkaEndpoint::last_error() const
 
 void KafkaEndpoint::dump_status(ceph::Formatter *f) const
 {
+  // No secret value appears here: the SASL password and the private key
+  // password are read from files at startup and are never stored, logged or
+  // reported. Only the paths (configuration, not secrets) are shown.
   f->dump_string("brokers", brokers);
   f->dump_string("topic", topic_name);
   f->dump_string("partition_key", partition_key);
   f->dump_unsigned("message_timeout_ms", message_timeout_ms);
   f->dump_unsigned("max_queue", max_queue);
+  f->dump_string("security_protocol",
+                 security_protocol.empty() ? "PLAINTEXT" : security_protocol);
+  if (ssl_protocol) {
+    f->dump_string("ssl_ca_location", ssl_ca_location);
+    f->dump_string("ssl_certificate_location", ssl_certificate_location);
+    f->dump_string("ssl_key_location", ssl_key_location);
+    f->dump_string("ssl_key_password_file", ssl_key_password_file);
+    f->dump_bool("ssl_verify", ssl_verify);
+  }
+  if (sasl_protocol) {
+    f->dump_string("sasl_mechanism", sasl_mechanism);
+    f->dump_string("sasl_username", sasl_username);
+    f->dump_string("sasl_password_file", sasl_password_file);
+    f->dump_bool("sasl_password_set", sasl_password_set);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -262,6 +390,23 @@ void ChangeNotifier::configure_endpoint(const ConfigProxy &conf)
   kafka.message_timeout_ms =
     conf.get_val<uint64_t>("mds_notify_kafka_message_timeout");
   kafka.max_queue = conf.get_val<uint64_t>("mds_notify_kafka_max_queue");
+  kafka.security_protocol =
+    conf.get_val<std::string>("mds_notify_kafka_security_protocol");
+  kafka.ssl_ca_location =
+    conf.get_val<std::string>("mds_notify_kafka_ssl_ca_location");
+  kafka.ssl_certificate_location =
+    conf.get_val<std::string>("mds_notify_kafka_ssl_certificate_location");
+  kafka.ssl_key_location =
+    conf.get_val<std::string>("mds_notify_kafka_ssl_key_location");
+  kafka.ssl_key_password_file =
+    conf.get_val<std::string>("mds_notify_kafka_ssl_key_password_file");
+  kafka.ssl_verify = conf.get_val<bool>("mds_notify_kafka_ssl_verify");
+  kafka.sasl_mechanism =
+    conf.get_val<std::string>("mds_notify_kafka_sasl_mechanism");
+  kafka.sasl_username =
+    conf.get_val<std::string>("mds_notify_kafka_sasl_username");
+  kafka.sasl_password_file =
+    conf.get_val<std::string>("mds_notify_kafka_sasl_password_file");
   kafka.rank = rank;
   bool want = conf.get_val<bool>("mds_notify_enable");
 
