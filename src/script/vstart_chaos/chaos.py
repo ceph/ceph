@@ -756,7 +756,11 @@ class Chaos:
         if not pg:
             return
         up = pg["up"]
-        src = random.choice(up)
+        # a PG can have no up OSDs at all while a zone is down
+        srcs = [o for o in up if o in self.c.osd_zone]
+        if not srcs:
+            return
+        src = random.choice(srcs)
         z = self.c.osd_zone.get(src)
         cands = [o for o in self.c.zones.get(z, []) if o not in up]
         if cands:
