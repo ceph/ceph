@@ -145,6 +145,10 @@ os._exit = os_exit_noop   # type: ignore
 
 DEFAULT_IMAGE = 'quay.io/ceph/ceph'
 
+# Pool type constants from include/rados.h / pg_pool_t (CEPH_PG_TYPE_*)
+CEPH_POOL_TYPE_REPLICATED = 1
+CEPH_POOL_TYPE_ERASURE = 3
+
 
 def host_exists(hostname_position: int = 1) -> Callable:
     """Check that a hostname exists in the inventory"""
@@ -3901,6 +3905,36 @@ Then run the following:
             raise OrchestratorError(f'Cannot find pool "{pool}" for '
                                     f'service {service_name}')
 
+    def _check_pool_supports_omap(self, pool: str, service_name: str) -> None:
+        osd_map = self.get('osd_map')
+        pools = osd_map.get('pools', []) if isinstance(osd_map, dict) else []
+        pool_info = None
+        for p in pools:
+            if p.get('pool_name') == pool:
+                pool_info = p
+                break
+        if pool_info is None:
+            raise OrchestratorError(
+                f'Pool "{pool}" was not found in the OSD map. '
+                f'Cannot verify OMAP support for service "{service_name}".'
+            )
+        if pool_info.get('type') == CEPH_POOL_TYPE_REPLICATED:
+            return
+        flags_names = pool_info.get('flags_names', '')
+        flags_set = set(f.strip() for f in flags_names.split(',') if f.strip())
+        if 'supports_omap' in flags_set:
+            return
+        raise OrchestratorError(
+            f'Pool "{pool}" does not support OMAP. '
+            f'Service "{service_name}" requires a pool with OMAP support '
+            f'because it uses OMAP objects for gateway state. '
+            f'Use a replicated pool, or enable OMAP support on the '
+            f'erasure-coded pool with '
+            f'"ceph osd pool set {pool} allow_ec_optimizations true" '
+            f'(requires all OSDs to be running Umbrella or later; '
+            f'Crimson-backed EC pools do not support OMAP).'
+        )
+
     def _add_daemon(self,
                     daemon_type: str,
                     spec: ServiceSpec) -> List[str]:
@@ -4822,6 +4856,7 @@ Then run the following:
                 NvmeofMetadataPoolHelper(self).create_pool_if_needed()
             try:
                 self._check_pool_exists(nvmeof_spec.pool, nvmeof_spec.service_name())
+                self._check_pool_supports_omap(nvmeof_spec.pool, nvmeof_spec.service_name())
             except OrchestratorError as e:
                 self.log.debug(f"{e}")
                 raise
