@@ -84,11 +84,26 @@ private:
 };
 
 /// Kafka endpoint configuration, straight from the mds_notify_kafka_* options.
+///
+/// Everything that names secret material (the SASL password, the private key
+/// password) is a *file path*: the secret itself is read at endpoint
+/// construction and never stored in the config store, never logged and never
+/// echoed in `notify status`.
 struct KafkaOptions {
   std::string brokers;
   std::string topic;
   uint32_t message_timeout_ms = 5000;
   uint64_t max_queue = 0;
+  /// librdkafka security.protocol: PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL
+  std::string security_protocol;
+  std::string ssl_ca_location;
+  std::string ssl_certificate_location;
+  std::string ssl_key_location;
+  std::string ssl_key_password_file;
+  bool ssl_verify = true;
+  std::string sasl_mechanism;
+  std::string sasl_username;
+  std::string sasl_password_file;
   /// MDS rank this producer belongs to; used as the message key so that all
   /// events from one rank land on one partition (per-rank ordering).
   int rank = -1;
@@ -116,6 +131,8 @@ public:
 
 private:
   void set_error(const std::string &err);
+  /// read a one-line secret from a file; the content is never logged
+  bool read_secret(const std::string &path, std::string &out);
 
   CephContext *const cct;
   rd_kafka_s *producer = nullptr;
@@ -125,6 +142,18 @@ private:
   std::string partition_key;
   uint32_t message_timeout_ms = 5000;
   uint64_t max_queue = 0;
+  std::string security_protocol;
+  std::string ssl_ca_location;
+  std::string ssl_certificate_location;
+  std::string ssl_key_location;
+  std::string ssl_key_password_file;
+  bool ssl_verify = true;
+  std::string sasl_mechanism;
+  std::string sasl_username;
+  std::string sasl_password_file;
+  bool ssl_protocol = false;
+  bool sasl_protocol = false;
+  bool sasl_password_set = false;
   mutable std::mutex err_lock;
   std::string err;
 };
@@ -153,6 +182,13 @@ private:
  *   - mds_notify_kafka_topic     Kafka topic (startup)
  *   - mds_notify_kafka_message_timeout  librdkafka message.timeout.ms (startup)
  *   - mds_notify_kafka_max_queue librdkafka queue.buffering.max.messages (startup)
+ *   - mds_notify_kafka_security_protocol / _ssl_* / _sasl_*   (startup)
+ *
+ * Secret material (the SASL password, an encrypted private key's passphrase)
+ * is read from files named by mds_notify_kafka_sasl_password_file and
+ * mds_notify_kafka_ssl_key_password_file; only the paths live in the config
+ * store and only the paths (never a value) can appear in logs or in the
+ * `notify status` output.
  *
  * The file endpoint wins when both it and Kafka are configured; it exists
  * so tests can assert the emitted records without a broker.
