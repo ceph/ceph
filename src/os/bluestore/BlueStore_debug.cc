@@ -13,8 +13,14 @@
  *
  */
 #include <cstdint>
+#include <deque>
 #include <ostream>
 #include "BlueStore.h"
+#include "Allocator.h"
+#include "common/debug.h"
+#include "include/random.h"
+
+#define dout_subsys ceph_subsys_bluestore
 
 static const std::string transition_table[26] = {
 "bcdfghjklmnprstuvxyz", //a
@@ -289,4 +295,139 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Onode::printer &p)
     }
   }
   return out;
+}
+
+// =======================================================
+
+// ClaimRangeStressThread
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.ClaimRangeStressThread "
+#undef dout_context
+#define dout_context store->cct
+
+void BlueStore::ClaimRangeStressThread::init()
+{
+  auto& conf = store->cct->_conf;
+  if (!conf.get_val<bool>("bluestore_debug_claim_range_stress")) {
+    return;
+  }
+  max_claims = conf.get_val<uint64_t>(
+    "bluestore_debug_claim_range_stress_max_claims");
+  claim_len = conf.get_val<Option::size_t>(
+    "bluestore_debug_claim_range_stress_claim_length");
+  free_p = conf.get_val<uint64_t>(
+    "bluestore_debug_claim_range_stress_max_free_percent");
+  min_free = conf.get_val<Option::size_t>(
+    "bluestore_debug_claim_range_stress_min_free");
+  interval = conf.get_val<double>(
+    "bluestore_debug_claim_range_stress_interval");
+  sentinel_samples = conf.get_val<uint64_t>(
+    "bluestore_debug_claim_range_stress_sentinel_samples");
+  // claim_range() asserts on a misaligned length;
+  ceph_assert(claim_len % store->alloc->get_block_size() == 0);
+  ceph_assert(claim_len <= uint64_t(store->alloc->get_capacity()));
+  ceph_assert(!stop);
+  create("bstore_claim_st");
+}
+
+void *BlueStore::ClaimRangeStressThread::entry()
+{
+  std::unique_lock l{lock};
+
+  struct held_claim {
+    PExtentVector exts;
+    uint64_t bytes;
+  };
+  std::deque<held_claim> pool;
+  uint64_t held = 0, claimed_total = 0, released_total = 0;
+  // claim_range() calls, by how much of the range was free
+  uint64_t claims_full = 0, claims_partial = 0, claims_zero = 0;
+  // sentinel blocks written at the edges and in the middle of extents
+  uint64_t sentinels_edge = 0, sentinels_middle = 0;
+  const uint64_t bs = store->block_size;
+  bufferlist sentinel;
+  sentinel.append(std::string(bs, char(0xAB)));
+
+  auto release_front = [&] {
+    auto &claimed_range = pool.front();
+    store->alloc->release(claimed_range.exts);
+    released_total += claimed_range.bytes;
+    held -= claimed_range.bytes;
+    pool.pop_front();
+  };
+
+  while (!stop) {
+    if (pool.size() == max_claims) {
+      release_front();
+    }
+    uint64_t free = store->alloc->get_free();
+
+    if (held + claim_len <= free_p * (held + free) / 100 &&
+        free >= min_free + claim_len) {
+      // start at any allocation unit, so claims straddle the edges of held
+      // claims and of the workload's extents; the last start that fits keeps
+      // [off, off + claim_len) within the allocator's capacity
+      uint64_t au = store->alloc->get_block_size();
+      uint64_t last = (store->alloc->get_capacity() - claim_len) / au;
+      uint64_t off =
+        ceph::util::generate_random_number<uint64_t>(0, last) * au;
+      PExtentVector exts;
+      uint64_t n = store->alloc->claim_range(off, claim_len, &exts);
+      dout(20) << __func__ << " claimed 0x" << std::hex << n << " of 0x"
+               << off << "~" << claim_len << std::dec << dendl;
+      if (n == claim_len) {
+        ++claims_full;
+      } else if (n > 0) {
+        ++claims_partial;
+      } else {
+        ++claims_zero;
+      }
+      if (n > 0) {
+        // write sentinel to the first and the last block of the extent,
+        // and to sentinel_samples random blocks in between
+        for (auto& e : exts) {
+          int r = store->bdev->write(e.offset, sentinel, false);
+          ceph_assert(r == 0);
+          r = store->bdev->write(e.offset + e.length - bs, sentinel, false);
+          ceph_assert(r == 0);
+          uint64_t blocks = e.length / bs;
+          // a one-block extent got the same block twice
+          sentinels_edge += blocks > 1 ? 2 : 1;
+          if (blocks > 2) {
+            for (uint64_t i = 0; i < sentinel_samples; ++i) {
+              uint64_t b =
+                ceph::util::generate_random_number<uint64_t>(1, blocks - 2);
+              r = store->bdev->write(e.offset + b * bs, sentinel, false);
+              ceph_assert(r == 0);
+              ++sentinels_middle;
+            }
+          }
+        }
+        claimed_total += n;
+        held += n;
+        pool.push_back({std::move(exts), n});
+      }
+    }
+    cond.wait_for(l, ceph::make_timespan(interval));
+  }
+
+  // Thread stopped, release all claims
+  while (!pool.empty()) {
+    release_front();
+  }
+
+  dout(1) << __func__ << " claims "
+          << claims_full + claims_partial + claims_zero
+          << " (full " << claims_full
+          << " partial " << claims_partial
+          << " zero " << claims_zero << ")"
+          << " sentinels edge " << sentinels_edge
+          << " middle " << sentinels_middle
+          << " claimed " << byte_u_t(claimed_total)
+          << " released " << byte_u_t(released_total) << dendl;
+  ceph_assert(held == 0);
+  ceph_assert(claimed_total == released_total);
+  stop = false;
+  return nullptr;
 }
