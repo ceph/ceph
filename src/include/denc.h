@@ -36,9 +36,7 @@
 #include <type_traits>
 #include <vector>
 
-#include <boost/container/flat_map.hpp>
-#include <boost/container/flat_set.hpp>
-#include <boost/container/small_vector.hpp>
+#include <boost/container/container_fwd.hpp>
 #include <boost/optional.hpp>
 
 #include "include/cpp_lib_backport.h"
