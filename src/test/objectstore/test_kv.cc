@@ -669,26 +669,23 @@ TEST_P(KVTest, RocksDBShardingIteratorReadError) {
   ASSERT_EQ(3u, b_ssts.size());
   save_store();
 
-  // A unreadable: a listing that stops early must report it
+  // A unreadable: the whole-space listing skips A and must report it, B is complete
   ASSERT_NO_FATAL_FAILURE(flip_bytes(a_sst, 0));
   init();
   ASSERT_EQ(0, db->open(cout, cfs));
   {
     KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
-    int n = count_keys(it);
-    ASSERT_LT(n, 2 * nkeys);
+    ASSERT_EQ(nkeys, count_keys(it));
     ASSERT_NE(0, it->status());
   }
   {
     KeyValueDB::Iterator it = db->get_iterator("B");
-    int n = count_keys(it);
-    if (n < nkeys) {
-      ASSERT_NE(0, it->status());
-    }
+    ASSERT_EQ(nkeys, count_keys(it));
+    ASSERT_EQ(0, it->status());
   }
   fini();
 
-  // every shard of B unreadable
+  // every shard of B unreadable: the listings stop before B and must report it
   restore_store();
   for (auto& sst : b_ssts) {
     ASSERT_NO_FATAL_FAILURE(flip_bytes(sst, 0));
@@ -697,16 +694,13 @@ TEST_P(KVTest, RocksDBShardingIteratorReadError) {
   ASSERT_EQ(0, db->open(cout, cfs));
   {
     KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
-    int n = count_keys(it);
-    ASSERT_LT(n, 2 * nkeys);
+    ASSERT_EQ(nkeys, count_keys(it));
     ASSERT_NE(0, it->status());
   }
   {
     KeyValueDB::Iterator it = db->get_iterator("B");
-    int n = count_keys(it);
-    if (n < nkeys) {
-      ASSERT_NE(0, it->status());
-    }
+    ASSERT_EQ(0, count_keys(it));
+    ASSERT_NE(0, it->status());
   }
   fini();
   fs::remove_all("kv_test_temp_dir.orig");
