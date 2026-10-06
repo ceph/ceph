@@ -19,7 +19,7 @@
 #include "include/common_fwd.h"
 #include "include/fs_types.h" // for inodeno_t
 #include "include/types.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_client.h"
 #include "osdc/StriperTypes.h"
 
 #include <cstdint>

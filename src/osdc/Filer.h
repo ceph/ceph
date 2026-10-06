@@ -27,7 +27,7 @@
  * "files" are identified by ino.
  */
 
-#include "osd/osd_types.h"
+#include "osd/osd_types_client.h"
 #include "include/fs_types.h"
 #include "include/types.h"
 #include "include/utime.h"

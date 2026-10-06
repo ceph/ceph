@@ -6,7 +6,7 @@
 
 #include "include/types.h" // for epoch_t
 #include "msg/Message.h"
-#include "osd/osd_types.h" // for spg_t
+#include "osd/osd_types_core.h"
 
 class MOSDFastDispatchOp : public Message {
 public:

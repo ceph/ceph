@@ -19,7 +19,8 @@
 #include "common/ceph_mutex.h"
 #include "include/buffer.h"
 #include "include/xlist.h"
-#include "osd/osd_types.h"
+#include "include/rados/librados.hpp"
+#include "osd/osd_types_core.h"
 
 class IoCtxImpl;
 

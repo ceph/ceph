@@ -15,6 +15,7 @@
 #include <fstream>
 
 #include "os/ObjectStore.h"
+#include "osd/osd_types_superblock.h"
 #include "global/global_init.h"
 #include "common/debug.h"
 #include "common/errno.h"

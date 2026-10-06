@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 #include "messages/PaxosServiceMessage.h"
 
 /// OSD -> mon: permanently stop PG merge shrink for a Crimson pool.

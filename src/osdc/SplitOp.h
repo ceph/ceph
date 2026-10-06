@@ -34,7 +34,8 @@
 #include "common/shunique_lock.h"
 
 #include "osd/ECTypes.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_op.h"
+#include "osd/osd_types_pool.h"
 
 #include "Objecter.h"
 

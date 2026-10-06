@@ -16,7 +16,7 @@
 #define OPREQUEST_H_
 
 #include "osd/osd_op_util.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 #include "common/TrackedOp.h"
 #include "common/tracer.h"
 #include "osd/Coroutines.h"

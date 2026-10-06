@@ -17,7 +17,7 @@
 #define PG_EFFECTS_H_
 
 #include "include/cephfs/libcephfs.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 #include <set>
 #include "osdc/Objecter.h"
 

@@ -21,6 +21,8 @@
 
 #include "ECUtil.h"
 #include "OpRequest.h"
+#include "osd/osd_types_peering.h"
+#include "osd/osd_types_stats.h"
 
 namespace ceph {
 class Formatter;

@@ -85,6 +85,7 @@ class WritebackHandler;
 
 class MDSMap;
 class Message;
+class OSDMap;
 class MQuarantineDisable;
 class destructive_lock_ref_t;
 

@@ -10,7 +10,7 @@
 #include "include/encoding.h"
 #include "include/utime.h"
 
-#include "osd/osd_types.h"
+#include "osd/osd_types_peering.h"
 
 struct creating_pgs_t {
   epoch_t last_scan_epoch = 0;

@@ -22,7 +22,7 @@
 #include "include/stringify.h"
 #include "include/types.h"
 
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 #include "common/RefCountedObj.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
@@ -51,6 +51,9 @@ namespace ceph {
 
 class Logger;
 class ContextQueue;
+class pool_opts_t;
+struct objectstore_perf_stat_t;
+struct store_statfs_t;
 
 static inline void encode(const std::map<std::string,ceph::buffer::ptr> *attrset, ceph::buffer::list &bl) {
   using ceph::encode;

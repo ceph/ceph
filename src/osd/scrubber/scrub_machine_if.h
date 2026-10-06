@@ -12,6 +12,7 @@
 #include <boost/statechart/state_machine.hpp>
 
 #include "osd/scrubber_common.h"
+#include "osd/osd_types_stats.h"
 
 namespace Scrub {
 

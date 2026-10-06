@@ -18,7 +18,7 @@
 
 #include "include/types.h" // for epoch_t, version_t
 #include "msg/Message.h"
-#include "osd/osd_types.h" // for pg_t
+#include "osd/osd_types_core.h"
 
 class MPGStatsAck final : public Message {
 public:

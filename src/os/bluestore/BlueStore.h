@@ -60,6 +60,8 @@
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 #include "common/admin_socket.h"
+#include "osd/osd_types_pool.h"
+#include "osd/osd_types_stats.h"
 #ifdef WITH_CPUTRACE
 #include "common/cputrace.h"
 #endif

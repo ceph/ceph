@@ -32,7 +32,7 @@
 #include "common/ceph_mutex.h"
 #include "include/common_fwd.h"
 #include "extblkdev/ExtBlkDevInterface.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
 #include "aio/aio.h"
