@@ -279,7 +279,6 @@ const uint32_t MAX_POOL_APPLICATION_KEYS = 64;
 const uint32_t MAX_POOL_APPLICATION_LENGTH = 128;
 
 const string CRUSH_ROOT_DEFAULT = "default";
-const string ZONE_FAILURE_DOMAIN_DEFAULT = "datacenter";
 const string OSD_FAILURE_DOMAIN_DEFAULT = "host";
 
 bool is_osd_writable(const OSDCapGrant& grant, const std::string* pool_name) {
@@ -7830,7 +7829,7 @@ int OSDMonitor::crush_rule_create_replica(const string &name,
   } else {
     int ruleno;
     string effective_root = !root.empty() ? root : CRUSH_ROOT_DEFAULT;
-    string effective_zone_failure_domain = !zone_failure_domain.empty() ? zone_failure_domain : ZONE_FAILURE_DOMAIN_DEFAULT;
+    string effective_zone_failure_domain = !zone_failure_domain.empty() ? zone_failure_domain : g_conf().get_val<string>("osd_pool_default_crush_zone_failure_domain");
     string effective_osd_failure_domain = !osd_failure_domain.empty() ? osd_failure_domain : OSD_FAILURE_DOMAIN_DEFAULT;
     if (num_zones > 1) {
       // default crush params
@@ -8573,7 +8572,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   // set zone_failure_domain to default value if it is not set for stretch
   string effective_zone_failure_domain = zone_failure_domain;
   if (num_zones > 1 && zone_failure_domain.empty())
-    effective_zone_failure_domain = ZONE_FAILURE_DOMAIN_DEFAULT;  
+    effective_zone_failure_domain = g_conf().get_val<string>("osd_pool_default_crush_zone_failure_domain");
 
   if (mon.monmap->global_stretch_mode_enabled && num_zones > 1) {
     CrushWrapper newcrush = _get_pending_crush();
@@ -12369,7 +12368,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string root = cmd_getval_or<string>(cmdmap, "root", "default");
     int64_t num_zones = cmd_getval_or<int64_t>(cmdmap, "num_zones", 2);
     int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
-    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", "datacenter");
+    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", g_conf().get_val<string>("osd_pool_default_crush_zone_failure_domain"));
     string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
     bool force = false;
     cmd_getval(cmdmap, "force", force);
