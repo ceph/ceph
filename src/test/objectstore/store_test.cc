@@ -488,6 +488,15 @@ public:
     SetVal(g_conf(), "bluestore_min_alloc_size", stringify(min_alloc_size).c_str());
     DeferredSetup();
   }
+  void StartClaimRangeStress(bool stress) {
+    SetVal(g_conf(), "bluestore_block_size", stringify(2ull << 30).c_str());
+    SetVal(g_conf(), "bluestore_allocator", "avl");
+    SetVal(g_conf(), "bluestore_debug_claim_range_stress",
+           stress ? "true" : "false");
+    SetVal(g_conf(), "bluestore_debug_claim_range_stress_min_free",
+           stringify(256ull << 20).c_str());
+    StartDeferred(4096);
+  }
 };
 
 struct MatrixArg
@@ -6165,6 +6174,20 @@ TEST_P(StoreTestSpecificAUSize, ZipperPatternSharded) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
+}
+
+TEST_P(StoreTestSpecificAUSize, ClaimRangeStressSmallDeviceBaseline) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  StartClaimRangeStress(false);
+  doSyntheticTest(1000, 10000, 400*1024, 40*1024, 0);
+}
+
+TEST_P(StoreTestSpecificAUSize, ClaimRangeStressSmallDevice) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  StartClaimRangeStress(true);
+  doSyntheticTest(1000, 10000, 400*1024, 40*1024, 0);
 }
 
 class SyntheticMatrixCsumAlgorithm: public MatrixTest {};
