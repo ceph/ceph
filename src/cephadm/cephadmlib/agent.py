@@ -1,13 +1,15 @@
 import gzip
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
-from typing import Optional, Any, Tuple
+from typing import Optional, Any, Dict, Tuple
 import logging
 
 logger = logging.getLogger()
 
 
-def make_json_request(url: str, json_bytes: bytes, compress: bool) -> Optional[Request]:
+def make_json_request(
+    url: str, json_bytes: bytes, compress: bool, headers: Optional[Dict[str, str]] = None
+) -> Optional[Request]:
     """
     Create a JSON POST request, optionally gzip-compressed. `json_bytes` must be JSON-encoded bytes.
     """
@@ -15,22 +17,22 @@ def make_json_request(url: str, json_bytes: bytes, compress: bool) -> Optional[R
         logger.error('Cannot send empty JSON payload — returning empty Request.')
         return None
 
+    request_headers = dict(headers or {})
+
     if compress:
         original_size = len(json_bytes)
         json_bytes = gzip.compress(json_bytes)
         compressed_size = len(json_bytes)
         compression_ratio = 100 * (1 - compressed_size / original_size)
         logger.debug(f'Compression reduced payload size by {compression_ratio:.1f}% ({original_size} → {compressed_size} bytes)')
-        headers = {
+        request_headers.update({
             'Content-Type': 'application/json',
             'Content-Encoding': 'gzip',
             'Accept-Encoding': 'gzip',
-        }
+        })
     else:
-        headers = {
-            'Content-Type': 'application/json',
-        }
-    return Request(url, data=json_bytes, headers=headers)
+        request_headers['Content-Type'] = 'application/json'
+    return Request(url, data=json_bytes, headers=request_headers)
 
 
 def http_query(
@@ -41,6 +43,7 @@ def http_query(
     ssl_ctx: Optional[Any] = None,
     timeout: Optional[int] = 10,
     compress: bool = False,
+    headers: Optional[Dict[str, str]] = None,
 ) -> Tuple[int, str]:
     """
     Perform an HTTPS POST request with optional gzip-compressed JSON payload.
@@ -50,7 +53,7 @@ def http_query(
     url = f'https://{addr}:{port}{endpoint}'
     logger.debug(f'Sending query to {url} (compression={compress})')
     try:
-        req = make_json_request(url, data, compress) if data else Request(url)
+        req = make_json_request(url, data, compress, headers) if data else Request(url, headers=headers or {})
         if req is not None:
             with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
                 response_str = response.read()

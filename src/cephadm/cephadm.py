@@ -1909,7 +1909,10 @@ class CephadmAgent(DaemonForm):
                                               data=data,
                                               endpoint='/data',
                                               ssl_ctx=self.ssl_ctx,
-                                              compress=self.metadata_compresion_enabled)
+                                              compress=self.metadata_compresion_enabled,
+                                              headers={
+                                                  'X-Cephadm-Agent-Sent-At': str(time.time())
+                                              })
                 if status != 200:
                     logger.error(f'HTTP error {status} while querying agent endpoint: {response}')
                     raise RuntimeError(f'non-200 response <{status}> from agent endpoint: {response}')

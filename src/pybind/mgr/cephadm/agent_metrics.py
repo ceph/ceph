@@ -20,6 +20,27 @@ _LATENCY_BUCKETS_MS = (
 
 _STORE_CATEGORIES = ('host', 'devices', 'agent')
 _STORE_SCOPES = ('agent_request', 'background')
+_REPORT_RATE_WINDOW_S = 60
+_AGENT_TO_WORKER_DELAY_BUCKETS_S = (
+    (1.0, '<1s'),
+    (10.0, '1-10s'),
+    (30.0, '10-30s'),
+    (60.0, '30-60s'),
+    (300.0, '1-5min'),
+    (900.0, '5-15min'),
+    (3600.0, '15-60min'),
+    (float('inf'), '>60min'),
+)
+_REPORT_INTERVAL_BUCKETS_S = (
+    (10.0, '<10s'),
+    (20.0, '10-20s'),
+    (40.0, '20-40s'),
+    (60.0, '40-60s'),
+    (90.0, '60-90s'),
+    (120.0, '90-120s'),
+    (300.0, '120-300s'),
+    (float('inf'), '>300s'),
+)
 
 
 def _utcnow() -> datetime.datetime:
@@ -49,6 +70,48 @@ def _record_latency(stats: Dict[str, Any], duration_s: float, error: bool = Fals
             break
 
 
+def _new_agent_to_worker_delay_stats() -> Dict[str, Any]:
+    return {
+        'count': 0,
+        'errors': 0,
+        'total_ms': 0.0,
+        'max_ms': 0.0,
+        'histogram': OrderedDict((label, 0) for _, label in _AGENT_TO_WORKER_DELAY_BUCKETS_S),
+    }
+
+
+def _record_agent_to_worker_delay(stats: Dict[str, Any], duration_s: float) -> None:
+    duration_ms = duration_s * 1000.0
+    stats['count'] += 1
+    stats['total_ms'] += duration_ms
+    stats['max_ms'] = max(stats['max_ms'], duration_ms)
+    for upper_s, label in _AGENT_TO_WORKER_DELAY_BUCKETS_S:
+        if duration_s < upper_s:
+            stats['histogram'][label] += 1
+            break
+
+
+def _new_interval_stats() -> Dict[str, Any]:
+    return {
+        'count': 0,
+        'total_s': 0.0,
+        'min_s': None,
+        'max_s': 0.0,
+        'histogram': OrderedDict((label, 0) for _, label in _REPORT_INTERVAL_BUCKETS_S),
+    }
+
+
+def _record_interval(stats: Dict[str, Any], duration_s: float) -> None:
+    stats['count'] += 1
+    stats['total_s'] += duration_s
+    stats['min_s'] = duration_s if stats['min_s'] is None else min(stats['min_s'], duration_s)
+    stats['max_s'] = max(stats['max_s'], duration_s)
+    for upper_s, label in _REPORT_INTERVAL_BUCKETS_S:
+        if duration_s < upper_s:
+            stats['histogram'][label] += 1
+            break
+
+
 class AgentMetadataStats:
     """Small in-memory diagnostics for cephadm agent request scalability.
 
@@ -67,8 +130,27 @@ class AgentMetadataStats:
     def reset(self) -> None:
         with self._lock:
             self._since = _utcnow()
+            self._since_monotonic = time.monotonic()
             self._requests = _new_latency_stats()
             self._reports_total = 0
+            self._valid_reports = 0
+            self._unique_reporting_hosts = set()
+            self._last_agent_send_by_host: Dict[str, float] = {}
+            self._agent_send_intervals = _new_interval_stats()
+            self._processed_rate_buckets: Dict[int, int] = {}
+            self._agent_sent_timestamp_reports = 0
+            self._agent_to_worker_delay = _new_agent_to_worker_delay_stats()
+            self._agent_clock_skew_samples = 0
+            self._store_rate_buckets: Dict[int, int] = {}
+            self._agent_store_rate_buckets: Dict[int, int] = {}
+            self._background_store_rate_buckets: Dict[int, int] = {}
+            self._pacing: Dict[str, Optional[int]] = {
+                'host_count': None,
+                'avg_concurrency': None,
+                'refresh_period_s': None,
+                'initial_startup_delay_max_s': None,
+                'jitter_seconds': None,
+            }
             self._bad_metadata = 0
             self._handler_errors = 0
             self._reports_with_nonempty_ls = 0
@@ -92,6 +174,11 @@ class AgentMetadataStats:
             self._multi_host_ack_fanouts = 0
             self._last_multi_host_ack_fanout_at: Optional[str] = None
             self._last_multi_host_ack_fanout_hosts = 0
+            self._increment_ack_fanouts = 0
+            self._increment_ack_hosts = 0
+            self._max_increment_ack_hosts = 0
+            self._config_pushes = 0
+            self._config_push_hosts = 0
 
     def begin_agent_request(self) -> None:
         # The request hook runs at on_start_resource, before json_in parses the
@@ -99,6 +186,7 @@ class AgentMetadataStats:
         # so concurrent CherryPy workers cannot mix their measurements.
         self._local.in_agent_request = True
         self._local.agent_request_start = time.monotonic()
+        self._local.agent_request_start_wall = time.time()
         self._local.agent_request_host = None
         self._local.agent_store_time_s = {category: 0.0 for category in _STORE_CATEGORIES}
         self._local.agent_store_calls = {category: 0 for category in _STORE_CATEGORIES}
@@ -148,11 +236,56 @@ class AgentMetadataStats:
 
         self._local.in_agent_request = False
         self._local.agent_request_start = None
+        self._local.agent_request_start_wall = None
         self._local.agent_request_host = None
         self._local.agent_store_time_s = {}
         self._local.agent_store_calls = {}
         self._local.agent_pool_idle_start = None
         self._local.agent_pool_queue_start = None
+
+    @staticmethod
+    def _record_rate_bucket(buckets: Dict[int, int], timestamp: float) -> None:
+        second = int(timestamp)
+        buckets[second] = buckets.get(second, 0) + 1
+        cutoff = second - _REPORT_RATE_WINDOW_S + 1
+        for old_second in [value for value in buckets if value < cutoff]:
+            del buckets[old_second]
+
+    def record_valid_report(self, host: str, agent_sent_at: Optional[float] = None) -> None:
+        # Worker-start time measures mgr processing cadence. Agent send time is
+        # supplied by the agent and measures pacing before the HTTP queue.
+        processed_at = getattr(self._local, 'agent_request_start', None)
+        if processed_at is None:
+            processed_at = time.monotonic()
+        worker_start_wall = getattr(self._local, 'agent_request_start_wall', None)
+        with self._lock:
+            self._valid_reports += 1
+            self._unique_reporting_hosts.add(host)
+            self._record_rate_bucket(self._processed_rate_buckets, processed_at)
+            if agent_sent_at is not None:
+                self._agent_sent_timestamp_reports += 1
+                previous = self._last_agent_send_by_host.get(host)
+                if previous is not None and agent_sent_at >= previous:
+                    _record_interval(self._agent_send_intervals, agent_sent_at - previous)
+                self._last_agent_send_by_host[host] = agent_sent_at
+                if worker_start_wall is not None:
+                    delay = worker_start_wall - agent_sent_at
+                    if delay >= 0:
+                        _record_agent_to_worker_delay(self._agent_to_worker_delay, delay)
+                    else:
+                        self._agent_clock_skew_samples += 1
+
+    def record_pacing(self, host_count: int, avg_concurrency: int,
+                      refresh_period_s: int, initial_startup_delay_max_s: int,
+                      jitter_seconds: int) -> None:
+        with self._lock:
+            self._pacing = {
+                'host_count': host_count,
+                'avg_concurrency': avg_concurrency,
+                'refresh_period_s': refresh_period_s,
+                'initial_startup_delay_max_s': initial_startup_delay_max_s,
+                'jitter_seconds': jitter_seconds,
+            }
 
     def record_report_shape(self, data: Dict[str, Any]) -> None:
         if getattr(self._local, 'in_agent_request', False):
@@ -183,8 +316,14 @@ class AgentMetadataStats:
             return
         in_agent_request = getattr(self._local, 'in_agent_request', False)
         scope = 'agent_request' if in_agent_request else 'background'
+        store_at = time.monotonic()
         with self._lock:
             _record_latency(self._stores[scope][category], duration_s, error)
+            self._record_rate_bucket(self._store_rate_buckets, store_at)
+            if in_agent_request:
+                self._record_rate_bucket(self._agent_store_rate_buckets, store_at)
+            else:
+                self._record_rate_bucket(self._background_store_rate_buckets, store_at)
         if in_agent_request:
             store_time = getattr(self._local, 'agent_store_time_s', None)
             store_calls = getattr(self._local, 'agent_store_calls', None)
@@ -207,7 +346,8 @@ class AgentMetadataStats:
         with self._lock:
             self._node_proxy_requests += 1
 
-    def record_ack_fanout(self, hosts: int) -> None:
+    def record_ack_fanout(self, hosts: int, increment: bool = False,
+                          config_push: bool = False) -> None:
         with self._lock:
             self._ack_fanouts += 1
             now = _utcnow().isoformat()
@@ -218,6 +358,13 @@ class AgentMetadataStats:
                 self._multi_host_ack_fanouts += 1
                 self._last_multi_host_ack_fanout_at = now
                 self._last_multi_host_ack_fanout_hosts = hosts
+            if increment:
+                self._increment_ack_fanouts += 1
+                self._increment_ack_hosts += hosts
+                self._max_increment_ack_hosts = max(self._max_increment_ack_hosts, hosts)
+            if config_push:
+                self._config_pushes += 1
+                self._config_push_hosts += hosts
 
     @staticmethod
     def _latency_snapshot(stats: Dict[str, Any]) -> Dict[str, Any]:
@@ -231,9 +378,41 @@ class AgentMetadataStats:
             'histogram': dict(stats['histogram']),
         }
 
+    @staticmethod
+    def _interval_snapshot(stats: Dict[str, Any]) -> Dict[str, Any]:
+        count = stats['count']
+        return {
+            'count': count,
+            'avg_s': round(stats['total_s'] / count, 3) if count else 0.0,
+            'min_s': round(stats['min_s'], 3) if stats['min_s'] is not None else 0.0,
+            'max_s': round(stats['max_s'], 3),
+            'histogram': dict(stats['histogram']),
+        }
+
+    def _rate_snapshot(self, buckets: Dict[int, int], now: float, since: Optional[float] = None) -> Dict[str, Any]:
+        current_second = int(now)
+        cutoff = current_second - _REPORT_RATE_WINDOW_S + 1
+        counts = [count for second, count in buckets.items() if second >= cutoff]
+        start = self._since_monotonic if since is None else since
+        elapsed = min(float(_REPORT_RATE_WINDOW_S), max(1.0, now - start))
+        total = sum(counts)
+        return {
+            'window_s': _REPORT_RATE_WINDOW_S,
+            'total': total,
+            'avg_per_sec': round(total / elapsed, 3),
+            'max_per_sec': max(counts) if counts else 0,
+        }
+
     def snapshot(self, mgr_name: str) -> Dict[str, Any]:
         with self._lock:
+            now = time.monotonic()
             requests = self._latency_snapshot(self._requests)
+            processed_rate = self._rate_snapshot(self._processed_rate_buckets, now)
+            store_rate = self._rate_snapshot(self._store_rate_buckets, now)
+            agent_store_rate = self._rate_snapshot(self._agent_store_rate_buckets, now)
+            background_store_rate = self._rate_snapshot(self._background_store_rate_buckets, now)
+            agent_send_intervals = self._interval_snapshot(self._agent_send_intervals)
+            agent_to_worker_delay = self._latency_snapshot(self._agent_to_worker_delay)
             stores = {
                 scope: {
                     category: self._latency_snapshot(self._stores[scope][category])
@@ -249,13 +428,21 @@ class AgentMetadataStats:
                 'since': self._since.isoformat(),
                 'reports': {
                     'total': self._reports_total,
+                    'valid': self._valid_reports,
+                    'unique_hosts': len(self._unique_reporting_hosts),
                     'bad_metadata': self._bad_metadata,
                     'handler_errors': self._handler_errors,
                     'with_nonempty_ls': self._reports_with_nonempty_ls,
                     'with_devices': self._reports_with_devices,
                     'first_contact': self._first_contact_reports,
                     'stale_ack': self._stale_ack_reports,
+                    'recent_processed_rate': processed_rate,
+                    'sent_timestamped': self._agent_sent_timestamp_reports,
+                    'send_interval': agent_send_intervals,
+                    'agent_to_worker_delay': agent_to_worker_delay,
+                    'clock_skew_samples': self._agent_clock_skew_samples,
                 },
+                'pacing': dict(self._pacing),
                 'request_latency': requests,
                 'persistence': {
                     'agent_request_calls': agent_store_calls,
@@ -265,6 +452,9 @@ class AgentMetadataStats:
                     'agent_request_store_time_pct': round(
                         agent_store_ms * 100.0 / request_total_ms, 2
                     ) if request_total_ms else 0.0,
+                    'recent_call_rate': store_rate,
+                    'recent_agent_call_rate': agent_store_rate,
+                    'recent_background_call_rate': background_store_rate,
                     'agent_request': stores['agent_request'],
                     'background': stores['background'],
                 },
@@ -284,12 +474,18 @@ class AgentMetadataStats:
                     'multi_host_events': self._multi_host_ack_fanouts,
                     'last_multi_host_at': self._last_multi_host_ack_fanout_at,
                     'last_multi_host_hosts': self._last_multi_host_ack_fanout_hosts,
+                    'increment_events': self._increment_ack_fanouts,
+                    'increment_hosts_total': self._increment_ack_hosts,
+                    'max_increment_hosts': self._max_increment_ack_hosts,
+                    'config_push_events': self._config_pushes,
+                    'config_push_hosts_total': self._config_push_hosts,
                 },
             }
 
     def format_plain(self, mgr_name: str) -> str:
         stats = self.snapshot(mgr_name)
         reports = stats['reports']
+        pacing = stats['pacing']
         req = stats['request_latency']
         persistence = stats['persistence']
         pool = stats['http_pool']
@@ -302,6 +498,11 @@ class AgentMetadataStats:
             '',
             'Reports:',
             f"  total:              {reports['total']}",
+            f"  valid:              {reports['valid']}",
+            f"  unique hosts:       {reports['unique_hosts']}",
+            f"  processed avg/sec:  {reports['recent_processed_rate']['avg_per_sec']:.3f}",
+            f"  processed max/sec:  {reports['recent_processed_rate']['max_per_sec']}",
+            f"  sent timestamps:    {reports['sent_timestamped']}",
             f"  bad metadata:       {reports['bad_metadata']}",
             f"  handler errors:     {reports['handler_errors']}",
             f"  non-empty ls:      {reports['with_nonempty_ls']}",
@@ -309,10 +510,39 @@ class AgentMetadataStats:
             f"  first contact:      {reports['first_contact']}",
             f"  stale ack:          {reports['stale_ack']}",
             '',
+            'Mgr pacing policy:',
+            f"  host count:         {pacing['host_count']}",
+            f"  avg concurrency:    {pacing['avg_concurrency']}",
+            f"  refresh period:     {pacing['refresh_period_s']} s",
+            f"  startup delay max:  {pacing['initial_startup_delay_max_s']} s",
+            f"  jitter:             {pacing['jitter_seconds']} s",
+            '',
+            'Agent send interval:',
+            f"  samples:            {reports['send_interval']['count']}",
+            f"  avg:                {reports['send_interval']['avg_s']:.3f} s",
+            f"  min:                {reports['send_interval']['min_s']:.3f} s",
+            f"  max:                {reports['send_interval']['max_s']:.3f} s",
+        ]
+        for bucket, count in reports['send_interval']['histogram'].items():
+            lines.append(f'  {bucket:<18} {count}')
+
+        delay = reports['agent_to_worker_delay']
+        lines.extend([
+            '',
+            'Agent send -> mgr worker delay:',
+            f"  avg:                {delay['avg_ms']:.3f} ms",
+            f"  max:                {delay['max_ms']:.3f} ms",
+            f"  clock skew samples: {reports['clock_skew_samples']}",
+        ])
+        for bucket, count in delay['histogram'].items():
+            lines.append(f'  {bucket:<18} {count}')
+
+        lines.extend([
+            '',
             'Request latency:',
             f"  avg:                {req['avg_ms']:.3f} ms",
             f"  max:                {req['max_ms']:.3f} ms",
-        ]
+        ])
         for bucket, count in req['histogram'].items():
             lines.append(f'  {bucket:<18} {count}')
 
@@ -321,6 +551,10 @@ class AgentMetadataStats:
             'Agent-request persistence:',
             f"  calls:              {persistence['agent_request_calls']}",
             f"  calls/report:       {persistence['agent_request_calls_per_report']:.3f}",
+            f"  total calls/sec:    {persistence['recent_call_rate']['avg_per_sec']:.3f}",
+            f"  total max/sec:      {persistence['recent_call_rate']['max_per_sec']}",
+            f"  agent calls/sec:    {persistence['recent_agent_call_rate']['avg_per_sec']:.3f}",
+            f"  background calls/s: {persistence['recent_background_call_rate']['avg_per_sec']:.3f}",
             f"  store time/request: {persistence['agent_request_store_time_pct']:.2f}%",
             '  category       calls      avg ms      max ms',
         ])
@@ -359,5 +593,10 @@ class AgentMetadataStats:
             f"  multi-host events:  {fanout['multi_host_events']}",
             f"  last multi-host at: {fanout['last_multi_host_at']}",
             f"  last multi hosts:   {fanout['last_multi_host_hosts']}",
+            f"  increment events:   {fanout['increment_events']}",
+            f"  increment hosts:    {fanout['increment_hosts_total']}",
+            f"  max increment hosts:{fanout['max_increment_hosts']:>7}",
+            f"  config push events: {fanout['config_push_events']}",
+            f"  config push hosts:  {fanout['config_push_hosts_total']}",
         ])
         return '\n'.join(lines) + '\n'

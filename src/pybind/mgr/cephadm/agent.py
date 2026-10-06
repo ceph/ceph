@@ -1,4 +1,5 @@
 import cherrypy
+import cephadm.cherrypy_compression_in  # noqa: F401
 import json
 import socket
 import ssl
@@ -837,6 +838,14 @@ class HostData:
             host = data['host']
             counter = self.mgr.agent_cache.agent_counter.get(host)
             if stats:
+                agent_sent_at = None
+                try:
+                    value = cherrypy.request.headers.get('X-Cephadm-Agent-Sent-At')
+                    if value is not None:
+                        agent_sent_at = float(value)
+                except (TypeError, ValueError):
+                    pass
+                stats.record_valid_report(host, agent_sent_at)
                 stats.record_report_state(
                     first_contact=counter is None,
                     stale_ack=counter is not None and int(data['ack']) != counter,
@@ -848,8 +857,18 @@ class HostData:
             # Auto-derived pacing values are runtime policy, not daemon
             # dependencies. Return the current values on normal reports so
             # agents adopt host-count changes without a config fan-out.
-            results['refresh_period'] = self.mgr.http_server.agent.compute_agents_refrsh_rate()
-            results['jitter_seconds'] = self.mgr.http_server.agent.get_jitter()
+            refresh_period = self.mgr.http_server.agent.compute_agents_refrsh_rate()
+            jitter_seconds = self.mgr.http_server.agent.get_jitter()
+            results['refresh_period'] = refresh_period
+            results['jitter_seconds'] = jitter_seconds
+            if stats:
+                stats.record_pacing(
+                    host_count=len(self.mgr.cache.get_hosts()),
+                    avg_concurrency=self.mgr.http_server.agent.compute_agents_avg_concurrency(),
+                    refresh_period_s=refresh_period,
+                    initial_startup_delay_max_s=self.mgr.http_server.agent.get_initial_delay(),
+                    jitter_seconds=jitter_seconds,
+                )
         return results
 
     def check_request_fields(self, data: Dict[str, Any]) -> None:
@@ -1057,7 +1076,11 @@ class CephadmAgentHelpers:
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         stats = getattr(self.mgr, 'agent_metadata_stats', None)
         if stats and hosts:
-            stats.record_ack_fanout(len(hosts))
+            stats.record_ack_fanout(
+                len(hosts),
+                increment=increment,
+                config_push=daemon_spec is not None,
+            )
         for host in hosts:
             if increment:
                 self.mgr.cache.metadata_up_to_date[host] = False

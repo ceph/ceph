@@ -2254,7 +2254,6 @@ class CephadmAgent(CephService):
         ``get_dependencies()``, which is the public entry point and computes the
         complete dependency set.
         """
-        agent = mgr.http_server.agent
         container_image = cls._get_ceph_volume_image(mgr)
 
         agent_options = [
@@ -2341,7 +2340,6 @@ class CephadmAgent(CephService):
 
         return config, self.get_dependencies(
             self.mgr, spec, daemon_spec.daemon_type)
-
 
 
 def next_action_for_mgmt_stack_service(
