@@ -503,7 +503,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                   hostname: str,
                   addr: Optional[str] = None,
                   labels: Optional[List[str]] = None,
-                  maintenance: Optional[bool] = False) -> HandleCommandResult:
+                  maintenance: Optional[bool] = False,
+                  skip_mtu_check: Optional[bool] = False) -> HandleCommandResult:
         """Add a host"""
         _status = 'maintenance' if maintenance else ''
 
@@ -515,8 +516,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             addr = unwrap_ipv6(addr)
 
         s = HostSpec(hostname=hostname, addr=addr, labels=labels, status=_status)
-
-        return self._apply_misc([s], False, Format.plain)
+        completion = self.add_host(s, skip_mtu_check=bool(skip_mtu_check))
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
 
     @OrchestratorCLICommand.Write('orch hardware status')
     def _hardware_status(self, hostname: Optional[str] = None, _end_positional_: int = 0, category: str = 'summary', format: Format = Format.plain) -> HandleCommandResult:
