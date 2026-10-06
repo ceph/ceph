@@ -14,6 +14,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "osdc/Striper.h"
+#include "osd/osd_types_client.h"
 
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>

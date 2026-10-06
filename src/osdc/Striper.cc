@@ -18,6 +18,7 @@
 #include "include/types.h"
 #include "include/buffer.h"
 #include "osd/OSDMap.h"
+#include "osd/osd_types_client.h"
 
 #include "common/config.h"
 #include "common/debug.h"

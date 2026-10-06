@@ -19,7 +19,7 @@
 #include "include/common_fwd.h"
 #include "include/fs_types.h" // for inodeno_t
 #include "include/types.h"
-#include "osd/osd_types_client.h"
+#include "include/object.h" // for object_t
 #include "osdc/StriperTypes.h"
 
 #include <cstdint>
@@ -27,6 +27,7 @@
 #include <map>
 #include <vector>
 
+class ObjectExtent;
 struct file_layout_t;
 
 //namespace ceph {

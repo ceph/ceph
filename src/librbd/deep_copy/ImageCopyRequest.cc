@@ -10,6 +10,7 @@
 #include "librbd/deep_copy/Utils.h"
 #include "librbd/object_map/DiffRequest.h"
 #include "osdc/Striper.h"
+#include "osd/osd_types_client.h"
 
 #include <shared_mutex> // for std::shared_lock
 
