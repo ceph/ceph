@@ -169,11 +169,17 @@ function lose_zone_pze() {
     wait_for_stretch_state 1 0 || return 1
 }
 
-function restore_zone_pze() {
+function restore_mon_pze() {
     local dir=$1
 
     activate_mon $dir b --public-addr $CEPH_MON_B || return 1
     wait_for_quorum 300 3 || return 1
+}
+
+function restore_zone_pze() {
+    local dir=$1
+
+    restore_mon_pze $dir || return 1
     # keep restarted OSDs in their zones
     ceph config set osd osd_crush_update_on_start false || return 1
     activate_osd $dir 2 || return 1
@@ -198,6 +204,39 @@ function TEST_force_healthy_stretch_mode_requires_recovery() {
     wait_for_stretch_state 1 1 || return 1
     ceph osd force_healthy_stretch_mode --yes-i-really-mean-it || return 1
     wait_for_stretch_state 0 0 || return 1
+}
+
+# force_recovery_stretch_mode only starts recovery stretch mode from degraded
+# stretch mode, and must fail rather than claim to do something in healthy
+# stretch mode.
+function TEST_force_recovery_stretch_mode_requires_degraded() {
+    local dir=$1
+
+    stretch_cluster $dir || return 1
+    expect_failure $dir "not in degraded stretch mode" \
+        ceph osd force_recovery_stretch_mode --yes-i-really-mean-it || return 1
+}
+
+# force_recovery_stretch_mode can start recovery stretch mode before the lost
+# zone's OSDs are back, but not while none of its monitors is up: it must fail
+# then, and the leader must keep running.
+function TEST_force_recovery_stretch_mode_requires_mons_up() {
+    local dir=$1
+
+    stretch_cluster $dir || return 1
+    ceph config set mon mon_stretch_recovery_min_wait 3600 || return 1
+
+    lose_zone_pze $dir || return 1
+    expect_failure $dir "monitor buckets {pze=b} are down" \
+        timeout 60 ceph osd force_recovery_stretch_mode --yes-i-really-mean-it || return 1
+    test "$(timeout 60 ceph quorum_status -f json | jq -c .quorum_names)" == '["a","c"]' || return 1
+
+    restore_mon_pze $dir || return 1
+    wait_for_stretch_state 1 0 || return 1
+    ceph osd force_recovery_stretch_mode --yes-i-really-mean-it || return 1
+    wait_for_stretch_state 1 1 || return 1
+    expect_failure $dir "already in recovery stretch mode" \
+        ceph osd force_recovery_stretch_mode --yes-i-really-mean-it || return 1
 }
 
 main mon-stretch-commands "$@"
