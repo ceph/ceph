@@ -609,7 +609,7 @@ void ReplicatedBackend::submit_transaction(
     delta_stats);
 
   vector<pg_log_entry_t> log_entries(_log_entries);
-  ObjectStore::Transaction op_t;
+  ObjectStore::Transaction op_t{get_parent()->min_peer_features()};
   PGTransactionUPtr t(std::move(_t));
   set<hobject_t> added, removed;
   generate_transaction(
