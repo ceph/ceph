@@ -406,3 +406,84 @@ def test_logged_input_without_filehandler_preserves_behavior(ptl_tool, monkeypat
     """Without a FileHandler, logged_input() should behave like plain input()."""
     monkeypatch.setattr(builtins, "input", lambda prompt='': 'plain-answer')
     assert ptl_tool.logged_input("plain> ") == "plain-answer"
+
+
+# ---------------------------------------------------------------------------
+# build_subject_with_branch_history(): on --update-qa the new branch becomes the
+# subject anchor and prior branches accumulate newest-first in a parenthesized
+# trailing list.
+# ---------------------------------------------------------------------------
+
+B1 = "wip-yuri-testing-20261002.125630-umbrella"
+B2 = "wip-yuri-testing-20261003.180813-umbrella"
+B3 = "wip-yuri-testing-20261005.175703-umbrella"
+B4 = "wip-yuri-testing-20261006.163134-umbrella"
+
+
+def test_subject_first_update_moves_branch_into_history(ptl_tool):
+    assert ptl_tool.build_subject_with_branch_history(B1, B2) == f"{B2} ({B1})"
+
+
+def test_subject_accumulates_newest_first(ptl_tool):
+    """Replays the real tracker 81324 update sequence."""
+    s = ptl_tool.build_subject_with_branch_history(B1, B2)
+    s = ptl_tool.build_subject_with_branch_history(s, B3)
+    s = ptl_tool.build_subject_with_branch_history(s, B4)
+    assert s == f"{B4} ({B3}, {B2}, {B1})"
+
+
+def test_subject_idempotent_reparse(ptl_tool):
+    """A subject already in '<anchor> (<history>)' form re-parses, never nests."""
+    existing = f"{B3} ({B2}, {B1})"
+    assert ptl_tool.build_subject_with_branch_history(existing, B4) == \
+        f"{B4} ({B3}, {B2}, {B1})"
+
+
+def test_subject_noop_on_same_branch(ptl_tool):
+    existing = f"{B2} ({B1})"
+    assert ptl_tool.build_subject_with_branch_history(existing, B2) == existing
+
+
+def test_subject_leaves_non_branch_parens_intact(ptl_tool):
+    """A human subject ending in '(...)' that isn't branch history is preserved."""
+    base = "umbrella integration (round 2)"
+    assert ptl_tool.build_subject_with_branch_history(base, B2) == f"{B2} ({base})"
+
+
+def test_subject_respects_length_cap(ptl_tool):
+    existing = f"{B4} ({B3}, {B2}, {B1})"
+    new = "wip-yuri-testing-20261007.101010-umbrella"
+    result = ptl_tool.build_subject_with_branch_history(existing, new, max_len=120)
+    assert len(result) <= 120
+    assert result.startswith(f"{new} (")
+    assert result.endswith("...)")  # oldest entries dropped
+
+
+def test_subject_truncation_marker_reparses_without_nesting(ptl_tool):
+    """A previously length-capped subject (trailing '...') must re-parse cleanly
+    on the next update: no nested parens, '...' not treated as a branch."""
+    capped = f"{B3} ({B2}, ...)"
+    result = ptl_tool.build_subject_with_branch_history(capped, B4)
+    assert result == f"{B4} ({B3}, {B2})"
+    assert result.count("(") == 1 and result.count(")") == 1
+
+
+def test_subject_promotes_existing_entry_without_dup(ptl_tool):
+    """Re-running a branch already in the history promotes it to anchor once,
+    leaving no duplicate."""
+    existing = f"{B4} ({B2}, {B1})"
+    result = ptl_tool.build_subject_with_branch_history(existing, B2)
+    assert result == f"{B2} ({B4}, {B1})"
+    assert result.count(B2) == 1
+
+
+def test_subject_length_cap_stays_parseable_with_huge_names(ptl_tool):
+    """Even when a single entry can't fit, the result stays parseable
+    (never a mid-name/mid-paren hard cut)."""
+    anchor = "wip-" + "a" * 120 + "-20261006.163134-x"
+    new = "wip-" + "b" * 120 + "-20261006.163134-y"
+    result = ptl_tool.build_subject_with_branch_history(anchor, new, max_len=150)
+    assert len(result) <= 150
+    # history dropped entirely -> bare new branch, no dangling open paren
+    assert result == new[:150]
+    assert "(" not in result
