@@ -258,9 +258,10 @@ Use the client's RDMA mode to verify both transfer directions:
    headers and compare the downloaded data with the original. The successful
    HTTP response has no object-data body.
 #. Download a range that fits in the configured buffer. Check HTTP
-   ``206 Partial Content``, ``Content-Range``, and a transferred-byte count
-   equal to the selected range size. Compare the data at the beginning of the
-   registered destination buffer with the selected object bytes.
+   ``206 Partial Content``, ``x-amz-rdma-reply: 206``, ``Content-Range``, and a
+   transferred-byte count equal to the selected range size. Compare the data
+   at the beginning of the registered destination buffer with the selected
+   object bytes.
 #. Issue a HEAD request. Verify that it returns the object's content length
    without an RDMA transfer or RDMA success headers.
 #. Read the uploaded object with an ordinary S3 client and compare its data.
@@ -313,9 +314,10 @@ On successful RDMA PUT or GET, RGW returns these headers:
 
    * - Header
      - Meaning
-   * - ``x-amz-rdma-reply: 200``
-     - The RDMA transfer succeeded. This value is also used for ranged GETs
-       whose HTTP status is ``206 Partial Content``.
+   * - ``x-amz-rdma-reply``
+     - The RDMA transfer succeeded: ``200`` for PUTs and ordinary GETs,
+       or ``206`` for ranged GETs whose HTTP status is
+       ``206 Partial Content``.
    * - ``x-amz-rdma-bytes-transferred``
      - The number of object-data bytes transferred, expressed in decimal.
 

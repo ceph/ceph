@@ -157,6 +157,7 @@ TEST_F(CuObjGet, SuccessWaitsForOperationAndRdmaCompletion)
   EXPECT_EQ(rdma.payload, "abcd");
   EXPECT_EQ(rdma.events, std::vector<std::string>({"rdma_complete", "http_status", "http_complete"}));
   EXPECT_EQ(client.statuses, std::vector<int>({200}));
+  EXPECT_EQ(client.headers.at("x-amz-rdma-reply"), "200");
   EXPECT_EQ(client.headers.at("x-amz-rdma-bytes-transferred"), "4");
   EXPECT_EQ(client.content_length, 0);
   EXPECT_TRUE(client.body.empty());
@@ -183,6 +184,7 @@ TEST_F(CuObjGet, RangeAllocatesOnlyResponseLength)
   op->complete();
   EXPECT_EQ(rdma.requested_size, 4);
   EXPECT_EQ(client.statuses, std::vector<int>({206}));
+  EXPECT_EQ(client.headers.at("x-amz-rdma-reply"), "206");
   EXPECT_EQ(client.headers.at("Content-Range"), "bytes 2-5/1024");
   EXPECT_EQ(client.headers.at("x-amz-rdma-bytes-transferred"), "4");
 }
@@ -195,6 +197,7 @@ TEST_F(CuObjGet, EmptyObjectNeedsNoBuffer)
   op->complete();
   EXPECT_EQ(rdma.writes, 0);
   EXPECT_EQ(client.statuses, std::vector<int>({200}));
+  EXPECT_EQ(client.headers.at("x-amz-rdma-reply"), "200");
   EXPECT_EQ(client.headers.at("x-amz-rdma-bytes-transferred"), "0");
 }
 
