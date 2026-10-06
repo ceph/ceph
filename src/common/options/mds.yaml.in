@@ -1888,7 +1888,8 @@ options:
   type: bool
   level: advanced
   desc: Enable CephFS change notification from this MDS rank. Requires an
-    endpoint to be configured (mds_notify_file).
+    endpoint to be configured (mds_notify_file, or mds_notify_kafka_brokers
+    and mds_notify_kafka_topic).
   default: false
   services:
   - mds
@@ -1920,7 +1921,48 @@ options:
   type: str
   level: dev
   desc: Debug/test file endpoint for CephFS change notification. Events are
-    appended to this file as one JSON object per line.
+    appended to this file as one JSON object per line. Takes precedence over
+    the Kafka endpoint when set.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_brokers
+  type: str
+  level: advanced
+  desc: Comma-separated list of Kafka bootstrap brokers for CephFS change
+    notification. Empty disables the Kafka endpoint.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_topic
+  type: str
+  level: advanced
+  desc: Kafka topic that CephFS change notification events are published to.
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_message_timeout
+  type: uint
+  level: advanced
+  desc: librdkafka message.timeout.ms for CephFS change notification events -
+    how long the producer keeps retrying delivery of an event internally
+    before giving up on it.
+  default: 5000
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_kafka_max_queue
+  type: uint
+  level: advanced
+  desc: Bound on the number of change notification events librdkafka buffers
+    internally (queue.buffering.max.messages). 0 keeps the librdkafka default.
+    When the bound is reached events are dropped, never delayed; drops are
+    reported by the "notify status" admin socket command.
+  default: 0
   services:
   - mds
   flags:

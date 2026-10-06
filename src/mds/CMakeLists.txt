@@ -59,4 +59,8 @@ target_link_libraries(mds PRIVATE
   legacy-option-headers Boost::url
   heap_profiler cpu_profiler osdc ${LUA_LIBRARIES}
   PUBLIC dmclock::dmclock)
+if(WITH_MDS_NOTIFY)
+  # target provided by the top-level librdkafka discovery
+  target_link_libraries(mds PRIVATE RDKafka::RDKafka)
+endif()
 target_include_directories(mds PRIVATE "${LUA_INCLUDE_DIR}")

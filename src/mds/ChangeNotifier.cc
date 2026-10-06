@@ -30,6 +30,8 @@
 #include <sstream>
 #include <string>
 
+#include <librdkafka/rdkafka.h>
+
 #include "common/Clock.h"
 #include "common/Formatter.h"
 #include "common/ceph_context.h"
@@ -97,6 +99,132 @@ void FileEndpoint::dump_status(ceph::Formatter *f) const
 }
 
 // ---------------------------------------------------------------------------
+// KafkaEndpoint
+// ---------------------------------------------------------------------------
+
+KafkaEndpoint::KafkaEndpoint(CephContext *cct, const KafkaOptions &opts)
+  : cct(cct), brokers(opts.brokers), topic_name(opts.topic),
+    message_timeout_ms(opts.message_timeout_ms), max_queue(opts.max_queue)
+{
+  char errstr[512] = {0};
+
+  rd_kafka_conf_t *conf = rd_kafka_conf_new();
+  if (!conf) {
+    set_error("failed to allocate librdkafka configuration");
+    return;
+  }
+  // rd_kafka_new() takes ownership of conf only on success.
+  std::unique_ptr<rd_kafka_conf_t, decltype(&rd_kafka_conf_destroy)>
+    conf_guard(conf, rd_kafka_conf_destroy);
+
+  // for non-secret settings: a librdkafka error string here names the
+  // property and the reason, which is what has to go into `notify status`
+  auto conf_set = [&](const char *key, const std::string &val) -> bool {
+    if (rd_kafka_conf_set(conf, key, val.c_str(), errstr, sizeof(errstr)) !=
+        RD_KAFKA_CONF_OK) {
+      set_error(std::string(key) + ": " + errstr);
+      return false;
+    }
+    return true;
+  };
+  if (!conf_set("bootstrap.servers", brokers))
+    return;
+  if (!conf_set("message.timeout.ms", std::to_string(message_timeout_ms)))
+    return;
+  if (!conf_set("client.id", "ceph-mds"))
+    return;
+  if (max_queue > 0 &&
+      !conf_set("queue.buffering.max.messages", std::to_string(max_queue)))
+    return;
+  // a broker outage is not a connection error to shout about: the producer
+  // retries in the background and we count drops
+  conf_set("log.connection.close", "false");
+
+  producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+  if (!producer) {
+    // librdkafka's rd_kafka_new() error text names the failing property, not
+    // its value; the secret properties were already accepted above
+    set_error(std::string("failed to create producer: ") + errstr);
+    return;
+  }
+  conf_guard.release(); // owned by the producer now
+
+  topic = rd_kafka_topic_new(producer, topic_name.c_str(), nullptr);
+  if (!topic) {
+    rd_kafka_resp_err_t err = rd_kafka_last_error();
+    set_error(std::string("failed to create topic handle: ") +
+              rd_kafka_err2str(err));
+    return;
+  }
+  dout(1) << "kafka endpoint brokers " << brokers
+          << " topic " << topic_name
+          << " message.timeout.ms " << message_timeout_ms << dendl;
+}
+
+KafkaEndpoint::~KafkaEndpoint()
+{
+  if (producer) {
+    // bounded: do not let daemon shutdown hang on an unreachable broker
+    rd_kafka_flush(producer, 2000);
+  }
+  if (topic) {
+    rd_kafka_topic_destroy(topic);
+    topic = nullptr;
+  }
+  if (producer) {
+    rd_kafka_destroy(producer);
+    producer = nullptr;
+  }
+}
+
+bool KafkaEndpoint::send(const std::string &json)
+{
+  if (!producer || !topic)
+    return false;
+  int rc = rd_kafka_produce(
+      topic, RD_KAFKA_PARTITION_UA,
+      RD_KAFKA_MSG_F_COPY, // librdkafka copies the payload
+      const_cast<char *>(json.data()), json.size(), nullptr, 0, nullptr);
+  if (rc == -1) {
+    set_error(rd_kafka_err2str(rd_kafka_last_error()));
+    return false;
+  }
+  return true;
+}
+
+void KafkaEndpoint::poll(int timeout_ms)
+{
+  if (producer)
+    rd_kafka_poll(producer, timeout_ms);
+}
+
+void KafkaEndpoint::flush()
+{
+  if (producer)
+    rd_kafka_flush(producer, 2000);
+}
+
+void KafkaEndpoint::set_error(const std::string &e)
+{
+  std::lock_guard l(err_lock);
+  err = e;
+}
+
+std::string KafkaEndpoint::last_error() const
+{
+  std::lock_guard l(err_lock);
+  return err;
+}
+
+void KafkaEndpoint::dump_status(ceph::Formatter *f) const
+{
+  f->dump_string("brokers", brokers);
+  f->dump_string("topic", topic_name);
+  f->dump_unsigned("message_timeout_ms", message_timeout_ms);
+  f->dump_unsigned("max_queue", max_queue);
+}
+
+// ---------------------------------------------------------------------------
 // ChangeNotifier
 // ---------------------------------------------------------------------------
 
@@ -121,6 +249,12 @@ ChangeNotifier::~ChangeNotifier()
 void ChangeNotifier::configure_endpoint(const ConfigProxy &conf)
 {
   std::string file = conf.get_val<std::string>("mds_notify_file");
+  KafkaOptions kafka;
+  kafka.brokers = conf.get_val<std::string>("mds_notify_kafka_brokers");
+  kafka.topic = conf.get_val<std::string>("mds_notify_kafka_topic");
+  kafka.message_timeout_ms =
+    conf.get_val<uint64_t>("mds_notify_kafka_message_timeout");
+  kafka.max_queue = conf.get_val<uint64_t>("mds_notify_kafka_max_queue");
   bool want = conf.get_val<bool>("mds_notify_enable");
 
   queue_cap = conf.get_val<Option::size_t>("mds_notify_queue_size");
@@ -134,14 +268,21 @@ void ChangeNotifier::configure_endpoint(const ConfigProxy &conf)
   }
 
   if (!file.empty()) {
+    // the file endpoint is the test/debug sink and wins when both are set
     auto ep = std::make_unique<FileEndpoint>(cct, file);
     if (ep->ok())
       endpoint = std::move(ep);
+  } else if (!kafka.brokers.empty() && !kafka.topic.empty()) {
+    auto ep = std::make_unique<KafkaEndpoint>(cct, kafka);
+    if (ep->ok())
+      endpoint = std::move(ep);
+    else
+      record_error(ep->last_error());
   }
 
   if (!endpoint) {
     enabled_.store(false);
-    if (want || !file.empty())
+    if (want || !file.empty() || !kafka.brokers.empty() || !kafka.topic.empty())
       derr << "no usable notification endpoint; change notifications stay off"
            << dendl;
     return;
@@ -240,8 +381,9 @@ void ChangeNotifier::record_error(const std::string &err)
 bool ChangeNotifier::set_enabled(bool enable, std::ostream &err)
 {
   if (enable && !endpoint) {
-    err << "no notification endpoint is configured (set mds_notify_file; "
-           "endpoint options take effect on daemon restart)";
+    err << "no notification endpoint is configured (set mds_notify_file, or "
+           "mds_notify_kafka_brokers and mds_notify_kafka_topic; endpoint "
+           "options take effect on daemon restart)";
     return false;
   }
   bool was = enabled_.exchange(enable);

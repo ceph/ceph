@@ -254,6 +254,17 @@
   ``fifo``). Existing InIndex buckets are unaffected until their next
   reshard, at which point they are automatically migrated to FIFO.
 
+* CephFS: The MDS can now report namespace changes. A stream of path-level
+  events (create, mkdir, unlink, rmdir, rename, hardlink, and client write
+  flushes) is published for the file system, so software that keeps its own
+  view of a CephFS tree can learn about changes made by other clients
+  without rescanning. Events are delivered to a Kafka topic, or to a local
+  file for testing, and paths are reported relative to a configured watch
+  root. The producer is off by default and is switched on with
+  ``mds_notify_enable``; see the new ``mds_notify_*`` options. The CephFS
+  change-notification code must be built into the MDS with the
+  ``WITH_MDS_NOTIFY`` build option (off by default).
+
 >=21.0.0
 
 * CephX: a new key type ``aes256k`` has been introduced to address
