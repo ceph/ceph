@@ -15030,6 +15030,22 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     err = 0;
     goto reply_no_propose;
   } else if (prefix == "osd force_recovery_stretch_mode") {
+    if (!mon.is_degraded_stretch_mode()) {
+      ss << "the cluster is not in degraded stretch mode";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    if (mon.is_recovering_stretch_mode()) {
+      ss << "the cluster is already in recovery stretch mode";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    if (!mon.dead_mon_buckets.empty()) {
+      ss << "monitor buckets " << mon.dead_mon_buckets << " are down; "
+         << "recovery stretch mode needs all monitor buckets up";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
     bool sure = false;
     cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
     if (!sure) {
