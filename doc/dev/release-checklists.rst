@@ -128,6 +128,13 @@ In the `ceph/ceph-build.git` repo:
 - [ ] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/setup_osc`)
 - [ ] grep for previous release and add relevant build targets (e.g. for reef https://github.com/ceph/ceph-build/pull/2076 and https://github.com/ceph/ceph-build/pull/2119 and https://github.com/ceph/ceph-build/pull/2315)
 
+CBT
+---
+Completed once ``src/ceph_release`` has been updated to X:
+- [ ] create CBT branch for new release at https://github.com/ceph/cbt/tree/main
+- [ ] add mapping X -> release name to `CBT_RELEASE_MAP` in `ceph/qa/tasks/cbt.py`
+- [ ] schedule teuthology run against ``main`` with ``perf-basic`` suite
+  If FAIL, identify issue and request fixes from CBT team
 
 After dev freeze
 ================
