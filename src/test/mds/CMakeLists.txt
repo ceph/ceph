@@ -39,3 +39,11 @@ add_executable(unittest_mds_standby_affinity
 )
 add_ceph_unittest(unittest_mds_standby_affinity)
 target_link_libraries(unittest_mds_standby_affinity mds ceph-common global ${BLKID_LIBRARIES})
+
+# unittest_mds_change_notifier
+add_executable(unittest_mds_change_notifier
+  TestChangeNotifier.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_mds_change_notifier)
+target_link_libraries(unittest_mds_change_notifier ceph-common global)
