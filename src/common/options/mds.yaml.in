@@ -1883,3 +1883,45 @@ options:
   - mds
   flags:
   - runtime
+
+- name: mds_notify_enable
+  type: bool
+  level: advanced
+  desc: Enable CephFS change notification from this MDS rank. Requires an
+    endpoint to be configured (mds_notify_file).
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_notify_root
+  type: str
+  level: advanced
+  desc: Watch root for CephFS change notification. Emitted event paths are
+    relative to this directory, and events for paths outside it are not
+    reported.
+  default: /
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_notify_queue_size
+  type: size
+  level: advanced
+  desc: Maximum number of CephFS change notification events queued in the MDS.
+    When the queue is full new events are dropped, never delayed; drops are
+    reported by the "notify status" admin socket command.
+  default: 8192
+  services:
+  - mds
+  flags:
+  - startup
+- name: mds_notify_file
+  type: str
+  level: dev
+  desc: Debug/test file endpoint for CephFS change notification. Events are
+    appended to this file as one JSON object per line.
+  services:
+  - mds
+  flags:
+  - startup
