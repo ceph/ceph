@@ -14,6 +14,7 @@
 #include "librbd/Watcher.h"
 #include "librbd/managed_lock/Types.h"
 #include "tools/rbd_mirror/instance_watcher/Types.h"
+#include <boost/variant/static_visitor.hpp>
 
 namespace librbd {
 

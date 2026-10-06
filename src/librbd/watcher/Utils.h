@@ -8,6 +8,7 @@
 #include "include/encoding.h"
 #include "include/Context.h"
 #include "librbd/Watcher.h"
+#include <boost/variant/static_visitor.hpp>
 
 namespace ceph { class Formatter; }
 

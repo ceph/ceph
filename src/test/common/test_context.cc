@@ -30,6 +30,7 @@
 #include "common/config_proxy.h"
 #include "common/Formatter.h"
 #include "log/Log.h"
+#include "common/cmdparse.h"
 
 using namespace std;
 

@@ -40,6 +40,7 @@
 #include <random>
 #include <sstream>
 #include <string.h>
+#include "common/cmdparse.h"
 
 using namespace std;
 
