@@ -1855,7 +1855,13 @@ bool Locker::rdlock_start(SimpleLock *lock, const MDRequestRef& mut, bool as_ano
 bool Locker::nudge_log(SimpleLock *lock)
 {
    // as with xlockdone, or cap flush
-  if (lock->get_parent()->is_auth() && lock->is_unstable_and_locked() && lock->has_any_waiter()) {
+  //
+  // On a replica, an unstable lock that is still locked means the auth is
+  // gathering it and waits for the requests holding it here, often ones
+  // that early replied and only drop their locks once journaled.  The
+  // waiters are on the auth, so do not require any here.
+  if (lock->is_unstable_and_locked() &&
+      (!lock->get_parent()->is_auth() || lock->has_any_waiter())) {
     dout(10) << __func__ << " YES " << *lock << " on " << *lock->get_parent() << dendl;
     mds->mdlog->flush();
     return true;
@@ -4249,7 +4255,11 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 							      ack, client));
   if (need_flush && !*need_flush &&
       ((change_max && new_max) || // max INCREASE
-       _need_flush_mdlog(in, dirty)))
+       _need_flush_mdlog(in, dirty) ||
+       // a filelock state change is waiting for the wrlock held above
+       // until this update is journaled
+       ((change_max || (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR))) &&
+	!in->filelock.is_stable())))
     *need_flush = true;
 
   return true;

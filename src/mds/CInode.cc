@@ -530,9 +530,12 @@ void CInode::pop_and_dirty_projected_inode(LogSegmentRef const& ls, const Mutati
     mut->remove_projected_node(this);
 
   bool pool_updated = get_inode()->layout.pool_id != front.inode->layout.pool_id;
+  bool tree_pin_updated = get_inode()->get_ephemeral_dist_tree_pin() !=
+			  front.inode->get_ephemeral_dist_tree_pin();
   bool pin_updated = (get_inode()->export_pin != front.inode->export_pin) ||
 		     (get_inode()->get_ephemeral_distributed_pin() !=
-		      front.inode->get_ephemeral_distributed_pin());
+		      front.inode->get_ephemeral_distributed_pin()) ||
+		     tree_pin_updated;
 
   reset_inode(std::move(front.inode));
   if (front.xattrs != get_xattrs())
@@ -549,6 +552,8 @@ void CInode::pop_and_dirty_projected_inode(LogSegmentRef const& ls, const Mutati
 
   if (pin_updated)
     maybe_export_pin(true);
+  if (tree_pin_updated)
+    maybe_export_pin_fragmented_descendants();
 }
 
 sr_t *CInode::prepare_new_srnode(snapid_t snapid)
@@ -859,6 +864,9 @@ CDir *CInode::add_dirfrag(CDir *dir)
     dir->get(CDir::PIN_STICKY);
   }
 
+  if (dir->get_frag() != frag_t())
+    mdcache->fragmented_dirs.insert(this);
+
   maybe_export_pin();
 
   return dir;
@@ -891,6 +899,18 @@ void CInode::close_dirfrag(frag_t fg)
   ceph_assert(dir->get_num_ref() == 0);
   delete dir;
   dirfrags.erase(fg);
+
+  if (fg != frag_t()) {
+    bool fragmented = false;
+    for (const auto& p : dirfrags) {
+      if (p.first != frag_t()) {
+	fragmented = true;
+	break;
+      }
+    }
+    if (!fragmented)
+      mdcache->fragmented_dirs.erase(this);
+  }
 }
 
 void CInode::close_dirfrags()
@@ -2299,11 +2319,16 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 
   const bool is_quarantined = _inode->has_quarantined();
+  bool tree_pin_updated = get_inode()->get_ephemeral_dist_tree_pin() !=
+			  _inode->get_ephemeral_dist_tree_pin();
   bool pin_updated = (get_inode()->export_pin != _inode->export_pin) ||
 		     (get_inode()->get_ephemeral_distributed_pin() !=
-		      _inode->get_ephemeral_distributed_pin());
+		      _inode->get_ephemeral_distributed_pin()) ||
+		     tree_pin_updated;
   reset_inode(std::move(_inode));
   maybe_export_pin(pin_updated);
+  if (tree_pin_updated)
+    maybe_export_pin_fragmented_descendants();
 
   if (snaprealm && snaprealm->get_subvolume_ino() == ino() &&
       was_quarantined != is_quarantined) {
@@ -5625,10 +5650,14 @@ void CInode::queue_export_pin(mds_rank_t export_pin)
 	queue = true;
 	break;
       }
-      target = mdcache->hash_into_rank_bucket(ino(), dir->get_frag());
+      target = get_ephemeral_dist_rank(dir->get_frag());
     }
 
-    if (target != MDS_RANK_NONE) {
+    if (target == mdcache->mds->get_nodeid() && is_ephemeral_dist_tree() &&
+	mdcache->is_in_auth_parent_subtree(dir)) {
+      // stays in the subtree of its parent: merge it if it is one of its own
+      queue = dir->is_subtree_root();
+    } else if (target != MDS_RANK_NONE) {
       if (dir->is_subtree_root()) {
 	// set auxsubtree bit or export it
 	if (!dir->state_test(CDir::STATE_AUXSUBTREE) ||
@@ -5668,6 +5697,42 @@ void CInode::maybe_export_pin(bool update)
 
   check_pin_policy(export_pin);
   queue_export_pin(export_pin);
+}
+
+void CInode::maybe_export_pin_fragmented_descendants()
+{
+  if (!mdcache->mds->balancer->get_bal_export_pin())
+    return;
+  if (!is_dir())
+    return;
+
+  dout(10) << __func__ << " " << *this << dendl;
+
+  /* A ceph.dir.pin.distributed.tree policy decides the pins of every
+   * fragmented directory below it, so setting or clearing it has to
+   * requeue those too, not only the directory it is set on.  Each rank
+   * does this for the dirfrags it holds, as it sees the policy change.
+   * Only directories with a fragment in cache can have one to move, and
+   * MDCache keeps those in a set, so this does not walk every dentry
+   * below.  Fragments opened later are looked at in add_dirfrag().
+   */
+  std::vector<CInode*> ls;
+  for (auto in : mdcache->fragmented_dirs) {
+    if (in == this)
+      continue;
+    for (const CInode *cur = in; cur; ) {
+      if (cur == this) {
+	ls.push_back(in);
+	break;
+      }
+      const CDentry *pdn = cur->get_parent_dn();
+      if (!pdn)
+	break;
+      cur = pdn->get_dir()->get_inode();
+    }
+  }
+  for (auto in : ls)
+    in->maybe_export_pin(true);
 }
 
 void CInode::set_ephemeral_pin(bool dist, bool rand)
@@ -5761,6 +5826,44 @@ void CInode::setxattr_ephemeral_dist(bool val)
   _get_projected_inode()->set_ephemeral_distributed_pin(val);
 }
 
+void CInode::setxattr_ephemeral_dist_tree(bool val)
+{
+  ceph_assert(is_dir());
+  _get_projected_inode()->set_ephemeral_dist_tree_pin(val);
+}
+
+mds_rank_t CInode::get_ephemeral_dist_rank(frag_t fg) const
+{
+  // ceph.dir.pin.distributed on the directory itself keeps the original
+  // per-fragment hash; otherwise the fragments are distributed by a
+  // ceph.dir.pin.distributed.tree policy above it
+  if (get_inode()->get_ephemeral_distributed_pin())
+    return mdcache->hash_into_rank_bucket(ino(), fg);
+  return mdcache->dist_tree_rank(ino(), fg);
+}
+
+bool CInode::is_dist_tree_fragmented() const
+{
+  if (dirfragtree.empty())
+    return false;
+  uint64_t min = mdcache->get_ephemeral_dist_tree_min_entries();
+  if (min == 0)
+    return true;
+  // stay distributed until it shrinks well below the threshold, so that a
+  // directory at the threshold does not move back and forth
+  if (is_ephemeral_dist())
+    min /= 2;
+  // the dirstat of the inode lags behind the fragments, which on the auth
+  // of a directory that is not distributed yet are all here
+  int64_t size = get_inode()->dirstat.size();
+  if (size >= 0 && (uint64_t)size >= min)
+    return true;
+  size = 0;
+  for (const auto& p : dirfrags)
+    size += p.second->get_projected_fnode()->fragstat.size();
+  return size >= 0 && (uint64_t)size >= min;
+}
+
 void CInode::set_export_pin(mds_rank_t rank)
 {
   ceph_assert(is_dir());
@@ -5793,6 +5896,17 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
   mds_rank_t r_target = MDS_RANK_NONE;
   const CInode *in = this;
   const CDir *dir = nullptr;
+  /* The nearest fragmented directory on the way up, and its dirfrag we came
+   * through: a ceph.dir.pin.distributed.tree policy further up distributes
+   * the fragments of every fragmented directory below it.
+   */
+  const CInode *fragged = nullptr;
+  frag_t fragged_fg;
+  /* Without inherit, a fragmented directory still looks further up, but
+   * only for the tree policy that would distribute its own fragments.
+   */
+  bool tree_only = false;
+  const bool dist_config = mdcache->get_export_ephemeral_distributed_config();
   while (true) {
     if (in->is_system())
       break;
@@ -5805,18 +5919,42 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
     }
 
     if (in->get_inode()->export_pin >= 0) {
+      if (tree_only)
+	break;
       return in->get_inode()->export_pin;
     } else if (in->get_inode()->get_ephemeral_distributed_pin() &&
-	       mdcache->get_export_ephemeral_distributed_config()) {
+	       dist_config) {
+      if (tree_only)
+	break;
       if (in != this)
 	return mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
       return MDS_RANK_EPHEMERAL_DIST;
-    } else if (r_target != MDS_RANK_NONE && in->get_inode()->export_ephemeral_random_pin > 0.0) {
+    }
+
+    if (!fragged && in->is_dir() && in->is_dist_tree_fragmented()) {
+      fragged = in;
+      if (in != this)
+	fragged_fg = dir->get_frag();
+    }
+    if (fragged && in->get_inode()->get_ephemeral_dist_tree_pin() &&
+	dist_config) {
+      if (fragged == this)
+	return MDS_RANK_EPHEMERAL_DIST;
+      return mdcache->dist_tree_rank(fragged->ino(), fragged_fg);
+    }
+
+    if (r_target != MDS_RANK_NONE && in->get_inode()->export_ephemeral_random_pin > 0.0) {
+      /* A directory between here and the tree policy was randomly pinned,
+       * by a random policy closer than the tree policy: that pin decides,
+       * as it does when inheriting.
+       */
+      if (tree_only)
+	break;
       return r_target;
     } else if (r_target == MDS_RANK_NONE && in->is_ephemeral_rand() &&
 	       mdcache->get_export_ephemeral_random_config()) {
       /* If a parent overrides a grandparent ephemeral pin policy with an export pin, we use that export pin instead. */
-      if (!inherit)
+      if (!inherit && !tree_only)
 	return MDS_RANK_EPHEMERAL_RAND;
       if (in == this)
 	r_target = MDS_RANK_EPHEMERAL_RAND;
@@ -5824,8 +5962,11 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
 	r_target = mdcache->hash_into_rank_bucket(in->ino());
     }
 
-    if (!inherit)
-      break;
+    if (!inherit && !tree_only) {
+      if (fragged != this)
+	break;
+      tree_only = true;
+    }
     dir = pdn->get_dir();
     in = dir->inode;
   }
