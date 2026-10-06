@@ -675,13 +675,13 @@ TEST_P(KVTest, RocksDBShardingIteratorReadError) {
   ASSERT_EQ(0, db->open(cout, cfs));
   {
     KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
-    ASSERT_EQ(nkeys, count_keys(it));
-    ASSERT_NE(0, it->status());
+    EXPECT_EQ(nkeys, count_keys(it));
+    EXPECT_NE(0, it->status());
   }
   {
     KeyValueDB::Iterator it = db->get_iterator("B");
-    ASSERT_EQ(nkeys, count_keys(it));
-    ASSERT_EQ(0, it->status());
+    EXPECT_EQ(nkeys, count_keys(it));
+    EXPECT_EQ(0, it->status());
   }
   fini();
 
@@ -694,13 +694,13 @@ TEST_P(KVTest, RocksDBShardingIteratorReadError) {
   ASSERT_EQ(0, db->open(cout, cfs));
   {
     KeyValueDB::WholeSpaceIterator it = db->get_wholespace_iterator();
-    ASSERT_EQ(nkeys, count_keys(it));
-    ASSERT_NE(0, it->status());
+    EXPECT_EQ(nkeys, count_keys(it));
+    EXPECT_NE(0, it->status());
   }
   {
     KeyValueDB::Iterator it = db->get_iterator("B");
-    ASSERT_EQ(0, count_keys(it));
-    ASSERT_NE(0, it->status());
+    EXPECT_EQ(0, count_keys(it));
+    EXPECT_NE(0, it->status());
   }
   fini();
   fs::remove_all("kv_test_temp_dir.orig");
