@@ -65,21 +65,11 @@ class OAuth2(SSOAuth):
             return request.headers.get('X-Access-Token')
 
     @classmethod
-    def set_token(cls, token: str):
-        cherrypy.request.jwt = token
-        cherrypy.request.jwt_payload = cls.get_token_payload()
-        cherrypy.request.user = cls.get_user(token)
-
-    @classmethod
     def get_token_payload(cls) -> Dict:
         try:
             return cherrypy.request.jwt_payload
         except AttributeError:
-            pass
-        try:
-            return decode_jwt_segment(cherrypy.request.jwt.split(".")[1])
-        except AttributeError:
-            return {}
+            {}
 
     @classmethod
     def set_token_payload(cls, token):
