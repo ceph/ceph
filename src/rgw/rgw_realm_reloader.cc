@@ -17,6 +17,7 @@
 #include "services/svc_zone.h"
 
 #include "common/errno.h"
+#include "rgw_lua_background.h"
 
 #define dout_subsys ceph_subsys_rgw
 

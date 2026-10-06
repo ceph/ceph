@@ -27,7 +27,6 @@
 #include <boost/utility/in_place_factory.hpp>
 #include <boost/function.hpp>
 #include <boost/container/flat_map.hpp>
-#include <boost/asio/deadline_timer.hpp>
 
 #include "common/armor.h"
 #include "common/mime.h"
@@ -54,7 +53,6 @@ struct rgw_crypt_src_identity;
 #include "rgw_lc.h"
 #include "rgw_tag.h"
 #include "rgw_object_lock.h"
-#include "cls/rgw/cls_rgw_client.h"
 #include "rgw_public_access.h"
 #include "rgw_bucket_encryption.h"
 #include "rgw_tracer.h"

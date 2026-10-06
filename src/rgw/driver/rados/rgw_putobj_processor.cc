@@ -23,6 +23,7 @@
 #include "rgw_sal_rados.h"
 
 #include "cls/version/cls_version_client.h"
+#include "cls/rgw/cls_rgw_client.h"
 
 #define dout_subsys ceph_subsys_rgw
 
