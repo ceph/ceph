@@ -529,6 +529,7 @@ PeeringState* ECPeeringTestFixture::create_child_peering_state(int shard,
     child_bl->shard_info[pg_shard_t(j, shard_id_t(j))] = shard_pg_info;
     child_bl->shard_missing[pg_shard_t(j, shard_id_t(j))] = pg_missing_t();
   }
+  child_bl->set_osd(this);
   child_bl->set_store(osd_fixture->store.get(), child_ch);
   child_bl->set_event_loop(event_loop.get());
   child_bl->set_messenger(messenger.get());
@@ -652,6 +653,7 @@ void ECPeeringTestFixture::ensure_test_pg_exists(pg_shard_t pg_whoami) {
     osdmap, pool_id, test_pg->dpp.get(), pg_whoami);
 
   shard_listener->info.pgid = shard_spgid;
+  shard_listener->set_osd(this);
   shard_listener->set_store(osd_fixture->store.get(), test_pg->ch);
   shard_listener->set_event_loop(event_loop.get());
   shard_listener->set_messenger(messenger.get());
