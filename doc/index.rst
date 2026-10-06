@@ -33,7 +33,7 @@ single point of failure.
      - :ref:`Block Device (RBD) <ceph_block_device>`,
        :ref:`File System (CephFS) <ceph-file-system>`,
        :ref:`Object Gateway (RGW) <object-gateway>`,
-       :ref:`Kubernetes (CSI) <ceph-csi>`
+       `Kubernetes (CSI)`_
    * - Fix a problem
      - :ref:`Troubleshooting <rados_troubleshooting>`,
        :doc:`Health Checks <rados/operations/health-checks>`,
@@ -42,7 +42,7 @@ single point of failure.
    * - Look something up
      - :doc:`Configuration <rados/configuration/index>`,
        :doc:`APIs <api/index>`,
-       :ref:`Releases <ceph-releases-general>`,
+       `Releases`_,
        :doc:`Glossary <glossary>`
    * - Contribute
      - :doc:`Developer Guide <dev/developer_guide/index>`,
@@ -52,7 +52,7 @@ single point of failure.
 Additional Resources
 ====================
 
-- :ref:`Ceph Releases <ceph-releases-general>`
+- `Ceph Releases`_
 - :doc:`Ceph Foundation <foundation>`
 
 .. toctree::
@@ -84,3 +84,11 @@ Additional Resources
    hardware-monitoring/index
    Glossary <glossary>
    Tracing <jaegertracing/index>
+
+.. Need to be external links because doc/releases/general.rst is not in
+   stable branches and we want to always use the main branch version
+.. _Releases: https://docs.ceph.com/en/latest/releases/general/
+.. _Ceph Releases: https://docs.ceph.com/en/latest/releases/general/
+
+.. Needs to be an external link because doc/csi is not in this branch
+.. _Kubernetes (CSI): https://docs.ceph.com/en/latest/csi/

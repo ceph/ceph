@@ -59,9 +59,9 @@ Read these before you install anything.
   bonding, and management networks.
 - :ref:`OS Recommendations <os-recommendations>`: the platforms that each Ceph
   release is built and tested on.
-- :ref:`Ceph Releases <ceph-releases-general>`: the release cycle and how long
+- `Ceph Releases`_: the release cycle and how long
   each release is maintained.
-- :ref:`Active Releases <active-releases>`: the releases that are maintained
+- `Active Releases`_: the releases that are maintained
   now, with their release notes.
 - :doc:`Glossary </glossary>`: definitions of the terms used throughout this
   documentation.
@@ -75,7 +75,7 @@ Read these before you install anything.
   :ref:`Ceph Block Device <ceph_block_device>`,
   :ref:`Ceph File System <ceph-file-system>`,
   :ref:`Ceph Object Gateway <object-gateway>`, or
-  :ref:`Ceph CSI <ceph-csi>` for Kubernetes.
+  `Ceph CSI`_ for Kubernetes.
 
 .. rubric:: Additional Resources
 
@@ -85,3 +85,11 @@ Read these before you install anything.
   cluster is unhealthy.
 - :ref:`Documenting Ceph <documenting_ceph>`: how to fix or improve this
   documentation.
+
+.. Need to be external links because the doc/releases pages are not in
+   stable branches and we want to always use the main branch version
+.. _Ceph Releases: https://docs.ceph.com/en/latest/releases/general/
+.. _Active Releases: https://docs.ceph.com/en/latest/releases/#active-releases
+
+.. Needs to be an external link because doc/csi is not in this branch
+.. _Ceph CSI: https://docs.ceph.com/en/latest/csi/
