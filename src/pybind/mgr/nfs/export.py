@@ -657,15 +657,17 @@ class ExportMgr:
                 'caps': nfs_caps,
                 'format': 'json',
             })
-            if err:
-                raise NFSException(f'Failed to update caps for {entity}: {err}')
+            if ret:
+                raise NFSException(f'Failed to update caps for {entity}: {err}', ret)
             ret, out, err = self.mgr.mon_command({
                 'prefix': 'auth get',
                 'entity': f'client.{entity}',
                 'format': 'json',
             })
-            if err:
-                raise NFSException(f'Failed to fetch caps for {entity}: {err}')
+            if ret:
+                raise NFSException(f'Failed to fetch caps for {entity}: {err}', ret)
+        elif ret:
+            raise NFSException(f'Failed to create user {entity}: {err}', ret)
 
         json_res = json.loads(out)
         log.info(f"Export user created is {json_res[0]['entity']}")
