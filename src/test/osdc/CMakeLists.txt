@@ -33,3 +33,15 @@ add_executable(unittest_split_ops_ut
   )
 add_ceph_unittest(unittest_split_ops_ut)
 target_link_libraries(unittest_split_ops_ut global ${BLKID_LIBRARIES})
+
+# unittest_objecter_throttle
+add_executable(unittest_objecter_throttle
+  objecter_throttle.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_objecter_throttle)
+target_link_libraries(unittest_objecter_throttle
+  global
+  ${EXTRALIBS}
+  ${CMAKE_DL_LIBS}
+  )

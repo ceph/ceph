@@ -2781,6 +2781,14 @@ private:
   void set_balanced_budget() { keep_balanced_budget = true; }
   void unset_balanced_budget() { keep_balanced_budget = false; }
 
+  /**
+   * Test helpers for the balanced-budget throttle path. May block the
+   * calling thread in Throttle::get until put_op_budget_for_test frees
+   * space (same failure mode as _op_submit_with_budget on the asio pool).
+   */
+  void throttle_op_budget_for_test(int op_budget);
+  void put_op_budget_for_test(int op_budget);
+
   void set_honor_pool_full() { honor_pool_full = true; }
   void unset_honor_pool_full() { honor_pool_full = false; }
 

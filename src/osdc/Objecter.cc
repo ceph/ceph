@@ -3838,6 +3838,21 @@ void Objecter::_throttle_op(Op *op,
   }
 }
 
+void Objecter::throttle_op_budget_for_test(int op_budget) {
+  ceph_assert(op_budget > 0);
+  // Op is unused when op_budget is provided, but _throttle_op requires one.
+  Op *op = new Op(object_t("throttle_test"), object_locator_t(), osdc_opvec{},
+                  0, static_cast<Context *>(nullptr), nullptr);
+  shunique_lock sul(rwlock, acquire_unique);
+  _throttle_op(op, sul, op_budget);
+  sul.unlock();
+  op->put();
+}
+
+void Objecter::put_op_budget_for_test(int op_budget) {
+  put_op_budget_bytes(op_budget);
+}
+
 int Objecter::take_linger_budget(LingerOp *info)
 {
   return 1;
