@@ -12,7 +12,8 @@
 
 #include "include/buffer.h"
 #include "include/types.h" // for epoch_t
-#include "osd/osd_types.h"
+#include "include/rados/rados_types.hpp"
+#include "osd/osd_types_scrub.h"
 
 // wrappers around scrub types to offer the necessary bits other than
 // the minimal set that the lirados requires

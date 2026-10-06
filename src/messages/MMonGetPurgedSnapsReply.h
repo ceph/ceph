@@ -4,7 +4,7 @@
 #pragma once
 
 #include "PaxosServiceMessage.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 #include "include/types.h"
 
 class MMonGetPurgedSnapsReply final : public PaxosServiceMessage {

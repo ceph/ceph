@@ -7,7 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "common/zipkin_trace.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 #include "librbd/Utils.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"

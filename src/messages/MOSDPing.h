@@ -30,7 +30,7 @@
 #include "common/Clock.h"
 
 #include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 
 
 class MOSDPing final : public Message {

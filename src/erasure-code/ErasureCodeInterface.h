@@ -148,7 +148,7 @@
 #include <memory>
 #include <string>
 #include "include/buffer_fwd.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 
 #define IGNORE_DEPRECATED \
   _Pragma("GCC diagnostic push") \

@@ -20,7 +20,7 @@
 
 #include "include/ceph_features.h"
 #include "include/types.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_superblock.h"
 
 class MOSDBoot final : public PaxosServiceMessage {
 private:

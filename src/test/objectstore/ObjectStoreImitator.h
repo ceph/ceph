@@ -10,6 +10,8 @@
 #include "include/common_fwd.h"
 #include "include/intarith.h"
 #include "os/ObjectStore.h"
+#include "osd/osd_types_pool.h"
+#include "osd/osd_types_stats.h"
 #include "os/bluestore/Allocator.h"
 #include "os/bluestore/bluestore_types.h"
 #include <algorithm>

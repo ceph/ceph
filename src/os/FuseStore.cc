@@ -24,6 +24,7 @@
 #define dout_context store->cct
 #define dout_subsys ceph_subsys_fuse
 #include "common/debug.h"
+#include "osd/osd_types_stats.h"
 #undef dout_prefix
 #define dout_prefix *_dout << "fuse "
 

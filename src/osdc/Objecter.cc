@@ -64,6 +64,7 @@
 #include "neorados/RADOSImpl.h"
 
 #include "osdc/SplitOp.h"
+#include "osd/osd_types_peering.h"
 
 using std::list;
 using std::make_pair;

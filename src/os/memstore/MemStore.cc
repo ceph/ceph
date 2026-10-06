@@ -29,6 +29,7 @@
 #include "common/JSONFormatter.h"
 #include "MemStore.h"
 #include "include/compat.h"
+#include "osd/osd_types_stats.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_memstore

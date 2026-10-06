@@ -8,7 +8,7 @@
 #include <vector>
 #include <map>
 
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 #include "common/WorkQueue.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/Cond.h"

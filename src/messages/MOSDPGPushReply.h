@@ -17,6 +17,7 @@
 #define MOSDPGPUSHREPLY_H
 
 #include "MOSDFastDispatchOp.h"
+#include "osd/osd_types_object.h"
 
 class MOSDPGPushReply : public MOSDFastDispatchOp {
 private:

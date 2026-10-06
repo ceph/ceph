@@ -19,7 +19,7 @@
 #include <map>
 
 #include "common/Formatter.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_stats.h"
 #include "messages/PaxosServiceMessage.h"
 
 class MPGStats final : public PaxosServiceMessage {
