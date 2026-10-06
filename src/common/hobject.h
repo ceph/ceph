@@ -23,8 +23,7 @@
 #include <fmt/ostream.h>
 #endif
 
-#include "json_spirit/json_spirit_value.h"
-#include "include/ceph_assert.h"   // spirit clobbers it!
+#include "include/ceph_assert.h"
 #include "include/object.h" // for object_t
 #include "include/types.h" // for version_t, shard_id_t
 
@@ -37,6 +36,12 @@
 
 namespace ceph {
   class Formatter;
+}
+
+namespace json_spirit {
+template <class Config> class Value_impl;
+template <class String> struct Config_vector;
+typedef Value_impl<Config_vector<std::string>> Value;
 }
 
 #ifndef UINT64_MAX
