@@ -30,15 +30,18 @@ class TestAgent:
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         agent_spec = ServiceSpec(service_type="agent", placement=PlacementSpec(count=1))
         agent_config = {
-            "agent.json": (
-                "{\"target_ip\": \"::1\", "
-                "\"target_port\": 7150, "
-                "\"refresh_period\": 20, "
-                "\"listener_port\": 4721, "
-                "\"host\": \"test\", "
-                "\"container_image\": \"quay.io/ceph/ceph:test\", "
-                "\"device_enhanced_scan\": \"False\"}"
-            ),
+            "agent.json": json.dumps({
+                "target_ip": "::1",
+                "target_port": 7150,
+                "listener_port": 4721,
+                "host": "test",
+                "container_image": "quay.io/ceph/ceph:test",
+                "device_enhanced_scan": "False",
+                "metadata_compresion_enabled": True,
+                "refresh_period": 20,
+                "initial_startup_delay_max": 10,
+                "jitter_seconds": 10,
+            }),
             "keyring": "[client.agent.test]\nkey = None\n",
             "root_cert.pem": f"{cephadm_root_ca}",
             "listener.crt": f"{ceph_generated_cert}",

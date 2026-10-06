@@ -33,7 +33,6 @@ class CephadmAgent(CephService):
         ``get_dependencies()``, which is the public entry point and computes the
         complete dependency set.
         """
-        agent = mgr.http_server.agent
         container_image = cls._get_ceph_volume_image(mgr)
 
         agent_options = [
