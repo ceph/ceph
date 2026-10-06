@@ -243,7 +243,9 @@ class Worker {
   bool init = false;
 
  public:
-  bool done = false;
+  // set by NetworkStack::stop(), polled by the worker loop; relaxed is
+  // enough: it guards no other data, and stop() joins the worker
+  std::atomic<bool> done = false;
 
   CephContext *cct;
   PerfCounters *perf_logger;
@@ -349,7 +351,7 @@ class Worker {
     init = false;
     init_cond.notify_all();
     init_lock.unlock();
-    done = false;
+    done.store(false, std::memory_order_relaxed);
   }
 };
 
