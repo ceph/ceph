@@ -43,8 +43,8 @@ namespace detail {
  *   {tag}   compiles to '[^/]+'   (same as '*')
  *   <other> literal               ('/' is never elided)
  *
- * Anchored at both ends. Callers must pass already-decoded paths with the
- * query string stripped. Declared in the header for unit testing. */
+ * Anchored at both ends. Callers must pass already-decoded request paths.
+ * Declared in the header for unit testing. */
 bool
 path_matches_pattern(const std::string_view pattern, const std::string_view path)
 {
@@ -147,8 +147,8 @@ service_type_matches(
 
 } // namespace detail
 
-static bool
-check_access_rules(
+bool
+detail::check_access_rules(
     const DoutPrefixProvider* dpp,
     std::span<const rgw::keystone::TokenEnvelope::ApplicationCredential::AccessRule> rules,
     const std::span<const std::string> accepted_service_types,
@@ -156,8 +156,9 @@ check_access_rules(
     const std::string_view method,
     const std::string_view raw_path)
 {
-  /* Access rules are defined against path only. */
-  const std::string_view path = raw_path.substr(0, raw_path.find('?'));
+  // req_info has already removed the query string before URL decoding. A '?'
+  // here came from an encoded %3F and is part of the object name.
+  const std::string_view path = raw_path;
 
   for (const auto& rule : rules) {
     if (!detail::service_type_matches(accepted_service_types, catalog,
@@ -219,8 +220,8 @@ enforce_access_rules(
                       << dendl;
     return false;
   }
-  if (check_access_rules(dpp, rules, accepted_service_types, catalog,
-                         s->info.method, s->relative_uri)) {
+  if (detail::check_access_rules(dpp, rules, accepted_service_types, catalog,
+                                 s->info.method, s->relative_uri)) {
     return true;
   }
   ldpp_dout(dpp, 5) << "denying request: application credential access "

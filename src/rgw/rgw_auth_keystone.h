@@ -33,6 +33,16 @@ bool path_matches_pattern(std::string_view pattern, std::string_view path);
 bool service_type_matches(std::span<const std::string> accepted_service_types,
                           std::span<const rgw::keystone::TokenEnvelope::CatalogService> catalog,
                           std::string_view service_type);
+
+/* Return whether an application-credential access rule permits the request.
+ * Exposed for testing. */
+bool check_access_rules(
+    const DoutPrefixProvider* dpp,
+    std::span<const rgw::keystone::TokenEnvelope::ApplicationCredential::AccessRule> rules,
+    std::span<const std::string> accepted_service_types,
+    std::span<const rgw::keystone::TokenEnvelope::CatalogService> catalog,
+    std::string_view method,
+    std::string_view path);
 } // namespace detail
 
 class TokenEngine : public rgw::auth::Engine {

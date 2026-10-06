@@ -7,8 +7,10 @@
 
 #include <gtest/gtest.h>
 
+using rgw::auth::keystone::detail::check_access_rules;
 using rgw::auth::keystone::detail::path_matches_pattern;
 using rgw::auth::keystone::detail::service_type_matches;
+using AccessRule = rgw::keystone::TokenEnvelope::ApplicationCredential::AccessRule;
 using CatalogService = rgw::keystone::TokenEnvelope::CatalogService;
 
 TEST(ServiceTypeMatches, AcceptedType)
@@ -111,14 +113,27 @@ TEST(PathMatchesPattern, MalformedPlaceholder_UnbalancedBrace)
   EXPECT_FALSE(path_matches_pattern("/v1/{account/obj", "/v1/AUTH_abc/obj"));
 }
 
-// Query string stripping is done by the caller (check_access_rules), not
-// path_matches_pattern itself. Verify the raw function sees '?' as a literal.
-TEST(PathMatchesPattern, QueryStringPassedThrough)
+// A '?' in the decoded path came from an encoded %3F and is part of the object
+// name. Verify the matcher treats it as a literal.
+TEST(PathMatchesPattern, QuestionMarkIsPartOfPath)
 {
-  // If a caller forgot to strip '?', the literal '?' in path won't match
-  // because pattern has no '?' or '**' to absorb it.
   EXPECT_FALSE(path_matches_pattern("/v1/AUTH_abc/container",
                                     "/v1/AUTH_abc/container?param=1"));
+}
+
+TEST(CheckAccessRules, QuestionMarkInObjectNameIsNotQuery)
+{
+  const std::vector<AccessRule> rules = {
+      {.service = "object-store",
+       .method = "GET",
+       .path = "/v1/AUTH_p/c/public"}};
+  const std::vector<std::string> accepted = {"object-store"};
+  const std::vector<CatalogService> catalog = {{.type = "object-store"}};
+
+  EXPECT_TRUE(check_access_rules(nullptr, rules, accepted, catalog, "GET",
+                                 "/v1/AUTH_p/c/public"));
+  EXPECT_FALSE(check_access_rules(nullptr, rules, accepted, catalog, "GET",
+                                  "/v1/AUTH_p/c/public?secret"));
 }
 
 // Mixed patterns
