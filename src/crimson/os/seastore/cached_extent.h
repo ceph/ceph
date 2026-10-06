@@ -15,6 +15,8 @@
 #include "include/buffer.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/common/errorator.h"
+#include "crimson/common/config_proxy.h"
+#include <seastar/core/shared_mutex.hh>
 
 struct btree_lba_manager_test;
 struct lba_btree_test;

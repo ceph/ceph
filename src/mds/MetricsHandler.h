@@ -19,6 +19,7 @@
 
 #include <boost/optional.hpp>
 #include <boost/variant/static_visitor.hpp>
+#include "msg/msg_types.h"
 
 struct CapInfoPayload;
 struct ReadLatencyPayload;

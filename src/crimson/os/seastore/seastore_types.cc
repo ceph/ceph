@@ -8,6 +8,7 @@
 
 #include "common/hobject.h"
 #include "crimson/common/log.h"
+#include <random>
 
 namespace {
 
