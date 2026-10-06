@@ -552,6 +552,72 @@ class TestFSCryptVolumes(CephFSTestCase):
         self.mount_a.run_shell_payload(f"sudo fscrypt lock --verbose {src_path}")
         self.mount_a.compare_trees(src_path, dst_path)
 
+    def test_fscrypt_backup_rename(self):
+        """ Test that an incremental backup and rename without key """
+
+        v = "cephfs"
+        sv = "sv1"
+        sv2 = "sv2"
+        self.fs.set_ceph_conf('client', 'client fscrypt as', True)
+
+        #generate original data
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        subvol_path = self._get_sv_path(v, sv)
+
+        self.mount_a.run_shell_payload(f'mkdir -p {subvol_path}')
+
+        self.mount_a.run_shell_payload(f"sudo fscrypt encrypt --verbose --source=raw_key --name={self.protector} --no-recovery --key=/tmp/key_volume {subvol_path}")
+        self.mount_a.run_shell_payload(f'sudo chmod 777 {subvol_path}')
+
+        src_dir = "dir1"
+        src_file = "file1"
+        src_path = f"{subvol_path}/{src_dir}"
+
+        self.mount_a.run_shell_payload(f'mkdir -p {src_path}')
+        self.mount_a.touch(f"{src_path}/{src_file}")
+
+        #replicate data to another volume without key
+        self.fs.set_ceph_conf('client', 'client fscrypt as', False)
+        self.mount_a.remount()
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv2} --mode=777')
+        subvol2_path = self._get_sv_path(v, sv2)
+
+        self.mount_a.run_shell_payload(f'mkdir -p {subvol2_path}')
+        self.mount_a.copy_tree(subvol_path, subvol2_path)
+
+        #verify the initial sync
+        self.fs.set_ceph_conf('client', 'client fscrypt as', True)
+        self.mount_a.remount()
+
+        self.mount_a.run_shell_payload(f"sudo fscrypt unlock --verbose --key=/tmp/key_volume {subvol_path}")
+        self.mount_a.compare_trees(subvol_path, subvol2_path)
+
+        # rename file to prep for incr backup
+        file_renamed = "filea"
+        self.mount_a.rename(f"{src_path}/{src_file}", f"{src_path}/{file_renamed}")
+
+        self.fs.set_ceph_conf('client', 'client fscrypt as', False)
+        self.mount_a.remount()
+
+        #perform backup rename without key
+        b64_paths_src = self.mount_a.ls(subvol_path)[0]
+        b64_paths_dst = self.mount_a.ls(subvol2_path)[0]
+
+        b64_src_path = f"{subvol_path}/{b64_paths_src}"
+        b64_dst_path = f"{subvol2_path}/{b64_paths_dst}"
+
+        b64_file_renamed = self.mount_a.ls(b64_src_path)[0]
+        b64_file_orig = self.mount_a.ls(b64_dst_path)[0]
+        self.mount_a.rename(f"{b64_dst_path}/{b64_file_orig}", f"{b64_dst_path}/{b64_file_renamed}")
+
+        self.fs.set_ceph_conf('client', 'client fscrypt as', True)
+        self.mount_a.remount()
+
+        #verify final state of subvol
+        self.mount_a.run_shell_payload(f"sudo fscrypt unlock --verbose --key=/tmp/key_volume {subvol_path}")
+        self.mount_a.compare_trees(subvol_path, subvol2_path)
+
+
 class TestFSCryptXFS(XFSTestsDev):
 
     def setup_xfsprogs_devs(self):
