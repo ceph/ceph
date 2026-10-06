@@ -7,6 +7,7 @@
 #include <charconv>
 #include <fmt/compile.h>
 #include <fmt/core.h>
+#include "json_spirit/json_spirit_value.h"
 
 using std::list;
 using std::ostream;
