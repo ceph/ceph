@@ -12357,9 +12357,15 @@ void Server::_readdir_diff(
   // fragments - there is no way to identify specific snapshot for the last entry.
   // The following vars denote the potential rollback position for such a case.
   // Fixes: https://tracker.ceph.com/issues/72518
+  //
+  // The budget never rolls back the group at the start of the reply,
+  // since an empty reply would leave the client nowhere to resume from.
+  // That group is sent whole; if it exceeds the budget, the reply ends
+  // after it.
   string last_name;
   size_t rollback_pos = 0;
   size_t rollback_num = 0;
+  bool over_budget = false;
 
   bool waiting = false;
   bool end = build_snap_diff(
@@ -12379,7 +12385,16 @@ void Server::_readdir_diff(
       // the last one for existent ones
       effective_snapid = exists ? snapid : snapid_prev;
       name.append(dn_name);
-      if ((int)(dnbl.length() + name.length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
+      // in the group at the start of the reply?
+      const bool first_group =
+        numfiles == 0 || (name == last_name && rollback_num == 0);
+      if (over_budget && !first_group) {
+	dout(10) << " over budget, stopping at " << dnbl.length()
+		 << " > " << bytes_left << dendl;
+	return false;
+      }
+      if (!first_group &&
+          (int)(dnbl.length() + name.length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
 	dout(10) << " ran out of room for name, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
         if (name == last_name) {
 	  bufferlist keep;
@@ -12405,7 +12420,9 @@ void Server::_readdir_diff(
 
       // inode
       dout(10) << "inc inode " << *in << " snap "	<< effective_snapid << dendl;
-      int r = in->encode_inodestat(dnbl, mdr->session, realm, effective_snapid, bytes_left - (int)dnbl.length());
+      // 0: no limit
+      int r = in->encode_inodestat(dnbl, mdr->session, realm, effective_snapid,
+        first_group ? 0 : bytes_left - (int)dnbl.length());
       if (r < 0) {
 	// chop off dn->name, lease
 	dout(10) << " ran out of room, stopping at "
@@ -12431,6 +12448,11 @@ void Server::_readdir_diff(
         last_name = name;
         rollback_pos = start_len;
         rollback_num = numfiles;
+      }
+      if (first_group && (int)dnbl.length() > bytes_left) {
+	dout(10) << " sending " << name << " beyond the budget, "
+		 << dnbl.length() << " > " << bytes_left << dendl;
+	over_budget = true;
       }
       // touch dn
       mdcache->lru.lru_touch(dn);
