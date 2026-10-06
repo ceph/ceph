@@ -35,6 +35,8 @@ class ZoneThrasher(Thrasher):
       revive_timeout     Seconds to wait for healthy stretch mode after reviving
                          the zone (default: 600)
       thrash_delay       Seconds to sleep between iterations (default: 30)
+      pool_timeout       Seconds to wait for a stretch pool to exist before
+                         starting thrashing (default: 300)
 
     The zone topology is read from
     ``overrides.ceph.pool-config.crush_map_config``, which is injected by the
@@ -78,6 +80,7 @@ class ZoneThrasher(Thrasher):
         self.degrade_timeout = float(self.config.get('degrade_timeout', 300))
         self.revive_timeout = float(self.config.get('revive_timeout', 600))
         self.thrash_delay = float(self.config.get('thrash_delay', 30))
+        self.pool_timeout = float(self.config.get('pool_timeout', 300))
 
         # Parse zone topology from crush_map_config injected by 2.yaml
         pool_config = self.config.get('pool_config', {})
@@ -89,10 +92,11 @@ class ZoneThrasher(Thrasher):
             'stretch_zone_thrash requires at least 2 zones in crush_map_config'
 
         self.log('seed: {s}, hold_duration: {h}s, degrade_timeout: {d}s, '
-                 'revive_timeout: {r}s, thrash_delay: {t}s'.format(
+                 'revive_timeout: {r}s, thrash_delay: {t}s, '
+                 'pool_timeout: {p}s'.format(
                      s=self.random_seed, h=self.hold_duration,
                      d=self.degrade_timeout, r=self.revive_timeout,
-                     t=self.thrash_delay))
+                     t=self.thrash_delay, p=self.pool_timeout))
         self.log('zones: {z}'.format(z=[z['name'] for z in self.zones]))
         self.log('tiebreak monitor: {m}'.format(m=self.tiebreak_monitor))
 
@@ -163,6 +167,38 @@ class ZoneThrasher(Thrasher):
             self.log('reviving osd.{i}'.format(i=osd_id))
             self.manager.revive_osd(osd_id, skip_admin_check=True)
 
+    def _wait_for_stretch_pool(self):
+        """
+        Poll until at least one pool with is_stretch_pool: true exists.
+        Prevents racing with pool creation during task startup.
+        Raises RuntimeError on timeout.
+        """
+        self.log('waiting for stretch pool to exist (timeout={t}s)'.format(
+            t=self.pool_timeout))
+        start = time.time()
+        with safe_while(
+                sleep=5,
+                tries=math.ceil(self.pool_timeout / 5),
+                action='wait for stretch pool') as proceed:
+            while proceed():
+                if self.stopping.is_set():
+                    return False
+                try:
+                    osdmap = self.manager.get_osd_dump_json()
+                    pools = osdmap.get('pools', [])
+                    for pool in pools:
+                        if pool.get('is_stretch_pool') is True:
+                            elapsed = time.time() - start
+                            self.log('stretch pool found ({p}) after {e:.1f}s'.format(
+                                p=pool.get('pool_name', pool.get('pool', 'unknown')),
+                                e=elapsed))
+                            return True
+                except Exception as e:
+                    self.log('Error checking for stretch pool: {0}'.format(e))
+        raise RuntimeError(
+            'Timed out waiting for stretch pool to exist after {t}s'.format(
+                t=self.pool_timeout))
+
     def _wait_for_degraded_stretch(self):
         """
         Poll until the cluster reports degraded stretch mode.
@@ -228,6 +264,8 @@ class ZoneThrasher(Thrasher):
         Main thrash loop.
         """
         self.log('ZoneThrasher starting')
+        if not self._wait_for_stretch_pool():
+            return
         total_mons = len(teuthology.get_mon_names(self.ctx))
 
         while not self.stopping.is_set():
