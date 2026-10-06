@@ -1,11 +1,13 @@
 import contextlib
+import logging
+import re
 from typing import cast
 from unittest.mock import MagicMock, patch, ANY
 
 import pytest
 
 from ceph.utils import datetime_now
-from orchestrator import DaemonDescriptionStatus
+from orchestrator import DaemonDescriptionStatus, OrchestratorError
 
 from cephadm.serve import CephadmServe
 from cephadm.services.service_registry import service_registry
@@ -722,6 +724,84 @@ class TestNFS:
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 3, 4, nfsrdma, rpcrdma" in ganesha_conf
                 assert "NFS_RDMA_Port = 1234" in ganesha_conf
+
+    @pytest.mark.parametrize(
+        "rdma_netdevs,bond_members,expected_err",
+        [
+            # bind IP is on a bond whose member devices are RDMA-capable
+            (['eno1', 'eno2'], ['eno1', 'eno2'], None),
+            # only some members are RDMA-capable: allowed, but warned about
+            (['eno1'], ['eno1', 'eno2'], None),
+            # the bond exists but none of its members are RDMA-capable
+            (['eno3'], ['eno1', 'eno2'], 'no member device of bond bond0'),
+            # bond0 is not a bond at all, just a non RDMA-capable nic
+            (['eno3'], [], 'interface bond0 (for this IP) is not RDMA-capable'),
+        ],
+    )
+    @patch("cephadm.serve.CephadmServe._run_cephadm_json")
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+    @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+    def test_nfs_config_rdma_bind_addr_on_bond(self, _run_cephadm, _run_cephadm_json,
+                                               rdma_netdevs, bond_members, expected_err,
+                                               caplog, cephadm_module: CephadmOrchestrator):
+        """The bind IP on a bond is checked against the bond's member devices, not its name."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        async def mock_run_cephadm_json(host, entity, command, *args, **kwargs):
+            if command == 'list-rdma':
+                return [{'link': f'rdma{i}/1', 'state': 'ACTIVE',
+                         'physical_state': 'LINK_UP', 'netdev': netdev}
+                        for i, netdev in enumerate(rdma_netdevs)]
+            if command == 'ls':
+                return []
+            return {}
+        _run_cephadm_json.side_effect = mock_run_cephadm_json
+
+        with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+            cephadm_module.cache.update_host_networks('host1', {
+                '1.2.3.0/24': {
+                    'bond0': ['1.2.3.7']
+                }
+            })
+            # gather-facts reports a bond's member devices as its lower_devs_list
+            cephadm_module.cache.update_host_facts('host1', {
+                'interfaces': {
+                    'bond0': {
+                        'nic_type': 'bonding' if bond_members else 'ethernet',
+                        'lower_devs_list': list(bond_members),
+                        'operstate': 'up',
+                    },
+                },
+            })
+            nfs_spec = NFSServiceSpec(
+                service_id="foo",
+                placement=PlacementSpec(hosts=['host1']),
+                enable_rdma=True,
+            )
+            with with_service(cephadm_module, nfs_spec) as _:
+                deploy_ctx = DaemonDeployContext(CephadmDaemonDeploySpec(
+                    host='host1',
+                    daemon_id='foo.host1.0.0',
+                    service_name=nfs_spec.service_name(),
+                    ip='1.2.3.7',
+                    ports=[2049, 9587, 20049],
+                ))
+                nfs_svc = service_registry.get_service('nfs')
+                if expected_err:
+                    with pytest.raises(OrchestratorError, match=re.escape(expected_err)):
+                        nfs_svc.generate_config(deploy_ctx)
+                else:
+                    with caplog.at_level(logging.WARNING, logger='cephadm.services.nfs'):
+                        nfs_generated_conf, _ = nfs_svc.generate_config(deploy_ctx)
+                    ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                    assert "Bind_addr = 1.2.3.7" in ganesha_conf
+                    assert "Protocols = 4, nfsrdma, rpcrdma" in ganesha_conf
+                    partially_rdma_capable = set(rdma_netdevs) != set(bond_members)
+                    warned = 'only some member devices of bond bond0' in caplog.text
+                    assert warned == partially_rdma_capable
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
