@@ -3524,8 +3524,9 @@ options:
   level: advanced
   desc: Number of KMIP client worker threads
   long_desc: KMIP requests are queued and handled by up to this many worker
-    threads in parallel. Each worker uses its own connections to the KMIP
-    server, so size this for the KMIP server's connection limit and RGW load.
+    threads in parallel. Each worker keeps at most one connection to the KMIP
+    server, closed after 5 seconds without use, so size this for the KMIP
+    server's connection limit and RGW load.
   default: 1
   min: 1
   max: 32

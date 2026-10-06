@@ -4,6 +4,7 @@
 #include <boost/intrusive/list.hpp>
 #include <atomic>
 #include <mutex>
+#include <utility>
 #include <string.h>
 
 #include "include/compat.h"
@@ -254,39 +255,36 @@ Done:
   return r;
 }
 
-struct RGWKmipHandles : public Thread {
+/*
+ * Connections owned by one KMIP worker thread. A worker handles one
+ * request at a time, so it keeps at most one idle connection for reuse.
+ * Only the owning worker touches it, so no locking is needed.
+ */
+struct RGWKmipHandles {
   CephContext *cct;
-  ceph::mutex cleaner_lock = ceph::make_mutex("RGWKmipHandles::cleaner_lock");
-  std::vector<RGWKmipHandle*> saved_kmip;
-  int cleaner_shutdown;
-  bool cleaner_active = false;
-  ceph::condition_variable cleaner_cond;
-  RGWKmipHandles(CephContext *cct) :
-    cct(cct), cleaner_shutdown{0} {
-  }
+  RGWKmipHandle* cached_kmip = nullptr;
+  RGWKmipHandles(CephContext *cct) : cct(cct) {}
+  ~RGWKmipHandles() { evict(); }
   RGWKmipHandle* get_kmip_handle();
   void release_kmip_handle_now(RGWKmipHandle* kmip);
   void release_kmip_handle(RGWKmipHandle* kmip);
-  void flush_kmip_handles();
+  void evict();
+  void evict_if_stale();
   int do_one_entry(RGWKMIPTransceiver &element);
-  void* entry();
-  void start();
-  void stop();
 };
+
+#define MAXIDLE 5
 
 RGWKmipHandle*
 RGWKmipHandles::get_kmip_handle()
 {
+  evict_if_stale();
+  if (cached_kmip) {
+    return std::exchange(cached_kmip, nullptr);
+  }
   RGWKmipHandle* kmip = 0;
   const char *hostaddr = cct->_conf->rgw_crypt_kmip_addr.c_str();
-  {
-    std::lock_guard lock{cleaner_lock};
-    if (!saved_kmip.empty()) {
-      kmip = *saved_kmip.begin();
-      saved_kmip.erase(saved_kmip.begin());
-    }
-  }
-  if (!kmip && hostaddr) {
+  if (hostaddr) {
     char *hosttemp = strdup(hostaddr);
     char *port = strchr(hosttemp, ':');
     if (port)
@@ -312,79 +310,29 @@ RGWKmipHandles::release_kmip_handle_now(RGWKmipHandle* kmip)
   delete kmip;
 }
 
-#define MAXIDLE 5
 void
 RGWKmipHandles::release_kmip_handle(RGWKmipHandle* kmip)
 {
-  if (cleaner_shutdown) {
-    release_kmip_handle_now(kmip);
-  } else {
-    std::lock_guard lock{cleaner_lock};
-    kmip->lastuse = mono_clock::now();
-    saved_kmip.insert(saved_kmip.begin(), 1, kmip);
-  }
-}
-
-void*
-RGWKmipHandles::entry()
-{
-  RGWKmipHandle* kmip;
-  std::unique_lock lock{cleaner_lock};
-
-  for (;;) {
-    if (cleaner_shutdown) {
-      if (saved_kmip.empty())
-	break;
-    } else {
-      cleaner_cond.wait_for(lock, std::chrono::seconds(MAXIDLE));
-    }
-    mono_time now = mono_clock::now();
-    while (!saved_kmip.empty()) {
-      auto cend = saved_kmip.end();
-      --cend;
-      kmip = *cend;
-      if (!cleaner_shutdown && now - kmip->lastuse
-	  < std::chrono::seconds(MAXIDLE))
-	break;
-      saved_kmip.erase(cend);
-      release_kmip_handle_now(kmip);
-    }
-  }
-  return nullptr;
+  evict();
+  kmip->lastuse = mono_clock::now();
+  cached_kmip = kmip;
 }
 
 void
-RGWKmipHandles::start()
+RGWKmipHandles::evict()
 {
-  std::lock_guard lock{cleaner_lock};
-  if (!cleaner_active) {
-    cleaner_active = true;
-    this->create("KMIPcleaner");  // len<16!!!
+  if (cached_kmip) {
+    release_kmip_handle_now(std::exchange(cached_kmip, nullptr));
   }
 }
 
 void
-RGWKmipHandles::stop()
+RGWKmipHandles::evict_if_stale()
 {
-  std::unique_lock lock{cleaner_lock};
-  cleaner_shutdown = 1;
-  cleaner_cond.notify_all();
-  if (cleaner_active) {
-    lock.unlock();
-    this->join();
-    cleaner_active = false;
+  if (cached_kmip &&
+      mono_clock::now() - cached_kmip->lastuse >= std::chrono::seconds(MAXIDLE)) {
+    evict();
   }
-}
-
-void
-RGWKmipHandles::flush_kmip_handles()
-{
-  stop();
-  join();
-  if (!saved_kmip.empty()) {
-    ldout(cct, 0) << "ERROR: " << __func__ << " failed final cleanup" << dendl;
-  }
-  saved_kmip.shrink_to_fit();
 }
 
 int
@@ -711,10 +659,14 @@ RGWKmipWorker::entry()
   std::unique_lock entry_lock{m.lock};
   ldout(m.cct, 10) << "kmip_worker[" << worker_id << "] start" << dendl;
   RGWKmipHandles handles{m.cct};
-  handles.start();
   while (!m.going_down) {
     if (m.requests.empty()) {
-      m.cond.wait(entry_lock);
+      m.cond.wait_for(entry_lock, std::chrono::seconds(MAXIDLE));
+      // close a connection left idle too long, even if no request comes;
+      // it is this worker's own, so do the network close without m.lock
+      entry_lock.unlock();
+      handles.evict_if_stale();
+      entry_lock.lock();
       continue;
     }
     auto iter = m.requests.begin();
@@ -744,7 +696,6 @@ RGWKmipWorker::entry()
     }
     delete node;
   }
-  handles.stop();
   ldout(m.cct, 10) << "kmip_worker[" << worker_id << "] finish" << dendl;
   return nullptr;
 }
