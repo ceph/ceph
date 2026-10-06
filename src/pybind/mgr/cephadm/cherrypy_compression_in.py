@@ -1,7 +1,30 @@
 import cherrypy
 import io
-import gzip
+import zlib
 from typing import Callable, Dict
+
+
+MAX_DECOMPRESSED_BODY_SIZE = 100 * 1024 * 1024  # 100 MiB
+
+
+class DecompressedBodyTooLarge(Exception):
+    pass
+
+
+def _decompress_gzip(data: bytes, max_size: int = MAX_DECOMPRESSED_BODY_SIZE) -> bytes:
+    """Decompress one gzip stream without allowing unbounded output."""
+    decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    decompressed = decompressor.decompress(data, max_size + 1)
+
+    if len(decompressed) > max_size or decompressor.unconsumed_tail:
+        raise DecompressedBodyTooLarge()
+
+    # Agents send a single complete gzip member. Reject truncated streams and
+    # trailing/concatenated members rather than silently accepting extra data.
+    if not decompressor.eof or decompressor.unused_data:
+        raise zlib.error('invalid or truncated gzip stream')
+
+    return decompressed
 
 
 class CompressionDecoderTool:
@@ -11,7 +34,7 @@ class CompressionDecoderTool:
     Supports: gzip
     """
     decompressors: Dict[str, Callable[[bytes], bytes]] = {
-        "gzip": lambda b: gzip.decompress(b),
+        "gzip": _decompress_gzip,
     }
 
     def __call__(self) -> None:
@@ -27,6 +50,13 @@ class CompressionDecoderTool:
                 cherrypy.request.body = io.BytesIO(decompressed)
                 cherrypy.request.headers['Content-Encoding'] = 'identity'
                 cherrypy.log(f"[compression_in] {encoding} decompressed {original_size} → {decompressed_size} bytes", severity=10)  # DEBUG
+            except DecompressedBodyTooLarge:
+                cherrypy.log(
+                    f"[compression_in] {encoding} request exceeds "
+                    f"{MAX_DECOMPRESSED_BODY_SIZE} byte decompressed limit",
+                    severity=30,
+                )
+                raise cherrypy.HTTPError(413, "Decompressed request body too large")
             except Exception as e:
                 cherrypy.log(f"[compression_in] Failed to decompress {encoding}: {e}", severity=40)
                 raise cherrypy.HTTPError(400, f"Invalid {encoding} request body")
