@@ -1701,6 +1701,8 @@ void pg_pool_t::dump(Formatter *f, const CrushWrapper *crush,
     f->dump_int("migration_src", *migration_src);
   if (migration_target.has_value())
     f->dump_int("migration_target", *migration_target);
+  if (migration_root.has_value())
+    f->dump_int("migration_root", *migration_root);
   f->dump_stream("migrating_pgs") << migrating_pgs;
   f->open_object_section("options");
   opts.dump(f);
@@ -2161,6 +2163,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(migration_target, bl);
     encode(migrating_pgs, bl);
     encode(lowest_migrated_pg, bl);
+    encode(migration_root, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -2371,6 +2374,7 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     decode(migration_target, bl);
     decode(migrating_pgs, bl);
     decode(lowest_migrated_pg, bl);
+    decode(migration_root, bl);
   } else {
     shard_mapping.clear();
     ec_data_shard_count.reset();
@@ -2379,6 +2383,7 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     migration_target.reset();
     migrating_pgs.clear();
     lowest_migrated_pg = 0;
+    migration_root.reset();
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -2486,6 +2491,7 @@ list<pg_pool_t> pg_pool_t::generate_test_instances()
   a.nonprimary_shards.clear();
   a.migration_src = 4;
   a.migration_target = 5;
+  a.migration_root = 4;
   a.migrating_pgs = { pg_t(1,2), pg_t(3,4) };
   a.lowest_migrated_pg = 5;
 

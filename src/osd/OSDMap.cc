@@ -4504,15 +4504,9 @@ void OSDMap::print_pools(CephContext *cct, ostream& out,
     } else {
       // Default (no --show-all): show only the tip, use root pool's ID.
       int64_t display_pid = pid;
-      if (is_pool_migration_target(pid)) {
-        for (const auto &[scan_pid, scan_pool] : pools) {
-          if (scan_pool.migration_target.has_value() &&
-              *scan_pool.migration_target == pid &&
-              scan_pid < display_pid) {
-            display_pid = scan_pid;
-          }
-        }
-      }
+      int64_t root = get_pool_migration_root_from_target(pid);
+      if (root >= 0)
+        display_pid = root;
       std::string name("<unknown>");
       const auto &pni = pool_name.find(pid);
       if (pni != pool_name.end())
