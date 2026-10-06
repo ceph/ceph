@@ -79,6 +79,12 @@ struct MetaSession {
 
   void enqueue_cap_release(inodeno_t ino, uint64_t cap_id, ceph_seq_t iseq,
       ceph_seq_t mseq, epoch_t osd_barrier);
+
+  /**
+   * Drop any queued CapRelease items for @p ino that have not been
+   * flushed yet.  Returns how many items were removed (for pin accounting).
+   */
+  size_t cancel_pending_cap_releases(inodeno_t ino);
 };
 
 using MetaSessionRef = std::shared_ptr<MetaSession>;

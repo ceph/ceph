@@ -1,13 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include "MetaSession.h"
+
+#include <algorithm>
+
+#include "common/Formatter.h"
 #include "include/types.h"
 #include "messages/MClientCapRelease.h"
 
-#include "MetaSession.h"
 #include "Inode.h"
-
-#include "common/Formatter.h"
 
 const char *MetaSession::get_state_name() const
 {
@@ -59,4 +61,24 @@ void MetaSession::enqueue_cap_release(inodeno_t ino, uint64_t cap_id, ceph_seq_t
   i.issue_seq = iseq;
   i.migrate_seq = mseq;
   release->caps.push_back(i);
+}
+
+size_t MetaSession::cancel_pending_cap_releases(inodeno_t ino)
+{
+  if (!release) {
+    return 0;
+  }
+
+  auto& caps = release->caps;
+  const size_t before = caps.size();
+  caps.erase(std::remove_if(caps.begin(), caps.end(),
+                            [ino](const ceph_mds_cap_item& item) {
+                              return inodeno_t(item.ino) == ino;
+                            }),
+             caps.end());
+  const size_t cancelled = before - caps.size();
+  if (caps.empty()) {
+    release.reset();
+  }
+  return cancelled;
 }
