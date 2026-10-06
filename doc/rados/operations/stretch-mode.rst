@@ -464,6 +464,11 @@ happen or you want to enable recovery mode early, run the following command:
 
    ceph osd force_recovery_stretch_mode --yes-i-really-mean-it
 
+This command fails if the cluster is not in degraded mode or is already in
+recovery mode. It also fails while every Monitor of a data center, or the
+tiebreaker Monitor, is down: recovery mode can start before the OSDs of the
+disconnected data center are back, but not before one of its Monitors is.
+
 
 Forcing Normal Stretch Mode
 ---------------------------
