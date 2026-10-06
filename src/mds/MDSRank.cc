@@ -528,7 +528,7 @@ MDSRank::MDSRank(
   server = new Server(this, &metrics_handler);
   locker = new Locker(this, mdcache);
 #ifdef WITH_MDS_NOTIFY
-  change_notifier = new ChangeNotifier(cct);
+  change_notifier = new ChangeNotifier(cct, whoami);
 #endif
 
   quiesce_db_manager.reset(new QuiesceDbManager());

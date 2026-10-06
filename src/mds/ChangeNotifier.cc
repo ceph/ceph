@@ -104,6 +104,7 @@ void FileEndpoint::dump_status(ceph::Formatter *f) const
 
 KafkaEndpoint::KafkaEndpoint(CephContext *cct, const KafkaOptions &opts)
   : cct(cct), brokers(opts.brokers), topic_name(opts.topic),
+    partition_key("mds." + std::to_string(opts.rank)),
     message_timeout_ms(opts.message_timeout_ms), max_queue(opts.max_queue)
 {
   char errstr[512] = {0};
@@ -156,7 +157,7 @@ KafkaEndpoint::KafkaEndpoint(CephContext *cct, const KafkaOptions &opts)
               rd_kafka_err2str(err));
     return;
   }
-  dout(1) << "kafka endpoint brokers " << brokers
+  dout(1) << "kafka endpoint rank " << opts.rank << " brokers " << brokers
           << " topic " << topic_name
           << " message.timeout.ms " << message_timeout_ms << dendl;
 }
@@ -181,10 +182,15 @@ bool KafkaEndpoint::send(const std::string &json)
 {
   if (!producer || !topic)
     return false;
+  // the rank is the message key: on a multi-partition topic it keeps every
+  // event from one rank on one partition, which is what makes per-rank order
+  // hold regardless of the topic's partition count (librdkafka copies the
+  // key itself, so partition_key may be reused)
   int rc = rd_kafka_produce(
       topic, RD_KAFKA_PARTITION_UA,
       RD_KAFKA_MSG_F_COPY, // librdkafka copies the payload
-      const_cast<char *>(json.data()), json.size(), nullptr, 0, nullptr);
+      const_cast<char *>(json.data()), json.size(),
+      partition_key.data(), partition_key.size(), nullptr);
   if (rc == -1) {
     set_error(rd_kafka_err2str(rd_kafka_last_error()));
     return false;
@@ -220,6 +226,7 @@ void KafkaEndpoint::dump_status(ceph::Formatter *f) const
 {
   f->dump_string("brokers", brokers);
   f->dump_string("topic", topic_name);
+  f->dump_string("partition_key", partition_key);
   f->dump_unsigned("message_timeout_ms", message_timeout_ms);
   f->dump_unsigned("max_queue", max_queue);
 }
@@ -228,8 +235,8 @@ void KafkaEndpoint::dump_status(ceph::Formatter *f) const
 // ChangeNotifier
 // ---------------------------------------------------------------------------
 
-ChangeNotifier::ChangeNotifier(CephContext *cct)
-  : cct(cct)
+ChangeNotifier::ChangeNotifier(CephContext *cct, int rank)
+  : cct(cct), rank(rank)
 {
   if (!cct)
     return;
@@ -255,6 +262,7 @@ void ChangeNotifier::configure_endpoint(const ConfigProxy &conf)
   kafka.message_timeout_ms =
     conf.get_val<uint64_t>("mds_notify_kafka_message_timeout");
   kafka.max_queue = conf.get_val<uint64_t>("mds_notify_kafka_max_queue");
+  kafka.rank = rank;
   bool want = conf.get_val<bool>("mds_notify_enable");
 
   queue_cap = conf.get_val<Option::size_t>("mds_notify_queue_size");
@@ -296,7 +304,7 @@ void ChangeNotifier::configure_endpoint(const ConfigProxy &conf)
     std::lock_guard l(root_lock);
     root_copy = root;
   }
-  dout(0) << "endpoint " << endpoint->type() << " root "
+  dout(0) << "rank " << rank << " endpoint " << endpoint->type() << " root "
           << root_copy << " queue capacity " << queue_cap
           << (want ? " (enabled)" : " (disabled)") << dendl;
 }
@@ -317,7 +325,7 @@ void ChangeNotifier::submit(std::string json)
     }
   }
   if (dropped) {
-    n_dropped.fetch_add(1);
+    n_dropped_queue.fetch_add(1);
     std::lock_guard l(err_lock);
     last_drop_at = ceph_clock_now();
   } else {
@@ -341,7 +349,7 @@ void ChangeNotifier::drain()
       if (endpoint && endpoint->send(rec)) {
         n_sent.fetch_add(1);
       } else {
-        n_dropped.fetch_add(1);
+        n_dropped_endpoint.fetch_add(1);
         {
           std::lock_guard l(err_lock);
           last_drop_at = ceph_clock_now();
@@ -421,6 +429,7 @@ void ChangeNotifier::handle_conf_change(const ConfigProxy &conf,
 void ChangeNotifier::dump_status(ceph::Formatter *f) const
 {
   f->open_object_section("change_notifier");
+  f->dump_int("rank", rank);
   f->dump_bool("enabled", enabled());
   {
     std::lock_guard l(root_lock);
@@ -439,7 +448,11 @@ void ChangeNotifier::dump_status(ceph::Formatter *f) const
   }
   f->dump_unsigned("queued", n_queued.load());
   f->dump_unsigned("sent", n_sent.load());
-  f->dump_unsigned("dropped", n_dropped.load());
+  // drops are reported by cause: the MDS queue (the commit path never
+  // blocks) and the endpoint (librdkafka full, broker unreachable, ...)
+  f->dump_unsigned("dropped_queue", n_dropped_queue.load());
+  f->dump_unsigned("dropped_endpoint", n_dropped_endpoint.load());
+  f->dump_unsigned("dropped", n_dropped_queue.load() + n_dropped_endpoint.load());
   {
     std::lock_guard l(err_lock);
     f->dump_string("last_error", last_error);

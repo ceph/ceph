@@ -89,6 +89,9 @@ struct KafkaOptions {
   std::string topic;
   uint32_t message_timeout_ms = 5000;
   uint64_t max_queue = 0;
+  /// MDS rank this producer belongs to; used as the message key so that all
+  /// events from one rank land on one partition (per-rank ordering).
+  int rank = -1;
 };
 
 /// Kafka endpoint: fire-and-forget librdkafka producer.
@@ -119,6 +122,7 @@ private:
   rd_kafka_topic_s *topic = nullptr;
   std::string brokers;
   std::string topic_name;
+  std::string partition_key;
   uint32_t message_timeout_ms = 5000;
   uint64_t max_queue = 0;
   mutable std::mutex err_lock;
@@ -152,10 +156,17 @@ private:
  *
  * The file endpoint wins when both it and Kafka are configured; it exists
  * so tests can assert the emitted records without a broker.
+ *
+ * One notifier exists per MDS rank, so every active rank emits for the
+ * subtrees it owns. There is no cross-rank ordering: events from different
+ * ranks reach the topic independently, and no message carries a global
+ * sequence number. Within one rank the drain thread preserves order, and the
+ * Kafka endpoint keys every message with the rank so that a rank's events
+ * stay on a single partition (per-partition order = per-rank order).
  */
 class ChangeNotifier {
 public:
-  ChangeNotifier(CephContext *cct);
+  ChangeNotifier(CephContext *cct, int rank);
   ~ChangeNotifier();
 
   ChangeNotifier(const ChangeNotifier &) = delete;
@@ -194,6 +205,8 @@ private:
   std::optional<std::string> relative_path(std::string_view path) const;
 
   CephContext *const cct;
+  /// MDS rank this notifier belongs to (message key, status output)
+  const int rank;
 
   /// watch root; runtime-changeable, guarded by root_lock
   mutable std::mutex root_lock;
@@ -212,9 +225,13 @@ private:
   size_t queue_cap = 8192;
 
   // counters (approximate by design: read for status, not for billing).
+  // drops are split by cause: the MDS queue being full (the commit path
+  // refusing to block) and the endpoint refusing the event (a full librdkafka
+  // queue, an unreachable broker after message.timeout.ms, ...).
   std::atomic<uint64_t> n_queued{0};
   std::atomic<uint64_t> n_sent{0};
-  std::atomic<uint64_t> n_dropped{0};
+  std::atomic<uint64_t> n_dropped_queue{0};
+  std::atomic<uint64_t> n_dropped_endpoint{0};
   mutable std::mutex err_lock;
   std::string last_error;
   utime_t last_error_at;
