@@ -499,6 +499,8 @@ private:
       int *err, std::ostream *ss) const;
 
   int _prepare_remove_pool(int64_t pool, std::ostream *ss, bool no_fake);
+  int _prepare_remove_pool_chain(int64_t target_pool, std::ostream *ss,
+				 bool no_fake);
   int _prepare_rename_pool(int64_t pool, std::string newname);
 
   bool enforce_pool_op_caps(MonOpRequestRef op);

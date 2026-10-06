@@ -14272,6 +14272,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply_no_propose;
     }
+    // Pool migration: snap_seq, snapid allocation and pool-snap metadata live on
+    // the root source pool.
+    int64_t root = osdmap.get_pool_migration_root(pool);
+    if (root >= 0 && root != pool)
+      pool = root;
     string snapname;
     cmd_getval(cmdmap, "snap", snapname);
     const pg_pool_t *p = osdmap.get_pg_pool(pool);
@@ -14321,6 +14326,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply_no_propose;
     }
+    // Pool migration: snap_seq, snapid allocation and pool-snap metadata live on
+    // the root source pool.
+    int64_t root = osdmap.get_pool_migration_root(pool);
+    if (root >= 0 && root != pool)
+      pool = root;
     string snapname;
     cmd_getval(cmdmap, "snap", snapname);
     const pg_pool_t *p = osdmap.get_pg_pool(pool);
@@ -14369,6 +14379,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply_no_propose;
     }
+
+    // Pool migration: snap_seq, snapid allocation and pool-snap metadata live on
+    // the root source pool.
+    int64_t root = osdmap.get_pool_migration_root(pool);
+    if (root >= 0 && root != pool)
+      pool = root;
 
     const pg_pool_t *p = osdmap.get_pg_pool(pool);
     pg_pool_t *pp = nullptr;
@@ -14859,24 +14875,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     const pg_pool_t *current_pool = &std::as_const(*this).get_pg_pool(pool);
-    int64_t target_pool = pool;
 
-    // If the current pool is a current migration src or is a src in a cascade then set the target to its target pool
-    // If the current pool is a target already or not in a migration then do nothing
-    if (current_pool->is_migrating()) {
-      target_pool = current_pool->migration_target.has_value() ?
-                 current_pool->migration_target.value() : pool;
+    if (current_pool->is_migration_src()) {
+      ss << "Pool '" << poolstr << "' is a pool migration source pool for pool '"
+         << osdmap.get_pool_name(current_pool->migration_target.value())
+         << "'. Delete that pool to remove the whole migration chain";
+      err = -EPERM;
+      goto reply_no_propose;
     }
 
-    // Collect all pools in the migration cascade which point to the target pool
-    // Will remain empty if the given pool was never in a migration
-    std::vector<int64_t> cascade_pool_ids;
     std::vector<std::string> cascade_pool_names;
     for (const auto& [pool_id, _] : osdmap.get_pools()) {
       if (!have_pg_pool(pool_id)) continue;
       if (std::as_const(*this).get_pg_pool(pool_id).migration_target.has_value() &&
-          std::as_const(*this).get_pg_pool(pool_id).migration_target.value() == target_pool) {
-        cascade_pool_ids.push_back(pool_id);
+          std::as_const(*this).get_pg_pool(pool_id).migration_target.value() == pool) {
         cascade_pool_names.push_back(osdmap.get_pool_name(pool_id));
       }
     }
@@ -14888,37 +14900,23 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (poolstr2 != poolstr ||
 	(!force && !force_no_fake)) {
       ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr;
-      
+
       if (!cascade_pool_names.empty()) {
-        ss << " and the following pools in the migration cascade: ";
+        ss << " and the following source pools in its migration cascade: ";
         for (size_t i = 0; i < cascade_pool_names.size(); ++i) {
-          if (cascade_pool_ids[i] == pool) continue;
           ss << cascade_pool_names[i];
-          if (i < cascade_pool_names.size() - 1) ss << ", ";
-        }
-        if (target_pool != pool){
-          ss << ", " << osdmap.get_pool_name(target_pool);
+          if (i + 1 < cascade_pool_names.size()) ss << ", ";
         }
       }
-      
+
       ss << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
         << "followed by --yes-i-really-really-mean-it.";
       err = -EPERM;
       goto reply_no_propose;
     }
 
-    // Delete all pools in cascade using the pre-collected list
-    // This will delete the current pool if it is a migration source
-    for (const auto& pool_id : cascade_pool_ids) {
-      err = _prepare_remove_pool(pool_id, &ss, force_no_fake);
-      ss << ", ";
-      if (err < 0) {
-        goto reply_no_propose;
-      }
-    }
-
-    //This will delete the target if one was set or will just delete the pool passed in
-    err = _prepare_remove_pool(target_pool, &ss, force_no_fake);
+    // Delete the target pool and every source pool in its cascade.
+    err = _prepare_remove_pool_chain(pool, &ss, force_no_fake);
 
     if (err == -EAGAIN) {
       goto wait;
@@ -15832,6 +15830,42 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
     return true;
   }
 
+  // Pool migration handling for the raw MPoolOp paths. Snap ops aimed at any
+  // pool other than the root source pool are redirected to the root source, where snap_seq, snapid
+  // allocation and the pool-snap metadata live. Pool delete aimed at a source pool
+  // is rejected.
+  switch (m->op) {
+  case POOL_OP_CREATE_SNAP:
+  case POOL_OP_CREATE_UNMANAGED_SNAP:
+  case POOL_OP_DELETE_SNAP:
+  case POOL_OP_DELETE_UNMANAGED_SNAP:
+    {
+      int64_t root = osdmap.get_pool_migration_root(m->pool);
+      if (root >= 0 && root != m->pool) {
+	dout(20) << __func__ << " redirecting snap op " << (int)m->op
+		 << " from migration pool " << m->pool << " to root source pool " << root
+		 << dendl;
+	m->pool = root;
+	p = osdmap.get_pg_pool(m->pool);
+	if (p == nullptr) {
+	  _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+	  return true;
+	}
+      }
+    }
+    break;
+  case POOL_OP_DELETE:
+    if (p->is_migration_src()) {
+      dout(10) << __func__ << " rejecting direct delete of migration source pool "
+	       << m->pool << dendl;
+      _pool_op_reply(op, -EPERM, osdmap.get_epoch());
+      return true;
+    }
+    break;
+  default:
+    break;
+  }
+
   // check if the snap and snapname exist
   bool snap_exists = false;
   if (p->snap_exists(m->name.c_str()))
@@ -15978,6 +16012,22 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
     return prepare_pool_op_create(op);
   } else if (m->op == POOL_OP_DELETE) {
     return prepare_pool_op_delete(op);
+  }
+
+  // Pool migration: Snap ops aimed at any pool other than the root source pool
+  // are redirected to the root source, where snap_seq, snapid allocation and
+  // the pool-snap metadata live.
+  if (m->op == POOL_OP_CREATE_SNAP ||
+      m->op == POOL_OP_CREATE_UNMANAGED_SNAP ||
+      m->op == POOL_OP_DELETE_SNAP ||
+      m->op == POOL_OP_DELETE_UNMANAGED_SNAP) {
+    int64_t root = osdmap.get_pool_migration_root(m->pool);
+    if (root >= 0 && root != m->pool) {
+      dout(20) << __func__ << " redirecting snap op " << (int)m->op
+	       << " from migration pool " << m->pool << " to chain root " << root
+	       << dendl;
+      m->pool = root;
+    }
   }
 
   int ret = 0;
@@ -16443,6 +16493,49 @@ int OSDMonitor::_prepare_remove_pool(
   return 0;
 }
 
+int OSDMonitor::_prepare_remove_pool_chain(
+  int64_t target_pool, ostream *ss, bool no_fake)
+{
+  dout(10) << __func__ << " " << target_pool << dendl;
+
+  // Collect every source stub whose migration_target points at target_pool,
+  // then the target itself. In a cascade A -> B -> C -> D, A, B and C all point at
+  // the target D, so deleting D removes them all.
+  std::vector<int64_t> chain_pool_ids;
+  for (const auto& [pool_id, pool_data] : osdmap.get_pools()) {
+    if (!have_pg_pool(pool_id))
+      continue;
+    if (pool_data.migration_target.has_value() &&
+	pool_data.migration_target.value() == target_pool) {
+      chain_pool_ids.push_back(pool_id);
+    }
+  }
+  chain_pool_ids.push_back(target_pool);
+
+  // Validate the whole chain before changing any state: the removals share one
+  // pending_inc / proposal, so a pool that fails _check_remove_pool() partway
+  // through would leave the rest of the chain deleted.
+  for (auto pool_id : chain_pool_ids) {
+    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    if (!p)
+      return -ENOENT;
+    // Only let the removal pass below emit the "pool removed" messages
+    ostringstream check_ss;
+    int r = _check_remove_pool(pool_id, *p, &check_ss);
+    if (r < 0) {
+      *ss << check_ss.str();
+      return r;
+    }
+  }
+
+  for (auto pool_id : chain_pool_ids) {
+    int r = _prepare_remove_pool(pool_id, ss, no_fake);
+    if (r < 0)
+      return r;
+  }
+  return 0;
+}
+
 int OSDMonitor::_prepare_rename_pool(int64_t pool, string newname)
 {
   dout(10) << "_prepare_rename_pool " << pool << dendl;
@@ -16467,7 +16560,7 @@ bool OSDMonitor::prepare_pool_op_delete(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   auto m = op->get_req<MPoolOp>();
   ostringstream ss;
-  int ret = _prepare_remove_pool(m->pool, &ss, false);
+  int ret = _prepare_remove_pool_chain(m->pool, &ss, false);
   if (ret == -EAGAIN) {
     wait_for_finished_proposal(op, new C_RetryMessage(this, op));
     return true;
