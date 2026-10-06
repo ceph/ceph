@@ -3884,6 +3884,9 @@ void MDCache::recalc_auth_bits(bool replay)
       subtree_inodes.insert(p->first->inode);
   }
 
+  // this walks the entire cache under mds_lock
+  uint64_t count = 0;
+
   for (auto p = subtrees.begin();
        p != subtrees.end();
        ++p) {
@@ -3909,6 +3912,9 @@ void MDCache::recalc_auth_bits(bool replay)
       CDir *dir = dfq.front();
       dfq.pop();
 
+      if (!(++count % mds->heartbeat_reset_grace()))
+        mds->heartbeat_reset();
+
       // dir
       if (auth) {
 	dir->state_set(CDir::STATE_AUTH);
@@ -3929,6 +3935,9 @@ void MDCache::recalc_auth_bits(bool replay)
 
       // dentries in this dir
       for (auto &p : dir->items) {
+	if (!(++count % mds->heartbeat_reset_grace()))
+	  mds->heartbeat_reset();
+
 	// dn
 	CDentry *dn = p.second;
 	CDentry::linkage_t *dnl = dn->get_linkage();
@@ -4670,7 +4679,13 @@ void MDCache::rejoin_scour_survivor_replicas(mds_rank_t from, const cref_t<MMDSC
 {
   dout(10) << "rejoin_scour_survivor_replicas from mds." << from << dendl;
 
-  auto scour_func = [this, from, ack, &acked_inodes, &gather_locks] (CInode *in) {
+  // this walks the entire cache under mds_lock
+  uint64_t count = 0;
+
+  auto scour_func = [this, from, ack, &acked_inodes, &gather_locks, &count] (CInode *in) {
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
+
     // inode?
     if (in->is_auth() &&
 	in->is_replica(from) &&
@@ -4695,6 +4710,9 @@ void MDCache::rejoin_scour_survivor_replicas(mds_rank_t from, const cref_t<MMDSC
       
       // dentries
       for (auto &p : dir->items) {
+	if (!(++count % mds->heartbeat_reset_grace()))
+	  mds->heartbeat_reset();
+
 	CDentry *dn = p.second;
 	
 	if (dn->is_replica(from)) {
