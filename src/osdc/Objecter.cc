@@ -1100,7 +1100,7 @@ void Objecter::ms_fast_dispatch2(const MessageRef& m)
   case CEPH_MSG_OSD_OPREPLY: {
     auto priv = m->get_connection()->get_priv();
     auto s = static_cast<OSDSession*>(priv.get());
-    if (s) {
+    if (s && dispatch_to_session_strand) {
       s->track_enqueue(m, [this, priv, s, m]() {
         handle_osd_op_reply(cref_cast<MOSDOpReply>(m));
         s->track_dequeue(m);
@@ -1114,7 +1114,7 @@ void Objecter::ms_fast_dispatch2(const MessageRef& m)
   case CEPH_MSG_WATCH_NOTIFY: {
     auto priv = m->get_connection()->get_priv();
     auto s = static_cast<OSDSession*>(priv.get());
-    if (s) {
+    if (s && dispatch_to_session_strand) {
       s->track_enqueue(m, [this, priv, s, m]() {
         handle_watch_notify(cref_cast<MWatchNotify>(m));
         s->track_dequeue(m);
@@ -1137,7 +1137,7 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
   case CEPH_MSG_OSD_BACKOFF: {
     auto priv = m->get_connection()->get_priv();
     auto s = static_cast<OSDSession*>(priv.get());
-    if (s) {
+    if (s && dispatch_to_session_strand) {
       s->track_enqueue(m, [this, priv, s, m]() {
         handle_osd_backoff(cref_cast<MOSDBackoff>(m));
         s->track_dequeue(m);
@@ -1154,7 +1154,7 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef& m)
     if (m->get_source().type() == CEPH_ENTITY_TYPE_OSD) {
       auto priv = m->get_connection()->get_priv();
       auto s = static_cast<OSDSession*>(priv.get());
-      if (s) {
+      if (s && dispatch_to_session_strand) {
         s->track_enqueue(m, [this, priv, s, m]() {
           handle_command_reply(cref_cast<MCommandReply>(m));
           s->track_dequeue(m);
@@ -5591,6 +5591,7 @@ Objecter::Objecter(CephContext *cct,
 {
   mon_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
+  dispatch_to_session_strand = cct->_conf.get_val<bool>("objecter_dispatch_to_session_strand");
   min_split_replica_read_size
     = cct->_conf.get_val<uint64_t>("osd_min_split_replica_read_size");
   ceph_assert(min_split_replica_read_size >= SplitOp::REPLICA_MIN_SPLIT_SIZE ||
