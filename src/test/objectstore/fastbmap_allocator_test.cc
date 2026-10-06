@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "os/bluestore/fastbmap_allocator_impl.h"
+#include "global/global_context.h"
 
 class TestAllocatorLevel01 : public AllocatorLevel01Loose
 {

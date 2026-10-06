@@ -31,6 +31,7 @@
 #include "include/intarith.h" // for round_up_to()
 
 #include "include/ceph_assert.h"
+#include "include/uuid.h"
 
 // Decode-failure tolerance for BlueStore fsck/repair (tracker #77325).
 // Regular I/O still crashes on corrupt decode; a caller can opt in via
