@@ -265,6 +265,8 @@ int librados::RadosClient::connect()
   if (!objecter)
     goto out;
   objecter->set_balanced_budget();
+  // Clients must direct ops to the source of a pool migration
+  objecter->set_honor_pool_migration();
 
   monclient.set_messenger(messenger);
   mgrclient.set_messenger(messenger);

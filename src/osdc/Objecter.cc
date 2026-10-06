@@ -3174,6 +3174,34 @@ int Objecter::_calc_target(op_target_t *t, snapid_t snap, bool any_change)
     }
     actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
     actual_pgid = pg_t(actual_ps, pgid.pool());
+    if (honor_pool_migration) {
+      // The migration target carries the user-facing pool name, so a client
+      // addressing a pool by name lands here on the target. Route the op back to
+      // the chain root as the single authority for the pool. Only targets (tips)
+      // are reverse-redirected here; ops addressed to a source stub fall through
+      // to the forward-cascade below.
+      int64_t root_pool =
+        osdmap->get_pool_migration_root_from_target(t->target_oloc.pool);
+      if (root_pool >= 0) {
+        const pg_pool_t *spi = osdmap->get_pg_pool(root_pool);
+        if (!spi) {
+          t->osd = -1;
+          return RECALC_OP_TARGET_POOL_DNE;
+        }
+        t->target_oloc.pool = root_pool;
+        pi = spi;
+        pg_num = pi->get_pg_num();
+        pg_num_mask = pi->get_pg_num_mask();
+        int ret = osdmap->object_locator_to_pg(t->target_oid, t->target_oloc,
+                                               pgid);
+        if (ret == -ENOENT) {
+          t->osd = -1;
+          return RECALC_OP_TARGET_POOL_DNE;
+        }
+        actual_ps = ceph_stable_mod(pgid.ps(), pg_num, pg_num_mask);
+        actual_pgid = pg_t(actual_ps, pgid.pool());
+      }
+    }
     if (pi->is_migration_src()) {
       // pool is migrating or has finished migration
       const pg_pool_t *tpi = osdmap->get_pg_pool(*pi->migration_target);

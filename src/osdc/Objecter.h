@@ -1778,6 +1778,9 @@ private:
   std::atomic<int> global_op_flags{0}; // flags which are applied to each IO op
   bool keep_balanced_budget = false;
   bool honor_pool_full = true;
+  // True only on client objecters to route ops to the source pool. Remains false
+  // in the OSD objecter so ops can be sent directly to the target pool.
+  bool honor_pool_migration = false;
 
   std::atomic<int> extra_read_flags{0};
 
@@ -2831,6 +2834,9 @@ private:
 
   void set_honor_pool_full() { honor_pool_full = true; }
   void unset_honor_pool_full() { honor_pool_full = false; }
+
+  void set_honor_pool_migration() { honor_pool_migration = true; }
+  void unset_honor_pool_migration() { honor_pool_migration = false; }
 
   void _scan_requests(
     OSDSession *s,

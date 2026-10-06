@@ -513,6 +513,8 @@ MDSRank::MDSRank(
 
   objecter->unset_honor_pool_full();
   objecter->set_balanced_budget();
+  // Clients must direct ops to the source of a pool migration
+  objecter->set_honor_pool_migration();
 
   finisher = new Finisher(cct, "MDSRank", "mds-rank-fin");
 

@@ -455,6 +455,9 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 
   mdsmap.reset(new MDSMap);
 
+  // Clients must direct ops to the source of a pool migration
+  objecter->set_honor_pool_migration();
+
   // osd interfaces
   writeback_handler.reset(new ObjecterWriteback(objecter, &objecter_finisher,
 					    &client_lock));
