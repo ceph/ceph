@@ -1051,6 +1051,9 @@ def deploy_daemon_units(
             _osd_unit_poststop_commands(ctx, ident, osd_fsid)
         )
     if ident.daemon_type == CephIscsi.daemon_type:
+        # Load target_core_user so rbd-target-api can contact the API (required on
+        # some distros e.g. Fedora 43 where it is in kernel-modules-extra).
+        pre_start_commands.append(CephIscsi.shell_load_target_core_user())
         pre_start_commands.append(
             CephIscsi.configfs_mount_umount(data_dir, mount=True)
         )
