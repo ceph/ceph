@@ -26,6 +26,7 @@
 #include <fstream>
 #include "global/global_context.h"
 #include "rbd_replay_debug.hpp"
+#include "common/cmdparse.h"
 
 #define dout_context g_ceph_context
 
