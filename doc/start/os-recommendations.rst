@@ -90,6 +90,11 @@ Since Umbrella the container image is built on Rocky Linux 10 (CentOS 9
 Stream before that). The host does not need to run Rocky 10; any
 distribution marked H above works.
 
+Rocky Linux 10 requires the x86-64-v3 microarchitecture level, so on the x86
+architecture the container image runs only on CPUs that support x86-64-v3,
+whatever distribution the host runs. For the first CPU generations that
+support it, see :ref:`CPU and Memory Sizing <hardware-cpu>`.
+
 .. note:: ARM architecture containers provide a limited set of daemons.
    Check that the daemons you need are available before you plan an ARM
    deployment.
