@@ -101,10 +101,22 @@ class Lvm(BaseObjectStore):
             logger.debug('data device size: {}'.format(self.args.data_size))
             if self.args.data_size != 0:
                 kwargs['size'] = self.args.data_size
-            return api.create_lv(
+            lv, fcm_reservation = api.create_lv(
                 lv_name_prefix,
                 osd_uuid,
                 **kwargs)
+            # Store FCM reservation for Sub-Task 3 metadata file writing
+            if fcm_reservation:
+                self.fcm_reservation = fcm_reservation
+                # Add FCM reservation to self.tags so they're persisted during prepare()
+                # (via block_lv.set_tags(self.tags) call in prepare flow)
+                self.tags.update({
+                    'ceph.fcm_reservation_total_bytes': str(fcm_reservation['total_bytes']),
+                    'ceph.fcm_reservation_lba_size_bytes': str(fcm_reservation['lba_size_bytes']),
+                    'ceph.fcm_reservation_slot_size_bytes': str(fcm_reservation['slot_size_bytes']),
+                    'ceph.fcm_reservation_lv_size_bytes': str(fcm_reservation['lv_size_bytes'])
+                })
+            return lv
         else:
             error = [
                 'Cannot use device ({}).'.format(device),
@@ -155,6 +167,81 @@ class Lvm(BaseObjectStore):
         # 5/ bluestore mkfs
         # prepare the osd filesystem
         self.osd_mkfs()
+
+        # 6/ write FCM dedup reservation metadata files (if applicable)
+        if hasattr(self, 'fcm_reservation') and self.fcm_reservation:
+            self._write_fcm_metadata()
+
+    def _load_fcm_reservation_from_tags(self, osd_id: str) -> None:
+        """
+        Reconstruct FCM reservation from LVM tags.
+
+        Used during standalone activate() when prepare() was not called in the same session.
+        Reads fcm_reservation values from LVM tags and populates self.fcm_reservation.
+
+        :param osd_id: OSD ID to look up the block LV tags
+        """
+        from ceph_volume.api import lvm as api_lvm
+
+        # Find the block LV for this OSD
+        lvs = api_lvm.get_lvs(tags={'ceph.osd_id': osd_id, 'ceph.type': 'block'})
+        if not lvs:
+            logger.debug('No block LV found for OSD %s, cannot load FCM reservation', osd_id)
+            return
+
+        lv = lvs[0]
+        tags = lv.tags or {}
+
+        # Check if FCM reservation tags are present
+        if 'ceph.fcm_reservation_total_bytes' in tags:
+            try:
+                self.fcm_reservation = {
+                    'total_bytes': int(tags['ceph.fcm_reservation_total_bytes']),
+                    'lba_size_bytes': int(tags['ceph.fcm_reservation_lba_size_bytes']),
+                    'slot_size_bytes': int(tags['ceph.fcm_reservation_slot_size_bytes']),
+                    'lv_size_bytes': int(tags['ceph.fcm_reservation_lv_size_bytes'])
+                }
+                logger.info('Loaded FCM reservation from LVM tags for OSD %s', osd_id)
+            except (KeyError, ValueError) as e:
+                logger.warning('Failed to load FCM reservation from tags: %s', e)
+
+    def _write_fcm_metadata(self) -> None:
+        """
+        Write FCM dedup reservation metadata to OSD data directory.
+
+        Writes a single JSON file:
+        - fcm_dedup_metadata.json: JSON object with base_lba and size_lba
+
+        Fields:
+          base_lba  - start LBA of the reserved region on the device
+          size_lba  - size of the reserved region in LBAs
+
+        These values are read by the dedup process at startup to know which
+        LBA range it owns without needing to recompute or contact BlueStore.
+        """
+        fcm_res = self.fcm_reservation
+        lv_size_bytes = int(getattr(fcm_res['lv_size_bytes'], 'b', fcm_res['lv_size_bytes']))
+
+        # Compute LBA values
+        base_lba, size_lba = nvme_utils.fcm_reservation_lbas(
+            lv_size_bytes,
+            fcm_res['total_bytes'],
+            fcm_res['lba_size_bytes']
+        )
+
+        metadata = {
+            'base_lba': base_lba,
+            'size_lba': size_lba,
+        }
+
+        metadata_path = os.path.join(self.osd_path, 'fcm_dedup_metadata.json')
+        logger.info('Writing FCM dedup reservation metadata to %s: %s',
+                    metadata_path, metadata)
+
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f)
+
+        system.chown(metadata_path)
 
     def prepare_dmcrypt(self) -> None:
         # If encrypted, there is no need to create the lockbox keyring file
@@ -275,7 +362,14 @@ class Lvm(BaseObjectStore):
             "tags": tags,
         }
 
-        lv = None if disk.is_partition(device_name) else api.create_lv(**kwargs)
+        if disk.is_partition(device_name):
+            lv = None
+            fcm_reservation = None
+        else:
+            lv, fcm_reservation = api.create_lv(**kwargs)
+            # Store FCM reservation for Sub-Task 3 metadata file writing
+            if fcm_reservation:
+                self.fcm_reservation = fcm_reservation
 
         if lv is not None:
             tags.update(
@@ -284,6 +378,14 @@ class Lvm(BaseObjectStore):
                     f"ceph.{device_type}_device": lv.lv_path,
                 }
             )
+            # Persist FCM reservation to LVM tags for standalone activate()
+            if fcm_reservation:
+                tags.update({
+                    'ceph.fcm_reservation_total_bytes': str(fcm_reservation['total_bytes']),
+                    'ceph.fcm_reservation_lba_size_bytes': str(fcm_reservation['lba_size_bytes']),
+                    'ceph.fcm_reservation_slot_size_bytes': str(fcm_reservation['slot_size_bytes']),
+                    'ceph.fcm_reservation_lv_size_bytes': str(fcm_reservation['lv_size_bytes'])
+                })
             self.tags.update(tags)
             lv.set_tags(tags)
             return lv.lv_path
@@ -442,6 +544,14 @@ class Lvm(BaseObjectStore):
             process.run(['ln', '-snf', wal_device_path, destination])
             system.chown(wal_device_path)
             system.chown(destination)
+
+        # Write FCM dedup metadata files if they were computed during prepare/create
+        # For standalone activate (without prepare in same session), try to load from LVM tags
+        if not hasattr(self, 'fcm_reservation') or not self.fcm_reservation:
+            self._load_fcm_reservation_from_tags(osd_id)
+
+        if hasattr(self, 'fcm_reservation') and self.fcm_reservation:
+            self._write_fcm_metadata()
 
         if no_systemd is False:
             # enable the ceph-volume unit for this OSD
