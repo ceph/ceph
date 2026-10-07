@@ -5,7 +5,7 @@
 #include "journal/Future.h"
 #include "journal/Utils.h"
 #include "include/ceph_assert.h"
-#include "include/types.h" // for operator<<(std::set)
+#include "include/container_ios.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/Timer.h"
 #include "common/errno.h"
