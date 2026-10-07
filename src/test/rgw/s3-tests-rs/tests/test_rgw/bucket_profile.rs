@@ -312,3 +312,92 @@ async fn test_reissuing_the_profile_is_a_no_op() {
     assert_eq!(again.get("converted.objects").map(String::as_str), Some("0"),
         "a settled bucket was walked again");
 }
+
+/// Conversion must not lose an object's owner.
+///
+/// While a bucket is unmarked, an object with no recorded ACL answers
+/// its owner from the inode -- `NooBaaXattrStrategy::object_owner()`
+/// returns the file's uid, because NooBaa's format has nowhere to put
+/// an ACL and their own gateway stores none.  The moment the bucket is
+/// marked that reader is gone and the recorded ACL is the only source,
+/// so conversion has to write down the answer it would have given.
+///
+/// The test measures both sides rather than naming a uid:  it reads the
+/// owner before conversion and again after, and requires them to be
+/// equal.  That makes it independent of which account runs the gateway.
+///
+/// **This is a control that can fail.**  A base bucket genuinely stores
+/// no ACL -- `disk_name(RGW_ATTR_ACL)` returns the empty string on that
+/// mapping -- so before the capture exists the object comes out of
+/// conversion with no owner, and the two reads differ.
+#[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
+#[tokio::test]
+async fn test_conversion_keeps_an_objects_inode_owner() {
+    let _guard = TestGuard::setup();
+    if !nsfs_only().await {
+        eprintln!("not nsfs;  nothing to check");
+        return;
+    }
+    let f = features().await.unwrap();
+    if f.get_bool("extensions_default") != Some(true) {
+        eprintln!("reversible mode;  extending a bucket is refused by design");
+        return;
+    }
+
+    let client = get_client();
+    let bucket = get_new_bucket(Some(&client)).await;
+
+    /* Reduce while empty:  a profile cannot be reduced on a bucket that
+     * holds content, and base is the only way to reach the state where
+     * an object is written without an ACL. */
+    if nsfs_set_profile(&bucket, "base").await.is_none() {
+        eprintln!("profile endpoint unavailable;  nothing to check");
+        return;
+    }
+
+    let key = "owner-survives-conversion";
+    client.put_object()
+        .bucket(&bucket)
+        .key(key)
+        .body(b"x".to_vec().into())
+        .send()
+        .await
+        .expect("a base bucket should accept a write");
+
+    let before = client.get_object_acl()
+        .bucket(&bucket)
+        .key(key)
+        .send()
+        .await
+        .expect("an unmarked bucket answers the owner from the inode");
+    let before_id = before.owner()
+        .and_then(|o| o.id())
+        .expect("the uid reader should have answered with an owner")
+        .to_string();
+    assert!(!before_id.is_empty(), "an empty owner is not an answer");
+
+    nsfs_set_profile(&bucket, "shared").await
+        .expect("profile should answer");
+
+    let after = client.get_object_acl()
+        .bucket(&bucket)
+        .key(key)
+        .send()
+        .await
+        .expect("a converted object should still answer its ACL");
+    let after_id = after.owner()
+        .and_then(|o| o.id())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+
+    assert_eq!(after_id, before_id,
+        "conversion lost the owner the inode was answering:  before {before_id:?}, after {after_id:?}");
+
+    /* What it writes is RGW's default policy, not a bare owner.  An
+     * owner with no grants is a shape RGW never produces, and it would
+     * be more restrictive than the absence it replaced -- with no ACL
+     * at all, authorization falls through to the bucket. */
+    assert!(!after.grants().is_empty(),
+        "the captured ACL grants nobody anything, which is more restrictive \
+         than the no-ACL state it replaced");
+}
