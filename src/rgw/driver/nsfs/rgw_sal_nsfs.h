@@ -685,6 +685,11 @@ protected:
    * inject_skip_reclone:  the negative case belongs in the test rather than
    * in a hand-edited build */
   bool inject_fsio_skip_cleanup{false};
+  /* make conversion behave as a daemon without CAP_CHOWN, so a test can
+   * assert that it refuses rather than creating a file whose owner is
+   * wrong.  The capability is not droppable in a test process -- a
+   * thread cannot regain it -- so the condition has to be injected */
+  bool inject_no_chown{false};
 
 public:
   NSFSDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
@@ -1094,6 +1099,7 @@ public:
     }
   }
   bool skip_reclone_injected() const { return inject_skip_reclone; }
+  bool no_chown_injected() const { return inject_no_chown; }
   int rename_fail_after_injected() const { return inject_rename_fail_after; }
   int rename_abandon_injected() const { return inject_rename_abandon; }
   bool fsio_attrs_fail_injected() const { return inject_fsio_attrs_fail; }

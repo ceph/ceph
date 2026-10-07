@@ -371,6 +371,64 @@ static bool nsfs_apply_non_md5_etag(const DoutPrefixProvider* dpp, int fd,
   return true;
 }
 
+/* The uid and gid of an open descriptor.
+ *
+ * Conversion wants them twice:  for the owner it records on an object
+ * that never had one, and for the files it creates. */
+static int statx_ids(int fd, struct statx& stx)
+{
+  if (::statx(fd, "", AT_EMPTY_PATH, STATX_UID | STATX_GID, &stx) < 0) {
+    return -errno;
+  }
+  if ((stx.stx_mask & (STATX_UID | STATX_GID))
+      != (STATX_UID | STATX_GID)) {
+    return -EOPNOTSUPP;
+  }
+  return 0;
+}
+
+/* Conversion creates nothing new.  Every file it writes re-expresses
+ * something that is already there, so it takes that thing's uid and
+ * gid -- the sentinel from the directory it replaces, an upload's
+ * files from theirs.
+ *
+ * Not the gateway's, which would leave a converted directory object
+ * unreadable to the account that owns the data.  And not an
+ * account's:  a sideloaded file may belong to a uid no account maps
+ * to, and there would be nobody to be.
+ *
+ * A no-op when the source is already ours, which is every file on a
+ * tree this gateway wrote, and which needs no capability.  Otherwise
+ * it needs CAP_CHOWN -- a fourth beyond the three the daemon is given
+ * -- and without it conversion refuses rather than leaving behind a
+ * file whose owner is wrong. */
+static int inherit_ids(const DoutPrefixProvider* dpp, int fd,
+		       const struct statx& src, bool no_chown,
+		       std::string_view what)
+{
+  if ((src.stx_uid == ::geteuid()) && (src.stx_gid == ::getegid())) {
+    return 0;
+  }
+  if (no_chown) {
+    ldpp_dout(dpp, 0) << "ERROR: refusing to create " << what
+      << " for uid " << src.stx_uid << ":" << src.stx_gid
+      << ":  chown is unavailable (injected)" << dendl;
+    return -EPERM;
+  }
+  if (::fchown(fd, src.stx_uid, src.stx_gid) < 0) {
+    int ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: cannot give " << what << " the uid "
+      << src.stx_uid << ":" << src.stx_gid << " of what it re-expresses: "
+      << cpp_strerror(-ret)
+      << (ret == -EPERM
+	  ? ";  the daemon needs CAP_CHOWN to convert a tree it does not own"
+	  : "")
+      << dendl;
+    return ret;
+  }
+  return 0;
+}
+
 
 /* LMDB comparator for versioned bucket listing.
  * Key format: name \0 instance.
@@ -5820,6 +5878,51 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
 
+  /* Capture the owner, because marking the bucket is what destroys it.
+   *
+   * An object with no recorded ACL answers its owner from the inode
+   * while the bucket is unmarked -- NooBaaXattrStrategy::object_owner()
+   * returns the uid.  The moment the mask goes down that reader is
+   * gone and the recorded ACL is the only source, so an object
+   * converted without one has no owner at all and lists as
+   * unknown/unknown.
+   *
+   * Nothing is invented:  the unconverted reader already answers with
+   * the uid, so this writes down the same answer.  What it writes is
+   * RGW's default policy and not an owner alone, because an
+   * owner-with-no-grants is a shape RGW never produces and is *more
+   * restrictive than the absence it replaces* -- with no ACL
+   * authorization falls through to the bucket.  The display name stays
+   * empty, which is what the uid reader had.
+   *
+   * Ordinary objects only.  A bucket's owner is not an inode fact and
+   * arrives with the account import;  a directory object does not come
+   * through here at all, because its attributes move from the directory
+   * to the sentinel rather than being rewritten in place, and
+   * convert_directory() captures its owner where that move happens. */
+  if ((base_ev.kind == nsfs::ConvertEvent::Kind::object) &&
+      (attrs.find(RGW_ATTR_ACL) == attrs.end())) {
+    struct statx ostx{};
+    ret = statx_ids(fd, ostx);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: cannot stat " << display
+	<< " to capture its owner: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    ACLOwner owner;
+    if (theirs->object_owner(attrs, &ostx, owner) == 0) {
+      RGWAccessControlPolicy policy;
+      policy.create_default(owner.id, owner.display_name);
+      bufferlist aclbl;
+      policy.encode(aclbl);
+      const std::string mine = ours->disk_name(RGW_ATTR_ACL);
+      if (!mine.empty()) {
+	to_write.insert_or_assign(mine, attr_on_disk(ours, RGW_ATTR_ACL,
+						     aclbl));
+      }
+    }
+  }
+
   if (cb) {
     nsfs::ConvertEvent ev = base_ev;
     ev.phase = nsfs::ConvertEvent::Phase::before;
@@ -5883,7 +5986,8 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 			     const nsfs::PathStrategy* their_paths,
 			     const nsfs::ReservedNames& rn,
 			     nsfs::convert_cb_t* cb,
-			     nsfs::ConvertProgress& progress)
+			     nsfs::ConvertProgress& progress,
+			     bool no_chown)
 {
   int ret = d->open(dpp);
   if (ret < 0) {
@@ -5968,8 +6072,11 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
     nsfs::PathStrategy::DirectoryObject dobj{};
     if (their_paths->directory_object(dpp, sub.get_fd(), dobj)) {
       const std::string sname = their_paths->folder_object_name();
+      /* 0644, which is what the ordinary write path creates an object
+       * with -- afterwards this is indistinguishable from one RGW
+       * wrote, so it should not be more private than one */
       int sfd = ::openat(sub.get_fd(), sname.c_str(),
-			 O_RDONLY | O_CREAT, S_IRUSR | S_IWUSR);
+			 O_RDONLY | O_CREAT, 0644);
       if (sfd < 0) {
 	ret = -errno;
 	ldpp_dout(dpp, 0) << "ERROR: creating " << sname << " under "
@@ -5978,6 +6085,31 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 	return ret;
       }
       auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
+
+      /* The sentinel re-expresses the directory, so it takes the
+       * directory's uid and gid. */
+      struct statx dstx{};
+      ret = statx_ids(sub.get_fd(), dstx);
+      if (ret < 0) {
+	ldpp_dout(dpp, 0) << "ERROR: cannot stat " << prefix << name
+	  << " to give " << sname << " its owner: "
+	  << cpp_strerror(-ret) << dendl;
+	return ret;
+      }
+      ret = inherit_ids(dpp, sfd, dstx, no_chown, sname);
+      if (ret < 0) {
+	/* The sentinel exists by now, and the whole point of refusing is
+	 * not to leave a file whose owner is wrong.  Take it back out --
+	 * the directory object is still theirs and still readable
+	 * through the fallback, which is where a stopped conversion
+	 * leaves everything else. */
+	if (::unlinkat(sub.get_fd(), sname.c_str(), 0) < 0) {
+	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << sname
+	    << " after refusing to create it: " << cpp_strerror(errno)
+	    << dendl;
+	}
+	return ret;
+      }
 
       nsfs::ConvertEvent ev{};
       ev.kind = nsfs::ConvertEvent::Kind::directory_object;
@@ -6004,6 +6136,24 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 	const std::string mine = ours->disk_name(key);
 	if (!mine.empty()) {
 	  to_write.try_emplace(mine, attr_on_disk(ours, key, bl));
+	}
+      }
+      /* Capture the owner, for the reason convert_attrs() gives:  the
+       * uid reader goes away with the mask.  Here the inode that
+       * answered it is the directory, and the answer lands on the
+       * sentinel along with everything else that moves. */
+      if (dattrs.find(RGW_ATTR_ACL) == dattrs.end()) {
+	ACLOwner owner;
+	if (theirs->object_owner(dattrs, &dstx, owner) == 0) {
+	  RGWAccessControlPolicy policy;
+	  policy.create_default(owner.id, owner.display_name);
+	  bufferlist aclbl;
+	  policy.encode(aclbl);
+	  const std::string mine = ours->disk_name(RGW_ATTR_ACL);
+	  if (!mine.empty()) {
+	    to_write.insert_or_assign(mine, attr_on_disk(ours, RGW_ATTR_ACL,
+							 aclbl));
+	  }
 	}
       }
       if (!to_write.empty()) {
@@ -6057,7 +6207,8 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
     }
 
     ret = convert_directory(dpp, y, &sub, cct, prefix + name + "/", fs,
-			    ours, theirs, their_paths, rn, cb, progress);
+			    ours, theirs, their_paths, rn, cb, progress,
+			    no_chown);
     if (ret != 0) {
       return ret;
     }
@@ -6180,6 +6331,26 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       }
       auto close_mfd = make_scope_guard([mfd] { ::close(mfd); });
 
+      /* re-expresses their staging directory, so it takes its ids */
+      struct statx tdstx{};
+      ret = statx_ids(theirdir.get_fd(), tdstx);
+      if (ret < 0) {
+	ldpp_dout(dpp, 0) << "ERROR: cannot stat the staging of " << meta
+	  << " to give " << mname << " its owner: " << cpp_strerror(-ret)
+	  << dendl;
+	return ret;
+      }
+      ret = inherit_ids(dpp, mfd, tdstx, driver->no_chown_injected(),
+			mname);
+      if (ret < 0) {
+	if (::unlinkat(ourdir.get_fd(), mname.c_str(), 0) < 0) {
+	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << mname
+	    << " after refusing to create it: " << cpp_strerror(errno)
+	    << dendl;
+	}
+	return ret;
+      }
+
       ACLOwner mp_owner;
       /* The bucket's owner, not theirs.  Their staging carries none --
        * upload_owner() answers from the directory's uid, which is a
@@ -6287,6 +6458,25 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	return ret;
       }
       auto close_dfd = make_scope_guard([dfd] { ::close(dfd); });
+
+      /* re-expresses their part file, so it takes its ids */
+      struct statx pstx{};
+      ret = statx_ids(sfd, pstx);
+      if (ret < 0) {
+	ldpp_dout(dpp, 0) << "ERROR: cannot stat " << sname << " to give "
+	  << ourname << " its owner: " << cpp_strerror(-ret) << dendl;
+	return ret;
+      }
+      ret = inherit_ids(dpp, dfd, pstx, driver->no_chown_injected(),
+			ourname);
+      if (ret < 0) {
+	if (::unlinkat(ourdir.get_fd(), ourname.c_str(), 0) < 0) {
+	  ldpp_dout(dpp, 0) << "ERROR: could not remove " << ourname
+	    << " after refusing to create it: " << cpp_strerror(errno)
+	    << dendl;
+	}
+	return ret;
+      }
 
       if (rec.stored > 0) {
 	ret = fs->copy_range(dpp, sfd, rec.offset, dfd, 0, rec.stored);
@@ -6601,7 +6791,8 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
   ret = convert_directory(dpp, y, dir.get(), driver->ctx(),
 			  std::string(), driver->get_fs_strategy(),
 			  xattr_strategy(), theirs, their_paths,
-			  driver->get_reserved_names(), cb, prog);
+			  driver->get_reserved_names(), cb, prog,
+			  driver->no_chown_injected());
   if (ret == 0) {
     ret = convert_uploads(dpp, y, cb, prog);
   }
@@ -12974,6 +13165,23 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
        * so a test can prove which path ran rather than assume it */
       (*out)["buffered_bytes"] =
 	std::to_string(fs_strategy->take_buffered_bytes());
+    }
+    return 0;
+  }
+
+  if (hint == "inject-no-chown") {
+    /* behave as a daemon without CAP_CHOWN, so a test can assert that
+     * conversion refuses rather than creating a file owned by the
+     * gateway.  The capability cannot be dropped in a test process --
+     * a thread that drops it cannot regain it, which would poison
+     * every later test -- so the condition is injected instead. */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    inject_no_chown = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = inject_no_chown ? "true" : "false";
     }
     return 0;
   }
