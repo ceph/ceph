@@ -128,13 +128,13 @@ class Inventory:
         return list(self._inventory.keys())
 
     def __contains__(self, host: str) -> bool:
-        return host in self._inventory or host in itertools.chain.from_iterable(self._all_known_names.values())
+        return host in self._inventory or host in itertools.chain.from_iterable(list(self._all_known_names.values()))
 
     def _get_stored_name(self, host: str) -> str:
         self.assert_host(host)
         if host in self._inventory:
             return host
-        for stored_name, all_names in self._all_known_names.items():
+        for stored_name, all_names in list(self._all_known_names.items()):
             if host in all_names:
                 return stored_name
         return host
@@ -225,11 +225,11 @@ class Inventory:
         )
 
     def all_specs(self) -> List[HostSpec]:
-        return list(map(self.spec_from_dict, self._inventory.values()))
+        return [self.spec_from_dict(v) for v in list(self._inventory.values())]
 
     def get_host_with_state(self, state: str = "") -> List[str]:
         """return a list of host names in a specific state"""
-        return [h for h in self._inventory if self._inventory[h].get("status", "").lower() == state]
+        return [h for h in list(self._inventory) if self._inventory[h].get("status", "").lower() == state]
 
     def save(self) -> None:
         self.mgr.set_store('inventory', json.dumps(self._inventory))
@@ -1068,12 +1068,12 @@ class HostCache():
         if host in self.last_tuned_profile_update:
             j['last_tuned_profile_update'] = datetime_to_str(self.last_tuned_profile_update[host])
         if host in self.daemons:
-            for name, dd in self.daemons[host].items():
+            for name, dd in list(self.daemons[host].items()):
                 j['daemons'][name] = dd.to_json()
         if host in self.networks:
             j['networks_and_interfaces'] = self.networks[host]
         if host in self.daemon_config_deps:
-            for name, depi in self.daemon_config_deps[host].items():
+            for name, depi in list(self.daemon_config_deps[host].items()):
                 j['daemon_config_deps'][name] = {
                     'deps': depi.get('deps', []),
                     'last_config': datetime_to_str(depi['last_config']),
@@ -1081,16 +1081,16 @@ class HostCache():
         if host in self.osdspec_previews and self.osdspec_previews[host]:
             j['osdspec_previews'] = self.osdspec_previews[host]
         if host in self.osdspec_last_applied:
-            for name, ts in self.osdspec_last_applied[host].items():
+            for name, ts in list(self.osdspec_last_applied[host].items()):
                 j['osdspec_last_applied'][name] = datetime_to_str(ts)
 
         if host in self.last_host_check:
             j['last_host_check'] = datetime_to_str(self.last_host_check[host])
 
         if host in self.last_client_files:
-            j['last_client_files'] = self.last_client_files[host]
+            j['last_client_files'] = dict(self.last_client_files[host])
         if host in self.scheduled_daemon_actions:
-            j['scheduled_daemon_actions'] = self.scheduled_daemon_actions[host]
+            j['scheduled_daemon_actions'] = dict(self.scheduled_daemon_actions[host])
         if host in self.metadata_up_to_date:
             j['metadata_up_to_date'] = self.metadata_up_to_date[host]
         if host in self.devices:
@@ -1302,12 +1302,12 @@ class HostCache():
         return self.facts.get(host, {})
 
     def _get_daemons(self) -> Iterator[orchestrator.DaemonDescription]:
-        for dm in self.daemons.copy().values():
-            yield from dm.values()
+        for dm in list(self.daemons.values()):
+            yield from list(dm.values())
 
     def _get_tmp_daemons(self) -> Iterator[orchestrator.DaemonDescription]:
-        for dm in self._tmp_daemons.copy().values():
-            yield from dm.values()
+        for dm in list(self._tmp_daemons.values()):
+            yield from list(dm.values())
 
     def get_daemons(self):
         # type: () -> List[orchestrator.DaemonDescription]
@@ -1352,7 +1352,8 @@ class HostCache():
             dd.events = self.mgr.events.get_for_daemon(dd.name())
             return dd
 
-        for host, dm in self.daemons.copy().items():
+        snapshot = {host: dict(dm) for host, dm in list(self.daemons.items())}
+        for host, dm in snapshot.items():
             yield host, {name: alter(host, d) for name, d in dm.items()}
 
     def get_daemons_by_service(self, service_name):
@@ -1379,7 +1380,7 @@ class HostCache():
 
     def get_daemons_by_type(self, service_type: str, host: str = '') -> List[orchestrator.DaemonDescription]:
         assert service_type not in ['keepalived', 'haproxy']
-        daemons = self.daemons[host].values() if host else self._get_daemons()
+        daemons = list(self.daemons[host].values()) if host else self._get_daemons()
         return [d for d in daemons if d.daemon_type in service_to_daemon_types(service_type)]
 
     def get_daemons_by_types(self, daemon_types: List[str]) -> List[str]:
@@ -1391,7 +1392,7 @@ class HostCache():
 
     def get_daemon_types(self, hostname: str) -> Set[str]:
         """Provide a list of the types of daemons on the host"""
-        return cast(Set[str], {d.daemon_type for d in self.daemons[hostname].values()})
+        return cast(Set[str], {d.daemon_type for d in list(self.daemons[hostname].values())})
 
     def get_daemon_names(self):
         # type: () -> List[str]
