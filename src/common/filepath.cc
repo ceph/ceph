@@ -110,14 +110,6 @@ void filepath::set_trimmed() {
   trimmed = true;
 }
 
-void filepath::set_string(std::string_view s)
-{
-  /* Yup, this is super evil. We use this to encode a symlink target for over-the-wire encoding. */
-  clear();
-  _path.assign(s.begin(), s.end());
-  _path.emplace_back('\0');
-}
-
 void filepath::_set_path(std::string_view s)
 {
   _path.clear(); /* remove everything include NUL */
@@ -239,9 +231,8 @@ void filepath::decode(ceph::buffer::list::const_iterator& blp)
   decode(_ino, blp);
   std::string p;
   decode(p, blp);
-  /* N.B. may be used as std::string storage (xattr / symlink target). Do not
-   * use _set_path() for normalization. Also, it may be a snappath beginning
-   * with '/'.
+  /* N.B. Do not use _set_path() for normalization. It may be a snappath
+   * beginning with '/'.
    */
   _path.assign(p.begin(), p.end());
   _path.emplace_back('\0');

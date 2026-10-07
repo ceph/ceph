@@ -2937,7 +2937,11 @@ ref_t<MClientRequest> Client::build_client_request(MetaRequest *request, mds_ran
 		   << dendl;
   }
   req->set_filepath(request->get_filepath());
-  req->set_filepath2(request->get_filepath2());
+  if (request->holds_filepath2()) {
+    req->set_filepath2(request->get_filepath2());
+  } else if (request->holds_string2()) {
+    req->set_string2(request->get_string2());
+  }
   req->set_alternate_name(request->alternate_name);
   req->set_data(request->data);
   req->fscrypt_auth = request->fscrypt_auth;
@@ -10110,7 +10114,7 @@ int Client::readdir_r_cb(dir_result_t* d,
     req->head.args.readdir.frag = fg;
     req->head.args.readdir.flags = CEPH_READDIR_REPLY_BITFLAGS;
     if (dirp->last_name.length()) {
-      req->path2.set_path(dirp->last_name);
+      req->set_string2(dirp->last_name);
     } else if (dirp->hash_order()) {
       req->head.args.readdir.offset_hash = dirp->offset_high();
     }
@@ -10616,7 +10620,7 @@ int Client::readdir_snapdiff(dir_result_t* d1, snapid_t snap2,
       req->head.args.snapdiff.frag = fg;
       req->head.args.snapdiff.flags = CEPH_READDIR_REPLY_BITFLAGS;
       if (dirp->last_name.length()) {
-	req->path2.set_path(dirp->last_name);
+	req->set_string2(dirp->last_name);
       } else if (dirp->hash_order()) {
 	req->head.args.snapdiff.offset_hash = dirp->offset_high();
       }
