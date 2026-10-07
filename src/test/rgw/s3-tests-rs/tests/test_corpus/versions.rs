@@ -23,11 +23,40 @@ use crate::generate::{ensure_bucket, env_or, out_dir};
 use crate::manifest::Manifest;
 use crate::names::bucket;
 
+/// Record an entry's owner, and flag it when there is not one.
+///
+/// RGW emits an `<Owner>` for a delete marker as well as for a version
+/// -- `rgw_rest_s3.cc` calls `dump_owner()` outside the
+/// `is_delete_marker()` guard, which suppresses only ETag, Size and
+/// StorageClass.  On this backend that field reads from the recorded
+/// ACL and nothing else, and the driver substitutes the literal string
+/// `unknown` when there is no ACL to read.  So `unknown` is the shape
+/// the defect takes:  a DELETE of a key that does not exist still
+/// writes a marker, and there was no source ACL to copy onto it.
+fn note_owner(
+    m: &mut Manifest,
+    key: &str,
+    vid: &str,
+    id: Option<&str>,
+    offenders: &mut Vec<String>,
+) {
+    let id = id.unwrap_or("");
+    m.object(key, &format!("version.{vid}.owner"),
+             if id.is_empty() { "<none>" } else { id });
+    if id.is_empty() || id == "unknown" {
+        offenders.push(format!(
+            "{key:?} version {vid:?} has owner {:?}",
+            if id.is_empty() { "<none>" } else { id }
+        ));
+    }
+}
+
 /// Record every version and delete marker the bucket reports.
 async fn list_versions_into(
     client: &aws_sdk_s3::Client,
     b: &str,
     m: &mut Manifest,
+    owners: &mut Vec<String>,
 ) -> Vec<(String, String)> {
     let mut seen = Vec::new();
     let page = client
@@ -45,6 +74,7 @@ async fn list_versions_into(
         if let Some(sz) = v.size() {
             m.object(key, &format!("version.{vid}.size"), &sz.to_string());
         }
+        note_owner(m, key, vid, v.owner().and_then(|o| o.id()), owners);
         seen.push((key.to_string(), vid.to_string()));
     }
     for d in page.delete_markers() {
@@ -53,6 +83,7 @@ async fn list_versions_into(
         m.object(key, &format!("version.{vid}.delete-marker"), "true");
         m.object(key, &format!("version.{vid}.is-latest"),
                  &d.is_latest().unwrap_or(false).to_string());
+        note_owner(m, key, vid, d.owner().and_then(|o| o.id()), owners);
         seen.push((key.to_string(), vid.to_string()));
     }
     m.bucket(b, "versions.listed", &seen.len().to_string());
@@ -125,22 +156,16 @@ async fn run(tier: &str, label: &str, status: &str) {
         }
     }
 
-    let listed = list_versions_into(&client, &b, &mut m).await;
+    let mut ownerless = Vec::new();
+    let listed = list_versions_into(&client, &b, &mut m, &mut ownerless).await;
 
     let dir = out_dir();
     std::fs::create_dir_all(&dir).expect("manifest directory");
     let path = dir.join(format!("{tier}-{label}.manifest"));
     std::fs::write(&path, m.render()).expect("write manifest");
 
-    if let Ok(data_root) = std::env::var("CORPUS_DATA_ROOT") {
-        let bucket_dir = std::path::Path::new(&data_root).join(&b);
-        let mut inv = crate::inventory::Inventory::new();
-        if inv.walk(&bucket_dir).is_ok() {
-            let ipath = dir.join(format!("{tier}-{label}.inventory"));
-            std::fs::write(&ipath, inv.render()).expect("write inventory");
-            eprintln!("corpus {tier}/{label}: {} disk facts", inv.len());
-        }
-    }
+    let mode_problems =
+        crate::inventory::capture(&b, &dir, &format!("{tier}-{label}"));
 
     eprintln!(
         "corpus {tier}/{label}: versioning={status}, {} reported, {} listed, {} facts -> {}",
@@ -153,7 +178,8 @@ async fn run(tier: &str, label: &str, status: &str) {
     /* Reference-free properties.  A version the gateway *told the
      * client about* must be findable afterwards, and no entry may
      * appear twice -- both hold of any S3 implementation. */
-    let mut problems = Vec::new();
+    let mut problems = mode_problems;
+    problems.extend(ownerless);
     for (k, v) in &reported {
         if !listed.iter().any(|(lk, lv)| lk == k && lv == v) {
             problems.push(format!(
@@ -216,21 +242,16 @@ async fn corpus_coverage_versioning_suspended() {
     m.object("v-across-suspend", "versions-after-suspend",
              &post.len().to_string());
 
-    let listed = list_versions_into(&client, &b, &mut m).await;
+    let mut ownerless = Vec::new();
+    let listed = list_versions_into(&client, &b, &mut m, &mut ownerless).await;
 
     let dir = out_dir();
     std::fs::create_dir_all(&dir).expect("manifest directory");
     let path = dir.join(format!("{tier}-ver-suspended.manifest"));
     std::fs::write(&path, m.render()).expect("write manifest");
 
-    if let Ok(data_root) = std::env::var("CORPUS_DATA_ROOT") {
-        let bucket_dir = std::path::Path::new(&data_root).join(&b);
-        let mut inv = crate::inventory::Inventory::new();
-        if inv.walk(&bucket_dir).is_ok() {
-            let ipath = dir.join(format!("{tier}-ver-suspended.inventory"));
-            std::fs::write(&ipath, inv.render()).expect("write inventory");
-        }
-    }
+    let mode_problems =
+        crate::inventory::capture(&b, &dir, &format!("{tier}-ver-suspended"));
 
     eprintln!(
         "corpus {tier}/ver-suspended: {} listed, {} facts -> {}",
@@ -242,5 +263,13 @@ async fn corpus_coverage_versioning_suspended() {
     assert!(
         !listed.is_empty(),
         "a suspended bucket lost the versions it held while enabled"
+    );
+
+    let mut problems = mode_problems;
+    problems.extend(ownerless);
+    assert!(
+        problems.is_empty(),
+        "the suspended bucket's corpus breaks an invariant:\n  {}",
+        problems.join("\n  ")
     );
 }

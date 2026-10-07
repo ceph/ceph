@@ -150,15 +150,8 @@ async fn corpus_coverage_objects() {
     let path = dir.join(format!("{tier}-objects.manifest"));
     std::fs::write(&path, m.render()).expect("write manifest");
 
-    if let Ok(data_root) = std::env::var("CORPUS_DATA_ROOT") {
-        let bucket_dir = std::path::Path::new(&data_root).join(&b);
-        let mut inv = crate::inventory::Inventory::new();
-        if inv.walk(&bucket_dir).is_ok() {
-            let ipath = dir.join(format!("{tier}-objects.inventory"));
-            std::fs::write(&ipath, inv.render()).expect("write inventory");
-            eprintln!("corpus {tier}/objects: {} disk facts", inv.len());
-        }
-    }
+    let mode_problems =
+        crate::inventory::capture(&b, &dir, &format!("{tier}-objects"));
 
     eprintln!(
         "corpus {tier}/objects: {} written, {} refused, {} facts -> {}",
@@ -185,9 +178,11 @@ async fn corpus_coverage_objects() {
             problems.push(format!("{key:?} was written and HEAD fails"));
         }
     }
+    problems.extend(mode_problems);
+
     assert!(
         problems.is_empty(),
-        "objects the corpus wrote do not answer HEAD:\n  {}",
+        "the corpus disagrees with what the gateway did:\n  {}",
         problems.join("\n  ")
     );
 }

@@ -28,6 +28,10 @@ use crate::manifest::encode;
 #[derive(Default)]
 pub struct Inventory {
     lines: BTreeSet<String>,
+    /* Every regular file seen, with its mode.  Kept apart from the
+     * rendered lines so an invariant can read it without parsing the
+     * inventory's own output back. */
+    files: Vec<(String, u32)>,
 }
 
 impl Inventory {
@@ -101,6 +105,10 @@ impl Inventory {
                 if ty == "f" { md.size() } else { 0 }
             ));
 
+            if ty == "f" {
+                self.files.push((rel.clone(), md.mode() & 0o7777));
+            }
+
             for name in list_xattr_names(&path)? {
                 self.lines
                     .insert(format!("{}\txattr\t{}", encode(&rel), encode(&name)));
@@ -111,6 +119,24 @@ impl Inventory {
             }
         }
         Ok(())
+    }
+
+    /// Every object on this backend is published 0600.
+    ///
+    /// Invisible over S3, so no manifest or listing check can see it,
+    /// and nsfs trees are shared with NFS and POSIX clients where the
+    /// mode is what decides access.  This caught a zero-length object
+    /// at 0700:  both write paths narrow the mode themselves, an empty
+    /// body goes through neither, so the file kept the `S_IRWXU` its
+    /// `openat` was given.
+    ///
+    /// Returns one line per offender, empty when all is well.
+    pub fn check_object_modes(&self) -> Vec<String> {
+        self.files
+            .iter()
+            .filter(|(_, m)| *m != 0o600)
+            .map(|(p, m)| format!("{p:?} is mode {m:04o}, not 0600"))
+            .collect()
     }
 }
 
@@ -208,4 +234,35 @@ mod tests {
         sorted.sort_unstable();
         assert_eq!(keys, sorted, "not sorted bytewise");
     }
+}
+
+/// Take the disk half for one bucket, write it beside the manifest, and
+/// return what the disk-level invariants object to.
+///
+/// Optional because the S3 half runs anywhere and the filesystem half
+/// cannot:  `CORPUS_DATA_ROOT` names the gateway's data root, and
+/// without it the inventory is simply not taken (and nothing is
+/// asserted -- a remote run must not fail an invariant it cannot
+/// measure).  A workflow needing both on separate hosts carries the
+/// tree.
+///
+/// One function rather than a block per axis, so a new axis gets the
+/// invariants by calling this rather than by remembering to.
+pub fn capture(bucket: &str, dir: &Path, stem: &str) -> Vec<String> {
+    let Ok(data_root) = std::env::var("CORPUS_DATA_ROOT") else {
+        return Vec::new();
+    };
+    let bucket_dir = Path::new(&data_root).join(bucket);
+    let mut inv = Inventory::new();
+    if let Err(e) = inv.walk(&bucket_dir) {
+        eprintln!(
+            "corpus {stem}: no inventory, {} is not readable: {e}",
+            bucket_dir.display()
+        );
+        return Vec::new();
+    }
+    let ipath = dir.join(format!("{stem}.inventory"));
+    std::fs::write(&ipath, inv.render()).expect("write inventory");
+    eprintln!("corpus {stem}: {} disk facts -> {}", inv.len(), ipath.display());
+    inv.check_object_modes()
 }
