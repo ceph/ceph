@@ -1082,7 +1082,7 @@ fully designed but are not required for R1 and will land in a later release.
   temporarily unavailable.
 
 - **Per-Zone ``min_size`` Interaction**: Once per-zone ``min_size`` enforcement
-  (Section 11.2.2) is implemented, both the EC split-op path and the replica
+  (Section 11.2) is implemented, both the EC split-op path and the replica
   split-op path should also consult the per-zone availability state before
   choosing a zone for localized reads. This prevents routing reads to a zone
   that the monitor has already determined to be below its minimum shard
@@ -1628,12 +1628,13 @@ A replicated EC pool implicitly operates in stretch mode. Creation and configura
 simplified based on the final CLI iteration as noted above.
 
 - **CRUSH rule**: Set to the stretch CRUSH rule when stretch mode is active.
-- **min_size**: Managed by the monitor. Automatically adjusted during stretch
-  mode state transitions (Section 11.3).
+- **min_size**: Set at pool creation; never automatically changed by the
+  monitor during stretch mode state transitions. Users may still adjust it
+  manually via ``ceph osd pool set <pool> min_size <value>``.
 - **Peering**: Uses stretch-aware acting set calculation with parameters
   adjusted by the monitor during state transitions.
-- **Failure**: Automatic ``min_size`` reduction, degraded/recovery/healthy
-  stretch mode transitions — all managed by OSDMonitor.
+- **Failure**: Degraded/recovery/healthy stretch mode transitions managed by
+  OSDMonitor; ``min_size`` is not modified.
 
 **Prerequisites for ``num_zones > 1`` Pool Creation**
 
@@ -1646,7 +1647,7 @@ simplified based on the final CLI iteration as noted above.
      - Ensures all OSDs understand extended acting-set semantics (Section 15)
    * - Stretch mode must be enabled on the cluster
      - ``num_zones > 1`` pools require the stretch mode state machine for
-       ``min_size`` management and zone failover
+       zone failover
    * - ``zone_failure_domain`` must match the stretch mode failure domain
      - The CRUSH rule must align with the stretch cluster topology
 
@@ -1662,51 +1663,28 @@ replica pool, this is in the range ``1`` to ``size``, defining a tolerance of
 Let the number of tolerated failures derived from this setup be denoted as **F**.
 
 If num_zones > 1, then this setting is dynamically *interpreted*
-according to the cluster's stretch mode (Healthy, Degraded, Recovery). Both
-EC and Replica pools with multiple zones will interpret ``min_size`` this way,
+according to the cluster's stretch mode (Healthy, Degraded, Recovery). EC pools 
+with multiple zones will interpret ``min_size`` this way,
 rather than actively modifying the ``min_size`` setting whenever a stretch
 mode transition occurs.
 
-11.2.1 Per-Pool Min-Size Interpretations — *R1*
+11.2.1 Per-Zone Min-Size Interpretations
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The pool statically tolerates up to ``F`` OSD failures, but that tolerance
-applies to different scopes based on the active stretch mode:
-
-- **Healthy Mode**: There may be up to ``F`` OSD failures across the OSDs in
-  *all zones combined*.
-- **Degraded Mode**: There may be up to ``F`` OSD failures across the OSDs in
-  the *surviving zone(s)*. The failed zone is entirely ignored.
-- **Recovery Mode**: There may be up to ``F`` OSD failures across the OSDs in
-  the *surviving zone(s)*. The recovering zone is entirely ignored.
-
-.. note::
-   A partial failure within a zone may drop a pool below its ``min_size``
-   requirement and cause I/O to stop. Manually removing the rest of the failed
-   zone will cause a transition to **Degraded Stretch Mode**, which might be
-   sufficient to bring the pool back online because the ``min_size`` requirement
-   is now met by the surviving zone. There will be no automation to promote a
-   partial zone failure to a whole zone failure.
-
-11.2.2 Per-Zone Min-Size Interpretations — *Later Release*
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-A more sophisticated implementation will reinterpret this tolerance strictly on
-a per-zone basis:
-
 - There may be up to ``F`` OSD failures *in each individual zone*.
-- If any single zone experiences more than ``F`` OSD failures, it will
-  automatically trigger a transition into **Degraded Stretch Mode**, effectively
-  treating all OSDs in the zone as failed.
+- A partial failure within a zone may drop a pool below its ``min_size``
+  requirement and cause I/O to stop. Manually removing the rest of the failed
+  zone will cause a transition to **Degraded Stretch Mode**, which might be
+  sufficient to bring the pool back online because the ``min_size`` requirement
+  is now met by the surviving zone. There will be no automation to promote a
+  partial zone failure to a whole zone failure.
 
 11.3 Stretch Mode State Machine
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When stretch mode is enabled, the state machine behaves identically to the
 replica stretch mode state machine — leveraging the existing OSDMonitor
-infrastructure. As noted above, the explicit ``min_size`` setting is simply
-*interpreted* against this state machine, rather than actively mutated by the
-OSDMonitor upon transitions.
+infrastructure. ``min_size`` is set at pool creation and is never mutated
+by the OSDMonitor upon stretch mode transitions.
 
 .. mermaid::
 
@@ -1719,69 +1697,10 @@ OSDMonitor upon transitions.
        Degraded --> Recovery: force_recovery_stretch_mode CLI
        Recovery --> Healthy: force_healthy_stretch_mode CLI
 
-**Two-Zone Transitions (--num-zones 2) — R1**
-
-.. list-table::
-   :header-rows: 1
-
-   * - Stretch State
-     - min_size
-     - Reasoning
-   * - **Healthy**
-     - ``num_zones × (K+M) − M``
-     - Full redundancy; tolerate up to M failures
-   * - **Degraded** (one zone down)
-     - ``K``
-     - One zone lost (K+M shards gone). Surviving zone has K+M shards;
-       can tolerate M more losses. ``K+M − M = K``.
-   * - **Recovery** (zone returning)
-     - ``K`` (same as degraded)
-     - Keep reduced min_size until resync is complete
-   * - **Healthy** (resync complete)
-     - ``num_zones × (K+M) − M``
-     - Full min_size restored
-
 **Concrete example — K=2, M=1, --num-zones 2 (size=6):**
 
-.. list-table::
-   :header-rows: 1
-
-   * - Stretch State
-     - min_size
-   * - Healthy
-     - 5
-   * - Degraded
-     - 2
-   * - Recovery
-     - 2
-   * - Healthy (restored)
-     - 5
-
-**The degraded-mode formula:**
-
-- Healthy min_size: ``num_zones × (K+M) − M``
-- Degraded min_size: ``(num_zones−1) × (K+M) − M`` = healthy min_size minus
-  ``(K+M)``
-- **Rule: if a zone fails, reduce min_size by K+M. If a zone becomes
-  healthy again, increase min_size by K+M.**
-
-**Three-Zone Transitions (num_zones=3) — Later Release**
-
-.. list-table::
-   :header-rows: 1
-
-   * - Stretch State
-     - min_size
-     - Example (K=2, M=1)
-   * - Healthy (3 zones)
-     - ``3(K+M) − M``
-     - 8
-   * - One zone down
-     - ``2(K+M) − M``
-     - 5
-   * - Two zones down
-     - ``K``
-     - 2
+``min_size`` is set to ``2`` at creation and remains ``2`` in every stretch state.
+I/O will stop if either zone has less than ``2`` shards active.
 
 11.4 OSDMonitor Changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1793,17 +1712,7 @@ several places. These gaps must be filled for EC pools with ``num_zones > 1``.
 **11.4.1 Pool Stretch Set / Unset** (``prepare_command_pool_stretch_set``,
 ``prepare_command_pool_stretch_unset``)
 
-Both ``stretch_set`` and ``stretch_unset`` are refused while stretch mode is
-enabled. Otherwise ``stretch_set`` works for any pool type, setting
-``peering_crush_bucket_*``, ``crush_rule``, ``size``, ``min_size``.
-
-For EC pools with ``num_zones > 1``, add validation:
-
-- Validate ``min_size ∈ [num_zones×(K+M)−M, num_zones×(K+M)]``
-- If ``size`` is provided, validate it matches ``num_zones × (K+M)``
-
-``stretch_unset`` clears all ``peering_crush_*`` fields. No EC-specific
-changes required.
+Both ``stretch_set`` and ``stretch_unset`` are refused for EC pools.
 
 **11.4.2 Enable/Disable Stretch Mode** (``try_enable_stretch_mode_pools``)
 
@@ -1813,7 +1722,6 @@ changes required.
   ``peering_crush_bucket_barrier`` (same values as replica)
 - Set ``crush_rule`` to the stretch CRUSH rule
 - Set ``size = r × (k + m)`` (should already be correct from pool creation)
-- Set ``min_size = r × (k + m) − m``
 
 **Pool Creation Gate**: Pool creation with ``num_zones > 1`` must be rejected if
 stretch mode is not already enabled on the cluster. This is validated in
@@ -1831,28 +1739,20 @@ After ``ceph mon enable_stretch_mode`` the new pool's
 **11.4.3 Degraded Stretch Mode** (``trigger_degraded_stretch_mode``)
 
 *Currently sets* ``newp.min_size = pgi.second.min_size / 2`` *for replica
-pools.* For EC pools, compute::
-
-    newp.min_size = p.min_size - (k + m)
-
-For a K=2, M=1, --num-zones 2 pool: ``min_size = 5 − 3 = 2``.
-
-Also set ``peering_crush_bucket_count`` and
-``peering_crush_mandatory_member`` as for replicated pools.
+pools.* For EC pools, ``min_size`` is **not modified**. Only
+``peering_crush_bucket_count`` and ``peering_crush_mandatory_member`` are
+updated, as for replicated pools.
 
 A replicated pool created after ``ceph mon enable_stretch_mode`` while the
 cluster is in degraded stretch mode keeps its full ``size`` and
 ``peering_crush_bucket_target``, as the existing stretch pools do, and is given
 the degraded ``peering_crush_bucket_count`` and the surviving zone as
 ``peering_crush_mandatory_member``, so the healthy transition (11.4.4)
-restores it with the other stretch pools. Its ``min_size`` is not halved.
+restores it with the other stretch pools.
 
 **11.4.4 Healthy Stretch Mode** (``trigger_healthy_stretch_mode``)
 
 *Currently reads* ``mon_stretch_pool_min_size`` *config for replica pools.*
-For EC pools, compute from the EC profile::
-
-    newp.min_size = r × (k + m) − m
 
 **11.4.5 Recovery Stretch Mode** (``trigger_recovery_stretch_mode``)
 
@@ -2100,17 +2000,14 @@ recovery traverse the inter-zone link via the Primary.
 4. **Stretch Mode and Peering for Replicated EC**
    Broken into the following sub-stories (see Sections 11.1–11.6):
 
-   a. **Pool Stretch Set/Unset for EC** (OSDMonitor): Allow ``osd pool
-      stretch set/unset`` on EC pools with ``num_zones > 1``. The refusal
-      while stretch mode is enabled (Section 11.4.1) must be relaxed for
-      such pools. Add EC-specific ``min_size`` range validation
-      (Section 11.4.1).
-   b. **Enable/Disable Stretch Mode for EC** (OSDMonitor): Allow
+   a. **Enable/Disable Stretch Mode for EC** (OSDMonitor): Allow
       ``mon enable_stretch_mode`` when the cluster has EC pools with
-      ``num_zones > 1``. Set ``min_size = r × (k+m) − m`` (Section 11.4.2).
+      ``num_zones > 1``.
    c. **Stretch Mode Transitions for EC** (OSDMonitor): Implement
-      degraded/recovery/healthy transitions. On zone failure, reduce
-      ``min_size`` by ``k+m``; on recovery, restore it (Sections 11.4.3–5).
+      degraded/recovery/healthy transitions. Update
+      ``peering_crush_bucket_count`` and ``peering_crush_mandatory_member``
+      on zone failure/recovery; ``min_size`` is not modified
+      (Sections 11.4.3–5).
    d. **EC Peering with Stretch Constraints** (PeeringState): Create
       ``calc_ec_acting_stretch`` to respect both shard identity and CRUSH
       ``bucket_max`` constraints. Extend async recovery checks
@@ -2220,13 +2117,13 @@ bandwidth optimizations.
    Upgrade direct-read failure handling to redirect to the local Zone
    Primary instead of the global Primary (Section 7.5).
 
-3. **Per-Zone min_size with Zone Failover**
-   Implement per-zone minimum shard thresholds that automatically trigger
-   zone failover (Section 11.2, later release).
-
-4. **Online OSDs in Offline Zones Handling**
+3. **Online OSDs in Offline Zones Handling**
    Implement removal of residual online OSDs from the up set when their zone
    is offline (Section 11.8).
+
+4. **In-Place Replica Count Modification**
+   Allow ``num_zones`` to be changed on an existing pool via EC profile swap
+   (Section 13.2).
 
 5. **3-Zone (``num_zones=3``) Full Integration Testing**
    Full integration and real-world testing of 3-zone configurations
