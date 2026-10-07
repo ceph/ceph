@@ -2196,16 +2196,28 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
     flags |= O_DIRECT;
   }
 
-  /* Under a personality the open goes through the ring, because
+  /* 0600, which is what an object on this backend carries.
+   *
+   * This used to create 0700 and rely on File::write() narrowing it
+   * afterwards, which left the wider mode on every path that creates
+   * a file and does not write to it:  a zero-length object, the
+   * multipart staging record, and -- through MPUStrategy::assemble()
+   * -- every completed multipart object.  Nothing wants owner-execute
+   * on a data file, so the create mode was simply wrong.  The
+   * narrowing calls stay as a backstop;  one of them is in
+   * driver/posix and shared.
+   *
+   * Under a personality the open goes through the ring, because
    * that is where the kernel decides access -- and under
    * impersonation it is also what gives the new file the right
    * owner.  With none, the plain syscall, unchanged. */
   if (personality != 0) {
     ret = rgw::sal::posix_uring_openat2(dpp, parent->get_fd(), path.c_str(),
-					flags | O_NOFOLLOW, S_IRWXU,
-					personality);
+					flags | O_NOFOLLOW,
+					S_IRUSR | S_IWUSR, personality);
   } else {
-    ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW, S_IRWXU);
+    ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW,
+		 S_IRUSR | S_IWUSR);
     if (ret < 0) {
       ret = -errno;
     }

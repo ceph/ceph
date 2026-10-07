@@ -278,7 +278,8 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
   }
 
   int out_fd = openat(dir_fd, output_name.c_str(),
-		      O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+		      O_WRONLY | O_CREAT | O_TRUNC,
+		      S_IRUSR | S_IWUSR);
   if (out_fd < 0) {
     int ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not create assembly file "
@@ -464,7 +465,8 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
    * from its offset there, a part in its own file from the start of
    * that file. */
   int out_fd = openat(dir_fd, output_name.c_str(),
-		      O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+		      O_WRONLY | O_CREAT | O_TRUNC,
+		      S_IRUSR | S_IWUSR);
   if (out_fd < 0) {
     int ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not create assembly file "
@@ -1342,7 +1344,8 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     out_fd = ::openat(dir_fd, output_name.c_str(), O_WRONLY);
   } else {
     out_fd = ::openat(dir_fd, output_name.c_str(),
-		      O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+		      O_WRONLY | O_CREAT | O_TRUNC,
+		      S_IRUSR | S_IWUSR);
   }
   if (out_fd < 0) {
     int ret = errno;
