@@ -4597,8 +4597,12 @@ TEST_F(NSFSNooBaaBucketTest, ConversionCapturesTheInodeOwnerAsAnAcl)
       << "the captured ACL grants nobody anything";
 }
 
-/* The sentinel is a user-visible object, so it is created with the mode
- * the ordinary write path uses and not a private one.
+/* The sentinel carries the mode every object on this backend carries.
+ *
+ * 0600:  the publish path fchmods to S_IRUSR|S_IWUSR as the owner, so
+ * access is decided by ownership and impersonation rather than by the
+ * mode, and a converted directory object must not be more permissive
+ * than an ordinary one.
  *
  * umask is set for the duration, because `openat` applies it and a
  * developer's umask is not the test's to assume. */
@@ -4626,9 +4630,9 @@ TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelAnObjectMode)
 
   struct stat st{};
   ASSERT_EQ(::stat(sentinel.c_str(), &st), 0);
-  EXPECT_EQ(st.st_mode & 07777, 0644u)
-      << "the sentinel is a user-visible object and should carry the mode "
-	 "an object written through S3 would";
+  EXPECT_EQ(st.st_mode & 07777, 0600u)
+      << "the sentinel does not carry the mode an object written through "
+	 "S3 carries;  it must not be more permissive than one";
 }
 
 /* A group we belong to that is not our primary one.

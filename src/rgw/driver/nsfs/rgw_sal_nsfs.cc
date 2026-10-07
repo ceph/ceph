@@ -6107,11 +6107,16 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
     nsfs::PathStrategy::DirectoryObject dobj{};
     if (their_paths->directory_object(dpp, sub.get_fd(), dobj)) {
       const std::string sname = their_paths->folder_object_name();
-      /* 0644, which is what the ordinary write path creates an object
-       * with -- afterwards this is indistinguishable from one RGW
-       * wrote, so it should not be more private than one */
+      /* 0600, which is what every object on this backend carries:  the
+       * publish path fchmods to S_IRUSR|S_IWUSR as the owner, and
+       * access is decided by ownership and impersonation rather than by
+       * the mode.  An earlier version of this used 0644 on the grounds
+       * that the write path creates objects with it;  the 0644 literals
+       * on that path are the open mode, and the fchmod after them is
+       * what decides.  A converted directory object must not be more
+       * permissive than an ordinary one. */
       int sfd = ::openat(sub.get_fd(), sname.c_str(),
-			 O_RDONLY | O_CREAT, 0644);
+			 O_RDONLY | O_CREAT, 0600);
       if (sfd < 0) {
 	ret = -errno;
 	ldpp_dout(dpp, 0) << "ERROR: creating " << sname << " under "
