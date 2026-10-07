@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <deque>
 #include <map>
@@ -80,8 +81,9 @@ public:
   }
   
 private:
-  // Static storage for the currently executing OSD and TestPG context
-  static int current_executing_osd;
+  // Static storage for the currently executing OSD and TestPG context;
+  // the log thread reads current_executing_osd in get_log_prefix()
+  static std::atomic<int> current_executing_osd;
   static TestPG* current_test_pg;
 
   struct Event {
@@ -470,6 +472,6 @@ public:
 };
 // Define the static variables
 // Initialized to -1 (no OSD currently executing) and nullptr (no TestPG context)
-inline int EventLoop::current_executing_osd = -1;
+inline std::atomic<int> EventLoop::current_executing_osd = -1;
 inline TestPG* EventLoop::current_test_pg = nullptr;
 
