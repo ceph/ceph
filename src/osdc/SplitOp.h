@@ -345,6 +345,8 @@ class SplitOp {
   std::map<int, std::vector<int>> op_offset_map;
 
  public:
+ static inline constexpr uint64_t REPLICA_MIN_SPLIT_SIZE = 4096;
+
  /**
   * @brief Construct a SplitOp.
   * @param op Original operation to be split
@@ -557,7 +559,15 @@ class ReplicaSplitOp : public SplitOp {
   bool version_mismatch() const override;
   
   void init_reference_sub_read() override;
-  
+
+  /**
+   * Acting indices that map to an existing OSD, in ascending order.
+   * Populated by init_reference_sub_read(), consumed by init_read().
+   */
+  std::vector<int> valid_indices;
+
+  size_t reference_valid_index = 0;
+
   /**
    * @brief Construct a ReplicaSplitOp.
    * @param op Original operation to be split
