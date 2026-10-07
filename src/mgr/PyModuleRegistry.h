@@ -80,6 +80,28 @@ public:
   }
 
   /**
+   * Look up a single mgr module config option by its full key ("mgr/<mod>/<opt>").
+   * Returns true and sets *val if found.
+   */
+  bool get_module_option(const std::string& key, std::string *val) const {
+    std::lock_guard l(module_config.lock);
+    auto it = module_config.config.find(key);
+    if (it == module_config.config.end()) {
+      return false;
+    }
+    *val = it->second;
+    return true;
+  }
+
+  /**
+   * Return a snapshot of the entire module config map.
+   */
+  std::map<std::string, std::string> get_module_config_snapshot() const {
+    std::lock_guard l(module_config.lock);
+    return module_config.config;
+  }
+
+  /**
    * Get references to all modules (whether they have loaded and/or
    * errored) or not.
    */
