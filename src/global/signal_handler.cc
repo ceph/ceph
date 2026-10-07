@@ -104,7 +104,8 @@ static void reraise_fatal(int signum)
 	    "signal %d didn't terminate the process?\n", signum);
     dout_emergency(buf);
   }
-  exit(1);
+  // not exit(): runs atexit handlers; not abort(): re-enters this handler
+  _exit(1);
 }
 
 
