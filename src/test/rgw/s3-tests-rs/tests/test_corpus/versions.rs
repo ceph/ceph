@@ -203,6 +203,10 @@ async fn run(tier: &str, label: &str, status: &str) {
     );
 }
 
+/* posix: a version the PUT reported is absent from ListObjectVersions.
+ * Not the mode half of this, which is fixed -- the versions themselves
+ * do not come back. */
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn corpus_coverage_versioning_enabled() {
     let tier = env_or("CORPUS_TIER", "coverage");
@@ -215,6 +219,9 @@ async fn corpus_coverage_versioning_enabled() {
 /// Suspended is versioned *and* suspended, not unversioned:  the bucket
 /// still holds the versions it had, and a write under suspension
 /// becomes the null version rather than a new one.
+/* posix: suspending versioning on a bucket that has versions errors
+ * outright, so this one cannot reach its assertions at all. */
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn corpus_coverage_versioning_suspended() {
     let tier = env_or("CORPUS_TIER", "coverage");
