@@ -106,6 +106,10 @@ void Background::resume(rgw::sal::Driver*) {
   cond.notify_all();
 }
 
+void Background::awaken() {
+  cond.notify_all();
+}
+
 int Background::read_script() {
   std::unique_lock cond_lock(pause_mutex);
   if (paused) {
@@ -197,7 +201,12 @@ void Background::run() {
     }
     process_scripts();
     std::unique_lock cond_lock(cond_mutex);
-    cond.wait_for(cond_lock, std::chrono::seconds(execute_interval), [this]{return stopped;}); 
+    auto status = cond.wait_for(cond_lock, std::chrono::seconds(execute_interval), [this]{return stopped || !processing_q.empty();});
+    if (status) {
+      ldpp_dout(dpp, 20) << "Lua background thread awakened because data is available. " << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << "Lua background thread awakened due to timeout. " << dendl;
+    }
   }
   ldpp_dout(dpp, 10) << "Lua background thread stopped" << dendl;
 }
@@ -218,6 +227,7 @@ void Background::process_script_add(std::string script_oid) {
   if (processing_q.push(script_ptr.get())) {
     script_ptr.release();
   }
+  awaken();
 }
 
 void Background::process_scripts() {

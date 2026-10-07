@@ -5708,11 +5708,9 @@ int RadosLuaManager::watch_script(const DoutPrefixProvider* dpp, const std::stri
     if (r < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to watch " << script_oid
                         << ". error: " << cpp_strerror(r) << dendl;
-      if (r == -ENOENT) {
-        // Let the background thread know to update the script cache
-        lua_background->process_script_add(script_oid);
-      }
-    // Return error?
+      // Let the background thread know to update the script cache
+      lua_background->process_script_add(script_oid);
+      // Return error?
       return r;
     }
     ldpp_dout(dpp, 20) << "INFO: inited watch on " << script_oid  << " with handle " << w_handle << dendl;
@@ -5812,7 +5810,6 @@ std::tuple<rgw::lua::LuaCodeType, int> RadosLuaManager::get_script_or_bytecode(c
                       <<  ", error = " << err.what() << dendl;
     return std::make_tuple("", -EIO);
   }
-
   r = watch_script(dpp, key);
   if (r < 0) {
     ldpp_dout(dpp, 10) << "WARNING: failed to watch Lua script: " << key << ", err:"
