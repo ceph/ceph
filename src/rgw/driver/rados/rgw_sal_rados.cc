@@ -1851,7 +1851,6 @@ int RadosBucket::write_logging_object(const std::string& obj_name,
       return ret;
     }
     std::ignore = arg.release();
-    std::ignore = completion.release();
     return 0;
   }
   if (const auto ret = rgw_rados_operate(dpp, io_ctx, temp_obj_name, std::move(op), y); ret < 0) {
