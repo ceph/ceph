@@ -23,6 +23,10 @@ out of the outage window:
   restore  the policy puts the group back into service (MDS: ``fs set
            joinable true``), and cephadm's cache is refreshed for the
            hosts involved.
+  settle   the policy says whether the group has settled enough for the
+           next one to be chosen. Not a failure when it takes long: no
+           timeout, the upgrade is not paused, the next serve() pass asks
+           again.
 
 If staging fails nothing has been restarted and the upgrade pauses with
 UPGRADE_STAGE_FAILED. If the switch or the verification fails, a policy
@@ -70,7 +74,11 @@ PHASE_STAGED = 'staged'
 PHASE_DOWN = 'down'
 PHASE_SWITCHING = 'switching'
 PHASE_SWITCHED = 'switched'
+PHASE_SETTLING = 'settling'
 PHASE_ROLLING_BACK = 'rolling_back'
+
+# how long one serve() pass polls a settling group before handing back
+SETTLE_POLL_SECONDS = 30
 
 
 class StagedSwitchNotReady(Exception):
@@ -183,6 +191,14 @@ class StagedSwitchPolicy(ABC):
     def restore(self, group: StagedGroup) -> None:
         """Put the group back into service. Called after a successful
         verify, and after a rollback."""
+
+    def settled(self, group: StagedGroup) -> Tuple[bool, str]:
+        """Whether the group, verified and restored, has settled enough for
+        the next group to be chosen (e.g. caught up with what its daemons
+        missed during the switch). Not bounded by verify_timeout() and never
+        a failure: until it is, the runner keeps the group, without pausing
+        the upgrade, and asks again on the next pass. Returns (ok, reason)."""
+        return True, ''
 
 
 class StagedSwitchRunner:
@@ -321,6 +337,16 @@ class StagedSwitchRunner:
                 return False, why
             time.sleep(2)
 
+    def _wait_settled(self, group: StagedGroup) -> Tuple[bool, str]:
+        deadline = time.time() + SETTLE_POLL_SECONDS
+        while True:
+            ok, why = self.policy.settled(group)
+            if ok or time.time() >= deadline:
+                return ok, why
+            if self.upgrade.upgrade_state is None or self.upgrade.upgrade_state.paused:
+                return ok, why
+            time.sleep(2)
+
     # --------------------------------------------------------------- driver
     def _group_from_state(self, need_upgrade: List[DaemonDescription]) -> Optional[StagedGroup]:
         st = self.state
@@ -375,8 +401,9 @@ class StagedSwitchRunner:
             return
         redeploy_only = set(self.state.get('redeploy_only') or [])
         state.remaining_count -= len([n for n in group.names if n not in redeploy_only])
-        # saved by the caller's _clear(), in the same write as the end of
-        # the group, so a failover in between cannot count it twice
+        # saved by the caller's _set_phase(PHASE_SETTLING), in the same
+        # write as the end of the switch, so a failover in between cannot
+        # count it twice
 
     def run(self, need_upgrade: List[DaemonDescription], target_image: str,
             redeploy_only: Optional[Iterable[str]] = None) -> bool:
@@ -511,6 +538,18 @@ class StagedSwitchRunner:
             self.policy.restore(group)
             self._count_against_limit(group)
             self.mgr.wait_async(self._refresh_hosts(group.hosts))
+            self._set_phase(PHASE_SETTLING)
+            phase = PHASE_SETTLING
+
+        if phase == PHASE_SETTLING:
+            ok, why = self._wait_settled(group)
+            if not ok:
+                # Not a failure: the group is switched and back in service;
+                # the next group waits for it. Ask again next pass.
+                msg = f'Waiting for the {self.policy.daemon_type} of {group.label} to settle: {why}'
+                logger.info('Upgrade: %s', msg)
+                self.upgrade.upgrade_info_str = msg
+                return True
             self._clear()
             logger.info('Upgrade: %s back on %s', group.label, target_version)
             return True

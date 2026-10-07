@@ -478,6 +478,114 @@ def test_runner_counts_switched_daemons_against_limit(cephadm_module: CephadmOrc
             p.stop()
 
 
+class _Settling(_FakePolicy):
+    """Settles once world.settle_left calls have answered "not yet" (None:
+    not before the test says so)."""
+
+    def settled(self, group):
+        left = getattr(self.world, 'settle_left', 0)
+        if left is None:
+            return False, 'catching up'
+        if left > 0:
+            self.world.settle_left = left - 1
+            return False, 'catching up'
+        return True, ''
+
+
+def test_runner_settling_waits_without_pausing(cephadm_module: CephadmOrchestrator):
+    # switched, verified and restored, but not settled: the runner keeps the
+    # group, pass after pass, without pausing and without a timeout, and lets
+    # go of it once it has settled - counted against --limit once
+    dds = [_dd('osd', 'a'), _dd('osd', 'b'), _dd('osd', 'c')]
+    world, calls, staged, patches = _runner_setup(cephadm_module, [d.name() for d in dds])
+    world.settle_left = None
+    for p in patches:
+        p.start()
+    try:
+        with with_host(cephadm_module, 'host1'):
+            _add_daemons(cephadm_module, dds)
+            st = cephadm_module.upgrade.upgrade_state
+            st.total_count, st.remaining_count = 10, 10
+
+            def one_pass():
+                policy = _Settling(cephadm_module.upgrade, world)
+                return StagedSwitchRunner(cephadm_module.upgrade, policy).run(dds, TARGET)
+
+            assert one_pass() is True
+            assert st.staged_switch.get('phase') == 'settling' and not st.paused
+            assert [e for e in world.log if not e.startswith('mon:')] == ['take_down', 'restore']
+            assert 'to settle: catching up' in cephadm_module.upgrade.upgrade_info_str
+            assert st.remaining_count == 7 and len(_switches(calls)) == 3
+            # a pass later (a mgr failover between the two, say): still
+            # settling, nothing staged or switched again, nothing counted again
+            assert one_pass() is True
+            assert st.staged_switch.get('phase') == 'settling' and not st.paused
+            assert len(staged) == 3 and len(_switches(calls)) == 3 and st.remaining_count == 7
+            world.settle_left = 2                # settles within the next pass
+            assert one_pass() is True
+            assert st.staged_switch == {} and not st.paused and st.remaining_count == 7
+            assert 'UPGRADE_SWITCH_FAILED' not in cephadm_module.health_checks
+    finally:
+        for p in reversed(patches):
+            p.stop()
+
+
+def test_do_upgrade_hands_a_settling_group_to_the_runner(cephadm_module: CephadmOrchestrator):
+    # The hook in _do_upgrade: once the last group is switched nothing is
+    # left to upgrade, but while that group settles the runner still gets
+    # the pass (and the phase of the type is not completed); with no group
+    # of the type in the state, it does not.
+    dds = [_dd('mds', 'a')]
+
+    def detect(daemons, *args, **kwargs):
+        return (False, [], [], len(daemons))
+
+    for state, expect in (({'type': 'mds', 'phase': 'settling', 'daemons': ['mds.a']}, 1),
+                          ({}, 0)):
+        cephadm_module.upgrade.upgrade_state = UpgradeState(
+            'target_image', 'pid', target_id='image_id', target_digests=[TARGET],
+            target_version=NEW, daemon_types=['mds'], fail_fs=True, staged_switch=dict(state))
+        cephadm_module.upgrade_staged_switch = True
+        cephadm_module.upgrade_staged_switch_types = 'mds'
+        run = mock.MagicMock(return_value=True)
+        set_images = mock.MagicMock()
+        patches = [
+            mock.patch.object(CephadmUpgrade, '_detect_need_upgrade', side_effect=detect),
+            mock.patch.object(CephadmUpgrade, '_upgrade_daemons'),
+            mock.patch.object(CephadmUpgrade, '_update_upgrade_progress'),
+            mock.patch.object(CephadmUpgrade, '_set_container_images', set_images),
+            mock.patch.object(CephadmUpgrade, '_complete_mds_upgrade'),
+            mock.patch.object(CephadmUpgrade, '_mark_upgrade_complete'),
+            mock.patch.object(CephadmUpgrade, 'get_distinct_container_image_settings', return_value={}),
+            mock.patch.object(StagedSwitchRunner, 'run', run),
+            mock.patch("cephadm.serve.CephadmServe._run_cephadm",
+                       new_callable=mock.AsyncMock, return_value=(['{}'], [], 0)),
+            mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name", return_value='tentacle'),
+            mock.patch("cephadm.module.CephadmOrchestrator.get_active_mgr_digests", return_value=[TARGET]),
+            mock.patch("cephadm.module.CephadmOrchestrator.version",
+                       new_callable=mock.PropertyMock, return_value=f'ceph version {NEW} (hash)'),
+            mock.patch("cephadm.module.CephadmOrchestrator.set_container_image"),
+            mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command",
+                       return_value=(0, '{}', '')),
+            mock.patch("cephadm.CephadmOrchestrator.get", side_effect=lambda what: {
+                'min_mon_release': 19, 'require_osd_release': 'tentacle', 'have_local_config_map': True,
+                'filesystems': []}),
+        ]
+        for p in patches:
+            p.start()
+        try:
+            with with_host(cephadm_module, 'host1'):
+                with mock.patch("cephadm.module.HostCache.get_daemons", return_value=dds):
+                    cephadm_module.upgrade._do_upgrade()
+        finally:
+            for p in reversed(patches):
+                p.stop()
+        assert run.call_count == expect
+        if expect:
+            assert run.call_args.args[0] == []
+            assert not any(c.args[0] == 'mds' for c in set_images.call_args_list)
+
+
 def test_runner_state_survives_json(cephadm_module: CephadmOrchestrator):
     st = UpgradeState('t', 'pid', staged_switch={'type': 'mds', 'phase': 'down', 'data': {'fscids': [1]}})
     restored = UpgradeState.from_json(json.loads(json.dumps(st.to_json())))

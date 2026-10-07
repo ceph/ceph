@@ -2556,8 +2556,10 @@ class CephadmUpgrade:
             # staged switch (mgr/cephadm/upgrade_staged_switch): stage the new
             # deployment while the daemons serve, take the group down, switch
             # all of them in parallel, verify with the monitors, restore - one
-            # group per pass. The next pass re-evaluates what is left.
-            if need_upgrade:
+            # group per pass. The next pass re-evaluates what is left. A group
+            # of this type still settling is handled even when nothing is
+            # left to upgrade.
+            if need_upgrade or self.upgrade_state.staged_switch.get('type') == daemon_type:
                 policy = policy_for(self, daemon_type)
                 if policy and StagedSwitchRunner(self, policy).run(
                         [d_entry[0] for d_entry in need_upgrade], target_image,
