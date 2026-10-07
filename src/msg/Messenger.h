@@ -604,6 +604,18 @@ public:
       bool anon=false, bool not_local_dest=false) {
 	return connect_to(CEPH_ENTITY_TYPE_OSD, dest, anon, not_local_dest);
   }
+  /**
+   * Open an anonymous (unregistered) connection to reactor `core` of a
+   * Crimson OSD that listens on per-reactor client ports
+   * (crimson_osd_client_shard_ports): the OSD's msgr2 address with its port
+   * replaced by `port`, the one the OSD published for that reactor in its
+   * shard map. Several may coexist with the regular connection to the same
+   * OSD. Returns nullptr if this messenger cannot do it.
+   */
+  virtual ConnectionRef connect_to_osd_shard(const entity_addrvec_t& dest,
+                                             uint32_t core, uint16_t port) {
+    return nullptr;
+  }
   ConnectionRef connect_to_mgr(const entity_addrvec_t& dest,
       bool anon=false, bool not_local_dest=false) {
 	return connect_to(CEPH_ENTITY_TYPE_MGR, dest, anon, not_local_dest);
