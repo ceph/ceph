@@ -637,6 +637,10 @@ seastar::future<> OSD::start()
   cluster_msgr->set_policy(entity_name_t::TYPE_CLIENT,
                            SocketPolicy::stateless_server(0));
 
+  // one extra port per reactor for shard-aware clients; a reactor that
+  // gets no port is served through the main port as before
+  public_msgr->set_client_shard_ports(true);
+
   crimson::net::dispatchers_t dispatchers{this, monc.get(), mgrc.get()};
   co_await seastar::when_all_succeed(
     cluster_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER))
