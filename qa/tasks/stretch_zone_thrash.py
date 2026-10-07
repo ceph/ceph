@@ -202,6 +202,7 @@ class ZoneThrasher(Thrasher):
     def _wait_for_degraded_stretch(self):
         """
         Poll until the cluster reports degraded stretch mode.
+        Returns False if the thrasher is stopped first.
         Raises RuntimeError on timeout.
         """
         self.log('waiting for degraded stretch mode (timeout={t}s)'.format(
@@ -212,11 +213,13 @@ class ZoneThrasher(Thrasher):
                 tries=math.ceil(self.degrade_timeout / 5),
                 action='wait for degraded stretch mode') as proceed:
             while proceed():
+                if self.stopping.is_set():
+                    return False
                 if self.manager.is_degraded_stretch_mode():
                     elapsed = time.time() - start
                     self.log('cluster entered degraded stretch mode after '
                              '{e:.1f}s'.format(e=elapsed))
-                    return
+                    return True
         raise RuntimeError(
             'Timed out waiting for cluster to enter degraded stretch mode '
             'after {t}s'.format(t=self.degrade_timeout))
@@ -279,12 +282,16 @@ class ZoneThrasher(Thrasher):
 
             # Confirm the cluster entered degraded stretch mode
             try:
-                self._wait_for_degraded_stretch()
+                degraded = self._wait_for_degraded_stretch()
             except RuntimeError:
                 # Always revive before propagating so teardown can succeed
                 self._revive_zone(zone, total_mons=total_mons)
                 self.manager.wait_for_mon_quorum_size(total_mons)
                 raise
+            if not degraded:
+                self._revive_zone(zone, total_mons=total_mons)
+                self.manager.wait_for_mon_quorum_size(total_mons)
+                break
 
             # Hold in degraded mode — this is the window where the IO workload
             # exercises the degraded stretch EC code path
