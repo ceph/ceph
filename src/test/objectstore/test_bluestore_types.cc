@@ -3212,7 +3212,7 @@ TEST(ExtentMap, dup_extent_map)
   }
 }
 
-void clear_and_dispose(bluestore::OldExtentMap &old_em) {
+void clear_and_dispose(bluestore::old_extent_map_t &old_em) {
   auto oep = old_em.begin();
   while (oep != old_em.end()) {
     auto &lo = *oep;
@@ -3234,7 +3234,7 @@ TEST(GarbageCollector, BasicTest) {
       &onode,
       g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
-  bluestore::OldExtentMap old_extents;
+  bluestore::old_extent_map_t old_extents;
 
   /*
    min_alloc_size = 4096
@@ -3320,7 +3320,7 @@ TEST(GarbageCollector, BasicTest) {
         &onode,
         g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
-    bluestore::OldExtentMap old_extents;
+    bluestore::old_extent_map_t old_extents;
     bluestore::GarbageCollector gc(g_ceph_context);
     int64_t saving;
     BlueStore::BlobRef b1(coll->new_blob());
@@ -3446,7 +3446,7 @@ TEST(GarbageCollector, BasicTest) {
         &onode,
         g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
 
-    bluestore::OldExtentMap old_extents;
+    bluestore::old_extent_map_t old_extents;
     bluestore::GarbageCollector gc(g_ceph_context);
     int64_t saving;
     BlueStore::BlobRef b0(coll->new_blob());

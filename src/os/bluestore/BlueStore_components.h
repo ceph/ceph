@@ -57,7 +57,7 @@ namespace bluestore {
       uint64_t offset,
       uint64_t length,
       const bluestore::ExtentMap& extent_map,
-      const bluestore::OldExtentMap& old_extents,
+      const bluestore::old_extent_map_t& old_extents,
       uint64_t min_alloc_size);
 
     /// return a collection of extents to perform GC on
@@ -481,7 +481,7 @@ namespace bluestore {
     unsigned csum_order = 0;        ///< target checksum chunk order
     uint64_t target_blob_size = 0;  ///< target (max) blob size
 
-    OldExtentMap old_extents;       ///< must deref these blobs
+    old_extent_map_t old_extents;       ///< must deref these blobs
     interval_set<uint64_t> extents_to_gc;      ///< extents for garbage collection
 
     bool full_write = false;        /// < whether full object is overwritten

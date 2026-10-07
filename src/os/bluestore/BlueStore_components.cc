@@ -184,7 +184,7 @@ int64_t bluestore::GarbageCollector::estimate(
   uint64_t start_offset,
   uint64_t length,
   const bluestore::ExtentMap& extent_map,
-  const bluestore::OldExtentMap& old_extents,
+  const bluestore::old_extent_map_t& old_extents,
   uint64_t min_alloc_size)
 {
 

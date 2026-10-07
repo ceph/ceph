@@ -28,7 +28,6 @@ namespace bluestore {
   struct Extent;
   struct ExtentMap;
   struct OldExtent;
-  struct OldExtentMap;
   struct SharedBlob;
   typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
   struct SharedBlobSet;

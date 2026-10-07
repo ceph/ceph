@@ -197,15 +197,12 @@ namespace bluestore {
       BlobRef& b);
   };
 
-  // Declaring through a struct to be able to have forward declarations
-  struct OldExtentMap :
-    public boost::intrusive::list<
+  typedef boost::intrusive::list<
       OldExtent,
       boost::intrusive::member_hook<
-	OldExtent,
-	boost::intrusive::list_member_hook<>,
-	&OldExtent::old_extent_item> > {
-  };
+        OldExtent,
+    boost::intrusive::list_member_hook<>,
+    &OldExtent::old_extent_item> > old_extent_map_t;
 
   struct Collection : public ObjectStore::CollectionImpl {
     BlueStore* store;
@@ -826,7 +823,7 @@ namespace bluestore {
     /// punch a logical hole.  add lextents to deref to target list.
     void punch_hole(CollectionRef &c,
 		    uint64_t offset, uint64_t length,
-		    bluestore::OldExtentMap *old_extents);
+		    bluestore::old_extent_map_t *old_extents);
 
     /// Empties range [offset~length] of object o that is in collection c.
     /// Collects unused elements:
@@ -852,7 +849,7 @@ namespace bluestore {
 			uint64_t logical_offset,
 			uint64_t offset, uint64_t length,
                         BlobRef b,
-			bluestore::OldExtentMap *old_extents);
+			bluestore::old_extent_map_t *old_extents);
 
     /// split a blob (and referring extents)
     BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);

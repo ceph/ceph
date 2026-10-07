@@ -3103,7 +3103,7 @@ void bluestore::ExtentMap::punch_hole(
   bluestore::CollectionRef &c,
   uint64_t offset,
   uint64_t length,
-  OldExtentMap *old_extents)
+  old_extent_map_t *old_extents)
 {
   auto p = seek_lextent(offset);
   uint64_t end = offset + length;
@@ -3237,7 +3237,7 @@ bluestore::Extent* bluestore::ExtentMap::set_lextent(
   bluestore::CollectionRef &c,
   uint64_t logical_offset,
   uint64_t blob_offset, uint64_t length, BlobRef b,
-  bluestore::OldExtentMap *old_extents)
+  bluestore::old_extent_map_t *old_extents)
 {
   // We need to have completely initialized Blob to increment its ref counters.
   ceph_assert(b->get_blob().get_logical_length() != 0);

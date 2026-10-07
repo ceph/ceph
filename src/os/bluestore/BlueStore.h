@@ -338,7 +338,6 @@ public:
   using ExtentMap = bluestore::ExtentMap;
   friend struct bluestore::ExtentMap;
   using OldExtent = bluestore::OldExtent;
-  using OldExtentMap = bluestore::OldExtentMap;
 
   using SharedBlob = bluestore::SharedBlob;
   using SharedBlobRef = bluestore::SharedBlobRef;
