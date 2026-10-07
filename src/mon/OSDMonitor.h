@@ -812,6 +812,7 @@ public:
                                          pg_pool_t& p,
                                          std::stringstream& ss);
   int prepare_command_pool_set_replica(int64_t pool,
+                                       const std::string& poolstr,
                                        int64_t n,
                                        const std::string& val,
                                        const std::string& interr,

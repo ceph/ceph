@@ -9446,8 +9446,8 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
 }
 
 int OSDMonitor::prepare_command_pool_set_replica(
-    int64_t pool, int64_t n, const string& val, const string& interr,
-    pg_pool_t& p, stringstream& ss)
+    int64_t pool, const string& poolstr, int64_t n, const string& val,
+    const string& interr, pg_pool_t& p, stringstream& ss)
 {
   if (interr.length()) {
     ss << "error parsing int value '" << val << "': " << interr;
@@ -9470,14 +9470,87 @@ int OSDMonitor::prepare_command_pool_set_replica(
     ss << "replica can only be set when num_zones > 0";
     return -EINVAL;
   }
-  p.replica = n;
-  int64_t new_size = num_zones * p.replica;
-  if (new_size != p.size) {
-    int r = check_pg_num(pool, p.get_pg_num(), new_size, p.get_crush_rule(), &ss);
-    if (r < 0) return r;
-    p.size = new_size;
+
+  if (n > std::numeric_limits<decltype(p.replica)>::max()) {
+    ss << "replica exceeds the maximum supported value";
+    return -ERANGE;
   }
-  ss << "set replica to " << p.replica << " (legacy) size set to: " << p.size;
+  const auto max_pool_size = std::numeric_limits<decltype(p.size)>::max();
+  if (num_zones > max_pool_size / n) {
+    ss << "resulting pool size exceeds the maximum supported value";
+    return -ERANGE;
+  }
+
+  int64_t new_size = num_zones * n;
+  int new_crush_rule = p.crush_rule;
+  const int old_crush_rule = p.crush_rule;
+  const bool replica_changed = n != p.replica;
+
+  if (num_zones > 1 && replica_changed) {
+    CrushWrapper crush = _get_pending_crush();
+    if (!crush.rule_exists(old_crush_rule)) {
+      ss << "pool CRUSH rule " << old_crush_rule << " does not exist";
+      return -ENOENT;
+    }
+
+    set<int> roots;
+    crush.find_takes_by_rule(old_crush_rule, &roots);
+    if (roots.size() != 1) {
+      ss << "pool CRUSH rule must have exactly one take operation to change replica";
+      return -EINVAL;
+    }
+    const char *root_name = crush.get_item_name(*roots.begin());
+    if (!root_name) {
+      ss << "pool CRUSH rule references an unnamed root";
+      return -EINVAL;
+    }
+
+    int zone_type = -1;
+    int osd_type = -1;
+    const int rule_len = crush.get_rule_len(old_crush_rule);
+    for (int step = 0; step < rule_len; ++step) {
+      const int op = crush.get_rule_op(old_crush_rule, step);
+      if (op == CRUSH_RULE_CHOOSE_FIRSTN) {
+        zone_type = crush.get_rule_arg2(old_crush_rule, step);
+      } else if (op == CRUSH_RULE_CHOOSELEAF_FIRSTN) {
+        osd_type = crush.get_rule_arg2(old_crush_rule, step);
+      }
+    }
+    const char *zone_failure_domain = crush.get_type_name(zone_type);
+    const char *osd_failure_domain = crush.get_type_name(osd_type);
+    if (!zone_failure_domain || !osd_failure_domain) {
+      ss << "pool CRUSH rule is not a stretch replicated rule";
+      return -EINVAL;
+    }
+
+    const string new_rule_name = poolstr + "-replica-" + stringify(n);
+    int err = crush_rule_create_replica(
+        new_rule_name, root_name, num_zones, static_cast<int>(n),
+        zone_failure_domain, osd_failure_domain, "", false, &new_crush_rule,
+        &ss);
+    err = handle_crush_rule_creation_result(err, new_rule_name);
+    if (err) {
+      return err;
+    }
+  }
+
+  if (new_size != p.size || new_crush_rule != p.crush_rule) {
+    int r = check_pg_num(pool, p.get_pg_num(), new_size, new_crush_rule, &ss);
+    if (r < 0) return r;
+  }
+
+  p.replica = n;
+  p.size = new_size;
+  p.crush_rule = new_crush_rule;
+  if (num_zones > 1 && replica_changed) {
+    // min_size = replica - floor(replica / 2)
+    p.min_size = g_conf().get_osd_pool_default_min_size(p.replica);
+  }
+  ss << "set replica to " << static_cast<unsigned>(p.replica)
+     << " (legacy) size set to: " << static_cast<unsigned>(p.size);
+  if (new_crush_rule != old_crush_rule) {
+    maybe_remove_unused_crush_rule(pool, old_crush_rule);
+  }
   return 0;
 }
 
@@ -9633,7 +9706,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 
     if (p.type != pg_pool_t::TYPE_ERASURE) {
       if (n < 1 || n > p.size) {
-	ss << "pool min_size must be between 1 and replica, which is set to " << p.replica;
+	ss << "pool min_size must be between 1 and replica, which is set to "
+           << static_cast<unsigned>(p.replica);
 	return -EINVAL;
       }
     } else {
@@ -10190,7 +10264,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
   } else if (var == "replica") {
     int r = prepare_command_pool_set_replica(
-        pool, n, val, interr, p, ss);
+        pool, poolstr, n, val, interr, p, ss);
     if (r < 0) {
       return r;
     }
@@ -10667,7 +10741,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         }
         p.size = new_size;
       }
-      ss << "set replica to " << p.replica << " (legacy) size set to: " << p.size;
+      ss << "set replica to " << static_cast<unsigned>(p.replica)
+         << " (legacy) size set to: " << static_cast<unsigned>(p.size);
     }
     // num_zones and replica are pool fields, not pool options
     if (var != "num_zones" && var != "replica") {

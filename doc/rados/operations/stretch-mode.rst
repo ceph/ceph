@@ -58,7 +58,13 @@ its CRUSH rule unchanged.
 
 To transition a replicated pool from one zone to two, supply ``--replica``,
 ``--zone_failure_domain``, and ``--osd_failure_domain``. The pool size becomes
-twice the per-zone replica count.
+twice the per-zone replica count. Changing ``replica`` on a two-zone pool
+assigns a CRUSH rule named ``<pool>-replica-<count>`` and recalculates
+``min_size`` from the per-zone replica count. With
+``osd_pool_default_min_size=0``, the calculation is
+``replica - floor(replica / 2)``; otherwise it is the smaller of the
+configured default minimum and the replica count. This replaces any custom
+pool ``min_size`` when the replica count changes.
 
 Setting ``num_zones`` to one clears the pool's stretch peering settings and
 assigns a single-zone CRUSH rule. Replicated pools revert to
