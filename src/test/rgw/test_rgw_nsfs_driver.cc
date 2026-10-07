@@ -4525,6 +4525,233 @@ TEST_F(NSFSNooBaaStateTest, OurStateWinsOverTheirs)
       << "their record was consulted for a bucket that has state of ours";
 }
 
+/* Conversion must write down the owner the inode was answering.
+ *
+ * An object with no recorded ACL answers its owner from the inode
+ * while the bucket is unmarked -- their format has nowhere to put an
+ * ACL, so `NooBaaXattrStrategy::disk_name(RGW_ATTR_ACL)` is empty and
+ * nothing is stored.  Marking the bucket retires that reader and makes
+ * the recorded ACL the only source, so without a capture the object
+ * comes out of conversion with no owner at all.
+ *
+ * The control is the sideloaded file:  it has no ACL by construction,
+ * which is the case the capture exists for.  Before the capture this
+ * test fails on the first assertion after the conversion. */
+TEST_F(NSFSNooBaaBucketTest, ConversionCapturesTheInodeOwnerAsAnAcl)
+{
+  const sf::path obj{bucket_path() / "sideloaded.txt"};
+  {
+    int fd = ::open(obj.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GE(fd, 0) << cpp_strerror(errno);
+    ASSERT_EQ(::write(fd, "x", 1), 1);
+    ::close(fd);
+  }
+
+  struct stat st{};
+  ASSERT_EQ(::stat(obj.c_str(), &st), 0);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_TRUE(b->xattr_strategy()->disk_name(RGW_ATTR_ACL).empty())
+      << "their mapping has somewhere to put an ACL after all;  the "
+	 "premise of this test is gone";
+
+  /* Where the ACL will land once the bucket is shared.  Asked of the
+   * strategy directly, because the bucket is still base and its own
+   * strategy has no name for an ACL at all. */
+  nsfs::PrefixedXattrStrategy ours;
+  const std::string disk = ours.disk_name(RGW_ATTR_ACL);
+  ASSERT_FALSE(disk.empty()) << "shared has nowhere to put an ACL";
+
+  /* Both polarities, in one run.  Absent before, present after -- so
+   * the assertion after the conversion is reachable, and what satisfies
+   * it is the conversion rather than something that was already
+   * there. */
+  ASSERT_EQ(::getxattr(obj.c_str(), disk.c_str(), nullptr, 0), -1);
+  ASSERT_EQ(errno, ENODATA)
+      << "the sideloaded object already carries " << disk
+      << ";  nothing here would then be proving the capture";
+
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  ASSERT_STREQ(b->profile_name(), "shared");
+
+  char buf[4096];
+  ssize_t len = ::getxattr(obj.c_str(), disk.c_str(), buf, sizeof(buf));
+  ASSERT_GT(len, 0)
+      << "the converted object carries no " << disk
+      << ";  its owner was answered from the inode and is now lost";
+
+  bufferlist bl;
+  bl.append(buf, len);
+  RGWAccessControlPolicy policy;
+  auto it = bl.cbegin();
+  ASSERT_NO_THROW(policy.decode(it));
+
+  EXPECT_EQ(to_string(policy.get_owner().id), std::to_string(st.st_uid))
+      << "the captured owner is not the uid the unconverted reader "
+	 "would have answered";
+
+  /* RGW's default policy, not a bare owner.  An owner with no grants
+   * is more restrictive than the absence it replaced:  with no ACL,
+   * authorization falls through to the bucket. */
+  EXPECT_FALSE(policy.get_acl().get_grant_map().empty())
+      << "the captured ACL grants nobody anything";
+}
+
+/* The sentinel is a user-visible object, so it is created with the mode
+ * the ordinary write path uses and not a private one.
+ *
+ * umask is set for the duration, because `openat` applies it and a
+ * developer's umask is not the test's to assume. */
+TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelAnObjectMode)
+{
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([saved] { ::umask(saved); });
+
+  const sf::path dir{bucket_path() / "dirobj"};
+  ASSERT_TRUE(sf::create_directories(dir));
+  {
+    const char* v = "0";
+    ASSERT_EQ(::setxattr(dir.c_str(), "user.noobaa.dir_content", v, 1, 0), 0)
+	<< cpp_strerror(errno)
+	<< ";  without their marker this is an ordinary directory and the "
+	   "sentinel is never created";
+  }
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+
+  const sf::path sentinel{dir / ".folder"};
+  ASSERT_TRUE(sf::exists(sentinel))
+      << "the directory object was not converted to a sentinel";
+
+  struct stat st{};
+  ASSERT_EQ(::stat(sentinel.c_str(), &st), 0);
+  EXPECT_EQ(st.st_mode & 07777, 0644u)
+      << "the sentinel is a user-visible object and should carry the mode "
+	 "an object written through S3 would";
+}
+
+/* A group we belong to that is not our primary one.
+ *
+ * `chown(2)` lets an unprivileged owner change a file's group to any
+ * group it is a member of.  That is what makes the inheritance path
+ * reachable without root:  `inherit_ids()` skips only when the uid
+ * *and* the gid already match the gateway's, so a source whose group
+ * differs forces the `fchown` that carries ownership across. */
+static std::optional<gid_t> other_group()
+{
+  int n = ::getgroups(0, nullptr);
+  if (n <= 0) {
+    return std::nullopt;
+  }
+  std::vector<gid_t> gs(n);
+  if (::getgroups(n, gs.data()) != n) {
+    return std::nullopt;
+  }
+  const gid_t mine = ::getegid();
+  for (gid_t g : gs) {
+    if (g != mine) {
+      return g;
+    }
+  }
+  return std::nullopt;
+}
+
+/* What conversion creates inherits the ownership of what it
+ * re-expresses.
+ *
+ * The sentinel stands in for the directory, so it carries the
+ * directory's uid and gid -- not the gateway's, which would leave a
+ * converted directory object unreadable to the account that owns the
+ * data.  The uid cannot be varied without privilege, so the group is
+ * what this varies, and it exercises the same `fchown`. */
+TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelTheDirectorysGroup)
+{
+  const auto alt = other_group();
+  if (!alt) {
+    GTEST_SKIP() << "only one group;  nothing to inherit that differs";
+  }
+
+  const sf::path dir{bucket_path() / "dirobj"};
+  ASSERT_TRUE(sf::create_directories(dir));
+  {
+    const char* v = "0";
+    ASSERT_EQ(::setxattr(dir.c_str(), "user.noobaa.dir_content", v, 1, 0), 0)
+	<< cpp_strerror(errno);
+  }
+  ASSERT_EQ(::chown(dir.c_str(), static_cast<uid_t>(-1), *alt), 0)
+      << cpp_strerror(errno);
+
+  struct stat dst{};
+  ASSERT_EQ(::stat(dir.c_str(), &dst), 0);
+  ASSERT_EQ(dst.st_gid, *alt) << "the premise is gone;  the chown did nothing";
+  ASSERT_NE(dst.st_gid, ::getegid())
+      << "the source group matches ours, so inherit_ids() would skip and "
+	 "this test could not fail";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+
+  const sf::path sentinel{dir / ".folder"};
+  ASSERT_TRUE(sf::exists(sentinel));
+  struct stat st{};
+  ASSERT_EQ(::stat(sentinel.c_str(), &st), 0);
+  EXPECT_EQ(st.st_gid, *alt)
+      << "the sentinel kept the gateway's group instead of the group of "
+	 "the directory it re-expresses";
+  EXPECT_EQ(st.st_uid, dst.st_uid) << "the sentinel's uid is not the "
+      "directory's";
+}
+
+/* Without the capability, conversion refuses and leaves nothing behind.
+ *
+ * `CAP_CHOWN` cannot be dropped in a test process -- a thread that
+ * drops it cannot regain it, which would poison every later test -- so
+ * the condition is injected through the same hint the suite uses.
+ *
+ * Both halves matter.  Refusing is the point, and so is removing the
+ * file it had already created:  a sentinel left behind with the
+ * gateway's ownership is the outcome the refusal exists to prevent. */
+TEST_F(NSFSNooBaaBucketTest, ConversionRefusesWhenItCannotInheritOwnership)
+{
+  const auto alt = other_group();
+  if (!alt) {
+    GTEST_SKIP() << "only one group;  the chown would be skipped anyway";
+  }
+
+  const sf::path dir{bucket_path() / "dirobj"};
+  ASSERT_TRUE(sf::create_directories(dir));
+  {
+    const char* v = "0";
+    ASSERT_EQ(::setxattr(dir.c_str(), "user.noobaa.dir_content", v, 1, 0), 0)
+	<< cpp_strerror(errno);
+  }
+  ASSERT_EQ(::chown(dir.c_str(), static_cast<uid_t>(-1), *alt), 0)
+      << cpp_strerror(errno);
+
+  std::map<std::string, std::string> params{{"enable", "true"}};
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-no-chown", params, &out), 0);
+  ASSERT_EQ(out["enabled"], "true");
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED),
+	    -EPERM)
+      << "conversion proceeded without being able to set ownership";
+
+  EXPECT_FALSE(sf::exists(dir / ".folder"))
+      << "the refusal left a sentinel owned by the gateway, which is the "
+	 "state it exists to prevent";
+
+  /* and the other polarity:  with the injection off the same tree
+   * converts, so the refusal above was the injection and not some
+   * unrelated failure */
+  params["enable"] = "false";
+  ASSERT_EQ(driver->driver_hint(env->dpp, "inject-no-chown", params, &out), 0);
+  EXPECT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  EXPECT_TRUE(sf::exists(dir / ".folder"));
+}
+
 /* Object lock reaches RGW.
  *
  * The one whose absence is a compliance breach rather than a missing
