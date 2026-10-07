@@ -49,6 +49,25 @@ place that will cause the cluster to re-replicate the data until the
 ``min_size`` configuration option has been met.
 
 
+Changing Per-Pool Zone and Replica Counts
+========================================
+
+Outside global stretch mode, ``ceph osd pool set <pool> num_zones`` supports
+one or two zones. Setting the current zone count again leaves the pool and
+its CRUSH rule unchanged.
+
+To transition a replicated pool from one zone to two, supply ``--replica``,
+``--zone_failure_domain``, and ``--osd_failure_domain``. The pool size becomes
+twice the per-zone replica count.
+
+Setting ``num_zones`` to one clears the pool's stretch peering settings and
+assigns a single-zone CRUSH rule. Replicated pools revert to
+``osd_pool_default_size`` and its default minimum size. Erasure-coded pools
+revert to the size and minimum size derived from their erasure-code profile.
+An explicit ``--crush_rule`` can select the replacement rule. Replaced rules
+are removed only when no other pool references them.
+
+
 Stretch Cluster Issues
 ======================
 

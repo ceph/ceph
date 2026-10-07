@@ -8442,7 +8442,7 @@ int OSDMonitor::check_pg_num(int64_t pool,
 
   for (const auto& [pool_id, pool_info] : osdmap.get_pools()) {
     // Check only for pools affected by crush rule
-    if (crush_pool_ids.contains(pool_id)) {
+    if (pool_id == pool || crush_pool_ids.contains(pool_id)) {
       if (pool_id == pool) {
         // Specified pool, use given pg_num and size values.
         projected += pg_num * size;
@@ -9126,12 +9126,18 @@ void OSDMonitor::maybe_remove_unused_crush_rule(int64_t skip_pool,
   }
   // Check whether any pool other than current still references old_rule_id.
   for (const auto& [pid, committed_pool] : osdmap.pools) {
-    if (pid == skip_pool) {
+    if (pid == skip_pool || pending_inc.old_pools.count(pid)) {
       continue;
     }
     const auto it = pending_inc.new_pools.find(pid);
     const auto& pp = (it != pending_inc.new_pools.end()) ? it->second : committed_pool;
     if (pp.crush_rule == old_rule_id) {
+      return;
+    }
+  }
+  for (const auto& [pid, pp] : pending_inc.new_pools) {
+    if (pid != skip_pool && !pending_inc.old_pools.count(pid) &&
+        pp.crush_rule == old_rule_id) {
       return;
     }
   }
@@ -9170,15 +9176,46 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
   }
   const int64_t old_num_zones = p.get_num_zones();
   const int old_crush_rule = p.crush_rule;
+  if (n == old_num_zones) {
+    return 0;
+  }
+  if (n > 2) {
+    ss << "num_zones must be 1 or 2";
+    return -EINVAL;
+  }
+  if (old_num_zones < 1) {
+    ss << "pool num_zones must be at least 1";
+    return -EINVAL;
+  }
 
   if (old_num_zones > 1 && n == 1) {
     if (p.is_stretch_pool()) {
+      int crush_rule = -1;
+      const string rule_name = cmd_getval_or<string>(
+          cmdmap, "crush_rule",
+          p.is_erasure() ? poolstr + "-single-zone" : "");
+      const string root = cmd_getval_or<string>(cmdmap, "root", "default");
+      int err = prepare_pool_crush_rule(
+          p.get_type(), poolstr, p.erasure_code_profile, rule_name, 1, root,
+          0, "", "", "", &crush_rule, &ss);
+      if (err) {
+        return err;
+      }
+      if (!osdmap.crush->rule_valid_for_pool_type(crush_rule, p.get_type())) {
+        ss << "replacement CRUSH rule type does not match pool";
+        return -EINVAL;
+      }
       p.peering_crush_bucket_count = 0;
       p.peering_crush_bucket_target = 0;
       p.peering_crush_bucket_barrier = 0;
       p.peering_crush_mandatory_member = 0;
       if (p.type == pg_pool_t::TYPE_REPLICATED) {
-        p.size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+        const auto size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+        if (size < 1 || size > std::numeric_limits<decltype(p.size)>::max()) {
+          ss << "default pool size exceeds the supported range";
+          return -ERANGE;
+        }
+        p.size = size;
         p.min_size = g_conf().get_osd_pool_default_min_size(p.size);
         p.replica = p.size;
       } else if (p.type == pg_pool_t::TYPE_ERASURE) {
@@ -9186,6 +9223,11 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
         stringstream tmp;
         int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
         if (err == 0) {
+          if (erasure_code->get_chunk_count() >
+              std::numeric_limits<decltype(p.size)>::max()) {
+            ss << "resulting pool size exceeds the maximum supported value";
+            return -ERANGE;
+          }
           p.size = erasure_code->get_chunk_count();
           p.min_size = erasure_code->get_data_chunk_count() +
                        std::min<int>(1, erasure_code->get_coding_chunk_count() - 1);
@@ -9197,13 +9239,29 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
         ss << "unknown pool type " << p.type;
         return -EINVAL;
       }
+      int r = check_pg_num(pool, p.get_pg_num(), p.size, crush_rule, &ss);
+      if (r < 0) {
+        return r;
+      }
+      p.num_zones = 1;
+      p.crush_rule = crush_rule;
       ss << "pool unstretched (num_zones=1)";
       bool any_pool_stretched = false;
-      for (const auto &_pool : osdmap.pools) {
-        if (_pool.first == pool) continue;
-        const pg_pool_t &other_pool = _pool.second;
-        if (other_pool.peering_crush_bucket_count > 0 &&
-            other_pool.peering_crush_bucket_target > 0) {
+      for (const auto& [pid, committed_pool] : osdmap.pools) {
+        if (pid == pool || pending_inc.old_pools.count(pid)) {
+          continue;
+        }
+        const auto it = pending_inc.new_pools.find(pid);
+        const auto& other_pool =
+            it != pending_inc.new_pools.end() ? it->second : committed_pool;
+        if (other_pool.is_stretch_pool()) {
+          any_pool_stretched = true;
+          break;
+        }
+      }
+      for (const auto& [pid, other_pool] : pending_inc.new_pools) {
+        if (pid != pool && !pending_inc.old_pools.count(pid) &&
+            other_pool.is_stretch_pool()) {
           any_pool_stretched = true;
           break;
         }
@@ -9248,6 +9306,15 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       }
       int64_t replica;
       cmd_getval(cmdmap, "replica", replica);
+      if (replica < 1) {
+        ss << "replica must be at least 1";
+        return -EINVAL;
+      }
+      if (replica > std::numeric_limits<decltype(p.replica)>::max() ||
+          n > std::numeric_limits<decltype(p.size)>::max() / replica) {
+        ss << "resulting pool size exceeds the maximum supported value";
+        return -ERANGE;
+      }
       string osd_failure_domain;
       cmd_getval(cmdmap, "osd_failure_domain", osd_failure_domain);
       string device_class = cmd_getval_or<string>(cmdmap, "class", "");
@@ -9261,9 +9328,16 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
         ss << "pool has no erasure_code_profile set";
         return -EINVAL;
       }
+      if (crush_rule_name.empty()) {
+        crush_rule_name = poolstr + "-stretch";
+      }
+      const string osd_failure_domain = cmd_getval_or<string>(
+          cmdmap, "osd_failure_domain", "");
+      const string device_class = cmd_getval_or<string>(cmdmap, "class", "");
       int err = prepare_pool_crush_rule(
           p.get_type(), poolstr, p.erasure_code_profile, crush_rule_name, n,
-          root, 0, "", "", "", &crush_rule, &ss);
+          root, 0, zone_failure_domain, osd_failure_domain, device_class,
+          &crush_rule, &ss);
       if (err) return err;
       if (auto r = enable_pool_ec_optimizations(p, true, false); !r) {
         ss << r.error().message;
@@ -9280,13 +9354,22 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       ss << "zone_failure_domain '" << zone_failure_domain << "' is not valid";
       return -EINVAL;
     }
+    if (!crush.rule_valid_for_pool_type(crush_rule, p.get_type())) {
+      ss << "CRUSH rule type does not match pool";
+      return -EINVAL;
+    }
     unsigned size, min_size;
     int replica_copy = p.replica;
     int err = prepare_pool_size(p.get_type(), p.erasure_code_profile, 0,
                   replica_copy, n, &size, &min_size, &ss);
     if (err) return err;
-    if (size > p.size) {
-      int r = check_pg_num(pool, p.get_pg_num(), size, p.get_crush_rule(), &ss);
+    if (size < 1 || size > std::numeric_limits<decltype(p.size)>::max() ||
+        min_size < 1 || min_size > size) {
+      ss << "resulting pool size or min_size exceeds the supported range";
+      return -ERANGE;
+    }
+    if (size != p.size || crush_rule != old_crush_rule) {
+      int r = check_pg_num(pool, p.get_pg_num(), size, crush_rule, &ss);
       if (r < 0) return r;
     }
     p.size = size;
@@ -9345,7 +9428,8 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
     ss << "pool transitioned to stretch mode (num_zones=" << n << ")";
     ss << "; pool size adjusted to " << (int)p.size;
     if (p.type == pg_pool_t::TYPE_REPLICATED) {
-      ss << " (" << n << " zones * " << p.replica << " replicas)";
+      ss << " (" << n << " zones * "
+         << static_cast<unsigned>(p.replica) << " replicas)";
     } else if (p.type == pg_pool_t::TYPE_ERASURE) {
       ErasureCodeInterfaceRef erasure_code;
       stringstream tmp;
@@ -9355,7 +9439,9 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       }
     }
   }
-  maybe_remove_unused_crush_rule(pool, old_crush_rule);
+  if (p.crush_rule != old_crush_rule) {
+    maybe_remove_unused_crush_rule(pool, old_crush_rule);
+  }
   return 0;
 }
 
@@ -9398,6 +9484,17 @@ int OSDMonitor::prepare_command_pool_set_replica(
 int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
                                          stringstream& ss)
 {
+  // MonMap changes must not commit before the corresponding pool is staged.
+  struct Plugger {
+    Paxos& paxos;
+    explicit Plugger(Paxos& p) : paxos(p) {
+      paxos.plug();
+    }
+    ~Plugger() {
+      paxos.unplug();
+    }
+  } plugger(paxos);
+
   string poolstr;
   cmd_getval(cmdmap, "pool", poolstr);
   int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
@@ -10520,7 +10617,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
           ss << "pool transitioned to stretch mode (num_zones=" << n << ")";
           ss << "; pool size adjusted to " << (int)p.size;
           if (p.type == pg_pool_t::TYPE_REPLICATED) {
-            ss << " (" << n << " zones * " << p.replica << " replicas)";
+            ss << " (" << n << " zones * "
+               << static_cast<unsigned>(p.replica) << " replicas)";
           } else if (p.type == pg_pool_t::TYPE_ERASURE) {
             ErasureCodeInterfaceRef erasure_code;
             stringstream tmp;
@@ -10616,6 +10714,10 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   }
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
+  if (pending_inc.change_stretch_mode) {
+    // Commit the pool and MonMap transitions in the same Paxos proposal.
+    need_immediate_propose = true;
+  }
   return 0;
 }
 
