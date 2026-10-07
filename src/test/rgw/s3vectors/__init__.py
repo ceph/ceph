@@ -74,6 +74,12 @@ def setup():
     global s3vector_backend
     s3vector_backend = defaults.get("s3vector_backend", "rgw")
 
+    # where the "rgw" backend stores the data of a new vector bucket:
+    # "vector_bucket" (inside the vector bucket) or "regular_bucket" (a same-name
+    # regular S3 bucket). matches the rgw_s3vector_backend_storage option.
+    global s3vector_storage
+    s3vector_storage = defaults.get("s3vector_storage", "vector_bucket")
+
     # backend options.
     # when not set, a value that fits the tested zone is used
     global s3vector_local_path
@@ -151,9 +157,16 @@ def get_s3vector_local_path():
     return s3vector_local_path
 
 
+def get_s3vector_storage():
+    global s3vector_storage
+    return s3vector_storage
+
+
 def has_backing_bucket():
-    """ whether the tested backend keeps the vector data in an ordinary bucket """
-    return get_s3vector_backend() == "rgw"
+    """ whether the tested configuration keeps the vector data in a separate
+    ordinary bucket that has to be created before the vector bucket. this is only
+    the case for the "rgw" backend in its "regular_bucket" storage mode. """
+    return get_s3vector_backend() == "rgw" and get_s3vector_storage() == "regular_bucket"
 
 
 @pytest.fixture(autouse=True, scope="package")

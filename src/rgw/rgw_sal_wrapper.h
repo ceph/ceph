@@ -18,6 +18,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define RGW_SAL_WRAPPER_VERSION_MAJOR 1
 #define RGW_SAL_WRAPPER_VERSION_MINOR 0
@@ -40,6 +41,8 @@ typedef struct CRgwYieldContext CRgwYieldContext; /* optional_yield; NULL = null
 typedef struct CRgwBucket {
   const char* name;      /* Bucket name, null-terminated */
   const char* tenant;    /* Tenant, null-terminated (NULL for default tenant) */
+  bool is_vector_bucket; /* resolve in the vector-bucket namespace (true) or the
+                            regular bucket namespace (false). */
 } CRgwBucket;
 
 /**

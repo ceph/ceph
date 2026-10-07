@@ -788,7 +788,7 @@ public:
   int list_vector_buckets(const DoutPrefixProvider* dpp,
 			     const rgw_owner& owner, const std::string& tenant,
 			     const std::string& marker, const std::string& end_marker,
-			     uint64_t max, BucketList& buckets,
+			     uint64_t max, bool need_stats, BucketList& buckets,
 			     optional_yield y) override { return -ENOTSUP; }
 
   virtual void finalize(void) override;

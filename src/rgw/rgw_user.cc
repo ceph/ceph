@@ -48,6 +48,36 @@ int rgw_sync_all_stats(const DoutPrefixProvider *dpp,
     }
   } while (!listing.next_marker.empty());
 
+  // Vector buckets live in a separate metadata namespace and keep their per-owner
+  // stats in a separate owner-stats object
+  rgw::sal::BucketList vlisting;
+  do {
+    ret = driver->list_vector_buckets(dpp, owner, tenant, vlisting.next_marker,
+                                      string(), max_entries, false, vlisting, y);
+    if (ret == -ENOTSUP) {
+      ret = 0;
+      break;
+    }
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "failed to list vector buckets: " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+
+    for (auto& ent : vlisting.buckets) {
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      ret = driver->load_vector_bucket(dpp, ent.bucket, &bucket, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: could not read vector bucket info: bucket=" << ent.bucket << " ret=" << ret << dendl;
+        continue;
+      }
+      ret = bucket->sync_owner_stats(dpp, y, &ent);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: could not sync vector bucket stats: ret=" << ret << dendl;
+        return ret;
+      }
+    }
+  } while (!vlisting.next_marker.empty());
+
   ret = driver->complete_flush_stats(dpp, y, owner);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to complete syncing owner stats: ret=" << ret << dendl;

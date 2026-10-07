@@ -20,6 +20,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +39,9 @@ struct LanceDBObjectStoreProvider;
  * @param dpp     Non-null pointer to DoutPrefixProvider for logging
  * @param tenant  Tenant of the buckets accessed through the provider, NULL or
  *                empty for the default tenant
+ * @param use_vector_bucket  When true, object operations resolve the bucket in the
+ *                vector-bucket namespace (LanceDB data is stored inside the vector
+ *                bucket itself); when false, in a same-name regular S3 bucket
  *
  * @return Non-null pointer to LanceDBObjectStoreProvider on success,
  *         NULL if either driver or dpp is NULL, or if tenant is not valid UTF-8
@@ -48,7 +52,8 @@ struct LanceDBObjectStoreProvider;
  * @note Both driver and dpp must remain valid for provider lifetime
  */
 struct LanceDBObjectStoreProvider* rgw_lancedb_store_create_provider(void* driver, const void* dpp,
-                                                                    const char* tenant);
+                                                                    const char* tenant,
+                                                                    bool use_vector_bucket);
 
 /**
  * Free a provider created by rgw_lancedb_store_create_provider.

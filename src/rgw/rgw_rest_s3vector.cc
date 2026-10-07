@@ -9,12 +9,23 @@
 #include "common/async/yield_context.h"
 #include "common/ceph_json.h"
 #include "rgw_arn.h"
+#include "rgw_zone.h"
 #include "rgw_s3vector_background.h"
+
+#include <type_traits>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 namespace {
+
+// detect whether an s3vector request config carries a vector_bucket_name field
+// (every op does except list_vector_buckets_t, which has no single bucket)
+template<typename T, typename = void>
+struct has_vector_bucket_name : std::false_type {};
+template<typename T>
+struct has_vector_bucket_name<T, std::void_t<decltype(std::declval<T&>().vector_bucket_name)>>
+    : std::true_type {};
 
 class RGWS3VectorBase : public RGWDefaultResponseOp {
 protected:
@@ -42,6 +53,17 @@ protected:
       return -EINVAL;
     }
 
+    // Attribute this request to its vector bucket in the ops/usage log using the
+    // ARN resource form ("bucket/<name>"), so that it doesn't collide with a same-name
+    // regular bucket
+    if constexpr (has_vector_bucket_name<T>::value) {
+      if (!configuration.vector_bucket_name.empty()) {
+        s->bucket_name = rgw::s3vector::vector_bucket_arn(
+            s->zonegroup_name, s->account_name,
+            configuration.vector_bucket_name).resource;
+      }
+    }
+
     return 0;
   }
 
@@ -53,6 +75,12 @@ protected:
   // known here. the operations needed by each request were taken from the SAL
   // calls that it makes: note that "s3:GetObject" covers the head of an object as
   // well, and that removing vectors writes deletion files, and deletes nothing
+  //
+  // this check applies only to the regular-bucket storage mode, where the data
+  // lives in a same-name regular S3 bucket that a user could otherwise reach
+  // directly. in vector-bucket mode the data is inside the vector bucket, which is
+  // in a separate metadata namespace and unreachable through the S3 object API, so
+  // there is no backing bucket to check.
   int verify_s3_bucket_permission(const std::string& bucket_name,
                                   std::initializer_list<uint64_t> s3_ops,
                                   optional_yield y) {
@@ -65,6 +93,14 @@ protected:
       return -EINVAL;
     }
     if (!rgw::s3vector::is_rgw_backend(backend_type)) {
+      return 0;
+    }
+
+    // vector-bucket storage keeps the data out of the S3 object namespace, so the
+    // backing-bucket permission check does not apply
+    if (rgw::s3vector::uses_vector_bucket_storage(
+            rgw::s3vector::get_bucket_storage_mode(
+                this, driver, &s->bucket_tenant, bucket_name, y))) {
       return 0;
     }
 
@@ -239,6 +275,42 @@ private:
     return do_init_processing(configuration, y);
   }
 
+  // create the vector bucket metadata entity, recording the (immutable) storage mode
+  int create_bucket_entity(rgw::s3vector::StorageMode mode, optional_yield y) {
+    const auto& zonegroup = s->penv.site->get_zonegroup();
+
+    rgw::sal::VectorBucket::CreateParams createparams;
+    // as with ordinary buckets, a vector bucket belongs to the account of the user
+    // creating it, when it has one, and to the user itself otherwise
+    createparams.owner = s->owner.id;
+    createparams.zonegroup_id = zonegroup.id;
+    createparams.placement_rule.storage_class = s->info.storage_class;
+    // only a vector-bucket-mode bucket stores LanceDB data inside itself, so only
+    // it needs a real bucket index; resolve placement accordingly. in
+    // regular-bucket mode the data lives in a separate same-name S3 bucket, so this
+    // entity is just a metadata handle -- leave zone_placement unset to create it
+    // indexless.
+    if (rgw::s3vector::uses_vector_bucket_storage(mode)) {
+      if (int r = select_bucket_placement(this, zonegroup, s->user->get_info(),
+                                          createparams.placement_rule); r < 0) {
+        return r;
+      }
+      createparams.zone_placement = rgw::find_zone_placement(
+          this, s->penv.site->get_zone_params(), createparams.placement_rule);
+      if (!createparams.zone_placement) {
+        return -ERR_INVALID_LOCATION_CONSTRAINT;
+      }
+    }
+    // record where LanceDB data of this bucket is stored. this attribute is set once,
+    // at creation, and is never changed afterwards, so the routing of a bucket's data
+    // is fixed even if rgw_s3vector_backend_storage changes later
+    bufferlist bl;
+    bl.append(rgw::s3vector::to_string(mode));
+    createparams.attrs[RGW_ATTR_S3VECTOR_STORAGE] = std::move(bl);
+
+    return bucket->create(this, createparams, y);
+  }
+
   void execute(optional_yield y) override {
     const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
     const int ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
@@ -247,31 +319,70 @@ private:
       op_ret = ret;
       return;
     }
+    const bool creating = (ret == -ENOENT);
 
-    // the backend is verified before the metadata of the bucket is created, so that a
-    // failed request does not leave a bucket behind. it is verified also when the bucket
-    // already exists, so that the request fails if the backend became unusable
+    // a new bucket takes its storage mode from the admin option; an existing bucket
+    // keeps whatever mode it was created with (its immutable attribute)
+    rgw::s3vector::StorageMode mode = rgw::s3vector::StorageMode::VECTOR_BUCKET;
+    {
+      const std::string mode_str =
+          s->cct->_conf.get_val<std::string>("rgw_s3vector_backend_storage");
+      if (rgw::s3vector::get_storage_mode(mode_str, mode) < 0) {
+        ldpp_dout(this, 1) << "ERROR: invalid rgw_s3vector_backend_storage: " << mode_str << dendl;
+        op_ret = -EINVAL;
+        return;
+      }
+    }
+    // the storage mode only governs the "rgw" backend; with the "local" backend the
+    // data is on the local filesystem and no bucket is involved
+    rgw::s3vector::BackendType backend_type;
+    {
+      const std::string backend_str =
+          s->cct->_conf.get_val<std::string>("rgw_s3vector_backend");
+      if (rgw::s3vector::get_backend_type(backend_str, backend_type) < 0) {
+        ldpp_dout(this, 1) << "ERROR: s3vector unrecognized backend type: " << backend_str << dendl;
+        op_ret = -EINVAL;
+        return;
+      }
+    }
+
+    // in vector-bucket mode the bucket itself is the LanceDB backend, so it must exist
+    // before connectivity can be verified. in regular-bucket mode (or the local
+    // backend) the backend is separate and must already exist, so it is verified first.
+    const bool vector_storage = creating &&
+        rgw::s3vector::is_rgw_backend(backend_type) &&
+        rgw::s3vector::uses_vector_bucket_storage(mode);
+
+    if (vector_storage) {
+      op_ret = create_bucket_entity(mode, y);
+      if (op_ret < 0) {
+        ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
+        return;
+      }
+    }
+
+    // the backend is verified before the metadata of the bucket is created (regular
+    // mode), so that a failed request does not leave a bucket behind. it is verified
+    // also when the bucket already exists, so that the request fails if the backend
+    // became unusable
     op_ret = rgw::s3vector::create_vector_bucket(configuration, driver, &s->bucket_tenant, this, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to initialize the backend of s3vector bucket " << bucket_id <<
         ". error: " << op_ret << dendl;
+      // in vector-bucket mode the entity was created before the backend was verified,
+      // so remove it to keep the guarantee that a failed request leaves no bucket behind
+      if (vector_storage) {
+        if (const int r = bucket->remove(this, true, y); r < 0) {
+          ldpp_dout(this, 1) << "WARNING: failed to roll back s3vector bucket " << bucket_id
+            << " after backend failure. error: " << r << dendl;
+        }
+      }
       return;
     }
 
     // TODO: verify creation parameters are the same as the existing ones. reject if not
-    if (ret == -ENOENT) {
-      const auto& zonegroup = s->penv.site->get_zonegroup();
-
-      rgw::sal::VectorBucket::CreateParams createparams;
-      // as with ordinary buckets, a vector bucket belongs to the account of the user
-      // creating it, when it has one, and to the user itself otherwise
-      createparams.owner = s->owner.id;
-      createparams.zonegroup_id = zonegroup.id;
-      // vector buckets are indexless
-      createparams.index_type = rgw::BucketIndexType::Indexless;
-      createparams.placement_rule.storage_class = s->info.storage_class;
-
-      op_ret = bucket->create(this, createparams, y);
+    if (creating && !vector_storage) {
+      op_ret = create_bucket_entity(mode, y);
       if (op_ret < 0) {
         ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
         return;
@@ -398,7 +509,6 @@ private:
       );
     }
 
-    s->bucket_name = configuration.vector_bucket_arn->resource;
     ldpp_dout(this, 20) << "INFO: s3vector bucket ARN: " << configuration.vector_bucket_arn.get() << dendl;
     return 0;
   }
@@ -710,7 +820,7 @@ private:
     }
 
     op_ret = driver->list_vector_buckets(this, s->owner.id, s->auth.identity->get_tenant(),
-        start_marker, end_marker, configuration.max_results, listing, y);
+        start_marker, end_marker, configuration.max_results, false, listing, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: failed to execute ListVectorBuckets. error: " << op_ret << dendl;
       return;
@@ -802,7 +912,7 @@ private:
       );
     }
 
-    s->bucket_name = configuration.vector_bucket_arn->resource;
+    // s->bucket_name for usage/ops-log attribution is set in do_init_processing()
     ldpp_dout(this, 20) << "INFO: s3vector bucket ARN: " << configuration.vector_bucket_arn.get() << dendl;
     return 0;
   }
@@ -1191,6 +1301,9 @@ int RGWHandler_REST_s3Vector::postauth_init(optional_yield y) {
     return ret;
   }
   s->bucket_tenant = tenant;
+
+  // Similar to tenant, a vector bucket is owned by the user making the request.
+  s->bucket_owner = s->owner;
   return 0;
 }
 

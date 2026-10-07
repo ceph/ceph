@@ -58,6 +58,11 @@ pub struct LanceDBObjectStoreProvider {
 /// - Both pointers must remain valid for the lifetime of the provider
 /// - `tenant`, when not NULL, must be a valid null-terminated string
 ///
+/// `use_vector_bucket` selects the RGW metadata namespace that object operations
+/// resolve in: when true, they go through the vector-bucket namespace (the LanceDB
+/// data is stored inside the vector bucket itself); when false, they go through the
+/// regular bucket namespace (a same-name regular S3 bucket).
+///
 /// # Returns
 /// Non-null pointer to LanceDBObjectStoreProvider on success, NULL if
 /// either `driver` or `dpp` is NULL, or if `tenant` is not valid UTF-8.
@@ -69,6 +74,7 @@ pub unsafe extern "C" fn rgw_lancedb_store_create_provider(
     driver: *mut CRgwDriver,
     dpp: *const CRgwDoutPrefix,
     tenant: *const std::os::raw::c_char,
+    use_vector_bucket: bool,
 ) -> *mut LanceDBObjectStoreProvider {
     if driver.is_null() || dpp.is_null() {
         return std::ptr::null_mut();
@@ -92,7 +98,7 @@ pub unsafe extern "C" fn rgw_lancedb_store_create_provider(
     }
 
     let provider: Arc<dyn lance_io::object_store::ObjectStoreProvider> =
-        Arc::new(RGWStoreProvider::new(driver, dpp, tenant));
+        Arc::new(RGWStoreProvider::new(driver, dpp, tenant, use_vector_bucket));
 
     Box::into_raw(Box::new(LanceDBObjectStoreProvider {
         inner: Some(provider),
@@ -183,6 +189,7 @@ mod tests {
                 std::ptr::null_mut(),
                 std::ptr::null(),
                 std::ptr::null(),
+                true,
             )
         }
         .is_null());
@@ -197,7 +204,7 @@ mod tests {
         // a provider of the default tenant, and one of a named tenant
         for tenant in [std::ptr::null(), tenant.as_ptr()] {
             let provider =
-                unsafe { rgw_lancedb_store_create_provider(fake_driver, fake_dpp, tenant) };
+                unsafe { rgw_lancedb_store_create_provider(fake_driver, fake_dpp, tenant, true) };
             assert!(!provider.is_null());
 
             // Free should not crash

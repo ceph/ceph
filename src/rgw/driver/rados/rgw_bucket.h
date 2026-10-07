@@ -252,6 +252,7 @@ struct RGWBucketAdminOpState {
   bool dump_keys;
   bool hide_progress;
   bool restore_stats;
+  bool is_vector = false;
   int max_aio = 0;
   ceph::timespan min_age = std::chrono::hours::zero();
 
@@ -296,6 +297,8 @@ struct RGWBucketAdminOpState {
 
 
   void set_sync_bucket(bool value) { sync_bucket = value; }
+  void set_vector(bool value) { is_vector = value; }
+  bool is_vector_bucket() { return is_vector; }
 
   rgw_user& get_user_id() { return uid; }
   rgw_account_id& get_account_id() { return account_id; }
