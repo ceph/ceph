@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <atomic>
+#include <compare>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -142,6 +143,7 @@ struct rebuild_event_t {
   enum class Result { NONE, SUCCESS, FAILURE, SKIPPED };
   Type type;
   ceph::coarse_real_time timestamp;
+  std::string tenant;
   std::string bucket;
   std::string index;
   int active_rebuilds = 0;
@@ -177,21 +179,41 @@ static const char* event_result_to_str(rebuild_event_t::Result r) {
 class Manager : public DoutPrefixProvider {
 public:
     //message_t -> pass in empty index name for session messages (can extend to per table sessions in the future if needed)
-    using table_name_t = std::pair<std::string, std::string>; // pair of vector bucket name and index name
+    // A vector index is identified cluster-wide by (tenant, bucket, index): two
+    // tenants can own same-named buckets/indexes, so tenant MUST be part of the key
+    // — otherwise their mutation counters, local build dedup, distributed lock, and
+    // event log all collide. Named fields (not a nested pair) keep every access site
+    // unambiguous and compiler-checked.
+    struct table_name_t {
+      std::string tenant;
+      std::string bucket;
+      std::string index;
+      auto operator<=>(const table_name_t&) const = default;  // ordering for std::map
+      bool operator==(const table_name_t&) const = default;   // equality for unordered_*
+    };
     using session_name_t = std::pair<std::string, std::string>; // pair of tenant and vector bucket name
     struct message_t {
       enum class Op {
         UPDATE,
-        REMOVE, 
-        SESSION_CREATE, 
+        REMOVE,
+        SESSION_CREATE,
         SESSION_DELETE
       };
       message_t(const std::string& tenant, const std::string& bucket_name, const std::string& index_name, Op _type) :
-          session_name(tenant, bucket_name), table_name(bucket_name, index_name), type(_type) {}
+          session_name(tenant, bucket_name), table_name{tenant, bucket_name, index_name}, type(_type) {}
       const session_name_t session_name;
       const table_name_t table_name;
       const Op type;
     };
+    // boost::hash<table_name_t> extension point (ADL), so the existing
+    // boost::hash<table_name_t> hashers on the maps below keep working unchanged.
+    friend std::size_t hash_value(const table_name_t& t) {
+      std::size_t seed = 0;
+      boost::hash_combine(seed, t.tenant);
+      boost::hash_combine(seed, t.bucket);
+      boost::hash_combine(seed, t.index);
+      return seed;
+    }
 
 private:
   // use mmap/mprotect to allocate 128k coroutine stacks
@@ -313,6 +335,7 @@ private:
   // append to the in-memory ring buffer (evicting the oldest when full).
   // Additive to the existing ldpp_dout() log lines — never replaces them.
   void record_event(rebuild_event_t::Type type,
+                    const std::string& tenant = "",
                     const std::string& bucket = "",
                     const std::string& index = "",
                     int active_rebuilds = 0,
@@ -350,6 +373,7 @@ private:
     rebuild_event_t ev;
     ev.type = type;
     ev.timestamp = ceph::coarse_real_clock::now();
+    ev.tenant = tenant;
     ev.bucket = bucket;
     ev.index = index;
     ev.active_rebuilds = active_rebuilds;
@@ -529,10 +553,12 @@ private:
   // and is the same bucket that LanceDB uses for data storage via rgw_sal_wrapper.
   // TODO: the backing S3 bucket is currently created externally (e.g. by tests);
   // CreateVectorBucket should create it automatically for the RGW backend.
-  int load_bucket_for_lock(const std::string& vector_bucket_name,
+  int load_bucket_for_lock(const std::string& tenant,
+                           const std::string& vector_bucket_name,
                            std::unique_ptr<rgw::sal::Bucket>& bucket,
                            optional_yield y) {
     rgw_bucket bucket_id;
+    bucket_id.tenant = tenant;  // scope the lock object to the owning tenant
     bucket_id.name = vector_bucket_name;
     int ret = driver->load_bucket(this, bucket_id, &bucket, y);
     if (ret < 0) {
@@ -547,13 +573,14 @@ private:
 
   // PUT lock object with if-none-match="*" (conditional create).
   // exactly one concurrent caller succeeds, others get -ERR_PRECONDITION_FAILED.
-  int put_lock_object(const std::string& vector_bucket_name,
+  int put_lock_object(const std::string& tenant,
+                      const std::string& vector_bucket_name,
                       const std::string& lock_key,
                       const std::string& token,
                       optional_yield y,
                       std::string* etag_out = nullptr) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
+    int ret = load_bucket_for_lock(tenant, vector_bucket_name, bucket, y);
     if (ret < 0) return ret;
 
     auto obj = bucket->get_object({lock_key});
@@ -610,13 +637,14 @@ private:
   // Refresh (conditional overwrite) the lock object with a fresh timestamp.
   // Uses if_match=current_etag to ensure only the lock holder can refresh.
   // Returns the new ETag on success for subsequent refresh calls.
-  refresh_result refresh_lock_object(const std::string& vector_bucket_name,
+  refresh_result refresh_lock_object(const std::string& tenant,
+                                     const std::string& vector_bucket_name,
                                      const std::string& lock_key,
                                      const std::string& token,
                                      const std::string& current_etag,
                                      optional_yield y) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
+    int ret = load_bucket_for_lock(tenant, vector_bucket_name, bucket, y);
     if (ret < 0) return {ret, {}};
 
     auto obj = bucket->get_object({lock_key});
@@ -666,12 +694,13 @@ private:
   // if etag is non-empty, only deletes if the object's current ETag matches —
   // prevents deleting a lock that was reclaimed by another instance.
   // if etag is empty, performs unconditional delete.
-  int delete_lock_object(const std::string& vector_bucket_name,
+  int delete_lock_object(const std::string& tenant,
+                         const std::string& vector_bucket_name,
                          const std::string& lock_key,
                          const std::string& etag,
                          optional_yield y) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
+    int ret = load_bucket_for_lock(tenant, vector_bucket_name, bucket, y);
     if (ret < 0) return ret;
 
     auto obj = bucket->get_object({lock_key});
@@ -695,11 +724,12 @@ private:
     std::string etag;
   };
 
-  lock_read_result get_lock_object(const std::string& vector_bucket_name,
+  lock_read_result get_lock_object(const std::string& tenant,
+                                   const std::string& vector_bucket_name,
                                    const std::string& lock_key,
                                    optional_yield y) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
+    int ret = load_bucket_for_lock(tenant, vector_bucket_name, bucket, y);
     if (ret < 0) return {ret, {}, {}};
 
     auto obj = bucket->get_object({lock_key});
@@ -754,13 +784,14 @@ private:
     std::string etag;
   };
 
-  lock_acquire_result try_acquire_lock(const std::string& bucket_name,
+  lock_acquire_result try_acquire_lock(const std::string& tenant,
+                                       const std::string& bucket_name,
                                        const std::string& index_name,
                                        optional_yield y) {
     const std::string lock_key = make_lock_key(index_name);
 
     // step 1: read existing lock
-    auto lock_info = get_lock_object(bucket_name, lock_key, y);
+    auto lock_info = get_lock_object(tenant, bucket_name, lock_key, y);
     if (lock_info.ret == 0) {
       lock_body_t existing_lock;
       if (!existing_lock.from_json_str(lock_info.body)) {
@@ -782,7 +813,7 @@ private:
       // step 2: stale lock — conditional delete using ETag from step 1
       ldpp_dout(this, 5) << "INFO: deleting stale lock for " << bucket_name
           << "." << index_name << " (age=" << age << "s, ttl=" << lock_ttl << "s)" << dendl;
-      int del_ret = delete_lock_object(bucket_name, lock_key, lock_info.etag, y);
+      int del_ret = delete_lock_object(tenant, bucket_name, lock_key, lock_info.etag, y);
       if (del_ret == -ERR_PRECONDITION_FAILED) {
         ldpp_dout(this, 5) << "INFO: stale lock for " << bucket_name << "." << index_name
             << " was already reclaimed by another instance" << dendl;
@@ -794,7 +825,7 @@ private:
     // create-if-absent (atomic create)
     std::string token = generate_lock_token();
     std::string etag;
-    int ret = put_lock_object(bucket_name, lock_key, token, y, &etag);
+    int ret = put_lock_object(tenant, bucket_name, lock_key, token, y, &etag);
     if (ret == 0) {
       ldpp_dout(this, 5) << "INFO: acquired lock for " << bucket_name
           << "." << index_name << " token=" << token << dendl;
@@ -824,14 +855,15 @@ private:
   // note: in the normal case (build completes within TTL), no other instance
   // touches the lock, so the token check and conditional DELETE are redundant
   // safety. they matter only when the build exceeds TTL.
-  void release_lock(const std::string& bucket_name,
+  void release_lock(const std::string& tenant,
+                    const std::string& bucket_name,
                     const std::string& index_name,
                     const std::string& token,
                     optional_yield y) {
     const std::string lock_key = make_lock_key(index_name);
 
     // step 1: read lock
-    auto lock_info = get_lock_object(bucket_name, lock_key, y);
+    auto lock_info = get_lock_object(tenant, bucket_name, lock_key, y);
     if (lock_info.ret < 0) return;
 
     // step 2: verify ownership
@@ -850,7 +882,7 @@ private:
     // step 3: conditional delete using ETag from step 1
     // in the case some other instance reclaimed the lock between our GET and DELETE, 
     // the ETag changed and this delete fails safely without deleting the new holder's lock.
-    int ret = delete_lock_object(bucket_name, lock_key, lock_info.etag, y);
+    int ret = delete_lock_object(tenant, bucket_name, lock_key, lock_info.etag, y);
     if (ret == -ERR_PRECONDITION_FAILED) {
       ldpp_dout(this, 5) << "INFO: lock for " << bucket_name << "." << index_name
           << " was reclaimed between read and delete, not releasing" << dendl;
@@ -930,8 +962,9 @@ private:
   int process_table(const table_name_t& table_name,
                     uint64_t local_inserts, uint64_t local_deletes,
                     boost::asio::yield_context yield) {
-    const auto& bucket_name = table_name.first;
-    const auto& index_name = table_name.second;
+    const auto& tenant = table_name.tenant;
+    const auto& bucket_name = table_name.bucket;
+    const auto& index_name = table_name.index;
 
     // step 1: check if this RGW is already building this table (cheapest check).
     {
@@ -955,9 +988,10 @@ private:
       return RESULT_REBUILD_DISABLED;
     }
 
-    // step 3: open table
+    // step 3: open table (tenant-scoped; &tenant with an empty string behaves like
+    // nullptr for the default tenant, see tenant_name())
     int connect_result = 0;
-    LanceDBConnection* conn = s3vector::connect(this, driver, nullptr, bucket_name, connect_result);
+    LanceDBConnection* conn = s3vector::connect(this, driver, &tenant, bucket_name, connect_result);
     if (!conn) {
       ldpp_dout(this, 5) << "WARNING: cannot connect to database for "
           << bucket_name << ", skipping" << dendl;
@@ -1031,7 +1065,7 @@ private:
     // commits are not mutual-exclusive — concurrent writes cause CommitConflict)
     // and to protect the rebuild itself.
     optional_yield y(yield);
-    auto lock_result = try_acquire_lock(bucket_name, index_name, y);
+    auto lock_result = try_acquire_lock(tenant, bucket_name, index_name, y);
     if (lock_result.token.empty()) {
       ldpp_dout(this, 5) << "INFO: lock held by another process for "
           << bucket_name << "." << index_name << ", skipping" << dendl;
@@ -1051,6 +1085,7 @@ private:
     struct lock_guard_t {
       Manager* mgr;
       const table_name_t& table_name;
+      const std::string& tenant;
       const std::string& bucket_name;
       const std::string& index_name;
       const std::string& token;
@@ -1061,9 +1096,9 @@ private:
           mgr->active_builds.erase(table_name);
           mgr->active_locks.erase(table_name);
         }
-        mgr->release_lock(bucket_name, index_name, token, y);
+        mgr->release_lock(tenant, bucket_name, index_name, token, y);
       }
-    } lock_guard{this, table_name, bucket_name, index_name, lock_token, y};
+    } lock_guard{this, table_name, tenant, bucket_name, index_name, lock_token, y};
 
     // step 7: read build state under lock — fresh global_delete_count
     build_state_t prev_state;
@@ -1243,7 +1278,7 @@ private:
               std::rethrow_exception(eptr);
             } catch (const std::exception& e) {
               ldpp_dout(this, 0) << "ERROR: lock refresh coroutine exception for "
-                  << name.first << "." << name.second << ": " << e.what() << dendl;
+                  << name.bucket << "." << name.index << ": " << e.what() << dendl;
             }
           });
     }
@@ -1258,9 +1293,9 @@ private:
                         const std::string& token,
                         const std::string& etag,
                         boost::asio::yield_context yield) {
-    const std::string lock_key = make_lock_key(name.second);
+    const std::string lock_key = make_lock_key(name.index);
     //the actual refresh I/O is done outside the lock, so it doesn't block other builds or refreshes.
-    const auto result = refresh_lock_object(name.first, lock_key, token, etag,
+    const auto result = refresh_lock_object(name.tenant, name.bucket, lock_key, token, etag,
                                             optional_yield(yield));
     const auto now = ceph::coarse_real_clock::now();
 
@@ -1286,20 +1321,20 @@ private:
       lock.last_refresh = now;
       ++lock.refresh_count;
       ldpp_dout(this, 10) << "INFO: refreshed lock for "
-          << name.first << "." << name.second << dendl;
-      record_event(rebuild_event_t::Type::LOCK_REFRESH, name.first, name.second);
+          << name.bucket << "." << name.index << dendl;
+      record_event(rebuild_event_t::Type::LOCK_REFRESH, name.tenant, name.bucket, name.index);
     } else if (result.ret == -ERR_PRECONDITION_FAILED) {
       // lock_lost: another instance reclaimed the lock (stolen) while we were refreshing it. mark it lost so the build can skip metadata updates.
       lock.lock_lost = true;
       ldpp_dout(this, 1) << "WARNING: lock lost (stolen) for "
-          << name.first << "." << name.second
+          << name.bucket << "." << name.index
           << " during active build" << dendl;
-      record_event(rebuild_event_t::Type::LOCK_LOST, name.first, name.second);
+      record_event(rebuild_event_t::Type::LOCK_LOST, name.tenant, name.bucket, name.index);
     } else {
       ldpp_dout(this, 1) << "WARNING: failed to refresh lock for "
-          << name.first << "." << name.second
+          << name.bucket << "." << name.index
           << " (ret=" << result.ret << "), will retry" << dendl;
-      record_event(rebuild_event_t::Type::LOCK_REFRESH_FAIL, name.first, name.second);
+      record_event(rebuild_event_t::Type::LOCK_REFRESH_FAIL, name.tenant, name.bucket, name.index);
     }
   }
 
@@ -1324,7 +1359,7 @@ private:
         switch(message->type) {
           case message_t::Op::REMOVE:
             {
-              ldpp_dout(this, 20) << "INFO: received remove message for table: " << table_name.first << "." << table_name.second << dendl;
+              ldpp_dout(this, 20) << "INFO: received remove message for table: " << table_name.bucket << "." << table_name.index << dendl;
               std::unique_lock ul(tables_mutex);//exclusive lock to erase the table from the map, since we don't want any other thread to be reading or writing to this table while it's being removed.(short time)
               tables.erase(table_name);
               return;
@@ -1429,7 +1464,7 @@ private:
                 << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
                 << ", max_concurrent=" << max_concurrent
                 << "), deferring remaining tables" << dendl;
-            record_event(rebuild_event_t::Type::LIMIT_REACHED, "", "",
+            record_event(rebuild_event_t::Type::LIMIT_REACHED, "", "", "",
                          active_rebuild_count.load(std::memory_order_relaxed),
                          max_concurrent);
             break;
@@ -1441,7 +1476,7 @@ private:
             continue;
           }
           if (now - state.last_rebuild_time < cooldown) {
-            ldpp_dout(this, 20) << "INFO: table " << name.first << "." << name.second
+            ldpp_dout(this, 20) << "INFO: table " << name.bucket << "." << name.index
                 << " under cooldown, deferring (inserts=" << inserts
                 << ", deletes=" << deletes << ")" << dendl;
             continue;
@@ -1468,13 +1503,13 @@ private:
                               active_rebuild_count.fetch_add(1, std::memory_order_relaxed) + 1);
 
           ldpp_dout(this, 1) << "INFO: spawning rebuild coroutine for "
-              << name.first << "." << name.second
+              << name.bucket << "." << name.index
               << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
               << "/" << max_concurrent
               << ", inserts=" << inserts
               << ", deletes=" << deletes << ")" << dendl;
 
-          record_event(rebuild_event_t::Type::SPAWN, name.first, name.second,
+          record_event(rebuild_event_t::Type::SPAWN, name.tenant, name.bucket, name.index,
                        active_rebuild_count.load(std::memory_order_relaxed),
                        max_concurrent);
 
@@ -1489,11 +1524,11 @@ private:
                 it->second.last_rebuild_time = ceph::coarse_real_clock::now();
               }
             } else if (rc < 0) {
-              ldpp_dout(this, 1) << "ERROR: failed to process table: " << table_name.first
-                  << "." << table_name.second << " with error code: " << rc << dendl;
+              ldpp_dout(this, 1) << "ERROR: failed to process table: " << table_name.bucket
+                  << "." << table_name.index << " with error code: " << rc << dendl;
             }
             ldpp_dout(this, 1) << "INFO: rebuild coroutine finished for "
-                << table_name.first << "." << table_name.second
+                << table_name.bucket << "." << table_name.index
                 << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
                 << ", rc=" << rc << ")" << dendl;
             const int duration_ms = static_cast<int>(
@@ -1502,8 +1537,8 @@ private:
             const auto result = (rc == 0) ? rebuild_event_t::Result::SUCCESS
                               : (rc < 0)  ? rebuild_event_t::Result::FAILURE
                                           : rebuild_event_t::Result::SKIPPED;
-            record_event(rebuild_event_t::Type::FINISH, table_name.first,
-                         table_name.second,
+            record_event(rebuild_event_t::Type::FINISH, table_name.tenant,
+                         table_name.bucket, table_name.index,
                          active_rebuild_count.load(std::memory_order_relaxed),
                          max_concurrent, duration_ms, result);
           }, [this, table_name = name, inserts, deletes] (std::exception_ptr eptr) {
@@ -1512,7 +1547,7 @@ private:
                 std::rethrow_exception(eptr);
               } catch (const std::exception& e) {
                 ldpp_dout(this, 0) << "ERROR: rebuild coroutine exception for "
-                    << table_name.first << "." << table_name.second
+                    << table_name.bucket << "." << table_name.index
                     << ": " << e.what() << dendl;
               }
               restore_counters(table_name, inserts, deletes);
@@ -1682,7 +1717,7 @@ public:
       ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about index mutation: manager is shutting down" << dendl;
       return false;
     }
-    const table_name_t table_name(bucket_name, index_name);
+    const table_name_t table_name{tenant, bucket_name, index_name};
 
     {
       std::shared_lock sl(tables_mutex);
@@ -1757,8 +1792,9 @@ public:
       std::lock_guard lg(active_builds_mutex);
       for (const auto& [name, lock] : active_locks) {
         active_build_info_t info;
-        info.bucket = name.first;
-        info.index = name.second;
+        info.tenant = name.tenant;
+        info.bucket = name.bucket;
+        info.index = name.index;
         info.start_time = lock.start_time;
         info.lock_refreshes = lock.refresh_count;
         st.active_builds_list.push_back(std::move(info));
@@ -1769,6 +1805,7 @@ public:
 
   // Return recorded events, optionally filtered by timestamp and bucket.
   std::vector<rebuild_event_info_t> get_rebuild_events(uint64_t since_epoch,
+                                                       const std::string& tenant_filter,
                                                        const std::string& bucket_filter) {
     std::vector<rebuild_event_info_t> out;
     std::lock_guard lg(event_log_mutex_);
@@ -1779,10 +1816,12 @@ public:
             ceph::coarse_real_clock::to_time_t(e.timestamp));
         if (ev_epoch < since_epoch) continue;
       }
+      if (!tenant_filter.empty() && e.tenant != tenant_filter) continue;
       if (!bucket_filter.empty() && e.bucket != bucket_filter) continue;
       rebuild_event_info_t info;
       info.type = event_type_to_str(e.type);
       info.timestamp = e.timestamp;
+      info.tenant = e.tenant;
       info.bucket = e.bucket;
       info.index = e.index;
       info.active_rebuilds = e.active_rebuilds;
@@ -1907,11 +1946,12 @@ background_status_t get_background_status() {
 }
 
 std::vector<rebuild_event_info_t> get_rebuild_events(uint64_t since_epoch,
+                                                     const std::string& tenant_filter,
                                                      const std::string& bucket_filter) {
   if (!s_manager) {
     return {};
   }
-  return s_manager->get_rebuild_events(since_epoch, bucket_filter);
+  return s_manager->get_rebuild_events(since_epoch, tenant_filter, bucket_filter);
 }
 
 

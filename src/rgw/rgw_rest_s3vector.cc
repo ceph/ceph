@@ -1325,6 +1325,7 @@ public:
 
 void RGWOp_VectorBucket_Rebuild_Status::execute(optional_yield y) {
   const std::string bucket_filter = s->info.args.get("vectorbucket");
+  const std::string tenant_filter = s->info.args.get("tenant");
   uint64_t since = 0;
   {
     bool exists = false;
@@ -1335,7 +1336,7 @@ void RGWOp_VectorBucket_Rebuild_Status::execute(optional_yield y) {
   }
 
   const auto status = rgw::s3vector::get_background_status();
-  const auto events = rgw::s3vector::get_rebuild_events(since, bucket_filter);
+  const auto events = rgw::s3vector::get_rebuild_events(since, tenant_filter, bucket_filter);
 
   Formatter* f = flusher.get_formatter();
   flusher.start(0);
@@ -1364,7 +1365,13 @@ void RGWOp_VectorBucket_Rebuild_Status::execute(optional_yield y) {
     if (!bucket_filter.empty() && b.bucket != bucket_filter) {
       continue;
     }
+    if (!tenant_filter.empty() && b.tenant != tenant_filter) {
+      continue;
+    }
     f->open_object_section("active_build");
+    if (!b.tenant.empty()) {
+      f->dump_string("tenant", b.tenant);
+    }
     f->dump_string("bucket", b.bucket);
     f->dump_string("index", b.index);
     f->dump_string("start_time", s3v_iso8601(b.start_time));
@@ -1381,6 +1388,9 @@ void RGWOp_VectorBucket_Rebuild_Status::execute(optional_yield y) {
     f->open_object_section("event");
     f->dump_string("type", e.type);
     f->dump_string("timestamp", s3v_iso8601(e.timestamp));
+    if (!e.tenant.empty()) {
+      f->dump_string("tenant", e.tenant);
+    }
     if (!e.bucket.empty()) {
       f->dump_string("bucket", e.bucket);
     }

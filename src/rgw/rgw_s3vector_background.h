@@ -44,6 +44,7 @@ namespace rgw::s3vector {
 
   // Snapshot of an in-progress rebuild on this instance.
   struct active_build_info_t {
+    std::string tenant;
     std::string bucket;
     std::string index;
     ceph::coarse_real_time start_time;
@@ -75,6 +76,7 @@ namespace rgw::s3vector {
   struct rebuild_event_info_t {
     std::string type;
     ceph::coarse_real_time timestamp;
+    std::string tenant;
     std::string bucket;
     std::string index;
     int active_rebuilds = 0;
@@ -84,9 +86,10 @@ namespace rgw::s3vector {
   };
 
   // Returns recorded events, optionally filtered by timestamp (epoch seconds,
-  // only events with timestamp >= since_epoch) and by bucket name.
+  // only events with timestamp >= since_epoch), by tenant, and by bucket name.
   std::vector<rebuild_event_info_t> get_rebuild_events(
     uint64_t since_epoch = 0,
+    const std::string& tenant_filter = "",
     const std::string& bucket_filter = "");
 }
 

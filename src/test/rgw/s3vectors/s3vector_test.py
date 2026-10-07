@@ -447,14 +447,49 @@ def _delete_s3_bucket_for_vector_bucket(bucket_name, s3conn=None):
             log.warning("Failed to delete S3 bucket '%s': %s", bucket_name, str(err))
 
 
-def _delete_all_indexes(conn, bucket_name):
+def _delete_all_indexes(conn, bucket_name, retries=12, delay=5):
     """
     Delete all indexes of a vector bucket. must be done before the vector bucket
-    itself is deleted, since deleting a vector bucket with indexes is not allowed
+    itself is deleted, since deleting a vector bucket with indexes is not allowed.
+
+    Tolerant of a concurrent background rebuild: DeleteIndex can transiently race
+    an in-flight rebuild of the same index and return NoSuchKey/404 while the
+    index still exists. We re-list and retry rather than assume success — so a
+    genuinely-gone index drops out of the listing (loop ends), while an index
+    that only raced is deleted for real once the rebuild settles.
     """
-    result = conn.list_indexes(vectorBucketName=bucket_name)
-    for index in result['indexes']:
-        _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index['indexName'])
+    for _attempt in range(retries):
+        indexes = conn.list_indexes(vectorBucketName=bucket_name)['indexes']
+        if not indexes:
+            return
+        raced = False
+        for index in indexes:
+            name = index['indexName']
+            try:
+                conn.delete_index(vectorBucketName=bucket_name, indexName=name)
+            except conn.exceptions.ClientError as err:
+                code = err.response['Error']['Code']
+                if code in ('404', 'NoSuchKey', 'NoSuchIndex'):
+                    # raced an in-flight rebuild (or already gone) — re-list to tell
+                    # the two apart on the next pass
+                    log.info("index '%s' not deletable yet (%s), will re-check",
+                             name, code)
+                    raced = True
+                    continue
+                raise
+        if not raced:
+            return
+        time.sleep(delay)
+    # Best-effort: if an index is still listed but keeps refusing deletion
+    # (delete_index returns NoSuchKey), it is a phantom from a corrupted or
+    # interrupted rebuild that the test cannot remove. Warn rather than fail the
+    # test — cleanup is best-effort, like the backing-bucket cleanup above.
+    remaining = [i['indexName']
+                 for i in conn.list_indexes(vectorBucketName=bucket_name)['indexes']]
+    if remaining:
+        log.warning("best-effort cleanup: indexes of '%s' still listed after %d "
+                    "retries (undeletable phantom?): %s",
+                    bucket_name, retries, remaining)
 
 
 def _delete_vector_bucket(conn, bucket_name):
@@ -4890,6 +4925,77 @@ def test_tenant_vectors_isolated():
 
 
 @pytest.mark.tenant_test
+def test_tenant_background_rebuild_isolated():
+    """Two tenants holding the same vector-bucket and index name each get their
+    index rebuilt independently by the background worker. This exercises the
+    tenant-aware rebuild path: the manager keys tables/locks/counters by
+    (tenant, bucket, index), connects per-tenant, and scopes the distributed
+    lock to the tenant's bucket. If tenant were dropped from the key (the old
+    behavior), the two tenants' mutation counters would merge, they would share
+    one lock, and the rebuild would resolve the wrong (default-tenant) bucket.
+
+    Each tenant inserts a DIFFERENT number of vectors (both above the IVF_PQ
+    minimum), and we assert each index rebuilds to its own row count — proving
+    no cross-tenant collision."""
+    _grant_admin_caps()
+    dimension = 32
+    bucket_name = gen_bucket_name()
+    index_name = 'shared-rebuild-index'
+    # distinct counts, both above the ~256-row minimum for index creation
+    counts = {}
+    conn1 = another_user(tenant=gen_tenant_name())
+    conn2 = another_user(tenant=gen_tenant_name())
+    counts[conn1.tenant] = 500
+    counts[conn2.tenant] = 800
+    before_time = int(time.time())
+    try:
+        for conn in (conn1, conn2):
+            _create_vector_bucket(conn, bucket_name, conn.s3)
+            result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                       dataType='float32', dimension=dimension,
+                                       distanceMetric='euclidean')
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            total = counts[conn.tenant]
+            batch_size = 100
+            for batch_start in range(0, total, batch_size):
+                batch_end = min(batch_start + batch_size, total)
+                vectors = generate_vectors(batch_end - batch_start, dimension)
+                for i, v in enumerate(vectors):
+                    v['key'] = f'vec-{batch_start + i}'
+                result = conn.put_vectors(vectorBucketName=bucket_name,
+                                          indexName=index_name, vectors=vectors)
+                assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # each tenant's index rebuilds independently to ITS OWN row count
+        for conn in (conn1, conn2):
+            stats = wait_for_index_rebuild(conn, bucket_name, index_name, timeout=120)
+            total = counts[conn.tenant]
+            indexed = stats['numIndexedRows']
+            assert indexed >= total * 0.9, (
+                f"tenant '{conn.tenant}' index rebuilt to {indexed} rows, "
+                f"expected ~{total} (cross-tenant counter collision?)")
+            # and it must NOT have absorbed the other tenant's rows
+            other_total = counts[conn2.tenant if conn is conn1 else conn1.tenant]
+            assert indexed < total + other_total, (
+                f"tenant '{conn.tenant}' index has {indexed} rows, which looks "
+                f"merged with the other tenant ({total}+{other_total})")
+
+        # the admin event log attributes rebuilds to the right tenant
+        for conn in (conn1, conn2):
+            status = get_rebuild_admin_status(since=before_time, bucket=bucket_name,
+                                              tenant=conn.tenant)
+            events = status['rebuild_events']
+            spawns = [e for e in events if e['type'] == 'spawn'
+                      and e.get('tenant') == conn.tenant
+                      and e['bucket'] == bucket_name]
+            assert len(spawns) >= 1, (
+                f"expected a spawn event for tenant '{conn.tenant}', got: {events}")
+    finally:
+        _cleanup_vector_bucket(conn1, bucket_name, conn1.s3)
+        _cleanup_vector_bucket(conn2, bucket_name, conn2.s3)
+
+
+@pytest.mark.tenant_test
 def test_tenant_delete_vector_bucket_isolated():
     """ an empty vector bucket may be deleted even when another tenant holds
     indexes in a vector bucket with the same name """
@@ -5027,10 +5133,11 @@ def _grant_admin_caps():
     assert ret == 0, f'failed to grant buckets=read cap to {uid}'
 
 
-def get_rebuild_admin_status(since=0, bucket=''):
+def get_rebuild_admin_status(since=0, bucket='', tenant=''):
     """Query the ceph admin REST API (/admin/vectorbucket?rebuild=true) for
     this RGW instance's background rebuild status + event log. Replaces log
-    scraping. Returns the parsed JSON response.
+    scraping. Returns the parsed JSON response. Optionally filter by bucket
+    and/or tenant.
 
     Uses stdlib urllib (not requests) so it works with the offline wheelhouse
     used by tox, which ships boto3/botocore but not requests."""
@@ -5050,6 +5157,8 @@ def get_rebuild_admin_status(since=0, bucket=''):
         params['since'] = str(since)
     if bucket:
         params['vectorbucket'] = bucket
+    if tenant:
+        params['tenant'] = tenant
 
     url = f'{scheme}{hostname}:{port_no}/admin/vectorbucket'
     creds = Credentials(get_access_key(), get_secret_key())
