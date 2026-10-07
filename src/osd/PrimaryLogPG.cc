@@ -13330,7 +13330,8 @@ void PrimaryLogPG::on_activate_complete()
 
   publish_stats_to_osd();
 
-  if (get_backfill_targets().size()) {
+  // Complete backfill targets need no backfill
+  if (recovery_state.needs_backfill()) {
     last_backfill_started = recovery_state.earliest_backfill();
     new_backfill = true;
     ceph_assert(!last_backfill_started.is_max());

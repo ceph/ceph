@@ -3434,13 +3434,17 @@ void PeeringState::activate(
       } else if (
 	pg_log.get_tail() > pi.last_update ||
 	pi.last_backfill == hobject_t() ||
-	(backfill_targets.count(*i) && pi.last_backfill.is_max())) {
+        (backfill_targets.count(*i) && pi.last_backfill.is_max() &&
+         !(pool.info.is_erasure() && pool.info.get_num_zone() > 1))) {
 	/* ^ This last case covers a situation where a replica is not contiguous
 	 * with the auth_log, but is contiguous with this replica.  Reshuffling
 	 * the active set to handle this would be tricky, so instead we just go
 	 * ahead and backfill it anyway.  This is probably preferrable in any
 	 * case since the replica in question would have to be significantly
 	 * behind.
+         * A complete backfill target of a multi-zone EC pool is an up shard
+         * waiting for its zone block to move to it.  It is caught up from the
+         * log instead, so that its objects keep counting as recovery sources.
 	 */
 	// backfill
 	pl->get_clog_debug() << info.pgid << " starting backfill to osd." << peer
@@ -4571,8 +4575,10 @@ void PeeringState::update_calc_stats()
       int64_t peer_num_objects =
         std::max((int64_t)0, peer.second.stats.stats.sum.num_objects);
       // Backfill targets always track num_objects accurately
-      // all other peers track missing accurately.
-      if (is_backfill_target(peer.first)) {
+      // all other peers track missing accurately, as does a complete
+      // backfill target, which is caught up from the log.
+      if (is_backfill_target(peer.first) &&
+          !peer.second.last_backfill.is_max()) {
         missing = std::max((int64_t)0, num_objects - peer_num_objects);
       } else {
 	auto pm_it = peer_missing.find(peer.first);
