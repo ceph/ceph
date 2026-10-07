@@ -1997,14 +1997,16 @@ void PeeringState::calc_ec_acting_stretch(
   }
 
   // With more than one zone, each zone block is served from a single CRUSH
-  // zone that no other block uses.  Choose the zones serving the most
-  // distinct relative shards, up to k, then those holding the most of their
-  // blocks' shards, counting a zone only if it holds at least k of them,
-  // then the most up[i] in those zones, then the most shards, then the most
-  // up[i], then the most acting[i].
+  // zone that no other block uses.  Like calc_ec_acting, prefer usable up[i]
+  // and acting[i] to strays: choose the zones serving the most distinct
+  // relative shards, up to k, then those filling the most positions from
+  // up[i] or acting[i], then from up[i], then those holding the most of
+  // their blocks' shards, counting a zone only if it holds at least k of
+  // them, then the most shards, then the most acting[i].
   const bool one_zone_per_block = pool.info.get_num_zone() > 1;
-  auto choose_block_zones = [&](const vector<vector<int>> &shard_holders) {
-    // (any holder if at least k, up[i] if at least k, any holder, up[i],
+  auto choose_block_zones = [&](const vector<vector<int>> &shard_holders,
+                                const vector<int> &cur_acting) {
+    // (up[i] or acting[i], up[i], any holder if at least k, any holder,
     //  acting[i])
     using held_t = std::array<unsigned, 5>;
     using block_held_t = map<int, map<int, held_t>>; // block -> zone -> held
@@ -2014,18 +2016,23 @@ void PeeringState::calc_ec_acting_stretch(
       const shard_id_t shard(i);
       const int block_id = pool.info.get_shard_zone(shard);
       auto &block = held[block_id];
-      set<int> zones;
+      set<int> zones, up_acting_zones;
       for (int osd : shard_holders[i]) {
         const int zone = get_crush_zone(osd);
         auto &h = block[zone];
         if (zones.insert(zone).second) {
-          ++h[2];
+          ++h[3];
           rel_held[block_id][zone].insert(pool.info.get_relative_shard(shard));
         }
-        if (i < up.size() && osd == up[i]) {
-          ++h[3];
+        const bool is_up = i < up.size() && osd == up[i];
+        const bool is_acting = i < cur_acting.size() && osd == cur_acting[i];
+        if ((is_up || is_acting) && up_acting_zones.insert(zone).second) {
+          ++h[0];
         }
-        if (i < acting.size() && osd == acting[i]) {
+        if (is_up) {
+          ++h[1];
+        }
+        if (is_acting) {
           ++h[4];
         }
       }
@@ -2033,9 +2040,8 @@ void PeeringState::calc_ec_acting_stretch(
     const unsigned k = pool.info.get_ec_data_shard_count();
     for (auto &[block, zones] : held) {
       for (auto &[zone, h] : zones) {
-        if (h[2] >= k) {
-          h[0] = h[2];
-          h[1] = h[3];
+        if (h[3] >= k) {
+          h[2] = h[3];
         }
       }
     }
@@ -2074,7 +2080,7 @@ void PeeringState::calc_ec_acting_stretch(
   };
   map<int, int> block_zone;
   if (one_zone_per_block) {
-    block_zone = choose_block_zones(holders);
+    block_zone = choose_block_zones(holders, acting);
     for (const auto &[block, zone] : block_zone) {
       ss << "zone block " << block << " served from zone " << zone
          << std::endl;
@@ -2123,7 +2129,7 @@ void PeeringState::calc_ec_acting_stretch(
       }
       add_holder(goal[i], i, want[i]);
     }
-    goal_zone = choose_block_zones(goal);
+    goal_zone = choose_block_zones(goal, want);
   }
   for (unsigned i = 0; i < size && i < up.size(); ++i) {
     if (up[i] == CRUSH_ITEM_NONE || want[i] == up[i]) {

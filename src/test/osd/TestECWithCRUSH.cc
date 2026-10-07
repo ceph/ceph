@@ -545,11 +545,10 @@ TEST_F(TestECStretchPeering, ZoneBlockSwapWithPgTemp_NoChooseActingAbort)
   EXPECT_EQ(ps->get_backfill_targets(), expected_backfill);
 }
 
-// Zone 1 loses two OSDs, then a pg-upmap moves zone block 1 onto the zone 0
-// OSDs serving block 0 while a pg_temp keeps block 0 there with a lone
-// shard 3 in zone 1.  Once the up OSDs are backfilled, Recovered must ask to
-// drop the pg_temp rather than abort in choose_acting.
-TEST_F(TestECStretchPeering, BackfilledZoneBlock_RecoveredDropsPgTemp)
+// A pg-upmap swaps the two zone blocks while a pg_temp keeps the old acting
+// set.  Once every up OSD is backfilled, Recovered must ask to drop the
+// pg_temp rather than abort in choose_acting.
+TEST_F(TestECStretchPeering, BackfilledZoneBlockSwap_RecoveredDropsPgTemp)
 {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   ASSERT_TRUE(all_shards_active());
@@ -558,20 +557,18 @@ TEST_F(TestECStretchPeering, BackfilledZoneBlock_RecoveredDropsPgTemp)
   vector<int> a;
   int acting_primary;
   osdmap->pg_to_acting_osds(pgid, &a, &acting_primary);
-  mark_osds_down({a[4], a[5]});
-
-  const int N = CRUSH_ITEM_NONE;
-  remap({a[4], a[5], N, a[1], a[0], a[2]}, {a[0], a[1], a[2], a[3], N, N});
+  const vector<int> up = {a[3], a[4], a[5], a[0], a[1], a[2]};
+  remap(up, a);
 
   TestPG *primary = get_primary_test_pg();
   PeeringState *ps = primary->get_peering_state();
-  const vector<int> up = {N, N, N, a[1], a[0], a[2]};
   ASSERT_EQ(ps->get_up(), up);
-  ASSERT_EQ(ps->get_acting(), (vector<int>{a[0], a[1], a[2], a[3], N, N}));
+  ASSERT_EQ(ps->get_acting(), a);
   ASSERT_STREQ(ps->get_current_state(), "Started/Primary/Active/Backfilling");
-  const set<pg_shard_t> targets = {pg_shard_t(a[1], shard_id_t(3)),
-                                   pg_shard_t(a[0], shard_id_t(4)),
-                                   pg_shard_t(a[2], shard_id_t(5))};
+  set<pg_shard_t> targets;
+  for (unsigned i = 0; i < up.size(); ++i) {
+    targets.insert(pg_shard_t(up[i], shard_id_t(i)));
+  }
   ASSERT_EQ(ps->get_backfill_targets(), targets);
   for (const auto &t : targets) {
     complete_backfill(t);

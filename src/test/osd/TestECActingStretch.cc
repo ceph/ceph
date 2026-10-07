@@ -2100,11 +2100,12 @@ TEST_F(TestECActingStretch, SingleZoneStretchPool_KeepsUpAcrossDatacenters) {
   EXPECT_TRUE(backfill.empty()) << ss.str();
 }
 
-// up moves zone block 1 onto the dc0 OSDs serving block 0, and acting keeps
-// block 0 there with a lone shard 3 in dc1.  Once the up OSDs are
-// backfilled, Recovered's choose_acting must move to up: with want ==
-// acting it asserts that the backfill targets are unchanged.
-TEST_F(TestECActingStretch, BackfilledUpZoneBlock_JoinsWant) {
+// up moves zone block 1 onto the dc0 OSDs serving block 0 and leaves block
+// 0 without OSDs; acting keeps block 0 in dc0 with a lone shard 3 in dc1.
+// Following up would give up four usable acting shards for three up shards
+// that are not even backfilled, so acting stays and nothing is backfilled,
+// also once the call is restricted to up and acting (from Recovered).
+TEST_F(TestECActingStretch, UpZoneBlockOntoServingZone_KeepsActing) {
   const int N = CRUSH_ITEM_NONE;
   vector<int> up = {N, N, N, 1, 0, 2};
   vector<int> acting = {0, 1, 2, 3, N, N};
@@ -2116,28 +2117,15 @@ TEST_F(TestECActingStretch, BackfilledUpZoneBlock_JoinsWant) {
     add_info(all_info, up[i], i, eversion_t());
   }
 
-  vector<int> want;
-  set<pg_shard_t> backfill, acting_backfill;
-  ostringstream ss;
-  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), false,
-       &want, &backfill, &acting_backfill, ss);
-  EXPECT_EQ(want, acting) << ss.str();
-  const set<pg_shard_t> targets = {pg_shard_t(1, shard_id_t(3)),
-                                   pg_shard_t(0, shard_id_t(4)),
-                                   pg_shard_t(2, shard_id_t(5))};
-  ASSERT_EQ(backfill, targets) << ss.str();
-
-  for (const auto &t : targets) {
-    add_info(all_info, t.osd, t.shard.id, eversion_t(1, 10), eversion_t(1, 5));
+  for (bool restrict_to_up_acting : {false, true}) {
+    vector<int> want;
+    set<pg_shard_t> backfill, acting_backfill;
+    ostringstream ss;
+    calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)),
+         restrict_to_up_acting, &want, &backfill, &acting_backfill, ss);
+    EXPECT_EQ(want, acting) << ss.str();
+    EXPECT_TRUE(backfill.empty()) << ss.str();
   }
-  want.clear();
-  backfill.clear();
-  acting_backfill.clear();
-  ostringstream ss2;
-  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(0)), true,
-       &want, &backfill, &acting_backfill, ss2);
-  EXPECT_EQ(want, up) << ss2.str();
-  EXPECT_TRUE(backfill.empty()) << ss2.str();
 }
 
 // PG 2.39 in a fault-injection run, OSD ids mapped onto this fixture.  A
