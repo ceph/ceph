@@ -26,6 +26,7 @@
 #include <syslog.h>
 
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 #include <set>
 
@@ -41,9 +42,9 @@ namespace logging {
 static OnExitManager exit_callbacks;
 
 // Static hook for getting log prefix (set by tests).
-// NOTE: Not thread-safe. Intended for single-threaded unit test harnesses
-// and should be set once during startup.
-static Log::prefix_hook_t prefix_hook = nullptr;
+// Atomic, as the log thread reads it for every entry; relaxed, as it
+// publishes no data.
+static std::atomic<Log::prefix_hook_t> prefix_hook = nullptr;
 
 static void log_on_exit(void *p)
 {
@@ -55,7 +56,7 @@ static void log_on_exit(void *p)
 
 void Log::set_prefix_hook(prefix_hook_t hook)
 {
-  prefix_hook = hook;
+  prefix_hook.store(hook, std::memory_order_relaxed);
 }
 
 Log::Log(const SubsystemMap *s)
@@ -421,7 +422,8 @@ void Log::_flush(EntryVector& t, bool crash)
       used += (std::size_t)append_time(stamp, pos + used, allocated - used);
       
       // In tests, replace thread ID with custom prefix (e.g., "osd.X" or "harness")
-      const char* prefix = prefix_hook ? prefix_hook() : nullptr;
+      const auto hook = prefix_hook.load(std::memory_order_relaxed);
+      const char* prefix = hook ? hook() : nullptr;
       if (prefix) {
         used += (std::size_t)snprintf(pos + used, allocated - used, " %s %2d ", prefix, prio);
       } else {
