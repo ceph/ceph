@@ -597,7 +597,17 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
     flags |= O_DIRECT;
   }
 
-  ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW, S_IRWXU);
+  /* 0600, not 0700.  File::write() below fchmods to S_IRUSR|S_IWUSR
+   * on every call, so for an object that is written this is already
+   * the mode it ends up with and this line changes nothing.  It is
+   * the files that are never written -- a zero-length object, a
+   * staging record -- that kept the create mode, and 0700 gave them
+   * owner-execute, which nothing wants on a data file.  Narrowing
+   * here makes them agree with what this driver already imposes
+   * everywhere else rather than giving posix a permission policy it
+   * does not have. */
+  ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW,
+	       S_IRUSR | S_IWUSR);
   if (ret < 0) {
     ret = errno;
     if (ret == EEXIST) {
