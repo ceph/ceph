@@ -128,6 +128,13 @@ LogManager::omap_set_keys(
    * Furthermore, if we ensure that the last entry of each LogNode is always
    * _fastinfo, garbage collection is unnecessary, because the new _fastinfo
    * will be appended to a new LogNode.
+   *
+   * The same applies to a LogNode created in this transaction, because
+   * several client writes to the same collection can be merged into one
+   * transaction. If a pg_log_entry cannot go over the _fastinfo (it does not
+   * fit, or it needs multiple blocks), the old _fastinfo is marked removed
+   * before the entry goes to a new LogNode. Otherwise the old LogNode keeps a
+   * live entry and is never freed.
    */
   bool has_ow_key = false;
   if (kvs.size() == OW_SIZE) {
@@ -149,40 +156,39 @@ LogManager::omap_set_keys(
 	cur = node->template cast<LogNode>();
       }
       for (auto &p : kvs_for_ow) {
-	if (cur->get_max_val_length(p.first.size()) < p.second.length()) {
+	const bool ends_with_ow_key = is_log_key(p.first) &&
+	  cur->get_size() + cur->get_reserved_size() > 0 && cur->can_ow();
+	const bool multi_block =
+	  cur->get_max_val_length(p.first.size()) < p.second.length();
+	const bool takes_ow_slot = ends_with_ow_key && !multi_block &&
+	  !cur->expect_overflow(p.first, p.second.length(), true);
+	if (ends_with_ow_key && !takes_ow_slot) {
+	  if (!cur->is_initial_pending()) {
+	    cur = tm.get_mutable_extent(t, cur)->template cast<LogNode>();
+	  }
+	  cur->remove_last_entry();
+	}
+	if (multi_block) {
 	  co_await _log_set_multi_block_key(log_root, t, cur, p.first, p.second);
 	  cur = co_await log_load_extent<LogNode>(
 	    t, log_root.addr, BEGIN_KEY, END_KEY);
 	  continue;
 	}
-	if (cur->expect_overflow(p.first, p.second.length(),
-	    (!is_ow_key(p.first) && !cur->is_initial_pending())
-	      ? cur->can_ow() : false)) {
-	  // This means the first entry of the new LogNode is not _fastinfo
-	  if (!is_ow_key(p.first)) {
-	    // remove _fastinfo in old LogNode
-	    auto e = co_await cur->get_value(p.first, LogNode::copy_t::SHALLOW);
-	    if (e != std::nullopt) {
-	      auto mut = tm.get_mutable_extent(t, cur)->template cast<LogNode>();
-	      mut->remove_entry(get_ow_key());
-	    }
-	  }
+	if (!takes_ow_slot &&
+	    cur->expect_overflow(p.first, p.second.length(), false)) {
 	  laddr_t dup_addr = cur->get_dup_tail_addr();
 	  cur = co_await alloc_log_node(cur->get_laddr());
 	  cur->set_dup_tail_addr(dup_addr);
 	  log_root.update(cur->get_laddr(), log_root.depth,
 	    log_root.hint, log_root.type);
 	}
-	if (cur->is_initial_pending()) {
-	  cur->append_kv(t, p.first, p.second);
+	if (!cur->is_initial_pending()) {
+	  cur = tm.get_mutable_extent(t, cur)->template cast<LogNode>();
+	}
+	if (takes_ow_slot) {
+	  cur->overwrite_kv(t, p.first, p.second);
 	} else {
-	  auto mut = tm.get_mutable_extent(t, cur)->cast<LogNode>();
-	  if (cur->can_ow() && is_log_key(p.first)) {
-	    mut->overwrite_kv(t, p.first, p.second);
-	  } else {
-	    mut->append_kv(t, p.first, p.second);
-	  }
-	  cur = mut;
+	  cur->append_kv(t, p.first, p.second);
 	}
       }
       co_return;

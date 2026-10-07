@@ -848,6 +848,10 @@ struct LogNode
   // Remove all matching keys in LogNode
   bool remove_entry(const std::string key);
 
+  // Remove the last entry, including one that is appended in this
+  // transaction but not applied yet
+  void remove_last_entry();
+
   void set_cur_bitmap(uint32_t begin, uint32_t end);
   d_bitmap_t get_cur_bitmap();
   void set_bitmap(d_bitmap_t map);
