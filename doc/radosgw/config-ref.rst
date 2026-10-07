@@ -38,6 +38,7 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_obj_stripe_size
 .. confval:: rgw_extended_http_attrs
 .. confval:: rgw_exit_timeout_secs
+.. confval:: rgw_graceful_stop
 .. confval:: rgw_get_obj_window_size
 .. confval:: rgw_get_obj_max_req_size
 .. confval:: rgw_multipart_min_part_size
@@ -188,6 +189,8 @@ file under each ``[client.radosgw.{instance-name}]`` instance.
 .. confval:: rgw_bucket_sync_spawn_window
 .. confval:: rgw_data_sync_spawn_window
 .. confval:: rgw_meta_sync_spawn_window
+.. confval:: rgw_realm_reload_pause_timeout
+.. confval:: rgw_realm_reload_max_delay
 
 .. important:: The values of :confval:`rgw_data_log_num_shards` and
    :confval:`rgw_md_log_max_shards` should not be changed after sync has
