@@ -7,6 +7,7 @@ from contextlib import contextmanager
 import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
+from ceph.deployment.hostspec import SpecValidationError
 from cephadm.serve import CephadmServe
 from cephadm.inventory import (
     HostCacheStatus,
@@ -1522,22 +1523,50 @@ class TestCephadm(object):
                     assert [d.path for d in saved.journal_devices.paths] == ['/dev/sdz']
                     mock_apply.assert_called_once()
 
-    def test_create_osd_default_spec_preserves_data_crush_device_class(self, cephadm_module):
+    def test_create_osd_default_spec_survives_reload(self, cephadm_module):
         with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
             with mock.patch("cephadm.module.CephadmOrchestrator.apply") as mock_apply:
                 with with_host(cephadm_module, 'test'):
                     dg = DriveGroupSpec(
                         placement=PlacementSpec(host_pattern='test'),
-                        data_devices=DeviceSelection(paths=[
-                            {'path': '/dev/sdb', 'crush_device_class': 'ssd'},
-                        ]),
+                        data_devices=DeviceSelection(paths=['/dev/sdb']),
                         service_id='default',
+                        crush_device_class='hdd',
+                        encrypted=True,
+                        osds_per_device=2,
+                        preview_only=True,
                     )
                     cephadm_module.create_osd_default_spec(dg)
                     saved = cephadm_module.spec_store.all_specs['osd.default']
-                    assert saved.data_devices.paths[0].path == '/dev/sdb'
-                    assert saved.data_devices.paths[0].crush_device_class == 'ssd'
+                    assert saved is not dg
+                    assert not saved.unmanaged
+                    assert not saved.preview_only
+                    # what SpecStore.load() reads back after an mgr restart
+                    loaded = ServiceSpec.from_json(json.loads(json.dumps(saved.to_json())))
+                    assert loaded.to_json() == saved.to_json()
+                    for spec in (saved, loaded):
+                        assert spec.placement.host_pattern.pattern == 'test'
+                        assert [d.path for d in spec.data_devices.paths] == ['/dev/sdb']
+                        assert spec.crush_device_class == 'hdd'
+                        assert spec.encrypted is True
+                        assert spec.osds_per_device == 2
                     mock_apply.assert_called_once()
+
+    @pytest.mark.parametrize('dg_args', [
+        dict(data_devices=DeviceSelection(paths=['/dev/sdb']), filter_logic='xor'),
+        dict(db_devices=DeviceSelection(paths=['/dev/sdc'])),
+    ])
+    def test_create_osds_rejects_invalid_request(self, cephadm_module, dg_args):
+        with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
+            with with_host(cephadm_module, 'test'):
+                dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), **dg_args)
+                with mock.patch.object(cephadm_module.osd_service,
+                                       'create_from_spec') as create_from_spec:
+                    with pytest.raises(SpecValidationError):
+                        wait(cephadm_module,
+                             cephadm_module.create_osds(dg, skip_validation=True))
+                create_from_spec.assert_not_called()
+                assert 'osd.default' not in cephadm_module.spec_store.all_specs
 
     def test_create_osds_skips_default_spec_when_osd_default_exists(self, cephadm_module):
         with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
