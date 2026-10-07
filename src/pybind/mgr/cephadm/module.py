@@ -59,6 +59,7 @@ from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeployContext
 from cephadm.http_server import CephadmHttpServer
 from cephadm.agent import CephadmAgentHelpers
+from cephadm.agent_metrics import AgentMetadataStats
 from cephadm.services.service_registry import service_registry
 
 
@@ -420,15 +421,45 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         ),
         Option(
             'agent_refresh_rate',
-            type='secs',
-            default=20,
-            desc='How often the agent on each host will gather and send metadata'
+            type='int',
+            default=-1,
+            desc='How often each agent sends metadata. Use -1 to auto-adjust based on cluster size.'
+        ),
+        Option(
+            'agent_avg_concurrency',
+            type='int',
+            default=-1,
+            desc='Target average number of agents sending per second. Used to compute jitter window. Set -1 for auto.'
+        ),
+        Option(
+            'agent_initial_startup_delay_max',
+            type='int',
+            default=-1,
+            desc='Max random startup delay (sec) before agent start sending metadata. Set to -1 for auto (default), or 0 to disable.'
+        ),
+        Option(
+            'agent_jitter_seconds',
+            type='int',
+            default=-1,
+            desc='Max random delay before agent sends metadata; set -1 for auto (default), 0 to disable'
         ),
         Option(
             'agent_starting_port',
             type='int',
             default=4721,
             desc='The first TCP port the agent will try to bind to. Up to 1000 subsequent ports will be attempted if this port cannot be bound'
+        ),
+        Option(
+            'agent_metadata_compresion_enabled',
+            type='bool',
+            default=False,
+            desc='Enable compression of metadata sent from agent to reduce payload size'
+        ),
+        Option(
+            'agent_metadata_payload_optimization_enabled',
+            type='bool',
+            default=True,
+            desc='Avoid processing and persisting unchanged agent metadata'
         ),
         Option(
             'agent_down_multiplier',
@@ -680,8 +711,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.ssh_cert: Optional[str] = None
             self.use_agent = False
             self.agent_refresh_rate = 0
+            self.agent_avg_concurrency = 0
+            self.agent_initial_startup_delay_max = 0
+            self.agent_jitter_seconds = 0
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
+            self.agent_metadata_compresion_enabled = True
+            self.agent_metadata_payload_optimization_enabled = True
             self.hw_monitoring = False
             self.hw_monitoring_vendor = 'generic'
             self.service_discovery_port = 0
@@ -789,6 +825,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.need_connect_dashboard_rgw = False
 
         self.config_checker = CephadmConfigChecks(self)
+
+        # In-memory diagnostics for the cephadm-agent HTTP/persistence path.
+        # These stats are intentionally process-local and reset on mgr restart/failover.
+        self.agent_metadata_stats = AgentMetadataStats(self.log)
 
         self.http_server = CephadmHttpServer(self)
         self.http_server.start()
@@ -1221,6 +1261,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         host = normalize_hostname(host)
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
+            # Agent metadata held for an offline host may be stale; have the
+            # agent resend every section in full.
+            self.agent_helpers.delta_baselines.forget(host)
             self._invalidate_all_host_metadata_and_kick_serve(host)
 
     def update_failed_daemon_health_check(self) -> None:
@@ -1438,6 +1481,33 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if ssh_config:
             return HandleCommandResult(stdout=ssh_config)
         return HandleCommandResult(stdout=get_default_ssh_config())
+
+    @CephadmCLICommand.Read('cephadm agent-stats')
+    def _agent_stats(self, format: Format = Format.plain) -> HandleCommandResult:
+        """Show in-memory cephadm-agent request and persistence diagnostics."""
+        if format not in [Format.plain, Format.json, Format.json_pretty]:
+            return HandleCommandResult(
+                retval=1,
+                stderr='Requested format is not supported for cephadm agent stats',
+            )
+
+        mgr_name = f'mgr.{self.get_mgr_id()}'
+        if format == Format.plain:
+            return HandleCommandResult(
+                stdout=self.agent_metadata_stats.format_plain(mgr_name)
+            )
+
+        stats = self.agent_metadata_stats.snapshot(mgr_name)
+        return HandleCommandResult(
+            stdout=json.dumps(stats, indent=2 if format == Format.json_pretty else None,
+                              sort_keys=True) + '\n'
+        )
+
+    @CephadmCLICommand.Write('cephadm agent-stats reset')
+    def _agent_stats_reset(self) -> HandleCommandResult:
+        """Reset in-memory cephadm-agent diagnostics."""
+        self.agent_metadata_stats.reset()
+        return HandleCommandResult(stdout='cephadm agent stats reset\n')
 
     @CephadmCLICommand.Write('cephadm generate-key')
     def _generate_key(self) -> Tuple[int, str, str]:
@@ -2525,6 +2595,8 @@ Then run the following:
 
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
+        self.agent_metadata_stats.forget_ls_delta_host(host)
+        self.agent_helpers.delta_baselines.forget(host)
         self.ssh.reset_con(host)
         # if host was in offline host list, we should remove it now.
         self.offline_hosts_remove(host)
@@ -4198,11 +4270,27 @@ Then run the following:
                 'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
-    def cert_store_cert_ls(self,
-                           filter_by: str = '',
-                           show_details: bool = False,
-                           include_cephadm_signed: bool = False) -> Dict[str, Any]:
-        return self.cert_mgr.cert_ls(filter_by, show_details, include_cephadm_signed)
+    def cert_store_cert_ls(
+        self,
+        filter_by: str = '',
+        show_details: bool = False,
+        include_cephadm_signed: bool = False
+    ) -> Dict[str, Any]:
+        return self.cert_mgr.cert_ls(
+            filter_by, show_details, include_cephadm_signed
+        )
+
+    @handle_orch_error
+    def show_agent_config(self) -> Dict[str, str]:
+        agent = self.http_server.agent
+        return {
+            'agent_refresh_rate': str(agent.compute_agents_refrsh_rate()),
+            'agent_avg_concurrency': str(agent.compute_agents_avg_concurrency()),
+            'agent_initial_startup_delay_max': str(agent.get_initial_delay()),
+            'agent_jitter_seconds': str(agent.get_jitter()),
+            'agent_down_multiplier': str(self.agent_down_multiplier),
+            'agent_starting_port': str(self.agent_starting_port),
+        }
 
     @handle_orch_error
     def cert_store_bindings_ls(self) -> Dict[str, Dict[str, List[str]]]:

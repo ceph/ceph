@@ -1,4 +1,5 @@
 import cherrypy
+import cephadm.cherrypy_compression_in  # noqa: F401
 import json
 import socket
 import ssl
@@ -20,7 +21,7 @@ from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 
 from urllib.error import HTTPError, URLError
-from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple
+from typing import Any, Dict, Iterable, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple, NamedTuple
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -28,8 +29,99 @@ if TYPE_CHECKING:
 
 CEPHADM_AGENT_CERT_DURATION = (365 * 5)
 
+# Metadata sections an agent reports. Must match METADATA_SECTIONS in
+# src/cephadm/cephadmlib/agent_delta.py.
+AGENT_METADATA_SECTIONS = ('ls', 'networks', 'facts', 'volume')
+
+
+class MetadataResult(NamedTuple):
+    """Outcome of handling one agent metadata report.
+
+    processed tells the agent whether it may commit its delta baselines;
+    resync lists sections the agent must send in full on its next report.
+    """
+    processed: bool
+    message: str
+    resync: List[str]
+
+
+class AgentDeltaBaselines:
+    """Metadata sections each agent has delivered in full to this mgr.
+
+    An agent may only report a section as unchanged relative to data this mgr
+    instance holds. This state is deliberately not persisted: after a mgr
+    restart or failover, agents are asked to resend sections in full.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._received: Dict[str, Set[str]] = {}
+
+    def record_received(self, host: str, sections: Iterable[str]) -> None:
+        with self._lock:
+            self._received.setdefault(host, set()).update(sections)
+
+    def split_unchanged(self, host: str, unchanged: Set[str]) -> Tuple[Set[str], List[str]]:
+        """Return (honoured, resync) for the sections an agent reports unchanged."""
+        with self._lock:
+            received = self._received.get(host, set())
+            return unchanged & received, sorted(unchanged - received)
+
+    def forget(self, host: str) -> None:
+        with self._lock:
+            self._received.pop(host, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._received.clear()
+
+
+def _agent_stats_request_start(mgr: "CephadmOrchestrator", endpoint: str) -> None:
+    """Start lightweight diagnostics for requests sharing the agent HTTP pool."""
+    stats = getattr(mgr, 'agent_metadata_stats', None)
+    if stats:
+        if endpoint == 'data':
+            stats.begin_agent_request()
+        elif endpoint == 'node-proxy':
+            stats.record_node_proxy_request()
+
+    # Sample at request start in addition to the periodic HTTP-server sample so
+    # short bursts are less likely to be missed. Diagnostics must not affect the
+    # request if the server is not fully initialized.
+    pool_sample = None
+    http_server = getattr(mgr, 'http_server', None)
+    if http_server:
+        try:
+            pool_sample = http_server._sample_agent_pool()
+        except Exception:
+            pass
+    if stats and endpoint == 'data' and pool_sample is not None:
+        stats.record_request_pool_start(*pool_sample)
+
+
+def _agent_stats_request_end(mgr: "CephadmOrchestrator", endpoint: str) -> None:
+    """Finish request diagnostics. Only /data has a request latency context."""
+    if endpoint != 'data':
+        return
+    stats = getattr(mgr, 'agent_metadata_stats', None)
+    if stats:
+        stats.finish_agent_request()
+
+
+# These tools are enabled only on the /data and /node-proxy mounts below.
+# on_start_resource runs before json_in parses the request body, so /data timing
+# includes JSON parsing as well as handler execution.
+cherrypy.tools.cephadm_agent_stats_start = cherrypy.Tool(
+    'on_start_resource', _agent_stats_request_start
+)
+cherrypy.tools.cephadm_agent_stats_end = cherrypy.Tool(
+    'on_end_request', _agent_stats_request_end
+)
+
 
 class AgentEndpoint:
+
+    DEFAULT_AGENT_TASK_DURATION_SECONDS = 2
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -47,9 +139,22 @@ class AgentEndpoint:
         return config
 
     def configure_routes(self, config: Dict) -> List[tuple]:
+        def with_stats(endpoint: str) -> Dict:
+            mount_config = {path: dict(values) for path, values in config.items()}
+            root_config = mount_config.setdefault('/', {})
+            root_config.update({
+                'tools.cephadm_agent_stats_start.on': True,
+                'tools.cephadm_agent_stats_start.mgr': self.mgr,
+                'tools.cephadm_agent_stats_start.endpoint': endpoint,
+                'tools.cephadm_agent_stats_end.on': True,
+                'tools.cephadm_agent_stats_end.mgr': self.mgr,
+                'tools.cephadm_agent_stats_end.endpoint': endpoint,
+            })
+            return mount_config
+
         return [
-            (self.host_data, '/data', config),
-            (self.node_proxy_endpoint, '/node-proxy', config),
+            (self.host_data, '/data', with_stats('data')),
+            (self.node_proxy_endpoint, '/node-proxy', with_stats('node-proxy')),
         ]
 
     def configure_tls(self) -> Dict[str, str]:
@@ -87,6 +192,82 @@ class AgentEndpoint:
             except PortAlreadyInUse:
                 self.server_port += 1
         self.mgr.log.error(f'Cephadm agent could not find free port in range {max_port - 150}-{max_port} and failed to start')
+
+    def compute_agents_avg_concurrency(self) -> int:
+        """
+        Compute the average number of agents allowed to report metadata per second (M).
+
+        - If user-specified value is -1, use an adaptive formula: sqrt(N)/2 (capped at 20).
+        - Ensures a minimum of 2 agents/sec to avoid unnecessary serialization.
+        - This helps spread load while avoiding bursts, especially on small clusters.
+        """
+        if self.mgr.agent_avg_concurrency == -1:  # auto-concurrency mode
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_concurrency = min(20, int(num_agents ** 0.5 / 2))
+        else:
+            agents_concurrency = self.mgr.agent_avg_concurrency
+        # We force a minimum of 2 agents per seconds
+        return max(2, agents_concurrency)
+
+    def compute_agents_refrsh_rate(self) -> int:
+        """
+        Compute the refresh rate (in seconds) for agent metadata reporting.
+
+        - If the user has specified a fixed `agent_refresh_rate`, use that.
+        - If `agent_refresh_rate` is set to -1 (auto mode), compute it dynamically as:
+            refresh_rate = (num_agents × task_duration) // avg_concurrency
+            where:
+              - num_agents = total number of agents in the cluster
+              - avg_concurrency = average number of agents allowed to report per second,
+                computed using a separate heuristic (sqrt(N)/2, capped).
+        - This ensures that agent updates are spread evenly and that the manager is not overwhelmed.
+
+        Notes:
+        - A minimum refresh rate of 20 seconds is enforced to avoid excessive agent churn and load.
+        - The dynamic mode adapts automatically as the cluster grows.
+
+        Returns:
+            int: The agent refresh rate in seconds.
+        """
+        if self.mgr.agent_refresh_rate == -1:  # auto-refresh rate
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_avg_concurrency = self.compute_agents_avg_concurrency()
+            refresh_rate = (num_agents * self.DEFAULT_AGENT_TASK_DURATION_SECONDS) // agents_avg_concurrency
+        else:
+            refresh_rate = self.mgr.agent_refresh_rate
+
+        return max(20, refresh_rate)
+
+    def get_initial_delay(self) -> int:
+        """
+        Compute the maximum initial random startup delay (in seconds) before an agent starts reporting.
+
+        - If agent_initial_startup_delay_max is -1 (auto), compute as:
+            delay = num_agents / avg_concurrency (M)
+        - This prevents bursts of all agents from reporting immediately at startup.
+        - Enforces a minimum of 10s to avoid early tight clustering.
+        """
+        if self.mgr.agent_initial_startup_delay_max == -1:  # auto-delay mode
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_avg_concurrency = self.compute_agents_avg_concurrency()
+            return max(10, num_agents // agents_avg_concurrency)
+        else:
+            return self.mgr.agent_initial_startup_delay_max
+
+    def get_jitter(self) -> int:
+        """
+        Compute the jitter window (in seconds) applied before agents send metadata.
+
+        - If agent_jitter_seconds is -1 (auto), compute it as:
+            jitter = num_agents / avg_concurrency (M)
+        - This spreads agent reports evenly across the window.
+        - Uses a min jitter of 2s to prevent tight clustering in very small clusters.
+        """
+        if self.mgr.agent_jitter_seconds == -1:  # auto-jitter mode
+            agents_refresh_rate = self.compute_agents_refrsh_rate()
+            return max(2, int(agents_refresh_rate * 0.5))
+        else:
+            return self.mgr.agent_jitter_seconds
 
     def configure(self) -> Tuple[Dict, Dict, List[tuple], tuple]:
         self.host_data = HostData(self.mgr)
@@ -669,23 +850,80 @@ class HostData:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
 
+    def get_data(self) -> Optional[dict]:
+        try:
+            remote_ip = cherrypy.request.remote.ip
+            content_encoding = cherrypy.request.headers.get('Content-Encoding', 'identity')
+            raw_body = cherrypy.request.body.read()
+            self.mgr.log.debug(f">>> Received payload from {remote_ip}, Content-Encoding: {content_encoding}")
+            return json.loads(raw_body.decode('utf-8'))
+        except Exception as e:
+            self.mgr.log.error(f"Failed to read request body: {e}")
+            return None
+
     @cherrypy.tools.allow(methods=['POST'])
-    @cherrypy.tools.json_in()
+    @cherrypy.tools.compression_in()
     @cherrypy.tools.json_out()
     @cherrypy.expose
     def index(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = cherrypy.request.json
+        data: Optional[Dict[str, Any]] = self.get_data()
+        if data is None:
+            return {}
         results: Dict[str, Any] = {}
+        stats = getattr(self.mgr, 'agent_metadata_stats', None)
+        if stats:
+            stats.record_report_shape(data)
         try:
             self.check_request_fields(data)
         except Exception as e:
+            if stats:
+                stats.record_bad_metadata()
             results['result'] = f'Bad metadata: {e}'
+            results['success'] = False
             self.mgr.log.warning(f'Received bad metadata from an agent: {e}')
         else:
+            host = data['host']
+            counter = self.mgr.agent_cache.agent_counter.get(host)
+            if stats:
+                agent_sent_at = None
+                try:
+                    value = cherrypy.request.headers.get('X-Cephadm-Agent-Sent-At')
+                    if value is not None:
+                        agent_sent_at = float(value)
+                except (TypeError, ValueError):
+                    pass
+                stats.record_valid_report(host, agent_sent_at)
+                stats.record_report_state(
+                    first_contact=counter is None,
+                    stale_ack=counter is not None and int(data['ack']) != counter,
+                )
             # if we got here, we've already verified the keyring of the agent. If
             # host agent is reporting on is marked offline, it shouldn't be any more
-            self.mgr.offline_hosts_remove(data['host'])
-            results['result'] = self.handle_metadata(data)
+            self.mgr.offline_hosts_remove(host)
+            metadata_result = self.handle_metadata(data)
+            if metadata_result.processed:
+                stats = getattr(self.mgr, 'agent_metadata_stats', None)
+                if stats is not None:
+                    stats.record_ls_delta_stats(host, data.get('ls_delta_stats'))
+            results['result'] = metadata_result.message
+            results['success'] = metadata_result.processed
+            if metadata_result.resync:
+                results['resync'] = metadata_result.resync
+            # Auto-derived pacing values are runtime policy, not daemon
+            # dependencies. Return the current values on normal reports so
+            # agents adopt host-count changes without a config fan-out.
+            refresh_period = self.mgr.http_server.agent.compute_agents_refrsh_rate()
+            jitter_seconds = self.mgr.http_server.agent.get_jitter()
+            results['refresh_period'] = refresh_period
+            results['jitter_seconds'] = jitter_seconds
+            if stats:
+                stats.record_pacing(
+                    host_count=len(self.mgr.cache.get_hosts()),
+                    avg_concurrency=self.mgr.http_server.agent.compute_agents_avg_concurrency(),
+                    refresh_period_s=refresh_period,
+                    initial_startup_delay_max_s=self.mgr.http_server.agent.get_initial_delay(),
+                    jitter_seconds=jitter_seconds,
+                )
         return results
 
     def check_request_fields(self, data: Dict[str, Any]) -> None:
@@ -714,13 +952,20 @@ class HostData:
         except Exception as e:
             raise Exception(
                 f'Counter value from agent on host {host} could not be converted to an integer: {e}')
-        metadata_types = ['ls', 'networks', 'facts', 'volume']
-        metadata_types_str = '{' + ', '.join(metadata_types) + '}'
-        if not all(item in data.keys() for item in metadata_types):
-            self.mgr.log.warning(
-                f'Agent on host {host} reported incomplete metadata. Not all of {metadata_types_str} were present. Received fields {fields}')
+        metadata_types = set(AGENT_METADATA_SECTIONS)
+        unchanged = data.get('unchanged', [])
+        if unchanged and (
+                not isinstance(unchanged, list)
+                or any(item not in metadata_types for item in unchanged)
+                or len(set(unchanged)) != len(unchanged)):
+            raise Exception(f'Invalid unchanged metadata sections from agent on host {host}: {unchanged}')
+        if not self.mgr.agent_metadata_payload_optimization_enabled:
+            metadata_types_str = '{' + ', '.join(sorted(metadata_types)) + '}'
+            if not all(item in data for item in metadata_types):
+                self.mgr.log.warning(
+                    f'Agent on host {host} reported incomplete metadata. Not all of {metadata_types_str} were present. Received fields {fields}')
 
-    def handle_metadata(self, data: Dict[str, Any]) -> str:
+    def handle_metadata(self, data: Dict[str, Any]) -> MetadataResult:
         try:
             host = data['host']
             self.mgr.agent_cache.agent_ports[host] = int(data['port'])
@@ -729,7 +974,7 @@ class HostData:
                 self.mgr.agent_helpers._request_agent_acks({host})
                 res = f'Got metadata from agent on host {host} with no known counter entry. Starting counter at 1 and requesting new metadata'
                 self.mgr.log.debug(res)
-                return res
+                return MetadataResult(False, res, [])
 
             # update timestamp of most recent agent update
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
@@ -749,16 +994,9 @@ class HostData:
                 self.mgr.log.debug(
                     f'Received old metadata from agent on host {host}. Requested up-to-date metadata.')
 
-            if 'ls' in data and data['ls']:
-                self.mgr._process_ls_output(host, data['ls'])
-                self.mgr.update_failed_daemon_health_check()
-            if 'networks' in data and data['networks']:
-                self.mgr.cache.update_host_networks(host, data['networks'])
-            if 'facts' in data and data['facts']:
-                self.mgr.cache.update_host_facts(host, json.loads(data['facts']))
-            if 'volume' in data and data['volume']:
-                ret = Devices.from_json(json.loads(data['volume']))
-                self.mgr.cache.update_host_devices(host, ret.devices)
+            unchanged, resync = self._reconcile_delta(host, data, up_to_date)
+            self._process_sections(host, data)
+            self._touch_unchanged(host, unchanged)
 
             if (
                 error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
@@ -768,7 +1006,7 @@ class HostData:
                     f'Change detected in state of daemons from {host} agent metadata. Kicking serve loop')
                 self.mgr._kick_serve_loop()
 
-            if up_to_date and ('ls' in data and data['ls']):
+            if up_to_date and (data.get('ls') or 'ls' in unchanged):
                 was_out_of_date = not self.mgr.cache.all_host_metadata_up_to_date()
                 self.mgr.cache.metadata_up_to_date[host] = True
                 if was_out_of_date and self.mgr.cache.all_host_metadata_up_to_date():
@@ -779,12 +1017,69 @@ class HostData:
                     f'Received up-to-date metadata from agent on host {host}.')
 
             self.mgr.agent_cache.save_agent(host)
-            return 'Successfully processed metadata.'
+            return MetadataResult(True, 'Successfully processed metadata.', resync)
 
         except Exception as e:
+            stats = getattr(self.mgr, 'agent_metadata_stats', None)
+            if stats:
+                stats.record_handler_error()
             err_str = f'Failed to update metadata with metadata from agent on host {host}: {e}'
             self.mgr.log.warning(err_str)
-            return err_str
+            return MetadataResult(False, err_str, [])
+
+    def _reconcile_delta(self, host: str, data: Dict[str, Any],
+                         up_to_date: bool) -> Tuple[Set[str], List[str]]:
+        """Split the sections the agent reports as unchanged.
+
+        Returns the sections this mgr holds, whose freshness can be refreshed,
+        and the sections the agent must resend in full. Unchanged sections in
+        a report with a stale ack are ignored.
+        """
+        if not up_to_date:
+            return set(), []
+        return self.mgr.agent_helpers.delta_baselines.split_unchanged(
+            host, set(data.get('unchanged', [])))
+
+    def _process_sections(self, host: str, data: Dict[str, Any]) -> None:
+        """Update the host cache from the sections included in the report."""
+        host_cache_changed = False
+        host_cache_saved = False
+        if data.get('ls'):
+            self.mgr._process_ls_output(host, data['ls'])
+            host_cache_saved = True  # _process_ls_output() calls save_host().
+            self.mgr.update_failed_daemon_health_check()
+        if data.get('networks'):
+            self.mgr.cache.update_host_networks(host, data['networks'])
+            host_cache_changed = True
+        if data.get('facts'):
+            self.mgr.cache.update_host_facts(host, json.loads(data['facts']))
+        if data.get('volume'):
+            ret = Devices.from_json(json.loads(data['volume']))
+            self.mgr.cache.update_host_devices(host, ret.devices)
+            host_cache_changed = True
+
+        # A changed device/network section can arrive while ls is unchanged.
+        # Persist it once; otherwise ls already saved the complete host cache.
+        if host_cache_changed and not host_cache_saved:
+            self.mgr.cache.save_host(host)
+
+        self.mgr.agent_helpers.delta_baselines.record_received(
+            host, [name for name in AGENT_METADATA_SECTIONS if data.get(name)])
+
+    def _touch_unchanged(self, host: str, unchanged: Set[str]) -> None:
+        """Mark unchanged sections as fresh without persisting the host cache.
+
+        Freshness alone must never cause a synchronous mon-store write.
+        """
+        now = datetime_now()
+        last_update = {
+            'ls': self.mgr.cache.last_daemon_update,
+            'networks': self.mgr.cache.last_network_update,
+            'facts': self.mgr.cache.last_facts_update,
+            'volume': self.mgr.cache.last_device_update,
+        }
+        for section in unchanged:
+            last_update[section][host] = now
 
 
 class AgentMessageThread(threading.Thread):
@@ -886,8 +1181,16 @@ class CephadmAgentHelpers:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.agent = mgr.http_server.agent
+        self.delta_baselines = AgentDeltaBaselines()
 
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
+        stats = getattr(self.mgr, 'agent_metadata_stats', None)
+        if stats and hosts:
+            stats.record_ack_fanout(
+                len(hosts),
+                increment=increment,
+                config_push=daemon_spec is not None,
+            )
         for host in hosts:
             if increment:
                 self.mgr.cache.metadata_up_to_date[host] = False
@@ -923,21 +1226,24 @@ class CephadmAgentHelpers:
             if host in self.mgr.offline_hosts:
                 return False
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
-        # agent hasn't reported in down multiplier * it's refresh rate. Something is likely wrong with it.
+        # agent hasn't reported in:  down_multiplier * it's refresh rate + jitter. Something is likely wrong with it.
+        jitter: float = self.agent.get_jitter()
         down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
         time_diff = datetime_now() - self.mgr.agent_cache.agent_timestamp[host]
-        if time_diff.total_seconds() > down_mult * float(self.mgr.agent_refresh_rate):
+        if time_diff.total_seconds() > down_mult * float(self.mgr.http_server.agent.compute_agents_refrsh_rate() + jitter):
             return True
         return False
 
     def _update_agent_down_healthcheck(self, down_agent_hosts: List[str]) -> None:
         self.mgr.remove_health_warning('CEPHADM_AGENT_DOWN')
         if down_agent_hosts:
+            for host in down_agent_hosts:
+                self.delta_baselines.forget(host)
             detail: List[str] = []
             down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
             for agent in down_agent_hosts:
                 detail.append((f'Cephadm agent on host {agent} has not reported in '
-                              f'{down_mult * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
+                              f'{down_mult * self.mgr.http_server.agent.compute_agents_refrsh_rate()} seconds. Agent is assumed '
                                'down and host may be offline.'))
             for dd in [d for d in self.mgr.cache.get_daemons_by_type(CephadmAgent.TYPE) if d.hostname in down_agent_hosts]:
                 dd.status = DaemonDescriptionStatus.error
@@ -984,6 +1290,7 @@ class CephadmAgentHelpers:
                 self.mgr.agent_cache.agent_timestamp = {}
                 self.mgr.agent_cache.agent_keys = {}
                 self.mgr.agent_cache.agent_ports = {}
+                self.delta_baselines.clear()
         return need_apply
 
     def _check_agent(self, host: str) -> bool:

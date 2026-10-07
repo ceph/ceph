@@ -2271,15 +2271,32 @@ class CephadmAgent(CephService):
         ``get_dependencies()``, which is the public entry point and computes the
         complete dependency set.
         """
-        agent = mgr.http_server.agent
         container_image = cls._get_ceph_volume_image(mgr)
+
+        agent_options = [
+            'device_enhanced_scan',
+            'agent_metadata_compresion_enabled',
+            'agent_metadata_payload_optimization_enabled',
+            'agent_starting_port',
+            'agent_refresh_rate',
+            'agent_avg_concurrency',
+            'agent_initial_startup_delay_max',
+            'agent_jitter_seconds',
+        ]
+        # Dependencies must reflect user configuration, not auto-computed
+        # values derived from the current host count. Otherwise routine host
+        # additions/removals invalidate every agent's deps and trigger a
+        # cluster-wide config push.
+        agent_static_cfg_opts = [f"{opt}: {mgr.get_module_option(opt)}" for opt in agent_options]
+
         return sorted(
             [
                 str(mgr.get_mgr_ip()),
-                str(agent.server_port),
+                str(mgr.http_server.agent.server_port),
                 mgr.cert_mgr.get_root_ca(),
                 str(mgr.get_module_option("device_enhanced_scan")),
                 container_image,
+                *agent_static_cfg_opts,
             ]
         )
 
@@ -2321,11 +2338,15 @@ class CephadmAgent(CephService):
         container_image = self._get_ceph_volume_image(self.mgr)
         cfg = {'target_ip': self.mgr.get_mgr_ip(),
                'target_port': agent.server_port,
-               'refresh_period': self.mgr.agent_refresh_rate,
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
                'container_image': container_image,
-               'device_enhanced_scan': str(self.mgr.device_enhanced_scan)}
+               'device_enhanced_scan': str(self.mgr.device_enhanced_scan),
+               'metadata_compresion_enabled': self.mgr.agent_metadata_compresion_enabled,
+               'metadata_payload_optimization_enabled': self.mgr.agent_metadata_payload_optimization_enabled,
+               'refresh_period': agent.compute_agents_refrsh_rate(),
+               'initial_startup_delay_max': agent.get_initial_delay(),
+               'jitter_seconds': agent.get_jitter()}
 
         tls_creds = self.get_certificates(daemon_spec)
         config = {

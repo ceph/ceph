@@ -548,8 +548,7 @@ def test_agent_get_ls(_ls_subset, _ls, cephadm_fs):
 
 @mock.patch("threading.Event.clear")
 @mock.patch("threading.Event.wait")
-@mock.patch("urllib.request.Request.__init__")
-@mock.patch("cephadmlib.agent.urlopen")
+@mock.patch("cephadm.http_query")
 @mock.patch("cephadm.list_networks")
 @mock.patch("cephadm.HostFacts.dump")
 @mock.patch("cephadm.HostFacts.__init__", lambda _, __: None)
@@ -559,9 +558,10 @@ def test_agent_get_ls(_ls_subset, _ls, cephadm_fs):
 @mock.patch("cephadm.AgentGatherer.start")
 @mock.patch("cephadm.port_in_use")
 @mock.patch("cephadm.CephadmAgent.pull_conf_settings")
-def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
+@mock.patch("cephadm.time.time", return_value=1234.5)
+def test_agent_run(_time, _pull_conf_settings, _port_in_use, _gatherer_start,
                    _listener_start, _is_alive, _load_verify_locations,
-                    _HF_dump, _list_networks, _urlopen, _RQ_init, _wait, _clear):
+                    _HF_dump, _list_networks, _http_query, _wait, _clear):
     target_ip = '192.168.0.0'
     target_port = '9999'
     refresh_period = 20
@@ -603,25 +603,14 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
         }
     }
 
-    class FakeHTTPResponse():
-        def __init__(self):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, type, value, tb):
-            pass
-
-        def read(self):
-            return json.dumps({'valid': 'output', 'result': '400'})
-
     _port_in_use.side_effect = _fake_port_in_use
     _is_alive.return_value = False
     _HF_dump.return_value = 'Host Facts'
     _list_networks.return_value = network_data
-    _urlopen.side_effect = lambda *args, **kwargs: FakeHTTPResponse()
-    _RQ_init.side_effect = lambda *args, **kwargs: None
+    _http_query.return_value = (200, json.dumps({
+        'valid': 'output', 'result': '400', 'refresh_period': 60,
+        'jitter_seconds': 15, 'success': True,
+    }))
     with with_cephadm_ctx([]) as ctx:
         ctx.fsid = FSID
         agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
@@ -663,17 +652,19 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
            'keyring': 'agent keyring',
            'port': str(open_listener_port)
         }
-        _RQ_init.assert_called_with(
-            f'https://{target_ip}:{target_port}/data',
-            json.dumps(expected_data).encode('ascii'),
-            {'Content-Type': 'application/json'}
-        )
+        _http_query.assert_called_with(
+            addr=target_ip, port=target_port,
+            data=json.dumps(expected_data).encode('ascii'), endpoint='/data',
+            ssl_ctx=agent.ssl_ctx, compress=False,
+            headers={'X-Cephadm-Agent-Sent-At': '1234.5'})
         _listener_start.assert_called()
         _gatherer_start.assert_called()
-        _urlopen.assert_called()
+        _http_query.assert_called()
+        assert agent.loop_interval == 60
+        assert agent.jitter_seconds == 15
 
         # agent should not go down if connections fail
-        _urlopen.side_effect = Exception()
+        _http_query.side_effect = Exception()
         with pytest.raises(EventCleared, match='SUCCESS'):
             agent.run()
 
@@ -945,3 +936,63 @@ def test_command_agent(_agent_run, cephadm_fs):
         cephadm_fs.create_dir(AGENT_DIR)
         _cephadm.command_agent(ctx)
         _agent_run.assert_called()
+
+
+def test_agent_delta_disabled_when_config_flag_missing(cephadm_fs):
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        cephadm_fs.create_dir(AGENT_DIR)
+        config = {
+            'target_ip': '192.0.2.1', 'target_port': 1234,
+            'refresh_period': 30, 'listener_port': 5678, 'host': AGENT_ID,
+            'device_enhanced_scan': 'False',
+        }
+        with open(agent.config_path, 'w') as f:
+            f.write(json.dumps(config))
+        with open(agent.keyring_path, 'w') as f:
+            f.write('keyring')
+        agent.pull_conf_settings()
+        assert agent.metadata_payload_optimization_enabled is False
+
+
+def _delta_agent(ctx):
+    agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+    agent.metadata_payload_optimization_enabled = True
+    return agent
+
+
+def test_agent_commits_delta_only_on_explicit_mgr_success():
+    """Pending sections are committed only when the mgr returns success: true."""
+    with with_cephadm_ctx([]) as ctx:
+        agent = _delta_agent(ctx)
+        sections = {'networks': {'10.0.0.0/24': {'eth0': ['10.0.0.2']}}}
+        for response in ({}, {'result': 'Bad metadata: x', 'success': False},
+                         {'result': 'Successfully processed metadata.'}):
+            _, pending = agent.metadata_delta.build(1, sections)
+            with pytest.raises(RuntimeError, match='did not process metadata'):
+                agent._apply_mgr_response(response, pending)
+            assert agent.metadata_delta.synced_ack == {}
+
+        _, pending = agent.metadata_delta.build(1, sections)
+        agent._apply_mgr_response({'success': True}, pending)
+        assert agent.metadata_delta.synced_ack == {'networks': 1}
+
+
+def test_agent_applies_mgr_resync_after_commit():
+    """Sections listed in resync are sent in full on the next report."""
+    with with_cephadm_ctx([]) as ctx:
+        agent = _delta_agent(ctx)
+        sections = {'networks': {'10.0.0.0/24': {'eth0': ['10.0.0.2']}}}
+        _, pending = agent.metadata_delta.build(1, sections)
+        agent._apply_mgr_response({'success': True, 'resync': ['networks']}, pending)
+        fields, _ = agent.metadata_delta.build(1, sections)
+        assert 'networks' in fields
+
+
+def test_agent_applies_pacing_from_mgr_response():
+    """refresh_period and jitter_seconds from the mgr update the agent loop."""
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        agent._apply_mgr_response({'refresh_period': 60, 'jitter_seconds': 15}, {})
+        assert agent.loop_interval == 60
+        assert agent.jitter_seconds == 15
