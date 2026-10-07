@@ -491,6 +491,7 @@ private:
       int64_t base_pool_id, const pg_pool_t *base_pool, const pg_pool_t *tier_pool,
       int *err, std::ostream *ss) const;
 
+  bool is_last_stretch_pool(int64_t pool);
   int _prepare_remove_pool(int64_t pool, std::ostream *ss, bool no_fake);
   int _prepare_rename_pool(int64_t pool, std::string newname);
 

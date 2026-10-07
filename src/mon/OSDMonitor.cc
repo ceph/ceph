@@ -17210,6 +17210,33 @@ bool OSDMonitor::_check_remove_tier(
   return true;
 }
 
+bool OSDMonitor::is_last_stretch_pool(int64_t pool)
+{
+  // If not in global stretch mode but osdmap has stretch mode enabled,
+  // check if this is the last pool with stretch mode enabled.
+  if (mon.monmap->global_stretch_mode_enabled ||
+      !mon.monmap->stretch_mode_enabled ||
+      !osdmap.stretch_mode_enabled) {
+    return false;
+  }
+  for (const auto &_pool : osdmap.pools) {
+    // Skip the pool being removed
+    if (_pool.first == pool) {
+      continue;
+    }
+
+    const pg_pool_t &p = _pool.second;
+    if (p.peering_crush_bucket_count > 0 && p.peering_crush_bucket_target > 0) {
+      dout(10) << __func__ << " pool " << _pool.first
+               << " still has stretch mode enabled (bucket_count="
+               << p.peering_crush_bucket_count << ", bucket_target="
+               << p.peering_crush_bucket_target << ")" << dendl;
+      return false;
+    }
+  }
+  return true;
+}
+
 int OSDMonitor::_prepare_remove_pool(
   int64_t pool, ostream *ss, bool no_fake)
 {
@@ -17242,6 +17269,13 @@ int OSDMonitor::_prepare_remove_pool(
 	    << old_name << " -> " << new_name << dendl;
     pending_inc.new_pool_names[pool] = new_name;
     return 0;
+  }
+
+  bool clear_stretch_mode = is_last_stretch_pool(pool);
+  if (clear_stretch_mode && !mon.monmon()->is_writeable()) {
+    dout(10) << __func__ << " " << pool
+             << " waiting for monmap to clear stretch mode" << dendl;
+    return -EAGAIN;
   }
 
   // remove
@@ -17345,50 +17379,23 @@ int OSDMonitor::_prepare_remove_pool(
   // remove any crush rules for this pool
   const pg_pool_t *pi = osdmap.get_pg_pool(pool);
   maybe_remove_unused_crush_rule(pool, pi->get_crush_rule());
-  // If not in global stretch mode but osdmap has stretch mode enabled,
-  // check if this is the last pool with stretch mode enabled.
-  // If so, clean up stretch mode state from both osdmap and monmap.
-  if (!mon.monmap->global_stretch_mode_enabled &&
-    mon.monmap->stretch_mode_enabled &&
-    osdmap.stretch_mode_enabled) {
-    // Check if any remaining pools still have stretch mode enabled
-    bool any_pool_stretched = false;
-    for (const auto &_pool : osdmap.pools) {
-      // Skip the pool being removed
-      if (_pool.first == pool) {
-        continue;
-      }
+  if (clear_stretch_mode) {
+    dout(10) << __func__ << " no pools with stretch mode remain, "
+             << "cleaning up per-pool stretch mode state" << dendl;
 
-      const pg_pool_t &p = _pool.second;
-      if (p.peering_crush_bucket_count > 0 && p.peering_crush_bucket_target > 0) {
-        any_pool_stretched = true;
-        dout(20) << __func__ << " pool " << _pool.first
-                 << " still has stretch mode enabled (bucket_count="
-                 << p.peering_crush_bucket_count << ", bucket_target="
-                 << p.peering_crush_bucket_target << ")" << dendl;
-        break;
-      }
-    }
+    // The monmap and OSDMap changes must commit in the same paxos round
+    paxos.plug();
+    mon.monmon()->clear_stretch_mode_state();
+    paxos.unplug();
+    force_immediate_propose();
 
-    // If no pools have stretch mode enabled, clean up stretch mode state
-    if (!any_pool_stretched) {
-      dout(10) << __func__ << " no pools with stretch mode remain, "
-               << "cleaning up per-pool stretch mode state" << dendl;
-
-      // Request MonmapMonitor to clear its stretch mode state
-      mon.monmon()->clear_stretch_mode_state();
-
-      // Clear OSDMap stretch mode state
-      pending_inc.change_stretch_mode = true;
-      pending_inc.stretch_mode_enabled = false;
-      pending_inc.new_stretch_bucket_count = 0;
-      pending_inc.new_degraded_stretch_mode = 0;
-      pending_inc.new_stretch_mode_bucket = 0;
-      pending_inc.new_recovering_stretch_mode = 0;
-    } else {
-      dout(10) << __func__ << " other pools still have stretch mode enabled, "
-               << "keeping stretch mode state" << dendl;
-    }
+    // Clear OSDMap stretch mode state
+    pending_inc.change_stretch_mode = true;
+    pending_inc.stretch_mode_enabled = false;
+    pending_inc.new_stretch_bucket_count = 0;
+    pending_inc.new_degraded_stretch_mode = 0;
+    pending_inc.new_stretch_mode_bucket = 0;
+    pending_inc.new_recovering_stretch_mode = 0;
   }
 
   // Check if EC profile can be removed

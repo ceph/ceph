@@ -7147,6 +7147,7 @@ void Monitor::do_stretch_mode_election_work()
   dout(20) << __func__ << dendl;
   if (!is_stretch_mode() ||
       !is_leader()) return;
+  if (!monmap->stretch_mode_enabled) return;
   dout(20) << "checking for degraded stretch mode" << dendl;
   map<string, set<string>> old_dead_buckets;
   old_dead_buckets.swap(dead_mon_buckets);
@@ -7198,6 +7199,7 @@ void Monitor::go_recovery_stretch_mode()
 {
   dout(20) << __func__ << dendl;
   if (!is_stretch_mode()) return;
+  if (!monmap->stretch_mode_enabled) return;
   dout(20) << "is_leader(): " << is_leader() << dendl;
   if (!is_leader()) return;
   dout(20) << "is_degraded_stretch_mode(): " << is_degraded_stretch_mode() << dendl;
@@ -7238,6 +7240,7 @@ void Monitor::maybe_go_degraded_stretch_mode()
 {
   dout(20) << __func__ << dendl;
   if (!is_stretch_mode()) return;
+  if (!monmap->stretch_mode_enabled) return;
   if (is_degraded_stretch_mode()) return;
   if (!is_leader()) return;
   if (dead_mon_buckets.empty()) return;
@@ -7316,6 +7319,7 @@ void Monitor::trigger_healthy_stretch_mode()
 {
   dout(20) << __func__ << dendl;
   if (!is_stretch_mode()) return;
+  if (!monmap->stretch_mode_enabled) return;
   if (!is_degraded_stretch_mode()) return;
   if (!is_leader()) return;
   if (!osdmon()->is_writeable()) {
