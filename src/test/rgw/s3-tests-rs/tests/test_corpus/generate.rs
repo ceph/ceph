@@ -134,6 +134,34 @@ async fn corpus_coverage_keys() {
     let path = dir.join(format!("{tier}-keys.manifest"));
     std::fs::write(&path, m.render()).expect("write manifest");
 
+    /* The disk half, when this run is local to the data root.
+     *
+     * Optional because the S3 half runs anywhere and the filesystem
+     * half cannot:  CORPUS_DATA_ROOT names the gateway's data root, and
+     * without it the inventory is simply not taken.  A workflow that
+     * needs both on separate hosts carries the tree. */
+    if let Ok(data_root) = std::env::var("CORPUS_DATA_ROOT") {
+        let bucket_dir = std::path::Path::new(&data_root).join(&b);
+        match crate::inventory::Inventory::new() {
+            mut inv => match inv.walk(&bucket_dir) {
+                Ok(()) => {
+                    let ipath = dir.join(format!("{tier}-keys.inventory"));
+                    std::fs::write(&ipath, inv.render())
+                        .expect("write inventory");
+                    eprintln!(
+                        "corpus {tier}/keys: {} disk facts -> {}",
+                        inv.len(),
+                        ipath.display()
+                    );
+                }
+                Err(e) => eprintln!(
+                    "corpus {tier}/keys: no inventory, {} is not readable: {e}",
+                    bucket_dir.display()
+                ),
+            },
+        }
+    }
+
     eprintln!(
         "corpus {tier}/keys: {} of {} keys written, {} refused, {} facts -> {}",
         written.len(),

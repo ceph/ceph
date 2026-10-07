@@ -8,13 +8,28 @@
 //!
 //! `docs/NSFS_CORPUS.md` in the nsfs design notes is the design.
 //!
+//! **Nothing it produces is committed.**  The manifests and
+//! inventories are output, regenerable by definition, and there is no
+//! expected copy in the repository to diff against.  A golden manifest
+//! was considered and rejected:  it records what this implementation
+//! happened to do, so it would have enshrined the defects that were in
+//! the first run's output as the expected result.  What the run asserts
+//! instead are properties true of any S3 implementation -- see
+//! `check_listing_invariants` -- and comparisons are between two
+//! captures, never against a file in the tree.
+//!
 //! Driven by the environment, as `test_bench` is:
 //!
 //! ```text
 //! CORPUS_TIER   coverage (default) | interaction | scale
-//! CORPUS_OUT    where to write the manifest;  default target/corpus
+//! CORPUS_OUT        where the captures are written;  default
+//!                   target/corpus, which is build output
+//! CORPUS_DATA_ROOT  the gateway's data root.  Set only when this run
+//!                   is local to it;  without it the disk inventory is
+//!                   not taken and the S3 half still works
 //! ```
 
 mod names;
 mod manifest;
+mod inventory;
 mod generate;

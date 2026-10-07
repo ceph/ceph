@@ -2227,6 +2227,7 @@ dependencies = [
  "chrono",
  "configparser",
  "hmac 0.12.1",
+ "libc",
  "once_cell",
  "rand 0.8.6",
  "rdkafka",

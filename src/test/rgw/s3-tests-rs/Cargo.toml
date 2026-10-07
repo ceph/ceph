@@ -27,6 +27,9 @@ regex = "1"
 sha1 = "0.10"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart"] }
 tempfile = "3"
+# llistxattr, for the corpus disk inventory;  std wraps mode/uid/gid
+# but not extended attributes
+libc = "0.2"
 rdkafka = { version = "0.36", features = ["cmake-build"], optional = true }
 
 [features]
