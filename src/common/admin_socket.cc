@@ -314,7 +314,7 @@ void AdminSocket::entry() noexcept
       }
       do_tell_queue();
     }
-    if (m_shutdown) {
+    if (m_shutdown.load(std::memory_order_relaxed)) {
       // Parent wants us to shut down
       return;
     }
@@ -1157,7 +1157,7 @@ void AdminSocket::shutdown()
     return;
 
   ldout(m_cct, 5) << "shutdown" << dendl;
-  m_shutdown = true;
+  m_shutdown.store(true, std::memory_order_relaxed);
 
   auto err = destroy_wakeup_pipe();
   if (!err.empty()) {
