@@ -40,6 +40,7 @@ namespace bluestore {
   struct WriteContext;
   struct BigDeferredWriteContext;
   struct GarbageCollector;
+  struct AioContext;
   struct printer;
 }
 

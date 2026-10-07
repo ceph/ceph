@@ -54,6 +54,167 @@ int get_key_object(const S& key, ghobject_t* oid);
 template<typename S>
 void get_object_key(CephContext* cct, const ghobject_t& oid, S* key);
 
+// Extent
+
+void bluestore::Extent::dump(Formatter* f) const
+{
+  f->dump_unsigned("logical_offset", logical_offset);
+  f->dump_unsigned("length", length);
+  f->dump_unsigned("blob_offset", blob_offset);
+  f->dump_object("blob", *blob);
+}
+
+namespace bluestore {
+ostream& operator<<(ostream& out, const bluestore::Extent& e)
+{
+  return out << std::hex << "0x" << e.logical_offset << "~" << e.length
+	     << ": 0x" << e.blob_offset << "~" << e.length << std::dec
+	     << " " << *e.blob;
+}
+}
+
+// OnodeSpace
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.OnodeSpace(" << this << " in " << cache << ") "
+
+bluestore::OnodeRef bluestore::OnodeSpace::add_onode(const ghobject_t& oid,
+  OnodeRef& o)
+{
+  std::lock_guard l(cache->lock);
+  // add entry or return existing one
+  auto p = onode_map.emplace(oid, o);
+  if (!p.second) {
+    ldout(cache->cct, 30) << __func__ << " " << oid << " " << o
+      << " raced, returning existing " << p.first->second
+      << dendl;
+    return p.first->second;
+  }
+  ldout(cache->cct, 20) << __func__ << " " << oid << " " << o << dendl;
+  cache->_add(o.get(), 1);
+  cache->_trim_some();
+  return o;
+}
+
+void bluestore::OnodeSpace::_remove(const ghobject_t& oid)
+{
+  ldout(cache->cct, 20) << __func__ << " " << oid << " " << dendl;
+  onode_map.erase(oid);
+}
+
+bluestore::OnodeRef bluestore::OnodeSpace::lookup(const ghobject_t& oid)
+{
+  ldout(cache->cct, 30) << __func__ << dendl;
+  OnodeRef o;
+
+  {
+    std::lock_guard l(cache->lock);
+    auto p = onode_map.find(oid);
+    if (p == onode_map.end()) {
+      ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
+    }
+    else {
+      ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
+	<< " " << p->second->nref
+	<< " " << p->second->cached
+	<< dendl;
+      // This will pin onode and implicitly touch the cache when Onode
+      // eventually will become unpinned
+      o = p->second;
+    }
+  }
+
+  return o;
+}
+
+void bluestore::OnodeSpace::clear()
+{
+  std::lock_guard l(cache->lock);
+  ldout(cache->cct, 10) << __func__ << " " << onode_map.size() << dendl;
+  for (auto& p : onode_map) {
+    cache->_rm(p.second.get());
+  }
+  onode_map.clear();
+}
+
+bool bluestore::OnodeSpace::empty()
+{
+  std::lock_guard l(cache->lock);
+  return onode_map.empty();
+}
+
+void bluestore::OnodeSpace::rename(
+  OnodeRef& oldo,
+  const ghobject_t& old_oid,
+  const ghobject_t& new_oid,
+  const mempool::bluestore_cache_meta::string& new_okey)
+{
+  std::lock_guard l(cache->lock);
+  ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
+    << dendl;
+  auto po = onode_map.find(old_oid);
+  auto pn = onode_map.find(new_oid);
+  ceph_assert(po != pn);
+
+  ceph_assert(po != onode_map.end());
+  if (pn != onode_map.end()) {
+    ldout(cache->cct, 30) << __func__ << "  removing target " << pn->second
+      << dendl;
+    cache->_rm(pn->second.get());
+    onode_map.erase(pn);
+  }
+  OnodeRef o = po->second;
+
+  // install a non-existent onode at old location
+  oldo.reset(new Onode(o->c, old_oid, o->key));
+  po->second = oldo;
+  cache->_add(oldo.get(), 1);
+  // add at new position and fix oid, key.
+  // This will pin 'o' and implicitly touch cache
+  // when it will eventually become unpinned
+  onode_map.insert(std::make_pair(new_oid, o));
+
+  o->oid = new_oid;
+  o->key = new_okey;
+  cache->_trim_some();
+}
+
+bool bluestore::OnodeSpace::map_any(std::function<bool(Onode*)> f)
+{
+  std::lock_guard l(cache->lock);
+  ldout(cache->cct, 20) << __func__ << dendl;
+  for (auto& i : onode_map) {
+    if (f(i.second.get())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template <int LogLevelV = 30>
+void bluestore::OnodeSpace::dump(CephContext* cct)
+{
+  for (auto& i : onode_map) {
+    ldout(cct, LogLevelV) << i.first << " : " << i.second
+      << " " << i.second->nref
+      << " " << i.second->cached
+      << dendl;
+  }
+}
+
+// OldExtent
+bluestore::OldExtent* bluestore::OldExtent::create(bluestore::CollectionRef c,
+  uint32_t lo,
+  uint32_t o,
+  uint32_t l,
+  BlobRef& b)
+{
+  OldExtent* oe = new OldExtent(lo, o, l, b);
+  b->put_ref(c.get(), o, l, &(oe->r));
+  oe->blob_empty = !b->is_referenced();
+  return oe;
+}
+
 // Collection
 
 #undef dout_prefix

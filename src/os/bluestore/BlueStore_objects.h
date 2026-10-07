@@ -15,7 +15,8 @@
 #ifndef CEPH_OSD_BLUESTORE_BLUESTORE_OBJECTS_H
 #define CEPH_OSD_BLUESTORE_BLUESTORE_OBJECTS_H
 
-#include "BlueStore_components.h"
+#include "BlueStore_fwd.h"
+#include "BlueStore.h"
 
 /*
  * extent map blob encoding
@@ -30,6 +31,181 @@
 #define BLOBID_SHIFT_BITS        4
 
 namespace bluestore {
+
+  struct printer {
+    static constexpr uint16_t PTR = 1;   // pointer to Blob
+    static constexpr uint16_t NICK = 2;  // a nickname of this Blob
+    static constexpr uint16_t DISK = 4;  // disk allocations of Blob
+    static constexpr uint16_t SDISK = 8; // shortened version of disk allocaitons
+    static constexpr uint16_t USE = 16;  // use tracker
+    static constexpr uint16_t SUSE = 32; // shortened use tracker
+    static constexpr uint16_t CHK = 64;  // checksum, full dump
+    static constexpr uint16_t SCHK = 128; // only base checksum info
+    static constexpr uint16_t BUF = 256;  // print Blob's buffers (takes cache lock)
+    static constexpr uint16_t SBUF = 512; // short print Blob's buffers (takes cache lock)
+    static constexpr uint16_t ATTRS = 1024; // print attrs in onode
+    static constexpr uint16_t JUSTID = 2048; // used to suppress printing length, spanning and shared blob
+  };
+
+  typedef mempool::bluestore_cache_meta::map<int, BlobRef> blob_map_t;
+  /// a logical extent, pointing to (some portion of) a blob
+  typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
+
+  struct Extent : public ExtentBase {
+    MEMPOOL_CLASS_HELPERS();
+
+    uint32_t logical_offset = 0;      ///< logical offset
+    uint32_t blob_offset = 0;         ///< blob offset
+    uint32_t length = 0;              ///< length
+    BlobRef  blob;                    ///< the blob with our data
+
+    /// ctor for lookup only
+    explicit Extent(uint32_t lo) : ExtentBase(), logical_offset(lo) {}
+    /// ctor for delayed initialization (see decode_some())
+    explicit Extent() : ExtentBase() {
+    }
+    /// ctor for general usage
+    Extent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
+      : ExtentBase(),
+      logical_offset(lo), blob_offset(o), length(l) {
+      assign_blob(b);
+    }
+    ~Extent();
+    struct printer : public bluestore::printer {
+      const Extent& ext;
+      uint16_t mode;
+      printer(const Extent& ext, uint16_t mode)
+	:ext(ext), mode(mode) {
+      }
+    };
+    friend std::ostream& operator<<(std::ostream& out, const printer& p);
+    printer print(uint16_t mode) const {
+      return printer(*this, mode);
+    }
+
+    void dump(ceph::Formatter* f) const;
+
+    void assign_blob(const BlobRef& b);
+
+    // comparators for intrusive_set
+    friend bool operator<(const Extent& a, const Extent& b) {
+      return a.logical_offset < b.logical_offset;
+    }
+    friend bool operator>(const Extent& a, const Extent& b) {
+      return a.logical_offset > b.logical_offset;
+    }
+    friend bool operator==(const Extent& a, const Extent& b) {
+      return a.logical_offset == b.logical_offset;
+    }
+
+    uint32_t blob_start() const {
+      return logical_offset - blob_offset;
+    }
+
+    uint32_t blob_end() const;
+
+    uint32_t logical_end() const {
+      return logical_offset + length;
+    }
+
+    // return true if any piece of the blob is out of
+    // the given range [o, o + l].
+    bool blob_escapes_range(uint32_t o, uint32_t l) const {
+      return blob_start() < o || blob_end() > o + l;
+    }
+  };
+
+  std::ostream& operator<<(std::ostream& out, const Extent& e);
+
+  typedef boost::intrusive::set<Extent> extent_map_t;
+
+  struct OnodeSpace {
+    bluestore::OnodeCacheShard* cache;
+
+  private:
+    /// forward lookups
+    mempool::bluestore_cache_meta::unordered_map<ghobject_t, OnodeRef> onode_map;
+
+    friend struct Collection;         // for split_cache()
+    friend struct Onode;              // for put()
+    friend struct LruOnodeCacheShard; // for _remove()
+    void _remove(const ghobject_t& oid);
+  public:
+    OnodeSpace(bluestore::OnodeCacheShard* c) : cache(c) {}
+    ~OnodeSpace() {
+      clear();
+    }
+
+    OnodeRef add_onode(const ghobject_t& oid, OnodeRef& o);
+    OnodeRef lookup(const ghobject_t& o);
+    void rename(OnodeRef& o, const ghobject_t& old_oid,
+      const ghobject_t& new_oid,
+      const mempool::bluestore_cache_meta::string& new_okey);
+    void clear();
+    bool empty();
+
+    template <int LogLevelV>
+    void dump(CephContext* cct);
+
+    /// return true if f true for any item
+    bool map_any(std::function<bool(Onode*)> f);
+  };
+
+  std::ostream& operator<<(std::ostream& out, const bluestore::SharedBlob& sb);
+
+  /// a lookup table of SharedBlobs
+  struct SharedBlobSet {
+    /// protect lookup, insertion, removal
+    ceph::mutex lock = ceph::make_mutex("BlueStore::SharedBlobSet::lock");
+
+    // we use a bare pointer because we don't want to affect the ref
+    // count
+    mempool::bluestore_cache_meta::unordered_map<uint64_t, SharedBlob*> sb_map;
+
+    SharedBlobRef lookup(uint64_t sbid);
+
+    void add(Collection* coll, SharedBlob* sb);
+
+    bool remove(SharedBlob* sb, bool verify_nref_is_zero = false);
+
+    bool empty() {
+      std::lock_guard l(lock);
+      return sb_map.empty();
+    }
+    template <int LogLevelV>
+    void dump(CephContext * cct) {
+      std::lock_guard l(lock);
+      for (auto& i : sb_map) {
+	lgeneric_subdout(cct, bluestore, LogLevelV) << i.first << " : " << *i.second << dendl;
+      }
+    }
+  };
+
+  struct OldExtent {
+    boost::intrusive::list_member_hook<> old_extent_item;
+    Extent e;
+    PExtentVector r;
+    bool blob_empty; // flag to track the last removed extent that makes blob
+    // empty - required to update compression stat properly
+    OldExtent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
+      : e(lo, o, l, b), blob_empty(false) {
+    }
+    static OldExtent* create(CollectionRef c,
+      uint32_t lo,
+      uint32_t o,
+      uint32_t l,
+      BlobRef& b);
+  };
+
+  // Declaring through a struct to be able to have forward declarations
+  struct OldExtentMap :
+    public boost::intrusive::list<
+      OldExtent,
+      boost::intrusive::member_hook<
+	OldExtent,
+	boost::intrusive::list_member_hook<>,
+	&OldExtent::old_extent_item> > {
+  };
 
   struct Collection : public ObjectStore::CollectionImpl {
     BlueStore* store;
@@ -125,9 +301,9 @@ namespace bluestore {
       bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
     };
 
-    SharedBlob(BlueStore::Collection *_coll) : collection(_coll), sbid_unloaded(0) {
+    SharedBlob(bluestore::Collection *_coll) : collection(_coll), sbid_unloaded(0) {
     }
-    SharedBlob(uint64_t i, BlueStore::Collection *_coll);
+    SharedBlob(uint64_t i, bluestore::Collection *_coll);
     ~SharedBlob();
 
     uint64_t get_sbid() const {
@@ -279,17 +455,17 @@ namespace bluestore {
     }
 
     /// get logical references
-    void get_ref(BlueStore::Collection *coll, uint32_t offset, uint32_t length);
+    void get_ref(bluestore::Collection *coll, uint32_t offset, uint32_t length);
     /// put logical references, and get back any released extents
-    bool put_ref(BlueStore::Collection *coll, uint32_t offset, uint32_t length,
+    bool put_ref(bluestore::Collection *coll, uint32_t offset, uint32_t length,
 		 PExtentVector *r);
     uint32_t put_ref_accumulate(
-      BlueStore::Collection* coll,
+      bluestore::Collection* coll,
       uint32_t offset,
       uint32_t length,
       PExtentVector *released_disk);
     /// split the blob
-    void split(BlueStore::Collection *coll, uint32_t blob_offset, Blob *o);
+    void split(bluestore::Collection *coll, uint32_t blob_offset, Blob *o);
 
     void maybe_prune_tail();
 
@@ -471,7 +647,7 @@ namespace bluestore {
         __u8 struct_v,
         uint64_t* sbid,      // shared blobid, is Blob turns out to be shared blob
         bool include_ref_map, // only spanning blobs have references stored
-        BlueStore::Collection* c) = 0;
+        bluestore::Collection* c) = 0;
 
       virtual void consume_blobid(Extent* le,
                                   bool spanning,
@@ -487,13 +663,13 @@ namespace bluestore {
       void decode_extent(Extent* le,
                          __u8 struct_v,
                          bptr_c_it_t& p,
-                         BlueStore::Collection* c);
+                         bluestore::Collection* c);
     public:
       virtual ~ExtentDecoder() {
       }
 
-      unsigned decode_some(const ceph::buffer::list& bl, BlueStore::Collection* c);
-      void decode_spanning_blobs(bptr_c_it_t& p, BlueStore::Collection* c);
+      unsigned decode_some(const ceph::buffer::list& bl, bluestore::Collection* c);
+      void decode_spanning_blobs(bptr_c_it_t& p, bluestore::Collection* c);
     };
 
     class ExtentDecoderFull : public ExtentDecoder {
@@ -508,7 +684,7 @@ namespace bluestore {
         __u8 struct_v,
         uint64_t* sbid,
         bool include_ref_map,
-        BlueStore::Collection* c) override;
+        bluestore::Collection* c) override;
 
       void consume_blobid(Extent* le, bool spanning, uint64_t blobid) override;
       void consume_blob(Extent* le,
@@ -710,7 +886,7 @@ namespace bluestore {
 
     std::atomic_int nref = 0;      ///< reference count
     std::atomic_int pin_nref = 0;  ///< reference count replica to track pinning
-    BlueStore::Collection *c;
+    bluestore::Collection *c;
     ghobject_t oid;
 
     /// key under PREFIX_OBJ where we are stored
@@ -736,7 +912,7 @@ namespace bluestore {
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
     std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
 
-    Onode(BlueStore::Collection *c, const ghobject_t& o,
+    Onode(bluestore::Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_meta::string& k)
       : c(c),
 	oid(o),
@@ -769,7 +945,7 @@ namespace bluestore {
     }
 
     static void decode_raw(
-      BlueStore::Onode* on,
+      bluestore::Onode* on,
       const bufferlist& v,
       ExtentMap::ExtentDecoder& dencoder,
       bool use_onode_segmentation);
