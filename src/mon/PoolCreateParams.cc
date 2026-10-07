@@ -480,6 +480,16 @@ int check_size_one(bool allowed, bool force, std::ostream* ss)
   return 0;
 }
 
+int check_size_change(const pg_pool_t& p, std::ostream* ss)
+{
+  if (p.has_flag(pg_pool_t::FLAG_NOSIZECHANGE)) {
+    *ss << "pool size change is disabled; you must unset nosizechange flag "
+           "for the pool first";
+    return -EPERM;
+  }
+  return 0;
+}
+
 int check_pool_replica_copies(int64_t n, std::string_view what,
                               std::ostream* ss)
 {
