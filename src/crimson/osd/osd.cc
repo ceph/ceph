@@ -586,6 +586,9 @@ seastar::future<> OSD::start()
   cluster_msgr->set_policy(entity_name_t::TYPE_CLIENT,
                            SocketPolicy::stateless_server(0));
 
+  public_msgr->set_client_shard_ports(
+    local_conf().get_val<bool>("crimson_osd_client_shard_ports"));
+
   crimson::net::dispatchers_t dispatchers{this, monc.get(), mgrc.get()};
   co_await seastar::when_all_succeed(
     cluster_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER))

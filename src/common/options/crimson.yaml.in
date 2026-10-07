@@ -145,6 +145,27 @@ options:
   desc: The maximum number of concurrent I/O operations, 0 for unlimited
   default: 0
 
+- name: crimson_osd_client_shard_ports
+  type: bool
+  level: advanced
+  desc: Listen on one extra public port per reactor for shard-aware clients
+  long_desc: When set, the public messenger also listens on one port per
+    reactor, taken from the ms_bind_port_min..ms_bind_port_max range (ports
+    in use are skipped), and connections accepted there are placed on that
+    reactor. The ports are published in the OSD's shard map, so shard-aware
+    clients (objecter_shard_routing) connect to the reactor that owns a PG
+    and its ops avoid a cross-core hop. The main public port keeps the
+    default reactor placement, so other clients are unaffected. Each OSD
+    uses one extra port per reactor from the range, so size the range for
+    OSDs per host x (reactors + the usual ports). A reactor that gets no
+    port is logged; clients use the main port for its PGs.
+  default: false
+  flags:
+  - startup
+  see_also:
+  - ms_bind_port_min
+  - ms_bind_port_max
+  - objecter_shard_routing
 - name: crimson_osd_stat_interval
   type: int
   level: advanced
