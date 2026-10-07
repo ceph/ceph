@@ -133,6 +133,20 @@ static const nsfs::ReservedNames& reserved_or_none(
 
 /* Matched against the driver's assembled set rather than asked of any
  * strategy:  this runs per directory entry. */
+/* Does any component of a key name something the driver reserves?
+ *
+ * `is_reserved_name()` below tests one directory entry.  A key is a
+ * path, so a collision can be at any component:  `.folder` names the
+ * sentinel, `foo/.folder` names the sentinel inside `foo`, and
+ * `.versions/x` puts an object where version entries live.
+ *
+ * Used to refuse such a write rather than accept it.  The listing skips
+ * reserved names, so accepting one produces an object that is on disk
+ * and in no listing -- the client is told the write succeeded and can
+ * never find it again. */
+static bool key_hits_reserved_name(std::string_view key,
+				   const nsfs::ReservedNames& rn);
+
 static bool is_reserved_name(std::string_view name,
 			     const nsfs::ReservedNames& rn)
 {
@@ -210,6 +224,27 @@ static bool dir_has_content(int parent_fd, const char* dname,
   }
   ::closedir(d);
   return found;
+}
+
+static bool key_hits_reserved_name(std::string_view key,
+				   const nsfs::ReservedNames& rn)
+{
+  size_t pos = 0;
+  while (pos <= key.size()) {
+    const size_t slash = key.find('/', pos);
+    const std::string_view comp = (slash == std::string_view::npos)
+	? key.substr(pos)
+	: key.substr(pos, slash - pos);
+    /* An empty component is a doubled or trailing slash, not a name */
+    if (!comp.empty() && is_reserved_name(comp, rn)) {
+      return true;
+    }
+    if (slash == std::string_view::npos) {
+      break;
+    }
+    pos = slash + 1;
+  }
+  return false;
 }
 
 static bool entry_is_content(int parent_fd, std::string_view name,
@@ -12567,6 +12602,49 @@ int NSFSAtomicWriter::prepare(optional_yield y)
     if ((pret < 0) && (pret != -ENODATA)) {
       return pret;
     }
+  }
+
+  /* Refuse a key the listing cache cannot hold, before anything is
+   * written.
+   *
+   * A listing is served from the cache, so a key LMDB will not accept
+   * is an object that lands on disk and appears in no listing -- the
+   * client is told the write succeeded and can never find it again.
+   * The ceiling is the library's `mdb_env_get_maxkeysize()`, 511 by
+   * default, against S3's 1024;  the cache key is `name \0 instance`,
+   * so the name itself has one byte less.
+   *
+   * Refusing is a divergence from S3, and a smaller one than it looks:
+   * nsfs already cannot store a path component longer than NAME_MAX,
+   * so many legal S3 keys are refused already.  What this fixes is
+   * that the limit was silent.  It goes away if LMDB is ever built
+   * with ceph, where MDB_MAXKEYSIZE is ours to raise. */
+  if (auto* bc = driver->get_bucket_cache(); bc) {
+    const int cap = bc->max_key_size();
+    const size_t klen = obj->get_name().size();
+    if ((cap > 0) && (klen + 1 > static_cast<size_t>(cap))) {
+      ldpp_dout(dpp, 4) << "nsfs: refusing key of " << klen
+	<< " bytes;  the listing cache holds at most " << (cap - 1)
+	<< dendl;
+      return -ERR_KEY_TOO_LONG;
+    }
+  }
+
+  /* And refuse a key whose components collide with our scaffolding,
+   * for the same reason:  the listing skips reserved names, so such an
+   * object is written, kept, and shown to nobody.
+   *
+   * Their gateway has no equivalent refusal -- NooBaa reserves three
+   * names and lists everything else -- so a tree being adopted may
+   * already contain such a file.  That is adoption's to report (it is
+   * the one pass that walks the whole tree deliberately), not this
+   * path's to fix;  refusing here stops us *adding* to the problem. */
+  if (key_hits_reserved_name(obj->get_name(),
+			     driver->get_reserved_names())) {
+    ldpp_dout(dpp, 4) << "nsfs: refusing key " << obj->get_name()
+      << ":  a component names driver scaffolding, and a listing would "
+	 "not show it" << dendl;
+    return -ERR_INVALID_OBJECT_NAME;
   }
 
   int ret;

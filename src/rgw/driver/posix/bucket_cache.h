@@ -333,6 +333,9 @@ struct BucketCache : public Notifiable
     CephContext* cct;
     std::string database_root;
     uint8_t lmdb_count;
+    /* mdb_env_get_maxkeysize(), captured from the first partition env;
+     * see the comment where it is set */
+    int max_key_sz{0};
     MDB_dbi max_dbs_per_partition;
 
     struct Partition {
@@ -365,8 +368,25 @@ struct BucketCache : public Notifiable
 	sf::create_directory(env_path);
 	parts[ix].env = LMDBSafe::getMDBEnv(
 	  env_path.string().c_str(), 0, 0600, max_dbs_per_partition);
+	/* The longest key this build of LMDB will accept.  It is a
+	 * compile-time constant of the library -- MDB_MAXKEYSIZE, 511 by
+	 * default -- and LMDB is a system package rather than vendored,
+	 * so the value is the distribution's and has to be asked for
+	 * rather than assumed.  Every env answers the same, so the first
+	 * one is enough.
+	 *
+	 * A listing is served from this cache, so this is also the real
+	 * ceiling on an object name:  an entry that will not fit cannot
+	 * be listed.  Callers compare against max_key_size() and refuse
+	 * the write, because the alternative is an object on disk that
+	 * no listing shows. */
+	if (max_key_sz == 0) {
+	  max_key_sz = mdb_env_get_maxkeysize(*parts[ix].env);
+	}
       }
     }
+
+    int max_key_size() const { return max_key_sz; }
 
     uint8_t partition_ix(BucketCacheEntry<D, B, YP>* bucket) {
       return bucket->hk % lmdb_count;
@@ -980,13 +1000,23 @@ public:
 
         txn->commit();
       } catch (const std::exception& e) {
+	/* Reported, not swallowed.  A rejected entry means the object is
+	 * on disk and absent from every listing, so a caller that
+	 * ignores this leaves the cache disagreeing with the tree and
+	 * tells the client the write succeeded. */
 	ldpp_dout(dpp, 0) << "BucketCache: add_entry failed for "
-	  << bname << ": " << e.what() << dendl;
+	  << bname << " key=" << bde.key.name << ": " << e.what()
+	  << dendl;
+	return -EIO;
       }
     } /* b */
 
     return 0;
   } /* add_entry */
+
+  /* The longest key LMDB will accept, hence the longest object name
+   * this cache can hold.  Zero until the first partition env exists. */
+  int max_key_size() const { return lmdbs.max_key_size(); }
 
   /* (de)serialisation of a cache entry, in one place.
    *
