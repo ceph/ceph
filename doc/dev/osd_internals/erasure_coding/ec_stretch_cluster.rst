@@ -340,8 +340,8 @@ For an erasure pool, ``ceph osd pool create`` rejects these with EINVAL:
   parameters (crush_root, zone_failure_domain, osd_failure_domain, crush_device_class)".
 * Any of those CRUSH options without ``--k``/``--m``, even with a value equal to the default:
   "crush parameters (crush_root, zone_failure_domain, osd_failure_domain, crush_device_class)
-  require k and m". Without ``--k``/``--m`` the pool shares the ``default`` profile and the
-  ``erasure-code`` rule, which cannot honour per-pool options.
+  require k and m". Without ``--k``/``--m`` the pool uses the shared ``default`` profile,
+  which cannot record per-pool options.
 * ``k`` less than 2: "k=<k> must be >= 2". ``k+m`` greater than 127: "(k+m)=<k+m> must be
   <= 127", because shard ids are 8-bit signed integers.
 
@@ -420,8 +420,8 @@ At creation the monitor loads the plugin named by the profile and sets:
 
 **CRUSH rule**
 
-Without ``--rule`` the rule is named after the pool, or ``erasure-code`` for the ``default``
-profile. If a committed rule of that name already exists it is reused, without checking that it
+Without ``--rule`` the rule is named after the pool. Single-zone pools with the ``default``
+profile are the exception: they share the ``erasure-code`` rule. If a committed rule of that name already exists it is reused, without checking that it
 fits ``k+m``, ``num_zones`` or the CRUSH options. Otherwise the plugin builds it:
 
 * ``num_zones`` greater than 1: a stretch rule that takes ``num_zones`` buckets of the zone type
@@ -456,8 +456,8 @@ rule from the profile's keys alone.
 * A multi-zone pool is created from ``--k``/``--m`` or from a profile. With ``--k``/``--m`` its
   plugin and technique come from ``osd_pool_default_erasure_code_profile``, or from a profile of
   the generated name created in advance. With neither ``--k``/``--m`` nor
-  ``--erasure_code_profile``, it uses the ``default`` profile and the shared ``erasure-code``
-  rule.
+  ``--erasure_code_profile``, it uses the ``default`` profile and, unlike a single-zone pool, a
+  rule of its own named after the pool.
 * This FastEC check at creation is the only release check. The OSD feature bit of Section 15
   is not implemented.
 

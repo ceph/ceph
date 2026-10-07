@@ -15521,8 +15521,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    // Without k/m the pool uses the shared default profile and crush rule,
-    // which cannot honour per-pool crush parameters.
+    // Without k/m the pool uses the shared default profile, which cannot
+    // record per-pool crush parameters.
     if (pool_type == pg_pool_t::TYPE_ERASURE && has_crush_params && !has_ec_params) {
       ss << "crush parameters (crush_root, zone_failure_domain, "
             "osd_failure_domain, crush_device_class) require k and m";
@@ -15675,7 +15675,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
       if (rule_name == "") {
 	implicit_rule_creation = true;
-	if (erasure_code_profile == "default") {
+        if (erasure_code_profile == "default" && num_zones == 1) {
 	  rule_name = "erasure-code";
 	} else {
 	  dout(1) << "implicitly use rule named after the pool: "
