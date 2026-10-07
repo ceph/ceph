@@ -74,19 +74,19 @@ download_boost() {
     boost_sha256=$1
     shift
     boost_version_underscore=$(echo $boost_version | sed 's/\./_/g')
-    boost_fname=boost_${boost_version_underscore}.tar.bz2
+    boost_dir=boost_${boost_version_underscore}
+    boost_fname=${boost_dir}.tar.bz2
     download_from $boost_fname $boost_sha256 $*
     tar xjf $boost_fname -C src \
-        --exclude="$boost_version_underscore/libs/*/doc" \
-        --exclude="$boost_version_underscore/libs/*/example" \
-        --exclude="$boost_version_underscore/libs/*/examples" \
-        --exclude="$boost_version_underscore/libs/*/meta" \
-        --exclude="$boost_version_underscore/libs/*/test" \
-        --exclude="$boost_version_underscore/tools/boostbook" \
-        --exclude="$boost_version_underscore/tools/quickbook" \
-        --exclude="$boost_version_underscore/tools/auto_index" \
+        --exclude="$boost_dir/libs/*/doc" \
+        --exclude="$boost_dir/libs/*/example" \
+        --exclude="$boost_dir/libs/*/examples" \
+        --exclude="$boost_dir/libs/*/test" \
+        --exclude="$boost_dir/tools/boostbook" \
+        --exclude="$boost_dir/tools/quickbook" \
+        --exclude="$boost_dir/tools/auto_index" \
         --exclude='doc' --exclude='more' --exclude='status'
-    mv src/boost_${boost_version_underscore} src/boost
+    mv src/$boost_dir src/boost
     tar cf ${outfile}.boost.tar ${outfile}/src/boost
     rm -rf src/boost
 }
