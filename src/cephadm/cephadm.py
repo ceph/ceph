@@ -225,6 +225,7 @@ from cephadmlib.daemons import (
     NodeProxy,
 )
 from cephadmlib.agent import http_query
+from cephadmlib.agent_delta import MetadataDeltaTracker, PendingSection
 from cephadmlib.listing import (
     CombinedStatusUpdater,
     DaemonStatusUpdater,
@@ -1699,6 +1700,13 @@ class CephadmAgent(DaemonForm):
         self.ssl_ctx = ssl.create_default_context()
         self.ssl_ctx.check_hostname = True
         self.ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        # Defaults for settings read from agent.json by pull_conf_settings().
+        self.metadata_compresion_enabled = False
+        self.initial_startup_delay_max = 0
+        self.jitter_seconds = 0
+        # Delta payloads are only used when the mgr enables them in agent.json.
+        self.metadata_payload_optimization_enabled = False
+        self.metadata_delta = MetadataDeltaTracker()
 
     def validate(self, config: Dict[str, str] = {}) -> None:
         # check for the required files
@@ -1801,6 +1809,9 @@ class CephadmAgent(DaemonForm):
                 self.loop_interval = int(config['refresh_period'])
                 self.starting_port = int(config['listener_port'])
                 self.metadata_compresion_enabled = bool(config.get('metadata_compresion_enabled', False))
+                # Missing on older mgrs: keep full-payload behavior for mixed-version upgrades.
+                self.metadata_payload_optimization_enabled = bool(
+                    config.get('metadata_payload_optimization_enabled', False))
                 self.initial_startup_delay_max = int(config.get('initial_startup_delay_max', 0))
                 self.jitter_seconds = int(config.get('jitter_seconds', 0))
                 self.host = config['host']
@@ -1888,19 +1899,41 @@ class CephadmAgent(DaemonForm):
             for key in networks.keys():
                 networks_list[key] = {}
                 for k, v in networks[key].items():
-                    networks_list[key][k] = list(v)
+                    networks_list[key][k] = sorted(v)
 
-            data = json.dumps({'host': self.host,
-                               'ls': (self.ls_gatherer.data if self.ack == self.ls_gatherer.ack
-                                      and self.ls_gatherer.data is not None else []),
-                               'networks': networks_list,
-                               'facts': HostFacts(self.ctx).dump(),
-                               'volume': (self.volume_gatherer.data if self.ack == self.volume_gatherer.ack
-                                          and self.volume_gatherer.data is not None else ''),
-                               'ack': str(ack),
-                               'keyring': self.keyring,
-                               'port': self.listener_port})
-            data = data.encode('ascii')
+            pending: Dict[str, PendingSection] = {}
+            if self.metadata_payload_optimization_enabled:
+                sections: Dict[str, Any] = {
+                    'networks': networks_list,
+                    'facts': HostFacts(self.ctx).dump(),
+                }
+                # Gatherer-owned sections are only candidates when their data
+                # was collected for this ack. Each section completes its own
+                # full sync independently.
+                if ack == self.ls_gatherer.ack and self.ls_gatherer.data is not None:
+                    sections['ls'] = self.ls_gatherer.data
+                if ack == self.volume_gatherer.ack and self.volume_gatherer.data is not None:
+                    sections['volume'] = self.volume_gatherer.data
+                payload = {
+                    'host': self.host,
+                    'ack': str(ack),
+                    'keyring': self.keyring,
+                    'port': self.listener_port,
+                }
+                delta_fields, pending = self.metadata_delta.build(ack, sections)
+                payload.update(delta_fields)
+            else:
+                payload = {'host': self.host,
+                           'ls': (self.ls_gatherer.data if ack == self.ls_gatherer.ack
+                                  and self.ls_gatherer.data is not None else []),
+                           'networks': networks_list,
+                           'facts': HostFacts(self.ctx).dump(),
+                           'volume': (self.volume_gatherer.data if ack == self.volume_gatherer.ack
+                                      and self.volume_gatherer.data is not None else ''),
+                           'ack': str(ack),
+                           'keyring': self.keyring,
+                           'port': self.listener_port}
+            data = json.dumps(payload).encode('ascii')
 
             try:
                 send_time = time.monotonic()
@@ -1917,10 +1950,7 @@ class CephadmAgent(DaemonForm):
                     logger.error(f'HTTP error {status} while querying agent endpoint: {response}')
                     raise RuntimeError(f'non-200 response <{status}> from agent endpoint: {response}')
                 response_json = json.loads(response)
-                if 'refresh_period' in response_json:
-                    self.loop_interval = int(response_json['refresh_period'])
-                if 'jitter_seconds' in response_json:
-                    self.jitter_seconds = int(response_json['jitter_seconds'])
+                self._apply_mgr_response(response_json, pending)
                 total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
                 logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
             except Exception as e:
@@ -1938,6 +1968,26 @@ class CephadmAgent(DaemonForm):
             self.event.wait(delay)
             self.event.clear()
 
+    def _apply_mgr_response(self, response_json: Dict[str, Any],
+                            pending: Dict[str, PendingSection]) -> None:
+        """Apply the mgr's response to a metadata report.
+
+        With delta payloads, the pending sections are committed only when the
+        mgr explicitly reports success; anything else leaves every section
+        eligible for retransmission. Sections the mgr asks to resync are sent
+        in full on the next report.
+        """
+        if self.metadata_payload_optimization_enabled:
+            if response_json.get('success') is not True:
+                raise RuntimeError(
+                    f'mgr did not process metadata successfully: {response_json.get("result")}')
+            self.metadata_delta.commit(pending)
+            self.metadata_delta.resync(response_json.get('resync', []))
+        if 'refresh_period' in response_json:
+            self.loop_interval = int(response_json['refresh_period'])
+        if 'jitter_seconds' in response_json:
+            self.jitter_seconds = int(response_json['jitter_seconds'])
+
     def _ceph_volume(self, enhanced: bool = False) -> Tuple[str, bool]:
         self.ctx.command = 'inventory --format=json'.split()
         if enhanced:
@@ -1950,10 +2000,11 @@ class CephadmAgent(DaemonForm):
 
         stdout = stream.getvalue()
 
-        if stdout:
-            return (stdout, False)
-        else:
+        if not stdout:
             raise Exception('ceph-volume returned empty value')
+        # Preserve ceph-volume's payload exactly. Delta comparison canonicalizes
+        # a parsed copy in _section_fingerprint() without changing user-visible order.
+        return (stdout, False)
 
     def _daemon_ls_subset(self) -> Dict[str, Dict[str, Any]]:
         # gets a subset of ls info quickly. The results of this will tell us if our

@@ -10,7 +10,7 @@ from cephadm.agent import (
     _agent_stats_request_end,
     _agent_stats_request_start,
 )
-from cephadm.agent_metrics import AgentMetadataStats
+from cephadm.agent_metrics import AgentMetadataStats, DeltaReason
 from cephadm.http_server import CephadmHttpServer
 
 
@@ -370,3 +370,85 @@ def test_empty_ack_fanout_is_not_recorded() -> None:
 
     result = stats.snapshot('mgr.a')
     assert result['ack_fanout']['events'] == 0
+
+
+def test_ls_delta_stats_are_aggregated_and_handle_agent_reset():
+    stats = AgentMetadataStats()
+    # First observation establishes the baseline only.
+    stats.record_ls_delta_stats('host1', {
+        'full_sync': 1, 'structural': 2, 'memory_usage': 3,
+        'cpu_percentage': 4, 'unchanged': 5,
+    })
+    assert stats.snapshot('mgr.a')['reports']['ls_delta'] == {
+        'full_sync': 0, 'structural': 0, 'memory_usage': 0,
+        'cpu_percentage': 0, 'unchanged': 0,
+    }
+
+    stats.record_ls_delta_stats('host1', {
+        'full_sync': 1, 'structural': 3, 'memory_usage': 5,
+        'cpu_percentage': 4, 'unchanged': 8,
+    })
+    # Simulate an agent restart. Any component moving backwards resets the whole
+    # cumulative vector, including counters whose values happen to be unchanged.
+    stats.record_ls_delta_stats('host1', {
+        'full_sync': 1, 'structural': 0, 'memory_usage': 1,
+        'cpu_percentage': 0, 'unchanged': 2,
+    })
+    delta = stats.snapshot('mgr.a')['reports']['ls_delta']
+    assert delta == {
+        'full_sync': 1,
+        'structural': 1,
+        'memory_usage': 3,
+        'cpu_percentage': 0,
+        'unchanged': 5,
+    }
+
+
+def test_ls_delta_stats_reset_keeps_host_baseline():
+    stats = AgentMetadataStats()
+    stats.record_ls_delta_stats('host1', {
+        'full_sync': 1, 'structural': 2, 'memory_usage': 3000,
+        'cpu_percentage': 4, 'unchanged': 900,
+    })
+    stats.reset()
+
+    # Reset clears the measurement window, not the per-host cumulative baseline.
+    stats.record_ls_delta_stats('host1', {
+        'full_sync': 1, 'structural': 2, 'memory_usage': 3000,
+        'cpu_percentage': 4, 'unchanged': 901,
+    })
+    delta = stats.snapshot('mgr.a')['reports']['ls_delta']
+    assert delta == {
+        'full_sync': 0, 'structural': 0, 'memory_usage': 0,
+        'cpu_percentage': 0, 'unchanged': 1,
+    }
+
+
+def test_ls_delta_stats_forget_host_reestablishes_baseline():
+    stats = AgentMetadataStats()
+    counters = {
+        'full_sync': 1, 'structural': 2, 'memory_usage': 3,
+        'cpu_percentage': 4, 'unchanged': 5,
+    }
+    stats.record_ls_delta_stats('host1', counters)
+    stats.forget_ls_delta_host('host1')
+    stats.record_ls_delta_stats('host1', counters)
+    assert stats.snapshot('mgr.a')['reports']['ls_delta'] == {
+        'full_sync': 0, 'structural': 0, 'memory_usage': 0,
+        'cpu_percentage': 0, 'unchanged': 0,
+    }
+
+
+def test_delta_reason_wire_values():
+    """DeltaReason values are the ls_delta_stats keys agents send."""
+    assert {reason.value for reason in DeltaReason} == {
+        'full_sync', 'unchanged', 'structural', 'memory_usage', 'cpu_percentage',
+    }
+
+
+def test_ls_delta_snapshot_is_keyed_by_plain_strings():
+    """The ls_delta snapshot uses the wire values as plain string keys."""
+    stats = AgentMetadataStats()
+    ls_delta = stats.snapshot('mgr.a')['reports']['ls_delta']
+    assert all(type(key) is str for key in ls_delta)
+    assert set(ls_delta) == {reason.value for reason in DeltaReason}

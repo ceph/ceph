@@ -21,13 +21,59 @@ from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 
 from urllib.error import HTTPError, URLError
-from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple
+from typing import Any, Dict, Iterable, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple, NamedTuple
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
 
 CEPHADM_AGENT_CERT_DURATION = (365 * 5)
+
+# Metadata sections an agent reports. Must match METADATA_SECTIONS in
+# src/cephadm/cephadmlib/agent_delta.py.
+AGENT_METADATA_SECTIONS = ('ls', 'networks', 'facts', 'volume')
+
+
+class MetadataResult(NamedTuple):
+    """Outcome of handling one agent metadata report.
+
+    processed tells the agent whether it may commit its delta baselines;
+    resync lists sections the agent must send in full on its next report.
+    """
+    processed: bool
+    message: str
+    resync: List[str]
+
+
+class AgentDeltaBaselines:
+    """Metadata sections each agent has delivered in full to this mgr.
+
+    An agent may only report a section as unchanged relative to data this mgr
+    instance holds. This state is deliberately not persisted: after a mgr
+    restart or failover, agents are asked to resend sections in full.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._received: Dict[str, Set[str]] = {}
+
+    def record_received(self, host: str, sections: Iterable[str]) -> None:
+        with self._lock:
+            self._received.setdefault(host, set()).update(sections)
+
+    def split_unchanged(self, host: str, unchanged: Set[str]) -> Tuple[Set[str], List[str]]:
+        """Return (honoured, resync) for the sections an agent reports unchanged."""
+        with self._lock:
+            received = self._received.get(host, set())
+            return unchanged & received, sorted(unchanged - received)
+
+    def forget(self, host: str) -> None:
+        with self._lock:
+            self._received.pop(host, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._received.clear()
 
 
 def _agent_stats_request_start(mgr: "CephadmOrchestrator", endpoint: str) -> None:
@@ -833,6 +879,7 @@ class HostData:
             if stats:
                 stats.record_bad_metadata()
             results['result'] = f'Bad metadata: {e}'
+            results['success'] = False
             self.mgr.log.warning(f'Received bad metadata from an agent: {e}')
         else:
             host = data['host']
@@ -853,7 +900,15 @@ class HostData:
             # if we got here, we've already verified the keyring of the agent. If
             # host agent is reporting on is marked offline, it shouldn't be any more
             self.mgr.offline_hosts_remove(host)
-            results['result'] = self.handle_metadata(data)
+            metadata_result = self.handle_metadata(data)
+            if metadata_result.processed:
+                stats = getattr(self.mgr, 'agent_metadata_stats', None)
+                if stats is not None:
+                    stats.record_ls_delta_stats(host, data.get('ls_delta_stats'))
+            results['result'] = metadata_result.message
+            results['success'] = metadata_result.processed
+            if metadata_result.resync:
+                results['resync'] = metadata_result.resync
             # Auto-derived pacing values are runtime policy, not daemon
             # dependencies. Return the current values on normal reports so
             # agents adopt host-count changes without a config fan-out.
@@ -897,13 +952,20 @@ class HostData:
         except Exception as e:
             raise Exception(
                 f'Counter value from agent on host {host} could not be converted to an integer: {e}')
-        metadata_types = ['ls', 'networks', 'facts', 'volume']
-        metadata_types_str = '{' + ', '.join(metadata_types) + '}'
-        if not all(item in data.keys() for item in metadata_types):
-            self.mgr.log.warning(
-                f'Agent on host {host} reported incomplete metadata. Not all of {metadata_types_str} were present. Received fields {fields}')
+        metadata_types = set(AGENT_METADATA_SECTIONS)
+        unchanged = data.get('unchanged', [])
+        if unchanged and (
+                not isinstance(unchanged, list)
+                or any(item not in metadata_types for item in unchanged)
+                or len(set(unchanged)) != len(unchanged)):
+            raise Exception(f'Invalid unchanged metadata sections from agent on host {host}: {unchanged}')
+        if not self.mgr.agent_metadata_payload_optimization_enabled:
+            metadata_types_str = '{' + ', '.join(sorted(metadata_types)) + '}'
+            if not all(item in data for item in metadata_types):
+                self.mgr.log.warning(
+                    f'Agent on host {host} reported incomplete metadata. Not all of {metadata_types_str} were present. Received fields {fields}')
 
-    def handle_metadata(self, data: Dict[str, Any]) -> str:
+    def handle_metadata(self, data: Dict[str, Any]) -> MetadataResult:
         try:
             host = data['host']
             self.mgr.agent_cache.agent_ports[host] = int(data['port'])
@@ -912,7 +974,7 @@ class HostData:
                 self.mgr.agent_helpers._request_agent_acks({host})
                 res = f'Got metadata from agent on host {host} with no known counter entry. Starting counter at 1 and requesting new metadata'
                 self.mgr.log.debug(res)
-                return res
+                return MetadataResult(False, res, [])
 
             # update timestamp of most recent agent update
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
@@ -932,16 +994,9 @@ class HostData:
                 self.mgr.log.debug(
                     f'Received old metadata from agent on host {host}. Requested up-to-date metadata.')
 
-            if 'ls' in data and data['ls']:
-                self.mgr._process_ls_output(host, data['ls'])
-                self.mgr.update_failed_daemon_health_check()
-            if 'networks' in data and data['networks']:
-                self.mgr.cache.update_host_networks(host, data['networks'])
-            if 'facts' in data and data['facts']:
-                self.mgr.cache.update_host_facts(host, json.loads(data['facts']))
-            if 'volume' in data and data['volume']:
-                ret = Devices.from_json(json.loads(data['volume']))
-                self.mgr.cache.update_host_devices(host, ret.devices)
+            unchanged, resync = self._reconcile_delta(host, data, up_to_date)
+            self._process_sections(host, data)
+            self._touch_unchanged(host, unchanged)
 
             if (
                 error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
@@ -951,7 +1006,7 @@ class HostData:
                     f'Change detected in state of daemons from {host} agent metadata. Kicking serve loop')
                 self.mgr._kick_serve_loop()
 
-            if up_to_date and ('ls' in data and data['ls']):
+            if up_to_date and (data.get('ls') or 'ls' in unchanged):
                 was_out_of_date = not self.mgr.cache.all_host_metadata_up_to_date()
                 self.mgr.cache.metadata_up_to_date[host] = True
                 if was_out_of_date and self.mgr.cache.all_host_metadata_up_to_date():
@@ -962,7 +1017,7 @@ class HostData:
                     f'Received up-to-date metadata from agent on host {host}.')
 
             self.mgr.agent_cache.save_agent(host)
-            return 'Successfully processed metadata.'
+            return MetadataResult(True, 'Successfully processed metadata.', resync)
 
         except Exception as e:
             stats = getattr(self.mgr, 'agent_metadata_stats', None)
@@ -970,7 +1025,61 @@ class HostData:
                 stats.record_handler_error()
             err_str = f'Failed to update metadata with metadata from agent on host {host}: {e}'
             self.mgr.log.warning(err_str)
-            return err_str
+            return MetadataResult(False, err_str, [])
+
+    def _reconcile_delta(self, host: str, data: Dict[str, Any],
+                         up_to_date: bool) -> Tuple[Set[str], List[str]]:
+        """Split the sections the agent reports as unchanged.
+
+        Returns the sections this mgr holds, whose freshness can be refreshed,
+        and the sections the agent must resend in full. Unchanged sections in
+        a report with a stale ack are ignored.
+        """
+        if not up_to_date:
+            return set(), []
+        return self.mgr.agent_helpers.delta_baselines.split_unchanged(
+            host, set(data.get('unchanged', [])))
+
+    def _process_sections(self, host: str, data: Dict[str, Any]) -> None:
+        """Update the host cache from the sections included in the report."""
+        host_cache_changed = False
+        host_cache_saved = False
+        if data.get('ls'):
+            self.mgr._process_ls_output(host, data['ls'])
+            host_cache_saved = True  # _process_ls_output() calls save_host().
+            self.mgr.update_failed_daemon_health_check()
+        if data.get('networks'):
+            self.mgr.cache.update_host_networks(host, data['networks'])
+            host_cache_changed = True
+        if data.get('facts'):
+            self.mgr.cache.update_host_facts(host, json.loads(data['facts']))
+        if data.get('volume'):
+            ret = Devices.from_json(json.loads(data['volume']))
+            self.mgr.cache.update_host_devices(host, ret.devices)
+            host_cache_changed = True
+
+        # A changed device/network section can arrive while ls is unchanged.
+        # Persist it once; otherwise ls already saved the complete host cache.
+        if host_cache_changed and not host_cache_saved:
+            self.mgr.cache.save_host(host)
+
+        self.mgr.agent_helpers.delta_baselines.record_received(
+            host, [name for name in AGENT_METADATA_SECTIONS if data.get(name)])
+
+    def _touch_unchanged(self, host: str, unchanged: Set[str]) -> None:
+        """Mark unchanged sections as fresh without persisting the host cache.
+
+        Freshness alone must never cause a synchronous mon-store write.
+        """
+        now = datetime_now()
+        last_update = {
+            'ls': self.mgr.cache.last_daemon_update,
+            'networks': self.mgr.cache.last_network_update,
+            'facts': self.mgr.cache.last_facts_update,
+            'volume': self.mgr.cache.last_device_update,
+        }
+        for section in unchanged:
+            last_update[section][host] = now
 
 
 class AgentMessageThread(threading.Thread):
@@ -1072,6 +1181,7 @@ class CephadmAgentHelpers:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.agent = mgr.http_server.agent
+        self.delta_baselines = AgentDeltaBaselines()
 
     def _request_agent_acks(self, hosts: Set[str], increment: bool = False, daemon_spec: Optional[CephadmDaemonDeploySpec] = None) -> None:
         stats = getattr(self.mgr, 'agent_metadata_stats', None)
@@ -1127,6 +1237,8 @@ class CephadmAgentHelpers:
     def _update_agent_down_healthcheck(self, down_agent_hosts: List[str]) -> None:
         self.mgr.remove_health_warning('CEPHADM_AGENT_DOWN')
         if down_agent_hosts:
+            for host in down_agent_hosts:
+                self.delta_baselines.forget(host)
             detail: List[str] = []
             down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
             for agent in down_agent_hosts:
@@ -1178,6 +1290,7 @@ class CephadmAgentHelpers:
                 self.mgr.agent_cache.agent_timestamp = {}
                 self.mgr.agent_cache.agent_keys = {}
                 self.mgr.agent_cache.agent_ports = {}
+                self.delta_baselines.clear()
         return need_apply
 
     def _check_agent(self, host: str) -> bool:

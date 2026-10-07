@@ -1,8 +1,9 @@
 import datetime
+import enum
 import threading
 import time
 from collections import OrderedDict
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 _SLOW_REQUEST_DEBUG_THRESHOLD_S = 1.0
 _SLOW_REQUEST_INFO_THRESHOLD_S = 5.0
@@ -17,6 +18,20 @@ _LATENCY_BUCKETS_MS = (
     (10000.0, '5-10s'),
     (float('inf'), '>10s'),
 )
+
+
+class DeltaReason(str, enum.Enum):
+    """Why an agent sent or skipped ls, as counted in its ls_delta_stats.
+
+    The values are the ls_delta_stats keys on the wire and must match
+    DeltaReason in src/cephadm/cephadmlib/agent_delta.py.
+    """
+    FULL_SYNC = 'full_sync'
+    UNCHANGED = 'unchanged'
+    STRUCTURAL = 'structural'
+    MEMORY = 'memory_usage'
+    CPU = 'cpu_percentage'
+
 
 _STORE_CATEGORIES = ('host', 'devices', 'agent')
 _STORE_SCOPES = ('agent_request', 'background')
@@ -125,6 +140,10 @@ class AgentMetadataStats:
         self._lock = threading.Lock()
         self._local = threading.local()
         self._logger = logger
+        # Per-host cumulative ls_delta_stats last seen from each agent. These are
+        # baselines, not measurements, so reset() keeps them: the next report
+        # after a reset then counts only what happened since.
+        self._ls_delta_last_by_host: Dict[str, Dict[DeltaReason, int]] = {}
         self.reset()
 
     def reset(self) -> None:
@@ -134,7 +153,7 @@ class AgentMetadataStats:
             self._requests = _new_latency_stats()
             self._reports_total = 0
             self._valid_reports = 0
-            self._unique_reporting_hosts = set()
+            self._unique_reporting_hosts: Set[str] = set()
             self._last_agent_send_by_host: Dict[str, float] = {}
             self._agent_send_intervals = _new_interval_stats()
             self._processed_rate_buckets: Dict[int, int] = {}
@@ -153,6 +172,7 @@ class AgentMetadataStats:
             }
             self._bad_metadata = 0
             self._handler_errors = 0
+            self._ls_delta_reasons: Dict[DeltaReason, int] = {reason: 0 for reason in DeltaReason}
             self._reports_with_nonempty_ls = 0
             self._reports_with_devices = 0
             self._first_contact_reports = 0
@@ -311,6 +331,32 @@ class AgentMetadataStats:
         with self._lock:
             self._handler_errors += 1
 
+    def record_ls_delta_stats(self, host: str, counters: Any) -> None:
+        if not isinstance(counters, dict):
+            return
+        try:
+            current = {reason: max(0, int(counters.get(reason.value, 0))) for reason in DeltaReason}
+        except (TypeError, ValueError):
+            return
+        with self._lock:
+            previous = self._ls_delta_last_by_host.get(host)
+            if previous is None:
+                # The first observation establishes a baseline. Counting the whole
+                # vector here would import the agent's pre-mgr/pre-reset history.
+                self._ls_delta_last_by_host[host] = current
+                return
+            # Cumulative counters form one vector. If any component moved backwards,
+            # the agent restarted/reset and the whole current vector is post-reset.
+            reset = any(current[reason] < previous[reason] for reason in DeltaReason)
+            for reason in DeltaReason:
+                delta = current[reason] if reset else current[reason] - previous[reason]
+                self._ls_delta_reasons[reason] += delta
+            self._ls_delta_last_by_host[host] = current
+
+    def forget_ls_delta_host(self, host: str) -> None:
+        with self._lock:
+            self._ls_delta_last_by_host.pop(host, None)
+
     def record_store(self, category: str, duration_s: float, error: bool = False) -> None:
         if category not in _STORE_CATEGORIES:
             return
@@ -436,6 +482,7 @@ class AgentMetadataStats:
                     'with_devices': self._reports_with_devices,
                     'first_contact': self._first_contact_reports,
                     'stale_ack': self._stale_ack_reports,
+                    'ls_delta': {reason.value: count for reason, count in self._ls_delta_reasons.items()},
                     'recent_processed_rate': processed_rate,
                     'sent_timestamped': self._agent_sent_timestamp_reports,
                     'send_interval': agent_send_intervals,
@@ -509,6 +556,11 @@ class AgentMetadataStats:
             f"  with devices:       {reports['with_devices']}",
             f"  first contact:      {reports['first_contact']}",
             f"  stale ack:          {reports['stale_ack']}",
+            f"  ls delta full sync: {reports['ls_delta'][DeltaReason.FULL_SYNC.value]}",
+            f"  ls structural:      {reports['ls_delta'][DeltaReason.STRUCTURAL.value]}",
+            f"  ls memory:          {reports['ls_delta'][DeltaReason.MEMORY.value]}",
+            f"  ls cpu:             {reports['ls_delta'][DeltaReason.CPU.value]}",
+            f"  ls unchanged:       {reports['ls_delta'][DeltaReason.UNCHANGED.value]}",
             '',
             'Mgr pacing policy:',
             f"  host count:         {pacing['host_count']}",

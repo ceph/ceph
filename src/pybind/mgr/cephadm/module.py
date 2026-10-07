@@ -443,6 +443,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Enable compression of metadata sent from agent to reduce payload size'
         ),
         Option(
+            'agent_metadata_payload_optimization_enabled',
+            type='bool',
+            default=True,
+            desc='Avoid processing and persisting unchanged agent metadata'
+        ),
+        Option(
             'agent_down_multiplier',
             type='float',
             default=3.0,
@@ -697,6 +703,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.agent_metadata_compresion_enabled = True
+            self.agent_metadata_payload_optimization_enabled = True
             self.hw_monitoring = False
             self.hw_monitoring_vendor = 'generic'
             self.service_discovery_port = 0
@@ -1240,6 +1247,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         host = normalize_hostname(host)
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
+            # Agent metadata held for an offline host may be stale; have the
+            # agent resend every section in full.
+            self.agent_helpers.delta_baselines.forget(host)
             self._invalidate_all_host_metadata_and_kick_serve(host)
 
     def update_failed_daemon_health_check(self) -> None:
@@ -2559,6 +2569,8 @@ Then run the following:
 
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
+        self.agent_metadata_stats.forget_ls_delta_host(host)
+        self.agent_helpers.delta_baselines.forget(host)
         self.ssh.reset_con(host)
         # if host was in offline host list, we should remove it now.
         self.offline_hosts_remove(host)
