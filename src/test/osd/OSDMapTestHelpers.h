@@ -18,6 +18,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "crush/CrushWrapper.h"
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 
