@@ -177,7 +177,6 @@ public:
     _ino = 0;
     _set_path(s);
   }
-  void set_string(std::string_view s);
 
   void set_trimmed();
 
@@ -283,7 +282,7 @@ private:
    * 1 is relative to root.
    * Everything else is relative to that inode number.
    */
-  mutable inodeno_t _ino = 0;
+  inodeno_t _ino = 0;
 
   /* The canonicalized path. If it is derived from a path beginning with "/",
    * the _ino will also be changed to 1 (root).

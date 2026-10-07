@@ -39,6 +39,7 @@
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include <fcntl.h>
@@ -51,6 +52,7 @@
 
 #include "common/Formatter.h"
 #include "common/filepath.h"
+#include "common/strescape.h"
 
 #include "mds/cephfs_features.h"
 #include "mds/metareqid_t.h"
@@ -94,6 +96,21 @@ class MClientRequest final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 1;
+
+  static bool op_path2_is_string(int op) {
+    switch (op) {
+    case CEPH_MDS_OP_SYMLINK:
+    case CEPH_MDS_OP_GETVXATTR:
+    case CEPH_MDS_OP_SETXATTR:
+    case CEPH_MDS_OP_RMXATTR:
+    case CEPH_MDS_OP_READDIR:
+    case CEPH_MDS_OP_LSSNAP:
+    case CEPH_MDS_OP_READDIR_SNAPDIFF:
+      return true;
+    default:
+      return false;
+    }
+  }
 
 public:
   mutable struct ceph_mds_request_head head; /* XXX HACK! */
@@ -144,8 +161,11 @@ public:
   };
   mutable std::vector<Release> releases; /* XXX HACK! */
 
+  using SecondaryArg = std::variant<std::monostate, filepath, std::string>;
+
   // path arguments
-  filepath path, path2;
+  filepath path;
+  SecondaryArg arg2;
   std::string alternate_name;
   std::vector<uint64_t> gid_list;
 
@@ -218,8 +238,8 @@ public:
   void inc_num_fwd() { head.ext_num_fwd = head.ext_num_fwd + 1; }
   void set_retry_attempt(int a) { head.ext_num_retry = a; }
   void set_filepath(const filepath& fp) { path = fp; }
-  void set_filepath2(const filepath& fp) { path2 = fp; }
-  void set_string2(const char *s) { path2.set_string(std::string_view(s)); }
+  void set_filepath2(const filepath& fp) { arg2 = fp; }
+  void set_string2(std::string_view s) { arg2 = std::string(s); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
   void set_gid_list(int count, const gid_t *gids) {
@@ -258,8 +278,16 @@ public:
 
   std::string_view get_path() const { return path.get_path(); }
   const filepath& get_filepath() const { return path; }
-  std::string_view get_path2() const { return path2.get_path(); }
-  const filepath& get_filepath2() const { return path2; }
+  const filepath& get_filepath2() const {
+    return std::get<filepath>(arg2);
+  }
+  std::string_view get_string2() const {
+    if (std::holds_alternative<std::monostate>(arg2)) {
+      return "";
+    } else {
+      return std::get<std::string>(arg2);
+    }
+  }
   std::string_view get_alternate_name() const { return std::string_view(alternate_name); }
 
   int get_dentry_wanted() const { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
@@ -298,7 +326,24 @@ public:
     }
 
     decode(path, p);
-    decode(path2, p);
+
+    if (op_path2_is_string(head.op)) {
+      __u8 struct_v;
+      inodeno_t ino;
+      std::string s;
+      decode(struct_v, p);
+      decode(ino, p);
+      decode(s, p);
+      arg2 = std::move(s);
+    } else {
+      filepath fp;
+      decode(fp, p);
+      if (!fp.empty() || fp.get_ino() != 0) {
+        arg2 = std::move(fp);
+      } else {
+        arg2 = std::monostate{};
+      }
+    }
     ceph::decode_nohead(head.num_releases, releases, p);
     if (header.version >= 2)
       decode(stamp, p);
@@ -339,7 +384,18 @@ public:
     }
 
     encode(path, payload);
-    encode(path2, payload);
+
+    if (auto* fp = std::get_if<filepath>(&arg2)) {
+      encode(*fp, payload);
+    } else if (auto* str = std::get_if<std::string>(&arg2)) {
+      encode((__u8)1, payload);
+      encode((inodeno_t)0, payload);
+      encode(*str, payload);
+    } else {
+      encode((__u8)1, payload);
+      encode((inodeno_t)0, payload);
+      encode(std::string_view(), payload);
+    }
     ceph::encode_nohead(releases, payload);
     encode(stamp, payload);
     encode(gid_list, payload);
@@ -387,8 +443,11 @@ public:
     out << " " << get_filepath();
     if (alternate_name.size())
       out << " (" << alternate_name << ") ";
-    if (!get_filepath2().empty())
-      out << " " << get_filepath2();
+    if (std::holds_alternative<filepath>(arg2)) {
+      out << " path2='" << binstrprint(get_filepath2().get_path(), 128) << "'";
+    } else if (std::holds_alternative<std::string>(arg2)) {
+      out << " arg2='" << binstrprint(get_string2(), 128) << "'";
+    }
     if (stamp != utime_t())
       out << " " << stamp;
     if (head.ext_num_fwd)

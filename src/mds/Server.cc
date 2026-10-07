@@ -5138,7 +5138,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   // which frag?
   frag_t fg = (__u32)req->head.args.readdir.frag;
   unsigned req_flags = (__u32)req->head.args.readdir.flags;
-  auto offset_str = std::string(req->get_path2());
+  auto offset_str = std::string(req->get_string2());
 
   __u32 offset_hash = 0;
   if (!offset_str.empty())
@@ -6351,7 +6351,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
   const cref_t<MClientRequest> &req = mdr->client_request;
   bool is_rmxattr = (req->get_op() == CEPH_MDS_OP_RMXATTR);
   MutationImpl::LockOpVec lov;
-  string name(req->get_path2());
+  auto name = std::string(req->get_string2());
   bufferlist bl = req->get_data();
   string value (bl.c_str(), bl.length());
 
@@ -7158,7 +7158,7 @@ void Server::mirror_info_removexattr_handler(CInode *cur, InodeStoreBase::xattr_
 void Server::handle_client_setxattr(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
-  string name(req->get_path2());
+  auto name = std::string(req->get_string2());
 
   // is a ceph virtual xattr?
   if (is_ceph_vxattr(name)) {
@@ -7255,7 +7255,7 @@ void Server::handle_client_setxattr(const MDRequestRef& mdr)
 void Server::handle_client_removexattr(const MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
-  std::string name(req->get_path2());
+  auto name = std::string(req->get_string2());
 
   // is a ceph virtual xattr?
   if (is_ceph_vxattr(name)) {
@@ -7324,7 +7324,7 @@ void Server::handle_client_removexattr(const MDRequestRef& mdr)
 void Server::handle_client_getvxattr(const MDRequestRef& mdr)
 {
   const auto& req = mdr->client_request;
-  string xattr_name{req->get_path2()};
+  auto xattr_name = std::string(req->get_string2());
 
   // is a ceph virtual xattr?
   if (!is_ceph_vxattr(xattr_name)) {
@@ -7835,7 +7835,7 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
   // it's a symlink
   dn->push_projected_linkage(newi);
 
-  newi->symlink = req->get_path2();
+  newi->symlink = std::string(req->get_string2());
   auto _inode = newi->_get_inode();
   _inode->version = dn->pre_dirty();
   _inode->size = newi->symlink.length();
@@ -11544,7 +11544,7 @@ void Server::handle_client_lssnap(const MDRequestRef& mdr)
     max_bytes = (512 << 10) + mds->mdsmap->get_max_xattr_size();
 
   __u64 last_snapid = 0;
-  auto offset_str = std::string(req->get_path2());
+  auto offset_str = std::string(req->get_string2());
   if (!offset_str.empty())
     last_snapid = realm->resolve_snapname(offset_str, diri->ino());
 
@@ -12328,7 +12328,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   frag_t fg = (__u32)req->head.args.snapdiff.frag;
   unsigned req_flags = (__u32)req->head.args.snapdiff.flags;
   unsigned diff_mask = (__u32)req->head.args.snapdiff.mask;
-  auto offset_str = std::string(req->get_path2());
+  auto offset_str = std::string(req->get_string2());
 
   __u32 offset_hash = 0;
   if (!offset_str.empty()) {
