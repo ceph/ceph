@@ -574,6 +574,26 @@ static DaemonKey key_from_service(
   }
 }
 
+// Decode the config blob of an MMgrOpen or MMgrReport. The message itself
+// decoded fine, but what it carries can still be malformed (corrupted before
+// it was sent), and that must not take the mgr down.
+static bool decode_daemon_config(
+  const ceph::buffer::list& bl,
+  std::map<std::string, std::map<int32_t, std::string>>* config,
+  std::map<std::string, std::string>* ignored_mon_config,
+  std::string* err)
+{
+  try {
+    auto p = bl.cbegin();
+    decode(*config, p);
+    decode(*ignored_mon_config, p);
+  } catch (const ceph::buffer::error& e) {
+    *err = e.what();
+    return false;
+  }
+  return true;
+}
+
 void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
 					  const entity_addr_t& addr)
 {
@@ -598,6 +618,19 @@ void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
   }
 }
 
+void DaemonServer::_drop_session(const ConnectionRef& con)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
+  con->mark_down();
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
+    auto priv = con->get_priv();
+    if (auto session = static_cast<MgrSession*>(priv.get()); session) {
+      osd_cons[session->osd_id].erase(con);
+    }
+  }
+  daemon_connections.erase(con);
+}
+
 bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
 {
   std::unique_lock l(lock);
@@ -608,6 +641,18 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
 
   auto con = m->get_connection();
   dout(10) << "from " << key << " " << con->get_peer_addr() << dendl;
+
+  std::map<std::string, std::map<int32_t, std::string>> config;
+  std::map<std::string, std::string> ignored_mon_config;
+  const bool have_config = m->config_bl.length() > 0;
+  if (std::string err;
+      have_config &&
+      !decode_daemon_config(m->config_bl, &config, &ignored_mon_config, &err)) {
+    derr << "dropping session from " << key << " " << con->get_peer_addr()
+	 << ": cannot decode its config: " << err << dendl;
+    _drop_session(con);
+    return true;
+  }
 
   _send_configure(con);
 
@@ -663,10 +708,9 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
       }
     }
 
-    auto p = m->config_bl.cbegin();
-    if (p != m->config_bl.end()) {
-      decode(daemon->config, p);
-      decode(daemon->ignored_mon_config, p);
+    if (have_config) {
+      daemon->config = std::move(config);
+      daemon->ignored_mon_config = std::move(ignored_mon_config);
       dout(20) << " got config " << daemon->config
 	       << " ignored " << daemon->ignored_mon_config << dendl;
     }
@@ -837,17 +881,38 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
       return false;
     }
 
+    std::map<std::string, std::map<int32_t, std::string>> config;
+    std::map<std::string, std::string> ignored_mon_config;
+    const bool have_config = m->config_bl.length() > 0;
+    if (std::string err;
+        have_config &&
+        !decode_daemon_config(m->config_bl, &config, &ignored_mon_config, &err)) {
+      derr << "dropping session from " << key << " "
+           << m->get_connection()->get_peer_addr()
+           << ": cannot decode its config: " << err << dendl;
+      _drop_session(m->get_connection());
+      return true;
+    }
+
     // Update the DaemonState
     ceph_assert(daemon != nullptr);
     {
       std::lock_guard l(daemon->lock);
       auto &daemon_counters = daemon->perf_counters;
-      daemon_counters.update(*m.get());
+      try {
+        daemon_counters.update(*m.get());
+      } catch (const ceph::buffer::error& e) {
+        // the reconnect resends MMgrOpen, which clears what was half applied
+        derr << "dropping session from " << key << " "
+             << m->get_connection()->get_peer_addr()
+             << ": cannot decode its perf counters: " << e.what() << dendl;
+        _drop_session(m->get_connection());
+        return true;
+      }
 
-      auto p = m->config_bl.cbegin();
-      if (p != m->config_bl.end()) {
-        decode(daemon->config, p);
-        decode(daemon->ignored_mon_config, p);
+      if (have_config) {
+        daemon->config = std::move(config);
+        daemon->ignored_mon_config = std::move(ignored_mon_config);
         dout(20) << " got config " << daemon->config
                  << " ignored " << daemon->ignored_mon_config << dendl;
       }
