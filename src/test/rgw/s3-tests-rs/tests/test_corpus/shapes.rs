@@ -180,3 +180,119 @@ impl TagClass {
         )
     }
 }
+
+/// How many parts an upload has.
+///
+/// 1 and 2 are the degenerate ends:  a single-part upload still gets
+/// the `-1` etag suffix, and 2 is the smallest upload with a boundary
+/// in it.  **512 and 513** are named rather than generated:  the nsfs
+/// staging layout keeps a record per part and overflowed its attribute
+/// at 513, which was the cause of the 1000-part failure.  A generator
+/// picking round numbers would have straddled it without landing on
+/// it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PartCount {
+    One,
+    Two,
+    AtStride,
+    OverStride,
+}
+
+impl PartCount {
+    pub fn count(self) -> usize {
+        match self {
+            PartCount::One => 1,
+            PartCount::Two => 2,
+            PartCount::AtStride => 512,
+            PartCount::OverStride => 513,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            PartCount::One => "p1",
+            PartCount::Two => "p2",
+            PartCount::AtStride => "p512",
+            PartCount::OverStride => "p513",
+        }
+    }
+}
+
+/// The sizes of the parts relative to each other.
+///
+/// `Uniform` is the shape the stride optimisation applies to -- every
+/// part the same size, so a part's offset is computable rather than
+/// recorded.  `ShortFinal` is the ordinary case, since an object is
+/// rarely a multiple of its part size.  `Mixed` defeats the stride
+/// altogether and is the one the fixture cannot generate, because it
+/// chunks a total size uniformly.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PartPattern {
+    Uniform,
+    ShortFinal,
+    Mixed,
+}
+
+impl PartPattern {
+    pub fn label(self) -> &'static str {
+        match self {
+            PartPattern::Uniform => "uni",
+            PartPattern::ShortFinal => "short",
+            PartPattern::Mixed => "mixed",
+        }
+    }
+
+    /// The size of each part, in order.  `base` is the part size the
+    /// minimum allows (vstart sets `rgw_multipart_min_part_size=32`),
+    /// and only the final part may be under it.
+    pub fn sizes(self, parts: usize, base: usize) -> Vec<usize> {
+        match self {
+            PartPattern::Uniform => vec![base; parts],
+            PartPattern::ShortFinal => {
+                let mut v = vec![base; parts];
+                if parts > 1 {
+                    *v.last_mut().unwrap() = base / 2 + 1;
+                }
+                v
+            }
+            PartPattern::Mixed => (0..parts)
+                .map(|i| base + (i % 3) * base)
+                .collect(),
+        }
+    }
+}
+
+/// What state the upload is left in when the corpus stops.
+///
+/// An in-flight upload is an artifact in its own right:  it has a
+/// staging layout on disk, it answers `ListMultipartUploads` and
+/// `ListParts`, and conversion has to re-stage it rather than abort
+/// it.  An aborted one is the control -- it must leave neither.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum UploadState {
+    Completed,
+    InFlight,
+    Aborted,
+}
+
+impl UploadState {
+    pub fn label(self) -> &'static str {
+        match self {
+            UploadState::Completed => "done",
+            UploadState::InFlight => "open",
+            UploadState::Aborted => "gone",
+        }
+    }
+}
+
+/// The coverage tier:  every value of every axis at least once, not
+/// the cross product.  The product is the interaction tier's job.
+pub const MPU_COVERAGE: &[(PartCount, PartPattern, UploadState)] = &[
+    (PartCount::One, PartPattern::Uniform, UploadState::Completed),
+    (PartCount::Two, PartPattern::ShortFinal, UploadState::Completed),
+    (PartCount::Two, PartPattern::Mixed, UploadState::Completed),
+    (PartCount::AtStride, PartPattern::Uniform, UploadState::Completed),
+    (PartCount::OverStride, PartPattern::Uniform, UploadState::Completed),
+    (PartCount::Two, PartPattern::Uniform, UploadState::InFlight),
+    (PartCount::Two, PartPattern::Uniform, UploadState::Aborted),
+];

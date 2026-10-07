@@ -34,5 +34,6 @@ mod shapes;
 mod manifest;
 mod inventory;
 mod generate;
+mod multipart;
 mod objects;
 mod versions;
