@@ -25,6 +25,8 @@ def async_side_effect(result):
 
 
 def get_ceph_option(_, key):
+    if key == 'jaeger_agent_port':
+        return 4317
     return __file__
 
 
