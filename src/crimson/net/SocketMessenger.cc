@@ -17,6 +17,7 @@
 
 #include <seastar/core/sleep.hh>
 
+#include <algorithm>
 #include <tuple>
 #include <boost/functional/hash.hpp>
 #include <fmt/os.h>
@@ -114,8 +115,42 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
       logger().warn("{} do_listen: listener doesn't exist", *this);
       return listen_ertr::now();
     }
-    return listener->listen(listen_addr);
+    std::optional<ShardedServerSocket::port_range_t> shard_port_range;
+    if (client_shard_ports) {
+      using crimson::common::local_conf;
+      shard_port_range.emplace(local_conf()->ms_bind_port_min,
+                               local_conf()->ms_bind_port_max);
+    }
+    return listener->listen(listen_addr, shard_port_range
+    ).safe_then([this] {
+      shard_ports = listener->get_shard_ports();
+    });
   });
+}
+
+bool SocketMessenger::is_client_shard_port(uint16_t port) const
+{
+  return port != 0 &&
+    std::find(shard_ports.begin(), shard_ports.end(), port) != shard_ports.end();
+}
+
+bool SocketMessenger::is_my_addr(const entity_addr_t& addr) const
+{
+  if (get_myaddrs().contains(addr)) {
+    return true;
+  }
+  if (!client_shard_ports) {
+    return false;
+  }
+  for (const auto& mine : get_myaddrs().v) {
+    if (mine.is_same_host(addr) &&
+        mine.get_type() == addr.get_type() &&
+        mine.get_nonce() == addr.get_nonce() &&
+        is_client_shard_port(addr.get_port())) {
+      return true;
+    }
+  }
+  return false;
 }
 
 SocketMessenger::bind_ertr::future<>

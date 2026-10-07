@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include <optional>
+#include <utility>
+#include <vector>
+
 #include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
@@ -175,7 +179,20 @@ public:
     return dispatch_only_on_primary_sid;
   }
 
-  listen_ertr::future<> listen(entity_addr_t addr);
+  using port_range_t = std::pair<uint32_t, uint32_t>;  // [min, max]
+
+  /// shard_port_range: also listen on one port per reactor, taken from this
+  /// range (skipping ports in use), each accepted on its reactor. A reactor
+  /// that gets no port is not an error; see get_shard_ports().
+  listen_ertr::future<> listen(
+    entity_addr_t addr,
+    std::optional<port_range_t> shard_port_range = std::nullopt);
+
+  /// Port bound for each reactor by listen() (0 = none); empty without
+  /// per-reactor ports. Valid on every shard once listen() resolves.
+  const std::vector<uint16_t>& get_shard_ports() const {
+    return shard_ports;
+  }
 
   using accept_func_t =
     std::function<seastar::future<>(SocketRef, entity_addr_t)>;
@@ -196,6 +213,29 @@ private:
   const bool listen_on_primary_only;
   entity_addr_t listen_addr;
   std::optional<seastar::server_socket> listener;
+  /// Per-reactor ports. Seastar's posix stack creates the kernel socket only
+  /// on shard 0; there it is bound with fixed_cpu(k) and accept() hands each
+  /// connection to reactor k, where an accept endpoint for the same address
+  /// must exist. So shard 0 holds every reactor's kernel socket and shard k
+  /// holds the endpoint for its own port.
+  std::vector<seastar::server_socket> shard_listeners;
+  /// the port of each entry of shard_listeners
+  std::vector<uint16_t> shard_listener_ports;
+  std::vector<uint16_t> shard_ports;
+
+  /// shard 0: bind a kernel socket per reactor from [min_port, max_port]
+  std::vector<uint16_t> bind_shard_ports(const entity_addr_t& addr,
+                                         uint32_t min_port, uint32_t max_port);
+  /// all shards: bind_shard_ports(), then each reactor's accept endpoint;
+  /// a reactor whose endpoint fails gets no port, on every shard
+  seastar::future<> listen_shard_ports(entity_addr_t addr,
+                                       std::optional<port_range_t> range);
+  /// reactor k's accept endpoint for ports[k]; false if it failed
+  bool listen_shard_endpoint(const entity_addr_t& addr,
+                             const std::vector<uint16_t>& ports);
+  /// close our listener on `port`, if any (before accept() armed it)
+  void close_shard_listener(uint16_t port);
+  void arm_accept_loop(seastar::server_socket& sock);
   seastar::gate shutdown_gate;
   accept_func_t fn_accept;
 
