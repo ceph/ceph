@@ -2693,6 +2693,12 @@ TEST_P(TestClsRbd, group_snap_remove) {
 
   ASSERT_EQ(1U, keys.size());
   ASSERT_EQ("snap_max_order", *keys.begin());
+
+  // A new snapshot can be added only in GROUP_SNAPSHOT_STATE_INCOMPLETE.
+  snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  ASSERT_EQ(-EINVAL, group_snap_set(&ioctx, group_id, snap));
+  ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
+  ASSERT_EQ(set<string>{"snap_max_order"}, keys);
 }
 
 TEST_P(TestClsRbd, group_snap_remove_without_order) {
