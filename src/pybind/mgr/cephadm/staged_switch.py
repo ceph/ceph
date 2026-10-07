@@ -1033,6 +1033,29 @@ class CrushTree:
                 stack.extend(int(c) for c in (node.get('children') or []))
         return sorted(out)
 
+    def narrowest(self, bucket_id: int, ids: Iterable[int]) -> Dict[str, Any]:
+        """The bucket `ids` really are, starting from bucket_id: going down
+        to the child bucket holding all of them as long as the bucket holds
+        other OSDs too - e.g. the datacenter, not its region, once the other
+        datacenters of the region have no OSD left in `ids`. A bucket with a
+        single child holding the very same OSDs (a datacenter of one rack)
+        keeps its own, higher, name - unless `ids` are only some of them,
+        e.g. one host of that rack."""
+        want = set(ids)
+        node = best = self.nodes[bucket_id]
+        while True:
+            inner = [int(c) for c in node.get('children') or [] if int(c) < 0 and int(c) in self.nodes
+                     and want <= set(self.osds_under(int(c)))]
+            if len(inner) != 1:
+                return best
+            child = self.nodes[inner[0]]
+            # through a single child holding the same OSDs (a datacenter of
+            # one rack), keeping the higher name unless a narrower bucket
+            # holds `ids` further down
+            if set(self.osds_under(int(child['id']))) != set(self.osds_under(int(node['id']))):
+                best = child
+            node = child
+
     def buckets_of_type(self, btype: str) -> List[Dict[str, Any]]:
         return sorted((n for n in self.nodes.values() if n.get('type') == btype),
                       key=lambda n: _natural_key(str(n.get('name'))))
@@ -1237,30 +1260,43 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
         whether any bucket of these levels holds a pending OSD at all)."""
         reasons: List[str] = []
         any_bucket = False
+        auto = self._level() == OSD_CRUSH_LEVEL_AUTO
         for btype in levels:
+            level_reasons: List[str] = []
             for bucket in tree.buckets_of_type(btype):
                 ids = [i for i in tree.osds_under(int(bucket['id'])) if i in pending]
                 if not ids:
                     continue
                 any_bucket = True
+                # Name the group after the deepest bucket holding all of its
+                # OSDs: once the other datacenters of a region are done, what
+                # is left of the region is one datacenter, not the region.
+                # With `auto` that bucket is tried at its own level, under its
+                # own name; asking ok-to-stop here would ask for the same set.
+                narrowest = tree.narrowest(int(bucket['id']), ids)
+                if auto and narrowest is not bucket:
+                    continue
+                bucket = narrowest
+                btype_of = str(bucket.get('type'))
                 if limit is not None and len(ids) > limit:
                     ids = ids[:limit]
                 if self._max_group() and len(ids) > self._max_group():
-                    reasons.append(f'{btype} {bucket["name"]}: {len(ids)} OSDs, more than '
-                                   f'upgrade_staged_switch_osd_max_group ({self._max_group()})')
+                    level_reasons.append(f'{btype_of} {bucket["name"]}: {len(ids)} OSDs, more than '
+                                         f'upgrade_staged_switch_osd_max_group ({self._max_group()})')
                     continue
                 ok, why = self._ok_to_stop(ids)
                 if ok:
-                    label = f'{btype} {bucket["name"]}'
+                    label = f'{btype_of} {bucket["name"]}'
                     group = StagedGroup(str(bucket['id']), label, [pending[i] for i in ids], {
-                        'bucket': bucket['name'], 'type': btype, 'osd_ids': ids,
+                        'bucket': bucket['name'], 'type': btype_of, 'osd_ids': ids,
                         'noout': False, 'committed': False,
                         'up_fingerprint': self._up_fingerprint(self._osds(), ids)})
-                    return group, reasons, True
-                reasons.append(f'{btype} {bucket["name"]} ({len(ids)} OSDs): {why}')
-            if reasons and self._level() == OSD_CRUSH_LEVEL_AUTO:
+                    return group, reasons + level_reasons, True
+                level_reasons.append(f'{btype_of} {bucket["name"]} ({len(ids)} OSDs): {why}')
+            reasons += level_reasons
+            if level_reasons and auto:
                 logger.info('Upgrade: no %s can be switched as a whole right now (%s); '
-                            'trying the next CRUSH level down', btype, '; '.join(reasons[-3:]))
+                            'trying the next CRUSH level down', btype, '; '.join(level_reasons[:3]))
         return None, reasons, any_bucket
 
     def groups(self, need_upgrade: List[DaemonDescription]) -> List[StagedGroup]:

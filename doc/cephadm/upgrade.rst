@@ -262,6 +262,13 @@ pool with an ``osd`` failure domain, say - the regular per-OSD path takes the
 pass rather than waiting for a verdict that will not change, and the buckets
 are tried again on the next pass with fewer OSDs left in them.
 
+A group is named after the deepest bucket that holds all of its OSDs: once
+the other datacenters of a region are upgraded, what is left of the region
+is one datacenter, and it is picked - and shown in the logs and in ``ceph
+orch upgrade status`` - as that datacenter, not as the region (a bucket with
+a single child holding the same OSDs, a datacenter of one rack, keeps its
+own name). With ``auto``, such a bucket is only tried at its own level.
+
 What ``ok-to-stop`` guarantees is that no PG becomes inactive, i.e. every
 PG keeps ``min_size`` copies; with ``size 3, min_size 2`` a group that
 passes may leave PGs with exactly ``min_size`` copies for the duration of
