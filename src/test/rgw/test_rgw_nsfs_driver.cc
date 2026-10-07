@@ -7516,6 +7516,70 @@ TEST_F(NSFSBucketTest, AClosedGateRefusesAWriteHandle)
   driver->gate_open(testname);
 }
 
+/* A PUT over a side-loaded file replaces the inode.
+ *
+ * This is the premise the mode narrowings rested on, and the reason
+ * removing them is safe.  The write path narrowed the mode with an
+ * fchmod on every write call;  if a PUT wrote *into* a file that was
+ * already there, that fchmod would be re-permissioning somebody
+ * else's file, and dropping it would change behaviour on a tree that
+ * is shared with NFS clients and with NooBaa -- side-loading is a
+ * first-class case here, not an edge.
+ *
+ * It does not write into it.  File::create() opens O_TMPFILE and
+ * link_temp_file() links the result over the name, so the published
+ * object is always an inode this gateway made, and the mode comes
+ * from that create.  Asserting the inode *changed* is what
+ * distinguishes the two, because the mode alone comes out 0600 either
+ * way.
+ */
+TEST_F(NSFSBucketTest, APutOverASideLoadedFileReplacesTheInode)
+{
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([saved] { ::umask(saved); });
+
+  /* a file somebody else put in the tree, with somebody else's mode */
+  const sf::path p{bucket_path() / "sideloaded.bin"};
+  {
+    std::ofstream f(p);
+    f << "not ours";
+  }
+  ASSERT_EQ(::chmod(p.c_str(), 0644), 0);
+  struct stat before{};
+  ASSERT_EQ(::stat(p.c_str(), &before), 0);
+  ASSERT_EQ(before.st_mode & 07777, 0644u) << "the side-load did not take";
+
+  auto obj = bucket->get_object(rgw_obj_key("sideloaded.bin"));
+  rgw_owner acl_owner_id = owner;
+  ACLOwner acl_owner{acl_owner_id, ""};
+  auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					  acl_owner, nullptr, 0, testname);
+  ASSERT_NE(writer.get(), nullptr);
+  ASSERT_EQ(writer->prepare(null_yield), 0);
+
+  bufferlist bl;
+  bl.append("ours");
+  const uint64_t len = bl.length();
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, len), 0);
+
+  ceph::real_time mtime;
+  Attrs attrs;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  ASSERT_EQ(writer->complete(len, etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), 0);
+
+  struct stat after{};
+  ASSERT_EQ(::stat(p.c_str(), &after), 0);
+  EXPECT_NE(after.st_ino, before.st_ino)
+      << "the PUT wrote into the side-loaded file rather than replacing "
+	 "it;  the mode narrowing in the write path is therefore not "
+	 "redundant and must not be removed";
+  EXPECT_EQ(after.st_mode & 07777, 0600u);
+}
+
 /* An object published through FSIO carries the mode an object carries.
  *
  * The NFS gateway writes through FSIO rather than through

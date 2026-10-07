@@ -2357,20 +2357,6 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
   int64_t left = bl.length();
   ssize_t ret;
 
-  /* As the owner.  Under impersonation the file was created by the
-   * identity, so the gateway cannot chmod it -- only the owner or
-   * CAP_FOWNER may.  There is no io_uring opcode for fchmod, so
-   * this is one of the calls that goes to the helper pool;  see
-   * docs/IMPERSONATED_XATTR.md. */
-  ret = nsfs::with_identity(dpp, identity, [&]() -> int {
-    return (::fchmod(fd, S_IRUSR|S_IWUSR) < 0) ? -errno : 0;
-  });
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not change permissions on object " << get_name() << ": "
-                  << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
   if (direct_io) {
     /* Never fcntl-off O_DIRECT on a shared fd; pad or RMW instead. */
     return posix_direct_write(fd, ofs, bl, dpp);
@@ -13012,39 +12998,6 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   }
   if (ret < 0) {
     return ret;
-  }
-
-  /* The published mode, narrowed here rather than only where the bytes
-   * go down.
-   *
-   * Both write paths narrow it themselves -- File::write() and
-   * UringWriteWindow -- and an object with an empty body goes through
-   * neither, so it kept the S_IRWXU its openat was given and landed
-   * 0700 among neighbours at 0600.  Measured by the conversion
-   * corpus's disk inventory, which is the only half that can see a
-   * mode at all.
-   *
-   * Narrowing at the end of the PUT is the one place every object
-   * reaches whatever path wrote it.  The two in the write paths stay:
-   * one of them is in driver/posix and shared, and FSIO writes do not
-   * come through here.
-   *
-   * As the owner, for the reason File::write() gives:  under
-   * impersonation the identity created the file, so the gateway cannot
-   * chmod it without CAP_FOWNER. */
-  {
-    int dfd = nsfs_data_file_fd(obj->get_fsent());
-    if (dfd >= 0) {
-      int cret = nsfs::with_identity(
-	dpp, obj->get_fsent()->get_identity(), [dfd]() -> int {
-	  return (::fchmod(dfd, S_IRUSR | S_IWUSR) < 0) ? -errno : 0;
-	});
-      if (cret < 0) {
-	ldpp_dout(dpp, 0) << "ERROR: could not set the published mode on "
-	  << obj->get_name() << ": " << cpp_strerror(-cret) << dendl;
-	return cret;
-      }
-    }
   }
 
   uint64_t orig_size = 0;
