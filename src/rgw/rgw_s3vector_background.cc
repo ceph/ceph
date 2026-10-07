@@ -448,13 +448,11 @@ private:
   // Index stats helper
   // ============================================================================
 
-  struct index_stats_result {
-    LanceDBIndexStats stats = {};
-    bool ok = false;
-  };
+  // Success holds the stats; failure holds the LanceDBError that occurred.
+  using index_stats_result = tl::expected<LanceDBIndexStats, LanceDBError>;
 
   index_stats_result get_vector_index_stats(const LanceDBTable* table) {
-    index_stats_result result;
+    LanceDBIndexStats stats = {};
     char* error_message = nullptr;
 
     // query the vector index directly by its known name (data_idx).
@@ -462,14 +460,21 @@ private:
     // always "data", so the vector index is always "data_idx".
     // this avoids picking up the scalar "key_idx" which reports misleading
     // unindexed counts (scalar BTree indices always show indexed=0).
-    if (const auto err = lancedb_table_index_stats(
-            table, vector_index_name, &result.stats, &error_message);
-        err == LANCEDB_SUCCESS) {
-      result.ok = true;
-      return result;
+    const auto err = lancedb_table_index_stats(
+        table, vector_index_name, &stats, &error_message);
+    if (err == LANCEDB_SUCCESS) {
+      return stats;
     }
 
-    ldpp_dout(this, 5) << "WARNING: lancedb_table_index_stats failed for '"
+    // Distinguish "no vector index yet" (benign, expected before the first
+    // rebuild) from a genuine backend failure. Only the former should be
+    // reported as "all rows unindexed"; a real error (IO, timeout, corruption,
+    // ...) must NOT be masked behind fabricated stats, or a transient failure
+    // would spuriously trigger a full index rebuild.
+    const bool index_absent = (err == LANCEDB_INDEX_NOT_FOUND);
+    ldpp_dout(this, index_absent ? 10 : 1)
+        << (index_absent ? "INFO: no vector index yet for '"
+                         : "ERROR: lancedb_table_index_stats failed for '")
         << vector_index_name << "': "
         << (error_message ? error_message : "unknown") << dendl;
 
@@ -477,12 +482,16 @@ private:
       lancedb_free_string(error_message);
     }
 
+    if (!index_absent) {
+      // genuine failure — let the caller handle it (returns -EIO)
+      return tl::make_unexpected(err);
+    }
+
     // vector index doesn't exist yet — all rows are unindexed
-    result.stats.num_indexed_rows = 0;
-    result.stats.num_unindexed_rows = lancedb_table_count_rows(table);
-    result.stats.num_indices = 0;
-    result.ok = true;
-    return result;
+    stats.num_indexed_rows = 0;
+    stats.num_unindexed_rows = lancedb_table_count_rows(table);
+    stats.num_indices = 0;
+    return stats;
   }
 
   // ============================================================================
@@ -1020,12 +1029,12 @@ private:
 
     // step 4: get index stats(lanceDB index stats are global ground truth, no lock needed, it does not reflect deleted rows)
     auto stats_result = get_vector_index_stats(table);
-    if (!stats_result.ok) {
+    if (!stats_result) {
       ldpp_dout(this, 1) << "ERROR: failed to get index stats for "
           << bucket_name << "." << index_name << dendl;
       return -EIO;
     }
-    const auto& vector_index_status = stats_result.stats;
+    const auto& vector_index_status = *stats_result;
 
     ldpp_dout(this, 1) << "INFO: index stats for " << bucket_name << "." << index_name
         << ": indexed=" << vector_index_status.num_indexed_rows
@@ -1192,11 +1201,11 @@ private:
 
     if (build_ret == 0) {
       auto post_stats = get_vector_index_stats(table);
-      if (post_stats.ok) {
+      if (post_stats) {
         ldpp_dout(this, 1) << "INFO: vector index build complete for "
             << bucket_name << "." << index_name
-            << " (indexed=" << post_stats.stats.num_indexed_rows
-            << ", unindexed=" << post_stats.stats.num_unindexed_rows << ")" << dendl;
+            << " (indexed=" << post_stats->num_indexed_rows
+            << ", unindexed=" << post_stats->num_unindexed_rows << ")" << dendl;
       } else {
         ldpp_dout(this, 1) << "INFO: vector index build complete for "
             << bucket_name << "." << index_name << dendl;
