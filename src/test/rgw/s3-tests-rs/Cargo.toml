@@ -63,3 +63,7 @@ path = "tests/test_rgw/mod.rs"
 [[test]]
 name = "test_bench"
 path = "tests/test_bench/mod.rs"
+
+[[test]]
+name = "test_corpus"
+path = "tests/test_corpus/mod.rs"
