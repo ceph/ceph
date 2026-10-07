@@ -20,9 +20,14 @@
 #include "arch/probe.h"
 #include "arch/intel.h"
 #include "arch/arm.h"
+#include "arch/ppc.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+#if (__powerpc64__)
+#include <sys/auxv.h>
+#include <asm/cputable.h>
+#endif
 
 #define FLAGS_SIZE 4096
 
@@ -31,7 +36,7 @@ TEST(Arch, all)
   ceph_arch_probe();
   EXPECT_TRUE(ceph_arch_probed);
   
-#if (__arm__ || __aarch64__ || __x86_64__) && __linux__
+#if (__arm__ || __aarch64__ || __x86_64__ || __powerpc64__) && __linux__
   char flags[FLAGS_SIZE];
   FILE *f = popen("grep '^\\(flags\\|Features\\)[	 ]*:' "
                   "/proc/cpuinfo | head -1", "r");
@@ -78,6 +83,16 @@ TEST(Arch, all)
 
   expected = strstr(flags, " sse2 ") ? 1 : 0;
   EXPECT_EQ(expected, ceph_arch_intel_sse2);
+
+#endif
+#if (__powerpc64__)
+
+  // /proc/cpuinfo is unreliable for determining crypto features on PowerPC.
+  // altivec support does NOT mean POWER8 crypto support is present.
+  // We check the hardware capability directly.
+  unsigned long hwcap2 = getauxval(AT_HWCAP2);
+  expected = (hwcap2 & PPC_FEATURE2_VEC_CRYPTO) ? 1 : 0;
+  EXPECT_EQ(expected, ceph_arch_ppc_crc32);
 
 #endif
 
