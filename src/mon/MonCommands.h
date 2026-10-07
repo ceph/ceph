@@ -1358,6 +1358,12 @@ COMMAND("osd pool set "
           "|use_gmt_hitset"
           "|write_fadvise_dontneed "
 	"name=val,type=CephString "
+        "name=replica,type=CephInt,range=1,req=false "
+        "name=zone_failure_domain,type=CephString,req=false "
+        "name=osd_failure_domain,type=CephString,req=false "
+        "name=crush_rule,type=CephString,req=false "
+        "name=root,type=CephString,req=false "
+        "name=class,type=CephString,req=false "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set pool parameter <var> to <val>", "osd", "rw")
 // 'val' is a CephString because it can include a unit.  Perhaps
