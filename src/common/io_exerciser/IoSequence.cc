@@ -933,11 +933,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq16::_next() {
       setup_next_operation();
     }
     
-    if (!check_consistency) {
-      return BarrierOp::generate();
-    }
-    barrier = true;
-    return ConsistencyOp::generate();
+    consistency = check_consistency;
+    return BarrierOp::generate();
   }
   
   // Should not reach here
