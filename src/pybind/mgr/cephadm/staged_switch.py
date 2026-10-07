@@ -20,14 +20,16 @@ out of the outage window:
   switch   ``cephadm switch-staged`` on every daemon, hosts in parallel:
            one container stop/start each.
   verify   the policy asks the monitors - not cephadm's daemon cache -
-           whether every daemon is back on the target version.
+           whether every daemon is back on the target version (OSD: and
+           every PG it holds has peered again with it).
   restore  the policy puts the group back into service (MDS: ``fs set
            joinable true``; OSD: ``osd unset-group noout``), and cephadm's
            cache is refreshed for the hosts involved.
   settle   the policy says whether the group has settled enough for the
-           next one to be chosen. Not a failure when it takes long: no
-           timeout, the upgrade is not paused, the next serve() pass asks
-           again.
+           next one to be chosen (OSD: in the acting set of every PG it
+           holds, caught up with the writes it missed).
+           Not a failure when it takes long: no timeout, the upgrade is not
+           paused, the next serve() pass asks again.
 
 A policy that can tell in advance which daemons it will switch has them
 all staged once, at the start of their phase (stage ahead, hosts in
@@ -983,6 +985,9 @@ OSD_CRUSH_LEVEL_AUTO = 'auto'
 # then let the next pass ask again
 OSD_OK_TO_STOP_TRIES = 4
 OSD_OK_TO_STOP_RETRY_SECONDS = 15
+# PG states in which a PG has not settled on an acting set yet
+OSD_UNSETTLED_PG_STATES = frozenset(
+    ('unknown', 'creating', 'peering', 'activating', 'stale', 'down', 'incomplete'))
 
 
 def _natural_key(name: str) -> List[Any]:
@@ -1392,7 +1397,78 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
                 v = self._version(i, int(osds[i].get('up_from', 0)))
                 if v != target_version:
                     return False, f'osd.{i} reports version {v!r}, want {target_version!r}'
+        # then the PGs: the switch is done only once every PG an OSD of the
+        # group holds has peered again since the OSD booted
+        waiting = self._pgs_waiting(ids, osds, caught_up=False)
+        if waiting:
+            return False, ('not every PG of the group has peered again with its OSDs yet ('
+                           + self._pgs_summary(waiting) + ')')
         return True, ''
+
+    def settled(self, group: StagedGroup) -> Tuple[bool, str]:
+        # ... and the next group is chosen only once they have caught up
+        waiting = self._pgs_waiting([int(i) for i in group.data['osd_ids']], self._osds(),
+                                    caught_up=True)
+        if waiting:
+            return False, ('its OSDs are recovering what was written while they were down ('
+                           + self._pgs_summary(waiting) + ')')
+        return True, ''
+
+    def _pgs_waiting(self, ids: List[int], osds: Dict[int, Dict[str, Any]],
+                     caught_up: bool) -> Dict[int, List[str]]:
+        """The PGs, per OSD of the group, that do not count the OSD yet the
+        way `ok-to-stop` counts OSDs: the acting set of a PG, or, for a
+        degraded PG, only the OSDs of it missing no object
+        (avail_no_missing). A PG holds an OSD when the OSD is in its up set.
+
+        caught_up=False (verify, bounded by the timeout; a failure past
+        it): the PG has peered again since the OSD booted - it is active,
+        not peering, activating, ..., as reported since then (stats from
+        before the restart say nothing about it).
+
+        caught_up=True (settle, unbounded; never a failure): the OSD, still
+        up, is in the acting set of the PG - not left out of it while it is
+        backfilled - and, if the PG is degraded, misses no object of it:
+        the recovery of what was written while it was down is done. An OSD
+        that went down again, or a PG that is not active, is left to
+        `ok-to-stop`.
+
+        Up and version only tell that the daemons booted; until their PGs
+        have peered and caught up, `ok-to-stop` counts them out and refuses
+        every bucket sharing a PG with the group - with `auto`, the policy
+        would descend a level, or hand the pass to the regular path, on a
+        verdict that only reflects the group not being back yet. Waiting
+        for both means the next group is chosen on a cluster where the OSDs
+        of this one count again: the highest bucket that can go as a whole
+        is the one taken."""
+        up_from = {i: int(osds.get(i, {}).get('up_from', 0)) for i in ids}
+        pg_stats = self.mgr.get('pg_stats') or {}
+        stats = pg_stats.get('pg_stats') or []
+        waiting: Dict[int, List[str]] = {}
+        for pg in stats:
+            mine = [int(i) for i in pg.get('up') or [] if int(i) in up_from]
+            if not mine:
+                continue
+            states = set(str(pg.get('state') or 'unknown').split('+'))
+            acting = {int(i) for i in pg.get('acting') or []}
+            active = 'active' in states and not states & OSD_UNSETTLED_PG_STATES
+            for i in mine:
+                if not caught_up:
+                    back = active and int(pg.get('reported_epoch') or 0) >= up_from[i]
+                elif active and osds.get(i, {}).get('up'):
+                    # shards, e.g. '3' or '3(0)' for an EC pool
+                    back = i in acting and ('degraded' not in states or i in {
+                        int(str(s).split('(', 1)[0]) for s in pg.get('avail_no_missing') or []})
+                else:
+                    back = True
+                if not back:
+                    waiting.setdefault(i, []).append(str(pg.get('pgid')))
+        return waiting
+
+    @staticmethod
+    def _pgs_summary(waiting: Dict[int, List[str]]) -> str:
+        return '; '.join(f'osd.{i}: {len(pgids)} PG(s), e.g. {", ".join(sorted(pgids)[:3])}'
+                         for i, pgids in sorted(waiting.items()))
 
     def restore(self, group: StagedGroup) -> None:
         if group.data.get('noout'):
