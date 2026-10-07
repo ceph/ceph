@@ -198,6 +198,7 @@ void WriteLogOperation::init(bool has_data,
                              bool persist_on_flush) {
   log_entry->init(has_data, current_sync_gen, last_op_sequence_num,
                   persist_on_flush);
+  m_perfcounter->inc(l_librbd_pwl_log_op_bytes, log_entry->write_bytes());
   bl.substr_of(write_req_bl, buffer_offset, log_entry->write_bytes());
   log_entry->init_cache_bl(write_req_bl, buffer_offset,
                            log_entry->write_bytes());
