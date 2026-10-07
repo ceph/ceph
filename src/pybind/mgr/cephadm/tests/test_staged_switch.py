@@ -1102,14 +1102,33 @@ class _FakeOsdMons:
     osdmap with up / up_from / per-OSD flags, `osd ok-to-stop` evaluated
     against a small PG model (acting sets and min_size; an OSD that just
     restarted has no complete copy until recover() is called), `osd
-    set-group` / `unset-group`, and `osd metadata`.
+    set-group` / `unset-group`, `osd metadata`, and the mgr's `pg_stats`.
+
+    A restarted OSD rejoins the PGs it holds (is back in their acting sets)
+    `join_secs` of simulated time after its restart, and has caught up with
+    the writes it missed `catch_up_secs` later (None: only once recover()
+    is called). Until it has rejoined, the PGs it is in the up set of report
+    `peering` without it; until it has caught up, they are degraded and
+    leave it out of avail_no_missing. ok-to-stop counts, like the real one,
+    the acting set of a PG, or only its avail_no_missing OSDs if it is
+    degraded. `never_join` keeps some OSDs out, `backfilling` keeps some
+    out of the acting set of active PGs, `stats_epoch` freezes the epoch
+    the PG stats were reported at.
 
     Default topology: root default -> racks r1, r2, r3 -> two hosts each
     (h1..h6) -> two OSDs each (0..11).
     """
 
-    def __init__(self, old=OLD, new=NEW, pgs=None):
+    def __init__(self, old=OLD, new=NEW, pgs=None, join_secs=4, catch_up_secs=4):
         self.old, self.new = old, new
+        self.clock = _Clock()
+        self.join_secs, self.catch_up_secs = join_secs, catch_up_secs
+        self.joins_at: Dict[int, float] = {}
+        self.caught_up_at: Dict[int, float] = {}
+        self.never_join: set = set()
+        self.backfilling: set = set()
+        self.stats_epoch = None
+        self.unjoined_at_unset: List[List[int]] = []
         self.racks = {'r1': ['h1', 'h2'], 'r2': ['h3', 'h4'], 'r3': ['h5', 'h6']}
         self.hosts = {h: [2 * i, 2 * i + 1] for i, h in enumerate(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])}
         self.host_of = {o: h for h, osds in self.hosts.items() for o in osds}
@@ -1155,16 +1174,55 @@ class _FakeOsdMons:
             return self.osdmap()
         if what == 'osd_map_tree':
             return self.tree()
+        if what == 'pg_stats':
+            return self.pg_stats()
         return None
 
-    # --- the PG model behind ok-to-stop
+    # --- the PG model behind ok-to-stop and pg_stats
+    def unjoined(self):
+        return {o for o, t in self.joins_at.items() if o in self.never_join or self.clock.now < t}
+
+    def missing(self):
+        """OSDs with objects missing, i.e. not caught up yet."""
+        return set(self.recovering) | {
+            o for o, t in self.caught_up_at.items() if t is None or self.clock.now < t}
+
+    def _pg(self, up):
+        unjoined, missing = self.unjoined(), self.missing()
+        acting = [o for o in up if self.up[o] and o not in unjoined and o not in self.backfilling]
+        degraded = len(acting) < len(up) or any(o in missing for o in acting)
+        complete = [o for o in acting if o not in missing] if degraded else []
+        return acting, degraded, complete
+
+    def pg_stats(self):
+        out = []
+        unjoined = self.unjoined()
+        for n, (min_size, up) in enumerate(self.pgs):
+            acting, degraded, complete = self._pg(up)
+            if any(self.up[o] and o in unjoined for o in up):
+                state = 'peering'
+            elif len(acting) < min_size:
+                state = 'undersized+degraded+peered'
+            elif any(o in self.backfilling for o in up):
+                state = 'active+remapped+backfilling'
+            elif degraded:
+                state = 'active+recovering+degraded'
+            else:
+                state = 'active+clean'
+            out.append({'pgid': f'1.{n:x}', 'state': state, 'up': list(up), 'acting': acting,
+                        'avail_no_missing': [str(o) for o in complete],
+                        'reported_epoch': self.epoch if self.stats_epoch is None else self.stats_epoch})
+        return {'pg_stats': out}
+
     def ok_to_stop(self, ids):
         stopped = set(ids)
         bad = []
-        for n, (min_size, acting) in enumerate(self.pgs):
-            if not stopped & set(acting):
+        for n, (min_size, up) in enumerate(self.pgs):
+            acting, degraded, complete = self._pg(up)
+            counted = complete if degraded else acting
+            if not stopped & set(up):
                 continue
-            left = [o for o in acting if o not in stopped and o not in self.recovering and self.up[o]]
+            left = [o for o in counted if o not in stopped]
             if len(left) < min_size:
                 bad.append(n)
         return bad
@@ -1180,6 +1238,8 @@ class _FakeOsdMons:
                 return (-16, json.dumps({'ok_to_stop': report}),
                         f'unsafe to stop osd(s) at this time ({len(bad)} PGs are or would become offline)')
             return (0, json.dumps({'ok_to_stop': report}), '')
+        if p == 'osd unset-group':
+            self.unjoined_at_unset.append(sorted(self.unjoined()))
         if p in ('osd set-group', 'osd unset-group'):
             for who in cmd['who']:
                 o = int(who.split('.', 1)[1])
@@ -1202,12 +1262,15 @@ class _FakeOsdMons:
         if comes_back:
             self.up[osd_id] = True
             self.up_from[osd_id] = self.epoch
-            self.recovering.add(osd_id)
+            self.joins_at[osd_id] = self.clock.now + self.join_secs
+            self.caught_up_at[osd_id] = (None if self.catch_up_secs is None
+                                         else self.joins_at[osd_id] + self.catch_up_secs)
         else:
             self.up[osd_id] = False
 
     def recover(self):
         self.recovering.clear()
+        self.caught_up_at.clear()
 
     def cmds(self, prefix, **kw):
         return [c for c in self.commands if c.get('prefix') == prefix
@@ -1263,7 +1326,7 @@ def _osd_setup(cephadm_module, mons, switch_fails=(), never_up=(), level='host',
         mock.patch("cephadm.CephadmOrchestrator.get", side_effect=mons.get),
         mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", side_effect=mons.mon_command),
         mock.patch("cephadm.module.CephadmOrchestrator.mon_command", side_effect=mons.mon_command),
-        mock.patch("cephadm.staged_switch.time", _Clock()),
+        mock.patch("cephadm.staged_switch.time", mons.clock),
     ]
     return calls, staged, patches
 
@@ -1345,8 +1408,11 @@ def test_osd_host_level_one_host_per_pass(cephadm_module: CephadmOrchestrator):
         # the ok-to-stop calls asked for exactly the set, with max = len
         oks = mons.cmds('osd ok-to-stop')
         assert all(c['max'] == len(c['ids']) for c in oks)
-        # next pass: PGs of h1 still recovering, h2 shares PGs with h1
-        # ([0,2,4], [1,3,8]) and every other host does too -> wait, do not pause
+        # the pass waited for h1 to be back in its PGs with a complete copy,
+        # so h2 could go next; but osd.0 restarts on its own and misses
+        # writes: every other host shares a PG with it ([0,2,4], [0,4,8]...)
+        # and so does every single OSD probed -> wait, do not pause
+        mons.recovering.add(0)
         assert run.one_pass() is True
         assert run.groups[-1] == []
         assert not cephadm_module.upgrade.upgrade_state.paused
@@ -1354,9 +1420,8 @@ def test_osd_host_level_one_host_per_pass(cephadm_module: CephadmOrchestrator):
         mons.recover()
         assert run.one_pass() is True
         assert run.groups[-1] == [2, 3]
-        # all the way through: six hosts, in order
+        # all the way through: six hosts, in order, one right after the other
         for _ in range(4):
-            mons.recover()
             run.one_pass()
         assert run.groups == [[0, 1], [], [2, 3], [4, 5], [6, 7], [8, 9], [10, 11]]
         assert all(v == NEW for v in mons.version.values())
@@ -1399,11 +1464,13 @@ def test_osd_explicit_level_never_descends_but_does_not_stall(cephadm_module: Ce
         assert run.one_pass() is False
         assert run.groups[-1] == [] and run.staged.count('osd.0') == 0
         assert not cephadm_module.upgrade.upgrade_state.paused
-        # ... whereas right after a switch, with PGs recovering, it waits
+        # ... whereas while PGs recover (osd.4 restarted on its own and missed
+        # writes), it waits
         mons2 = _FakeOsdMons()
     with _OsdRun(cephadm_module, mons2, level='rack') as run2:
         run2.one_pass()
         assert run2.groups[-1] == [4, 5, 6, 7]
+        mons2.recovering.add(4)
         assert run2.one_pass() is True                       # recovering: wait
         assert run2.groups[-1] == []
         info = cephadm_module.upgrade.upgrade_info_str
@@ -1717,3 +1784,194 @@ def test_osd_staging_generates_config_and_passes_the_uuid_map(cephadm_module: Ce
         assert sorted(c.args[0].daemon_spec.name() for c in gen.call_args_list) == ['osd.0', 'osd.1']
         # the fake _create_daemon asserted the uuid map was handed over
         assert sorted(run.staged) == ['osd.0', 'osd.1']
+
+
+def test_osd_group_is_done_only_once_back_in_its_pgs(cephadm_module: CephadmOrchestrator):
+    # the OSDs boot on the new version at once but take 10s to rejoin their
+    # PGs and 10s more to catch up: noout stays on and the next group is not
+    # chosen until they have
+    mons = _FakeOsdMons(join_secs=10, catch_up_secs=10)
+    with _OsdRun(cephadm_module, mons) as run:
+        assert run.one_pass() is True
+        assert run.groups[-1] == [0, 1]
+        assert mons.unjoined_at_unset == [[]] and mons.missing() == set()
+        assert mons.flags[0] == set() and mons.flags[1] == set()
+        assert cephadm_module.upgrade.upgrade_state.staged_switch == {}
+
+
+def test_osd_auto_takes_the_next_rack_once_the_previous_one_has_rejoined(cephadm_module: CephadmOrchestrator):
+    # size 2 / min_size 1 PGs over two racks out of three: once r1 is
+    # switched, r2 and r3 hold PGs of r1's OSDs, but h4 (6, 7) does not.
+    # While r1 is still peering, or catching up, ok-to-stop counts it out:
+    # r2 is refused and h4 passes - the group would be a host on a verdict
+    # that only reflects r1 not being back yet. Waiting for r1 to be back
+    # in its PGs with a complete copy gets the whole of r2.
+    pgs = [(1, [0, 4]), (1, [1, 8]), (1, [2, 5]), (1, [3, 9]), (1, [6, 10]), (1, [7, 11])]
+    mons = _FakeOsdMons(pgs=pgs, join_secs=6, catch_up_secs=6)
+    with _OsdRun(cephadm_module, mons, level='auto') as run:
+        for _ in range(3):
+            assert run.one_pass() is True
+        assert run.groups == [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+        assert all(u == [] for u in mons.unjoined_at_unset)
+        assert all(v == NEW for v in mons.version.values())
+
+
+def test_osd_never_rejoined_pauses_and_resume_finishes(cephadm_module: CephadmOrchestrator):
+    # osd.1 boots on the new version but never gets back into its PGs:
+    # the upgrade pauses at the verification, noout kept, no rollback; once
+    # it has, `upgrade resume` restores the group without restarting it
+    mons = _FakeOsdMons()
+    mons.never_join.add(1)
+    with _OsdRun(cephadm_module, mons) as run:
+        run.one_pass()
+        st = cephadm_module.upgrade.upgrade_state
+        assert st.paused and st.staged_switch.get('phase') == 'switched'
+        assert run.switched(rollback=True) == []
+        assert mons.flags[0] == {'noout'} and mons.flags[1] == {'noout'}
+        summary = cephadm_module.health_checks['UPGRADE_SWITCH_FAILED']['summary']
+        assert 'peered again' in summary and 'osd.1:' in summary and 'osd.0:' not in summary
+        mons.never_join.clear()
+        st.paused = False
+        assert run.one_pass(dds=_osd_dds(mons, [])) is True
+        assert len(run.switched()) == 2
+        assert mons.flags[0] == set() and mons.flags[1] == set()
+        assert st.staged_switch == {} and not st.paused
+
+
+def test_osd_pg_stats_from_before_the_restart_do_not_count(cephadm_module: CephadmOrchestrator):
+    # PG stats not reported since the OSDs booted say nothing about them
+    mons = _FakeOsdMons()
+    mons.stats_epoch = mons.epoch
+    with _OsdRun(cephadm_module, mons) as run:
+        run.one_pass()
+        st = cephadm_module.upgrade.upgrade_state
+        assert st.paused and st.staged_switch.get('phase') == 'switched'
+        assert 'peered again' in cephadm_module.health_checks['UPGRADE_SWITCH_FAILED']['summary']
+        mons.stats_epoch = None
+        st.paused = False
+        run.one_pass(dds=_osd_dds(mons, []))
+        assert st.staged_switch == {} and not st.paused
+
+
+def test_osd_backfilling_osd_settles_without_pausing(cephadm_module: CephadmOrchestrator):
+    # osd.0 is backfilled (left out of the acting set of active PGs, pg_temp):
+    # its PGs have peered again, so the switch is done, but it is not back
+    # in their acting sets yet - the group settles, without a timeout, and
+    # the next group waits for the backfill
+    mons = _FakeOsdMons()
+    mons.backfilling.add(0)
+    with _OsdRun(cephadm_module, mons) as run:
+        cephadm_module.upgrade_staged_switch_osd_timeout = 30
+        run.one_pass()
+        st = cephadm_module.upgrade.upgrade_state
+        assert not st.paused and 'UPGRADE_SWITCH_FAILED' not in cephadm_module.health_checks
+        assert st.staged_switch.get('phase') == 'settling'
+        info = cephadm_module.upgrade.upgrade_info_str
+        assert 'osd.0:' in info and 'osd.1:' not in info
+        mons.clock.sleep(3600)
+        run.one_pass()
+        assert st.staged_switch.get('phase') == 'settling' and not st.paused
+        mons.backfilling.clear()
+        run.one_pass()
+        assert st.staged_switch == {} and not st.paused
+
+
+def test_osd_catching_up_waits_without_pausing(cephadm_module: CephadmOrchestrator):
+    # osd.0 and osd.1 are back in the acting sets of their PGs, active, but
+    # still miss the objects written while they were down: the switch is
+    # done (noout cleared, --limit counted) but the next group waits for
+    # them, pass after pass, without pausing the upgrade and without a
+    # timeout; once they have caught up, the group ends and h2 goes next
+    mons = _FakeOsdMons(catch_up_secs=None)
+    with _OsdRun(cephadm_module, mons) as run:
+        st = cephadm_module.upgrade.upgrade_state
+        st.remaining_count = 10
+        assert run.one_pass() is True
+        assert run.groups[-1] == [0, 1]
+        assert not st.paused and 'UPGRADE_SWITCH_FAILED' not in cephadm_module.health_checks
+        assert st.staged_switch.get('phase') == 'settling'
+        assert mons.flags[0] == set() and mons.flags[1] == set()
+        assert st.remaining_count == 8
+        assert mons.unjoined() == set() and mons.missing() == {0, 1}
+        stats = mons.pg_stats()['pg_stats']
+        assert all('active' in pg['state'].split('+') and 0 in pg['acting']
+                   for pg in stats if 0 in pg['up'])
+        info = cephadm_module.upgrade.upgrade_info_str
+        assert 'to settle' in info and 'recovering what was written' in info and 'osd.0:' in info
+        # hours later (well past any timeout), still waiting, still not paused
+        mons.clock.sleep(10 * 3600)
+        staged = len(run.staged)
+        assert run.one_pass() is True
+        assert run.groups[-1] == [] and len(run.staged) == staged
+        assert not st.paused and st.staged_switch.get('phase') == 'settling'
+        mons.recover()
+        assert run.one_pass() is True                        # the group ends
+        assert run.groups[-1] == [] and st.staged_switch == {}
+        assert st.remaining_count == 8                       # counted once
+        assert run.one_pass() is True
+        assert run.groups[-1] == [2, 3]
+
+
+def test_osd_last_group_settles_too(cephadm_module: CephadmOrchestrator):
+    # the last group is switched: nothing left to upgrade, but the group
+    # still settles before the runner lets go of it
+    mons = _FakeOsdMons(catch_up_secs=None)
+    with _OsdRun(cephadm_module, mons, dds=_osd_dds(mons, [0, 1])) as run:
+        run.one_pass()
+        st = cephadm_module.upgrade.upgrade_state
+        assert st.staged_switch.get('phase') == 'settling'
+        assert run.pending() == []
+        assert run.one_pass(dds=[]) is True                  # still settling
+        mons.recover()
+        assert run.one_pass(dds=[]) is True                  # done now
+        assert st.staged_switch == {}
+        assert run.one_pass(dds=[]) is False                 # nothing left
+
+
+def test_osd_settling_ignores_an_osd_that_went_down_again(cephadm_module: CephadmOrchestrator):
+    # an OSD of the group that dies after the switch is not waited for:
+    # ok-to-stop sees it down when the next group is chosen
+    mons = _FakeOsdMons(catch_up_secs=None)
+    with _OsdRun(cephadm_module, mons) as run:
+        run.one_pass()
+        st = cephadm_module.upgrade.upgrade_state
+        assert st.staged_switch.get('phase') == 'settling'
+        mons.up[0] = False
+        mons.epoch += 1
+        mons.caught_up_at.pop(1)                            # osd.1 caught up
+        assert run.one_pass() is True
+        assert st.staged_switch == {} and not st.paused
+
+
+def test_osd_verify_timeout_does_not_cover_catching_up(cephadm_module: CephadmOrchestrator):
+    # catching up takes longer than upgrade_staged_switch_osd_timeout: no
+    # UPGRADE_SWITCH_FAILED, the group just settles for longer
+    mons = _FakeOsdMons(catch_up_secs=900)
+    with _OsdRun(cephadm_module, mons) as run:
+        cephadm_module.upgrade_staged_switch_osd_timeout = 60
+        for _ in range(40):
+            run.one_pass()
+            if cephadm_module.upgrade.upgrade_state.staged_switch == {}:
+                break
+        st = cephadm_module.upgrade.upgrade_state
+        assert not st.paused and 'UPGRADE_SWITCH_FAILED' not in cephadm_module.health_checks
+        assert st.staged_switch == {} and mons.missing() == set()
+        assert run.one_pass() is True
+        assert run.groups[-1] == [2, 3]
+
+
+def test_osd_ec_shards_in_avail_no_missing(cephadm_module: CephadmOrchestrator):
+    # EC pools report shards as 'osd(shard)'
+    mons = _FakeOsdMons()
+    with _OsdRun(cephadm_module, mons):
+        policy = policy_for(cephadm_module.upgrade, 'osd')
+        assert isinstance(policy, OsdStagedSwitchPolicy)
+        osds = {0: {'up': 1, 'up_from': 10}, 1: {'up': 1, 'up_from': 10}}
+        pg = {'pgid': '2.0', 'state': 'active+recovering+degraded', 'up': [0, 4, 8],
+              'acting': [0, 4, 8], 'avail_no_missing': ['0(0)', '4(1)'], 'reported_epoch': 20}
+        with mock.patch("cephadm.CephadmOrchestrator.get", side_effect=lambda w: {'pg_stats': [pg]}):
+            assert policy._pgs_waiting([0, 1], osds, caught_up=False) == {}
+            assert policy._pgs_waiting([0, 1], osds, caught_up=True) == {}
+            pg['avail_no_missing'] = ['4(1)', '8(2)']
+            assert policy._pgs_waiting([0, 1], osds, caught_up=True) == {0: ['2.0']}
+            assert policy._pgs_summary({0: ['2.0']}) == 'osd.0: 1 PG(s), e.g. 2.0'

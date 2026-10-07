@@ -219,8 +219,34 @@ For each pass of the upgrade, cephadm:
    call per host naming every OSD of the group on it, so the OSDs of a host
    go down and come back around a single ``systemctl stop`` / ``start``,
 #. waits until the osdmap shows every one of them up again with a new
-   ``up_from`` and ``ceph osd metadata`` reports the target version for each,
-#. clears ``noout`` on the group.
+   ``up_from``, ``ceph osd metadata`` reports the target version for each,
+   and every PG each of them holds has peered again since it booted (active,
+   as reported since then),
+#. clears ``noout`` on the group,
+#. waits until every one of them is back in the acting set of every PG it
+   holds and misses no object of it: the recovery (log-based, or a
+   backfill) of what was written while it was down is done. Only then is
+   the next group chosen.
+
+Waiting for the OSDs of a group to be back in their PGs and caught up, and
+not only to boot, keeps the next group from being chosen while they are
+still peering or recovering: until then ``ok-to-stop`` counts them out (for
+a degraded PG it counts only the OSDs missing no object) and refuses every
+bucket sharing a PG with them, which with ``auto`` would make cephadm
+descend a level - or hand the pass to the regular path - for no lasting
+reason.
+
+Step 4 is bounded by ``mgr/cephadm/upgrade_staged_switch_osd_timeout``: an
+OSD that does not come back, comes back on the wrong version or whose PGs
+do not peer again is a failed switch, and the upgrade pauses (see below).
+Step 6 is not: how long recovery takes depends on what was written during
+the restart and on the recovery settings, not on the upgrade, and an OSD
+that needs a backfill (its PG log was trimmed while it was down) takes as
+long as the backfill. cephadm waits, without pausing the upgrade, and
+``ceph orch upgrade status`` says what for ("Waiting for the osd of rack r1
+to settle: its OSDs are recovering what was written while they were down
+(...)"). An OSD of the group that goes down again meanwhile is not waited
+for; ``ok-to-stop`` takes it into account when the next group is chosen.
 
 The bucket type is ``mgr/cephadm/upgrade_staged_switch_osd_crush_level``
 (default ``host``): any bucket type of the CRUSH map except the roots, or
@@ -256,7 +282,9 @@ Related options:
   ``OSD_FLAGS`` in ``ceph health detail``; clear it with ``ceph osd
   unset-group noout <osd ids>``.
 * ``mgr/cephadm/upgrade_staged_switch_osd_timeout`` (default ``600``
-  seconds): how long step 4 waits for the whole group.
+  seconds): how long step 4 waits for the whole group to be back, on the
+  target version and its PGs peered again. Recovery and backfill (step 6)
+  are not counted.
 * ``mgr/cephadm/upgrade_staged_switch_osd_max_group`` (default ``0``, no
   limit): the most OSDs a group may hold; a bigger bucket is skipped (with
   ``auto``, the next level down is tried).
