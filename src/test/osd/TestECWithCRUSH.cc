@@ -13,6 +13,7 @@
  *
  */
 
+#include <optional>
 #include <gtest/gtest.h>
 #include "crush/crush.h"   // CRUSH_ITEM_NONE
 #include "osdc/SplitOp.h"
@@ -399,6 +400,81 @@ protected:
     inc.new_pools[pool_id] = updated;
     osdmap->apply_incremental(inc);
   }
+
+  // Trims the log, so that the up OSDs of a later remap need backfill.
+  // Deleting the object leaves that backfill nothing to copy.
+  void trim_log(bool delete_obj = false) {
+    trim_min.emplace("osd_pg_log_trim_min", "1");
+    trim_max.emplace("osd_pg_log_trim_max", "1000");
+    osdmap->set_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT);
+    const std::string data(stripe_unit * k, 'A');
+    create_and_write_verify("obj", data);
+    enable_log_trimming = true;
+    set_target_pg_log_entries(1);
+    for (int i = 0; i < 5; ++i) {
+      write_verify("obj", 0, data, data.size());
+    }
+    if (delete_obj) {
+      ASSERT_EQ(0, delete_object("obj"));
+    }
+    enable_log_trimming = false;
+    ASSERT_GT(get_primary_test_pg()->get_peering_state()->get_info().log_tail,
+              eversion_t());
+  }
+
+  // An empty upmap or pg_temp removes it.
+  void remap(const vector<int> &upmap, const vector<int> &pg_temp,
+             const vector<int> &osds_up = {}) {
+    auto next = std::make_shared<OSDMap>();
+    next->deepish_copy_from(*osdmap);
+    OSDMap::Incremental inc(next->get_epoch() + 1);
+    inc.fsid = next->get_fsid();
+    if (upmap.empty()) {
+      inc.old_pg_upmap.insert(pgid);
+    } else {
+      inc.new_pg_upmap[pgid] =
+        mempool::osdmap::vector<int32_t>(upmap.begin(), upmap.end());
+    }
+    vector<int> temp;
+    if (!pg_temp.empty()) {
+      temp = next->pgtemp_primaryfirst(*next->get_pg_pool(pool_id), pg_temp);
+    }
+    inc.new_pg_temp[pgid] =
+      mempool::osdmap::vector<int32_t>(temp.begin(), temp.end());
+    next->apply_incremental(inc);
+    for (int osd : osds_up) {
+      OSDMapTestHelpers::mark_osd_up(next, osd);
+    }
+    update_osdmap_with_peering(next);
+    event_loop->run_until_idle();
+  }
+
+  void set_backfill_progress(const pg_shard_t &t, const hobject_t &progress) {
+    get_primary_test_pg()->get_peering_state()->update_peer_last_backfill(
+      t, progress);
+    ObjectStore::Transaction tx;
+    get_test_pg(t)->get_peering_state()->update_backfill_progress(
+      progress, pg_stat_t(), false, tx);
+  }
+
+  void complete_backfill(const pg_shard_t &t) {
+    set_backfill_progress(t, hobject_t::get_max());
+    get_test_pg(t)->get_peering_state()->handle_event(
+      std::make_shared<PGPeeringEvent>(
+        osdmap->get_epoch(), osdmap->get_epoch(), RecoveryDone()),
+      get_test_pg(t)->get_peering_ctx());
+  }
+
+  void finish_backfill() {
+    get_primary_test_pg()->get_peering_state()->handle_event(
+      std::make_shared<PGPeeringEvent>(
+        osdmap->get_epoch(), osdmap->get_epoch(), PeeringState::Backfilled()),
+      get_primary_test_pg()->get_peering_ctx());
+    new_epoch_loop();
+  }
+
+  std::optional<ScopedConfig> trim_min;
+  std::optional<ScopedConfig> trim_max;
 };
 
 // Losing a whole zone leaves the PG peered until degraded stretch mode names the surviving zone as mandatory.
@@ -449,19 +525,7 @@ TEST_F(TestECStretchPeering, ZoneBlockSwapWithPgTemp_NoChooseActingAbort)
 {
   ASSERT_TRUE(osdmap->get_pg_pool(pool_id)->is_stretch_pool());
   ASSERT_TRUE(all_shards_active());
-
-  ScopedConfig trim_min("osd_pg_log_trim_min", "1");
-  ScopedConfig trim_max("osd_pg_log_trim_max", "1000");
-  osdmap->set_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT);
-  const std::string data(stripe_unit * k, 'A');
-  create_and_write_verify("obj", data);
-  enable_log_trimming = true;
-  set_target_pg_log_entries(1);
-  for (int i = 0; i < 5; ++i) {
-    write_verify("obj", 0, data, data.size());
-  }
-  ASSERT_GT(get_primary_test_pg()->get_peering_state()->get_info().log_tail,
-            eversion_t());
+  trim_log();
 
   vector<int> up, acting;
   int up_primary, acting_primary;
@@ -469,20 +533,7 @@ TEST_F(TestECStretchPeering, ZoneBlockSwapWithPgTemp_NoChooseActingAbort)
   const int zone_size = k + m;
   vector<int> swapped(acting.begin() + zone_size, acting.end());
   swapped.insert(swapped.end(), acting.begin(), acting.begin() + zone_size);
-
-  auto new_osdmap = std::make_shared<OSDMap>();
-  new_osdmap->deepish_copy_from(*osdmap);
-  OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
-  inc.fsid = new_osdmap->get_fsid();
-  vector<int> pg_temp =
-    new_osdmap->pgtemp_primaryfirst(*new_osdmap->get_pg_pool(pool_id), acting);
-  inc.new_pg_temp[pgid] =
-    mempool::osdmap::vector<int32_t>(pg_temp.begin(), pg_temp.end());
-  inc.new_pg_upmap[pgid] =
-    mempool::osdmap::vector<int32_t>(swapped.begin(), swapped.end());
-  new_osdmap->apply_incremental(inc);
-  update_osdmap_with_peering(new_osdmap);
-  event_loop->run_until_idle();
+  remap(swapped, acting);
 
   PeeringState *ps = get_primary_test_pg()->get_peering_state();
   EXPECT_TRUE(ps->is_active()) << get_state_name(0);
@@ -502,19 +553,7 @@ TEST_F(TestECStretchPeering, BackfilledZoneBlock_RecoveredDropsPgTemp)
 {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   ASSERT_TRUE(all_shards_active());
-
-  ScopedConfig trim_min("osd_pg_log_trim_min", "1");
-  ScopedConfig trim_max("osd_pg_log_trim_max", "1000");
-  osdmap->set_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT);
-  const std::string data(stripe_unit * k, 'A');
-  create_and_write_verify("obj", data);
-  enable_log_trimming = true;
-  set_target_pg_log_entries(1);
-  for (int i = 0; i < 5; ++i) {
-    write_verify("obj", 0, data, data.size());
-  }
-  ASSERT_GT(get_primary_test_pg()->get_peering_state()->get_info().log_tail,
-            eversion_t());
+  trim_log();
 
   vector<int> a;
   int acting_primary;
@@ -522,20 +561,7 @@ TEST_F(TestECStretchPeering, BackfilledZoneBlock_RecoveredDropsPgTemp)
   mark_osds_down({a[4], a[5]});
 
   const int N = CRUSH_ITEM_NONE;
-  const vector<int> upmap = {a[4], a[5], N, a[1], a[0], a[2]};
-  auto new_osdmap = std::make_shared<OSDMap>();
-  new_osdmap->deepish_copy_from(*osdmap);
-  OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
-  inc.fsid = new_osdmap->get_fsid();
-  vector<int> pg_temp = new_osdmap->pgtemp_primaryfirst(
-    *new_osdmap->get_pg_pool(pool_id), {a[0], a[1], a[2], a[3], N, N});
-  inc.new_pg_temp[pgid] =
-    mempool::osdmap::vector<int32_t>(pg_temp.begin(), pg_temp.end());
-  inc.new_pg_upmap[pgid] =
-    mempool::osdmap::vector<int32_t>(upmap.begin(), upmap.end());
-  new_osdmap->apply_incremental(inc);
-  update_osdmap_with_peering(new_osdmap);
-  event_loop->run_until_idle();
+  remap({a[4], a[5], N, a[1], a[0], a[2]}, {a[0], a[1], a[2], a[3], N, N});
 
   TestPG *primary = get_primary_test_pg();
   PeeringState *ps = primary->get_peering_state();
@@ -547,27 +573,13 @@ TEST_F(TestECStretchPeering, BackfilledZoneBlock_RecoveredDropsPgTemp)
                                    pg_shard_t(a[0], shard_id_t(4)),
                                    pg_shard_t(a[2], shard_id_t(5))};
   ASSERT_EQ(ps->get_backfill_targets(), targets);
-
   for (const auto &t : targets) {
-    ps->update_peer_last_backfill(t, hobject_t::get_max());
-    PeeringState *target = get_test_pg(t)->get_peering_state();
-    ObjectStore::Transaction tx;
-    target->update_backfill_progress(hobject_t::get_max(), pg_stat_t(), false,
-                                     tx);
-    target->handle_event(
-      std::make_shared<PGPeeringEvent>(
-        osdmap->get_epoch(), osdmap->get_epoch(), RecoveryDone()),
-      get_test_pg(t)->get_peering_ctx());
+    complete_backfill(t);
   }
 
   ASSERT_FALSE(primary->get_peering_listener()->pg_temp_wanted);
   EXPECT_EXIT({
-      ps->handle_event(
-        std::make_shared<PGPeeringEvent>(
-          osdmap->get_epoch(), osdmap->get_epoch(),
-          PeeringState::Backfilled()),
-        primary->get_peering_ctx());
-      new_epoch_loop();
+      finish_backfill();
       _exit(get_primary_test_pg()->get_peering_state()->get_acting() == up ?
             0 : 1);
     }, ::testing::ExitedWithCode(0), "");
