@@ -188,10 +188,12 @@ void Cache::register_metrics(store_index_t store_index)
   }
 
   /*
-   * laddr_lookups: logical extents located by laddr through the LBA tree
+   * laddr_lookups: logical extents read by laddr
+   * laddr_index_hits: of those, found in the laddr index without an LBA walk
    */
   for (auto& [src, src_label] : labels_by_src) {
     auto& lookups_by_ext = get_by_src(stats.laddr_lookups_by_src_ext, src);
+    auto& hits_by_ext = get_by_src(stats.laddr_index_hits_by_src_ext, src);
     for (auto& [ext, ext_label] : labels_by_ext) {
       if (!is_logical_type(ext)) {
         continue;
@@ -204,8 +206,15 @@ void Cache::register_metrics(store_index_t store_index)
           sm::make_counter(
             "laddr_lookups",
             get_by_ext(lookups_by_ext, ext),
-            sm::description("total number of logical extents located by laddr "
-                            "through the lba tree, including retried attempts"),
+            sm::description("total number of logical extents read by laddr, "
+                            "including retried attempts"),
+            merged_labels
+          ),
+          sm::make_counter(
+            "laddr_index_hits",
+            get_by_ext(hits_by_ext, ext),
+            sm::description("total number of laddr lookups served by the "
+                            "laddr index without an lba walk"),
             merged_labels
           ),
         }
@@ -2404,6 +2413,7 @@ void Cache::init()
     remove_extent(root, nullptr);
     root = nullptr;
   }
+  laddr_index.clear();
   root = CachedExtent::make_cached_extent_ref<RootBlock>();
   // Make it simpler to keep root dirty
   root->init(CachedExtent::extent_state_t::DIRTY,
@@ -2447,6 +2457,7 @@ Cache::close_ertr::future<> Cache::close()
        extents_index.size(),
        extents_index.get_bytes());
   root.reset();
+  laddr_index.clear();
   clear_dirty();
   backref_extents.clear();
   backref_entryrefs_by_seq.clear();

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include "seastar/core/shared_future.hh"
 
 #include "include/buffer.h"
@@ -770,9 +772,62 @@ public:
     stats.read_hit_cold += t.read_hit_cold;
   }
 
-  // A logical extent of type ext was located by laddr through an LBA lookup.
+  // A logical extent of type ext is being read by laddr.
   void account_laddr_lookup(Transaction &t, extent_types_t ext) {
     ++get_by_ext(get_by_src(stats.laddr_lookups_by_src_ext, t.get_src()), ext);
+  }
+
+  // laddr index: laddr -> cached metadata extent, to skip the LBA walk.
+  // Any change to the mapping invalidates the extent, so a valid entry is safe.
+  static constexpr bool is_laddr_indexed(extent_types_t type) {
+    switch (type) {
+    case extent_types_t::COLL_BLOCK:
+    case extent_types_t::ONODE_BLOCK_STAGED:
+    case extent_types_t::LOG_NODE:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  // Returns the indexed extent at laddr if t can use it, or null.
+  // len == 0 skips the length check.
+  CachedExtentRef laddr_index_lookup(
+    Transaction &t,
+    extent_types_t type,
+    laddr_t laddr,
+    extent_len_t len) {
+    if (!is_laddr_indexed(type)) {
+      return CachedExtentRef();
+    }
+    auto it = laddr_index.find(laddr);
+    if (it == laddr_index.end()) {
+      return CachedExtentRef();
+    }
+    auto &extent = it->second;
+    if (!extent->is_valid()) {
+      laddr_index.erase(it);
+      return CachedExtentRef();
+    }
+    assert(extent->get_type() == type);
+    if (!extent->is_stable() ||
+        (len && extent->get_length() != len) ||
+        !extent->is_fully_loaded() ||
+        // t retired it
+        !extent->maybe_get_transactional_view(t)) {
+      return CachedExtentRef();
+    }
+    ++get_by_ext(get_by_src(stats.laddr_index_hits_by_src_ext, t.get_src()), type);
+    return extent;
+  }
+
+  void laddr_index_insert(laddr_t laddr, CachedExtentRef extent) {
+    if (!is_laddr_indexed(extent->get_type()) ||
+        !extent->is_valid() ||
+        !extent->is_stable()) {
+      return;
+    }
+    laddr_index[laddr] = std::move(extent);
   }
 
 private:
@@ -1816,6 +1871,9 @@ private:
 
   const bool force_backref = false;
 
+  // holds refs, cleared on close(); see laddr_index_lookup()
+  std::unordered_map<laddr_t, CachedExtentRef> laddr_index;
+
   /**
    * dirty
    *
@@ -1927,6 +1985,8 @@ private:
       access_by_src_ext;
     counter_by_src_t<counter_by_extent_t<uint64_t> >
       laddr_lookups_by_src_ext;
+    counter_by_src_t<counter_by_extent_t<uint64_t> >
+      laddr_index_hits_by_src_ext;
 
     uint64_t onode_tree_depth = 0;
     int64_t onode_tree_extents_num = 0;

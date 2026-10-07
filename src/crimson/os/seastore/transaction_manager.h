@@ -270,15 +270,49 @@ public:
 
   template <typename T>
   using lextent_init_func_t = std::function<void (T&)>;
+  using read_extent_iertr = get_pin_iertr;
+  template <typename T>
+  using read_extent_ret =
+    read_extent_iertr::future<maybe_indirect_extent_t<T>>;
+  /**
+   * read_indexed_extent
+   *
+   * Read extent of type T at laddr from the cache's laddr index, skipping the
+   * LBA walk. Returns null if it isn't indexed or t can't use it.
+   */
+  template <typename T>
+  read_extent_iertr::future<TCachedExtentRef<T>> read_indexed_extent(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t length,
+    lextent_init_func_t<T> &maybe_init) {
+    auto indexed = cache->laddr_index_lookup(t, T::TYPE, laddr, length);
+    if (!indexed) {
+      co_return TCachedExtentRef<T>();
+    }
+    // same as read_pin() for a linked child
+    auto ext = co_await cache->get_extent_viewable_by_trans(
+      t, std::move(indexed));
+    auto extent = ext->template cast<T>();
+    if (!extent->is_seen_by_users()) {
+      maybe_init(*extent);
+      extent->set_seen_by_users();
+    }
+#ifndef NDEBUG
+    // the LBA walk must reach the same extent
+    auto pin = co_await get_pin(t, laddr);
+    auto walked = co_await read_pin<T>(t, std::move(pin));
+    assert(!walked.is_indirect());
+    assert(walked.extent == extent);
+#endif
+    co_return extent;
+  }
+
   /**
    * read_extent
    *
    * Read extent of type T at offset~length
    */
-  using read_extent_iertr = get_pin_iertr;
-  template <typename T>
-  using read_extent_ret =
-    read_extent_iertr::future<maybe_indirect_extent_t<T>>;
   template <typename T>
   read_extent_ret<T> read_extent(
     Transaction &t,
@@ -289,14 +323,24 @@ public:
     SUBDEBUGT(seastore_tm, "{}~0x{:x} {} ...",
               t, offset, length, T::TYPE);
     cache->account_laddr_lookup(t, T::TYPE);
+    auto indexed = co_await read_indexed_extent<T>(
+      t, offset, length, maybe_init);
+    if (indexed) {
+      co_return maybe_indirect_extent_t<T>{
+        std::move(indexed), std::nullopt, false};
+    }
     auto pin = co_await get_pin(t, offset);
     if (length != pin.get_length() || !pin.get_val().is_real_location()) {
       SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong pin {}",
 		t, offset, length, T::TYPE, pin);
       ceph_abort_msg("Impossible");
     }
-    co_return co_await this->read_pin<T>(
+    auto ret = co_await this->read_pin<T>(
       t, std::move(pin), std::move(maybe_init));
+    if (!ret.is_indirect()) {
+      cache->laddr_index_insert(offset, ret.extent);
+    }
+    co_return ret;
   }
 
   /**
@@ -313,14 +357,24 @@ public:
     SUBDEBUGT(seastore_tm, "{} {} ...",
               t, offset, T::TYPE);
     cache->account_laddr_lookup(t, T::TYPE);
+    auto indexed = co_await read_indexed_extent<T>(
+      t, offset, 0, maybe_init);
+    if (indexed) {
+      co_return maybe_indirect_extent_t<T>{
+        std::move(indexed), std::nullopt, false};
+    }
     auto pin = co_await get_pin(t, offset);
     if (!pin.get_val().is_real_location()) {
       SUBERRORT(seastore_tm, "{} {} got wrong pin {}",
 		t, offset, T::TYPE, pin);
       ceph_abort_msg("Impossible");
     }
-    co_return co_await this->read_pin<T>(
+    auto ret = co_await this->read_pin<T>(
       t, std::move(pin), std::move(maybe_init));
+    if (!ret.is_indirect()) {
+      cache->laddr_index_insert(offset, ret.extent);
+    }
+    co_return ret;
   }
 
   template <typename T>
