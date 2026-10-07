@@ -149,13 +149,13 @@ First release candidate
 - [ ] src/ceph_release: change type to `rc`
 - [ ] opt-in to all telemetry channels, generate telemetry reports, and verify no sensitive details (like pools names) are collected
 - [ ] check if new pool flags exist in pg_pool_t (osd/osd_types.h), and add them to telemetry's basic_pool_flags collection, in case they are not sensitive
+- [ ] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
 
 
 First stable release
 ====================
 
 - [ ] src/ceph_release: change type `stable`
-- [ ] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
 - [ ] src/cephadm/cephadmlib/constants.py: update `LATEST_STABLE_RELEASE`
 - [ ] activate latest release in readthedocs, as described in `the readthedocs
   documentation <https://docs.readthedocs.io/en/stable/versions.html>`_ 
