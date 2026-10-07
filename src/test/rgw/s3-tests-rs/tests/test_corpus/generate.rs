@@ -57,7 +57,7 @@ async fn corpus_coverage_keys() {
     let mut m = Manifest::new();
     m.bucket(&b, "tier", &tier);
 
-    let mut made = 0usize;
+    let mut written: Vec<String> = Vec::new();
     let mut refused = Vec::new();
 
     for class in KeyClass::COVERAGE {
@@ -73,7 +73,7 @@ async fn corpus_coverage_keys() {
 
         match put {
             Ok(_) => {
-                made += 1;
+                written.push(key.clone());
                 m.object(&key, "class", &format!("{class:?}"));
                 m.object(&key, "rationale", class.rationale());
             }
@@ -98,6 +98,7 @@ async fn corpus_coverage_keys() {
     }
 
     /* What S3 says about what landed */
+    let mut listed: Vec<String> = Vec::new();
     let mut token: Option<String> = None;
     loop {
         let mut req = client.list_objects_v2().bucket(&b).max_keys(1000);
@@ -107,6 +108,7 @@ async fn corpus_coverage_keys() {
         let page = req.send().await.expect("the corpus bucket should list");
         for o in page.contents() {
             let key = o.key().unwrap_or_default();
+            listed.push(key.to_string());
             m.object(key, "listed", "yes");
             if let Some(sz) = o.size() {
                 m.object(key, "size", &sz.to_string());
@@ -133,7 +135,8 @@ async fn corpus_coverage_keys() {
     std::fs::write(&path, m.render()).expect("write manifest");
 
     eprintln!(
-        "corpus {tier}/keys: {made} of {} keys written, {} refused, {} facts -> {}",
+        "corpus {tier}/keys: {} of {} keys written, {} refused, {} facts -> {}",
+        written.len(),
         KeyClass::COVERAGE.len(),
         refused.len(),
         m.len(),
@@ -143,8 +146,65 @@ async fn corpus_coverage_keys() {
         eprintln!("  refused {k:?}: {c}");
     }
 
-    /* The corpus is the product, so the only assertion is that it is
-     * not empty -- an empty manifest means nothing was generated and
-     * the later comparison would pass vacuously. */
+    /* An empty manifest means nothing was generated and any later
+     * comparison would pass vacuously. */
     assert!(!m.is_empty(), "the corpus produced no facts");
+
+    check_listing_invariants(&written, &listed);
+}
+
+/// Properties true of any S3 implementation, so they need no reference
+/// gateway and hold before the NooBaa half of the harness exists.
+///
+/// This is what separates the corpus from a recorder.  A *refusal* is a
+/// fact about a backend and is recorded rather than failed -- a key a
+/// gateway cannot write is something the corpus exists to capture.  A
+/// listing that disagrees with what was written is not a fact about
+/// anything;  it is a defect, and the run should say so without waiting
+/// for a second gateway to compare against.
+fn check_listing_invariants(written: &[String], listed: &[String]) {
+    let mut problems: Vec<String> = Vec::new();
+
+    /* No key the listing returns is empty.  An empty key is not a
+     * valid S3 object name and cannot be addressed, copied or
+     * deleted, so a client meeting one has no way forward. */
+    let empties = listed.iter().filter(|k| k.is_empty()).count();
+    if empties > 0 {
+        problems.push(format!("{empties} listed key(s) are empty"));
+    }
+
+    /* No key is listed twice.  One object, one entry. */
+    let mut seen = std::collections::BTreeMap::new();
+    for k in listed {
+        *seen.entry(k.as_str()).or_insert(0usize) += 1;
+    }
+    for (k, n) in &seen {
+        if *n > 1 {
+            problems.push(format!("{k:?} listed {n} times"));
+        }
+    }
+
+    /* Everything written is listed:  catches silent loss. */
+    for w in written {
+        if !seen.contains_key(w.as_str()) {
+            problems.push(format!("{w:?} was written and is not listed"));
+        }
+    }
+
+    /* Everything listed was written:  catches phantoms, which is how a
+     * reserved-name collision surfaces -- one file on disk emitted
+     * under a second, invented key. */
+    let wset: std::collections::BTreeSet<&str> =
+        written.iter().map(|s| s.as_str()).collect();
+    for k in seen.keys() {
+        if !wset.contains(k) {
+            problems.push(format!("{k:?} is listed and was never written"));
+        }
+    }
+
+    assert!(
+        problems.is_empty(),
+        "the listing disagrees with what the corpus wrote:\n  {}",
+        problems.join("\n  ")
+    );
 }
