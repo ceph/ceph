@@ -139,7 +139,8 @@ To list all certificates managed by Cephadm:
 
 This command displays an overview of all certificates currently managed by
 Cephadm. The ``--show-details`` option includes additional information such as
-issuing authorities and certificate extensions.
+issuing authorities and certificate extensions. If a stored certificate contains
+more than one ``CERTIFICATE`` block, the listing reports ``contains_chain: true``.
 
 By default, this command omits Cephadm-signed certificates. To include them,
 pass the ``--include-cephadm-signed`` argument.
@@ -213,6 +214,32 @@ Replace ``<key-name>`` with the actual certificate name from ``ceph orch certmgr
 For certificates with host or service scope, include
 the ``--hostname`` or ``--service_name`` arguments as needed.
 
+Supported PEM Inputs
+====================
+
+``certmgr`` accepts PEM-encoded certificates and unencrypted PEM private keys.
+
+Certificate input may contain either a single certificate or a certificate chain
+containing multiple ``CERTIFICATE`` blocks. When a certificate chain is provided,
+the leaf certificate must be the first ``CERTIFICATE`` block, followed by any
+intermediate CA certificates.
+
+Supported private key PEM blocks are:
+
+- ``-----BEGIN PRIVATE KEY-----`` for unencrypted PKCS#8 private keys.
+- ``-----BEGIN RSA PRIVATE KEY-----`` for unencrypted PKCS#1 RSA private keys.
+- ``-----BEGIN EC PRIVATE KEY-----`` for unencrypted SEC1 EC private keys.
+
+For ``cert-key set``, the input must contain one unencrypted private key and at
+least one certificate.
+
+Encrypted private keys, multiple private keys in the same input, unsupported
+private key PEM block types, inputs without any ``CERTIFICATE`` block, and
+non-PEM input are rejected.
+
+``cert set`` accepts certificate PEM only. If the input contains private key
+material, use ``cert-key set`` instead.
+
 Setting a Certificate-Key Pair
 ==============================
 
@@ -224,8 +251,8 @@ To associate a certificate with a private key:
 
 Use this command to upload or replace an existing certificate/key pair for a certain service.
 Replace ``<service-type>`` with the actual certificate name from ``ceph orch certmgr bindings ls``.
-The ``-i`` option can be used to specify a file containing a combined certificate and key in
-PEM format. This file should include both the certificate and private key concatenated together.
+The ``-i`` option can be used to specify a PEM file containing one unencrypted
+private key and one or more certificates.
 
 Setting a Certificate
 =====================
