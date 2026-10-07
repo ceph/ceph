@@ -211,6 +211,9 @@ These are the primary parameters required for standard deployments.
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 These parameters are intended for advanced users and offer finer control over the cluster layout.
+For a replicated pool, ``--root``, ``--zone_failure_domain``, ``--osd_failure_domain`` and
+``--class`` take effect only with ``num_zones`` greater than 1 and are rejected otherwise
+(Section 2.1.5).
 
 **--zone_failure_domain**
   - *Definition*: The CRUSH bucket type over which zone-redundancy is achieved.
@@ -353,7 +356,11 @@ For any pool type:
 * ``--num_zones`` less than 1: "num_zones must be >= 1".
 
 For a replicated pool, ``--k`` or ``--m`` is rejected: "cannot specify k/m parameters for
-replicated pools".
+replicated pools". A replicated pool with ``num_zones`` 1 uses the default replicated rule, or the
+rule given with ``--rule``, so any of ``--root``, ``--zone_failure_domain``,
+``--osd_failure_domain`` or ``--class`` is rejected for it rather than ignored: "crush parameters
+(crush_root, zone_failure_domain, osd_failure_domain, crush_device_class) require num_zones > 1
+for a replicated pool".
 
 ``--rule`` may be combined with ``--k``/``--m`` or with ``--erasure_code_profile``. ``m``
 greater than ``k`` is allowed. The plugin can reject further values when it normalizes the

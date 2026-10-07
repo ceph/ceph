@@ -15542,6 +15542,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    if (pool_type == pg_pool_t::TYPE_REPLICATED && num_zones == 1 &&
+        has_crush_params) {
+      ss << "crush parameters (crush_root, zone_failure_domain, "
+            "osd_failure_domain, crush_device_class) require num_zones > 1 "
+            "for a replicated pool";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+
     // size can only be used with single-zone (num_zones=1)
     if (cmdmap.count("size") && cmdmap.count("num_zones") && num_zones != 1) {
       ss << "cannot specify 'size' with num_zones > 1; use 'replica' parameter instead";
