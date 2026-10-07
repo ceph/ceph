@@ -13,6 +13,7 @@
  *
  */
 
+#include <random>
 #include <gtest/gtest.h>
 #include "test/osd/ECPeeringTestFixture.h"
 #include "osd/PeeringState.h"
@@ -2189,4 +2190,162 @@ TEST_F(TestECActingStretch, ReturningZone_CurrentShardsKeepTheirZone) {
   EXPECT_EQ(want, acting) << ss.str();
   EXPECT_EQ(backfill, (set<pg_shard_t>{pg_shard_t(5, shard_id_t(3))}))
     << ss.str();
+}
+
+// Random up sets, acting sets and shard states.  A want that calc picks must
+// be picked again once it is acting (otherwise pg_temp changes back and
+// forth), want == up must come without backfill, and once the backfill
+// targets are complete the call restricted to up and acting (from
+// Recovered) must either move on or keep the same targets, as
+// choose_acting() asserts.
+TEST_F(TestECActingStretch, RandomStates_StableWantAndBackfill) {
+  const int N = CRUSH_ITEM_NONE;
+  const eversion_t log_tail(1, 5);
+  const vector<vector<int>> dc = {{0, 1, 2, 6}, {3, 4, 5, 7}};
+  std::mt19937 rng(20261006);
+  auto pick = [&](int n) { return std::uniform_int_distribution<int>(0, n - 1)(rng); };
+
+  auto random_layout = [&]() {
+    vector<int> v(6, N);
+    const int first = pick(2);
+    for (int block = 0; block < 2; ++block) {
+      vector<int> osds = dc[block == 0 ? first : 1 - first];
+      std::shuffle(osds.begin(), osds.end(), rng);
+      for (int j = 0; j < 3; ++j) {
+        v[block * 3 + j] = pick(6) ? osds[j] : N;
+      }
+    }
+    return v;
+  };
+  auto add_random_info = [&](map<pg_shard_t, pg_info_t> &all_info, int osd,
+                             int shard) {
+    if (osd == N || all_info.count(pg_shard_t(osd, shard_id_t(shard)))) {
+      return;
+    }
+    switch (pick(5)) {
+    case 0: // current
+      add_info(all_info, osd, shard, eversion_t(20, 200), log_tail);
+      break;
+    case 1: // behind, but within the log
+      add_info(all_info, osd, shard, eversion_t(10, 100), log_tail);
+      break;
+    case 2: // behind the log tail
+      add_info(all_info, osd, shard, eversion_t(1, 3), eversion_t(1, 1));
+      break;
+    case 3: // being backfilled
+      add_info(all_info, osd, shard, eversion_t(20, 200), log_tail);
+      all_info[pg_shard_t(osd, shard_id_t(shard))].last_backfill = hobject_t();
+      break;
+    default: // empty
+      add_info(all_info, osd, shard, eversion_t());
+    }
+  };
+
+  unsigned checked = 0;
+  for (int iter = 0; iter < 20000; ++iter) {
+    const vector<int> up = random_layout();
+    const vector<int> acting = pick(3) ? random_layout() : up;
+    map<pg_shard_t, pg_info_t> all_info;
+    for (int i = 0; i < 6; ++i) {
+      add_random_info(all_info, up[i], i);
+      add_random_info(all_info, acting[i], i);
+    }
+    for (int s = pick(4); s > 0; --s) {
+      add_random_info(all_info, pick(8), pick(6));
+    }
+    pg_shard_t auth;
+    for (const auto &[shard, info] : all_info) {
+      if (!info.is_incomplete() && info.last_update == eversion_t(20, 200)) {
+        auth = shard;
+      }
+    }
+    if (auth == pg_shard_t()) {
+      continue;
+    }
+    ++checked;
+
+    vector<int> want;
+    set<pg_shard_t> backfill, acting_backfill;
+    ostringstream ss;
+    calc(up, acting, all_info, auth, false, &want, &backfill,
+         &acting_backfill, ss);
+    if (want == up) {
+      ASSERT_TRUE(backfill.empty()) << ss.str();
+    }
+
+    vector<int> want2;
+    set<pg_shard_t> backfill2, acting_backfill2;
+    ostringstream ss2;
+    calc(up, want, all_info, auth, false, &want2, &backfill2,
+         &acting_backfill2, ss2);
+    ASSERT_EQ(want2, want) << "up " << up << " acting " << acting << "\n"
+                           << ss.str() << "then\n" << ss2.str();
+    if (want2 == up) {
+      ASSERT_TRUE(backfill2.empty()) << ss2.str();
+    }
+
+    if (backfill2.empty()) {
+      continue;
+    }
+    for (const auto &t : backfill2) {
+      add_info(all_info, t.osd, t.shard.id, eversion_t(20, 200), log_tail);
+    }
+    vector<int> want3;
+    set<pg_shard_t> backfill3, acting_backfill3;
+    ostringstream ss3;
+    calc(up, want, all_info, auth, true, &want3, &backfill3,
+         &acting_backfill3, ss3);
+    if (want3 == want) {
+      ASSERT_EQ(backfill3, backfill2)
+        << "up " << up << " want " << want << "\n" << ss2.str()
+        << "after backfill\n" << ss3.str();
+    }
+  }
+  EXPECT_GT(checked, 10000u);
+}
+
+// Zone dc1 returns while acting still serves zone block 1 from dc0 and is
+// recovering an object only dc1 holds.  acting stays (it fills three
+// positions, up's dc1 shards two).  3(3) and 4(5) are complete and only one
+// write behind; they are backfill targets with the empty up shards, so they
+// keep getting writes.  Once the empty shards are complete, up's zones win.
+TEST_F(TestECActingStretch, ReturningZone_BehindUpShardsKeptAsTargets) {
+  const int N = CRUSH_ITEM_NONE;
+  const eversion_t log_tail(1, 5);
+  const eversion_t behind(20, 401);
+  const eversion_t head(20, 402);
+  vector<int> up = {0, 2, 1, 3, 5, 4};
+  vector<int> acting = {N, N, N, 0, 2, 1};
+  map<pg_shard_t, pg_info_t> all_info;
+  add_info(all_info, 0, 3, head, log_tail);
+  add_info(all_info, 2, 4, head, log_tail);
+  add_info(all_info, 1, 5, head, log_tail);
+  add_info(all_info, 3, 3, behind, log_tail);
+  add_info(all_info, 4, 5, behind, log_tail);
+  add_info(all_info, 7, 4, behind, log_tail);
+  add_info(all_info, 5, 4, eversion_t());
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(3)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, acting) << ss.str();
+  const set<pg_shard_t> targets = {
+    pg_shard_t(0, shard_id_t(0)), pg_shard_t(2, shard_id_t(1)),
+    pg_shard_t(1, shard_id_t(2)), pg_shard_t(3, shard_id_t(3)),
+    pg_shard_t(5, shard_id_t(4)), pg_shard_t(4, shard_id_t(5))};
+  ASSERT_EQ(backfill, targets) << ss.str();
+
+  for (const auto &t : targets) {
+    add_info(all_info, t.osd, t.shard.id, head, log_tail);
+  }
+  want.clear();
+  backfill.clear();
+  acting_backfill.clear();
+  ostringstream ss2;
+  calc(up, acting, all_info, pg_shard_t(0, shard_id_t(3)), true,
+       &want, &backfill, &acting_backfill, ss2);
+  EXPECT_EQ(want, up) << ss2.str();
+  EXPECT_TRUE(backfill.empty()) << ss2.str();
 }

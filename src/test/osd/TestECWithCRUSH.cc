@@ -644,3 +644,81 @@ TEST_F(TestECStretchPeering, ReturningZone_NewestWritesNotUnfound)
   }
   EXPECT_EQ(0u, ps->get_num_unfound());
 }
+
+// A pg-upmap swaps the zone blocks while a pg_temp keeps the old acting
+// set.  Before the last new up shard of block 1 (y) is backfilled, the OSD
+// of another, complete one (x) restarts and misses a few writes, and the
+// writes that follow outrun the PG log.  x must be caught up from the log,
+// not backfilled again from scratch, and keep getting writes, so that the
+// PG moves to up when y's backfill finishes.
+TEST_F(TestECStretchPeering, ZoneBlockSwap_RestartedUpShardKeptCurrent)
+{
+  ASSERT_TRUE(all_shards_active());
+  // The monitor's min_size for a 2+1 stretch pool.
+  set_pool_min_size(k);
+  trim_log(true);
+
+  vector<int> a;
+  int acting_primary;
+  osdmap->pg_to_acting_osds(pgid, &a, &acting_primary);
+  const vector<int> up = {a[3], a[4], a[5], a[0], a[1], a[2]};
+  remap(up, a);
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_acting(), a);
+  ASSERT_EQ(ps->get_backfill_targets().size(), up.size());
+
+  const pg_shard_t x(a[2], shard_id_t(5));
+  const pg_shard_t y(a[1], shard_id_t(4));
+  for (const auto &t : ps->get_backfill_targets()) {
+    if (t != y) {
+      complete_backfill(t);
+    }
+  }
+  // y is past every object this test writes (they have hash 0), so it gets
+  // their writes as a real backfill target would, but is not complete.
+  set_backfill_progress(y, hobject_t(object_t("progress"), "", CEPH_NOSNAP,
+                                     0xffffffff, pool_id, ""));
+
+  const std::string data(stripe_unit * k, 'B');
+  const vector<std::string> missed = {"missed0", "missed1"};
+  mark_osd_down(x.osd);
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active());
+  for (const auto &name : missed) {
+    create_and_write_verify(name, data);
+  }
+  mark_osd_up(x.osd);
+  ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_acting(), a);
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  ASSERT_TRUE(ps->is_backfill_target(x));
+  ASSERT_TRUE(ps->get_peer_info(x).last_backfill.is_max());
+  for (const auto &name : missed) {
+    run_recovery(name, false, data);
+  }
+  ASSERT_FALSE(get_primary_test_pg()->get_peering_state()->needs_recovery());
+
+  // More writes than the PG log keeps.
+  enable_log_trimming = true;
+  set_target_pg_log_entries(2);
+  vector<std::string> later;
+  for (int i = 0; i < 6; ++i) {
+    later.push_back("later" + std::to_string(i));
+    create_and_write_verify(later.back(), data);
+  }
+  enable_log_trimming = false;
+
+  complete_backfill(y);
+  ASSERT_STREQ(get_primary_test_pg()->get_peering_state()->get_current_state(),
+               "Started/Primary/Active/Backfilling");
+  finish_backfill();
+
+  ps = get_primary_test_pg()->get_peering_state();
+  EXPECT_EQ(ps->get_acting(), up) << ps->get_current_state();
+  EXPECT_EQ(0u, ps->get_num_unfound());
+  for (const auto &name : missed) {
+    verify_object(name);
+  }
+  for (const auto &name : later) {
+    verify_object(name);
+  }
+}
