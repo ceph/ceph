@@ -13,11 +13,11 @@ use s3_tests_rs::error::extract_s3_error;
 use crate::manifest::Manifest;
 use crate::names::{bucket, KeyClass};
 
-fn env_or(var: &str, default: &str) -> String {
+pub fn env_or(var: &str, default: &str) -> String {
     std::env::var(var).unwrap_or_else(|_| default.to_string())
 }
 
-fn out_dir() -> PathBuf {
+pub fn out_dir() -> PathBuf {
     PathBuf::from(env_or("CORPUS_OUT", "target/corpus"))
 }
 
@@ -25,7 +25,7 @@ fn out_dir() -> PathBuf {
 /// so a rerun meets its own buckets;  that is tolerated rather than
 /// treated as an error, and a corpus run against a dirty root is the
 /// operator's problem to notice.
-async fn ensure_bucket(client: &aws_sdk_s3::Client, name: &str) {
+pub async fn ensure_bucket(client: &aws_sdk_s3::Client, name: &str) {
     match client.create_bucket().bucket(name).send().await {
         Ok(_) => {}
         Err(e) => {

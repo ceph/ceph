@@ -30,6 +30,8 @@
 //! ```
 
 mod names;
+mod shapes;
 mod manifest;
 mod inventory;
 mod generate;
+mod objects;
