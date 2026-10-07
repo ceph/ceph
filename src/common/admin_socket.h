@@ -20,6 +20,7 @@
 #include "crimson/admin/admin_socket.h"
 #else
 
+#include <atomic>
 #include <condition_variable>
 #include <list>
 #include <mutex>
@@ -192,7 +193,9 @@ private:
   int m_sock_fd = -1;
   int m_wakeup_rd_fd = -1;
   int m_wakeup_wr_fd = -1;
-  bool m_shutdown = false;
+  // set by shutdown(), polled by entry(); relaxed is enough: it guards
+  // no other data, and shutdown() joins the thread
+  std::atomic<bool> m_shutdown = false;
 
   bool in_hook = false;
   std::condition_variable in_hook_cond;
