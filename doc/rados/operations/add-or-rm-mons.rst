@@ -54,13 +54,12 @@ Deploying your Hardware
 
 Some operators choose to add a new Monitor host at the same time that they add
 a new Monitor. For details on the minimum recommendations for Monitor hardware,
-see `Hardware Recommendations`_. Before adding a Monitor host to the cluster,
+see :ref:`minimum-hardware`. Before adding a Monitor host to the cluster,
 make sure that there is an up-to-date version of Linux installed.
 
 Add the newly installed Monitor host to a rack in your cluster, connect the
 host to the network, and make sure that the host has network connectivity.
 
-.. _Hardware Recommendations: ../../../start/hardware-recommendations
 
 Installing the Required Software
 --------------------------------
