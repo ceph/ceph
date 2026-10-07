@@ -769,6 +769,40 @@ void KernelDevice::_aio_thread()
       dout(30) << __func__ << " got " << r << " completed aios" << dendl;
       for (int i = 0; i < r; ++i) {
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
+#if defined(HAVE_POSIXAIO)
+	// aio_writev()/aio_readv() on a raw GEOM provider can complete with
+	// fewer bytes than asked for (seen: a 0x5000 write that returned
+	// 4096).  That is a partial transfer, not an error: issue the rest
+	// and treat the request as finished only when all of it is done.
+	{
+	  long short_r = aio[i]->get_return_value();
+	  if (short_r > 0 && (uint64_t)short_r < aio[i]->length) {
+	    const uint64_t s_off = aio[i]->offset;
+	    const uint64_t s_len = aio[i]->length;
+	    if (aio[i]->advance(short_r, block_size)) {
+	      int retries = 0;
+	      int rr = io_queue->resubmit(
+		aio[i], &retries,
+		cct->_conf->bdev_aio_submit_retry_max,
+		cct->_conf->bdev_aio_submit_retry_initial_delay_us);
+	      if (rr >= 0) {
+		dout(1) << __func__ << " aio to 0x" << std::hex << s_off
+			<< "~" << s_len << std::dec << " returned only "
+			<< short_r << ", submitted the remaining "
+			<< aio[i]->length << " bytes" << dendl;
+		continue;
+	      }
+	      derr << __func__ << " resubmit of the rest of aio to 0x"
+		   << std::hex << s_off << "~" << s_len << std::dec
+		   << " failed: " << cpp_strerror(rr) << dendl;
+	    }
+	    // not aligned, or resubmit failed: report it the old way below
+	    aio[i]->offset = s_off;
+	    aio[i]->length = s_len;
+	    aio[i]->rval = short_r;
+	  }
+	}
+#endif
 	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
 	if (aio[i]->queue_item.is_linked()) {
 	  std::lock_guard l(debug_queue_lock);
