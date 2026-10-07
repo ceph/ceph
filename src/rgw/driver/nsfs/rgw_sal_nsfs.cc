@@ -436,7 +436,13 @@ static int statx_ids(int fd, struct statx& stx)
  * tree this gateway wrote, and which needs no capability.  Otherwise
  * it needs CAP_CHOWN -- a fourth beyond the three the daemon is given
  * -- and without it conversion refuses rather than leaving behind a
- * file whose owner is wrong. */
+ * file whose owner is wrong.
+ *
+ * **Call this after the mode is set, never before.**  A file's mode is
+ * fixed by the open that creates it, while the gateway still owns it;
+ * chowning first would leave us modifying a file owned by somebody
+ * else, which needs CAP_FOWNER as well.  One capability rather than
+ * two, and only because of the order. */
 static int inherit_ids(const DoutPrefixProvider* dpp, int fd,
 		       const struct statx& src, bool no_chown,
 		       std::string_view what)
