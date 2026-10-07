@@ -1035,6 +1035,7 @@ void Cache::commit_retire_extent(
   remove_extent(ref, &t_src);
 
   ref->dirty_from = JOURNAL_SEQ_NULL;
+  laddr_index_erase(ref);
   invalidate_extent(t, *ref);
 }
 

@@ -843,6 +843,18 @@ public:
     it->second = std::move(next);
   }
 
+  // On retire commit: drop the entry so the extent can be freed.
+  void laddr_index_erase(CachedExtentRef ref) {
+    if (!is_laddr_indexed(ref->get_type())) {
+      return;
+    }
+    auto laddr = static_cast<LogicalCachedExtent*>(ref.get())->get_laddr();
+    auto it = laddr_index.find(laddr);
+    if (it != laddr_index.end() && it->second.get() == ref.get()) {
+      laddr_index.erase(it);
+    }
+  }
+
 private:
   /**
    * maybe_page_aligned_bptr
