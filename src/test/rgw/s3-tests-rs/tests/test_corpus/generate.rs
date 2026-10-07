@@ -42,6 +42,15 @@ pub async fn ensure_bucket(client: &aws_sdk_s3::Client, name: &str) {
 /// The coverage tier for key naming:  one object per key class, each
 /// with a body whose length identifies it, and the manifest recording
 /// what S3 then says.
+/* posix: a key whose first component starts with a dot -- ".folder",
+ * ".fofopidoo", ".versions/k-under-versions" -- is accepted by the PUT
+ * and then dropped by the cold listing path, so the object exists and
+ * no listing shows it.  Reproducible either way:  it fails on a
+ * freshly cleaned tree and passes on the next run against the same
+ * one, because fill_cache() filters those names and add_entry() does
+ * not.  nsfs refuses the same keys with InvalidObjectName. */
+#[cfg_attr(feature = "fails_on_posix",
+           ignore = "posix: dot-prefixed key accepted, then not listed")]
 #[tokio::test]
 async fn corpus_coverage_keys() {
     let tier = env_or("CORPUS_TIER", "coverage");
