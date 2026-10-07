@@ -2816,7 +2816,7 @@ public:
   void execute(optional_yield y) override;
 
   const char* name() const override { return "delete_bucket_meta_search"; }
-  virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
+  RGWOpType get_type() override { return RGW_OP_DEL_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
