@@ -168,7 +168,7 @@ void Log::reopen_log_file()
   if (!is_started()) {
     return;
   }
-  m_flush_mutex_holder = pthread_self();
+  m_flush_mutex_holder.store(pthread_self(), std::memory_order_relaxed);
   if (m_fd >= 0) {
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
     m_fd = -1;
@@ -183,7 +183,7 @@ void Log::reopen_log_file()
       }
     }
   }
-  m_flush_mutex_holder = 0;
+  m_flush_mutex_holder.store(0, std::memory_order_relaxed);
 }
 
 void Log::chown_log_file(uid_t uid, gid_t gid)
@@ -262,7 +262,7 @@ void Log::stop_journald_logger()
 void Log::submit_entry(Entry&& e)
 {
   std::unique_lock lock(m_queue_mutex);
-  m_queue_mutex_holder = pthread_self();
+  m_queue_mutex_holder.store(pthread_self(), std::memory_order_relaxed);
 
   if (unlikely(m_inject_segv))
     *(volatile int *)(0) = 0xdead;
@@ -276,25 +276,25 @@ void Log::submit_entry(Entry&& e)
 
   m_new.emplace_back(std::move(e));
   m_cond_flusher.notify_all();
-  m_queue_mutex_holder = 0;
+  m_queue_mutex_holder.store(0, std::memory_order_relaxed);
 }
 
 void Log::flush()
 {
   std::scoped_lock lock1(m_flush_mutex);
-  m_flush_mutex_holder = pthread_self();
+  m_flush_mutex_holder.store(pthread_self(), std::memory_order_relaxed);
 
   {
     std::scoped_lock lock2(m_queue_mutex);
-    m_queue_mutex_holder = pthread_self();
+    m_queue_mutex_holder.store(pthread_self(), std::memory_order_relaxed);
     assert(m_flush.empty());
     m_flush.swap(m_new);
     m_cond_loggers.notify_all();
-    m_queue_mutex_holder = 0;
+    m_queue_mutex_holder.store(0, std::memory_order_relaxed);
   }
 
   _flush(m_flush, false);
-  m_flush_mutex_holder = 0;
+  m_flush_mutex_holder.store(0, std::memory_order_relaxed);
 }
 
 void Log::_log_safe_write(std::string_view sv)
@@ -521,14 +521,14 @@ static uint64_t tid_to_int(T tid)
 void Log::dump_recent()
 {
   std::scoped_lock lock1(m_flush_mutex);
-  m_flush_mutex_holder = pthread_self();
+  m_flush_mutex_holder.store(pthread_self(), std::memory_order_relaxed);
 
   {
     std::scoped_lock lock2(m_queue_mutex);
-    m_queue_mutex_holder = pthread_self();
+    m_queue_mutex_holder.store(pthread_self(), std::memory_order_relaxed);
     assert(m_flush.empty());
     m_flush.swap(m_new);
-    m_queue_mutex_holder = 0;
+    m_queue_mutex_holder.store(0, std::memory_order_relaxed);
   }
 
   _flush(m_flush, false);
@@ -571,7 +571,7 @@ void Log::dump_recent()
 
   assert(m_log_buf.empty());
 
-  m_flush_mutex_holder = 0;
+  m_flush_mutex_holder.store(0, std::memory_order_relaxed);
 }
 
 void Log::start()
@@ -602,20 +602,20 @@ void *Log::entry()
   reopen_log_file();
   {
     std::unique_lock lock(m_queue_mutex);
-    m_queue_mutex_holder = pthread_self();
+    m_queue_mutex_holder.store(pthread_self(), std::memory_order_relaxed);
     while (!m_stop) {
       if (!m_new.empty()) {
-        m_queue_mutex_holder = 0;
+        m_queue_mutex_holder.store(0, std::memory_order_relaxed);
         lock.unlock();
         flush();
         lock.lock();
-        m_queue_mutex_holder = pthread_self();
+        m_queue_mutex_holder.store(pthread_self(), std::memory_order_relaxed);
         continue;
       }
 
       m_cond_flusher.wait(lock);
     }
-    m_queue_mutex_holder = 0;
+    m_queue_mutex_holder.store(0, std::memory_order_relaxed);
   }
   flush();
   return NULL;
@@ -624,8 +624,8 @@ void *Log::entry()
 bool Log::is_inside_log_lock()
 {
   return
-    pthread_self() == m_queue_mutex_holder ||
-    pthread_self() == m_flush_mutex_holder;
+    pthread_self() == m_queue_mutex_holder.load(std::memory_order_relaxed) ||
+    pthread_self() == m_flush_mutex_holder.load(std::memory_order_relaxed);
 }
 
 void Log::inject_segv()

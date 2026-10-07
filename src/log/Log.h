@@ -6,6 +6,7 @@
 
 #include <boost/circular_buffer.hpp>
 
+#include <atomic>
 #include <condition_variable>
 #include <map>
 #include <memory>
@@ -115,8 +116,12 @@ private:
   std::condition_variable m_cond_loggers;
   std::condition_variable m_cond_flusher;
 
-  pthread_t m_queue_mutex_holder;
-  pthread_t m_flush_mutex_holder;
+  // read lock-free by is_inside_log_lock() from the fatal signal handler;
+  // relaxed, they are only compared against pthread_self()
+  static_assert(std::atomic<pthread_t>::is_always_lock_free,
+                "is_inside_log_lock() reads these from a signal handler");
+  std::atomic<pthread_t> m_queue_mutex_holder;
+  std::atomic<pthread_t> m_flush_mutex_holder;
 
   RecentThreadNames m_recent_thread_names; // protected by m_flush_mutex
   EntryVector m_new;    ///< new entries
