@@ -6370,14 +6370,12 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
     nsfs::PathStrategy::DirectoryObject dobj{};
     if (their_paths->directory_object(dpp, sub.get_fd(), dobj)) {
       const std::string sname = their_paths->folder_object_name();
-      /* 0600, which is what every object on this backend carries:  the
-       * publish path fchmods to S_IRUSR|S_IWUSR as the owner, and
-       * access is decided by ownership and impersonation rather than by
-       * the mode.  An earlier version of this used 0644 on the grounds
-       * that the write path creates objects with it;  the 0644 literals
-       * on that path are the open mode, and the fchmod after them is
-       * what decides.  A converted directory object must not be more
-       * permissive than an ordinary one. */
+      /* 0600, which is what every object on this backend carries, and
+       * now because that is the mode every create asks for rather than
+       * because something narrows it afterwards.  Access is decided by
+       * ownership and impersonation, not by the mode, and a converted
+       * directory object must not be more permissive than an ordinary
+       * one. */
       int sfd = ::openat(sub.get_fd(), sname.c_str(),
 			 O_RDONLY | O_CREAT, 0600);
       if (sfd < 0) {
@@ -8849,7 +8847,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     /* inject-fork-race: stand in for another instance which forked first,
      * so the linkat below loses with EEXIST and joins its shadow */
     int rfd = ::openat(sdir_fd, leaf.c_str(),
-		       O_RDWR | O_CREAT | O_EXCL, 0644);
+		       O_RDWR | O_CREAT | O_EXCL, 0600);
     if (rfd >= 0) {
       static const char marker[] = "RACEWON";
       [[maybe_unused]] ssize_t nw =
@@ -8897,14 +8895,14 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     /* New object.  O_TMPFILE keeps it nameless until the link, so a
      * failure or a crash leaves nothing at all behind -- the inode is
      * reclaimed when the descriptor closes. */
-    build_fd = ::openat(sdir_fd, ".", O_TMPFILE | O_RDWR, 0644);
+    build_fd = ::openat(sdir_fd, ".", O_TMPFILE | O_RDWR, 0600);
     if ((build_fd < 0) &&
 	((errno == EOPNOTSUPP) || (errno == EISDIR) || (errno == EINVAL))) {
       /* filesystem without O_TMPFILE:  fall back to a named temp */
       tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
 	"_" + std::to_string(fsio_build_seq.fetch_add(1));
       build_fd = ::openat(sdir_fd, tmp_name.c_str(),
-			  O_RDWR | O_CREAT | O_EXCL, 0644);
+			  O_RDWR | O_CREAT | O_EXCL, 0600);
     }
     if (build_fd < 0) {
       return FSIOResult{-errno, nullptr};
@@ -9269,7 +9267,7 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
     }
   } else {
     new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(),
-		      O_RDWR | O_CREAT | O_EXCL, 0644);
+		      O_RDWR | O_CREAT | O_EXCL, 0600);
     if ((new_fd < 0) && (errno == EEXIST)) {
       joined = true;
     }

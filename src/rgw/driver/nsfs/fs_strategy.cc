@@ -504,7 +504,7 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
   }
 
   int dst_flags = O_WRONLY | O_CREAT | (excl ? O_EXCL : O_TRUNC);
-  int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags, 0644);
+  int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags, 0600);
   if (dst_fd < 0) {
     int err = errno;
     ::close(src_fd);
@@ -541,7 +541,7 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  int tmp_fd = ::openat(dst_dir_fd, ".", O_TMPFILE | O_WRONLY, 0644);
+  int tmp_fd = ::openat(dst_dir_fd, ".", O_TMPFILE | O_WRONLY, 0600);
   if (tmp_fd < 0) {
     int err = errno;
     ldpp_dout(dpp, 0) << "ERROR: clone_fd: O_TMPFILE failed: "

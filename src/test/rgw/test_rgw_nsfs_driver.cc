@@ -815,6 +815,16 @@ protected:
 public:
   NSFSBucketTest() {}
 
+  sf::path bucket_path() const { return bp / "root" / testname; }
+
+  static mode_t file_mode(const sf::path& p) {
+    struct stat st{};
+    if (::stat(p.c_str(), &st) != 0) {
+      return 0;
+    }
+    return st.st_mode & 07777;
+  }
+
   void SetUp() {
     NSFSDriverTest::SetUp();
 
@@ -7504,6 +7514,89 @@ TEST_F(NSFSBucketTest, AClosedGateRefusesAWriteHandle)
   }
 
   driver->gate_open(testname);
+}
+
+/* An object published through FSIO carries the mode an object carries.
+ *
+ * The NFS gateway writes through FSIO rather than through
+ * NSFSAtomicWriter, so it reaches none of the three places the mode is
+ * narrowed:  File::write(), UringWriteWindow and
+ * NSFSAtomicWriter::complete().  Whatever mode the shadow was created
+ * with is the mode the published object ends up with, because publish
+ * renames the shadow into place.
+ *
+ * umask is pinned, and that is the whole reason this test can mean
+ * anything.  umask only *clears* bits, so a shadow created 0644 lands
+ * at 0600 under a umask of 077 and at 0644 under 022.  A developer
+ * with a restrictive umask would see this pass while the defect was
+ * there -- and so would a radosgw whose umask happened to be tight.
+ */
+TEST_F(NSFSBucketTest, AnFSIOPublishedObjectCarriesTheObjectMode)
+{
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([saved] { ::umask(saved); });
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  ASSERT_TRUE(b->has_extension(nsfs::EXT_SHADOW))
+      << "nothing to test:  FSIO needs EXT_SHADOW";
+
+  auto obj = bucket->get_object(rgw_obj_key("fsio-new.bin"));
+  auto [rc, hdl] = obj->get_fsio_handle(
+      env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+		rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+  ASSERT_EQ(rc, 0);
+  ASSERT_NE(hdl.get(), nullptr);
+  ASSERT_EQ(hdl->commit(env->dpp,
+			rgw::sal::Object::FSIOObject::COMMIT_FLAG_NONE), 0);
+  ASSERT_EQ(hdl->publish(env->dpp,
+			 rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE), 0);
+  hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+  hdl.reset();
+
+  const sf::path published{bucket_path() / "fsio-new.bin"};
+  ASSERT_TRUE(sf::exists(published)) << "the handle published nothing";
+  EXPECT_EQ(file_mode(published), 0600u)
+      << "an object written through the NFS gateway is more permissive "
+	 "than the same object written through S3";
+}
+
+/* And re-opening an existing object for write, which clones it.
+ *
+ * A second write handle on an object that already exists takes
+ * FSStrategy::clone_file() rather than the O_TMPFILE branch, so the
+ * shadow comes from a different create with its own mode.  Same
+ * question, different line.
+ */
+TEST_F(NSFSBucketTest, AnFSIOClonedObjectCarriesTheObjectMode)
+{
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([saved] { ::umask(saved); });
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+  ASSERT_TRUE(b->has_extension(nsfs::EXT_SHADOW));
+
+  const char* name = "fsio-clone.bin";
+  for (int pass = 0; pass < 2; ++pass) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto [rc, hdl] = obj->get_fsio_handle(
+	env->dpp, rgw::sal::Object::FSIOObject::OPEN_FLAG_CREATE |
+		  rgw::sal::Object::FSIOObject::OPEN_FLAG_WRITE);
+    ASSERT_EQ(rc, 0) << "pass " << pass;
+    ASSERT_NE(hdl.get(), nullptr);
+    ASSERT_EQ(hdl->commit(env->dpp,
+			  rgw::sal::Object::FSIOObject::COMMIT_FLAG_NONE), 0);
+    ASSERT_EQ(hdl->publish(env->dpp,
+			   rgw::sal::Object::FSIOObject::PUBLISH_FLAG_NONE), 0);
+    hdl->close(env->dpp, rgw::sal::Object::FSIOObject::CLOSE_FLAG_NONE);
+  }
+
+  const sf::path published{bucket_path() / name};
+  ASSERT_TRUE(sf::exists(published));
+  EXPECT_EQ(file_mode(published), 0600u)
+      << "the clone path left the object more permissive than an object "
+	 "written through S3";
 }
 
 /* Re-issuing the same request resumes a stopped conversion.
