@@ -75,6 +75,7 @@ public:
       Messenger *clientm_, Objecter *objecter_,
       LogChannelRef clog_, LogChannelRef audit_clog_);
   ~Mgr();
+  void shutdown();
 
   bool is_initialized() const {return initialized;}
   bool exceeded_initialization_expiration();
