@@ -263,9 +263,47 @@ UNIX timestamp) and set ``ENABLE_GIT_VERSION`` to ``OFF`` when running
   production or debugging purposes, as they do not contain the correct build
   time and git version information.
 
+Building Ceph with precompiled headers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``WITH_PCH`` precompiles the core ``std``, ``fmt``, ``boost`` and Ceph headers
+once per target instead of parsing them in every translation unit. It is off by
+default:
+
+.. prompt:: bash $
+
+  cmake -DWITH_PCH=ON ..
+
+It applies to the targets measured to benefit, listed with their figures at the
+end of ``src/CMakeLists.txt``; ``rgw``, ``osd``, ``mon``, ``mds``, ``librbd``
+and its unit tests add a few of their own headers. A source file with compile
+settings set on the file itself is compiled without the precompiled header.
+
+In a Debug build it cuts the compile CPU of these targets by a quarter to two
+thirds, and that of a whole build by about 30%, with or without tests. The
+precompiled headers add about 2GB to the build tree.
+
+It requires Clang. With GCC, ``ccache`` and ``sccache`` can serve a stale
+precompiled header, and without them GCC gains little for about five times the
+space; other compilers are untested.
+
+``ccache`` caches objects built against a precompiled header only with
+``pch_defines`` and ``time_macros`` in ``CCACHE_SLOPPINESS``; ``WITH_PCH`` sets
+both for its build without touching ``ccache.conf``. See the
+`precompiled headers`_ section of the ccache manual. ``sccache`` needs nothing.
+
+.. important:: A precompiled header must never be what makes a translation
+   unit compile: every translation unit has to keep including what it uses. A
+   missing include goes unnoticed with ``WITH_PCH`` and breaks only builds
+   without it.
+
+In CI it suits jobs that only check whether the tree compiles. Builds that get
+delivered should not use it, and some job has to build without it.
+
 .. _`ccache`: https://ccache.samba.org/
 .. _`run modes`: https://ccache.samba.org/manual.html#_run_modes
 .. _`configuration`: https://ccache.samba.org/manual.html#_configuration
+.. _`precompiled headers`: https://ccache.dev/manual/latest.html#_precompiled_headers
 
 Development-mode cluster
 ------------------------
