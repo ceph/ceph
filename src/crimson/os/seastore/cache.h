@@ -830,6 +830,19 @@ public:
     laddr_index[laddr] = std::move(extent);
   }
 
+  // On mutation commit: if prev is in the index, point the entry at next.
+  void laddr_index_replace(CachedExtentRef next, CachedExtentRef prev) {
+    if (!is_laddr_indexed(prev->get_type())) {
+      return;
+    }
+    auto laddr = static_cast<LogicalCachedExtent*>(prev.get())->get_laddr();
+    auto it = laddr_index.find(laddr);
+    if (it == laddr_index.end() || it->second.get() != prev.get()) {
+      return;
+    }
+    it->second = std::move(next);
+  }
+
 private:
   /**
    * maybe_page_aligned_bptr

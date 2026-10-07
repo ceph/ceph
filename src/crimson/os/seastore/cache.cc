@@ -1101,6 +1101,7 @@ void Cache::commit_replace_extent(
     add_to_dirty(next, &t_src);
   }
 
+  laddr_index_replace(next, prev);
   invalidate_extent(t, *prev);
 
 }
