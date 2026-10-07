@@ -31,41 +31,19 @@ between FDB's types! If you have a user type to add, this is the place!
 
 /*** Conversions: */
 
-namespace ceph::libfdb::detail {
-
-auto as_fdb_span(ceph::buffer::list& bl)
-{
- // c_str() makes the buffer::list contiguous. Use length(), not C-string
- // rules, because buffer::list may contain arbitrary bytes:
- auto p = bl.c_str();
-
- return std::span<const std::uint8_t>(
-          reinterpret_cast<const std::uint8_t *>(p), bl.length());
-}
-
-} // namespace ceph::libfdb::detail
-
 namespace ceph::buffer {
 
 auto serialize(auto& archive, ceph::buffer::list& target)
 {
- // This should be revisited after the library is separated from the larger
- // surrounding project-- essentially, we can't write directly /into/ the buffer::list
- // that I know of; yet, it would obviously be great to eliminate the copy
- // here. I believe that somewhere in zpp::bits there's probably a way to get the
- // archive to call a custom function-- but it is not clear to me at this time and
- // I need to move on for now, unfortunately:
- std::vector<std::uint8_t> out;
+ // Decode a transient view, then copy the bytes once into their durable Ceph
+ // owner:
+ std::span<const std::uint8_t> bytes;
+ auto result = archive(bytes);
 
- auto r = archive(out);
-
- // JFW: this is really annoying, but again buffer::list is not something I find
- // easy to wrangle-- I'm not sure there's a straightforward way to just assign
- // a new value... so if you know what that is, please improve this:
  target.clear();
- target.append(out);
+ target.append(reinterpret_cast<const char *>(bytes.data()), std::size(bytes));
 
- return r;
+ return result;
 }
 
 auto serialize(auto& archive, const ceph::buffer::list& src)
@@ -86,9 +64,10 @@ auto serialize(auto& archive, const ceph::buffer::list& src)
 // is a non-owning structure. 
 auto serialize(auto& archive, const ceph::buffer::ptr& src)
 {
- std::span<std::uint8_t> src_span((std::uint8_t *)src.c_str(), src.length());
+ const auto bytes = ceph::libfdb::detail::as_byte_view(
+  std::string_view(src.c_str(), src.length()));
 
- return archive(src_span);
+ return archive(bytes);
 }
 
 } // namespace ceph::buffer
