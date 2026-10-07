@@ -1327,6 +1327,7 @@ def test_nfs_get_dependencies_rdma_and_tls_options(cephadm_module: CephadmOrches
     assert service_registry.get_service('nfs').get_dependencies(
         cephadm_module, spec, 'nfs'
     ) == sorted([
+        'ceph_nodes:',
         'enable_rdma: True',
         'rdma_port: 20049',
         'tls_ktls: True',
@@ -1356,3 +1357,135 @@ def test_nfs_get_dependencies_enable_nfs_metrics(cephadm_module: CephadmOrchestr
         last_deps=[],
     )
     assert step.action is utils.Action.REDEPLOY
+
+
+# ---------------------------------------------------------------------------
+# Tests for ceph_nodes dependency tracking and SIGHUP-based reconfig
+# (IBMCEPH-19447: CEPH_NODES_LIST not updated on existing NFS daemons)
+# ---------------------------------------------------------------------------
+
+@patch("cephadm.serve.CephadmServe._run_cephadm", MagicMock(side_effect=async_side_effect(('{}', '', 0))))
+def test_nfs_get_dependencies_includes_ceph_nodes(cephadm_module: CephadmOrchestrator):
+    """Test A: ceph_nodes appears in the dependency list and reflects
+    placement hosts.  Changing placement must change the dependency."""
+    nfs_svc = service_registry.get_service('nfs')
+
+    spec_2hosts = NFSServiceSpec(
+        service_id='foo',
+        placement=PlacementSpec(hosts=['host1', 'host2']),
+    )
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(with_host(cephadm_module, 'host1', addr='10.0.0.1'))
+        stack.enter_context(with_host(cephadm_module, 'host2', addr='10.0.0.2'))
+        stack.enter_context(with_host(cephadm_module, 'host3', addr='10.0.0.3'))
+
+        deps_2 = nfs_svc.get_dependencies(cephadm_module, spec_2hosts)
+        ceph_nodes_deps = [d for d in deps_2 if d.startswith('ceph_nodes:')]
+        assert len(ceph_nodes_deps) == 1
+        assert ceph_nodes_deps[0] == 'ceph_nodes:10.0.0.1,10.0.0.2'
+
+        # Expand placement to 3 hosts
+        spec_3hosts = NFSServiceSpec(
+            service_id='foo',
+            placement=PlacementSpec(hosts=['host1', 'host2', 'host3']),
+        )
+        deps_3 = nfs_svc.get_dependencies(cephadm_module, spec_3hosts)
+        ceph_nodes_deps_3 = [d for d in deps_3 if d.startswith('ceph_nodes:')]
+        assert len(ceph_nodes_deps_3) == 1
+        assert ceph_nodes_deps_3[0] == 'ceph_nodes:10.0.0.1,10.0.0.2,10.0.0.3'
+
+        # The overall dependency lists must differ
+        assert deps_2 != deps_3
+
+
+@patch("cephadm.serve.CephadmServe._run_cephadm", MagicMock(side_effect=async_side_effect(('{}', '', 0))))
+def test_nfs_get_dependencies_ceph_nodes_is_sorted(cephadm_module: CephadmOrchestrator):
+    """Verify that ceph_nodes IPs are sorted so the dependency is
+    deterministic regardless of placement host order."""
+    nfs_svc = service_registry.get_service('nfs')
+
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(with_host(cephadm_module, 'hostZ', addr='10.0.0.9'))
+        stack.enter_context(with_host(cephadm_module, 'hostA', addr='10.0.0.1'))
+
+        spec_za = NFSServiceSpec(
+            service_id='foo',
+            placement=PlacementSpec(hosts=['hostZ', 'hostA']),
+        )
+        spec_az = NFSServiceSpec(
+            service_id='foo',
+            placement=PlacementSpec(hosts=['hostA', 'hostZ']),
+        )
+        deps_za = nfs_svc.get_dependencies(cephadm_module, spec_za)
+        deps_az = nfs_svc.get_dependencies(cephadm_module, spec_az)
+        assert deps_za == deps_az
+        ceph_nodes_dep = [d for d in deps_za if d.startswith('ceph_nodes:')][0]
+        assert ceph_nodes_dep == 'ceph_nodes:10.0.0.1,10.0.0.9'
+
+
+def test_nfs_choose_next_action_ceph_nodes_only_sighup():
+    """Test B: When only ceph_nodes changed, the action must be RECONFIG
+    with skip_restart_for_reconfig=True and send_signal_to_daemon='SIGHUP'."""
+    nfs_svc = service_registry.get_service('nfs')
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        None,
+        curr_deps=['ceph_nodes:10.0.0.1,10.0.0.2,10.0.0.3'],
+        last_deps=['ceph_nodes:10.0.0.1,10.0.0.2'],
+    )
+    assert step.action is utils.Action.RECONFIG
+    assert step.skip_restart_for_reconfig is True
+    assert step.send_signal_to_daemon == 'SIGHUP'
+
+
+def test_nfs_choose_next_action_ceph_nodes_plus_tls_redeploy():
+    """Test C: When ceph_nodes changed together with another dep that
+    requires redeploy (e.g. TLS), the result must remain REDEPLOY."""
+    nfs_svc = service_registry.get_service('nfs')
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        None,
+        curr_deps=[
+            'ceph_nodes:10.0.0.1,10.0.0.2,10.0.0.3',
+            'tls_ktls: True',
+        ],
+        last_deps=[
+            'ceph_nodes:10.0.0.1,10.0.0.2',
+            'tls_ktls: False',
+        ],
+    )
+    assert step.action is utils.Action.REDEPLOY
+
+
+def test_nfs_choose_next_action_no_change():
+    """Test D: Unchanged dependencies must not trigger any action."""
+    nfs_svc = service_registry.get_service('nfs')
+    deps = ['ceph_nodes:10.0.0.1,10.0.0.2']
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        None,
+        curr_deps=deps,
+        last_deps=deps,
+    )
+    assert step.action is utils.Action.NO_ACTION
+    assert step.skip_restart_for_reconfig is False
+    assert step.send_signal_to_daemon is None
+
+
+def test_nfs_choose_next_action_placement_shrink_sighup():
+    """Test E: Shrinking placement (removing a node) must also trigger
+    the SIGHUP-based reconfig, not a redeploy."""
+    nfs_svc = service_registry.get_service('nfs')
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION,
+        'nfs',
+        None,
+        curr_deps=['ceph_nodes:10.0.0.1,10.0.0.2'],
+        last_deps=['ceph_nodes:10.0.0.1,10.0.0.2,10.0.0.3'],
+    )
+    assert step.action is utils.Action.RECONFIG
+    assert step.skip_restart_for_reconfig is True
+    assert step.send_signal_to_daemon == 'SIGHUP'
