@@ -1577,6 +1577,19 @@ void MonmapMonitor::trigger_healthy_stretch_mode()
   propose_pending();
 }
 
+void MonmapMonitor::clear_stretch_mode_state()
+{
+  dout(10) << __func__ << " clearing per-pool stretch mode state from monmap" << dendl;
+  ceph_assert(paxos.is_plugged());
+
+  pending_map.stretch_mode_enabled = false;
+  pending_map.tiebreaker_mon = "";
+  pending_map.disallowed_leaders.clear();
+  pending_map.stretch_marked_down_mons.clear();
+  pending_map.last_changed = ceph_clock_now();
+
+  propose_pending();
+}
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 {
   auto join = op->get_req<MMonJoin>();

@@ -559,6 +559,9 @@ private:
   int parse_erasure_code_profile(const std::vector<std::string> &erasure_code_profile,
 				 std::map<std::string,std::string> *erasure_code_profile_map,
 				 std::ostream *ss);
+  void maybe_remove_unused_crush_rule(int64_t skip_pool, int old_rule_id);
+  bool crush_rule_removal_pending(const std::string& rule_name, int rule_id);
+  bool erasure_code_profile_removal_pending(const std::string& name) const;
   int prepare_pool_size(const unsigned pool_type,
                         const std::string &erasure_code_profile,
                         uint8_t repl_size,
@@ -806,6 +809,31 @@ public:
   void maybe_enable_pool_split_ops(pg_pool_t &p);
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                std::stringstream& ss);
+  int prepare_command_pool_set_num_zones(const cmdmap_t& cmdmap,
+                                         int64_t pool,
+                                         const std::string& poolstr,
+                                         int64_t n,
+                                         const std::string& val,
+                                         const std::string& interr,
+                                         pg_pool_t& p,
+                                         std::stringstream& ss);
+  // Recompute the shards of a FastEC pool that cannot become a primary, for
+  // its num_zones.
+  int update_nonprimary_shards(pg_pool_t& p, std::ostream *ss);
+  int prepare_num_zones_crush_rule(const cmdmap_t& cmdmap,
+                                   const std::string& poolstr,
+                                   int64_t n,
+                                   const pg_pool_t& p,
+                                   int *crush_rule,
+                                   std::ostream *ss);
+  int prepare_command_pool_set_replica(int64_t pool,
+                                       const std::string& poolstr,
+                                       int64_t n,
+                                       const std::string& val,
+                                       const std::string& interr,
+                                       pg_pool_t& p,
+                                       std::stringstream& ss,
+                                       bool force);
 
   int prepare_command_pool_application(const std::string &prefix,
                                        const cmdmap_t& cmdmap,

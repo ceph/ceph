@@ -134,6 +134,7 @@ public:
    * down list to allow any non-tiebreaker mon to be the leader again.
    */
   void trigger_healthy_stretch_mode();
+  void clear_stretch_mode_state();
 };
 
 

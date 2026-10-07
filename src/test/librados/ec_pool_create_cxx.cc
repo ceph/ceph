@@ -133,12 +133,91 @@ std::string get_pool_crush_rule(Rados &cluster, const std::string &pool_name) {
   return "";
 }
 
+// Helper function to get pool's current size.
+int get_pool_size(Rados &cluster, const std::string &pool_name) {
+  std::string cmd = "{\"prefix\": \"osd pool get\", \"pool\": \"" +
+    pool_name + "\", \"var\": \"size\"}";
+  bufferlist outbl;
+  int ret = cluster.mon_command(std::move(cmd), {}, &outbl, nullptr);
+  if (ret != 0) {
+    return ret;
+  }
+  std::string output = outbl.to_str();
+  // Expected format: "size: <value>\n"
+  size_t pos = output.find("size:");
+  if (pos == std::string::npos) {
+    return INT_MIN;
+  }
+  std::string value_str = output.substr(pos + 5); // Skip "size:"
+  value_str.erase(0, value_str.find_first_not_of(" \t\n\r"));
+  value_str.erase(value_str.find_last_not_of(" \t\n\r") + 1);
+  try {
+    return std::stoi(value_str);
+  } catch (...) {
+    return INT_MIN;
+  }
+}
+
 // Helper function to clean up crush rule
 int cleanup_crush_rule(Rados &cluster, const std::string &rule_name) {
   std::string cmd = "{\"prefix\": \"osd crush rule rm\", "
                     "\"name\": \"" + rule_name + "\"}";
   return cluster.mon_command(std::move(cmd), {}, nullptr, nullptr);
 }
+
+// Helper function to create a replicated pool with an explicit replica count.
+int create_replicated_pool_with_size(Rados &cluster,
+                                     const std::string &pool_name,
+                                     int size) {
+  std::string cmd = "{\"prefix\": \"osd pool create\", \"pool\": \"" +
+    pool_name + "\", \"pool_type\": \"replicated\", \"pg_num\": 8, "
+    "\"size\": " + std::to_string(size) + "}";
+  bufferlist outbl;
+  int ret = cluster.mon_command(std::move(cmd), {}, &outbl, nullptr);
+  if (ret == 0) {
+    cluster.wait_for_latest_osdmap();
+  }
+  return ret;
+}
+
+int set_pool_num_zones(Rados &cluster, const std::string &pool_name,
+                       int num_zones) {
+  std::string cmd = "{\"prefix\": \"osd pool set\", \"pool\": \"" +
+    pool_name + "\", \"var\": \"num_zones\", \"val\": \"" +
+    std::to_string(num_zones) + "\"}";
+  bufferlist outbl;
+  int ret = cluster.mon_command(std::move(cmd), {}, &outbl, nullptr);
+  if (ret == 0) {
+    cluster.wait_for_latest_osdmap();
+  }
+  return ret;
+}
+
+
+
+// Whether the CRUSH map has the two datacenters that a pool over two zones
+// needs. The tests that create one are skipped on other clusters.
+bool has_two_datacenters(Rados &cluster) {
+  bufferlist outbl;
+  if (cluster.mon_command(
+        "{\"prefix\": \"osd crush tree\", \"format\": \"json\"}",
+        {}, &outbl, nullptr) != 0) {
+    return false;
+  }
+  const std::string tree = outbl.to_str();
+  const std::string datacenter = "\"type\":\"datacenter\"";
+  int count = 0;
+  for (size_t pos = tree.find(datacenter); pos != std::string::npos;
+       pos = tree.find(datacenter, pos + 1)) {
+    ++count;
+  }
+  return count == 2;
+}
+
+#define SKIP_WITHOUT_TWO_DATACENTERS(cluster)                         \
+  if (!has_two_datacenters(cluster)) {                                 \
+    GTEST_SKIP() << "the CRUSH map does not have two datacenters";     \
+  }
 
 // Test basic EC pool creation with K and M parameters
 TEST(ECPoolCreatePP, BasicKM) {
@@ -166,6 +245,7 @@ TEST(ECPoolCreatePP, BasicKM) {
 TEST(ECPoolCreatePP, StretchECWithNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
+  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
 
   const std::string pool_name = get_temp_pool_name("ec_stretch_");
   constexpr int k = 2, m = 1, num_zones = 2;
@@ -392,6 +472,7 @@ TEST(ECPoolCreatePP, DefaultProfile) {
 TEST(ECPoolCreatePP, ReplicatedPoolStoresNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
+  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
 
   const std::string pool_name = get_temp_pool_name("repl_num_zones_");
   std::string cmd = "{\"prefix\": \"osd pool create\", \"pool\": \"" +
@@ -437,6 +518,7 @@ TEST(ECPoolCreatePP, AutoProfileAndAutoCrushRule) {
 TEST(ECPoolCreatePP, AutoProfileAndRuleWithNumZones) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
+  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
 
   const std::string pool_name = get_temp_pool_name("ec_auto_stretch_");
   constexpr int k = 2, m = 1, num_zones = 2;
@@ -497,5 +579,115 @@ TEST(ECPoolCreatePP, SharedProfileRetention) {
   ASSERT_EQ(0, cleanup_ec_pool(cluster, pool2));
   ASSERT_NE(0, verify_ec_profile(cluster, profile_name));
 
+  cluster.shutdown();
+}
+
+TEST(ECPoolCreatePP, ErasurePoolSetNumZones) {
+  Rados cluster;
+  ASSERT_EQ("", connect_cluster_pp(cluster));
+  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
+
+  const std::string pool_name = get_temp_pool_name("ec_set_num_zones_");
+  constexpr int k = 2;
+  constexpr int m = 1;
+
+  ASSERT_EQ(0, create_ec_pool_with_params(cluster, pool_name, k, m));
+
+  ASSERT_EQ(1, get_pool_num_zones(cluster, pool_name));
+  const std::string initial_crush_rule = get_pool_crush_rule(cluster, pool_name);
+  ASSERT_FALSE(initial_crush_rule.empty());
+  // For k=2, m=1 the base EC chunk count is k+m=3, so initial size == 3.
+  const int initial_size = get_pool_size(cluster, pool_name);
+  ASSERT_EQ(k + m, initial_size);
+
+  // only a FastEC pool can be stretched
+  std::string cmd = "{\"prefix\": \"osd pool set\", \"pool\": \"" +
+    pool_name + "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}";
+  bufferlist outbl;
+  ASSERT_EQ(0, cluster.mon_command(std::move(cmd), {}, &outbl, nullptr));
+
+  // double pool size to num_zones * (k+m) == 6.
+  ASSERT_EQ(0, set_pool_num_zones(cluster, pool_name, 2));
+  ASSERT_EQ(2, get_pool_num_zones(cluster, pool_name));
+  const std::string stretch_crush_rule = get_pool_crush_rule(cluster, pool_name);
+  ASSERT_NE(initial_crush_rule, stretch_crush_rule);
+  ASSERT_EQ(2 * (k + m), get_pool_size(cluster, pool_name));
+
+  // Disable stretch mode: num_zones=1 should restore base size (k+m)
+  ASSERT_EQ(0, set_pool_num_zones(cluster, pool_name, 1));
+  ASSERT_EQ(1, get_pool_num_zones(cluster, pool_name));
+  const std::string restored_crush_rule = get_pool_crush_rule(cluster, pool_name);
+  ASSERT_NE(stretch_crush_rule, restored_crush_rule);
+  ASSERT_EQ(k + m, get_pool_size(cluster, pool_name));
+
+  ASSERT_EQ(0, cleanup_ec_pool(cluster, pool_name));
+  cluster.shutdown();
+}
+
+// Test a refused num_zones change leaves the pool as it was
+TEST(ECPoolCreatePP, SetNumZonesFailureLeavesPoolUnchanged) {
+  Rados cluster;
+  ASSERT_EQ("", connect_cluster_pp(cluster));
+  if (has_two_datacenters(cluster)) {
+    GTEST_SKIP() << "the CRUSH map has the two datacenters that the "
+                 << "change needs";
+  }
+
+  const std::string pool_name = get_temp_pool_name("ec_set_num_zones_fail_");
+  constexpr int k = 2;
+  constexpr int m = 1;
+
+  ASSERT_EQ(0, create_ec_pool_with_params(cluster, pool_name, k, m));
+
+  ASSERT_EQ(1, get_pool_num_zones(cluster, pool_name));
+  const std::string initial_crush_rule = get_pool_crush_rule(cluster, pool_name);
+  ASSERT_FALSE(initial_crush_rule.empty());
+  ASSERT_EQ(k + m, get_pool_size(cluster, pool_name));
+
+  // two zones need two datacenters, the default zone type
+  ASSERT_EQ(-EINVAL, set_pool_num_zones(cluster, pool_name, 2));
+
+  ASSERT_EQ(1, get_pool_num_zones(cluster, pool_name));
+  ASSERT_EQ(initial_crush_rule, get_pool_crush_rule(cluster, pool_name));
+  ASSERT_EQ(k + m, get_pool_size(cluster, pool_name));
+
+  ASSERT_EQ(0, cleanup_ec_pool(cluster, pool_name));
+  cluster.shutdown();
+}
+
+TEST(ECPoolCreatePP, ReplicatedPoolSetNumZones) {
+  Rados cluster;
+  ASSERT_EQ("", connect_cluster_pp(cluster));
+  SKIP_WITHOUT_TWO_DATACENTERS(cluster);
+
+  const std::string pool_name = get_temp_pool_name("repl_set_num_zones_");
+  std::string cmd = "{\"prefix\": \"osd pool create\", \"pool\": \"" +
+    pool_name + "\", \"pool_type\": \"replicated\", \"pg_num\": 8}";
+   bufferlist outbl;
+  ASSERT_EQ(0, cluster.mon_command(std::move(cmd), {}, &outbl, nullptr));
+  cluster.wait_for_latest_osdmap();
+
+  ASSERT_EQ(1, get_pool_num_zones(cluster, pool_name));
+  const std::string initial_crush_rule = get_pool_crush_rule(cluster, pool_name);
+  ASSERT_FALSE(initial_crush_rule.empty());
+  const int initial_size = get_pool_size(cluster, pool_name);
+  ASSERT_GT(initial_size, 0);
+
+  ASSERT_EQ(0, set_pool_num_zones(cluster, pool_name, 2));
+  ASSERT_EQ(2, get_pool_num_zones(cluster, pool_name));
+  const std::string stretch_crush_rule = get_pool_crush_rule(cluster, pool_name);
+  ASSERT_NE(initial_crush_rule, stretch_crush_rule);
+  const int stretch_size = get_pool_size(cluster, pool_name);
+  ASSERT_GT(stretch_size, initial_size);
+
+  ASSERT_EQ(0, set_pool_num_zones(cluster, pool_name, 1));
+  ASSERT_EQ(1, get_pool_num_zones(cluster, pool_name));
+  const std::string restored_crush_rule = get_pool_crush_rule(cluster, pool_name);
+  ASSERT_NE(stretch_crush_rule, restored_crush_rule);
+  const int restored_size = get_pool_size(cluster, pool_name);
+  ASSERT_EQ(initial_size, restored_size);
+
+  ASSERT_EQ(0, cluster.pool_delete(pool_name.c_str()));
+  cluster.wait_for_latest_osdmap();
   cluster.shutdown();
 }
