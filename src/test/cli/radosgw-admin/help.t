@@ -34,6 +34,8 @@
     account stats                    dump account storage stats
     account rm                       remove an account
     account list                     list all account ids
+    account suspend                  suspend an account
+    account enable                   re-enable account after suspension
     bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)
     bucket limit check               show bucket sharding stats
     bucket link                      link bucket to specified user
