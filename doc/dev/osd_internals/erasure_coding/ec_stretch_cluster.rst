@@ -424,8 +424,9 @@ Without ``--rule`` the rule is named after the pool, or ``erasure-code`` for the
 profile. If a committed rule of that name already exists it is reused, without checking that it
 fits ``k+m``, ``num_zones`` or the CRUSH options. Otherwise the plugin builds it:
 
-* ``num_zones`` greater than 1: a stretch rule that takes every bucket of the zone type under
-  the root (``choose firstn 0``), then ``k+m`` OSD failure domains (``chooseleaf_indep``) in each. The root, zone type,
+* ``num_zones`` greater than 1: a stretch rule that takes ``num_zones`` buckets of the zone type
+  under the root (``choose firstn <num_zones>``), then ``k+m`` OSD failure domains
+  (``chooseleaf_indep``) in each. The root, zone type,
   OSD failure domain type and device class are the command-line values, else the profile's
   ``crush-root``, ``crush-zone-failure-domain``, ``crush-osd-failure-domain`` (or
   ``crush-failure-domain``) and ``crush-device-class``. ``crush-num-failure-domains``,
