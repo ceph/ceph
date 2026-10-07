@@ -812,7 +812,7 @@ def get_custom_field(issue, field_id):
     return None
 
 # A ptl-generated integration branch, e.g. wip-yuri-testing-20261006.163134-umbrella
-_BRANCH_RE = re.compile(r'wip-\S+?-\d{8}\.\d{6}-\S+')
+_BRANCH_RE = re.compile(r'wip-\S+?-\d{8}\.\d{6}-[^,\s]+')
 
 def build_subject_with_branch_history(current_subject, new_branch, max_len=255):
     """Move new_branch to the front as the anchor and keep the previous
@@ -824,6 +824,10 @@ def build_subject_with_branch_history(current_subject, new_branch, max_len=255):
     rather than nested. The parenthesized group is only treated as branch
     history when every entry matches a ptl branch name, so an arbitrary
     human subject that happens to end in "(...)" is left untouched.
+
+    Precondition: current_subject is expected to be a ptl branch name or a
+    prior history form. A subject carrying unrelated parentheses does not
+    round-trip (it is wrapped as the anchor and will not re-parse later).
     """
     base = current_subject.strip()
     prev = []
@@ -836,6 +840,8 @@ def build_subject_with_branch_history(current_subject, new_branch, max_len=255):
         if branches and all(_BRANCH_RE.fullmatch(e) for e in branches):
             prev = branches
             old_anchor = base[:m.start()].rstrip()
+    if not old_anchor:
+        return new_branch  # empty/blank subject: no history to carry
     if new_branch == old_anchor:
         return current_subject  # no-op: re-run with the same branch
     prev = [old_anchor] + [p for p in prev if p != old_anchor and p != new_branch]

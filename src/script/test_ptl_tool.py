@@ -487,3 +487,15 @@ def test_subject_length_cap_stays_parseable_with_huge_names(ptl_tool):
     # history dropped entirely -> bare new branch, no dangling open paren
     assert result == new[:150]
     assert "(" not in result
+
+
+def test_subject_empty_current_returns_bare_branch(ptl_tool):
+    """A blank subject must not produce the malformed '<branch> ()'."""
+    assert ptl_tool.build_subject_with_branch_history("", B1) == B1
+    assert ptl_tool.build_subject_with_branch_history("   ", B1) == B1
+
+
+def test_branch_re_rejects_comma_in_name(ptl_tool):
+    """The branch pattern must not swallow a comma (the history splitter)."""
+    assert ptl_tool._BRANCH_RE.fullmatch(B1) is not None
+    assert ptl_tool._BRANCH_RE.fullmatch("wip-x-20261006.163134-a,b") is None
