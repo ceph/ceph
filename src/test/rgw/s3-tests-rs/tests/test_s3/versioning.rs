@@ -2187,3 +2187,108 @@ async fn test_versioned_mpu_one_latest_after_incremental_update() {
     assert_eq!(latest_count(&client, &bucket, key).await, 1,
         "a superseded version is still marked latest after a multipart complete");
 }
+
+/* A non-current version keeps its size, etag and owner in the listing
+ * when the bucket was already listed at the time of the write.
+ *
+ * The listing between the two PUTs is the whole point.  A write demotes
+ * the old current version and rewrites its cache entry to clear
+ * FLAG_CURRENT, and on nsfs that rewritten entry used to carry the key
+ * and the flags and nothing else -- so the version listed as
+ * zero-length with no etag and no owner.  Without the first
+ * list_object_versions() the final listing misses the cache, fills it
+ * from the store, and reads correctly no matter what the write put
+ * there;  that is why every existing versioning test passes either
+ * way.
+ *
+ * The bytes were never at risk.  This asserts what the listing says
+ * about them. */
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+#[tokio::test]
+async fn test_versioning_noncurrent_listed_after_warm_cache() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let key = "warm";
+    let first_body = "first version";
+
+    let first = client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from(first_body.as_bytes().to_vec()))
+        .send()
+        .await
+        .unwrap();
+    let first_id = first.version_id().unwrap().to_string();
+    let first_etag = first.e_tag().unwrap().to_string();
+
+    /* warm the listing cache, so the next write's demotion is what the
+     * final listing reads rather than a fresh fill */
+    let warm = client
+        .list_object_versions()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(warm.versions().len(), 1);
+
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from("second version, longer".as_bytes().to_vec()))
+        .send()
+        .await
+        .unwrap();
+
+    let after = client
+        .list_object_versions()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+
+    let demoted = after
+        .versions()
+        .iter()
+        .find(|v| v.version_id() == Some(first_id.as_str()))
+        .expect("the demoted version is missing from the listing");
+
+    assert!(
+        !demoted.is_latest().unwrap_or(true),
+        "the demoted version is still flagged latest"
+    );
+    assert_eq!(
+        demoted.size(),
+        Some(first_body.len() as i64),
+        "the demoted version lists the wrong size"
+    );
+    assert_eq!(
+        demoted.e_tag().map(|e| e.trim_matches('"').to_string()),
+        Some(first_etag.trim_matches('"').to_string()),
+        "the demoted version lists the wrong etag"
+    );
+    let owner = demoted
+        .owner()
+        .and_then(|o| o.id())
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        !owner.is_empty() && owner != "unknown",
+        "the demoted version lists owner {owner:?}"
+    );
+
+    /* and the bytes, which were never the thing at risk */
+    let body = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .version_id(&first_id)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(get_body(body).await, first_body);
+}
