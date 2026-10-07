@@ -1287,6 +1287,7 @@ public:
     std::optional<std::string> conf_files;
     std::optional<std::string> cluster;
     std::optional<std::string> name;
+    std::optional<std::string> objecter_admin_socket_name;
     std::vector<std::pair<std::string, std::string>> configs;
     bool no_default_conf = false;
     bool no_mon_conf = false;
@@ -1300,6 +1301,13 @@ public:
     }
     Builder& set_name(std::string_view n) {
       name = std::string(n);
+      return *this;
+    }
+
+    Builder&
+    set_objecter_admin_socket_name(std::string_view n)
+    {
+      objecter_admin_socket_name = std::string(n);
       return *this;
     }
     Builder& set_no_default_conf() {
@@ -1334,15 +1342,20 @@ public:
   /// We take an `intrusive_ptr<CephContext>` to make it clear that we
   /// will take ownership of the reference.
   template<boost::asio::completion_token_for<BuildSig> CompletionToken>
-  static auto make_with_cct(boost::intrusive_ptr<CephContext> cct,
-			    boost::asio::io_context& ioctx,
-			    CompletionToken&& token) {
+  static auto make_with_cct(
+      boost::intrusive_ptr<CephContext> cct,
+      boost::asio::io_context& ioctx,
+      CompletionToken&& token,
+      std::optional<std::string> objecter_admin_socket_name = std::nullopt) {
     auto consigned = boost::asio::consign(
       std::forward<CompletionToken>(token), boost::asio::make_work_guard(
 	boost::asio::get_associated_executor(token, ioctx.get_executor())));
     return boost::asio::async_initiate<decltype(consigned), BuildSig>(
-      [cct = std::move(cct), &ioctx](auto&& handler) mutable {
-	make_with_cct_(std::move(cct), ioctx, std::move(handler));
+      [cct = std::move(cct), &ioctx,
+       objecter_admin_socket_name =
+	 std::move(objecter_admin_socket_name)](auto&& handler) mutable {
+	make_with_cct_(std::move(cct), ioctx, std::move(handler),
+		       objecter_admin_socket_name);
       }, consigned);
   }
 
@@ -1792,9 +1805,11 @@ private:
   friend Builder;
 
   RADOS(std::shared_ptr<detail::Client> impl);
-  static void make_with_cct_(boost::intrusive_ptr<CephContext> cct,
-			     boost::asio::io_context& ioctx,
-			     BuildComp c);
+  static void make_with_cct_(
+      boost::intrusive_ptr<CephContext> cct,
+      boost::asio::io_context& ioctx,
+      BuildComp c,
+      const std::optional<std::string>& objecter_admin_socket_name = std::nullopt);
 
   void execute_(Object o, IOContext ioc, ReadOp op,
 		ceph::buffer::list* bl, Op::Completion c,
