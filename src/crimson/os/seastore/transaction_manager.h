@@ -288,6 +288,7 @@ public:
     LOG_PREFIX(TransactionManager::read_extent);
     SUBDEBUGT(seastore_tm, "{}~0x{:x} {} ...",
               t, offset, length, T::TYPE);
+    cache->account_laddr_lookup(t, T::TYPE);
     auto pin = co_await get_pin(t, offset);
     if (length != pin.get_length() || !pin.get_val().is_real_location()) {
       SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong pin {}",
@@ -311,6 +312,7 @@ public:
     LOG_PREFIX(TransactionManager::read_extent);
     SUBDEBUGT(seastore_tm, "{} {} ...",
               t, offset, T::TYPE);
+    cache->account_laddr_lookup(t, T::TYPE);
     auto pin = co_await get_pin(t, offset);
     if (!pin.get_val().is_real_location()) {
       SUBERRORT(seastore_tm, "{} {} got wrong pin {}",

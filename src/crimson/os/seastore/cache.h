@@ -770,6 +770,11 @@ public:
     stats.read_hit_cold += t.read_hit_cold;
   }
 
+  // A logical extent of type ext was located by laddr through an LBA lookup.
+  void account_laddr_lookup(Transaction &t, extent_types_t ext) {
+    ++get_by_ext(get_by_src(stats.laddr_lookups_by_src_ext, t.get_src()), ext);
+  }
+
 private:
   /**
    * maybe_page_aligned_bptr
@@ -1920,6 +1925,8 @@ private:
     counter_by_src_t<uint64_t> cache_absent_by_src;
     counter_by_src_t<counter_by_extent_t<cache_access_stats_t> >
       access_by_src_ext;
+    counter_by_src_t<counter_by_extent_t<uint64_t> >
+      laddr_lookups_by_src_ext;
 
     uint64_t onode_tree_depth = 0;
     int64_t onode_tree_extents_num = 0;

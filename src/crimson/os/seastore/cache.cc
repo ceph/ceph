@@ -188,6 +188,32 @@ void Cache::register_metrics(store_index_t store_index)
   }
 
   /*
+   * laddr_lookups: logical extents located by laddr through the LBA tree
+   */
+  for (auto& [src, src_label] : labels_by_src) {
+    auto& lookups_by_ext = get_by_src(stats.laddr_lookups_by_src_ext, src);
+    for (auto& [ext, ext_label] : labels_by_ext) {
+      if (!is_logical_type(ext)) {
+        continue;
+      }
+      std::vector<sm::label_instance> merged_labels = src_label;
+      merged_labels.insert(merged_labels.end(), ext_label.begin(), ext_label.end());
+      metrics.add_group(
+        "cache",
+        {
+          sm::make_counter(
+            "laddr_lookups",
+            get_by_ext(lookups_by_ext, ext),
+            sm::description("total number of logical extents located by laddr "
+                            "through the lba tree, including retried attempts"),
+            merged_labels
+          ),
+        }
+      );
+    }
+  }
+
+  /*
    * cache_query: cache_access and cache_hit
    */
   metrics.add_group(
