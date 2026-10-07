@@ -390,6 +390,9 @@ BuildRequires:  bison
 BuildRequires:  flex
 BuildRequires:	pkgconfig(nlohmann_json)
 BuildRequires:  pkgconfig(libevent)
+# the OTLP/HTTP trace exporter
+BuildRequires:  pkgconfig(protobuf)
+BuildRequires:  protobuf-compiler
 %endif
 %if 0%{with system_pmdk}
 BuildRequires:  pkgconfig(libpmemobj) >= 1.8

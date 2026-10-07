@@ -5,8 +5,92 @@
 
 #include "acconfig.h"
 #include "include/encoding.h"
+#include "include/utime.h"
+
+#include <array>
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace tracing {
+
+using trace_id_t = std::array<uint8_t, 16>;
+using span_id_t = std::array<uint8_t, 8>;
+
+// Ids derived from a request id. Every OSD that handles the same request
+// derives the same ids, without sending anything new on the wire:
+// - trace_id and root_span_id place a request that no client traced: its ops
+//   hang off the root span, which is never exported.
+// - primary_span_id is the span id of the request's op on the primary, which
+//   the replicas' sub-ops and the replies take as their parent.
+struct RequestTrace {
+  trace_id_t trace_id;
+  span_id_t root_span_id;
+  span_id_t primary_span_id;
+};
+
+// `cluster` is a hash of the cluster fsid, so that clusters sharing one
+// tracing backend do not mix up requests that happen to have the same id;
+// the other arguments are the fields of the osd_reqid_t.
+RequestTrace request_trace(uint64_t cluster, uint8_t name_type, int64_t name_num,
+                           int32_t inc, uint64_t tid);
+
+// The timeline of an operation that has already happened, as recorded by the
+// op tracker. Tracer::record_op() turns it into a trace after the fact, so
+// building it costs nothing on the I/O path.
+struct OpTimeline {
+  std::string name;
+  utime_t start;
+  utime_t end;
+  bool complete = true;  // false: the op is still in flight at `end`
+  std::vector<std::pair<utime_t, std::string>> events;
+  std::vector<std::pair<std::string, std::string>> attributes;
+  std::vector<std::pair<std::string, int64_t>> int_attributes;
+  // where the op's span goes. With trace_id and parent_span_id, it is a child
+  // of that span, which may never be exported; with neither, it starts a new
+  // trace, with trace_id if given. span_id, if given, is the span's own id,
+  // which spans on other daemons may already refer to.
+  std::optional<trace_id_t> trace_id;
+  std::optional<span_id_t> parent_span_id;
+  std::optional<span_id_t> span_id;
+
+  // some stamps can be unset (zero), so events outside the lifetime are ignored
+  bool in_lifetime(utime_t stamp) const {
+    return stamp >= start && stamp <= end;
+  }
+};
+
+// the time between two consecutive events of an OpTimeline
+struct OpPhase {
+  std::string name;  // "<event> -> <next event>"
+  utime_t start;
+  utime_t end;
+};
+
+// the phases of `t` that took at least `min_share` of the op, in order. An op
+// still in flight ends with a "<last event> -> (in flight)" phase.
+std::vector<OpPhase> op_phases(const OpTimeline& t, double min_share);
+
+// like op_phases(), but named after what the op was doing, for the events the
+// OSD records: "receive", "queued for PG", "waiting for rw locks", "execute",
+// "local commit", "reply". Waiting for replicas becomes one phase per replica,
+// "replica osd.N", all starting when the sub-ops were sent, so the slowest
+// replica is the longest bar. Phases may overlap. Unknown events keep the
+// "<event> -> <next event>" names.
+std::vector<OpPhase> named_phases(const OpTimeline& t, double min_share);
+
+// the named phases worth a child span each: those of at least 5% of the op,
+// and none when a single phase covers 90% of it, since that span would only
+// repeat the op's own; the op span keeps every event either way
+std::vector<OpPhase> exported_phases(const OpTimeline& t);
+
+} // namespace tracing
 
 #ifdef HAVE_JAEGER
+#include <shared_mutex>
+
 #include "opentelemetry/trace/provider.h"
 
 using jspan = opentelemetry::trace::Span;
@@ -23,16 +107,29 @@ static_assert(SpanIdkSize == opentelemetry::trace::SpanId::kSize);
 
 class Tracer {
  private:
-  const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
+  using tracer_ptr = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer>;
+  const static tracer_ptr noop_tracer;
   const static jspan_ptr noop_span;
   CephContext* cct = nullptr;;
-  opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
+  std::string service_name;
+  mutable std::shared_mutex tracer_lock;  ///< protects tracer, which reconfigure() replaces
+  tracer_ptr tracer;
+
+  // a tracer exporting as trace_exporter and its options currently say
+  tracer_ptr make_tracer();
+  tracer_ptr get_tracer() const {
+    std::shared_lock l(tracer_lock);
+    return tracer;
+  }
 
  public:
 
   Tracer() = default;
 
   void init(CephContext* _cct, opentelemetry::nostd::string_view service_name);
+  // re-create the exporter after trace_exporter or one of its options
+  // changed; spans already started still go to the previous exporter
+  void reconfigure();
 
   bool is_enabled() const;
   // creates and returns a new span with `trace_name`
@@ -43,14 +140,41 @@ class Tracer {
   // if false is given to `trace_is_enabled` param, noop span will be returned
   jspan_ptr start_trace(opentelemetry::nostd::string_view trace_name, bool trace_is_enabled);
 
-  // creates and returns a new span with `span_name` which parent span is `parent_span'
+  // creates and returns a new span with `span_name` which parent span is `parent_span'.
+  // Without tracing, returns `parent_span` itself, so that the context it may
+  // carry (see context_span()) stays in place for code that swaps spans.
   jspan_ptr add_span(opentelemetry::nostd::string_view span_name, const jspan_ptr& parent_span);
   // creates and return a new span with `span_name`
   // the span is added to the trace which it's context is `parent_ctx`.
-  // parent_ctx contains the required information of the trace.
+  // parent_ctx contains the required information of the trace. Only if this
+  // daemon traces and the sender sampled the trace: a context that a client
+  // passes along just to place slow-op traces must not cost live spans.
   jspan_ptr add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx);
 
+  // a span that records nothing but carries new trace and span ids, marked
+  // not sampled, for passing a trace context along without the cost of live
+  // spans; record_op() can later export a span with those ids
+  jspan_ptr context_span();
+
+  // exports `timeline` as a trace with its recorded timestamps: one span for
+  // the op, placed as its trace_id, parent_span_id and span_id say, and a
+  // child span for each phase that took a noticeable share of it. Works
+  // whether or not jaeger_tracing_enable is set. Returns the trace id as hex,
+  // or an empty string if nothing was exported.
+  std::string record_op(const OpTimeline& timeline);
 };
+
+// the ids of a valid context
+inline bool context_ids(const jspan_context& ctx, trace_id_t* trace_id, span_id_t* span_id) {
+  if (!ctx.IsValid()) {
+    return false;
+  }
+  auto t = ctx.trace_id().Id();
+  auto s = ctx.span_id().Id();
+  std::copy(t.begin(), t.end(), trace_id->begin());
+  std::copy(s.begin(), s.end(), span_id->begin());
+  return true;
+}
 
 inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
   ENCODE_START(1, 1, bl);
@@ -146,11 +270,18 @@ namespace tracing {
 
 struct Tracer {
   void init(CephContext* _cct, std::string_view service_name) {}
+  void reconfigure() {}
   bool is_enabled() const { return false; }
   jspan_ptr start_trace(std::string_view, bool enabled = true) { return {}; }
   jspan_ptr add_span(std::string_view, const jspan_ptr&) { return {}; }
   jspan_ptr add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
+  jspan_ptr context_span() { return {}; }
+  std::string record_op(const OpTimeline&) { return {}; }
 };
+
+inline bool context_ids(const jspan_context&, trace_id_t*, span_id_t*) {
+  return false;
+}
 
 inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
   ENCODE_START(1, 1, bl);

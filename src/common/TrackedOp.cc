@@ -90,6 +90,10 @@ OpHistory::OpHistory(CephContext *c) : cct(c), opsvc(this) {
 
   b.add_u64_counter(l_trackedop_slow_op_count, "slow_ops_count",
 					       "Number of operations taking over ten seconds");
+  b.add_u64_counter(l_trackedop_slow_op_traced, "slow_op_traces",
+		    "Number of slow operations exported as traces");
+  b.add_u64_counter(l_trackedop_slow_op_trace_dropped, "slow_op_traces_dropped",
+		    "Number of slow operations not traced because of the rate limit");
 
   logger.reset(b.create_perf_counters());
   cct->get_perfcounters_collection()->add(logger.get());
@@ -122,12 +126,71 @@ void OpHistory::on_shutdown()
   slow_op.clear();
 }
 
+void OpHistory::maybe_trace(const utime_t& now, TrackedOp& op, double opduration)
+{
+  const float threshold = trace_slow_threshold.load();
+  if (threshold <= 0 || opduration < threshold) {
+    return;
+  }
+  slow_op_tracer_t tracer;
+  {
+    std::lock_guard history_lock(ops_history_lock);
+    tracer = slow_op_tracer;
+  }
+  if (!tracer) {
+    return;
+  }
+  // an op that was traced while stuck keeps its trace, so that the snapshot
+  // finds the completed op next to it
+  const bool keep = op.traced_in_flight.load();
+  auto admit = [&](uint64_t key) {
+    if (keep || trace_sampler.admit(key, now, trace_max_per_sec.load())) {
+      return true;
+    }
+    logger->inc(l_trackedop_slow_op_trace_dropped);
+    return false;
+  };
+  if (std::string id = tracer(op, false, admit); !id.empty()) {
+    op.set_trace_id(std::move(id));
+    logger->inc(l_trackedop_slow_op_traced);
+  }
+}
+
+bool OpHistory::trace_in_flight(TrackedOp& op)
+{
+  if (trace_slow_threshold.load() <= 0) {
+    return false;
+  }
+  slow_op_tracer_t tracer;
+  {
+    std::lock_guard history_lock(ops_history_lock);
+    tracer = slow_op_tracer;
+  }
+  if (!tracer || op.traced_in_flight.exchange(true)) {
+    return false;
+  }
+  // the caller limits how many it asks for; the token bucket belongs to the
+  // service thread
+  std::string id = tracer(op, true, [](uint64_t) { return true; });
+  if (id.empty()) {
+    return false;
+  }
+  op.set_trace_id(std::move(id));
+  logger->inc(l_trackedop_slow_op_traced);
+  return true;
+}
+
 void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
 {
+  double opduration = op->get_duration();
+  // trace before the op is visible in the history, so dumps see its trace id
+  // and the export does not hold ops_history_lock
+  if (!shutdown) {
+    maybe_trace(now, *op, opduration);
+  }
   std::lock_guard history_lock(ops_history_lock);
   if (shutdown)
     return;
-  double opduration = op->get_duration();
   duration.insert(make_pair(opduration, op));
   arrived.insert(make_pair(op->get_initiated(), op));
   if (opduration >= history_slow_op_threshold.load()) {
@@ -637,6 +700,9 @@ void TrackedOp::dump(utime_t now, Formatter *f, OpTracker::dumper lambda) const
   f->dump_float("age", now - get_initiated());
   f->dump_float("duration", get_duration());
   f->dump_bool("continuous", is_continuous());
+  if (auto id = get_trace_id(); !id.empty()) {
+    f->dump_string("trace_id", id);
+  }
   {
     f->open_object_section("type_data");
     lambda(*this, f);

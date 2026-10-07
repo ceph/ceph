@@ -545,6 +545,11 @@ option(WITH_JAEGER "Enable jaegertracing and it's dependent libraries" ON)
 if(WITH_JAEGER)
   set(HAVE_JAEGER TRUE)
 endif()
+CMAKE_DEPENDENT_OPTION(WITH_OTLP "Export traces over OTLP/HTTP (requires protobuf)" ON
+  "WITH_JAEGER" OFF)
+if(WITH_OTLP)
+  set(HAVE_OTLP TRUE)
+endif()
 
 # Catch2 C++ Unit Test support:
 # This needs to come before any tests using Catch2.

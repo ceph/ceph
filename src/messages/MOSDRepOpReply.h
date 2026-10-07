@@ -30,7 +30,7 @@
 
 class MOSDRepOpReply final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 public:
   epoch_t map_epoch, min_epoch;
@@ -84,6 +84,10 @@ public:
     decode(last_complete_ondisk, p);
 
     decode(from, p);
+    if (header.version >= 3) {
+      // the client's trace context, so slow-op traces join the client's trace
+      decode_otel_trace(p);
+    }
     final_decode_needed = false;
   }
   void encode_payload(uint64_t features) override {
@@ -98,6 +102,7 @@ public:
     encode(result, payload);
     encode(last_complete_ondisk, payload);
     encode(from, payload);
+    encode_otel_trace(payload, features);
   }
 
   spg_t get_pg() { return pgid; }
