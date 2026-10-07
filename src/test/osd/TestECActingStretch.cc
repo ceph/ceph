@@ -2139,3 +2139,66 @@ TEST_F(TestECActingStretch, BackfilledUpZoneBlock_JoinsWant) {
   EXPECT_EQ(want, up) << ss2.str();
   EXPECT_TRUE(backfill.empty()) << ss2.str();
 }
+
+// PG 2.39 in a fault-injection run, OSD ids mapped onto this fixture.  A
+// pg-upmap moved the zone blocks (block 0 to dc0) and up's shards were
+// backfilled, so up = acting.  osd.5 returns empty for position 3.  The
+// strays of the layout before the pg-upmap hold every shard, but are behind:
+// swapping the zone blocks onto them would leave up again.
+TEST_F(TestECActingStretch, ReturningEmptyUpShard_KeepsUpActingZones) {
+  const int N = CRUSH_ITEM_NONE;
+  const eversion_t log_tail(1, 5);
+  const eversion_t behind(10, 100);
+  const eversion_t current(20, 200);
+  vector<int> up = {6, 0, 2, 5, 7, 4};
+  vector<int> old_layout = {7, 3, 5, 1, 6, 2};
+  map<pg_shard_t, pg_info_t> all_info;
+  for (int i = 0; i < 6; ++i) {
+    add_info(all_info, old_layout[i], i, behind, log_tail);
+    if (i != 3) {
+      add_info(all_info, up[i], i, current, log_tail);
+    }
+  }
+  add_info(all_info, 5, 3, eversion_t());
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, up, all_info, pg_shard_t(0, shard_id_t(1)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, (vector<int>{6, 0, 2, N, 7, 4})) << ss.str();
+  EXPECT_EQ(backfill, (set<pg_shard_t>{pg_shard_t(5, shard_id_t(3))}))
+    << ss.str();
+}
+
+// PG 2.39 later in the same run.  While dc1 was down, the PG ran on 0(1)
+// and 2(2) alone, so they hold the only copies of those writes.  When dc1
+// returns, block 0 must stay in dc0 with them: the strays of the layout
+// before the pg-upmap are behind, and moving acting onto them leaves the
+// newest shards as strays that miss every write.
+TEST_F(TestECActingStretch, ReturningZone_CurrentShardsKeepTheirZone) {
+  const int N = CRUSH_ITEM_NONE;
+  const eversion_t log_tail(1, 5);
+  const eversion_t behind(10, 100);
+  const eversion_t current(20, 200);
+  vector<int> up = {N, 0, 2, 5, N, N};
+  vector<int> acting = {N, 0, 2, N, N, N};
+  map<pg_shard_t, pg_info_t> all_info;
+  add_info(all_info, 0, 1, current, log_tail);
+  add_info(all_info, 2, 2, current, log_tail);
+  add_info(all_info, 3, 1, behind, log_tail);
+  add_info(all_info, 5, 2, behind, log_tail);
+  add_info(all_info, 1, 3, behind, log_tail);
+  add_info(all_info, 2, 5, behind, log_tail);
+  add_info(all_info, 5, 3, current, log_tail);
+  all_info[pg_shard_t(5, shard_id_t(3))].last_backfill = hobject_t();
+
+  vector<int> want;
+  set<pg_shard_t> backfill, acting_backfill;
+  ostringstream ss;
+  calc(up, acting, all_info, pg_shard_t(2, shard_id_t(2)), false,
+       &want, &backfill, &acting_backfill, ss);
+  EXPECT_EQ(want, acting) << ss.str();
+  EXPECT_EQ(backfill, (set<pg_shard_t>{pg_shard_t(5, shard_id_t(3))}))
+    << ss.str();
+}

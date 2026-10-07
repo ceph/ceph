@@ -584,3 +584,66 @@ TEST_F(TestECStretchPeering, BackfilledZoneBlock_RecoveredDropsPgTemp)
             0 : 1);
     }, ::testing::ExitedWithCode(0), "");
 }
+
+// The k up shards of one zone block take every write while the other zone
+// is down.  When that zone returns, with the pg-upmap giving the full up set
+// again, those writes must stay recoverable.
+TEST_F(TestECStretchPeering, ReturningZone_NewestWritesNotUnfound)
+{
+  ASSERT_TRUE(all_shards_active());
+  // The monitor's min_size for a 2+1 stretch pool, so k shards take writes.
+  set_pool_min_size(k);
+  trim_log(true);
+
+  const int N = CRUSH_ITEM_NONE;
+  vector<int> a;
+  int acting_primary;
+  osdmap->pg_to_acting_osds(pgid, &a, &acting_primary);
+  const vector<int> upmapped = {a[3], a[4], a[5], a[0], a[1], a[2]};
+  remap(upmapped, a);
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_acting(), a);
+  ASSERT_EQ(ps->get_backfill_targets().size(), upmapped.size());
+
+  mark_osds_down({a[3], a[4], a[5]});
+  enter_degraded_stretch_mode(a[0] / (k + m));
+  ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_acting(), (vector<int>{a[0], a[1], a[2], N, N, N}));
+  ASSERT_STREQ(ps->get_current_state(), "Started/Primary/Active/Backfilling");
+  const set<pg_shard_t> zone_a_targets = {pg_shard_t(a[0], shard_id_t(3)),
+                                          pg_shard_t(a[1], shard_id_t(4)),
+                                          pg_shard_t(a[2], shard_id_t(5))};
+  ASSERT_EQ(ps->get_backfill_targets(), zone_a_targets);
+  for (const auto &t : zone_a_targets) {
+    complete_backfill(t);
+  }
+  finish_backfill();
+  ASSERT_EQ(get_primary_test_pg()->get_peering_state()->get_acting(),
+            (vector<int>{N, N, N, a[0], a[1], a[2]}));
+
+  mark_osd_down(a[2]);
+  ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_acting(), (vector<int>{N, N, N, a[0], a[1], N}));
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  const std::string data(stripe_unit * k, 'B');
+  const vector<std::string> newest = {"newest0", "newest1", "newest2"};
+  for (const auto &name : newest) {
+    create_and_write_verify(name, data);
+  }
+
+  // Without the upmap the newest shards are strays while the PG writes on.
+  remap({}, {});
+  ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  ASSERT_EQ(0u, ps->get_num_unfound());
+  create_and_write_verify("later", data);
+
+  remap(upmapped, {}, {a[2], a[3], a[4], a[5]});
+  ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  for (const auto &name : newest) {
+    EXPECT_FALSE(ps->get_missing_loc().is_unfound(make_test_object(name)))
+      << name;
+  }
+  EXPECT_EQ(0u, ps->get_num_unfound());
+}
