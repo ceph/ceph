@@ -1189,6 +1189,9 @@ COMMAND("osd pool create "
         "name=target_size_bytes,type=CephInt,range=0,req=false "
         "name=target_size_ratio,type=CephFloat,range=0.0,req=false "
         "name=force_pg_limit,type=CephBool,req=false "
+        "name=yes_i_really_mean_it,type=CephBool,req=false "
+        "name=crimson,type=CephBool,req=false "
+        "-- "
         "name=k,type=CephInt,range=2,req=false "
         "name=m,type=CephInt,range=1,req=false "
         "name=num_zones,type=CephInt,range=1,req=false "
@@ -1197,9 +1200,7 @@ COMMAND("osd pool create "
         "name=osd_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
         "name=replica,type=CephInt,range=1,req=false "
         "name=class,type=CephString,goodchars=" CLASS_GOODCHARS ",req=false "
-        "name=min_size,type=CephInt,range=1,req=false "
-        "name=yes_i_really_mean_it,type=CephBool,req=false "
-        "name=crimson,type=CephBool,req=false",
+        "name=min_size,type=CephInt,range=1,req=false",
         "create pool", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete "
 	"name=pool,type=CephPoolname "
@@ -1358,7 +1359,14 @@ COMMAND("osd pool set "
           "|use_gmt_hitset"
           "|write_fadvise_dontneed "
 	"name=val,type=CephString "
-	"name=yes_i_really_mean_it,type=CephBool,req=false",
+        "name=yes_i_really_mean_it,type=CephBool,req=false "
+        "-- "
+        "name=replica,type=CephInt,range=1,req=false "
+        "name=zone_failure_domain,type=CephString,req=false "
+        "name=osd_failure_domain,type=CephString,req=false "
+        "name=crush_rule,type=CephString,req=false "
+        "name=root,type=CephString,req=false "
+        "name=class,type=CephString,req=false",
 	"set pool parameter <var> to <val>", "osd", "rw")
 // 'val' is a CephString because it can include a unit.  Perhaps
 // there should be a Python type for validation/conversion of strings
@@ -1616,6 +1624,7 @@ COMMAND("config generate-minimal-conf",
 	"Generate a minimal ceph.conf file",
 	"config", "r")
 COMMAND("osd pool default set "
+        "-- "
         "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false "
         "name=num_zones,type=CephInt,range=1,req=false "
         "name=rule,type=CephString,req=false "

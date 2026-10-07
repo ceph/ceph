@@ -18,6 +18,7 @@
 class ConfigValues;
 class CrushWrapper;
 struct ConfigMap;
+struct pg_pool_t;
 
 // The parameters of a new pool, as ceph osd pool create and ceph osd pool
 // default set build them:
@@ -140,6 +141,9 @@ std::string profile_to_string(const std::map<std::string, std::string>& profile)
 // (allowed) must be set and the command must pass --yes-i-really-mean-it
 // (force).
 int check_size_one(bool allowed, bool force, std::ostream* ss);
+
+// Whether the size of pool p may change: not with its nosizechange flag set.
+int check_size_change(const pg_pool_t& p, std::ostream* ss);
 
 // Whether n copies (the size or the replica named by what) are from 1 to
 // MAX_POOL_REPLICA_COPIES.
