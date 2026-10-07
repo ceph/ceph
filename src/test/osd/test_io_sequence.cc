@@ -71,20 +71,13 @@ TEST(IoSequence, Seq16ChecksConsistencyWhenRequested) {
 // Without it a balanced read can reach a replica before that op does and
 // return the old object.
 TEST(IoSequence, NoReadWhileWholeObjectWriteInFlight) {
-  for (int s = static_cast<int>(Sequence::SEQUENCE_BEGIN);
-       s < static_cast<int>(Sequence::SEQUENCE_END); s++) {
-    const Sequence seq = static_cast<Sequence>(s);
-    if (seq == Sequence::SEQUENCE_SEQ10) {
-      continue;
-    }
+  for (Sequence seq : supported_sequences()) {
     for (int seed = 1; seed <= 3; seed++) {
-      auto sequence = IoSequence::generate_sequence(seq, {1, 32}, seed, false);
+      auto ops = run_sequence(seq, seed, false);
       int primary = 0;
       bool in_flight[2] = {false, false};
-      int steps = 0;
-      for (auto op = sequence->next(); op->getOpType() != OpType::Done;
-           op = sequence->next(), steps++) {
-        switch (op->getOpType()) {
+      for (size_t step = 0; step < ops.size(); step++) {
+        switch (ops[step]) {
           case OpType::Barrier:
             in_flight[0] = in_flight[1] = false;
             break;
@@ -105,10 +98,22 @@ TEST(IoSequence, NoReadWhileWholeObjectWriteInFlight) {
           case OpType::Read:
           case OpType::Read2:
           case OpType::Read3:
+          case OpType::Consistency:
             EXPECT_FALSE(in_flight[primary])
-                << seq << " seed " << seed << " step " << steps;
+                << seq << " seed " << seed << " step " << step;
             break;
-          default:
+          case OpType::Done:
+          case OpType::Write:
+          case OpType::Write2:
+          case OpType::Write3:
+          case OpType::Append:
+          case OpType::FailedWrite:
+          case OpType::FailedWrite2:
+          case OpType::FailedWrite3:
+          case OpType::InjectReadError:
+          case OpType::InjectWriteError:
+          case OpType::ClearReadErrorInject:
+          case OpType::ClearWriteErrorInject:
             break;
         }
       }
