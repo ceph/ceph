@@ -16,6 +16,7 @@
 #include "Instances.h"
 #include "tools/rbd_mirror/instances/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
+#include <boost/variant/static_visitor.hpp>
 
 namespace librbd {
 class ImageCtx;

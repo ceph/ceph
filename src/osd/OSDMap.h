@@ -37,7 +37,8 @@
 #include "include/fs_types.h" // for struct file_layout_t
 #include "include/types.h"
 #include "common/ceph_releases.h"
-#include "osd_types.h"
+#include "osd/osd_types_core.h"
+#include "osd/osd_types_pool.h"
 
 #include "crush/CrushWrapper.h"
 

@@ -17,7 +17,7 @@
 #define OP_QUEUE_H
 
 #include "include/msgr.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 
 #include <list>
 #include <functional>

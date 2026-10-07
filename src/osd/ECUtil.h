@@ -27,7 +27,8 @@
 #include "common/interval_map.h"
 #include "common/mini_flat_map.h"
 
-#include "osd_types.h"
+#include "osd/osd_types_pool.h"
+#include "common/dout.h"
 
 // Must be a power of 2.
 static inline constexpr uint64_t EC_ALIGN_SIZE = 4096;

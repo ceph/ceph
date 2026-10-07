@@ -18,7 +18,7 @@
 #define CEPH_MOSDPGINFO_H
 
 #include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_peering.h"
 
 class MOSDPGInfo final : public Message {
 private:

@@ -34,6 +34,7 @@
 #include "os/ObjectStore.h"
 #include "osd/OSDMap.h"
 #include "osd/SnapMapReaderI.h"
+#include "osd/osd_types_log.h"
 
 class OSDriver : public MapCacher::StoreDriver<std::string, ceph::buffer::list> {
 #ifdef WITH_CRIMSON

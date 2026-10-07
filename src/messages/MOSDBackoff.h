@@ -18,7 +18,7 @@
 #define CEPH_MOSDBACKOFF_H
 
 #include "MOSDFastDispatchOp.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 
 class MOSDBackoff : public MOSDFastDispatchOp {
 public:

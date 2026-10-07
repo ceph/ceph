@@ -17,7 +17,7 @@
 #ifndef CEPH_MGETPOOLSTATSREPLY_H
 #define CEPH_MGETPOOLSTATSREPLY_H
 
-#include "osd/osd_types.h" // for pool_stat_t
+#include "osd/osd_types_stats.h"
 
 class MGetPoolStatsReply final : public PaxosServiceMessage {
   static constexpr int HEAD_VERSION = 2;

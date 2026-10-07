@@ -25,6 +25,7 @@
 #include "include/ceph_assert.h"
 #include "include/cephfs/dump.h"
 #include "include/cephfs/types.h"
+#include "msg/msg_types.h"
 
 #define MDS_PORT_CACHE   0x200
 #define MDS_PORT_LOCKER  0x300

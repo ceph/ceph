@@ -25,6 +25,7 @@
 #include "include/ceph_features.h"
 #include "include/ceph_fs.h" // for CEPH_MSG_OSD_OP
 #include "common/hobject.h"
+#include "osd/osd_types_op.h"
 
 /*
  * OSD op

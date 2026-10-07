@@ -26,7 +26,7 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/xlist.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 #include "osdc/Objecter.h"
 
 class RadosClient;

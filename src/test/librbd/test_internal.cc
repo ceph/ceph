@@ -13,6 +13,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "osd/osd_types_client.h"
 #include "librbd/Operations.h"
 #include "librbd/api/DiffIterate.h"
 #include "librbd/api/Image.h"

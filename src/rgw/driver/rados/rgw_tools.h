@@ -26,7 +26,7 @@
 #include "common/ceph_time.h"
 #include "common/dout.h"
 
-#include "osd/osd_types.h"
+#include "osd/osd_types_pool.h"
 
 #include "rgw_common.h"
 #include "rgw_obj_types.h"

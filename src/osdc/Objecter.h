@@ -64,6 +64,8 @@
 #include "msg/Dispatcher.h"
 
 #include "osd/OSDMap.h"
+#include "osd/osd_types_client.h"
+#include "osd/osd_types_stats.h"
 #include "osd/error_code.h"
 
 class Context;

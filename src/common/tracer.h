@@ -7,7 +7,13 @@
 #include "include/encoding.h"
 
 #ifdef HAVE_JAEGER
-#include "opentelemetry/trace/provider.h"
+#include "opentelemetry/trace/span.h"
+
+OPENTELEMETRY_BEGIN_NAMESPACE
+namespace trace {
+class Tracer;
+}
+OPENTELEMETRY_END_NAMESPACE
 
 using jspan = opentelemetry::trace::Span;
 using jspan_ptr = opentelemetry::nostd::shared_ptr<jspan>;

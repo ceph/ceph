@@ -13,6 +13,7 @@
 #include "include/stringify.h"
 #include "messages/MOSDOp.h"
 #include "mgr/OSDPerfMetricTypes.h"
+#include "osd/osd_types_peering.h"
 
 class DynamicPerfStats {
 public:

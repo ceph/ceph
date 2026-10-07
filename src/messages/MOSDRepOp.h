@@ -18,6 +18,8 @@
 #define CEPH_MOSDREPOP_H
 
 #include "MOSDFastDispatchOp.h"
+#include "osd/osd_types_peering.h"
+#include "osd/osd_types_stats.h"
 
 /*
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)

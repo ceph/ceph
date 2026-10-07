@@ -21,6 +21,7 @@
 #include "boost/intrusive/list.hpp"
 #include "boost/dynamic_bitset.hpp"
 #include "include/hash.h"
+#include "common/Thread.h"
 
 class Allocator;
 

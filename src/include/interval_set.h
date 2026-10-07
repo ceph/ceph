@@ -22,7 +22,8 @@
 #include <ostream>
 #include <fmt/ranges.h>
 #include "common/fmt_common.h"
-#include "common/dout.h"
+#include "common/CanHasPrint.h"
+#include "include/ceph_assert.h"
 
 #include "encoding.h"
 

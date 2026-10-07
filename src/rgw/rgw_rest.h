@@ -14,7 +14,6 @@
 #include "rgw_op.h"
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
-#include "rgw_lua_background.h"
 
 extern std::map<std::string, std::string> rgw_to_http_attrs;
 

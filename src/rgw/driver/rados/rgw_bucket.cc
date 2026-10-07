@@ -28,6 +28,7 @@
 #define VERSION_ATTR "ceph.objclass.version"
 
 #include "cls/user/cls_user_types.h"
+#include "cls/rgw/cls_rgw_client.h"
 
 #ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"

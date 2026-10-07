@@ -16,6 +16,7 @@
 #include "global/global_init.h"
 #include "include/random.h"
 #include "librados/librados_asio.h"
+#include "osd/osd_types_pool.h"
 
 using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
 

@@ -9,7 +9,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 
 #define OPS_PER_PTR 32
 

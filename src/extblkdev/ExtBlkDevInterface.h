@@ -35,7 +35,7 @@
 #include <map>
 #include <ostream>
 #include <memory>
-#include "osd/osd_types.h"
+#include "osd/osd_types_core.h"
 #ifdef __linux__
 #include <sys/capability.h>
 #else
