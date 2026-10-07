@@ -363,6 +363,7 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_INVALID_BUCKET_ACL   2228 // 400 InvalidBucketAclWithObjectOwnership
 #define ERR_NO_SUCH_OWNERSHIP_CONTROLS 2229 // 404 OwnershipControlsNotFoundError
 #define ERR_KEY_TOO_LONG         2230 // 400 KeyTooLongError
+#define ERR_KEY_PATH_CONFLICT    2231 // 409 KeyPathConflict
 
 #define ERR_BUSY_RESHARDING      2300 // also in cls_rgw_types.h, don't change!
 #define ERR_NO_SUCH_ENTITY       2301

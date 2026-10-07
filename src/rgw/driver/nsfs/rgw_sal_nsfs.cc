@@ -12650,6 +12650,27 @@ int NSFSAtomicWriter::prepare(optional_yield y)
   int ret;
 
   ret = obj->make_ent(ObjectType::FILE);
+  if (ret == -ENOTDIR) {
+    /* A component of this key is an existing object.
+     *
+     * `foo/bar` holds bytes, so it is a file;  `foo/bar/xyzzy` needs
+     * `foo/bar` to be a directory.  One namespace entry per name, two
+     * keys that want it.  Both are legal S3, and AWS has no such
+     * conflict because its keys are opaque strings.
+     *
+     * The sentinel does not help:  it names a key ending in '/', so
+     * moving the file there would rename the object rather than
+     * re-represent it.  NooBaa has the same constraint and answers
+     * 404, which says the object is absent when the truth is that a
+     * conflicting one is present.  See DESIGN.md.
+     *
+     * 409 and a code of our own, because the client's recourse is to
+     * delete the occupying object -- a 500 invites a retry that can
+     * never succeed, and a 404 invites a write that will not land. */
+    ldpp_dout(dpp, 4) << "nsfs: refusing key " << obj->get_name()
+      << ":  a component of it is an existing object" << dendl;
+    return -ERR_KEY_PATH_CONFLICT;
+  }
   if (ret < 0) {
     return ret;
   }
