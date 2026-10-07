@@ -30,15 +30,18 @@ class TestAgent:
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         agent_spec = ServiceSpec(service_type="agent", placement=PlacementSpec(count=1))
         agent_config = {
-            "agent.json": (
-                "{\"target_ip\": \"::1\", "
-                "\"target_port\": 7150, "
-                "\"refresh_period\": 20, "
-                "\"listener_port\": 4721, "
-                "\"host\": \"test\", "
-                "\"container_image\": \"quay.io/ceph/ceph:test\", "
-                "\"device_enhanced_scan\": \"False\"}"
-            ),
+            "agent.json": json.dumps({
+                "target_ip": "::1",
+                "target_port": 7150,
+                "listener_port": 4721,
+                "host": "test",
+                "container_image": "quay.io/ceph/ceph:test",
+                "device_enhanced_scan": "False",
+                "metadata_compresion_enabled": True,
+                "refresh_period": 20,
+                "initial_startup_delay_max": 10,
+                "jitter_seconds": 10,
+            }),
             "keyring": "[client.agent.test]\nkey = None\n",
             "root_cert.pem": f"{cephadm_root_ca}",
             "listener.crt": f"{ceph_generated_cert}",
@@ -86,13 +89,47 @@ def test_agent_get_dependencies():
     mgr.http_server.agent.server_port = 7150
     mgr.get_mgr_ip.return_value = '10.0.0.1'
     mgr.cert_mgr.get_root_ca.return_value = 'ROOT-CA'
-    mgr.get_module_option.return_value = True
     mgr.get_container_image.return_value = 'quay.io/ceph/ceph:test'
 
-    assert CephadmAgent.get_dependencies(mgr) == sorted([
+    options = {
+        'device_enhanced_scan': True,
+        'agent_metadata_compresion_enabled': True,
+        'agent_starting_port': 4721,
+        'agent_refresh_rate': -1,
+        'agent_avg_concurrency': -1,
+        'agent_initial_startup_delay_max': -1,
+        'agent_jitter_seconds': -1,
+    }
+    mgr.get_module_option.side_effect = lambda opt: options[opt]
+
+    expected = sorted([
         '10.0.0.1',
         '7150',
         'ROOT-CA',
         'True',
         'quay.io/ceph/ceph:test',
+        'device_enhanced_scan: True',
+        'agent_metadata_compresion_enabled: True',
+        'agent_starting_port: 4721',
+        'agent_refresh_rate: -1',
+        'agent_avg_concurrency: -1',
+        'agent_initial_startup_delay_max: -1',
+        'agent_jitter_seconds: -1',
     ])
+
+    deps = CephadmAgent.get_dependencies(mgr)
+    assert deps == expected
+    mgr.http_server.agent.compute_agents_refrsh_rate.assert_not_called()
+    mgr.http_server.agent.get_initial_delay.assert_not_called()
+    mgr.http_server.agent.get_jitter.assert_not_called()
+
+    # Auto-computed pacing values depend on host count, but host count itself
+    # must not invalidate agent dependencies and trigger a config fan-out.
+    mgr.cache.get_hosts.return_value = ['host1']
+    assert CephadmAgent.get_dependencies(mgr) == deps
+    mgr.cache.get_hosts.return_value = [f'host{i}' for i in range(300)]
+    assert CephadmAgent.get_dependencies(mgr) == deps
+
+    # An explicit user option change is a real configuration dependency.
+    options['agent_refresh_rate'] = 60
+    assert CephadmAgent.get_dependencies(mgr) != deps

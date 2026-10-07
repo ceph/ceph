@@ -559,7 +559,8 @@ def test_agent_get_ls(_ls_subset, _ls, cephadm_fs):
 @mock.patch("cephadm.AgentGatherer.start")
 @mock.patch("cephadm.port_in_use")
 @mock.patch("cephadm.CephadmAgent.pull_conf_settings")
-def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
+@mock.patch("cephadm.time.time", return_value=1234.5)
+def test_agent_run(_time, _pull_conf_settings, _port_in_use, _gatherer_start,
                    _listener_start, _is_alive, _load_verify_locations,
                     _HF_dump, _list_networks, _urlopen, _RQ_init, _wait, _clear):
     target_ip = '192.168.0.0'
@@ -614,7 +615,12 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
             pass
 
         def read(self):
-            return json.dumps({'valid': 'output', 'result': '400'})
+            return json.dumps({
+                'valid': 'output',
+                'result': '400',
+                'refresh_period': 60,
+                'jitter_seconds': 15,
+            })
 
     _port_in_use.side_effect = _fake_port_in_use
     _is_alive.return_value = False
@@ -666,11 +672,16 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
         _RQ_init.assert_called_with(
             f'https://{target_ip}:{target_port}/data',
             json.dumps(expected_data).encode('ascii'),
-            {'Content-Type': 'application/json'}
+            {
+                'X-Cephadm-Agent-Sent-At': '1234.5',
+                'Content-Type': 'application/json',
+            }
         )
         _listener_start.assert_called()
         _gatherer_start.assert_called()
         _urlopen.assert_called()
+        assert agent.loop_interval == 60
+        assert agent.jitter_seconds == 15
 
         # agent should not go down if connections fail
         _urlopen.side_effect = Exception()
