@@ -1699,7 +1699,11 @@ def test_osd_group_cap_option(cephadm_module: CephadmOrchestrator):
         cephadm_module.upgrade_staged_switch_osd_max_group = 0
         mons.recover()
         run.one_pass()
-        assert run.groups[-1] == [2, 3]                  # the rest of rack r1, as a rack
+        # what is left of r1 is h2: a whole rack goes first, h2 as a host
+        assert run.groups[-1] == [4, 5, 6, 7]
+        run.one_pass()
+        run.one_pass()
+        assert run.groups[-2:] == [[8, 9, 10, 11], [2, 3]]
 
 
 def test_osd_verify_timeout_is_its_own_option(cephadm_module: CephadmOrchestrator):
@@ -1975,3 +1979,77 @@ def test_osd_ec_shards_in_avail_no_missing(cephadm_module: CephadmOrchestrator):
             pg['avail_no_missing'] = ['4(1)', '8(2)']
             assert policy._pgs_waiting([0, 1], osds, caught_up=True) == {0: ['2.0']}
             assert policy._pgs_summary({0: ['2.0']}) == 'osd.0: 1 PG(s), e.g. 2.0'
+
+
+def test_crush_tree_narrowest():
+    tree = CrushTree(_FakeOsdMons().tree())
+    assert tree.narrowest(-1, [0, 1, 2, 3])['name'] == 'r1'
+    assert tree.narrowest(-2, [2, 3])['name'] == 'h2'
+    assert tree.narrowest(-2, [2])['name'] == 'h2'
+    assert tree.narrowest(-1, [0, 4])['name'] == 'default'
+    # a datacenter of one rack stays the datacenter; once dc1 is done,
+    # what is left of the region is dc2, not its rack
+    t2 = CrushTree({'nodes': [
+        {'id': -1, 'name': 'default', 'type': 'root', 'type_id': 11, 'children': [-2]},
+        {'id': -2, 'name': 'us', 'type': 'region', 'type_id': 10, 'children': [-3, -4]},
+        {'id': -3, 'name': 'dc1', 'type': 'datacenter', 'type_id': 8, 'children': [-5]},
+        {'id': -4, 'name': 'dc2', 'type': 'datacenter', 'type_id': 8, 'children': [-6]},
+        {'id': -5, 'name': 'dc1-r1', 'type': 'rack', 'type_id': 3, 'children': [0, 1]},
+        {'id': -6, 'name': 'dc2-r1', 'type': 'rack', 'type_id': 3, 'children': [2, 3]},
+        {'id': 0, 'name': 'osd.0', 'type': 'osd', 'type_id': 0},
+        {'id': 1, 'name': 'osd.1', 'type': 'osd', 'type_id': 0},
+        {'id': 2, 'name': 'osd.2', 'type': 'osd', 'type_id': 0},
+        {'id': 3, 'name': 'osd.3', 'type': 'osd', 'type_id': 0}]})
+    assert t2.narrowest(-3, [0, 1])['name'] == 'dc1'
+    assert t2.narrowest(-2, [0, 1, 2, 3])['name'] == 'us'
+    assert t2.narrowest(-2, [2, 3])['name'] == 'dc2'
+    assert t2.narrowest(-2, [3])['name'] == 'dc2'
+    # a datacenter of one rack of two hosts: one host left is that host
+    t3 = CrushTree({'nodes': [
+        {'id': -1, 'name': 'default', 'type': 'root', 'type_id': 11, 'children': [-2]},
+        {'id': -2, 'name': 'nyc', 'type': 'datacenter', 'type_id': 8, 'children': [-3]},
+        {'id': -3, 'name': 'nyc-r1', 'type': 'rack', 'type_id': 3, 'children': [-4, -5]},
+        {'id': -4, 'name': 'nyc-r1-h1', 'type': 'host', 'type_id': 1, 'children': [0, 1]},
+        {'id': -5, 'name': 'nyc-r1-h2', 'type': 'host', 'type_id': 1, 'children': [2, 3]},
+        {'id': 0, 'name': 'osd.0', 'type': 'osd', 'type_id': 0},
+        {'id': 1, 'name': 'osd.1', 'type': 'osd', 'type_id': 0},
+        {'id': 2, 'name': 'osd.2', 'type': 'osd', 'type_id': 0},
+        {'id': 3, 'name': 'osd.3', 'type': 'osd', 'type_id': 0}]})
+    assert t3.narrowest(-2, [0, 1, 2, 3])['name'] == 'nyc'
+    assert t3.narrowest(-2, [2, 3])['name'] == 'nyc-r1-h2'
+    assert t3.narrowest(-3, [2, 3])['name'] == 'nyc-r1-h2'
+    assert t3.narrowest(-1, [2, 3])['name'] == 'nyc-r1-h2'
+
+
+def test_osd_auto_names_the_group_after_what_is_left(cephadm_module: CephadmOrchestrator, caplog):
+    # r1 can never go as a whole; once h1 is done, what is left of r1 is h2:
+    # it is picked as host h2 - not as rack r1, a bucket half upgraded - and
+    # ok-to-stop is not asked twice for the same set
+    caplog.set_level('INFO', logger='cephadm.staged_switch')
+    mons = _FakeOsdMons()
+    with _OsdRun(cephadm_module, mons, level='auto') as run:
+        for _ in range(4):
+            run.one_pass()
+        assert run.groups == [[4, 5, 6, 7], [8, 9, 10, 11], [0, 1], [2, 3]]
+        picked = [r.getMessage() for r in caplog.records if 'staged switch picked' in r.getMessage()]
+        assert [m.split('picked ', 1)[1].split(':')[0] for m in picked] == \
+            ['rack r2', 'rack r3', 'host h1', 'host h2']
+        # h2 asked about to be picked and right before its switch - not
+        # once more as "rack r1"
+        assert [c['ids'] for c in mons.cmds('osd ok-to-stop')].count(['2', '3']) == 2
+        # a "no rack" message lists racks only
+        for r in caplog.records:
+            m = r.getMessage()
+            if 'no rack can be switched' in m:
+                assert 'host ' not in m.split('(', 1)[1]
+
+
+def test_osd_explicit_level_names_the_group_after_what_is_left(cephadm_module: CephadmOrchestrator, caplog):
+    # level rack, osd.0 and osd.1 already upgraded: what is left of r1 is h2
+    caplog.set_level('INFO', logger='cephadm.staged_switch')
+    mons = _FakeOsdMons()
+    mons.version[0] = mons.version[1] = NEW
+    with _OsdRun(cephadm_module, mons, level='rack') as run:
+        run.one_pass()
+        assert run.groups[-1] == [2, 3]
+        assert any('staged switch picked host h2: 2 OSD(s)' in r.getMessage() for r in caplog.records)
