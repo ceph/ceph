@@ -2333,6 +2333,23 @@ options:
   - rgw_graceful_stop
   flags:
   - runtime
+- name: rgw_realm_reload_max_delay
+  type: secs
+  level: advanced
+  desc: Maximum random delay before a realm reload
+  long_desc: When a gateway is notified of a new period (for example after
+    `radosgw-admin period update --commit`), it waits a random delay between 0 and this
+    many seconds before pausing its frontends to reload the realm configuration. This
+    spreads the reloads of gateways behind the same load balancer so that they don't all
+    stop serving requests at the same time. A value of 0 reloads immediately.
+  default: 0
+  min: 0
+  services:
+  - rgw
+  see_also:
+  - rgw_realm_reload_pause_timeout
+  flags:
+  - runtime
 - name: rgw_get_obj_window_size
   type: size
   level: advanced
