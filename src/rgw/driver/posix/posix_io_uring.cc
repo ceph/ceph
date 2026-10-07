@@ -803,7 +803,6 @@ struct UringWriteWindow::Impl {
   int fd;
   unsigned qd;
   bool direct_io;
-  bool chmod_done = false;
   int64_t logical_end = 0;
   bool needs_truncate = false;
   std::deque<std::unique_ptr<IoSlot>> inflight;
@@ -930,16 +929,6 @@ int UringWriteWindow::process(bufferlist&& data, uint64_t offset)
 {
   if (data.length() == 0) {
     return impl->drain_all();
-  }
-  if (!impl->chmod_done) {
-    int ret = ::fchmod(impl->fd, S_IRUSR | S_IWUSR);
-    if (ret < 0) {
-      ret = -errno;
-      ldpp_dout(impl->dpp, 0) << "ERROR: URING: fchmod failed: "
-                              << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-    impl->chmod_done = true;
   }
   while (impl->inflight.size() >= impl->qd) {
     int r = impl->wait_oldest();

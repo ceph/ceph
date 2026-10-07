@@ -713,13 +713,6 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
   int64_t left = bl.length();
   ssize_t ret;
 
-  ret = fchmod(fd, S_IRUSR|S_IWUSR);
-  if(ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not change permissions on object " << get_name() << ": "
-                  << cpp_strerror(ret) << dendl;
-    return ret;
-  }
-
   if (direct_io) {
     /* Never fcntl-off O_DIRECT on a shared fd; pad or RMW instead. */
     return posix_direct_write(fd, ofs, bl, dpp);

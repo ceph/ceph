@@ -1359,6 +1359,67 @@ TEST_F(POSIXBucketTest, ObjectWrite)
   EXPECT_TRUE(sf::is_regular_file(tp));
 }
 
+/* A PUT over a side-loaded file replaces the inode.
+ *
+ * The premise behind dropping the mode narrowings.  File::write()
+ * fchmod()ed to 0600 on every write call;  if a PUT wrote *into* a
+ * file that was already there, that call was re-permissioning
+ * somebody else's file and dropping it would change behaviour.  It
+ * does not:  File::create() opens O_TMPFILE and the result is linked
+ * over the name, so the published object is always an inode this
+ * driver made and its mode comes from that create.
+ *
+ * The inode assertion is the one that distinguishes the two cases --
+ * the mode alone comes out 0600 either way.
+ *
+ * umask is pinned because `openat` applies it:  a create of 0644
+ * lands at 0600 under a umask of 077, which would make this pass for
+ * the wrong reason.
+ */
+TEST_F(POSIXBucketTest, APutOverASideLoadedFileReplacesTheInode)
+{
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([saved] { ::umask(saved); });
+
+  const sf::path p{bp / "root" / testname / "sideloaded.bin"};
+  {
+    std::ofstream f(p);
+    f << "not ours";
+  }
+  ASSERT_EQ(::chmod(p.c_str(), 0644), 0);
+  struct stat before{};
+  ASSERT_EQ(::stat(p.c_str(), &before), 0);
+  ASSERT_EQ(before.st_mode & 07777, 0644u) << "the side-load did not take";
+
+  auto obj = bucket->get_object(rgw_obj_key("sideloaded.bin"));
+  auto writer = driver->get_atomic_writer(env->dpp, null_yield, obj.get(),
+					  acl_owner, nullptr, 0, testname);
+  ASSERT_NE(writer.get(), nullptr);
+  ASSERT_EQ(writer->prepare(null_yield), 0);
+
+  bufferlist bl;
+  bl.append("ours");
+  const uint64_t len = bl.length();
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, len), 0);
+
+  ceph::real_time mtime;
+  Attrs attrs;
+  std::string etag;
+  req_context rctx{env->dpp, null_yield, nullptr};
+  ASSERT_EQ(writer->complete(len, etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), 0);
+
+  struct stat after{};
+  ASSERT_EQ(::stat(p.c_str(), &after), 0);
+  EXPECT_NE(after.st_ino, before.st_ino)
+      << "the PUT wrote into the side-loaded file rather than replacing "
+	 "it;  the mode narrowing in the write path is therefore not "
+	 "redundant and must not be removed";
+  EXPECT_EQ(after.st_mode & 07777, 0600u);
+}
+
 class POSIXObjectTest : public POSIXBucketTest {
 protected:
   std::unique_ptr<rgw::sal::Object> object;
