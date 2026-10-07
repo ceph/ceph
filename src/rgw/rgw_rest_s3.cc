@@ -155,6 +155,44 @@ static struct response_attr_param resp_attr_params[] = {
   {NULL, NULL},
 };
 
+// query parameter names we might expect in any s3 request
+static constexpr auto common_params = {
+  // sigv2 presigned urls
+  "AWSAccessKeyId",
+  "Signature",
+  "Expires",
+  // rgw extension from RGWHandler_REST::allocate_formatter()
+  "format",
+};
+
+// TODO: use std::ranges::contains()
+bool contains_param(const auto& container, const std::string& entry)
+{
+  auto i = std::find(std::begin(container), std::end(container), entry);
+  return i != std::end(container);
+}
+
+// check request for unrecognized query params
+auto unrecognized_param(const RGWHTTPArgs& args,
+                        const auto& recognized_names)
+  -> const char*
+{
+  for (const auto& [name, val] : args.get_params()) {
+    if (contains_param(recognized_names, name)) {
+      continue;
+    }
+    if (contains_param(common_params, name)) {
+      continue;
+    }
+    // x-amz- parameters from sigv4 presigned urls
+    if (boost::istarts_with(name, "x-amz-")) {
+      continue;
+    }
+    return name.c_str();
+  }
+  return nullptr;
+}
+
 #define SSE_C_GROUP 1
 #define KMS_GROUP 2
 
@@ -5413,6 +5451,26 @@ RGWOp *RGWHandler_REST_Service_S3::op_head()
 
 RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data) const
 {
+  static constexpr auto list_params = {
+    // ListObjects
+    "delimiter", "encoding-type", "marker", "max-keys", "prefix",
+    // ListObjectsV2
+    "list-type", "continuation-token", "delimiter", "encoding-type",
+    "fetch-owner", "max-keys", "prefix", "start-after",
+    // ListObjectVersions
+    "versions", "delimiter", "encoding-type", "key-marker",
+    "max-keys", "prefix", "version-id-marker",
+    // rgw extensions
+    "allow-unordered",
+    "objs-container",
+    "read-stats",
+  };
+  if (auto name = unrecognized_param(s->info.args, list_params); name) {
+    ldpp_dout(s, 5) << "the bucket sub-resource " << name << " names an S3 API "
+        "that rgw does not implement" << dendl;
+    return nullptr;
+  }
+
   // Non-website mode
   if (get_data) {
     int list_type = 1;
@@ -5549,6 +5607,14 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
   } else if (is_bucket_ownership_op()) {
     return new RGWPutBucketOwnershipControls_ObjStore_S3;
   }
+
+  static constexpr auto create_bucket_params = std::initializer_list<const char*>{};
+  if (auto name = unrecognized_param(s->info.args, create_bucket_params); name) {
+    ldpp_dout(s, 5) << "the bucket sub-resource " << name << " names an S3 API "
+        "that rgw does not implement" << dendl;
+    return nullptr;
+  }
+
   return new RGWCreateBucket_ObjStore_S3;
 }
 
@@ -5591,6 +5657,13 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDelBucketMetaSearch_ObjStore_S3;
   }
 
+  static constexpr auto delete_bucket_params = std::initializer_list<const char*>{};
+  if (auto name = unrecognized_param(s->info.args, delete_bucket_params); name) {
+    ldpp_dout(s, 5) << "the bucket sub-resource " << name << " names an S3 API "
+        "that rgw does not implement" << dendl;
+    return nullptr;
+  }
+
   return new RGWDeleteBucket_ObjStore_S3;
 }
 
@@ -5611,6 +5684,13 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
     return new RGWConfigBucketMetaSearch_ObjStore_S3;
   }
 
+  static constexpr auto post_object_params = std::initializer_list<const char*>{};
+  if (auto name = unrecognized_param(s->info.args, post_object_params); name) {
+    ldpp_dout(s, 5) << "the bucket sub-resource " << name << " names an S3 API "
+        "that rgw does not implement" << dendl;
+    return nullptr;
+  }
+
   return new RGWPostObj_ObjStore_S3;
 }
 
@@ -5621,6 +5701,25 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_options()
 
 RGWOp *RGWHandler_REST_Obj_S3::get_obj_op(bool get_data)
 {
+  static constexpr auto get_object_params = {
+    // GetObject/HeadObject
+    "partNumber",
+    "response-cache-control",
+    "response-content-disposition",
+    "response-content-encoding",
+    "response-content-language",
+    "response-content-type",
+    "response-expires",
+    "versionId",
+    // GetObjectTorrent
+    "torrent",
+  };
+  if (auto name = unrecognized_param(s->info.args, get_object_params); name) {
+    ldpp_dout(s, 5) << "the object sub-resource " << name << " names an S3 API "
+        "that rgw does not implement" << dendl;
+    return nullptr;
+  }
+
   RGWGetObj_ObjStore_S3 *get_obj_op = new RGWGetObj_ObjStore_S3;
   get_obj_op->set_get_data(get_data);
   return get_obj_op;
@@ -5668,6 +5767,20 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
     return new RGWPutObjLegalHold_ObjStore_S3;
   }
 
+  static constexpr auto put_object_params = {
+    // UploadPart/UploadPartCopy
+    "uploadId",
+    "partNumber",
+    // AppendObject extension
+    "append",
+    "position",
+  };
+  if (auto name = unrecognized_param(s->info.args, put_object_params); name) {
+    ldpp_dout(s, 5) << "the object sub-resource " << name << " names an S3 API "
+        "that rgw does not implement" << dendl;
+    return nullptr;
+  }
+
   if (s->init_state.src_bucket.empty())
     return new RGWPutObj_ObjStore_S3;
   else
@@ -5679,12 +5792,20 @@ RGWOp *RGWHandler_REST_Obj_S3::op_delete()
   if (is_tagging_op()) {
     return new RGWDeleteObjTags_ObjStore_S3;
   }
-  string upload_id = s->info.args.get("uploadId");
-
-  if (upload_id.empty())
-    return new RGWDeleteObj_ObjStore_S3;
-  else
+  if (s->info.args.exists("uploadId")) {
     return new RGWAbortMultipart_ObjStore_S3;
+  }
+
+  static constexpr auto delete_object_params = {
+    "versionId",
+  };
+  if (auto name = unrecognized_param(s->info.args, delete_object_params); name) {
+    ldpp_dout(s, 5) << "the object sub-resource " << name << " names an S3 API "
+        "that rgw does not implement" << dendl;
+    return nullptr;
+  }
+
+  return new RGWDeleteObj_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Obj_S3::op_post()
@@ -5700,6 +5821,13 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
   
   if (is_select_op())
     return rgw::s3select::create_s3select_op();
+
+  static constexpr auto post_object_params = std::initializer_list<const char*>{};
+  if (auto name = unrecognized_param(s->info.args, post_object_params); name) {
+    ldpp_dout(s, 5) << "the object sub-resource " << name << " names an S3 API "
+        "that rgw does not implement" << dendl;
+    return nullptr;
+  }
 
   return new RGWPostObj_ObjStore_S3;
 }
