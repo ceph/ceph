@@ -3815,20 +3815,22 @@ Then run the following:
             if err_msg:
                 return err_msg
 
-        # Only save/apply osd.default after validation passes. Otherwise the serve loop
-        # would still apply the spec and create an OSD while the CLI returns an error.
-        # Spec store keys are full service names (example: "osd.default"), not service_id alone.
-        if drive_group.service_name() not in self.spec_store.all_specs:
-            self.log.info(f"{drive_group.service_name()} does not exist. Creating it now.")
-            self.create_osd_default_spec(drive_group)
-        else:
-            self.log.info(
-                f"Service {drive_group.service_name()} is already registered; continuing with this "
-                "daemon add (one-shot ceph-volume apply, not a full spec re-apply).")
+        # keep the serve loop off these hosts until this create returns
+        with self.osd_service.reserve_hosts(filtered_hosts):
+            # Only save/apply osd.default after validation passes. Otherwise the serve loop
+            # would still apply the spec and create an OSD while the CLI returns an error.
+            # Spec store keys are full service names (example: "osd.default"), not service_id alone.
+            if drive_group.service_name() not in self.spec_store.all_specs:
+                self.log.info(f"{drive_group.service_name()} does not exist. Creating it now.")
+                self.create_osd_default_spec(drive_group)
+            else:
+                self.log.info(
+                    f"Service {drive_group.service_name()} is already registered; continuing with this "
+                    "daemon add (one-shot ceph-volume apply, not a full spec re-apply).")
 
-        # 'ceph orch daemon add osd' must always run ceph-volume for this request.
-        # osdspec_needs_apply() only compares timestamps and would skip when inventory did not change.
-        return self.osd_service.create_from_spec(drive_group, force_apply=True)
+            # 'ceph orch daemon add osd' must always run ceph-volume for this request.
+            # osdspec_needs_apply() only compares timestamps and would skip when inventory did not change.
+            return self.osd_service.create_from_spec(drive_group, force_apply=True)
 
     def _preview_osdspecs(self,
                           osdspecs: Optional[List[DriveGroupSpec]] = None

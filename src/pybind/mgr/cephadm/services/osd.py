@@ -1,8 +1,9 @@
 import json
 import logging
 from asyncio import gather, to_thread
-from threading import Lock
-from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
+from contextlib import contextmanager
+from threading import Condition, Lock
+from typing import Iterator, List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
 
 from ceph.deployment import translate
 from ceph.deployment.drive_group import DriveGroupSpec
@@ -30,6 +31,44 @@ logger = logging.getLogger(__name__)
 @register_cephadm_service
 class OSDService(CephService):
     TYPE = 'osd'
+
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+        super().__init__(mgr)
+        # hosts with an OSD create running
+        self._creating_hosts: Set[str] = set()
+        self._creating_cond = Condition()
+        self._deferred = False
+
+    @contextmanager
+    def reserve_hosts(self, hosts: List[str]) -> Iterator[None]:
+        """Wait until the hosts are free, then hold them for the block."""
+        with self._creating_cond:
+            if not self._creating_cond.wait_for(
+                    lambda: not self._creating_hosts.intersection(hosts),
+                    timeout=self.mgr.default_cephadm_command_timeout):
+                raise OrchestratorError(
+                    f'timed out waiting for OSD creation on {", ".join(hosts)}')
+            self._creating_hosts.update(hosts)
+        try:
+            yield
+        finally:
+            self._release_hosts(hosts)
+
+    def _try_reserve_host(self, host: str) -> bool:
+        with self._creating_cond:
+            if host in self._creating_hosts:
+                self._deferred = True
+                return False
+            self._creating_hosts.add(host)
+            return True
+
+    def _release_hosts(self, hosts: List[str]) -> None:
+        with self._creating_cond:
+            self._creating_hosts.difference_update(hosts)
+            self._creating_cond.notify_all()
+            deferred, self._deferred = self._deferred, False
+        if deferred:
+            self.mgr._kick_serve_loop()
 
     def _apply_osd_config_to_daemon(
         self,
@@ -92,6 +131,7 @@ class OSDService(CephService):
         :param force_apply: If True, do not check osdspec_needs_apply(). Used by
             'ceph orch daemon add osd' where the requested devices are not reflected
             in inventory timestamps (and the check only compares timestamps, not spec content).
+            The caller must hold reserve_hosts().
         """
         logger.debug(f"Processing DriveGroup {drive_group}")
         creation_cfg, post_create_cfg = self._get_osd_spec_configs(drive_group)
@@ -119,21 +159,30 @@ class OSDService(CephService):
                     drive_group.service_id))
                 return None
 
-            logger.debug('Applying service osd.%s on host %s...' % (
-                drive_group.service_id, host
-            ))
-            start_ts = datetime_now()
-            env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
-            ret_msg = await self.create_single_host(
-                drive_group, host, cmds,
-                replace_osd_ids=osd_id_claims_for_host, env_vars=env_vars,
-                creation_cfg=creation_cfg, post_create_cfg=post_create_cfg
-            )
-            self.mgr.cache.update_osdspec_last_applied(
-                host, drive_group.service_name(), start_ts
-            )
-            self.mgr.cache.save_host(host)
-            return ret_msg
+            # a busy host is retried on a later pass
+            if not force_apply and not self._try_reserve_host(host):
+                logger.info(f'OSD creation in progress on {host}, '
+                            f'deferring {drive_group.service_name()}')
+                return None
+            try:
+                logger.debug('Applying service osd.%s on host %s...' % (
+                    drive_group.service_id, host
+                ))
+                start_ts = datetime_now()
+                env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
+                ret_msg = await self.create_single_host(
+                    drive_group, host, cmds,
+                    replace_osd_ids=osd_id_claims_for_host, env_vars=env_vars,
+                    creation_cfg=creation_cfg, post_create_cfg=post_create_cfg
+                )
+                self.mgr.cache.update_osdspec_last_applied(
+                    host, drive_group.service_name(), start_ts
+                )
+                self.mgr.cache.save_host(host)
+                return ret_msg
+            finally:
+                if not force_apply:
+                    self._release_hosts([host])
 
         async def all_hosts() -> List[str]:
             futures = [create_from_spec_one(h, ds)
