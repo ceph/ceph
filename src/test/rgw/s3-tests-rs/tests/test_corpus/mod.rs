@@ -35,3 +35,4 @@ mod manifest;
 mod inventory;
 mod generate;
 mod objects;
+mod versions;
