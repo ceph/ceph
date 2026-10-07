@@ -139,7 +139,6 @@ function test_autoscaler_basic() {
     wait_for 60 "ceph health detail | grep POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO"
 
     # test autoscale warn
-
     ceph osd pool create warn0 1 --autoscale-mode=warn
     wait_for 120 "ceph health detail | grep POOL_TOO_FEW_PGS"
 
@@ -212,14 +211,161 @@ function test_exact_budget() {
     ceph osd pool rm data1 data1 --yes-i-really-really-mean-it
 }
 
+function test_overlapping_roots() {
+    # Create custom CRUSH rules for zone-based placement
+    MON_TARGET_PG_PER_OSD=100
+    ceph config set global mon_target_pg_per_osd $MON_TARGET_PG_PER_OSD
+
+    ceph osd crush add-bucket us-east region
+    ceph osd crush move us-east root=default
+
+    ceph osd crush add-bucket us-east-1 zone
+    ceph osd crush add-bucket us-east-2 zone
+    ceph osd crush add-bucket us-east-3 zone
+    ceph osd crush move us-east-1 region=us-east
+    ceph osd crush move us-east-2 region=us-east
+    ceph osd crush move us-east-3 region=us-east
+
+    ceph osd crush add-bucket host0 host
+    ceph osd crush add-bucket host1 host
+    ceph osd crush add-bucket host2 host
+    ceph osd crush add-bucket host3 host
+    ceph osd crush add-bucket host4 host
+    ceph osd crush add-bucket host5 host
+
+    ceph osd crush move host0 zone=us-east-1
+    ceph osd crush move host1 zone=us-east-1
+    ceph osd crush move host2 zone=us-east-2
+    ceph osd crush move host3 zone=us-east-2
+    ceph osd crush move host4 zone=us-east-3
+    ceph osd crush move host5 zone=us-east-3
+
+    ceph osd crush set osd.0 1.0 host=host0
+    ceph osd crush set osd.1 1.0 host=host1
+    ceph osd crush set osd.2 1.0 host=host2
+    ceph osd crush set osd.3 1.0 host=host3
+    ceph osd crush set osd.4 1.0 host=host4
+    ceph osd crush set osd.5 1.0 host=host5
+
+    ceph osd crush move us-east root=default
+
+    # Add zone-based CRUSH rules
+    hostname=$(hostname -s)
+    ceph osd crush remove $hostname
+
+    ceph osd getcrushmap > crushmap
+    crushtool --decompile crushmap > crushmap.txt
+    sed 's/^# end crush map$//' crushmap.txt > crushmap_modified.txt
+    cat >> crushmap_modified.txt << EOF
+rule zone-1-only {
+        id 1
+        type replicated
+        step take us-east-1
+        step chooseleaf firstn 3 type host
+        step emit
+}
+
+rule zone-2-only {
+        id 2
+        type replicated
+        step take us-east-2
+        step chooseleaf firstn 3 type host
+        step emit
+}
+
+rule zone-3-only {
+        id 3
+        type replicated
+        step take us-east-3
+        step chooseleaf firstn 3 type host
+        step emit
+}
+
+rule default {
+        id 4
+        type replicated
+        step take default
+        step chooseleaf firstn 3 type host
+        step emit
+}
+# end crush map
+EOF
+
+    # compile the modified crushmap and set it
+    crushtool --compile crushmap_modified.txt -o crushmap.bin
+    ceph osd setcrushmap -i crushmap.bin
+
+
+    ceph osd pool create data0 --size=1
+    ceph osd pool create data1 --size=1
+    ceph osd pool create data2 --size=1
+    ceph osd pool create data3 --size=3
+
+    ceph osd pool set data0 pg_autoscale_mode on
+    ceph osd pool set data1 pg_autoscale_mode on
+    ceph osd pool set data2 pg_autoscale_mode on
+    ceph osd pool set data3 pg_autoscale_mode on
+    
+
+    ceph osd pool set data0 crush_rule zone-1-only
+    ceph osd pool set data1 crush_rule zone-2-only
+    ceph osd pool set data2 crush_rule zone-3-only
+    ceph osd pool set data3 crush_rule default
+
+    ceph osd pool set data0 target_size_ratio 1.0
+    ceph osd pool set data1 target_size_ratio 1.0
+    ceph osd pool set data2 target_size_ratio 1.0
+    ceph osd pool set data3 target_size_ratio 1.0
+
+    # expect
+    #  -1         6.00000  root default
+    #  -8         6.00000      region us-east
+    #  -5         2.00000          zone us-east-1
+    # -13         1.00000              host host0
+    #   0    ssd  1.00000                  osd.0
+    # -14         1.00000              host host1
+    #   1    ssd  1.00000                  osd.1
+    #  -6         2.00000          zone us-east-2
+    # -15         1.00000              host host2
+    #   2    ssd  1.00000                  osd.2
+    # -16         1.00000              host host3
+    #   3    ssd  1.00000                  osd.3
+    #  -7         2.00000          zone us-east-3
+    # -17         1.00000              host host4
+    #   4    ssd  1.00000                  osd.4
+    # -18         1.00000              host host5
+    #   5    ssd  1.00000                  osd.5
+
+    # -1: pg_target = 300
+    # -5: pg_target = 100
+    # -6  pg_target = 100
+    # -7: pg_target = 100
+
+    TARGET_PG_1=$(power2_floor $MON_TARGET_PG_PER_OSD)
+    TARGET_PG_2=$(power2_floor $(( ($NUM_OSDS - 3) * $MON_TARGET_PG_PER_OSD )))
+
+
+    wait_for 300 "ceph osd pool get data0 pg_num | grep $TARGET_PG_1"
+    wait_for 300 "ceph osd pool get data1 pg_num | grep $TARGET_PG_1"
+    wait_for 300 "ceph osd pool get data2 pg_num | grep $TARGET_PG_1"
+    wait_for 300 "ceph osd pool get data3 pg_num | grep $TARGET_PG_2"
+
+    ceph osd pool rm data0 data0 --yes-i-really-really-mean-it
+    ceph osd pool rm data1 data1 --yes-i-really-really-mean-it
+    ceph osd pool rm data2 data2 --yes-i-really-really-mean-it
+    ceph osd pool rm data3 data3 --yes-i-really-really-mean-it
+}
 
 # enable
 ceph config set mgr mgr/pg_autoscaler/sleep_interval 60
 ceph mgr module enable pg_autoscaler
+ceph osd pool set threshold 1.0
+
 
 test_autoscaler_basic || return 1
 test_pool_starvation || return 1
 test_exact_budget || return 1
+test_overlapping_roots || exit 1
 
 echo OK
 
