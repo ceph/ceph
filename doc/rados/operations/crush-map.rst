@@ -813,8 +813,9 @@ OSDs and clients are required to support the CRUSH_MSR feature bit
 Deleting rules
 --------------
 
-To delete rules that are not in use by pools, run a command of the following
-form:
+The Monitors delete a rule automatically when the last pool that uses it is
+deleted or given another rule, unless it is the default replicated rule. To
+delete a rule that no pool uses, run a command of the following form:
 
 .. prompt:: bash $
 
