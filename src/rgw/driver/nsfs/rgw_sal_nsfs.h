@@ -67,14 +67,19 @@ namespace nsfs {
  * the same hook that sequences a reader injects a failure and leaves a
  * tree for a restart to finish. */
 struct ConvertEvent {
-  enum class Kind { bucket, object, directory_object, upload, part };
+  enum class Kind { bucket, object, directory_object, version, upload,
+                    part };
   enum class Phase { before, written, pruned };
 
   Kind kind;
   Phase phase;
   std::string key;         /* the object, or the upload's object;
-                            * the bucket name when kind is bucket */
+                            * the bucket name when kind is bucket.
+                            * For a version it is the object the
+                            * version belongs to, with no suffix --
+                            * version_id carries the rest. */
   std::string upload_id;   /* empty unless kind is upload or part */
+  std::string version_id;  /* empty unless kind is version */
   uint32_t part{0};
   uint64_t index{0};       /* items reached so far, this run */
 };
@@ -90,6 +95,11 @@ using convert_cb_t =
 struct ConvertProgress {
   uint64_t objects{0};
   uint64_t directory_objects{0};
+  /* Counted apart from objects, because a resumed run has only these
+   * numbers and its marker to report from:  folded together, a count
+   * of 1540 cannot be reconciled against a bucket of 1200 keys, and a
+   * half-finished sweep reads the same as a bucket with history. */
+  uint64_t versions{0};
   uint64_t uploads{0};
   uint64_t parts{0};
   bool complete{false};    /* nothing foreign left;  the marker is gone */

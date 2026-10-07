@@ -152,6 +152,7 @@ public:
     f->open_object_section("converted");
     f->dump_unsigned("objects", prog.objects);
     f->dump_unsigned("directory_objects", prog.directory_objects);
+    f->dump_unsigned("versions", prog.versions);
     f->dump_unsigned("uploads", prog.uploads);
     f->dump_unsigned("parts", prog.parts);
     f->close_section();

@@ -6679,6 +6679,38 @@ public:
 			 ct.data(), ct.size(), 0), 0);
   }
 
+  /* a version entry of theirs, under .versions/.  Their layout is
+   * ours -- we borrowed it -- so only the attribute names differ. */
+  void their_version(const std::string& leaf, const std::string& vid,
+		     const char* ctype) {
+    const sf::path vdir{bucket_path() / ".versions"};
+    sf::create_directories(vdir);
+    const sf::path p{vdir / (leaf + "_" + vid)};
+    write_file(p, "their old bytes");
+    const std::string ct{ctype};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.content_type",
+			 ct.data(), ct.size(), 0), 0);
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.version_id",
+			 vid.data(), vid.size(), 0), 0);
+  }
+
+  /* a delete marker of theirs:  no bytes, and no ACL of any kind */
+  void their_delete_marker(const std::string& leaf, const std::string& vid) {
+    const sf::path vdir{bucket_path() / ".versions"};
+    sf::create_directories(vdir);
+    const sf::path p{vdir / (leaf + "_" + vid)};
+    write_file(p, "");
+    const std::string t{"true"};
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.delete_marker",
+			 t.data(), t.size(), 0), 0);
+    ASSERT_EQ(::setxattr(p.c_str(), "user.noobaa.version_id",
+			 vid.data(), vid.size(), 0), 0);
+  }
+
+  sf::path version_path(const std::string& leaf, const std::string& vid) {
+    return bucket_path() / ".versions" / (leaf + "_" + vid);
+  }
+
   /* RGW stores several string attributes as counted strings, so a
    * value read back through our own strategy carries the terminator
    * and one read through theirs does not -- theirs is not a counted
@@ -6753,6 +6785,105 @@ TEST_F(NSFSUpgradeTest, ConvertsTheBucketsOwnAttributes)
    * alone;  the mask is still there and still says strong */
   EXPECT_TRUE(after.contains(nsfs::EXTENSIONS_XATTR));
   EXPECT_FALSE(after.contains(nsfs::CONVERTING_XATTR));
+}
+
+/* .versions/ is a reserved name, so the tree walk skips it.  It skipped
+ * the version entries with it until convert_versions() existed, which
+ * left every one of them in their spelling while the bucket read in
+ * ours. */
+TEST_F(NSFSUpgradeTest, ConvertsVersionEntries)
+{
+  const std::string v1{"mtime-dlyy3p93o4mt-ino-430o2"};
+  const std::string v2{"mtime-dlyy3p96naq6-ino-430o3"};
+  their_object("photo.jpg", "image/jpeg");
+  their_version("photo.jpg", v1, "image/jpeg");
+  /* a leaf with an underscore in it, which is what makes the entry
+   * name ambiguous and the split non-trivial */
+  their_version("my_photo.jpg", v2, "image/png");
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.objects, 1u);
+  EXPECT_EQ(prog.versions, 2u)
+      << "the version entries were not visited";
+  EXPECT_TRUE(prog.complete);
+
+  for (const auto& [leaf, vid] :
+       std::vector<std::pair<std::string, std::string>>{
+	 {"photo.jpg", v1}, {"my_photo.jpg", v2}}) {
+    auto names = xattr_names(version_path(leaf, vid));
+    EXPECT_TRUE(names.contains("user.nsfs.rgw.content_type"))
+	<< leaf << " version kept no content type we can read";
+    EXPECT_FALSE(names.contains("user.noobaa.content_type"))
+	<< leaf << " version kept their spelling;  a later write would "
+	<< "add ours beside it";
+  }
+}
+
+/* The severe one.  Their delete marker is user.noobaa.delete_marker and
+ * ours is user.nsfs.delete_marker;  every read resolves the name
+ * through the bucket's strategy, and there is no chaining reader, so a
+ * marker left in their spelling stops being a marker once the mask is
+ * written.  The object it deleted comes back -- 200 with no bytes where
+ * S3 owes 404 -- and nothing reports it. */
+TEST_F(NSFSUpgradeTest, ADeleteMarkerStillReadsAsOneAfterConversion)
+{
+  const std::string vid{"mtime-dlyy3p9ezde0-ino-hu35vm"};
+  /* no leaf object:  a DELETE of a key that does not exist still
+   * writes a marker, and that is the case with no ACL to inherit */
+  their_delete_marker("gone.bin", vid);
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.versions, 1u);
+
+  auto names = xattr_names(version_path("gone.bin", vid));
+  EXPECT_TRUE(names.contains("user.nsfs.delete_marker"))
+      << "the marker is no longer a marker;  the deleted object is back";
+  EXPECT_FALSE(names.contains("user.noobaa.delete_marker"));
+}
+
+/* Conversion used to make a version owner *worse*:  unconverted, the
+ * bucket reads with their strategy and object_owner() answers from the
+ * inode;  converted, ours demands a recorded ACL and has no fallback.
+ * An entry left untouched therefore went from a correct owner to
+ * unknown/unknown.  A delete marker needs this too -- RGW emits an
+ * <Owner> for one. */
+TEST_F(NSFSUpgradeTest, ConversionCapturesTheOwnerOfAVersion)
+{
+  const std::string vid{"mtime-dlyy3p99mgtk-ino-430o4"};
+  const std::string dmid{"mtime-dlyy3p9muo1r-ino-hu35vn"};
+  their_version("doc.txt", vid, "text/plain");
+  their_delete_marker("doc.txt", dmid);
+
+  for (const auto& p : {version_path("doc.txt", vid),
+			version_path("doc.txt", dmid)}) {
+    ASSERT_FALSE(xattr_names(p).contains("user.nsfs.rgw.acl"))
+	<< "nothing to prove:  " << p << " already had an ACL";
+  }
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.versions, 2u);
+
+  for (const auto& p : {version_path("doc.txt", vid),
+			version_path("doc.txt", dmid)}) {
+    EXPECT_TRUE(xattr_names(p).contains("user.nsfs.rgw.acl"))
+	<< p << " has no owner after conversion, so it lists as unknown";
+  }
+}
+
+/* The lock file is ours, not a version, and must not be counted or
+ * rewritten as one. */
+TEST_F(NSFSUpgradeTest, TheVersionsLockIsNotAVersion)
+{
+  const std::string vid{"mtime-dlyy3p9clmwx-ino-430o5"};
+  their_version("only.bin", vid, "text/plain");
+  write_file(bucket_path() / ".versions" / ".lock", "");
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  EXPECT_EQ(prog.versions, 1u);
 }
 
 /* Neither marker is bucket metadata, so neither reaches the S3

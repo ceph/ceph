@@ -374,6 +374,37 @@ static std::string etag_from_fd(int fd, const nsfs::XattrStrategy* xs)
   return std::string(buf, len);
 }
 
+/* The object's recorded owner, from its ACL xattr.
+ *
+ * XattrStrategy::object_owner() reads an attribute map, so this builds
+ * the single entry it looks at.  The ACL is ceph-encoded rather than a
+ * counted string, so the bytes on disk go into the map unchanged.
+ *
+ * Sized from the attribute rather than from a fixed buffer:  a policy
+ * with many grants would otherwise be truncated, and a truncated
+ * encoding fails to decode, which would look like an object with no
+ * owner rather than like an error.
+ */
+static int owner_from_fd(int fd, const struct statx* stx,
+			 const nsfs::XattrStrategy* xs, ACLOwner& owner)
+{
+  Attrs attrs;
+  const std::string xattr = xs->disk_name(RGW_ATTR_ACL);
+  if (!xattr.empty()) {
+    ssize_t len = ::fgetxattr(fd, xattr.c_str(), nullptr, 0);
+    if (len > 0) {
+      bufferlist bl;
+      bl.push_back(buffer::create(len));
+      len = ::fgetxattr(fd, xattr.c_str(), bl.c_str(), len);
+      if (len > 0) {
+	bl.splice(len, bl.length() - len);
+	attrs[RGW_ATTR_ACL] = std::move(bl);
+      }
+    }
+  }
+  return xs->object_owner(attrs, stx, owner);
+}
+
 /* version entry name within .versions/: <leaf>_<version_id> */
 static inline std::string nsfs_ver_entry(const std::string& leaf,
                                          const std::string& vid)
@@ -1122,6 +1153,22 @@ version_lock_recovering(const DoutPrefixProvider* dpp, NSFSDriver* driver,
 struct DemoteResult {
   bool did_demote{false};
   std::string demoted_ver_id;
+
+  /* The demoted version's own facts, captured where the demotion
+   * happens.
+   *
+   * A caller that has already replaced the object cannot read them
+   * afterwards:  by then the inode under the leaf name is the *new*
+   * version.  That is why four of the five demoted cache entries were
+   * built from a key and almost nothing else -- the facts were never
+   * carried out of here, and only the delete path, which still holds
+   * the pre-delete object, could fill them in for itself.
+   *
+   * See fill_demoted_entry(). */
+  struct statx stx{};
+  std::string etag;
+  ACLOwner owner;
+  bool have_owner{false};
 };
 
 /*
@@ -1193,8 +1240,15 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 	xs->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
       ::fsetxattr(demoted_fd, ts_x.c_str(),
 		  now_ms.c_str(), now_ms.size(), 0);
+      /* While the fd that can answer them is open.  cur_stx was taken
+       * on the leaf before the link and safe_link moves no bytes, so
+       * it describes this same inode. */
+      result.etag = etag_from_fd(demoted_fd, xs);
+      result.have_owner =
+	(owner_from_fd(demoted_fd, &cur_stx, xs, result.owner) >= 0);
       ::close(demoted_fd);
     }
+    result.stx = cur_stx;
     result.did_demote = true;
     result.demoted_ver_id = cur_ver_id;
   } else if (sr == SafeResult::MISMATCH && cur_is_null) {
@@ -1373,6 +1427,49 @@ static inline ceph::real_time from_statx_timestamp(const struct statx_timestamp&
 {
   struct timespec ts{xts.tv_sec, xts.tv_nsec};
   return ceph::real_clock::from_timespec(ts);
+}
+
+/* The cache entry for a version a write has just demoted.
+ *
+ * One function because every caller of demote_current_version() needs
+ * this entry and each of them built a different subset of it:  the PUT
+ * path set the key and the flags and nothing else, so on a warm cache
+ * every non-current version listed as zero-length with no etag and no
+ * owner.  The bytes were never at risk -- a versioned GET reads the
+ * file -- but the listing said otherwise.
+ *
+ * It hid because a listing that misses runs Directory::fill_cache(),
+ * which reads each entry's xattrs and fills everything in.  A bucket
+ * listed for the first time after its writes therefore looks correct,
+ * and so does every test that creates a bucket, writes, and lists
+ * once.  The same mechanism hid the FLAG_CURRENT half of this bug
+ * until it was fixed in NSFSFSIOObject::publish(), whose comment
+ * describes it.
+ */
+static void fill_demoted_entry(const std::string& obj_name,
+			       const DemoteResult& d,
+			       rgw_bucket_dir_entry& bde)
+{
+  bde.key.name = obj_name;
+  bde.key.instance = d.demoted_ver_id;
+  bde.ver.pool = 1;
+  bde.ver.epoch = 1;
+  bde.exists = true;
+  bde.meta.category = RGWObjCategory::Main;
+  bde.meta.size = d.stx.stx_size;
+  bde.meta.accounted_size = d.stx.stx_size;
+  bde.meta.mtime = from_statx_timestamp(d.stx.stx_mtime);
+  bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+  /* its own digest where it has one;  etag_from_fd() says why the
+   * synthesized token must not stand in for a real one */
+  bde.meta.etag = d.etag.empty() ? synthesize_etag(d.stx) : d.etag;
+  /* FLAG_VER without FLAG_CURRENT is what demotion means, and clearing
+   * that flag is why the entry is rewritten at all */
+  bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+  if (d.have_owner) {
+    bde.meta.owner = to_string(d.owner.id);
+    bde.meta.owner_display_name = d.owner.display_name;
+  }
 }
 
 static inline int copy_dir_fd(int old_fd)
@@ -5859,6 +5956,7 @@ const char* nsfs::to_string(nsfs::ConvertEvent::Kind k)
   case nsfs::ConvertEvent::Kind::bucket:           return "bucket";
   case nsfs::ConvertEvent::Kind::object:           return "object";
   case nsfs::ConvertEvent::Kind::directory_object: return "directory object";
+  case nsfs::ConvertEvent::Kind::version:          return "version";
   case nsfs::ConvertEvent::Kind::upload:           return "upload";
   case nsfs::ConvertEvent::Kind::part:             return "part";
   }
@@ -5936,12 +6034,20 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
    * authorization falls through to the bucket.  The display name stays
    * empty, which is what the uid reader had.
    *
-   * Ordinary objects only.  A bucket's owner is not an inode fact and
-   * arrives with the account import;  a directory object does not come
-   * through here at all, because its attributes move from the directory
-   * to the sentinel rather than being rewritten in place, and
-   * convert_directory() captures its owner where that move happens. */
-  if ((base_ev.kind == nsfs::ConvertEvent::Kind::object) &&
+   * Objects and versions.  A version entry is an object's earlier
+   * content and answers its owner exactly the same way, so it needs
+   * the same capture;  a delete marker included, because RGW emits an
+   * <Owner> for one -- rgw_rest_s3.cc's version listing calls
+   * dump_owner() outside the is_delete_marker() guard, which suppresses
+   * only ETag, Size and StorageClass.  No bytes does not mean no owner.
+   *
+   * A bucket's owner is not an inode fact and arrives with the account
+   * import;  a directory object does not come through here at all,
+   * because its attributes move from the directory to the sentinel
+   * rather than being rewritten in place, and convert_directory()
+   * captures its owner where that move happens. */
+  if (((base_ev.kind == nsfs::ConvertEvent::Kind::object) ||
+       (base_ev.kind == nsfs::ConvertEvent::Kind::version)) &&
       (attrs.find(RGW_ATTR_ACL) == attrs.end())) {
     struct statx ostx{};
     ret = statx_ids(fd, ostx);
@@ -6006,6 +6112,137 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
     if (ret != 0) {
       return ret;
     }
+  }
+
+  return 0;
+}
+
+/* Split a ".versions/" entry into the object and the version id.
+ *
+ * "<leaf>_<version-id>", and a leaf may itself contain '_', so the
+ * split is the rightmost separator whose suffix is a version id.  The
+ * test is the one list_leaf_versions() applies:  "null", or the
+ * "mtime-" form. */
+static bool split_version_entry(const std::string& entry,
+				std::string& leaf, std::string& vid)
+{
+  size_t pos = entry.rfind('_');
+  while (pos != std::string::npos) {
+    const std::string cand = entry.substr(pos + 1);
+    if ((cand == NULL_VERSION_ID) || cand.starts_with("mtime-")) {
+      if (pos == 0) {
+	return false; /* no leaf */
+      }
+      leaf = entry.substr(0, pos);
+      vid = cand;
+      return true;
+    }
+    if (pos == 0) {
+      break;
+    }
+    pos = entry.rfind('_', pos - 1);
+  }
+  return false;
+}
+
+/* The version entries of one directory.
+ *
+ * .versions/ is a reserved name, so the walk in convert_directory()
+ * skips it, and until this existed the conversion skipped the versions
+ * with it.  That was not a cosmetic gap.  Every read resolves an
+ * attribute name through the *bucket's* strategy, there is one
+ * strategy per bucket and no chaining reader, so once the mask is
+ * written a user.noobaa.* name on a version entry is invisible:  a
+ * NooBaa delete marker stops reading as a delete marker and the object
+ * it deleted comes back, 200 with no bytes where S3 owes 404.
+ *
+ * It also went backwards on the owner.  Unconverted, the bucket reads
+ * with their strategy and object_owner() answers from the inode;
+ * converted, ours demands a recorded ACL and has no fallback, so an
+ * entry left in their spelling lists as unknown/unknown.  The capture
+ * in convert_attrs() is what closes that, which is why a version is
+ * one of the kinds it captures for.
+ *
+ * Flat:  the entries belong to leaves in this directory, so there is
+ * nothing to recurse into.  Anything that is not a regular file is
+ * left alone -- the lock file is ours, and a subdirectory here is a
+ * shape neither format produces.
+ */
+static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
+			    nsfs::Directory* d, CephContext* cct,
+			    const std::string& prefix,
+			    nsfs::FSStrategy* fs,
+			    const nsfs::XattrStrategy* ours,
+			    const nsfs::XattrStrategy* theirs,
+			    nsfs::convert_cb_t* cb,
+			    nsfs::ConvertProgress& progress)
+{
+  /* Checked before opening because most directories have no history,
+   * and Directory::open() logs at level 0 on failure -- an ENOENT per
+   * directory would bury the run's real output. */
+  struct statx vstx;
+  if (statx(d->get_fd(), HIDDEN_VERSIONS_PATH.c_str(), AT_SYMLINK_NOFOLLOW,
+	    STATX_MODE, &vstx) < 0) {
+    return 0;
+  }
+  if (!S_ISDIR(vstx.stx_mode)) {
+    return 0;
+  }
+
+  nsfs::Directory vers(HIDDEN_VERSIONS_PATH, d, cct);
+  int ret = vers.open(dpp);
+  if (ret < 0) {
+    /* it is there and unreadable, which is the case this pass must not
+     * pass over silently */
+    return ret;
+  }
+
+  std::vector<std::string> entries;
+  ret = vers.for_each(dpp, [&](const char* name) {
+    std::string_view n(name);
+    if ((n == ".") || (n == "..") || (n == VERSIONS_LOCK_NAME)) {
+      return 0;
+    }
+    struct statx stx;
+    if (statx(vers.get_fd(), name, AT_SYMLINK_NOFOLLOW, STATX_MODE,
+	      &stx) < 0) {
+      return 0;
+    }
+    if (S_ISREG(stx.stx_mode)) {
+      entries.emplace_back(name);
+    }
+    return 0;
+  });
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (const auto& name : entries) {
+    int fd = ::openat(vers.get_fd(), name.c_str(), O_RDONLY);
+    if (fd < 0) {
+      /* deleted under us;  one version, not a failed conversion */
+      continue;
+    }
+    auto close_fd = make_scope_guard([fd] { ::close(fd); });
+
+    nsfs::ConvertEvent ev{};
+    ev.kind = nsfs::ConvertEvent::Kind::version;
+    std::string leaf;
+    if (!split_version_entry(name, leaf, ev.version_id)) {
+      /* A name neither format produces.  Still converted, because the
+       * attributes are the whole point and leaving them is the defect;
+       * reported under the entry name, which is all there is. */
+      leaf = name;
+    }
+    ev.key = prefix + leaf;
+    ev.index = progress.objects + progress.directory_objects
+      + progress.versions;
+
+    ret = convert_attrs(dpp, y, fd, ev.key, fs, ours, theirs, cb, ev);
+    if (ret != 0) {
+      return ret;
+    }
+    ++progress.versions;
   }
 
   return 0;
@@ -6088,6 +6325,14 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       return ret;
     }
     ++progress.objects;
+  }
+
+  /* Before descending, so the whole of this directory -- its objects
+   * and their history -- is done in one step. */
+  ret = convert_versions(dpp, y, d, cct, prefix, fs, ours, theirs, cb,
+			 progress);
+  if (ret != 0) {
+    return ret;
   }
 
   for (const auto& name : subdirs) {
@@ -6845,7 +7090,8 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
   if (ret != 0) {
     ldpp_dout(dpp, 1) << "nsfs: converting bucket " << get_name()
       << " stopped after " << prog.objects << " objects, "
-      << prog.directory_objects << " directory objects and "
+      << prog.directory_objects << " directory objects, "
+      << prog.versions << " versions and "
       << prog.uploads << " uploads: "
       << cpp_strerror(-ret) << ";  the marker stays and a later run "
       << "resumes" << dendl;
@@ -6860,7 +7106,8 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
 
   ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name() << " converted: "
     << prog.objects << " objects, " << prog.directory_objects
-    << " directory objects, " << prog.uploads << " uploads ("
+    << " directory objects, " << prog.versions << " versions, "
+    << prog.uploads << " uploads ("
     << prog.parts << " parts)" << dendl;
   return 0;
 }
@@ -8149,20 +8396,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       bcache->remove_entry(dpp, db->get_name(), old_key);
 
       rgw_bucket_dir_entry dem_bde{};
-      dem_bde.key.name = obj_name;
-      dem_bde.key.instance = demote.demoted_ver_id;
-      dem_bde.ver.pool = 1;
-      dem_bde.ver.epoch = 1;
-      dem_bde.exists = true;
-      dem_bde.meta.category = RGWObjCategory::Main;
-      dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
-      {
-        ACLOwner acl_owner;
-        if (xattr_strategy()->object_owner(dobj->get_attrs(), nullptr, acl_owner) >= 0) {
-          dem_bde.meta.owner = to_string(acl_owner.id);
-          dem_bde.meta.owner_display_name = acl_owner.display_name;
-        }
-      }
+      fill_demoted_entry(obj_name, demote, dem_bde);
       bcache->add_entry(dpp, db->get_name(), dem_bde);
     }
 
@@ -8976,13 +9210,7 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 	bcache->remove_entry(dpp, bucket->get_name(), old_key);
 
 	rgw_bucket_dir_entry dem_bde{};
-	dem_bde.key.name = obj_name;
-	dem_bde.key.instance = demote.demoted_ver_id;
-	dem_bde.ver.pool = 1;
-	dem_bde.ver.epoch = 1;
-	dem_bde.exists = true;
-	dem_bde.meta.category = RGWObjCategory::Main;
-	dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+	fill_demoted_entry(obj_name, demote, dem_bde);
 	bcache->add_entry(dpp, bucket->get_name(), dem_bde);
       }
     }
@@ -11082,9 +11310,25 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     ::fsetxattr(dm_fd, vid_xattr.c_str(),
                 dm_ver_id.c_str(), dm_ver_id.size(), 0);
 
-    /* copy ACL from the source object so the DM has owner info */
+    /* copy ACL from the source object so the DM has owner info.
+     *
+     * There is not always one to copy.  A DELETE of a key that does
+     * not exist still writes a marker, and then the source carries no
+     * ACL, so the marker got none and listed as unknown/unknown --
+     * RGW emits an <Owner> for a delete marker, and on this backend
+     * the recorded ACL is the only thing that field reads from.
+     * params.obj_owner is the caller the SAL contract supplies for
+     * exactly this ("acl owner for delete marker if necessary"), so
+     * the marker is owned by whoever deleted, which is also what S3
+     * says it is. */
     bufferlist acl_bl;
-    if (rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ACL, acl_bl)) {
+    if (!rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ACL, acl_bl)) {
+      RGWAccessControlPolicy policy;
+      policy.create_default(params.obj_owner.id,
+			    params.obj_owner.display_name);
+      policy.encode(acl_bl);
+    }
+    if (acl_bl.length() > 0) {
       std::string acl_xattr = source->xattr_strategy()->disk_name(RGW_ATTR_ACL);
       std::string acl_v = attr_on_disk(source->xattr_strategy(),
                                        RGW_ATTR_ACL, acl_bl);
@@ -11165,10 +11409,20 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
                    rgw_bucket_dir_entry::FLAG_CURRENT |
                    rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
     {
+      /* The source has no ACL when the key being deleted does not
+       * exist, and a DELETE of a key that does not exist still writes
+       * a marker.  params.obj_owner is what the SAL hands us for
+       * exactly that case, and it is the same owner the marker's own
+       * ACL was just written with, so the cache entry and the disk
+       * agree. */
       ACLOwner acl_owner;
-      if (source->xattr_strategy()->object_owner(source->get_attrs(), nullptr, acl_owner) >= 0) {
+      if (source->xattr_strategy()->object_owner(source->get_attrs(), nullptr,
+						 acl_owner) >= 0) {
         dm_bde.meta.owner = to_string(acl_owner.id);
         dm_bde.meta.owner_display_name = acl_owner.display_name;
+      } else {
+        dm_bde.meta.owner = to_string(params.obj_owner.id);
+        dm_bde.meta.owner_display_name = params.obj_owner.display_name;
       }
     }
     bcache->add_entry(dpp, b->get_name(), dm_bde);
@@ -11854,20 +12108,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
         bcache->remove_entry(dpp, pb->get_name(), old_key);
 
         rgw_bucket_dir_entry dem_bde{};
-        dem_bde.key.name = obj_name;
-        dem_bde.key.instance = demote.demoted_ver_id;
-        dem_bde.ver.pool = 1;
-        dem_bde.ver.epoch = 1;
-        dem_bde.exists = true;
-        dem_bde.meta.category = RGWObjCategory::Main;
-        dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
-        {
-          ACLOwner acl_owner;
-          if (xattr_strategy()->object_owner(target_obj->get_attrs(), nullptr, acl_owner) >= 0) {
-            dem_bde.meta.owner = to_string(acl_owner.id);
-            dem_bde.meta.owner_display_name = acl_owner.display_name;
-          }
-        }
+        fill_demoted_entry(obj_name, demote, dem_bde);
         bcache->add_entry(dpp, pb->get_name(), dem_bde);
       }
 
@@ -11891,9 +12132,21 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       new_bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                       rgw_bucket_dir_entry::FLAG_CURRENT;
       {
+        /* The ACL comes from the attrs this write was handed, for the
+         * same reason the etag just above does:  target_obj's
+         * in-memory state is the object as it was *before* the write,
+         * so a new version has no ACL there and the entry went into
+         * the cache with no owner at all.
+         *
+         * Invisible on a cold cache, because a listing that misses
+         * runs fill_cache(), which reads the xattrs and supplies one.
+         * It showed up only when a version was written to a bucket
+         * that had already been listed -- found by running the
+         * conversion corpus twice against one gateway. */
         ACLOwner acl_owner;
-        if (xattr_strategy()->object_owner(target_obj->get_attrs(),
-                                           &new_stx, acl_owner) >= 0) {
+        const Attrs& osrc = (attrs.find(RGW_ATTR_ACL) != attrs.end())
+          ? attrs : target_obj->get_attrs();
+        if (xattr_strategy()->object_owner(osrc, &new_stx, acl_owner) >= 0) {
           new_bde.meta.owner = to_string(acl_owner.id);
           new_bde.meta.owner_display_name = acl_owner.display_name;
         }
@@ -11923,9 +12176,12 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
       bde.meta.etag = (eit2 != attrs.end())
 	? eit2->second.to_str() : synthesize_etag(new_stx);
       {
+        /* the write's attrs, not the pre-write state;  see the
+         * versioned branch above */
         ACLOwner acl_owner;
-        if (xattr_strategy()->object_owner(target_obj->get_attrs(),
-                                           &new_stx, acl_owner) >= 0) {
+        const Attrs& osrc = (attrs.find(RGW_ATTR_ACL) != attrs.end())
+          ? attrs : target_obj->get_attrs();
+        if (xattr_strategy()->object_owner(osrc, &new_stx, acl_owner) >= 0) {
           bde.meta.owner = to_string(acl_owner.id);
           bde.meta.owner_display_name = acl_owner.display_name;
         }
@@ -12747,6 +13003,40 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (ret < 0) {
     return ret;
   }
+
+  /* The published mode, narrowed here rather than only where the bytes
+   * go down.
+   *
+   * Both write paths narrow it themselves -- File::write() and
+   * UringWriteWindow -- and an object with an empty body goes through
+   * neither, so it kept the S_IRWXU its openat was given and landed
+   * 0700 among neighbours at 0600.  Measured by the conversion
+   * corpus's disk inventory, which is the only half that can see a
+   * mode at all.
+   *
+   * Narrowing at the end of the PUT is the one place every object
+   * reaches whatever path wrote it.  The two in the write paths stay:
+   * one of them is in driver/posix and shared, and FSIO writes do not
+   * come through here.
+   *
+   * As the owner, for the reason File::write() gives:  under
+   * impersonation the identity created the file, so the gateway cannot
+   * chmod it without CAP_FOWNER. */
+  {
+    int dfd = nsfs_data_file_fd(obj->get_fsent());
+    if (dfd >= 0) {
+      int cret = nsfs::with_identity(
+	dpp, obj->get_fsent()->get_identity(), [dfd]() -> int {
+	  return (::fchmod(dfd, S_IRUSR | S_IWUSR) < 0) ? -errno : 0;
+	});
+      if (cret < 0) {
+	ldpp_dout(dpp, 0) << "ERROR: could not set the published mode on "
+	  << obj->get_name() << ": " << cpp_strerror(-cret) << dendl;
+	return cret;
+      }
+    }
+  }
+
   uint64_t orig_size = 0;
   auto exists = obj->check_exists(dpp);
   if (exists) {
@@ -12886,13 +13176,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     bcache->remove_entry(rctx.dpp, b->get_name(), old_key);
 
     rgw_bucket_dir_entry dem_bde{};
-    dem_bde.key.name = obj_name;
-    dem_bde.key.instance = demote.demoted_ver_id;
-    dem_bde.ver.pool = 1;
-    dem_bde.ver.epoch = 1;
-    dem_bde.exists = true;
-    dem_bde.meta.category = RGWObjCategory::Main;
-    dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
+    fill_demoted_entry(obj_name, demote, dem_bde);
     bcache->add_entry(rctx.dpp, b->get_name(), dem_bde);
   }
 
