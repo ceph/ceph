@@ -65,6 +65,8 @@ async fn stage_one(
         .bucket(b)
         .key(&key)
         .content_type("application/octet-stream")
+        .customize()
+        .mutate_request(s3_tests_rs::http::zero_content_length)
         .send()
         .await
         .expect("create_multipart_upload");
@@ -274,14 +276,28 @@ async fn corpus_coverage_multipart() {
                     ));
                 }
                 /* the part count is the etag's suffix, which is how a
-                 * client tells a multipart object from a plain one */
-                let e = etag.clone().unwrap_or_default();
-                let suffix = format!("-{}", u.parts);
-                if !e.trim_matches('"').ends_with(&suffix) {
-                    problems.push(format!(
-                        "{:?} has {} parts and etag {e}, which does not end {suffix:?}",
-                        u.key, u.parts
-                    ));
+                 * client tells a multipart object from a plain one
+                 *
+                 * NooBaa does not produce an S3 multipart ETag at all.
+                 * Measured at the pin:  every completed upload comes
+                 * back `mtime-<base36>-ino-<base36>` -- an identity
+                 * token for the file instance, with no digest and no
+                 * part count.  Gated rather than fixed, because it is
+                 * what their implementation does;  the consequence for
+                 * adoption is in the punch list, and it is that an
+                 * adopted object either changes ETag under clients or
+                 * we store NooBaa's verbatim. */
+                #[cfg(not(feature = "fails_on_noobaa"))]
+                {
+                    let e = etag.clone().unwrap_or_default();
+                    let suffix = format!("-{}", u.parts);
+                    if !e.trim_matches('"').ends_with(&suffix) {
+                        problems.push(format!(
+                            "{:?} has {} parts and etag {e}, which does not \
+                             end {suffix:?}",
+                            u.key, u.parts
+                        ));
+                    }
                 }
                 if owner.is_empty() || owner == "unknown" {
                     problems.push(format!(

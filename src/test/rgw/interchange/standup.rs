@@ -7,7 +7,7 @@ edition = "2021"
 ---
 //! Stand up NooBaa's NSFS gateway over a data root, so that the
 //! conversion corpus can be run against *their* implementation and the
-//! result compared with ours.
+//! result compared with RGW.
 //!
 //! This is the workflow driver.  It does not test anything itself:  it
 //! brings a pinned NooBaa up, hands off, and tears down.  The corpus
@@ -25,7 +25,7 @@ edition = "2021"
 //!     -- drain, then upgrade -- and simultaneous access is a separate
 //!     feature.
 //!   * **A git worktree at the pin**, never a checkout of the
-//!     developer's own clone.  Reading their source at some other
+//!     developer's own clone.  Reading noobaa-core's source at some other
 //!     commit is a thing we do constantly;  this must not disturb it.
 //!
 //! Run `standup.rs list` to see the steps, `standup.rs <step>` to run
@@ -55,24 +55,29 @@ struct Env {
     /// the ceph build directory, for the handoff.  **Required** for
     /// `adopt`, and only for `adopt`
     ceph_build: Option<PathBuf>,
-    /// their HTTP port
+    /// the NooBaa HTTP port
     port: u16,
-    /// the account their gateway serves as
+    /// the account NooBaa serves as
     account: String,
     /// the one bucket, which both gateways will serve
     bucket: String,
     /// fixed, so the corpus can be pointed at it without discovery
     access_key: String,
     secret_key: String,
+    /// the s3-tests-rs checkout the corpus lives in.  A sibling of
+    /// this driver, so it needs no setting in the normal case
+    suite: PathBuf,
+    /// which corpus tier `capture` runs
+    tier: String,
 }
 
 /// Every setting, from `interchange.conf` and then the environment.
 ///
-/// `IX_WORK` and `work = ` are the same setting;  the environment
+/// `INTERCHANGE_WORK` and `work = ` are the same setting;  the environment
 /// wins.
 fn settings() -> BTreeMap<String, String> {
     let mut m = BTreeMap::new();
-    let conf = ix_home().join("interchange.conf");
+    let conf = interchange_home().join("interchange.conf");
     if let Ok(text) = std::fs::read_to_string(&conf) {
         for line in text.lines() {
             let line = line.trim();
@@ -85,7 +90,7 @@ fn settings() -> BTreeMap<String, String> {
         }
     }
     for (k, v) in std::env::vars() {
-        if let Some(rest) = k.strip_prefix("IX_") {
+        if let Some(rest) = k.strip_prefix("INTERCHANGE_") {
             m.insert(rest.to_ascii_lowercase(), v);
         }
     }
@@ -111,10 +116,10 @@ impl Env {
                  It holds the NooBaa worktree -- upwards of a gigabyte -- and the\n  \
                  config store and the data root, which are the artifacts this\n  \
                  produces.  Put it somewhere deliberate, outside any ceph path:\n\n    \
-                 IX_WORK=/path/to/interchange standup.rs <step>\n\n  \
+                 INTERCHANGE_WORK=/path/to/interchange standup.rs <step>\n\n  \
                  or, standing, in {}:\n\n    work = /path/to/interchange\n\n  \
                  See interchange.conf.sample.",
-                ix_home().join("interchange.conf").display()
+                interchange_home().join("interchange.conf").display()
             ));
         };
         let work = PathBuf::from(work);
@@ -144,8 +149,23 @@ impl Env {
             /* Fixed rather than generated:  the corpus has to be
              * pointed at this endpoint, and a credential that changes
              * per run means a config file that changes per run. */
-            access_key: get("access_key", "IXAAAAAAAAAAAAAAAAAA"),
-            secret_key: get("secret_key", "IXsecretIXsecretIXsecretIXsecretIXsecret"),
+            access_key: get("access_key", "INTERCHANGEACCESSKEY"),
+            secret_key: get("secret_key", "interchangesecretkeyinterchangesecretkey"),
+            /* `../s3-tests-rs` from here.  The corpus is a modality of
+             * that suite rather than a separate tool, so the two move
+             * together and the default is right whenever this driver
+             * is run from the tree it was committed to. */
+            suite: get(
+                "suite",
+                &interchange_home()
+                    .parent()
+                    .unwrap_or(&interchange_home())
+                    .join("s3-tests-rs")
+                    .display()
+                    .to_string(),
+            )
+            .into(),
+            tier: get("tier", "coverage"),
         })
     }
 
@@ -158,7 +178,7 @@ impl Env {
         self.work.join(format!("noobaa-{}", self.pin))
     }
 
-    /// Their NC configuration directory -- the config store the
+    /// The NC configuration directory -- the config store the
     /// account and bucket records live in.  Separate from the data
     /// root:  the records describe the tree, they are not in it.
     fn config_root(&self) -> PathBuf {
@@ -166,7 +186,7 @@ impl Env {
     }
 
     fn node(&self) -> String {
-        env_or("IX_NODE", "node")
+        env_or("INTERCHANGE_NODE", "node")
     }
 
     fn pid_file(&self) -> PathBuf {
@@ -175,6 +195,25 @@ impl Env {
 
     fn log_file(&self) -> PathBuf {
         self.work.join("nsfs.log")
+    }
+
+    /// Where a capture's artifacts go.
+    ///
+    /// **The side is in the path, never in the artifacts.**  The
+    /// comparison between two gateways is `diff`, so a fact saying
+    /// which gateway produced it would differ on every line and the
+    /// diff would stop saying anything.  `capture/noobaa` here, and
+    /// `capture/rgw` for the run after `adopt`.
+    fn capture_dir(&self, side: &str) -> PathBuf {
+        self.work.join("capture").join(side)
+    }
+
+    fn capture_conf(&self) -> PathBuf {
+        self.work.join("s3tests-noobaa.conf")
+    }
+
+    fn capture_log(&self) -> PathBuf {
+        self.work.join("capture").join("noobaa.log")
     }
 }
 
@@ -194,10 +233,10 @@ const STEPS: &[(&str, &str)] = &[
     ("pin",      "resolve the pin and verify the commit is present"),
     ("worktree", "create or refresh a git worktree at the pin"),
     ("patch",    "apply the patches this pin needs to build"),
-    ("build",    "install the dependency tree, and build their native addon"),
-    ("config",   "write their account and bucket records over the data root"),
-    ("serve",    "start their NSFS endpoint"),
-    ("capture",  "run the corpus against their endpoint"),
+    ("build",    "install the dependency tree, and build NooBaa's native addon"),
+    ("config",   "write the NooBaa account and bucket records over the data root"),
+    ("serve",    "start the NooBaa NSFS endpoint"),
+    ("capture",  "run the corpus against the NooBaa endpoint"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("adopt",    "start RGW against the same tree"),
 ];
@@ -220,9 +259,9 @@ fn main() {
         "build" => build(&env),
         "config" => config(&env),
         "serve" => serve(&env),
+        "capture" => capture(&env),
         "stop" => stop(&env),
         "adopt" => adopt(&env),
-        "capture" => unbuilt(cmd),
         "up" => ["pin", "worktree", "patch", "build", "config"]
             .iter()
             .try_for_each(|s| match *s {
@@ -244,24 +283,25 @@ fn main() {
 fn list() {
     println!("steps:");
     for (name, what) in STEPS {
-        let mark = if *name == "capture" { " " } else { "x" };
-        println!("  [{mark}] {name:10} {what}");
+        println!("  {name:10} {what}");
     }
 
-    println!("\n`IX_` is for *interchange*.  Each setting is an IX_ environment");
-    println!("variable, or the same name in interchange.conf beside this driver;");
-    println!("the environment wins.\n");
+    println!("\nEach setting is an INTERCHANGE_<NAME> environment variable, or the");
+    println!("same name in interchange.conf beside this driver;  the environment");
+    println!("wins.\n");
 
     let s = settings();
     let shown = [
         ("work", "REQUIRED -- the worktree, config store, data root, logs"),
         ("ceph_build", "REQUIRED for `adopt` -- the ceph build directory"),
-        ("noobaa_src", "their clone, read only"),
+        ("noobaa_src", "the noobaa-core clone, read only"),
         ("pin", "the commit to stand up"),
         ("data", "what --data-root is given;  the tree is data/root"),
-        ("port", "their HTTP port"),
+        ("port", "the NooBaa HTTP port"),
         ("account", ""),
         ("bucket", ""),
+        ("suite", "the s3-tests-rs checkout;  defaults to a sibling of this driver"),
+        ("tier", "which corpus tier `capture` runs"),
     ];
     for (k, note) in shown {
         match s.get(k) {
@@ -269,15 +309,10 @@ fn list() {
             _ => println!("  {k:12} (unset)  {note}"),
         }
     }
-    println!("\n[x] is built;  [ ] is not.  `up` runs through `config`.");
-}
-
-fn unbuilt(step: &str) -> Result<(), String> {
-    Err(format!(
-        "step {step:?} is not built yet.  The step model is agreed and \
-         the earlier steps work;  this one is where the discussion with \
-         Matt had got to.  See README.md."
-    ))
+    println!("\n`up` runs through `config`.  `serve`, `capture`, `stop` and `adopt`");
+    println!("are each run deliberately:  they start and stop gateways over a tree");
+    println!("that is the artifact, and chaining them past a failure is how a tree");
+    println!("gets destroyed rather than handed over.");
 }
 
 /* ---------------------------------------------------------------- */
@@ -285,19 +320,19 @@ fn unbuilt(step: &str) -> Result<(), String> {
 /// Resolve the pin against the developer's clone, and say what it is.
 ///
 /// Read only.  The clone's HEAD and index are not touched, because
-/// reading their source at some other commit is a thing we do
+/// reading noobaa-core's source at some other commit is a thing we do
 /// constantly and this must not disturb it.
 fn pin(env: &Env) -> Result<(), String> {
     if !env.src.join(".git").exists() {
         return Err(format!(
-            "{} is not a git clone of noobaa-core;  set IX_NOOBAA_SRC",
+            "{} is not a git clone of noobaa-core;  set INTERCHANGE_NOOBAA_SRC",
             env.src.display()
         ));
     }
     let full = git(&env.src, &["rev-parse", &format!("{}^{{commit}}", env.pin)])
         .map_err(|_| {
             format!(
-                "commit {} is not in {};  fetch it, or set IX_PIN",
+                "commit {} is not in {};  fetch it, or set INTERCHANGE_PIN",
                 env.pin,
                 env.src.display()
             )
@@ -358,13 +393,13 @@ fn worktree(env: &Env) -> Result<(), String> {
 ///
 /// **Patched rather than silenced.**  Demoting the warning was the
 /// first thing tried and it was wrong -- it would have left a real
-/// aliasing hazard in the addon that every capture from their gateway
+/// aliasing hazard in the addon that every capture from NooBaa
 /// depends on, where a miscompilation would surface as what looks like
 /// a format difference.
 ///
 /// Upstream may well have fixed this in a later commit;  this driver
 /// deliberately does not go looking.  The pin is the pin, and carrying
-/// a patch against it is cheaper than tracking their history.
+/// a patch against it is cheaper than tracking NooBaa's history.
 ///
 /// Idempotent:  an applied patch is detected by whether it reverses.
 fn patch(env: &Env) -> Result<(), String> {
@@ -372,7 +407,7 @@ fn patch(env: &Env) -> Result<(), String> {
     if !wt.exists() {
         return Err("no worktree;  run `worktree` first".into());
     }
-    let dir = ix_home().join("patches");
+    let dir = interchange_home().join("patches");
     let mut found = 0;
     let mut applied = 0;
 
@@ -415,15 +450,15 @@ fn patch(env: &Env) -> Result<(), String> {
 }
 
 /// Where this driver and its data files live.
-fn ix_home() -> PathBuf {
-    std::env::var("IX_HOME")
+fn interchange_home() -> PathBuf {
+    std::env::var("INTERCHANGE_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| ".".into()))
 }
 
 /// Install the dependency tree, from a lock we control.
 ///
-/// **Their lock at this pin does not `npm ci`.**  `npm ci` is the
+/// **NooBaa's lock at this pin does not `npm ci`.**  `npm ci` is the
 /// right verb -- it installs a lock exactly, refuses when the lock and
 /// `package.json` disagree, and never rewrites the lock -- and at
 /// `08d063f86` it refuses:  `package-lock.json` is missing
@@ -438,7 +473,7 @@ fn ix_home() -> PathBuf {
 /// after that copies that lock in and uses `npm ci`, which is exact.
 /// The resolved lock is committed alongside this driver, so the
 /// dependency tree is reproducible for us even though it is not
-/// reproducible from their commit alone.
+/// reproducible from NooBaa's commit alone.
 ///
 /// A container would not have helped:  an image bakes in whatever one
 /// arbitrary resolution produced, which is this, without saying so.
@@ -460,16 +495,16 @@ fn build(env: &Env) -> Result<(), String> {
         return native(env);
     }
 
-    let ours = ours_lock(env);
-    let theirs = wt.join("package-lock.json");
+    let recorded = pinned_lock(env);
+    let in_worktree = wt.join("package-lock.json");
 
-    let verb = if ours.exists() {
-        println!("build    npm ci against {}", ours.display());
-        std::fs::copy(&ours, &theirs)
+    let verb = if recorded.exists() {
+        println!("build    npm ci against {}", recorded.display());
+        std::fs::copy(&recorded, &in_worktree)
             .map_err(|e| format!("cannot place our lock: {e}"))?;
         "ci"
     } else {
-        println!("build    no lock of ours for this pin yet;  resolving with");
+        println!("build    no recorded lock for this pin yet;  resolving with");
         println!("         npm install, then recording it in locks/");
         "install"
     };
@@ -489,11 +524,11 @@ fn build(env: &Env) -> Result<(), String> {
     }
 
     if verb == "install" {
-        std::fs::create_dir_all(ours.parent().unwrap())
+        std::fs::create_dir_all(recorded.parent().unwrap())
             .map_err(|e| format!("cannot create locks/: {e}"))?;
-        std::fs::copy(&theirs, &ours)
+        std::fs::copy(&in_worktree, &recorded)
             .map_err(|e| format!("cannot record our lock: {e}"))?;
-        println!("build    recorded {}", ours.display());
+        println!("build    recorded {}", recorded.display());
         println!("         commit it:  that is what makes this pin reproducible");
     }
 
@@ -502,7 +537,7 @@ fn build(env: &Env) -> Result<(), String> {
     native(env)
 }
 
-/// Their native addon, which `npm ci` does not build.
+/// NooBaa's native addon, which `npm ci` does not build.
 ///
 /// `package.json` overrides the install hook -- *"install hook
 /// override to avoid npm default hook calling node-gyp"* -- so
@@ -546,12 +581,12 @@ fn native(env: &Env) -> Result<(), String> {
     Ok(())
 }
 
-/// Write their account and bucket records over the data root.
+/// Write the NooBaa account and bucket records over the data root.
 ///
-/// Through `manage_nsfs.js`, their own CLI, rather than by composing
-/// JSON:  the whole point of standing their gateway up is to get
+/// Through `manage_nsfs.js`, NooBaa's own CLI, rather than by composing
+/// JSON:  the whole point of standing NooBaa up is to get
 /// records *they* wrote.  Hand-written records would be our reading of
-/// their schema again, which is the thing this stage exists to stop
+/// NooBaa's schema again, which is the thing this stage exists to stop
 /// relying on.
 ///
 /// **uid and gid are the running user's.**  The handoff is sequential
@@ -561,7 +596,7 @@ fn native(env: &Env) -> Result<(), String> {
 /// rather than on anything interesting.
 ///
 /// Idempotent:  a second run finds the records present and says so.
-/// Their CLI fails a duplicate `add`, which is correct of it and not
+/// NooBaa's CLI fails a duplicate `add`, which is correct of it and not
 /// what this driver wants.
 fn config(env: &Env) -> Result<(), String> {
     let wt = env.worktree();
@@ -616,7 +651,7 @@ fn config(env: &Env) -> Result<(), String> {
         println!("         bucket {:?} created at {}", env.bucket, bucket_path.display());
     }
 
-    /* Their NC config file, which is where a config override goes.
+    /* The NC config file, which is where a config override goes.
      *
      * ALLOW_HTTP, because in NC mode the S3 endpoint refuses to serve
      * HTTP at all unless it is set -- `if (nsfs_config_root &&
@@ -654,7 +689,7 @@ fn config(env: &Env) -> Result<(), String> {
     Ok(())
 }
 
-/// Start their S3 endpoint over the data root.
+/// Start the NooBaa S3 endpoint over the data root.
 ///
 /// HTTP only.  `--https_port -1` turns TLS off the way they turn IAM
 /// off, and the corpus talks to this with the Rust SDK, for which a
@@ -750,6 +785,308 @@ fn serve(env: &Env) -> Result<(), String> {
     ))
 }
 
+/// Run the corpus against the NooBaa endpoint, and keep what it produced.
+///
+/// This is the step the rest of the stand-up exists for.  Everything
+/// before it arranges for a pinned NooBaa to be serving a tree;  this
+/// points the conversion corpus at it and keeps the two artifacts the
+/// corpus produces per axis -- the S3 manifest and the disk inventory
+/// -- under `capture/noobaa`.
+///
+/// **A failing axis is the finding, not a broken step.**  The corpus
+/// asserts what the nsfs driver should do, and NooBaa is a different
+/// implementation:  a disagreement is exactly what a capture is for.
+/// Every axis writes its manifest and takes its inventory *before* it
+/// asserts, which is what makes this usable -- a failed axis still
+/// leaves its artifacts behind.  So the corpus is run `--no-fail-fast`
+/// and a non-zero exit is reported rather than propagated.  What this
+/// step does fail on is producing no artifacts at all, because that
+/// means the corpus never reached a write.
+///
+/// **`CORPUS_OBJECT_MODE=any`.**  The corpus checks that every object
+/// is published 0600, which is a statement about the nsfs driver and not
+/// about S3.  Left strict, every object NooBaa wrote would be
+/// reported as an offender and the differences worth reading would be
+/// buried.
+///
+/// Idempotent:  the artifacts are rewritten, and the buckets the
+/// corpus uses have stable names so a second run meets its own.
+fn capture(env: &Env) -> Result<(), String> {
+    let Some(pid) = running(env) else {
+        return Err("the NooBaa endpoint is not running;  run `serve` first".into());
+    };
+    /* Whether it answers, not whether a pid exists.  The corpus will
+     * ask the same question and a clearer error here is cheaper than
+     * an SDK timeout there. */
+    if std::net::TcpStream::connect(("127.0.0.1", env.port)).is_err() {
+        return Err(format!(
+            "pid {pid} is alive but nothing accepts a connection on port {};\n  see {}",
+            env.port,
+            env.log_file().display()
+        ));
+    }
+    if !env.suite.join("Cargo.toml").exists() {
+        return Err(format!(
+            "{} is not the s3-tests-rs suite.  It is normally a sibling of this\n  \
+             driver;  set INTERCHANGE_SUITE, or `suite = ` in {}.",
+            env.suite.display(),
+            interchange_home().join("interchange.conf").display()
+        ));
+    }
+
+    let dir = env.capture_dir("noobaa");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+
+    /* Clear the artifacts of a previous capture, and only those.
+     *
+     * A manifest this run no longer produces would otherwise sit in
+     * the directory and read as a fact about this run.  By suffix and
+     * one level deep -- not a recursive remove -- because the last
+     * thing this project got wrong in exactly this shape deleted a
+     * tree it was supposed to be reading. */
+    let mut stale = 0usize;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.filter_map(|e| e.ok()) {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.ends_with(".manifest") || name.ends_with(".inventory") {
+                if std::fs::remove_file(e.path()).is_ok() {
+                    stale += 1;
+                }
+            }
+        }
+    }
+    if stale > 0 {
+        println!("capture  cleared {stale} artifacts from a previous run");
+    }
+
+    let conf = write_capture_conf(env)?;
+    println!("capture  endpoint http://127.0.0.1:{}", env.port);
+    println!("         conf     {}", conf.display());
+    println!("         tier     {}", env.tier);
+    println!("         out      {}", dir.display());
+    println!("         log      {}", env.capture_log().display());
+
+    /* nextest if it is there, the built-in harness if it is not.  The
+     * house standard is nextest and its per-test failure blocks are
+     * what makes a multi-axis disagreement readable;  requiring it
+     * would make this step fail for a reason that has nothing to do
+     * with the interchange. */
+    let have_nextest = Command::new("cargo")
+        .args(["nextest", "--version"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    /* `--features fails_on_noobaa`.
+     *
+     * The gates that feature carries are permanent and name what
+     * NooBaa's implementation does not do -- the multipart ETag is an
+     * identity token rather than a digest with a part count, bucket-
+     * level object lock configuration answers NotImplemented, and
+     * three scaffolding names are hidden by prefix match.  Without it
+     * `capture`'s exit status carries no signal:  a capability fact
+     * and a real disagreement look the same.
+     *
+     * It does not suppress everything that fails.  The bucket-
+     * configuration axis still fails here, deliberately, because that
+     * one is our instrument looking only where the nsfs driver stores
+     * configuration -- gating it would hide a defect of ours behind a
+     * fact about NooBaa. */
+    let runner = if have_nextest {
+        "cargo nextest run --features fails_on_noobaa --test test_corpus \
+         --no-fail-fast --test-threads=4"
+    } else {
+        println!("         (cargo-nextest is not installed;  using cargo test)");
+        "cargo test --features fails_on_noobaa --test test_corpus \
+         --no-fail-fast -- --test-threads=4"
+    };
+
+    /* Through bash so the output reaches the terminal and the log at
+     * once:  a capture is slow enough that silence reads as a hang,
+     * and a disagreement that only ever existed in a scrollback is
+     * not a record.  `pipefail` so the runner's status survives tee.
+     *
+     * Every path goes through the environment rather than into the
+     * command line, so nothing here has to be quoted correctly. */
+    let script = format!(
+        "set -o pipefail; cd \"$INTERCHANGE_SUITE\" || exit 1; \
+         {runner} 2>&1 | tee \"$INTERCHANGE_CAPTURE_LOG\""
+    );
+    let st = Command::new("bash")
+        .arg("-c")
+        .arg(&script)
+        .env("INTERCHANGE_SUITE", env.suite.display().to_string())
+        .env("INTERCHANGE_CAPTURE_LOG", env.capture_log().display().to_string())
+        .env("S3TEST_CONF", conf.display().to_string())
+        .env("CORPUS_OUT", dir.display().to_string())
+        /* The disk half.  Same host by construction -- the NooBaa endpoint
+         * is on 127.0.0.1 -- so the inventory can be taken, and it is
+         * the half that answers "what did they write". */
+        .env("CORPUS_DATA_ROOT", env.tree().display().to_string())
+        .env("CORPUS_TIER", &env.tier)
+        /* NooBaa publishes its own modes.  See the doc comment. */
+        .env("CORPUS_OBJECT_MODE", "any")
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .map_err(|e| format!("cannot run the corpus: {e}"))?;
+
+    /* What landed.  The artifacts are the product, so they are what
+     * gets reported -- and an empty directory is the one outcome that
+     * means this step did not happen. */
+    let mut artifacts: Vec<(String, usize)> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.filter_map(|e| e.ok()) {
+            let name = e.file_name().to_string_lossy().to_string();
+            if !(name.ends_with(".manifest") || name.ends_with(".inventory")) {
+                continue;
+            }
+            let facts = std::fs::read_to_string(e.path())
+                .map(|t| t.lines().count())
+                .unwrap_or(0);
+            artifacts.push((name, facts));
+        }
+    }
+    artifacts.sort();
+
+    if artifacts.is_empty() {
+        return Err(format!(
+            "the corpus produced nothing in {}.\n  \
+             It exited {st}, and every axis writes its manifest before it\n  \
+             asserts -- so no artifacts means no axis got as far as writing\n  \
+             one.  Read {} from the top:  the first failure is the real one.",
+            dir.display(),
+            env.capture_log().display()
+        ));
+    }
+
+    println!();
+    println!("capture  {} artifacts in {}", artifacts.len(), dir.display());
+    let mut facts = 0usize;
+    for (name, n) in &artifacts {
+        println!("         {n:6}  {name}");
+        facts += n;
+    }
+    println!("         {facts:6}  total");
+
+    if st.success() {
+        println!("capture  every axis agreed with what the corpus expects of our");
+        println!("         driver, which is a stronger result than this step needs.");
+    } else {
+        println!();
+        println!("capture  the corpus exited {st}:  one or more axes disagreed with");
+        println!("         NooBaa.  That is the finding -- the artifacts above");
+        println!("         are complete either way.  {}", env.capture_log().display());
+    }
+    Ok(())
+}
+
+/// An `s3tests.conf` for the NooBaa endpoint.
+///
+/// Written rather than borrowed:  the suite's own config points at
+/// whatever vstart last brought up, and a capture that quietly ran
+/// against RGW while claiming to have run against NooBaa is
+/// the worst failure this step could have.
+///
+/// **Every identity section the loader requires, not only the one the
+/// corpus uses.**  `load_config` is all or nothing -- it demands
+/// `[s3 main]`, `[s3 alt]`, `[s3 tenant]`, `[iam]`, `[iam root]` and
+/// `[iam alt root]`, five keys each, and returns one error for the
+/// first it cannot find.  A conf carrying only `[s3 main]` fails every
+/// axis at config load, before any of them writes an artifact.
+///
+/// The identities other than main are placeholders, and deliberately
+/// not copies of main's credential:  there is one NC account here, so
+/// an axis reaching for a second identity against NooBaa should
+/// fail rather than silently act as the first.  Each placeholder names
+/// its own section so the failure says which one was asked for.
+fn write_capture_conf(env: &Env) -> Result<PathBuf, String> {
+    let p = env.capture_conf();
+
+    /* 20 characters, the shape an S3 access key has, so a failure
+     * reads as "this identity does not exist" rather than as a
+     * malformed credential. */
+    let placeholder = |what: &str| -> String {
+        let mut k = format!("NOSUCH{}", what.to_ascii_uppercase());
+        while k.len() < 20 {
+            k.push('X');
+        }
+        k.truncate(20);
+        k
+    };
+    let unused = |section: &str, what: &str| -> String {
+        format!(
+            "[{section}]\n\
+             # Not an identity on NooBaa.  Required by the suite's config\n\
+             # loader, unused by the corpus, and not a copy of main's credential\n\
+             # on purpose:  one NC account serves this tree.\n\
+             display_name = {what}\n\
+             user_id = {what}\n\
+             email = {what}@interchange.invalid\n\
+             access_key = {ak}\n\
+             secret_key = {ak}{ak}\n",
+            section = section,
+            what = what,
+            ak = placeholder(what),
+        )
+    };
+
+    let text = format!(
+        "# Written by standup.rs -- the NooBaa endpoint, not RGW's.\n\
+         #\n\
+         # NooBaa NSFS at the pin, over {tree}.\n\
+         # Regenerated by every `capture`;  edit interchange.conf instead.\n\
+         \n\
+         [DEFAULT]\n\
+         host = 127.0.0.1\n\
+         port = {port}\n\
+         is_secure = False\n\
+         ssl_verify = False\n\
+         \n\
+         [fixtures]\n\
+         # The corpus names its own buckets -- corpus-<tier>-<axis>, derived\n\
+         # from what produced them so two captures are diffable -- and does\n\
+         # not read this.  Here because the section should exist.\n\
+         bucket prefix = interchange-{{random}}-\n\
+         \n\
+         [s3 main]\n\
+         # The one account `config` created, which owns the tree.\n\
+         display_name = {account}\n\
+         user_id = {account}\n\
+         email = {account}@interchange.invalid\n\
+         access_key = {ak}\n\
+         secret_key = {sk}\n\
+         # No storage_classes:  NooBaa has no placement to configure,\n\
+         # and the storage-class axis falls back to a name that is valid S3\n\
+         # but not STANDARD when nothing is named here.\n\
+         \n\
+         {alt}\n\
+         {tenant}\n\
+         {iam}\n\
+         {iam_root}\n\
+         {iam_alt_root}",
+        tree = env.tree().display(),
+        port = env.port,
+        account = env.account,
+        ak = env.access_key,
+        sk = env.secret_key,
+        alt = unused("s3 alt", "alt"),
+        tenant = {
+            /* `tenant` is the one extra key in that section */
+            let mut t = unused("s3 tenant", "tenant");
+            t.push_str("tenant = interchange-tenant\n");
+            t
+        },
+        iam = unused("iam", "iam"),
+        iam_root = unused("iam root", "iamroot"),
+        iam_alt_root = unused("iam alt root", "iamaltroot"),
+    );
+    std::fs::write(&p, text).map_err(|e| format!("cannot write {}: {e}", p.display()))?;
+    Ok(p)
+}
+
 /// Stop the endpoint, leaving the tree.
 ///
 /// The tree is the artifact and must survive:  RGW opens it next.
@@ -788,10 +1125,10 @@ fn stop(env: &Env) -> Result<(), String> {
 ///     `vstart.sh` removes `$dev/rgw/$STORE/root` outright on every
 ///     start, which would delete the tree we came to read.
 ///   * **`--with-lifecycle`**, because conversion carries bucket
-///     configuration and lifecycle is part of it.  NooBaa stores
-///     theirs as `lifecycle_configuration_rules` in the bucket
-///     record;  ours is an xattr.  A run that omits the flag cannot
-///     exercise the translation.
+///     configuration and lifecycle is part of it.  NooBaa keeps a
+///     bucket's rules in `lifecycle_configuration_rules` in its
+///     bucket record;  the nsfs driver keeps them in an xattr.  A run
+///     that omits the flag cannot exercise the translation.
 ///
 /// `rgw-vstart.sh` must be run from the build directory, which is why
 /// `ceph_build` is a setting rather than a guess.
@@ -806,9 +1143,9 @@ fn adopt(env: &Env) -> Result<(), String> {
         return Err(format!(
             "`ceph_build` is not set.  `adopt` runs rgw-vstart.sh, which has to \
              be\n  invoked from the ceph build directory:\n\n    \
-             IX_CEPH_BUILD=/path/to/ceph/build standup.rs adopt\n\n  \
+             INTERCHANGE_CEPH_BUILD=/path/to/ceph/build standup.rs adopt\n\n  \
              or put `ceph_build = /path/to/ceph/build` in {}.",
-            ix_home().join("interchange.conf").display()
+            interchange_home().join("interchange.conf").display()
         ));
     };
     let script = build.join("../src/script/rgw/rgw-vstart.sh");
@@ -872,7 +1209,7 @@ fn adopt(env: &Env) -> Result<(), String> {
     Ok(())
 }
 
-/// The pid of a running endpoint of ours, if there is one.
+/// The pid of the NooBaa endpoint this driver started, if it is up.
 fn running(env: &Env) -> Option<u32> {
     let pid: u32 = std::fs::read_to_string(env.pid_file())
         .ok()?
@@ -889,7 +1226,7 @@ fn alive(pid: u32) -> bool {
     Path::new(&format!("/proc/{pid}")).exists()
 }
 
-/// Their CLI.  Quiet unless it fails, because `status` is used as a
+/// NooBaa's CLI.  Quiet unless it fails, because `status` is used as a
 /// probe and a missing record is an expected answer.
 fn nsfs_cli(env: &Env, args: &[&str]) -> Result<String, String> {
     let wt = env.worktree();
@@ -931,11 +1268,11 @@ fn running_ids() -> Result<(u32, u32), String> {
 }
 
 /// The lock this project keeps for a given pin.  Committed.
-fn ours_lock(env: &Env) -> PathBuf {
-    ix_home().join("locks").join(format!("{}.package-lock.json", env.pin))
+fn pinned_lock(env: &Env) -> PathBuf {
+    interchange_home().join("locks").join(format!("{}.package-lock.json", env.pin))
 }
 
-/// Their lockfile must still match the pin.
+/// NooBaa's lockfile must still match the pin.
 fn lock_is_pristine(wt: &Path, when: &str) -> Result<(), String> {
     let out = Command::new("git")
         .args(["status", "--porcelain", "--", "package-lock.json"])

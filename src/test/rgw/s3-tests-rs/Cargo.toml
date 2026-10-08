@@ -39,6 +39,10 @@ fails_on_aws = []
 fails_on_dbstore = []
 fails_on_nsfs = []
 fails_on_posix = []
+# NooBaa, for a capture taken from their gateway rather than from RGW.
+# Permanent by nature:  it marks what their implementation does not do,
+# and it works against a black box.
+fails_on_noobaa = []
 rgw_admin = []
 has_kafka = ["rdkafka"]
 has_vault = []

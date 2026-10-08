@@ -130,13 +130,71 @@ impl Inventory {
     /// body goes through neither, so the file kept the `S_IRWXU` its
     /// `openat` was given.
     ///
+    /// **`CORPUS_OBJECT_MODE` says which mode, and `any` turns the
+    /// check off.**  This is the one assertion in the corpus that is
+    /// not a property of every S3 implementation -- it is a statement
+    /// about *this* driver -- and a capture from a foreign gateway has
+    /// to be able to say so.  NooBaa publishes its own mode, so a run
+    /// against their endpoint reports every object as an offender and
+    /// drowns the differences the capture exists to find.
+    ///
     /// Returns one line per offender, empty when all is well.
     pub fn check_object_modes(&self) -> Vec<String> {
+        let spec = std::env::var("CORPUS_OBJECT_MODE").ok();
+        self.modes_against(&mode_policy(spec.as_deref()))
+    }
+
+    /// The same check against a policy given rather than read, so both
+    /// polarities are testable without mutating the environment -- the
+    /// axes run in one process and share it.
+    fn modes_against(&self, policy: &ModePolicy) -> Vec<String> {
+        let want = match policy {
+            ModePolicy::Any => return Vec::new(),
+            /* A knob nobody can read is worse than no knob:  reported
+             * as a problem, so the axis fails and names it, rather
+             * than silently falling back to the default. */
+            ModePolicy::Malformed(v) => {
+                return vec![format!(
+                    "CORPUS_OBJECT_MODE={v:?} is neither an octal mode nor `any`"
+                )]
+            }
+            ModePolicy::Exactly(m) => *m,
+        };
         self.files
             .iter()
-            .filter(|(_, m)| *m != 0o600)
-            .map(|(p, m)| format!("{p:?} is mode {m:04o}, not 0600"))
+            .filter(|(_, m)| *m != want)
+            .map(|(p, m)| format!("{p:?} is mode {m:04o}, not {want:04o}"))
             .collect()
+    }
+}
+
+/// What `check_object_modes` requires.
+#[derive(Debug, PartialEq, Eq)]
+enum ModePolicy {
+    /// do not look at modes at all
+    Any,
+    /// every regular file must be exactly this
+    Exactly(u32),
+    /// the knob was set to something unreadable
+    Malformed(String),
+}
+
+/// Read the knob.  Unset is the strict default, so nothing an existing
+/// run does changes.
+fn mode_policy(spec: Option<&str>) -> ModePolicy {
+    let Some(raw) = spec else {
+        return ModePolicy::Exactly(0o600);
+    };
+    let v = raw.trim();
+    if v.eq_ignore_ascii_case("any") {
+        return ModePolicy::Any;
+    }
+    /* Octal without needing the prefix, because a mode is written
+     * octal:  `0600`, `600` and `0o600` are the same answer. */
+    let digits = v.trim_start_matches("0o").trim_start_matches("0O");
+    match u32::from_str_radix(digits, 8) {
+        Ok(m) if m <= 0o7777 => ModePolicy::Exactly(m),
+        _ => ModePolicy::Malformed(raw.to_string()),
     }
 }
 
@@ -210,6 +268,52 @@ mod tests {
         assert!(
             !out.contains("mtime") && !out.contains("ino"),
             "the inventory recorded something that varies per run: {out}"
+        );
+    }
+
+    /// Strict unless told otherwise, and an unreadable value is a
+    /// complaint rather than a silent default.
+    #[test]
+    fn the_mode_knob_defaults_strict() {
+        assert_eq!(mode_policy(None), ModePolicy::Exactly(0o600));
+        assert_eq!(mode_policy(Some("any")), ModePolicy::Any);
+        assert_eq!(mode_policy(Some("ANY")), ModePolicy::Any);
+        assert_eq!(mode_policy(Some("0644")), ModePolicy::Exactly(0o644));
+        assert_eq!(mode_policy(Some("644")), ModePolicy::Exactly(0o644));
+        assert_eq!(mode_policy(Some(" 0600 ")), ModePolicy::Exactly(0o600));
+        assert!(matches!(mode_policy(Some("rw-")), ModePolicy::Malformed(_)));
+        /* 0o10000 is not a mode */
+        assert!(matches!(mode_policy(Some("10000")), ModePolicy::Malformed(_)));
+    }
+
+    /// The check has to be able to fail, and the knob has to be able to
+    /// stop it failing.  Both polarities on one offending file:  a
+    /// knob whose negative case is unreachable would prove nothing
+    /// about what a capture from their gateway suppresses.
+    #[test]
+    fn an_offending_mode_is_caught_by_default_and_only_by_default() {
+        let mut inv = Inventory::new();
+        inv.files.push(("sub/f".to_string(), 0o700));
+
+        let strict = inv.modes_against(&ModePolicy::Exactly(0o600));
+        assert_eq!(strict.len(), 1, "0700 was not caught: {strict:?}");
+        assert!(
+            strict[0].contains("0700") && strict[0].contains("0600"),
+            "the complaint does not say what it found or wanted: {strict:?}"
+        );
+
+        assert!(
+            inv.modes_against(&ModePolicy::Any).is_empty(),
+            "`any` still complained"
+        );
+        assert!(
+            inv.modes_against(&ModePolicy::Exactly(0o700)).is_empty(),
+            "0700 was wanted and still complained"
+        );
+        assert_eq!(
+            inv.modes_against(&ModePolicy::Malformed("rw-".into())).len(),
+            1,
+            "a malformed knob did not report itself"
         );
     }
 

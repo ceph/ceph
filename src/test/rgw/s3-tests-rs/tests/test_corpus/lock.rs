@@ -70,6 +70,13 @@ fn default_mode_of(s: &str) -> ObjectLockRetentionMode {
     }
 }
 
+/* NooBaa returns `501 NotImplemented` to PutObjectLockConfiguration at
+ * the pin, so the axis cannot create the bucket it needs and reaches
+ * none of its assertions.  Per-object retention is a different
+ * surface -- NooBaa does keep that in xattrs -- and only the
+ * bucket-level configuration is refused. */
+#[cfg_attr(feature = "fails_on_noobaa",
+           ignore = "noobaa: PutObjectLockConfiguration is NotImplemented")]
 #[tokio::test]
 async fn corpus_coverage_object_lock() {
     let tier = env_or("CORPUS_TIER", "coverage");

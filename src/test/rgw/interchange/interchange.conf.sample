@@ -1,8 +1,8 @@
 # standup.rs settings.  Copy to interchange.conf and edit.
 #
-# `IX_` is for *interchange*.  Every key here is also an environment
-# variable with that prefix -- IX_WORK, IX_PIN -- and the environment
-# wins over this file.
+# Every key here is also an environment variable, spelled
+# INTERCHANGE_<NAME> -- INTERCHANGE_WORK, INTERCHANGE_PIN -- and the
+# environment wins over this file.
 
 # REQUIRED.  Holds the NooBaa worktree (upwards of a gigabyte), their
 # config store, the data root, and the logs.
@@ -38,3 +38,11 @@ ceph_build = /lv2tb/ceph-cp/build
 
 # account = interchange
 # bucket  = interchange
+
+# The s3-tests-rs checkout the conversion corpus lives in.  Defaults
+# to `../s3-tests-rs` from this driver, which is right whenever it is
+# run from the tree it was committed to.
+# suite = /path/to/ceph/src/test/rgw/s3-tests-rs
+
+# Which corpus tier `capture` runs:  coverage, interaction or scale.
+# tier = coverage

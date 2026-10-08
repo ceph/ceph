@@ -27,6 +27,11 @@
 //! CORPUS_DATA_ROOT  the gateway's data root.  Set only when this run
 //!                   is local to it;  without it the disk inventory is
 //!                   not taken and the S3 half still works
+//! CORPUS_OBJECT_MODE  the mode every object must be published with,
+//!                   default 0600;  `any` turns the check off.  The
+//!                   one assertion here that is about *this* driver
+//!                   rather than about S3, so a capture from a foreign
+//!                   gateway sets it -- see `interchange/standup.rs`
 //! ```
 
 mod names;

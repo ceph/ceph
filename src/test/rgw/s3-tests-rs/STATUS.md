@@ -70,6 +70,7 @@ A test may carry several.
 | `fails_on_aws` | 84 | |
 | `fails_on_nsfs` | 72 | |
 | `fails_on_rgw` | 11 | on by default |
+| `fails_on_noobaa` | 1 | NooBaa, for a capture from their gateway |
 | `rgw_admin` | 30 | **requires** the feature — Admin Ops endpoints |
 | `has_vault` | 22 | **requires** a Vault sidecar |
 
@@ -77,6 +78,22 @@ The `fails_on_*` gates are permanent annotations, not a to-do list:
 the suite is meant to run against implementations it cannot
 interrogate, so recording "this one does not pass here" is what works
 against a black box.  `fails_on_rgw` is in `default`.
+
+**The column counts whole tests ignored, and that is not the only
+form a gate takes.**  A gate may instead sit inside a test body, as
+`#[cfg(not(feature = …))]` around one assertion, so that the test
+still runs and still guards everything else it checks.  Those do not
+appear in a `nextest list` and so cannot appear above.  There are 53
+of them for `fails_on_aws`, 2 for `fails_on_noobaa` and 1 for
+`fails_on_posix`.
+
+`fails_on_noobaa` is set by `interchange/standup.rs capture`, which
+runs the conversion corpus against a NooBaa endpoint rather than
+against RGW.  Its three gates are the multipart ETag, which NooBaa
+returns as `mtime-<base36>-ino-<base36>` rather than as a digest with
+a part count;  `PutObjectLockConfiguration`, which answers
+`NotImplemented` at the pinned commit;  and three scaffolding key
+names NooBaa accepts and then hides from its own listings.
 
 `has_kafka` is **not** a test gate — it is a build feature that pulls
 in `rdkafka`.  The Kafka tests check for a broker at run time and fail

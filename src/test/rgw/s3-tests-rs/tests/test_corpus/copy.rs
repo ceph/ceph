@@ -87,6 +87,8 @@ async fn make_source(
                 .metadata("srcmeta", "from-source")
                 .content_type("text/plain")
                 .tagging("ck=cv")
+                .customize()
+                .mutate_request(s3_tests_rs::http::zero_content_length)
                 .send()
                 .await
                 .expect("create_multipart_upload");
