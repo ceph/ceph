@@ -39,6 +39,7 @@
 #include "driver/nsfs/adopt/noobaa_config_store.h"
 #include "driver/nsfs/adopt/noobaa_master_keys.h"
 #include "driver/nsfs/adopt/noobaa_import_plan.h"
+#include "driver/nsfs/adopt/noobaa_import.h"
 #include "rgw_account.h"
 #include "driver/nsfs/personality.h"
 #include "rgw_auth.h"
@@ -609,6 +610,26 @@ public:
     std::string cache_base = driver_base + "/cache";
     base_path = driver_base + "/root";
 
+    /* A database of this test's own.
+     *
+     * `NSFSDriver`'s constructor builds `userDB` from
+     * `rgw_nsfs_userdb_dir`, which is a global and defaults to a path
+     * no test may write -- and one database shared by every test is
+     * the cross-test interference the suite just finished removing.
+     * `userDB` is protected, so a subclass can simply point it
+     * somewhere per-test;  no hook in the driver is needed for it.
+     *
+     * Without this the account and user write paths cannot run at
+     * all, because both go through this handle. */
+    userDB = std::make_unique<nsfs::IdentityDB>(driver_base + "/userdb",
+						env->cct.get());
+    if (int r = userDB->Initialize("", -1); r < 0) {
+      ldpp_dout(env->dpp, 0) << " ERROR: could not open the test userdb: "
+			     << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    set_context(env->cct.get());
+
     /* The base path first, because the extents probe reads it, then the
      * strategies, then the root directory -- which takes the FSStrategy
      * as a constructor argument and passes it to every child.  The real
@@ -663,11 +684,12 @@ public:
 
 class TestUser : public StoreUser {
   Attrs attrs;
+  TestDriver* dr{nullptr};
 
 public:
-  TestUser(TestDriver *_dr, const rgw_user& _u) : StoreUser(_u) { }
-  TestUser(TestDriver *_dr, const RGWUserInfo& _i) : StoreUser(_i) { }
-  TestUser(TestDriver *_dr)  { }
+  TestUser(TestDriver *_dr, const rgw_user& _u) : StoreUser(_u), dr(_dr) { }
+  TestUser(TestDriver *_dr, const RGWUserInfo& _i) : StoreUser(_i), dr(_dr) { }
+  TestUser(TestDriver *_dr) : dr(_dr) { }
   TestUser(TestUser& _o) = default;
   virtual ~TestUser() = default;
 
@@ -685,9 +707,28 @@ public:
              std::map<rgw_user_bucket, rgw_usage_log_entry> &usage) override { return 0; }
   virtual int trim_usage(const DoutPrefixProvider* dpp, uint64_t start_epoch,
                          uint64_t end_epoch, optional_yield y) override { return 0; }
-  virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
+  /* Real, not stubbed.
+   *
+   * These were `{ return 0; }`, which makes any test of a write
+   * through them vacuous:  the import reported a user created, the
+   * user table was empty, and nothing failed until an assertion went
+   * looking.  They now do what `NSFSUser` does -- the driver's one
+   * handle -- so a test can ask whether a user was really written. */
+  virtual int load_user(const DoutPrefixProvider* dpp,
+			optional_yield y) override {
+    return dr ? dr->get_user_db()->get_user(dpp, "user_id", get_id().id,
+					    get_info(), &get_attrs(),
+					    &get_version_tracker())
+	      : 0;
+  }
   virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool
-			 exclusive, RGWUserInfo* old_info = nullptr) override { return 0; }
+			 exclusive, RGWUserInfo* old_info = nullptr) override {
+    return dr ? dr->get_user_db()->store_user(dpp, get_info(), exclusive,
+					      &get_attrs(),
+					      &get_version_tracker(),
+					      old_info)
+	      : 0;
+  }
   virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override { return 0; }
   virtual int verify_mfa(const std::string &mfa_str, bool *verified,
                          const DoutPrefixProvider* dpp,
@@ -9523,6 +9564,443 @@ TEST_F(NooBaaPlanTest, AStoreOnDiskPlansCleanly)
     EXPECT_FALSE(e.account_id.empty()) << e.noobaa_name;
     EXPECT_TRUE(rgw::account::validate_id(e.account_id)) << e.account_id;
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * I4 -- writing identities into RGW.
+ *
+ * The first stage that writes, so these tests look at what is in RGW
+ * afterwards rather than at a returned structure.  The driver gets a
+ * database of its own per test (see TestDriver::init), which is what
+ * makes the account and user write paths reachable at all.
+ * ------------------------------------------------------------------ */
+
+class NooBaaImportTest : public NooBaaStoreTest {
+public:
+  nsfs::ImportPlan plan;
+  nsfs::ImportResult result;
+
+  /* read, plan, write -- the three stages in the order the import
+   * runs them */
+  int run() {
+    auto c = read_store();
+    nsfs::NooBaaMasterKeys keys;
+    nsfs::NooBaaSettings fs;
+    fs.master_keys_store_type = "file";
+    if (keys.load(env->dpp, fs, store) == 0) {
+      std::vector<std::string> rejected;
+      nsfs::decrypt_store_secrets(env->dpp, keys, c, rejected);
+    }
+    plan = nsfs::ImportPlan{};
+    result = nsfs::ImportResult{};
+    if (int r = nsfs::build_import_plan(env->dpp, env->cct.get(), c, plan);
+	r < 0) {
+      return r;
+    }
+    return nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
+				   plan, result);
+  }
+
+  std::string why() const {
+    std::string s;
+    for (const auto& f : result.failures) {
+      s += "\n  " + f;
+    }
+    return s;
+  }
+
+  const nsfs::ImportEntry* entry(const std::string& name) const {
+    for (const auto& e : plan.entries) {
+      if (e.noobaa_name == name) {
+	return &e;
+      }
+    }
+    return nullptr;
+  }
+};
+
+/* A store their tools wrote lands in RGW.
+ *
+ * The account, the user that holds its keys, and the identity row --
+ * three writes per root account, because `RGWAccountInfo` holds no
+ * credentials and neither holds the POSIX fields. */
+TEST_F(NooBaaImportTest, AnAccountBecomesAnAccountAUserAndARow)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.accounts_created, 1u);
+  EXPECT_EQ(result.users_created, 1u);
+  EXPECT_EQ(result.identity_rows, 1u);
+  EXPECT_EQ(result.accounts_skipped, 0u);
+
+  const auto* e = entry("interchange");
+  ASSERT_NE(e, nullptr);
+
+  /* the account, by the id that was minted for it */
+  RGWAccountInfo got;
+  Attrs attrs;
+  RGWObjVersionTracker objv;
+  ASSERT_EQ(driver->load_account_by_id(env->dpp, null_yield, e->account_id,
+				       got, attrs, objv), 0);
+  EXPECT_EQ(got.name, "interchange");
+  EXPECT_EQ(got.email, "interchange");
+
+  /* and by name and by email, which are the indexes a collision would
+   * have hit */
+  RGWAccountInfo byname;
+  ASSERT_EQ(driver->load_account_by_name(env->dpp, null_yield, "",
+					 "interchange", byname, attrs,
+					 objv), 0);
+  EXPECT_EQ(byname.id, e->account_id);
+
+  /* the user that carries the credential, found the way an
+   * authenticated request finds it */
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0)
+      << "the imported credential does not authenticate";
+  EXPECT_EQ(user->get_info().account_id, e->account_id);
+  EXPECT_EQ(user->get_display_name(), "interchange");
+  const auto& keys = user->get_info().access_keys;
+  ASSERT_EQ(keys.size(), 1u);
+  /* the decrypted secret, which is what makes the credential usable
+   * and is why I2 comes first */
+  EXPECT_EQ(keys.begin()->second.key, NB_PLAIN_SECRET);
+
+  /* the identity row, keyed on the account and carrying their id */
+  nsfs::Identity row;
+  ASSERT_EQ(driver->get_identity_db()->get_identity_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", row), 0)
+      << "re-import could not recognise what it just wrote";
+  EXPECT_EQ(row.key, e->account_id);
+  EXPECT_EQ(row.uid, 1000u);
+  EXPECT_EQ(row.gid, 1000u);
+  EXPECT_EQ(row.new_buckets_path, "/lv2tb/nsfs-interchange/data/root");
+}
+
+/* Running it twice writes nothing the second time.
+ *
+ * Keyed on their `_id`, because the name is not stable:  a rename
+ * rewrites `name` and `email` and leaves `_id` alone.  A name-keyed
+ * re-run would collide on the name it wrote itself, or worse, mint a
+ * second id for an identity already imported. */
+TEST_F(NooBaaImportTest, ASecondRunRecognisesWhatTheFirstWrote)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  ASSERT_EQ(result.accounts_created, 2u);
+  const std::string first_id = entry("interchange")->account_id;
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.accounts_created, 0u) << "it wrote again";
+  EXPECT_EQ(result.users_created, 0u);
+  EXPECT_EQ(result.identity_rows, 0u);
+  EXPECT_EQ(result.accounts_skipped, 2u);
+
+  /* and the account it already had is still the one it had:  the
+   * second run minted a new id in its plan, and must not have used
+   * it */
+  nsfs::Identity row;
+  ASSERT_EQ(driver->get_identity_db()->get_identity_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", row), 0);
+  EXPECT_EQ(row.key, first_id)
+      << "the second run re-minted an id for an identity already imported";
+}
+
+/* A rename on their side does not produce a duplicate.
+ *
+ * This is why the id is the key and the name is not.  The same record
+ * under a new name is the same identity. */
+TEST_F(NooBaaImportTest, ARenameOnTheirSideIsStillTheSameIdentity)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  ASSERT_EQ(run(), 0) << why();
+  const std::string id = entry("interchange")->account_id;
+
+  /* their rename:  name and email change, `_id` does not */
+  std::string renamed{NB_ACCOUNT_PLAIN};
+  auto at = renamed.find("\"name\": \"interchange\"");
+  ASSERT_NE(at, std::string::npos);
+  renamed.replace(at, 21, "\"name\": \"renamed-acct\"");
+  at = renamed.find("\"email\": \"interchange\"");
+  ASSERT_NE(at, std::string::npos);
+  renamed.replace(at, 22, "\"email\": \"renamed-acct\"");
+  add_identity("6ac7cb27fd4af356919110a3", renamed.c_str());
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.accounts_created, 0u)
+      << "a rename produced a second account";
+  EXPECT_EQ(result.accounts_skipped, 1u);
+
+  nsfs::Identity row;
+  ASSERT_EQ(driver->get_identity_db()->get_identity_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", row), 0);
+  EXPECT_EQ(row.key, id);
+}
+
+/* The anonymous account gets a row and nothing else.
+ *
+ * RGW's anonymous identity is built in and is not an account, so
+ * importing it as one is wrong;  skipping it loses the uid mapping
+ * nsfs needs, and then an unauthenticated request has no POSIX
+ * identity to act as.  Keyed on RGW's own owner string, so resolution
+ * reaches it by the same path as any other owner (§6.8). */
+TEST_F(NooBaaImportTest, AnonymousGetsARowAndNothingElse)
+{
+  add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_TRUE(result.anonymous_imported);
+  EXPECT_EQ(result.identity_rows, 1u);
+  EXPECT_EQ(result.accounts_created, 0u) << "anonymous became an account";
+  EXPECT_EQ(result.users_created, 0u) << "anonymous got a user";
+
+  nsfs::Identity row;
+  ASSERT_EQ(driver->get_identity_db()->get_identity(
+		env->dpp, RGW_USER_ANON_ID, row), 0)
+      << "nothing resolves for " << RGW_USER_ANON_ID
+      << ", so an unauthenticated request has no identity";
+  EXPECT_EQ(row.uid, 65534u);
+  EXPECT_EQ(row.gid, 65534u);
+  EXPECT_EQ(row.noobaa_id, "6ac7d213cac521f05aac9fb4");
+
+  /* nothing was minted for it */
+  const auto* e = entry("anonymous");
+  ASSERT_NE(e, nullptr);
+  RGWAccountInfo got;
+  Attrs attrs;
+  RGWObjVersionTracker objv;
+  EXPECT_NE(driver->load_account_by_name(env->dpp, null_yield, "",
+					 "anonymous", got, attrs, objv), 0)
+      << "an RGW account named anonymous was created";
+}
+
+/* An IAM user lands in its owner's account.
+ *
+ * One schema serves accounts and users, so the import tells them apart
+ * by `owner` and places the user in the account that owner became. */
+TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("u1", R"({"_id":"u1","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3","iam_path":"/eng/",
+    "nsfs_account_config":{"uid":1500,"gid":1500},
+    "access_keys":[{"access_key":"USERAAAAAAAAAAAAAAAA",
+      "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
+    "master_key_id":"6ac7cb2751b72219a4bae375"})");
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.accounts_created, 1u);
+  EXPECT_EQ(result.users_created, 2u) << "the account's own user, and the "
+					 "IAM user";
+  EXPECT_EQ(result.identity_rows, 2u);
+
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "USERAAAAAAAAAAAAAAAA",
+					   null_yield, &user), 0);
+  EXPECT_EQ(user->get_info().account_id,
+	    entry("interchange")->account_id)
+      << "the user was not placed in its owner's account";
+  EXPECT_EQ(user->get_info().path, "/eng/");
+  EXPECT_EQ(user->get_display_name(), "a-user");
+
+  /* its own row, with its own uid */
+  nsfs::Identity row;
+  ASSERT_EQ(driver->get_identity_db()->get_identity_by_noobaa_id(
+		env->dpp, "u1", row), 0);
+  EXPECT_EQ(row.uid, 1500u);
+}
+
+/* A key with no decrypted secret is refused, not written.
+ *
+ * A user written with an unusable credential is worse than one not
+ * written:  the credential silently does not authenticate and nothing
+ * says why.  So the master-key step comes first and this is what
+ * happens when it did not. */
+TEST_F(NooBaaImportTest, AnUndecryptedSecretRefusesTheIdentity)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  /* no master_keys.json, so no secret is opened */
+  ASSERT_FALSE(std::filesystem::exists(store + "/master_keys.json"));
+
+  EXPECT_EQ(run(), -EIO);
+  EXPECT_EQ(result.users_created, 0u);
+  bool said = false;
+  for (const auto& f : result.failures) {
+    if (f.find("no decrypted secret") != std::string::npos) {
+      said = true;
+    }
+  }
+  EXPECT_TRUE(said) << why();
+
+  /* and nothing authenticates with it */
+  std::unique_ptr<rgw::sal::User> user;
+  EXPECT_NE(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0)
+      << "a credential was written with no usable secret";
+}
+
+/* allow_bypass_governance becomes an IAM grant.
+ *
+ * Their flag is a boolean;  RGW expresses the same permission as an
+ * action, so the import writes a policy rather than inventing a
+ * column (§2.2). */
+TEST_F(NooBaaImportTest, BypassGovernanceBecomesAGrant)
+{
+  std::string with{NB_ACCOUNT_PLAIN};
+  auto at = with.find("\"gid\": 1000");
+  ASSERT_NE(at, std::string::npos);
+  with.replace(at, 11, "\"gid\": 1000,\n    \"allow_bypass_governance\": true");
+  add_identity("6ac7cb27fd4af356919110a3", with.c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.grants_written, 1u);
+
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  auto p = user->get_attrs().find(RGW_ATTR_USER_POLICY);
+  ASSERT_NE(p, user->get_attrs().end()) << "no policy was attached";
+  std::map<std::string, std::string> policies;
+  auto bl = p->second.cbegin();
+  ceph::decode(policies, bl);
+  ASSERT_EQ(policies.size(), 1u);
+  EXPECT_NE(policies.begin()->second.find("s3:BypassGovernanceRetention"),
+	    std::string::npos);
+
+  /* and the negative case:  without the flag, no policy at all */
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("other", NB_ACCOUNT_GROUPS);
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.grants_written, 0u);
+}
+
+/* A collision against RGW's existing state is caught before writing.
+ *
+ * I3 sees the collisions in the store;  this is the other half, and it
+ * needs a lookup.  An identity already imported is **not** one -- it is
+ * recognised by its id and skipped, which is what makes a re-run safe,
+ * so the check has to ask that question first. */
+TEST_F(NooBaaImportTest, ACollisionWithExistingRgwStateIsCaught)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  ASSERT_EQ(run(), 0) << why();
+
+  /* a second, different NooBaa identity claiming the same name */
+  add_identity("different", R"({"_id":"different","name":"interchange",
+    "email":"interchange"})");
+
+  auto c = read_store();
+  nsfs::ImportPlan p;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p),
+	    -EEXIST)
+      << "two records of one name should collide in the store alone";
+
+  /* and with only the new one in the store, the store looks clean and
+   * RGW is the only thing that knows */
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("different", R"({"_id":"different","name":"interchange",
+    "email":"interchange"})");
+  auto c2 = read_store();
+  nsfs::ImportPlan p2;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c2, p2), 0)
+      << "the store half should be clean here";
+
+  std::vector<std::string> collisions;
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p2,
+				  collisions), -EEXIST)
+      << "a name already in RGW was not noticed";
+  ASSERT_FALSE(collisions.empty());
+  EXPECT_NE(collisions[0].find("interchange"), std::string::npos)
+      << collisions[0];
+
+  /* and the same check passes for an identity already imported, which
+   * is the case it must not call a collision */
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  auto c3 = read_store();
+  nsfs::ImportPlan p3;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c3, p3), 0);
+  std::vector<std::string> none;
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p3,
+				  none), 0)
+      << "an identity already imported was called a collision";
+}
+
+/* A real store on disk imports.
+ *
+ * Skipped when `NSFS_NOOBAA_STORE` is unset.  Three accounts their CLI
+ * and gateway wrote, their master key, their ciphertext -- read,
+ * planned, decrypted and written, which is the whole of phases 0 and 1
+ * against output nobody composed. */
+TEST_F(NooBaaImportTest, AStoreOnDiskImports)
+{
+  const char* dir = ::getenv("NSFS_NOOBAA_STORE");
+  if (!dir || !*dir) {
+    GTEST_SKIP() << "NSFS_NOOBAA_STORE is unset";
+  }
+
+  nsfs::NooBaaConfigStore cs(dir);
+  nsfs::NooBaaStoreContents c;
+  ASSERT_EQ(cs.read(env->dpp, c), 0);
+
+  nsfs::NooBaaMasterKeys keys;
+  ASSERT_EQ(keys.load(env->dpp, c.settings, dir), 0);
+  std::vector<std::string> rejected;
+  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, rejected), 0);
+
+  nsfs::ImportPlan p;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
+
+  std::vector<std::string> collisions;
+  ASSERT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p,
+				  collisions), 0);
+
+  nsfs::ImportResult r;
+  std::string s;
+  int ret = nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
+				    p, r);
+  for (const auto& f : r.failures) {
+    s += "\n  " + f;
+  }
+  ASSERT_EQ(ret, 0) << s;
+  EXPECT_GT(r.accounts_created, 0u);
+  EXPECT_GT(r.identity_rows, 0u);
+  /* their store has an anonymous account, and it must have become a
+   * row rather than an account */
+  EXPECT_TRUE(r.anonymous_imported);
+
+  /* every imported credential authenticates */
+  size_t checked = 0;
+  for (const auto& id : c.identities) {
+    for (const auto& ak : id.access_keys) {
+      std::unique_ptr<rgw::sal::User> user;
+      EXPECT_EQ(driver->get_user_by_access_key(env->dpp, ak.access_key,
+					       null_yield, &user), 0)
+	  << ak.access_key << " does not authenticate";
+      ++checked;
+    }
+  }
+  EXPECT_GT(checked, 0u) << "no credential was checked";
+
+  /* and a second run writes nothing */
+  nsfs::ImportResult again;
+  ASSERT_EQ(nsfs::import_identities(env->dpp, null_yield, driver.get(), c,
+				    p, again), 0);
+  EXPECT_EQ(again.accounts_created, 0u);
+  EXPECT_EQ(again.users_created, 0u);
 }
 
 int main(int argc, char *argv[]) {
