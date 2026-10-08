@@ -354,12 +354,41 @@ async fn corpus_coverage_bucket_config() {
         }
     );
 
-    /* logging:  a recorded gap on this backend -- all 59 of the
-     * suite's bucket-logging tests are gated for nsfs -- so whatever
-     * comes back is a fact rather than a failure.  The target bucket
-     * has to exist for the request to be well formed. */
+    /* logging.
+     *
+     * The target bucket needs a policy, not merely to exist.  S3
+     * requires the log-delivery service to be granted s3:PutObject on
+     * it, and RGW implements that check --
+     * `verify_target_bucket_policy()` in rgw_bucket_logging.cc, which
+     * cites the AWS page it comes from.  A bare target is refused with
+     * 403, correctly, and reading that as "logging is unimplemented"
+     * is how this axis first mis-reported it:  the permission check
+     * had in fact *granted*, and the refusal was the op's own.
+     *
+     * Same statement the suite's own logging tests use, so the
+     * condition keys match what the check wants rather than what I
+     * guessed. */
     let log_target = get_new_bucket_name();
     ensure_bucket(&client, &log_target).await;
+    {
+        let policy = format!(
+            r#"{{"Version":"2012-10-17","Statement":[{{"Sid":"S3ServerAccessLogsPolicy","Effect":"Allow","Principal":{{"Service":"logging.s3.amazonaws.com"}},"Action":["s3:PutObject"],"Resource":"arn:aws:s3:::{log_target}/log/*","Condition":{{"ArnLike":{{"aws:SourceArn":"arn:aws:s3:::{b}"}},"StringEquals":{{"aws:SourceAccount":"testid"}}}}}}]}}"#
+        );
+        match client
+            .put_bucket_policy()
+            .bucket(&log_target)
+            .policy(policy)
+            .send()
+            .await
+        {
+            Ok(_) => m.bucket(&log_target, "log-target-policy", "set"),
+            Err(e) => m.bucket(
+                &log_target,
+                "log-target-policy.refused",
+                e.into_service_error().meta().code().unwrap_or("Unknown"),
+            ),
+        }
+    }
     step!(
         "logging",
         Ok(()),
