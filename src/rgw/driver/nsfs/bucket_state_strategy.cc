@@ -33,7 +33,7 @@
 #include "include/scope_guard.h"
 
 #include "bucket_state_strategy.h"
-#include "noobaa_config_store.h"
+#include "adopt/noobaa_config_store.h"
 
 #define dout_subsys ceph_subsys_rgw
 
