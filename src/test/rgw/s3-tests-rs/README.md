@@ -1,10 +1,30 @@
 # s3-tests-rs
 
-Rust translation of the [Ceph s3-tests](https://github.com/ceph/s3-tests) S3 API
-compatibility test suite. Targets Ceph RGW (and any S3-compatible endpoint) using
-the Rust-native AWS SDK.
+Started as a Rust translation of the
+[Ceph s3-tests](https://github.com/ceph/s3-tests) S3 API compatibility suite, and
+that is still the largest part. Four kinds of work live here now:
 
-**Current status:** 767 tests across 19 modules (719 active + 48 ignored).
+- **the s3-tests translation** — the S3 API compatibility surface
+- **translations of larger Ceph test programs and qa workunits**, which makes them
+  runnable against `vstart` without teuthology
+- **calibrated `elbencho` workload automation** — performance as a repeatable run
+- **the conversion corpus** — generates artifacts and captures rather than
+  testing a feature
+
+Targets Ceph RGW (and any S3-compatible endpoint) using the Rust-native AWS SDK.
+
+| module | tests | source |
+|---|---|---|
+| `test_s3` | 752 | `test_s3.py`, `test_headers.py`, `rgw_multi/tests.py` |
+| `test_iam` | 74 | `test_iam.py`, `test_sts.py`, plus new account coverage |
+| `test_rgw` | 31 | original to this project, except `quota.rs` from `s3_user_quota.pl` |
+| `test_sns` | 26 | `test_sns.py`, plus the Kafka subset of `test_bn.py` |
+| `test_bench` | 6 | original — `elbencho` automation |
+| `test_corpus` | 13 | original — see `tests/test_corpus/README.md` |
+
+Every module header names what it was translated from, so the correspondence is
+recoverable by reading rather than by asking. Translated tests keep their Python
+names wherever possible, which is what makes `grep` work across the two suites.
 
 ## Stack
 

@@ -1,3 +1,21 @@
+//! Notification topics and Kafka delivery.
+//!
+//! Two sources.  Four tests -- the account and cross-account topic
+//! ones -- are translated from the vendored
+//! `src/test/rgw/s3-tests/s3tests/functional/test_sns.py` and keep its
+//! names.
+//!
+//! The rest derive from the Ceph RGW notification test program
+//! `src/test/rgw/bucket_notification/test_bn.py`, which is 87 tests
+//! across AMQP, Kafka, persistent topics and multisite.  These are the
+//! Kafka subset, renamed to `test_notification_kafka_*` because the
+//! correspondence is by behaviour rather than one-to-one:  filters,
+//! event fields, multipart, copy, multi-delete, topic attributes.
+//! Persistent topics, AMQP and multisite are deliberately not ported.
+//!
+//! Needs a Kafka broker -- `kafka-vstart.sh`, or `[kafka] broker` in
+//! the config -- and is gated behind `has_kafka`.
+
 use s3_tests_rs::client::{
     get_iam_root_s3client,
     get_sns_root_client, get_sns_alt_root_client,

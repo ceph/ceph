@@ -1,3 +1,19 @@
+//! User quota.
+//!
+//! Translated from the Ceph qa workunit
+//! `qa/workunits/rgw/s3_user_quota.pl`, whose `quota_set_max_size_per_user`
+//! and `max_size_per_user` are the shape these follow.  Running it here
+//! rather than under teuthology means a quota failure reproduces
+//! against vstart.
+//!
+//! **Bucket-scope quota is not ported.**  The companion workunit
+//! `qa/workunits/rgw/s3_bucket_quota.pl` covers `quota_set_max_obj`,
+//! `quota_set_max_size`, the zero and negative cases and
+//! enable/disable at bucket scope, and none of that is here.
+//!
+//! Both nsfs and posix are gated:  `load_stats()` is a stub on those
+//! drivers, so quota cannot be enforced there at all.
+
 use aws_sdk_s3::primitives::ByteStream;
 use serial_test::serial;
 use s3_tests_rs::client::get_quota_client;
