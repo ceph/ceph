@@ -173,6 +173,14 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   if (params->group_users_table.empty()) {
     params->group_users_table = getGroupUsersTable();
   }
+  /* The access-keys join table.  Missed when the table was added, so
+   * every statement naming it formatted against `''` -- InsertAccessKey,
+   * RemoveAccessKey, RemoveUserAccessKeys, and the GetUser variant that
+   * looks a user up *by* access key.  Prepared statements are cached,
+   * so one lookup poisoned the rest of the process. */
+  if (params->access_keys_table.empty()) {
+    params->access_keys_table = getAccessKeysTable();
+  }
   if (params->topic_table.empty()) {
     params->topic_table = getTopicTable();
   }
@@ -200,6 +208,7 @@ int SQLiteDB::InitPrepareParams(const DoutPrefixProvider *dpp,
   p_params.oidc_table = params->oidc_table;
   p_params.group_table = params->group_table;
   p_params.group_users_table = params->group_users_table;
+  p_params.access_keys_table = params->access_keys_table;
   p_params.topic_table = params->topic_table;
   p_params.bucket_topic_mapping_table = params->bucket_topic_mapping_table;
   p_params.user_table = params->user_table;
@@ -1085,6 +1094,11 @@ int SQLiteDB::createTables(const DoutPrefixProvider *dpp)
   params.oidc_table = getOIDCTable();
   params.group_table = getGroupTable();
   params.group_users_table = getGroupUsersTable();
+  /* Before `createAccessKeysTable` below, which formats this name
+   * into its DDL.  Unset, the table was created as `''` -- so the
+   * join table the access-key lookup depends on did not exist under
+   * the name every query for it uses. */
+  params.access_keys_table = getAccessKeysTable();
   params.user_table = getUserTable();
   params.bucket_table = getBucketTable();
   params.quota_table = getQuotaTable();
