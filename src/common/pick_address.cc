@@ -509,7 +509,6 @@ int pick_addresses(
   int r = getifaddrs(&ifa);
   if (r < 0) {
     r = -errno;
-    string err = cpp_strerror(r);
     lderr(cct) << "unable to fetch interfaces and addresses: "
 	       <<  cpp_strerror(r) << dendl;
     return r;
