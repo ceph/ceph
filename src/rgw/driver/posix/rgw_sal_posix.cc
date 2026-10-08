@@ -5477,8 +5477,19 @@ int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
                       POSIXBucket *sb, POSIXBucket *db, POSIXObject *dobj)
 {
   rgw_obj_key dst_key = dobj->get_key();
-  if (!get_key().instance.empty())
-    dst_key.instance = get_key().instance;
+  /* The instance in this name is a *source* version selector, not part
+   * of the destination path.  VersionedDirectory::copy() takes the
+   * destination directory from the version-less basename and matches
+   * every source entry against this instance, so a destination
+   * instance reaching it compares a destination version id against the
+   * source's versions, matches nothing, copies nothing, and then built
+   * a symlink with no target.
+   *
+   * The source's instance is therefore the only thing that belongs
+   * here:  set for "copy this one version", empty for a whole-object
+   * copy, which is what skips the filter and copies every version
+   * including the current-version symlink. */
+  dst_key.instance = get_key().instance;
 
   return ent->copy(dpp, y, db->get_dir(), get_key_fname(dst_key, /*use_version=*/true));
 }
