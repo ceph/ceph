@@ -36,8 +36,11 @@
 #                       (for sideloaded file detection; off by default)
 #   --ramdisk           Mount tmpfs on data root and LMDB cache dirs
 #                       (eliminates I/O latency for test runs)
-#   --data-root DIR     Redirect data root and LMDB cache to DIR
-#                       (e.g. --data-root /mnt/nvme for fast storage)
+#   --data-root DIR     Serve objects from DIR/root instead of the build
+#                       directory (e.g. --data-root /mnt/nvme for fast
+#                       storage, or a tree another gateway wrote).
+#                       The LMDB cache and userdb stay in the build dir.
+#                       Refuses --clean:  DIR/root is not ours to wipe.
 #   --perf              Performance tuning: NUMA pinning, tcmalloc
 #                       thread cache, tcp_nodelay, no request timeout
 #   -o 'key=value'      Pass extra config option through to vstart.sh
@@ -141,13 +144,43 @@ fi
 # tolerate permission errors from root-owned files (e.g. LMDB
 # created when the daemon ran as root for LWE testing)
 
+# --- validate --data-root before anything is deleted -------------
+#
+# Early, because whether a redirect is in play decides what this
+# script may remove.
+
+if [[ -n "$DATA_ROOT" ]]; then
+	if [[ ! -d "$DATA_ROOT" ]]; then
+		echo "error: --data-root $DATA_ROOT does not exist" >&2
+		exit 1
+	fi
+	if $CLEAN; then
+		echo "error: --clean with --data-root would destroy the contents of" >&2
+		echo "       $DATA_ROOT/root, which this script did not create and" >&2
+		echo "       has no business removing.  Remove it yourself if that" >&2
+		echo "       is what you want, then run again without --clean." >&2
+		exit 1
+	fi
+fi
+
 if $CLEAN; then
 	echo "==> --clean: wiping config DB and all data"
 	rm -f "$BUILD_DIR/dev/rgw/dbstore/config.db" 2>/dev/null || true
 fi
 
 echo "==> cleaning data dirs"
-rm -rf "$BUILD_DIR/dev/rgw/$STORE"/{lmdb,root,userdb}/* 2>/dev/null || true
+#
+# Per entry, because `rm -rf dir/*` globs *through* a symlink and
+# deletes what it points at.  --ramdisk leaves these as symlinks, so a
+# second run used to empty the redirect target rather than the link.
+for sub in lmdb root userdb; do
+	d="$BUILD_DIR/dev/rgw/$STORE/$sub"
+	if [[ -L "$d" ]]; then
+		rm -f "$d" 2>/dev/null || true
+	else
+		rm -rf "$d"/* 2>/dev/null || true
+	fi
+done
 
 if $RAMDISK; then
 	RAMDISK_BASE="/dev/shm/rgw-ramdisk"
@@ -167,18 +200,19 @@ if $RAMDISK; then
 fi
 
 if [[ -n "$DATA_ROOT" ]]; then
-	if [[ ! -d "$DATA_ROOT" ]]; then
-		echo "error: --data-root $DATA_ROOT does not exist" >&2
-		exit 1
-	fi
-	mkdir -p "$DATA_ROOT"/{root,lmdb}
-	DATA_DIR="$BUILD_DIR/dev/rgw/$STORE"
-	mkdir -p "$DATA_DIR"
-	for sub in root lmdb; do
-		rm -rf "$DATA_DIR/$sub"
-		ln -sfn "$DATA_ROOT/$sub" "$DATA_DIR/$sub"
-	done
-	echo "==> data-root: data on $DATA_ROOT/{root,lmdb}"
+	# Only the data root moves.  The LMDB cache and the userdb stay in
+	# the build directory:  they are RGW's own, they do not need to be
+	# wherever the objects are, and keeping them avoids re-bootstrapping
+	# the test users.
+	#
+	# Redirected by patching ceph.conf after vstart has written it, the
+	# way --gpfs does, and *not* by symlinking the build-dir path:
+	# vstart.sh runs with -n and removes $dev/rgw/$STORE/root outright
+	# (vstart.sh:990, :1010), so a symlink made before it ran was gone
+	# by the time the daemon started and the redirect silently had no
+	# effect at all.
+	mkdir -p "$DATA_ROOT/root"
+	echo "==> data-root: objects on $DATA_ROOT/root (conf patched after vstart)"
 fi
 
 if $GPFS; then
@@ -356,9 +390,11 @@ DATA_DIR="$BUILD_DIR/dev/rgw/$STORE/root"
 
 if $GPFS; then
 	DATA_DIR="$GPFS_ROOT/root"
+elif [[ -n "$DATA_ROOT" ]]; then
+	DATA_DIR="$DATA_ROOT/root"
 fi
 
-if ! $GPFS && ! $PERF; then
+if ! $GPFS && ! $PERF && [[ -z "$DATA_ROOT" ]]; then
 	# plain non-GPFS: vstart already started the daemon with defaults
 	true
 else
@@ -390,6 +426,13 @@ fi
 if $GPFS; then
 	echo "==> patching ceph.conf for GPFS base path"
 	sed -i "s|rgw nsfs base path = .*|rgw nsfs base path = $GPFS_ROOT/root|" "$CONF"
+elif [[ -n "$DATA_ROOT" ]]; then
+	echo "==> patching ceph.conf for --data-root"
+	sed -i "s|rgw $STORE base path = .*|rgw $STORE base path = $DATA_ROOT/root|" "$CONF"
+	grep -q "rgw $STORE base path = $DATA_ROOT/root" "$CONF" || {
+		echo "error: could not redirect 'rgw $STORE base path' in $CONF" >&2
+		exit 1
+	}
 fi
 
 patch_conf_bool() {
