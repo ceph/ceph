@@ -67,7 +67,7 @@ import logging
 import re
 import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Type
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple, Type
 
 from orchestrator import DaemonDescription, OrchestratorError, daemon_type_to_service
 from cephadm.serve import CephadmServe
@@ -997,6 +997,9 @@ OSD_CRUSH_LEVEL_AUTO = 'auto'
 # couple of seconds rather than at the next 15 s try
 OSD_OK_TO_STOP_WAIT_SECONDS = 45
 OSD_OK_TO_STOP_POLL_SECONDS = 2
+# a wait for PGs to settle not seen for this long (the upgrade was paused,
+# stopped...) is over: the next one starts afresh
+OSD_SETTLING_FORGET_SECONDS = 300
 # PG states in which a PG has not settled on an acting set yet
 OSD_UNSETTLED_PG_STATES = frozenset(
     ('unknown', 'creating', 'peering', 'activating', 'stale', 'down', 'incomplete'))
@@ -1117,6 +1120,9 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
     def _max_group(self) -> int:
         return max(0, int(getattr(self.mgr, 'upgrade_staged_switch_osd_max_group', 0) or 0))
 
+    def _pause(self) -> int:
+        return max(0, int(getattr(self.mgr, 'upgrade_staged_switch_osd_pause', 0) or 0))
+
     def verify_timeout(self) -> int:
         # a host of OSDs booting at once takes longer than an MDS group:
         # store open, PG load, on-disk conversions on a major upgrade
@@ -1150,11 +1156,17 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
         """Ask the monitors whether *exactly* this set can be stopped with
         every PG staying active. `max` = len(ids) keeps the mgr from adding
         OSDs of its own to the set."""
+        ok, why, _ = self._ok_to_stop_pgs(ids)
+        return ok, why
+
+    def _ok_to_stop_pgs(self, ids: List[int]) -> Tuple[bool, str, List[str]]:
+        """_ok_to_stop(), plus the PGs that keep the set from stopping."""
         ret, out, err = self.mgr.mon_command({
             'prefix': 'osd ok-to-stop', 'ids': [str(i) for i in ids], 'max': len(ids)})
         if ret == 0:
-            return True, ''
+            return True, '', []
         why = (err or '').strip() or f'osd ok-to-stop returned {ret}'
+        pgids: List[str] = []
         try:
             report = json.loads(out or '{}')
             report = report.get('ok_to_stop', report) if isinstance(report, dict) else {}
@@ -1173,9 +1185,32 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
                 bits.append(f'{len(no_pool)} PG(s) of a pool being created or deleted')
             if bits:
                 why = ', '.join(bits)
+            pgids = [str(p) for p in list(inactive) + list(already) + list(unknown) + list(no_pool)]
         except (ValueError, TypeError, AttributeError):
             pass
-        return False, why
+        return False, why, pgids
+
+    def _pg_states(self) -> Dict[str, Set[str]]:
+        pg_stats = self.mgr.get('pg_stats') or {}
+        return {str(pg.get('pgid')): set(str(pg.get('state') or 'unknown').split('+'))
+                for pg in pg_stats.get('pg_stats') or []}
+
+    @staticmethod
+    def _refusal_is_transient(pgids: List[str], states: Dict[str, Set[str]]) -> bool:
+        """Whether a set was refused only for now: some PG keeping it from
+        stopping is not active+clean yet (peering, recovering, degraded,
+        stale, unknown, or not reported) - typically the PGs of the previous
+        group, or of an OSD that restarted, still settling. Otherwise, every
+        such PG is active+clean and the set is refused by the placement
+        itself (two copies of a PG under the bucket): that will not change by
+        waiting. A refusal that names no PG is taken as transient."""
+        if not pgids:
+            return True
+        for pgid in pgids:
+            st = states.get(pgid)
+            if st is None or not {'active', 'clean'} <= st or st & OSD_UNSETTLED_PG_STATES:
+                return True
+        return False
 
     def _paused(self) -> bool:
         return bool(self.upgrade.upgrade_state is None or self.upgrade.upgrade_state.paused)
@@ -1266,15 +1301,28 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
         return pending
 
     def _pick(self, tree: CrushTree, levels: List[str], pending: Dict[int, DaemonDescription],
-              limit: Optional[int]) -> Tuple[Optional[StagedGroup], List[str], bool]:
+              limit: Optional[int], patient: bool = True
+              ) -> Tuple[Optional[StagedGroup], List[str], bool, Optional[str]]:
         """First bucket, highest level first, whose pending OSDs are
         ok-to-stop as a set. Returns (group, reasons it skipped the others,
-        whether any bucket of these levels holds a pending OSD at all)."""
+        whether any bucket of these levels holds a pending OSD at all, the
+        first level with a bucket refused only for now - see
+        _refusal_is_transient() - if any).
+
+        With `auto`, a level is left for the next one down only when its
+        buckets are refused by the placement itself; a bucket refused only
+        while PGs settle is waited for at its own level rather than split
+        into smaller groups that happen to pass meanwhile - unless not
+        `patient` any more."""
         reasons: List[str] = []
         any_bucket = False
         auto = self._level() == OSD_CRUSH_LEVEL_AUTO
-        for btype in levels:
+        asked: Set[FrozenSet[int]] = set()
+        unsettled: Optional[str] = None
+        states: Optional[Dict[str, Set[str]]] = None
+        for n, btype in enumerate(levels):
             level_reasons: List[str] = []
+            transient = False
             for bucket in tree.buckets_of_type(btype):
                 ids = [i for i in tree.osds_under(int(bucket['id'])) if i in pending]
                 if not ids:
@@ -1292,24 +1340,38 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
                 btype_of = str(bucket.get('type'))
                 if limit is not None and len(ids) > limit:
                     ids = ids[:limit]
+                # the same OSDs already asked about under a bucket above (a
+                # rack of a single host, say): the answer would be the same
+                if frozenset(ids) in asked:
+                    continue
+                asked.add(frozenset(ids))
                 if self._max_group() and len(ids) > self._max_group():
                     level_reasons.append(f'{btype_of} {bucket["name"]}: {len(ids)} OSDs, more than '
                                          f'upgrade_staged_switch_osd_max_group ({self._max_group()})')
                     continue
-                ok, why = self._ok_to_stop(ids)
+                ok, why, pgids = self._ok_to_stop_pgs(ids)
                 if ok:
                     label = f'{btype_of} {bucket["name"]}'
                     group = StagedGroup(str(bucket['id']), label, [pending[i] for i in ids], {
                         'bucket': bucket['name'], 'type': btype_of, 'osd_ids': ids,
                         'noout': False, 'committed': False,
                         'up_fingerprint': self._up_fingerprint(self._osds(), ids)})
-                    return group, reasons + level_reasons, True
+                    return group, reasons + level_reasons, True, unsettled
+                if not transient:
+                    if states is None and pgids:
+                        states = self._pg_states()
+                    transient = self._refusal_is_transient(pgids, states or {})
                 level_reasons.append(f'{btype_of} {bucket["name"]} ({len(ids)} OSDs): {why}')
             reasons += level_reasons
-            if level_reasons and auto:
-                logger.info('Upgrade: no %s can be switched as a whole right now (%s); '
+            if transient:
+                unsettled = unsettled or btype
+                if patient:
+                    # wait for this level rather than settle for a smaller group
+                    return None, reasons, any_bucket, btype
+            if level_reasons and auto and n + 1 < len(levels):
+                logger.info('Upgrade: no %s can be switched as a whole (%s); '
                             'trying the next CRUSH level down', btype, '; '.join(level_reasons[:3]))
-        return None, reasons, any_bucket
+        return None, reasons, any_bucket, unsettled
 
     def groups(self, need_upgrade: List[DaemonDescription]) -> List[StagedGroup]:
         state = self.upgrade.upgrade_state
@@ -1323,9 +1385,33 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
             return []
         limit = state.remaining_count if state.remaining_count is not None and state.remaining_count > 0 else None
         reasons: List[str] = []
+        waiting: Optional[str] = None
+        warned = False
+        # Since when (over passes: a policy lives one pass) buckets have been
+        # waited for while their PGs settle. PGs that stay degraded for
+        # another reason (an OSD down elsewhere) look the same: past
+        # verify_timeout(), a refusal is taken for what it is.
+        since: Optional[float] = None
+        seen = getattr(self.upgrade, '_osd_settling', None)
+        if seen and time.time() - seen[1] < OSD_SETTLING_FORGET_SECONDS:
+            since = seen[0]
         deadline = time.time() + OSD_OK_TO_STOP_WAIT_SECONDS
         while True:
-            group, reasons, any_bucket = self._pick(tree, levels, pending, limit)
+            patient = since is None or time.time() - since < self.verify_timeout()
+            group, reasons, any_bucket, unsettled = self._pick(tree, levels, pending, limit, patient)
+            if unsettled is None:
+                since = None
+            elif since is None:
+                since = time.time()
+            setattr(self.upgrade, '_osd_settling', None if since is None else (since, time.time()))
+            if group is None and patient and unsettled and unsettled != waiting:
+                logger.info('Upgrade: waiting for a %s to become stoppable as a whole, PGs still '
+                            'settling (%s)', unsettled, '; '.join(reasons[-3:]))
+            waiting = unsettled if group is None and patient else None
+            if unsettled and not patient and not warned:
+                logger.warning('Upgrade: PGs have not settled in %ss; no longer waiting for '
+                               'a whole %s', self.verify_timeout(), unsettled)
+                warned = True
             if group is not None:
                 logger.info('Upgrade: staged switch picked %s: %d OSD(s) %s', group.label,
                             len(group.daemons), ', '.join(group.names))
@@ -1342,6 +1428,9 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
             time.sleep(OSD_OK_TO_STOP_POLL_SECONDS)
         summary = (f'no {"/".join(levels)} bucket can be switched as a whole right now, every PG '
                    f'must stay active ({"; ".join(reasons[:3])}{"; ..." if len(reasons) > 3 else ""})')
+        if waiting:
+            # PGs still settling: the verdict will change, wait for it
+            raise StagedSwitchNotReady(summary)
         if self._some_osd_ok_to_stop_alone(tree, levels, pending):
             # Not the PGs of the previous group recovering (then no OSD
             # sharing a PG with them passes either) but buckets that cannot
@@ -1469,6 +1558,38 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
         if waiting:
             return False, ('its OSDs are recovering what was written while they were down ('
                            + self._pgs_summary(waiting) + ')')
+        return self._paused_after(group)
+
+    def _paused_after(self, group: StagedGroup) -> Tuple[bool, str]:
+        """upgrade_staged_switch_osd_pause: a lever for whatever restarting
+        OSDs back to back may cause that the PG states do not show (cold
+        caches...). Once every PG of the group's OSDs is active+clean, wait
+        that many seconds more before the next group is chosen. Counted in
+        memory: after a mgr failover the pause starts over."""
+        pause = self._pause()
+        if not pause:
+            return True, ''
+        ids = {int(i) for i in group.data['osd_ids']}
+        unclean = []
+        pg_stats = self.mgr.get('pg_stats') or {}
+        for pg in pg_stats.get('pg_stats') or []:
+            if ids & {int(i) for i in list(pg.get('up') or []) + list(pg.get('acting') or [])}:
+                states = set(str(pg.get('state') or 'unknown').split('+'))
+                if not {'active', 'clean'} <= states or states & OSD_UNSETTLED_PG_STATES:
+                    unclean.append(str(pg.get('pgid')))
+        mark = getattr(self.upgrade, '_osd_group_pause', None)
+        if unclean:
+            setattr(self.upgrade, '_osd_group_pause', None)
+            return False, (f'pausing {pause}s (upgrade_staged_switch_osd_pause) once every PG of its '
+                           f'OSDs is active+clean; {len(unclean)} not yet, e.g. '
+                           f'{", ".join(sorted(unclean)[:3])}')
+        if not mark or mark[0] != group.key:
+            mark = (group.key, time.time())
+            setattr(self.upgrade, '_osd_group_pause', mark)
+        left = mark[1] + pause - time.time()
+        if left > 0:
+            return False, f'pausing {pause}s (upgrade_staged_switch_osd_pause), {int(left + 0.999)}s left'
+        setattr(self.upgrade, '_osd_group_pause', None)
         return True, ''
 
     def _pgs_waiting(self, ids: List[int], osds: Dict[int, Dict[str, Any]],

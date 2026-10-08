@@ -8,6 +8,7 @@ from unittest import mock
 from cephadm import CephadmOrchestrator
 from cephadm.staged_switch import (
     OSD_OK_TO_STOP_POLL_SECONDS,
+    OSD_OK_TO_STOP_WAIT_SECONDS,
     CrushTree,
     MdsStagedSwitchPolicy,
     OsdStagedSwitchPolicy,
@@ -1250,7 +1251,7 @@ class _FakeOsdMons:
         if p == 'osd ok-to-stop':
             ids = [int(i) for i in cmd['ids']]
             bad = self.ok_to_stop(ids)
-            report = {'ok_to_stop': not bad, 'osds': ids, 'bad_become_inactive': [f'1.{b}' for b in bad]}
+            report = {'ok_to_stop': not bad, 'osds': ids, 'bad_become_inactive': [f'1.{b:x}' for b in bad]}
             if bad:
                 return (-16, json.dumps({'ok_to_stop': report}),
                         f'unsafe to stop osd(s) at this time ({len(bad)} PGs are or would become offline)')
@@ -2178,6 +2179,150 @@ def test_osd_stage_ahead_off_stages_group_by_group(cephadm_module: CephadmOrches
     with _OsdRun(cephadm_module, mons, stage_ahead=False) as run:
         run.one_pass()
         assert sorted(run.staged) == ['osd.0', 'osd.1']
+
+
+# size 2 / min_size 1 PGs over two racks out of three: once r1 is
+# switched, r2 and r3 each share a PG with osd.0 or osd.1, h4 (6, 7) and h6
+# (10, 11) do not
+_PGS_2_OVER_3_RACKS = [(1, [0, 4]), (1, [1, 8]), (1, [2, 5]), (1, [3, 9]), (1, [6, 10]), (1, [7, 11])]
+
+
+def _lag_until(mons, osds, t_clear=None):
+    """osds miss writes (their PGs active+recovering+degraded) until
+    t_clear of simulated time, or for good."""
+    mons.recovering.update(osds)
+    orig_ok = mons.ok_to_stop
+
+    def ok_to_stop(ids):
+        if t_clear is not None and mons.clock.now >= t_clear:
+            mons.recovering.clear()
+        return orig_ok(ids)
+    mons.ok_to_stop = ok_to_stop
+
+
+def test_osd_auto_waits_for_settling_pgs_rather_than_descending(cephadm_module: CephadmOrchestrator):
+    # r1 is switched and settled, then osd.0 and osd.1 are found missing
+    # writes for a few seconds: r2 and r3 are refused, h4 is not. The
+    # refusal comes from PGs that are not clean: wait for a rack rather
+    # than take a host.
+    mons = _FakeOsdMons(pgs=_PGS_2_OVER_3_RACKS)
+    with _OsdRun(cephadm_module, mons, level='auto') as run:
+        run.one_pass()
+        assert run.groups[-1] == [0, 1, 2, 3]
+        _lag_until(mons, {0, 1}, mons.clock.now + 6)
+        run.one_pass()
+        assert run.groups[-1] == [4, 5, 6, 7]
+        # hosts were not even asked about while waiting for a rack
+        assert not [c for c in mons.cmds('osd ok-to-stop') if c['ids'] == ['6', '7']]
+        run.one_pass()
+        assert run.groups == [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]
+
+
+def test_osd_settling_pgs_do_not_hand_over_to_the_regular_path(cephadm_module: CephadmOrchestrator):
+    # same, at an explicit level: no rack can go, single OSDs could. The
+    # verdict will change once osd.0 and osd.1 have caught up: wait rather
+    # than let the regular path upgrade OSDs one by one.
+    mons = _FakeOsdMons(pgs=_PGS_2_OVER_3_RACKS)
+    with _OsdRun(cephadm_module, mons, level='rack') as run:
+        run.one_pass()
+        mons.recovering.update({0, 1})
+        assert run.one_pass() is True
+        assert run.groups[-1] == []
+        assert not cephadm_module.upgrade.upgrade_state.paused
+        assert 'Waiting to stage' in cephadm_module.upgrade.upgrade_info_str
+        mons.recover()
+        assert run.one_pass() is True
+        assert run.groups[-1] == [4, 5, 6, 7]
+
+
+def test_osd_pgs_that_never_settle_stop_the_wait_after_the_timeout(cephadm_module: CephadmOrchestrator, caplog):
+    # osd.0 and osd.1 never catch up (as with an OSD down elsewhere, PGs
+    # that stay degraded look like PGs settling): r2 and r3 are waited for
+    # up to the OSD verify timeout, then the policy descends as it would
+    # for a refusal by the placement: h4, then h6.
+    mons = _FakeOsdMons(pgs=_PGS_2_OVER_3_RACKS)
+    cephadm_module.upgrade_staged_switch_osd_timeout = 120
+    with _OsdRun(cephadm_module, mons, level='auto') as run:
+        run.one_pass()
+        _lag_until(mons, {0, 1})
+        waited_from = mons.clock.now
+        while run.one_pass() and run.groups[-1] == []:
+            assert not cephadm_module.upgrade.upgrade_state.paused
+            assert mons.clock.now - waited_from < 120 + 2 * OSD_OK_TO_STOP_WAIT_SECONDS
+        assert run.groups[-1] == [6, 7]
+        assert mons.clock.now - waited_from >= 120
+        assert 'no longer waiting for a whole rack' in caplog.text
+        # still not settled: no new wait
+        run.one_pass()
+        assert run.groups[-1] == [10, 11]
+        # h3 and h5 share a PG with osd.0 or osd.1, and so do the OSDs of
+        # theirs probed alone: wait, without pausing
+        assert run.one_pass() is True
+        assert run.groups[-1] == [] and not cephadm_module.upgrade.upgrade_state.paused
+        mons.recover()
+        run.one_pass()
+        assert run.groups[-1] == [4, 5]
+
+
+def test_osd_same_osds_asked_once_per_pick(cephadm_module: CephadmOrchestrator):
+    # r2 holds h3 alone: when every rack is refused by the placement (both
+    # copies of each PG on one host), the host level does not ask again for
+    # the OSDs of r2.
+    mons = _FakeOsdMons(pgs=[(2, [2 * h, 2 * h + 1]) for h in range(6)])
+    mons.racks = {'r1': ['h1', 'h2'], 'r2': ['h3'], 'r3': ['h4', 'h5', 'h6']}
+    with _OsdRun(cephadm_module, mons, level='auto') as run:
+        assert run.one_pass() is True
+        assert run.groups[-1] == []
+        asks = [c['ids'] for c in mons.cmds('osd ok-to-stop')]
+        picks = asks.count(['0', '1', '2', '3'])
+        assert picks > 1
+        assert asks.count(['4', '5']) == picks          # once per pick, not twice
+        assert asks.count(['0', '1']) == picks          # the host level was tried
+
+
+def test_osd_pause_between_groups(cephadm_module: CephadmOrchestrator):
+    # upgrade_staged_switch_osd_pause: once every PG of the group's OSDs is
+    # active+clean, wait that long before choosing the next group
+    mons = _FakeOsdMons()
+    cephadm_module.upgrade_staged_switch_osd_pause = 100
+    with _OsdRun(cephadm_module, mons) as run:
+        st = cephadm_module.upgrade.upgrade_state
+        run.one_pass()
+        assert run.groups[-1] == [0, 1]
+        assert st.staged_switch.get('phase') == 'settling' and not st.paused
+        assert 'pausing 100s (upgrade_staged_switch_osd_pause)' in cephadm_module.upgrade.upgrade_info_str
+        # a PG of h1 not clean any more (osd.4 misses writes): the pause
+        # starts over once it is
+        mons.recovering.add(4)
+        run.one_pass()
+        assert run.groups[-1] == [] and st.staged_switch.get('phase') == 'settling'
+        assert 'active+clean; ' in cephadm_module.upgrade.upgrade_info_str
+        mons.recover()
+        clean_at = mons.clock.now
+        while st.staged_switch:
+            run.one_pass()
+            assert run.groups[-1] == [] and not st.paused
+        assert mons.clock.now - clean_at >= 100
+        run.one_pass()
+        assert run.groups[-1] == [2, 3]
+        # setting the option back to 0 ends a pause in progress
+        assert st.staged_switch.get('phase') == 'settling'
+        cephadm_module.upgrade_staged_switch_osd_pause = 0
+        t = mons.clock.now
+        run.one_pass()
+        assert st.staged_switch == {} and mons.clock.now - t < 30
+        run.one_pass()
+        assert run.groups[-1] == [4, 5]
+
+
+def test_osd_no_pause_by_default(cephadm_module: CephadmOrchestrator):
+    mons = _FakeOsdMons()
+    with _OsdRun(cephadm_module, mons) as run:
+        assert cephadm_module.upgrade_staged_switch_osd_pause == 0
+        run.one_pass()
+        assert cephadm_module.upgrade.upgrade_state.staged_switch == {}
+        run.one_pass()
+        assert run.groups == [[0, 1], [2, 3]]
 
 
 def test_osd_ok_to_stop_polled_every_two_seconds(cephadm_module: CephadmOrchestrator):
