@@ -28,6 +28,7 @@
 
 #include <fmt/core.h>
 
+#include <iomanip> // for std::quoted
 #include <sstream>
 
 /* Don't use standard Ceph logging in this file.
