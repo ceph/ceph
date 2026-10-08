@@ -266,6 +266,7 @@ class UpgradeState:
                  has_set_cephx_allowed_ciphers: Optional[bool] = False,
                  health_warnings_muted: Optional[bool] = False,
                  staged_switch: Optional[Dict[str, Any]] = None,
+                 staged_ahead: Optional[Dict[str, Any]] = None,
                  ):
 
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -300,6 +301,9 @@ class UpgradeState:
         # progress of the staged switch of the group currently being
         # handled (see cephadm.staged_switch), so a mgr failover resumes it
         self.staged_switch: Dict[str, Any] = staged_switch or {}
+        # daemons staged ahead of their group, per daemon type:
+        # {type: {'image': target image, 'daemons': {name: fingerprint}}}
+        self.staged_ahead: Dict[str, Any] = staged_ahead or {}
 
     def to_json(self) -> dict:
         return {
@@ -327,6 +331,7 @@ class UpgradeState:
             'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
             'health_warnings_muted': self.health_warnings_muted,
             'staged_switch': self.staged_switch,
+            'staged_ahead': self.staged_ahead,
         }
 
     @classmethod
