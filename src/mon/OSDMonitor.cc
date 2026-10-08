@@ -17918,14 +17918,8 @@ void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
   const string& remaining_site_name = *(live_zones.begin());
   ceph_assert(osdmap.crush->name_exists(remaining_site_name));
   int remaining_site = osdmap.crush->get_item_id(remaining_site_name);
-  for (auto pgi : osdmap.pools) {
-    if (pgi.second.peering_crush_bucket_count) {
-      pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
-      newp.peering_crush_bucket_count = new_site_count;
-      newp.peering_crush_mandatory_member = remaining_site;
-      newp.set_last_force_op_resend(pending_inc.epoch);
-    }
-  }
+  apply_stretch_transition_to_pools(osdmap.get_pools(), pending_inc,
+                                    new_site_count, remaining_site);
   propose_pending();
 }
 
@@ -17940,12 +17934,7 @@ void OSDMonitor::trigger_recovery_stretch_mode()
   pending_inc.new_recovering_stretch_mode = 1;
   pending_inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
 
-  for (auto pgi : osdmap.pools) {
-    if (pgi.second.peering_crush_bucket_count) {
-      pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
-      newp.set_last_force_op_resend(pending_inc.epoch);
-    }
-  }
+  apply_stretch_transition_to_pools(osdmap.get_pools(), pending_inc);
   propose_pending();
 }
 
@@ -18023,14 +18012,27 @@ void OSDMonitor::trigger_healthy_stretch_mode()
   pending_inc.new_degraded_stretch_mode = 0; // turn off degraded mode...
   pending_inc.new_recovering_stretch_mode = 0; //...and recovering mode!
   pending_inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
-  for (auto pgi : osdmap.pools) {
-    if (pgi.second.peering_crush_bucket_count) {
-      pg_pool_t& newp = *pending_inc.get_new_pool(pgi.first, &pgi.second);
-      newp.peering_crush_bucket_count = osdmap.stretch_bucket_count;
-      newp.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
-      newp.set_last_force_op_resend(pending_inc.epoch);
+  apply_stretch_transition_to_pools(osdmap.get_pools(), pending_inc,
+                                    osdmap.stretch_bucket_count,
+                                    CRUSH_ITEM_NONE);
+  propose_pending();
+}
+
+void OSDMonitor::apply_stretch_transition_to_pools(
+  const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+  OSDMap::Incremental& inc,
+  uint32_t bucket_count,
+  int mandatory_member)
+{
+  for (const auto& [id, p] : pools) {
+    if (p.peering_crush_bucket_count) {
+      pg_pool_t& newp = *inc.get_new_pool(id, &p);
+      if (bucket_count) {
+        newp.peering_crush_bucket_count = bucket_count;
+        newp.peering_crush_mandatory_member = mandatory_member;
+      }
+      newp.set_last_force_op_resend(inc.epoch);
     }
   }
-  propose_pending();
 }
 
