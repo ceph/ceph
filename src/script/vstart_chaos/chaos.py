@@ -198,14 +198,18 @@ class Cluster:
         self.pool_id = p["pool_id"]
         self.size = p["size"]
         self.min_size = p["min_size"]
-        self.num_zones = p.get("options", {}).get("num_zones", 1)
-        self.global_stretch = False
-        if self.num_zones == 1 and p.get("peering_crush_bucket_count", 0) > 0:
-            st = ceph_json("osd dump")["stretch_mode"]
-            if st["stretch_mode_enabled"]:
-                self.num_zones = st["stretch_bucket_count"]
-                self.global_stretch = True
+        # an error where the monitors have no num_zones, as on main
+        nz = ceph_json(f"osd pool get {pool} num_zones", quiet=True)
+        self.num_zones = nz["num_zones"] if nz else 1
+        mon_dump = ceph_json("mon dump")
+        # main has only global stretch mode and calls it stretch_mode
+        global_mode = mon_dump.get("global_stretch_mode",
+                                   mon_dump.get("stretch_mode", False))
+        if global_mode and self.num_zones == 1 and \
+                p.get("peering_crush_bucket_count", 0) > 0:
+            self.num_zones = ceph_json("osd dump")["stretch_mode"]["stretch_bucket_count"]
         self.multi_zone = self.num_zones > 1
+        self.global_stretch = global_mode and self.multi_zone
         self.zone_size = self.size // self.num_zones
         self.erasure = bool(p.get("erasure_code_profile"))
         flags = p.get("flags_names", "").split(",")
@@ -219,7 +223,6 @@ class Cluster:
             self.budget = self.zone_size - 1
         else:
             self.budget = self.size - self.min_size
-        mon_dump = ceph_json("mon dump")
         self.all_mons = sorted(m["name"] for m in mon_dump["mons"])
         self.zone_mon = {}
         if self.multi_zone:
