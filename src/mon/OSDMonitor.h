@@ -1016,9 +1016,10 @@ public:
    */
   void trigger_healthy_stretch_mode();
   /**
-   * Update the pending copy of each stretch pool for a stretch mode
-   * transition: force an op resend and, if bucket_count is non-zero, set
-   * the peering bucket count and mandatory member.
+   * Update each pool that is stretched once inc is applied, including
+   * pools that inc creates or changes, for a stretch mode transition:
+   * force an op resend and, if bucket_count is non-zero, set the peering
+   * bucket count and mandatory member.
    */
   static void apply_stretch_transition_to_pools(
       const mempool::osdmap::map<int64_t, pg_pool_t>& pools,

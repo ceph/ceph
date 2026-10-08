@@ -18024,14 +18024,22 @@ void OSDMonitor::apply_stretch_transition_to_pools(
   uint32_t bucket_count,
   int mandatory_member)
 {
+  auto apply = [&](pg_pool_t& p) {
+    if (bucket_count) {
+      p.peering_crush_bucket_count = bucket_count;
+      p.peering_crush_mandatory_member = mandatory_member;
+    }
+    p.set_last_force_op_resend(inc.epoch);
+  };
+  for (auto& [id, p] : inc.new_pools) {
+    if (p.is_stretch_pool() && !inc.old_pools.contains(id)) {
+      apply(p);
+    }
+  }
   for (const auto& [id, p] : pools) {
-    if (p.peering_crush_bucket_count) {
-      pg_pool_t& newp = *inc.get_new_pool(id, &p);
-      if (bucket_count) {
-        newp.peering_crush_bucket_count = bucket_count;
-        newp.peering_crush_mandatory_member = mandatory_member;
-      }
-      newp.set_last_force_op_resend(inc.epoch);
+    if (p.is_stretch_pool() && !inc.new_pools.contains(id) &&
+        !inc.old_pools.contains(id)) {
+      apply(*inc.get_new_pool(id, &p));
     }
   }
 }
