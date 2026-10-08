@@ -1130,6 +1130,10 @@ fn stop(env: &Env) -> Result<(), String> {
 ///     the default location cannot be used anyway, because
 ///     `vstart.sh` removes `$dev/rgw/$STORE/root` outright on every
 ///     start, which would delete the tree we came to read.
+/// ///   * **The adoption mode, explicitly.**  `serve` is the driver's
+///     default and serves the tree read-only, which is right for a
+///     customer deciding whether to adopt and wrong for a handoff that
+///     means to write.  `--adoption-mode adopt` runs the import.
 ///   * **`--with-lifecycle`**, because conversion carries bucket
 ///     configuration and lifecycle is part of it.  NooBaa keeps a
 ///     bucket's rules in `lifecycle_configuration_rules` in its
@@ -1177,8 +1181,9 @@ fn adopt(env: &Env) -> Result<(), String> {
         .map(|d| d.filter_map(|e| e.ok()).count())
         .unwrap_or(0);
     println!("adopt    tree {} ({buckets} entries)", tree.display());
-    println!("         rgw-vstart.sh --store nsfs --data-root {} --with-lifecycle",
-             env.data.display());
+    println!("         rgw-vstart.sh --store nsfs --data-root {} \
+              --noobaa-config-root {} --adoption-mode adopt --with-lifecycle",
+             env.data.display(), env.config_root().display());
 
     let st = Command::new("bash")
         .arg(script.display().to_string())
@@ -1187,6 +1192,16 @@ fn adopt(env: &Env) -> Result<(), String> {
             "nsfs",
             "--data-root",
             &env.data.display().to_string(),
+            /* Their store, so RGW can read what NooBaa wrote. */
+            "--noobaa-config-root",
+            &env.config_root().display().to_string(),
+            /* **`adopt`, said explicitly.**  The driver defaults to
+             * `serve`, which serves the tree *read-only* -- that is
+             * the conservative default a customer should get, since it
+             * changes nothing on disk and keeps the decision
+             * reversible.  A handoff that means to write has to ask. */
+            "--adoption-mode",
+            "adopt",
             "--with-lifecycle",
         ])
         .current_dir(build)
