@@ -6,8 +6,10 @@
 #include "mon/MonMap.h"
 #include "mon/KVMonitor.h"
 #include "mon/MgrMonitor.h"
+#include "mon/MonmapMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "mon/Paxos.h"
+#include "mon/PoolCreateParams.h"
 #include "messages/MConfig.h"
 #include "messages/MGetConfig.h"
 #include "messages/MMonCommand.h"
@@ -15,6 +17,8 @@
 #include "common/JSONFormatter.h"
 #include "common/TextTable.h"
 #include "common/cmdparse.h"
+#include "common/config_values.h"
+#include "include/str_map.h"
 #include "include/stringify.h"
 #include "crush/CrushWrapper.h"
 
@@ -193,7 +197,15 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(cmdmap, "prefix", prefix);
 
   bufferlist odata;
-  if (prefix == "config help") {
+  if (prefix == "osd pool default get") {
+    stringstream out;
+    dump_pool_defaults(f.get(), out);
+    if (f) {
+      f->flush(odata);
+    } else {
+      odata.append(out.str());
+    }
+  } else if (prefix == "config help") {
     stringstream ss;
     string name;
     cmd_getval(cmdmap, "key", name);
@@ -601,6 +613,13 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       pending[key].reset();
     }
     goto update;
+  } else if (prefix == "osd pool default set") {
+    err = prepare_pool_default_set(cmdmap, ss);
+    if (err) {
+      goto reply;
+    }
+    pending_description = "osd pool default set";
+    goto update;
   } else if (prefix == "config reset") {
     int64_t revert_to = -1;
     cmd_getval(cmdmap, "num", revert_to);
@@ -984,4 +1003,260 @@ void ConfigMonitor::check_all_subs()
     }
   }
   dout(10) << __func__ << " updated " << updated << " / " << total << dendl;
+}
+
+namespace {
+
+// The parameters that ceph osd pool default get shows, in order.
+const vector<string> POOL_DEFAULT_PARAMS = {
+  "pool_type", "num_zones", "rule", "zone_failure_domain",
+  "osd_failure_domain", "root", "class", "replica", "min_size",
+  "erasure_code_profile", "k", "m", "pg_num", "pgp_num", "autoscale_mode",
+  "bulk", "crimson"};
+
+} // anonymous namespace
+
+string ConfigMonitor::pool_default_source(const string& option)
+{
+  const ConfigValues values = g_conf().get_config_values();
+  for (int level = CONF_FINAL; level > CONF_MON; --level) {
+    if (values.get_value(option, level).second) {
+      switch (level) {
+      case CONF_FILE:
+        return "file";
+      case CONF_ENV:
+        return "env";
+      case CONF_CMDLINE:
+        return "cmdline";
+      default:
+        return "override";
+      }
+    }
+  }
+  if (!values.get_value(option, CONF_MON).second) {
+    return "default";
+  }
+  const OSDMap& osdmap = mon.osdmon()->osdmap;
+  map<string,string> crush_location;
+  osdmap.crush->get_full_location(g_conf()->host, &crush_location);
+  std::unordered_map<string,ConfigMap::ValueSource> src;
+  config_map.generate_entity_map(g_conf()->name, crush_location,
+                                 osdmap.crush.get(), string{}, &src);
+  auto p = src.find(option);
+  if (p == src.end()) {
+    return "mon";
+  }
+  string source = p->second.section;
+  if (p->second.option && !p->second.option->mask.empty()) {
+    source += "/" + p->second.option->mask.to_str();
+  }
+  return source;
+}
+
+void ConfigMonitor::dump_pool_defaults(Formatter *f, ostream& out)
+{
+  const PoolCreateParams d = load_pool_defaults(g_conf());
+  const OSDMap& osdmap = mon.osdmon()->osdmap;
+  const string profile =
+    g_conf().get_val<string>("osd_pool_default_erasure_code_profile");
+  auto value_of = [&](const string& param) -> string {
+    if (param == "pool_type") {
+      return string(pg_pool_t::get_type_name(d.pool_type));
+    } else if (param == "num_zones") {
+      return stringify(d.num_zones);
+    } else if (param == "rule") {
+      const auto id = d.default_rule;
+      if (id < 0) {
+        return "none";
+      }
+      const char *name = osdmap.crush->get_rule_name(id);
+      return name ? string(name) : stringify(id);
+    } else if (param == "zone_failure_domain") {
+      return d.zone_failure_domain;
+    } else if (param == "osd_failure_domain") {
+      return d.osd_failure_domain;
+    } else if (param == "root") {
+      return d.root;
+    } else if (param == "class") {
+      return d.device_class;
+    } else if (param == "replica") {
+      return stringify(d.replica);
+    } else if (param == "min_size") {
+      return stringify(d.min_size);
+    } else if (param == "erasure_code_profile") {
+      return profile;
+    } else if (param == "k") {
+      return d.k() ? stringify(*d.k()) : string();
+    } else if (param == "m") {
+      return d.m() ? stringify(*d.m()) : string();
+    } else if (param == "pg_num") {
+      return stringify(d.pg_num);
+    } else if (param == "pgp_num") {
+      return stringify(d.pgp_num);
+    } else if (param == "autoscale_mode") {
+      return d.autoscale_mode;
+    } else if (param == "bulk") {
+      return d.bulk ? "true" : "false";
+    } else {
+      return d.crimson ? "true" : "false";
+    }
+  };
+  auto option_of = [&](const string& param) -> string {
+    if (param == "replica" &&
+        g_conf().get_val<uint64_t>("osd_pool_default_replica") == 0) {
+      return "osd_pool_default_size";
+    }
+    return pool_default_options().at(param);
+  };
+
+  TextTable tbl;
+  if (f) {
+    f->open_object_section("pool_defaults");
+  } else {
+    tbl.define_column("PARAMETER", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("SOURCE", TextTable::LEFT, TextTable::LEFT);
+  }
+  for (const auto& param : POOL_DEFAULT_PARAMS) {
+    const string option = option_of(param);
+    const string value = value_of(param);
+    const string source = pool_default_source(option);
+    if (f) {
+      f->open_object_section(param);
+      f->dump_string("value", value);
+      f->dump_string("option", option);
+      f->dump_string("source", source);
+      f->close_section();
+    } else {
+      tbl << param << value << option << source << TextTable::endrow;
+    }
+  }
+  if (f) {
+    f->close_section();
+  } else {
+    out << tbl;
+  }
+}
+
+int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
+                                            ostream& ss)
+{
+  const OSDMap& osdmap = mon.osdmon()->osdmap;
+
+  // 1. the defaults, 2. the profile, 3. the command line
+  PoolCreateParams p = load_pool_defaults(g_conf());
+  string profile_name;
+  cmd_getval(cmdmap, "erasure_code_profile", profile_name);
+  int err = use_profile(
+    p, profile_name,
+    osdmap.has_erasure_code_profile(profile_name)
+      ? &osdmap.get_erasure_code_profile(profile_name) : nullptr,
+    &ss);
+  if (err) {
+    return err;
+  }
+  apply_command_line(p, cmdmap);
+  err = check_command_line(p, PoolCommand::DEFAULT_SET, &ss);
+  if (err) {
+    return err;
+  }
+  int64_t rule_id = -1;
+  if (p.is_given("rule") && p.rule != "none") {
+    rule_id = osdmap.crush->get_rule_id(p.rule);
+    if (rule_id < 0) {
+      ss << "rule '" << p.rule << "' does not exist";
+      return -ENOENT;
+    }
+  }
+
+  // 4. the checks that the next ceph osd pool create would make
+  err = check_pool_defaults(p, mon.osdmon()->pool_create_cluster(*osdmap.crush),
+                            &ss);
+  if (err) {
+    return err;
+  }
+  if ((p.is_given("replica") && p.replica == 1) ||
+      (p.is_given("size") && p.size == 1)) {
+    if (!g_conf().get_val<bool>("mon_allow_pool_size_one")) {
+      ss << "configuring pool size as 1 is disabled by default.";
+      return -EPERM;
+    }
+    if (!cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false)) {
+      ss << "WARNING: setting pool size 1 could lead to data loss "
+            "without recovery. If you are *ABSOLUTELY CERTAIN* that is what "
+            "you want, pass the flag --yes-i-really-mean-it.";
+      return -EPERM;
+    }
+  }
+
+  // the options to write
+  map<string,string> values;
+  for (const auto& param : p.given) {
+    const string& option = pool_default_options().at(param);
+    if (param == "pool_type") {
+      values[option] = string(pg_pool_t::get_type_name(p.pool_type));
+    } else if (param == "num_zones") {
+      values[option] = stringify(p.num_zones);
+    } else if (param == "rule") {
+      values[option] = stringify(rule_id);
+    } else if (param == "zone_failure_domain") {
+      values[option] = p.zone_failure_domain;
+    } else if (param == "osd_failure_domain") {
+      values[option] = p.osd_failure_domain;
+    } else if (param == "root") {
+      values[option] = p.root;
+    } else if (param == "class") {
+      values[option] = p.device_class;
+    } else if (param == "replica" || param == "size") {
+      values[option] = stringify(p.copies_per_zone());
+    } else if (param == "min_size") {
+      values[option] = stringify(p.min_size);
+    } else if (param == "erasure_code_profile" || param == "k" ||
+               param == "m") {
+      values[option] = profile_to_string(p.profile);
+    } else if (param == "pg_num") {
+      values[option] = stringify(p.pg_num);
+    } else if (param == "pgp_num") {
+      values[option] = stringify(p.pgp_num);
+    } else if (param == "autoscale_mode") {
+      values[option] = p.autoscale_mode;
+    } else if (param == "bulk") {
+      values[option] = p.bulk ? "true" : "false";
+    } else if (param == "crimson") {
+      values[option] = p.crimson ? "true" : "false";
+    }
+  }
+
+  const auto db_overrides = db_pool_default_overrides(config_map);
+  const auto local_overrides =
+    local_pool_default_overrides(g_conf().get_config_values());
+  for (auto& [name, value] : values) {
+    if (auto p = db_overrides.find(name); p != db_overrides.end()) {
+      ss << name << " is set in section " << p->second
+         << " of the configuration database, which overrides the global "
+            "value for monitors";
+      return -EINVAL;
+    }
+    if (local_overrides.contains(name)) {
+      ss << name << " is set in the local configuration of mon."
+         << mon.name << " (file, environment or command line), which "
+            "overrides the configuration database";
+      return -EINVAL;
+    }
+    const Option *opt = g_conf().find_option(name);
+    ceph_assert(opt);
+    Option::value_t real_value;
+    string errstr;
+    if (opt->parse_value(value, &real_value, &errstr, &value) < 0) {
+      ss << "error parsing value for " << name << ": " << errstr;
+      return -EINVAL;
+    }
+  }
+  for (const auto& [name, value] : values) {
+    bufferlist bl;
+    bl.append(value);
+    pending["global/" + name] = bl;
+  }
+  return 0;
 }

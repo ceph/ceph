@@ -113,6 +113,7 @@ target_link_libraries(unittest_pool_defaults global)
 # unittest_pool_create_params
 add_executable(unittest_pool_create_params
   test_pool_create_params.cc
+  ${CMAKE_SOURCE_DIR}/src/mon/ConfigMap.cc
   ${CMAKE_SOURCE_DIR}/src/mon/PoolCreateParams.cc
   )
 add_ceph_unittest(unittest_pool_create_params)

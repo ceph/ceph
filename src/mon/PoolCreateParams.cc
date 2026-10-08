@@ -8,8 +8,10 @@
 
 #include "common/config.h"
 #include "common/config_proxy.h"
+#include "common/config_values.h"
 #include "crush/CrushWrapper.h"
 #include "include/str_map.h"
+#include "mon/ConfigMap.h"
 #include "osd/osd_types.h"
 
 using std::string;
@@ -62,6 +64,22 @@ string PoolCreateParams::from_default(const string& param) const
   }
   auto i = pool_default_options().find(param);
   return i == pool_default_options().end() ? "" : " (" + i->second + ")";
+}
+
+std::optional<int64_t> profile_value(const string& profile, const string& key)
+{
+  std::istringstream in(profile);
+  string token;
+  while (in >> token) {
+    if (token.rfind(key + "=", 0) == 0) {
+      try {
+        return std::stoll(token.substr(key.size() + 1));
+      } catch (const std::exception&) {
+        return std::nullopt;
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 PoolCreateParams load_pool_defaults(const ConfigProxy& conf)
@@ -412,4 +430,90 @@ const std::map<string, string>& pool_default_options()
     {"crimson", "osd_pool_default_crimson"},
   };
   return options;
+}
+
+std::set<string> pool_default_option_names()
+{
+  std::set<string> names;
+  for (const auto& [param, option] : pool_default_options()) {
+    names.insert(option);
+  }
+  return names;
+}
+
+string set_profile_value(const string& profile,
+                         const string& key,
+                         const string& value)
+{
+  std::istringstream in(profile);
+  std::ostringstream out;
+  bool found = false;
+  string token;
+  while (in >> token) {
+    if (out.tellp() > 0)
+      out << " ";
+    if (token.rfind(key + "=", 0) == 0) {
+      out << key << "=" << value;
+      found = true;
+    } else {
+      out << token;
+    }
+  }
+  if (!found) {
+    if (out.tellp() > 0)
+      out << " ";
+    out << key << "=" << value;
+  }
+  return out.str();
+}
+
+string profile_to_string(const std::map<string, string>& profile)
+{
+  std::ostringstream out;
+  for (const auto& [key, value] : profile) {
+    if (out.tellp() > 0)
+      out << " ";
+    out << key << "=" << value;
+  }
+  return out.str();
+}
+
+std::map<string, string> db_pool_default_overrides(const ConfigMap& config_map)
+{
+  const auto names = pool_default_option_names();
+  std::map<string, string> overrides;
+  auto scan = [&](const string& section, const Section& s, bool masked_only) {
+    for (const auto& [name, option] : s.options) {
+      if (!names.contains(name) || overrides.contains(name))
+        continue;
+      if (!option.mask.empty()) {
+        overrides[name] = section + "/" + option.mask.to_str();
+      } else if (!masked_only) {
+        overrides[name] = section;
+      }
+    }
+  };
+  if (auto i = config_map.by_type.find("mon"); i != config_map.by_type.end()) {
+    scan("mon", i->second, false);
+  }
+  for (const auto& [id, section] : config_map.by_id) {
+    if (id.rfind("mon.", 0) == 0)
+      scan(id, section, false);
+  }
+  scan("global", config_map.global, true);
+  return overrides;
+}
+
+std::set<string> local_pool_default_overrides(const ConfigValues& values)
+{
+  std::set<string> overrides;
+  for (const auto& name : pool_default_option_names()) {
+    for (int level = CONF_FILE; level <= CONF_FINAL; ++level) {
+      if (values.get_value(name, level).second) {
+        overrides.insert(name);
+        break;
+      }
+    }
+  }
+  return overrides;
 }

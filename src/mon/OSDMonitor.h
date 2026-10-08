@@ -507,10 +507,12 @@ private:
 			  std::ostream *ss);
   void check_legacy_ec_plugin(const std::string& plugin, 
 			      const std::string& profile) const;
+public:
   int normalize_profile(const std::string& profilename,
 			ceph::ErasureCodeProfile &profile,
 			bool force,
 			std::ostream *ss);
+private:
   int crush_rule_create_replica(const std::string &name,
 				const std::string &root,
         int64_t num_zones,

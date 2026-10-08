@@ -30,12 +30,15 @@
 #include "mon/MonMap.h"
 #include "mon/HealthMonitor.h"
 #include "mon/OSDMonitor.h"
+#include "mon/ConfigMonitor.h"
+#include "mon/PoolCreateParams.h"
 #include "osd/OSDMap.h"
 
 
 #include "messages/MMonCommand.h"
 #include "messages/MMonHealthChecks.h"
 
+#include "common/config_values.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/prime.h"
@@ -706,6 +709,46 @@ bool HealthMonitor::check_member_health()
     auto& d = next.add("AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED", HEALTH_WARN, ss.str(), 1);
     ds << "mon." << mon.name << " has auth_allow_insecure_global_id_reclaim set to true";
     d.detail.push_back(ds.str());
+  }
+
+  // POOL_DEFAULT_OVERRIDDEN
+  {
+    const ConfigMap& config_map = mon.configmon()->get_config_map();
+    auto global_value = [&](const string& name) -> std::optional<string> {
+      auto [first, last] = config_map.global.options.equal_range(name);
+      for (auto i = first; i != last; ++i) {
+        if (i->second.mask.empty()) {
+          return i->second.raw_value;
+        }
+      }
+      return std::nullopt;
+    };
+    list<string> detail;
+    for (const auto& [name, section] : db_pool_default_overrides(config_map)) {
+      if (global_value(name)) {
+        detail.push_back(name + " is set in section " + section +
+                         " of the configuration database");
+      }
+    }
+    for (const auto& name :
+           local_pool_default_overrides(g_conf().get_config_values())) {
+      auto global = global_value(name);
+      string local;
+      g_conf().get_val(name, &local);
+      if (global && *global != local) {
+        detail.push_back("mon." + mon.name + " has " + name + " = " + local +
+                         " in its local configuration; the global value is " +
+                         *global);
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << "mon%plurals% %names% %hasorhave% pool creation defaults that "
+         << "override their global values";
+      auto& d = next.add("POOL_DEFAULT_OVERRIDDEN", HEALTH_WARN, ss.str(),
+                         detail.size());
+      d.detail.swap(detail);
+    }
   }
 
   {

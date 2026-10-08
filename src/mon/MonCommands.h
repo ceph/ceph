@@ -1623,6 +1623,31 @@ COMMAND("config reset "
 COMMAND("config generate-minimal-conf",
 	"Generate a minimal ceph.conf file",
 	"config", "r")
+COMMAND("osd pool default set "
+        "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false "
+        "name=num_zones,type=CephInt,range=1,req=false "
+        "name=rule,type=CephString,req=false "
+        "name=zone_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=osd_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=root,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=class,type=CephString,goodchars=" CLASS_GOODCHARS ",req=false "
+        "name=replica,type=CephInt,range=1,req=false "
+        "name=size,type=CephInt,range=1,req=false "
+        "name=min_size,type=CephInt,range=0,req=false "
+        "name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=k,type=CephInt,range=2,req=false "
+        "name=m,type=CephInt,range=1,req=false "
+        "name=pg_num,type=CephInt,range=1,req=false "
+        "name=pgp_num,type=CephInt,range=0,req=false "
+        "name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
+        "name=bulk,type=CephBool,req=false "
+        "name=crimson,type=CephBool,req=false "
+        "name=yes_i_really_mean_it,type=CephBool,req=false",
+        "set the defaults that ceph osd pool create uses",
+        "config", "rw")
+COMMAND("osd pool default get",
+        "show the defaults that ceph osd pool create uses",
+        "config", "r")
 
 /* NVMeofGwMon*/
 COMMAND("nvme-gw create"

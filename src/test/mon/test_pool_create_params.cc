@@ -8,6 +8,7 @@
  */
 
 #include "gtest/gtest.h"
+#include "mon/ConfigMap.h"
 #include "mon/PoolCreateParams.h"
 #include "osd/osd_types.h"
 #include "crush/CrushWrapper.h"
@@ -800,4 +801,180 @@ TEST(PoolDefaultOptionsTest, ProfileKMShareOneOption) {
             options.at("erasure_code_profile"));
   EXPECT_EQ(options.at("erasure_code_profile"), options.at("k"));
   EXPECT_EQ(options.at("erasure_code_profile"), options.at("m"));
+}
+
+// Test a key in the profile is replaced in place
+TEST(SetProfileValueTest, ReplacesKeyInPlace) {
+  EXPECT_EQ("plugin=isa k=4 m=2",
+            set_profile_value("plugin=isa k=2 m=2", "k", "4"));
+}
+
+// Test a missing key is added at the end
+TEST(SetProfileValueTest, AddsMissingKey) {
+  EXPECT_EQ("plugin=isa k=2 m=3",
+            set_profile_value("plugin=isa k=2", "m", "3"));
+}
+
+// Test an empty profile gets the key
+TEST(SetProfileValueTest, EmptyProfile) {
+  EXPECT_EQ("k=4", set_profile_value("", "k", "4"));
+}
+
+// Test a key that only starts with the same letters is not replaced
+TEST(SetProfileValueTest, SimilarKeyNotReplaced) {
+  EXPECT_EQ("km=7 k=4", set_profile_value("km=7", "k", "4"));
+}
+
+// Test extra spaces between items are dropped
+TEST(SetProfileValueTest, ExtraSpacesDropped) {
+  EXPECT_EQ("plugin=isa k=2 m=5",
+            set_profile_value("  plugin=isa   k=2  m=2 ", "m", "5"));
+}
+
+// Test a profile map is written as key=value items in key order
+TEST(ProfileToStringTest, KeyOrder) {
+  EXPECT_EQ("k=4 m=2 plugin=isa technique=cauchy",
+            profile_to_string({{"plugin", "isa"}, {"technique", "cauchy"},
+                               {"k", "4"}, {"m", "2"}}));
+}
+
+// Test an empty profile map gives an empty string
+TEST(ProfileToStringTest, Empty) {
+  EXPECT_EQ("", profile_to_string({}));
+}
+
+// Test the written options are unique and use the new replica name
+TEST(PoolDefaultOptionsTest, OptionNames) {
+  const auto names = pool_default_option_names();
+  EXPECT_EQ(15u, names.size());
+  EXPECT_TRUE(names.contains("osd_pool_default_replica"));
+  EXPECT_FALSE(names.contains("osd_pool_default_size"));
+  EXPECT_TRUE(names.contains("osd_pool_default_erasure_code_profile"));
+}
+
+class PoolDefaultOverridesTest : public ::testing::Test {
+protected:
+  unique_ptr<CephContext> cct;
+  ConfigMap config_map;
+
+  void SetUp() override {
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_MON));
+    g_ceph_context = cct.get();
+    common_init_finish(g_ceph_context);
+  }
+
+  void TearDown() override {
+    g_ceph_context = nullptr;
+  }
+
+  void add(const string& who, const string& name, const string& value) {
+    ASSERT_EQ(0, config_map.add_option(
+      cct.get(), name, who, value,
+      [this](const string& n) { return cct->_conf.find_option(n); }));
+  }
+};
+
+// Test an unmasked global value is not an override
+TEST_F(PoolDefaultOverridesTest, GlobalValueIsNotAnOverride) {
+  add("global", "osd_pool_default_replica", "2");
+  EXPECT_TRUE(db_pool_default_overrides(config_map).empty());
+}
+
+// Test a value in the mon section is an override
+TEST_F(PoolDefaultOverridesTest, MonSectionOverrides) {
+  add("global", "osd_pool_default_replica", "2");
+  add("mon", "osd_pool_default_replica", "3");
+  const map<string, string> expected = {{"osd_pool_default_replica", "mon"}};
+  EXPECT_EQ(expected, db_pool_default_overrides(config_map));
+}
+
+// Test a value for one monitor is an override
+TEST_F(PoolDefaultOverridesTest, MonIdOverrides) {
+  add("mon.b", "osd_pool_default_num_zones", "1");
+  const map<string, string> expected = {{"osd_pool_default_num_zones", "mon.b"}};
+  EXPECT_EQ(expected, db_pool_default_overrides(config_map));
+}
+
+// Test a masked global value is an override
+TEST_F(PoolDefaultOverridesTest, MaskedGlobalOverrides) {
+  add("global/host:foo", "osd_pool_default_root", "dc1");
+  const map<string, string> expected =
+    {{"osd_pool_default_root", "global/host:foo"}};
+  EXPECT_EQ(expected, db_pool_default_overrides(config_map));
+}
+
+// Test a value for OSDs or for another daemon is not an override
+TEST_F(PoolDefaultOverridesTest, OtherDaemonsDoNotOverride) {
+  add("osd", "osd_pool_default_replica", "3");
+  add("osd.1", "osd_pool_default_replica", "3");
+  add("mgr", "osd_pool_default_replica", "3");
+  EXPECT_TRUE(db_pool_default_overrides(config_map).empty());
+}
+
+// Test a mon section value of an option that is not a pool default is ignored
+TEST_F(PoolDefaultOverridesTest, OtherOptionsIgnored) {
+  add("mon", "osd_pool_default_size", "3");
+  add("mon", "mon_allow_pool_size_one", "true");
+  EXPECT_TRUE(db_pool_default_overrides(config_map).empty());
+}
+
+// Test every overridden option is listed once
+TEST_F(PoolDefaultOverridesTest, SeveralOverrides) {
+  add("mon", "osd_pool_default_replica", "3");
+  add("mon.a", "osd_pool_default_replica", "4");
+  add("mon.a", "osd_pool_default_type", "erasure");
+  const map<string, string> expected = {
+    {"osd_pool_default_replica", "mon"},
+    {"osd_pool_default_type", "mon.a"}};
+  EXPECT_EQ(expected, db_pool_default_overrides(config_map));
+}
+
+// Test nothing is overridden locally by default
+TEST_F(PoolDefaultOverridesTest, NoLocalOverrideByDefault) {
+  EXPECT_TRUE(local_pool_default_overrides(
+    cct->_conf.get_config_values()).empty());
+}
+
+// Test a value from the configuration database is not a local override
+TEST_F(PoolDefaultOverridesTest, MonValueIsNotLocalOverride) {
+  map<string, string, less<>> mon_vals = {{"osd_pool_default_replica", "2"}};
+  cct->_conf.set_mon_vals(cct.get(), mon_vals, nullptr);
+  EXPECT_TRUE(local_pool_default_overrides(
+    cct->_conf.get_config_values()).empty());
+}
+
+// Test a locally set value is a local override
+TEST_F(PoolDefaultOverridesTest, LocalValueOverrides) {
+  ASSERT_EQ(0, cct->_conf.set_val("osd_pool_default_num_zones", "2"));
+  const set<string> expected = {"osd_pool_default_num_zones"};
+  EXPECT_EQ(expected,
+            local_pool_default_overrides(cct->_conf.get_config_values()));
+}
+
+// Test a locally set legacy size is not a local override of replica
+TEST_F(PoolDefaultOverridesTest, LocalLegacySizeIsNotOverride) {
+  ASSERT_EQ(0, cct->_conf.set_val("osd_pool_default_size", "2"));
+  EXPECT_TRUE(local_pool_default_overrides(
+    cct->_conf.get_config_values()).empty());
+}
+
+// Test an integer profile value is found
+TEST(ProfileValueTest, Found) {
+  EXPECT_EQ(4, profile_value("plugin=isa k=4 m=2", "k").value());
+  EXPECT_EQ(2, profile_value("plugin=isa k=4 m=2", "m").value());
+}
+
+// Test a missing key gives no value
+TEST(ProfileValueTest, Missing) {
+  EXPECT_FALSE(profile_value("plugin=isa k=4", "m").has_value());
+}
+
+// Test a key that only starts with the same letters is not found
+TEST(ProfileValueTest, SimilarKeyNotFound) {
+  EXPECT_FALSE(profile_value("km=7", "k").has_value());
+}
+
+// Test a value that is not a number gives no value
+TEST(ProfileValueTest, NotANumber) {
+  EXPECT_FALSE(profile_value("k=four", "k").has_value());
 }
