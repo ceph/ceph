@@ -10592,6 +10592,181 @@ TEST_F(NooBaaModeTest, AnUnknownModeIsRefused)
   EXPECT_EQ(ask()["mode"], "serve");
 }
 
+/* ------------------------------------------------------------------ *
+ * P2 -- resolution from a stored path.
+ *
+ * Two arms (NSFS_BUCKET_PLACEMENT_PLAN.md §7):  an index row's Path,
+ * else `<base>/<name>`.  The second is what every deployment has, so
+ * the test that matters most is that nothing changes without a row.
+ * ------------------------------------------------------------------ */
+
+class NSFSPlacedBucketTest : public NSFSDriverTest {
+public:
+  sf::path elsewhere() const { return bp / "second-filesystem"; }
+
+  /* A row written by hand, which is how the plan asks for this to be
+   * exercised:  P4 is what writes one in the course of creating a
+   * bucket, and P6 is what the import writes. */
+  void place(const std::string& name, const sf::path& at,
+	     const std::string& tenant = "") {
+    nsfs::BucketPlacement bp2;
+    bp2.bucket_name = name;
+    bp2.tenant = tenant;
+    bp2.path = at.string();
+    ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
+							      bp2), 0);
+  }
+
+  std::unique_ptr<rgw::sal::Bucket> make_bucket(const std::string& name) {
+    RGWBucketInfo info;
+    info.bucket.name = name;
+    info.owner = owner;
+    info.creation_time = ceph::real_clock::now();
+    auto b = driver->get_bucket(info);
+    EXPECT_NE(b.get(), nullptr);
+    rgw::sal::Bucket::CreateParams cp;
+    cp.owner = owner;
+    EXPECT_EQ(b->create(env->dpp, cp, null_yield), 0);
+    return b;
+  }
+};
+
+/* Without a row, nothing changes.
+ *
+ * This is the arm every existing deployment is on -- no index, no
+ * migration -- so it is the one whose breaking would matter most. */
+TEST_F(NSFSPlacedBucketTest, WithoutARowTheBucketIsWhereItAlwaysWas)
+{
+  auto bucket = make_bucket("ordinary");
+  EXPECT_TRUE(sf::is_directory(bp / "root" / "ordinary"))
+      << "a bucket with no placement row moved";
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "ordinary"},
+				&loaded, null_yield), 0);
+  EXPECT_EQ(loaded->get_name(), "ordinary");
+}
+
+/* With a row, the bucket is served from the stored path.
+ *
+ * A second directory, outside the data root entirely, which is the
+ * case the whole plan exists for:  `path` is required on every NooBaa
+ * bucket record, so a real deployment's buckets are scattered. */
+TEST_F(NSFSPlacedBucketTest, ARowServesTheBucketFromItsStoredPath)
+{
+  const sf::path at = elsewhere() / "placed";
+  sf::create_directories(at);
+  place("placed", at);
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "placed"},
+				&loaded, null_yield), 0)
+      << "the bucket at " << at << " did not load";
+  EXPECT_EQ(loaded->get_name(), "placed");
+
+  /* and it is really that directory:  an object written to the bucket
+   * lands there, and nothing appears under the data root */
+  RGWBucketInfo info;
+  info.bucket.name = "placed";
+  info.owner = owner;
+  auto b = driver->get_bucket(info);
+  ASSERT_EQ(b->load_bucket(env->dpp, null_yield), 0);
+
+  Attrs attrs;
+  bufferlist bl;
+  bl.append("x");
+  attrs["user.rgw.probe"] = bl;
+  ASSERT_EQ(b->merge_and_store_attrs(env->dpp, attrs, null_yield), 0);
+
+  /* size 0 asks for the length;  a real buffer would have to be big
+   * enough for an encoded RGWBucketInfo, and the question here is only
+   * whether the attribute is there. */
+  EXPECT_GT(::getxattr(at.c_str(), "user.nsfs.bucket_info", nullptr, 0), 0)
+      << "the bucket's own state did not land at " << at;
+  EXPECT_FALSE(sf::exists(bp / "root" / "placed"))
+      << "a placed bucket also appeared under the data root";
+}
+
+/* The path is read on every lookup, not bound once.
+ *
+ * Theirs is read per lookup, and storage is attachable to a running
+ * Scale cluster at any time -- so a design that binds a location once
+ * is wrong on the platform this driver exists for (§6).  Moving the
+ * row must move the next lookup. */
+TEST_F(NSFSPlacedBucketTest, ThePathIsBoundPerLookup)
+{
+  const sf::path first = elsewhere() / "first";
+  const sf::path second = elsewhere() / "second";
+  sf::create_directories(first);
+  sf::create_directories(second);
+
+  place("moving", first);
+  std::unique_ptr<rgw::sal::Bucket> a;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "moving"}, &a,
+				null_yield), 0);
+
+  /* the row moves, and the *next* lookup follows it */
+  place("moving", second);
+  std::unique_ptr<rgw::sal::Bucket> b;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", "moving"}, &b,
+				null_yield), 0);
+
+  Attrs attrs;
+  bufferlist bl;
+  bl.append("y");
+  attrs["user.rgw.probe"] = bl;
+  ASSERT_EQ(b->merge_and_store_attrs(env->dpp, attrs, null_yield), 0);
+
+  EXPECT_GT(::getxattr(second.c_str(), "user.nsfs.bucket_info", nullptr,
+		       0), 0)
+      << "the second lookup did not follow the moved row";
+}
+
+/* A row recording the default location is the same answer as no row.
+ *
+ * P4 writes a row for every bucket it creates, including the ones at
+ * the default location, so an empty Path has to mean exactly what an
+ * absent row means or every ordinary bucket breaks. */
+TEST_F(NSFSPlacedBucketTest, AnEmptyPathMeansTheDefault)
+{
+  nsfs::BucketPlacement bp2;
+  bp2.bucket_name = "defaulted";
+  ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
+							    bp2), 0);
+
+  auto bucket = make_bucket("defaulted");
+  EXPECT_TRUE(sf::is_directory(bp / "root" / "defaulted"))
+      << "an empty Path did not mean the default location";
+}
+
+/* The tenant is part of the lookup, as it is of the key.
+ *
+ * Two tenants' buckets of the same name are two rows, so they must be
+ * two directories. */
+TEST_F(NSFSPlacedBucketTest, TheTenantSelectsTheRow)
+{
+  const sf::path a = elsewhere() / "tenant-a";
+  sf::create_directories(a);
+  place("shared", a, "tenant-a");
+
+  /* the untenanted bucket has no row and stays at the default */
+  auto plain = make_bucket("shared");
+  EXPECT_TRUE(sf::is_directory(bp / "root" / "shared"));
+
+  /* and the tenanted one resolves to its row */
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp,
+				rgw_bucket{"tenant-a", "shared"}, &loaded,
+				null_yield), 0);
+  Attrs attrs;
+  bufferlist bl;
+  bl.append("z");
+  attrs["user.rgw.probe"] = bl;
+  ASSERT_EQ(loaded->merge_and_store_attrs(env->dpp, attrs, null_yield), 0);
+  EXPECT_GT(::getxattr(a.c_str(), "user.nsfs.bucket_info", nullptr, 0), 0)
+      << "the tenanted bucket did not resolve to its row";
+}
+
 int main(int argc, char *argv[]) {
   auto args = argv_to_vec(argc, argv);
   env_to_vec(args);

@@ -1876,8 +1876,12 @@ int FSEnt::stat(const DoutPrefixProvider* dpp, bool force)
     return 0;
   }
 
-  int ret = statx(parent->get_fd(), fname.c_str(), AT_SYMLINK_NOFOLLOW,
-		  STATX_ALL, &stx);
+  /* AT_FDCWD with no parent, which is how `Directory::open()` has
+   * always resolved one:  a parentless entry's `fname` is an absolute
+   * path.  The data root is such an entry and so is a bucket served
+   * from a stored path (P2), and this dereferenced the null. */
+  int ret = statx(parent ? parent->get_fd() : AT_FDCWD, fname.c_str(),
+		  AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not stat " << get_name() << ": "
@@ -4212,15 +4216,96 @@ std::unique_ptr<Object> NSFSDriver::get_object(const rgw_obj_key& k)
   return std::make_unique<NSFSObject>(this, k);
 }
 
+/* P2.  Where a bucket's storage is, resolved per lookup.
+ *
+ * Two arms (`NSFS_BUCKET_PLACEMENT_PLAN.md` §7):
+ *
+ *     index row for (name, tenant)?  ->  use its Path
+ *     otherwise                      ->  <base>/<name>
+ *
+ * The second keeps every existing deployment working with no index and
+ * no migration:  an absent row means the default location, which is
+ * where every bucket this driver has ever created lives.
+ *
+ * There is deliberately no third arm reading their bucket record.
+ * Their `path` reaches us at adopt time and is written into the index
+ * with the rest of their bucket state;  consulting their config store
+ * on the request path is drift, and this must not add a second
+ * consumer of it.
+ *
+ * **Bound per lookup, not cached.**  Theirs is read on every lookup --
+ * `read_bucket_sdk_info()` builds the namespace resource around the
+ * record each time, so changing the record changes where the next
+ * request goes -- and storage is attachable to a running Scale cluster
+ * at any time, so a design that binds a location once is wrong on the
+ * platform this driver exists for (§6).  That also disposes of whether
+ * a path is "mutable":  binding late makes mutability a non-event.
+ *
+ * Returns null when there is no row, which the callers read as "the
+ * default", so the ordinary case allocates nothing.
+ */
+std::unique_ptr<nsfs::Directory>
+NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
+			      const std::string& name,
+			      const std::string& tenant)
+{
+  if (!userDB) {
+    return nullptr;
+  }
+  nsfs::BucketPlacement bp;
+  if (userDB->get_bucket_placement(dpp, name, tenant, bp) < 0) {
+    return nullptr;
+  }
+  if (bp.path.empty()) {
+    /* a row that records the default location, which P4 writes for
+     * every bucket it creates;  the same answer as no row */
+    return nullptr;
+  }
+
+  /* No parent, and the whole path as the name -- which is how the
+   * data root itself is built.  The FSStrategy has to be passed
+   * explicitly for the same reason it is there:  a Directory built
+   * without one leaves every File below it with a null strategy. */
+  ldpp_dout(dpp, 10) << "nsfs: bucket " << name << " is placed at "
+    << bp.path << dendl;
+  auto d = std::make_unique<nsfs::Directory>(bp.path, nullptr, ctx(),
+					     fs_strategy.get());
+  /* Seeded exactly as the data root is.
+   *
+   * A child inherits its strategies from its parent, and this has no
+   * parent -- so without this its xattr strategy is null and the first
+   * `read_attrs()` faults.  The same four the root is given, because a
+   * placed bucket is a root of its own as far as resolution is
+   * concerned.
+   *
+   * Which format's strategies these are is the driver's default, the
+   * same as the root's.  A placed bucket in *their* format still has
+   * its profile recognised per bucket, which is where the per-format
+   * strategies come from;  this is only the seed. */
+  d->set_mpu_strategy(mpu_strategy.get());
+  d->set_xattr_strategy(xattr_strategy.get());
+  d->set_path_strategy(path_strategy.get());
+  d->set_reserved_names(&reserved_names);
+  return d;
+}
+
 int NSFSDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
-  *bucket = std::make_unique<NSFSBucket>(this, root_dir.get(), b);
+  if (auto placed = placed_bucket_dir(dpp, b.name, b.tenant)) {
+    *bucket = std::make_unique<NSFSBucket>(this, std::move(placed), b);
+  } else {
+    *bucket = std::make_unique<NSFSBucket>(this, root_dir.get(), b);
+  }
   return (*bucket)->load_bucket(dpp, y);
 }
 
 std::unique_ptr<Bucket> NSFSDriver::get_bucket(const RGWBucketInfo& i)
 {
   /* Don't need to fetch the bucket info, use the provided one */
+  if (auto placed = placed_bucket_dir(nullptr, i.bucket.name,
+				      i.bucket.tenant)) {
+    return std::make_unique<NSFSBucket>(this, std::move(placed), i);
+  }
   return std::make_unique<NSFSBucket>(this, root_dir.get(), i);
 }
 
@@ -7438,7 +7523,14 @@ int NSFSBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::re
   struct timespec ts[2];
   ts[0].tv_nsec = UTIME_OMIT;
   ts[1] = ceph::real_clock::to_timespec(mtime);
-  int ret = utimensat(dir->get_parent()->get_fd(), get_fname().c_str(), ts, AT_SYMLINK_NOFOLLOW);
+  /* A bucket served from a stored path has no parent Directory and its
+   * own name is the absolute path, so resolve it from the cwd -- the
+   * same way `Directory::open()` does (P2). */
+  const bool placed = (dir->get_parent() == nullptr);
+  int ret = utimensat(placed ? AT_FDCWD : dir->get_parent()->get_fd(),
+		      placed ? dir->get_name().c_str()
+			     : get_fname().c_str(),
+		      ts, AT_SYMLINK_NOFOLLOW);
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not set mtime on bucket " << get_name() << ": "

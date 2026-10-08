@@ -924,6 +924,13 @@ public:
 				  GroupList& listing) override;
 
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
+  /* P2.  The Directory a placed bucket is served from, or null for
+   * the default location.  Consulted on every lookup, because the
+   * path is bound late. */
+  std::unique_ptr<nsfs::Directory>
+  placed_bucket_dir(const DoutPrefixProvider* dpp, const std::string& name,
+		    const std::string& tenant);
+
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                           std::unique_ptr<Bucket>* bucket, optional_yield y) override;
@@ -1448,6 +1455,19 @@ public:
     acls(),
     ns(),
     dir(std::make_unique<nsfs::Directory>(get_fname(), _p_dir, _dr->ctx()))
+    { }
+
+  /* A bucket served from a Directory already built, with the info
+   * provided -- P2's placed arm, where the directory is an absolute
+   * path rather than a child of the data root, so it cannot be
+   * rendered from the name. */
+  NSFSBucket(NSFSDriver *_dr, std::unique_ptr<nsfs::Directory> _this_dir,
+	     const RGWBucketInfo& _i)
+    : StoreBucket(_i),
+    driver(_dr),
+    acls(),
+    ns(),
+    dir(std::move(_this_dir))
     { }
 
   NSFSBucket(const NSFSBucket& _b) :
