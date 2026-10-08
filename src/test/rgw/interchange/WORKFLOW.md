@@ -1,13 +1,14 @@
 # The corpus validation workflow, end to end
 
-**Who this is for.**  Someone running the adoption validation, or
-picking it up part-built.  It is the operational sequence and nothing
-else:  each step names the document that owns its detail rather than
-restating it.
+**Who this is for.**  A developer running the adoption validation, or
+taking it over part-built.  Stage letters like C2b are
+`docs/NSFS_ADOPTION_WORK_PLAN.md`'s.
 
-Four steps.  **The first three run today;  the fourth does not** — see
-*Verify* below, which is honest about what is missing rather than
-describing a plan as a procedure.
+This is the sequence and nothing else;  each step names the document
+that owns its detail rather than restating it.
+
+Four steps.  **The first three run today.  The fourth is not built** —
+step 4 says what is missing.
 
 ```
   1. stand NooBaa up        standup.rs up && standup.rs serve
@@ -35,9 +36,9 @@ cd src/test/rgw/interchange
 tens of minutes on a first run.  Everything after it is seconds.
 
 **What this produces.**  A pinned NooBaa NSFS gateway serving a data
-root, with an account and a bucket their own CLI created.  Records
-*they* wrote, which is the whole point:  every control composed from
-our reading of their schema tests our reading rather than their output.
+root, with an account and a bucket their own CLI created — records
+*they* wrote, rather than records composed from our reading of their
+schema.
 
 `README.md` beside this file owns the detail — why source and not a
 container, why a `--detach`ed worktree, why the dependency tree is
@@ -58,7 +59,7 @@ by their gateway, and a record of what S3 said about each one.  The
 artifacts are the ingest;  the captures are the baseline the fourth
 step compares against.
 
-Three things about reading the output, all of which have bitten:
+Three things about reading the output:
 
 * **A failing axis is the finding, not a broken step.**  The corpus
   asserts what the nsfs driver should do, and theirs is a different
@@ -137,16 +138,19 @@ which differences are **expected** — an ETag that cannot survive a
 migration is not a defect, and a lost ACL is.  Without that list a
 diff is noise.
 
-**Until it exists**, the workflow is run for what the first three steps
-find on their own:  the capture from step 2 is a measurement of their
-format that nothing else produces, and step 3 either serves the tree or
-does not.  The first full run this way found NooBaa's multipart ETag,
-their 501 on bucket-level object lock, and a false positive in our own
-instrument.
+**Until it exists**, the first three steps are worth running on their
+own.  Step 2's capture is a measurement of their on-disk format that
+nothing else produces, and step 3 either serves the tree or reports why
+it cannot.  The first full run found that NooBaa's completed-multipart
+ETag is `mtime-<base36>-ino-<base36>` rather than a digest with a part
+count, that they answer `501 NotImplemented` to
+PutObjectLockConfiguration at the pinned commit, and that our own
+bucket-configuration axis was looking for configuration only where
+*this* driver stores it.
 
 ---
 
-## Where each document's authority ends
+## Which document owns what
 
 | | |
 |---|---|

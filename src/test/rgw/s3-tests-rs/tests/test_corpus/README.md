@@ -42,22 +42,16 @@ and not of the corpus.
 
 ---
 
-## Two halves and two captures — different pairs
+## What writes the artifacts
 
-Easy to conflate, and the words overlap.
+Every artifact here is written through S3, by whichever gateway the
+run is pointed at.  That is the only generator this has.
 
-**The two *captures*** are what this records about an artifact:  the
-**manifest**, what S3 says, and the **inventory**, what the filesystem
-says.  Both are built, and every axis takes both.
-
-**The two *halves*** are who *wrote* the artifact.  The **S3 half** is
-everything a gateway writes — the axes below, pointed at any endpoint.
-The **filesystem half** is artifacts no gateway wrote, plus bulk for
-the scale tier, and it is **not built**:  its purpose is provenance no
-gateway can supply, and `docs/NSFS_CORPUS.md` §1 is the design.
-
-So "capture both halves" in *Adding an axis* means both **captures**.
-Nothing here generates artifacts behind a gateway's back yet.
+A second one is designed and **not built**:  artifacts written
+straight to the filesystem, which no gateway produced, plus bulk for
+the scale tier.  Its purpose is provenance an S3 request cannot
+supply — a directory object in their layout, a name a gateway would
+refuse.  `docs/NSFS_CORPUS.md` §1 is the design.
 
 ---
 
@@ -147,7 +141,7 @@ produces is identifiable as corpus output.
 2. Add `<axis>.rs` with one `#[tokio::test] async fn corpus_coverage_<axis>()`.
 3. Declare it in `mod.rs`.
 4. Return early unless `CORPUS_TIER` is a tier you implement.
-5. Capture both halves; assert reference-free properties only.
+5. Record both captures; assert reference-free properties only.
 
 ### Write the axis to exercise what you are suspicious of
 
