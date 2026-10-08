@@ -1,0 +1,162 @@
+# The corpus validation workflow, end to end
+
+**Who this is for.**  Someone running the adoption validation, or
+picking it up part-built.  It is the operational sequence and nothing
+else:  each step names the document that owns its detail rather than
+restating it.
+
+Four steps.  **The first three run today;  the fourth does not** — see
+*Verify* below, which is honest about what is missing rather than
+describing a plan as a procedure.
+
+```
+  1. stand NooBaa up        standup.rs up && standup.rs serve
+  2. generate and ingest    standup.rs capture
+  3. hand off to RGW        standup.rs stop && standup.rs adopt
+  4. verify                 not built -- C2b
+```
+
+Everything is driven from `src/test/rgw/interchange/standup.rs`.
+`standup.rs list` prints the steps and the settings;  `INTERCHANGE_WORK`
+is required and has no default, because it holds the worktree, their
+config store, the data root and the captures.
+
+---
+
+## 1.  Stand NooBaa up
+
+```sh
+cd src/test/rgw/interchange
+./standup.rs up          # pin, worktree, patch, build, config
+./standup.rs serve       # their endpoint, HTTP, on 6001
+```
+
+`up` is the slow one — their dependency tree and their native addon,
+tens of minutes on a first run.  Everything after it is seconds.
+
+**What this produces.**  A pinned NooBaa NSFS gateway serving a data
+root, with an account and a bucket their own CLI created.  Records
+*they* wrote, which is the whole point:  every control composed from
+our reading of their schema tests our reading rather than their output.
+
+`README.md` beside this file owns the detail — why source and not a
+container, why a `--detach`ed worktree, why the dependency tree is
+pinned on our side, and the one patch their native addon needs.
+
+## 2.  Generate and ingest
+
+```sh
+./standup.rs capture
+```
+
+Runs the conversion corpus against their endpoint and keeps what it
+produced in `$INTERCHANGE_WORK/capture/noobaa/` — one manifest and one
+inventory per axis, plus `noobaa.log` for the whole run.
+
+**What this produces.**  Artifacts in *their* on-disk format, written
+by their gateway, and a record of what S3 said about each one.  The
+artifacts are the ingest;  the captures are the baseline the fourth
+step compares against.
+
+Three things about reading the output, all of which have bitten:
+
+* **A failing axis is the finding, not a broken step.**  The corpus
+  asserts what the nsfs driver should do, and theirs is a different
+  implementation.  Every axis writes its artifacts before it asserts,
+  so a failed axis still leaves a complete pair.
+* **No artifacts at all is a real failure**, and the step fails on it:
+  it means no axis reached a write, so read `noobaa.log` from the top.
+* `capture` sets `CORPUS_OBJECT_MODE=any` and
+  `--features fails_on_noobaa`.  The first because the corpus
+  otherwise requires every object to be `0600`, which is a statement
+  about our driver;  the second because three things their
+  implementation does not do would otherwise be indistinguishable from
+  real disagreements.
+
+The corpus itself is owned by
+`../s3-tests-rs/tests/test_corpus/README.md` (the interface) and
+`docs/NSFS_CORPUS.md` in the nsfs design set (the reasoning, including
+the two capture formats in §7).
+
+## 3.  Hand off to RGW
+
+```sh
+./standup.rs stop        # leaves the tree
+./standup.rs adopt       # RGW over the same tree
+```
+
+**Sequential, never concurrent.**  NooBaa writes, stops, then RGW opens
+the same directory.  That is the production story — drain, then upgrade
+— and `adopt` refuses while their endpoint is still running rather than
+warning about it.
+
+`adopt` runs `rgw-vstart.sh` with three things that matter:
+
+| | |
+|---|---|
+| `--data-root` | the tree NooBaa wrote.  Mandatory:  without it RGW serves its own build directory and the run measures nothing |
+| `--noobaa-config-root` | their config store, so RGW can read what they wrote |
+| `--adoption-mode adopt` | **the driver defaults to `serve`, which serves read-only.**  A handoff that means to write has to ask |
+
+That last one is the production trigger too:  a real upgrade sets
+`rgw_nsfs_adoption_mode` and restarts, and the import runs because the
+mode says so.  There is no verb and no endpoint.  `ACCOUNT_IMPORT.md`
+§6.1 owns what the import does, in order.
+
+**What this produces.**  An RGW gateway serving the tree NooBaa wrote,
+with that deployment's accounts, users, identity rows and bucket state
+imported.
+
+## 4.  Verify — **not built**
+
+This is C2b of `docs/NSFS_ADOPTION_WORK_PLAN.md`, and it is the one
+step with no procedure yet.  Two things are missing, and they are
+separate:
+
+**An observe-only corpus mode.**  Every axis today *writes* its
+artifacts and then records what S3 says.  The fourth step needs the
+second half without the first:  re-read the artifacts NooBaa created,
+now through RGW, and capture what RGW says about them.  Running the
+corpus again as it stands would rewrite them in our format and destroy
+the thing under test.
+
+**The comparison.**  C2b is a *three-way* diff, because RGW makes two
+passes:
+
+```
+capture/noobaa   what their gateway said      (step 2, exists)
+capture/rgw      what RGW says, adopted       (needs observe-only)
+capture/rgw-conv what RGW says, converted     (needs observe-only + C7)
+```
+
+The formats are built for this:  both captures are line-oriented, one
+fact per line, sorted bytewise, so the comparison is `diff` and a
+difference names the *fact* rather than the object
+(`docs/NSFS_CORPUS.md` §7).  What does not exist is the statement of
+which differences are **expected** — an ETag that cannot survive a
+migration is not a defect, and a lost ACL is.  Without that list a
+diff is noise.
+
+**Until it exists**, the workflow is run for what the first three steps
+find on their own:  the capture from step 2 is a measurement of their
+format that nothing else produces, and step 3 either serves the tree or
+does not.  The first full run this way found NooBaa's multipart ETag,
+their 501 on bucket-level object lock, and a false positive in our own
+instrument.
+
+---
+
+## Where each document's authority ends
+
+| | |
+|---|---|
+| `README.md` (here) | the stand-up:  pinning, the worktree, their build, the config store |
+| this file | the sequence, and what each step produces |
+| `../s3-tests-rs/tests/test_corpus/README.md` | running the corpus, the capture types, adding an axis |
+| `docs/NSFS_CORPUS.md` | why the corpus is shaped as it is;  §7 the two formats |
+| `docs/NSFS_ADOPTION.md` | the adoption model:  §7 the modes, §8 the permission rules, §9 how the work is scheduled |
+| `docs/ACCOUNT_IMPORT.md` | the import:  §6.1 what it does in order, §6.2 failure and re-running |
+| `docs/NSFS_ADOPTION_WORK_PLAN.md` | the stages, and which are done |
+| `docs/RGW_FS_DEV_GUIDE.md` §6 | the same ground for a developer who is not doing adoption work |
+
+The `docs/` set is the nsfs design notes, held outside this tree.

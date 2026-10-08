@@ -9,7 +9,9 @@ Comparing two gateways is a later pass.  What this produces is the
 substrate for that comparison.
 
 The design notes are `docs/NSFS_CORPUS.md` in the nsfs design set;
-this file is the interface.
+this file is the interface.  The end-to-end validation workflow this
+feeds — stand NooBaa up, generate and ingest, hand off to RGW, verify
+— is `../../../interchange/WORKFLOW.md`.
 
 ---
 
@@ -37,6 +39,25 @@ the same buckets.  Use `rgw-vstart.sh --clean`.  One axis — bucket
 configuration — is explicitly idempotent because it clears each
 configuration before applying it, but that is a property of that axis
 and not of the corpus.
+
+---
+
+## Two halves and two captures — different pairs
+
+Easy to conflate, and the words overlap.
+
+**The two *captures*** are what this records about an artifact:  the
+**manifest**, what S3 says, and the **inventory**, what the filesystem
+says.  Both are built, and every axis takes both.
+
+**The two *halves*** are who *wrote* the artifact.  The **S3 half** is
+everything a gateway writes — the axes below, pointed at any endpoint.
+The **filesystem half** is artifacts no gateway wrote, plus bulk for
+the scale tier, and it is **not built**:  its purpose is provenance no
+gateway can supply, and `docs/NSFS_CORPUS.md` §1 is the design.
+
+So "capture both halves" in *Adding an axis* means both **captures**.
+Nothing here generates artifacts behind a gateway's back yet.
 
 ---
 
@@ -94,8 +115,6 @@ bucket's configuration lives on the bucket directory, so that needs
 when asking whether something was persisted: a configuration folded
 into an existing blob adds no attribute *name*, and a names-only
 comparison reads that as "stored nowhere".
-
----
 
 ## The parameter space
 
@@ -171,3 +190,24 @@ that is not a change in behaviour.  `RETAIN_UNTIL_SECS` is a fixed
 date for this reason.  Where a value cannot be fixed — an
 inode-derived version id, a retention date computed from an object's
 own mtime — record it as a fact and do not compare it.
+
+---
+
+## What this is not
+
+Two things are **deliberately** absent.  Both have a revisit
+condition, so neither is an oversight to correct by adding one.
+
+**Concurrency.**  No axis generates concurrent traffic.  A corpus is a
+static artifact set, and names derived from parameters are what make
+two runs against two gateways diff line for line;  mixing concurrent
+traffic in would cost exactly that.  Conversion *while serving* does
+need it, and it belongs to C2b and C7 rather than here.  Revisit when
+C7 is specified.  `docs/NSFS_CORPUS.md` §8.
+
+**A golden manifest.**  There is no expected copy in the repository to
+diff against, and there should not be:  it would record what this
+implementation happened to do, enshrining whatever defects were in the
+first run's output as the expected result.  What an axis asserts
+instead are properties true of any S3 implementation, and comparisons
+are between two captures — never against a file in the tree.
