@@ -41,6 +41,7 @@
 
 #include "erasure-code/ErasureCodeInterface.h"
 #include "mon/MonOpRequest.h"
+#include "mon/PoolCreateParams.h"
 #include <boost/functional/hash.hpp>
 
 class Monitor;
@@ -955,6 +956,10 @@ public:
    */
   static int validate_stretch_mode_new_pool(CrushWrapper& crush, int crush_rule, int stretch_bucket_count, int stretch_mode_bucket, 
     const mempool::osdmap::map<int64_t, pg_pool_t>& pools, const std::string& zone_failure_domain, std::ostream *ss);
+
+  // What check_pool_params() needs from this cluster, with crush as its
+  // CRUSH map. crush must outlive the result.
+  PoolCreateCluster pool_create_cluster(const CrushWrapper& crush);
 
   /**
   *
