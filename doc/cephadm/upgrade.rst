@@ -267,6 +267,17 @@ pool with an ``osd`` failure domain, say - the regular per-OSD path takes the
 pass rather than waiting for a verdict that will not change, and the buckets
 are tried again on the next pass with fewer OSDs left in them.
 
+A refusal is not always lasting. When a PG that keeps a bucket from passing
+is not ``active+clean`` (still recovering what was written while the
+previous group was down, degraded, peering...), the verdict will change once
+it has settled: cephadm waits for the bucket at its own level, asking again
+every 2 seconds, rather than descending to smaller groups that happen to
+pass meanwhile or handing the pass to the regular path. Only when every such
+PG is ``active+clean`` - the placement itself keeps the bucket from going -
+does it descend. PGs that stay degraded for another reason (an OSD down
+elsewhere) look the same; past ``upgrade_staged_switch_osd_timeout`` of
+waiting, cephadm stops waiting and descends as for a lasting refusal.
+
 A group is named after the deepest bucket that holds all of its OSDs: once
 the other datacenters of a region are upgraded, what is left of the region
 is one datacenter, and it is picked - and shown in the logs and in ``ceph
@@ -300,6 +311,12 @@ Related options:
 * ``mgr/cephadm/upgrade_staged_switch_osd_max_group`` (default ``0``, no
   limit): the most OSDs a group may hold; a bigger bucket is skipped (with
   ``auto``, the next level down is tried).
+* ``mgr/cephadm/upgrade_staged_switch_osd_pause`` (default ``0``, no pause):
+  seconds to wait between two groups, counted from the moment every PG of
+  the previous group's OSDs is ``active+clean``. A lever against effects of
+  restarting OSDs back to back that the PG states do not show (cold caches,
+  client latency...). ``ceph orch upgrade status`` shows the pause; setting
+  the option back to ``0`` ends it.
 
 Unlike the MDS policy, a failed OSD switch is **never rolled back**: an OSD
 that booted on the new release may have upgraded its store, and starting
