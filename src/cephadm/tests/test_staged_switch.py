@@ -544,3 +544,70 @@ class TestDeployStaged:
     def test_parser(self):
         with with_cephadm_ctx(['_orch', 'deploy-staged', '--fsid', FSID]) as ctx:
             assert ctx.func is _cephadm.command_deploy_staged
+
+
+class TestStagePerDaemonWork:
+    """What staging does not need to repeat for every daemon: the firewall
+    (untouched), the uid/gid lookup and the sysctl settings (once per call
+    of `_orch deploy-staged`), the running-state check (stage takes
+    priority over redeploy)."""
+
+    def test_stage_touches_no_firewall_rule(self, cephadm_fs, funkypatch):
+        _call, _call_throws = _deploy_patches(funkypatch)
+        update_firewalld = funkypatch.patch('cephadm.update_firewalld')
+        with with_cephadm_ctx([]) as ctx:
+            ctx.container_engine = mock_podman()
+            _cephadm.apply_deploy_config_to_ctx(
+                {'name': 'mds.a', 'fsid': FSID, 'image': NEW_IMAGE,
+                 'config_blobs': {'config': 'CONF', 'keyring': 'KEY'},
+                 'params': {'stage': True, 'tcp_ports': [6800]}}, ctx)
+            _live_daemon(OLD_IMAGE)
+            with mock.patch('cephadm.call_throws'), \
+                    mock.patch('cephadm.call', return_value=('', '', 0)), \
+                    mock.patch('cephadm.check_unit', return_value=(True, 'running', True)), \
+                    mock.patch('cephadm.is_container_running', return_value=True):
+                _cephadm._common_deploy(ctx)
+        assert _read(f'{DATA}/unit.image.staged').strip() == NEW_IMAGE
+        update_firewalld.assert_not_called()
+        _cephadm.Firewalld().open_ports.assert_not_called()
+        _cephadm.Firewalld().apply_rules.assert_not_called()
+
+    def test_deploy_staged_looks_up_uid_gid_and_sysctl_once(self, cephadm_fs, funkypatch, capsys):
+        # the patches of _deploy_patches, keeping hold of the mocks counted here
+        _call = funkypatch.patch('cephadmlib.container_types.call')
+        _call.return_value = ('', '', 0)
+        _call_throws = funkypatch.patch('cephadmlib.container_types.call_throws')
+        _call_throws.return_value = ('ceph version 99.0.0 (hash) reef (stable)', '', 0)
+        funkypatch.patch('cephadm.Firewalld')
+        uid_gid = funkypatch.patch('cephadm.extract_uid_gid', force=True)
+        uid_gid.return_value = (os.getuid(), os.getgid())
+        install_sysctl = funkypatch.patch('cephadm.install_sysctl')
+        funkypatch.patch('cephadmlib.file_utils.make_run_dir')
+        update_firewalld = funkypatch.patch('cephadm.update_firewalld')
+        _live_daemon(OLD_IMAGE)
+        _daemon_b(live=OLD_IMAGE, staged=None)
+        err, out, lock, call_throws = TestDeployStaged()._run(TestDeployStaged()._configs(), capsys)
+        assert err is None and out == {'mds.a': {'ok': True}, 'mds.b': {'ok': True}}
+        assert uid_gid.call_count == 1
+        assert install_sysctl.call_count == 1
+        update_firewalld.assert_not_called()
+
+    def test_stage_does_not_look_at_the_running_state(self, cephadm_fs):
+        with with_cephadm_ctx(['--image', NEW_IMAGE, 'deploy', '--name', 'mds.a',
+                               '--fsid', FSID, '--stage']) as ctx:
+            _live_daemon()
+            with mock.patch('cephadm.check_unit') as check_unit, \
+                    mock.patch('cephadm.is_container_running') as running:
+                assert _cephadm.get_deployment_type(ctx, _ident()) is _cephadm.DeploymentType.STAGE
+            check_unit.assert_not_called()
+            running.assert_not_called()
+
+    def test_default_still_becomes_redeploy_when_running(self, cephadm_fs):
+        with with_cephadm_ctx(['--image', NEW_IMAGE, 'deploy', '--name', 'mds.a',
+                               '--fsid', FSID]) as ctx:
+            with mock.patch('cephadm.check_unit', return_value=(True, 'running', True)), \
+                    mock.patch('cephadm.is_container_running', return_value=False):
+                assert _cephadm.get_deployment_type(ctx, _ident()) is _cephadm.DeploymentType.REDEPLOY
+            with mock.patch('cephadm.check_unit', return_value=(False, 'stopped', False)), \
+                    mock.patch('cephadm.is_container_running', return_value=False):
+                assert _cephadm.get_deployment_type(ctx, _ident()) is _cephadm.DeploymentType.DEFAULT
