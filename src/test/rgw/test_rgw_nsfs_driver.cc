@@ -49,7 +49,24 @@ const std::string ATTR3{"attr3"};
 const std::string ATTR_OBJECT_TYPE{"object_type"};
 
 namespace {
-  bool do_create = false;
+  /* Start each run from an empty tree.
+   *
+   * **Default, and it was not.**  The wipe existed behind `--create`,
+   * off unless asked for, so the suite passed on its first run against
+   * a fresh directory and failed 40 tests on every run after it:  a
+   * test asserting a path is absent read the path the previous run
+   * created.  Worse, one of those stale states left the multipart
+   * cache non-empty at teardown and the process segfaulted.  A suite
+   * that only passes with an undocumented flag reports "the unit tests
+   * pass" from a state nobody can reproduce.
+   *
+   * `--reuse` restores the old behaviour for anyone who wants to run
+   * against a tree a previous run left.  `--create` is kept, and now
+   * asks for what already happens. */
+  bool clean_first = true;
+  /* Remove the tree on the way out.  Off by default, so the tree
+   * survives a run and can be inspected after a failure -- which is
+   * safe now that the next run starts by clearing it. */
   bool do_delete = false;
   bool verbose = false;
 }
@@ -117,7 +134,7 @@ public:
   virtual ~Environment() {}
 
   void SetUp() override {
-    if (do_create) {
+    if (clean_first) {
       sf::remove_all(base_path);
     }
     sf::create_directories(base_path);
@@ -8146,12 +8163,6 @@ public:
   void SetUp() {
     NSFSDriverTest::SetUp();
     store = (bp / "noobaa.conf.d").string();
-    /* From empty, every time.  The base fixture's directory survives
-     * a run, so a store left behind by the previous execution of this
-     * binary is still there -- and a test whose subject is "the file
-     * is absent" then reads the file the last run wrote.  Found by
-     * running the whole suite after the tests passed on their own. */
-    std::filesystem::remove_all(store);
     std::filesystem::create_directories(store + "/identities");
     std::filesystem::create_directories(store + "/buckets");
   }
@@ -8574,7 +8585,11 @@ int main(int argc, char *argv[]) {
 
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_flag(args, arg_iter, "--create", (char*) nullptr)) {
-      do_create = true;
+      /* what already happens;  accepted so an existing invocation
+       * keeps working */
+      clean_first = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--reuse", (char*) nullptr)) {
+      clean_first = false;
     } else if (ceph_argparse_flag(args, arg_iter, "--delete", (char*) nullptr)) {
       do_delete = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--verbose", (char*) nullptr)) {
@@ -8584,7 +8599,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  std::cout << "flags: do_create=" << do_create
+  std::cout << "flags: clean_first=" << clean_first
             << " do_delete=" << do_delete
             << " verbose=" << verbose
             << " cwd=" << sf::current_path()
