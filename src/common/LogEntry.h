@@ -17,6 +17,9 @@
 #define CEPH_LOGENTRY_H
 
 #include <fmt/format.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 #include "include/types.h" // for version_t
 #include "include/utime.h"
