@@ -39,4 +39,5 @@ mod copy;
 mod generate;
 mod multipart;
 mod objects;
+mod storage;
 mod versions;

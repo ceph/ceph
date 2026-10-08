@@ -460,3 +460,62 @@ pub const LOCK_COVERAGE: &[LockClass] = &[
 /// The corpus tree is reset with `rgw-vstart.sh --clean`, which wipes
 /// the filesystem and does not go through S3 at all.
 pub const RETAIN_UNTIL_SECS: i64 = 1_893_456_000;
+
+/// Storage class.
+///
+/// `Standard` is what every object in this corpus has carried until
+/// now, which is why nothing has ever exercised the attribute:  RGW
+/// does not store one for the default class, so there was no
+/// `user.rgw.storage_class` on disk to translate.
+///
+/// `Configured` is whatever `storage_classes` in `[s3 main]` names, if
+/// anything.  It is read from the config rather than hardcoded because
+/// a storage class only exists if the cluster has a placement target
+/// for it, and that is a property of the deployment.
+///
+/// **`TheirUnmigrated` cannot be produced from our side at all.**
+/// `GLACIER_DA` is a value NooBaa wrote and later renamed, so it
+/// appears only in a tree their gateway built --
+/// `docs/NOOBAA_ONDISK_STABILITY.md` records it as the one unmigrated
+/// value rename.  It is in this enum so the axis can *say* that,
+/// rather than the gap being invisible, and it is skipped unless the
+/// corpus is pointed at their endpoint.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum StorageClass {
+    Standard,
+    Configured,
+    TheirUnmigrated,
+}
+
+impl StorageClass {
+    pub fn label(self) -> &'static str {
+        match self {
+            StorageClass::Standard => "standard",
+            StorageClass::Configured => "configured",
+            StorageClass::TheirUnmigrated => "glacier-da",
+        }
+    }
+
+    pub fn rationale(self) -> &'static str {
+        match self {
+            StorageClass::Standard => {
+                "the default;  RGW stores no attribute for it, so there is \
+                 nothing on disk to translate"
+            }
+            StorageClass::Configured => {
+                "a non-default class, which is the case that writes \
+                 user.rgw.storage_class and the case the listing row may \
+                 report wrongly"
+            }
+            StorageClass::TheirUnmigrated => {
+                "GLACIER_DA, which only a NooBaa-written tree can carry"
+            }
+        }
+    }
+}
+
+pub const STORAGE_COVERAGE: &[StorageClass] = &[
+    StorageClass::Standard,
+    StorageClass::Configured,
+    StorageClass::TheirUnmigrated,
+];
