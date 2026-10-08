@@ -8425,6 +8425,16 @@ int Client::_readlink(const InodeRef& diri, const char* relpath, char *buf, size
 
 int Client::_getattr(const InodeRef& in, int mask, const UserPerm& perms, bool force)
 {
+  if (in->snapid == CEPH_SNAPDIR) {
+    if (in->snapdir_parent) {
+      int r = _getattr(in->snapdir_parent, mask, perms, force);
+      if (r < 0)
+        return r;
+      refresh_snapdir_attrs(in.get(), in->snapdir_parent.get());
+    }
+    return 0;
+  }
+
   bool yes = in->caps_issued_mask(mask, true);
 
   ldout(cct, 10) << __func__ << " mask " << ccap_string(mask) << " issued=" << yes << dendl;
