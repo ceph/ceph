@@ -1295,7 +1295,9 @@ unsigned PeeringState::apply_backfill_space_priority(
   unsigned base_priority,
   const std::optional<backfill_reservation_space_info_t> &space_info)
 {
-  if (!space_info || base_priority >= OSD_BACKFILL_DEGRADED_PRIORITY_BASE) {
+  if (!space_info ||
+      base_priority >= OSD_BACKFILL_DEGRADED_PRIORITY_BASE ||
+      !cct->_conf.get_val<bool>("osd_space_aware_backfill_priority")) {
     return base_priority;
   }
 

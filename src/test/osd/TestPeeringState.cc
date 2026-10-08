@@ -1218,6 +1218,7 @@ protected:
   void SetUp() override
   {
     g_ceph_context->_log->set_max_new(0);
+    g_ceph_context->_conf.set_val("osd_space_aware_backfill_priority", "true");
     dout(0) << "SetUp" << dendl;
 
     // Create a basic OSDMap
