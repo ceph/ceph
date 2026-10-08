@@ -4,7 +4,8 @@
 #   ZONES      1 (default) or 2; with 2 the OSDs are split over datacenters
 #              dc1 and dc2 and the mons get locations (c is the arbiter).
 #              Where the monitors support 'osd pool create --num_zones', the
-#              pool is created with --num_zones 2, which enables stretch mode.
+#              pool and the rbd metadata pool (2 copies per zone) are created
+#              with --num_zones 2, which enables stretch mode.
 #              Otherwise every pool gets a rule placing 2 copies in each
 #              datacenter and 'ceph mon enable_stretch_mode' turns on global
 #              stretch mode, which takes replicated pools only.
@@ -119,7 +120,11 @@ else
     ceph osd pool set $POOL min_size $(( r > 1 ? r - 1 : 1 ))
 fi
 ceph osd pool application enable $POOL rbd
-ceph osd pool create rbd 8 8 replicated $rule
+if [ "$stretch" = num_zones ]; then
+    ceph osd pool create rbd replicated --num_zones 2 --$per_zone 2 --osd_failure_domain osd --pg_num 8
+else
+    ceph osd pool create rbd 8 8 replicated $rule
+fi
 ceph osd pool application enable rbd rbd
 if [ "$stretch" = global ]; then
     # the monitor election it starts can re-run it and report "already
