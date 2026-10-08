@@ -24,6 +24,7 @@
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{MetadataDirective, TaggingDirective};
 use s3_tests_rs::client::get_client;
+use s3_tests_rs::fixtures::check_configure_versioning_retry;
 
 use crate::generate::{ensure_bucket, env_or, out_dir};
 use crate::manifest::Manifest;
@@ -38,7 +39,6 @@ struct Copied {
     dst_bucket: String,
     declared_size: usize,
     meta: Directive,
-    dest_self: bool,
     refused: Option<String>,
 }
 
@@ -147,12 +147,20 @@ async fn corpus_coverage_copy() {
     let client = get_client();
     let b = bucket(&tier, "copy");
     let other = bucket(&tier, "copy-dst");
+    /* A versioned destination, because the driver's copy path forks on
+     * it and only that branch hand-builds the new object's cache
+     * entry. */
+    let versioned = bucket(&tier, "copy-ver");
     ensure_bucket(&client, &b).await;
     ensure_bucket(&client, &other).await;
+    ensure_bucket(&client, &versioned).await;
+    check_configure_versioning_retry(&client, &versioned, "Enabled", "Enabled").await;
 
     let mut m = Manifest::new();
     m.bucket(&b, "tier", &tier);
     m.bucket(&other, "tier", &tier);
+    m.bucket(&versioned, "tier", &tier);
+    m.bucket(&versioned, "versioning", "Enabled");
 
     /* sources first, then warm the cache on both buckets, then copy --
      * so what the copy path writes into the cache is what the final
@@ -166,7 +174,7 @@ async fn corpus_coverage_copy() {
         cases.push((i, *shape, *dest, *meta, *tags, src_key, size));
     }
 
-    for bk in [&b, &other] {
+    for bk in [&b, &other, &versioned] {
         let w = client
             .list_objects_v2()
             .bucket(bk)
@@ -182,6 +190,7 @@ async fn corpus_coverage_copy() {
         let (dst_bucket, dst_key) = match dest {
             CopyDest::SameBucket => (b.clone(), format!("c{i:02}-dst")),
             CopyDest::OtherBucket => (other.clone(), format!("c{i:02}-dst")),
+            CopyDest::Versioned => (versioned.clone(), format!("c{i:02}-dst")),
             CopyDest::SelfSame => (b.clone(), src_key.clone()),
         };
 
@@ -235,14 +244,13 @@ async fn corpus_coverage_copy() {
             dst_bucket,
             declared_size: size,
             meta,
-            dest_self: dest == CopyDest::SelfSame,
             refused,
         });
     }
 
     /* what the two buckets say afterwards, on the warm cache */
     let mut listed = std::collections::BTreeMap::new();
-    for bk in [&b, &other] {
+    for bk in [&b, &other, &versioned] {
         let page = client
             .list_objects_v2()
             .bucket(bk)
@@ -299,6 +307,8 @@ async fn corpus_coverage_copy() {
         crate::inventory::capture(&b, &dir, &format!("{tier}-copy"));
     mode_problems
         .extend(crate::inventory::capture(&other, &dir, &format!("{tier}-copy-dst")));
+    mode_problems
+        .extend(crate::inventory::capture(&versioned, &dir, &format!("{tier}-copy-ver")));
 
     eprintln!(
         "corpus {tier}/copy: {} copies, {} refused, {} facts -> {}",
@@ -346,18 +356,12 @@ async fn corpus_coverage_copy() {
          * that is checkable without a reference:  COPY must carry the
          * source's user metadata across, REPLACE must not.
          *
-         * Not asserted for a self-copy.  REPLACE onto the object
-         * itself *merges* on this backend -- the replacement metadata
-         * and content type do apply, and the source's user metadata
-         * also survives -- which is a defect, recorded in the punch
-         * list, not an open question.  The facts are still captured,
-         * so the manifest shows `head-meta.srcmeta` sitting beside
-         * `head-meta.dstmeta` on that object;  withholding the
-         * assertion keeps the suite honest about a known gap without
-         * dropping the artifact. */
-        if (c.dest_self) {
-            continue;
-        }
+         * The self-copy is asserted like any other now.  REPLACE onto
+         * the object itself used to *merge* -- the replacement applied
+         * and the source's user metadata survived with it -- because
+         * the attribute write merges and nothing removed the keys the
+         * request had dropped.  That is what this case exists to
+         * catch. */
         let rendered = m.render();
         let has_src = rendered.contains(&format!(
             "object\t{}\thead-meta.srcmeta\t", crate::manifest::encode(&c.dst_key)));

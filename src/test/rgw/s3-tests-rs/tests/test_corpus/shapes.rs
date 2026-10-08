@@ -326,10 +326,16 @@ impl CopySource {
 /// `SelfSame` is the degenerate one S3 refuses unless the metadata
 /// directive is REPLACE, and it is a recorded gap on this backend, so
 /// the corpus captures whatever comes back rather than asserting.
+/// `Versioned` is its own value because the driver's copy path forks on
+/// it:  only a versioned destination allocates a version id and takes
+/// the branch that writes the new object's listing-cache entry by hand.
+/// Without this value that branch is never executed, which is how its
+/// owner handling went uncovered while the rest of the axis passed.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CopyDest {
     SameBucket,
     OtherBucket,
+    Versioned,
     SelfSame,
 }
 
@@ -338,6 +344,7 @@ impl CopyDest {
         match self {
             CopyDest::SameBucket => "same",
             CopyDest::OtherBucket => "other",
+            CopyDest::Versioned => "ver",
             CopyDest::SelfSame => "self",
         }
     }
@@ -363,6 +370,8 @@ impl Directive {
 
 /// The coverage tier:  every value of every axis at least once.
 pub const COPY_COVERAGE: &[(CopySource, CopyDest, Directive, Directive)] = &[
+    (CopySource::Plain, CopyDest::Versioned, Directive::Copy, Directive::Copy),
+    (CopySource::Multipart, CopyDest::Versioned, Directive::Replace, Directive::Copy),
     (CopySource::Plain, CopyDest::SameBucket, Directive::Copy, Directive::Copy),
     (CopySource::Plain, CopyDest::OtherBucket, Directive::Replace, Directive::Replace),
     (CopySource::Plain, CopyDest::SameBucket, Directive::Replace, Directive::Copy),
