@@ -40,6 +40,8 @@
 #include "driver/nsfs/adopt/noobaa_master_keys.h"
 #include "driver/nsfs/adopt/noobaa_import_plan.h"
 #include "driver/nsfs/adopt/noobaa_import.h"
+#include "driver/nsfs/adopt/noobaa_bucket_import.h"
+#include "rgw_bucket_logging.h"
 #include "rgw_account.h"
 #include "driver/nsfs/personality.h"
 #include "rgw_auth.h"
@@ -10001,6 +10003,358 @@ TEST_F(NooBaaImportTest, AStoreOnDiskImports)
 				    p, again), 0);
   EXPECT_EQ(again.accounts_created, 0u);
   EXPECT_EQ(again.users_created, 0u);
+}
+
+/* ------------------------------------------------------------------ *
+ * I5 -- bucket state, and the principals in it.
+ *
+ * Most of the translation already existed;  what is new is the owner,
+ * the principal rewriting, and `logging`.  The rewriting gets the most
+ * tests because it is the part where being subtly wrong changes who
+ * may do what, and nobody notices until an access decision goes the
+ * wrong way.
+ * ------------------------------------------------------------------ */
+
+class NooBaaPolicyTest : public ::testing::Test {
+public:
+  nsfs::IdentityMapping mapping;
+
+  void SetUp() override {
+    mapping.account_by_noobaa_id["6ac7cb27fd4af356919110a3"] =
+      "RGW11111111111111111";
+    mapping.noobaa_id_by_name["acct-one"] = "6ac7cb27fd4af356919110a3";
+    mapping.user_arn_by_noobaa_id["u1"] =
+      "arn:aws:iam::RGW11111111111111111:user/alice";
+    mapping.noobaa_id_by_name["alice"] = "u1";
+  }
+
+  std::string rewrite(const std::string& doc, int expect = 0) {
+    std::string out;
+    std::vector<std::string> unresolved;
+    EXPECT_EQ(nsfs::rewrite_policy_principals(env->dpp, doc, mapping, out,
+					      unresolved), expect)
+	<< (unresolved.empty() ? std::string{} : unresolved[0]);
+    return out;
+  }
+};
+
+/* Id first, then name -- which is the whole of the disambiguation.
+ *
+ * A name and an id are both bare strings and cannot be told apart
+ * syntactically:  an account may legally be *named* twenty-four hex
+ * characters.  So the order matters, and it mirrors theirs. */
+TEST_F(NooBaaPolicyTest, APrincipalResolvesByIdThenByName)
+{
+  EXPECT_EQ(*mapping.resolve("6ac7cb27fd4af356919110a3"),
+	    "RGW11111111111111111");
+  EXPECT_EQ(*mapping.resolve("acct-one"), "RGW11111111111111111");
+  EXPECT_EQ(*mapping.resolve("u1"),
+	    "arn:aws:iam::RGW11111111111111111:user/alice");
+  EXPECT_EQ(*mapping.resolve("alice"),
+	    "arn:aws:iam::RGW11111111111111111:user/alice");
+  EXPECT_FALSE(mapping.resolve("nobody").has_value());
+
+  /* an account *named* like an id resolves as the id it is, not the
+   * name it looks like */
+  nsfs::IdentityMapping ambiguous = mapping;
+  ambiguous.noobaa_id_by_name["6ac7cb27fd4af356919110a3"] = "u1";
+  EXPECT_EQ(*ambiguous.resolve("6ac7cb27fd4af356919110a3"),
+	    "RGW11111111111111111")
+      << "the name arm won, so the order is wrong";
+}
+
+/* Everything outside Principal survives byte-for-byte.
+ *
+ * This is why it is a DOM and not a string substitution.  A policy's
+ * `Condition` is the difference between a narrow grant and a broad
+ * one, and a value that happens to equal a principal must not be
+ * rewritten because it is a resource or a condition value. */
+TEST_F(NooBaaPolicyTest, OnlyPrincipalsAreTouched)
+{
+  const std::string doc = R"({
+    "Version":"2012-10-17",
+    "Statement":[{
+      "Sid":"acct-one",
+      "Effect":"Allow",
+      "Principal":{"AWS":["acct-one"]},
+      "Action":["s3:GetObject"],
+      "Resource":["arn:aws:s3:::acct-one/*"],
+      "Condition":{"StringEquals":{"s3:prefix":"acct-one"}}
+    }]
+  })";
+
+  const std::string out = rewrite(doc);
+  /* the principal moved */
+  EXPECT_NE(out.find("RGW11111111111111111"), std::string::npos) << out;
+  /* and nothing else did -- a Sid, a Resource and a Condition value
+   * that all equal the principal's name are untouched */
+  EXPECT_NE(out.find("\"Sid\":\"acct-one\""), std::string::npos) << out;
+  EXPECT_NE(out.find("arn:aws:s3:::acct-one/*"), std::string::npos) << out;
+  EXPECT_NE(out.find("\"s3:prefix\":\"acct-one\""), std::string::npos)
+      << out;
+  /* the condition survived at all, which a model-and-re-emit rewrite
+   * is what would quietly drop */
+  EXPECT_NE(out.find("StringEquals"), std::string::npos) << out;
+}
+
+/* Their three principal shapes, and the arms that are not ours.
+ *
+ * A bare string, an array, and an object with an `AWS` member;
+ * `Service` and `Federated` are AWS's own namespaces and are left
+ * exactly as they are. */
+TEST_F(NooBaaPolicyTest, EveryPrincipalShapeIsRewritten)
+{
+  EXPECT_NE(rewrite(R"({"Statement":[{"Principal":"alice"}]})")
+		.find("user/alice"), std::string::npos);
+  EXPECT_NE(rewrite(R"({"Statement":[{"Principal":["alice","acct-one"]}]})")
+		.find("RGW11111111111111111"), std::string::npos);
+
+  const std::string obj =
+    rewrite(R"({"Statement":[{"Principal":{"AWS":"acct-one",
+      "Service":"acct-one"}}]})");
+  EXPECT_NE(obj.find("\"AWS\":\"RGW11111111111111111\""),
+	    std::string::npos) << obj;
+  EXPECT_NE(obj.find("\"Service\":\"acct-one\""), std::string::npos)
+      << "a Service principal was rewritten: " << obj;
+
+  /* NotPrincipal is a denial's subject and matters just as much */
+  EXPECT_NE(rewrite(R"({"Statement":[{"NotPrincipal":{"AWS":"alice"}}]})")
+		.find("user/alice"), std::string::npos);
+
+  /* `*` means everyone on both sides */
+  const std::string star = rewrite(R"({"Statement":[{"Principal":"*"}]})");
+  EXPECT_NE(star.find("\"*\""), std::string::npos) << star;
+
+  /* a single statement rather than an array */
+  EXPECT_NE(rewrite(R"({"Statement":{"Principal":"alice"}})")
+		.find("user/alice"), std::string::npos);
+}
+
+/* An unresolved principal refuses the policy and names every one.
+ *
+ * A principal resolving to nothing is a grant or a denial that will
+ * not take effect.  Every one is listed, because an operator fixing
+ * them needs the list rather than the first. */
+TEST_F(NooBaaPolicyTest, AnUnresolvedPrincipalRefusesThePolicy)
+{
+  std::string out{"untouched"};
+  std::vector<std::string> unresolved;
+  EXPECT_EQ(nsfs::rewrite_policy_principals(
+		env->dpp,
+		R"({"Statement":[{"Principal":{"AWS":["alice","ghost",
+		  "phantom"]}}]})",
+		mapping, out, unresolved), -ENOENT);
+  ASSERT_EQ(unresolved.size(), 2u);
+  EXPECT_EQ(unresolved[0], "ghost");
+  EXPECT_EQ(unresolved[1], "phantom");
+
+  /* and a document that will not parse is a different answer */
+  unresolved.clear();
+  EXPECT_EQ(nsfs::rewrite_policy_principals(env->dpp, "{not json",
+					    mapping, out, unresolved),
+	    -EBADMSG);
+  EXPECT_TRUE(unresolved.empty());
+}
+
+/* The mapping is built from the plan, so it is what I4 wrote by. */
+TEST_F(NooBaaPlanTest, TheMappingFollowsThePlan)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("u1", R"({"_id":"u1","name":"alice","email":"alice",
+    "owner":"6ac7cb27fd4af356919110a3"})");
+  ASSERT_EQ(build(2), 0);
+
+  const auto m = nsfs::mapping_from(plan);
+  const std::string acct = entry("interchange")->account_id;
+
+  EXPECT_EQ(*m.resolve("6ac7cb27fd4af356919110a3"), acct);
+  EXPECT_EQ(*m.resolve("interchange"), acct);
+  /* an IAM user resolves to an ARN, because that is what an RGW user
+   * principal is, and it matches on display_name */
+  EXPECT_EQ(*m.resolve("u1"), "arn:aws:iam::" + acct + ":user/alice");
+  EXPECT_EQ(*m.resolve("alice"), "arn:aws:iam::" + acct + ":user/alice");
+}
+
+/* Their bucket state reaches RGW:  the owner, the policy and logging.
+ *
+ * The owner is the field the state strategy reads and does not apply,
+ * because turning their account id into an `rgw_owner` needs the
+ * mapping.  `logging` is one of three fields nothing read before, and
+ * a bucket converted without it loses its logging silently. */
+class NooBaaBucketImportTest : public NSFSNooBaaStateTest {
+public:
+  nsfs::IdentityMapping mapping;
+  nsfs::BucketImportResult result;
+
+  void SetUp() override {
+    NSFSNooBaaStateTest::SetUp();
+    mapping.account_by_noobaa_id["6560e1f1c0ffee0000000002"] =
+      "RGW11111111111111111";
+    mapping.noobaa_id_by_name["their-acct"] = "6560e1f1c0ffee0000000002";
+  }
+
+  int run() {
+    nsfs::NooBaaStoreContents c;
+    nsfs::NooBaaBucketRecord rec;
+    rec.name = testname;
+    c.buckets.push_back(rec);
+    result = nsfs::BucketImportResult{};
+    /* The fixture's bucket exists on disk;  release the handle it
+     * holds so the import opens its own, which is what the real
+     * sequence does -- identities, then buckets, with nothing else
+     * holding them. */
+    bucket.reset();
+    return nsfs::import_bucket_state(env->dpp, null_yield, driver.get(),
+				     conf_root().string(), c, mapping,
+				     result);
+  }
+
+  std::string why() const {
+    std::string s;
+    for (const auto& f : result.failures) {
+      s += "\n  " + f;
+    }
+    for (const auto& r : result.policies_refused) {
+      s += "\n  " + r;
+    }
+    return s;
+  }
+};
+
+TEST_F(NooBaaBucketImportTest, TheOwnerAndLoggingReachRgw)
+{
+  write_their_record("ENABLED",
+      R"(,"logging":{"log_bucket":"audit","log_prefix":"logs/"})");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.buckets_written, 1u);
+  EXPECT_EQ(result.logging_carried, 1u);
+
+  /* read it back through the bucket, which is what a request would */
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto bucket = driver->get_bucket(info);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+
+  /* the owner the strategy would not apply */
+  EXPECT_EQ(to_string(bucket->get_owner()), "RGW11111111111111111")
+      << "owner_account was read and not applied";
+  EXPECT_TRUE(bucket->versioned()) << "versioning was lost on the write";
+
+  /* The attribute's presence is what says logging is configured:
+   * `enabled` is an in-memory field and is not part of the encoded
+   * form, so a round trip cannot carry it and asserting it would be
+   * asserting nothing. */
+  auto lg = bucket->get_attrs().find(RGW_ATTR_BUCKET_LOGGING);
+  ASSERT_NE(lg, bucket->get_attrs().end()) << "logging was dropped";
+  rgw::bucketlogging::configuration conf;
+  auto bl = lg->second.cbegin();
+  conf.decode(bl);
+  EXPECT_EQ(conf.target_bucket, "audit");
+  EXPECT_EQ(conf.target_prefix, "logs/");
+}
+
+/* A bucket whose owner this import did not write is refused, not
+ * guessed.  There is no correct account to invent. */
+TEST_F(NooBaaBucketImportTest, AnUnknownOwnerRefusesTheBucket)
+{
+  write_their_record("DISABLED");
+  mapping.account_by_noobaa_id.clear();
+
+  EXPECT_EQ(run(), -EIO);
+  EXPECT_EQ(result.buckets_written, 0u);
+  bool said = false;
+  for (const auto& f : result.failures) {
+    if (f.find("is not an account this import wrote") != std::string::npos) {
+      said = true;
+    }
+  }
+  EXPECT_TRUE(said) << why();
+}
+
+/* A policy whose principals do not resolve is dropped, the rest of
+ * the bucket is written, and the refusal is reported.
+ *
+ * The bucket's other state is correct and worth having;  a policy
+ * pointing at nothing is not. */
+TEST_F(NooBaaBucketImportTest, ARefusedPolicyDoesNotRefuseTheBucket)
+{
+  write_their_record("ENABLED",
+      R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
+        "Effect":"Allow","Principal":{"AWS":["ghost"]},
+        "Action":["s3:GetObject"],
+        "Resource":["arn:aws:s3:::b/*"]}]})");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.buckets_written, 1u) << "the bucket was refused too";
+  EXPECT_EQ(result.policies_rewritten, 0u);
+  ASSERT_EQ(result.policies_refused.size(), 1u);
+  EXPECT_NE(result.policies_refused[0].find("ghost"), std::string::npos)
+      << result.policies_refused[0];
+
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto bucket = driver->get_bucket(info);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_EQ(bucket->get_attrs().find(RGW_ATTR_IAM_POLICY),
+	    bucket->get_attrs().end())
+      << "a policy pointing at nothing was written anyway";
+  EXPECT_TRUE(bucket->versioned()) << "the rest of the state was lost";
+}
+
+/* And a resolvable one is written, rewritten. */
+TEST_F(NooBaaBucketImportTest, AResolvablePolicyIsRewrittenAndWritten)
+{
+  write_their_record("DISABLED",
+      R"(,"s3_policy":{"Version":"2012-10-17","Statement":[{
+        "Effect":"Allow","Principal":{"AWS":["their-acct"]},
+        "Action":["s3:GetObject"],
+        "Resource":["arn:aws:s3:::b/*"]}]})");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.policies_rewritten, 1u);
+
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto bucket = driver->get_bucket(info);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto p = bucket->get_attrs().find(RGW_ATTR_IAM_POLICY);
+  ASSERT_NE(p, bucket->get_attrs().end());
+  const std::string stored = p->second.to_str();
+  EXPECT_NE(stored.find("RGW11111111111111111"), std::string::npos)
+      << stored;
+  EXPECT_EQ(stored.find("their-acct"), std::string::npos)
+      << "their name survived in the stored policy: " << stored;
+}
+
+/* What is read and not translated is reported rather than silent.
+ *
+ * Notifications need an RGW topic per destination;  a path outside the
+ * data root needs P2 to serve it and P6 to record it.  Both are
+ * deliberate boundaries, and an operator should learn them from the
+ * report. */
+TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
+{
+  write_their_record("DISABLED",
+      R"(,"notifications":[{"id":["n1"],"event":["s3:ObjectCreated:*"],
+        "topic":["arn:noobaa:sns:::t1"]}])");
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.buckets_written, 1u);
+
+  bool notif = false, path = false;
+  for (const auto& d : result.deferred) {
+    if (d.find("notifications") != std::string::npos) {
+      notif = true;
+    }
+    if (d.find("not under the data root") != std::string::npos) {
+      path = true;
+    }
+  }
+  EXPECT_TRUE(notif) << "notifications were dropped silently";
+  /* write_their_record() always writes a path under /ibm/gpfs, so the
+   * path deferral is reached too */
+  EXPECT_TRUE(path) << "a path outside the data root was not reported";
 }
 
 int main(int argc, char *argv[]) {
