@@ -466,3 +466,81 @@ class TestSwitchStagedSeveral:
         with pytest.raises(SystemExit):
             with with_cephadm_ctx(['switch-staged', '--fsid', FSID, '--name', 'mds.a', '--name', 'bogus.b']):
                 pass
+
+
+class TestDeployStaged:
+    """`_orch deploy-staged`: several `deploy --stage` in one call - one
+    acquisition of the cluster lock, the target image checked once, one
+    daemon-reload, one result per daemon."""
+
+    def _configs(self, names=('mds.a', 'mds.b'), stage=True):
+        return [{'name': n, 'fsid': FSID, 'image': NEW_IMAGE,
+                 'config_blobs': {'config': f'CONF {n}', 'keyring': f'KEY {n}'},
+                 'params': {'stage': stage}} for n in names]
+
+    def _run(self, configs, capsys):
+        with with_cephadm_ctx(['_orch', 'deploy-staged', '--fsid', FSID]) as ctx:
+            ctx.container_engine = mock_podman()
+            with mock.patch('cephadm.read_configuration_source', return_value=configs), \
+                    mock.patch('cephadm.FileLock') as lock, \
+                    mock.patch('cephadm.call_throws') as call_throws, \
+                    mock.patch('cephadm.call', return_value=('', '', 0)), \
+                    mock.patch('cephadm.check_unit', return_value=(True, 'running', True)), \
+                    mock.patch('cephadm.is_container_running', return_value=True):
+                err = None
+                try:
+                    _cephadm.command_deploy_staged(ctx)
+                except _cephadm.Error as e:
+                    err = e
+        return err, json.loads(capsys.readouterr().out), lock, call_throws
+
+    def test_stages_every_daemon_in_one_call(self, cephadm_fs, funkypatch, capsys):
+        _call, _call_throws = _deploy_patches(funkypatch)
+        _live_daemon(OLD_IMAGE)
+        _daemon_b(live=OLD_IMAGE, staged=None)
+        err, out, lock, call_throws = self._run(self._configs(), capsys)
+        assert err is None
+        assert out == {'mds.a': {'ok': True}, 'mds.b': {'ok': True}}
+        # both staged, each with its own config and keyring, live files untouched
+        for data, name in ((DATA, 'mds.a'), (DATA_B, 'mds.b')):
+            assert _read(f'{data}/unit.image.staged').strip() == NEW_IMAGE
+            assert _read(f'{data}/unit.image').strip() == OLD_IMAGE
+            assert _read(f'{data}/config') == f'CONF {name}'
+            assert _read(f'{data}/keyring') == f'KEY {name}'
+        # one lock, one --version run of the image, one daemon-reload
+        assert lock.call_count == 1 and lock.return_value.acquire.call_count == 1
+        version_runs = [c for c in _call_throws.call_args_list
+                        if '--version' in c.args[1] and NEW_IMAGE in c.args[1]]
+        assert len(version_runs) == 1
+        assert _systemctl_calls(call_throws) == [['systemctl', 'daemon-reload']]
+
+    def test_one_daemon_failing_does_not_stop_the_others(self, cephadm_fs, funkypatch, capsys):
+        # mds.b was never deployed on this host: it fails, mds.a is staged,
+        # the call reports both and fails
+        _call, _call_throws = _deploy_patches(funkypatch)
+        _live_daemon(OLD_IMAGE)
+        err, out, lock, call_throws = self._run(self._configs(), capsys)
+        assert out['mds.a'] == {'ok': True}
+        assert 'not been deployed' in out['mds.b']['error']
+        assert err is not None and '1 of 2' in str(err)
+        assert _read(f'{DATA}/unit.image.staged').strip() == NEW_IMAGE
+        assert not os.path.exists(f'{DATA_B}/unit.run.staged')
+        assert _systemctl_calls(call_throws) == [['systemctl', 'daemon-reload']]
+
+    def test_only_stages(self, cephadm_fs, funkypatch, capsys):
+        _call, _call_throws = _deploy_patches(funkypatch)
+        _live_daemon(OLD_IMAGE)
+        err, out, lock, call_throws = self._run(self._configs(names=('mds.a',), stage=False), capsys)
+        assert 'only stages' in out['mds.a']['error'] and err is not None
+        assert not os.path.exists(f'{DATA}/unit.run.staged')
+        assert _systemctl_calls(call_throws) == []
+
+    def test_refuses_an_empty_request(self, cephadm_fs, capsys):
+        with with_cephadm_ctx(['_orch', 'deploy-staged', '--fsid', FSID]) as ctx:
+            with mock.patch('cephadm.read_configuration_source', return_value=[]):
+                with pytest.raises(_cephadm.Error, match='non-empty'):
+                    _cephadm.command_deploy_staged(ctx)
+
+    def test_parser(self):
+        with with_cephadm_ctx(['_orch', 'deploy-staged', '--fsid', FSID]) as ctx:
+            assert ctx.func is _cephadm.command_deploy_staged

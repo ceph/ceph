@@ -299,9 +299,10 @@ class StagedSwitchRunner:
                      ) -> Tuple[Dict[str, str], Dict[str, str], List[str]]:
         """deploy --stage every daemon whose staged deployment is not already
         the one it would get now (`already`: name -> fingerprint): up to
-        max_parallel hosts at a time, the daemons of one host one after the
-        other (cephadm's per-host lock would serialize them anyway).
-        Returns (name -> error, name -> fingerprint staged, names skipped)."""
+        max_parallel hosts at a time, the daemons of one host in one cephadm
+        call (`_orch deploy-staged`: one lock, one image check, one
+        daemon-reload). Returns (name -> error, name -> fingerprint staged,
+        names skipped)."""
         sem = asyncio.Semaphore(max(1, int(self.mgr.upgrade_staged_switch_max_parallel)))
         errors: Dict[str, str] = {}
         staged: Dict[str, str] = {}
@@ -315,29 +316,38 @@ class StagedSwitchRunner:
             except Exception as e:
                 logger.debug('Upgrade: could not read the osd uuid map up front: %s', e)
 
-        async def one(d: DaemonDescription) -> None:
-            try:
-                spec = self._stage_spec(d, target_image)
-                fp = self._stage_fingerprint(spec, target_image)
-                if already.get(d.name()) == fp:
-                    skipped.append(d.name())
-                    return
-                await CephadmServe(self.mgr)._create_daemon(
-                    spec, osd_uuid_map=osd_uuid_map, stage=True)
-                staged[d.name()] = fp
-            except Exception as e:
-                errors[d.name()] = str(e)
-
-        async def host(daemons: List[DaemonDescription]) -> None:
+        async def host(hostname: str, daemons: List[DaemonDescription]) -> None:
             async with sem:
+                todo: List[Tuple[CephadmDaemonDeploySpec, str]] = []
                 for d in daemons:
-                    await one(d)
+                    try:
+                        spec = self._stage_spec(d, target_image)
+                        fp = self._stage_fingerprint(spec, target_image)
+                    except Exception as e:
+                        errors[d.name()] = str(e)
+                        continue
+                    if already.get(d.name()) == fp:
+                        skipped.append(d.name())
+                    else:
+                        todo.append((spec, fp))
+                if not todo:
+                    return
+                try:
+                    failed = await CephadmServe(self.mgr)._stage_daemons(
+                        hostname, [spec for spec, _ in todo], osd_uuid_map=osd_uuid_map)
+                except Exception as e:
+                    failed = {spec.name(): str(e) for spec, _ in todo}
+                for spec, fp in todo:
+                    if spec.name() in failed:
+                        errors[spec.name()] = failed[spec.name()]
+                    else:
+                        staged[spec.name()] = fp
 
         by_host: Dict[str, List[DaemonDescription]] = {}
         for d in daemons:
             assert d.hostname is not None
             by_host.setdefault(d.hostname, []).append(d)
-        await asyncio.gather(*[host(ds) for ds in by_host.values()])
+        await asyncio.gather(*[host(h, ds) for h, ds in by_host.items()])
         return errors, staged, skipped
 
     async def _stage_all(self, group: StagedGroup, target_image: str) -> Dict[str, str]:

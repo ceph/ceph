@@ -1555,6 +1555,155 @@ class CephadmServe:
         if updated_files:
             self.mgr.cache.save_host(host)
 
+    def _deploy_request(self,
+                        daemon_spec: CephadmDaemonDeploySpec,
+                        reconfig: bool = False,
+                        osd_uuid_map: Optional[Dict[str, Any]] = None,
+                        skip_restart_for_reconfig: bool = False,
+                        send_signal_to_daemon: Optional[str] = None,
+                        stage: bool = False,
+                        ) -> Tuple[CephadmDaemonDeploySpec, exchange.Deploy]:
+        """What `cephadm _orch deploy` (or one entry of `_orch
+        deploy-staged`) gets on stdin for this daemon."""
+        daemon_params: Dict[str, Any] = {}
+        image = ''
+        ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
+        port_ips: Dict[str, str] = daemon_spec.port_ips if daemon_spec.port_ips else {}
+
+        if daemon_spec.daemon_type == 'container':
+            spec = cast(CustomContainerSpec,
+                        self.mgr.spec_store[daemon_spec.service_name].spec)
+            image = spec.image
+
+        # TCP port to open in the host firewall
+        if len(ports) > 0:
+            daemon_params['tcp_ports'] = list(ports)
+
+        if port_ips:
+            daemon_params['port_ips'] = port_ips
+
+        # osd deployments needs an --osd-uuid arg
+        if daemon_spec.daemon_type == 'osd':
+            if not osd_uuid_map:
+                osd_uuid_map = self.mgr.get_osd_uuid_map()
+            osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
+            if not osd_uuid:
+                raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
+            daemon_params['osd_fsid'] = osd_uuid
+            # we may need a dm-crypt key to rotate this OSD's keyring
+            # if it is encrypted. If it is not encrypted, no such
+            # key will exist
+            rc, ckg_out, ckg_err = self.mgr.mon_command({
+                'prefix': 'config-key get',
+                'key': f'dm-crypt/osd/{osd_uuid}/luks',
+            })
+            if not rc and ckg_out:
+                daemon_params['osd_dm_crypt_key'] = ckg_out
+
+        if reconfig:
+            daemon_params['reconfig'] = True
+        if stage:
+            daemon_params['stage'] = True
+        if skip_restart_for_reconfig:
+            daemon_params['skip_restart_for_reconfig'] = True
+        if send_signal_to_daemon:
+            daemon_params['send_signal_to_daemon'] = send_signal_to_daemon
+        if self.mgr.allow_ptrace:
+            daemon_params['allow_ptrace'] = True
+        if self.mgr.log_deploy_configuration:
+            daemon_params['log_deploy_configuration'] = True
+
+        daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
+        init_containers = self._setup_init_containers(daemon_spec, daemon_params)
+
+        if daemon_spec.service_name in self.mgr.spec_store:
+            configs = self.mgr.spec_store[daemon_spec.service_name].spec.custom_configs
+            if configs is not None:
+                daemon_spec.final_config.update(
+                    {'custom_config_files': [c.to_json() for c in configs]})
+
+        termination_grace_period = None
+        if daemon_spec.service_name in self.mgr.spec_store:
+            svc_spec = self.mgr.spec_store[daemon_spec.service_name].spec
+            termination_grace_period = getattr(svc_spec, 'termination_grace_period_seconds', None)
+
+        if termination_grace_period is not None:
+            daemon_params['termination_grace_period_seconds'] = int(termination_grace_period)
+
+        return daemon_spec, exchange.Deploy(
+            fsid=self.mgr._cluster_fsid,
+            name=daemon_spec.name(),
+            image=image,
+            params=daemon_params,
+            meta=exchange.DeployMeta(
+                service_name=daemon_spec.service_name,
+                ports=daemon_spec.ports,
+                ip=daemon_spec.ip,
+                deployed_by=self.mgr.get_active_mgr_digests(),
+                rank=daemon_spec.rank,
+                rank_generation=daemon_spec.rank_generation,
+                extra_container_args=ArgumentSpec.map_json(
+                    extra_container_args,
+                ),
+                extra_entrypoint_args=ArgumentSpec.map_json(
+                    extra_entrypoint_args,
+                ),
+                init_containers=init_containers,
+            ),
+            config_blobs=daemon_spec.final_config,
+        )
+
+    async def _stage_daemons(self,
+                             host: str,
+                             daemon_specs: List[CephadmDaemonDeploySpec],
+                             osd_uuid_map: Optional[Dict[str, Any]] = None,
+                             ) -> Dict[str, str]:
+        """Stage several daemons of one host (`deploy --stage`) in one
+        `cephadm _orch deploy-staged` call: one acquisition of the cluster
+        lock on the host instead of one per daemon, the target image checked
+        once, one daemon-reload. The daemons must share their target image.
+        Returns name -> error for the daemons that could not be staged."""
+        errors: Dict[str, str] = {}
+        requests: List[Tuple[CephadmDaemonDeploySpec, exchange.Deploy]] = []
+        start_time = datetime_now()
+        for spec in daemon_specs:
+            try:
+                requests.append(self._deploy_request(spec, osd_uuid_map=osd_uuid_map, stage=True))
+            except Exception as e:
+                errors[spec.name()] = str(e)
+        if not requests:
+            return errors
+        if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
+            await self._registry_login(host, json.loads(str(self.mgr.get_store('registry_credentials'))))
+        names = [spec.name() for spec, _ in requests]
+        self.log.info('Staging daemons %s on %s', ', '.join(names), host)
+        out, err, code = await self._run_cephadm(
+            host,
+            names[0],   # the image is the target image of every one of them
+            ['_orch', 'deploy-staged'],
+            [],
+            stdin=json.dumps([json.loads(r.dump_json_str()) for _, r in requests]),
+            error_ok=True,
+        )
+        try:
+            results = json.loads('\n'.join(out)) if out else {}
+        except ValueError:
+            results = {}
+        for spec, _ in requests:
+            res = results.get(spec.name())
+            if res and res.get('ok'):
+                self.mgr.cache.update_daemon_config_deps(host, spec.name(), spec.deps, start_time)
+                self.mgr.events.for_daemon(spec.name(), OrchestratorEvent.INFO,
+                                           f"Staged {spec.name()} on host '{host}'")
+                self.mgr.recently_altered_daemons[spec.name()] = datetime_now()
+            else:
+                why = res.get('error') if res else None
+                why = why or f'cephadm exited with code {code}: {" ".join(err)}'
+                errors[spec.name()] = why
+                self.mgr.events.for_daemon(spec.name(), OrchestratorEvent.ERROR, f'Failed to stage: {why}')
+        self.mgr.cache.save_host(host)
+        return errors
+
     async def _create_daemon(self,
                              daemon_spec: CephadmDaemonDeploySpec,
                              reconfig: bool = False,
@@ -1574,7 +1723,6 @@ class CephadmServe:
         if stage and reconfig:
             raise OrchestratorError('cannot stage and reconfig at the same time')
 
-        daemon_params: Dict[str, Any] = {}
         with set_exception_subject('service', orchestrator.DaemonDescription(
                 daemon_type=daemon_spec.daemon_type,
                 daemon_id=daemon_spec.daemon_id,
@@ -1582,62 +1730,11 @@ class CephadmServe:
         ).service_id(), overwrite=True):
 
             try:
-                image = ''
                 start_time = datetime_now()
-                ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
-                port_ips: Dict[str, str] = daemon_spec.port_ips if daemon_spec.port_ips else {}
-
-                if daemon_spec.daemon_type == 'container':
-                    spec = cast(CustomContainerSpec,
-                                self.mgr.spec_store[daemon_spec.service_name].spec)
-                    image = spec.image
-
-                # TCP port to open in the host firewall
-                if len(ports) > 0:
-                    daemon_params['tcp_ports'] = list(ports)
-
-                if port_ips:
-                    daemon_params['port_ips'] = port_ips
-
-                # osd deployments needs an --osd-uuid arg
-                if daemon_spec.daemon_type == 'osd':
-                    if not osd_uuid_map:
-                        osd_uuid_map = self.mgr.get_osd_uuid_map()
-                    osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
-                    if not osd_uuid:
-                        raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
-                    daemon_params['osd_fsid'] = osd_uuid
-                    # we may need a dm-crypt key to rotate this OSD's keyring
-                    # if it is encrypted. If it is not encrypted, no such
-                    # key will exist
-                    rc, ckg_out, ckg_err = self.mgr.mon_command({
-                        'prefix': 'config-key get',
-                        'key': f'dm-crypt/osd/{osd_uuid}/luks',
-                    })
-                    if not rc and ckg_out:
-                        daemon_params['osd_dm_crypt_key'] = ckg_out
-
-                if reconfig:
-                    daemon_params['reconfig'] = True
-                if stage:
-                    daemon_params['stage'] = True
-                if skip_restart_for_reconfig:
-                    daemon_params['skip_restart_for_reconfig'] = True
-                if send_signal_to_daemon:
-                    daemon_params['send_signal_to_daemon'] = send_signal_to_daemon
-                if self.mgr.allow_ptrace:
-                    daemon_params['allow_ptrace'] = True
-                if self.mgr.log_deploy_configuration:
-                    daemon_params['log_deploy_configuration'] = True
-
-                daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
-                init_containers = self._setup_init_containers(daemon_spec, daemon_params)
-
-                if daemon_spec.service_name in self.mgr.spec_store:
-                    configs = self.mgr.spec_store[daemon_spec.service_name].spec.custom_configs
-                    if configs is not None:
-                        daemon_spec.final_config.update(
-                            {'custom_config_files': [c.to_json() for c in configs]})
+                daemon_spec, request = self._deploy_request(
+                    daemon_spec, reconfig=reconfig, osd_uuid_map=osd_uuid_map,
+                    skip_restart_for_reconfig=skip_restart_for_reconfig,
+                    send_signal_to_daemon=send_signal_to_daemon, stage=stage)
 
                 if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
                     await self._registry_login(daemon_spec.host, json.loads(str(self.mgr.get_store('registry_credentials'))))
@@ -1646,41 +1743,12 @@ class CephadmServe:
                     'Staging' if stage else 'Reconfiguring' if reconfig else 'Deploying',
                     daemon_spec.name(), daemon_spec.host))
 
-                termination_grace_period = None
-                if daemon_spec.service_name in self.mgr.spec_store:
-                    svc_spec = self.mgr.spec_store[daemon_spec.service_name].spec
-                    termination_grace_period = getattr(svc_spec, 'termination_grace_period_seconds', None)
-
-                if termination_grace_period is not None:
-                    daemon_params['termination_grace_period_seconds'] = int(termination_grace_period)
-
                 out, err, code = await self._run_cephadm(
                     daemon_spec.host,
                     daemon_spec.name(),
                     ['_orch', 'deploy'],
                     [],
-                    stdin=exchange.Deploy(
-                        fsid=self.mgr._cluster_fsid,
-                        name=daemon_spec.name(),
-                        image=image,
-                        params=daemon_params,
-                        meta=exchange.DeployMeta(
-                            service_name=daemon_spec.service_name,
-                            ports=daemon_spec.ports,
-                            ip=daemon_spec.ip,
-                            deployed_by=self.mgr.get_active_mgr_digests(),
-                            rank=daemon_spec.rank,
-                            rank_generation=daemon_spec.rank_generation,
-                            extra_container_args=ArgumentSpec.map_json(
-                                extra_container_args,
-                            ),
-                            extra_entrypoint_args=ArgumentSpec.map_json(
-                                extra_entrypoint_args,
-                            ),
-                            init_containers=init_containers,
-                        ),
-                        config_blobs=daemon_spec.final_config,
-                    ).dump_json_str(),
+                    stdin=request.dump_json_str(),
                     use_current_daemon_image=reconfig,
                     error_ok=True
                 )

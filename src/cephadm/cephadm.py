@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import argparse
+import copy
 import datetime
 import ipaddress
 import io
@@ -1421,6 +1422,11 @@ def verify_staged_image(ctx: CephadmContext, c: 'CephContainer') -> str:
     entrypoint = c.entrypoint
     if not entrypoint:
         raise Error('cannot verify staged image: container has no entrypoint')
+    # `_orch deploy-staged` stages several daemons of the same image(s):
+    # verify each image once per call
+    verified: Optional[Dict[Tuple[str, str], str]] = getattr(ctx, 'verified_staged_images', None)
+    if verified is not None and (c.image, entrypoint) in verified:
+        return verified[(c.image, entrypoint)]
     try:
         out = CephContainer(
             ctx,
@@ -1432,6 +1438,8 @@ def verify_staged_image(ctx: CephadmContext, c: 'CephContainer') -> str:
         raise Error(f'staged image {c.image} failed to run {entrypoint} --version: {e}')
     version = out.strip()
     logger.info('Staged image %s runs %s: %s', c.image, entrypoint, version)
+    if verified is not None:
+        verified[(c.image, entrypoint)] = version
     return version
 
 
@@ -1656,7 +1664,9 @@ def deploy_daemon_units(
         sidecar_ids=sc_ids,
         success_exit_status=container.success_exit_status,
     )
-    call_throws(ctx, ['systemctl', 'daemon-reload'])
+    if not (stage and getattr(ctx, 'defer_daemon_reload', False)):
+        # `_orch deploy-staged` reloads once, after the last daemon
+        call_throws(ctx, ['systemctl', 'daemon-reload'])
 
     if stage:
         # Nothing else: the daemon keeps running on its current image.
@@ -3751,13 +3761,67 @@ def command_deploy_from(ctx: CephadmContext) -> None:
         sys.exit(DAEMON_FAILED_ERROR)
 
 
-def _common_deploy(ctx: CephadmContext) -> None:
+def command_deploy_staged(ctx: CephadmContext) -> None:
+    """Stage several daemons of this host in one call: `_orch deploy` with
+    params.stage=true for each entry of a JSON list of deploy configurations,
+    under one acquisition of the cluster lock (that `_orch deploy` takes for
+    each daemon, so concurrent calls would only queue), checking each target
+    image runs once rather than once per daemon, and reloading systemd once
+    at the end. A daemon that cannot be staged does not stop the others.
+    Prints a JSON object: name -> {"ok": true} or {"error": "..."}; exits
+    with an error if any daemon could not be staged.
+    """
+    configs = read_configuration_source(ctx)
+    if not isinstance(configs, list) or not configs:
+        raise Error('expected a non-empty JSON list of deploy configurations')
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
+    verified: Dict[Tuple[str, str], str] = {}
+    results: Dict[str, Dict[str, Any]] = {}
+    staged = 0
+    for config_data in configs:
+        name = str(config_data.get('name', ''))
+        try:
+            if not (config_data.get('params') or {}).get('stage'):
+                raise Error(f'{name}: deploy-staged only stages (params.stage must be true)')
+            if config_data.get('fsid', ctx.fsid) != ctx.fsid:
+                raise Error(f'{name}: fsid {config_data.get("fsid")} is not {ctx.fsid}')
+            dctx = _context_of_its_own(ctx)
+            apply_deploy_config_to_ctx(config_data, dctx)
+            dctx.verified_staged_images = verified
+            dctx.defer_daemon_reload = True
+            _common_deploy(dctx, lock=False)
+            results[name] = {'ok': True}
+            staged += 1
+        except Exception as e:
+            logger.error('Staging %s failed: %s', name or '?', e)
+            results[name] = {'error': str(e)}
+    if staged:
+        call_throws(ctx, ['systemctl', 'daemon-reload'])
+    print(json.dumps(results))
+    if staged < len(configs):
+        raise Error(f'{len(configs) - staged} of {len(configs)} daemon(s) could not be staged')
+
+
+def _context_of_its_own(ctx: CephadmContext) -> CephadmContext:
+    """A copy of ctx for one of several deployments made in one call, so
+    the settings applied for one daemon do not leak into the next."""
+    c = CephadmContext()
+    for k, v in ctx.__dict__.items():
+        c.__dict__[k] = copy.copy(v) if k in ('_args', '_conf') else v
+    return c
+
+
+def _common_deploy(ctx: CephadmContext, lock: bool = True) -> None:
     ident = DaemonIdentity.from_context(ctx)
     if ident.daemon_type not in get_supported_daemons():
         raise Error('daemon type %s not recognized' % ident.daemon_type)
 
-    lock = FileLock(ctx, ctx.fsid)
-    lock.acquire()
+    # held until we return (not taken when the caller already holds it:
+    # `_orch deploy-staged`)
+    held = FileLock(ctx, ctx.fsid) if lock else None
+    if held:
+        held.acquire()
 
     deployment_type = get_deployment_type(ctx, ident)
 
@@ -6321,6 +6385,19 @@ def _get_parser():
         default='-',
         nargs='?',
         help='Configuration input source file',
+    )
+
+    parser_deploy_staged = subparsers_orch.add_parser(
+        'deploy-staged', help='stage several daemons (deploy --stage) in one call')
+    parser_deploy_staged.set_defaults(func=command_deploy_staged)
+    parser_deploy_staged.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_deploy_staged.add_argument(
+        'source',
+        default='-',
+        nargs='?',
+        help='JSON list of deploy configurations (as for `_orch deploy`)',
     )
 
     parser_check_online = subparsers_orch.add_parser(

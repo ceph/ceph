@@ -112,6 +112,20 @@ class _FakePolicy(StagedSwitchPolicy):
         self.world.down = False
 
 
+def _stage_daemons_via(fake_create_daemon):
+    """A CephadmServe._stage_daemons that stages each daemon of the call
+    with a per-daemon fake (what _create_daemon(stage=True) would do)."""
+    async def fake_stage_daemons(host, daemon_specs, osd_uuid_map=None):
+        failed = {}
+        for spec in daemon_specs:
+            try:
+                await fake_create_daemon(spec, osd_uuid_map=osd_uuid_map, stage=True)
+            except Exception as e:
+                failed[spec.name()] = str(e)
+        return failed
+    return fake_stage_daemons
+
+
 def _runner_setup(cephadm_module, names, switch_fails=(), stage_fails=(), verify_fails=()):
     world = _FakeWorld(names)
     calls: List[Tuple[str, str, list]] = []
@@ -166,7 +180,8 @@ def _runner_setup(cephadm_module, names, switch_fails=(), stage_fails=(), verify
         'target_image', 0, target_digests=[TARGET], target_version=NEW, fail_fs=True)
     patches = [
         mock.patch("cephadm.serve.CephadmServe._run_cephadm", side_effect=fake_run_cephadm),
-        mock.patch("cephadm.serve.CephadmServe._create_daemon", side_effect=fake_create_daemon),
+        mock.patch("cephadm.serve.CephadmServe._stage_daemons",
+                   side_effect=_stage_daemons_via(fake_create_daemon)),
         mock.patch.object(StagedSwitchRunner, '_refresh_hosts', side_effect=no_refresh),
         mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", side_effect=mon_command),
         mock.patch("cephadm.staged_switch.time", _Clock()),
@@ -674,8 +689,8 @@ def test_runner_stage_ahead_failure_is_left_to_the_group(cephadm_module: Cephadm
             raise OrchestratorError('registry hiccup')
         staged.append(daemon_spec.name())
         return 'ok'
-    patches = [p for p in patches if getattr(p, 'attribute', None) != '_create_daemon'] + [
-        mock.patch("cephadm.serve.CephadmServe._create_daemon", side_effect=flaky)]
+    patches = [p for p in patches if getattr(p, 'attribute', None) != '_stage_daemons'] + [
+        mock.patch("cephadm.serve.CephadmServe._stage_daemons", side_effect=_stage_daemons_via(flaky))]
     for p in patches:
         p.start()
     try:
@@ -855,7 +870,8 @@ def _mds_setup(cephadm_module, mons, switch_fails=()):
         'target_image', 0, target_digests=[TARGET], target_version=mons.new, fail_fs=True)
     patches = [
         mock.patch("cephadm.serve.CephadmServe._run_cephadm", side_effect=fake_run_cephadm),
-        mock.patch("cephadm.serve.CephadmServe._create_daemon", side_effect=fake_create_daemon),
+        mock.patch("cephadm.serve.CephadmServe._stage_daemons",
+                   side_effect=_stage_daemons_via(fake_create_daemon)),
         mock.patch.object(StagedSwitchRunner, '_refresh_hosts', side_effect=no_refresh),
         mock.patch("cephadm.CephadmOrchestrator.get", side_effect=mons.get),
         mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", side_effect=mons.mon_command),
@@ -1321,7 +1337,8 @@ def _osd_setup(cephadm_module, mons, switch_fails=(), never_up=(), level='host',
         'target_image', 0, target_digests=[TARGET], target_version=mons.new)
     patches = [
         mock.patch("cephadm.serve.CephadmServe._run_cephadm", side_effect=fake_run_cephadm),
-        mock.patch("cephadm.serve.CephadmServe._create_daemon", side_effect=fake_create_daemon),
+        mock.patch("cephadm.serve.CephadmServe._stage_daemons",
+                   side_effect=_stage_daemons_via(fake_create_daemon)),
         mock.patch.object(StagedSwitchRunner, '_refresh_hosts', side_effect=no_refresh),
         mock.patch("cephadm.CephadmOrchestrator.get", side_effect=mons.get),
         mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", side_effect=mons.mon_command),
@@ -2053,3 +2070,72 @@ def test_osd_explicit_level_names_the_group_after_what_is_left(cephadm_module: C
         run.one_pass()
         assert run.groups[-1] == [2, 3]
         assert any('staged switch picked host h2: 2 OSD(s)' in r.getMessage() for r in caplog.records)
+
+
+def test_stage_daemons_is_one_cephadm_call(cephadm_module: CephadmOrchestrator):
+    # CephadmServe._stage_daemons: one `_orch deploy-staged` call with the
+    # deploy request of every daemon, a result per daemon
+    from cephadm.serve import CephadmServe
+    from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+    calls = []
+
+    async def run_cephadm(host, entity, command, args, **kw):
+        if command != ['_orch', 'deploy-staged']:
+            return (['{}'], [], 0)
+        calls.append((host, entity, command, json.loads(kw['stdin'])))
+        return (['{"mds.fs.a": {"ok": true}, "mds.fs.b": {"error": "boom"}}'], ['1 of 2 failed'], 1)
+
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", side_effect=run_cephadm), \
+            with_host(cephadm_module, 'host1'):
+        specs = [CephadmDaemonDeploySpec.from_daemon_description(_dd('mds', n, service_name='mds.fs'))
+                 for n in ('fs.a', 'fs.b')]
+        failed = cephadm_module.wait_async(CephadmServe(cephadm_module)._stage_daemons('host1', specs))
+    assert failed == {'mds.fs.b': 'boom'}
+    assert len(calls) == 1
+    host, entity, command, requests = calls[0]
+    assert (host, entity, command) == ('host1', 'mds.fs.a', ['_orch', 'deploy-staged'])
+    assert [r['name'] for r in requests] == ['mds.fs.a', 'mds.fs.b']
+    assert all(r['params'].get('stage') is True for r in requests)
+
+
+def test_stage_daemons_reports_every_daemon_when_cephadm_fails(cephadm_module: CephadmOrchestrator):
+    from cephadm.serve import CephadmServe
+    from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+
+    async def run_cephadm(host, entity, command, args, **kw):
+        if command != ['_orch', 'deploy-staged']:
+            return (['{}'], [], 0)
+        return ([], ['Traceback ...'], 1)
+
+    with mock.patch("cephadm.serve.CephadmServe._run_cephadm", side_effect=run_cephadm), \
+            with_host(cephadm_module, 'host1'):
+        specs = [CephadmDaemonDeploySpec.from_daemon_description(_dd('mds', n, service_name='mds.fs'))
+                 for n in ('fs.a', 'fs.b')]
+        failed = cephadm_module.wait_async(CephadmServe(cephadm_module)._stage_daemons('host1', specs))
+    assert sorted(failed) == ['mds.fs.a', 'mds.fs.b']
+    assert all('code 1' in v for v in failed.values())
+
+
+def test_runner_stages_one_call_per_host(cephadm_module: CephadmOrchestrator):
+    # the daemons of a host in one call, hosts in parallel
+    dds = [_dd('osd', 'a'), _dd('osd', 'b', host='host2'), _dd('osd', 'c'), _dd('osd', 'd', host='host2')]
+    world, calls, staged, patches = _runner_setup(cephadm_module, [d.name() for d in dds])
+    for p in patches:
+        p.start()
+    try:
+        with with_host(cephadm_module, 'host1'), with_host(cephadm_module, 'host2'):
+            _add_daemons(cephadm_module, dds)
+            from cephadm.serve import CephadmServe
+            with mock.patch.object(CephadmServe, '_stage_daemons',
+                                   side_effect=_stage_daemons_via(
+                                       lambda spec, **kw: _noop())) as stage:
+                StagedSwitchRunner(cephadm_module.upgrade, _FakePolicy(cephadm_module.upgrade, world)).run(dds, TARGET)
+            per_host = sorted((c.args[0], sorted(s.name() for s in c.args[1])) for c in stage.call_args_list)
+            assert per_host == [('host1', ['osd.a', 'osd.c']), ('host2', ['osd.b', 'osd.d'])]
+    finally:
+        for p in reversed(patches):
+            p.stop()
+
+
+async def _noop():
+    return 'ok'
