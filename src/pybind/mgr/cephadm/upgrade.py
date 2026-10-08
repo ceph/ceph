@@ -2205,6 +2205,8 @@ class CephadmUpgrade:
             })
         else:
             logger.info('Found mon/mgr/OSD/mds daemons still needing upgrade. Service cipher not set')
+            logger.info('Upgrade: Cannot mark complete, daemons still need upgrade: %s', still_needing_upgrade)
+            return
 
         # TODO: remove me when we're sure the entry this removes can't be
         # present. I think that's N+2 for the latest version we did an initial
