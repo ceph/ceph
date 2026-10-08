@@ -46,16 +46,16 @@ RADOS
 RBD (RADOS Block Device)
 ------------------------
 
-- Fixed a use-after-free in trash purge on image open error.
-- Fixed a use-after-free releasing object map locks during deep copy.
-- Fixed memory leaks in PWL cache discard operations.
-- Fixed a race between ``dispatch_deferred_writes()`` and ``~AbstractWriteLog()`` in the SSD PWL cache.
 - It's possible to specify the source cluster's ``mon_host`` and ``key`` for
   ``native`` format migration via the migration spec now.  This eliminates the
   dependency on a ``<cluster-name>.conf`` file in a known location, which is
   rather rigid and also challenging to disseminate in some environments.  The
   key can be embedded in the migration spec or just referenced from there while
   stored in the MON config-key store.
+- Fixed a use-after-free in trash purge on image open error.
+- Fixed a use-after-free releasing object map locks during deep copy.
+- Fixed memory leaks in PWL cache discard operations.
+- Fixed a race between ``dispatch_deferred_writes()`` and ``~AbstractWriteLog()`` in the SSD PWL cache.
 - Fixed strict weak ordering in ``rbd-mirror``'s ``PeerSpec::operator<``.
 - ``rbd-mirror`` now prunes obsolete primary mirror snapshots after relocation.
 - Fixed ``mgr/rbd_support`` perf iostat pool-spec filtering by data pool.
