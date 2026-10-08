@@ -176,7 +176,6 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
   auto ebliter = bl.cbegin();
   object_begin ob;
   ob.decode(ebliter);
-  map<string,bufferlist>::iterator i;
   bufferlist abl;
   bool skipping;
 
