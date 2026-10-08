@@ -1584,13 +1584,13 @@ void MonmapMonitor::trigger_healthy_stretch_mode()
 void MonmapMonitor::clear_stretch_mode_state()
 {
   dout(10) << __func__ << " clearing per-pool stretch mode state from monmap" << dendl;
+  ceph_assert(paxos.is_plugged());
 
   pending_map.stretch_mode_enabled = false;
   pending_map.tiebreaker_mon = "";
   pending_map.disallowed_leaders.clear();
   pending_map.stretch_marked_down_mons.clear();
   pending_map.last_changed = ceph_clock_now();
-  mon.stretch_mode_engaged = false;
   // Note: global_stretch_mode_enabled is already cleared here
   // since this is called in a per-pool stretch mode disable path,
   // so global_stretch_mode_enabled was never true.

@@ -17978,6 +17978,10 @@ void OSDMonitor::try_end_recovery_stretch_mode(bool force)
   if (!mon.is_leader()) return;
   if (!mon.is_degraded_stretch_mode()) return;
   if (!mon.is_recovering_stretch_mode()) return;
+  if (!mon.monmon()->pending_map.stretch_mode_enabled) {
+    dout(10) << __func__ << " aborting: stretch mode is pending disable" << dendl;
+    return;
+  }
   if (!is_readable()) {
     wait_for_readable_ctx(new CMonExitRecovery(this, force));
     return;
