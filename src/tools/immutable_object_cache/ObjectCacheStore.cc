@@ -147,8 +147,6 @@ int ObjectCacheStore::shutdown() {
 
 int ObjectCacheStore::init_cache() {
   ldout(m_cct, 20) << dendl;
-  std::string cache_dir = m_cache_root_dir;
-
   return 0;
 }
 

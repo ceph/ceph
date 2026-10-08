@@ -2890,7 +2890,6 @@ bool DaemonServer::_handle_command(
     cmdctx->reply(r, ss);
     return true;
   } else if (prefix == "device ls") {
-    std::set<string> devids;
     TextTable tbl;
     if (f) {
       f->open_array_section("devices");

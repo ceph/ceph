@@ -224,11 +224,10 @@ bool ConfigMap::parse_mask(
       }
       continue;
     }
-    string type, id;
+    string type;
     auto dotpos = i.find('.');
     if (dotpos != std::string::npos) {
       type = i.substr(0, dotpos);
-      id = i.substr(dotpos + 1);
     } else {
       type = i;
     }

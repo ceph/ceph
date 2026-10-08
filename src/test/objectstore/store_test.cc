@@ -937,7 +937,7 @@ TEST_P(StoreTest, FiemapHoles) {
     //fiemap test from 0 to SKIP_STEP * (MAX_EXTENTS - 1) + 3
     bufferlist bl;
     store->fiemap(ch, oid, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3, bl);
-    map<uint64_t,uint64_t> m, e;
+    map<uint64_t,uint64_t> m;
     auto p = bl.cbegin();
     decode(m, p);
     cout << " got " << m << std::endl;
@@ -957,7 +957,7 @@ TEST_P(StoreTest, FiemapHoles) {
     // fiemap test from SKIP_STEP to SKIP_STEP * (MAX_EXTENTS - 2) + 3
     bufferlist bl;
     store->fiemap(ch, oid, SKIP_STEP, SKIP_STEP * (MAX_EXTENTS - 2) + 3, bl);
-    map<uint64_t,uint64_t> m, e;
+    map<uint64_t,uint64_t> m;
     auto p = bl.cbegin();
     decode(m, p);
     cout << " got " << m << std::endl;
@@ -5169,7 +5169,6 @@ public:
       if (objects.size() == 0)
         break;
       ObjectStore::Transaction t;
-      std::map<std::string, ceph::buffer::list> attrset;
       for (vector<ghobject_t>::iterator p = objects.begin();
            p != objects.end(); ++p) {
         t.remove(cid, *p);
@@ -5682,7 +5681,6 @@ public:
     ObjectStore::Transaction& t = tt.emplace_back();
 
     map<string, bufferlist, less<>> attrs;
-    set<string> keys;
 
     while (entries--) {
       bufferlist name, value;

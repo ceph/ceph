@@ -360,7 +360,6 @@ int main(int argc, char** argv) {
   uint64_t io_depth = 8;
   int nparser_threads = 16;
   int nworker_threads = 16;
-  string file("input.txt");
   string ceph_conf_path("./ceph.conf");
   string pool("test_pool");
   bool skip_do_ops = false;

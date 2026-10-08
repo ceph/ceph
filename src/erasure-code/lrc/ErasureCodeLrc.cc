@@ -155,7 +155,6 @@ int ErasureCodeLrc::layers_parse(const string &description_string,
       return ERROR_LRC_ARRAY;
     }
     json_spirit::mArray layer_json = i->get_array();
-    ErasureCodeProfile profile;
     int index = 0;
     for (vector<json_spirit::mValue>::iterator j = layer_json.begin();
 	 j != layer_json.end();

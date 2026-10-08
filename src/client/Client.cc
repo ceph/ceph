@@ -8042,10 +8042,6 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
   int symlinks = 0;
   unsigned i = 0;
 
-  if (trimmed_path == "") {
-    std::string trimmed_path = path.get_trimmed_path();
-  }
-
   ldout(cct, 10) << __func__ << ": cur=" << *diri << " path=" << binstrprint(trimmed_path) << dendl;
 
   if (path.depth() == 0) {

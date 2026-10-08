@@ -1127,7 +1127,6 @@ protected:
     }
 
     if (destination & OP_DEST_OMAP) {
-      std::map<std::string, librados::bufferlist> values;
       ObjectReadOperation rop;
       rop.omap_get_vals2(omap_read.start_after, omap_read.filter_prefix, omap_read.max_return, nullptr, nullptr, nullptr);
       ret = io_ctx.aio_operate(oid, completions[slot], &rop, pbl);

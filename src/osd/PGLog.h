@@ -1709,7 +1709,6 @@ public:
 
 	std::set<hobject_t> did;
 	std::set<hobject_t> checked;
-	std::set<hobject_t> skipped;
 	for (auto i = log.log.rbegin(); i != log.log.rend(); ++i) {
 	  if (i->soid > info.last_backfill)
 	    continue;

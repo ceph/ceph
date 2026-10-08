@@ -5287,10 +5287,7 @@ int OSDMap::balance_primaries(
 
   // Get pgs by osd (map of osd -> pgs)
   // Get primaries by osd (map of osd -> primary)
-  map<uint64_t,set<pg_t>> pgs_by_osd;
   map<uint64_t,set<pg_t>> prim_pgs_by_osd;
-  map<uint64_t,set<pg_t>> acting_prims_by_osd;
-  pgs_by_osd = tmp_osd_map.get_pgs_by_osd(cct, pid, &prim_pgs_by_osd, &acting_prims_by_osd);
 
   // Construct information about the pgs and osds we will consider in new primary mappings,
   // as well as a map of all pgs and their original primary osds.

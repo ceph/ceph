@@ -348,7 +348,6 @@ int TableTool::main(std::vector<const char*> &argv)
 
   const std::string role_str = std::string(argv[0]);
   const std::string mode = std::string(argv[1]);
-  const std::string table = std::string(argv[2]);
 
   r = role_selector.parse(*fsmap, role_str);
   if (r < 0) {

@@ -3621,7 +3621,6 @@ int process_pg_map_command(
   }
 
   if (prefix == "pg dump") {
-    string val;
     vector<string> dumpcontents;
     set<string> what;
     if (cmd_getval(cmdmap, "dumpcontents", dumpcontents)) {
