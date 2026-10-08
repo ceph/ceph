@@ -216,6 +216,7 @@ const std::map<std::string,std::string>& DaemonState::_get_config_defaults()
       decode(config_defaults, p);
     } catch (buffer::error& e) {
     }
+    config_defaults_bl.clear();
   }
   return config_defaults;
 }
