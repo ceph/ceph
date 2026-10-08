@@ -7,6 +7,7 @@ from unittest import mock
 
 from cephadm import CephadmOrchestrator
 from cephadm.staged_switch import (
+    OSD_OK_TO_STOP_POLL_SECONDS,
     CrushTree,
     MdsStagedSwitchPolicy,
     OsdStagedSwitchPolicy,
@@ -2177,3 +2178,33 @@ def test_osd_stage_ahead_off_stages_group_by_group(cephadm_module: CephadmOrches
     with _OsdRun(cephadm_module, mons, stage_ahead=False) as run:
         run.one_pass()
         assert sorted(run.staged) == ['osd.0', 'osd.1']
+
+
+def test_osd_ok_to_stop_polled_every_two_seconds(cephadm_module: CephadmOrchestrator):
+    # osd.0 restarts on its own and misses writes: no host can go; it has
+    # caught up 5 s later and the next group is taken down within one poll
+    # (2 s) of that - not at the next 15 s retry
+    mons = _FakeOsdMons()
+    with _OsdRun(cephadm_module, mons) as run:
+        run.one_pass()                                   # h1
+        mons.recovering.add(0)
+        t_clear = mons.clock.now + 5
+        orig_ok, orig_cmd = mons.ok_to_stop, mons.mon_command
+        taken_down_at = []
+
+        def ok_to_stop(ids):
+            if mons.clock.now >= t_clear:
+                mons.recovering.clear()
+            return orig_ok(ids)
+
+        def mon_command(cmd, inbuf=None):
+            if cmd.get('prefix') == 'osd set-group':
+                taken_down_at.append(mons.clock.now)
+            return orig_cmd(cmd, inbuf)
+        mons.ok_to_stop = ok_to_stop
+        with mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command", side_effect=mon_command), \
+                mock.patch("cephadm.module.CephadmOrchestrator.mon_command", side_effect=mon_command):
+            run.one_pass()
+        assert run.groups[-1] == [2, 3]
+        assert len(taken_down_at) == 1
+        assert t_clear <= taken_down_at[0] <= t_clear + OSD_OK_TO_STOP_POLL_SECONDS
