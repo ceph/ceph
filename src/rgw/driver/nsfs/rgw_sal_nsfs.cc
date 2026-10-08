@@ -276,6 +276,31 @@ static bool entry_is_content(int parent_fd, std::string_view name,
  * standard RGW_ATTR_ACL attribute, matching rados. The former
  * NSFSOwner xattr could not represent account-owned objects. */
 
+/* The storage class a listing row should report.
+ *
+ * From the object's own attribute, which is where the write path puts
+ * a requested class.  Absent means STANDARD -- RGW stores no
+ * attribute for the default -- and that is what the absence means
+ * rather than a fallback.
+ *
+ * A literal STANDARD used to be assigned at twelve sites.  An object
+ * written with a non-default class therefore had it on disk, answered
+ * it from HEAD (rgw_rest.cc maps the attribute to the
+ * X-Amz-Storage-Class header), and listed as STANDARD:  the same shape
+ * as the demoted-version, multipart and copy entries, where the row
+ * carried less than the object.
+ *
+ * Not a counted string -- see counted_string_value() -- so the bytes
+ * are the value. */
+static std::string listed_storage_class(const Attrs& attrs)
+{
+  auto i = attrs.find(RGW_ATTR_STORAGE_CLASS);
+  if ((i == attrs.end()) || (i->second.length() == 0)) {
+    return RGW_STORAGE_CLASS_STANDARD;
+  }
+  return i->second.to_str();
+}
+
 static std::string to_base36(uint64_t v)
 {
   if (v == 0) return "0";
@@ -2148,7 +2173,7 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
   bde.meta.size = stx.stx_size;
   bde.meta.accounted_size = stx.stx_size;
   bde.meta.mtime = from_statx_timestamp(stx.stx_mtime);
-  bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+  bde.meta.storage_class = listed_storage_class(attrs);
   bde.meta.appendable = true;
   bufferlist etag_bl;
   if (rgw::sal::get_attr(attrs, RGW_ATTR_ETAG, etag_bl)) {
@@ -3019,7 +3044,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       bde.meta.size = ent->get_stx().stx_size;
       bde.meta.accounted_size = ent->get_stx().stx_size;
       bde.meta.mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
-      bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+      bde.meta.storage_class = listed_storage_class(attrs);
 
       bufferlist etag_bl;
       if (rgw::sal::get_attr(attrs, RGW_ATTR_ETAG, etag_bl)) {
@@ -3215,6 +3240,11 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
               bde.meta.etag = etag_bl.to_str();
             }
 
+            /* Set here, with the other attribute-derived fields,
+             * because `attrs` does not outlive this block.  A version
+             * entry we could not open keeps the default below. */
+            bde.meta.storage_class = listed_storage_class(attrs);
+
             ::close(tfd);
           }
 
@@ -3222,7 +3252,9 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
           bde.meta.size = vstx.stx_size;
           bde.meta.accounted_size = vstx.stx_size;
           bde.meta.mtime = from_statx_timestamp(vstx.stx_mtime);
-          bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+          if (bde.meta.storage_class.empty()) {
+            bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+          }
 
           if (bde.meta.etag.empty()) {
             bde.meta.etag = synthesize_etag(vstx);
@@ -13113,6 +13145,34 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
         }
       }
     }
+  }
+
+  /* The requested storage class, stored so it can be answered.
+   *
+   * nsfs accepted `x-amz-storage-class` and dropped it:  the op layer
+   * assigns the header to `s->dest_placement.storage_class` without
+   * validating it (rgw_op.cc), and the only check anywhere is in
+   * rados's zone-placement lookup, which exists because rados has to
+   * resolve a pool.  nsfs needs no pool, so nothing looked and nothing
+   * stored it -- a client asking for GLACIER got a 200, HEAD reported
+   * no class at all, and the listing said STANDARD.
+   *
+   * Stored rather than refused, because interop requires us to hold
+   * it:  NooBaa keeps a class per object in `user.storage_class` --
+   * including the unmigrated `GLACIER_DA` -- so an adopted tree
+   * carries classes we must be able to serve, and refusing to set one
+   * would leave us able to read a class we could never write.
+   *
+   * dbstore is the precedent for a driver storing it
+   * (`dbstore.cc`, on its meta write):  a plain string, when the rule
+   * names one.  The generic layer does the rest -- `rgw_rest.cc` maps
+   * this attribute to the `X-Amz-Storage-Class` response header, so
+   * HEAD and GET answer it without anything further here. */
+  if (ptail_placement_rule && !ptail_placement_rule->storage_class.empty() &&
+      (attrs.find(RGW_ATTR_STORAGE_CLASS) == attrs.end())) {
+    bufferlist scbl;
+    scbl.append(ptail_placement_rule->storage_class);
+    attrs[RGW_ATTR_STORAGE_CLASS] = std::move(scbl);
   }
 
   /* A bucket's default retention applies to the version this PUT
