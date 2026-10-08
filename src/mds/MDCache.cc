@@ -30,6 +30,7 @@
 
 #include "MDSRank.h"
 #include "Server.h"
+#include "cephfs_features.h" // for CEPHFS_FEATURE_QUARANTINE
 #include "Locker.h"
 #include "MDLog.h"
 #include "MDBalancer.h"
@@ -14094,6 +14095,11 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
       }
       if (qis->qtine_op == QUARANTINE_DEL) {
         for (auto& [client, cap] : in->get_client_caps()) {
+          // clients without quarantine support do not know the message; they
+          // get their caps back via issue_caps() above.
+          if (!cap.get_session()->info.has_feature(CEPHFS_FEATURE_QUARANTINE)) {
+            continue;
+          }
           dout(20) << __func__ << " sending MQuarantineDisable for inode "
                    << in->ino() << " to client " << client << dendl;
           auto msg = make_message<MQuarantineDisable>();
@@ -15263,6 +15269,10 @@ bool MDCache::start_revoke_caps_for_inode(CInode *in, inodeno_t qtine_root_ino, 
   mdr->internal_op_finish = new LambdaContext([this, in, qtine_op](int r) {
     if (qtine_op == QUARANTINE_DEL) {
       for (auto& [client, cap] : in->get_client_caps()) {
+        // only quarantine-aware clients know the message
+        if (!cap.get_session()->info.has_feature(CEPHFS_FEATURE_QUARANTINE)) {
+          continue;
+        }
         dout(20) << __func__ << " sending MQuarantineDisable for inode " << in->ino() << " to client " << client << dendl;
         auto msg = make_message<MQuarantineDisable>();
         msg->ino = in->ino();
