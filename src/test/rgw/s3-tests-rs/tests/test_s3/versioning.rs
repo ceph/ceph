@@ -1323,6 +1323,20 @@ async fn test_delete_marker_suspended() {
     check_delete_marker(&client, &bucket_name, key, "true").await;
 }
 
+/* Needs lifecycle processing, despite living in this module.
+ *
+ * It sets a lifecycle configuration and then sleeps
+ * `6 * lc_debug_interval`, so it only passes against a gateway with
+ * `rgw_lc_debug_interval` set and `lc_debug_interval` present in
+ * s3tests.conf -- that is, started with `rgw-vstart.sh
+ * --with-lifecycle`.
+ *
+ * The `baseline` profile filters out `test(lifecycle::)`, which makes
+ * it reasonable to assume no lifecycle dependency is left in a
+ * baseline run.  This is the exception, and it is in `versioning::`
+ * because delete-marker expiration is a versioning behaviour that
+ * lifecycle happens to drive.  Without the flag it fails on the
+ * marker still being there, which reads as a versioning defect. */
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]

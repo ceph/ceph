@@ -78,6 +78,32 @@ tag, so there is nothing more precise to point at.
 rediscovering it.  See `feedback_derive_from_shipped_noobaa` and
 `project_scale_team_questions` in the design notes.
 
+## Still to incorporate into the workflow design
+
+Agreed 2026-10-08, not yet built.  Recorded here rather than patched
+in reactively.
+
+**`IX_` is for *interchange*.**  It is this driver's prefix on both
+environment variables and config keys.  A two-letter prefix is only
+obvious to whoever chose it, so it needs glossing wherever it appears
+-- here, in `list` output, and at the top of `standup.rs`.
+
+**Config should direct where things live, and there should be no
+invented default.**  `work` is where a gigabyte of worktree goes *and*
+where the config store and data root live -- the artifacts this
+exercise produces.  The first version defaulted to
+`~/.cache/nsfs-interchange`, which was wrong twice:  it put the
+deliverable somewhere nominally disposable, and it chose the location
+without being asked.  The driver should take the location from config
+or from the environment and **stop** if neither supplies one.
+
+**XDG cache semantics do not control this.**  I reached for them to
+justify the default;  this work is explicit, and a location given on
+purpose needs no appeal to a general convention.  The reasoning, not
+just the path, was the mistake.
+
+---
+
 ## Their lock does not `npm ci`, so the tree is pinned here
 
 `npm ci` is the right verb:  it installs a lockfile exactly, refuses

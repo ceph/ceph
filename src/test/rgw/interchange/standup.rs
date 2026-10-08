@@ -70,7 +70,10 @@ impl Env {
             pin: env_or("IX_PIN", "08d063f86"),
             data: env_or("IX_DATA", &format!("{work}/data")).into(),
             work: work.into(),
-            port: env_or("IX_PORT", "6443").parse().unwrap_or(6443),
+            /* their HTTP port.  HTTP rather than HTTPS deliberately:
+             * the corpus talks to this with the Rust SDK and a
+             * self-signed certificate is a problem worth not having. */
+            port: env_or("IX_PORT", "6001").parse().unwrap_or(6001),
             account: env_or("IX_ACCOUNT", "interchange"),
             bucket: env_or("IX_BUCKET", "interchange"),
             /* Fixed rather than generated:  the corpus has to be
@@ -97,6 +100,14 @@ impl Env {
 
     fn node(&self) -> String {
         env_or("IX_NODE", "node")
+    }
+
+    fn pid_file(&self) -> PathBuf {
+        self.work.join("nsfs.pid")
+    }
+
+    fn log_file(&self) -> PathBuf {
+        self.work.join("nsfs.log")
     }
 }
 
@@ -135,7 +146,9 @@ fn main() {
         "patch" => patch(&env),
         "build" => build(&env),
         "config" => config(&env),
-        "serve" | "capture" | "stop" => unbuilt(cmd),
+        "serve" => serve(&env),
+        "stop" => stop(&env),
+        "capture" => unbuilt(cmd),
         "up" => ["pin", "worktree", "patch", "build", "config"]
             .iter()
             .try_for_each(|s| match *s {
@@ -158,7 +171,10 @@ fn list(env: &Env) {
     println!("steps:");
     for (name, what) in STEPS {
         let mark =
-            if matches!(*name, "pin" | "worktree" | "patch" | "build" | "config") {
+            if matches!(
+                *name,
+                "pin" | "worktree" | "patch" | "build" | "config" | "serve" | "stop"
+            ) {
                 "x"
             } else {
                 " "
@@ -522,6 +538,24 @@ fn config(env: &Env) -> Result<(), String> {
         println!("         bucket {:?} created at {}", env.bucket, bucket_path.display());
     }
 
+    /* Their NC config file, which is where a config override goes.
+     *
+     * ALLOW_HTTP, because in NC mode the S3 endpoint refuses to serve
+     * HTTP at all unless it is set -- `if (nsfs_config_root &&
+     * !config.ALLOW_HTTP)` in endpoint.js, which then only
+     * `dbg.warn`s "HTTP is not allowed for NC NSFS" and carries on
+     * with no listener.  A warning in a log and a closed port is a
+     * confusing pair to debug, which is the reason this comment is
+     * here.
+     *
+     * HTTP rather than a certificate because the corpus talks to this
+     * with the Rust SDK;  a self-signed cert is a problem worth not
+     * having when nothing here leaves the host. */
+    let cfg = env.config_root().join("config.json");
+    std::fs::write(&cfg, "{\n    \"ALLOW_HTTP\": true\n}\n")
+        .map_err(|e| format!("cannot write {}: {e}", cfg.display()))?;
+    println!("         wrote {} (ALLOW_HTTP)", cfg.display());
+
     /* What `capture` will need, written where it can find it rather
      * than rediscovered. */
     let creds = env.work.join("credentials");
@@ -540,6 +574,142 @@ fn config(env: &Env) -> Result<(), String> {
     .map_err(|e| format!("cannot write {}: {e}", creds.display()))?;
     println!("         wrote {}", creds.display());
     Ok(())
+}
+
+/// Start their S3 endpoint over the data root.
+///
+/// HTTP only.  `--https_port -1` turns TLS off the way they turn IAM
+/// off, and the corpus talks to this with the Rust SDK, for which a
+/// self-signed certificate is a problem worth not having.
+///
+/// Backgrounded with its pid recorded, because the handoff is
+/// sequential:  something has to stop this before RGW opens the same
+/// tree, and `stop` needs to know what to stop.
+///
+/// Idempotent:  an endpoint already answering is left alone.
+fn serve(env: &Env) -> Result<(), String> {
+    if let Some(pid) = running(env) {
+        println!("serve    already up, pid {pid}, port {}", env.port);
+        return Ok(());
+    }
+    let wt = env.worktree();
+    if !wt.join("build/Release/nb_native.node").exists() {
+        return Err("no native addon;  run `build` first".into());
+    }
+    if !env.config_root().join("buckets").exists() {
+        return Err("no bucket records;  run `config` first".into());
+    }
+
+    let log = std::fs::File::create(env.log_file())
+        .map_err(|e| format!("cannot create {}: {e}", env.log_file().display()))?;
+    let errlog = log
+        .try_clone()
+        .map_err(|e| format!("cannot clone the log handle: {e}"))?;
+
+    let child = Command::new(env.node())
+        .args([
+            "src/cmd/nsfs.js",
+            "--config_root",
+            &env.config_root().display().to_string(),
+            "--http_port",
+            &env.port.to_string(),
+            /* Every TLS listener, not only S3's.
+             *
+             * `if (https_port > 0)` is the test, so a non-positive
+             * port disables one -- but STS and Vector have their own
+             * defaults (7443, 14443) and keep them unless told
+             * otherwise.  Passing -1 for S3 alone left those two
+             * starting, and the failure surfaced as `EACCES listen
+             * EACCES` from start_https_server, which reads as a
+             * permission problem on the port asked for rather than as
+             * a port nobody asked for.  IAM already defaults to -1. */
+            /* `--flag=-1`, not `--flag -1`.
+             *
+             * They parse with minimist, which reads a bare `-1` as a
+             * short option rather than as a value:  `--https_port -1`
+             * leaves https_port `true`, `Number(true) || 6443` is 1,
+             * and the endpoint tries to listen on port 1 and gets
+             * EACCES.  The error names `0.0.0.0:1`, which is the only
+             * clue that the argument never arrived. */
+            "--https_port=-1",
+            "--https_port_sts=-1",
+            "--https_port_vector=-1",
+        ])
+        .current_dir(&wt)
+        .stdout(Stdio::from(log))
+        .stderr(Stdio::from(errlog))
+        .spawn()
+        .map_err(|e| format!("cannot start {}: {e}", env.node()))?;
+
+    let pid = child.id();
+    std::fs::write(env.pid_file(), pid.to_string())
+        .map_err(|e| format!("cannot write {}: {e}", env.pid_file().display()))?;
+    println!("serve    started pid {pid}, log {}", env.log_file().display());
+
+    /* Wait for the port rather than for a message in the log:  the
+     * question is whether it will answer, and that is what the corpus
+     * will ask it. */
+    for i in 0..120 {
+        if std::net::TcpStream::connect(("127.0.0.1", env.port)).is_ok() {
+            println!("serve    answering on http://127.0.0.1:{}", env.port);
+            return Ok(());
+        }
+        if !alive(pid) {
+            return Err(format!(
+                "it exited before answering;  see {}",
+                env.log_file().display()
+            ));
+        }
+        if i == 10 {
+            println!("serve    waiting for the port...");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    Err(format!(
+        "it did not answer on port {} within a minute;  see {}",
+        env.port,
+        env.log_file().display()
+    ))
+}
+
+/// Stop the endpoint, leaving the tree.
+///
+/// The tree is the artifact and must survive:  RGW opens it next.
+fn stop(env: &Env) -> Result<(), String> {
+    let Some(pid) = running(env) else {
+        println!("stop     not running");
+        let _ = std::fs::remove_file(env.pid_file());
+        return Ok(());
+    };
+    /* SIGTERM, then wait:  it has a tree open and should be allowed to
+     * close it. */
+    let _ = Command::new("kill").arg(pid.to_string()).status();
+    for _ in 0..60 {
+        if !alive(pid) {
+            let _ = std::fs::remove_file(env.pid_file());
+            println!("stop     pid {pid} stopped;  {} left in place", env.data.display());
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    Err(format!("pid {pid} did not stop within 30s"))
+}
+
+/// The pid of a running endpoint of ours, if there is one.
+fn running(env: &Env) -> Option<u32> {
+    let pid: u32 = std::fs::read_to_string(env.pid_file())
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    alive(pid).then_some(pid)
+}
+
+/// Whether a pid is alive, without a libc dependency and without
+/// matching on a command line -- which is how three wait loops in this
+/// driver\'s own development ended up waiting on themselves.
+fn alive(pid: u32) -> bool {
+    Path::new(&format!("/proc/{pid}")).exists()
 }
 
 /// Their CLI.  Quiet unless it fails, because `status` is used as a
