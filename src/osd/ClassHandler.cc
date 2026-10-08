@@ -11,6 +11,7 @@
 #include <dirent.h>
 
 #include <map>
+#include <string_view>
 
 #if defined(__FreeBSD__)
 #include <sys/param.h>
@@ -56,26 +57,27 @@ int ClassHandler::open_all_classes()
   if (!dir)
     return -errno;
 
+  constexpr std::string_view prefix{CLS_PREFIX};
+  constexpr std::string_view suffix{CLS_SUFFIX};
   struct dirent *pde = nullptr;
   int r = 0;
   while ((pde = ::readdir(dir))) {
-    if (pde->d_name[0] == '.')
+    std::string_view name{pde->d_name};
+    if (name.size() <= prefix.size() + suffix.size() ||
+        !name.starts_with(prefix) || !name.ends_with(suffix)) {
       continue;
-    if (strlen(pde->d_name) > sizeof(CLS_PREFIX) - 1 + sizeof(CLS_SUFFIX) - 1 &&
-	strncmp(pde->d_name, CLS_PREFIX, sizeof(CLS_PREFIX) - 1) == 0 &&
-	strcmp(pde->d_name + strlen(pde->d_name) - (sizeof(CLS_SUFFIX) - 1), CLS_SUFFIX) == 0) {
-      char cname[PATH_MAX + 1];
-      strncpy(cname, pde->d_name + sizeof(CLS_PREFIX) - 1, sizeof(cname) -1);
-      cname[strlen(cname) - (sizeof(CLS_SUFFIX) - 1)] = '\0';
-      ldout(cct, 10) << __func__ << " found " << cname << dendl;
-      ClassData *cls;
-      // skip classes that aren't in 'osd class load list'
-      r = open_class(cname, &cls);
-      if (r < 0 && r != -EPERM)
-	goto out;
+    }
+    name.remove_prefix(prefix.size());
+    name.remove_suffix(suffix.size());
+    std::string cname{name};
+    ldout(cct, 10) << __func__ << " found " << cname << dendl;
+    ClassData *cls;
+    // skip classes that aren't in 'osd class load list'
+    r = open_class(cname, &cls);
+    if (r < 0 && r != -EPERM) {
+      break;
     }
   }
- out:
   closedir(dir);
   return r;
 }
