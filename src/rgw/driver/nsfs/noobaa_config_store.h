@@ -65,6 +65,16 @@ struct NooBaaAccessKey {
   std::string encrypted_secret_key;
   std::string creation_date;
   bool deactivated{false};
+
+  /* Filled by I2's `decrypt_store_secrets()`, empty until then.
+   *
+   * RGW keeps a secret in the clear -- `RGWAccessKey` holds a plain
+   * string -- so the import is the moment a deployment's secrets stop
+   * being encrypted at rest (ACCOUNT_IMPORT.md §5.1).  That is RGW's
+   * long-standing model rather than something adoption introduces,
+   * but it is a change in posture on a specific day and belongs in
+   * the migration documentation rather than in a discovery. */
+  std::string secret_key;
 };
 
 /* The POSIX half of an identity.
@@ -158,6 +168,18 @@ struct NooBaaSettings {
    * a live permission fact and not an absence. */
   bool dynamic_supplemental_groups{false};
   bool have_dynamic_supplemental_groups{false};
+
+  /* Where the master keys are, which decides whether
+   * `master_keys.json` is even the right thing to look for.
+   *
+   * `NC_MASTER_KEYS_STORE_TYPE` is `file` by default and may be
+   * `executable`, in which case the keys come from a program's
+   * standard output and no key file exists at all.  So a reader that
+   * assumes the file is reading the wrong deployment rather than a
+   * broken one. */
+  std::string master_keys_store_type;      /* "file" | "executable" */
+  std::string master_keys_file_location;   /* empty: beside config.json */
+  std::string master_keys_get_executable;
 };
 
 /* A record that is there and could not be read. */

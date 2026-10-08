@@ -37,6 +37,7 @@
 #include "rgw_bucket_encryption.h"
 #include "driver/nsfs/identity_db.h"
 #include "driver/nsfs/noobaa_config_store.h"
+#include "driver/nsfs/noobaa_master_keys.h"
 #include "driver/nsfs/personality.h"
 #include "rgw_auth.h"
 #include "common/ceph_json.h"
@@ -8577,6 +8578,317 @@ TEST_F(NooBaaStoreTest, ReadingTheStoreWritesNothing)
 	     R"({"_id":"1","name":"a-bucket","versioning":"ENABLED"})");
   EXPECT_NE(snapshot(), before)
       << "the mtime comparison cannot detect a write, so it proves nothing";
+}
+
+/* ------------------------------------------------------------------ *
+ * I2 -- the master key, and the secrets it opens.
+ *
+ * The master key below is **the one NooBaa generated** in the store
+ * `standup.rs` stood up, and `NB_ACCOUNT_PLAIN` above carries the
+ * ciphertext **their CLI produced** under it.  The plaintext is known
+ * because the stand-up chose the secret:  so these tests decrypt real
+ * NooBaa output and compare against a known answer, which is the
+ * strongest control available for this stage and the one §9 asks for.
+ * ------------------------------------------------------------------ */
+
+static constexpr const char* NB_MASTER_KEYS = R"({
+  "timestamp": 1791478567852,
+  "active_master_key": "6ac7cb2751b72219a4bae375",
+  "master_keys_by_id": {
+    "6ac7cb2751b72219a4bae375": {
+      "id": "6ac7cb2751b72219a4bae375",
+      "cipher_key": "I/WLyx1+z7KYouUZAwp6b7WT9QdBFqstDu+67OPlnX4=",
+      "cipher_iv": "EUWSw9er4NMWTkuJkB2PsQ==",
+      "encryption_type": "aes-256-gcm"
+    }
+  }
+})";
+
+/* what `account add --secret_key` was given */
+static constexpr const char* NB_PLAIN_SECRET =
+  "interchangesecretkeyinterchangesecretkey";
+
+class NooBaaKeysTest : public NooBaaStoreTest {
+public:
+  nsfs::NooBaaSettings file_store() {
+    nsfs::NooBaaSettings s;
+    s.master_keys_store_type = "file";
+    return s;
+  }
+
+  nsfs::NooBaaMasterKeys load(const nsfs::NooBaaSettings& s, int expect = 0) {
+    nsfs::NooBaaMasterKeys keys;
+    EXPECT_EQ(keys.load(env->dpp, s, store), expect);
+    return keys;
+  }
+};
+
+/* The plausibility check, which is the only thing that reports a wrong
+ * master key.
+ *
+ * Pure, so both polarities are here without a cipher.  Their
+ * construction computes no authentication tag, so a wrong key
+ * decrypts to keystream of exactly the right length and the cipher
+ * reports success -- this function is what stands between that and an
+ * import full of credentials that do not authenticate. */
+TEST(NooBaaSecretShape, OnlyACredentialIsPlausible)
+{
+  EXPECT_TRUE(nsfs::secret_is_plausible(NB_PLAIN_SECRET));
+  EXPECT_TRUE(nsfs::secret_is_plausible(
+      "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=="));
+  EXPECT_TRUE(nsfs::secret_is_plausible("12345678"));
+
+  /* keystream:  what a wrong key actually produced against the real
+   * ciphertext, measured before this was written */
+  EXPECT_FALSE(nsfs::secret_is_plausible(
+      std::string("\x19\x21\xb7\xe7o'9Y\x8a\x83;\xb8\xf2""aPp", 16)));
+  /* a single control character is enough, which is the point */
+  EXPECT_FALSE(nsfs::secret_is_plausible(std::string("abcdefgh\x01", 9)));
+  EXPECT_FALSE(nsfs::secret_is_plausible(std::string("abcdefgh\0", 9)));
+  EXPECT_FALSE(nsfs::secret_is_plausible(""));
+  EXPECT_FALSE(nsfs::secret_is_plausible("short"));
+  EXPECT_FALSE(nsfs::secret_is_plausible(std::string(257, 'a')));
+}
+
+/* The real key opens the real ciphertext.
+ *
+ * **This is also the IV-length control.**  Their IV is 16 bytes and
+ * GCM's default is 12;  a decryption that did not set the length
+ * explicitly would run a different construction and this comparison
+ * would fail rather than merely warn. */
+TEST_F(NooBaaKeysTest, TheirKeyOpensTheirSecret)
+{
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  auto keys = load(file_store());
+  ASSERT_EQ(keys.size(), 1u);
+  EXPECT_EQ(keys.active(), "6ac7cb2751b72219a4bae375");
+  EXPECT_TRUE(keys.have("6ac7cb2751b72219a4bae375"));
+
+  std::string secret;
+  ASSERT_EQ(keys.decrypt(env->dpp, "6ac7cb2751b72219a4bae375",
+			 "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51Fijv"
+			 "Rm3nJgdKQ==", secret), 0);
+  EXPECT_EQ(secret, NB_PLAIN_SECRET);
+}
+
+/* A wrong key is detected, and that is the stage.
+ *
+ * The cipher cannot report it -- no tag is computed -- so the only
+ * thing that can is what came out.  Both polarities against one
+ * ciphertext:  the right key yields the secret, a key of the right
+ * shape and the wrong bytes is refused with -EKEYREJECTED rather than
+ * returning garbage a caller would store. */
+TEST_F(NooBaaKeysTest, AWrongKeyIsDetectedRatherThanReturned)
+{
+  const std::string ct = "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51Fijv"
+			 "Rm3nJgdKQ==";
+  const std::string id = "6ac7cb2751b72219a4bae375";
+
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  std::string good;
+  ASSERT_EQ(load(file_store()).decrypt(env->dpp, id, ct, good), 0);
+  ASSERT_EQ(good, NB_PLAIN_SECRET);
+
+  /* the same store with 32 zero bytes for a key:  valid base64, right
+   * length, wrong key */
+  std::string wrong{NB_MASTER_KEYS};
+  const std::string zeros = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+  auto at = wrong.find("I/WLyx1+z7KYouUZAwp6b7WT9QdBFqstDu+67OPlnX4=");
+  ASSERT_NE(at, std::string::npos);
+  wrong.replace(at, 44, zeros);
+  write_file(store + "/master_keys.json", wrong);
+
+  std::string bad{"untouched"};
+  EXPECT_EQ(load(file_store()).decrypt(env->dpp, id, ct, bad),
+	    -EKEYREJECTED);
+  EXPECT_TRUE(bad.empty()) << "a rejected secret was still handed back";
+}
+
+/* The executable store form.
+ *
+ * `NC_MASTER_KEYS_STORE_TYPE` may be `executable`, and then no key
+ * file exists at all -- a reader that assumed `master_keys.json` would
+ * report a broken deployment rather than a differently configured one.
+ * The same key, delivered on standard output, opens the same secret. */
+TEST_F(NooBaaKeysTest, TheKeysMayComeFromAProgram)
+{
+  const std::string prog = (bp / "say-keys").string();
+  write_file(prog, std::string("#!/bin/sh\ncat <<'EOJ'\n") +
+		   NB_MASTER_KEYS + "\nEOJ\n");
+  ASSERT_EQ(::chmod(prog.c_str(), 0700), 0);
+
+  nsfs::NooBaaSettings s;
+  s.master_keys_store_type = "executable";
+  s.master_keys_get_executable = prog;
+
+  /* and no key file:  this must not be reading one by accident */
+  ASSERT_FALSE(std::filesystem::exists(store + "/master_keys.json"));
+
+  auto keys = load(s);
+  std::string secret;
+  ASSERT_EQ(keys.decrypt(env->dpp, "6ac7cb2751b72219a4bae375",
+			 "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51Fijv"
+			 "Rm3nJgdKQ==", secret), 0);
+  EXPECT_EQ(secret, NB_PLAIN_SECRET);
+
+  /* a program that fails is not an empty key store */
+  nsfs::NooBaaSettings broken = s;
+  broken.master_keys_get_executable = (bp / "no-such-program").string();
+  nsfs::NooBaaMasterKeys none;
+  EXPECT_LT(none.load(env->dpp, broken, store), 0);
+  EXPECT_TRUE(none.empty());
+
+  nsfs::NooBaaSettings unset;
+  unset.master_keys_store_type = "executable";
+  EXPECT_EQ(none.load(env->dpp, unset, store), -ENOENT);
+}
+
+/* A store this cannot read says so, each in its own way.
+ *
+ * Distinguished because they mean different things:  a cipher we do
+ * not implement is a deployment we cannot import, a corrupt file is a
+ * file, and a key a record names and the store lacks is §5's hard
+ * failure with nothing to fall back to. */
+TEST_F(NooBaaKeysTest, AStoreThisCannotUseIsRefusedSpecifically)
+{
+  nsfs::NooBaaMasterKeys keys;
+
+  EXPECT_EQ(keys.load(env->dpp, file_store(), store), -ENOENT);
+
+  write_file(store + "/master_keys.json", "{ not json");
+  EXPECT_EQ(keys.load(env->dpp, file_store(), store), -EBADMSG);
+
+  write_file(store + "/master_keys.json", R"({"active_master_key":"x"})");
+  EXPECT_EQ(keys.load(env->dpp, file_store(), store), -ENOKEY);
+
+  /* a cipher we do not implement.  Refused rather than attempted:
+   * decrypting it as though it were theirs would produce garbage, and
+   * then the plausibility check would be the only thing to notice. */
+  std::string other{NB_MASTER_KEYS};
+  auto at = other.find("aes-256-gcm");
+  ASSERT_NE(at, std::string::npos);
+  other.replace(at, 11, "aes-256-ctr");
+  write_file(store + "/master_keys.json", other);
+  EXPECT_EQ(keys.load(env->dpp, file_store(), store), -EPROTONOSUPPORT);
+
+  /* a 16-byte key, which is not AES-256 */
+  std::string shortkey{NB_MASTER_KEYS};
+  at = shortkey.find("I/WLyx1+z7KYouUZAwp6b7WT9QdBFqstDu+67OPlnX4=");
+  ASSERT_NE(at, std::string::npos);
+  shortkey.replace(at, 44, "AAAAAAAAAAAAAAAAAAAAAA==");
+  write_file(store + "/master_keys.json", shortkey);
+  EXPECT_EQ(keys.load(env->dpp, file_store(), store), -EBADMSG);
+
+  /* a key a record names and the store does not hold */
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+  auto good = load(file_store());
+  std::string secret;
+  EXPECT_EQ(good.decrypt(env->dpp, "6ac7cb2751b72219a4bae999",
+			 "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51Fijv"
+			 "Rm3nJgdKQ==", secret), -ENOKEY);
+
+  /* ciphertext that is not base64 */
+  EXPECT_EQ(good.decrypt(env->dpp, "6ac7cb2751b72219a4bae375", "", secret),
+	    -EINVAL);
+}
+
+/* Every secret in a store, opened in one pass, and every failure
+ * reported.
+ *
+ * Collected rather than stopped at the first, for the reason I1
+ * collects unreadable records -- one run should say everything that is
+ * wrong -- and still an error, so no caller proceeds past a wrong key
+ * by ignoring the list. */
+TEST_F(NooBaaKeysTest, EverySecretOpensOrTheImportRefuses)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  auto c = read_store();
+  ASSERT_EQ(c.identities.size(), 2u);
+  auto keys = load(file_store());
+
+  std::vector<std::string> rejected;
+  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, rejected), 0)
+      << rejected.size() << " rejected, first: "
+      << (rejected.empty() ? std::string{} : rejected[0]);
+
+  const auto* plain = by_name(c, "interchange");
+  ASSERT_NE(plain, nullptr);
+  ASSERT_EQ(plain->access_keys.size(), 1u);
+  EXPECT_EQ(plain->access_keys[0].secret_key, NB_PLAIN_SECRET);
+  /* the ciphertext is still there:  nothing is rewritten in place */
+  EXPECT_FALSE(plain->access_keys[0].encrypted_secret_key.empty());
+
+  /* the anonymous account has no keys, so there is nothing to open and
+   * that is not a failure */
+  const auto* anon = by_name(c, "anonymous");
+  ASSERT_NE(anon, nullptr);
+  EXPECT_TRUE(anon->access_keys.empty());
+
+  /* and the negative case:  the wrong key refuses the whole store
+   * rather than importing two accounts with garbage credentials */
+  std::string wrong{NB_MASTER_KEYS};
+  auto at = wrong.find("I/WLyx1+z7KYouUZAwp6b7WT9QdBFqstDu+67OPlnX4=");
+  ASSERT_NE(at, std::string::npos);
+  wrong.replace(at, 44, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+  write_file(store + "/master_keys.json", wrong);
+
+  auto c2 = read_store();
+  auto badkeys = load(file_store());
+  std::vector<std::string> rejected2;
+  EXPECT_EQ(nsfs::decrypt_store_secrets(env->dpp, badkeys, c2, rejected2),
+	    -EKEYREJECTED);
+  ASSERT_EQ(rejected2.size(), 1u);
+  EXPECT_NE(rejected2[0].find("interchange"), std::string::npos)
+      << "the report does not name the identity: " << rejected2[0];
+  for (const auto& i : c2.identities) {
+    for (const auto& ak : i.access_keys) {
+      EXPECT_TRUE(ak.secret_key.empty())
+	  << i.name << " was given a secret from a rejected key";
+    }
+  }
+}
+
+/* A real store on disk, opened with its own key.
+ *
+ * `NSFS_NOOBAA_STORE` names a NooBaa configuration directory;  skipped
+ * when unset.  Where the tests above use their bytes in this test's
+ * layout, this is their store entire -- the key file where they put
+ * it, read through whatever `config.json` says the store type is. */
+TEST_F(NooBaaKeysTest, AStoreOnDiskOpensItsOwnSecrets)
+{
+  const char* dir = ::getenv("NSFS_NOOBAA_STORE");
+  if (!dir || !*dir) {
+    GTEST_SKIP() << "NSFS_NOOBAA_STORE is unset";
+  }
+
+  nsfs::NooBaaConfigStore cs(dir);
+  nsfs::NooBaaStoreContents c;
+  ASSERT_EQ(cs.read(env->dpp, c), 0);
+  ASSERT_GT(c.identities.size(), 0u);
+
+  nsfs::NooBaaMasterKeys keys;
+  ASSERT_EQ(keys.load(env->dpp, c.settings, dir), 0);
+
+  std::vector<std::string> rejected;
+  std::string why;
+  for (const auto& r : rejected) {
+    why += "\n  " + r;
+  }
+  ASSERT_EQ(nsfs::decrypt_store_secrets(env->dpp, keys, c, rejected), 0)
+      << why;
+
+  size_t opened = 0;
+  for (const auto& i : c.identities) {
+    for (const auto& ak : i.access_keys) {
+      EXPECT_TRUE(nsfs::secret_is_plausible(ak.secret_key)) << i.name;
+      ++opened;
+    }
+  }
+  /* an assertion over an empty set proves nothing */
+  EXPECT_GT(opened, 0u) << "no secret in the store was opened";
 }
 
 int main(int argc, char *argv[]) {

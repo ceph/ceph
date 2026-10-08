@@ -236,15 +236,29 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
       JSONParser p;
       if (!p.parse(doc.data(), doc.size())) {
 	unreadable(path, "not JSON");
-      } else if (p.find_obj("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS")) {
+      } else {
+	if (p.find_obj("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS")) {
+	  try {
+	    JSONDecoder::decode_json("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS",
+				     out.settings.dynamic_supplemental_groups,
+				     &p);
+	    out.settings.have_dynamic_supplemental_groups = true;
+	  } catch (const JSONDecoder::err& e) {
+	    unreadable(path, std::string("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_"
+					 "GROUPS: ") + e.what());
+	  }
+	}
+	/* Where the master keys live.  Absent means their defaults --
+	 * `file`, and the file beside config.json. */
 	try {
-	  JSONDecoder::decode_json("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS",
-				   out.settings.dynamic_supplemental_groups,
-				   &p);
-	  out.settings.have_dynamic_supplemental_groups = true;
+	  JSONDecoder::decode_json("NC_MASTER_KEYS_STORE_TYPE",
+				   out.settings.master_keys_store_type, &p);
+	  JSONDecoder::decode_json("NC_MASTER_KEYS_FILE_LOCATION",
+				   out.settings.master_keys_file_location, &p);
+	  JSONDecoder::decode_json("NC_MASTER_KEYS_GET_EXECUTABLE",
+				   out.settings.master_keys_get_executable, &p);
 	} catch (const JSONDecoder::err& e) {
-	  unreadable(path, std::string("NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_"
-				       "GROUPS: ") + e.what());
+	  unreadable(path, std::string("NC_MASTER_KEYS_*: ") + e.what());
 	}
       }
     } else if (ret != -ENOENT) {
