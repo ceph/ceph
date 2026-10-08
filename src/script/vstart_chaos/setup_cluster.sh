@@ -37,17 +37,22 @@ ceph tell mon.\* config set debug_paxos 1/10 >/dev/null
 ceph config set osd osd_crush_update_on_start false
 ceph config set osd bluestore_debug_inject_read_err true
 
-stretch=
+stretch= per_zone=
 if [ $ZONES = 2 ]; then
-    stretch=$(python3 - <<'EOF'
+    # the replicas per zone argument of 'osd pool create' became replica
+    read -r stretch per_zone < <(python3 - <<'EOF'
 import json, rados
 with rados.Rados(conffile="") as cluster:
     ret, out, err = cluster.mon_command(json.dumps({"prefix": "get_command_descriptions"}), b"")
 assert ret == 0, err
-print("num_zones" if any(
-    cmd["sig"][:3] == ["osd", "pool", "create"] and
-    any(isinstance(a, dict) and a.get("name") == "num_zones" for a in cmd["sig"])
-    for cmd in json.loads(out).values()) else "global")
+args = set()
+for cmd in json.loads(out).values():
+    if cmd["sig"][:3] == ["osd", "pool", "create"]:
+        args |= {a.get("name") for a in cmd["sig"] if isinstance(a, dict)}
+if "num_zones" in args:
+    print("num_zones", "replica" if "replica" in args else "num_replica_per_zone")
+else:
+    print("global")
 EOF
 )
     [ "${GLOBAL_STRETCH:-0}" = 1 ] && stretch=global
@@ -104,7 +109,7 @@ if [ $POOL_TYPE = erasure ]; then
     fi
     ceph osd pool set $POOL allow_ec_overwrites true
 elif [ "$stretch" = num_zones ]; then
-    ceph osd pool create $POOL replicated --num_zones 2 --num_replica_per_zone ${REPLICAS:-2} --osd_failure_domain osd --pg_num 16
+    ceph osd pool create $POOL replicated --num_zones 2 --$per_zone ${REPLICAS:-2} --osd_failure_domain osd --pg_num 16
 elif [ "$stretch" = global ]; then
     ceph osd pool create $POOL 16 16 replicated $rule
 else
