@@ -33,6 +33,7 @@ mod names;
 mod shapes;
 mod manifest;
 mod inventory;
+mod copy;
 mod generate;
 mod multipart;
 mod objects;

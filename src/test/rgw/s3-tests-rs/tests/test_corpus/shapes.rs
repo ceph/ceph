@@ -296,3 +296,78 @@ pub const MPU_COVERAGE: &[(PartCount, PartPattern, UploadState)] = &[
     (PartCount::Two, PartPattern::Uniform, UploadState::InFlight),
     (PartCount::Two, PartPattern::Uniform, UploadState::Aborted),
 ];
+
+/// What is being copied.
+///
+/// A multipart source is here because its ETag carries the `-<parts>`
+/// suffix and a copy re-assembles the bytes, so what the copy's ETag
+/// becomes is a question rather than an assumption.  Zero-length is
+/// here because it is the shape that skipped the write path and so
+/// skipped everything hung off it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CopySource {
+    Plain,
+    Empty,
+    Multipart,
+}
+
+impl CopySource {
+    pub fn label(self) -> &'static str {
+        match self {
+            CopySource::Plain => "plain",
+            CopySource::Empty => "empty",
+            CopySource::Multipart => "mpu",
+        }
+    }
+}
+
+/// Where the copy lands.
+///
+/// `SelfSame` is the degenerate one S3 refuses unless the metadata
+/// directive is REPLACE, and it is a recorded gap on this backend, so
+/// the corpus captures whatever comes back rather than asserting.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CopyDest {
+    SameBucket,
+    OtherBucket,
+    SelfSame,
+}
+
+impl CopyDest {
+    pub fn label(self) -> &'static str {
+        match self {
+            CopyDest::SameBucket => "same",
+            CopyDest::OtherBucket => "other",
+            CopyDest::SelfSame => "self",
+        }
+    }
+}
+
+/// Whether the copy keeps the source's metadata and tags or replaces
+/// them.  Two directives, and they are independent:  REPLACE metadata
+/// with COPY tagging is a real combination.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Directive {
+    Copy,
+    Replace,
+}
+
+impl Directive {
+    pub fn label(self) -> &'static str {
+        match self {
+            Directive::Copy => "keep",
+            Directive::Replace => "repl",
+        }
+    }
+}
+
+/// The coverage tier:  every value of every axis at least once.
+pub const COPY_COVERAGE: &[(CopySource, CopyDest, Directive, Directive)] = &[
+    (CopySource::Plain, CopyDest::SameBucket, Directive::Copy, Directive::Copy),
+    (CopySource::Plain, CopyDest::OtherBucket, Directive::Replace, Directive::Replace),
+    (CopySource::Plain, CopyDest::SameBucket, Directive::Replace, Directive::Copy),
+    (CopySource::Empty, CopyDest::SameBucket, Directive::Copy, Directive::Copy),
+    (CopySource::Multipart, CopyDest::SameBucket, Directive::Copy, Directive::Copy),
+    (CopySource::Multipart, CopyDest::OtherBucket, Directive::Copy, Directive::Copy),
+    (CopySource::Plain, CopyDest::SelfSame, Directive::Replace, Directive::Copy),
+];
