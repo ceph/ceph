@@ -179,7 +179,8 @@ class ZoneThrasher(Thrasher):
         with safe_while(
                 sleep=5,
                 tries=math.ceil(self.pool_timeout / 5),
-                action='wait for stretch pool') as proceed:
+                action='wait for stretch pool',
+                _raise=False) as proceed:
             while proceed():
                 if self.stopping.is_set():
                     return False
