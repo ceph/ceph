@@ -1994,9 +1994,10 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 33;
+  uint8_t v = 34;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
+  // v34 (num_zones, replica) belongs to the release that ships stretch zones
   if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_UMBRELLA)) {
     v = 32;
   }
@@ -2047,7 +2048,9 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(tmp, bl);
   }
   encode((uint32_t)0, bl); // crash_replay_interval
-  encode(min_size, bl);
+  // before v34, min_size counts every zone
+  const __u8 encoded_min_size = v >= 34 ? min_size : min_size * num_zones;
+  encode(encoded_min_size, bl);
   encode(quota_max_bytes, bl);
   encode(quota_max_objects, bl);
   encode(tiers, bl);
@@ -2128,6 +2131,8 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(shard_mapping, bl);
     encode(ec_data_shard_count, bl);
     encode(ec_coding_shard_count, bl);
+  }
+  if (v >= 34) {
     encode(replica, bl);
     encode(num_zones, bl);
   }
@@ -2136,7 +2141,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(33, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(34, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2338,12 +2343,15 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     decode(shard_mapping, bl);
     decode(ec_data_shard_count, bl);
     decode(ec_coding_shard_count, bl);
-    decode(replica, bl);
-    decode(num_zones, bl);
   } else {
     shard_mapping.clear();
     ec_data_shard_count.reset();
     ec_coding_shard_count.reset();
+  }
+  if (struct_v >= 34) {
+    decode(replica, bl);
+    decode(num_zones, bl);
+  } else {
     // Old pools that don't have num_zones and replica
     if (is_stretch_pool()) {
       // Stretch pool: infer num_zones from peering_crush_bucket_target

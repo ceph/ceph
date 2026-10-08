@@ -132,6 +132,149 @@ TEST(pg_pool_t, encodeDecode)
   }
 }
 
+class PgPoolStretchEncodingTest : public ::testing::Test {
+protected:
+  // the release before stretch zones lacks SERVER_UMBRELLA and writes the
+  // older format, without num_zones and replica
+  static constexpr uint64_t full_features = CEPH_FEATURES_ALL;
+  static constexpr uint64_t older_features =
+    CEPH_FEATURES_ALL & ~CEPH_FEATURE_SERVER_UMBRELLA;
+
+  static pg_pool_t make_stretch_pool(unsigned zones, unsigned replica,
+                                     unsigned min_size_per_zone) {
+    pg_pool_t p;
+    p.type = pg_pool_t::TYPE_REPLICATED;
+    p.size = zones * replica;
+    p.min_size = min_size_per_zone;
+    p.num_zones = zones;
+    p.replica = replica;
+    p.crush_rule = 1;
+    p.peering_crush_bucket_count = zones;
+    p.peering_crush_bucket_target = zones;
+    p.peering_crush_bucket_barrier = 8;
+    p.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    p.set_pg_num(8);
+    p.set_pgp_num(8);
+    return p;
+  }
+
+  static pg_pool_t make_local_pool(unsigned size, unsigned min_size) {
+    pg_pool_t p;
+    p.type = pg_pool_t::TYPE_REPLICATED;
+    p.size = size;
+    p.min_size = min_size;
+    p.num_zones = 1;
+    p.replica = size;
+    p.crush_rule = 0;
+    p.set_pg_num(8);
+    p.set_pgp_num(8);
+    return p;
+  }
+
+  static pg_pool_t round_trip(const pg_pool_t& in, uint64_t features) {
+    bufferlist bl;
+    in.encode(bl, features);
+    auto it = bl.cbegin();
+    pg_pool_t out;
+    out.decode(it);
+    return out;
+  }
+
+  static uint8_t encoded_struct_v(const pg_pool_t& p, uint64_t features) {
+    bufferlist bl;
+    p.encode(bl, features);
+    return static_cast<uint8_t>(bl[0]);
+  }
+};
+
+// Test the full format is version 34
+TEST_F(PgPoolStretchEncodingTest, FullFeaturesEncodeVersion34) {
+  EXPECT_EQ(34u, encoded_struct_v(make_stretch_pool(2, 2, 1), full_features));
+}
+
+// Test the release before stretch zones gets a version without num_zones
+TEST_F(PgPoolStretchEncodingTest, OlderFeaturesEncodeBeforeVersion34) {
+  EXPECT_LT(encoded_struct_v(make_stretch_pool(2, 2, 1), older_features), 34u);
+}
+
+// Test the full format keeps num_zones, replica and the per-zone min_size
+TEST_F(PgPoolStretchEncodingTest, FullFormatRoundTrip) {
+  const pg_pool_t out = round_trip(make_stretch_pool(2, 2, 1), full_features);
+  EXPECT_EQ(2u, out.get_num_zones());
+  EXPECT_EQ(2u, out.get_replica());
+  EXPECT_EQ(4u, out.get_size());
+  EXPECT_EQ(1u, out.get_min_size());
+}
+
+// Test the older format round trip keeps the per-zone min_size
+TEST_F(PgPoolStretchEncodingTest, OlderFormatRoundTripKeepsMinSize) {
+  const pg_pool_t out = round_trip(make_stretch_pool(2, 2, 1), older_features);
+  EXPECT_EQ(2u, out.get_num_zones());
+  EXPECT_EQ(2u, out.get_replica());
+  EXPECT_EQ(4u, out.get_size());
+  EXPECT_EQ(1u, out.get_min_size());
+}
+
+// Test the older format writes min_size as the total over all zones
+TEST_F(PgPoolStretchEncodingTest, OlderFormatWritesTotalMinSize) {
+  // decode divides the older format's min_size by num_zones, so getting the
+  // per-zone 2 back means 4 was written, as an older release expects
+  const pg_pool_t out = round_trip(make_stretch_pool(2, 3, 2), older_features);
+  EXPECT_EQ(2u, out.get_min_size());
+}
+
+// Test repeated older format round trips do not halve min_size each time
+TEST_F(PgPoolStretchEncodingTest, OlderFormatRepeatedRoundTripsAreStable) {
+  pg_pool_t p = make_stretch_pool(2, 3, 2);
+  for (int i = 0; i < 5; ++i) {
+    p = round_trip(p, older_features);
+  }
+  EXPECT_EQ(2u, p.get_min_size());
+  EXPECT_EQ(2u, p.get_num_zones());
+  EXPECT_EQ(3u, p.get_replica());
+  EXPECT_EQ(6u, p.get_size());
+}
+
+// Test a three-zone pool round trips in the older format
+TEST_F(PgPoolStretchEncodingTest, OlderFormatThreeZones) {
+  const pg_pool_t out = round_trip(make_stretch_pool(3, 2, 1), older_features);
+  EXPECT_EQ(3u, out.get_num_zones());
+  EXPECT_EQ(2u, out.get_replica());
+  EXPECT_EQ(6u, out.get_size());
+  EXPECT_EQ(1u, out.get_min_size());
+}
+
+// Test num_zones comes from bucket_target, not the degraded bucket_count
+TEST_F(PgPoolStretchEncodingTest, OlderFormatUsesBucketTargetWhenDegraded) {
+  pg_pool_t in = make_stretch_pool(2, 2, 1);
+  in.peering_crush_bucket_count = 1;
+  const pg_pool_t out = round_trip(in, older_features);
+  EXPECT_EQ(2u, out.get_num_zones());
+  EXPECT_EQ(1u, out.get_min_size());
+}
+
+// Test a local pool is unchanged by either format
+TEST_F(PgPoolStretchEncodingTest, LocalPoolUnchangedByEitherFormat) {
+  const pg_pool_t in = make_local_pool(3, 2);
+  for (uint64_t f : {full_features, older_features}) {
+    const pg_pool_t out = round_trip(in, f);
+    EXPECT_EQ(1u, out.get_num_zones());
+    EXPECT_EQ(3u, out.get_replica());
+    EXPECT_EQ(3u, out.get_size());
+    EXPECT_EQ(2u, out.get_min_size());
+  }
+}
+
+// Test switching from the older to the full format keeps the pool
+TEST_F(PgPoolStretchEncodingTest, OlderThenFullFormatKeepsPool) {
+  const pg_pool_t older = round_trip(make_stretch_pool(2, 2, 1), older_features);
+  const pg_pool_t full = round_trip(older, full_features);
+  EXPECT_EQ(2u, full.get_num_zones());
+  EXPECT_EQ(2u, full.get_replica());
+  EXPECT_EQ(4u, full.get_size());
+  EXPECT_EQ(1u, full.get_min_size());
+}
+
 TEST(hobject, prefixes0)
 {
   uint32_t mask = 0xE947FA20;
