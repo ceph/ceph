@@ -3754,6 +3754,234 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst_comprehensive) {
   }
 }
 
+// The full map is written in the format without num_zones until the commit
+// sets stretch_zones, so before it every OSD reads the same pools
+TEST_F(OSDMapTest, EncodingFollowsStretchZonesFlag) {
+  set_up_map(6);
+  for (bool committed : {false, true}) {
+    SCOPED_TRACE(committed ? "committed" : "before the commit");
+    OSDMap m;
+    m.deepish_copy_from(osdmap);
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    inc.new_require_osd_release =
+      committed ? ceph_release_t::umbrella : ceph_release_t::tentacle;
+    inc.new_flags = committed ? m.get_flags() | CEPH_OSDMAP_STRETCH_ZONES
+                              : m.get_flags() & ~CEPH_OSDMAP_STRETCH_ZONES;
+    pg_pool_t p = *m.get_pg_pool(my_rep_pool);
+    p.size = 4;
+    p.min_size = 1;
+    p.num_zones = 2;
+    p.replica = 2;
+    inc.new_pools[my_rep_pool] = p;
+    ASSERT_EQ(0, m.apply_incremental(inc));
+    EXPECT_EQ(committed, m.stretch_zones());
+    EXPECT_EQ(committed, HAVE_SIGNIFICANT_FEATURE(m.get_encoding_features(),
+                                                  OSD_STRETCH_ZONES));
+    bufferlist bl;
+    m.encode(bl, m.get_encoding_features() | CEPH_FEATURE_RESERVED);
+    OSDMap decoded;
+    decoded.decode(bl);
+    EXPECT_EQ(committed, decoded.stretch_zones());
+    const pg_pool_t *q = decoded.get_pg_pool(my_rep_pool);
+    ASSERT_TRUE(q);
+    EXPECT_EQ(committed ? 2u : 1u, q->get_num_zones());
+    EXPECT_EQ(committed ? 1u : 2u, q->get_min_size());
+  }
+}
+
+// From the commit on an OSD needs OSD_STRETCH_ZONES to connect; a client
+// never does
+TEST_F(OSDMapTest, OsdFeaturesRequireStretchZonesOnceCommitted) {
+  set_up_map(6);
+  for (bool committed : {false, true}) {
+    SCOPED_TRACE(committed ? "committed" : "before the commit");
+    OSDMap m;
+    m.deepish_copy_from(osdmap);
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    inc.new_flags = committed ? m.get_flags() | CEPH_OSDMAP_STRETCH_ZONES
+                              : m.get_flags() & ~CEPH_OSDMAP_STRETCH_ZONES;
+    ASSERT_EQ(0, m.apply_incremental(inc));
+    uint64_t mask = 0;
+    const uint64_t osd_features = m.get_features(CEPH_ENTITY_TYPE_OSD, &mask);
+    EXPECT_EQ(committed, HAVE_FEATURE(osd_features, OSD_STRETCH_ZONES));
+    EXPECT_TRUE(mask & CEPH_FEATURE_OSD_STRETCH_ZONES);
+    const uint64_t client_features =
+      m.get_features(CEPH_ENTITY_TYPE_CLIENT, &mask);
+    EXPECT_FALSE(client_features & CEPH_FEATURE_OSD_STRETCH_ZONES);
+  }
+}
+
+// Before the upgrade is committed the monitor writes the earlier release's
+// format, whose min_size an OSD of that release reads as a total over all
+// copies. A pool of global stretch mode must decode as it does there, one
+// zone with replica the size and min_size as written, also in degraded
+// stretch mode where the monitor halved it, and be written back unchanged.
+TEST_F(OSDMapTest, LegacyGlobalStretchPoolBeforeCommit) {
+  set_up_map(6);
+  const uint64_t older_features =
+    (CEPH_FEATURES_ALL & ~CEPH_FEATURE_OSD_STRETCH_ZONES) |
+    CEPH_FEATURE_RESERVED;
+  const vector<std::pair<unsigned, bool>> cases = {
+    {1, false}, {2, false}, {3, false}, {1, true}, {2, true}};
+  for (const auto& [min_size, degraded] : cases) {
+    SCOPED_TRACE("min_size " + std::to_string(min_size) +
+                 (degraded ? " degraded" : ""));
+    OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+    inc.fsid = osdmap.get_fsid();
+    inc.new_require_osd_release = ceph_release_t::tentacle;
+    inc.new_flags = osdmap.get_flags() & ~CEPH_OSDMAP_STRETCH_ZONES;
+    inc.change_stretch_mode = true;
+    inc.stretch_mode_enabled = true;
+    inc.new_stretch_bucket_count = 2;
+    inc.new_degraded_stretch_mode = degraded ? 1 : 0;
+    inc.new_recovering_stretch_mode = 0;
+    inc.new_stretch_mode_bucket = 8;
+    pg_pool_t p = *osdmap.get_pg_pool(my_rep_pool);
+    p.size = 4;
+    p.min_size = min_size;
+    p.num_zones = 1;
+    p.replica = 4;
+    p.peering_crush_bucket_barrier = 8;
+    p.peering_crush_bucket_target = 2;
+    p.peering_crush_bucket_count = degraded ? 1 : 2;
+    p.peering_crush_mandatory_member =
+      degraded ? osdmap.crush->get_item_id("default") : CRUSH_ITEM_NONE;
+    inc.new_pools[my_rep_pool] = p;
+
+    // the incremental as the monitor sends it before the commit
+    bufferlist inc_bl;
+    inc.encode(inc_bl, older_features);
+    auto inc_it = inc_bl.cbegin();
+    OSDMap::Incremental older_inc(inc_it);
+    OSDMap applied;
+    applied.deepish_copy_from(osdmap);
+    ASSERT_EQ(0, applied.apply_incremental(older_inc));
+    ASSERT_EQ(ceph_release_t::tentacle, applied.require_osd_release);
+
+    // the full map as the monitor stores it before the commit
+    bufferlist map_bl;
+    applied.encode(map_bl, applied.get_encoding_features() |
+                           CEPH_FEATURE_RESERVED);
+    OSDMap decoded;
+    decoded.decode(map_bl);
+
+    for (const OSDMap *o : {&applied, &decoded}) {
+      const pg_pool_t *q = o->get_pg_pool(my_rep_pool);
+      ASSERT_TRUE(q);
+      EXPECT_TRUE(q->is_stretch_pool());
+      EXPECT_EQ(1u, q->get_num_zones());
+      EXPECT_EQ(4u, q->get_replica());
+      EXPECT_EQ(4u, q->get_size());
+      EXPECT_EQ(min_size, q->get_min_size());
+
+      // the min_size an OSD of the earlier release reads once the monitor
+      // writes the pool again
+      bufferlist pool_bl;
+      q->encode(pool_bl, o->get_encoding_features());
+      auto pool_it = pool_bl.cbegin();
+      pg_pool_t older;
+      older.decode(pool_it);
+      EXPECT_EQ(min_size, older.get_min_size());
+    }
+  }
+}
+
+// Test the raw space per byte stored of an erasure coded pool over zones,
+// which keeps a full set of k+m shards in each zone, as ceph df and the
+// autoscaler use it
+TEST_F(OSDMapTest, PoolRawUsedRateCountsZones) {
+  set_up_map();
+  OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+  inc.new_pool_max = osdmap.get_pool_max();
+  inc.new_erasure_code_profiles["k4m2"] = {{"k", "4"}, {"m", "2"}};
+  const int64_t one_zone = set_ec_pool("one_zone", inc, false);
+  inc.new_pools[one_zone].erasure_code_profile = "k4m2";
+  inc.new_pools[one_zone].size = 6;
+  const int64_t two_zones = set_ec_pool("two_zones", inc, false);
+  inc.new_pools[two_zones].erasure_code_profile = "k4m2";
+  inc.new_pools[two_zones].size = 12;
+  inc.new_pools[two_zones].num_zones = 2;
+  osdmap.apply_incremental(inc);
+
+  EXPECT_FLOAT_EQ(1.5, osdmap.pool_raw_used_rate(one_zone));
+  EXPECT_FLOAT_EQ(3.0, osdmap.pool_raw_used_rate(two_zones));
+}
+
+// A replicated stretch pool from a release before num_zones keeps the
+// meaning it had there, one zone with min_size counted over all its copies,
+// as an individual stretch pool and in global stretch mode: only the update
+// that commits the upgrade gives a pool of global stretch mode its zones.
+TEST_F(OSDMapTest, LegacyStretchPoolDecode) {
+  set_up_map(6);
+  const uint64_t older_features =
+    (CEPH_FEATURES_ALL & ~CEPH_FEATURE_SERVER_UMBRELLA) | CEPH_FEATURE_RESERVED;
+  for (bool stretch_mode : {false, true}) {
+    SCOPED_TRACE(stretch_mode ? "global stretch mode" : "individual stretch pool");
+    OSDMap m;
+    m.deepish_copy_from(osdmap);
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    pg_pool_t p = *m.get_pg_pool(my_rep_pool);
+    p.peering_crush_bucket_barrier = 8;
+    p.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    if (stretch_mode) {
+      p.size = 4;
+      p.min_size = 1;
+      p.num_zones = 2;
+      p.replica = 2;
+      p.peering_crush_bucket_count = 2;
+      p.peering_crush_bucket_target = 2;
+      inc.change_stretch_mode = true;
+      inc.stretch_mode_enabled = true;
+      inc.new_stretch_bucket_count = 2;
+      inc.new_stretch_mode_bucket = 8;
+    } else {
+      // three zones, one copy in each, active with any two
+      p.size = 3;
+      p.min_size = 2;
+      p.num_zones = 1;
+      p.replica = 3;
+      p.peering_crush_bucket_count = 2;
+      p.peering_crush_bucket_target = 3;
+    }
+    inc.new_pools[my_rep_pool] = p;
+
+    // the incremental as an older monitor sends it
+    bufferlist inc_bl;
+    inc.encode(inc_bl, older_features);
+    auto inc_it = inc_bl.cbegin();
+    OSDMap::Incremental older_inc(inc_it);
+    OSDMap applied;
+    applied.deepish_copy_from(osdmap);
+    ASSERT_EQ(0, applied.apply_incremental(older_inc));
+
+    // the full map as an older monitor stores it
+    bufferlist map_bl;
+    applied.encode(map_bl, older_features);
+    OSDMap decoded;
+    decoded.decode(map_bl);
+
+    for (const OSDMap *o : {&applied, &decoded}) {
+      const pg_pool_t *q = o->get_pg_pool(my_rep_pool);
+      ASSERT_TRUE(q);
+      EXPECT_TRUE(q->is_stretch_pool());
+      if (stretch_mode) {
+        EXPECT_EQ(1u, q->get_num_zones());
+        EXPECT_EQ(4u, q->get_replica());
+        EXPECT_EQ(4u, q->get_size());
+        EXPECT_EQ(2u, q->get_min_size());
+      } else {
+        EXPECT_EQ(1u, q->get_num_zones());
+        EXPECT_EQ(3u, q->get_replica());
+        EXPECT_EQ(3u, q->get_size());
+        EXPECT_EQ(2u, q->get_min_size());
+      }
+    }
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   OSDMap,
   OSDMapTest,

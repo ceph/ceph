@@ -173,6 +173,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_NOSNAPTRIM       (1<<21) /* disable snap trimming */
 #define CEPH_OSDMAP_PGLOG_HARDLIMIT  (1<<22) /* put a hard limit on pg log length */
 #define CEPH_OSDMAP_NOAUTOSCALE      (1<<23)  /* block pg autoscale */
+#define CEPH_OSDMAP_STRETCH_ZONES    (1<<24)  /* pools may span zones; set at the upgrade commit */
 
 /* these are hidden in 'ceph status' view */
 #define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
@@ -181,7 +182,8 @@ extern const char *ceph_osd_state_name(int s);
 				      CEPH_OSDMAP_RECOVERY_DELETES |	\
 				      CEPH_OSDMAP_SORTBITWISE |		\
 				      CEPH_OSDMAP_PURGED_SNAPDIRS |     \
-                                      CEPH_OSDMAP_PGLOG_HARDLIMIT)
+                                      CEPH_OSDMAP_PGLOG_HARDLIMIT |     \
+                                      CEPH_OSDMAP_STRETCH_ZONES)
 #define CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL |	\
 					  CEPH_OSDMAP_REQUIRE_KRAKEN |	\
 					  CEPH_OSDMAP_REQUIRE_LUMINOUS)
