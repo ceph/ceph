@@ -2871,6 +2871,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     break;
   }
 
+  settle_legacy_stretch_pools();
   calc_num_osds();
   _calc_up_osd_features();
   return 0;
@@ -4234,8 +4235,23 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
   post_decode();
 }
 
+void OSDMap::settle_legacy_stretch_pools()
+{
+  for (auto& [pool_id, pool] : pools) {
+    if (!pool.legacy_stretch) {
+      continue;
+    }
+    if (stretch_mode_enabled) {
+      pool.convert_legacy_stretch_zones();
+    } else {
+      pool.legacy_stretch = false;
+    }
+  }
+}
+
 void OSDMap::post_decode()
 {
+  settle_legacy_stretch_pools();
   // index pool names
   name_pool.clear();
   for (const auto &pname : pool_name) {

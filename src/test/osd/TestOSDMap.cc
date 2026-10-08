@@ -3754,6 +3754,79 @@ TEST_F(OSDMapTest, pgtemp_primaryfirst_comprehensive) {
   }
 }
 
+// A replicated stretch pool from a release before num_zones keeps the
+// meaning it had there unless the map is in stretch mode: an individual
+// stretch pool stays one zone with min_size counted over all its copies,
+// while a pool of global stretch mode gets the zones of stretch mode.
+TEST_F(OSDMapTest, LegacyStretchPoolDecode) {
+  set_up_map(6);
+  const uint64_t older_features =
+    (CEPH_FEATURES_ALL & ~CEPH_FEATURE_SERVER_UMBRELLA) | CEPH_FEATURE_RESERVED;
+  for (bool stretch_mode : {false, true}) {
+    SCOPED_TRACE(stretch_mode ? "global stretch mode" : "individual stretch pool");
+    OSDMap m;
+    m.deepish_copy_from(osdmap);
+    OSDMap::Incremental inc(m.get_epoch() + 1);
+    inc.fsid = m.get_fsid();
+    pg_pool_t p = *m.get_pg_pool(my_rep_pool);
+    p.peering_crush_bucket_barrier = 8;
+    p.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    if (stretch_mode) {
+      p.size = 4;
+      p.min_size = 1;
+      p.num_zones = 2;
+      p.replica = 2;
+      p.peering_crush_bucket_count = 2;
+      p.peering_crush_bucket_target = 2;
+      inc.change_stretch_mode = true;
+      inc.stretch_mode_enabled = true;
+      inc.new_stretch_bucket_count = 2;
+      inc.new_stretch_mode_bucket = 8;
+    } else {
+      // three zones, one copy in each, active with any two
+      p.size = 3;
+      p.min_size = 2;
+      p.num_zones = 1;
+      p.replica = 3;
+      p.peering_crush_bucket_count = 2;
+      p.peering_crush_bucket_target = 3;
+    }
+    inc.new_pools[my_rep_pool] = p;
+
+    // the incremental as an older monitor sends it
+    bufferlist inc_bl;
+    inc.encode(inc_bl, older_features);
+    auto inc_it = inc_bl.cbegin();
+    OSDMap::Incremental older_inc(inc_it);
+    OSDMap applied;
+    applied.deepish_copy_from(osdmap);
+    ASSERT_EQ(0, applied.apply_incremental(older_inc));
+
+    // the full map as an older monitor stores it
+    bufferlist map_bl;
+    applied.encode(map_bl, older_features);
+    OSDMap decoded;
+    decoded.decode(map_bl);
+
+    for (const OSDMap *o : {&applied, &decoded}) {
+      const pg_pool_t *q = o->get_pg_pool(my_rep_pool);
+      ASSERT_TRUE(q);
+      EXPECT_TRUE(q->is_stretch_pool());
+      if (stretch_mode) {
+        EXPECT_EQ(2u, q->get_num_zones());
+        EXPECT_EQ(2u, q->get_replica());
+        EXPECT_EQ(4u, q->get_size());
+        EXPECT_EQ(1u, q->get_min_size());
+      } else {
+        EXPECT_EQ(1u, q->get_num_zones());
+        EXPECT_EQ(3u, q->get_replica());
+        EXPECT_EQ(3u, q->get_size());
+        EXPECT_EQ(2u, q->get_min_size());
+      }
+    }
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   OSDMap,
   OSDMapTest,
