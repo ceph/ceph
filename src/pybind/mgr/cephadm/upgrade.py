@@ -388,6 +388,15 @@ class CephadmUpgrade:
         # FIXME: we assume the first digest is the best one to use
         return self.upgrade_state.target_digests[0]
 
+    def _announce_target(self, target_version: str,
+                         target_digests: Optional[List[str]]) -> None:
+        (target_major, _) = target_version.split('.', 1)
+        target_major_name = self.mgr.lookup_release_name(int(target_major))
+        logger.info('Upgrade: Target is version %s (%s)' % (
+            target_version, target_major_name))
+        logger.info('Upgrade: Target container is %s, digests %s' % (
+            self.target_image, target_digests))
+
     def _upgrade_status_osd_bucket_scope_active(self) -> bool:
         """True when upgrade state selects OSD bucket scope"""
         st = self.upgrade_state
@@ -817,9 +826,17 @@ class CephadmUpgrade:
             self._validate_failure_domain_upgrade_options(
                 bucket_type, bucket_name, daemon_types)
 
+        # Reuse the validation pull's metadata only for registry pre-pull.
+        # Otherwise _do_upgrade() still does the normal first pull.
+        registry_prepull = (
+            self.image_prepull.configured_method() == UpgradeImagePrePullMethod.REGISTRY
+        )
         if daemon_types is not None or services is not None or hosts is not None:
             scoped_id, scoped_ver, scoped_digests, scoped_host = (
                 self._validate_upgrade_filters(target_name, daemon_types, hosts, services))
+            if not registry_prepull:
+                scoped_id = scoped_ver = scoped_host = None
+                scoped_digests = None
         else:
             scoped_id = scoped_ver = scoped_host = None
             scoped_digests = None
@@ -862,6 +879,8 @@ class CephadmUpgrade:
                 self._get_filtered_daemons())
             if scoped_host in scope_hosts:
                 self.image_prepull.mark_host_done(scoped_host)
+        if registry_prepull and scoped_ver:
+            self._announce_target(scoped_ver, scoped_digests)
         # One-time PG autoscaling decision when upgrade includes OSDs
         if self._upgrade_includes_osds(daemon_types, hosts, services):
             # prior_autoscale: current OSD noautoscale status from osd_map flags (before we touch it)
@@ -927,7 +946,13 @@ class CephadmUpgrade:
             raise OrchestratorError(
                 'Cannot set values for --daemon-types, --services or --hosts when upgrade already in progress.')
         try:
-            pull_timeout = self.image_prepull.pull_timeout_sec()
+            # The long timeout is only for registry pre-pull. A normal
+            # staggered start keeps default_cephadm_command_timeout.
+            pull_timeout = (
+                self.image_prepull.pull_timeout_sec()
+                if self.image_prepull.configured_method() == UpgradeImagePrePullMethod.REGISTRY
+                else None
+            )
             first_host = next(iter(self.mgr.inventory.keys()), None)
             with self.mgr.async_timeout_handler('cephadm inspect-image', timeout=pull_timeout):
                 target_id, target_version, target_digests = self.mgr.wait_async(
@@ -2300,7 +2325,11 @@ class CephadmUpgrade:
             # then distributes self.target_image (digest by default) in batches.
             logger.info('Upgrade: First pull of %s' % target_image)
             self.upgrade_info_str = 'Doing first pull of %s image' % (target_image)
-            pull_timeout = self.image_prepull.pull_timeout_sec()
+            pull_timeout = (
+                self.image_prepull.pull_timeout_sec()
+                if method == UpgradeImagePrePullMethod.REGISTRY
+                else None
+            )
             first_host = next(iter(self.mgr.inventory.keys()), None)
             try:
                 with self.mgr.async_timeout_handler(
@@ -2349,10 +2378,7 @@ class CephadmUpgrade:
         target_major_name = self.mgr.lookup_release_name(int(target_major))
 
         if first:
-            logger.info('Upgrade: Target is version %s (%s)' % (
-                target_version, target_major_name))
-            logger.info('Upgrade: Target container is %s, digests %s' % (
-                target_image, target_digests))
+            self._announce_target(target_version, target_digests)
 
         version_error = self._check_target_version(target_version)
         if version_error:

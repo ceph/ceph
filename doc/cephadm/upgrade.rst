@@ -84,7 +84,9 @@ When enabled, cephadm pre-pulls the target image to in-scope hosts
   (Harbor, Quay, etc.). Use this when every node already has registry
   connectivity. The existing first pull on one host still learns the target
   digest and Ceph version (and rejects a bad target) before the cluster-wide
-  pre-pull. Hosts already completed are skipped after a pause or mgr failover.
+  pre-pull. The longer pull timeout, and a staggered upgrade's reuse of the
+  image already inspected at start, apply only while this method is
+  ``registry``. Hosts already completed are skipped after a pause or mgr failover.
   If pre-pull fails on any host, the upgrade is paused before any daemon is
   upgraded. Staggered upgrades pre-pull only on hosts in the current upgrade
   scope.

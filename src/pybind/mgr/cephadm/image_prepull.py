@@ -73,7 +73,16 @@ class UpgradeImagePrePull:
         hosts = sorted({d.hostname for d in daemons if d.hostname})
         return [h for h in hosts if h not in self.mgr.offline_hosts]
 
+    def configured_method(self) -> UpgradeImagePrePullMethod:
+        """Configured pre-pull method. Unknown values are not registry."""
+        raw = getattr(self.mgr, 'upgrade_prepull_method', '') or ''
+        try:
+            return UpgradeImagePrePullMethod.from_config(raw)
+        except ValueError:
+            return UpgradeImagePrePullMethod.NONE
+
     def pull_timeout_sec(self) -> int:
+        """Long cephadm pull timeout. Callers must use this only for registry."""
         return max(
             UPGRADE_IMAGE_PRE_PULL_MIN_TIMEOUT_SEC,
             self.mgr.default_cephadm_command_timeout,
