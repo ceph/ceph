@@ -763,7 +763,7 @@ Create the following CRUSH rule for a stretch cluster spread across geographical
       id 2
       type replicated
       step take {root}
-      step choose firstn 0 type {zone-failure-domain}
+      step choose firstn {zones} type {zone-failure-domain}
       step chooseleaf firstn {num-replica-per-zone} type {host-failure-domain}
       step emit
    }
