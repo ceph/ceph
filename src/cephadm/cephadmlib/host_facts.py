@@ -23,6 +23,46 @@ from cephadmlib.net_utils import get_fqdn, get_ipv4_address, get_ipv6_address
 
 logger = logging.getLogger()
 
+# CPU feature flags (as reported in /proc/cpuinfo) that each x86-64
+# microarchitecture level adds on top of the previous one. Note that
+# /proc/cpuinfo reports the LZCNT instruction as 'abm'.
+_X86_64_ISA_LEVELS: List[tuple] = [
+    (
+        'x86-64-v2',
+        {'cx16', 'lahf_lm', 'popcnt', 'sse4_1', 'sse4_2', 'ssse3'},
+    ),
+    (
+        'x86-64-v3',
+        {
+            'abm',
+            'avx',
+            'avx2',
+            'bmi1',
+            'bmi2',
+            'f16c',
+            'fma',
+            'movbe',
+            'xsave',
+        },
+    ),
+    (
+        'x86-64-v4',
+        {'avx512f', 'avx512bw', 'avx512cd', 'avx512dq', 'avx512vl'},
+    ),
+]
+
+
+def get_x86_64_isa_level(cpu_flags: Set[str]) -> str:
+    """Return the highest x86-64 microarchitecture level (e.g. 'x86-64-v3')
+    supported by a CPU with the given /proc/cpuinfo feature flags.
+    """
+    level = 'x86-64-v1'
+    for name, required_flags in _X86_64_ISA_LEVELS:
+        if not required_flags.issubset(cpu_flags):
+            break
+        level = name
+    return level
+
 
 class Enclosure:
     def __init__(self, enc_id: str, enc_path: str, dev_path: str):
@@ -128,6 +168,8 @@ class HostFacts:
         self.cpu_count: int = 0
         self.cpu_cores: int = 0
         self.cpu_threads: int = 0
+        # only set on x86-64 hosts; None elsewhere (excluded from dump())
+        self.cpu_isa_level: Optional[str] = None
         self.interfaces: Dict[str, Any] = {}
 
         self._meminfo: List[str] = read_file(['/proc/meminfo']).splitlines()
@@ -201,6 +243,7 @@ class HostFacts:
         raw = read_file(['/proc/cpuinfo'])
         output = raw.splitlines()
         cpu_set = set()
+        cpu_flags: Set[str] = set()
 
         for line in output:
             field = [f.strip() for f in line.split(':')]
@@ -212,8 +255,12 @@ class HostFacts:
                 self.cpu_threads = int(field[1].strip())
             if 'cpu cores' in line:
                 self.cpu_cores = int(field[1].strip())
+            if line.startswith('flags'):
+                cpu_flags.update(field[1].split())
             pass
         self.cpu_count = len(cpu_set)
+        if cpu_flags and platform.machine() == 'x86_64':
+            self.cpu_isa_level = get_x86_64_isa_level(cpu_flags)
 
     def _get_block_devs(self):
         # type: () -> List[str]
