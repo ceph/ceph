@@ -136,7 +136,8 @@ All heap subcommands (``stats``, ``start_profiler``, ``stop_profiler``,
 supported for RGW.
 
 RGW also returns free ``TCMalloc`` memory to the OS every
-:confval:`rgw_heap_release_interval` seconds. To disable it, run:
+:confval:`rgw_heap_release_interval` seconds, about
+:confval:`rgw_heap_release_bytes` at a time. To disable it, run:
 
 .. prompt:: bash
 

@@ -392,8 +392,14 @@ void rgw::AppMain::init_heap_release()
       const auto interval = g_conf().get_val<std::chrono::seconds>(
           "rgw_heap_release_interval");
       if (interval.count()) {
+        const uint64_t bytes = g_conf().get_val<Option::size_t>(
+            "rgw_heap_release_bytes");
         ldpp_dout(dpp, 20) << "releasing free tcmalloc memory" << dendl;
-        ceph_heap_release_free_memory();
+        if (bytes) {
+          ceph_heap_release_to_system(bytes);
+        } else {
+          ceph_heap_release_free_memory();
+        }
       }
       cond.wait_for(lock, stop, std::max(interval, std::chrono::seconds(1)),
                     [] { return false; });
