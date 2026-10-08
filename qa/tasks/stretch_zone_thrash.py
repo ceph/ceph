@@ -211,7 +211,8 @@ class ZoneThrasher(Thrasher):
         with safe_while(
                 sleep=5,
                 tries=math.ceil(self.degrade_timeout / 5),
-                action='wait for degraded stretch mode') as proceed:
+                action='wait for degraded stretch mode',
+                _raise=False) as proceed:
             while proceed():
                 if self.stopping.is_set():
                     return False
@@ -240,7 +241,8 @@ class ZoneThrasher(Thrasher):
         with safe_while(
                 sleep=10,
                 tries=math.ceil(self.revive_timeout / 10),
-                action='wait for healthy stretch mode') as proceed:
+                action='wait for healthy stretch mode',
+                _raise=False) as proceed:
             while proceed():
                 if (not self.manager.is_degraded_stretch_mode() and
                         not self.manager.is_recovering_stretch_mode()):
