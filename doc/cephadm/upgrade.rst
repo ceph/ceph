@@ -122,7 +122,8 @@ The *staged switch* moves it out of the window. For each group, cephadm:
 
 #. stages the new deployment on every host while the daemons still serve
    (``cephadm deploy --stage``: new config, keyring and unit files written
-   next to the live ones, the target image executed once),
+   next to the live ones, the target image executed once; the daemons of a
+   host in one ``cephadm`` call),
 #. takes the group out of service,
 #. switches every daemon to its staged deployment, all hosts in parallel
    (``cephadm switch-staged``: one ``systemctl stop`` / ``start`` each),
@@ -210,7 +211,7 @@ For each pass of the upgrade, cephadm:
    cephadm waits and asks again on the next pass (``ceph orch upgrade
    status`` says why) - the upgrade is not paused,
 #. stages the new deployment of every OSD of the group while they serve
-   (hosts in parallel, the OSDs of a host one after the other),
+   (hosts in parallel, the OSDs of a host in one ``cephadm`` call),
 #. sets ``noout`` on exactly those OSDs (``ceph osd set-group noout``),
    checks that no OSD outside the group has gone down (or come back) since
    the group was chosen and asks ``ok-to-stop`` once more - if either says
