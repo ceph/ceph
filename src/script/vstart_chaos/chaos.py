@@ -31,10 +31,13 @@ Multi-zone pools also get:
   zone_failover           (stretch mode) whole zone failures (zone OSDs and
                           zone monitor), run as a state machine
                           across cycles so other actions and workloads continue
-                          while a zone is down:
+                          while a zone is down. If stretch mode is still
+                          degraded (not recovering) --nudge-after seconds
+                          after the revive, with full quorum, that is
+                          recorded as a finding and the monitors are nudged
+                          with 'osd force_recovery_stretch_mode'. Variants:
     standard        kill zone OSDs+mon, wait degraded, hold, revive mon then OSDs
-    osds_first      as standard, but revive OSDs before the mon and do not nudge
-                    the monitor; getting stuck in degraded mode is recorded
+    osds_first      as standard, but revive OSDs before the mon
     flap            once the revived zone is recovering, kill the other zone
     surviving_loss  while degraded, also kill a failure budget of OSDs in the
                     surviving zone
