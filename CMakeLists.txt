@@ -608,6 +608,10 @@ option(WITH_RADOSGW_LANCEDB "Enable lancedb support in RADOS Gateway" ON)
 cmake_dependent_option(WITH_RADOSGW_STANDALONE "Standalone RADOS Gateway" ON WITH_RADOSGW_POSIX OFF)
 cmake_dependent_option(WITH_RADOSGW_NSFS "NSFS backend for RADOS Gateway" ON WITH_RADOSGW_DBSTORE OFF)
 
+# Dependant options
+cmake_dependent_option(WITH_RADOSGW_STANDALONE "Standalone RADOS Gateway" ON WITH_RADOSGW_POSIX OFF)
+cmake_dependent_option(WITH_RADOSGW_NSFS "NSFS backend for RADOS Gateway" ON WITH_RADOSGW_DBSTORE OFF)
+
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
 
