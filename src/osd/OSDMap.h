@@ -518,7 +518,8 @@ private:
     CEPH_FEATUREMASK_SERVER_REEF |
     CEPH_FEATUREMASK_SERVER_TENTACLE |
     CEPH_FEATUREMASK_SERVER_UMBRELLA |
-    CEPH_FEATUREMASK_SERVER_VAMPIRE;
+    CEPH_FEATUREMASK_SERVER_VAMPIRE |
+    CEPH_FEATUREMASK_OSD_STRETCH_ZONES;
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
@@ -723,6 +724,9 @@ public:
 
   int get_flags() const { return flags; }
   bool test_flag(int f) const { return flags & f; }
+  /// the upgrade to pools over zones is committed: stretch pools follow
+  /// this release's peering rules, and every OSD has OSD_STRETCH_ZONES
+  bool stretch_zones() const { return test_flag(CEPH_OSDMAP_STRETCH_ZONES); }
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 

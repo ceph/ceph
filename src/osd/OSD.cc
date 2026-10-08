@@ -1500,6 +1500,15 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
                           con->get_peer_entity_name().to_str(),
                           con->get_peer_addr()) << dendl;
 
+  // an OSD of an earlier release would judge the intervals of these maps
+  // by its rules and keep them on disk
+  if (osdmap->stretch_zones() &&
+      con->get_peer_type() == CEPH_ENTITY_TYPE_OSD &&
+      !con->has_features(CEPH_FEATUREMASK_OSD_STRETCH_ZONES)) {
+    dout(10) << __func__ << " not sending to an OSD without OSD_STRETCH_ZONES"
+             << dendl;
+    return;
+  }
   OSDSuperblock sblock(get_superblock());
   if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
     dout(10) << "  " << (to - since) << " > max "
