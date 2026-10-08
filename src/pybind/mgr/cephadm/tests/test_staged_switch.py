@@ -586,11 +586,146 @@ def test_do_upgrade_hands_a_settling_group_to_the_runner(cephadm_module: Cephadm
             assert not any(c.args[0] == 'mds' for c in set_images.call_args_list)
 
 
+class _OneByOne(_FakePolicy):
+    """One daemon per group; names every daemon still to upgrade for
+    staging ahead."""
+
+    def groups(self, need_upgrade):
+        return [StagedGroup(f'g-{need_upgrade[0].name()}', need_upgrade[0].name(),
+                            [need_upgrade[0]], {})] if need_upgrade else []
+
+    def stage_ahead(self, need_upgrade):
+        return list(need_upgrade)
+
+
+def _ahead_run(cephadm_module, dds, world, passes, policy_cls=_OneByOne):
+    """Run `passes` passes, each handing the runner the daemons not
+    switched yet."""
+    for _ in range(passes):
+        left = [d for d in dds if d.name() not in world.switched]
+        StagedSwitchRunner(cephadm_module.upgrade, policy_cls(cephadm_module.upgrade, world)).run(left, TARGET)
+
+
+def test_runner_stages_ahead_once_then_groups_skip_it(cephadm_module: CephadmOrchestrator):
+    # all three staged at the first pass, hosts in parallel, before the first
+    # group; then each group switches without staging again
+    dds = [_dd('osd', 'a'), _dd('osd', 'b', host='host2'), _dd('osd', 'c')]
+    world, calls, staged, patches = _runner_setup(cephadm_module, [d.name() for d in dds])
+    for p in patches:
+        p.start()
+    try:
+        with with_host(cephadm_module, 'host1'), with_host(cephadm_module, 'host2'):
+            _add_daemons(cephadm_module, dds)
+            _ahead_run(cephadm_module, dds, world, 1)
+            assert sorted(staged) == ['osd.a', 'osd.b', 'osd.c']
+            assert world.switched == {'osd.a'}
+            st = cephadm_module.upgrade.upgrade_state
+            assert st.staged_ahead['osd']['image'] == TARGET
+            assert sorted(st.staged_ahead['osd']['daemons']) == ['osd.a', 'osd.b', 'osd.c']
+            _ahead_run(cephadm_module, dds, world, 2)
+            assert world.switched == {'osd.a', 'osd.b', 'osd.c'}
+            assert sorted(staged) == ['osd.a', 'osd.b', 'osd.c']          # never staged twice
+            assert not st.paused
+            # the state survives a mgr failover (json round trip)
+            restored = UpgradeState.from_json(json.loads(json.dumps(st.to_json())))
+            assert restored and restored.staged_ahead == st.staged_ahead
+    finally:
+        for p in reversed(patches):
+            p.stop()
+
+
+def test_runner_restages_what_changed_since_staged_ahead(cephadm_module: CephadmOrchestrator):
+    # osd.b's generated configuration changed after it was staged ahead:
+    # its group stages it again, the others are not
+    dds = [_dd('osd', 'a'), _dd('osd', 'b'), _dd('osd', 'c')]
+    world, calls, staged, patches = _runner_setup(cephadm_module, [d.name() for d in dds])
+    fps = {n: 'v1' for n in ('osd.a', 'osd.b', 'osd.c')}
+    patches.append(mock.patch.object(
+        StagedSwitchRunner, '_stage_fingerprint',
+        side_effect=lambda spec, image: fps[spec.name()]))
+    for p in patches:
+        p.start()
+    try:
+        with with_host(cephadm_module, 'host1'):
+            _add_daemons(cephadm_module, dds)
+            _ahead_run(cephadm_module, dds, world, 1)
+            fps['osd.b'] = 'v2'
+            _ahead_run(cephadm_module, dds, world, 2)
+            assert sorted(staged) == ['osd.a', 'osd.b', 'osd.b', 'osd.c']
+            assert world.switched == {'osd.a', 'osd.b', 'osd.c'}
+    finally:
+        for p in reversed(patches):
+            p.stop()
+
+
+def test_runner_stage_ahead_failure_is_left_to_the_group(cephadm_module: CephadmOrchestrator):
+    # staging osd.b ahead fails: not recorded, no pause; its group stages it
+    # again (and would pause, as usual, if that failed too)
+    dds = [_dd('osd', 'a'), _dd('osd', 'b'), _dd('osd', 'c')]
+    world, calls, staged, patches = _runner_setup(cephadm_module, [d.name() for d in dds])
+    attempts: List[str] = []
+
+    async def flaky(daemon_spec, reconfig=False, osd_uuid_map=None, skip_restart_for_reconfig=False,
+                    send_signal_to_daemon=None, stage=False):
+        attempts.append(daemon_spec.name())
+        if daemon_spec.name() == 'osd.b' and attempts.count('osd.b') == 1:
+            raise OrchestratorError('registry hiccup')
+        staged.append(daemon_spec.name())
+        return 'ok'
+    patches = [p for p in patches if getattr(p, 'attribute', None) != '_create_daemon'] + [
+        mock.patch("cephadm.serve.CephadmServe._create_daemon", side_effect=flaky)]
+    for p in patches:
+        p.start()
+    try:
+        with with_host(cephadm_module, 'host1'):
+            _add_daemons(cephadm_module, dds)
+            _ahead_run(cephadm_module, dds, world, 1)
+            st = cephadm_module.upgrade.upgrade_state
+            assert sorted(st.staged_ahead['osd']['daemons']) == ['osd.a', 'osd.c']
+            assert not st.paused
+            _ahead_run(cephadm_module, dds, world, 2)
+            assert attempts.count('osd.b') == 2 and attempts.count('osd.a') == 1
+            assert world.switched == {'osd.a', 'osd.b', 'osd.c'} and not st.paused
+    finally:
+        for p in reversed(patches):
+            p.stop()
+
+
+def test_runner_stage_ahead_can_be_disabled(cephadm_module: CephadmOrchestrator):
+    dds = [_dd('osd', 'a'), _dd('osd', 'b')]
+    world, calls, staged, patches = _runner_setup(cephadm_module, [d.name() for d in dds])
+    for p in patches:
+        p.start()
+    try:
+        with with_host(cephadm_module, 'host1'):
+            _add_daemons(cephadm_module, dds)
+            cephadm_module.upgrade_staged_switch_stage_ahead = False
+            try:
+                _ahead_run(cephadm_module, dds, world, 1)
+                assert staged == ['osd.a']                       # only the group
+                assert cephadm_module.upgrade.upgrade_state.staged_ahead == {}
+            finally:
+                cephadm_module.upgrade_staged_switch_stage_ahead = True
+    finally:
+        for p in reversed(patches):
+            p.stop()
+
+
+def test_runner_no_stage_ahead_by_default(cephadm_module: CephadmOrchestrator):
+    # a policy that does not name daemons to stage ahead (the MDS one) stages
+    # each group when it is picked, as before
+    world, calls, staged, handled = _run_fake(cephadm_module, names=('a', 'b', 'c'))
+    assert handled is True and sorted(staged) == ['osd.a', 'osd.b', 'osd.c']
+    assert cephadm_module.upgrade.upgrade_state.staged_ahead == {}
+
+
 def test_runner_state_survives_json(cephadm_module: CephadmOrchestrator):
-    st = UpgradeState('t', 'pid', staged_switch={'type': 'mds', 'phase': 'down', 'data': {'fscids': [1]}})
+    st = UpgradeState('t', 'pid', staged_switch={'type': 'mds', 'phase': 'down', 'data': {'fscids': [1]}},
+                      staged_ahead={'osd': {'image': 'i', 'daemons': {'osd.1': 'f'}}})
     restored = UpgradeState.from_json(json.loads(json.dumps(st.to_json())))
     assert restored and restored.staged_switch == {'type': 'mds', 'phase': 'down', 'data': {'fscids': [1]}}
-    assert UpgradeState('t', 'pid').staged_switch == {}
+    assert restored.staged_ahead == {'osd': {'image': 'i', 'daemons': {'osd.1': 'f'}}}
+    assert UpgradeState('t', 'pid').staged_switch == {} and UpgradeState('t', 'pid').staged_ahead == {}
 
 
 def test_policy_for_honours_options(cephadm_module: CephadmOrchestrator):

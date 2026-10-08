@@ -157,6 +157,12 @@ Related options:
   how long to wait in step 4 before switching back.
 * ``mgr/cephadm/upgrade_staged_switch_max_parallel`` (default ``16``): how
   many hosts to stage or switch at once.
+* ``mgr/cephadm/upgrade_staged_switch_stage_ahead`` (default ``true``): for
+  a daemon type whose policy knows in advance which daemons it will switch
+  (OSDs), stage them all once, at the start of their phase, instead of group
+  by group; a group then re-stages only the daemons whose target image or
+  generated configuration changed since. The MDS policy stages each
+  filesystem when it is picked either way.
 * ``mgr/cephadm/upgrade_staged_switch_flush_mds_journal`` (default
   ``true``): flush the journal of each active MDS rank, one rank at a time,
   before ``fs fail``, so the replay after the switch is shorter. This adds
