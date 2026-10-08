@@ -38,6 +38,10 @@ class FakeCache:
             return [FakeDaemonDescription('1.2.3.4', [9123], 'node0'),
                     FakeDaemonDescription('1.2.3.5', [9123], 'node1')]
 
+        if service_type == 'pushgateway':
+            return [FakeDaemonDescription('1.2.3.4', [9091], 'node0'),
+                    FakeDaemonDescription('1.2.3.5', [9091], 'node1')]
+
         if service_type == 'mgr':
             return [FakeDaemonDescription('1.2.3.4', [9922], 'node0', daemon_type='mgr', daemon_id='fake_active_mgr'),
                     FakeDaemonDescription('1.2.3.5', [9922], 'node1', daemon_type='mgr', daemon_id='fake_standby_mgr')]
@@ -294,6 +298,18 @@ class TestServiceDiscovery:
 
         # check content
         assert cfg[0]['targets'] == ['1.2.3.4:9123']
+
+    def test_get_sd_config_pushgateway(self):
+        mgr = FakeMgr()
+        root = Root(mgr)
+        cfg = root.get_sd_config('pushgateway')
+
+        assert cfg
+        for entry in cfg:
+            assert 'labels' in entry
+            assert 'targets' in entry
+
+        assert cfg[0]['targets'] == ['1.2.3.4:9091', '1.2.3.5:9091']
 
     def test_get_sd_config_invalid_service(self):
         mgr = FakeMgr()
