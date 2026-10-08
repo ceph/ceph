@@ -8423,6 +8423,35 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       }
     }
     bcache->add_entry(dpp, db->get_name(), new_bde);
+  } else if (dobj->get_fsent()) {
+    /* An unversioned destination needs its entry too.
+     *
+     * Only the versioned branch above touched the cache, so a copy
+     * into an ordinary bucket added nothing:  the object was on disk,
+     * complete, and answerable by HEAD, and invisible to
+     * ListObjectsV2 for as long as that bucket's listing cache stayed
+     * warm.  A listing that misses refills from the store and shows
+     * it, which is why this went unnoticed -- every test that copies
+     * into a fresh bucket and lists once passes.
+     *
+     * make_dir_entry() rather than another hand-built entry:  it is
+     * what link_temp_file() uses on the PUT path and what fill_cache()
+     * uses when a listing misses, so the fields come from the file
+     * rather than from whatever the caller happens to be holding. */
+    auto* bcache = driver->get_bucket_cache();
+    if (bcache) {
+      dobj->get_fsent()->stat(dpp, /*force=*/true);
+      rgw_bucket_dir_entry bde{};
+      int r = dobj->get_fsent()->make_dir_entry(
+	  dpp, y, dobj->get_key(), nsfs::FSEnt::FLAG_NONE, bde);
+      if (r < 0) {
+	ldpp_dout(dpp, 0) << "ERROR: could not compose the listing entry for "
+	  << dobj->get_key() << " after a copy: " << cpp_strerror(-r)
+	  << ";  it will not list until the cache misses" << dendl;
+      } else {
+	bcache->add_entry(dpp, db->get_name(), bde);
+      }
+    }
   }
 
   return 0;
