@@ -1,0 +1,23 @@
+# 2-zone stretch topology for replica pools
+# Zone1 (osds 0-7, mon.a) + Zone2 (osds 8-15, mon.b) + tiebreak mon.c
+# 2 replicas per zone (4 total); min_size 2 keeps writes alive when one zone is down
+overrides:
+  ceph:
+    conf:
+      global:
+        osd pool default size: 4
+        osd pool default min size: 2
+    pool-config:
+      ec_pool: false
+      min_size: 2
+      num_zones: 2
+      crush_map_config:
+        failure_domain: osd
+        zones:
+          - name: zone1
+            osds: [ 0, 1, 2, 3, 4, 5, 6, 7 ]
+            monitors: [ a ]
+          - name: zone2
+            osds: [ 8, 9, 10, 11, 12, 13, 14, 15 ]
+            monitors: [ b ]
+        tiebreak_monitor: c
