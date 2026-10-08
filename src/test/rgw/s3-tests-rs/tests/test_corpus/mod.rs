@@ -34,6 +34,7 @@ mod shapes;
 mod lock;
 mod manifest;
 mod inventory;
+mod buckets;
 mod copy;
 mod generate;
 mod multipart;

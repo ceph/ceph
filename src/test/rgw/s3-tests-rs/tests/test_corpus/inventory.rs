@@ -266,3 +266,68 @@ pub fn capture(bucket: &str, dir: &Path, stem: &str) -> Vec<String> {
     eprintln!("corpus {stem}: {} disk facts -> {}", inv.len(), ipath.display());
     inv.check_object_modes()
 }
+
+/// The attribute names on a directory itself.
+///
+/// `walk()` records what is *under* a root and not the root, and a
+/// bucket's configuration lives on the bucket directory rather than in
+/// it -- so this is the one thing the walk cannot answer.  Returns an
+/// empty list when the path is unreadable, which is the same as "the
+/// disk half is not being taken".
+pub fn root_xattr_names(root: &Path) -> Vec<String> {
+    list_xattr_names(root).unwrap_or_default()
+}
+
+/// A directory's own attributes as name plus a digest of the value.
+///
+/// Names alone are not enough to tell whether a configuration was
+/// persisted.  A configuration that updates an attribute the bucket
+/// already has -- anything folded into a bucket-info blob -- adds no
+/// name, so a names-only comparison reads as "stored nowhere" when it
+/// is in fact stored.  Comparing digests catches the modification as
+/// well as the addition.
+///
+/// The digest is FNV-1a, which is not a security property:  it only
+/// has to differ when the bytes differ.
+pub fn root_xattr_digest(root: &Path) -> Vec<(String, u64)> {
+    let mut out = Vec::new();
+    for name in root_xattr_names(root) {
+        let v = read_xattr(root, &name).unwrap_or_default();
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for byte in &v {
+            h ^= *byte as u64;
+            h = h.wrapping_mul(0x1000_0000_01b3);
+        }
+        out.push((name, h));
+    }
+    out.sort();
+    out
+}
+
+/// One attribute's value, without following symlinks.
+fn read_xattr(path: &Path, name: &str) -> std::io::Result<Vec<u8>> {
+    let cp = CString::new(path.as_os_str().as_bytes())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    let cn = CString::new(name)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    let len = unsafe {
+        libc::lgetxattr(cp.as_ptr(), cn.as_ptr(), std::ptr::null_mut(), 0)
+    };
+    if len < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    let mut buf = vec![0u8; len as usize];
+    let got = unsafe {
+        libc::lgetxattr(
+            cp.as_ptr(),
+            cn.as_ptr(),
+            buf.as_mut_ptr() as *mut libc::c_void,
+            buf.len(),
+        )
+    };
+    if got < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    buf.truncate(got as usize);
+    Ok(buf)
+}
