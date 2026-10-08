@@ -5830,6 +5830,15 @@ int OSDMap::calc_pg_upmaps(
     lderr(cct) << __func__ << " abort due to osd_weight_total == 0" << dendl;
     return 0;
   }
+  for (auto& [osd, pgs] : pgs_by_osd) {
+    // straw2 picks a zero-weight item when every item in its bucket has zero weight
+    if (!osd_weight.count(osd)) {
+      lderr(cct) << __func__ << " abort due to osd." << osd
+                 << " with no weight under the crush rule in the up set of "
+                 << pgs.size() << " pgs" << dendl;
+      return 0;
+    }
+  }
 
   float pgs_per_weight = total_pgs / osd_weight_total;
   ldout(cct, 10) << " osd_weight_total " << osd_weight_total << dendl;
