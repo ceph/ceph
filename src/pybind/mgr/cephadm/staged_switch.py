@@ -1169,7 +1169,12 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
         pgids: List[str] = []
         try:
             report = json.loads(out or '{}')
-            report = report.get('ok_to_stop', report) if isinstance(report, dict) else {}
+            if not isinstance(report, dict):
+                report = {}
+            # the report itself ({"ok_to_stop": false, "bad_become_inactive":
+            # [...], ...}); also accept it nested under "ok_to_stop"
+            if isinstance(report.get('ok_to_stop'), dict):
+                report = report['ok_to_stop']
             inactive = report.get('bad_become_inactive') or []
             already = report.get('bad_already_inactive') or []
             unknown = report.get('unknown_pgs') or []
@@ -1203,9 +1208,10 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
         group, or of an OSD that restarted, still settling. Otherwise, every
         such PG is active+clean and the set is refused by the placement
         itself (two copies of a PG under the bucket): that will not change by
-        waiting. A refusal that names no PG is taken as transient."""
+        waiting. A refusal that names no PG (a report that could not be
+        read) is not waited for."""
         if not pgids:
-            return True
+            return False
         for pgid in pgids:
             st = states.get(pgid)
             if st is None or not {'active', 'clean'} <= st or st & OSD_UNSETTLED_PG_STATES:
