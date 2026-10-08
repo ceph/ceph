@@ -10543,6 +10543,45 @@ TEST_F(NooBaaModeTest, ConvertAdoptsAndSaysTheRewriteDidNotRun)
       << "convert claimed to have rewritten objects";
 }
 
+/* One bucket, adopted now.
+ *
+ * The increment the background sweep will drive, and the granularity
+ * validation wants.  Identities are store-wide because a principal
+ * resolves against the complete mapping;  buckets are the unit that
+ * can be done one at a time. */
+TEST_F(NooBaaModeTest, OneBucketCanBeAdoptedOnTheSpot)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_their_record("ENABLED");
+
+  /* identities first, which is the store-wide half */
+  auto st = ask({{"mode", "adopt"}, {"run", "true"}});
+  ASSERT_EQ(st["ran"], "true") << st["error"];
+
+  /* then the one bucket, which is the increment */
+  auto one = ask({{"bucket", testname}});
+  EXPECT_EQ(one["adopted"], "true") << one["error"];
+  EXPECT_EQ(one["buckets"], "1");
+
+  /* and the state is on the bucket */
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto bucket = driver->get_bucket(info);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_TRUE(bucket->versioned())
+      << "their versioning did not reach the adopted bucket";
+
+  /* a name the store has no record of is -ENOENT, not a silent
+   * success -- an operator adopting a bucket by name needs to know
+   * they named one that exists */
+  std::map<std::string, std::string> out;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", "no-such-bucket"}}, &out),
+	    -ENOENT);
+  EXPECT_EQ(out["adopted"], "false");
+}
+
 /* An unknown mode is refused rather than guessed. */
 TEST_F(NooBaaModeTest, AnUnknownModeIsRefused)
 {

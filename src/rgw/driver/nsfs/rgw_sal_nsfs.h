@@ -1151,6 +1151,13 @@ public:
   int run_adoption(const DoutPrefixProvider* dpp, optional_yield y,
 		   std::map<std::string, std::string>* report = nullptr);
 
+  /* Adopt one bucket now:  the bucket half of an import, against
+   * identities already imported.  For validation, and the granularity
+   * the background sweep will need. */
+  int adopt_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
+		       const std::string& bucket_name,
+		       std::map<std::string, std::string>* report = nullptr);
+
   int driver_hint(const DoutPrefixProvider* dpp,
 		  const std::string& hint,
 		  const std::map<std::string, std::string>& params,

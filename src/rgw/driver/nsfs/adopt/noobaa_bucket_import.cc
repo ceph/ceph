@@ -251,6 +251,35 @@ int carry_logging(const DoutPrefixProvider* dpp, JSONObj* obj, Attrs& attrs)
 
 } // namespace
 
+int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
+		      NSFSDriver* driver,
+		      const std::string& config_root,
+		      const std::string& bucket_name,
+		      const NooBaaStoreContents& contents,
+		      const IdentityMapping& mapping,
+		      BucketImportResult& result)
+{
+  /* One record, by name.  Everything else is the same operation, so
+   * this narrows the input rather than taking a second path through
+   * it -- a second path is a second thing to keep in step. */
+  NooBaaStoreContents one;
+  one.settings = contents.settings;
+  one.identities = contents.identities;
+  for (const auto& b : contents.buckets) {
+    if (b.name == bucket_name) {
+      one.buckets.push_back(b);
+      break;
+    }
+  }
+  if (one.buckets.empty()) {
+    ldpp_dout(dpp, 4) << "nsfs: no NooBaa record for bucket "
+      << bucket_name << dendl;
+    return -ENOENT;
+  }
+  return import_bucket_state(dpp, y, driver, config_root, one, mapping,
+			     result);
+}
+
 int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 			NSFSDriver* driver,
 			const std::string& config_root,

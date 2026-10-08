@@ -132,6 +132,24 @@ struct BucketImportResult {
   std::vector<std::string> failures;
 };
 
+/* Write one bucket's state, named.
+ *
+ * The import is one operation over the whole store (§6.1), because a
+ * policy principal resolves through the complete identity mapping and
+ * the mapping is not complete until every identity is written.  So
+ * this is **not** a smaller import:  it is the bucket half of one,
+ * run against a mapping that already exists, which is what the
+ * background sweep will do per bucket once it exists (C9).
+ *
+ * Returns -ENOENT when the store holds no record of that name. */
+int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
+		      NSFSDriver* driver,
+		      const std::string& config_root,
+		      const std::string& bucket_name,
+		      const NooBaaStoreContents& contents,
+		      const IdentityMapping& mapping,
+		      BucketImportResult& result);
+
 /* Write every bucket's state.
  *
  * `config_root` is the store, passed rather than asked of the

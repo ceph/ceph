@@ -13723,6 +13723,70 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+/* Adopt one bucket, now.
+ *
+ * For validation, and for the sweep once it exists.  The import is
+ * one operation over the whole store, so this is the *bucket* half of
+ * one run against identities that are already imported -- which is
+ * what a per-bucket sweep does (C9).  Identities are not re-imported:
+ * the mapping is rebuilt from the plan, and a plan whose identities
+ * are already present is what makes a re-run a no-op.
+ */
+int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
+				 optional_yield y,
+				 const std::string& bucket_name,
+				 std::map<std::string, std::string>* report)
+{
+  auto say = [report](const char* k, const std::string& v) {
+    if (report) {
+      (*report)[k] = v;
+    }
+  };
+
+  if (!adoption_configured()) {
+    say("adopted", "false");
+    say("why", "no NooBaa configuration store is configured");
+    return -ENOENT;
+  }
+
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  int ret = store.read(dpp, contents);
+  if (ret < 0) {
+    say("adopted", "false");
+    say("error", cpp_strerror(-ret));
+    return ret;
+  }
+
+  /* The mapping, from a plan over the whole store.  A principal may
+   * name any identity, so the mapping has to cover all of them even
+   * when one bucket is being adopted. */
+  nsfs::ImportPlan plan;
+  ret = nsfs::build_import_plan(dpp, ctx(), contents, plan);
+  if (ret < 0) {
+    say("adopted", "false");
+    say("collisions", std::to_string(plan.collisions.size()));
+    return ret;
+  }
+  const auto mapping = nsfs::mapping_from(plan);
+
+  nsfs::BucketImportResult br;
+  ret = nsfs::import_one_bucket(dpp, y, this, root, bucket_name, contents,
+				mapping, br);
+  say("adopted", (ret == 0) ? "true" : "false");
+  say("buckets", std::to_string(br.buckets_written));
+  say("policies", std::to_string(br.policies_rewritten));
+  say("policies_refused", std::to_string(br.policies_refused.size()));
+  say("logging", std::to_string(br.logging_carried));
+  if (ret < 0) {
+    say("error", cpp_strerror(-ret));
+  }
+  return ret;
+}
+
 int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 			    const std::string& hint,
 			    const std::map<std::string, std::string>& params,
@@ -13777,6 +13841,14 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 	(*out)["read_only"] = serving_read_only() ? "true" : "false";
       }
     }
+    /* `bucket=<name>` adopts that one now, which is the granularity
+     * validation wants and the one the sweep will need.  Identities
+     * must already be imported;  this is the bucket half. */
+    auto one = params.find("bucket");
+    if (one != params.end()) {
+      return adopt_one_bucket(dpp, null_yield, one->second, out);
+    }
+
     auto run = params.find("run");
     if ((run != params.end()) && (run->second == "true")) {
       return run_adoption(dpp, null_yield, out);
