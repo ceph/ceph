@@ -1581,6 +1581,9 @@ def test_account_group_update(iam_root):
     assert new_name == groups[0]['GroupName']
     assert group_id == groups[0]['GroupId']
 
+    # DeleteUser fails while it still has a group membership
+    with pytest.raises(iam_root.exceptions.DeleteConflictException):
+        iam_root.delete_user(UserName=username)
 
 # IAM GroupPolicy apis
 @pytest.mark.group_policy
