@@ -126,13 +126,6 @@ public:
 
   int Initialize(std::string logfile, int loglevel);
 
-private:
-  /* Whether the table already carries a column, for the migrations
-   * `CREATE TABLE IF NOT EXISTS` cannot perform. */
-  bool has_column(const DoutPrefixProvider* dpp, const char* name) const;
-
-public:
-
   /* Insert or replace.  `id.key` must be set;  everything else is
    * optional subject to the exclusivity rule. */
   int put_identity(const DoutPrefixProvider* dpp, const Identity& id);

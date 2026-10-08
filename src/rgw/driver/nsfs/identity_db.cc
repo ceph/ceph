@@ -160,6 +160,13 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "  CustomBucketPathAllowedList TEXT,"
     "  FsBackend TEXT,"
     "  NoobaaId TEXT,"
+    /* X1.  A column added here does not reach a table that already
+     * exists -- `CREATE TABLE IF NOT EXISTS` does nothing to one --
+     * and that is accepted rather than migrated:  nsfs has not
+     * shipped, so no deployment holds this table, and vstart.sh
+     * removes the userdb on every start.  A migration belongs here
+     * once there is a released schema to migrate *from*, written
+     * against that rather than against a guess. */
     "  ForceMd5Etag INTEGER,"
     "  CHECK (ForceMd5Etag IS NULL OR ForceMd5Etag IN (0, 1)),"
     "  CHECK ((Uid IS NULL) = (Gid IS NULL)),"
@@ -179,54 +186,7 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     return ret;
   }
 
-  /* Columns added after a database already existed.
-   *
-   * `CREATE TABLE IF NOT EXISTS` does nothing to a table that is
-   * already there, so a column added to the schema above never
-   * reaches one -- and then every SELECT naming it fails, which
-   * breaks reads rather than losing a field.  Each addition goes
-   * here as well as there.
-   *
-   * `ADD COLUMN` on a column that exists is an error, and the only
-   * way to tell that from a real failure is the message, so a
-   * `PRAGMA table_info` is asked first.  Note that SQLite cannot add
-   * a CHECK with a column:  the constraint above guards tables
-   * created fresh, and a migrated table carries the column without
-   * it.  The binding only ever writes 0, 1 or NULL. */
-  if (!has_column(&dp, "ForceMd5Etag")) {
-    const std::string add =
-      "ALTER TABLE '" + identity_table + "' ADD COLUMN ForceMd5Etag INTEGER;";
-    ret = exec(&dp, add.c_str(), nullptr);
-    if (ret < 0) {
-      ldpp_dout(&dp, 0) << "ERROR: could not add ForceMd5Etag to "
-	<< identity_table << dendl;
-      return ret;
-    }
-    ldpp_dout(&dp, 4) << "nsfs: added ForceMd5Etag to " << identity_table
-      << dendl;
-  }
   return 0;
-}
-
-/* Whether the identity table already has a column.
- *
- * `PRAGMA table_info` rather than parsing an error message, so a
- * migration that fails for a real reason is distinguishable from one
- * that had nothing to do. */
-bool IdentityDB::has_column(const DoutPrefixProvider* dpp,
-			    const char* name) const
-{
-  const std::string sql =
-    "SELECT 1 FROM pragma_table_info('" + identity_table + "') "
-    "WHERE name = ?;";
-  sqlite3_stmt* st = nullptr;
-  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
-      != SQLITE_OK) {
-    return false;
-  }
-  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
-  sqlite3_bind_text(st, 1, name, -1, SQLITE_TRANSIENT);
-  return sqlite3_step(st) == SQLITE_ROW;
 }
 
 int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)

@@ -8984,69 +8984,6 @@ TEST_F(NSFSIdentityDBTest, ForceMd5EtagDistinguishesUnsetFromFalse)
   EXPECT_EQ(got.noobaa_id, "6a2bdeabf5c8e167f92cb079");
 }
 
-/* A database created before the column existed gains it.
- *
- * `CREATE TABLE IF NOT EXISTS` does nothing to a table already there,
- * so without a migration every SELECT naming the new column fails and
- * reads break rather than a field going missing.  The negative case is
- * reachable:  the table here is deliberately created without the
- * column, which is exactly the state an existing deployment is in. */
-TEST_F(NSFSIdentityDBTest, AnOlderTableGainsTheColumn)
-{
-  const std::string path = (bp / "older").string();
-  const std::string table =
-    std::filesystem::path(path).filename().string() + "_nsfs_identity";
-  /* `.db`, because that is what `DB::getDBfile()` appends -- the
-   * constructor takes the name and the file is the name plus a
-   * suffix.  Opening the wrong file produces an empty table and a
-   * test that proves nothing. */
-  const std::string file = path + ".db";
-
-  /* the schema as it was before X1, written by hand */
-  {
-    sqlite3* raw = nullptr;
-    ASSERT_EQ(sqlite3_open(file.c_str(), &raw), SQLITE_OK);
-    const std::string old_schema =
-      "CREATE TABLE '" + table + "' ("
-      "  Identity TEXT NOT NULL PRIMARY KEY,"
-      "  Uid INTEGER, Gid INTEGER, SupplementalGroups TEXT,"
-      "  DistinguishedName TEXT, NewBucketsPath TEXT,"
-      "  CustomBucketPathAllowedList TEXT, FsBackend TEXT, NoobaaId TEXT"
-      ");";
-    char* err = nullptr;
-    ASSERT_EQ(sqlite3_exec(raw, old_schema.c_str(), nullptr, nullptr, &err),
-	      SQLITE_OK) << (err ? err : "");
-    const std::string row =
-      "INSERT INTO '" + table + "' (Identity, Uid, Gid, NoobaaId) "
-      "VALUES ('legacy', 7, 8, 'abc');";
-    ASSERT_EQ(sqlite3_exec(raw, row.c_str(), nullptr, nullptr, &err),
-	      SQLITE_OK) << (err ? err : "");
-    sqlite3_close(raw);
-  }
-
-  nsfs::IdentityDB older{path, env->cct.get()};
-  ASSERT_EQ(older.Initialize("", -1), 0);
-
-  /* the row that predates the column reads, with the flag unset */
-  nsfs::Identity got;
-  ASSERT_EQ(older.get_identity(env->dpp, "legacy", got), 0);
-  EXPECT_EQ(got.uid, 7u);
-  EXPECT_EQ(got.noobaa_id, "abc");
-  EXPECT_FALSE(got.force_md5_etag.has_value());
-
-  /* and the column is usable afterwards */
-  got.force_md5_etag = true;
-  ASSERT_EQ(older.put_identity(env->dpp, got), 0);
-  nsfs::Identity again;
-  ASSERT_EQ(older.get_identity(env->dpp, "legacy", again), 0);
-  ASSERT_TRUE(again.force_md5_etag.has_value());
-  EXPECT_TRUE(*again.force_md5_etag);
-
-  /* twice is a no-op, not an error:  ADD COLUMN on a column that
-   * exists would fail */
-  ASSERT_EQ(older.Initialize("", -1), 0);
-}
-
 /* I1 carries each bucket's value, in three states.
  *
  * Read in I1 as well as by the state strategy because the question
