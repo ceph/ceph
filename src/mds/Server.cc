@@ -11480,6 +11480,10 @@ void Server::handle_client_lssnap(const MDRequestRef& mdr)
   CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
   if (!diri)
     return;
+  // looked up by ino (not via a path helper), so do the quarantine block
+  // check here for clients that can't be refused via check_access()
+  if (check_quarantine_block(mdr, diri))
+    return;
 
   if (!diri->is_dir()) {
     respond_to_request(mdr, -ENOTDIR);
@@ -11598,6 +11602,10 @@ void Server::handle_client_mksnap(const MDRequestRef& mdr)
 
   CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
   if (!diri)
+    return;
+  // looked up by ino (not via a path helper), so do the quarantine block
+  // check here for clients that can't be refused via check_access()
+  if (check_quarantine_block(mdr, diri))
     return;
 
   // dir only
@@ -11784,6 +11792,10 @@ void Server::handle_client_rmsnap(const MDRequestRef& mdr)
   CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
   if (!diri)
     return;
+  // looked up by ino (not via a path helper), so do the quarantine block
+  // check here for clients that can't be refused via check_access()
+  if (check_quarantine_block(mdr, diri))
+    return;
 
   if (!diri->is_dir()) {
     respond_to_request(mdr, -ENOTDIR);
@@ -11916,6 +11928,10 @@ void Server::handle_client_renamesnap(const MDRequestRef& mdr)
 
   CInode *diri = try_get_auth_inode(mdr, req->get_filepath().get_ino());
   if (!diri)
+    return;
+  // looked up by ino (not via a path helper), so do the quarantine block
+  // check here for clients that can't be refused via check_access()
+  if (check_quarantine_block(mdr, diri))
     return;
 
   if (!diri->is_dir()) { // dir only

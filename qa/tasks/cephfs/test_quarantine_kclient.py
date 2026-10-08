@@ -239,6 +239,69 @@ class TestQuarantineKernelBlocking(CephFSTestCase):
 
         self._assert_blocked_and_resume(proc, "stat")
 
+    def _mount_subvol_root(self):
+        """
+        Mount at the subvolume root (not the data path): snapshots of a
+        subvolume can only be taken at its root.
+        """
+        self._safe_umount()
+        self.mount_a.mount_wait(cephfs_mntpt=self.subvol_root_path)
+        self._ensure_mount_addr()
+        return os.path.join(self.mount_a.hostfs_mntpt, ".snap")
+
+    def test_blocked_rmsnap_resumes_after_unquarantine(self):
+        """
+        Verify that removing a snapshot of a quarantined subvolume blocks for
+        old kernel clients (snapshot ops look up the directory by ino rather
+        than via a path, so they need their own quarantine check) and
+        completes after quarantine is disabled.
+        """
+        snapdir = self._mount_subvol_root()
+        snap = os.path.join(snapdir, "snap1")
+        self.mount_a.run_shell_payload(f"mkdir {snap}", sudo=True, cwd="/")
+
+        self._quarantine_cmd("enable")
+
+        proc = self.mount_a.run_shell_payload(
+            f"rmdir {snap}",
+            sudo=True,
+            wait=False,
+            timeout=60,
+            cwd="/"
+        )
+
+        self._assert_blocked_and_resume(proc, "rmsnap")
+        self.assertEqual(proc.exitstatus, 0,
+                         "rmsnap should succeed after unquarantine")
+        ls = self.mount_a.run_shell_payload(f"ls {snapdir}", cwd="/")
+        self.assertNotIn("snap1", self._get_stdout(ls))
+
+    def test_blocked_mksnap_resumes_after_unquarantine(self):
+        """
+        Verify that creating a snapshot of a quarantined subvolume blocks for
+        old kernel clients and completes after quarantine is disabled.
+        """
+        snapdir = self._mount_subvol_root()
+        snap = os.path.join(snapdir, "snap1")
+
+        self._quarantine_cmd("enable")
+
+        proc = self.mount_a.run_shell_payload(
+            f"mkdir {snap}",
+            sudo=True,
+            wait=False,
+            timeout=60,
+            cwd="/"
+        )
+
+        self._assert_blocked_and_resume(proc, "mksnap")
+        self.assertEqual(proc.exitstatus, 0,
+                         "mksnap should succeed after unquarantine")
+        ls = self.mount_a.run_shell_payload(f"ls {snapdir}", cwd="/")
+        self.assertIn("snap1", self._get_stdout(ls))
+        # the subvolume can't be removed (in tearDown) with snapshots
+        self.mount_a.run_shell_payload(f"rmdir {snap}", sudo=True, cwd="/")
+
     def _wait_for_dd_in_progress(self, proc, stream_file, min_bytes, timeout=60):
         """Wait until dd has written at least min_bytes and is still running."""
         deadline = time.time() + timeout
