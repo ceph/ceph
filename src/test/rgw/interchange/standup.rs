@@ -925,6 +925,12 @@ fn capture(env: &Env) -> Result<(), String> {
          * is on 127.0.0.1 -- so the inventory can be taken, and it is
          * the half that answers "what did they write". */
         .env("CORPUS_DATA_ROOT", env.tree().display().to_string())
+        /* The other place a bucket's configuration can live.  NooBaa
+         * keeps tagging, CORS, policy, lifecycle, logging and
+         * encryption in the bucket's record and none of them reaches
+         * the bucket directory, so an axis reading only the tree
+         * concludes they were accepted and dropped. */
+        .env("CORPUS_CONFIG_ROOT", env.config_root().display().to_string())
         .env("CORPUS_TIER", &env.tier)
         /* NooBaa publishes its own modes.  See the doc comment. */
         .env("CORPUS_OBJECT_MODE", "any")
@@ -972,7 +978,7 @@ fn capture(env: &Env) -> Result<(), String> {
     println!("         {facts:6}  total");
 
     if st.success() {
-        println!("capture  every axis agreed with what the corpus expects of our");
+        println!("capture  every axis agreed with what the corpus expects of the nsfs");
         println!("         driver, which is a stronger result than this step needs.");
     } else {
         println!();

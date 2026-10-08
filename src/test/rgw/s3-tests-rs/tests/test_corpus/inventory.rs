@@ -396,14 +396,55 @@ pub fn root_xattr_names(root: &Path) -> Vec<String> {
 pub fn root_xattr_digest(root: &Path) -> Vec<(String, u64)> {
     let mut out = Vec::new();
     for name in root_xattr_names(root) {
-        let v = read_xattr(root, &name).unwrap_or_default();
-        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-        for byte in &v {
-            h ^= *byte as u64;
-            h = h.wrapping_mul(0x1000_0000_01b3);
-        }
-        out.push((name, h));
+        out.push((name.clone(), fnv1a(&read_xattr(root, &name).unwrap_or_default())));
     }
+    out.sort();
+    out
+}
+
+/// FNV-1a.  Not a security property:  it only has to differ when the
+/// bytes differ.
+pub fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        h ^= *byte as u64;
+        h = h.wrapping_mul(0x1000_0000_01b3);
+    }
+    h
+}
+
+/// A JSON record's top-level fields, name plus a digest of the value.
+///
+/// For a backend that keeps a bucket's configuration in a record
+/// rather than in the bucket directory's attributes.  NooBaa is one:
+/// `tag`, `cors_configuration_rules`, `s3_policy`,
+/// `lifecycle_configuration_rules`, `logging` and `encryption` all
+/// live in `<config_root>/buckets/<name>.json`, and none of them
+/// reaches the directory.
+///
+/// **Which keys exist is read from the file.**  Nothing here encodes
+/// NooBaa's schema -- no field name appears in this function -- which
+/// is the point:  interpreting their record is what I1 owns, and
+/// composing our reading of it is exactly what the capture exists to
+/// stop relying on.  A name and a digest is an observation, not an
+/// interpretation.
+///
+/// An unreadable or non-object file yields nothing, which is the same
+/// answer as "this backend has no record".
+pub fn record_field_digest(path: &Path) -> Vec<(String, u64)> {
+    let Ok(text) = std::fs::read(path) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    let Some(map) = value.as_object() else {
+        return Vec::new();
+    };
+    let mut out: Vec<(String, u64)> = map
+        .iter()
+        .map(|(k, v)| (k.clone(), fnv1a(v.to_string().as_bytes())))
+        .collect();
     out.sort();
     out
 }

@@ -7,18 +7,28 @@
 //! carry across is decided here rather than per object.
 //!
 //! **The design point is attribution.**  Each configuration is applied
-//! on its own and the bucket directory's own attribute names are read
-//! before and after, so the manifest records *which attribute each
+//! on its own and the bucket's persisted state is read before and
+//! after, so the manifest records *which stored thing each
 //! configuration produced* rather than only that the bucket ended up
 //! with a pile of them.  `Inventory::walk()` cannot answer this -- it
 //! records what is under a root and not the root itself -- which is why
 //! `root_xattr_names()` exists.
 //!
 //! That attribution is also what makes the strong invariant possible:
-//! a configuration the gateway *accepted* must have produced at least
-//! one new attribute on the bucket.  Accepted-and-dropped is the shape
-//! of the known `logging` and `notifications` gaps, and it is invisible
-//! to a round-trip check if the value is also served from memory.
+//! a configuration the gateway *accepted* must have changed something
+//! that persists.  Accepted-and-dropped is the shape of the known
+//! `logging` and `notifications` gaps, and it is invisible to a
+//! round-trip check if the value is also served from memory.
+//!
+//! **A bucket's configuration does not live in one place.**  The nsfs
+//! driver puts it in the bucket directory's extended attributes;
+//! NooBaa puts it in a record under their config store, and nothing of
+//! it reaches the directory.  This axis read only the first and
+//! concluded "nothing on disk holds it" for all three of tagging, CORS
+//! and policy on the first capture from their gateway -- a claim about
+//! storage in general, drawn from looking at one location, and wrong
+//! wherever it ran.  Both locations are read now, and `CORPUS_CONFIG_
+//! ROOT` names the second when there is one.  See the punch list.
 
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::fixtures::get_new_bucket_name;
@@ -42,17 +52,51 @@ fn data_root_bucket(b: &str) -> Option<std::path::PathBuf> {
         .map(|r| std::path::Path::new(&r).join(b))
 }
 
-/// The bucket directory's own attributes, name plus a digest of the
-/// value, or an empty list when the disk half is not being taken.
+/// The bucket's record in a config store, when the backend keeps one.
 ///
-/// Digests rather than names:  a configuration folded into an
-/// attribute the bucket already carries adds no name, and a names-only
-/// comparison would read that as "stored nowhere".
-fn bucket_attrs(b: &str) -> Vec<(String, u64)> {
-    match data_root_bucket(b) {
-        Some(p) => crate::inventory::root_xattr_digest(&p),
-        None => Vec::new(),
+/// `<config_root>/buckets/<name>.json` is the layout.  A path, not a
+/// schema:  what is inside it is read generically.
+fn config_store_record(b: &str) -> Option<std::path::PathBuf> {
+    std::env::var("CORPUS_CONFIG_ROOT").ok().map(|r| {
+        std::path::Path::new(&r)
+            .join("buckets")
+            .join(format!("{b}.json"))
+    })
+}
+
+/// Everything persisted about this bucket that the corpus can see,
+/// each entry a name and a digest of its value.
+///
+/// Two locations, each prefixed so the manifest attributes a
+/// configuration to where it landed rather than only to a name:
+///
+/// ```text
+/// xattr:user.nsfs.rgw.tagset      the bucket directory's attributes
+/// record:cors_configuration_rules a field of the bucket's record
+/// ```
+///
+/// Digests rather than names, for both:  a configuration folded into
+/// something the bucket already carries adds no name, and a names-only
+/// comparison reads that as "stored nowhere".  NooBaa's `tag` is
+/// exactly that case -- their `bucket add` writes `tag: []` and
+/// PutBucketTagging modifies it in place.
+///
+/// Empty when neither location is being observed, which is how a run
+/// remote from the gateway asserts nothing it cannot measure.
+fn bucket_state(b: &str) -> Vec<(String, u64)> {
+    let mut out = Vec::new();
+    if let Some(p) = data_root_bucket(b) {
+        for (n, h) in crate::inventory::root_xattr_digest(&p) {
+            out.push((format!("xattr:{n}"), h));
+        }
     }
+    if let Some(p) = config_store_record(b) {
+        for (n, h) in crate::inventory::record_field_digest(&p) {
+            out.push((format!("record:{n}"), h));
+        }
+    }
+    out.sort();
+    out
 }
 
 #[tokio::test]
@@ -68,7 +112,9 @@ async fn corpus_coverage_bucket_config() {
     let mut m = Manifest::new();
     m.bucket(&b, "tier", &tier);
 
-    let have_disk = data_root_bucket(&b).is_some();
+    /* Observed at all:  either location is enough, and neither means
+     * the persistence invariant is not asserted. */
+    let have_disk = data_root_bucket(&b).is_some() || config_store_record(&b).is_some();
     let mut steps: Vec<Step> = Vec::new();
 
     /* One macro-free helper per configuration, because each has its own
@@ -91,13 +137,13 @@ async fn corpus_coverage_bucket_config() {
              * Clearing rather than varying the values, because
              * run-varying values would stop the manifests diffing. */
             let _: Result<(), String> = $clear;
-            let before = bucket_attrs(&b);
+            let before = bucket_state(&b);
             let outcome: Result<(), String> = $apply;
             let (accepted, code) = match outcome {
                 Ok(()) => (true, String::new()),
                 Err(c) => (false, c),
             };
-            let after = bucket_attrs(&b);
+            let after = bucket_state(&b);
             /* added, or changed in place */
             let gained: Vec<String> = after
                 .iter()
@@ -109,7 +155,7 @@ async fn corpus_coverage_bucket_config() {
                 m.bucket(&b, concat!($name, ".refused"), &code);
             }
             for g in &gained {
-                m.bucket(&b, concat!($name, ".gained-attr"), g);
+                m.bucket(&b, concat!($name, ".gained"), g);
             }
             let read_back: bool = if accepted { $read } else { false };
             m.bucket(&b, concat!($name, ".reads-back"), &read_back.to_string());
@@ -463,13 +509,17 @@ async fn corpus_coverage_bucket_config() {
             ));
         }
         /* The strong one:  accepted means persisted.  A configuration
-         * that lands nowhere on the bucket survives only as long as
-         * whatever memory is serving it, and a round-trip check cannot
-         * tell the two apart. */
+         * that lands nowhere survives only as long as whatever memory
+         * is serving it, and a round-trip check cannot tell the two
+         * apart.
+         *
+         * "Nowhere" means neither location -- not the bucket
+         * directory's attributes and not a record field.  Asserting it
+         * of one location was this axis's own defect. */
         if have_disk && s.gained.is_empty() {
             problems.push(format!(
-                "{:?} was accepted and added no attribute to the bucket, \
-                 so nothing on disk holds it",
+                "{:?} was accepted and changed nothing that persists, \
+                 in neither the bucket's attributes nor its record",
                 s.name
             ));
         }

@@ -27,6 +27,11 @@
 //! CORPUS_DATA_ROOT  the gateway's data root.  Set only when this run
 //!                   is local to it;  without it the disk inventory is
 //!                   not taken and the S3 half still works
+//! CORPUS_CONFIG_ROOT  a config store, for a backend that keeps a
+//!                   bucket's configuration in a record rather than in
+//!                   the bucket directory's attributes.  Read
+//!                   generically -- a name and a digest per field, no
+//!                   schema -- and unset for an nsfs or posix tree
 //! CORPUS_OBJECT_MODE  the mode every object must be published with,
 //!                   default 0600;  `any` turns the check off.  The
 //!                   one assertion here that is about *this* driver
