@@ -509,6 +509,88 @@ TEST_F(OSDMonitorValidateStretchModeNewPoolTest, RejectsDifferentZonesAndUnknown
   EXPECT_NE(ss2.str().find("does not exist"), string::npos) << ss2.str();
 }
 
+class OSDMonitorStretchTransitionTest : public ::testing::Test {
+protected:
+  static constexpr int zone1 = -2;
+  static constexpr int zone2 = -3;
+  static constexpr epoch_t epoch = 100;
+  mempool::osdmap::map<int64_t, pg_pool_t> pools;
+  OSDMap::Incremental pending_inc{epoch};
+
+  static pg_pool_t make_pool(uint32_t bucket_count,
+                             int mandatory_member = CRUSH_ITEM_NONE) {
+    pg_pool_t p;
+    p.type = pg_pool_t::TYPE_REPLICATED;
+    p.peering_crush_bucket_count = bucket_count;
+    p.peering_crush_bucket_target = bucket_count ? 2 : 0;
+    p.peering_crush_mandatory_member = mandatory_member;
+    return p;
+  }
+
+  void expect_transitioned(int64_t id, uint32_t bucket_count,
+                           int mandatory_member) {
+    SCOPED_TRACE("pool " + std::to_string(id));
+    ASSERT_TRUE(pending_inc.new_pools.contains(id));
+    const pg_pool_t& p = pending_inc.new_pools.at(id);
+    EXPECT_EQ(bucket_count, p.peering_crush_bucket_count);
+    EXPECT_EQ(mandatory_member, p.peering_crush_mandatory_member);
+    EXPECT_EQ(epoch, p.get_last_force_op_resend());
+  }
+};
+
+// Pool changes prepared in the same incremental as the transition: a pool
+// set to num_zones 2 (2), a pool set to num_zones 1 (3), a pool deletion (4)
+// and a two-zone pool create (6).
+TEST_F(OSDMonitorStretchTransitionTest, DegradedCoversPendingPools) {
+  pools[1] = make_pool(2);
+  pools[2] = make_pool(0);
+  pending_inc.new_pools[2] = make_pool(2);
+  pools[3] = make_pool(2);
+  pending_inc.new_pools[3] = make_pool(0, 0);
+  pools[4] = make_pool(2);
+  pending_inc.old_pools.insert(4);
+  pools[5] = make_pool(0);
+  pending_inc.new_pools[6] = make_pool(2);
+
+  OSDMonitor::apply_stretch_transition_to_pools(pools, pending_inc, 1, zone2);
+
+  expect_transitioned(1, 1, zone2);
+  expect_transitioned(2, 1, zone2);
+  expect_transitioned(6, 1, zone2);
+  const pg_pool_t& unstretched = pending_inc.new_pools.at(3);
+  EXPECT_EQ(0u, unstretched.peering_crush_bucket_count);
+  EXPECT_EQ(0, unstretched.peering_crush_mandatory_member);
+  EXPECT_EQ(0u, unstretched.get_last_force_op_resend());
+  EXPECT_FALSE(pending_inc.new_pools.contains(4));
+  EXPECT_FALSE(pending_inc.new_pools.contains(5));
+}
+
+// A pool created from the degraded committed map before the healthy
+// transition commits.
+TEST_F(OSDMonitorStretchTransitionTest, HealthyCoversPendingPools) {
+  pools[1] = make_pool(1, zone1);
+  pending_inc.new_pools[2] = make_pool(1, zone1);
+
+  OSDMonitor::apply_stretch_transition_to_pools(pools, pending_inc, 2,
+                                                CRUSH_ITEM_NONE);
+
+  expect_transitioned(1, 2, CRUSH_ITEM_NONE);
+  expect_transitioned(2, 2, CRUSH_ITEM_NONE);
+}
+
+TEST_F(OSDMonitorStretchTransitionTest, RecoveryCoversPendingPools) {
+  pools[1] = make_pool(1, zone1);
+  pending_inc.new_pools[2] = make_pool(1, zone1);
+  pools[3] = make_pool(1, zone1);
+  pending_inc.old_pools.insert(3);
+
+  OSDMonitor::apply_stretch_transition_to_pools(pools, pending_inc);
+
+  expect_transitioned(1, 1, zone1);
+  expect_transitioned(2, 1, zone1);
+  EXPECT_FALSE(pending_inc.new_pools.contains(3));
+}
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
