@@ -15,7 +15,7 @@ function(build_qatzip)
   # qatzip builds with -Werror so we need to suppress several warnings. some warnings are specific
   # to clang, so we have to check whether our compiler supports them first
   include(CheckCCompilerFlag)
-  foreach(WARNING strict-prototypes unused-but-set-variable)
+  foreach(WARNING strict-prototypes unused-but-set-variable gnu-zero-variadic-macro-arguments tautological-constant-out-of-range-compare c11-extensions)
     check_c_compiler_flag("-Wno-error=${WARNING}" SUPPORTS_${WARNING})
     if(SUPPORTS_${WARNING})
       list(APPEND CFLAGS "-Wno-error=${WARNING}")
