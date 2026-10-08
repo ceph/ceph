@@ -115,6 +115,7 @@ fn env_or(k: &str, d: &str) -> String {
 const STEPS: &[(&str, &str)] = &[
     ("pin",      "resolve the pin and verify the commit is present"),
     ("worktree", "create or refresh a git worktree at the pin"),
+    ("patch",    "apply the patches this pin needs to build"),
     ("build",    "install the dependency tree, and build their native addon"),
     ("config",   "write their account and bucket records over the data root"),
     ("serve",    "start their NSFS endpoint"),
@@ -131,14 +132,16 @@ fn main() {
         "list" => { list(&env); Ok(()) }
         "pin" => pin(&env),
         "worktree" => worktree(&env),
+        "patch" => patch(&env),
         "build" => build(&env),
         "config" => config(&env),
         "serve" | "capture" | "stop" => unbuilt(cmd),
-        "up" => ["pin", "worktree", "build", "config"]
+        "up" => ["pin", "worktree", "patch", "build", "config"]
             .iter()
             .try_for_each(|s| match *s {
                 "pin" => pin(&env),
                 "worktree" => worktree(&env),
+                "patch" => patch(&env),
                 "build" => build(&env),
                 _ => config(&env),
             }),
@@ -155,7 +158,11 @@ fn list(env: &Env) {
     println!("steps:");
     for (name, what) in STEPS {
         let mark =
-            if matches!(*name, "pin" | "worktree" | "build" | "config") { "x" } else { " " };
+            if matches!(*name, "pin" | "worktree" | "patch" | "build" | "config") {
+                "x"
+            } else {
+                " "
+            };
         println!("  [{mark}] {name:10} {what}");
     }
     println!("\nsettings (all overridable):");
@@ -244,6 +251,83 @@ fn worktree(env: &Env) -> Result<(), String> {
     )?;
     println!("worktree {}", wt.display());
     Ok(())
+}
+
+/// Apply the patches this pin needs in order to build.
+///
+/// One so far:  `fs_napi.cpp`'s GPFS request builder wrote the
+/// attribute name through `payload.buffer[0]`, a zero-length array at
+/// the end of `payload`, reaching the sibling `buffer` member only
+/// because the two happen to be adjacent.  GCC 15 reports
+/// `-Warray-bounds` on it and their own `-Werror` then refuses the
+/// build.  The diagnostic is right:  the write is out of bounds as far
+/// as the language is concerned, and the compiler may optimise on
+/// that.  The patch writes through the member that has the storage,
+/// which is where the reply is read from anyway.
+///
+/// **Patched rather than silenced.**  Demoting the warning was the
+/// first thing tried and it was wrong -- it would have left a real
+/// aliasing hazard in the addon that every capture from their gateway
+/// depends on, where a miscompilation would surface as what looks like
+/// a format difference.
+///
+/// Upstream may well have fixed this in a later commit;  this driver
+/// deliberately does not go looking.  The pin is the pin, and carrying
+/// a patch against it is cheaper than tracking their history.
+///
+/// Idempotent:  an applied patch is detected by whether it reverses.
+fn patch(env: &Env) -> Result<(), String> {
+    let wt = env.worktree();
+    if !wt.exists() {
+        return Err("no worktree;  run `worktree` first".into());
+    }
+    let dir = ix_home().join("patches");
+    let mut found = 0;
+    let mut applied = 0;
+
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(_) => {
+            println!("patch    no patches/ directory;  nothing to apply");
+            return Ok(());
+        }
+    };
+    let mut names: Vec<PathBuf> =
+        entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+    names.sort();
+
+    for p in names {
+        let base = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+        if !base.ends_with(".patch") || !base.starts_with(&env.pin) {
+            continue;
+        }
+        found += 1;
+        let path = p.display().to_string();
+        /* already applied?  then it reverses cleanly */
+        if git(&wt, &["apply", "--reverse", "--check", &path]).is_ok() {
+            println!("patch    {base} already applied");
+            continue;
+        }
+        git(&wt, &["apply", "--check", &path])
+            .map_err(|e| format!("{base} does not apply to this worktree: {e}"))?;
+        git(&wt, &["apply", &path])?;
+        println!("patch    {base} applied");
+        applied += 1;
+    }
+
+    if found == 0 {
+        println!("patch    no patches for {}", env.pin);
+    } else {
+        println!("patch    {found} for this pin, {applied} newly applied");
+    }
+    Ok(())
+}
+
+/// Where this driver and its data files live.
+fn ix_home() -> PathBuf {
+    std::env::var("IX_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| ".".into()))
 }
 
 /// Install the dependency tree, from a lock we control.
@@ -346,31 +430,13 @@ fn native(env: &Env) -> Result<(), String> {
         println!("native   nb_native.node present, skipping");
         return Ok(());
     }
-    /* Their code does not compile under a current GCC with their own
-     * -Werror.
-     *
-     * `fs_napi.cpp:317` memcpy()s into `reqP->payload.buffer[0]`,
-     * where `buffer` is declared `char[0]` inside a GPFS
-     * `gpfs_fcntl` request struct that is deliberately
-     * over-allocated.  The code is correct by construction;  the
-     * declaration is the deprecated `char[0]` idiom rather than a C99
-     * flexible array member, and GCC 15 reports
-     * -Warray-bounds on it.  With `cc1plus: all warnings being
-     * treated as errors`, the build stops.
-     *
-     * One warning is demoted, not -Werror as a whole:  every other
-     * warning stays fatal, which is their intent.  Overridable,
-     * because which warnings a toolchain raises is a property of the
-     * host and this will not be the last one.
-     *
-     * This is the part no lockfile can pin, and the only honest
-     * argument for a container -- about the *toolchain*, not about
-     * dependency resolution. */
-    let cxxflags = env_or("IX_CXXFLAGS", "-Wno-error=array-bounds");
-    println!("native   node-gyp configure && build (CXXFLAGS={cxxflags})");
+    /* No warning is demoted here.  Their -Werror stays as they set
+     * it;  the one diagnostic that stopped the build is fixed in the
+     * source by `patch`, because it was reporting a real out-of-bounds
+     * write rather than a false positive.  See patches/. */
+    println!("native   node-gyp configure && build");
     let st = Command::new("npm")
         .args(["run", "build:native"])
-        .env("CXXFLAGS", &cxxflags)
         .current_dir(&wt)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -519,17 +585,7 @@ fn running_ids() -> Result<(u32, u32), String> {
 
 /// The lock this project keeps for a given pin.  Committed.
 fn ours_lock(env: &Env) -> PathBuf {
-    let here = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(Path::to_path_buf))
-        .unwrap_or_else(|| PathBuf::from("."));
-    /* -Zscript puts the binary in a cache, so prefer the source
-     * directory when it can be found;  fall back to the cwd, which is
-     * where the driver is normally run from. */
-    let src_dir = std::env::var("IX_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or(here));
-    src_dir.join("locks").join(format!("{}.package-lock.json", env.pin))
+    ix_home().join("locks").join(format!("{}.package-lock.json", env.pin))
 }
 
 /// Their lockfile must still match the pin.
