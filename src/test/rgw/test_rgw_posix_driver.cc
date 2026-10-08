@@ -15,8 +15,10 @@
 #include "rgw_sal_posix.h"
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <array>
 #include <iostream>
 #include <filesystem>
+#include <sys/xattr.h>
 #include "common/common_init.h"
 #include "common/errno.h"
 #include "global/global_init.h"
@@ -1075,6 +1077,14 @@ TEST(FSEnt, MPVerDirReadWrite)
 class TestUser;
 class TestDriver : public POSIXDriver
 {
+  /* The cache geometry, so a fixture can make it small enough to
+   * evict.  Defaults are the small-but-not-evicting values the suite
+   * has always used;  {1,1,1,8} makes a second upload evict the
+   * first, which is the only way the stabilize callback runs. */
+  std::array<uint64_t, 4> mp_sizes{16, 2, 2, 64};
+public:
+  void set_mp_cache_sizes(const std::array<uint64_t, 4>& s) { mp_sizes = s; }
+
 public:
   std::string driver_base;
 
@@ -1116,7 +1126,8 @@ public:
      * runs the stabilize callback.  Without a cache at all,
      * POSIXMultipartUpload::list_parts() returns -ENOENT and every
      * completion reports NoSuchUpload. */
-    init_multipart_cache(dpp, 16, 2, 2, 64,
+    init_multipart_cache(dpp, mp_sizes[0], mp_sizes[1], mp_sizes[2],
+			 mp_sizes[3],
 			 file::listing::MultipartCachePolicy::writeback);
 
     ldpp_dout(env->dpp, 20) << "SUCCESS" << dendl;
@@ -1198,6 +1209,12 @@ class POSIXDriverTest : public ::testing::Test {
   public:
     POSIXDriverTest() {}
 
+    /* max entries, lanes, partitions, total part budget.  Overridden
+     * by a fixture that needs eviction to happen. */
+    virtual std::array<uint64_t, 4> mp_cache_sizes() const {
+      return {16, 2, 2, 64};
+    }
+
     void SetUp() {
       testname = get_test_name();
       bp = sf::path{sf::absolute(sf::path{base_path / testname})};
@@ -1205,6 +1222,7 @@ class POSIXDriverTest : public ::testing::Test {
       sf::create_directory(bp / "cache");
       sf::create_directory(bp / "root");
       driver = std::make_unique<TestDriver>(bp);
+      driver->set_mp_cache_sizes(mp_cache_sizes());
       int ret = driver->init(env->dpp);
       EXPECT_EQ(ret, 0);
 
@@ -2636,6 +2654,97 @@ public:
 TEST_F(POSIXVerMPObjectTest, MPUploadComplete)
 {
   create_MPObj(testname + "MPVER");
+}
+
+
+/* An evicted part's record reaches the disk.
+ *
+ * Under writeback, eviction is the only thing that writes a part's
+ * xattr, so nothing else persists it.  The callback did the write
+ * relative to `root_fd`, a member that was declared and never
+ * assigned and whose only reader this was, so every stabilize opened
+ * its staging directory relative to an uninitialized descriptor and
+ * returned having written nothing.  The suite could not see it:  no
+ * test forced an eviction and then looked.
+ *
+ * {1,1,1,8}, so the second upload below evicts the first.
+ */
+class POSIXEvictingMPTest : public POSIXBucketTest {
+public:
+  std::array<uint64_t, 4> mp_cache_sizes() const override {
+    return {1, 1, 1, 8};
+  }
+};
+
+TEST_F(POSIXEvictingMPTest, AnEvictedPartRecordReachesTheDisk)
+{
+  const std::string upload_id = "c0ffee";
+  const std::string staging = ".multipart_" + testname + "." + upload_id;
+
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    bucket->get_multipart_upload(testname, upload_id);
+  ASSERT_NE(upload.get(), nullptr);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+  {
+    std::unique_ptr<rgw::sal::Writer> writer =
+      upload->get_writer(env->dpp, null_yield, nullptr, acl_owner, &placement,
+			 1, "part-00001");
+    ASSERT_NE(writer.get(), nullptr);
+    ASSERT_EQ(writer->prepare(null_yield), 0);
+    bufferlist bl;
+    bl.append(std::string(64, 'a'));
+    ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+    ASSERT_EQ(writer->process(bufferlist(), 64), 0);
+    ceph::real_time mtime;
+    Attrs pattrs;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ASSERT_EQ(writer->complete(64, "etag", &mtime, real_time(), pattrs,
+			       std::nullopt, real_time(), nullptr, nullptr,
+			       nullptr, nullptr, nullptr, rctx, 0), 0);
+  }
+
+  /* a second upload, which evicts the first from a one-entry cache */
+  {
+    const std::string other_id = "decaf0";
+    std::unique_ptr<rgw::sal::MultipartUpload> other =
+      bucket->get_multipart_upload(testname + "-other", other_id);
+    ASSERT_NE(other.get(), nullptr);
+    ASSERT_EQ(other->init(env->dpp, null_yield, acl_owner, placement,
+			  attrs), 0);
+    std::unique_ptr<rgw::sal::Writer> writer =
+      other->get_writer(env->dpp, null_yield, nullptr, acl_owner, &placement,
+			1, "part-00001");
+    ASSERT_NE(writer.get(), nullptr);
+    ASSERT_EQ(writer->prepare(null_yield), 0);
+    bufferlist bl;
+    bl.append(std::string(64, 'z'));
+    ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+    ASSERT_EQ(writer->process(bufferlist(), 64), 0);
+    ceph::real_time mtime;
+    Attrs pattrs;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ASSERT_EQ(writer->complete(64, "etag", &mtime, real_time(), pattrs,
+			       std::nullopt, real_time(), nullptr, nullptr,
+			       nullptr, nullptr, nullptr, rctx, 0), 0);
+  }
+
+  const sf::path part{bp / "root" / testname / staging / "part-00001"};
+  ASSERT_TRUE(sf::exists(part)) << part;
+
+  /* the record itself, which is what eviction was supposed to write */
+  char buf[8192];
+  ssize_t len = ::listxattr(part.c_str(), buf, sizeof(buf));
+  ASSERT_GT(len, 0) << part << " carries no attributes at all";
+  std::set<std::string> names;
+  for (const char* q = buf; q < buf + len; q += strlen(q) + 1) {
+    names.insert(q);
+  }
+  EXPECT_TRUE(names.contains("user.rgw.POSIX-Multipart-Upload"))
+      << "the evicted part's record was not written";
 }
 
 

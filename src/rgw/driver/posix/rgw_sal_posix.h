@@ -515,7 +515,6 @@ protected:
   UserCache user_cache;
   std::string base_path;
   std::unique_ptr<posix::Directory> root_dir;
-  int root_fd;
   RGWSyncModuleInstanceRef sync_module;
   RGWQuotaHandler* quota_handler{nullptr};
   RGWLC* lc{nullptr};
@@ -531,7 +530,26 @@ public:
 
     userDB = std::make_unique<rgw::store::POSIXUserDB>(db_full_path.string(), cct);
   }
-  virtual ~POSIXDriver() { }
+  /* The multipart cache goes before anything it calls back into.
+   *
+   * A writeback entry's eviction runs `stabilize_fn`, which captures
+   * the driver and asks it for the root fd.  The cache is a member
+   * declared before `root_dir`, so without this it is destroyed in
+   * reverse order -- after the `Directory` that `get_root_fd()`
+   * dereferences -- and a cache still holding a dirty entry faults on
+   * the way out.
+   *
+   * Dropped here rather than reordered.  Reordering the members would
+   * work and would leave nothing saying why the order matters, so the
+   * next member added in the wrong place brings it back.
+   *
+   * Stabilizing on the way out is wanted, not merely tolerated:  under
+   * writeback, eviction is the only thing that writes those part
+   * records, so a shutdown that skipped it would lose the parts of
+   * every multipart upload still in flight. */
+  virtual ~POSIXDriver() {
+    multipart_cache.reset();
+  }
 
   void set_context(CephContext *_cct) {
     cct = _cct;

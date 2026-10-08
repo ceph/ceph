@@ -2349,7 +2349,11 @@ void POSIXDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	    file::listing::MultipartPartInfo>& parts) {
 	std::optional<std::string> ns{mp_ns};
 	auto staging_name = bucket_fname(key.upload_meta, ns);
-	int dir_fd = ::openat(root_fd, (key.bucket_name + "/" +
+	/* get_root_fd(), not the root_fd member:  that member was
+	 * declared and never assigned, and this was its only reader, so
+	 * every stabilize opened a directory relative to an
+	 * uninitialized descriptor.  The member is gone. */
+	int dir_fd = ::openat(get_root_fd(), (key.bucket_name + "/" +
 	  staging_name).c_str(), O_RDONLY | O_DIRECTORY);
 	if (dir_fd < 0) {
 	  return;
