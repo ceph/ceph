@@ -13,6 +13,8 @@
  *
  */
 
+#include <condition_variable>
+#include <mutex>
 #include <set>
 #include <boost/intrusive/list.hpp>
 #include "global/global_init.h"
@@ -374,6 +376,30 @@ void rgw::AppMain::init_perfcounters()
     heap_profiler_hook = nullptr;
   }
 } /* init_perfcounters */
+
+void rgw::AppMain::init_heap_release()
+{
+  if (!ceph_using_tcmalloc()) {
+    return;
+  }
+  heap_releaser = std::jthread([dpp = dpp] (std::stop_token stop) {
+    ceph_pthread_setname("rgw_heap_rel");
+    std::mutex mutex;
+    std::condition_variable_any cond;
+    std::unique_lock lock{mutex};
+    while (!stop.stop_requested()) {
+      // re-read every pass so it can be changed at runtime; 0 disables
+      const auto interval = g_conf().get_val<std::chrono::seconds>(
+          "rgw_heap_release_interval");
+      if (interval.count()) {
+        ldpp_dout(dpp, 20) << "releasing free tcmalloc memory" << dendl;
+        ceph_heap_release_free_memory();
+      }
+      cond.wait_for(lock, stop, std::max(interval, std::chrono::seconds(1)),
+                    [] { return false; });
+    }
+  });
+}
 
 void rgw::AppMain::init_http_clients()
 {
@@ -832,6 +858,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   rgw::curl::cleanup_curl();
   g_conf().remove_observer(implicit_tenant_context.get());
   implicit_tenant_context.reset(); // deletes
+  heap_releaser = std::jthread{};
   unregister_heap_profiler_hook();
   rgw_perf_stop(g_ceph_context);
   ratelimiter.reset(); // deletes--ensure this happens before we destruct

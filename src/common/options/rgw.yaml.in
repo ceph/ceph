@@ -1352,6 +1352,15 @@ options:
   see_also:
   - rgw_max_concurrent_requests
   with_legacy: true
+- name: rgw_heap_release_interval
+  type: secs
+  level: advanced
+  desc: How often radosgw gives free tcmalloc memory back to the OS
+  long_desc: Each interval, radosgw asks tcmalloc to hand memory it is no longer
+    using back to the OS. Set to 0 to turn it off.
+  default: 1
+  services:
+  - rgw
 - name: rgw_num_control_oids
   type: int
   level: advanced

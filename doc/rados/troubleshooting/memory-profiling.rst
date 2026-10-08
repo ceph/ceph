@@ -135,6 +135,13 @@ All heap subcommands (``stats``, ``start_profiler``, ``stop_profiler``,
 ``dump``, ``release``, ``get_release_rate``, ``set_release_rate``) are
 supported for RGW.
 
+RGW also returns free ``TCMalloc`` memory to the OS every
+:confval:`rgw_heap_release_interval` seconds. To disable it, run:
+
+.. prompt:: bash
+
+   ceph config set client.rgw rgw_heap_release_interval 0
+
 
 Dumping Heap Information
 ------------------------

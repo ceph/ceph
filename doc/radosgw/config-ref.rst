@@ -28,6 +28,7 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_op_thread_timeout
 .. confval:: rgw_op_thread_suicide_timeout
 .. confval:: rgw_thread_pool_size
+.. confval:: rgw_heap_release_interval
 .. confval:: rgw_num_control_oids
 .. confval:: rgw_init_timeout
 .. confval:: rgw_mime_types_file
