@@ -1563,6 +1563,27 @@ class RgwService(CephService):
     def allow_colo(self) -> bool:
         return True
 
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
+        step = super().choose_next_action(
+            scheduled_action, daemon_type, spec, curr_deps, last_deps
+        )
+        # Only REDEPLOY when frontend config changed, as rgw_frontends
+        # can't be updated at runtime other changes like ssl
+        # certs can be applied via reconfig without a restart.
+        if step.action is utils.Action.RECONFIG:
+            changed = set(curr_deps).symmetric_difference(last_deps)
+            if any(d.startswith('frontend:') for d in changed):
+                return utils.NextDaemonStep(utils.Action.REDEPLOY)
+        return step
+
     @classmethod
     def _get_service_dependencies(
         cls,
@@ -1580,6 +1601,17 @@ class RgwService(CephService):
             if isinstance(ssl_cert, list):
                 ssl_cert = '\n'.join(ssl_cert)
             deps.append(f'ssl-cert:{utils.config_hash(ssl_cert)}')
+
+        if rgw_spec:
+            frontend_parts = []
+            if rgw_spec.rgw_frontend_type:
+                frontend_parts.append(f'type={rgw_spec.rgw_frontend_type}')
+            if rgw_spec.rgw_frontend_extra_args:
+                frontend_parts.append(
+                    f'extra_args={sorted(rgw_spec.rgw_frontend_extra_args)}')
+            allow_reuse = getattr(rgw_spec, 'allow_port_reuse', False)
+            frontend_parts.append(f'allow_port_reuse={allow_reuse}')
+            deps.append(f'frontend:{utils.config_hash(str(sorted(frontend_parts)))}')
 
         return sorted(deps)
 
