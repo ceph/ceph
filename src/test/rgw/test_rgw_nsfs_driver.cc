@@ -38,6 +38,8 @@
 #include "driver/nsfs/identity_db.h"
 #include "driver/nsfs/noobaa_config_store.h"
 #include "driver/nsfs/noobaa_master_keys.h"
+#include "driver/nsfs/noobaa_import_plan.h"
+#include "rgw_account.h"
 #include "driver/nsfs/personality.h"
 #include "rgw_auth.h"
 #include "common/ceph_json.h"
@@ -9258,6 +9260,269 @@ TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRefusedWhereItIsStored)
     " VALUES ('two', '', '', 2);";
   EXPECT_NE(sqlite3_exec(raw, two.c_str(), nullptr, nullptr, nullptr),
 	    SQLITE_OK) << "the schema accepted OwnsStorage=2";
+}
+
+/* ------------------------------------------------------------------ *
+ * I3 -- the mapping, and the collision gate.
+ *
+ * No secrets:  an access key's id is cleartext, so this runs against
+ * a store whose master key is missing.  Nothing is written.
+ * ------------------------------------------------------------------ */
+
+class NooBaaPlanTest : public NooBaaStoreTest {
+public:
+  nsfs::ImportPlan plan;
+
+  int build(int expect_entries = -1) {
+    auto c = read_store();
+    int ret = nsfs::build_import_plan(env->dpp, env->cct.get(), c, plan);
+    if (expect_entries >= 0) {
+      EXPECT_EQ(static_cast<int>(plan.entries.size()), expect_entries);
+    }
+    return ret;
+  }
+
+  const nsfs::ImportEntry* entry(const std::string& name) const {
+    for (const auto& e : plan.entries) {
+      if (e.noobaa_name == name) {
+	return &e;
+      }
+    }
+    return nullptr;
+  }
+
+  bool said(const std::string& fragment) const {
+    for (const auto& c : plan.collisions) {
+      if (c.find(fragment) != std::string::npos) {
+	return true;
+      }
+    }
+    return false;
+  }
+
+  std::string why() const {
+    std::string s;
+    for (const auto& c : plan.collisions) {
+      s += "\n  " + c;
+    }
+    return s;
+  }
+};
+
+/* A store their tools wrote maps cleanly.
+ *
+ * The three records are NooBaa's own bytes.  Note what the ids look
+ * like:  their `_id` is a 24-character hex ObjectId and the minted
+ * account id is `RGW` followed by digits, which is why no
+ * transformation of one is the other. */
+TEST_F(NooBaaPlanTest, AStoreTheirToolsWroteMapsCleanly)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
+
+  ASSERT_EQ(build(3), 0) << why();
+  EXPECT_TRUE(plan.collisions.empty()) << why();
+  EXPECT_EQ(plan.accounts(), 3u);
+  EXPECT_EQ(plan.iam_users(), 0u);
+
+  const auto* e = entry("interchange");
+  ASSERT_NE(e, nullptr);
+  EXPECT_EQ(e->noobaa_id, "6ac7cb27fd4af356919110a3");
+  EXPECT_EQ(e->name, "interchange");
+  /* their email is a copy of the name, carried as it is */
+  EXPECT_EQ(e->email, "interchange");
+  /* what principal matching consults */
+  EXPECT_EQ(e->display_name, "interchange");
+  EXPECT_TRUE(e->tenant.empty());
+  ASSERT_EQ(e->access_key_ids.size(), 1u);
+  EXPECT_EQ(e->access_key_ids[0], "INTERCHANGEACCESSKEY");
+  EXPECT_FALSE(e->iam_user);
+
+  /* a minted id in RGW's own form, not a transformation of theirs */
+  EXPECT_TRUE(rgw::account::validate_id(e->account_id))
+      << e->account_id << " is not an RGW account id";
+  EXPECT_NE(e->account_id, e->noobaa_id);
+  EXPECT_EQ(e->account_id.compare(0, 3, "RGW"), 0);
+
+  /* every account gets its own */
+  std::set<std::string> ids;
+  for (const auto& x : plan.entries) {
+    EXPECT_TRUE(ids.insert(x.account_id).second)
+	<< "two accounts were minted the same id";
+  }
+
+  EXPECT_TRUE(entry("anonymous")->anonymous);
+  EXPECT_TRUE(entry("anonymous")->access_key_ids.empty());
+}
+
+/* It needs no secrets.
+ *
+ * The same store with no master_keys.json maps identically:  the gate
+ * is about ids and names, so a deployment whose key is missing can
+ * still be told what its import would hit. */
+TEST_F(NooBaaPlanTest, ThePlanNeedsNoMasterKey)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  ASSERT_FALSE(std::filesystem::exists(store + "/master_keys.json"));
+
+  ASSERT_EQ(build(1), 0) << why();
+  EXPECT_EQ(entry("interchange")->access_key_ids[0],
+	    "INTERCHANGEACCESSKEY");
+}
+
+/* An IAM user takes its owner's account id.
+ *
+ * Root accounts are mapped first so a user can be placed without a
+ * second pass, and an orphan user is reported rather than given an
+ * invented account. */
+TEST_F(NooBaaPlanTest, AnIamUserTakesItsOwnersAccount)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("b", R"({"_id":"b","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3"})");
+
+  ASSERT_EQ(build(2), 0) << why();
+  EXPECT_EQ(plan.accounts(), 1u);
+  EXPECT_EQ(plan.iam_users(), 1u);
+
+  const auto* acct = entry("interchange");
+  const auto* user = entry("a-user");
+  ASSERT_NE(acct, nullptr);
+  ASSERT_NE(user, nullptr);
+  EXPECT_TRUE(user->iam_user);
+  EXPECT_EQ(user->account_id, acct->account_id)
+      << "the user was not placed in its owner's account";
+
+  /* an owner that is not in the store */
+  add_identity("c", R"({"_id":"c","name":"orphan","email":"o@x",
+    "owner":"6ac7cb27fd4af3569191ffff"})");
+  EXPECT_EQ(build(3), -EINVAL);
+  EXPECT_TRUE(said("whose owner")) << why();
+  EXPECT_TRUE(said("6ac7cb27fd4af3569191ffff")) << why();
+}
+
+/* The email collision, which is the likeliest first failure.
+ *
+ * Their email is a copy of the name, and RGW's email index is shared
+ * across users and accounts.  So two IAM users named `alice` under
+ * different root accounts collide -- which is §6.3's own example, and
+ * nothing about it is visible one record at a time. */
+TEST_F(NooBaaPlanTest, TwoUsersOfOneNameUnderDifferentAccountsCollide)
+{
+  add_identity("a1", R"({"_id":"a1","name":"acct-one","email":"acct-one"})");
+  add_identity("a2", R"({"_id":"a2","name":"acct-two","email":"acct-two"})");
+  ASSERT_EQ(build(2), 0) << why();
+
+  add_identity("u1", R"({"_id":"u1","name":"alice","email":"alice",
+    "owner":"a1"})");
+  add_identity("u2", R"({"_id":"u2","name":"alice","email":"alice",
+    "owner":"a2"})");
+
+  EXPECT_EQ(build(4), -EEXIST);
+  EXPECT_TRUE(said("both carry the email \"alice\"")) << why();
+  EXPECT_TRUE(said("u1")) << why();
+  EXPECT_TRUE(said("u2")) << why();
+  /* the plan is still returned, because an operator reading a refusal
+   * wants to see what would have been imported */
+  EXPECT_EQ(plan.entries.size(), 4u);
+}
+
+/* Every collision is reported, not the first.
+ *
+ * Fixing them one import at a time means one failed import per
+ * collision, so the list is the deliverable.  Four kinds at once, and
+ * the count is asserted so a gate that stopped early would fail. */
+TEST_F(NooBaaPlanTest, EveryCollisionIsReportedTogether)
+{
+  add_identity("a1", R"({"_id":"a1","name":"same-name","email":"e1",
+    "access_keys":[{"access_key":"KEYAAAAAAAAAAAAAAAAA",
+    "encrypted_secret_key":"x"}]})");
+  add_identity("a2", R"({"_id":"a2","name":"same-name","email":"e2",
+    "access_keys":[{"access_key":"KEYAAAAAAAAAAAAAAAAA",
+    "encrypted_secret_key":"x"}]})");
+  add_identity("a3", R"({"_id":"a3","name":"third","email":"e1"})");
+  add_identity("a4", R"({"_id":"a4","name":"has$dollar","email":"e4"})");
+
+  EXPECT_EQ(build(4), -EEXIST);
+
+  EXPECT_TRUE(said("two accounts are named same-name")) << why();
+  EXPECT_TRUE(said("both carry the email \"e1\"")) << why();
+  EXPECT_TRUE(said("both carry the access key KEYAAAAAAAAAAAAAAAAA"))
+      << why();
+  EXPECT_TRUE(said("has$dollar")) << why();
+  EXPECT_GE(plan.collisions.size(), 4u)
+      << "the gate stopped before reporting everything:" << why();
+}
+
+/* A name RGW will not accept is reported, not rewritten.
+ *
+ * NooBaa validates only *new* names and says so, so a legacy name may
+ * contain anything.  Rewriting one silently invalidates every
+ * name-form principal referring to it, so this reports. */
+TEST_F(NooBaaPlanTest, ANameRgwRefusesIsReportedNotRewritten)
+{
+  add_identity("a", R"({"_id":"a","name":"has:colon","email":"a"})");
+  EXPECT_EQ(build(1), -EINVAL);
+  EXPECT_TRUE(said("has:colon")) << why();
+  EXPECT_TRUE(said("will not accept")) << why();
+  /* the name is carried through unchanged */
+  EXPECT_EQ(plan.entries[0].name, "has:colon");
+
+  /* and a plain name is accepted, so the check is not refusing
+   * everything */
+  nsfs::ImportPlan clean;
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("b", R"({"_id":"b","name":"ordinary","email":"b"})");
+  auto c = read_store();
+  EXPECT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, clean), 0);
+}
+
+/* A duplicated NooBaa id is refused, because re-import depends on it.
+ *
+ * The id is what a second pass recognises an identity by -- the name
+ * is not, since a rename rewrites the name and leaves the id -- so two
+ * records claiming one id make that recognition ambiguous. */
+TEST_F(NooBaaPlanTest, ADuplicatedNooBaaIdIsRefused)
+{
+  /* two directories, one `_id` inside both */
+  add_identity("dir-one", R"({"_id":"same","name":"one","email":"one"})");
+  add_identity("dir-two", R"({"_id":"same","name":"two","email":"two"})");
+
+  EXPECT_EQ(build(2), -EEXIST);
+  EXPECT_TRUE(said("appears on more than one record")) << why();
+}
+
+/* A real store on disk plans without collisions.
+ *
+ * Skipped when `NSFS_NOOBAA_STORE` is unset.  Three accounts their CLI
+ * and gateway made, which is the case an import will actually meet
+ * first. */
+TEST_F(NooBaaPlanTest, AStoreOnDiskPlansCleanly)
+{
+  const char* dir = ::getenv("NSFS_NOOBAA_STORE");
+  if (!dir || !*dir) {
+    GTEST_SKIP() << "NSFS_NOOBAA_STORE is unset";
+  }
+
+  nsfs::NooBaaConfigStore cs(dir);
+  nsfs::NooBaaStoreContents c;
+  ASSERT_EQ(cs.read(env->dpp, c), 0);
+  ASSERT_GT(c.identities.size(), 0u);
+
+  nsfs::ImportPlan p;
+  const int ret = nsfs::build_import_plan(env->dpp, env->cct.get(), c, p);
+  std::string s;
+  for (const auto& x : p.collisions) {
+    s += "\n  " + x;
+  }
+  EXPECT_EQ(ret, 0) << s;
+  EXPECT_EQ(p.entries.size(), c.identities.size());
+  for (const auto& e : p.entries) {
+    EXPECT_FALSE(e.account_id.empty()) << e.noobaa_name;
+    EXPECT_TRUE(rgw::account::validate_id(e.account_id)) << e.account_id;
+  }
 }
 
 int main(int argc, char *argv[]) {
