@@ -1,0 +1,40 @@
+# standup.rs settings.  Copy to interchange.conf and edit.
+#
+# `IX_` is for *interchange*.  Every key here is also an environment
+# variable with that prefix -- IX_WORK, IX_PIN -- and the environment
+# wins over this file.
+
+# REQUIRED.  Holds the NooBaa worktree (upwards of a gigabyte), their
+# config store, the data root, and the logs.
+#
+# Put it somewhere deliberate and OUTSIDE any ceph path.  Not in a
+# build directory:  vstart.sh removes $dev/rgw/$STORE/root on every
+# start, so a tree there is deleted by the act of starting the gateway
+# meant to read it.
+work = /lv2tb/nsfs-interchange
+
+# REQUIRED for `adopt`, which runs rgw-vstart.sh and must do so from
+# the build directory.
+ceph_build = /lv2tb/ceph-cp/build
+
+# Their clone.  Read only -- never checked out, never has its HEAD
+# moved;  `worktree` makes a --detach'ed worktree from it.
+# noobaa_src = ~/dev/noobaa-core
+
+# The commit to stand up.  08d063f86 is "Bumping version from 5.22.0
+# to 5.23.0" -- the START of the window carrying that version string,
+# which is a hypothesis about what Scale ships and not a confirmed
+# pin.  `standup.rs pin` says so on every run.
+# pin = 08d063f86
+
+# What `rgw-vstart.sh --data-root` is given.  The tree both gateways
+# open is `<data>/root`, because that is the layout that flag expects.
+# Defaults to <work>/data.
+# data = /lv2tb/nsfs-interchange/data
+
+# Their S3 endpoint.  HTTP, not HTTPS:  the corpus talks to it with the
+# Rust SDK and a self-signed certificate is a problem worth not having.
+# port = 6001
+
+# account = interchange
+# bucket  = interchange

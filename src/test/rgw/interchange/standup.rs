@@ -46,11 +46,16 @@ struct Env {
     src: PathBuf,
     /// the commit to stand up
     pin: String,
-    /// scratch:  the worktree, the config, the logs
+    /// the worktree, the config store, the data root, the logs.
+    /// **Required** -- see `Env::load`
     work: PathBuf,
-    /// the tree both gateways will serve
+    /// what `rgw-vstart.sh --data-root` is given.  The tree itself is
+    /// `data/root`, because that is the layout that flag expects
     data: PathBuf,
-    /// NooBaa's endpoint port
+    /// the ceph build directory, for the handoff.  **Required** for
+    /// `adopt`, and only for `adopt`
+    ceph_build: Option<PathBuf>,
+    /// their HTTP port
     port: u16,
     /// the account their gateway serves as
     account: String,
@@ -61,30 +66,92 @@ struct Env {
     secret_key: String,
 }
 
+/// Every setting, from `interchange.conf` and then the environment.
+///
+/// `IX_WORK` and `work = ` are the same setting;  the environment
+/// wins.
+fn settings() -> BTreeMap<String, String> {
+    let mut m = BTreeMap::new();
+    let conf = ix_home().join("interchange.conf");
+    if let Ok(text) = std::fs::read_to_string(&conf) {
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((k, v)) = line.split_once('=') {
+                m.insert(k.trim().to_ascii_lowercase(), v.trim().to_string());
+            }
+        }
+    }
+    for (k, v) in std::env::vars() {
+        if let Some(rest) = k.strip_prefix("IX_") {
+            m.insert(rest.to_ascii_lowercase(), v);
+        }
+    }
+    m
+}
+
 impl Env {
-    fn from_environment() -> Env {
+    /// **`work` has no default and this stops without it.**
+    ///
+    /// It is where a gigabyte of worktree goes *and* where the config
+    /// store and the data root live -- the artifacts this exercise
+    /// produces.  The first version of this defaulted to
+    /// `~/.cache/nsfs-interchange`, which was wrong twice over:  it
+    /// put the deliverable somewhere nominally disposable, and it
+    /// chose the location without being asked.
+    fn load() -> Result<Env, String> {
+        let s = settings();
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
-        let work = env_or("IX_WORK", &format!("{home}/.cache/nsfs-interchange"));
-        Env {
-            src: env_or("IX_NOOBAA_SRC", &format!("{home}/dev/noobaa-core")).into(),
-            pin: env_or("IX_PIN", "08d063f86"),
-            data: env_or("IX_DATA", &format!("{work}/data")).into(),
-            work: work.into(),
-            /* their HTTP port.  HTTP rather than HTTPS deliberately:
-             * the corpus talks to this with the Rust SDK and a
-             * self-signed certificate is a problem worth not having. */
-            port: env_or("IX_PORT", "6001").parse().unwrap_or(6001),
-            account: env_or("IX_ACCOUNT", "interchange"),
-            bucket: env_or("IX_BUCKET", "interchange"),
+
+        let Some(work) = s.get("work").filter(|v| !v.is_empty()) else {
+            return Err(format!(
+                "`work` is not set, and this driver will not choose one for you.\n\n  \
+                 It holds the NooBaa worktree -- upwards of a gigabyte -- and the\n  \
+                 config store and the data root, which are the artifacts this\n  \
+                 produces.  Put it somewhere deliberate, outside any ceph path:\n\n    \
+                 IX_WORK=/path/to/interchange standup.rs <step>\n\n  \
+                 or, standing, in {}:\n\n    work = /path/to/interchange\n\n  \
+                 See interchange.conf.sample.",
+                ix_home().join("interchange.conf").display()
+            ));
+        };
+        let work = PathBuf::from(work);
+
+        let get = |k: &str, d: &str| -> String {
+            s.get(k).filter(|v| !v.is_empty()).cloned().unwrap_or_else(|| d.to_string())
+        };
+
+        Ok(Env {
+            src: get("noobaa_src", &format!("{home}/dev/noobaa-core")).into(),
+            pin: get("pin", "08d063f86"),
+            /* `rgw-vstart.sh --data-root DIR` serves DIR/root, so the
+             * tree NooBaa writes has to be data/root for the handoff to
+             * line up without copying anything. */
+            data: get("data", &work.join("data").display().to_string()).into(),
+            ceph_build: s
+                .get("ceph_build")
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from),
+            work,
+            /* HTTP rather than HTTPS deliberately:  the corpus talks to
+             * this with the Rust SDK and a self-signed certificate is a
+             * problem worth not having. */
+            port: get("port", "6001").parse().unwrap_or(6001),
+            account: get("account", "interchange"),
+            bucket: get("bucket", "interchange"),
             /* Fixed rather than generated:  the corpus has to be
              * pointed at this endpoint, and a credential that changes
              * per run means a config file that changes per run. */
-            access_key: env_or("IX_ACCESS_KEY", "IXAAAAAAAAAAAAAAAAAA"),
-            secret_key: env_or(
-                "IX_SECRET_KEY",
-                "IXsecretIXsecretIXsecretIXsecretIXsecret",
-            ),
-        }
+            access_key: get("access_key", "IXAAAAAAAAAAAAAAAAAA"),
+            secret_key: get("secret_key", "IXsecretIXsecretIXsecretIXsecretIXsecret"),
+        })
+    }
+
+    /// The tree itself:  what both gateways open.
+    fn tree(&self) -> PathBuf {
+        self.data.join("root")
     }
 
     fn worktree(&self) -> PathBuf {
@@ -132,15 +199,21 @@ const STEPS: &[(&str, &str)] = &[
     ("serve",    "start their NSFS endpoint"),
     ("capture",  "run the corpus against their endpoint"),
     ("stop",     "stop the endpoint, leaving the tree"),
+    ("adopt",    "start RGW against the same tree"),
 ];
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let env = Env::from_environment();
     let cmd = args.first().map(String::as_str).unwrap_or("list");
 
-    let r = match cmd {
-        "list" => { list(&env); Ok(()) }
+    /* `list` is how you find out what to set, so it must work before
+     * anything is set. */
+    if cmd == "list" {
+        list();
+        return;
+    }
+
+    let r = Env::load().and_then(|env| match cmd {
         "pin" => pin(&env),
         "worktree" => worktree(&env),
         "patch" => patch(&env),
@@ -148,6 +221,7 @@ fn main() {
         "config" => config(&env),
         "serve" => serve(&env),
         "stop" => stop(&env),
+        "adopt" => adopt(&env),
         "capture" => unbuilt(cmd),
         "up" => ["pin", "worktree", "patch", "build", "config"]
             .iter()
@@ -159,7 +233,7 @@ fn main() {
                 _ => config(&env),
             }),
         other => Err(format!("unknown step {other:?};  try `list`")),
-    };
+    });
 
     if let Err(e) = r {
         eprintln!("\x1b[31mstandup: {e}\x1b[0m");
@@ -167,34 +241,35 @@ fn main() {
     }
 }
 
-fn list(env: &Env) {
+fn list() {
     println!("steps:");
     for (name, what) in STEPS {
-        let mark =
-            if matches!(
-                *name,
-                "pin" | "worktree" | "patch" | "build" | "config" | "serve" | "stop"
-            ) {
-                "x"
-            } else {
-                " "
-            };
+        let mark = if *name == "capture" { " " } else { "x" };
         println!("  [{mark}] {name:10} {what}");
     }
-    println!("\nsettings (all overridable):");
-    let s: BTreeMap<&str, String> = BTreeMap::from([
-        ("IX_NOOBAA_SRC", env.src.display().to_string()),
-        ("IX_PIN", env.pin.clone()),
-        ("IX_WORK", env.work.display().to_string()),
-        ("IX_DATA", env.data.display().to_string()),
-        ("IX_PORT", env.port.to_string()),
-        ("IX_ACCOUNT", env.account.clone()),
-        ("IX_BUCKET", env.bucket.clone()),
-    ]);
-    for (k, v) in s {
-        println!("  {k:16} {v}");
+
+    println!("\n`IX_` is for *interchange*.  Each setting is an IX_ environment");
+    println!("variable, or the same name in interchange.conf beside this driver;");
+    println!("the environment wins.\n");
+
+    let s = settings();
+    let shown = [
+        ("work", "REQUIRED -- the worktree, config store, data root, logs"),
+        ("ceph_build", "REQUIRED for `adopt` -- the ceph build directory"),
+        ("noobaa_src", "their clone, read only"),
+        ("pin", "the commit to stand up"),
+        ("data", "what --data-root is given;  the tree is data/root"),
+        ("port", "their HTTP port"),
+        ("account", ""),
+        ("bucket", ""),
+    ];
+    for (k, note) in shown {
+        match s.get(k) {
+            Some(v) if !v.is_empty() => println!("  {k:12} {v}"),
+            _ => println!("  {k:12} (unset)  {note}"),
+        }
     }
-    println!("\n[x] is built;  [ ] is not.  `up` runs the built ones.");
+    println!("\n[x] is built;  [ ] is not.  `up` runs through `config`.");
 }
 
 fn unbuilt(step: &str) -> Result<(), String> {
@@ -496,11 +571,14 @@ fn config(env: &Env) -> Result<(), String> {
     let (uid, gid) = running_ids()?;
     std::fs::create_dir_all(env.config_root())
         .map_err(|e| format!("cannot create {}: {e}", env.config_root().display()))?;
-    std::fs::create_dir_all(&env.data)
-        .map_err(|e| format!("cannot create {}: {e}", env.data.display()))?;
+    /* The tree, not `data`:  `rgw-vstart.sh --data-root DIR` serves
+     * DIR/root, so NooBaa has to write into data/root for the handoff
+     * to line up without copying anything. */
+    std::fs::create_dir_all(env.tree())
+        .map_err(|e| format!("cannot create {}: {e}", env.tree().display()))?;
 
     println!("config   config_root {}", env.config_root().display());
-    println!("         data        {} (uid {uid}, gid {gid})", env.data.display());
+    println!("         tree        {} (uid {uid}, gid {gid})", env.tree().display());
 
     if nsfs_cli(env, &["account", "status", "--name", &env.account]).is_ok() {
         println!("         account {:?} already present", env.account);
@@ -512,7 +590,7 @@ fn config(env: &Env) -> Result<(), String> {
                 "--name", &env.account,
                 "--uid", &uid.to_string(),
                 "--gid", &gid.to_string(),
-                "--new_buckets_path", &env.data.display().to_string(),
+                "--new_buckets_path", &env.tree().display().to_string(),
                 "--access_key", &env.access_key,
                 "--secret_key", &env.secret_key,
             ],
@@ -520,7 +598,7 @@ fn config(env: &Env) -> Result<(), String> {
         println!("         account {:?} created", env.account);
     }
 
-    let bucket_path = env.data.join(&env.bucket);
+    let bucket_path = env.tree().join(&env.bucket);
     if nsfs_cli(env, &["bucket", "status", "--name", &env.bucket]).is_ok() {
         println!("         bucket {:?} already present", env.bucket);
     } else {
@@ -563,12 +641,12 @@ fn config(env: &Env) -> Result<(), String> {
         &creds,
         format!(
             "# written by standup.rs config\nendpoint=http://127.0.0.1:{}\n\
-             access_key={}\nsecret_key={}\nbucket={}\ndata={}\n",
+             access_key={}\nsecret_key={}\nbucket={}\ntree={}\n",
             env.port,
             env.access_key,
             env.secret_key,
             env.bucket,
-            env.data.display()
+            env.tree().display()
         ),
     )
     .map_err(|e| format!("cannot write {}: {e}", creds.display()))?;
@@ -693,6 +771,105 @@ fn stop(env: &Env) -> Result<(), String> {
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
     Err(format!("pid {pid} did not stop within 30s"))
+}
+
+/// Start RGW against the tree NooBaa wrote.
+///
+/// This is the handoff, and the reason it is a step rather than a line
+/// in a README:  the discipline it carries is not optional and is easy
+/// to get wrong.
+///
+///   * **NooBaa must be stopped first.**  The model is sequential --
+///     drain, then upgrade -- and two gateways writing one tree is a
+///     different feature.  Refused rather than warned about.
+///   * **`--data-root` is mandatory.**  Without it RGW serves its own
+///     build directory and the run silently measures nothing;  and
+///     the default location cannot be used anyway, because
+///     `vstart.sh` removes `$dev/rgw/$STORE/root` outright on every
+///     start, which would delete the tree we came to read.
+///   * **`--with-lifecycle`**, because conversion carries bucket
+///     configuration and lifecycle is part of it.  NooBaa stores
+///     theirs as `lifecycle_configuration_rules` in the bucket
+///     record;  ours is an xattr.  A run that omits the flag cannot
+///     exercise the translation.
+///
+/// `rgw-vstart.sh` must be run from the build directory, which is why
+/// `ceph_build` is a setting rather than a guess.
+fn adopt(env: &Env) -> Result<(), String> {
+    if let Some(pid) = running(env) {
+        return Err(format!(
+            "NooBaa is still running (pid {pid}).  The handoff is sequential:  \
+             run `stop` first."
+        ));
+    }
+    let Some(build) = env.ceph_build.as_ref() else {
+        return Err(format!(
+            "`ceph_build` is not set.  `adopt` runs rgw-vstart.sh, which has to \
+             be\n  invoked from the ceph build directory:\n\n    \
+             IX_CEPH_BUILD=/path/to/ceph/build standup.rs adopt\n\n  \
+             or put `ceph_build = /path/to/ceph/build` in {}.",
+            ix_home().join("interchange.conf").display()
+        ));
+    };
+    let script = build.join("../src/script/rgw/rgw-vstart.sh");
+    if !script.exists() {
+        return Err(format!(
+            "{} is not there;  is {} really a ceph build directory?",
+            script.display(),
+            build.display()
+        ));
+    }
+    let tree = env.tree();
+    if !tree.is_dir() {
+        return Err(format!(
+            "{} does not exist -- there is no tree to adopt.  Run `config` and \
+             `serve`, and let something write to it.",
+            tree.display()
+        ));
+    }
+
+    /* Said out loud, because it is the whole point of the exercise and
+     * a reader of the log should be able to see what was handed over. */
+    let buckets = std::fs::read_dir(&tree)
+        .map(|d| d.filter_map(|e| e.ok()).count())
+        .unwrap_or(0);
+    println!("adopt    tree {} ({buckets} entries)", tree.display());
+    println!("         rgw-vstart.sh --store nsfs --data-root {} --with-lifecycle",
+             env.data.display());
+
+    let st = Command::new("bash")
+        .arg(script.display().to_string())
+        .args([
+            "--store",
+            "nsfs",
+            "--data-root",
+            &env.data.display().to_string(),
+            "--with-lifecycle",
+        ])
+        .current_dir(build)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .map_err(|e| format!("cannot run rgw-vstart.sh: {e}"))?;
+    if !st.success() {
+        return Err(format!("rgw-vstart.sh failed ({st})"));
+    }
+
+    /* Confirm what it actually points at rather than trusting the exit
+     * code:  a redirect that silently did not take effect is the
+     * defect this step exists downstream of. */
+    let conf = build.join("ceph.conf");
+    let text = std::fs::read_to_string(&conf)
+        .map_err(|e| format!("cannot read {}: {e}", conf.display()))?;
+    let want = format!("rgw nsfs base path = {}", tree.display());
+    if !text.contains(&want) {
+        return Err(format!(
+            "{} does not say {want:?} -- RGW is not serving the tree",
+            conf.display()
+        ));
+    }
+    println!("adopt    ceph.conf confirms the base path");
+    Ok(())
 }
 
 /// The pid of a running endpoint of ours, if there is one.
