@@ -13077,6 +13077,38 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     }
   }
 
+  /* A bucket's default retention applies to the version this PUT
+   * creates, unless the request set one of its own.
+   *
+   * The op layer does not do this -- each driver does it in its own
+   * write path, and four of them do:  rados (rgw_rados.cc, on
+   * PUT_OBJ_CREATE), dbstore, daos and motr.  nsfs did not, so an
+   * object uploaded into a lock-configured bucket came back from
+   * GetObjectRetention with ObjectLockConfigurationNotFoundError --
+   * no retention at all, where every other backend reports the
+   * bucket's rule.
+   *
+   * Found by the conversion corpus's object lock axis.  The suite's
+   * existing coverage sets an explicit retention immediately after the
+   * PUT, so it never observed what the default gave the object.
+   *
+   * Same shape as rados:  only when the bucket has a rule, only when
+   * the request supplied no retention of its own, and computed from
+   * this write's mtime so the date belongs to the object. */
+  {
+    const auto& lock_info = obj->get_bucket()->get_info();
+    if (lock_info.obj_lock_enabled() && lock_info.obj_lock.has_rule() &&
+	(attrs.find(RGW_ATTR_OBJECT_RETENTION) == attrs.end())) {
+      const ceph::real_time base = ceph::real_clock::is_zero(set_mtime)
+	  ? ceph::real_clock::now() : set_mtime;
+      RGWObjectRetention retention(lock_info.obj_lock.get_mode(),
+				   lock_info.obj_lock.get_lock_until_date(base));
+      bufferlist rbl;
+      retention.encode(rbl);
+      attrs[RGW_ATTR_OBJECT_RETENTION] = std::move(rbl);
+    }
+  }
+
   /* owner is already in attrs[RGW_ATTR_ACL] from the generic layer */
 
   obj->set_attrs(attrs);
