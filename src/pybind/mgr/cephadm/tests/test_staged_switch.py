@@ -1251,11 +1251,13 @@ class _FakeOsdMons:
         if p == 'osd ok-to-stop':
             ids = [int(i) for i in cmd['ids']]
             bad = self.ok_to_stop(ids)
-            report = {'ok_to_stop': not bad, 'osds': ids, 'bad_become_inactive': [f'1.{b:x}' for b in bad]}
+            # the mgr's report, as is: {"ok_to_stop": false, "osds": [...], ...}
+            report = {'ok_to_stop': not bad, 'osds': ids, 'num_ok_pgs': len(self.pgs) - len(bad),
+                      'num_not_ok_pgs': len(bad), 'bad_become_inactive': [f'1.{b:x}' for b in bad]}
             if bad:
-                return (-16, json.dumps({'ok_to_stop': report}),
+                return (-16, json.dumps(report),
                         f'unsafe to stop osd(s) at this time ({len(bad)} PGs are or would become offline)')
-            return (0, json.dumps({'ok_to_stop': report}), '')
+            return (0, json.dumps(report), '')
         if p == 'osd unset-group':
             self.unjoined_at_unset.append(sorted(self.unjoined()))
         if p in ('osd set-group', 'osd unset-group'):
@@ -2262,6 +2264,53 @@ def test_osd_pgs_that_never_settle_stop_the_wait_after_the_timeout(cephadm_modul
         mons.recover()
         run.one_pass()
         assert run.groups[-1] == [4, 5]
+
+
+def test_osd_ok_to_stop_report_as_the_mgr_sends_it(cephadm_module: CephadmOrchestrator):
+    # what `osd ok-to-stop` answers on a refusal (Reef), and the same report
+    # nested under "ok_to_stop": the PGs are read from either
+    flat = json.dumps({'ok_to_stop': False, 'osds': [0, 1], 'num_ok_pgs': 10, 'num_not_ok_pgs': 3,
+                       'bad_already_inactive': ['2.3'], 'bad_become_inactive': ['2.0', '2.1a']})
+    nested = json.dumps({'ok_to_stop': json.loads(flat)})
+    mons = _FakeOsdMons()
+    with _OsdRun(cephadm_module, mons):
+        policy = policy_for(cephadm_module.upgrade, 'osd')
+        assert isinstance(policy, OsdStagedSwitchPolicy)
+        for out in (flat, nested):
+            with mock.patch("cephadm.module.CephadmOrchestrator.mon_command",
+                            return_value=(-16, out, 'unsafe to stop osd(s) at this time (3 PGs ...)')):
+                ok, why, pgids = policy._ok_to_stop_pgs([0, 1])
+            assert not ok
+            assert why == '2 PG(s) would become inactive, 1 PG(s) already inactive'
+            assert sorted(pgids) == ['2.0', '2.1a', '2.3']
+        with mock.patch("cephadm.module.CephadmOrchestrator.mon_command",
+                        return_value=(-16, '', 'unsafe to stop osd(s) at this time (3 PGs ...)')):
+            assert policy._ok_to_stop_pgs([0, 1]) == (
+                False, 'unsafe to stop osd(s) at this time (3 PGs ...)', [])
+    # no PG named: nothing to tell a settling PG from the placement, not waited for
+    assert OsdStagedSwitchPolicy._refusal_is_transient([], {}) is False
+    assert OsdStagedSwitchPolicy._refusal_is_transient(['1.0'], {'1.0': {'active', 'clean'}}) is False
+    assert OsdStagedSwitchPolicy._refusal_is_transient(['1.0'], {'1.0': {'active', 'recovering', 'degraded'}})
+    assert OsdStagedSwitchPolicy._refusal_is_transient(['1.0'], {})
+
+
+def test_osd_unreadable_refusal_is_not_waited_for(cephadm_module: CephadmOrchestrator):
+    # PGs settling, but the refusals name no PG: like before, descend
+    # rather than wait up to the timeout for a verdict that may never change
+    mons = _FakeOsdMons(pgs=_PGS_2_OVER_3_RACKS)
+    orig = mons.mon_command
+
+    def no_report(cmd, inbuf=None):
+        ret, out, err = orig(cmd, inbuf)
+        return (ret, '', err) if cmd.get('prefix') == 'osd ok-to-stop' else (ret, out, err)
+    with _OsdRun(cephadm_module, mons, level='auto') as run:
+        run.one_pass()
+        mons.recovering.update({0, 1})
+        t = mons.clock.now
+        with mock.patch("cephadm.module.CephadmOrchestrator.mon_command", side_effect=no_report):
+            run.one_pass()
+        assert run.groups[-1] == [6, 7]
+        assert mons.clock.now - t < 30
 
 
 def test_osd_same_osds_asked_once_per_pick(cephadm_module: CephadmOrchestrator):
