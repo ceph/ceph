@@ -1369,6 +1369,12 @@ class OsdStagedSwitchPolicy(StagedSwitchPolicy):
                 break
         return False
 
+    def stage_ahead(self, need_upgrade: List[DaemonDescription]) -> List[DaemonDescription]:
+        # every OSD this policy will switch itself: staged once, hosts in
+        # parallel, while they serve; the groups then only re-stage what
+        # changed since
+        return list(self._pending(need_upgrade, self._tree(), self._osds()).values())
+
     def take_down(self, group: StagedGroup) -> None:
         ids = [int(i) for i in group.data['osd_ids']]
         if self._noout():
