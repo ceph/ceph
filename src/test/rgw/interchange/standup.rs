@@ -52,6 +52,13 @@ struct Env {
     data: PathBuf,
     /// NooBaa's endpoint port
     port: u16,
+    /// the account their gateway serves as
+    account: String,
+    /// the one bucket, which both gateways will serve
+    bucket: String,
+    /// fixed, so the corpus can be pointed at it without discovery
+    access_key: String,
+    secret_key: String,
 }
 
 impl Env {
@@ -64,11 +71,32 @@ impl Env {
             data: env_or("IX_DATA", &format!("{work}/data")).into(),
             work: work.into(),
             port: env_or("IX_PORT", "6443").parse().unwrap_or(6443),
+            account: env_or("IX_ACCOUNT", "interchange"),
+            bucket: env_or("IX_BUCKET", "interchange"),
+            /* Fixed rather than generated:  the corpus has to be
+             * pointed at this endpoint, and a credential that changes
+             * per run means a config file that changes per run. */
+            access_key: env_or("IX_ACCESS_KEY", "IXAAAAAAAAAAAAAAAAAA"),
+            secret_key: env_or(
+                "IX_SECRET_KEY",
+                "IXsecretIXsecretIXsecretIXsecretIXsecret",
+            ),
         }
     }
 
     fn worktree(&self) -> PathBuf {
         self.work.join(format!("noobaa-{}", self.pin))
+    }
+
+    /// Their NC configuration directory -- the config store the
+    /// account and bucket records live in.  Separate from the data
+    /// root:  the records describe the tree, they are not in it.
+    fn config_root(&self) -> PathBuf {
+        self.work.join("config")
+    }
+
+    fn node(&self) -> String {
+        env_or("IX_NODE", "node")
     }
 }
 
@@ -87,7 +115,7 @@ fn env_or(k: &str, d: &str) -> String {
 const STEPS: &[(&str, &str)] = &[
     ("pin",      "resolve the pin and verify the commit is present"),
     ("worktree", "create or refresh a git worktree at the pin"),
-    ("build",    "npm install inside the worktree"),
+    ("build",    "install the dependency tree, and build their native addon"),
     ("config",   "write their account and bucket records over the data root"),
     ("serve",    "start their NSFS endpoint"),
     ("capture",  "run the corpus against their endpoint"),
@@ -104,13 +132,15 @@ fn main() {
         "pin" => pin(&env),
         "worktree" => worktree(&env),
         "build" => build(&env),
-        "config" | "serve" | "capture" | "stop" => unbuilt(cmd),
-        "up" => ["pin", "worktree", "build"]
+        "config" => config(&env),
+        "serve" | "capture" | "stop" => unbuilt(cmd),
+        "up" => ["pin", "worktree", "build", "config"]
             .iter()
             .try_for_each(|s| match *s {
                 "pin" => pin(&env),
                 "worktree" => worktree(&env),
-                _ => build(&env),
+                "build" => build(&env),
+                _ => config(&env),
             }),
         other => Err(format!("unknown step {other:?};  try `list`")),
     };
@@ -124,7 +154,8 @@ fn main() {
 fn list(env: &Env) {
     println!("steps:");
     for (name, what) in STEPS {
-        let mark = if matches!(*name, "pin" | "worktree" | "build") { "x" } else { " " };
+        let mark =
+            if matches!(*name, "pin" | "worktree" | "build" | "config") { "x" } else { " " };
         println!("  [{mark}] {name:10} {what}");
     }
     println!("\nsettings (all overridable):");
@@ -134,6 +165,8 @@ fn list(env: &Env) {
         ("IX_WORK", env.work.display().to_string()),
         ("IX_DATA", env.data.display().to_string()),
         ("IX_PORT", env.port.to_string()),
+        ("IX_ACCOUNT", env.account.clone()),
+        ("IX_BUCKET", env.bucket.clone()),
     ]);
     for (k, v) in s {
         println!("  {k:16} {v}");
@@ -243,9 +276,13 @@ fn build(env: &Env) -> Result<(), String> {
         return Err("no worktree;  run `worktree` first".into());
     }
     lock_is_pristine(&wt, "before")?;
+
+    /* The dependency tree and the native addon are two installs, and
+     * skipping the first must not skip the second -- which it did,
+     * when this returned early instead of falling through. */
     if wt.join("node_modules").exists() {
-        println!("build    node_modules present, skipping");
-        return Ok(());
+        println!("build    node_modules present, skipping the install");
+        return native(env);
     }
 
     let ours = ours_lock(env);
@@ -286,7 +323,198 @@ fn build(env: &Env) -> Result<(), String> {
     }
 
     git(&wt, &["checkout", "--", "package-lock.json"])?;
-    lock_is_pristine(&wt, "after")
+    lock_is_pristine(&wt, "after")?;
+    native(env)
+}
+
+/// Their native addon, which `npm ci` does not build.
+///
+/// `package.json` overrides the install hook -- *"install hook
+/// override to avoid npm default hook calling node-gyp"* -- so
+/// installing the dependency tree leaves `build/Release/nb_native.node`
+/// absent, and every entry point fails at require time with "Could not
+/// locate the bindings file".  `npm run build` is
+/// `node-gyp configure && node-gyp build`, and it has to be asked for.
+///
+/// Needs a C++ toolchain and node headers on the host.  This is the
+/// part no lockfile pins, and the one honest argument for a container
+/// -- which is about the *toolchain*, not about dependency resolution.
+fn native(env: &Env) -> Result<(), String> {
+    let wt = env.worktree();
+    let addon = wt.join("build/Release/nb_native.node");
+    if addon.exists() {
+        println!("native   nb_native.node present, skipping");
+        return Ok(());
+    }
+    /* Their code does not compile under a current GCC with their own
+     * -Werror.
+     *
+     * `fs_napi.cpp:317` memcpy()s into `reqP->payload.buffer[0]`,
+     * where `buffer` is declared `char[0]` inside a GPFS
+     * `gpfs_fcntl` request struct that is deliberately
+     * over-allocated.  The code is correct by construction;  the
+     * declaration is the deprecated `char[0]` idiom rather than a C99
+     * flexible array member, and GCC 15 reports
+     * -Warray-bounds on it.  With `cc1plus: all warnings being
+     * treated as errors`, the build stops.
+     *
+     * One warning is demoted, not -Werror as a whole:  every other
+     * warning stays fatal, which is their intent.  Overridable,
+     * because which warnings a toolchain raises is a property of the
+     * host and this will not be the last one.
+     *
+     * This is the part no lockfile can pin, and the only honest
+     * argument for a container -- about the *toolchain*, not about
+     * dependency resolution. */
+    let cxxflags = env_or("IX_CXXFLAGS", "-Wno-error=array-bounds");
+    println!("native   node-gyp configure && build (CXXFLAGS={cxxflags})");
+    let st = Command::new("npm")
+        .args(["run", "build:native"])
+        .env("CXXFLAGS", &cxxflags)
+        .current_dir(&wt)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .map_err(|e| format!("cannot run npm: {e}"))?;
+    if !st.success() {
+        return Err(format!("node-gyp build failed ({st})"));
+    }
+    if !addon.exists() {
+        return Err(format!(
+            "node-gyp reported success and {} is not there",
+            addon.display()
+        ));
+    }
+    println!("native   {}", addon.display());
+    Ok(())
+}
+
+/// Write their account and bucket records over the data root.
+///
+/// Through `manage_nsfs.js`, their own CLI, rather than by composing
+/// JSON:  the whole point of standing their gateway up is to get
+/// records *they* wrote.  Hand-written records would be our reading of
+/// their schema again, which is the thing this stage exists to stop
+/// relying on.
+///
+/// **uid and gid are the running user's.**  The handoff is sequential
+/// against one tree -- NooBaa writes, stops, RGW opens the same
+/// directory -- so the files have to be owned by the identity RGW will
+/// run as, or the second half of the exercise fails on permissions
+/// rather than on anything interesting.
+///
+/// Idempotent:  a second run finds the records present and says so.
+/// Their CLI fails a duplicate `add`, which is correct of it and not
+/// what this driver wants.
+fn config(env: &Env) -> Result<(), String> {
+    let wt = env.worktree();
+    if !wt.join("node_modules").exists() {
+        return Err("no dependency tree;  run `build` first".into());
+    }
+    let (uid, gid) = running_ids()?;
+    std::fs::create_dir_all(env.config_root())
+        .map_err(|e| format!("cannot create {}: {e}", env.config_root().display()))?;
+    std::fs::create_dir_all(&env.data)
+        .map_err(|e| format!("cannot create {}: {e}", env.data.display()))?;
+
+    println!("config   config_root {}", env.config_root().display());
+    println!("         data        {} (uid {uid}, gid {gid})", env.data.display());
+
+    if nsfs_cli(env, &["account", "status", "--name", &env.account]).is_ok() {
+        println!("         account {:?} already present", env.account);
+    } else {
+        nsfs_cli(
+            env,
+            &[
+                "account", "add",
+                "--name", &env.account,
+                "--uid", &uid.to_string(),
+                "--gid", &gid.to_string(),
+                "--new_buckets_path", &env.data.display().to_string(),
+                "--access_key", &env.access_key,
+                "--secret_key", &env.secret_key,
+            ],
+        )?;
+        println!("         account {:?} created", env.account);
+    }
+
+    let bucket_path = env.data.join(&env.bucket);
+    if nsfs_cli(env, &["bucket", "status", "--name", &env.bucket]).is_ok() {
+        println!("         bucket {:?} already present", env.bucket);
+    } else {
+        std::fs::create_dir_all(&bucket_path)
+            .map_err(|e| format!("cannot create {}: {e}", bucket_path.display()))?;
+        nsfs_cli(
+            env,
+            &[
+                "bucket", "add",
+                "--name", &env.bucket,
+                "--owner", &env.account,
+                "--path", &bucket_path.display().to_string(),
+            ],
+        )?;
+        println!("         bucket {:?} created at {}", env.bucket, bucket_path.display());
+    }
+
+    /* What `capture` will need, written where it can find it rather
+     * than rediscovered. */
+    let creds = env.work.join("credentials");
+    std::fs::write(
+        &creds,
+        format!(
+            "# written by standup.rs config\nendpoint=http://127.0.0.1:{}\n\
+             access_key={}\nsecret_key={}\nbucket={}\ndata={}\n",
+            env.port,
+            env.access_key,
+            env.secret_key,
+            env.bucket,
+            env.data.display()
+        ),
+    )
+    .map_err(|e| format!("cannot write {}: {e}", creds.display()))?;
+    println!("         wrote {}", creds.display());
+    Ok(())
+}
+
+/// Their CLI.  Quiet unless it fails, because `status` is used as a
+/// probe and a missing record is an expected answer.
+fn nsfs_cli(env: &Env, args: &[&str]) -> Result<String, String> {
+    let wt = env.worktree();
+    let mut a: Vec<String> = vec!["src/cmd/manage_nsfs.js".into()];
+    a.extend(args.iter().map(|s| s.to_string()));
+    a.push("--config_root".into());
+    a.push(env.config_root().display().to_string());
+
+    let out = Command::new(env.node())
+        .args(&a)
+        .current_dir(&wt)
+        .output()
+        .map_err(|e| format!("cannot run {}: {e}", env.node()))?;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr);
+        let o = String::from_utf8_lossy(&out.stdout);
+        return Err(format!(
+            "manage_nsfs {} failed:\n{}",
+            args.join(" "),
+            if err.trim().is_empty() { o.trim() } else { err.trim() }
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// The uid and gid this process runs as, without a libc dependency.
+fn running_ids() -> Result<(u32, u32), String> {
+    let one = |flag: &str| -> Result<u32, String> {
+        let out = Command::new("id")
+            .arg(flag)
+            .output()
+            .map_err(|e| format!("cannot run id: {e}"))?;
+        String::from_utf8_lossy(&out.stdout)
+            .trim()
+            .parse()
+            .map_err(|e| format!("cannot read id {flag}: {e}"))
+    };
+    Ok((one("-u")?, one("-g")?))
 }
 
 /// The lock this project keeps for a given pin.  Committed.
