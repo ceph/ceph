@@ -65,6 +65,8 @@ class TestNFS:
                         service_name=nfs_spec.service_name())))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Monitoring_Addr = 1.2.3.1" in ganesha_conf
+                assert 'register_service = true' in ganesha_conf
+                assert 'nodeid = "foo.test.0.0"' in ganesha_conf
 
             nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
                                       monitoring_networks=['1.2.3.0/24'],
@@ -849,6 +851,8 @@ class TestNFS:
                         service_name=nfs_spec.service_name())))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 assert "Protocols = 4;" in ganesha_conf
+                assert 'register_service = true' in ganesha_conf
+                assert 'nodeid = "foo.test.0.0"' in ganesha_conf
 
             # Test with enable_nfsv3=True
             nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
@@ -867,7 +871,7 @@ class TestNFS:
     @patch("cephadm.services.nfs.NFSService.purge", MagicMock())
     @patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
     def test_nfs_client_object_cache_default_disabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
-        """Default: no CEPH block when client object cache is disabled and unset."""
+        """Default: CEPH block has register_service and nodeid but no client object cache options."""
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         with with_host(cephadm_module, 'test'):
@@ -878,7 +882,8 @@ class TestNFS:
                                                                 service_name=nfs_spec.service_name(),
                                                                 rank=0)))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
-                assert 'CEPH {' not in ganesha_conf
+                assert 'register_service = true' in ganesha_conf
+                assert 'nodeid = "foo.test.0.0"' in ganesha_conf
                 assert "client_oc" not in ganesha_conf
                 assert "client_oc_size" not in ganesha_conf
                 assert "client_oc_max_dirty" not in ganesha_conf
