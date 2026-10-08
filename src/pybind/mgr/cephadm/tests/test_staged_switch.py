@@ -1298,7 +1298,8 @@ def _osd_dds(mons, ids=None):
             for o in (ids if ids is not None else range(12))]
 
 
-def _osd_setup(cephadm_module, mons, switch_fails=(), never_up=(), level='host', noout=True):
+def _osd_setup(cephadm_module, mons, switch_fails=(), never_up=(), level='host', noout=True,
+               stage_ahead=False):
     calls: List[Tuple[str, str, list]] = []
     staged: List[str] = []
 
@@ -1333,6 +1334,8 @@ def _osd_setup(cephadm_module, mons, switch_fails=(), never_up=(), level='host',
     cephadm_module.upgrade_staged_switch_timeout = 20
     cephadm_module.upgrade_staged_switch_osd_crush_level = level
     cephadm_module.upgrade_staged_switch_osd_noout = noout
+    # most tests look at what each group stages; the stage-ahead tests turn it on
+    cephadm_module.upgrade_staged_switch_stage_ahead = stage_ahead
     cephadm_module.upgrade.upgrade_state = UpgradeState(
         'target_image', 0, target_digests=[TARGET], target_version=mons.new)
     patches = [
@@ -2139,3 +2142,38 @@ def test_runner_stages_one_call_per_host(cephadm_module: CephadmOrchestrator):
 
 async def _noop():
     return 'ok'
+
+
+def test_osd_stage_ahead_stages_every_osd_once(cephadm_module: CephadmOrchestrator):
+    # every OSD the policy will switch is staged at the first pass; the
+    # groups switch without staging again
+    mons = _FakeOsdMons()
+    with _OsdRun(cephadm_module, mons, stage_ahead=True) as run:
+        run.one_pass()
+        assert sorted(run.staged) == sorted(f'osd.{i}' for i in range(12))
+        assert run.groups[-1] == [0, 1]
+        for _ in range(5):
+            run.one_pass()
+        assert all(v == NEW for v in mons.version.values())
+        assert sorted(run.staged) == sorted(f'osd.{i}' for i in range(12))   # once each
+
+
+def test_osd_stage_ahead_leaves_out_what_the_policy_will_not_switch(cephadm_module: CephadmOrchestrator):
+    # down OSDs and OSDs outside --crush_bucket_name are left to the regular
+    # path: not staged ahead
+    mons = _FakeOsdMons()
+    mons.pgs = [pg for pg in mons.pgs if 5 not in pg[1]]
+    mons.up[5] = False
+    with _OsdRun(cephadm_module, mons, stage_ahead=True) as run:
+        st = cephadm_module.upgrade.upgrade_state
+        st.crush_bucket_type, st.crush_bucket_name = 'rack', 'r2'
+        run.one_pass()
+        assert sorted(run.staged) == ['osd.4', 'osd.6', 'osd.7']
+        assert run.groups[-1] == [4]
+
+
+def test_osd_stage_ahead_off_stages_group_by_group(cephadm_module: CephadmOrchestrator):
+    mons = _FakeOsdMons()
+    with _OsdRun(cephadm_module, mons, stage_ahead=False) as run:
+        run.one_pass()
+        assert sorted(run.staged) == ['osd.0', 'osd.1']

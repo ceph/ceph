@@ -211,7 +211,11 @@ For each pass of the upgrade, cephadm:
    cephadm waits and asks again on the next pass (``ceph orch upgrade
    status`` says why) - the upgrade is not paused,
 #. stages the new deployment of every OSD of the group while they serve
-   (hosts in parallel, the OSDs of a host in one ``cephadm`` call),
+   (hosts in parallel, the OSDs of a host in one ``cephadm`` call). With
+   ``mgr/cephadm/upgrade_staged_switch_stage_ahead`` (the default), every
+   OSD to upgrade has already been staged once, at the start of the OSD
+   phase, and only the OSDs whose target image or generated configuration
+   changed since are staged again here,
 #. sets ``noout`` on exactly those OSDs (``ceph osd set-group noout``),
    checks that no OSD outside the group has gone down (or come back) since
    the group was chosen and asks ``ok-to-stop`` once more - if either says
