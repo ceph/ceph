@@ -1344,18 +1344,20 @@ int Symlink::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file
     return -EINVAL;
   }
 
-  /* Diagnostics only:  this says what is wrong and then faults exactly
-   * as before, so the behaviour is unchanged and the report survives
-   * in the crash handler's dump of recent events.
+  /* A symlink with no target cannot be created, and used to try.
    *
-   * target is set by fill_target(), which the four-argument constructor
-   * calls -- discarding its return value, and passing a null dpp, so a
-   * failure there is both unreported and unloggable at the point it
-   * happens.  This is the first place that can say so. */
+   * target is set by fill_target(), which the target-taking
+   * constructors call;  it can return without setting one -- its
+   * readlinkat() path, taken when the target name is empty -- and the
+   * dereference below then faulted.  The copy constructor does not
+   * copy the target either, so a cloned Symlink reaches here with
+   * none.  Refusing is what the caller can act on. */
   if (! target) {
     ldpp_dout(dpp, 0) << "ERROR: Symlink::create: " << fname
-		      << " has no target;  fill_target() did not set one, "
-		      << "and the dereference below faults" << dendl;
+		      << " has no target:  fill_target() returned "
+		      << cpp_strerror(-target_ret)
+		      << " and did not set one" << dendl;
+    return (target_ret < 0) ? target_ret : -EINVAL;
   }
   int ret = symlinkat(target->get_name().c_str(), parent->get_fd(), fname.c_str());
   if (ret < 0) {

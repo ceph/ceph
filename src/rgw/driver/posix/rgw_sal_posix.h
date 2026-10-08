@@ -241,16 +241,25 @@ public:
 
 class Symlink: public File {
   std::unique_ptr<FSEnt> target;
+  /* fill_target()'s result, kept rather than discarded.
+   *
+   * A constructor cannot report one, and these have no
+   * DoutPrefixProvider to log with either, so the failure used to be
+   * both silent and unloggable where it happened -- fill_target() can
+   * return without setting the target, and create() then dereferenced
+   * it.  create() is the first place with both a result and a dpp, so
+   * it is where this is reported. */
+  int target_ret{0};
 public:
   Symlink(std::string _name, Directory* _parent, std::string _tgt, CephContext* _ctx) :
     File(_name, _parent, _ctx)
-    { fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
+    { target_ret = fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
   Symlink(std::string _name, Directory* _parent, CephContext* _ctx) :
     File(_name, _parent, _ctx)
     {}
   Symlink(std::string _name, Directory* _parent, struct statx& _stx, std::string _tgt, CephContext* _ctx) :
     File(_name, _parent, _stx, _ctx)
-    { fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
+    { target_ret = fill_target(nullptr, parent, fname,_tgt, target, _ctx); }
   Symlink(std::string _name, Directory* _parent, struct statx& _stx, CephContext* _ctx) :
     File(_name, _parent, _stx, _ctx)
     {}
