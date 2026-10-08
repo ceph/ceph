@@ -1522,6 +1522,8 @@ struct pg_pool_t {
   uint64_t flags = 0;           ///< FLAG_*
   __u8 type = 0;                ///< TYPE_*
   __u8 size = 0, min_size = 0;  ///< number of osds in each pg
+  __u8 replica = 0;             ///< number of replicas per zone
+  __u8 num_zones = 1;           ///< number of zones
   __u8 crush_rule = 0;          ///< crush placement rule
   __u8 object_hash = 0;         ///< hash mapping object name to ps
   pg_autoscale_mode_t pg_autoscale_mode = pg_autoscale_mode_t::UNKNOWN;
@@ -1820,6 +1822,8 @@ public:
   unsigned get_type() const { return type; }
   unsigned get_size() const { return size; }
   unsigned get_min_size() const { return min_size; }
+  unsigned get_num_zones() const { return num_zones; }
+  unsigned get_replica() const { return replica; }
   int get_crush_rule() const { return crush_rule; }
   int get_object_hash() const { return object_hash; }
   const char *get_object_hash_name() const {
@@ -1838,7 +1842,8 @@ public:
   uint64_t get_auid() const { return auid; }
 
   uint8_t get_ec_data_shard_count() const {
-    return ec_data_shard_count.value_or(nonprimary_shards.size() + 1);
+    return ec_data_shard_count.value_or(
+      nonprimary_shards.size() / get_num_zone() + 1);
   }
 
   void set_snap_seq(snapid_t s) { snap_seq = s; }
@@ -2020,6 +2025,29 @@ public:
     } else {
       return shard_id_t::NO_SHARD;
     }
+  }
+
+  /// Deprecated: use get_num_zones() instead
+  /// Kept for backward compatibility
+  int get_num_zone() const {
+    return get_num_zones();
+  }
+
+  int get_zone_size() const {
+    return size / get_num_zones();
+  }
+
+  /// EC multi-zone: convert absolute shard ID to relative shard ID
+  /// For multi-zone EC pools: absolute_shard = relative_shard + zone * (k+m)
+  /// where k+m = pool.size
+  shard_id_t get_relative_shard(const shard_id_t shard) const {
+
+    // Fast path for common case (id < size) and negative shards
+    if (std::cmp_less(shard.id, get_zone_size())) {
+      return shard;
+    }
+    // Convert absolute to relative using modulo
+    return shard_id_t(shard.id % get_zone_size());
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
