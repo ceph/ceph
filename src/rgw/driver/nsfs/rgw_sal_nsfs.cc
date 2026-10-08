@@ -4252,14 +4252,54 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
   if (!userDB) {
     return nullptr;
   }
+  std::string path;
+
   nsfs::BucketPlacement bp;
-  if (userDB->get_bucket_placement(dpp, name, tenant, bp) < 0) {
-    return nullptr;
-  }
-  if (bp.path.empty()) {
-    /* a row that records the default location, which P4 writes for
-     * every bucket it creates;  the same answer as no row */
-    return nullptr;
+  if (userDB->get_bucket_placement(dpp, name, tenant, bp) == 0) {
+    /* An empty Path is a row recording the default location, which P4
+     * writes for every bucket it creates;  the same answer as no row,
+     * and it stops here rather than falling through to their record --
+     * a row is ours and is the answer. */
+    if (bp.path.empty()) {
+      return nullptr;
+    }
+    path = bp.path;
+  } else {
+    /* P5.  No row of ours, so ask their record.
+     *
+     * `path` is required on every NooBaa bucket record, so a real
+     * deployment's buckets are scattered -- and in `serve` mode
+     * nothing is written, so there is no row to have.  Without this,
+     * serve mode only ever works for buckets at the default location,
+     * which is not what a deployment we have not touched looks like.
+     *
+     * The read is the one serve mode already does for a bucket's
+     * configuration, through the component that owns it, so this adds
+     * no consumer of their store (§7).
+     *
+     * **It never adopts.**  Resolving where a bucket lives is
+     * read-only;  adoption happens because the mode says so, or by
+     * explicit command. */
+    if (!nb_bucket_state_strategy) {
+      return nullptr;
+    }
+    auto* theirs = static_cast<nsfs::NooBaaBucketStateStrategy*>(
+	nb_bucket_state_strategy.get());
+    if (theirs->recorded_path(dpp, name, path) < 0) {
+      return nullptr;
+    }
+    if (path.empty()) {
+      return nullptr;
+    }
+    /* Their path names the bucket's own directory, and a path we
+     * would not store is one we will not serve from either -- the
+     * record is a store we did not write (§9). */
+    if (!nsfs::placement_path_is_acceptable(path)) {
+      ldpp_dout(dpp, 0) << "ERROR: bucket " << name << ": their record "
+	<< "says " << path << ", which is not an absolute canonical path"
+	<< dendl;
+      return nullptr;
+    }
   }
 
   /* No parent, and the whole path as the name -- which is how the
@@ -4267,8 +4307,8 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
    * explicitly for the same reason it is there:  a Directory built
    * without one leaves every File below it with a null strategy. */
   ldpp_dout(dpp, 10) << "nsfs: bucket " << name << " is placed at "
-    << bp.path << dendl;
-  auto d = std::make_unique<nsfs::Directory>(bp.path, nullptr, ctx(),
+    << path << dendl;
+  auto d = std::make_unique<nsfs::Directory>(path, nullptr, ctx(),
 					     fs_strategy.get());
   /* Seeded exactly as the data root is.
    *

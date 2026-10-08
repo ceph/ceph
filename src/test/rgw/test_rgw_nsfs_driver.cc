@@ -4460,14 +4460,21 @@ public:
 			    "user.nsfs.bucket_info"), 0);
   }
 
+  /* `path` names the bucket's real directory.
+   *
+   * It used to be `/ibm/gpfs/noobaadata/<name>`, which does not
+   * exist -- harmless while nothing read `path`, and wrong once P5
+   * resolves a base bucket from it.  A real NooBaa record names where
+   * the storage actually is, so the fixture does too. */
   void write_their_record(const char* versioning,
 		    const std::string& extra = std::string{},
-		    const char* created = "2026-01-02T03:04:05.000Z") {
+		    const char* created = "2026-01-02T03:04:05.000Z",
+		    const std::string& at = std::string{}) {
     std::string doc = std::string(
       "{\"_id\":\"6560e1f1c0ffee0000000001\",\"name\":\"") + testname +
       "\",\"owner_account\":\"6560e1f1c0ffee0000000002\""
       ",\"versioning\":\"" + versioning + "\""
-      ",\"path\":\"/ibm/gpfs/noobaadata/" + testname + "\""
+      ",\"path\":\"" + (at.empty() ? bucket_path().string() : at) + "\""
       ",\"should_create_underlying_storage\":true"
       ",\"creation_date\":\"" + created + "\"" +
       extra + "}";
@@ -10346,9 +10353,15 @@ TEST_F(NooBaaBucketImportTest, AResolvablePolicyIsRewrittenAndWritten)
  * report. */
 TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
 {
+  /* A path genuinely outside the data root, said explicitly:  the
+   * deferral is about that, and inheriting it from the fixture's
+   * default made the test depend on a detail that then changed. */
+  const sf::path elsewhere = bp / "another-filesystem" / testname;
+  sf::create_directories(elsewhere);
   write_their_record("DISABLED",
       R"(,"notifications":[{"id":["n1"],"event":["s3:ObjectCreated:*"],
-        "topic":["arn:noobaa:sns:::t1"]}])");
+        "topic":["arn:noobaa:sns:::t1"]}])",
+      "2026-01-02T03:04:05.000Z", elsewhere.string());
 
   ASSERT_EQ(run(), 0) << why();
   EXPECT_EQ(result.buckets_written, 1u);
@@ -10765,6 +10778,198 @@ TEST_F(NSFSPlacedBucketTest, TheTenantSelectsTheRow)
   ASSERT_EQ(loaded->merge_and_store_attrs(env->dpp, attrs, null_yield), 0);
   EXPECT_GT(::getxattr(a.c_str(), "user.nsfs.bucket_info", nullptr, 0), 0)
       << "the tenanted bucket did not resolve to its row";
+}
+
+/* ------------------------------------------------------------------ *
+ * P5 -- a base bucket served at the path their record names.
+ *
+ * `path` is required on every NooBaa bucket record, so a real
+ * deployment's buckets are scattered -- and in `serve` mode nothing is
+ * written, so there is no index row to read instead.  Without this,
+ * serve mode works only for buckets at the default location, which is
+ * not what a deployment we have not touched looks like.
+ * ------------------------------------------------------------------ */
+
+class NSFSRecordedPathTest : public NSFSNooBaaStateTest {
+public:
+  sf::path their_storage() const { return bp / "their-filesystem"; }
+
+  /* Where a bucket resolved to, read rather than written.
+   *
+   * These tests are about `serve` mode, which refuses mutations -- so
+   * probing by writing would contradict the thing under test.  The
+   * directory's own name is the answer and asking for it changes
+   * nothing;  intrusive inspection is the right tool here. */
+  static std::string resolved_at(rgw::sal::Bucket* b) {
+    auto* nb = static_cast<rgw::sal::NSFSBucket*>(b);
+    return nb->get_dir() ? nb->get_dir()->get_name() : std::string{};
+  }
+
+  /* Their record, naming a path of their choosing. */
+  void record_at(const sf::path& at, const char* versioning = "DISABLED") {
+    std::string doc = std::string(
+      "{\"_id\":\"6560e1f1c0ffee0000000001\",\"name\":\"") + testname +
+      "\",\"owner_account\":\"6560e1f1c0ffee0000000002\""
+      ",\"versioning\":\"" + versioning + "\""
+      ",\"path\":\"" + at.string() + "\""
+      ",\"should_create_underlying_storage\":true"
+      ",\"creation_date\":\"2026-01-02T03:04:05.000Z\"}";
+    write_file(conf_root() / "buckets" / (testname + ".json"), doc);
+  }
+};
+
+/* Their recorded path is where the bucket is served from.
+ *
+ * The read is the one serve mode already does for a bucket's
+ * configuration, so this adds no consumer of their store. */
+TEST_F(NSFSRecordedPathTest, ABaseBucketIsServedAtTheirRecordedPath)
+{
+  const sf::path at = their_storage() / "scattered";
+  sf::create_directories(at);
+  record_at(at, "ENABLED");
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0)
+      << "a bucket at the path their record names did not load";
+  EXPECT_TRUE(loaded->versioned())
+      << "their versioning did not come with it";
+}
+
+/* And resolving it writes nothing.
+ *
+ * Serve mode's whole value is that nothing changes on disk, so the
+ * decision to adopt stays reversible.  Reading where a bucket lives
+ * must not adopt it -- adoption happens because the mode says so, or
+ * by explicit command. */
+TEST_F(NSFSRecordedPathTest, ResolvingTheirPathDoesNotAdoptTheBucket)
+{
+  const sf::path at = their_storage() / "untouched";
+  sf::create_directories(at);
+  record_at(at);
+
+  auto snapshot = [this, &at] {
+    std::map<std::string, std::pair<time_t, off_t>> m;
+    for (const auto& root : {at, conf_root(), bp / "root"}) {
+      if (!sf::exists(root)) {
+	continue;
+      }
+      for (const auto& e : sf::recursive_directory_iterator(root)) {
+	struct stat st{};
+	if (::lstat(e.path().c_str(), &st) == 0) {
+	  m[e.path().string()] = {st.st_mtime, st.st_size};
+	}
+      }
+    }
+    return m;
+  };
+
+  const auto before = snapshot();
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+
+  EXPECT_EQ(snapshot(), before)
+      << "resolving their path changed something on disk";
+
+  /* and no index row was invented for it */
+  nsfs::BucketPlacement bp2;
+  EXPECT_EQ(driver->get_identity_db()->get_bucket_placement(
+		env->dpp, testname, "", bp2), -ENOENT)
+      << "resolution wrote a placement row, so it adopted";
+
+  /* The comparison can fail, shown without going through the driver:
+   * serve mode refuses a write, which is the point, so the negative
+   * case is made by touching the tree directly. */
+  write_file(at / "probe", "x");
+  EXPECT_NE(snapshot(), before)
+      << "the comparison cannot detect a write, so it proves nothing";
+}
+
+/* A row of ours wins over their record.
+ *
+ * Once a bucket is adopted the index is the answer, and their store is
+ * not consulted for it again -- which is what makes adoption an
+ * adoption rather than a permanent bridge. */
+TEST_F(NSFSRecordedPathTest, OurRowWinsOverTheirRecord)
+{
+  const sf::path theirs = their_storage() / "theirs";
+  const sf::path ours = their_storage() / "ours";
+  sf::create_directories(theirs);
+  sf::create_directories(ours);
+  record_at(theirs);
+
+  nsfs::BucketPlacement row;
+  row.bucket_name = testname;
+  row.path = ours.string();
+  ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
+							    row), 0);
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_EQ(resolved_at(loaded.get()), ours.string())
+      << "their recorded path was used although we had a row";
+}
+
+/* A row recording the default location stops there.
+ *
+ * It is our answer, so it must not fall through to their record --
+ * otherwise adopting a bucket to the default location would be undone
+ * by the record that named somewhere else. */
+TEST_F(NSFSRecordedPathTest, ARowForTheDefaultDoesNotFallThrough)
+{
+  const sf::path theirs = their_storage() / "elsewhere";
+  sf::create_directories(theirs);
+  record_at(theirs);
+
+  nsfs::BucketPlacement row;
+  row.bucket_name = testname;	/* empty path:  the default location */
+  ASSERT_EQ(driver->get_identity_db()->put_bucket_placement(env->dpp,
+							    row), 0);
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  /* the default location renders as the bucket's own name under the
+   * data root, not as an absolute path of theirs */
+  EXPECT_NE(resolved_at(loaded.get()), theirs.string())
+      << "a row for the default location fell through to their record";
+}
+
+/* A path their record names that we would not store is refused.
+ *
+ * Their store is one this driver did not write, so its contents are
+ * input -- and a path we would reject at the point of storing is one
+ * we will not serve from either (§9). */
+TEST_F(NSFSRecordedPathTest, APathWeWouldNotStoreIsNotServedFrom)
+{
+  for (const char* bad : {"relative/path", "/a/../b", "/trailing/"}) {
+    std::string doc = std::string(
+      "{\"_id\":\"1\",\"name\":\"") + testname +
+      "\",\"versioning\":\"DISABLED\",\"path\":\"" + bad + "\"}";
+    write_file(conf_root() / "buckets" / (testname + ".json"), doc);
+
+    /* falls back to the default location rather than following it */
+    std::unique_ptr<rgw::sal::Bucket> loaded;
+    const int ret = driver->load_bucket(env->dpp,
+					rgw_bucket{"", testname}, &loaded,
+					null_yield);
+    EXPECT_EQ(ret, 0) << "refusing the path should fall back, not fail: "
+		      << bad;
+  }
+}
+
+/* With no store configured, nothing about resolution changes.
+ *
+ * Every deployment today, and the arm that must not break. */
+TEST_F(NSFSBucketTest, WithoutATheirStoreResolutionIsUnchanged)
+{
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_TRUE(sf::is_directory(bp / "root" / testname));
 }
 
 int main(int argc, char *argv[]) {

@@ -776,6 +776,37 @@ int from_noobaa_cors(const DoutPrefixProvider* dpp, CephContext* cct,
 
 } // namespace
 
+int NooBaaBucketStateStrategy::recorded_path(const DoutPrefixProvider* dpp,
+					     const std::string& bucket_name,
+					     std::string& out) const
+{
+  out.clear();
+  if (config_root.empty()) {
+    return -ENOENT;
+  }
+  const std::string path =
+    config_root + "/buckets/" + bucket_name + ".json";
+
+  std::string doc;
+  int ret = read_record_file(dpp, path, doc);
+  if (ret < 0) {
+    return ret;
+  }
+  JSONParser p;
+  if (!p.parse(doc.data(), doc.size())) {
+    ldpp_dout(dpp, 0) << "ERROR: " << path << " is not JSON" << dendl;
+    return -EBADMSG;
+  }
+  try {
+    JSONDecoder::decode_json("path", out, &p);
+  } catch (const JSONDecoder::err& e) {
+    ldpp_dout(dpp, 0) << "ERROR: " << path << " has a path this gateway "
+      << "cannot read: " << e.what() << dendl;
+    return -EBADMSG;
+  }
+  return 0;
+}
+
 int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
 				    const std::string& bucket_name,
 				    Attrs& attrs, RGWBucketInfo& info) const

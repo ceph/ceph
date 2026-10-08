@@ -393,8 +393,13 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 	  "destination needs an RGW topic");
     }
 
-    /* `path` outside the data root is P6's, and resolution is P2's.
-     * Reported, which is all this stage can honestly do. */
+    /* `path` outside the data root.
+     *
+     * Serving it from there is done -- P2 resolves an index row and
+     * P5 falls back to this very record -- so what is left is
+     * *recording* it in the index, which is P6.  Reported so an
+     * operator knows the bucket is being served from their record
+     * rather than from a fact we hold. */
     std::string their_path;
     try {
       JSONDecoder::decode_json("path", their_path, &p);
@@ -407,8 +412,8 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       if (their_path != expected) {
 	result.deferred.push_back(
 	    rec.name + ": its storage is at " + their_path +
-	    ", which is not under the data root;  serving it from there "
-	    "is P2 and recording it is P6");
+	    ", which is not under the data root;  it is served from their "
+	    "record until the index records it (P6)");
       }
     }
 
