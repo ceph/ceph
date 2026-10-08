@@ -711,7 +711,33 @@ public:
 
     userDB = std::make_unique<nsfs::IdentityDB>(db_full_path.string(), cct);
   }
-  virtual ~NSFSDriver() { }
+  /* The multipart cache goes before anything it calls back into.
+   *
+   * A writeback entry's eviction runs `stabilize_fn`, which captures
+   * the driver and asks it for the root fd.  The cache is a member, so
+   * without this it is destroyed in reverse declaration order -- after
+   * `root_dir`, which `get_root_fd()` dereferences -- and a cache
+   * still holding a dirty entry segfaults the process on the way out.
+   * It took the unit suite's second run to show it, because the cache
+   * has to be non-empty at teardown for `drain()` to evict anything.
+   *
+   * Dropped here rather than reordered.  Reordering the members would
+   * work and would leave nothing saying why the order matters, so the
+   * next member added in the wrong place brings the crash back.
+   *
+   * Stabilizing on the way out is wanted, not merely tolerated:  under
+   * writeback, eviction is the only thing that writes those part
+   * records, so a shutdown that skipped it would lose the parts of
+   * every multipart upload still in flight.  This makes it happen
+   * while the driver can still serve it.
+   *
+   * posix has the same two members in the same order
+   * (`rgw_sal_posix.h`) and an empty destructor, so it has the same
+   * latent crash;  that line is rgw-standalone's and is noted rather
+   * than changed here. */
+  virtual ~NSFSDriver() {
+    multipart_cache.reset();
+  }
 
   void set_context(CephContext *_cct) {
     cct = _cct;
