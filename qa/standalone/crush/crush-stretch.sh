@@ -758,4 +758,119 @@ function TEST_stretch_diff_bucket_barrier() {
 
 }
 
+# Test that unstretching the last pool cleanly disables stretch mode globally and clears leader memory
+# across all transition states: Healthy, Degraded, and Recovery.
+function TEST_stretch_unstretch_clean() {
+    local dir=$1
+    run_mon $dir a --public-addr=$CEPH_MON_A || return 1
+    run_mon $dir b --public-addr=$CEPH_MON_B || return 1
+    run_mon $dir c --public-addr=$CEPH_MON_C || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+    run_osd $dir 3 || return 1
+
+    ceph mon set_location a datacenter=dc1
+    ceph mon set_location b datacenter=dc2
+    ceph mon set_location c datacenter=arbiter
+
+    ceph osd crush add-bucket dc1 datacenter
+    ceph osd crush add-bucket dc2 datacenter
+    ceph osd crush move dc1 root=default
+    ceph osd crush move dc2 root=default
+
+    ceph osd crush add-bucket host1 host
+    ceph osd crush move host1 datacenter=dc1
+    ceph osd crush set osd.0 1.0 host=host1
+
+    ceph osd crush add-bucket host2 host
+    ceph osd crush move host2 datacenter=dc1
+    ceph osd crush set osd.1 1.0 host=host2
+
+    ceph osd crush add-bucket host3 host
+    ceph osd crush move host3 datacenter=dc2
+    ceph osd crush set osd.2 1.0 host=host3
+
+    ceph osd crush add-bucket host4 host
+    ceph osd crush move host4 datacenter=dc2
+    ceph osd crush set osd.3 1.0 host=host4
+
+    # ==========================================
+    # 1. Test Unstretching from Healthy Stretch Mode
+    # ==========================================
+    ceph osd pool create data_healthy --num-zones 2 || return 1
+
+    # Verify we are in healthy stretch mode (meaning force_healthy should fail on active stretched cluster)
+    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it 2>&1 | grep "the cluster is not in recovery stretch mode" || return 1
+
+    # Unstretch the pool
+    ceph osd pool set data_healthy num_zones 1 || return 1
+
+    # Verify global stretch mode is disabled and force_healthy still fails as expected
+    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it 2>&1 | grep "the cluster is not in recovery stretch mode" || return 1
+
+    # ==========================================
+    # 2. Test Unstretching from Degraded Stretch Mode
+    # ==========================================
+    ceph osd pool create data_degraded --num-zones 2 || return 1
+
+    # Simulate zone failure by killing monitor b and OSDs in dc2
+    kill_daemons $dir TERM mon.b
+    kill_daemons $dir TERM osd.2
+    kill_daemons $dir TERM osd.3
+    ceph osd down 2 3 || return 1
+
+    # Wait and verify that degraded stretch mode has been activated
+    ceph osd dump | grep "degraded_stretch_mode 1" || return 1
+
+    # Unstretch the pool while in degraded stretch mode
+    ceph osd pool set data_degraded num_zones 1 || return 1
+
+    # Verify that the cluster cleanly exited stretch mode and leader's degraded/recovering flags are reset
+    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it 2>&1 | grep "the cluster is not in recovery stretch mode" || return 1
+
+    # Restart monitor and wait for quorum of 3 monitors to form first
+    activate_mon $dir b || return 1
+    wait_for_quorum 60 3 || return 1
+
+    # Now restart the OSDs in dc2
+    activate_osd $dir 2 || return 1
+    activate_osd $dir 3 || return 1
+    ceph osd crush set osd.2 1.0 host=host3
+    ceph osd crush set osd.3 1.0 host=host4
+    sleep 5
+    ceph osd tree
+    # ==========================================
+    # 3. Test Unstretching from Recovery Stretch Mode
+    # ==========================================
+    ceph osd pool create data_recovery --num-zones 2 || return 1
+
+    # To reach recovery stretch mode the cluster must first enter degraded stretch
+    # mode (go_recovery_stretch_mode() is a no-op unless is_degraded_stretch_mode()).
+    # Kill dc2 OSDs (but NOT mon.b) to trigger degraded stretch mode.
+    # go_recovery_stretch_mode() asserts if dead_mon_buckets is non-empty, so
+    # mon.b must be alive before force_recovery_stretch_mode is called.
+    kill_daemons $dir TERM osd.2
+    kill_daemons $dir TERM osd.3
+    ceph osd down 2 3 || return 1
+
+    # Wait for degraded stretch mode to activate
+    ceph osd dump | grep "degraded_stretch_mode 1" || return 1
+
+    # Transition to recovery stretch mode.  mon.b is still up so dead_mon_buckets
+    # is empty — go_recovery_stretch_mode() will proceed without asserting.
+    ceph osd force_recovery_stretch_mode --yes-i-really-mean-it || return 1
+    ceph osd dump | grep "recovering_stretch_mode 1" || return 1
+
+    # Unstretch the pool while in recovery stretch mode
+    ceph osd pool set data_recovery num_zones 1 || return 1
+
+    # Verify that the cluster cleanly exited stretch mode and leader's recovering flags are reset
+    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it 2>&1 | grep "the cluster is not in recovery stretch mode" || return 1
+
+    # Restore dc2 OSDs so teardown can clean up normally
+    activate_osd $dir 2 || return 1
+    activate_osd $dir 3 || return 1
+}
+
 main crush-stretch "$@"
