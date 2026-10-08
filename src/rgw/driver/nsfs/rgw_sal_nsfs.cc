@@ -8359,7 +8359,45 @@ int NSFSObject::copy_object(const ACLOwner& owner,
   if (rgw::sal::get_attr(src_attrs, RGW_NSFS_ATTR_MPUPLOAD, mpu)) {
     attrs[RGW_NSFS_ATTR_MPUPLOAD] = mpu;
   }
-  ret = dobj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
+  /* A replace that lands on the object itself has to remove the user
+   * metadata it is replacing.
+   *
+   * set_obj_attrs() merges, so for a distinct destination the new
+   * object simply carries `attrs` and there is nothing stale to
+   * remove -- which is why REPLACE was already right there.  A
+   * self-copy updates the object in place, so every key the request
+   * did not send survived:  an object PUT with x-amz-meta-srcmeta and
+   * then self-copied with REPLACE and x-amz-meta-dstmeta came back
+   * carrying both, so a client replacing its metadata in order to
+   * *remove* a key did not remove it.
+   *
+   * Only the x-amz-meta- family, and only by name.
+   * AttrWriteMode::REPLACE_ALL would do this generically and is the
+   * wrong tool:  it prunes every name that parses as one of ours and
+   * is absent from the write set, which on a versioned object includes
+   * user.nsfs.version_id and the delete marker.  Removing a name the
+   * object does not carry is a no-op -- remove_xattrs() ignores
+   * ENODATA -- so this is safe where the destination is fresh. */
+  Attrs stale_meta;
+  if ((attrs_mod == rgw::sal::ATTRSMOD_REPLACE) &&
+      (dobj->get_bucket()->get_name() == get_bucket()->get_name()) &&
+      (dobj->get_key().name == get_key().name)) {
+    const std::string meta_prefix{RGW_ATTR_META_PREFIX};
+    for (const auto& [key, bl] : src_attrs) {
+      if (key.starts_with(meta_prefix) && (attrs.find(key) == attrs.end())) {
+	stale_meta[key] = bl;
+      }
+    }
+    if (!stale_meta.empty()) {
+      ldpp_dout(dpp, 20) << "NSFSObject::copy: replacing in place, dropping "
+	<< stale_meta.size() << " superseded metadata attributes from "
+	<< get_key() << dendl;
+    }
+  }
+
+  ret = dobj->set_obj_attrs(dpp, &attrs,
+			    stale_meta.empty() ? nullptr : &stale_meta,
+			    y, rgw::sal::FLAG_LOG_OP);
   if (ret < 0) {
     return ret;
   }
