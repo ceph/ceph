@@ -16,6 +16,9 @@
 #   EC_OPT     0 to leave allow_ec_optimizations off on a single-zone EC pool
 #   OSD        number of OSDs (default 8)
 #   POOL       pool name (default chaos)
+#   LOG_LEVELS    daemon log levels: low, default or high (run_chaos.sh -l)
+#   DEBUG_LEVELS  more levels, comma separated [osd:|mon:|mgr:]SUBSYS=LEVEL
+#                 (run_chaos.sh -D)
 set -ex
 . "$(dirname "$0")/env.sh"
 POOL_TYPE=${POOL_TYPE:-erasure} ZONES=${ZONES:-1} POOL=${POOL:-chaos} OSD=${OSD:-8}
@@ -25,16 +28,30 @@ die() { set +x; echo "setup_cluster.sh: $*" >&2; exit 1; }
 cd $CEPH_BUILD
 env -u CEPH_KEYRING -u CEPH_CONF CEPH_PORT=30000 CEPH_ARGS='--bluestore_block_size=4294967296 --bluestore_block_wal_size=134217728 --bluestore_block_db_size=536870912' MON=3 OSD=$OSD MDS=0 MGR=1 RGW=0 ../src/vstart.sh -n -d --without-dashboard \
     -o 'osd_pool_default_pg_autoscale_mode=off'
-sed -i -E 's/^(\s*debug (osd|mon|mgr|paxos|auth|monc|client|mgrc)) = [0-9/]+\s*$/\1 = 1\/20/; s/^(\s*debug ms) = [0-9/]+\s*$/\1 = 0\/5/' ceph.conf
-for kv in debug_osd=1/20 debug_ms=0/5 debug_bluestore=1/10 debug_bluefs=1/10 debug_bdev=1/10 debug_rocksdb=1/5; do
-    ceph config set osd ${kv%%=*} ${kv#*=}
+# Daemon log levels go in the config database, so that restarted daemons
+# keep them. ceph.conf would override it, so its monitor debug lines go;
+# the running monitors read those at startup and get overrides instead.
+# Other subsystems keep the levels of vstart -d.
+sed -i -E '/^\s*debug (osd|mon|mgr|paxos|auth|monc|mgrc|ms) = /d; s/^(\s*debug client) = [0-9/]+\s*$/\1 = 1\/20/' ceph.conf
+levels="osd:osd=1/20 osd:ms=0/5 osd:bluestore=1/10 osd:bluefs=1/10 osd:bdev=1/10 osd:rocksdb=1/5
+        mon:mon=1/20 mon:ms=0/5 mon:paxos=1/10 mon:osd=1/20 mon:auth=1/20 mon:mgrc=1/20"
+case ${LOG_LEVELS:-default} in
+    default) ;;
+    low) levels="$levels osd:monc=1/10 osd:objecter=1/10 osd:mgrc=1/10 osd:reserver=1/10
+                 osd:objclass=1/10 mgr:mgr=1/20 mgr:ms=0/5 mgr:monc=1/10 mgr:mon=1/10" ;;
+    high) levels="$levels osd:osd=20 osd:ms=1 mon:mon=20 mon:ms=1 mon:paxos=10" ;;
+    *) die "LOG_LEVELS must be low, default or high" ;;
+esac
+for kv in $levels ${DEBUG_LEVELS//,/ }; do
+    who="osd mon mgr"
+    case $kv in *:*) who=${kv%%:*} kv=${kv#*:} ;; esac
+    for w in $who; do
+        ceph config set $w debug_${kv%%=*} ${kv#*=} || die "cannot set debug_${kv%%=*} to ${kv#*=} for $w"
+        if [ $w = mon ]; then
+            ceph tell mon.\* config set debug_${kv%%=*} ${kv#*=} >/dev/null
+        fi
+    done
 done
-ceph tell osd.\* config set debug_osd 1/20 >/dev/null
-ceph tell osd.\* config set debug_bdev 1/10 >/dev/null
-ceph tell osd.\* config set debug_bluestore 1/10 >/dev/null
-ceph tell mon.\* config set debug_mon 1/20 >/dev/null
-ceph tell mon.\* config set debug_ms 0/5 >/dev/null
-ceph tell mon.\* config set debug_paxos 1/10 >/dev/null
 ceph config set osd osd_crush_update_on_start false
 ceph config set osd bluestore_debug_inject_read_err true
 

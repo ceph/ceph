@@ -35,6 +35,21 @@
 #   -r N      replicated pool size per zone (default 3, or 2 with zones;
 #             global stretch mode needs 2)
 #   -L        single-zone EC pool without allow_ec_optimizations
+#   -l LEVELS daemon log levels, as file/memory levels (the memory levels
+#             reach the log only when a daemon crashes):
+#               low      as default, but 1 in the file for the OSDs' monc,
+#                        objecter, mgrc, reserver and objclass and for the
+#                        manager, which vstart -d logs at 10 to 20
+#               default  debug_osd and debug_mon 1/20, debug_ms 0/5
+#               high     debug_osd and debug_mon 20 and debug_ms 1 on OSDs
+#                        and monitors, for the detail of stuck ops
+#             Besides up to 1G while the cluster is created, a two-zone EC
+#             2+1 run logs about 0.1G (low), 0.3G (default) or 65G (high)
+#             an hour to $CEPH_BUILD/out, so keep high runs short (-c, -t);
+#             -D osd:osd=10 roughly halves high
+#   -D LIST   more levels after -l, comma separated
+#             [osd:|mon:|mgr:]SUBSYS=LEVEL[/MEMLEVEL], for every daemon type
+#             without a prefix, e.g. -D osd=10,ms=1 or -D osd:bluestore=1/20
 #   -x        stop the cluster after the run (default: leave it for inspection)
 #   -y        do not ask before destroying the existing cluster
 # Extra arguments after -- are passed to chaos.py.
@@ -43,13 +58,15 @@ set -e
 B=$CEPH_BUILD
 SNAP=
 BUILD_DIR= SEED= LIMIT=36000 CYCLES=0 NAME= STOP=0 YES=0
-export POOL=chaos POOL_TYPE=erasure ZONES=1 K=2 M=1 REPLICAS= EC_OPT=1 GLOBAL_STRETCH=0
-while getopts "s:b:S:t:c:n:p:z:gk:m:r:Lxyh" o; do
+export POOL=chaos POOL_TYPE=erasure ZONES=1 K=2 M=1 REPLICAS= EC_OPT=1 GLOBAL_STRETCH=0 \
+       LOG_LEVELS=default DEBUG_LEVELS=
+while getopts "s:b:S:t:c:n:p:z:gk:m:r:Ll:D:xyh" o; do
     case $o in
         s) SNAP=$OPTARG ;; b) BUILD_DIR=$OPTARG ;; S) SEED=$OPTARG ;;
         t) LIMIT=$OPTARG ;; c) CYCLES=$OPTARG ;; n) NAME=$OPTARG ;;
         p) POOL_TYPE=$OPTARG ;; z) ZONES=$OPTARG ;; g) GLOBAL_STRETCH=1 ;; r) REPLICAS=$OPTARG ;;
         k) K=$OPTARG ;; m) M=$OPTARG ;; L) EC_OPT=0 ;; x) STOP=1 ;; y) YES=1 ;;
+        l) LOG_LEVELS=$OPTARG ;; D) DEBUG_LEVELS=$OPTARG ;;
         h|*) sed -n '2,/^set -e/p' $0 | sed '$d; s/^# \{0,1\}//'; exit 2 ;;
     esac
 done
@@ -85,6 +102,11 @@ stop_cluster() {
 # --- 0. preflight
 case $POOL_TYPE in erasure|replicated) ;; *) echo "-p must be erasure or replicated"; exit 2 ;; esac
 case $ZONES in 1|2) ;; *) echo "-z must be 1 or 2"; exit 2 ;; esac
+case $LOG_LEVELS in low|default|high) ;; *) echo "-l must be low, default or high"; exit 2 ;; esac
+for kv in ${DEBUG_LEVELS//,/ }; do
+    [[ $kv =~ ^((osd|mon|mgr):)?[a-z0-9_]+=[0-9]+(/[0-9]+)?$ ]] ||
+        { echo "-D: '$kv' is not [osd:|mon:|mgr:]SUBSYS=LEVEL[/MEMLEVEL]"; exit 2; }
+done
 [ -x $B/bin/ceph-mon ] || { echo "no $B/bin/ceph-mon: set CEPH_BUILD to a build dir"; exit 1; }
 # setup_cluster.sh runs on $B's monitors whatever -s or -b say
 GLOBAL=
@@ -106,6 +128,7 @@ else
 fi
 CONFIG="$CONFIG zones=$ZONES"
 [ -n "$GLOBAL" ] && CONFIG="$CONFIG global-stretch"
+CONFIG="$CONFIG logs=$LOG_LEVELS${DEBUG_LEVELS:+ debug=$DEBUG_LEVELS}"
 if pgrep -f '^python3 [c]haos.py' >/dev/null; then
     echo "a chaos run is already in progress"; exit 1
 fi
@@ -136,6 +159,7 @@ if [ $((free + reclaim)) -lt 20 ]; then
 elif [ $((free + reclaim)) -lt 40 ]; then
     echo "warning: $B has $((free + reclaim))G for the cluster; a long run may stop on the disk guard"
 fi
+[ $LOG_LEVELS = high ] && echo "warning: -l high logs tens of G an hour; chaos.py stops below 10G free"
 mkdir -p $R
 exec > >(tee -a $R/run.log) 2>&1
 say "$WHERE"
