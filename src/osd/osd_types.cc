@@ -1826,6 +1826,8 @@ void pg_pool_t::dump(Formatter *f, const CrushWrapper *crush,
   f->dump_int("type", get_type());
   f->dump_int("size", get_size());
   f->dump_int("min_size", get_min_size());
+  f->dump_int("num_zones", get_num_zones());
+  f->dump_int("replica", get_replica());
   const int rule_id = get_crush_rule();
   f->dump_int("crush_rule", rule_id);
   if (show_rule_names && crush && crush->rule_exists(rule_id)) {
@@ -2233,9 +2235,12 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 34;
+  uint8_t v = 35;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
+  if (!HAVE_SIGNIFICANT_FEATURE(features, OSD_STRETCH_ZONES)) {
+    v = 34;
+  }
   if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_VAMPIRE)) {
     v = 33;
   }
@@ -2289,7 +2294,9 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(tmp, bl);
   }
   encode((uint32_t)0, bl); // crash_replay_interval
-  encode(min_size, bl);
+  // before v35, min_size counts every zone
+  const __u8 encoded_min_size = v >= 35 ? min_size : min_size * num_zones;
+  encode(encoded_min_size, bl);
   encode(quota_max_bytes, bl);
   encode(quota_max_objects, bl);
   encode(tiers, bl);
@@ -2378,12 +2385,16 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(lowest_migrated_pg, bl);
     encode(migration_root, bl);
   }
+  if (v >= 35) {
+    encode(replica, bl);
+    encode(num_zones, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(34, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(35, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2601,6 +2612,15 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     lowest_migrated_pg = 0;
     migration_root.reset();
   }
+  if (struct_v >= 35) {
+    decode(replica, bl);
+    decode(num_zones, bl);
+  } else {
+    // an earlier release's pool, or one before the upgrade commit: one
+    // zone and a min_size over all its copies
+    num_zones = 1;
+    replica = size;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -2736,8 +2756,14 @@ void pg_pool_t::print(ostream& out, const CrushWrapper *crush) const
         << static_cast<unsigned int>(p.ec_coding_shard_count.value_or(0));
   }
   const int rule_id = p.get_crush_rule();
-  out << " size " << p.get_size()
-      << " min_size " << p.get_min_size()
+  out << " size " << p.get_size();
+  if (p.get_num_zones() > 1) {
+    out << " num_zones " << p.get_num_zones();
+    if (p.is_replicated()) {
+      out << " replica " << p.get_replica();
+    }
+  }
+  out << " min_size " << p.get_min_size()
       << " crush_rule ";
   if (crush && crush->rule_exists(rule_id)) {
     out << crush->get_rule_name(rule_id);
