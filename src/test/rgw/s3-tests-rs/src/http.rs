@@ -724,3 +724,34 @@ pub async fn post_object_form_with_filename(
         final_url,
     }
 }
+
+/// `Content-Length: 0` on a request the SDK leaves without one.
+///
+/// The SDK omits the header on an operation whose body is empty.  A
+/// gateway is then entitled to refuse it:  `upload_part_copy` and
+/// `create_multipart_upload` both carry their input in the URI and
+/// headers, so both arrive bodyless, and both are refused by at least
+/// one implementation we test against.
+///
+///   * RGW refuses `upload_part_copy` without it.
+///   * NooBaa refuses `create_multipart_upload` without it, with
+///     `411 MissingContentLength`.
+///
+/// The header is correct HTTP for a bodyless request either way, so
+/// this is applied unconditionally rather than per gateway.
+///
+/// Use it through `mutate_request`, never by composing the request by
+/// hand:  the mutation happens before signing, so the header is
+/// covered by the SigV4 signature.
+///
+/// ```ignore
+/// client.create_multipart_upload().bucket(b).key(k)
+///     .customize()
+///     .mutate_request(zero_content_length)
+///     .send().await
+/// ```
+pub fn zero_content_length(
+    req: &mut aws_smithy_runtime_api::client::orchestrator::HttpRequest,
+) {
+    req.headers_mut().insert("content-length", "0");
+}

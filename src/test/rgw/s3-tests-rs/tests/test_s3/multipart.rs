@@ -868,7 +868,7 @@ async fn test_multipart_copy_small() {
         .copy_source(format!("{src_bucket}/{src_key}"))
         .copy_source_range(format!("bytes=0-{}", size - 1))
         .customize()
-        .mutate_request(|req| { req.headers_mut().insert("content-length", "0"); })
+        .mutate_request(s3_tests_rs::http::zero_content_length)
         .send()
         .await
         .unwrap();
@@ -929,7 +929,7 @@ async fn test_multipart_copy_without_range() {
         .part_number(1)
         .copy_source(format!("{src_bucket}/{src_key}"))
         .customize()
-        .mutate_request(|req| { req.headers_mut().insert("content-length", "0"); })
+        .mutate_request(s3_tests_rs::http::zero_content_length)
         .send()
         .await
         .unwrap();
@@ -988,7 +988,7 @@ async fn test_multipart_copy_invalid_range() {
         .copy_source(format!("{bucket_name}/{src_key}"))
         .copy_source_range("bytes=0-536870911")
         .customize()
-        .mutate_request(|req| { req.headers_mut().insert("content-length", "0"); })
+        .mutate_request(s3_tests_rs::http::zero_content_length)
         .send()
         .await;
     let err = s3_tests_rs::expect_s3_err!(result);
@@ -1574,7 +1574,7 @@ async fn test_upload_part_copy_percent_encoded_key() {
         .upload_id(&upload_id)
         .copy_source(&copy_source)
         .customize()
-        .mutate_request(|req| { req.headers_mut().insert("content-length", "0"); })
+        .mutate_request(s3_tests_rs::http::zero_content_length)
         .send()
         .await;
     assert!(result.is_err());

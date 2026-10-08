@@ -290,9 +290,7 @@ pub async fn multipart_copy(
             .upload_id(&upload_id)
             .copy_source_range(&range)
             .customize()
-            .mutate_request(|req| {
-                req.headers_mut().insert("content-length", "0");
-            })
+            .mutate_request(crate::http::zero_content_length)
             .send()
             .await
             .expect("upload_part_copy failed");
