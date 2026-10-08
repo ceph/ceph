@@ -12,6 +12,7 @@
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 #include "json_spirit/json_spirit.h"
+#include <boost/endian/conversion.hpp>
 
 namespace librbd {
 namespace {
@@ -24,6 +25,8 @@ struct MockTestImageCtx : public MockImageCtx {
 } // anonymous namespace
 
 namespace migration {
+
+using boost::endian::native_to_big;
 
 template<>
 struct SourceSpecBuilder<librbd::MockTestImageCtx> {
@@ -106,8 +109,8 @@ public:
 
   void expect_probe_header(MockStreamInterface& mock_stream_interface,
                            uint32_t magic, uint32_t version, int r) {
-    magic = htobe32(magic);
-    version = htobe32(version);
+    magic = native_to_big(magic);
+    version = native_to_big(version);
 
     bufferlist probe_bl;
     probe_bl.append(std::string_view(reinterpret_cast<char*>(&magic), 4));
@@ -119,15 +122,15 @@ public:
                           uint32_t snapshot_count, int r) {
     QCowHeader qcow_header;
     memset(&qcow_header, 0, sizeof(qcow_header));
-    qcow_header.magic = htobe32(QCOW_MAGIC);
-    qcow_header.version = htobe32(2);
-    qcow_header.size = htobe64(1<<30);
-    qcow_header.cluster_bits = htobe32(16);
-    qcow_header.l1_size = htobe32(2);
-    qcow_header.l1_table_offset = htobe64(1<<20);
+    qcow_header.magic = native_to_big<uint32_t>(QCOW_MAGIC);
+    qcow_header.version = native_to_big<uint32_t>(2);
+    qcow_header.size = native_to_big<uint64_t>(1<<30);
+    qcow_header.cluster_bits = native_to_big<uint32_t>(16);
+    qcow_header.l1_size = native_to_big<uint32_t>(2);
+    qcow_header.l1_table_offset = native_to_big<uint64_t>(1<<20);
     if (snapshot_count > 0) {
-      qcow_header.nb_snapshots = htobe32(snapshot_count);
-      qcow_header.snapshots_offset = htobe64(1<<21);
+      qcow_header.nb_snapshots = native_to_big(snapshot_count);
+      qcow_header.snapshots_offset = native_to_big<uint64_t>(1<<21);
     }
 
     bufferlist header_bl;
@@ -147,7 +150,7 @@ public:
 
     l1_table->resize(2);
     for (size_t idx = 0; idx < l1_table->size(); ++idx) {
-      (*l1_table)[idx] = htobe64((*l1_table)[idx]);
+      (*l1_table)[idx] = native_to_big((*l1_table)[idx]);
     }
 
     l1_table_bl.append(
@@ -167,7 +170,7 @@ public:
 
     l2_table->resize(l2_table_size);
     for (size_t idx = 0; idx < l2_table->size(); ++idx) {
-      (*l2_table)[idx] = htobe64((*l2_table)[idx]);
+      (*l2_table)[idx] = native_to_big((*l2_table)[idx]);
     }
 
     l2_table_bl.append(
@@ -218,11 +221,11 @@ public:
                                    uint64_t* snapshot_offset, int r) {
     QCowSnapshotHeader snapshot_header;
     memset(&snapshot_header, 0, sizeof(snapshot_header));
-    snapshot_header.id_str_size = htobe16(id.size());
-    snapshot_header.name_size = htobe16(name.size());
-    snapshot_header.extra_data_size = htobe32(16);
-    snapshot_header.l1_size = htobe32(1);
-    snapshot_header.l1_table_offset = htobe64(l1_table_offset);
+    snapshot_header.id_str_size = native_to_big<uint16_t>(id.size());
+    snapshot_header.name_size = native_to_big<uint16_t>(name.size());
+    snapshot_header.extra_data_size = native_to_big<uint32_t>(16);
+    snapshot_header.l1_size = native_to_big<uint32_t>(1);
+    snapshot_header.l1_table_offset = native_to_big(l1_table_offset);
 
     bufferlist snapshot_header_bl;
     snapshot_header_bl.append(
@@ -240,7 +243,7 @@ public:
       uint64_t* snapshot_offset, int r) {
     QCowSnapshotExtraData snapshot_header_extra;
     memset(&snapshot_header_extra, 0, sizeof(snapshot_header_extra));
-    snapshot_header_extra.disk_size = htobe64(size);
+    snapshot_header_extra.disk_size = native_to_big(size);
 
     bufferlist snapshot_header_extra_bl;
     snapshot_header_extra_bl.append(
@@ -257,7 +260,7 @@ public:
 
   void expect_read_snapshot_l1_table(MockStreamInterface& mock_stream_interface,
                                      uint64_t l1_table_offset, int r) {
-    uint64_t l2_table_cluster = htobe64(l1_table_offset);
+    uint64_t l2_table_cluster = native_to_big(l1_table_offset);
 
     bufferlist snapshot_l1_table_bl;
     snapshot_l1_table_bl.append(
@@ -295,10 +298,10 @@ TEST_F(TestMockMigrationQCOWFormat, OpenCloseV1) {
   int expected_open_ret_val = 0;
   QCowHeaderV1 qcow_header;
   memset(&qcow_header, 0, sizeof(qcow_header));
-  qcow_header.magic = htobe32(QCOW_MAGIC);
-  qcow_header.version = htobe32(1);
-  qcow_header.size = htobe64(1<<30);
-  qcow_header.l1_table_offset = htobe64(1<<20);
+  qcow_header.magic = native_to_big<uint32_t>(QCOW_MAGIC);
+  qcow_header.version = native_to_big<uint32_t>(1);
+  qcow_header.size = native_to_big<uint64_t>(1<<30);
+  qcow_header.l1_table_offset = native_to_big<uint64_t>(1<<20);
   qcow_header.cluster_bits = 16;
   qcow_header.l2_bits = 13;
 
@@ -461,10 +464,10 @@ TEST_F(TestMockMigrationQCOWFormat, ReadHeaderV1Error) {
 
   QCowHeaderV1 qcow_header;
   memset(&qcow_header, 0, sizeof(qcow_header));
-  qcow_header.magic = htobe32(QCOW_MAGIC);
-  qcow_header.version = htobe32(1);
-  qcow_header.size = htobe64(1<<30);
-  qcow_header.l1_table_offset = htobe64(1<<20);
+  qcow_header.magic = native_to_big<uint32_t>(QCOW_MAGIC);
+  qcow_header.version = native_to_big<uint32_t>(1);
+  qcow_header.size = native_to_big<uint64_t>(1<<30);
+  qcow_header.l1_table_offset = native_to_big<uint64_t>(1<<20);
   qcow_header.cluster_bits = 16;
   qcow_header.l2_bits = 13;
 
