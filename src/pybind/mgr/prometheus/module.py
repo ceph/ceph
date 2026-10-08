@@ -7,6 +7,7 @@ import re
 import threading
 import time
 import errno
+import ssl
 import enum
 from collections import namedtuple
 from collections import OrderedDict
@@ -16,8 +17,8 @@ from cherrypy import _cptree
 
 from .cli import PrometheusCLICommand
 
-from mgr_module import MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult
-from mgr_util import get_default_addr, profile_method, build_url, test_port_allocation, PortAlreadyInUse
+from mgr_module import MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, _get_localized_key
+from mgr_util import get_default_addr, profile_method, build_url, test_port_allocation, PortAlreadyInUse, verify_tls_files
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from rbd import RBD
 
@@ -31,6 +32,7 @@ MetricValue = Dict[LabelValues, Number]
 # for Prometheus exporter port registry
 
 DEFAULT_PORT = 9283
+DEFAULT_SSL_PORT = 9284
 
 # to access things in class Module from subclass Root.  Because
 # it's a dict, the writer doesn't need to declare 'global' for access
@@ -750,6 +752,26 @@ class Module(MgrModule, OrchestratorClientMixin):
             desc='Maximum number of health check history entries to keep',
             runtime=True
         ),
+        Option(
+            name='ssl',
+            type='bool',
+            default=False,
+            desc='Enable SSL/TLS for the metrics endpoint'),
+        Option(
+            name='ssl_server_port',
+            type='int',
+            default=DEFAULT_SSL_PORT,
+            desc='Port for HTTPS when ssl is enabled'),
+        Option(
+            name='crt_file',
+            type='str',
+            default='',
+            desc='Path to SSL certificate file'),
+        Option(
+            name='key_file',
+            type='str',
+            default='',
+            desc='Path to SSL key file'),
     ]
 
     STALE_CACHE_FAIL = 'fail'
@@ -2292,7 +2314,11 @@ class Module(MgrModule, OrchestratorClientMixin):
                 if service['type'] != 'mgr':
                     continue
                 id_ = service['id']
-                port = self._get_module_option('server_port', DEFAULT_PORT, id_)
+                use_ssl = self._get_module_option('ssl', False, id_)
+                if use_ssl:
+                    port = self._get_module_option('ssl_server_port', DEFAULT_SSL_PORT, id_)
+                else:
+                    port = self._get_module_option('server_port', DEFAULT_PORT, id_)
                 targets.append(f'{hostname}:{port}')
         ret = [
             {
@@ -2301,6 +2327,26 @@ class Module(MgrModule, OrchestratorClientMixin):
             }
         ]
         return 0, json.dumps(ret), ""
+
+    @PrometheusCLICommand.Write('prometheus set-ssl-certificate')
+    def set_ssl_certificate(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+        if inbuf is None:
+            return -errno.EINVAL, '', 'Please specify the certificate with "-i" option'
+        if mgr_id is not None:
+            self.set_store(_get_localized_key(mgr_id, 'crt'), inbuf)
+        else:
+            self.set_store('crt', inbuf)
+        return 0, 'SSL certificate updated', ''
+
+    @PrometheusCLICommand.Write('prometheus set-ssl-certificate-key')
+    def set_ssl_certificate_key(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+        if inbuf is None:
+            return -errno.EINVAL, '', 'Please specify the certificate key with "-i" option'
+        if mgr_id is not None:
+            self.set_store(_get_localized_key(mgr_id, 'key'), inbuf)
+        else:
+            self.set_store('key', inbuf)
+        return 0, 'SSL certificate key updated', ''
 
     def self_test(self) -> None:
         self.collect()
@@ -2322,7 +2368,10 @@ class Module(MgrModule, OrchestratorClientMixin):
                     e
                 )
 
-        # In any error fallback to plain http mode
+        use_ssl = self.get_localized_module_option('ssl', False)
+        if use_ssl:
+            return self.setup_direct_tls_config()
+
         return self.setup_default_config()
 
     def get_cherrypy_config(self) -> Dict[str, Dict[str, Any]]:
@@ -2342,6 +2391,38 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     def setup_default_config(self) -> Tuple[Dict[str, Dict[str, Any]], None, str]:
         return self.get_cherrypy_config(), None, 'http'
+
+    def setup_direct_tls_config(self) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Any], str]:
+        cert = self.get_localized_store("crt")
+        if cert is not None:
+            self.cert_tmp = NamedTemporaryFile()
+            self.cert_tmp.write(cert.encode('utf-8'))
+            self.cert_tmp.flush()
+            cert_fname = self.cert_tmp.name
+        else:
+            cert_fname = cast(str, self.get_localized_module_option('crt_file'))
+
+        pkey = self.get_localized_store("key")
+        if pkey is not None:
+            self.pkey_tmp = NamedTemporaryFile()
+            self.pkey_tmp.write(pkey.encode('utf-8'))
+            self.pkey_tmp.flush()
+            pkey_fname = self.pkey_tmp.name
+        else:
+            pkey_fname = cast(str, self.get_localized_module_option('key_file'))
+
+        verify_tls_files(cert_fname, pkey_fname)
+
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.load_cert_chain(cert_fname, pkey_fname)
+        context.minimum_version = ssl.TLSVersion.TLSv1_3
+
+        ssl_info = {
+            'cert': cert_fname,
+            'key': pkey_fname,
+            'context': context
+        }
+        return self.get_cherrypy_config(), ssl_info, 'https'
 
     def setup_tls_config(self) -> Tuple[Dict[str, Dict[str, Any]], Optional[Dict[str, Any]], str]:
         # Temporarily disabling the verify function due to issues.
@@ -2466,7 +2547,11 @@ class Module(MgrModule, OrchestratorClientMixin):
 
         def start_server() -> cherrypy.process.servers.ServerAdapter:
             server_addr = cast(str, self.get_localized_module_option('server_addr', get_default_addr()))
-            server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
+            use_ssl = self.get_localized_module_option('ssl', False)
+            if use_ssl:
+                server_port = cast(int, self.get_localized_module_option('ssl_server_port', DEFAULT_SSL_PORT))
+            else:
+                server_port = cast(int, self.get_localized_module_option('server_port', DEFAULT_PORT))
 
             config, ssl_info, scheme = self.configure()
             tree = _cptree.Tree()
@@ -2593,10 +2678,42 @@ class StandbyModule(MgrStandbyModule):
     def serve(self) -> None:
         server_addr = cast(str, self.get_localized_module_option(
             'server_addr', get_default_addr()))
-        server_port = cast(int, self.get_localized_module_option(
-            'server_port', DEFAULT_PORT))
+        use_ssl = self.get_localized_module_option('ssl', False)
+        if use_ssl:
+            server_port = cast(int, self.get_localized_module_option(
+                'ssl_server_port', DEFAULT_SSL_PORT))
+        else:
+            server_port = cast(int, self.get_localized_module_option(
+                'server_port', DEFAULT_PORT))
         self.log.info("server_addr: %s server_port: %s" %
                       (server_addr, server_port))
+
+        ssl_info = None
+        if use_ssl:
+            cert = self.get_localized_store("crt")
+            if cert is not None:
+                self.cert_tmp = NamedTemporaryFile()
+                self.cert_tmp.write(cert.encode('utf-8'))
+                self.cert_tmp.flush()
+                cert_fname = self.cert_tmp.name
+            else:
+                cert_fname = cast(str, self.get_localized_module_option('crt_file'))
+
+            pkey = self.get_localized_store("key")
+            if pkey is not None:
+                self.pkey_tmp = NamedTemporaryFile()
+                self.pkey_tmp.write(pkey.encode('utf-8'))
+                self.pkey_tmp.flush()
+                pkey_fname = self.pkey_tmp.name
+            else:
+                pkey_fname = cast(str, self.get_localized_module_option('key_file'))
+
+            verify_tls_files(cert_fname, pkey_fname)
+
+            context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            context.load_cert_chain(cert_fname, pkey_fname)
+            context.minimum_version = ssl.TLSVersion.TLSv1_3
+            ssl_info = {'cert': cert_fname, 'key': pkey_fname, 'context': context}
 
         module = self
 
@@ -2639,7 +2756,8 @@ class StandbyModule(MgrStandbyModule):
         self.server_adapter, _ = CherryPyMgr.mount(
             tree,
             'prometheus-standby',
-            (server_addr, int(server_port))
+            (server_addr, int(server_port)),
+            ssl_info=ssl_info
         )
         self.log.info('Engine started.')
 
