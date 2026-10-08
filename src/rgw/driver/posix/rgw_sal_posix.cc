@@ -1344,6 +1344,19 @@ int Symlink::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file
     return -EINVAL;
   }
 
+  /* Diagnostics only:  this says what is wrong and then faults exactly
+   * as before, so the behaviour is unchanged and the report survives
+   * in the crash handler's dump of recent events.
+   *
+   * target is set by fill_target(), which the four-argument constructor
+   * calls -- discarding its return value, and passing a null dpp, so a
+   * failure there is both unreported and unloggable at the point it
+   * happens.  This is the first place that can say so. */
+  if (! target) {
+    ldpp_dout(dpp, 0) << "ERROR: Symlink::create: " << fname
+		      << " has no target;  fill_target() did not set one, "
+		      << "and the dereference below faults" << dendl;
+  }
   int ret = symlinkat(target->get_name().c_str(), parent->get_fd(), fname.c_str());
   if (ret < 0) {
     ret = errno;
@@ -1862,29 +1875,78 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     return ret;
   }
 
+  /* Diagnostics only, for the SIGSEGV below.  The symlink step at the
+   * end builds a Symlink from tgtname, and tgtname is assigned only
+   * inside this loop;  an empty one reaches Symlink::fill_target(),
+   * which then takes its readlinkat() path, fails, and leaves the
+   * target unset, and Symlink::create() dereferences it.  So the
+   * question is why the loop assigned nothing, and these say which of
+   * the three reasons it was. */
+  ldpp_dout(dpp, 20) << "VersionedDirectory::copy: " << get_name()
+		     << " -> dst_name=" << dst_name
+		     << " dest_key.name=" << dest_key.name
+		     << " dest_key.instance=\"" << dest_key.instance << "\""
+		     << " basename=" << basename << dendl;
+
   std::string tgtname;
-  ret = for_each(dpp, [this, &dest, &dest_key, &tgtname, &dpp, &y](const char* name) {
+  unsigned seen = 0, skipped_dot = 0, skipped_inst = 0, copied = 0;
+  ret = for_each(dpp, [this, &dest, &dest_key, &tgtname, &dpp, &y,
+		       &seen, &skipped_dot, &skipped_inst,
+		       &copied](const char* name) {
     std::unique_ptr<FSEnt> sobj;
 
+    ++seen;
     if (name[0] == '.') {
       /* Skip dotfiles */
+      ++skipped_dot;
       return 0;
     }
     rgw_obj_key key = decode_obj_key(name);
     if (!dest_key.instance.empty() && dest_key.instance != key.instance) {
       /* Were asked to copy a single version, and this is not it */
+      ++skipped_inst;
+      ldpp_dout(dpp, 20) << "VersionedDirectory::copy: skipping " << name
+			 << ":  instance \"" << key.instance
+			 << "\" is not the requested \"" << dest_key.instance
+			 << "\"" << dendl;
       return 0;
     }
 
     int r = this->get_ent(dpp, y, name, std::string(), sobj);
-    if (r < 0)
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: VersionedDirectory::copy: get_ent(" << name
+			<< ") failed: " << cpp_strerror(-r)
+			<< ";  the loop stops here and tgtname stays as it is"
+			<< dendl;
       return r;
+    }
     key.name = dest_key.name;
     tgtname = get_key_fname(key, /*use_version=*/true);
+    ++copied;
     return sobj->copy(dpp, y, dest.get(), tgtname);
   });
 
+  ldpp_dout(dpp, 20) << "VersionedDirectory::copy: for_each ret=" << ret
+		     << " entries=" << seen
+		     << " skipped_dotfile=" << skipped_dot
+		     << " skipped_instance=" << skipped_inst
+		     << " copied=" << copied
+		     << " tgtname=\"" << tgtname << "\"" << dendl;
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: VersionedDirectory::copy: the version loop "
+		      << "returned " << cpp_strerror(-ret)
+		      << " and the symlink step below runs anyway, "
+		      << "overwriting it" << dendl;
+  }
+
   if (!dest_key.instance.empty()) {
+    if (tgtname.empty()) {
+      ldpp_dout(dpp, 0) << "ERROR: VersionedDirectory::copy: about to build a "
+			<< "symlink for " << basename << " with no target:  an "
+			<< "instance was requested (\"" << dest_key.instance
+			<< "\") and the loop matched no version of "
+			<< get_name() << dendl;
+    }
     /* We didn't copy the symlink, make a new one */
     std::unique_ptr<Symlink> sl = std::make_unique<Symlink>(basename, dest.get(), tgtname, ctx);
     ret = sl->create(dpp, /*existed=*/nullptr, /*temp_file=*/false);
