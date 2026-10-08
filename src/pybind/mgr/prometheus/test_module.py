@@ -1,7 +1,8 @@
 from typing import Dict
 from unittest import TestCase, mock
+import errno
 
-from prometheus.module import Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict
+from prometheus.module import Metric, LabelValues, Number, HealthHistory, ThreadSafeLRUCacheDict, Module
 import threading
 
 
@@ -471,3 +472,153 @@ class HardwareMetricsTest(TestCase):
         self.module._process_processors(self.status, self.hostname)
         for labels in self.module.metrics['hardware_cpu_cores'].value:
             self.assertEqual(len(labels), 5)
+
+
+class TestSSLCertificateCLI(TestCase):
+    def setUp(self):
+        self.module = mock.MagicMock()
+        self.module.set_store = mock.MagicMock()
+
+    def test_set_ssl_certificate_no_inbuf(self):
+        ret, out, err = Module.set_ssl_certificate(self.module, inbuf=None)
+        self.assertEqual(ret, -errno.EINVAL)
+        self.assertIn('certificate', err)
+
+    def test_set_ssl_certificate_key_no_inbuf(self):
+        ret, out, err = Module.set_ssl_certificate_key(self.module, inbuf=None)
+        self.assertEqual(ret, -errno.EINVAL)
+        self.assertIn('certificate key', err)
+
+    def test_set_ssl_certificate_global(self):
+        ret, out, err = Module.set_ssl_certificate(self.module, inbuf='cert-data')
+        self.assertEqual(ret, 0)
+        self.module.set_store.assert_called_once_with('crt', 'cert-data')
+
+    def test_set_ssl_certificate_key_global(self):
+        ret, out, err = Module.set_ssl_certificate_key(self.module, inbuf='key-data')
+        self.assertEqual(ret, 0)
+        self.module.set_store.assert_called_once_with('key', 'key-data')
+
+    def test_set_ssl_certificate_per_mgr(self):
+        ret, out, err = Module.set_ssl_certificate(self.module, mgr_id='mgr.a', inbuf='cert-data')
+        self.assertEqual(ret, 0)
+        self.module.set_store.assert_called_once_with('mgr.a/crt', 'cert-data')
+
+    def test_set_ssl_certificate_key_per_mgr(self):
+        ret, out, err = Module.set_ssl_certificate_key(self.module, mgr_id='mgr.a', inbuf='key-data')
+        self.assertEqual(ret, 0)
+        self.module.set_store.assert_called_once_with('mgr.a/key', 'key-data')
+
+
+class TestConfigureSSL(TestCase):
+    def setUp(self):
+        self.module = mock.MagicMock(spec=Module)
+
+    def test_configure_calls_direct_tls_when_ssl_enabled(self):
+        self.module.mon_command = mock.MagicMock(return_value=(-22, None, ''))
+        self.module.get_localized_module_option = mock.MagicMock(return_value=True)
+        self.module.setup_direct_tls_config = mock.MagicMock(
+            return_value=({}, {'cert': '/tmp/c', 'key': '/tmp/k'}, 'https'))
+        Module.configure(self.module)
+        self.module.setup_direct_tls_config.assert_called_once()
+
+    def test_configure_prefers_orchestrator_over_direct_ssl(self):
+        self.module.mon_command = mock.MagicMock(
+            return_value=(0, '{"security_enabled": true}', ''))
+        self.module.get_localized_module_option = mock.MagicMock(return_value=True)
+        self.module.setup_tls_config = mock.MagicMock(
+            return_value=({}, {'cert': '/tmp/c', 'key': '/tmp/k'}, 'https'))
+        Module.configure(self.module)
+        self.module.setup_tls_config.assert_called_once()
+        self.module.setup_direct_tls_config.assert_not_called()
+
+    def test_configure_uses_direct_ssl_when_orchestrator_security_disabled(self):
+        self.module.mon_command = mock.MagicMock(
+            return_value=(0, '{"security_enabled": false}', ''))
+        self.module.get_localized_module_option = mock.MagicMock(return_value=True)
+        self.module.setup_direct_tls_config = mock.MagicMock(
+            return_value=({}, {'cert': '/tmp/c', 'key': '/tmp/k', 'context': mock.MagicMock()}, 'https'))
+        Module.configure(self.module)
+        self.module.setup_direct_tls_config.assert_called_once()
+        self.module.setup_tls_config.assert_not_called()
+
+    def test_configure_skips_direct_tls_when_ssl_disabled(self):
+        self.module.mon_command = mock.MagicMock(return_value=(0, None, ''))
+        self.module.get_localized_module_option = mock.MagicMock(return_value=False)
+        self.module.setup_default_config = mock.MagicMock(return_value=({}, None, 'http'))
+        Module.configure(self.module)
+        self.module.setup_direct_tls_config.assert_not_called()
+
+
+class TestFileSDConfig(TestCase):
+    def setUp(self):
+        self.module = mock.MagicMock(spec=Module)
+        self.module.list_servers = mock.MagicMock(return_value=[
+            {
+                'hostname': 'host1',
+                'services': [{'type': 'mgr', 'id': 'x'}]
+            }
+        ])
+
+    def test_file_sd_config_uses_default_port(self):
+        self.module._get_module_option = mock.MagicMock(
+            side_effect=lambda opt, default, id_: {
+                'ssl': False,
+                'server_port': 9283,
+            }.get(opt, default))
+        ret, out, err = Module.get_file_sd_config(self.module)
+        self.assertEqual(ret, 0)
+        self.assertIn('host1:9283', out)
+
+    def test_file_sd_config_uses_ssl_port(self):
+        self.module._get_module_option = mock.MagicMock(
+            side_effect=lambda opt, default, id_: {
+                'ssl': True,
+                'ssl_server_port': 9284,
+            }.get(opt, default))
+        ret, out, err = Module.get_file_sd_config(self.module)
+        self.assertEqual(ret, 0)
+        self.assertIn('host1:9284', out)
+
+
+class TestBuildSSLInfo(TestCase):
+    def setUp(self):
+        self.module = mock.MagicMock()
+        # By default no cert/key in the config-key store.
+        self.module.get_localized_store.return_value = None
+
+    def _set_options(self, **opts):
+        self.module.get_localized_module_option.side_effect = \
+            lambda opt: opts.get(opt)
+
+    def test_propagates_cert_error(self):
+        # A missing/invalid cert must raise so the caller can stay down
+        # instead of the module crashing with an unhandled exception.
+        from prometheus.module import _build_ssl_info
+        self._set_options(crt_file='/does/not/exist.pem',
+                          key_file='/does/not/exist.key')
+        with mock.patch('prometheus.module.verify_tls_files',
+                        side_effect=RuntimeError('Certificate does not exist')):
+            with self.assertRaises(RuntimeError):
+                _build_ssl_info(self.module)
+
+    def test_store_takes_precedence_and_warns(self):
+        # When both the config-key store and crt_file/key_file are set, the
+        # store wins and the user is warned about the precedence.
+        from prometheus.module import _build_ssl_info
+        self.module.get_localized_store.side_effect = \
+            lambda k: {'crt': 'CERT', 'key': 'KEY'}.get(k)
+        self._set_options(crt_file='/some/file.pem', key_file='/some/file.key')
+        with mock.patch('prometheus.module.verify_tls_files'), \
+                mock.patch('prometheus.module.ssl'):
+            _build_ssl_info(self.module)
+        self.module.log.warning.assert_called_once()
+
+    def test_no_warning_when_only_file_source(self):
+        # Only file-based config, no store values: no precedence conflict.
+        from prometheus.module import _build_ssl_info
+        self._set_options(crt_file='/some/file.pem', key_file='/some/file.key')
+        with mock.patch('prometheus.module.verify_tls_files'), \
+                mock.patch('prometheus.module.ssl'):
+            _build_ssl_info(self.module)
+        self.module.log.warning.assert_not_called()
