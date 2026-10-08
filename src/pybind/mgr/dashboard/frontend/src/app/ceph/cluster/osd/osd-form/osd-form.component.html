@@ -59,6 +59,7 @@
             >
               <cds-radio
                 value="automatic"
+                [checked]="form.controls['deploymentMode'].value === 'automatic'"
                 [disabled]="!hasEligibleDevices ? true : null"
               >
                 <div class="osd-radio-label-wrapper">
@@ -98,6 +99,7 @@
                     @for (optionName of optionNames; track optionName; let isLast = $last) {
                       <cds-radio
                         [value]="optionName"
+                        [checked]="form.controls['deploymentOption'].value === optionName"
                         [class.cds-mb-5]="!isLast"
                         [disabled]="
                           !hasEligibleDevices || !deploymentOptions?.options[optionName].available
@@ -125,6 +127,7 @@
 
               <cds-radio
                 value="manual"
+                [checked]="form.controls['deploymentMode'].value === 'manual'"
                 [disabled]="!hasEligibleDevices ? true : null"
               >
                 <div class="osd-radio-label-wrapper">
