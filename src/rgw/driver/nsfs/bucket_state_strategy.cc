@@ -913,6 +913,33 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     }
   }
 
+  /* X1.  `force_md5_etag`, carried and **not enforced**
+   * (`ACCOUNT_IMPORT.md` §6.1a).
+   *
+   * Their value, in their shape:  the literal `true` or `false`, and
+   * no attribute at all when the record does not mention it.  The
+   * tri-state is the point -- their precedence is a cascade, bucket
+   * if defined else account if defined else their global, and `false`
+   * counts as defined -- so a bucket that turns it off is not a
+   * bucket that said nothing.
+   *
+   * Carried rather than applied because `rgw_non_md5_etag` is the
+   * single deployment-wide control and their global maps to it.  A
+   * deployment that varies this per bucket is doing something we do
+   * not intend to support, and carrying the value is what lets the
+   * import report say so rather than leaving an operator to discover
+   * it.
+   *
+   * Written into the attribute map so it survives conversion:  once a
+   * bucket is adopted, nothing reads their record again. */
+  if (p.find_obj("force_md5_etag")) {
+    bool force = false;
+    JSONDecoder::decode_json("force_md5_etag", force, &p);
+    bufferlist fbl;
+    fbl.append(force ? "true" : "false");
+    attrs[RGW_NSFS_ATTR_FORCE_MD5_ETAG] = std::move(fbl);
+  }
+
   ldpp_dout(dpp, 10) << "nsfs: bucket " << bucket_name
     << " took versioning from " << path << ": "
     << (versioning.empty() ? "unset" : versioning) << dendl;

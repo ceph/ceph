@@ -76,6 +76,46 @@ size_t NooBaaStoreContents::iam_users() const
 		       [](const NooBaaIdentity& i) { return i.is_iam_user(); });
 }
 
+std::vector<std::string> NooBaaStoreContents::md5_etag_divergence() const
+{
+  /* What the accounts say.  A deployment is uniform when every
+   * account agrees, and a bucket diverges when it states something
+   * else -- including stating the same thing an account left unsaid,
+   * since `false` and unsaid inherit differently. */
+  std::optional<bool> account_says;
+  bool accounts_differ = false;
+  for (const auto& id : identities) {
+    if (!id.have_force_md5_etag) {
+      continue;
+    }
+    if (!account_says) {
+      account_says = id.force_md5_etag;
+    } else if (*account_says != id.force_md5_etag) {
+      accounts_differ = true;
+    }
+  }
+
+  std::vector<std::string> out;
+  if (accounts_differ) {
+    out.push_back("the accounts do not agree on force_md5_etag");
+  }
+  for (const auto& b : buckets) {
+    if (!b.force_md5_etag) {
+      continue;
+    }
+    if (account_says && (*b.force_md5_etag == *account_says)) {
+      continue;
+    }
+    out.push_back(b.name + " sets force_md5_etag=" +
+		  (*b.force_md5_etag ? "true" : "false") +
+		  (account_says
+		     ? std::string(", against the account's ") +
+		       (*account_says ? "true" : "false")
+		     : std::string(", which no account states")));
+  }
+  return out;
+}
+
 namespace {
 
 /* Sorted names of the entries under `dir`, with `.` and `..` dropped.
@@ -352,7 +392,21 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 	  unreadable(path, "not JSON");
 	  continue;
 	}
-	out.buckets.push_back(name.substr(0, name.size() - suffix.size()));
+	NooBaaBucketRecord rec;
+	rec.name = name.substr(0, name.size() - suffix.size());
+	/* Presence, then value.  Absent is a third state their cascade
+	 * depends on, so it cannot be read as false. */
+	if (p.find_obj("force_md5_etag")) {
+	  try {
+	    bool force = false;
+	    JSONDecoder::decode_json("force_md5_etag", force, &p);
+	    rec.force_md5_etag = force;
+	  } catch (const JSONDecoder::err& e) {
+	    unreadable(path, std::string("force_md5_etag: ") + e.what());
+	    continue;
+	  }
+	}
+	out.buckets.push_back(std::move(rec));
       }
     }
   }

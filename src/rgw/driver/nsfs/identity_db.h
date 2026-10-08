@@ -70,6 +70,23 @@ struct Identity {
   std::string fs_backend;
   std::string noobaa_id;
 
+  /* X1.  NooBaa's per-account `force_md5_etag`, carried and **not
+   * enforced** (`ACCOUNT_IMPORT.md` §6.1a).
+   *
+   * Three states, like `groups` above, and for the same reason:
+   * their precedence is a cascade -- bucket if defined, else account
+   * if defined, else their global -- and `false` counts as defined.
+   * So an account that turns it off is not an account that said
+   * nothing, and collapsing the two would change which value a later
+   * decision inherits.
+   *
+   * Nothing consults it at request time.  `rgw_non_md5_etag` is the
+   * single deployment-wide control and their global maps to it;  the
+   * option exists so a proof of concept would not read slower than
+   * NooBaa, and making it per-bucket turns a deployment posture into
+   * per-object luck. */
+  std::optional<bool> force_md5_etag;
+
   bool directory_backed() const { return !distinguished_name.empty(); }
   bool local() const { return uid.has_value(); }
 };
@@ -108,6 +125,13 @@ public:
 		     + "_nsfs_identity") {}
 
   int Initialize(std::string logfile, int loglevel);
+
+private:
+  /* Whether the table already carries a column, for the migrations
+   * `CREATE TABLE IF NOT EXISTS` cannot perform. */
+  bool has_column(const DoutPrefixProvider* dpp, const char* name) const;
+
+public:
 
   /* Insert or replace.  `id.key` must be set;  everything else is
    * optional subject to the exclusivity rule. */

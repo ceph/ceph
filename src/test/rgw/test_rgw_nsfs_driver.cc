@@ -4458,6 +4458,46 @@ public:
   }
 };
 
+/* X1.  Their per-bucket force_md5_etag is carried into the attribute
+ * map, in their shape, with the tri-state intact.
+ *
+ * Carried and **not enforced**:  `rgw_non_md5_etag` is the single
+ * deployment-wide control and their global maps to it
+ * (`ACCOUNT_IMPORT.md` §6.1a).  What this asserts is that the value
+ * survives -- into an attribute rather than only into their record,
+ * because once a bucket is adopted nothing reads their record again.
+ *
+ * All three states, because their precedence is a cascade and `false`
+ * counts as defined:  a bucket that turns it off must not arrive
+ * looking like a bucket that said nothing. */
+TEST_F(NSFSNooBaaStateTest, ForceMd5EtagIsCarriedInTheirShape)
+{
+  RGWBucketInfo info;
+  Attrs attrs;
+
+  write_their_record("DISABLED");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  EXPECT_EQ(attrs.find(RGW_NSFS_ATTR_FORCE_MD5_ETAG), attrs.end())
+      << "a record that says nothing produced an attribute";
+
+  write_their_record("DISABLED", ",\"force_md5_etag\":true");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto on = attrs.find(RGW_NSFS_ATTR_FORCE_MD5_ETAG);
+  ASSERT_NE(on, attrs.end()) << "their true was dropped";
+  EXPECT_EQ(on->second.to_str(), "true");
+
+  write_their_record("DISABLED", ",\"force_md5_etag\":false");
+  ASSERT_EQ(read_their_record(info, attrs), 0);
+  auto off = attrs.find(RGW_NSFS_ATTR_FORCE_MD5_ETAG);
+  ASSERT_NE(off, attrs.end())
+      << "their explicit false read as unset -- the cascade is lost";
+  EXPECT_EQ(off->second.to_str(), "false");
+
+  /* and nothing about the gateway's own behaviour changed:  the flag
+   * is carried, and no request path consults it */
+  EXPECT_FALSE(info.flags & BUCKET_VERSIONED);
+}
+
 /* Their versioning reaches RGW, which is what a base bucket loses today.
  *
  * A bucket that reads as unversioned takes a PUT in place instead of
@@ -8225,7 +8265,7 @@ TEST_F(NooBaaStoreTest, AStoreTheirToolsWroteReadsBack)
   EXPECT_EQ(c.accounts(), 3u);
   EXPECT_EQ(c.iam_users(), 0u);
   EXPECT_EQ(c.buckets.size(), 1u);
-  EXPECT_EQ(c.buckets[0], "a-bucket");
+  EXPECT_EQ(c.buckets[0].name, "a-bucket");
   EXPECT_TRUE(c.master_keys_present);
 
   const auto* plain = by_name(c, "interchange");
@@ -8307,7 +8347,7 @@ TEST_F(NooBaaStoreTest, EveryUnreadableRecordIsReportedAndTheRestAreRead)
     return s;
   }();
   EXPECT_EQ(c.buckets.size(), 1u);
-  EXPECT_EQ(c.buckets[0], "good");
+  EXPECT_EQ(c.buckets[0].name, "good");
 
   /* each complaint names the file, which is what makes a preflight
    * report actionable rather than a count */
@@ -8889,6 +8929,203 @@ TEST_F(NooBaaKeysTest, AStoreOnDiskOpensItsOwnSecrets)
   }
   /* an assertion over an empty set proves nothing */
   EXPECT_GT(opened, 0u) << "no secret in the store was opened";
+}
+
+/* ------------------------------------------------------------------ *
+ * X1 -- carrying force_md5_etag, and enforcing nothing.
+ *
+ * Three states everywhere, because their precedence is a cascade --
+ * bucket if defined, else account if defined, else their global -- and
+ * `false` counts as defined.  So "off" and "said nothing" inherit
+ * differently and collapsing them changes behaviour a later decision
+ * would honour.  `ACCOUNT_IMPORT.md` §6.1a.
+ * ------------------------------------------------------------------ */
+
+/* The account flag round-trips in all three states.
+ *
+ * The same shape as `GroupsDistinguishUnsetFromEmpty` above, for the
+ * same reason:  a column that cannot tell NULL from 0 cannot carry a
+ * cascade. */
+TEST_F(NSFSIdentityDBTest, ForceMd5EtagDistinguishesUnsetFromFalse)
+{
+  nsfs::Identity unset = local_identity("x1-unset");
+  ASSERT_FALSE(unset.force_md5_etag.has_value());
+  ASSERT_EQ(db->put_identity(env->dpp, unset), 0);
+
+  nsfs::Identity off = local_identity("x1-off");
+  off.force_md5_etag = false;
+  ASSERT_EQ(db->put_identity(env->dpp, off), 0);
+
+  nsfs::Identity on = local_identity("x1-on");
+  on.force_md5_etag = true;
+  ASSERT_EQ(db->put_identity(env->dpp, on), 0);
+
+  nsfs::Identity got;
+  ASSERT_EQ(db->get_identity(env->dpp, "x1-unset", got), 0);
+  EXPECT_FALSE(got.force_md5_etag.has_value())
+      << "an unset flag came back set";
+
+  ASSERT_EQ(db->get_identity(env->dpp, "x1-off", got), 0);
+  ASSERT_TRUE(got.force_md5_etag.has_value())
+      << "an explicit false came back as unset -- the cascade is lost";
+  EXPECT_FALSE(*got.force_md5_etag);
+
+  ASSERT_EQ(db->get_identity(env->dpp, "x1-on", got), 0);
+  ASSERT_TRUE(got.force_md5_etag.has_value());
+  EXPECT_TRUE(*got.force_md5_etag);
+
+  /* and it updates independently, including back to unset */
+  off.force_md5_etag = std::nullopt;
+  ASSERT_EQ(db->put_identity(env->dpp, off), 0);
+  ASSERT_EQ(db->get_identity(env->dpp, "x1-off", got), 0);
+  EXPECT_FALSE(got.force_md5_etag.has_value());
+  /* the other columns survived the rewrite */
+  EXPECT_EQ(got.uid, 1001u);
+  EXPECT_EQ(got.noobaa_id, "6a2bdeabf5c8e167f92cb079");
+}
+
+/* A database created before the column existed gains it.
+ *
+ * `CREATE TABLE IF NOT EXISTS` does nothing to a table already there,
+ * so without a migration every SELECT naming the new column fails and
+ * reads break rather than a field going missing.  The negative case is
+ * reachable:  the table here is deliberately created without the
+ * column, which is exactly the state an existing deployment is in. */
+TEST_F(NSFSIdentityDBTest, AnOlderTableGainsTheColumn)
+{
+  const std::string path = (bp / "older").string();
+  const std::string table =
+    std::filesystem::path(path).filename().string() + "_nsfs_identity";
+  /* `.db`, because that is what `DB::getDBfile()` appends -- the
+   * constructor takes the name and the file is the name plus a
+   * suffix.  Opening the wrong file produces an empty table and a
+   * test that proves nothing. */
+  const std::string file = path + ".db";
+
+  /* the schema as it was before X1, written by hand */
+  {
+    sqlite3* raw = nullptr;
+    ASSERT_EQ(sqlite3_open(file.c_str(), &raw), SQLITE_OK);
+    const std::string old_schema =
+      "CREATE TABLE '" + table + "' ("
+      "  Identity TEXT NOT NULL PRIMARY KEY,"
+      "  Uid INTEGER, Gid INTEGER, SupplementalGroups TEXT,"
+      "  DistinguishedName TEXT, NewBucketsPath TEXT,"
+      "  CustomBucketPathAllowedList TEXT, FsBackend TEXT, NoobaaId TEXT"
+      ");";
+    char* err = nullptr;
+    ASSERT_EQ(sqlite3_exec(raw, old_schema.c_str(), nullptr, nullptr, &err),
+	      SQLITE_OK) << (err ? err : "");
+    const std::string row =
+      "INSERT INTO '" + table + "' (Identity, Uid, Gid, NoobaaId) "
+      "VALUES ('legacy', 7, 8, 'abc');";
+    ASSERT_EQ(sqlite3_exec(raw, row.c_str(), nullptr, nullptr, &err),
+	      SQLITE_OK) << (err ? err : "");
+    sqlite3_close(raw);
+  }
+
+  nsfs::IdentityDB older{path, env->cct.get()};
+  ASSERT_EQ(older.Initialize("", -1), 0);
+
+  /* the row that predates the column reads, with the flag unset */
+  nsfs::Identity got;
+  ASSERT_EQ(older.get_identity(env->dpp, "legacy", got), 0);
+  EXPECT_EQ(got.uid, 7u);
+  EXPECT_EQ(got.noobaa_id, "abc");
+  EXPECT_FALSE(got.force_md5_etag.has_value());
+
+  /* and the column is usable afterwards */
+  got.force_md5_etag = true;
+  ASSERT_EQ(older.put_identity(env->dpp, got), 0);
+  nsfs::Identity again;
+  ASSERT_EQ(older.get_identity(env->dpp, "legacy", again), 0);
+  ASSERT_TRUE(again.force_md5_etag.has_value());
+  EXPECT_TRUE(*again.force_md5_etag);
+
+  /* twice is a no-op, not an error:  ADD COLUMN on a column that
+   * exists would fail */
+  ASSERT_EQ(older.Initialize("", -1), 0);
+}
+
+/* I1 carries each bucket's value, in three states.
+ *
+ * Read in I1 as well as by the state strategy because the question
+ * X1 exists to answer -- does this deployment vary it per bucket? --
+ * is about the deployment and cannot be answered one bucket at a
+ * time. */
+TEST_F(NooBaaStoreTest, EachBucketsForceMd5EtagIsCarried)
+{
+  add_bucket("says-nothing", R"({"_id":"1","name":"says-nothing"})");
+  add_bucket("says-true",
+	     R"({"_id":"2","name":"says-true","force_md5_etag":true})");
+  add_bucket("says-false",
+	     R"({"_id":"3","name":"says-false","force_md5_etag":false})");
+
+  auto c = read_store();
+  ASSERT_EQ(c.buckets.size(), 3u);
+
+  std::map<std::string, std::optional<bool>> got;
+  for (const auto& b : c.buckets) {
+    got[b.name] = b.force_md5_etag;
+  }
+  EXPECT_FALSE(got["says-nothing"].has_value());
+  ASSERT_TRUE(got["says-true"].has_value());
+  EXPECT_TRUE(*got["says-true"]);
+  ASSERT_TRUE(got["says-false"].has_value())
+      << "an explicit false read as unset -- the cascade is lost";
+  EXPECT_FALSE(*got["says-false"]);
+}
+
+/* A deployment that varies it per bucket is reported.
+ *
+ * X1 enforces nothing, so this report is the whole of what an
+ * operator gets.  Both polarities:  a uniform deployment is silent,
+ * and each kind of divergence is named. */
+TEST_F(NooBaaStoreTest, VaryingItPerBucketIsReported)
+{
+  /* uniform:  one account says true, every bucket agrees or is silent */
+  add_identity("a", R"({"_id":"a","name":"acct","force_md5_etag":true})");
+  add_bucket("quiet", R"({"_id":"1","name":"quiet"})");
+  add_bucket("agrees",
+	     R"({"_id":"2","name":"agrees","force_md5_etag":true})");
+  EXPECT_TRUE(read_store().md5_etag_divergence().empty())
+      << "a uniform deployment was reported as varying";
+
+  /* one bucket turns it off against the account */
+  add_bucket("differs",
+	     R"({"_id":"3","name":"differs","force_md5_etag":false})");
+  auto one = read_store().md5_etag_divergence();
+  ASSERT_EQ(one.size(), 1u);
+  EXPECT_NE(one[0].find("differs"), std::string::npos) << one[0];
+  EXPECT_NE(one[0].find("false"), std::string::npos) << one[0];
+
+  /* a second account that disagrees with the first */
+  add_identity("b", R"({"_id":"b","name":"other","force_md5_etag":false})");
+  auto two = read_store().md5_etag_divergence();
+  EXPECT_GE(two.size(), 2u);
+  bool said_accounts = false;
+  for (const auto& line : two) {
+    if (line.find("accounts do not agree") != std::string::npos) {
+      said_accounts = true;
+    }
+  }
+  EXPECT_TRUE(said_accounts) << "two accounts disagreed and nothing said so";
+}
+
+/* A bucket with no account to compare against is still reported.
+ *
+ * The value cannot be inherited from anything, so a bucket stating it
+ * is the only thing stating it -- which is the per-bucket posture X1
+ * exists to surface, not an absence of information. */
+TEST_F(NooBaaStoreTest, ABucketStatingItAloneIsReported)
+{
+  add_identity("a", R"({"_id":"a","name":"acct"})");
+  add_bucket("alone",
+	     R"({"_id":"1","name":"alone","force_md5_etag":true})");
+
+  auto d = read_store().md5_etag_divergence();
+  ASSERT_EQ(d.size(), 1u);
+  EXPECT_NE(d[0].find("no account states"), std::string::npos) << d[0];
 }
 
 int main(int argc, char *argv[]) {

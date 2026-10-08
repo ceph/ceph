@@ -48,6 +48,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -182,6 +183,26 @@ struct NooBaaSettings {
   std::string master_keys_get_executable;
 };
 
+/* One bucket record, as far as I1 reads it.
+ *
+ * The fields a bucket's *state* needs are translated by
+ * `NooBaaBucketStateStrategy`, which already reads one record per
+ * bucket.  What I1 establishes is which buckets exist, that each
+ * record parses, and the one value whose spread across a deployment is
+ * itself the finding. */
+struct NooBaaBucketRecord {
+  std::string name;
+
+  /* X1.  Carried, not enforced.  Three states, because their
+   * precedence is a cascade and `false` counts as defined.
+   *
+   * Read here as well as by the state strategy because a *deployment*
+   * question -- does this site vary it per bucket? -- cannot be
+   * answered one bucket at a time, and I1 is already parsing every
+   * record. */
+  std::optional<bool> force_md5_etag;
+};
+
 /* A record that is there and could not be read. */
 struct NooBaaUnreadable {
   std::string path;
@@ -193,11 +214,7 @@ struct NooBaaStoreContents {
   NooBaaSettings settings;
   std::vector<NooBaaIdentity> identities;
 
-  /* Bucket record *names*.  Their contents are translated by
-   * `NooBaaBucketStateStrategy`, which already reads one record per
-   * bucket;  I1 establishes which buckets exist and that each record
-   * parses, and I5 is what carries the fields across. */
-  std::vector<std::string> buckets;
+  std::vector<NooBaaBucketRecord> buckets;
 
   bool master_keys_present{false};
 
@@ -207,6 +224,18 @@ struct NooBaaStoreContents {
 
   size_t accounts() const;
   size_t iam_users() const;
+
+  /* The buckets whose `force_md5_etag` differs from what their owner
+   * account says, naming each and what it says.
+   *
+   * X1 carries the flag and enforces nothing, because
+   * `rgw_non_md5_etag` is the single deployment-wide control.  A
+   * deployment that varies this per bucket is doing something we do
+   * not intend to support, so the import report is where an operator
+   * should learn it -- not a later surprise about which objects have
+   * a digest for an ETag.  Empty means the deployment is uniform,
+   * which is the ordinary case. */
+  std::vector<std::string> md5_etag_divergence() const;
 };
 
 /* A NooBaa configuration directory, read.

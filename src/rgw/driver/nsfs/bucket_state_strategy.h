@@ -22,6 +22,17 @@
 
 namespace rgw { namespace sal { namespace nsfs {
 
+/* NooBaa's per-bucket `force_md5_etag`, carried and not enforced.
+ *
+ * Their field name, so the provenance of the value is readable on
+ * disk;  the XattrStrategy supplies the prefix, making it
+ * `user.nsfs.force_md5_etag` in our format.  The value is their
+ * literal -- `true` or `false` -- and the attribute is absent when
+ * their record did not mention it, which keeps the tri-state their
+ * cascade depends on.  See `ACCOUNT_IMPORT.md` §6.1a. */
+#define RGW_NSFS_ATTR_FORCE_MD5_ETAG "force_md5_etag"
+
+
 /* The attribute a bucket's encoded RGWBucketInfo is written to.
  *
  * A constant and not a strategy question, because every profile writes

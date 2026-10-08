@@ -97,7 +97,8 @@ std::optional<uint32_t> column_u32(sqlite3_stmt* st, int col)
  * rather than silently shifting a read. */
 constexpr const char* IDENTITY_COLUMNS =
   "Identity, Uid, Gid, SupplementalGroups, DistinguishedName, "
-  "NewBucketsPath, CustomBucketPathAllowedList, FsBackend, NoobaaId";
+  "NewBucketsPath, CustomBucketPathAllowedList, FsBackend, NoobaaId, "
+  "ForceMd5Etag";
 
 int row_to_identity(const DoutPrefixProvider* dpp, sqlite3_stmt* st,
 		    Identity& out)
@@ -122,6 +123,10 @@ int row_to_identity(const DoutPrefixProvider* dpp, sqlite3_stmt* st,
   out.custom_bucket_path_allowed_list = column_text(st, 6);
   out.fs_backend = column_text(st, 7);
   out.noobaa_id = column_text(st, 8);
+  /* NULL is "said nothing", which is not the same as 0 */
+  if (sqlite3_column_type(st, 9) != SQLITE_NULL) {
+    out.force_md5_etag = (sqlite3_column_int64(st, 9) != 0);
+  }
   return 0;
 }
 
@@ -155,6 +160,8 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "  CustomBucketPathAllowedList TEXT,"
     "  FsBackend TEXT,"
     "  NoobaaId TEXT,"
+    "  ForceMd5Etag INTEGER,"
+    "  CHECK (ForceMd5Etag IS NULL OR ForceMd5Etag IN (0, 1)),"
     "  CHECK ((Uid IS NULL) = (Gid IS NULL)),"
     "  CHECK (NOT (Uid IS NOT NULL AND DistinguishedName IS NOT NULL)),"
     "  CHECK (Uid IS NULL OR (typeof(Uid) = 'integer' AND Uid >= 0)),"
@@ -171,7 +178,55 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
       << dendl;
     return ret;
   }
+
+  /* Columns added after a database already existed.
+   *
+   * `CREATE TABLE IF NOT EXISTS` does nothing to a table that is
+   * already there, so a column added to the schema above never
+   * reaches one -- and then every SELECT naming it fails, which
+   * breaks reads rather than losing a field.  Each addition goes
+   * here as well as there.
+   *
+   * `ADD COLUMN` on a column that exists is an error, and the only
+   * way to tell that from a real failure is the message, so a
+   * `PRAGMA table_info` is asked first.  Note that SQLite cannot add
+   * a CHECK with a column:  the constraint above guards tables
+   * created fresh, and a migrated table carries the column without
+   * it.  The binding only ever writes 0, 1 or NULL. */
+  if (!has_column(&dp, "ForceMd5Etag")) {
+    const std::string add =
+      "ALTER TABLE '" + identity_table + "' ADD COLUMN ForceMd5Etag INTEGER;";
+    ret = exec(&dp, add.c_str(), nullptr);
+    if (ret < 0) {
+      ldpp_dout(&dp, 0) << "ERROR: could not add ForceMd5Etag to "
+	<< identity_table << dendl;
+      return ret;
+    }
+    ldpp_dout(&dp, 4) << "nsfs: added ForceMd5Etag to " << identity_table
+      << dendl;
+  }
   return 0;
+}
+
+/* Whether the identity table already has a column.
+ *
+ * `PRAGMA table_info` rather than parsing an error message, so a
+ * migration that fails for a real reason is distinguishable from one
+ * that had nothing to do. */
+bool IdentityDB::has_column(const DoutPrefixProvider* dpp,
+			    const char* name) const
+{
+  const std::string sql =
+    "SELECT 1 FROM pragma_table_info('" + identity_table + "') "
+    "WHERE name = ?;";
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    return false;
+  }
+  auto finalize = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, name, -1, SQLITE_TRANSIENT);
+  return sqlite3_step(st) == SQLITE_ROW;
 }
 
 int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
@@ -182,7 +237,7 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
 
   const std::string sql =
     "INSERT OR REPLACE INTO '" + identity_table + "' (" + IDENTITY_COLUMNS
-    + ") VALUES (?,?,?,?,?,?,?,?,?);";
+    + ") VALUES (?,?,?,?,?,?,?,?,?,?);";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
@@ -209,6 +264,8 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
   bind_text_or_null(st, 7, id.custom_bucket_path_allowed_list);
   bind_text_or_null(st, 8, id.fs_backend);
   bind_text_or_null(st, 9, id.noobaa_id);
+  id.force_md5_etag ? sqlite3_bind_int64(st, 10, *id.force_md5_etag ? 1 : 0)
+		    : sqlite3_bind_null(st, 10);
 
   if (sqlite3_step(st) != SQLITE_DONE) {
     /* a CHECK violation lands here, and it is the expected way an
