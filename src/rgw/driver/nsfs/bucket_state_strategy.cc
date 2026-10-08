@@ -33,6 +33,7 @@
 #include "include/scope_guard.h"
 
 #include "bucket_state_strategy.h"
+#include "noobaa_config_store.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -68,40 +69,6 @@ int RgwBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
 }
 
 namespace {
-
-/* Their record whole, in one read.  No iostreams and no incremental
- * parse:  a bucket record is small, and a cap keeps a corrupt or
- * hostile file from being read into memory whole. */
-constexpr size_t NB_RECORD_MAX = 1u << 20;
-
-int slurp(const DoutPrefixProvider* dpp, const std::string& path,
-	  std::string& out)
-{
-  int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
-  if (fd < 0) {
-    return -errno;
-  }
-  auto close_fd = make_scope_guard([fd] { ::close(fd); });
-
-  out.clear();
-  char buf[8192];
-  for (;;) {
-    ssize_t n = ::read(fd, buf, sizeof(buf));
-    if (n < 0) {
-      return -errno;
-    }
-    if (n == 0) {
-      break;
-    }
-    if ((out.size() + n) > NB_RECORD_MAX) {
-      ldpp_dout(dpp, 0) << "ERROR: " << path << " exceeds "
-	<< NB_RECORD_MAX << " bytes" << dendl;
-      return -EFBIG;
-    }
-    out.append(buf, n);
-  }
-  return 0;
-}
 
 /* The last inch of a conversion:  materialise an RGW type from the
  * document a `from_noobaa_*` function has just written into `f`.
@@ -821,7 +788,7 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     config_root + "/buckets/" + bucket_name + ".json";
 
   std::string doc;
-  int ret = slurp(dpp, path, doc);
+  int ret = read_record_file(dpp, path, doc);
   if (ret == -ENOENT) {
     /* no record:  this bucket has no state in their store, which is
      * the absent case and not a failure */

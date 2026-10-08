@@ -36,6 +36,7 @@
 #include "rgw_website.h"
 #include "rgw_bucket_encryption.h"
 #include "driver/nsfs/identity_db.h"
+#include "driver/nsfs/noobaa_config_store.h"
 #include "driver/nsfs/personality.h"
 #include "rgw_auth.h"
 #include "common/ceph_json.h"
@@ -8060,6 +8061,512 @@ INSTANTIATE_TEST_SUITE_P(
     [](const ::testing::TestParamInfo<FormatCase>& i) {
       return std::string(i.param.label);
     });
+
+
+/* ------------------------------------------------------------------ *
+ * I1 -- reading NooBaa's configuration store.
+ *
+ * The records below are **verbatim what their CLI and gateway wrote**,
+ * copied out of a store stood up at noobaa-core 08d063f86 by
+ * `src/test/rgw/interchange/standup.rs`.  That matters:  every earlier
+ * control in the import work was composed from our reading of their
+ * schema, so it demonstrated that we read what we *believe* they
+ * write.  These are their bytes.  The directory is the test's, the
+ * content is not.
+ * ------------------------------------------------------------------ */
+
+/* A root account with credentials.  Eight required fields and nothing
+ * optional, which is what `account add` with no extra flags produces. */
+static constexpr const char* NB_ACCOUNT_PLAIN = R"({
+  "_id": "6ac7cb27fd4af356919110a3",
+  "name": "interchange",
+  "email": "interchange",
+  "creation_date": "2026-10-08T16:56:07.864Z",
+  "access_keys": [
+    {
+      "access_key": "INTERCHANGEACCESSKEY",
+      "encrypted_secret_key": "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="
+    }
+  ],
+  "nsfs_account_config": {
+    "uid": 1000,
+    "gid": 1000,
+    "new_buckets_path": "/lv2tb/nsfs-interchange/data/root"
+  },
+  "allow_bucket_creation": true,
+  "master_key_id": "6ac7cb2751b72219a4bae375"
+})";
+
+/* The same, plus the two optional fields that change behaviour:  an
+ * explicit supplemental group list, and force_md5_etag. */
+static constexpr const char* NB_ACCOUNT_GROUPS = R"({
+  "_id": "6ac7d2121e63a748e37663e0",
+  "name": "ix-groups",
+  "email": "ix-groups",
+  "creation_date": "2026-10-08T17:25:38.981Z",
+  "access_keys": [
+    {
+      "access_key": "IXGROUPSACCESSKEY001",
+      "encrypted_secret_key": "DEi0ds53sqdzVH3H8QM7FhsgNwouyCHIXK+RHH5n1lmpqxuhm5YbIg=="
+    }
+  ],
+  "force_md5_etag": true,
+  "nsfs_account_config": {
+    "uid": 1000,
+    "gid": 1000,
+    "new_buckets_path": "/lv2tb/nsfs-interchange/data/root",
+    "supplemental_groups": [1000, 4, 27]
+  },
+  "allow_bucket_creation": true,
+  "master_key_id": "6ac7cb2751b72219a4bae375"
+})";
+
+/* The anonymous account, `account add --anonymous`.  Note what it is
+ * and is not:  an empty key list, no new_buckets_path, bucket creation
+ * off -- and it still carries a master_key_id. */
+static constexpr const char* NB_ACCOUNT_ANONYMOUS = R"({
+  "_id": "6ac7d213cac521f05aac9fb4",
+  "name": "anonymous",
+  "email": "anonymous",
+  "creation_date": "2026-10-08T17:25:39.650Z",
+  "access_keys": [],
+  "nsfs_account_config": {
+    "uid": 65534,
+    "gid": 65534
+  },
+  "allow_bucket_creation": false,
+  "master_key_id": "6ac7cb2751b72219a4bae375"
+})";
+
+class NooBaaStoreTest : public NSFSDriverTest {
+protected:
+  std::string store;
+
+public:
+  void SetUp() {
+    NSFSDriverTest::SetUp();
+    store = (bp / "noobaa.conf.d").string();
+    /* From empty, every time.  The base fixture's directory survives
+     * a run, so a store left behind by the previous execution of this
+     * binary is still there -- and a test whose subject is "the file
+     * is absent" then reads the file the last run wrote.  Found by
+     * running the whole suite after the tests passed on their own. */
+    std::filesystem::remove_all(store);
+    std::filesystem::create_directories(store + "/identities");
+    std::filesystem::create_directories(store + "/buckets");
+  }
+
+  void write_file(const std::string& path, const std::string& text) {
+    std::filesystem::create_directories(
+	std::filesystem::path(path).parent_path());
+    int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    ASSERT_GE(fd, 0) << path << ": " << cpp_strerror(errno);
+    ASSERT_EQ(::write(fd, text.data(), text.size()),
+	      static_cast<ssize_t>(text.size()));
+    ::close(fd);
+  }
+
+  /* Their layout:  a directory per identity holding identity.json, not
+   * a file per identity.  Read off a store their CLI wrote. */
+  void add_identity(const std::string& id, const char* record) {
+    write_file(store + "/identities/" + id + "/identity.json", record);
+  }
+
+  void add_bucket(const std::string& name, const std::string& record) {
+    write_file(store + "/buckets/" + name + ".json", record);
+  }
+
+  nsfs::NooBaaStoreContents read_store() {
+    nsfs::NooBaaConfigStore cs(store);
+    nsfs::NooBaaStoreContents out;
+    EXPECT_EQ(cs.read(env->dpp, out), 0);
+    return out;
+  }
+
+  const nsfs::NooBaaIdentity* by_name(const nsfs::NooBaaStoreContents& c,
+				      const std::string& name) {
+    for (const auto& i : c.identities) {
+      if (i.name == name) {
+	return &i;
+      }
+    }
+    return nullptr;
+  }
+};
+
+/* The three records their CLI wrote, read back whole.
+ *
+ * One test over all three rather than one each, because the thing
+ * being established is that a store reads as a store. */
+TEST_F(NooBaaStoreTest, AStoreTheirToolsWroteReadsBack)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
+  add_bucket("a-bucket", R"({"_id":"1","name":"a-bucket","versioning":"ENABLED"})");
+  write_file(store + "/master_keys.json", R"({"active_master_key":"x"})");
+
+  auto c = read_store();
+  EXPECT_TRUE(c.unreadable.empty()) << c.unreadable[0].path << ": "
+				    << c.unreadable[0].why;
+  EXPECT_EQ(c.identities.size(), 3u);
+  EXPECT_EQ(c.accounts(), 3u);
+  EXPECT_EQ(c.iam_users(), 0u);
+  EXPECT_EQ(c.buckets.size(), 1u);
+  EXPECT_EQ(c.buckets[0], "a-bucket");
+  EXPECT_TRUE(c.master_keys_present);
+
+  const auto* plain = by_name(c, "interchange");
+  ASSERT_NE(plain, nullptr);
+  EXPECT_EQ(plain->id, "6ac7cb27fd4af356919110a3");
+  /* their email is a copy of the name, which is I3's likeliest
+   * collision against RGW's cross-account email uniqueness */
+  EXPECT_EQ(plain->email, "interchange");
+  EXPECT_EQ(plain->master_key_id, "6ac7cb2751b72219a4bae375");
+  EXPECT_TRUE(plain->allow_bucket_creation);
+  ASSERT_EQ(plain->access_keys.size(), 1u);
+  EXPECT_EQ(plain->access_keys[0].access_key, "INTERCHANGEACCESSKEY");
+  /* the secret is still theirs, encrypted -- decrypting is I2 */
+  EXPECT_EQ(plain->access_keys[0].encrypted_secret_key,
+	    "AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ==");
+  EXPECT_EQ(plain->posix.kind, nsfs::NooBaaPosixConfig::Kind::Ids);
+  EXPECT_EQ(plain->posix.uid, 1000);
+  EXPECT_EQ(plain->posix.gid, 1000);
+  EXPECT_EQ(plain->posix.new_buckets_path,
+	    "/lv2tb/nsfs-interchange/data/root");
+  EXPECT_FALSE(plain->have_force_md5_etag);
+  EXPECT_FALSE(plain->posix.have_supplemental_groups);
+  EXPECT_FALSE(plain->is_anonymous());
+  EXPECT_FALSE(plain->is_iam_user());
+
+  const auto* groups = by_name(c, "ix-groups");
+  ASSERT_NE(groups, nullptr);
+  EXPECT_TRUE(groups->have_force_md5_etag);
+  EXPECT_TRUE(groups->force_md5_etag);
+  ASSERT_TRUE(groups->posix.have_supplemental_groups);
+  EXPECT_EQ(groups->posix.supplemental_groups,
+	    (std::vector<int64_t>{1000, 4, 27}));
+
+  const auto* anon = by_name(c, "anonymous");
+  ASSERT_NE(anon, nullptr);
+  EXPECT_TRUE(anon->is_anonymous());
+  EXPECT_TRUE(anon->access_keys.empty());
+  EXPECT_FALSE(anon->allow_bucket_creation);
+  EXPECT_TRUE(anon->posix.new_buckets_path.empty());
+  EXPECT_EQ(anon->posix.uid, 65534);
+  /* it carries one even with no secret to protect */
+  EXPECT_FALSE(anon->master_key_id.empty());
+}
+
+/* A record that will not parse is reported, and the rest are still
+ * read.
+ *
+ * The failure mode this exists for:  an import that discovered its
+ * third bad record after writing two accounts leaves a state nobody
+ * asked for.  So the read must report everything wrong with a store in
+ * one pass.
+ *
+ * Both polarities, and the negative case is reachable:  a reader that
+ * stopped at the first bad record would return fewer than two good
+ * identities, and a reader that ignored bad records would report none
+ * unreadable. */
+TEST_F(NooBaaStoreTest, EveryUnreadableRecordIsReportedAndTheRestAreRead)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("aaaaaaaaaaaaaaaaaaaaaaaa", "{ this is not json");
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  /* right shape, wrong type:  JSONDecoder throws rather than the
+   * parser failing, which is a different path through the reader */
+  add_identity("bbbbbbbbbbbbbbbbbbbbbbbb",
+	       R"({"_id":"b","name":"n","nsfs_account_config":{"uid":"ten","gid":1}})");
+  /* no identifier:  parses, and cannot be imported */
+  add_identity("cccccccccccccccccccccccc", R"({"name":"no-id"})");
+  add_bucket("good", R"({"_id":"1","name":"good"})");
+  add_bucket("bad", "}{");
+
+  auto c = read_store();
+  EXPECT_EQ(c.identities.size(), 2u)
+      << "a bad record stopped the traversal";
+  EXPECT_EQ(c.unreadable.size(), 4u) << [&] {
+    std::string s;
+    for (const auto& u : c.unreadable) {
+      s += "\n  " + u.path + ": " + u.why;
+    }
+    return s;
+  }();
+  EXPECT_EQ(c.buckets.size(), 1u);
+  EXPECT_EQ(c.buckets[0], "good");
+
+  /* each complaint names the file, which is what makes a preflight
+   * report actionable rather than a count */
+  for (const auto& u : c.unreadable) {
+    EXPECT_FALSE(u.path.empty());
+    EXPECT_FALSE(u.why.empty());
+  }
+}
+
+/* An absent supplemental group list is not an empty one.
+ *
+ * §2.4:  an explicit list overrides the directory entirely, and with
+ * no list and no dynamic resolution there are *no* supplementary
+ * groups at all.  Violating this one grants access, so the reader has
+ * to distinguish "no list" from "an empty list" -- which a bare
+ * vector cannot. */
+TEST_F(NooBaaStoreTest, AnAbsentGroupListIsNotAnEmptyOne)
+{
+  add_identity("a", NB_ACCOUNT_PLAIN);
+  add_identity("b", R"({"_id":"b","name":"empty-list",
+    "nsfs_account_config":{"uid":1,"gid":1,"supplemental_groups":[]}})");
+
+  auto c = read_store();
+  ASSERT_EQ(c.identities.size(), 2u);
+
+  const auto* absent = by_name(c, "interchange");
+  ASSERT_NE(absent, nullptr);
+  EXPECT_FALSE(absent->posix.have_supplemental_groups);
+  EXPECT_TRUE(absent->posix.supplemental_groups.empty());
+
+  const auto* empty = by_name(c, "empty-list");
+  ASSERT_NE(empty, nullptr);
+  EXPECT_TRUE(empty->posix.have_supplemental_groups)
+      << "an explicit empty list read as no list at all";
+  EXPECT_TRUE(empty->posix.supplemental_groups.empty());
+}
+
+/* A missing config.json is not a stored false.
+ *
+ * NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS defaults to false in their
+ * config.js, and false is a live permission fact:  with it off, a
+ * directory-backed identity carrying no list runs with zero
+ * supplementary groups.  So "the file did not say" and "the file said
+ * false" must not arrive as the same answer -- §2.5 point 4 is that
+ * the value travels with the deployment. */
+TEST_F(NooBaaStoreTest, AMissingSettingIsNotAStoredFalse)
+{
+  add_identity("a", NB_ACCOUNT_PLAIN);
+
+  auto absent = read_store();
+  EXPECT_FALSE(absent.settings.have_config_json);
+  EXPECT_FALSE(absent.settings.have_dynamic_supplemental_groups);
+  EXPECT_FALSE(absent.settings.dynamic_supplemental_groups);
+
+  write_file(store + "/config.json",
+	     R"({"NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS": false})");
+  auto stored_false = read_store();
+  EXPECT_TRUE(stored_false.settings.have_config_json);
+  EXPECT_TRUE(stored_false.settings.have_dynamic_supplemental_groups)
+      << "a stored false is indistinguishable from the file being absent";
+  EXPECT_FALSE(stored_false.settings.dynamic_supplemental_groups);
+
+  write_file(store + "/config.json",
+	     R"({"NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS": true})");
+  auto stored_true = read_store();
+  EXPECT_TRUE(stored_true.settings.have_dynamic_supplemental_groups);
+  EXPECT_TRUE(stored_true.settings.dynamic_supplemental_groups);
+
+  /* a config.json that exists and does not mention it */
+  write_file(store + "/config.json", R"({"ALLOW_HTTP": true})");
+  auto silent = read_store();
+  EXPECT_TRUE(silent.settings.have_config_json);
+  EXPECT_FALSE(silent.settings.have_dynamic_supplemental_groups);
+}
+
+/* uid-and-gid and distinguished_name are different identities.
+ *
+ * Their schema is a `oneOf` and the two resolve groups differently
+ * (§2.3), so flattening both into an optional uid would lose which
+ * one a record was. */
+TEST_F(NooBaaStoreTest, ADistinguishedNameIdentityIsNotAUidOne)
+{
+  add_identity("a", NB_ACCOUNT_PLAIN);
+  add_identity("b", R"({"_id":"b","name":"dn-backed",
+    "nsfs_account_config":{"distinguished_name":"uid=jo,ou=people,dc=x"}})");
+  add_identity("c", R"({"_id":"c","name":"no-posix-config"})");
+
+  auto c = read_store();
+  ASSERT_EQ(c.identities.size(), 3u);
+
+  EXPECT_EQ(by_name(c, "interchange")->posix.kind,
+	    nsfs::NooBaaPosixConfig::Kind::Ids);
+
+  const auto* dn = by_name(c, "dn-backed");
+  ASSERT_NE(dn, nullptr);
+  EXPECT_EQ(dn->posix.kind, nsfs::NooBaaPosixConfig::Kind::DistinguishedName);
+  EXPECT_EQ(dn->posix.distinguished_name, "uid=jo,ou=people,dc=x");
+  EXPECT_EQ(dn->posix.uid, -1) << "a dn identity was given a uid";
+
+  EXPECT_EQ(by_name(c, "no-posix-config")->posix.kind,
+	    nsfs::NooBaaPosixConfig::Kind::Unset);
+}
+
+/* An IAM user is the one with an owner, and a role is the one with a
+ * trust policy.
+ *
+ * One schema serves accounts, IAM users and roles, so the reader has
+ * to tell them apart from the record rather than from where it sat
+ * (§2.8).  The trust policy is kept as text:  translating it is I4. */
+TEST_F(NooBaaStoreTest, AnIamUserIsTheOneWithAnOwner)
+{
+  add_identity("a", NB_ACCOUNT_PLAIN);
+  add_identity("b", R"({"_id":"b","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3","creator":"6ac7cb27fd4af356919110a3",
+    "iam_path":"/eng/"})");
+  add_identity("c", R"({"_id":"c","name":"a-role",
+    "role_config":{"role_name":"r","assume_role_policy_document":{
+      "Version":"2012-10-17","Statement":[{"Effect":"Allow",
+      "Principal":{"AWS":["u@x"]},"Action":["sts:AssumeRole"]}]}}})");
+
+  auto c = read_store();
+  ASSERT_EQ(c.identities.size(), 3u);
+  EXPECT_EQ(c.accounts(), 2u);
+  EXPECT_EQ(c.iam_users(), 1u);
+
+  const auto* user = by_name(c, "a-user");
+  ASSERT_NE(user, nullptr);
+  EXPECT_TRUE(user->is_iam_user());
+  EXPECT_EQ(user->owner, "6ac7cb27fd4af356919110a3");
+  EXPECT_EQ(user->iam_path, "/eng/");
+
+  const auto* role = by_name(c, "a-role");
+  ASSERT_NE(role, nullptr);
+  EXPECT_FALSE(role->is_iam_user());
+  EXPECT_FALSE(role->role_config.empty())
+      << "the trust policy was dropped";
+  EXPECT_NE(role->role_config.find("sts:AssumeRole"), std::string::npos);
+}
+
+/* A store that is not there, and one that is not a directory.
+ *
+ * Distinguished, because they mean different things to an operator:
+ * one is a path that was never created, the other is a path that names
+ * something else. */
+TEST_F(NooBaaStoreTest, ADirectoryThatIsNotAStoreIsRefused)
+{
+  nsfs::NooBaaStoreContents out;
+
+  nsfs::NooBaaConfigStore missing((bp / "nowhere").string());
+  EXPECT_EQ(missing.read(env->dpp, out), -ENOENT);
+
+  const std::string file = (bp / "a-file").string();
+  write_file(file, "{}");
+  nsfs::NooBaaConfigStore notdir(file);
+  EXPECT_EQ(notdir.read(env->dpp, out), -ENOTDIR);
+
+  nsfs::NooBaaConfigStore nowhere("");
+  EXPECT_EQ(nowhere.read(env->dpp, out), -ENOENT);
+}
+
+/* A directory with no identities is reported rather than read as
+ * empty.
+ *
+ * An import with nothing to import is almost certainly pointed at the
+ * wrong directory, and saying so costs one line.  Their lock files
+ * sitting beside the bucket records are not records and must not be
+ * counted as unreadable ones. */
+TEST_F(NooBaaStoreTest, AStoreWithNoIdentitiesSaysSo)
+{
+  std::filesystem::remove_all(store + "/identities");
+  add_bucket("b", R"({"_id":"1","name":"b"})");
+  write_file(store + "/buckets/b.json.lock", "");
+
+  auto c = read_store();
+  EXPECT_TRUE(c.identities.empty());
+  ASSERT_EQ(c.unreadable.size(), 1u);
+  EXPECT_NE(c.unreadable[0].why.find("identities"), std::string::npos);
+  EXPECT_EQ(c.buckets.size(), 1u) << "a lock file was read as a record";
+}
+
+/* A store on disk, read without complaint.
+ *
+ * `NSFS_NOOBAA_STORE` names a real NooBaa configuration directory and
+ * this reads it.  Skipped when unset, the way the suite's other
+ * tests that need something stood up behave -- so it is a no-op
+ * everywhere except on a machine where
+ * `src/test/rgw/interchange/standup.rs` has run.
+ *
+ * The fixtures above are their bytes but the test's layout.  This is
+ * the other way round, and it is what catches an assumption about the
+ * tree rather than about a record:  that identities are directories,
+ * that a `.json.lock` beside a record is not a record, that the
+ * symlink indexes are elsewhere. */
+TEST_F(NooBaaStoreTest, AStoreOnDiskReadsWithoutComplaint)
+{
+  const char* dir = ::getenv("NSFS_NOOBAA_STORE");
+  if (!dir || !*dir) {
+    GTEST_SKIP() << "NSFS_NOOBAA_STORE is unset;  see "
+		 << "src/test/rgw/interchange/standup.rs";
+  }
+
+  nsfs::NooBaaConfigStore cs(dir);
+  nsfs::NooBaaStoreContents c;
+  ASSERT_EQ(cs.read(env->dpp, c), 0);
+
+  std::string complaints;
+  for (const auto& u : c.unreadable) {
+    complaints += "\n  " + u.path + ": " + u.why;
+  }
+  EXPECT_TRUE(c.unreadable.empty()) << complaints;
+
+  /* A store with no identities is not one an import can act on, and
+   * reading one as success would make this test vacuous. */
+  EXPECT_GT(c.identities.size(), 0u);
+  EXPECT_TRUE(c.master_keys_present)
+      << "no master_keys.json, so no secret could be decrypted";
+
+  for (const auto& i : c.identities) {
+    EXPECT_FALSE(i.id.empty());
+    EXPECT_FALSE(i.name.empty());
+    /* Every account at this pin has access_keys and master_key_id --
+     * eight required fields, and those two among them.  The anonymous
+     * account is the one with an empty key list, not a missing one. */
+    EXPECT_FALSE(i.master_key_id.empty()) << i.name;
+    if (!i.is_anonymous() && !i.is_iam_user()) {
+      EXPECT_FALSE(i.access_keys.empty()) << i.name;
+    }
+  }
+}
+
+/* Nothing in the store is written, which is the whole of I1's
+ * contract.
+ *
+ * Checked by mtime over every file and directory in the store rather
+ * than by reading the code:  a read that opened a record O_RDWR, or
+ * created an index, or dropped a lock file, would change one.  The
+ * negative case is reachable -- the same comparison catches a write
+ * made deliberately below. */
+TEST_F(NooBaaStoreTest, ReadingTheStoreWritesNothing)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("6ac7d213cac521f05aac9fb4", NB_ACCOUNT_ANONYMOUS);
+  add_bucket("a-bucket", R"({"_id":"1","name":"a-bucket"})");
+  write_file(store + "/config.json", R"({"ALLOW_HTTP": true})");
+  write_file(store + "/master_keys.json", R"({"active_master_key":"x"})");
+
+  auto snapshot = [this] {
+    std::map<std::string, std::pair<time_t, off_t>> m;
+    for (const auto& e :
+	 std::filesystem::recursive_directory_iterator(store)) {
+      struct stat st;
+      if (::lstat(e.path().c_str(), &st) == 0) {
+	m[e.path().string()] = {st.st_mtime, st.st_size};
+      }
+    }
+    return m;
+  };
+
+  const auto before = snapshot();
+  ASSERT_FALSE(before.empty());
+
+  auto c = read_store();
+  ASSERT_TRUE(c.unreadable.empty());
+  EXPECT_EQ(snapshot(), before) << "reading the store changed it";
+
+  /* the comparison can fail:  one deliberate write, detected */
+  write_file(store + "/buckets/a-bucket.json",
+	     R"({"_id":"1","name":"a-bucket","versioning":"ENABLED"})");
+  EXPECT_NE(snapshot(), before)
+      << "the mtime comparison cannot detect a write, so it proves nothing";
+}
 
 int main(int argc, char *argv[]) {
   auto args = argv_to_vec(argc, argv);

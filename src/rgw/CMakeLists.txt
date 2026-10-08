@@ -301,6 +301,7 @@ list(APPEND librgw_nsfs_srcs
   driver/nsfs/mpu_strategy.cc
   driver/nsfs/xattr_strategy.cc
   driver/nsfs/bucket_state_strategy.cc
+  driver/nsfs/noobaa_config_store.cc
   driver/nsfs/identity_db.cc
   driver/nsfs/impersonate.cc
   driver/nsfs/personality.cc
