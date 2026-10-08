@@ -9065,6 +9065,201 @@ TEST_F(NooBaaStoreTest, ABucketStatingItAloneIsReported)
   EXPECT_NE(d[0].find("no account states"), std::string::npos) << d[0];
 }
 
+/* ------------------------------------------------------------------ *
+ * P1 -- bucket placement:  the column and the accessor.
+ *
+ * Nothing reads a path yet.  Resolution is P2 and enumeration is P3,
+ * so what is asserted here is that the row survives a round trip and
+ * that a path we will not accept is refused where it is stored --
+ * never on the request path, where it is a row we wrote.
+ * ------------------------------------------------------------------ */
+
+/* The lexical rule, as a pure function.
+ *
+ * It rules out a stored path that *means* something other than it
+ * reads.  It does not make a path safe to open -- that is `openat2`
+ * with RESOLVE_NO_SYMLINKS, a later stage -- and it does not make one
+ * authorized, which is the per-account allowlist their
+ * `custom_bucket_path_allowed_list` already expresses. */
+TEST(NSFSPlacementPath, OnlyAnAbsoluteCanonicalPathIsStorable)
+{
+  EXPECT_TRUE(nsfs::placement_path_is_acceptable("/ibm/gpfs/fs1/bucket"));
+  EXPECT_TRUE(nsfs::placement_path_is_acceptable("/a"));
+  EXPECT_TRUE(nsfs::placement_path_is_acceptable("/a/b-c_d.e"));
+  /* a space is legal in a path and is not a reason to refuse one */
+  EXPECT_TRUE(nsfs::placement_path_is_acceptable("/mnt/some where"));
+
+  /* the empty path is the default location, which is not a path */
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable(""));
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable("relative/path"));
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable("/"));
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable("/trailing/"));
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable("/double//slash"));
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable("/a/../b"));
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable("/a/.."));
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable("/.."));
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable("/a/./b"));
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable("/a/."));
+  /* a newline would be legal on the filesystem and would make every
+   * log line that quotes the path ambiguous */
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable("/a/b\nc"));
+  EXPECT_FALSE(nsfs::placement_path_is_acceptable(
+      "/" + std::string(PATH_MAX, 'x')));
+
+  /* `..` inside a component is a name, not a traversal */
+  EXPECT_TRUE(nsfs::placement_path_is_acceptable("/a/b..c"));
+  EXPECT_TRUE(nsfs::placement_path_is_acceptable("/a/...."));
+}
+
+/* A row round-trips, and a bucket without one is the ordinary case.
+ *
+ * `get` returning -ENOENT is what every bucket looks like today:  the
+ * default location needs no row, which is why no deployment changes
+ * behaviour when this lands. */
+TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
+{
+  nsfs::BucketPlacement got;
+  EXPECT_EQ(db->get_bucket_placement(env->dpp, "absent", "", got), -ENOENT)
+      << "a bucket with no row was not the ordinary case";
+
+  nsfs::BucketPlacement bp;
+  bp.bucket_name = "elsewhere";
+  bp.path = "/ibm/gpfs/fs1/elsewhere";
+  bp.owns_storage = false;
+  ASSERT_EQ(db->put_bucket_placement(env->dpp, bp), 0);
+
+  ASSERT_EQ(db->get_bucket_placement(env->dpp, "elsewhere", "", got), 0);
+  EXPECT_EQ(got.bucket_name, "elsewhere");
+  EXPECT_EQ(got.tenant, "");
+  EXPECT_EQ(got.path, "/ibm/gpfs/fs1/elsewhere");
+  EXPECT_FALSE(got.owns_storage);
+
+  /* the default location, stored explicitly:  empty is accepted and
+   * means what a missing row means */
+  nsfs::BucketPlacement deflt;
+  deflt.bucket_name = "ordinary";
+  ASSERT_EQ(db->put_bucket_placement(env->dpp, deflt), 0);
+  ASSERT_EQ(db->get_bucket_placement(env->dpp, "ordinary", "", got), 0);
+  EXPECT_TRUE(got.path.empty());
+  EXPECT_TRUE(got.owns_storage) << "the default for owns_storage changed";
+
+  /* rewritten in place rather than duplicated */
+  bp.path = "/ibm/gpfs/fs2/elsewhere";
+  ASSERT_EQ(db->put_bucket_placement(env->dpp, bp), 0);
+  ASSERT_EQ(db->get_bucket_placement(env->dpp, "elsewhere", "", got), 0);
+  EXPECT_EQ(got.path, "/ibm/gpfs/fs2/elsewhere");
+
+  ASSERT_EQ(db->remove_bucket_placement(env->dpp, "elsewhere", ""), 0);
+  EXPECT_EQ(db->get_bucket_placement(env->dpp, "elsewhere", "", got),
+	    -ENOENT);
+  /* removing a row that is not there is not a failure */
+  EXPECT_EQ(db->remove_bucket_placement(env->dpp, "elsewhere", ""), 0);
+}
+
+/* The tenant is part of the key.
+ *
+ * dbstore's own bucket table makes BucketName unique and leaves the
+ * tenant out of the key;  its comment has said for years that both
+ * should be the key once one handle holds several tenants.  A table of
+ * ours does not inherit that, and this is the assertion that says so
+ * -- two tenants' buckets of the same name are two rows. */
+TEST_F(NSFSIdentityDBTest, TheTenantIsPartOfTheKey)
+{
+  nsfs::BucketPlacement one;
+  one.bucket_name = "shared-name";
+  one.tenant = "tenant-a";
+  one.path = "/ibm/gpfs/fs1/a";
+  ASSERT_EQ(db->put_bucket_placement(env->dpp, one), 0);
+
+  nsfs::BucketPlacement two;
+  two.bucket_name = "shared-name";
+  two.tenant = "tenant-b";
+  two.path = "/ibm/gpfs/fs1/b";
+  ASSERT_EQ(db->put_bucket_placement(env->dpp, two), 0)
+      << "the second tenant's row replaced the first";
+
+  nsfs::BucketPlacement got;
+  ASSERT_EQ(db->get_bucket_placement(env->dpp, "shared-name", "tenant-a",
+				     got), 0);
+  EXPECT_EQ(got.path, "/ibm/gpfs/fs1/a");
+  ASSERT_EQ(db->get_bucket_placement(env->dpp, "shared-name", "tenant-b",
+				     got), 0);
+  EXPECT_EQ(got.path, "/ibm/gpfs/fs1/b");
+
+  /* and the untenanted row is a third */
+  EXPECT_EQ(db->get_bucket_placement(env->dpp, "shared-name", "", got),
+	    -ENOENT);
+}
+
+/* A path we will not accept is refused where it is stored.
+ *
+ * Both the accessor's check and the schema's, because the schema is
+ * the only place a guard survives a caller written later -- the same
+ * reason the group list carries a GLOB.  The second half here writes
+ * a row behind the accessor's back to prove the CHECK is live. */
+TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRefusedWhereItIsStored)
+{
+  nsfs::BucketPlacement place;
+  place.bucket_name = "b";
+
+  for (const char* bad : {"relative/path", "/a/../b", "/trailing/",
+			  "/double//slash", "/", "/.."}) {
+    place.path = bad;
+    EXPECT_EQ(db->put_bucket_placement(env->dpp, place), -EINVAL)
+	<< "stored " << bad;
+  }
+  nsfs::BucketPlacement got;
+  EXPECT_EQ(db->get_bucket_placement(env->dpp, "b", "", got), -ENOENT)
+      << "a refused path left a row behind";
+
+  /* a nameless bucket is not a row either */
+  nsfs::BucketPlacement noname;
+  noname.path = "/ibm/gpfs/fs1/x";
+  EXPECT_EQ(db->put_bucket_placement(env->dpp, noname), -EINVAL);
+
+  /* And the schema's own guard, reached behind the accessor.
+   *
+   * This is the half that matters:  the C++ check can be bypassed by
+   * a caller written later, and the CHECK cannot.  A test that only
+   * exercised the accessor would not know whether the constraint in
+   * the DDL does anything at all. */
+  const std::string file = (bp / "identity").string() + ".db";
+  const std::string table =
+    std::filesystem::path((bp / "identity").string()).filename().string()
+    + "_nsfs_bucket_placement";
+  sqlite3* raw = nullptr;
+  ASSERT_EQ(sqlite3_open(file.c_str(), &raw), SQLITE_OK);
+  auto close_raw = make_scope_guard([raw] { sqlite3_close(raw); });
+
+  for (const char* bad : {"relative/path", "/a/../b", "/double//slash",
+			  "/a/.."}) {
+    const std::string sql =
+      "INSERT INTO '" + table + "' (BucketName, Tenant, Path, OwnsStorage)"
+      " VALUES ('direct', '', '" + bad + "', 1);";
+    char* err = nullptr;
+    EXPECT_NE(sqlite3_exec(raw, sql.c_str(), nullptr, nullptr, &err),
+	      SQLITE_OK)
+	<< "the schema accepted " << bad;
+    sqlite3_free(err);
+  }
+
+  /* the comparison can succeed:  an acceptable path goes in this way */
+  const std::string good =
+    "INSERT INTO '" + table + "' (BucketName, Tenant, Path, OwnsStorage)"
+    " VALUES ('direct', '', '/ibm/gpfs/fs1/direct', 1);";
+  char* err = nullptr;
+  EXPECT_EQ(sqlite3_exec(raw, good.c_str(), nullptr, nullptr, &err),
+	    SQLITE_OK) << (err ? err : "");
+  sqlite3_free(err);
+
+  /* and an out-of-range OwnsStorage is refused too */
+  const std::string two =
+    "INSERT INTO '" + table + "' (BucketName, Tenant, Path, OwnsStorage)"
+    " VALUES ('two', '', '', 2);";
+  EXPECT_NE(sqlite3_exec(raw, two.c_str(), nullptr, nullptr, nullptr),
+	    SQLITE_OK) << "the schema accepted OwnsStorage=2";
+}
+
 int main(int argc, char *argv[]) {
   auto args = argv_to_vec(argc, argv);
   env_to_vec(args);

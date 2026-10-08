@@ -91,6 +91,56 @@ struct Identity {
   bool local() const { return uid.has_value(); }
 };
 
+/* Where a bucket's storage is, when it is not under the data root.
+ *
+ * P1 of `NSFS_BUCKET_PLACEMENT_PLAN.md`.  **The column and the
+ * accessor only:  nothing reads a path yet.**  Resolution is P2 and
+ * enumeration is P3.
+ *
+ * `path` empty means the default location, `<data root>/<bucket>`,
+ * which is where every bucket is today.  So a bucket at the default
+ * location needs no row at all -- the same rule §7's third arm states
+ * -- and an existing deployment behaves exactly as it does now.
+ *
+ * `owns_storage` is their `should_create_underlying_storage`, and is a
+ * plain bool rather than a tri-state:  their schema makes it required,
+ * and a bucket this driver creates owns the directory it created.
+ * Compare `Identity::force_md5_etag`, which needs three states because
+ * their *precedence* is a cascade and `false` counts as defined.  A
+ * third state nothing needs is weight, not safety. */
+struct BucketPlacement {
+  std::string bucket_name;
+  /* Part of the key from the start.  dbstore's own bucket table has
+   * `BucketName NOT NULL UNIQUE` with the tenant outside the key, and
+   * its comment has said for years that both should be the key once
+   * one handle holds several tenants;  a table of ours need not
+   * inherit that. */
+  std::string tenant;
+
+  /* absolute, canonical, no `..`.  Empty is the default location. */
+  std::string path;
+  bool owns_storage{true};
+};
+
+/* Whether a path may be stored.
+ *
+ * A stored path is input:  it arrives over Admin Ops or is translated
+ * out of a NooBaa bucket record at adopt time -- operator-initiated,
+ * so semi-trusted, but adopt reads a store this driver does not own
+ * and did not write.
+ *
+ * **Checked where it is stored, never on the request path.**  By then
+ * it is a row we wrote, and re-checking each time would put a policy
+ * decision on the hot path (`NSFS_BUCKET_PLACEMENT_PLAN.md` §9).
+ *
+ * This is the lexical half:  absolute, no `..`, no empty component,
+ * no trailing slash.  Opening it safely is a different question and a
+ * later stage -- `openat2` with `RESOLVE_NO_SYMLINKS` -- and so is the
+ * per-account allowlist their `custom_bucket_path_allowed_list`
+ * already expresses.  Neither is attempted here, and a lexically
+ * clean path is not an authorized one. */
+bool placement_path_is_acceptable(std::string_view path);
+
 /* The driver's database, plus the identity table.
  *
  * A subclass rather than a second database:  one file, one
@@ -104,6 +154,13 @@ struct Identity {
  * unit suite -- never creates it either. */
 class IdentityDB : public rgw::store::POSIXUserDB {
   const std::string identity_table;
+  /* The driver's second owned table.  Placement is bucket metadata
+   * unique to this backend, so it lives in schema this backend owns
+   * rather than changing dbstore's shared bucket table -- which nsfs
+   * does not use at all.  Decided 2026-10-08.
+   *
+   * The class name is narrower than what it now holds. */
+  const std::string placement_table;
 
   /* The one handle, qualified.
    *
@@ -122,9 +179,30 @@ public:
        * db_name is a full path here, and a table named after the
        * path is orphaned the moment the directory moves. */
       identity_table(std::filesystem::path(db_name).filename().string()
-		     + "_nsfs_identity") {}
+		     + "_nsfs_identity"),
+      placement_table(std::filesystem::path(db_name).filename().string()
+		      + "_nsfs_bucket_placement") {}
 
   int Initialize(std::string logfile, int loglevel);
+
+  /* Bucket placement.  Write, read, and remove;  **enumeration is
+   * P3's**, which is where the union with the data root's readdir is
+   * defined and where a de-duplication rule is needed.  Adding it
+   * here would be a reader for nobody.
+   *
+   * `put` refuses a path `placement_path_is_acceptable()` rejects,
+   * with -EINVAL;  `get` returns -ENOENT when a bucket has no row,
+   * which is the ordinary case for a bucket at the default
+   * location. */
+  int put_bucket_placement(const DoutPrefixProvider* dpp,
+			   const BucketPlacement& bp);
+  int get_bucket_placement(const DoutPrefixProvider* dpp,
+			   const std::string& bucket_name,
+			   const std::string& tenant,
+			   BucketPlacement& out) const;
+  int remove_bucket_placement(const DoutPrefixProvider* dpp,
+			      const std::string& bucket_name,
+			      const std::string& tenant);
 
   /* Insert or replace.  `id.key` must be set;  everything else is
    * optional subject to the exclusivity rule. */
