@@ -267,37 +267,37 @@ function TEST_pool_create_stretch_replica() {
     ceph osd crush move dc1 root=default
     ceph osd crush move dc2 root=default
 
-    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
+    ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc1 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host1 host
     ceph osd crush move host1 datacenter=dc1
-    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
+    ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc1 has only 1 items of type host" || return 1
 
     ceph osd crush add-bucket host2 host
     ceph osd crush move host2 datacenter=dc1
-    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.0 1.0 host=host1
-    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.1 1.0 host=host2
-    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
+    ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host3 host
     ceph osd crush move host3 datacenter=dc2
-    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
+    ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc2 has only 1 items of type host" || return 1
 
     ceph osd crush add-bucket host4 host
     ceph osd crush move host4 datacenter=dc2
-    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
 
 
     ceph osd crush set osd.2 1.0 host=host3
-    ceph osd pool create data0 --num-zones 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
+    ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
 
     ceph osd crush set osd.3 1.0 host=host4
 
-    ceph osd pool create data0 --num-zones 2 || return 1
+    ceph osd pool create data0 --num-zones 2 --replica 2 || return 1
     # replica (2) copies in each of the 2 zones
     test "$(ceph osd pool get data0 size -f json | jq .size)" = 4 || return 1
     test "$(ceph osd pool get data0 min_size -f json | jq .min_size)" = 1 || return 1

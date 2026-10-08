@@ -102,3 +102,10 @@ add_executable(unittest_osd_monitor
   )
 add_ceph_unittest(unittest_osd_monitor)
 target_link_libraries(unittest_osd_monitor mon global)
+
+# unittest_pool_defaults
+add_executable(unittest_pool_defaults
+  test_pool_defaults.cc
+  )
+add_ceph_unittest(unittest_pool_defaults)
+target_link_libraries(unittest_pool_defaults global)

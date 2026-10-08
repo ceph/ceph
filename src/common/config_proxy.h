@@ -153,6 +153,10 @@ public:
     std::lock_guard l{lock};
     return config.get_osd_pool_default_min_size(values, size);
   }
+  uint64_t get_osd_pool_default_replica() const {
+    std::lock_guard l{lock};
+    return config.get_osd_pool_default_replica(values);
+  }
   void early_expand_meta(std::string &val,
 			 std::ostream *oss) const {
     std::lock_guard l{lock};

@@ -7829,7 +7829,7 @@ int OSDMonitor::crush_rule_create_replica(const string &name,
   } else {
     int ruleno;
     string effective_root = !root.empty() ? root : CRUSH_ROOT_DEFAULT;
-    string effective_zone_failure_domain = !zone_failure_domain.empty() ? zone_failure_domain : g_conf().get_val<string>("default_crush_zone_failure_domain");
+    string effective_zone_failure_domain = !zone_failure_domain.empty() ? zone_failure_domain : g_conf().get_val<string>("osd_pool_default_zone_failure_domain");
     string effective_osd_failure_domain = !osd_failure_domain.empty() ? osd_failure_domain : OSD_FAILURE_DOMAIN_DEFAULT;
     if (num_zones > 1) {
       // default crush params
@@ -8146,7 +8146,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
             : g_conf().get_osd_pool_default_min_size(*size);
     } else { // Use size parameter (legacy)
       if (repl_size == 0) {
-        repl_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+        repl_size = g_conf().get_osd_pool_default_replica();
       }
       *size = repl_size;
       if (!set_min_size)
@@ -8592,7 +8592,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   // set zone_failure_domain to default value if it is not set for stretch
   string effective_zone_failure_domain = zone_failure_domain;
   if (num_zones > 1 && zone_failure_domain.empty())
-    effective_zone_failure_domain = g_conf().get_val<string>("default_crush_zone_failure_domain");
+    effective_zone_failure_domain = g_conf().get_val<string>("osd_pool_default_zone_failure_domain");
 
   if (mon.monmap->global_stretch_mode_enabled && num_zones > 1) {
     CrushWrapper newcrush = _get_pending_crush();
@@ -9194,7 +9194,8 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       const string rule_name = cmd_getval_or<string>(
           cmdmap, "crush_rule",
           p.is_erasure() ? poolstr + "-single-zone" : "");
-      const string root = cmd_getval_or<string>(cmdmap, "root", "default");
+      const string root = cmd_getval_or<string>(
+          cmdmap, "root", g_conf().get_val<string>("osd_pool_default_root"));
       int err = prepare_pool_crush_rule(
           p.get_type(), poolstr, p.erasure_code_profile, rule_name, 1, root,
           0, "", "", "", &crush_rule, &ss);
@@ -9210,7 +9211,7 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       p.peering_crush_bucket_barrier = 0;
       p.peering_crush_mandatory_member = 0;
       if (p.type == pg_pool_t::TYPE_REPLICATED) {
-        const auto size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+        const auto size = g_conf().get_osd_pool_default_replica();
         if (size < 1 || size > std::numeric_limits<decltype(p.size)>::max()) {
           ss << "default pool size exceeds the supported range";
           return -ERANGE;
@@ -9284,28 +9285,17 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       ss << "Error: num_zones == 1 but pool is already stretched";
       return -EINVAL;
     }
-    if (!cmdmap.count("zone_failure_domain")) {
-      ss << "Must specify --zone_failure_domain when setting num_zones to 2";
-      return -EINVAL;
-    }
-
-    string zone_failure_domain;
-    cmd_getval(cmdmap, "zone_failure_domain", zone_failure_domain);
-    string root = cmd_getval_or<string>(cmdmap, "root", "default");
+    const string zone_failure_domain = cmd_getval_or<string>(
+        cmdmap, "zone_failure_domain",
+        g_conf().get_val<string>("osd_pool_default_zone_failure_domain"));
+    const string root = cmd_getval_or<string>(
+        cmdmap, "root", g_conf().get_val<string>("osd_pool_default_root"));
     string crush_rule_name = cmd_getval_or<string>(cmdmap, "crush_rule", "");
     int crush_rule = -1;
 
     if (p.type == pg_pool_t::TYPE_REPLICATED) {
-      if (!cmdmap.count("replica")) {
-        ss << "Must specify --replica when setting num_zones to 2 for replicated pools";
-        return -EINVAL;
-      }
-      if (!cmdmap.count("osd_failure_domain")) {
-        ss << "Must specify --osd_failure_domain when setting num_zones to 2";
-        return -EINVAL;
-      }
-      int64_t replica;
-      cmd_getval(cmdmap, "replica", replica);
+      const int64_t replica = cmd_getval_or<int64_t>(
+          cmdmap, "replica", g_conf().get_osd_pool_default_replica());
       if (replica < 1) {
         ss << "replica must be at least 1";
         return -EINVAL;
@@ -9315,9 +9305,11 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
         ss << "resulting pool size exceeds the maximum supported value";
         return -ERANGE;
       }
-      string osd_failure_domain;
-      cmd_getval(cmdmap, "osd_failure_domain", osd_failure_domain);
-      string device_class = cmd_getval_or<string>(cmdmap, "class", "");
+      const string osd_failure_domain = cmd_getval_or<string>(
+          cmdmap, "osd_failure_domain",
+          g_conf().get_val<string>("osd_pool_default_osd_failure_domain"));
+      const string device_class = cmd_getval_or<string>(
+          cmdmap, "class", g_conf().get_val<string>("osd_pool_default_class"));
       int err = prepare_pool_crush_rule(
           p.get_type(), poolstr, "", crush_rule_name, n, root, replica,
           zone_failure_domain, osd_failure_domain, device_class, &crush_rule, &ss);
@@ -13339,7 +13331,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string root = cmd_getval_or<string>(cmdmap, "root", "default");
     int64_t num_zones = cmd_getval_or<int64_t>(cmdmap, "num_zones", 2);
     int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
-    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", g_conf().get_val<string>("default_crush_zone_failure_domain"));
+    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", g_conf().get_val<string>("osd_pool_default_zone_failure_domain"));
     string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
     bool force = false;
     cmd_getval(cmdmap, "force", force);
@@ -15756,21 +15748,24 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool force_create = false;
     cmd_getval(cmdmap, "force_pg_limit", force_create);
 
-    root = cmd_getval_or<string>(cmdmap, "root", "default");
+    // An EC pool's rule takes these from its profile instead.
+    if (pool_type == pg_pool_t::TYPE_REPLICATED) {
+      root = cmd_getval_or<string>(
+        cmdmap, "root", g_conf().get_val<string>("osd_pool_default_root"));
+      osd_failure_domain = cmd_getval_or<string>(
+        cmdmap, "osd_failure_domain",
+        g_conf().get_val<string>("osd_pool_default_osd_failure_domain"));
+      device_class = cmd_getval_or<string>(
+        cmdmap, "class", g_conf().get_val<string>("osd_pool_default_class"));
+    }
     int replica = cmd_getval_or<int64_t>(cmdmap, "replica", 0);
     int num_replica_per_zone = cmd_getval_or<int64_t>(
-      cmdmap, "replica",
-      g_conf().get_val<uint64_t>("osd_pool_stretch_default_replica"));
+      cmdmap, "replica", g_conf().get_osd_pool_default_replica());
     if (!cmd_getval(cmdmap, "zone_failure_domain", zone_failure_domain) &&
         mon.monmap->global_stretch_mode_enabled && osdmap.stretch_mode_enabled) {
       // a global stretch mode pool is divided as the cluster is
       zone_failure_domain = osdmap.crush->get_type_name(osdmap.stretch_mode_bucket);
     }
-    cmd_getval(cmdmap, "osd_failure_domain", osd_failure_domain);
-    if (pool_type == pg_pool_t::TYPE_REPLICATED && osd_failure_domain.empty()) {
-      osd_failure_domain = "host";
-    }
-    cmd_getval(cmdmap, "class", device_class);
 
     if (pool_type == pg_pool_t::TYPE_REPLICATED && num_zones > 1 &&
         replica == 0) {
