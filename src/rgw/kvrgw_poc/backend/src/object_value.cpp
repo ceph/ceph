@@ -61,17 +61,17 @@ size_t object_payload_offset(const ObjectValueHeader &hdr,
                              std::string_view data)
 {
   size_t tail_offset = sizeof(ObjectValueHeader) + hdr.content_type_len;
-  if (hdr.chunk.type == CHUNK_INLINE && hdr.size > 0) {
+  if (hdr.chunk_type == CHUNK_INLINE && hdr.size > 0) {
     const size_t need = tail_offset + static_cast<size_t>(hdr.size);
     if (data.size() < need) {
       return data.size() + 1;
     }
     tail_offset = need;
   }
-  if (hdr.chunk.type == CHUNK_CHILD_D_REF) {
+  if (hdr.chunk_type == CHUNK_CHILD_D_REF) {
     tail_offset += kBucketIdSize + kRefTagSize;
   }
-  else if (hdr.chunk.type == CHUNK_STORAGE_REF) {
+  else if (hdr.chunk_type == CHUNK_STORAGE_REF) {
     tail_offset += kRefTagSize;
   }
   return tail_offset;
@@ -116,7 +116,7 @@ std::optional<ObjectValue> parse_object_value(std::string_view data)
   std::memcpy(&value.hdr, data.data(), sizeof(ObjectValueHeader));
   hdr_from_be(value.hdr);
 
-  const char ct_byte = static_cast<char>(value.hdr.chunk.type);
+  const char ct_byte = static_cast<char>(value.hdr.chunk_type);
   if (ct_byte != CHUNK_INLINE && ct_byte != CHUNK_CHILD_D &&
       ct_byte != CHUNK_CHILD_D_REF && ct_byte != CHUNK_STORAGE &&
       ct_byte != CHUNK_STORAGE_REF) {
@@ -132,32 +132,37 @@ std::optional<ObjectValue> parse_object_value(std::string_view data)
 
   size_t tail_offset = sizeof(ObjectValueHeader) + ct_len;
 
-  if (value.hdr.chunk.type == CHUNK_INLINE && value.hdr.size > 0) {
+  if (value.hdr.chunk_type == CHUNK_INLINE && value.hdr.size > 0) {
     const size_t inline_len = static_cast<size_t>(value.hdr.size);
     if (data.size() - tail_offset < inline_len) {
       return std::nullopt;
     }
-    const auto *p =
-        reinterpret_cast<const uint8_t *>(data.data() + tail_offset);
+    const auto *p = reinterpret_cast<const uint8_t *>(data.data() + tail_offset);
     value.inline_data.assign(p, p + inline_len);
     tail_offset += inline_len;
   }
 
-  if (value.hdr.chunk.type == CHUNK_CHILD_D_REF) {
-    if (data.size() < tail_offset + kBucketIdSize + kRefTagSize) {
+  if (value.hdr.chunk_type == CHUNK_CHILD_D_REF) {
+    if (data.size() < tail_offset + sizeof(bucket_id_t) + sizeof(RefTag)) {
       return std::nullopt;
     }
-    value.chunk_data_bucket_id.load(data.data() + tail_offset);
-    tail_offset += kBucketIdSize;
-    value.chunk_data_ref_tag.load(data.data() + tail_offset);
-    tail_offset += kRefTagSize;
+    bucket_id_t bid{};
+    bid.load(data.data() + tail_offset);
+    tail_offset += sizeof(bucket_id_t);
+    value.chunk = ChunkDescriptor(value.hdr.chunk_type,
+                                  data.data() + tail_offset, bid);
+    tail_offset += sizeof(RefTag);
   }
-  else if (value.hdr.chunk.type == CHUNK_STORAGE_REF) {
-    if (data.size() < tail_offset + kRefTagSize) {
+  else if (value.hdr.chunk_type == CHUNK_STORAGE_REF) {
+    if (data.size() < tail_offset + sizeof(RefTag)) {
       return std::nullopt;
     }
-    value.chunk_data_ref_tag.load(data.data() + tail_offset);
-    tail_offset += kRefTagSize;
+    value.chunk = ChunkDescriptor(value.hdr.chunk_type,
+                                  data.data() + tail_offset, kNullBucket);
+    tail_offset += sizeof(RefTag);
+  }
+  else {
+    value.chunk = ChunkDescriptor(value.hdr.chunk_type, RefTag{}, kNullBucket);
   }
 
   if (value.hdr.metadata_count > 0) {

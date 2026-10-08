@@ -59,11 +59,98 @@ constexpr bool child_flag_shared(ChildValueFlags flags) {
   return (static_cast<uint8_t>(flags) & static_cast<uint8_t>(CHILD_FLAG_SHARED)) != 0;
 }
 
+// Flags for ChunkDescriptor. Each bit is a named constant below.
+// No bits defined yet — placeholder for future flags (e.g. encryption, compression).
+class __attribute__((packed)) ChunkDescriptorFlags {
+ public:
+  ChunkDescriptorFlags() = default;
+  explicit constexpr ChunkDescriptorFlags(uint8_t v) : val_(v) {}
+
+  constexpr ChunkDescriptorFlags operator|(ChunkDescriptorFlags b) const {
+    return ChunkDescriptorFlags(val_ | b.val_);
+  }
+  constexpr ChunkDescriptorFlags operator&(ChunkDescriptorFlags b) const {
+    return ChunkDescriptorFlags(val_ & b.val_);
+  }
+  constexpr ChunkDescriptorFlags& operator|=(ChunkDescriptorFlags b) {
+    val_ |= b.val_;
+    return *this;
+  }
+  constexpr bool any() const { return val_ != 0; }
+  constexpr uint8_t raw() const { return val_; }
+
+ private:
+  uint8_t val_{0};
+};
+static_assert(sizeof(ChunkDescriptorFlags) == 1);
+// Future: constexpr ChunkDescriptorFlags kChunkFlagEncrypted{0x01};
+//         constexpr ChunkDescriptorFlags kChunkFlagCompressed{0x02};
+
 #pragma pack(push, 1)
 
-struct ChunkDescriptor {
-  ChunkType type{CHUNK_STORAGE};
+// Self-sufficient data-location descriptor for one object's data.
+// Carries everything needed to locate, reference-count, and clean up the data,
+// regardless of which tier it lives on. Future fields (encryption_key,
+// compression_alg) will be added in an extended subtype.
+//
+// part_count is stored internally as BE to avoid any conversion on serialize.
+class ChunkDescriptor {
+ public:
+  ChunkDescriptor() = default;
+
+  // Primary constructor: all identity fields supplied by the caller.
+  ChunkDescriptor(ChunkType t, const RefTag& rt, bucket_id_t bid,
+                  uint16_t pc = 0,
+                  ChunkDescriptorFlags f = ChunkDescriptorFlags{})
+      : flags_(f), type_(t), part_count_be_(htons(pc)),
+        bucket_id_(bid), ref_tag_(rt) {}
+
+  // Construct from a raw ref_tag byte pointer (string_view of kRefTagSize).
+  ChunkDescriptor(ChunkType t, const char* rt_data, bucket_id_t bid,
+                  uint16_t pc = 0,
+                  ChunkDescriptorFlags f = ChunkDescriptorFlags{})
+      : flags_(f), type_(t), part_count_be_(htons(pc)), bucket_id_(bid) {
+    ref_tag_.load(rt_data);
+  }
+
+  ChunkType         get_type()      const { return type_; }
+  const RefTag&     get_ref_tag()   const { return ref_tag_; }
+  const bucket_id_t& get_bucket_id() const { return bucket_id_; }
+  std::string_view  ref_tag_view()   const { return ref_tag_.view(); }
+  std::string       ref_tag_filename() const { return ref_tag_.filename(); }
+  std::string_view  bucket_id_view() const { return bucket_id_.view(); }
+
+  // Serialize to dst (must have sizeof(ChunkDescriptor) bytes available).
+  // Wire order: flags, type, part_count BE, bucket_id, ref_tag.
+  void serialize(uint8_t* dst) const {
+    dst[offsetof(ChunkDescriptor, flags_)] = flags_.raw();
+    dst[offsetof(ChunkDescriptor, type_)]  = static_cast<uint8_t>(type_);
+    std::memcpy(dst + offsetof(ChunkDescriptor, part_count_be_), &part_count_be_, sizeof(part_count_be_));
+    std::memcpy(dst + offsetof(ChunkDescriptor, bucket_id_), bucket_id_.view().data(), kBucketIdSize);
+    std::memcpy(dst + offsetof(ChunkDescriptor, ref_tag_), ref_tag_.view().data(), kRefTagSize);
+  }
+
+  // Load from src (must have sizeof(ChunkDescriptor) bytes available).
+  void load(const uint8_t* src) {
+    flags_ = ChunkDescriptorFlags(src[offsetof(ChunkDescriptor, flags_)]);
+    type_  = static_cast<ChunkType>(src[offsetof(ChunkDescriptor, type_)]);
+    std::memcpy(&part_count_be_, src + offsetof(ChunkDescriptor, part_count_be_), sizeof(part_count_be_));
+    bucket_id_.load(src + offsetof(ChunkDescriptor, bucket_id_));
+    ref_tag_.load(reinterpret_cast<const char*>(src + offsetof(ChunkDescriptor, ref_tag_)));
+  }
+
+ private:
+  ChunkDescriptorFlags flags_{};
+  ChunkType            type_{CHUNK_STORAGE};
+  uint16_t             part_count_be_{};   // stored as big-endian
+  bucket_id_t          bucket_id_{};
+  RefTag               ref_tag_{};
 };
+static_assert(sizeof(ChunkDescriptor) == 24);
+
+#pragma pack(pop)
+
+#pragma pack(push, 1)
 
 struct ObjectValue;
 struct ObjectValueHeader {
@@ -75,7 +162,7 @@ struct ObjectValueHeader {
   uint32_t last_modified_sec{};
   uint32_t last_modified_nsec{};
 
-  ChunkDescriptor chunk;
+  ChunkType chunk_type{CHUNK_STORAGE};
   uint8_t flags{};
   uint8_t tags_count{};
   uint8_t content_type_len{};
@@ -87,15 +174,9 @@ struct ObjectValueHeader {
 };
 
 struct GcValueHeader {
-  ChunkDescriptor chunk;
-  uint8_t flags{};
-  uint64_t object_size{};
-  uint32_t mtime{};
-};
-
-struct PoValueHeader {
-  uint64_t estimated_size{};
-  uint32_t created_at_unix{};
+  ChunkType chunk_type{CHUNK_STORAGE};
+  uint8_t   flags{};
+  uint8_t   pad[2]{};
 };
 
 struct BucketValueHeader {
@@ -114,10 +195,8 @@ struct ChildValueHeader {
 #pragma pack(pop)
 
 static_assert(sizeof(ObjectValueHeader) == 62);
-static_assert(sizeof(GcValueHeader) == 14);
-static_assert(sizeof(PoValueHeader) == 12);
+static_assert(sizeof(GcValueHeader) == 4);
 static_assert(sizeof(BucketValueHeader) == 18);
-static_assert(sizeof(ChunkDescriptor) == 1);
 static_assert(sizeof(ChildValueHeader) == 8);
 static_assert(kMaxOValueBytes > sizeof(ObjectValueHeader));
 
@@ -172,14 +251,14 @@ struct ObjectValue {
   bool is_delete_marker() const { return (hdr.flags & kFlagFenced) != 0; }
   bool has_shared_data() const { return (hdr.flags & kFlagSharedData) != 0; }
   bool has_external_tags() const { return (hdr.flags & kFlagExternalTags) != 0; }
-  bool has_data() const { return hdr.size > 0 || hdr.chunk.type != CHUNK_INLINE; }
+  bool has_data() const { return hdr.size > 0 || hdr.chunk_type != CHUNK_INLINE; }
 
   // Returns the ref_tag view for data access:
-  // chunk_data_ref_tag for REF chunk types, hdr.ref_tag otherwise.
+  // chunk.ref_tag for REF chunk types, hdr.ref_tag otherwise.
   std::string_view data_ref_view() const {
-    if (hdr.chunk.type == CHUNK_CHILD_D_REF ||
-        hdr.chunk.type == CHUNK_STORAGE_REF) {
-      return chunk_data_ref_tag.view();
+    if (hdr.chunk_type == CHUNK_CHILD_D_REF ||
+        hdr.chunk_type == CHUNK_STORAGE_REF) {
+      return chunk.ref_tag_view();
     }
     return hdr.ref_tag.view();
   }
@@ -192,8 +271,10 @@ struct ObjectValue {
 
   std::string etag_display() const;
 
-  bucket_id_t chunk_data_bucket_id{};
-  RefTag chunk_data_ref_tag{};
+  // Full data-location descriptor (in-memory only — not in the packed header).
+  // chunk.type mirrors hdr.chunk_type; chunk.ref_tag and chunk.bucket_id are
+  // populated from the variable-length wire tail for REF chunk types.
+  ChunkDescriptor chunk{};
 };
 
 struct BucketValue {
@@ -216,7 +297,7 @@ inline const ObjectValueHeader* ovh_ptr(std::string_view data)
     return nullptr;
   }
   const auto* hdr = reinterpret_cast<const ObjectValueHeader*>(data.data());
-  const auto ct = hdr->chunk.type;
+  const auto ct = hdr->chunk_type;
   if (ct != CHUNK_INLINE && ct != CHUNK_CHILD_D && ct != CHUNK_CHILD_D_REF &&
       ct != CHUNK_STORAGE && ct != CHUNK_STORAGE_REF) {
     return nullptr;
@@ -256,7 +337,7 @@ inline bool ovh_chunk_ref(std::string_view raw, const ObjectValueHeader* h,
                            OvhChunkRef& out)
 {
   const size_t base = sizeof(ObjectValueHeader) + h->content_type_len;
-  if (h->chunk.type == CHUNK_CHILD_D_REF) {
+  if (h->chunk_type == CHUNK_CHILD_D_REF) {
     const size_t need = base + kBucketIdSize + kRefTagSize;
     if (raw.size() < need) {
       return false;
@@ -265,7 +346,7 @@ inline bool ovh_chunk_ref(std::string_view raw, const ObjectValueHeader* h,
     out.ref_tag = raw.substr(base + kBucketIdSize, kRefTagSize);
     return true;
   }
-  if (h->chunk.type == CHUNK_STORAGE_REF) {
+  if (h->chunk_type == CHUNK_STORAGE_REF) {
     const size_t need = base + kRefTagSize;
     if (raw.size() < need) {
       return false;

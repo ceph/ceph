@@ -24,213 +24,214 @@
 
 namespace kvrgw {
 
-namespace {
-
-void gc_hdr_to_be(GcValueHeader &hdr)
+void make_gc_value(GcValueBuf &buf, const GcValueHeader &hdr, const GcDescriptor &gc)
 {
-  hdr.object_size = htobe64(hdr.object_size);
-  hdr.mtime = htonl(hdr.mtime);
+  // GcValueHeader contains only single-byte fields — no endian conversion needed.
+  std::memcpy(buf.data, &hdr, sizeof(hdr));
+  gc.serialize(buf.data + sizeof(hdr));
 }
 
-void gc_hdr_from_be(GcValueHeader &hdr)
+bool parse_gc_value(std::string_view data, GcValue &val)
 {
-  hdr.object_size = be64toh(hdr.object_size);
-  hdr.mtime = be32toh(hdr.mtime);
-}
-
-void po_hdr_to_be(PoValueHeader &hdr)
-{
-  hdr.estimated_size = htobe64(hdr.estimated_size);
-  hdr.created_at_unix = htonl(hdr.created_at_unix);
-}
-
-void po_hdr_from_be(PoValueHeader &hdr)
-{
-  hdr.estimated_size = be64toh(hdr.estimated_size);
-  hdr.created_at_unix = be32toh(hdr.created_at_unix);
-}
-
-} // namespace
-
-std::string make_gc_value(const GcValueHeader &hdr)
-{
-  GcValueHeader wire = hdr;
-  gc_hdr_to_be(wire);
-  std::string out;
-  out.append(reinterpret_cast<const char *>(&wire), sizeof(wire));
-  return out;
-}
-
-std::optional<GcValue> parse_gc_value(std::string_view data)
-{
-  if (data.size() < sizeof(GcValueHeader)) {
-    return std::nullopt;
+  if (data.size() < sizeof(GcValueBuf)) {
+    return false;
   }
-  GcValue val;
   std::memcpy(&val.hdr, data.data(), sizeof(GcValueHeader));
-  gc_hdr_from_be(val.hdr);
-  const char ct = static_cast<char>(val.hdr.chunk.type);
+  const char ct = static_cast<char>(val.hdr.chunk_type);
   if (ct != CHUNK_INLINE && ct != CHUNK_CHILD_D && ct != CHUNK_CHILD_D_REF &&
       ct != CHUNK_STORAGE && ct != CHUNK_STORAGE_REF) {
+    return false;
+  }
+  val.gc.load(reinterpret_cast<const uint8_t*>(data.data()) + sizeof(GcValueHeader));
+  return true;
+}
+
+// Single P:O value: [GcDescriptor 36B][object_name_len 2B BE][object_name variable]
+void make_po_value(PoValueBuf& buf, const PoEntry& entry)
+{
+  entry.gc.serialize(buf.data);
+  buf.len = sizeof(GcDescriptor);
+  const uint16_t len_be = htons(static_cast<uint16_t>(entry.object_name.size()));
+  std::memcpy(buf.data + buf.len, &len_be, sizeof(len_be));
+  buf.len += sizeof(len_be);
+  std::memcpy(buf.data + buf.len, entry.object_name.data(), entry.object_name.size());
+  buf.len += entry.object_name.size();
+}
+
+std::optional<PoEntryView> parse_po_value_view(std::string_view data)
+{
+  constexpr size_t kMinSize = sizeof(GcDescriptor) + sizeof(uint16_t);
+  if (data.size() < kMinSize) {
     return std::nullopt;
   }
+  PoEntryView entry;
+  entry.gc.load(reinterpret_cast<const uint8_t*>(data.data()));
+  uint16_t len_be{};
+  std::memcpy(&len_be, data.data() + sizeof(GcDescriptor), sizeof(len_be));
+  const uint16_t name_len = be16toh(len_be);
+  if (data.size() != kMinSize + name_len) {
+    return std::nullopt;
+  }
+  entry.object_name = data.substr(kMinSize, name_len);
+  return entry;
+}
+
+// Group P:O value:
+//   [object_name_len[kMaxGroupPoSize] × 2B BE]  — 16B fixed
+//   [GcDescriptor[kMaxGroupPoSize]]              — 288B fixed
+//   [object_name_0]...[object_name_{n-1}]        — packed variable
+void make_group_po_value(GroupPoValueBuf& buf, const GroupPoValue& gpv)
+{
+  // Write name-length array
+  size_t off = 0;
+  for (size_t i = 0; i < kMaxGroupPoSize; ++i) {
+    const uint16_t l = (i < gpv.count)
+        ? static_cast<uint16_t>(gpv.entries[i].object_name.size())
+        : 0;
+    const uint16_t l_be = htons(l);
+    std::memcpy(buf.data + off, &l_be, sizeof(l_be));
+    off += sizeof(l_be);
+  }
+  // Write GcDescriptor array
+  for (size_t i = 0; i < kMaxGroupPoSize; ++i) {
+    if (i < gpv.count) {
+      gpv.entries[i].gc.serialize(buf.data + off);
+    } else {
+      std::memset(buf.data + off, 0, sizeof(GcDescriptor));
+    }
+    off += sizeof(GcDescriptor);
+  }
+  // Write packed variable object names
+  for (size_t i = 0; i < gpv.count; ++i) {
+    const auto& nm = gpv.entries[i].object_name;
+    std::memcpy(buf.data + off, nm.data(), nm.size());
+    off += nm.size();
+  }
+  buf.len = off;
+}
+
+std::optional<GroupPoValueView> parse_group_po_value_view(std::string_view data)
+{
+  constexpr size_t kFixedSize = GroupPoValueBuf::kFixedSize;
+  if (data.size() < kFixedSize) {
+    return std::nullopt;
+  }
+  GroupPoValueView val;
+  val.created_at_unix = 0;
+  // Read name-length array
+  uint16_t name_lens[kMaxGroupPoSize]{};
+  size_t off = 0;
+  for (size_t i = 0; i < kMaxGroupPoSize; ++i) {
+    uint16_t l_be{};
+    std::memcpy(&l_be, data.data() + off, sizeof(l_be));
+    name_lens[i] = be16toh(l_be);
+    off += sizeof(l_be);
+  }
+  // Read GcDescriptor array; count = slots with name_len > 0
+  uint8_t count = 0;
+  for (size_t i = 0; i < kMaxGroupPoSize; ++i) {
+    val.entries[i].gc.load(reinterpret_cast<const uint8_t*>(data.data()) + off);
+    off += sizeof(GcDescriptor);
+    if (name_lens[i] > 0) {
+      ++count;
+    }
+  }
+  // Verify total size
+  size_t var_size = 0;
+  for (size_t i = 0; i < kMaxGroupPoSize; ++i) {
+    var_size += name_lens[i];
+  }
+  if (data.size() != kFixedSize + var_size) {
+    return std::nullopt;
+  }
+  // Read packed object names (views into data, no copy)
+  for (size_t i = 0; i < kMaxGroupPoSize; ++i) {
+    if (name_lens[i] > 0) {
+      val.entries[i].object_name = data.substr(off, name_lens[i]);
+      off += name_lens[i];
+    }
+  }
+  val.count = count;
   return val;
 }
 
-std::string make_po_value(uint64_t estimated_size, uint32_t created_at_unix)
+//--------------------------------------------------------------------------------
+void make_group_gc_value(GroupGcValueBuf &buf, const GcDescriptor *entries, uint16_t count)
 {
-  PoValueHeader wire{};
-  wire.estimated_size = estimated_size;
-  wire.created_at_unix = created_at_unix;
-  po_hdr_to_be(wire);
-  std::string out;
-  out.append(reinterpret_cast<const char *>(&wire), sizeof(wire));
-  return out;
+  const uint16_t count_be = htons(static_cast<uint16_t>(count));
+  std::memcpy(buf.data, &count_be, sizeof(count_be));
+  buf.len = sizeof(count_be);
+  for (auto i = 0; i < count; ++i) {
+    entries[i].serialize(buf.data + buf.len);
+    buf.len += sizeof(GcDescriptor);
+  }
 }
 
-std::optional<PoValue> parse_po_value(std::string_view data)
+//--------------------------------------------------------------------------------
+bool parse_group_gc_value(std::string_view data, GroupGcValue &val)
 {
-  if (data.size() < sizeof(PoValueHeader)) {
-    return std::nullopt;
-  }
-  PoValue val;
-  std::memcpy(&val.hdr, data.data(), sizeof(PoValueHeader));
-  po_hdr_from_be(val.hdr);
-  return val;
-}
-
-std::string make_group_po_value(const GroupPoEntry *entries, size_t count,
-                                uint32_t created_at)
-{
-  std::string out;
-  out.reserve(2 + count * 20 + 4);
-  uint16_t count_be = htons(static_cast<uint16_t>(count));
-  out.append(reinterpret_cast<const char *>(&count_be), 2);
-  for (size_t i = 0; i < count; ++i) {
-    out.append(entries[i].ref_tag.view().data(), kRefTagSize);
-    uint64_t size_be = htobe64(entries[i].object_size);
-    out.append(reinterpret_cast<const char *>(&size_be), 8);
-  }
-  uint32_t ts_be = htonl(created_at);
-  out.append(reinterpret_cast<const char *>(&ts_be), 4);
-  return out;
-}
-
-std::optional<GroupPoValue> parse_group_po_value(std::string_view data)
-{
-  if (data.size() < 6) {
-    return std::nullopt; // min: 2B count + 4B created_at
-  }
   uint16_t count_be{};
-  std::memcpy(&count_be, data.data(), 2);
+  if (data.size() < sizeof(count_be)) {
+    return false;
+  }
+  std::memcpy(&count_be, data.data(), sizeof(count_be));
   const uint16_t count = be16toh(count_be);
   if (count == 0 || count > kMaxBatchSize) {
-    return std::nullopt;
+    return false;
   }
-  const size_t expected = 2 + static_cast<size_t>(count) * 20 + 4;
+  const size_t expected = sizeof(count_be) + static_cast<size_t>(count) * sizeof(GcDescriptor);
   if (data.size() != expected) {
-    return std::nullopt;
+    return false;
   }
-
-  GroupPoValue val;
   val.count = static_cast<uint8_t>(count);
   for (size_t i = 0; i < count; ++i) {
-    const size_t offset = 2 + i * 20;
-    val.entries[i].ref_tag.load(data.data() + offset);
-    uint64_t size_be{};
-    std::memcpy(&size_be, data.data() + offset + kRefTagSize, 8);
-    val.entries[i].object_size = be64toh(size_be);
+    const size_t offset = sizeof(count_be) + i * sizeof(GcDescriptor);
+    val.entries[i].load(reinterpret_cast<const uint8_t*>(data.data()) + offset);
   }
-  uint32_t ts_be{};
-  std::memcpy(&ts_be, data.data() + data.size() - 4, 4);
-  val.created_at_unix = be32toh(ts_be);
-  return val;
+  return true;
 }
 
-std::string make_group_gc_value(const GroupGcEntry *entries, size_t count)
-{
-  std::string out;
-  out.reserve(2 + count * 22);
-  uint16_t count_be = htons(static_cast<uint16_t>(count));
-  out.append(reinterpret_cast<const char *>(&count_be), 2);
-  for (size_t i = 0; i < count; ++i) {
-    out.append(entries[i].ref_tag.view().data(), kRefTagSize);
-    out.push_back(static_cast<char>(entries[i].chunk));
-    out.push_back(static_cast<char>(entries[i].flags));
-    uint64_t size_be = htobe64(entries[i].object_size);
-    out.append(reinterpret_cast<const char *>(&size_be), 8);
-  }
-  return out;
-}
-
-std::optional<GroupGcValue> parse_group_gc_value(std::string_view data)
-{
-  if (data.size() < 2) {
-    return std::nullopt;
-  }
-  uint16_t count_be{};
-  std::memcpy(&count_be, data.data(), 2);
-  const uint16_t count = be16toh(count_be);
-  if (count == 0 || count > kMaxBatchSize) {
-    return std::nullopt;
-  }
-  const size_t expected = 2 + static_cast<size_t>(count) * 22;
-  if (data.size() != expected) {
-    return std::nullopt;
-  }
-
-  GroupGcValue val;
-  val.count = static_cast<uint8_t>(count);
-  for (size_t i = 0; i < count; ++i) {
-    const size_t offset = 2 + i * 22;
-    val.entries[i].ref_tag.load(data.data() + offset);
-    val.entries[i].chunk = static_cast<ChunkType>(data[offset + kRefTagSize]);
-    val.entries[i].flags = static_cast<uint8_t>(data[offset + kRefTagSize + 1]);
-    uint64_t size_be{};
-    std::memcpy(&size_be, data.data() + offset + kRefTagSize + 2, 8);
-    val.entries[i].object_size = be64toh(size_be);
-  }
-  return val;
-}
-
-std::expected<void, fdb_error_t> move_po_to_go(KvTransaction &tr,
-                                               const PoKeyParts &parts,
-                                               const PoValue &po_value)
+//--------------------------------------------------------------------------------
+fdb_error_t move_po_to_go(KvTransaction &tr,
+                           const PoKeyParts &parts,
+                           const GcDescriptor &gc,
+                           std::string_view object_name)
 {
   const auto rt_view = parts.ref_tag.view();
   KeyBuf po_key;
-  make_po_key(parts.bucket_id, parts.object_name, rt_view, po_key);
+  make_po_key(parts.bucket_id, rt_view, po_key);
   auto po_exists = tr.kv_get(po_key.view());
   if (!po_exists) {
-    return std::unexpected(po_exists.error());
+    return po_exists.error();
   }
   if (!*po_exists) {
-    return {};
+    return 0;
   }
   KeyBuf object_key;
-  make_object_key(parts.bucket_id, parts.object_name, object_key);
+  make_object_key(parts.bucket_id, object_name, object_key);
   auto existing = tr.kv_get(object_key.view());
   if (!existing) {
-    return std::unexpected(existing.error());
+    return existing.error();
   }
+
   if (*existing) {
     const auto object_value = parse_object_value(**existing);
     if (object_value && object_value->hdr.ref_tag == parts.ref_tag) {
       tr.kv_del(po_key.view());
-      return {};
+      return 0;
     }
   }
 
   KeyBuf go_key;
-  make_go_key(parts.shard_count, parts.shard_id,
-              parts.bucket_id, rt_view, po_value.hdr.estimated_size, go_key);
+  make_go_key(kShardCount, kShardId,
+              parts.bucket_id, rt_view, gc.object_size, go_key);
   GcValueHeader gc_hdr{};
-  gc_hdr.chunk.type = CHUNK_STORAGE;
-  gc_hdr.object_size = po_value.hdr.estimated_size;
-  gc_hdr.mtime = 0;
-  tr.kv_put(go_key.view(), make_gc_value(gc_hdr));
+  gc_hdr.chunk_type = CHUNK_STORAGE;
+  GcValueBuf gc_buf;
+  make_gc_value(gc_buf, gc_hdr, gc);
+  tr.kv_put(go_key.view(), gc_buf.view());
   tr.kv_del(po_key.view());
-  return {};
+  return 0;
 }
 
 } // namespace kvrgw

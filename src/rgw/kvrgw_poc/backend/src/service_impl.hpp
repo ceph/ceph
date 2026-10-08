@@ -75,6 +75,7 @@ struct BatchPutResult {
 
 struct BatchCommitEntry {
   tenant_id_t tenant_id;
+  bucket_id_t bucket_id{};
   std::string bucket_name;
   std::string object_name;
   ObjectValue value;
@@ -90,23 +91,51 @@ struct BatchCommitEntry {
 };
 
 struct BatchStats {
-  std::atomic<int64_t> batch_commits{0};
-  std::atomic<int64_t> total_entries_batched{0};
+  // attempted_* — recorded in start_batch (before Phase 1 commit)
+  std::atomic<int64_t> attempted_batch_commits{0};
+  std::atomic<int64_t> attempted_total_entries_batch{0};
+  std::atomic<int64_t> attempted_single_entry_batches{0};
+  std::atomic<int64_t> attempted_min_batch_size{0};
+  std::atomic<int64_t> attempted_max_batch_size{0};
+  std::atomic<int64_t> attempted_total_wait_us{0};
+  std::atomic<int64_t> attempted_min_wait_us{0};
+  std::atomic<int64_t> attempted_max_wait_us{0};
+  std::atomic<int64_t> attempted_inline_only_batch_commits{0};
+  std::atomic<int64_t> attempted_inline_only_batch_entries{0};
+
+  // committed_* — recorded on successful Phase 3 commit
+  std::atomic<int64_t> committed_batch_commits{0};
+  std::atomic<int64_t> committed_total_entries{0};
+  std::atomic<int64_t> committed_single_entry_batches{0};
+  std::atomic<int64_t> committed_inline_only_batch_commits{0};
+  std::atomic<int64_t> committed_inline_only_batch_entries{0};
+
+  // misc
   std::atomic<int64_t> conflict_pushbacks{0};
-  std::atomic<int64_t> min_batch_size{0};
-  std::atomic<int64_t> max_batch_size{0};
-  std::atomic<int64_t> total_wait_us{0};
-  std::atomic<int64_t> min_wait_us{0};
-  std::atomic<int64_t> max_wait_us{0};
   std::atomic<int64_t> total_queue_size_at_extract{0};
+  std::atomic<int64_t> fallback_to_single_count{0};
+  std::atomic<int64_t> fallback_to_single_entries{0};
+  std::atomic<int64_t> single_txn_puts{0};
 
   void reset() {
-    batch_commits.store(0);
-    total_entries_batched.store(0);
+    attempted_batch_commits.store(0);
+    attempted_total_entries_batch.store(0);
+    attempted_single_entry_batches.store(0);
+    attempted_min_batch_size.store(0); attempted_max_batch_size.store(0);
+    attempted_total_wait_us.store(0);
+    attempted_min_wait_us.store(0); attempted_max_wait_us.store(0);
+    attempted_inline_only_batch_commits.store(0);
+    attempted_inline_only_batch_entries.store(0);
+    committed_batch_commits.store(0);
+    committed_total_entries.store(0);
+    committed_single_entry_batches.store(0);
+    committed_inline_only_batch_commits.store(0);
+    committed_inline_only_batch_entries.store(0);
     conflict_pushbacks.store(0);
-    min_batch_size.store(0); max_batch_size.store(0);
-    total_wait_us.store(0); min_wait_us.store(0); max_wait_us.store(0);
     total_queue_size_at_extract.store(0);
+    fallback_to_single_count.store(0);
+    fallback_to_single_entries.store(0);
+    single_txn_puts.store(0);
   }
 };
 
@@ -122,17 +151,20 @@ class BatchCommitQueue {
 
  private:
   struct InFlightBatch {
-    enum Phase : uint8_t { PHASE_EMPTY = 0, PHASE_1 = 1, PHASE_2 = 2, PHASE_3 = 3 };
+    enum Phase : uint8_t { PHASE_EMPTY = 0, PHASE_1 = 1, PHASE_2 = 2, PHASE_3 = 3, PHASE_FALLBACK = 4 };
     enum Step : uint8_t { STEP_WORKING = 0, STEP_COMMIT_ISSUED = 1, STEP_IO_ISSUED = 2 };
+
+    // Worst-case split: 20 storage entries / 2 per Group P:O = 10 keys.
+    static constexpr int kMaxPhase1Keys = kMaxBatchSize / 2; // = 10
 
     uint8_t phase{PHASE_EMPTY};
     uint8_t step{STEP_WORKING};
     uint8_t entry_count{0};
-    uint8_t storage_entry_count{0};
+    uint8_t phase1_key_count{0};
     uint8_t p3_attempt{0};
+    uint8_t start_attempt{0};
 
-    bucket_id_t group_bucket_id{};
-    GroupPoEntry storage_entries[kMaxBatchSize];
+    std::array<KeyBuf, kMaxPhase1Keys> phase1_keys{};
     BatchCommitEntry entries[kMaxBatchSize];
 
     std::unique_ptr<KvTransaction> txn;
@@ -151,9 +183,9 @@ class BatchCommitQueue {
         entries[i].metadata_encoded_size = 0;
       }
       entry_count = 0;
-      storage_entry_count = 0;
+      phase1_key_count = 0;
       p3_attempt = 0;
-      group_bucket_id = kNullBucket;
+      start_attempt = 0;
       txn.reset();
       commit_future = FdbFuture();
     }
@@ -165,8 +197,9 @@ class BatchCommitQueue {
   };
 
   void run();
-  void commit_batch(std::vector<BatchCommitEntry>& batch);
   void start_batch(InFlightBatch& ib);
+  void fallback_to_single(InFlightBatch& ib);
+  void record_batch_stats(InFlightBatch& ib);
   bool do_phase3_work(InFlightBatch& ib);
 
   KvRgwServiceImpl& service_;
@@ -589,6 +622,7 @@ class KvRgwServiceImpl final {
   struct DeleteContext {
     FdbFuture f_obj;
     KeyBuf object_key;
+    std::optional<std::string> resolved{};  // populated by delete_multi_try_commit before delete_apply
   };
 
   std::expected<DeleteBatchCtx, KvrgwErrorCode> delete_prepare_batch(
@@ -620,6 +654,14 @@ class KvRgwServiceImpl final {
       const std::string& bucket_name,
       const std::string& object_name,
       const GetCondition* cond);
+
+  // Extracts a GcDescriptor from a raw object if it needs deferred GC.
+  // Returns true and populates `out` for STORAGE/STORAGE_REF/coalescing objects.
+  // Returns false for INLINE, CHILD_D, etc. — no transaction side effects.
+  bool pack_object_into_gc(std::string_view object_key,
+                           std::string_view raw_value,
+                           VersioningState versioning_state,
+                           GcDescriptor& out) const;
 
   bool delete_multi_try_commit(
       tenant_id_t tenant_id,

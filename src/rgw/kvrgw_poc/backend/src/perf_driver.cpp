@@ -206,13 +206,18 @@ void print_results(const char *label, const BenchResult &result,
 void print_fdb_put_stats(KvStore &store)
 {
   auto &s = store.fdb_put_stats();
-  const uint64_t n = s.num_put.load(std::memory_order_relaxed);
-  const uint64_t k = s.key_bytes.load(std::memory_order_relaxed);
-  const uint64_t v = s.value_bytes.load(std::memory_order_relaxed);
-  const uint64_t avg_k = (n > 0) ? (k / n) : 0;
-  const uint64_t avg_v = (n > 0) ? (v / n) : 0;
-  std::cout << "  num-put=" << n << " avg-key-size-put=" << avg_k
-            << " avg-value-size-put=" << avg_v << "\n";
+  const uint64_t nk = s.num_keys.load(std::memory_order_relaxed);
+  const uint64_t kb = s.key_bytes.load(std::memory_order_relaxed);
+  const uint64_t nb = s.num_bucket_names.load(std::memory_order_relaxed);
+  const uint64_t bb = s.bucket_name_bytes.load(std::memory_order_relaxed);
+  const uint64_t nv = s.num_values.load(std::memory_order_relaxed);
+  const uint64_t vb = s.value_bytes.load(std::memory_order_relaxed);
+  std::cout << "  num-put=" << nk
+            << " avg-key-size-put=" << (nk > 0 ? kb / nk : 0)
+            << " num-bucket-name=" << nb
+            << " avg-bucket-name-size-put=" << (nb > 0 ? bb / nb : 0)
+            << " num-value-writes=" << nv
+            << " avg-value-size-put=" << (nv > 0 ? vb / nv : 0) << "\n";
 }
 
 struct ParsedParams {
@@ -441,9 +446,9 @@ static void progress_tick(int thread_id, int progress_sec, OpType op,
 
   char line[256];
   std::snprintf(line, sizeof(line),
-                "progress: %6.1f elapsed; total: (%6.1fM objects %6lld iops, "
+                "progress: %6.1f elapsed; total: (%6.2fM objects %6lld iops, "
                 "%6lldus latency) | "
-                "interval: (%6.1fM objects %6lld iops, %6lldus latency)\n",
+                "interval: (%6.2fM objects %6lld iops, %6lldus latency)\n",
                 elapsed, static_cast<double>(cnt) / 1000000.0,
                 static_cast<long long>(iops), static_cast<long long>(lat),
                 static_cast<double>(dcnt) / 1000000.0,
@@ -2113,6 +2118,13 @@ int run_perf_driver(KvRgwRuntime &runtime)
 //--------------------------------------------------------------------------------
 static int process_prefix()
 {
+  if (const char *kp = std::getenv("KVRGW_KEY_PREFIX"); kp && kp[0] != '\0') {
+    strncpy(g_key_prefix, kp, sizeof(g_key_prefix) - 1);
+    g_key_prefix[sizeof(g_key_prefix) - 1] = '\0';
+    g_prefix_len = static_cast<int>(strlen(g_key_prefix));
+    return 0;  // explicit prefix wins — skip KVRGW_PREFIX_LEN/random generation entirely
+  }
+
   if (const char *rpk = std::getenv("KVRGW_RANDOM_PREFIX_PER_KEY")) {
     if (strcasecmp(rpk, "yes") == 0 || strcasecmp(rpk, "true") == 0) {
       g_random_prefix_per_key = true;
@@ -2157,6 +2169,17 @@ static int process_prefix()
 //--------------------------------------------------------------------------------
 static int process_suffix()
 {
+  if (const char *ks = std::getenv("KVRGW_KEY_SUFFIX"); ks && ks[0] != '\0') {
+    strncpy(g_key_suffix, ks, sizeof(g_key_suffix) - 1);
+    g_key_suffix[sizeof(g_key_suffix) - 1] = '\0';
+    g_suffix_len = static_cast<int>(strlen(g_key_suffix));
+    if (g_prefix_len + g_suffix_len > kKeyPrefixMaxLen) {
+      std::cerr << "ERROR: prefix_len + suffix_len exceeds " << kKeyPrefixMaxLen << "\n";
+      return 1;
+    }
+    return 0;  // explicit suffix wins — skip KVRGW_SUFFIX_LEN/random generation entirely
+  }
+
   if (const char *sl = std::getenv("KVRGW_SUFFIX_LEN")) {
     if (sl[0] == '\0') [[unlikely]] {
       std::cerr << "ERROR: KVRGW_SUFFIX_LEN cannot be empty\n";
@@ -2344,23 +2367,32 @@ int run_perf_driver(KvRgwServiceImpl &service, KvStore &store,
     else if (cmd == "batch-stats") {
       auto &s = service.batch_queue().stats();
       auto &ls = service.latency_stats();
-      int64_t bc = s.batch_commits.load();
-      int64_t te = s.total_entries_batched.load();
+      int64_t bc = s.attempted_batch_commits.load();
+      int64_t te = s.attempted_total_entries_batch.load();
       double avg_bs = bc > 0 ? static_cast<double>(te) / bc : 0;
-      int64_t avg_wait = bc > 0 ? s.total_wait_us.load() / bc : 0;
+      int64_t avg_wait = bc > 0 ? s.attempted_total_wait_us.load() / bc : 0;
       double avg_qsz =
           bc > 0
               ? static_cast<double>(s.total_queue_size_at_extract.load()) / bc
               : 0;
-      std::cout << "batch_commits=" << bc << " entries_batched=" << te
+      int64_t cbc = s.committed_batch_commits.load();
+      int64_t cte = s.committed_total_entries.load();
+      std::cout << "attempted_batch_commits=" << bc
+                << " attempted_entries_batched=" << te
+                << " attempted_avg_batch_size=" << std::fixed << std::setprecision(1)
+                << avg_bs
+                << " attempted_min_batch_size=" << s.attempted_min_batch_size.load()
+                << " attempted_max_batch_size=" << s.attempted_max_batch_size.load()
+                << " attempted_inline_only_commits=" << s.attempted_inline_only_batch_commits.load()
+                << " attempted_avg_wait_us=" << avg_wait
+                << " attempted_min_wait_us=" << s.attempted_min_wait_us.load()
+                << " attempted_max_wait_us=" << s.attempted_max_wait_us.load()
+                << " committed_batch_commits=" << cbc
+                << " committed_total_entries=" << cte
+                << " committed_inline_only_commits=" << s.committed_inline_only_batch_commits.load()
                 << " conflict_pushbacks=" << s.conflict_pushbacks.load()
-                << " avg_batch_size=" << std::fixed << std::setprecision(1)
-                << avg_bs << " min_batch_size=" << s.min_batch_size.load()
-                << " max_batch_size=" << s.max_batch_size.load()
                 << " avg_queue_size=" << std::setprecision(1) << avg_qsz
-                << " avg_wait_us=" << avg_wait
-                << " min_wait_us=" << s.min_wait_us.load()
-                << " max_wait_us=" << s.max_wait_us.load()
+                << " fallback_to_single_count=" << s.fallback_to_single_count.load()
                 << " txn_retries=" << ls.txn_retries.load()
                 << " txn_hard_failures=" << ls.txn_hard_failures.load()
                 << " txn_max_retries_exceeded="

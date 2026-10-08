@@ -170,43 +170,71 @@ std::vector<GcEntry> scan_gc_entries(kvrgw::KvStore &store,
   std::vector<GcEntry> entries;
   entries.reserve(rows.size());
   for (const auto &row : rows) {
+    // Single G:O key
     const auto parts = kvrgw::parse_go_key(row.key);
-    if (!parts) {
+    if (parts) {
+      const auto rt_view     = parts->ref_tag.view();
+      const auto rt_filename = parts->ref_tag.filename();
+      GcEntry entry;
+      entry.size_tier = parts->size_tier;
+      entry.ref_tag = parts->ref_tag;
+      entry.bucket_id = parts->bucket_id;
+      entry.shard_count = parts->shard_count;
+      entry.shard_id = parts->shard_id;
+
+      kvrgw::GcValue gc_val;
+      if (kvrgw::parse_gc_value(row.value, gc_val)) {
+        entry.blob_bytes = gc_val.gc.object_size;
+        if (gc_val.hdr.chunk_type == kvrgw::CHUNK_STORAGE) {
+          const auto actual = blob_file_size(data_store, rt_filename);
+          if (actual.has_value() && *actual != gc_val.gc.object_size) {
+            entry.size_mismatch = true;
+          }
+        }
+        else if (gc_val.hdr.chunk_type == kvrgw::CHUNK_CHILD_D) {
+          const uint8_t st = kvrgw::d_size_tier_from_size(gc_val.gc.object_size);
+          kvrgw::KeyBuf d_key;
+          kvrgw::make_d_key(parts->bucket_id, st, rt_view, gc_val.gc.mtime, d_key);
+          auto d_val_result = store.get(d_key.view());
+          if (d_val_result && *d_val_result &&
+              (*d_val_result)->size() != sizeof(kvrgw::ChildValueHeader) + gc_val.gc.object_size) {
+            entry.size_mismatch = true;
+          }
+        }
+      }
+      else {
+        entry.blob_bytes = blob_file_size(data_store, rt_filename);
+      }
+      entries.push_back(std::move(entry));
       continue;
     }
-    const auto rt_view     = parts->ref_tag.view();
-    const auto rt_filename = parts->ref_tag.filename();
-    GcEntry entry;
-    entry.size_tier = parts->size_tier;
-    entry.ref_tag = parts->ref_tag;
-    entry.bucket_id = parts->bucket_id;
-    entry.shard_count = parts->shard_count;
-    entry.shard_id = parts->shard_id;
 
-    const auto gc_val = kvrgw::parse_gc_value(row.value);
-    if (gc_val) {
-      entry.blob_bytes = gc_val->hdr.object_size;
-      if (gc_val->hdr.chunk.type == kvrgw::CHUNK_STORAGE) {
-        const auto actual = blob_file_size(data_store, rt_filename);
-        if (actual.has_value() && *actual != gc_val->hdr.object_size) {
+    // Group G:G key — expand each descriptor into individual GcEntry records
+    const auto group_parts = kvrgw::parse_group_go_key(row.key);
+    if (!group_parts) {
+      continue;
+    }
+    kvrgw::GroupGcValue group_val;
+    if (!kvrgw::parse_group_gc_value(row.value, group_val)) {
+      continue;
+    }
+    for (uint8_t i = 0; i < group_val.count; ++i) {
+      const auto& gc = group_val.entries[i];
+      GcEntry entry;
+      entry.ref_tag     = gc.chunk.get_ref_tag();
+      entry.size_tier   = kvrgw::size_tier_from_size(gc.object_size);
+      entry.bucket_id   = gc.chunk.get_bucket_id();
+      entry.shard_count = kvrgw::kShardCount;
+      entry.shard_id    = kvrgw::kShardId;
+      entry.blob_bytes  = gc.object_size;
+      if (gc.chunk.get_type() == kvrgw::CHUNK_STORAGE) {
+        const auto actual = blob_file_size(data_store, gc.chunk.ref_tag_filename());
+        if (actual.has_value() && *actual != gc.object_size) {
           entry.size_mismatch = true;
         }
       }
-      else if (gc_val->hdr.chunk.type == kvrgw::CHUNK_CHILD_D) {
-        const uint8_t st = kvrgw::d_size_tier_from_size(gc_val->hdr.object_size);
-        kvrgw::KeyBuf d_key;
-        kvrgw::make_d_key(parts->bucket_id, st, rt_view, gc_val->hdr.mtime, d_key);
-        auto d_val_result = store.get(d_key.view());
-        if (d_val_result && *d_val_result &&
-            (*d_val_result)->size() != sizeof(kvrgw::ChildValueHeader) + gc_val->hdr.object_size) {
-          entry.size_mismatch = true;
-        }
-      }
+      entries.push_back(std::move(entry));
     }
-    else {
-      entry.blob_bytes = blob_file_size(data_store, rt_filename);
-    }
-    entries.push_back(std::move(entry));
   }
   return entries;
 }

@@ -49,7 +49,7 @@ fi
 META="${RESULTS_DIR}/test_metadata.txt"
 [[ -f "${META}" ]] || { echo "ERROR: ${META} not found" >&2; exit 1; }
 
-PREFIX=$(grep '^prefix=' "${META}" | head -1 | cut -d= -f2)
+PREFIX=$(grep '^prefix=' "${META}" | head -1 | cut -d= -f2 || true)
 SUFFIX=$(grep '^suffix=' "${META}" | head -1 | cut -d= -f2 || true)
 [[ -n "${PREFIX}" ]] || { echo "ERROR: prefix not found in ${META}" >&2; exit 1; }
 

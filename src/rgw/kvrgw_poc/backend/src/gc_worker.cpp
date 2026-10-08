@@ -103,66 +103,79 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
     return std::string("\xFF", 1);
   }();
 
-  auto rows = store_.range_scan(prefix.view(), end, kGcMaxKeys);
-  if (!rows) {
+  auto scan_tr = store_.begin_transaction();
+  if (!scan_tr) {
+    return;
+  }
+  // FdbRangeHolder owns the underlying FdbFuture (not scan_tr), so the
+  // key/value views below remain valid for the lifetime of `holder`,
+  // independent of scan_tr's state — safe to use across this entire loop
+  // even though each iteration opens its own separate transaction for the
+  // actual mutation/commit.
+  FdbRangeHolder holder((*scan_tr)->kv_async_get_range_holder(
+      prefix.view(), /*exclusive_begin=*/false, end, kGcMaxKeys));
+  if (holder.wait()) {
     return;
   }
 
-  for (const auto &row : *rows) {
+  GcPolicy entry_policy = config_.active_policy_copy();
+  for (const auto &[key, value] : holder) {
     if (stop_flag_) {
       return;
     }
 
-    config_.maybe_apply_pending();
-    const GcPolicy entry_policy = config_.active_policy_copy();
-    if (entry_policy.suspended) {
-      return;
+    if (config_.maybe_apply_pending()) {
+      entry_policy = config_.active_policy_copy();
+      if (entry_policy.suspended) {
+        return;
+      }
     }
 
-    const auto parts = parse_go_key(row.key);
+    const auto parts = parse_go_key(key);
     if (!parts) {
-      const auto group_parts = parse_group_go_key(row.key);
+      const auto group_parts = parse_group_go_key(key);
       if (!group_parts) {
         continue;
       }
 
-      const auto group_val = parse_group_gc_value(row.value);
-      if (!group_val) {
+      GroupGcValue group_val;
+      if (!parse_group_gc_value(value, group_val)) {
         continue;
       }
 
-      for (uint8_t i = 0; i < group_val->count; ++i) {
-        const auto &ge = group_val->entries[i];
+      for (auto i = 0; i < group_val.count; ++i) {
+        const auto &ge = group_val.entries[i];
         if (!rate_allow(rate, entry_policy, ge.object_size)) {
           return;
         }
-        (void)data_store_.remove(ge.ref_tag.filename());
+        (void)data_store_.remove(ge.chunk.ref_tag_filename());
       }
       auto tr = store_.begin_transaction();
       if (!tr) {
         continue;
       }
-      (*tr)->kv_del(row.key);
+      (*tr)->kv_del(key);
       (*tr)->commit();
       continue;
     }
 
-    const auto gc_val = parse_gc_value(row.value);
-    const ChunkType ct = gc_val ? gc_val->hdr.chunk.type : CHUNK_STORAGE;
+    GcValue gc_val;
+    if (!parse_gc_value(value, gc_val)) {
+      continue;
+    }
+    const ChunkType ct         = gc_val.gc.chunk.get_type();
+    const bool shared          = gc_val.hdr.flags & ObjectValue::kFlagSharedData;
+    const bool has_external_children = gc_val.hdr.flags & kFlagExternalTags;
+    const auto rt_view         = gc_val.gc.chunk.ref_tag_view();
+    const auto rt_filename     = gc_val.gc.chunk.ref_tag_filename();
+    const auto& bucket_id      = gc_val.gc.chunk.get_bucket_id();
 
-    const bool shared =
-        gc_val && (gc_val->hdr.flags & ObjectValue::kFlagSharedData);
-
-    const bool has_external_children =
-        gc_val && (gc_val->hdr.flags & kFlagExternalTags);
-    const auto rt_view = parts->ref_tag.view();
-    const auto rt_filename = parts->ref_tag.filename();
     auto clean_children = [&](KvTransaction &txn) {
       if (!has_external_children) {
         return;
       }
       KeyBuf c_prefix;
-      make_c_prefix(parts->bucket_id, rt_view, c_prefix);
+      make_c_prefix(bucket_id, rt_view, c_prefix);
       auto c_end = c_prefix;
       c_end.append_byte(0xFF);
       txn.kv_range_clear(c_prefix.view(), c_end.view());
@@ -175,23 +188,23 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
         if (!tr) {
           continue;
         }
-        auto r_val = (*tr)->kv_get(r_key.view());
-        if (r_val && *r_val) {
-          auto rv = parse_r_value(**r_val);
+        FdbGetHolder r_holder((*tr)->kv_async_get_holder(r_key.view()));
+        if (!r_holder.wait() && r_holder.present()) {
+          auto rv = parse_r_value(r_holder.value());
           if (!rv) {
             continue;
           }
           if (rv->ref_count > 1) {
             (*tr)->kv_put(r_key.view(),
                           write_r_value(rv->ref_count - 1, rv->chunk_descriptor));
-            (*tr)->kv_del(row.key);
+            (*tr)->kv_del(key);
             (*tr)->commit();
             continue;
           }
           (*tr)->kv_del(r_key.view());
         }
         (void)data_store_.remove(rt_filename);
-        (*tr)->kv_del(row.key);
+        (*tr)->kv_del(key);
         clean_children(**tr);
         (*tr)->commit();
       }
@@ -207,7 +220,7 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
         if (!tr) {
           continue;
         }
-        (*tr)->kv_del(row.key);
+        (*tr)->kv_del(key);
         clean_children(**tr);
         (*tr)->commit();
       }
@@ -216,16 +229,16 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
       if (!rate_allow(rate, entry_policy, 0)) {
         return;
       }
-      const uint8_t st = d_size_tier_from_size(gc_val->hdr.object_size);
+      const uint8_t st = d_size_tier_from_size(gc_val.gc.object_size);
       KeyBuf d_key;
-      make_d_key(parts->bucket_id, st, rt_view, gc_val->hdr.mtime, d_key);
+      make_d_key(bucket_id, st, rt_view, gc_val.gc.mtime, d_key);
       auto tr = store_.begin_transaction();
       if (!tr) {
         continue;
       }
-      decrement_or_del_child_d(**tr, d_key.view(), gc_val->hdr.object_size,
+      decrement_or_del_child_d(**tr, d_key.view(), gc_val.gc.object_size,
                                shared);
-      (*tr)->kv_del(row.key);
+      (*tr)->kv_del(key);
       clean_children(**tr);
       (*tr)->commit();
     }
@@ -237,7 +250,7 @@ void GcWorker::gc_once(const GcPolicy &policy, RateWindow *rate)
       if (!tr) {
         continue;
       }
-      (*tr)->kv_del(row.key);
+      (*tr)->kv_del(key);
       clean_children(**tr);
       (*tr)->commit();
     }

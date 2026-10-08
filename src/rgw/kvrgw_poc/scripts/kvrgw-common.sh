@@ -355,8 +355,10 @@ kvrgw_build() {
     "${ROOT}/build/l_key_test"
     if [[ -f "${FDB_CLUSTER_FILE}" ]]; then
       "${ROOT}/build/kv_range_test"
+      KVRGW_DATA_ROOT=/tmp/kvrgw-test-data "${ROOT}/build/batch_mixed_test"
     else
       echo "Skipping kv_range_test (no FDB cluster file)"
+      echo "Skipping batch_mixed_test (no FDB cluster file)"
     fi
   fi
   cd "${ROOT}/frontend" && go mod tidy && go build -o "${ROOT}/build/kv-rgw-frontend" .

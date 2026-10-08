@@ -57,7 +57,7 @@ void test_ref_tag_zero_base64_roundtrip()
   value.hdr.last_modified_sec = 1785926327;
   value.hdr.last_modified_nsec = 123456789;
   value.content_type = "text/plain";
-  value.hdr.chunk.type = kvrgw::CHUNK_STORAGE;
+  value.hdr.chunk_type = kvrgw::CHUNK_STORAGE;
 
   kvrgw::OValueBuf buf;
   kvrgw::ObjectValueHeader wire = value.hdr;
@@ -73,7 +73,7 @@ void test_ref_tag_zero_base64_roundtrip()
   assert(parsed->hdr.last_modified_sec == value.hdr.last_modified_sec);
   assert(parsed->hdr.last_modified_nsec == value.hdr.last_modified_nsec);
   assert(parsed->content_type == value.content_type);
-  assert(parsed->hdr.chunk.type == kvrgw::CHUNK_STORAGE);
+  assert(parsed->hdr.chunk_type == kvrgw::CHUNK_STORAGE);
 }
 
 void test_tenant_value_roundtrip()
@@ -121,7 +121,7 @@ void test_object_value_header_version_fields()
   value.hdr.size = 100;
   value.hdr.last_modified_sec = 1700000000;
   value.hdr.last_modified_nsec = 500000000;
-  value.hdr.chunk.type = kvrgw::CHUNK_STORAGE;
+  value.hdr.chunk_type = kvrgw::CHUNK_STORAGE;
   value.content_type = "text/html";
 
   const kvrgw::version_id_t vids[] = {
@@ -227,7 +227,7 @@ void test_inline_metadata_frame_roundtrip()
   value.hdr.ref_tag = {};
   value.hdr.metadata_count = 1;
   value.content_type = "text/plain";
-  value.hdr.chunk.type = kvrgw::CHUNK_STORAGE;
+  value.hdr.chunk_type = kvrgw::CHUNK_STORAGE;
   value.metadata_frame.assign(encoded.data(), encoded.data() + frame_size);
 
   kvrgw::OValueBuf buf;

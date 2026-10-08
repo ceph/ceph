@@ -67,12 +67,12 @@ struct KeyHeaderS {
   char ns;
   uint16_t shard_count;
   uint16_t shard_id;
-  uint8_t bucket_id[kBucketIdSize];
+  bucket_id_t bucket_id;
   char cat;
 
-  KeyHeaderS(char ns_, uint16_t sc, uint16_t si, std::string_view bid, char cat_)
+  KeyHeaderS(char ns_, uint16_t sc, uint16_t si, bucket_id_t bid, char cat_)
       : ns(ns_), shard_count(htons(sc)), shard_id(htons(si)), cat(cat_) {
-    std::memcpy(bucket_id, static_cast<const void*>(bid.data()), kBucketIdSize);
+    bucket_id = bid;
   }
 };
 
@@ -81,30 +81,60 @@ struct KeyHeaderG {
   uint8_t size_tier;
   uint16_t shard_count;
   uint16_t shard_id;
-  uint8_t bucket_id[kBucketIdSize];
+  bucket_id_t bucket_id;
   char cat;
 
-  KeyHeaderG(uint8_t tier, uint16_t sc, uint16_t si, std::string_view bid, char cat_)
+  KeyHeaderG(uint8_t tier, uint16_t sc, uint16_t si, bucket_id_t bid, char cat_)
       : ns('G'), size_tier(tier), shard_count(htons(sc)), shard_id(htons(si)), cat(cat_) {
-    std::memcpy(bucket_id, static_cast<const void*>(bid.data()), kBucketIdSize);
+    bucket_id = bid;
   }
 };
+
+// Compact header for group G:G keys — no bucket_id (each GcDescriptor is self-contained).
+// Wire layout: [ns='G'][cat='G'] — 2 bytes, followed by ref_tag (12B) as unique discriminator.
+struct KeyHeaderGGroup {
+  char ns{'G'};
+  char cat{'G'};
+};
+static_assert(sizeof(KeyHeaderGGroup) == 2);
+
+// Single P:O key header.
+// Wire layout: [ns='P'][bucket_id 8B][cat='O'] — 10B, followed by ref_tag (12B) → 22B total key.
+struct KeyHeaderPO {
+  char ns{'P'};
+  char cat{'O'};
+  bucket_id_t bucket_id;
+
+  KeyHeaderPO() = default;
+  explicit KeyHeaderPO(bucket_id_t bid) {
+    bucket_id = bid;
+  }
+};
+static_assert(sizeof(KeyHeaderPO) == 10);
+
+// Group P:O key header.
+// Wire layout: [ns='P'][cat='G'] — 2B, followed by ref_tag_0 (12B) → 14B total key.
+struct KeyHeaderPOGroup {
+  char ns{'P'};
+  char cat{'G'};
+};
+static_assert(sizeof(KeyHeaderPOGroup) == 2);
 
 struct KeyHeaderD {
   char ns;
   uint16_t shard_count;
   uint16_t shard_id;
-  uint8_t bucket_id[kBucketIdSize];
+  bucket_id_t bucket_id;
   uint8_t size_tier;
   uint8_t hash_prefix;
   uint32_t mtime;
   RefTag ref_tag;
 
-  KeyHeaderD(uint16_t sc, uint16_t si, std::string_view bid,
+  KeyHeaderD(uint16_t sc, uint16_t si, bucket_id_t bid,
              uint8_t st, uint8_t hp, uint32_t mt, const char* rt)
       : ns('D'), shard_count(htons(sc)), shard_id(htons(si)),
         size_tier(st), hash_prefix(hp), mtime(htonl(mt)) {
-    std::memcpy(bucket_id, static_cast<const void*>(bid.data()), kBucketIdSize);
+    bucket_id = bid;
     ref_tag.load(rt);
   }
 };

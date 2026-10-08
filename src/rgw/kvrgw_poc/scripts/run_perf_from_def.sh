@@ -240,9 +240,17 @@ if [[ "$workload" == "get" ]]; then
 else
   KEY_PREFIX=""
   KEY_SUFFIX=""
+  if [[ "${random_prefix_per_key:-no}" != "yes" ]]; then
+    # Generate ONE shared prefix/suffix and pass it to every instance below,
+    # so a later run_list_test.sh can reconstruct the full keyspace.
+    KEY_PREFIX="$(hex_to_len "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" "${prefix_len}")"
+    KEY_SUFFIX="$(hex_to_len "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" "${suffix_len}")"
+  fi
 fi
 
 cat > "${OUTDIR}/test_metadata.txt" <<METAEOF
+prefix=${KEY_PREFIX}
+suffix=${KEY_SUFFIX}
 prefix_len=${prefix_len}
 suffix_len=${suffix_len}
 random_prefix_per_key=${random_prefix_per_key:-no}
@@ -666,8 +674,8 @@ for line in lines:
 lat = int(lat_num / lat_den) if lat_den else 0
 latl = int(latl_num / latl_den) if latl_den else 0
 
-print("\033[32m  TOTAL progress: %6.1f elapsed; total: (%6.1fM objects %6d iops, %6dus latency) | "
-         "interval: (%6.1fM objects %6d iops, %6dus latency) \033[0m" % (
+print("\033[32m  TOTAL progress: %6.1f elapsed; total: (%6.2fM objects %6d iops, %6dus latency) | "
+         "interval: (%6.2fM objects %6d iops, %6dus latency) \033[0m" % (
           elapsed, obj / 1e6, iops, lat, obj_last / 1e6, iops_last, latl))
 ' "$((SECONDS - WAIT_T0))" "${PROG_SNAP[@]}"
     for i in $(seq 0 $((instances-1))); do
@@ -833,6 +841,20 @@ except Exception:
 }
 
 wait_until_quiet
+
+if [[ "$workload" != "get" ]]; then
+  echo ""
+  echo "=== Put key/bucket-name/value size stats ==="
+  for i in $(seq 0 $((instances-1))); do
+    inst_id=$(printf "%02d" "$i")
+    stat_line=$(grep "avg-key-size-put=" "${INST_LOGS[$i]}" | tail -1 || true)
+    if [[ -n "${stat_line}" ]]; then
+      echo "  instance-${inst_id}: ${stat_line#  }"
+    else
+      echo "  instance-${inst_id}: (stats not found)"
+    fi
+  done
+fi
 
 # Kill remaining collectors
 kill $(jobs -p) 2>/dev/null || true

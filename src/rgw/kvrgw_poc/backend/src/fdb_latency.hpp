@@ -51,6 +51,11 @@ private:
 };
 
 
+inline int64_t now_unix() noexcept {
+  return std::chrono::duration_cast<std::chrono::seconds>(
+             std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
 // Helper definitions
 inline void sleep_for_msec(int64_t ms) noexcept {
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));

@@ -46,10 +46,7 @@ struct ObjectKeyPartsView {
 };
 
 struct PoKeyParts {
-  uint16_t shard_count{};
-  uint16_t shard_id{};
   bucket_id_t bucket_id{};
-  std::string object_name;
   RefTag ref_tag{};
 };
 
@@ -99,16 +96,15 @@ std::optional<ObjectKeyPartsView> parse_object_key_parts_view(std::string_view k
 
 void   make_po_key(
     bucket_id_t bucket_id,
-    std::string_view object_name,
     std::string_view ref_tag_bytes,
     KeyBuf& out);
 void   make_group_po_key(
-    bucket_id_t bucket_id,
     std::string_view group_ref_tag,
     KeyBuf& out);
-KeyBuf make_p_prefix(uint16_t shard_count, uint16_t shard_id);
+KeyBuf make_p_prefix();
 KeyBuf make_p_bucket_prefix(bucket_id_t bucket_id);
 std::optional<PoKeyParts> parse_po_key(std::string_view key);
+bool   parse_group_po_key(std::string_view key);
 
 void make_go_key(
     uint16_t shard_count,
@@ -130,8 +126,6 @@ void make_d_key(
     std::string_view ref_tag,
     uint32_t mtime,
     KeyBuf& out);
-KeyBuf make_d_bucket_prefix(bucket_id_t bucket_id);
-KeyBuf make_d_bucket_tier_prefix(bucket_id_t bucket_id, uint8_t size_tier);
 std::optional<DKeyParts> parse_d_key(std::string_view key);
 uint8_t d_size_tier_from_size(uint64_t object_size_bytes);
 uint8_t d_hash_prefix(std::string_view ref_tag);
@@ -154,24 +148,11 @@ KeyBuf make_r_key(std::string_view ref_tag);
 void   make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out);
 void   make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out);
 
-struct GroupPoKeyParts {
-  uint16_t shard_count{};
-  uint16_t shard_id{};
-  bucket_id_t bucket_id{};
-  RefTag group_ref_tag{};
-};
-
-std::optional<GroupPoKeyParts> parse_group_po_key(std::string_view key);
-
 struct GroupGoKeyParts {
-  uint8_t size_tier{};
-  uint16_t shard_count{};
-  uint16_t shard_id{};
-  bucket_id_t bucket_id{};
   RefTag group_ref_tag{};
 };
 
-KeyBuf make_group_go_key(bucket_id_t bucket_id, std::string_view group_ref_tag);
+KeyBuf make_group_go_key(std::string_view ref_tag);
 std::optional<GroupGoKeyParts> parse_group_go_key(std::string_view key);
 
 }  // namespace kvrgw

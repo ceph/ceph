@@ -660,7 +660,12 @@ elif mode == 'health':
 
     def cluster_flag(sample):
         lq = sample.get('qos_limiting_queue', 0)
-        return '[THROTTLING]' if lq > 10e6 else '[OK]'
+        # knob_storage_hard_limit_bytes is typically ~1.5GB (SS refuses writes at that
+        # point); flag once the ratekeeper's limiting queue crosses ~50% of that, which
+        # is well above normal steady-state queueing (observed baseline: ~150-250MB).
+        if lq > 750e6: return '[THROTTLING]'
+        if lq > 300e6: return '[ELEVATED]'
+        return '[OK]'
 
     def fmt_mb(v):
         if v >= 1e9: return f'{v/1e9:.1f}GB'
@@ -921,6 +926,11 @@ with open(stats_file) as f:
         elif line.startswith('PutObject '):
             m = re.search(r'interval_total_us=([\d.]+)', line)
             if m: cur['put_lat'] = float(m.group(1))
+            m = re.search(r'interval_hz=([\d.]+)', line)
+            if m:
+                v = float(m.group(1))
+                if v > 0:
+                    cur['put_hz'] = v
         elif 'GetObject_hz=' in line:
             m = re.search(r'GetObject_hz=([\d.]+)', line)
             if m:
@@ -941,8 +951,11 @@ with open(stats_file) as f:
 for r in records:
     entries = r.get('iops')
     get_iops = r.get('get_ops_hz') or r.get('get_hz')
+    put_iops = r.get('put_hz')
     if not entries and get_iops:
         r['iops'] = get_iops
+    elif not entries and put_iops:
+        r['iops'] = put_iops
     if get_iops and not entries:
         if 'get_lat' in r:
             r['latency'] = r['get_lat']

@@ -105,7 +105,7 @@ if tier_at_least medium; then
   PLAN_ORDER+=("5 byte range GET (4MiB)" "6 version tests" "7 list boundary (1024)" "8 batch tiers (s5cmd)" "9 tagging")
 fi
 if tier_at_least slow; then
-  PLAN_ORDER+=("10 pagination (64K)" "11 list stress (64K upload)" "12 list buckets stress (1K buckets)" "13 gc delete queue")
+  PLAN_ORDER+=("10 pagination (64K)" "11 list stress (64K upload)" "12 list buckets stress (1K buckets)" "13 gc delete queue" "14 batch mixed s3")
 fi
 if [[ "${TIER}" == "chaos" ]]; then
   PLAN_ORDER+=("14 kill instance" "14b reload restore (3)" "15 power-cycle easy" "16 power-cycle hard")
@@ -281,6 +281,10 @@ phase_gc_delete_queue() {
   "${ROOT}/scripts/test_gc_delete_queue.sh"
 }
 
+phase_batch_mixed() {
+  "${ROOT}/scripts/test_batch_mixed.sh"
+}
+
 phase_kill_instance() {
   "${ROOT}/scripts/test_kill_single_instance.sh"
 }
@@ -322,6 +326,7 @@ if tier_at_least slow; then
   run_phase "11 list stress (64K upload)" phase_stress
   run_phase "12 list buckets stress (1K buckets)" phase_list_buckets_stress
   run_phase "13 gc delete queue" phase_gc_delete_queue
+  run_phase "14 batch mixed s3" phase_batch_mixed
 fi
 
 if [[ "${TIER}" == "chaos" ]]; then

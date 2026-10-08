@@ -31,7 +31,7 @@ class GcConfigState {
   uint32_t active_age() const;
   GcConfigSnapshot snapshot() const;
   GcPolicy active_policy_copy() const;
-  void maybe_apply_pending();
+  bool maybe_apply_pending();
 
  private:
   mutable std::mutex mu_;

@@ -46,8 +46,8 @@ enum VersioningState : uint8_t {
   VERSIONING_SUSPENDED = 2,
 };
 
-inline constexpr uint32_t kDefaultMaxInline = 0;
-inline constexpr uint32_t kDefaultMaxKvStore = 0;
+inline constexpr uint32_t kDefaultMaxInline = 256;
+inline constexpr uint32_t kDefaultMaxKvStore = 4096;
 inline constexpr bool kDefaultKvStoreCoalescing = false;
 
 inline constexpr size_t kRefTagSize = 12;
@@ -73,7 +73,8 @@ inline constexpr std::string_view kLocalCounterTenantId = "tenant_id";
 inline constexpr std::string_view kLocalCounterBucketId = "bucket_id";
 inline constexpr std::string_view kLocalCounterRgwId = "rgw_id";
 
-inline constexpr int kMaxBatchSize = 16;
+inline constexpr int kMaxBatchSize = 20;
+inline constexpr int kMaxGroupPoSize = 8;
 
 inline constexpr size_t AWS_MaxMetadataBytes = 2048;
 inline constexpr size_t AWS_MaxObjectNameLen = 1024;

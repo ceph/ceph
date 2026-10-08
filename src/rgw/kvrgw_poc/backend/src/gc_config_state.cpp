@@ -55,19 +55,20 @@ GcPolicy GcConfigState::active_policy_copy() const
   return active_policy_;
 }
 
-void GcConfigState::maybe_apply_pending()
+bool GcConfigState::maybe_apply_pending()
 {
   if (active_age_.load(std::memory_order_acquire) ==
       pending_age_.load(std::memory_order_acquire)) {
-    return;
+    return false;
   }
   std::lock_guard lock(mu_);
   if (active_age_ == pending_age_) {
-    return;
+    return false;
   }
   active_policy_ = pending_policy_;
   active_age_.store(pending_age_.load(std::memory_order_relaxed),
                     std::memory_order_release);
+  return true;
 }
 
 } // namespace kvrgw

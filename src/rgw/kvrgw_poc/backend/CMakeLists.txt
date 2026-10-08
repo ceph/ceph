@@ -196,6 +196,21 @@ set_target_properties(kvrgw_c_abi_test PROPERTIES
   INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
 )
 
+add_executable(batch_mixed_test
+  tests/batch_mixed_test.cpp
+)
+target_include_directories(batch_mixed_test PRIVATE
+  "${CMAKE_SOURCE_DIR}/src"
+  "${FDB_INCLUDE_DIR}"
+  ${YAML_CPP_INCLUDE_DIRS}
+)
+target_link_directories(batch_mixed_test PRIVATE "${FDB_LIB_DIR}")
+target_link_libraries(batch_mixed_test PRIVATE kvrgw)
+set_target_properties(batch_mixed_test PROPERTIES
+  BUILD_RPATH "${FDB_LIB_DIR};$ORIGIN"
+  INSTALL_RPATH "${FDB_LIB_DIR};$ORIGIN"
+)
+
 enable_testing()
 add_test(NAME object_value_test COMMAND object_value_test)
 add_test(NAME l_key_test COMMAND l_key_test)
@@ -205,3 +220,4 @@ add_test(NAME gc_config_state_test COMMAND gc_config_state_test)
 add_test(NAME fdb_error_test COMMAND fdb_error_test)
 add_test(NAME data_store_error_test COMMAND data_store_error_test)
 add_test(NAME err_insertion_test COMMAND err_insertion_test)
+add_test(NAME batch_mixed_test COMMAND batch_mixed_test)

@@ -19,6 +19,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <string>
+#include <string_view>
 
 namespace kvrgw {
 
@@ -31,6 +33,9 @@ class Sweeper {
 
  private:
   void sweep_once();
+  void sweep_range(std::string_view prefix, std::string_view end, bool force);
+  void process_group_po_entry(std::string_view key, std::string_view value, int64_t now);
+  static std::string compute_exclusive_end(std::string_view prefix);
 
   KvStore& store_;
   std::atomic<bool>& stop_flag_;

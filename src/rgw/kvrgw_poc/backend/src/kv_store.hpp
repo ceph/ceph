@@ -181,19 +181,38 @@ struct TxnStats {
 };
 
 struct FdbPutStats {
-  std::atomic<uint64_t> num_put{0};
+  // Three independent counters. num_keys and num_bucket_names are recorded
+  // together in put_object() (same call site, so always numerically equal)
+  // but measure unrelated quantities. num_values is recorded separately in
+  // put_finalize() and can differ (e.g. txn retries) from the other two.
+  std::atomic<uint64_t> num_keys{0};
   std::atomic<uint64_t> key_bytes{0};
+  std::atomic<uint64_t> num_bucket_names{0};
+  std::atomic<uint64_t> bucket_name_bytes{0};
+  std::atomic<uint64_t> num_values{0};
   std::atomic<uint64_t> value_bytes{0};
 
-  void record(size_t key_len, size_t value_len) {
-    num_put.fetch_add(1, std::memory_order_relaxed);
-    key_bytes.fetch_add(key_len, std::memory_order_relaxed);
-    value_bytes.fetch_add(value_len, std::memory_order_relaxed);
+  void record_key(size_t len) {
+    num_keys.fetch_add(1, std::memory_order_relaxed);
+    key_bytes.fetch_add(len, std::memory_order_relaxed);
+  }
+
+  void record_bucket_name(size_t len) {
+    num_bucket_names.fetch_add(1, std::memory_order_relaxed);
+    bucket_name_bytes.fetch_add(len, std::memory_order_relaxed);
+  }
+
+  void record_value(size_t len) {
+    num_values.fetch_add(1, std::memory_order_relaxed);
+    value_bytes.fetch_add(len, std::memory_order_relaxed);
   }
 
   void reset() {
-    num_put.store(0, std::memory_order_relaxed);
+    num_keys.store(0, std::memory_order_relaxed);
     key_bytes.store(0, std::memory_order_relaxed);
+    num_bucket_names.store(0, std::memory_order_relaxed);
+    bucket_name_bytes.store(0, std::memory_order_relaxed);
+    num_values.store(0, std::memory_order_relaxed);
     value_bytes.store(0, std::memory_order_relaxed);
   }
 };

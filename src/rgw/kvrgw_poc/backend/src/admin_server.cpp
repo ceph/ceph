@@ -220,6 +220,7 @@ std::string AdminServer::handle_line(const std::string &line)
     if (!handle) {
       return "BUSY";
     }
+    tier_config_.maybe_apply_pending();
     return "OK HANDLE=" + std::to_string(*handle);
   }
 
@@ -382,10 +383,10 @@ std::string AdminServer::handle_line(const std::string &line)
       return "ERROR batch stats not available";
     }
     auto now = std::chrono::steady_clock::now();
-    int64_t bc = batch_stats_->batch_commits.load(std::memory_order_relaxed);
+    int64_t bc = batch_stats_->attempted_batch_commits.load(std::memory_order_relaxed);
     int64_t te =
-        batch_stats_->total_entries_batched.load(std::memory_order_relaxed);
-    int64_t tw = batch_stats_->total_wait_us.load(std::memory_order_relaxed);
+        batch_stats_->attempted_total_entries_batch.load(std::memory_order_relaxed);
+    int64_t tw = batch_stats_->attempted_total_wait_us.load(std::memory_order_relaxed);
     int64_t tq = batch_stats_->total_queue_size_at_extract.load(
         std::memory_order_relaxed);
     double avg_bs = bc > 0 ? static_cast<double>(te) / bc : 0;
@@ -415,19 +416,43 @@ std::string AdminServer::handle_line(const std::string &line)
     bs_prev_queue_ = tq;
 
     std::ostringstream out;
-    out << "batch_commits=" << bc << " entries_batched=" << te
+    out << "attempted_batch_commits=" << bc
+        << " attempted_entries_batched=" << te
+        << " attempted_single_entry_batches="
+        << batch_stats_->attempted_single_entry_batches.load(std::memory_order_relaxed)
+        << " attempted_inline_only_batch_commits="
+        << batch_stats_->attempted_inline_only_batch_commits.load(std::memory_order_relaxed)
+        << " attempted_inline_only_batch_entries="
+        << batch_stats_->attempted_inline_only_batch_entries.load(std::memory_order_relaxed)
         << " conflict_pushbacks="
         << batch_stats_->conflict_pushbacks.load(std::memory_order_relaxed)
-        << " avg_batch_size=" << std::fixed << std::setprecision(1) << avg_bs
-        << " min_batch_size="
-        << batch_stats_->min_batch_size.load(std::memory_order_relaxed)
-        << " max_batch_size="
-        << batch_stats_->max_batch_size.load(std::memory_order_relaxed)
+        << " attempted_avg_batch_size=" << std::fixed << std::setprecision(1) << avg_bs
+        << " attempted_min_batch_size="
+        << batch_stats_->attempted_min_batch_size.load(std::memory_order_relaxed)
+        << " attempted_max_batch_size="
+        << batch_stats_->attempted_max_batch_size.load(std::memory_order_relaxed)
         << " avg_queue_size=" << std::setprecision(1) << avg_qsz
-        << " avg_wait_us=" << avg_wait << " min_wait_us="
-        << batch_stats_->min_wait_us.load(std::memory_order_relaxed)
-        << " max_wait_us="
-        << batch_stats_->max_wait_us.load(std::memory_order_relaxed)
+        << " attempted_avg_wait_us=" << avg_wait
+        << " attempted_min_wait_us="
+        << batch_stats_->attempted_min_wait_us.load(std::memory_order_relaxed)
+        << " attempted_max_wait_us="
+        << batch_stats_->attempted_max_wait_us.load(std::memory_order_relaxed)
+        << " committed_batch_commits="
+        << batch_stats_->committed_batch_commits.load(std::memory_order_relaxed)
+        << " committed_total_entries="
+        << batch_stats_->committed_total_entries.load(std::memory_order_relaxed)
+        << " committed_single_entry_batches="
+        << batch_stats_->committed_single_entry_batches.load(std::memory_order_relaxed)
+        << " committed_inline_only_batch_commits="
+        << batch_stats_->committed_inline_only_batch_commits.load(std::memory_order_relaxed)
+        << " committed_inline_only_batch_entries="
+        << batch_stats_->committed_inline_only_batch_entries.load(std::memory_order_relaxed)
+        << " fallback_to_single_count="
+        << batch_stats_->fallback_to_single_count.load(std::memory_order_relaxed)
+        << " fallback_to_single_entries="
+        << batch_stats_->fallback_to_single_entries.load(std::memory_order_relaxed)
+        << " single_txn_puts="
+        << batch_stats_->single_txn_puts.load(std::memory_order_relaxed)
         << " entries_hz=" << std::setprecision(0) << entries_hz
         << " commits_hz=" << std::setprecision(0) << commits_hz
         << " interval_wait_us=" << std::setprecision(0) << interval_wait_us

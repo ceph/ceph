@@ -373,7 +373,6 @@ KvTransaction::kv_wait_range(FdbFuture &f, bool *more)
 //---------------------------------------------------------------------------------
 void KvTransaction::kv_put(std::string_view key, std::string_view value)
 {
-  store_.fdb_put_stats().record(key.size(), value.size());
   fdb_transaction_set(impl_->tr, reinterpret_cast<const uint8_t *>(key.data()),
                       static_cast<int>(key.size()),
                       reinterpret_cast<const uint8_t *>(value.data()),

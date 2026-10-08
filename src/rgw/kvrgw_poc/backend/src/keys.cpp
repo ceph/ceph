@@ -173,7 +173,7 @@ std::optional<std::string_view> parse_bucket_key_view(std::string_view key)
 
 void make_object_key(bucket_id_t bucket_id, std::string_view object_name, KeyBuf& out)
 {
-  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id.view(), kCategoryObject);
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryObject);
   out.set_header(hdr);
   out.append(object_name.data(), object_name.size());
 }
@@ -188,7 +188,7 @@ KeyBuf make_object_key(bucket_id_t bucket_id, std::string_view object_name)
 KeyBuf make_object_prefix(bucket_id_t bucket_id)
 {
   KeyBuf key;
-  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id.view(), kCategoryObject);
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryObject);
   key.set_header(hdr);
   return key;
 }
@@ -196,7 +196,7 @@ KeyBuf make_object_prefix(bucket_id_t bucket_id)
 KeyBuf make_version_prefix(bucket_id_t bucket_id)
 {
   KeyBuf key;
-  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id.view(), kCategoryVersion);
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryVersion);
   key.set_header(hdr);
   return key;
 }
@@ -257,72 +257,64 @@ std::optional<ObjectKeyPartsView> parse_object_key_parts_view(std::string_view k
   return parts;
 }
 
-void make_po_key(bucket_id_t bucket_id, std::string_view object_name,
-                 std::string_view ref_tag_bytes, KeyBuf& out)
+void make_po_key(bucket_id_t bucket_id, std::string_view ref_tag_bytes, KeyBuf& out)
 {
-  KeyHeaderS hdr('P', kShardCount, kShardId, bucket_id.view(), kOpTypeObject);
+  KeyHeaderPO hdr(bucket_id);
   out.set_header(hdr);
-  out.append(object_name.data(), object_name.size());
   out.append(ref_tag_bytes.data(), ref_tag_bytes.size());
 }
 
-void make_group_po_key(bucket_id_t bucket_id, std::string_view group_ref_tag,
-                       KeyBuf& out)
+void make_group_po_key(std::string_view group_ref_tag, KeyBuf& out)
 {
-  KeyHeaderS hdr('P', kShardCount, kShardId, bucket_id.view(), kOpTypeGroup);
+  KeyHeaderPOGroup hdr{};
   out.set_header(hdr);
   out.append(group_ref_tag.data(), group_ref_tag.size());
 }
 
-KeyBuf make_p_prefix(uint16_t shard_count, uint16_t shard_id)
+KeyBuf make_p_prefix()
 {
   KeyBuf key;
   key.data[0] = static_cast<uint8_t>(kNamespacePending);
   key.len = 1;
-  uint16_t sc_net = htons(shard_count);
-  uint16_t si_net = htons(shard_id);
-  key.append(&sc_net, 2);
-  key.append(&si_net, 2);
   return key;
 }
 
 KeyBuf make_p_bucket_prefix(bucket_id_t bucket_id)
 {
   KeyBuf key;
-  KeyHeaderS hdr('P', kShardCount, kShardId, bucket_id.view(), kOpTypeObject);
+  KeyHeaderPO hdr(bucket_id);
   key.set_header(hdr);
   return key;
 }
 
+// Single P:O key: [ns='P'][bucket_id 8B][cat='O'][ref_tag 12B] = 22B
 std::optional<PoKeyParts> parse_po_key(std::string_view key)
 {
-  constexpr size_t kPoFixedSuffixSize = kRefTagSize;
-  constexpr size_t kHdrSize = sizeof(KeyHeaderS);
-  if (key.size() < kHdrSize + kPoFixedSuffixSize || key[0] != kNamespacePending ||
-      key[offsetof(KeyHeaderS, cat)] != kOpTypeObject) [[unlikely]] {
+  constexpr size_t kPoKeySize = sizeof(KeyHeaderPO) + kRefTagSize;
+  if (key.size() != kPoKeySize || key[0] != kNamespacePending ||
+      key[offsetof(KeyHeaderPO, cat)] != kCategoryObject) [[unlikely]] {
     return std::nullopt;
   }
   PoKeyParts parts;
-  uint16_t sc_net{}, si_net{};
-  std::memcpy(&sc_net, key.data() + offsetof(KeyHeaderS, shard_count), sizeof(sc_net));
-  std::memcpy(&si_net, key.data() + offsetof(KeyHeaderS, shard_id), sizeof(si_net));
-  parts.shard_count = be16toh(sc_net);
-  parts.shard_id = be16toh(si_net);
-  parts.bucket_id.load(key.data() + offsetof(KeyHeaderS, bucket_id));
-  parts.object_name.assign(
-      key.substr(kHdrSize, key.size() - kHdrSize - kPoFixedSuffixSize));
-  parts.ref_tag.load(key.data() + key.size() - kPoFixedSuffixSize);
-  if (parts.object_name.empty()) {
-    return std::nullopt;
-  }
+  parts.bucket_id.load(key.data() + offsetof(KeyHeaderPO, bucket_id));
+  parts.ref_tag.load(key.data() + sizeof(KeyHeaderPO));
   return parts;
+}
+
+// Group P:O key: [ns='P'][cat='G'][ref_tag_0 12B] = 14B
+bool parse_group_po_key(std::string_view key)
+{
+  constexpr size_t kGroupPoKeySize = sizeof(KeyHeaderPOGroup) + kRefTagSize;
+  return key.size() == kGroupPoKeySize &&
+         key[0] == kNamespacePending &&
+         key[offsetof(KeyHeaderPOGroup, cat)] == kOpTypeGroup;
 }
 
 void make_go_key(uint16_t shard_count, uint16_t shard_id, bucket_id_t bucket_id,
                  std::string_view ref_tag_bytes, uint64_t object_size, KeyBuf& out)
 {
   KeyHeaderG hdr(size_tier_from_size(object_size), shard_count, shard_id,
-                 bucket_id.view(), kCategoryObject);
+                 bucket_id, kCategoryObject);
   out.set_header(hdr);
   out.append(ref_tag_bytes.data(), ref_tag_bytes.size());
 }
@@ -357,29 +349,9 @@ std::optional<GoKeyParts> parse_go_key(std::string_view key)
 void make_d_key(bucket_id_t bucket_id, uint8_t size_tier,
                 std::string_view ref_tag, uint32_t mtime, KeyBuf& out)
 {
-  KeyHeaderD hdr(kShardCount, kShardId, bucket_id.view(), size_tier,
+  KeyHeaderD hdr(kShardCount, kShardId, bucket_id, size_tier,
                  d_hash_prefix(ref_tag), mtime, ref_tag.data());
   out.set_header(hdr);
-}
-
-KeyBuf make_d_bucket_prefix(bucket_id_t bucket_id)
-{
-  KeyBuf key;
-  key.data[0] = static_cast<uint8_t>(kNamespaceData);
-  key.len = 1;
-  uint16_t sc_net = htons(kShardCount);
-  uint16_t si_net = htons(kShardId);
-  key.append(&sc_net, 2);
-  key.append(&si_net, 2);
-  key.append(static_cast<const void*>(bucket_id.view().data()), kBucketIdSize);
-  return key;
-}
-
-KeyBuf make_d_bucket_tier_prefix(bucket_id_t bucket_id, uint8_t size_tier)
-{
-  KeyBuf key = make_d_bucket_prefix(bucket_id);
-  key.append(&size_tier, 1);
-  return key;
 }
 
 std::optional<DKeyParts> parse_d_key(std::string_view key)
@@ -407,7 +379,7 @@ std::optional<DKeyParts> parse_d_key(std::string_view key)
 void make_v_key(bucket_id_t bucket_id, std::string_view object_name,
                 version_id_t version_id, KeyBuf& out)
 {
-  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id.view(), kCategoryVersion);
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryVersion);
   out.set_header(hdr);
   out.append(object_name.data(), object_name.size());
   out.append_byte('\0');
@@ -419,7 +391,7 @@ void make_v_key(bucket_id_t bucket_id, std::string_view object_name,
 KeyBuf make_v_prefix(bucket_id_t bucket_id, std::string_view object_name)
 {
   KeyBuf key;
-  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id.view(), kCategoryVersion);
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryVersion);
   key.set_header(hdr);
   key.append(object_name.data(), object_name.size());
   key.append_byte('\0');
@@ -482,7 +454,7 @@ KeyBuf make_r_key(std::string_view ref_tag)
 
 void make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
 {
-  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id.view(), kCategoryChild);
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryChild);
   out.set_header(hdr);
   out.append(ref_tag.data(), ref_tag.size());
   const char child_type = kChildTypeTags;
@@ -491,54 +463,29 @@ void make_ct_key(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
 
 void make_c_prefix(bucket_id_t bucket_id, std::string_view ref_tag, KeyBuf& out)
 {
-  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id.view(), kCategoryChild);
+  KeyHeaderS hdr('S', kShardCount, kShardId, bucket_id, kCategoryChild);
   out.set_header(hdr);
   out.append(ref_tag.data(), ref_tag.size());
 }
 
-std::optional<GroupPoKeyParts> parse_group_po_key(std::string_view key)
-{
-  constexpr size_t kGroupPoKeySize = sizeof(KeyHeaderS) + kRefTagSize;
-  if (key.size() != kGroupPoKeySize || key[0] != kNamespacePending ||
-      key[offsetof(KeyHeaderS, cat)] != kOpTypeGroup) [[unlikely]] {
-    return std::nullopt;
-  }
-  GroupPoKeyParts parts;
-  uint16_t sc_net{}, si_net{};
-  std::memcpy(&sc_net, key.data() + offsetof(KeyHeaderS, shard_count), sizeof(sc_net));
-  std::memcpy(&si_net, key.data() + offsetof(KeyHeaderS, shard_id), sizeof(si_net));
-  parts.shard_count = be16toh(sc_net);
-  parts.shard_id = be16toh(si_net);
-  parts.bucket_id.load(key.data() + offsetof(KeyHeaderS, bucket_id));
-  parts.group_ref_tag.load(key.data() + sizeof(KeyHeaderS));
-  return parts;
-}
-
-KeyBuf make_group_go_key(bucket_id_t bucket_id, std::string_view group_ref_tag)
+KeyBuf make_group_go_key(std::string_view ref_tag)
 {
   KeyBuf key;
-  KeyHeaderG hdr(0, kShardCount, kShardId, bucket_id.view(), kOpTypeGroup);
+  KeyHeaderGGroup hdr{};
   key.set_header(hdr);
-  key.append(group_ref_tag.data(), group_ref_tag.size());
+  key.append(ref_tag.data(), ref_tag.size());
   return key;
 }
 
 std::optional<GroupGoKeyParts> parse_group_go_key(std::string_view key)
 {
-  constexpr size_t kGroupGoKeySize = sizeof(KeyHeaderG) + kRefTagSize;
+  constexpr size_t kGroupGoKeySize = sizeof(KeyHeaderGGroup) + kRefTagSize;
   if (key.size() != kGroupGoKeySize || key[0] != kNamespaceGc ||
-      key[offsetof(KeyHeaderG, cat)] != kOpTypeGroup) [[unlikely]] {
+      key[offsetof(KeyHeaderGGroup, cat)] != kOpTypeGroup) [[unlikely]] {
     return std::nullopt;
   }
   GroupGoKeyParts parts;
-  parts.size_tier = static_cast<uint8_t>(key[offsetof(KeyHeaderG, size_tier)]);
-  uint16_t sc_net{}, si_net{};
-  std::memcpy(&sc_net, key.data() + offsetof(KeyHeaderG, shard_count), sizeof(sc_net));
-  std::memcpy(&si_net, key.data() + offsetof(KeyHeaderG, shard_id), sizeof(si_net));
-  parts.shard_count = be16toh(sc_net);
-  parts.shard_id = be16toh(si_net);
-  parts.bucket_id.load(key.data() + offsetof(KeyHeaderG, bucket_id));
-  parts.group_ref_tag.load(key.data() + sizeof(KeyHeaderG));
+  parts.group_ref_tag.load(key.data() + sizeof(KeyHeaderGGroup));
   return parts;
 }
 
