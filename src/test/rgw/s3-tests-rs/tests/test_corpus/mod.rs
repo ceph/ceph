@@ -31,6 +31,7 @@
 
 mod names;
 mod shapes;
+mod lock;
 mod manifest;
 mod inventory;
 mod copy;

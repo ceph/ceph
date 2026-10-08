@@ -371,3 +371,83 @@ pub const COPY_COVERAGE: &[(CopySource, CopyDest, Directive, Directive)] = &[
     (CopySource::Multipart, CopyDest::OtherBucket, Directive::Copy, Directive::Copy),
     (CopySource::Plain, CopyDest::SelfSame, Directive::Replace, Directive::Copy),
 ];
+
+/// Object Lock state.
+///
+/// Worth its own axis because the two formats disagree about *shape*
+/// and not only about names.  NooBaa writes three plain attributes --
+/// `user.noobaa.legal_hold`, `retention_mode`, `retention_date` --
+/// where legal hold is the literal `ON` or `OFF`;  ours is a
+/// ceph-encoded `RGWObjectLegalHold`, and retention is two of their
+/// attributes against one of ours.  `NOOBAA_ONDISK_STABILITY.md` also
+/// names object lock as the part of their layout still moving, so this
+/// is the axis most likely to need revisiting.
+///
+/// `GovernanceThenHold` exists because the two are independent:  an
+/// object can carry retention and a legal hold at once, and removing
+/// one must not remove the other.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum LockClass {
+    None,
+    Governance,
+    Compliance,
+    LegalHoldOn,
+    LegalHoldOff,
+    GovernanceThenHold,
+    BucketDefault,
+}
+
+impl LockClass {
+    pub fn label(self) -> &'static str {
+        match self {
+            LockClass::None => "none",
+            LockClass::Governance => "gov",
+            LockClass::Compliance => "comp",
+            LockClass::LegalHoldOn => "hold-on",
+            LockClass::LegalHoldOff => "hold-off",
+            LockClass::GovernanceThenHold => "gov-hold",
+            LockClass::BucketDefault => "default",
+        }
+    }
+
+    /// The retention mode this class sets explicitly, if any.  The
+    /// bucket default is not set per object, which is the point of it.
+    pub fn retention(self) -> Option<&'static str> {
+        match self {
+            LockClass::Governance | LockClass::GovernanceThenHold => Some("GOVERNANCE"),
+            LockClass::Compliance => Some("COMPLIANCE"),
+            _ => None,
+        }
+    }
+
+    /// The legal hold this class sets explicitly, if any.
+    pub fn legal_hold(self) -> Option<&'static str> {
+        match self {
+            LockClass::LegalHoldOn | LockClass::GovernanceThenHold => Some("ON"),
+            LockClass::LegalHoldOff => Some("OFF"),
+            _ => None,
+        }
+    }
+}
+
+pub const LOCK_COVERAGE: &[LockClass] = &[
+    LockClass::None,
+    LockClass::Governance,
+    LockClass::Compliance,
+    LockClass::LegalHoldOn,
+    LockClass::LegalHoldOff,
+    LockClass::GovernanceThenHold,
+    LockClass::BucketDefault,
+];
+
+/// 2030-01-01T00:00:00Z, fixed rather than now-plus-an-offset.
+///
+/// A moving date would make every manifest differ from the last for a
+/// reason that is not a change in behaviour, and the corpus exists to
+/// be diffed.  Far enough out that nothing lapses mid-run.
+///
+/// The consequence is deliberate:  an object under COMPLIANCE
+/// retention cannot be deleted through S3 until this date, by anyone.
+/// The corpus tree is reset with `rgw-vstart.sh --clean`, which wipes
+/// the filesystem and does not go through S3 at all.
+pub const RETAIN_UNTIL_SECS: i64 = 1_893_456_000;
