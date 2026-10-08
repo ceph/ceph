@@ -10188,6 +10188,17 @@ public:
 
   void SetUp() override {
     NSFSNooBaaStateTest::SetUp();
+
+    /* The mode has to be `adopt`, because writing a bucket's state is
+     * a mutation and `serve` refuses mutations -- correctly:  a
+     * read-only view of a deployment is exactly what serve is for.
+     * These tests exercise the import, which is what `adopt` runs, so
+     * they say so.  Found by the full-suite run after they passed on
+     * their own, which is the mode gate working. */
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				  {{"mode", "adopt"}}, &out), 0);
+
     mapping.account_by_noobaa_id["6560e1f1c0ffee0000000002"] =
       "RGW11111111111111111";
     mapping.noobaa_id_by_name["their-acct"] = "6560e1f1c0ffee0000000002";
@@ -10355,6 +10366,191 @@ TEST_F(NooBaaBucketImportTest, WhatWaitsForAnotherStageIsReported)
   /* write_their_record() always writes a path under /ibm/gpfs, so the
    * path deferral is reached too */
   EXPECT_TRUE(path) << "a path outside the data root was not reported";
+}
+
+/* ------------------------------------------------------------------ *
+ * I6 -- the mode, and what it does.
+ *
+ * There is no endpoint and no operator verb:  the mode is read at
+ * startup and the import runs because of it.  The suite reaches it
+ * through the `adoption` driver hint, which is how an intrusive
+ * trigger stays out of a production surface.
+ * ------------------------------------------------------------------ */
+
+class NooBaaModeTest : public NSFSNooBaaStateTest {
+public:
+  /* The fixture's write_file() does not create parents, and an
+   * identity lives at identities/<id>/identity.json. */
+  void add_their_identity(const std::string& id, const std::string& record) {
+    const auto dir = conf_root() / "identities" / id;
+    std::filesystem::create_directories(dir);
+    write_file(dir / "identity.json", record);
+  }
+
+  /* The account `write_their_record()`'s bucket is owned by.
+   *
+   * Their bucket record names its owner by `_id`, and the bucket
+   * import refuses a bucket whose owner this run did not write -- so
+   * the account has to carry the id the record names, not an
+   * arbitrary one. */
+  static constexpr const char* THEIR_OWNER_ID =
+    "6560e1f1c0ffee0000000002";
+
+  void add_the_owning_account() {
+    std::string rec{NB_ACCOUNT_PLAIN};
+    const std::string from = "6ac7cb27fd4af356919110a3";
+    for (auto at = rec.find(from); at != std::string::npos;
+	 at = rec.find(from)) {
+      rec.replace(at, from.size(), THEIR_OWNER_ID);
+    }
+    add_their_identity(THEIR_OWNER_ID, rec);
+  }
+
+  std::map<std::string, std::string> ask(
+      const std::map<std::string, std::string>& params = {}) {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "adoption", params, &out), 0);
+    return out;
+  }
+};
+
+/* The default is serve, and serve serves read-only.
+ *
+ * Writes are refused because they would be incomplete, not because
+ * they are impossible:  their arrangement has nowhere to put an ACL,
+ * so a write cannot record one, and an object written half into their
+ * shape is one neither gateway reads correctly afterwards.  What is
+ * left is a readable view of a deployment nothing has changed on
+ * disk, which is what keeps the decision reversible.
+ */
+TEST_F(NooBaaModeTest, ServeIsTheDefaultAndRefusesWrites)
+{
+  auto st = ask();
+  EXPECT_EQ(st["configured"], "true") << "the fixture has a store";
+  EXPECT_EQ(st["mode"], "serve") << "the default changed";
+  EXPECT_EQ(st["read_only"], "true");
+
+  /* A write, through the gate every mutation takes. */
+  EXPECT_EQ(driver->mutation_enter(env->dpp, testname),
+	    -ERR_METHOD_NOT_ALLOWED);
+
+  /* adopt lifts it, which is the other polarity -- a refusal that
+   * cannot be lifted would say nothing about the mode */
+  st = ask({{"mode", "adopt"}});
+  EXPECT_EQ(st["mode"], "adopt");
+  EXPECT_EQ(st["read_only"], "false");
+  EXPECT_EQ(driver->mutation_enter(env->dpp, testname), 0);
+  driver->mutation_leave(testname);
+}
+
+/* The mode is inert without a store.
+ *
+ * An ordinary nsfs deployment has nothing to adopt, so the option must
+ * not change it by existing.  This is the fixture *without* a NooBaa
+ * configuration root, which is every deployment today. */
+TEST_F(NSFSBucketTest, TheAdoptionModeIsInertWithoutAStore)
+{
+  std::map<std::string, std::string> out;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "adoption", {}, &out), 0);
+  EXPECT_EQ(out["configured"], "false");
+  EXPECT_EQ(out["read_only"], "false")
+      << "a deployment with nothing to adopt was made read-only";
+
+  /* and writes work, which is the whole point */
+  EXPECT_EQ(driver->mutation_enter(env->dpp, testname), 0);
+  driver->mutation_leave(testname);
+}
+
+/* serve runs no import, and says why.
+ *
+ * Asking it to run in serve mode is not an error -- it is the mode
+ * doing what it says -- so the hint reports rather than failing. */
+TEST_F(NooBaaModeTest, ServeImportsNothing)
+{
+  auto st = ask({{"run", "true"}});
+  EXPECT_EQ(st["ran"], "false");
+  EXPECT_EQ(st["why"], "the mode is serve");
+  EXPECT_TRUE(st.find("accounts") == st.end())
+      << "serve got as far as importing";
+}
+
+/* adopt runs the import, over the store the fixture points at.
+ *
+ * End to end through the one entry point a deployment has:  phases 0
+ * to 2, reported back through the hint so a test can see what each
+ * phase did. */
+TEST_F(NooBaaModeTest, AdoptRunsTheImport)
+{
+  /* an identity and a bucket record of theirs */
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_their_record("ENABLED");
+
+  auto st = ask({{"mode", "adopt"}, {"run", "true"}});
+  EXPECT_EQ(st["ran"], "true") << "mode=" << st["mode"]
+			       << " error=" << st["error"];
+  EXPECT_EQ(st["accounts"], "1");
+  EXPECT_EQ(st["users"], "1");
+  EXPECT_EQ(st["identity_rows"], "1");
+
+  /* the credential their record carried now authenticates */
+  std::unique_ptr<rgw::sal::User> user;
+  EXPECT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+
+  /* and a second run is a no-op, because re-running is the recovery */
+  auto again = ask({{"run", "true"}});
+  EXPECT_EQ(again["ran"], "true");
+  EXPECT_EQ(again["accounts"], "0");
+  EXPECT_EQ(again["accounts_present"], "1");
+}
+
+/* A store that will not preflight is refused before anything is
+ * written, which is the point of phase 0. */
+TEST_F(NooBaaModeTest, APreflightFailureWritesNothing)
+{
+  /* a record that does not parse */
+  add_their_identity("bad", "{ not json");
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+
+  std::map<std::string, std::string> out;
+  const int ret = driver->driver_hint(
+      env->dpp, "adoption", {{"mode", "adopt"}, {"run", "true"}}, &out);
+  EXPECT_LT(ret, 0);
+  EXPECT_EQ(out["ran"], "false");
+  EXPECT_EQ(out["unreadable"], "1");
+  EXPECT_TRUE(out.find("accounts") == out.end())
+      << "a preflight failure got as far as writing";
+}
+
+/* convert adopts and says the rewrite did not run.
+ *
+ * An operator who asked for convert should learn that the second half
+ * -- rewriting each bucket's objects into our arrangement -- is the
+ * conversion chain and has not run, rather than being quietly given
+ * adopt. */
+TEST_F(NooBaaModeTest, ConvertAdoptsAndSaysTheRewriteDidNotRun)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_their_record("DISABLED");
+
+  auto st = ask({{"mode", "convert"}, {"run", "true"}});
+  EXPECT_EQ(st["mode"], "convert");
+  EXPECT_EQ(st["ran"], "true") << st["error"];
+  EXPECT_EQ(st["accounts"], "1");
+  EXPECT_EQ(st["converted"], "false")
+      << "convert claimed to have rewritten objects";
+}
+
+/* An unknown mode is refused rather than guessed. */
+TEST_F(NooBaaModeTest, AnUnknownModeIsRefused)
+{
+  std::map<std::string, std::string> out;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"mode", "sideways"}}, &out), -EINVAL);
+  /* and the mode it had is unchanged */
+  EXPECT_EQ(ask()["mode"], "serve");
 }
 
 int main(int argc, char *argv[]) {

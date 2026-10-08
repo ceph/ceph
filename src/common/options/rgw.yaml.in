@@ -4708,6 +4708,28 @@ options:
   default: /var/lib/ceph/radosgw
   services:
   - rgw
+- name: rgw_nsfs_adoption_mode
+  type: str
+  level: advanced
+  desc: What this gateway is doing with the tree it has been pointed at
+  long_desc: Governs adoption of a NooBaa deployment, and has meaning only
+    when rgw_nsfs_noobaa_config_root names a configuration store;  with no
+    store there is nothing to adopt and this is inert.  "serve" (default)
+    imports nothing and marks nothing, and serves the trees read-only as
+    NooBaa arranged them -- a readable view of a deployment nothing has
+    changed on disk, so the decision to adopt stays reversible.  "adopt"
+    imports the accounts and bucket state and lets an adopted bucket serve
+    reads and writes.  "convert" adopts and then rewrites each bucket's
+    objects into RGW's arrangement.  Read at startup;  failures are
+    reported to the log.
+  default: serve
+  enum_values:
+  - serve
+  - adopt
+  - convert
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_nsfs_noobaa_config_root
   type: str
   level: advanced

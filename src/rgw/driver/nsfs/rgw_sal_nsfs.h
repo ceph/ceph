@@ -627,6 +627,24 @@ protected:
    * because which format a bucket is in is not known until it is
    * loaded, and constructing a strategy costs nothing. */
   std::unique_ptr<nsfs::BucketStateStrategy> bucket_state_strategy;
+  /* What this gateway is doing with the tree it was pointed at.
+   *
+   * `NSFS_ADOPTION.md` §7.  Meaningful only when a NooBaa
+   * configuration store is configured:  with no store there is
+   * nothing to adopt, so the mode is inert and an ordinary nsfs
+   * deployment behaves as it always has.
+   *
+   * `serve` is the default and is deliberately the conservative one.
+   * Nothing is imported, nothing is marked, and **writes are
+   * refused** -- not because they are impossible, but because they
+   * would be incomplete:  their arrangement has nowhere to put an ACL,
+   * so a write cannot record one, and an object written half into
+   * their shape is one neither gateway reads correctly afterwards.
+   * The result is a readable view of a deployment nothing has changed
+   * on disk, which is what keeps the decision to adopt reversible. */
+  enum class AdoptionMode { Serve, Adopt, Convert };
+  AdoptionMode adoption_mode{AdoptionMode::Serve};
+
   /* null unless rgw_nsfs_noobaa_config_root names a store */
   std::unique_ptr<nsfs::BucketStateStrategy> nb_bucket_state_strategy;
   std::unique_ptr<nsfs::XattrStrategy> nb_xattr_strategy;
@@ -1108,6 +1126,30 @@ public:
     mutation_gate_wait = mutation;
     gate_drain_wait = drain;
   }
+
+  AdoptionMode get_adoption_mode() const { return adoption_mode; }
+
+  /* Whether the mode governs anything.  It does not without a store
+   * to adopt from, which is what keeps this option from changing an
+   * ordinary deployment by existing. */
+  bool adoption_configured() const {
+    return nb_bucket_state_strategy != nullptr;
+  }
+
+  /* Writes are refused in `serve` mode, and in that mode only.
+   *
+   * Nothing is ever marked in `serve`, so every bucket is unadopted
+   * by definition and the refusal needs no per-bucket question.  In
+   * `adopt` it becomes one, which is the per-bucket marker's and not
+   * this. */
+  bool serving_read_only() const {
+    return adoption_configured() && (adoption_mode == AdoptionMode::Serve);
+  }
+
+  /* Run the import, if the mode says to.  Called once at startup, and
+   * by the `adoption` driver hint so the suite can drive it. */
+  int run_adoption(const DoutPrefixProvider* dpp, optional_yield y,
+		   std::map<std::string, std::string>* report = nullptr);
 
   int driver_hint(const DoutPrefixProvider* dpp,
 		  const std::string& hint,

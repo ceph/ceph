@@ -46,6 +46,15 @@
 #include "common/errno.h"
 #include "rgw_lc.h"
 
+/* I6:  the import the adoption mode runs.  These are the only place
+ * the request path reaches the adopt code, and it reaches it once, at
+ * startup. */
+#include "adopt/noobaa_config_store.h"
+#include "adopt/noobaa_master_keys.h"
+#include "adopt/noobaa_import_plan.h"
+#include "adopt/noobaa_import.h"
+#include "adopt/noobaa_bucket_import.h"
+
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
@@ -3599,6 +3608,31 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
 	std::make_unique<nsfs::NooBaaBucketStateStrategy>(nb_root);
       ldpp_dout(dpp, 1) << "nsfs: reading NooBaa bucket state from "
 	<< nb_root << dendl;
+
+      /* The mode, read beside the store it governs.  Read here and
+       * not earlier because it means nothing without one. */
+      const auto& m =
+	g_conf().get_val<std::string>("rgw_nsfs_adoption_mode");
+      if (m == "adopt") {
+	adoption_mode = AdoptionMode::Adopt;
+      } else if (m == "convert") {
+	adoption_mode = AdoptionMode::Convert;
+      } else {
+	adoption_mode = AdoptionMode::Serve;
+	if (!m.empty() && (m != "serve")) {
+	  /* The option is an enum, so this is a deployment that got
+	   * past validation somehow;  the safe reading is the one that
+	   * changes nothing on disk. */
+	  ldpp_dout(dpp, 0) << "ERROR: rgw_nsfs_adoption_mode is \"" << m
+	    << "\", which is none of serve, adopt or convert;  serving "
+	    << "read-only" << dendl;
+	}
+      }
+      ldpp_dout(dpp, 1) << "nsfs: adoption mode " << m
+	<< (adoption_mode == AdoptionMode::Serve
+	      ? ";  this deployment is served read-only until it is adopted"
+	      : "")
+	<< dendl;
     }
   }
 
@@ -3965,6 +3999,23 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
   if (!RGWPubSubEndpoint::init_all(cct)) {
     ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
+  }
+
+  /* I6.  The import runs because the mode says so, and nothing else
+   * invokes it (`ACCOUNT_IMPORT.md` §9).  Last, so everything it needs
+   * -- the strategies, the root, the database -- is up.
+   *
+   * **A failed import does not fail startup.**  It reports to the log
+   * and the gateway comes up, because the tree is still readable and
+   * refusing to start would take away the one thing an operator can
+   * use to see what went wrong.  Re-running is the recovery, and the
+   * mode still says to, so a restart retries it. */
+  if (adoption_configured() && (adoption_mode != AdoptionMode::Serve)) {
+    if (int r = run_adoption(dpp, null_yield); r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: adoption did not finish: "
+	<< cpp_strerror(-r) << ";  the deployment is readable and a "
+	<< "restart will retry it" << dendl;
+    }
   }
 
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
@@ -6953,6 +7004,25 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 int NSFSDriver::mutation_enter(const DoutPrefixProvider* dpp,
 			       const std::string& bucket)
 {
+  /* `serve` mode refuses every mutation, and this is the only place it
+   * has to say so.
+   *
+   * The enumeration above is why:  the gate is already taken at every
+   * mutating SAL entry point and in `get_fsio_handle()`, so a refusal
+   * here reaches the request path and the FSIO path alike without a
+   * second list to keep in step.  Serve mode is the same mechanism as
+   * the conversion gate with a different reason and no reopening.
+   *
+   * MethodNotAllowed rather than AccessDenied:  nothing about the
+   * caller's identity is wrong, and the gateway is not going to
+   * perform this operation on this tree in this mode. */
+  if (serving_read_only()) {
+    ldpp_dout(dpp, 4) << "nsfs: refusing a write to " << bucket
+      << ": rgw_nsfs_adoption_mode is serve, so this deployment is "
+      << "served read-only until it is adopted" << dendl;
+    return -ERR_METHOD_NOT_ALLOWED;
+  }
+
   std::unique_lock l{gate_lock};
   auto& g = bucket_gates[bucket];
   if (g.closed) {
@@ -13503,6 +13573,156 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
   mgr->register_resource("nsfs", nsfs_mgr);
 }
 
+/* The import, phases 0 to 2, in the order ACCOUNT_IMPORT.md §6.1 sets.
+ *
+ * Nothing invokes this but the mode:  there is no operator verb and no
+ * endpoint, so there is no capability question about a backend-specific
+ * way to create accounts (§9, I6).  The suite reaches it through the
+ * `adoption` driver hint, which is how an intrusive trigger stays out
+ * of a production surface.
+ *
+ * **Synchronously at startup, for now.**  §7 describes the background
+ * machinery acting on the mode, and that machinery is phase 5 (C8-C10)
+ * and not built.  A store large enough for this to matter will want it;
+ * until then a startup that takes as long as its import is honest about
+ * what it is doing, and the alternative -- serving requests against a
+ * half-imported state -- is worse.
+ *
+ * Failures report to the log.  A phase-0 failure costs nothing, which
+ * is the point of the phase;  a later one leaves RGW state behind and
+ * re-running is the recovery, keyed on their `_id` (§6.2).
+ */
+int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
+			     optional_yield y,
+			     std::map<std::string, std::string>* report)
+{
+  auto say = [report](const char* k, const std::string& v) {
+    if (report) {
+      (*report)[k] = v;
+    }
+  };
+
+  if (!adoption_configured()) {
+    say("ran", "false");
+    say("why", "no NooBaa configuration store is configured");
+    return 0;
+  }
+  if (adoption_mode == AdoptionMode::Serve) {
+    say("ran", "false");
+    say("why", "the mode is serve");
+    return 0;
+  }
+
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+
+  /* ---- phase 0:  preflight.  Nothing is written. ---- */
+
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  int ret = store.read(dpp, contents);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: adoption: cannot read " << root << ": "
+      << cpp_strerror(-ret) << dendl;
+    say("ran", "false");
+    say("error", cpp_strerror(-ret));
+    return ret;
+  }
+  if (!contents.unreadable.empty()) {
+    for (const auto& u : contents.unreadable) {
+      ldpp_dout(dpp, 0) << "ERROR: adoption: " << u.path << ": " << u.why
+	<< dendl;
+    }
+    say("ran", "false");
+    say("unreadable", std::to_string(contents.unreadable.size()));
+    return -EBADMSG;
+  }
+
+  nsfs::NooBaaMasterKeys keys;
+  ret = keys.load(dpp, contents.settings, root);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: adoption: no usable master key: "
+      << cpp_strerror(-ret) << dendl;
+    say("ran", "false");
+    say("error", "master keys");
+    return ret;
+  }
+  std::vector<std::string> rejected;
+  ret = nsfs::decrypt_store_secrets(dpp, keys, contents, rejected);
+  if (ret < 0) {
+    for (const auto& r : rejected) {
+      ldpp_dout(dpp, 0) << "ERROR: adoption: " << r << dendl;
+    }
+    say("ran", "false");
+    say("error", "secrets");
+    return ret;
+  }
+
+  nsfs::ImportPlan plan;
+  ret = nsfs::build_import_plan(dpp, ctx(), contents, plan);
+  if (ret < 0) {
+    say("ran", "false");
+    say("collisions", std::to_string(plan.collisions.size()));
+    return ret;
+  }
+  std::vector<std::string> collisions;
+  ret = nsfs::check_rgw_state(dpp, y, this, plan, collisions);
+  if (ret < 0) {
+    say("ran", "false");
+    say("collisions", std::to_string(collisions.size()));
+    return ret;
+  }
+
+  /* ---- phase 1:  identities ---- */
+
+  nsfs::ImportResult ir;
+  ret = nsfs::import_identities(dpp, y, this, contents, plan, ir);
+  say("accounts", std::to_string(ir.accounts_created));
+  say("accounts_present", std::to_string(ir.accounts_skipped));
+  say("users", std::to_string(ir.users_created));
+  say("identity_rows", std::to_string(ir.identity_rows));
+  say("anonymous", ir.anonymous_imported ? "true" : "false");
+  if (ret < 0) {
+    say("ran", "partial");
+    return ret;
+  }
+
+  /* ---- phase 2:  buckets ---- */
+
+  const auto mapping = nsfs::mapping_from(plan);
+  nsfs::BucketImportResult br;
+  ret = nsfs::import_bucket_state(dpp, y, this, root, contents, mapping, br);
+  say("buckets", std::to_string(br.buckets_written));
+  say("policies", std::to_string(br.policies_rewritten));
+  say("policies_refused", std::to_string(br.policies_refused.size()));
+  say("logging", std::to_string(br.logging_carried));
+  say("deferred", std::to_string(br.deferred.size()));
+  if (ret < 0) {
+    say("ran", "partial");
+    return ret;
+  }
+
+  /* ---- phase 3:  the report ---- */
+
+  if (adoption_mode == AdoptionMode::Convert) {
+    /* `convert` is adopt plus rewriting each bucket's objects into our
+     * arrangement, and the rewriting is the conversion chain -- C5 to
+     * C7, phase 4.  Said out loud rather than silently treated as
+     * adopt, because an operator who asked for convert should learn
+     * that the second half has not run. */
+    ldpp_dout(dpp, 0) << "nsfs: adoption mode is convert, and the object "
+      << "rewrite is not implemented;  the deployment is adopted and "
+      << "every bucket keeps NooBaa's arrangement" << dendl;
+    say("converted", "false");
+  }
+
+  say("ran", "true");
+  ldpp_dout(dpp, 1) << "nsfs: adopted " << root << ": "
+    << ir.accounts_created << " accounts, " << ir.users_created
+    << " users, " << br.buckets_written << " buckets" << dendl;
+  return 0;
+}
+
 int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 			    const std::string& hint,
 			    const std::map<std::string, std::string>& params,
@@ -13521,6 +13741,45 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     inject_fork_race = (it->second == "true");
     if (out) {
       (*out)["enabled"] = inject_fork_race ? "true" : "false";
+    }
+    return 0;
+  }
+
+  /* `adoption` -- what the mode is, and a way to run it.
+   *
+   * The import has no endpoint on purpose, so this is how the suite
+   * drives it.  `run=true` runs it;  without that the hint only
+   * reports, which is what a test asserting the default needs. */
+  if (hint == "adoption") {
+    if (out) {
+      (*out)["configured"] = adoption_configured() ? "true" : "false";
+      (*out)["mode"] =
+	adoption_mode == AdoptionMode::Adopt ? "adopt"
+	  : adoption_mode == AdoptionMode::Convert ? "convert" : "serve";
+      (*out)["read_only"] = serving_read_only() ? "true" : "false";
+    }
+    auto it = params.find("mode");
+    if (it != params.end()) {
+      /* Set the mode, for a test that cannot restart the gateway.  A
+       * deployment sets it in configuration and this is the same
+       * assignment, reachable only through a hint. */
+      if (it->second == "adopt") {
+	adoption_mode = AdoptionMode::Adopt;
+      } else if (it->second == "convert") {
+	adoption_mode = AdoptionMode::Convert;
+      } else if (it->second == "serve") {
+	adoption_mode = AdoptionMode::Serve;
+      } else {
+	return -EINVAL;
+      }
+      if (out) {
+	(*out)["mode"] = it->second;
+	(*out)["read_only"] = serving_read_only() ? "true" : "false";
+      }
+    }
+    auto run = params.find("run");
+    if ((run != params.end()) && (run->second == "true")) {
+      return run_adoption(dpp, null_yield, out);
     }
     return 0;
   }
