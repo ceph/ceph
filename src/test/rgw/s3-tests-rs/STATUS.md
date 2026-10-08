@@ -1,145 +1,127 @@
-# s3-tests-rs — Porting Status (2026-06-08)
+# s3-tests-rs — status
 
-## Summary
+Measured 2026-10-08.  Every number here is counted from the tree, and
+the counting is mechanical enough to redo:  Rust tests by the `#[test]`
+and `#[tokio::test]` attributes, Python tests by `^def test_`, and the
+correspondence between them by set intersection of the names.
 
-The Python s3-tests suite (`s3tests/functional/`) contains ~976 test
-functions across 7 files.  The Rust suite contains ~708 tests in
-`tests/test_s3/` plus additional tests in `test_iam.rs` and
-`test_sns.rs`.  Approximately 129 tests from the main Python file
-(`test_s3.py`) have not been ported.  80 tests in the Rust suite are
-new (no Python equivalent).
+## What is here
 
-The separate Python files contribute additional unported coverage:
+Four kinds of work, six modules.
 
-| Python file | Tests | Ported to Rust |
-|-------------|-------|----------------|
-| test_s3.py | 757 | ~628 (129 remaining) |
-| test_iam.py | 90 | ~26 (partial) |
-| test_headers.py | 48 | ~21 (partial, merged into headers.rs) |
-| test_s3select.py | 38 | 0 |
-| test_sts.py | 37 | 0 |
-| test_sns.py | 5 | 4 |
+| module | tests | source |
+|---|---|---|
+| `test_s3` | 752 | `test_s3.py`, `test_headers.py`, `rgw_multi/tests.py` |
+| `test_iam` | 74 | `test_iam.py`, `test_sts.py`, plus new account coverage |
+| `test_rgw` | 31 | original, except `quota.rs` from `s3_user_quota.pl` |
+| `test_sns` | 26 | `test_sns.py`, plus the Kafka subset of `test_bn.py` |
+| `test_bench` | 6 | original — `elbencho` workload automation |
+| `test_corpus` | 12 | original — the conversion corpus |
+| **total** | **901** | |
 
-## Unported tests from test_s3.py by category
+The Python sources are the s3-tests suite vendored in the Ceph tree at
+`src/test/rgw/s3-tests/`;  `test_bn.py` is
+`src/test/rgw/bucket_notification/test_bn.py`;  `s3_user_quota.pl` is
+`qa/workunits/rgw/s3_user_quota.pl`.  Each module header names its own
+source.
 
-### Bucket logging (56 tests)
+## Provenance, and how it is recoverable
 
-Cleanup, concurrent flush, key filter, notupdating, request_id, and
-additional configuration variants not yet ported.  Most require the
-bucket logging rollover infrastructure.
+**681 of 901 Rust tests carry a name that appears verbatim in a Ceph
+Python file.**  Translated tests keep their Python names, which is what
+makes the correspondence greppable rather than remembered:
 
-### Encryption — SSE-KMS / SSE-S3 (30 tests)
+| Python file | tests | ported | remaining |
+|---|---|---|---|
+| `test_s3.py` | 760 | 598 | 162 |
+| `test_iam.py` | 89 | 65 | 24 |
+| `test_headers.py` | 48 | 13 | 35 |
+| `test_sts.py` | 34 | 1 | 33 |
+| `test_s3select.py` | 34 | 0 | 34 |
+| `test_sns.py` | 5 | 4 | 1 |
+| `test_s3control.py` | 1 | 0 | 1 |
+| `test_utils.py` | 1 | 0 | 1 |
+| **total** | **972** | **681** | **291** |
 
-Bucket-level encryption config (GET/PUT/DELETE), encrypted copy,
-encrypted transfer, SSE-KMS policy conditions, and multipart with
-SSE-KMS.  The Rust suite covers SSE-C but is missing the KMS/S3
-server-side variants.
+Two translations were renamed and so are not findable by name:
 
-Tests include:
-- `test_put_bucket_encryption_{kms,s3}` — bucket default encryption
-- `test_get_bucket_encryption_{kms,s3}` — read back config
-- `test_delete_bucket_encryption_{kms,s3}` — remove config
-- `test_sse_{kms,s3}_*` — object-level SSE-KMS/S3 operations
-- `test_encrypted_transfer_*` — end-to-end encrypted PUT/GET
-- `test_copy_enc`, `test_copy_part_enc` — encrypted CopyObject
+- `test_sns.rs`'s `test_notification_kafka_*` are the Kafka subset of
+  `test_bn.py`'s 87 tests.  AMQP, persistent topics and multisite are
+  deliberately not ported.
+- `test_rgw/quota.rs` follows `s3_user_quota.pl`, user scope only.  The
+  companion `s3_bucket_quota.pl` — bucket-scope quota, the zero and
+  negative cases, enable and disable — is not ported.
 
-### Bucket policy (8 tests)
+## What does not run, and why
 
-- `test_bucket_policy_different_tenant` — cross-tenant policy
-- `test_bucket_policy_tenanted_bucket` — tenanted bucket naming
-- `test_bucket_policy_deny_self_denied_policy{,_confirm_header}`
-- `test_bucket_policy_put_obj_kms_noenc` — KMS policy with no enc
-- `test_bucket_policy_put_obj_{kms_s3,s3_kms}` — mixed enc policies
-- `test_bucket_policy_set_condition_operator_end_with_IfExists`
-- `test_head_object_404_with_policy_prefix`
+Three different things get called "ignored" and only the first is
+unconditional.
 
-### Object attributes (4 tests)
+**Unconditionally ignored: 14.**  13 in `test_s3`, 1 in `test_iam`.
+These do not run anywhere.
 
-The `GetObjectAttributes` API (newer S3 operation):
-- `test_get_multipart_object_attributes`
-- `test_get_paginated_multipart_object_attributes`
-- `test_get_multipart_checksum_object_attributes`
-- `test_get_sse_c_encrypted_object_attributes`
+**Conditionally gated: 335** carry at least one `cfg_attr(…, ignore)`.
+A test may carry several.
 
-### Conditional PUT (8 tests)
+| gate | tests | meaning |
+|---|---|---|
+| `fails_on_dbstore` | 204 | known to fail on that backend |
+| `fails_on_posix` | 85 | |
+| `fails_on_aws` | 84 | |
+| `fails_on_nsfs` | 72 | |
+| `fails_on_rgw` | 11 | on by default |
+| `rgw_admin` | 30 | **requires** the feature — Admin Ops endpoints |
+| `has_vault` | 22 | **requires** a Vault sidecar |
 
-- `test_put_object_ifmatch_{good,failed}`
-- `test_put_object_ifmatch_{nonexisted_failed,overwrite_existed_good}`
-- `test_put_object_ifnonmatch_{good,failed}`
-- `test_put_object_ifnonmatch_{nonexisted_good,overwrite_existed_failed}`
+The `fails_on_*` gates are permanent annotations, not a to-do list:
+the suite is meant to run against implementations it cannot
+interrogate, so recording "this one does not pass here" is what works
+against a black box.  `fails_on_rgw` is in `default`.
 
-Note: some of these may overlap with the Rust `conditional` module
-under different names.  Needs verification.
+`has_kafka` is **not** a test gate — it is a build feature that pulls
+in `rdkafka`.  The Kafka tests check for a broker at run time and fail
+with a message naming `kafka-vstart.sh`.
 
-### Multipart edge cases (3 tests)
+## Remaining from `test_s3.py`, by area
 
-- `test_multipart_resend_first_finishes_last` — part reorder
-- `test_multipart_upload_complete_without_create` — complete w/o init
-- `test_multipart_upload_resend_part` — part resend idempotency
+162 tests.  Grouped by what they exercise, measured rather than
+estimated:
 
-### Usage / stats (2 tests)
+| area | tests |
+|---|---|
+| bucket logging | 58 |
+| SSE-KMS / SSE-S3 | 23 |
+| versioning | 23 |
+| conditional requests | 12 |
+| lifecycle | 12 |
+| bucket policy / IAM | 4 |
+| multipart | 4 |
+| cloud tier / restore | 4 |
+| object attributes | 1 |
+| usage / stats | 1 |
+| other | 20 |
 
-- `test_account_usage`
-- `test_head_bucket_usage`
+## Priorities, for the filesystem-backed drivers
 
-### Atomic writes (3 tests)
+Worth porting, in order:
 
-- `test_atomic_conditional_write_1mb`
-- `test_atomic_dual_conditional_write_1mb`
-- `test_atomic_write_bucket_gone`
+1. **Conditional requests** (12).  Ten of the twenty in "other" are
+   also `if_match`/`if_none_match` variants, so this area is larger
+   than its row suggests and it exercises a driver-level decision
+   point — `If-None-Match: *` has to be decided at the publish, not
+   before it.
+2. **Versioning** (23).  The largest area that nsfs and posix
+   implement themselves rather than inherit.
+3. **Multipart** (4).  Resend and reorder resilience, which is
+   driver-level idempotency.
+4. **Object attributes** (1).  A newer API over the same metadata
+   paths.
 
-### Other (15 tests)
+Needing infrastructure or a feature these drivers lack:
 
-- `test_100_continue_error_retry` — 100-Continue handling
-- `test_bucket_head_extended` — extended HEAD response
-- `test_object_copy_versioning_multipart_upload` — versioned MPU copy
-- `test_object_requestid_matches_header_on_error` — RequestId check
-- `test_ranged_request_return_trailing_bytes_response_code`
-- `test_ranged_request_skip_leading_bytes_response_code`
-- `test_read_through` — read-through cache
-- `test_restore_noncur_obj` — glacier restore (non-current)
-- `test_restore_object_permanent` — glacier restore (permanent)
-- `test_restore_object_temporary` — glacier restore (temporary)
-- `test_versioning_stack_delete_merkers` — stacked delete markers
-
-## Entirely unported Python files
-
-### test_sts.py (37 tests)
-
-STS AssumeRole, AssumeRoleWithWebIdentity, GetSessionToken.
-Requires OIDC IdP (Keycloak) integration.  None ported.
-
-### test_s3select.py (38 tests)
-
-S3 Select (SQL queries over objects).  Requires the s3select
-module to be built and enabled.  None ported.
-
-### test_iam.py (90 tests, ~26 ported)
-
-IAM user policies.  Partially ported to `test_iam.rs`.  The Rust
-SDK has an XML element ordering issue that blocks 7 tests (see
-`docs/sdk-limitations.md`).  Remaining ~64 tests not yet ported.
-
-### test_headers.py (48 tests, ~21 ported)
-
-SigV2 header validation.  Partially ported to `headers.rs`.
-Remaining ~27 tests not yet ported.
-
-## Porting priorities for nsfs/posix drivers
-
-For filesystem-backed drivers, the most valuable unported tests are:
-
-1. **Conditional PUT** (8 tests) — may already be covered under
-   different names, but should be verified
-2. **Multipart edge cases** (3 tests) — resend/reorder resilience
-   exercises driver-level idempotency
-3. **Object attributes** (4 tests) — newer API, exercises metadata
-   paths
-4. **Atomic writes** (3 tests) — concurrent write correctness
-
-Lower priority (require infrastructure not available in nsfs):
-- Encryption (30) — needs KMS; SSE-C is already covered
-- Bucket logging (56) — not implemented in nsfs
-- STS (37) — needs OIDC IdP
-- S3 Select (38) — needs s3select module
-- Glacier restore (3) — needs cloud tiering
+- **bucket logging** (58) — configuration is stored on nsfs and posix,
+  but delivery is not implemented on either, so these cannot pass
+- **SSE-KMS / SSE-S3** (23) — needs Vault;  SSE-C is already covered
+- **STS** (33) and **S3 Select** (34) — need an OIDC IdP and the
+  s3select module
+- **cloud tier / restore** (4) — needs tiering
