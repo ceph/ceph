@@ -428,7 +428,7 @@ class StagedSwitchRunner:
                 return True, ''
             if time.time() >= deadline:
                 return False, why
-            time.sleep(2)
+            time.sleep(1)
 
     def _wait_settled(self, group: StagedGroup) -> Tuple[bool, str]:
         deadline = time.time() + SETTLE_POLL_SECONDS
@@ -438,7 +438,7 @@ class StagedSwitchRunner:
                 return ok, why
             if self.upgrade.upgrade_state is None or self.upgrade.upgrade_state.paused:
                 return ok, why
-            time.sleep(2)
+            time.sleep(1)
 
     # --------------------------------------------------------------- driver
     def _group_from_state(self, need_upgrade: List[DaemonDescription]) -> Optional[StagedGroup]:
