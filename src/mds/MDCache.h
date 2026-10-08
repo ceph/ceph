@@ -1315,7 +1315,8 @@ private:
   void send_subtree_resolves();
   void maybe_finish_peer_resolve();
 
-  void rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin);
+  void rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin,
+                   uint64_t& count);
   void handle_cache_rejoin(const cref_t<MMDSCacheRejoin> &m);
   void handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &m);
   CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last);

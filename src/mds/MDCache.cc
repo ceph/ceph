@@ -3194,6 +3194,8 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
   MDSContext::vec waiters;
 
   // wake up any waiters in their subtrees
+  // this walks every replica of the recovered rank's subtrees under mds_lock
+  uint64_t count = 0;
   for (auto p = subtrees.begin();
        p != subtrees.end();
        ++p) {
@@ -3211,10 +3213,17 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
     while (!q.empty()) {
       CDir *d = q.front();
       q.pop();
+
+      if (!(++count % mds->heartbeat_reset_grace()))
+        mds->heartbeat_reset();
+
       d->take_waiting(d_mask, waiters);
 
       // inode waiters too
       for (auto &p : d->items) {
+	if (!(++count % mds->heartbeat_reset_grace()))
+	  mds->heartbeat_reset();
+
 	CDentry *dn = p.second;
 	CDentry::linkage_t *dnl = dn->get_linkage();
 	if (dnl->is_primary()) {
@@ -4171,6 +4180,8 @@ void MDCache::rejoin_send_rejoins()
   
   
   // check all subtrees
+  // this walks every replica of the rejoining ranks' subtrees under mds_lock
+  uint64_t count = 0;
   for (auto p = subtrees.begin();
        p != subtrees.end();
        ++p) {
@@ -4192,7 +4203,7 @@ void MDCache::rejoin_send_rejoins()
     if (rejoins.count(auth) == 0)
       continue;   // don't care about this node's subtrees
 
-    rejoin_walk(dir, rejoins[auth]);
+    rejoin_walk(dir, rejoins[auth], count);
   }
   
   // rejoin root inodes, too
@@ -4339,7 +4350,8 @@ void MDCache::rejoin_send_rejoins()
  *  strong dentries (no connectivity!)
  *  strong inodes
  */
-void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
+void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin,
+                          uint64_t& count)
 {
   dout(10) << "rejoin_walk " << *dir << dendl;
 
@@ -4349,6 +4361,9 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
     // WEAK
     rejoin->add_weak_dirfrag(dir->dirfrag());
     for (auto &p : dir->items) {
+      if (!(++count % mds->heartbeat_reset_grace()))
+        mds->heartbeat_reset();
+
       CDentry *dn = p.second;
       ceph_assert(dn->last == CEPH_NOSNAP);
       CDentry::linkage_t *dnl = dn->get_linkage();
@@ -4373,6 +4388,9 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
     dir->state_set(CDir::STATE_REJOINING);
 
     for (auto it = dir->items.begin(); it != dir->items.end(); ) {
+      if (!(++count % mds->heartbeat_reset_grace()))
+        mds->heartbeat_reset();
+
       CDentry *dn = it->second;
       ++it;
       dn->state_set(CDentry::STATE_REJOINING);
@@ -4437,7 +4455,7 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
 
   // recurse into nested dirs
   for (const auto& dir : nested) {
-    rejoin_walk(dir, rejoin);
+    rejoin_walk(dir, rejoin, count);
   }
 }
 
@@ -4835,7 +4853,12 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
 
   // strong dirfrags/dentries.
   //  also process auth_pins, xlocks.
+  // the sender's rejoin_walk() can make this message large
+  uint64_t count = 0;
   for (const auto &p : strong->strong_dirfrags) {
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
+
     auto& dirfrag = p.first;
     CInode *diri = get_inode(dirfrag.ino);
     if (!diri)
@@ -4876,6 +4899,9 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
     if (it != strong->strong_dentries.end()) {
       const auto& dmap = it->second;
       for (const auto &q : dmap) {
+        if (!(++count % mds->heartbeat_reset_grace()))
+          mds->heartbeat_reset();
+
         const string_snap_t& ss = q.first;
         const MMDSCacheRejoin::dn_strong& d = q.second;
         CDentry *dn;
@@ -4976,6 +5002,9 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
   }
 
   for (const auto &p : strong->strong_inodes) {
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
+
     CInode *in = get_inode(p.first);
     ceph_assert(in);
     in->add_replica(from, p.second.nonce);
@@ -5085,7 +5114,12 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
   list<pair<CInode*,int> > updated_realms;
 
   // dirs
+  // the sender's rejoin_send_acks() can make this message large
+  uint64_t count = 0;
   for (const auto &p : ack->strong_dirfrags) {
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
+
     // we may have had incorrect dir fragmentation; refragment based
     // on what they auth tells us.
     CDir *dir = get_dirfrag(p.first);
@@ -5131,6 +5165,9 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
     auto it = ack->strong_dentries.find(p.first);
     if (it != ack->strong_dentries.end()) {
       for (const auto &q : it->second) {
+        if (!(++count % mds->heartbeat_reset_grace()))
+          mds->heartbeat_reset();
+
         CDentry *dn = dir->lookup(q.first.name, q.first.snapid);
         if(!dn)
 	  dn = dir->add_null_dentry(q.first.name, q.second.first, q.first.snapid);
@@ -5208,6 +5245,9 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
 
   // full dirfrags
   for (const auto &p : ack->dirfrag_bases) {
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
+
     CDir *dir = get_dirfrag(p.first);
     ceph_assert(dir);
     auto q = p.second.cbegin();
@@ -5218,6 +5258,9 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
   // full inodes
   auto p = ack->inode_base.cbegin();
   while (!p.end()) {
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
+
     inodeno_t ino;
     snapid_t last;
     bufferlist basebl;
@@ -5242,6 +5285,9 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
   p = ack->inode_locks.cbegin();
   //dout(10) << "inode_locks len " << ack->inode_locks.length() << " is " << ack->inode_locks << dendl;
   while (!p.end()) {
+    if (!(++count % mds->heartbeat_reset_grace()))
+      mds->heartbeat_reset();
+
     inodeno_t ino;
     snapid_t last;
     __u32 nonce;
@@ -6231,6 +6277,8 @@ void MDCache::rejoin_send_acks()
   rejoin_ack_sent = recovery_set;
   
   // walk subtrees
+  // this walks every auth item in the cache under mds_lock
+  uint64_t count = 0;
   for (auto p = subtrees.begin(); 
        p != subtrees.end();
        ++p) {
@@ -6247,6 +6295,9 @@ void MDCache::rejoin_send_acks()
       CDir *dir = dq.front();
       dq.pop();
       
+      if (!(++count % mds->heartbeat_reset_grace()))
+        mds->heartbeat_reset();
+
       // dir
       for (auto &r : dir->get_replicas()) {
 	auto it = acks.find(r.first);
@@ -6257,6 +6308,9 @@ void MDCache::rejoin_send_acks()
       }
 	   
       for (auto &p : dir->items) {
+	if (!(++count % mds->heartbeat_reset_grace()))
+	  mds->heartbeat_reset();
+
 	CDentry *dn = p.second;
 	CDentry::linkage_t *dnl = dn->get_linkage();
 
