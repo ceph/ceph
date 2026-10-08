@@ -87,7 +87,7 @@ appear in a `nextest list` and so cannot appear above.  There are 53
 of them for `fails_on_aws`, 2 for `fails_on_noobaa` and 1 for
 `fails_on_posix`.
 
-`fails_on_noobaa` is set by `interchange/standup.rs capture`, which
+`fails_on_noobaa` is set by `adoption/standup.rs capture`, which
 runs the conversion corpus against a NooBaa endpoint rather than
 against RGW.  Its three gates are the multipart ETag, which NooBaa
 returns as `mtime-<base36>-ino-<base36>` rather than as a digest with

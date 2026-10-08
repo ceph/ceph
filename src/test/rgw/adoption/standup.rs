@@ -71,13 +71,13 @@ struct Env {
     tier: String,
 }
 
-/// Every setting, from `interchange.conf` and then the environment.
+/// Every setting, from `adoption.conf` and then the environment.
 ///
-/// `INTERCHANGE_WORK` and `work = ` are the same setting;  the environment
+/// `ADOPTION_WORK` and `work = ` are the same setting;  the environment
 /// wins.
 fn settings() -> BTreeMap<String, String> {
     let mut m = BTreeMap::new();
-    let conf = interchange_home().join("interchange.conf");
+    let conf = adoption_home().join("adoption.conf");
     if let Ok(text) = std::fs::read_to_string(&conf) {
         for line in text.lines() {
             let line = line.trim();
@@ -90,7 +90,7 @@ fn settings() -> BTreeMap<String, String> {
         }
     }
     for (k, v) in std::env::vars() {
-        if let Some(rest) = k.strip_prefix("INTERCHANGE_") {
+        if let Some(rest) = k.strip_prefix("ADOPTION_") {
             m.insert(rest.to_ascii_lowercase(), v);
         }
     }
@@ -101,7 +101,7 @@ impl Env {
     /// **`work` has no default and this stops without it.**
     ///
     /// It is where a gigabyte of worktree goes *and* where the config
-    /// store and the data root live -- the artifacts this exercise
+    /// store and the data root live -- the artifacts this harness
     /// produces.  The first version of this defaulted to
     /// `~/.cache/nsfs-interchange`, which was wrong twice over:  it
     /// put the deliverable somewhere nominally disposable, and it
@@ -116,10 +116,10 @@ impl Env {
                  It holds the NooBaa worktree -- upwards of a gigabyte -- and the\n  \
                  config store and the data root, which are the artifacts this\n  \
                  produces.  Put it somewhere deliberate, outside any ceph path:\n\n    \
-                 INTERCHANGE_WORK=/path/to/interchange standup.rs <step>\n\n  \
-                 or, standing, in {}:\n\n    work = /path/to/interchange\n\n  \
-                 See interchange.conf.sample.",
-                interchange_home().join("interchange.conf").display()
+                 ADOPTION_WORK=/path/to/adoption standup.rs <step>\n\n  \
+                 or, standing, in {}:\n\n    work = /path/to/adoption\n\n  \
+                 See adoption.conf.sample.",
+                adoption_home().join("adoption.conf").display()
             ));
         };
         let work = PathBuf::from(work);
@@ -144,22 +144,22 @@ impl Env {
              * this with the Rust SDK and a self-signed certificate is a
              * problem worth not having. */
             port: get("port", "6001").parse().unwrap_or(6001),
-            account: get("account", "interchange"),
-            bucket: get("bucket", "interchange"),
+            account: get("account", "adoption"),
+            bucket: get("bucket", "adoption"),
             /* Fixed rather than generated:  the corpus has to be
              * pointed at this endpoint, and a credential that changes
              * per run means a config file that changes per run. */
-            access_key: get("access_key", "INTERCHANGEACCESSKEY"),
-            secret_key: get("secret_key", "interchangesecretkeyinterchangesecretkey"),
+            access_key: get("access_key", "ADOPTIONACCESSKEY001"),
+            secret_key: get("secret_key", "adoptionsecretkeyadoptionsecretkeyadopti"),
             /* `../s3-tests-rs` from here.  The corpus is a modality of
              * that suite rather than a separate tool, so the two move
              * together and the default is right whenever this driver
              * is run from the tree it was committed to. */
             suite: get(
                 "suite",
-                &interchange_home()
+                &adoption_home()
                     .parent()
-                    .unwrap_or(&interchange_home())
+                    .unwrap_or(&adoption_home())
                     .join("s3-tests-rs")
                     .display()
                     .to_string(),
@@ -186,7 +186,7 @@ impl Env {
     }
 
     fn node(&self) -> String {
-        env_or("INTERCHANGE_NODE", "node")
+        env_or("ADOPTION_NODE", "node")
     }
 
     fn pid_file(&self) -> PathBuf {
@@ -286,8 +286,8 @@ fn list() {
         println!("  {name:10} {what}");
     }
 
-    println!("\nEach setting is an INTERCHANGE_<NAME> environment variable, or the");
-    println!("same name in interchange.conf beside this driver;  the environment");
+    println!("\nEach setting is an ADOPTION_<NAME> environment variable, or the");
+    println!("same name in adoption.conf beside this driver;  the environment");
     println!("wins.\n");
 
     let s = settings();
@@ -298,8 +298,8 @@ fn list() {
         ("pin", "the commit to stand up"),
         ("data", "what --data-root is given;  the tree is data/root"),
         ("port", "the NooBaa HTTP port"),
-        ("account", ""),
-        ("bucket", ""),
+        ("account", "the account `config` creates;  default adoption"),
+        ("bucket", "the bucket `config` creates;  default adoption"),
         ("suite", "the s3-tests-rs checkout;  defaults to a sibling of this driver"),
         ("tier", "which corpus tier `capture` runs"),
     ];
@@ -325,14 +325,14 @@ fn list() {
 fn pin(env: &Env) -> Result<(), String> {
     if !env.src.join(".git").exists() {
         return Err(format!(
-            "{} is not a git clone of noobaa-core;  set INTERCHANGE_NOOBAA_SRC",
+            "{} is not a git clone of noobaa-core;  set ADOPTION_NOOBAA_SRC",
             env.src.display()
         ));
     }
     let full = git(&env.src, &["rev-parse", &format!("{}^{{commit}}", env.pin)])
         .map_err(|_| {
             format!(
-                "commit {} is not in {};  fetch it, or set INTERCHANGE_PIN",
+                "commit {} is not in {};  fetch it, or set ADOPTION_PIN",
                 env.pin,
                 env.src.display()
             )
@@ -407,7 +407,7 @@ fn patch(env: &Env) -> Result<(), String> {
     if !wt.exists() {
         return Err("no worktree;  run `worktree` first".into());
     }
-    let dir = interchange_home().join("patches");
+    let dir = adoption_home().join("patches");
     let mut found = 0;
     let mut applied = 0;
 
@@ -450,8 +450,8 @@ fn patch(env: &Env) -> Result<(), String> {
 }
 
 /// Where this driver and its data files live.
-fn interchange_home() -> PathBuf {
-    std::env::var("INTERCHANGE_HOME")
+fn adoption_home() -> PathBuf {
+    std::env::var("ADOPTION_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| ".".into()))
 }
@@ -828,9 +828,9 @@ fn capture(env: &Env) -> Result<(), String> {
     if !env.suite.join("Cargo.toml").exists() {
         return Err(format!(
             "{} is not the s3-tests-rs suite.  It is normally a sibling of this\n  \
-             driver;  set INTERCHANGE_SUITE, or `suite = ` in {}.",
+             driver;  set ADOPTION_SUITE, or `suite = ` in {}.",
             env.suite.display(),
-            interchange_home().join("interchange.conf").display()
+            adoption_home().join("adoption.conf").display()
         ));
     }
 
@@ -871,7 +871,7 @@ fn capture(env: &Env) -> Result<(), String> {
      * house standard is nextest and its per-test failure blocks are
      * what makes a multi-axis disagreement readable;  requiring it
      * would make this step fail for a reason that has nothing to do
-     * with the interchange. */
+     * with the adoption harness. */
     let have_nextest = Command::new("cargo")
         .args(["nextest", "--version"])
         .stdout(Stdio::null())
@@ -911,14 +911,14 @@ fn capture(env: &Env) -> Result<(), String> {
      * Every path goes through the environment rather than into the
      * command line, so nothing here has to be quoted correctly. */
     let script = format!(
-        "set -o pipefail; cd \"$INTERCHANGE_SUITE\" || exit 1; \
-         {runner} 2>&1 | tee \"$INTERCHANGE_CAPTURE_LOG\""
+        "set -o pipefail; cd \"$ADOPTION_SUITE\" || exit 1; \
+         {runner} 2>&1 | tee \"$ADOPTION_CAPTURE_LOG\""
     );
     let st = Command::new("bash")
         .arg("-c")
         .arg(&script)
-        .env("INTERCHANGE_SUITE", env.suite.display().to_string())
-        .env("INTERCHANGE_CAPTURE_LOG", env.capture_log().display().to_string())
+        .env("ADOPTION_SUITE", env.suite.display().to_string())
+        .env("ADOPTION_CAPTURE_LOG", env.capture_log().display().to_string())
         .env("S3TEST_CONF", conf.display().to_string())
         .env("CORPUS_OUT", dir.display().to_string())
         /* The disk half.  Same host by construction -- the NooBaa endpoint
@@ -1030,7 +1030,7 @@ fn write_capture_conf(env: &Env) -> Result<PathBuf, String> {
              # on purpose:  one NC account serves this tree.\n\
              display_name = {what}\n\
              user_id = {what}\n\
-             email = {what}@interchange.invalid\n\
+             email = {what}@adoption.invalid\n\
              access_key = {ak}\n\
              secret_key = {ak}{ak}\n",
             section = section,
@@ -1043,7 +1043,7 @@ fn write_capture_conf(env: &Env) -> Result<PathBuf, String> {
         "# Written by standup.rs -- the NooBaa endpoint, not RGW's.\n\
          #\n\
          # NooBaa NSFS at the pin, over {tree}.\n\
-         # Regenerated by every `capture`;  edit interchange.conf instead.\n\
+         # Regenerated by every `capture`;  edit adoption.conf instead.\n\
          \n\
          [DEFAULT]\n\
          host = 127.0.0.1\n\
@@ -1055,13 +1055,13 @@ fn write_capture_conf(env: &Env) -> Result<PathBuf, String> {
          # The corpus names its own buckets -- corpus-<tier>-<axis>, derived\n\
          # from what produced them so two captures are diffable -- and does\n\
          # not read this.  Here because the section should exist.\n\
-         bucket prefix = interchange-{{random}}-\n\
+         bucket prefix = adoption-{{random}}-\n\
          \n\
          [s3 main]\n\
          # The one account `config` created, which owns the tree.\n\
          display_name = {account}\n\
          user_id = {account}\n\
-         email = {account}@interchange.invalid\n\
+         email = {account}@adoption.invalid\n\
          access_key = {ak}\n\
          secret_key = {sk}\n\
          # No storage_classes:  NooBaa has no placement to configure,\n\
@@ -1082,7 +1082,7 @@ fn write_capture_conf(env: &Env) -> Result<PathBuf, String> {
         tenant = {
             /* `tenant` is the one extra key in that section */
             let mut t = unused("s3 tenant", "tenant");
-            t.push_str("tenant = interchange-tenant\n");
+            t.push_str("tenant = adoption-tenant\n");
             t
         },
         iam = unused("iam", "iam"),
@@ -1153,9 +1153,9 @@ fn adopt(env: &Env) -> Result<(), String> {
         return Err(format!(
             "`ceph_build` is not set.  `adopt` runs rgw-vstart.sh, which has to \
              be\n  invoked from the ceph build directory:\n\n    \
-             INTERCHANGE_CEPH_BUILD=/path/to/ceph/build standup.rs adopt\n\n  \
+             ADOPTION_CEPH_BUILD=/path/to/ceph/build standup.rs adopt\n\n  \
              or put `ceph_build = /path/to/ceph/build` in {}.",
-            interchange_home().join("interchange.conf").display()
+            adoption_home().join("adoption.conf").display()
         ));
     };
     let script = build.join("../src/script/rgw/rgw-vstart.sh");
@@ -1290,7 +1290,7 @@ fn running_ids() -> Result<(u32, u32), String> {
 
 /// The lock this project keeps for a given pin.  Committed.
 fn pinned_lock(env: &Env) -> PathBuf {
-    interchange_home().join("locks").join(format!("{}.package-lock.json", env.pin))
+    adoption_home().join("locks").join(format!("{}.package-lock.json", env.pin))
 }
 
 /// NooBaa's lockfile must still match the pin.

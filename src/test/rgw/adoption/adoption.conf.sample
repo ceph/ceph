@@ -1,7 +1,7 @@
-# standup.rs settings.  Copy to interchange.conf and edit.
+# standup.rs settings.  Copy to adoption.conf and edit.
 #
 # Every key here is also an environment variable, spelled
-# INTERCHANGE_<NAME> -- INTERCHANGE_WORK, INTERCHANGE_PIN -- and the
+# ADOPTION_<NAME> -- ADOPTION_WORK, ADOPTION_PIN -- and the
 # environment wins over this file.
 
 # REQUIRED.  Holds the NooBaa worktree (upwards of a gigabyte), their
@@ -11,6 +11,8 @@
 # build directory:  vstart.sh removes $dev/rgw/$STORE/root on every
 # start, so a tree there is deleted by the act of starting the gateway
 # meant to read it.
+# (this one predates the rename of this directory;  the path is
+# arbitrary and only has to be deliberate)
 work = /lv2tb/nsfs-interchange
 
 # REQUIRED for `adopt`, which runs rgw-vstart.sh and must do so from
@@ -36,8 +38,10 @@ ceph_build = /lv2tb/ceph-cp/build
 # Rust SDK and a self-signed certificate is a problem worth not having.
 # port = 6001
 
-# account = interchange
-# bucket  = interchange
+# The account and bucket the stand-up creates.  Arbitrary names for a
+# fixture deployment;  they end up in NooBaa's own records.
+# account = adoption
+# bucket  = adoption
 
 # The s3-tests-rs checkout the conversion corpus lives in.  Defaults
 # to `../s3-tests-rs` from this driver, which is right whenever it is

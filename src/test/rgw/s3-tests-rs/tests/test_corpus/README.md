@@ -11,7 +11,7 @@ substrate for that comparison.
 The design notes are `docs/NSFS_CORPUS.md` in the nsfs design set;
 this file is the interface.  The end-to-end validation workflow this
 feeds — stand NooBaa up, generate and ingest, hand off to RGW, verify
-— is `../../../interchange/WORKFLOW.md`.
+— is `../../../adoption/WORKFLOW.md`.
 
 ---
 

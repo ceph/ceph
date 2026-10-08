@@ -17,8 +17,8 @@ step 4 says what is missing.
   4. verify                 not built -- C2b
 ```
 
-Everything is driven from `src/test/rgw/interchange/standup.rs`.
-`standup.rs list` prints the steps and the settings;  `INTERCHANGE_WORK`
+Everything is driven from `src/test/rgw/adoption/standup.rs`.
+`standup.rs list` prints the steps and the settings;  `ADOPTION_WORK`
 is required and has no default, because it holds the worktree, their
 config store, the data root and the captures.
 
@@ -27,7 +27,7 @@ config store, the data root and the captures.
 ## 1.  Stand NooBaa up
 
 ```sh
-cd src/test/rgw/interchange
+cd src/test/rgw/adoption
 ./standup.rs up          # pin, worktree, patch, build, config
 ./standup.rs serve       # their endpoint, HTTP, on 6001
 ```
@@ -51,7 +51,7 @@ pinned on our side, and the one patch their native addon needs.
 ```
 
 Runs the conversion corpus against their endpoint and keeps what it
-produced in `$INTERCHANGE_WORK/capture/noobaa/` — one manifest and one
+produced in `$ADOPTION_WORK/capture/noobaa/` — one manifest and one
 inventory per axis, plus `noobaa.log` for the whole run.
 
 **What this produces.**  Artifacts in *their* on-disk format, written

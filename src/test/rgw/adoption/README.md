@@ -1,4 +1,4 @@
-# nsfs interchange:  standing NooBaa up
+# nsfs adoption:  standing NooBaa up
 
 `standup.rs` brings a pinned NooBaa NSFS gateway up over a data root,
 so the conversion corpus can be run against *their* implementation and
@@ -33,19 +33,19 @@ prints them.
 
 | | |
 |---|---|
-| `INTERCHANGE_NOOBAA_SRC` | the developer's noobaa-core clone.  **Read only** |
-| `INTERCHANGE_PIN` | the commit to stand up |
-| `INTERCHANGE_WORK` | **required.**  the worktree, the NooBaa config, the data root, logs, captures |
-| `INTERCHANGE_DATA` | the tree both gateways serve;  defaults to `$INTERCHANGE_WORK/data` |
-| `INTERCHANGE_PORT` | the NooBaa endpoint |
-| `INTERCHANGE_CEPH_BUILD` | **required for `adopt`.**  the ceph build directory |
-| `INTERCHANGE_SUITE` | the s3-tests-rs checkout;  defaults to a sibling of this driver |
-| `INTERCHANGE_TIER` | which corpus tier `capture` runs |
+| `ADOPTION_NOOBAA_SRC` | the developer's noobaa-core clone.  **Read only** |
+| `ADOPTION_PIN` | the commit to stand up |
+| `ADOPTION_WORK` | **required.**  the worktree, the NooBaa config, the data root, logs, captures |
+| `ADOPTION_DATA` | the tree both gateways serve;  defaults to `$ADOPTION_WORK/data` |
+| `ADOPTION_PORT` | the NooBaa endpoint |
+| `ADOPTION_CEPH_BUILD` | **required for `adopt`.**  the ceph build directory |
+| `ADOPTION_SUITE` | the s3-tests-rs checkout;  defaults to a sibling of this driver |
+| `ADOPTION_TIER` | which corpus tier `capture` runs |
 
 ## What `capture` produces
 
 `capture` points the conversion corpus at the NooBaa endpoint and keeps
-what it produced, per axis, under `$INTERCHANGE_WORK/capture/noobaa`:
+what it produced, per axis, under `$ADOPTION_WORK/capture/noobaa`:
 
 ```
 coverage-keys.manifest     what S3 says -- one fact per line, sorted
@@ -75,7 +75,7 @@ Two things it sets that a normal corpus run does not:
   published `0600`, which is a statement about the nsfs driver rather than
   about S3.  Left strict, every object NooBaa wrote is reported
   as an offender and the differences worth reading are buried.
-* a generated `s3tests.conf`, at `$INTERCHANGE_WORK/s3tests-noobaa.conf`.  The
+* a generated `s3tests.conf`, at `$ADOPTION_WORK/s3tests-noobaa.conf`.  The
   suite's own config points at whatever vstart last brought up, and a
   capture that quietly ran against RGW while claiming to have
   run against NooBaa is the worst failure this step could have.  It
@@ -134,8 +134,8 @@ were `IX_WORK`, `IX_PIN` and so on, and `IX` was glossed as
 *interchange* wherever it appeared.  Glossing a token is not the fix:
 two letters carry no lexical structure, so a reader has to be told
 every time rather than being able to read it.  They are
-`INTERCHANGE_WORK` and `INTERCHANGE_PIN` now, and the gloss is gone
-because nothing needs glossing.  Config keys in `interchange.conf` are
+`ADOPTION_WORK` and `ADOPTION_PIN` now, and the gloss is gone
+because nothing needs glossing.  Config keys in `adoption.conf` are
 bare -- `work`, `pin` -- and always were.
 
 **Config should direct where things live, and there should be no

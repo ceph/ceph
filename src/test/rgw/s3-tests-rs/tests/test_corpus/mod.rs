@@ -36,7 +36,7 @@
 //!                   default 0600;  `any` turns the check off.  The
 //!                   one assertion here that is about *this* driver
 //!                   rather than about S3, so a capture from a foreign
-//!                   gateway sets it -- see `interchange/standup.rs`
+//!                   gateway sets it -- see `adoption/standup.rs`
 //! ```
 
 mod names;
