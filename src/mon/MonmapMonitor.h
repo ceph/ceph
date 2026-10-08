@@ -96,7 +96,6 @@ private:
    * @param tiebreaker_mon: the name of the monitor to declare tiebreaker (empty for auto-select)
    * @param dividing_bucket: the bucket type (eg 'dc') that divides the cluster
    * @param crush: the pending CrushWrapper for validating monitor locations against subtrees
-   * @param set_global_stretch_mode: if true, set global_stretch_mode_enabled to true when committing
    *
    * Note: CRUSH bucket type and subtree count validation is performed by
    * OSDMonitor::try_enable_stretch_mode() to avoid redundancy.
@@ -107,8 +106,7 @@ public:
 			       int *errcode, bool commit,
 			       std::string tiebreaker_mon,
 			       const std::string& dividing_bucket,
-			       const CrushWrapper& crush,
-             bool set_global_stretch_mode);
+			       const CrushWrapper& crush);
 
   /**
    * Static helper for validating and enabling stretch mode on a MonMap.
@@ -124,8 +122,7 @@ public:
 			       int *errcode, bool commit,
 			       std::string tiebreaker_mon,
 			       const std::string& dividing_bucket,
-			       const CrushWrapper& crush,
-             bool set_global_stretch_mode);
+			       const CrushWrapper& crush);
 
 public:
   /**

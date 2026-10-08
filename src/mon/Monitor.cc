@@ -3338,9 +3338,6 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
   } else {
     ss << "  cluster:\n";
     ss << "    id:     " << monmap->get_fsid() << "\n";
-    if (monmap->global_stretch_mode_enabled) {
-      ss << "    stretch_mode_global: ENABLED\n";
-    }
     string health;
     healthmon()->get_health_status(false, nullptr, &health,
 				   "\n            ", "\n            ");

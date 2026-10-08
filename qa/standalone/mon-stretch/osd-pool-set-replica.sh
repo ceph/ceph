@@ -162,6 +162,11 @@ function TEST_pool_replica_crush_rule_name() {
     ceph osd pool create "$ec_poolname" --pool_type erasure --k 2 --m 1 \
         --pg_num 8 --pgp_num 8 \
         --zone_failure_domain zone --osd_failure_domain host || return 1
+    # a legacy EC pool must be converted to FastEC first
+    expect_failure $dir "is a legacy EC pool" \
+        ceph osd pool set "$ec_poolname" num_zones 2 \
+        --zone_failure_domain zone || return 1
+    ceph osd pool set "$ec_poolname" allow_ec_optimizations true || return 1
     ceph osd pool set "$ec_poolname" num_zones 2 \
         --zone_failure_domain zone || return 1
     ceph osd pool get "$ec_poolname" all --format json > "$dir/ec-pool.json" || return 1

@@ -1228,22 +1228,11 @@ int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
     }
   }
 
-  const auto db_overrides = db_pool_default_overrides(config_map);
-  const auto local_overrides =
-    local_pool_default_overrides(g_conf().get_config_values());
+  err = check_pool_default_overrides(values, ss);
+  if (err) {
+    return err;
+  }
   for (auto& [name, value] : values) {
-    if (auto p = db_overrides.find(name); p != db_overrides.end()) {
-      ss << name << " is set in section " << p->second
-         << " of the configuration database, which overrides the global "
-            "value for monitors";
-      return -EINVAL;
-    }
-    if (local_overrides.contains(name)) {
-      ss << name << " is set in the local configuration of mon."
-         << mon.name << " (file, environment or command line), which "
-            "overrides the configuration database";
-      return -EINVAL;
-    }
     const Option *opt = g_conf().find_option(name);
     ceph_assert(opt);
     Option::value_t real_value;
@@ -1259,4 +1248,51 @@ int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
     pending["global/" + name] = bl;
   }
   return 0;
+}
+
+int ConfigMonitor::check_pool_default_overrides(
+  const map<string,string>& values, ostream& ss)
+{
+  const auto db_overrides = db_pool_default_overrides(config_map);
+  const auto local_overrides =
+    local_pool_default_overrides(g_conf().get_config_values());
+  for (const auto& [name, value] : values) {
+    if (auto p = db_overrides.find(name); p != db_overrides.end()) {
+      ss << name << " is set in section " << p->second
+         << " of the configuration database, which overrides the global "
+            "value for monitors";
+      return -EINVAL;
+    }
+    if (local_overrides.contains(name)) {
+      ss << name << " is set in the local configuration of mon."
+         << mon.name << " (file, environment or command line), which "
+            "overrides the configuration database";
+      return -EINVAL;
+    }
+  }
+  return 0;
+}
+
+void ConfigMonitor::propose_global_options(const map<string,string>& values,
+                                           const string& description)
+{
+  ceph_assert(is_writeable());
+  ceph_assert(mon.kvmon()->is_writeable());
+  for (const auto& [name, value] : values) {
+    const string key = "global/" + name;
+    auto q = current.find(key);
+    if (q != current.end() && q->second.to_str() == value) {
+      continue;
+    }
+    bufferlist bl;
+    bl.append(value);
+    pending[key] = bl;
+  }
+  if (pending.empty()) {
+    return;
+  }
+  pending_description = description;
+  encode_pending_to_kvmon();
+  mon.kvmon()->propose_pending();
+  propose_pending();
 }

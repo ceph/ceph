@@ -242,26 +242,21 @@ TEST(MonMapBuildInitial, build_initial_mon_host_from_dns_fail) {
   ASSERT_EQ(r, -EINVAL);
 }
 
-static MonMap umbrella_round_trip(bool global_stretch_mode)
-{
+// Test the stretch mode fields survive an encode and decode
+TEST(MonMapEncode, stretch_mode_round_trip) {
   MonMap in;
+  in.strategy = MonMap::CONNECTIVITY;
   in.stretch_mode_enabled = true;
-  in.global_stretch_mode_enabled = global_stretch_mode;
+  in.tiebreaker_mon = "e";
+  in.disallowed_leaders = {"e"};
+  in.stretch_marked_down_mons = {"a", "b"};
   ceph::buffer::list bl;
   in.encode(bl, CEPH_FEATURES_ALL);
   MonMap out;
   out.decode(bl);
-  return out;
-}
-
-TEST(MonMapEncode, umbrella_stretch_mode_without_global) {
-  MonMap m = umbrella_round_trip(false);
-  ASSERT_TRUE(m.stretch_mode_enabled);
-  ASSERT_FALSE(m.global_stretch_mode_enabled);
-}
-
-TEST(MonMapEncode, umbrella_global_stretch_mode) {
-  MonMap m = umbrella_round_trip(true);
-  ASSERT_TRUE(m.stretch_mode_enabled);
-  ASSERT_TRUE(m.global_stretch_mode_enabled);
+  ASSERT_EQ(MonMap::CONNECTIVITY, out.strategy);
+  ASSERT_TRUE(out.stretch_mode_enabled);
+  ASSERT_EQ("e", out.tiebreaker_mon);
+  ASSERT_EQ(std::set<std::string>{"e"}, out.disallowed_leaders);
+  ASSERT_EQ((std::set<std::string>{"a", "b"}), out.stretch_marked_down_mons);
 }

@@ -321,6 +321,14 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
 
+  if ((prefix == "mon enable_stretch_mode" ||
+       prefix == "mon disable_stretch_mode") &&
+      mon.osdmon()->num_zones_supported()) {
+    // stretch mode follows the pools, which OSDMonitor changes
+    mon.osdmon()->dispatch(op);
+    return true;
+  }
+
   string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
@@ -1148,13 +1156,13 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       mon.osdmon()->wait_for_writeable(op, new Monitor::C_RetryMessage(&mon, op));
       return false;  /* do not propose, yet */
     }
-    if (monmap.global_stretch_mode_enabled) {
-      ss << "global stretch mode is already engaged";
+    if (monmap.stretch_mode_enabled) {
+      ss << "stretch mode is already engaged";
       err = -EINVAL;
       goto reply_no_propose;
     }
-    if (pending_map.global_stretch_mode_enabled) {
-      ss << "globalstretch mode currently committing";
+    if (pending_map.stretch_mode_enabled) {
+      ss << "stretch mode currently committing";
       err = 0;
       goto reply_no_propose;
     }
@@ -1203,7 +1211,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply_no_propose;
     }
     try_enable_stretch_mode(ss, &okay, &errcode, false,
-          tiebreaker_mon, dividing_bucket, crush, true);
+          tiebreaker_mon, dividing_bucket, crush);
     if (!okay) {
       err = errcode;
       goto reply_no_propose;
@@ -1216,7 +1224,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     }
     // everything looks good, actually commit the changes!
     try_enable_stretch_mode(ss, &okay, &errcode, true,
-          tiebreaker_mon, dividing_bucket, crush, true);
+          tiebreaker_mon, dividing_bucket, crush);
     mon.osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, true,
               dividing_bucket,
               2, // right now we only support 2 sites
@@ -1233,14 +1241,14 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     bool sure = false;
     bool okay = false;
     int errcode = 0;
-    if (!pending_map.global_stretch_mode_enabled) {
-      ss << "global stretch mode is already disabled";
+    if (!pending_map.stretch_mode_enabled) {
+      ss << "stretch mode is already disabled";
       err = -EINVAL;
       goto reply_no_propose;
     }
     cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
     if (!sure) {
-      ss << " This command will disable global stretch mode, "
+      ss << " This command will disable stretch mode, "
       "which means all your pools will be reverted back "
       "to the default size, min_size and crush_rule. "
       "Pass --yes-i-really-mean-it to proceed.";
@@ -1257,7 +1265,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     pending_map.tiebreaker_mon = "";
     pending_map.disallowed_leaders.clear();
     pending_map.stretch_marked_down_mons.clear();
-    pending_map.global_stretch_mode_enabled = false;
     pending_map.last_changed = ceph_clock_now();
     request_proposal(mon.osdmon());
   } else if (prefix == "mon set") {
@@ -1368,8 +1375,7 @@ void MonmapMonitor::validate_and_enable_stretch_mode(
     int *errcode, bool commit,
     string tiebreaker_mon,
     const string& dividing_bucket,
-    const CrushWrapper& crush,
-    bool set_global_stretch_mode)
+    const CrushWrapper& crush)
 {
   /* A helper function so that we can unittest
   *  the logic of going into stretch mode.
@@ -1521,9 +1527,6 @@ void MonmapMonitor::validate_and_enable_stretch_mode(
   }
 
   if (commit) {
-    if (set_global_stretch_mode) {
-      pending_map.global_stretch_mode_enabled = true;
-    }
     pending_map.strategy = strategy;
     pending_map.disallowed_leaders.insert(tiebreaker_mon);
     pending_map.tiebreaker_mon = tiebreaker_mon;
@@ -1536,8 +1539,7 @@ void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 					    int *errcode, bool commit,
 					    string tiebreaker_mon,
 					    const string& dividing_bucket,
-					    const CrushWrapper& crush,
-              bool set_global_stretch_mode)
+					    const CrushWrapper& crush)
 {
   dout(20) << __func__ << dendl;
   
@@ -1553,7 +1555,7 @@ void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   }
   
   validate_and_enable_stretch_mode(*mon.monmap, pending_map, ss, okay, errcode, commit,
-                                     tiebreaker_mon, dividing_bucket, crush, set_global_stretch_mode);
+                                     tiebreaker_mon, dividing_bucket, crush);
 
   // Add debug logging if successful
   if (*okay && !tiebreaker_mon.empty()) {
@@ -1591,9 +1593,6 @@ void MonmapMonitor::clear_stretch_mode_state()
   pending_map.disallowed_leaders.clear();
   pending_map.stretch_marked_down_mons.clear();
   pending_map.last_changed = ceph_clock_now();
-  // Note: global_stretch_mode_enabled is already cleared here
-  // since this is called in a per-pool stretch mode disable path,
-  // so global_stretch_mode_enabled was never true.
 
   propose_pending();
 }

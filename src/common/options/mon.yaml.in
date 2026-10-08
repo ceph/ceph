@@ -671,19 +671,13 @@ options:
   services:
   - mon
   min: 1
-- name: mon_global_stretch_pool_replica
-  type: uint
-  level: dev
-  default: 2
-  desc: Number of replicas per zone for global stretch mode pools
-  services:
-  - mon
-  min: 1
 - name: mon_stretch_pool_size
   type: uint
   level: dev
   default: 4
-  desc: '[DEPRECATED] Absolute pool size for stretch mode (use mon_global_stretch_pool_replica instead)'
+  desc: '[LEGACY] Pool size that ceph mon enable_stretch_mode gives replicated pools
+    until require_osd_release reaches the release with per-pool num_zones; half of it
+    becomes osd_pool_default_replica then'
   services:
   - mon
   min: 3
@@ -692,7 +686,8 @@ options:
   type: uint
   level: dev
   default: 2
-  desc: '[DEPRECATED] Absolute min_size for stretch mode pools (now calculated from num_zones)'
+  desc: '[LEGACY] Pool min_size that ceph mon enable_stretch_mode gives replicated pools
+    until require_osd_release reaches the release with per-pool num_zones'
   services:
   - mon
   min: 2

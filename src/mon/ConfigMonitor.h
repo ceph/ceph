@@ -50,6 +50,16 @@ public:
     return config_map;
   }
 
+  // Fails if a configuration database section or this monitor's local
+  // configuration would override the global value of one of the options.
+  int check_pool_default_overrides(
+    const std::map<std::string,std::string>& values, std::ostream& ss);
+
+  // Write global values of options and propose them. The caller checks that
+  // this service and KVMonitor are writeable.
+  void propose_global_options(const std::map<std::string,std::string>& values,
+                              const std::string& description);
+
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;

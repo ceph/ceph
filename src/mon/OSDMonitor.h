@@ -815,6 +815,12 @@ public:
                                          const std::string& interr,
                                          pg_pool_t& p,
                                          std::stringstream& ss);
+  int prepare_num_zones_crush_rule(const cmdmap_t& cmdmap,
+                                   const std::string& poolstr,
+                                   int64_t n,
+                                   const pg_pool_t& p,
+                                   int *crush_rule,
+                                   std::ostream *ss);
   int prepare_command_pool_set_replica(int64_t pool,
                                        const std::string& poolstr,
                                        int64_t n,
@@ -944,7 +950,7 @@ public:
 			       const std::set<pg_pool_t*>& pools,
 			       const std::string& new_crush_rule,
 			       CrushWrapper& crush,
-             bool set_global_stretch_mode);
+			       bool legacy);
 
   static void extract_sites_from_crush_rule(CrushWrapper& crush, std::set<int> &rule_sites, const std::set<int> &rule_roots, int dividing_id);
 
@@ -959,9 +965,57 @@ public:
   static int validate_stretch_mode_new_pool(CrushWrapper& crush, int crush_rule, int stretch_bucket_count, int stretch_mode_bucket, 
     const mempool::osdmap::map<int64_t, pg_pool_t>& pools, const std::string& zone_failure_domain, std::ostream *ss);
 
+  // The release that ships per-pool num_zones. Until require_osd_release
+  // reaches it the monitors keep the behaviour of earlier releases.
+  static constexpr ceph_release_t NUM_ZONES_RELEASE = ceph_release_t::umbrella;
+  bool num_zones_supported() const {
+    return osdmap.require_osd_release >= NUM_ZONES_RELEASE;
+  }
   // What check_pool_params() needs from this cluster, with crush as its
   // CRUSH map. crush must outlive the result.
   PoolCreateCluster pool_create_cluster(const CrushWrapper& crush);
+
+
+  // What ceph mon enable_stretch_mode or disable_stretch_mode does to a pool.
+  enum class StretchModeChange {
+    STRETCH,    // num_zones 1 to 2
+    REPLICA,    // stays at num_zones 2 with a new replica count
+    UNSTRETCH,  // num_zones 2 to 1
+  };
+  static constexpr int STRETCH_MODE_REPLICA = 2;
+  static constexpr int LOCAL_REPLICA = 3;
+
+  static std::map<int64_t, StretchModeChange> plan_stretch_mode_changes(
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools, bool enable);
+
+  // The checks of ceph mon enable_stretch_mode that need no cluster state
+  // other than the CRUSH map and the pools.
+  static int validate_enable_stretch_mode(
+      CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, std::string>& pool_names,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      const std::string& new_crush_rule,
+      const std::string& dividing_bucket,
+      std::ostream *ss);
+
+  // The checks of ceph mon disable_stretch_mode that need no cluster state
+  // other than the CRUSH map, the pools and whether stretch mode recovers.
+  static int validate_disable_stretch_mode(
+      const CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      const std::string& crush_rule,
+      bool recovering,
+      std::ostream *ss);
+
+  // ceph mon enable_stretch_mode and disable_stretch_mode once the upgrade
+  // is committed: change every pool as ceph osd pool set num_zones does and
+  // set the pool creation defaults. -EAGAIN when CRUSH rules were created
+  // and the command must be retried once they are committed.
+  int enable_stretch_mode(std::ostream& ss,
+                          const std::string& tiebreaker_mon,
+                          const std::string& dividing_bucket,
+                          const std::string& new_crush_rule);
+  int disable_stretch_mode(std::ostream& ss, const std::string& crush_rule);
 
   /**
   *
