@@ -33,10 +33,9 @@
 
 #define MAX_PORT_NUMBER 65535
 
-#ifdef _WIN32
-// ceph_sockaddr_storage matches the Linux format.
+// The wire format uses Linux's AF_INET6. Windows, FreeBSD and macOS
+// define it differently (23, 28 and 30).
 #define AF_INET6_LINUX 10
-#endif
 
 namespace ceph {
   class Formatter;
@@ -173,7 +172,7 @@ static inline void encode(const sockaddr_storage& a, ceph::buffer::list& bl) {
   auto src = (unsigned char const *)&a;
   auto dst = (unsigned char *)&ss;
   src += sizeof(a.ss_len);
-  ss.ss_family = a.ss_family;
+  ss.ss_family = a.ss_family == AF_INET6 ? AF_INET6_LINUX : a.ss_family;
   src += sizeof(a.ss_family);
   dst += sizeof(ss.ss_family);
   const auto copy_size = std::min((unsigned char*)(&a + 1) - src,
@@ -207,7 +206,7 @@ static inline void decode(sockaddr_storage& a,
   auto dst = (unsigned char *)&a;
   a.ss_len = 0;
   dst += sizeof(a.ss_len);
-  a.ss_family = ss.ss_family;
+  a.ss_family = ss.ss_family == AF_INET6_LINUX ? AF_INET6 : ss.ss_family;
   src += sizeof(ss.ss_family);
   dst += sizeof(a.ss_family);
   auto const copy_size = std::min((unsigned char*)(&ss + 1) - src,
@@ -494,20 +493,14 @@ struct entity_addr_t {
     }
     encode(nonce, bl);
     __u32 elen = get_sockaddr_len();
-#if (__FreeBSD__) || defined(__APPLE__)
-      elen -= sizeof(u.sa.sa_len);
-#endif
     encode(elen, bl);
     if (elen) {
       uint16_t ss_family = u.sa.sa_family;
-#if defined(_WIN32)
       if (ss_family == AF_INET6) {
         ss_family = AF_INET6_LINUX;
       }
-#endif
       encode(ss_family, bl);
-      elen -= sizeof(u.sa.sa_family);
-      bl.append(u.sa.sa_data, elen);
+      bl.append(u.sa.sa_data, elen - offsetof(struct sockaddr, sa_data));
     }
     ENCODE_FINISH(bl);
   }
@@ -535,14 +528,12 @@ struct entity_addr_t {
 	throw ceph::buffer::malformed_input("elen smaller than family len");
       }
       decode(ss_family, bl);
-#if defined(_WIN32)
       if (ss_family == AF_INET6_LINUX) {
         ss_family = AF_INET6;
       }
-#endif
       u.sa.sa_family = ss_family;
       elen -= sizeof(ss_family);
-      if (elen > get_sockaddr_len() - sizeof(u.sa.sa_family)) {
+      if (elen > get_sockaddr_len() - offsetof(struct sockaddr, sa_data)) {
 	throw ceph::buffer::malformed_input("elen exceeds sockaddr len");
       }
       bl.copy(elen, u.sa.sa_data);
