@@ -461,6 +461,15 @@ options:
     each enabled module. If set to 0, collection of these stats will be disabled.
   default: 5
   min: 0
+- name: mgr_module_shutdown_timeout
+  type: int
+  level: advanced
+  desc: Maximum time in seconds to wait for a Manager module's shutdown() to complete.
+  long_desc: If a module's shutdown() call does not return within this many seconds,
+    it is treated as failed and the caller stops waiting on it, instead of blocking
+    forever (e.g. blocking a standby manager's promotion to active).
+  default: 30
+  min: 1
 - name: mgr_tick_period
   type: secs
   level: advanced
