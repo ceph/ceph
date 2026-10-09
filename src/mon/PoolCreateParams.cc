@@ -398,6 +398,8 @@ int check_pool_defaults(const PoolCreateParams& p,
   for (int type : types) {
     PoolCreateParams pool = p;
     pool.pool_type = type;
+    // pool create limits a min_size default to the pool's size
+    pool.given.erase("min_size");
     if (int r = check_pool_params(pool, cluster, ss); r < 0) {
       return r;
     }

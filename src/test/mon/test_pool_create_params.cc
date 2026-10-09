@@ -820,6 +820,28 @@ TEST_F(PoolParamsTest, DefaultsCheckReplicatedWhenGiven) {
   EXPECT_EQ("replica must be between 1 and 10", ss.str());
 }
 
+// Test a min_size default is not checked against an EC pool's k and m
+TEST_F(PoolParamsTest, DefaultsMinSizeNotCheckedAsErasure) {
+  set("osd_pool_default_type", "erasure");
+  PoolCreateParams p = defaults();
+  apply_command_line(p, {{"min_size", int64_t(1)}});
+  EXPECT_EQ(0, check_pool_defaults(p, cluster(), &ss)) << ss.str();
+}
+
+// Test a min_size default is not checked against the default replicas
+TEST_F(PoolParamsTest, DefaultsMinSizeNotCheckedAsReplicated) {
+  const PoolCreateParams p = with({{"replica", int64_t(2)},
+                                   {"min_size", int64_t(3)}});
+  EXPECT_EQ(0, check_pool_defaults(p, cluster(), &ss)) << ss.str();
+}
+
+// Test a min_size given with k and m in one command is not checked either
+TEST_F(PoolParamsTest, DefaultsMinSizeWithKAndM) {
+  const PoolCreateParams p = with({{"k", int64_t(4)}, {"m", int64_t(2)},
+                                   {"min_size", int64_t(2)}});
+  EXPECT_EQ(0, check_pool_defaults(p, cluster(), &ss)) << ss.str();
+}
+
 // Where values come from
 
 // Test the zone failure domain of a pool
