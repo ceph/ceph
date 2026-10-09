@@ -3519,6 +3519,19 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_kmip_worker_threads
+  type: int
+  level: advanced
+  desc: Number of KMIP client worker threads
+  long_desc: KMIP requests are queued and handled by up to this many worker
+    threads in parallel. Each worker keeps at most one connection to the KMIP
+    server, closed after 5 seconds without use, so size this for the KMIP
+    server's connection limit and RGW load.
+  default: 1
+  min: 1
+  max: 32
+  services:
+  - rgw
 - name: rgw_crypt_suppress_logs
   type: bool
   level: advanced
