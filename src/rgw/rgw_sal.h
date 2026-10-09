@@ -1543,6 +1543,9 @@ public:
   /** Get the Object that represents this upload */
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() = 0;
 
+  /** True if this store persists per-part GCM salts; gates AEAD UploadPart salt emission. */
+  virtual bool supports_crypt_part_salts() const { return false; }
+
   /** Initialize this upload */
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) = 0;
   /** List all the parts of this upload, filling the parts cache */
