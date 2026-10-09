@@ -200,6 +200,209 @@ These values are converted to bytes when written into a ``CEPH`` block in
 ``ganesha.conf`` (as ``client_oc``, ``client_oc_size``, and
 ``client_oc_max_dirty``) when object caching is enabled.
 
+.. _cephadm-nfs-file-logging:
+
+NFS Daemon File Logging
+-----------------------
+
+Summary
+~~~~~~~
+
+Cephadm-managed NFS-Ganesha daemons support writing logs to a file on the host
+via the ``log_to_file`` Ceph configuration option.  By default, NFS-Ganesha
+logs to STDERR, which is captured by the container runtime and accessible via
+``cephadm logs`` or ``journalctl``.  When ``log_to_file`` is enabled, cephadm
+creates a per-daemon log directory on the host, bind-mounts it into the
+container, and starts NFS-Ganesha with file-based logging.
+
+Requirements
+~~~~~~~~~~~~
+
+* A cephadm-managed Ceph cluster with one or more NFS-Ganesha daemons deployed.
+* The ``log_to_file`` option must be set at the ``client.nfs`` config section
+  (applies to all NFS daemons) or at a more specific section.
+
+Enabling File Logging
+~~~~~~~~~~~~~~~~~~~~~
+
+Enable file logging for all NFS daemons:
+
+.. prompt:: bash #
+
+   ceph config set client.nfs log_to_file true
+
+Restart the NFS service so the change takes effect:
+
+.. prompt:: bash #
+
+   ceph orch restart nfs.<cluster_id>
+
+Verify that the Ganesha process inside the container is using file logging:
+
+.. prompt:: bash #
+
+   podman exec -it <container> ps -ef
+
+You should see::
+
+   /usr/bin/ganesha.nfsd -F -L /var/log/ceph/ganesha.log -N NIV_EVENT
+
+When ``log_to_file`` is **not** enabled, the process runs with::
+
+   /usr/bin/ganesha.nfsd -F -L STDERR -N NIV_EVENT
+
+How It Works
+~~~~~~~~~~~~
+
+When ``log_to_file`` is enabled, cephadm performs the following steps during
+NFS daemon deployment:
+
+1. **Creates a per-daemon log directory** on the host::
+
+      /var/log/ceph/<fsid>/<daemon_name>/
+
+   For example::
+
+      /var/log/ceph/<fsid>/nfs.mynfs.0.0.host1.xkfzal/
+
+   Each daemon gets its own subdirectory to avoid mount conflicts when multiple
+   NFS daemons are colocated on the same host (see :ref:`cephadm-nfs-colocation`).
+
+2. **Bind-mounts** the host log directory to ``/var/log/ceph`` inside the
+   container::
+
+      Host:      /var/log/ceph/<fsid>/<daemon_name>/
+      Container: /var/log/ceph/
+
+3. **Starts NFS-Ganesha** with ``-L /var/log/ceph/ganesha.log`` so logs are
+   written to the bind-mounted path.
+
+The resulting log file is available on the host at::
+
+   /var/log/ceph/<fsid>/<daemon_name>/ganesha.log
+
+Verifying File Logging
+~~~~~~~~~~~~~~~~~~~~~~
+
+After enabling ``log_to_file`` and restarting the NFS service:
+
+1. Verify the dedicated NFS log directory was created:
+
+   .. prompt:: bash #
+
+      find /var/log/ceph -type d | grep <cluster_id>
+
+   Expected output::
+
+      /var/log/ceph/<fsid>/nfs.<cluster_id>.0.0.<host>.<suffix>
+
+2. Verify the log file was created:
+
+   .. prompt:: bash #
+
+      find /var/log/ceph -name ganesha.log
+
+   Expected output::
+
+      /var/log/ceph/<fsid>/nfs.<cluster_id>.0.0.<host>.<suffix>/ganesha.log
+
+3. Verify the bind-mount inside the container:
+
+   .. prompt:: bash #
+
+      podman inspect <container> | grep "/var/log/ceph"
+
+   Expected output::
+
+      Source: /var/log/ceph/<fsid>/nfs.<cluster_id>.0.0.<host>.<suffix>
+      Destination: /var/log/ceph
+
+4. Verify log entries are being written (e.g. after creating or removing an
+   NFS export):
+
+   .. prompt:: bash #
+
+      tail -f /var/log/ceph/<fsid>/nfs.<cluster_id>.0.0.<host>.<suffix>/ganesha.log
+
+   Sample log entries::
+
+      NFS SERVER INITIALIZED
+      Received SIGHUP.... initiating export list reload
+      Reread exports complete
+
+Disabling File Logging
+~~~~~~~~~~~~~~~~~~~~~~
+
+To disable file logging and revert to STDERR:
+
+.. prompt:: bash #
+
+   ceph config rm client.nfs log_to_file
+   ceph orch restart nfs.<cluster_id>
+
+.. _cephadm-nfs-log-destination-constraint:
+
+Log Destination Constraint
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Cephadm bind-mounts only the per-daemon host directory to ``/var/log/ceph``
+inside the container.  **Any NFS-Ganesha log path must be under**
+``/var/log/ceph/``.  Logs written to any other path stay inside the container
+and are **not visible on the host**.
+
+This constraint also applies when using a custom ``LOG {}`` block via
+``ceph nfs cluster config set`` (see :ref:`nfs-cluster-set`).  If you add a
+``FACILITY`` that writes to a file, the ``destination`` **must** be under
+``/var/log/ceph/``.
+
+Correct example:
+
+.. code-block:: none
+
+   LOG {
+       Default_log_level = EVENT;
+       FACILITY {
+           name = logfile;
+           destination = "/var/log/ceph/ganesha.log";
+           max_level = FULL_DEBUG;
+           enable = active;
+       }
+   }
+
+.. warning::
+
+   Setting ``destination`` to a path outside ``/var/log/ceph/`` (for example,
+   ``/tmp/ganesha.log`` or ``/var/log/ganesha/``) means the log file will exist
+   only inside the container and will not be accessible from the host.
+
+Avoiding Duplicate Log Entries
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+NFS-Ganesha supports two independent mechanisms for file logging:
+
+* The **``-L`` command-line flag** — used automatically by cephadm when
+  ``log_to_file`` is enabled.
+* A **``LOG {}`` block** with a ``FACILITY`` directive — set manually via
+  ``ceph nfs cluster config set``.
+
+Both mechanisms can independently enable file logging.  However, if both are
+active at the same time, every log event is written twice to the same file,
+resulting in duplicate entries.  For example::
+
+   SIGHUP_HANDLER: Received SIGHUP.... initiating export list reload
+   SIGHUP_HANDLER: Received SIGHUP.... initiating export list reload
+
+   Reread exports complete
+   Reread exports complete
+
+Use only **one** mechanism at a time:
+
+* Use ``log_to_file`` for simple file logging — no additional configuration is
+  needed.
+* Use a custom ``LOG {}`` block only when you need fine-grained control over
+  log levels or multiple facilities, and leave ``log_to_file`` disabled
+  (``ceph config rm client.nfs log_to_file``).
+
 .. _cephadm-nfs-colocation:
 
 NFS Daemon Colocation
