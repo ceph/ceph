@@ -423,6 +423,8 @@ Ingress for NFS can be deployed for an existing NFS service
       monitor_port: 9000
       virtual_ip: 10.0.0.123/24
       haproxy_peer_communication_port: <integer> # optional: NFS ingress only; HAProxy peer TCP port (default 1024)
+      haproxy_log_target: <string> # optional: Default is journald. Use none to disable logging.
+      haproxy_log_level: <string> # optional: Default is info.
 
 A few notes:
 
@@ -454,6 +456,11 @@ A few notes:
     default is *1024*. Cephadm reserves this port alongside other ingress ports when
     scheduling daemons. Set a different value if *1024* is already in use or blocked.
     For RGW backends, HAProxy does not use a peers section, so this field is not applicable.
+
+  * HAProxy request logging is on by default. It is controlled by ``haproxy_log_target``
+    (``journald`` by default, ``none`` to disable) and ``haproxy_log_level`` (``info`` by
+    default). Read the logs with ``cephadm logs --name <haproxy-daemon>`` or
+    ``journalctl``. See the RGW ingress docs for the full field descriptions.
 
   * The backend service (``nfs.mynfs`` in this example) should include
     a *port* property that is not 2049 to avoid conflicting with the

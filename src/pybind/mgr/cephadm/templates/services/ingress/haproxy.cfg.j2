@@ -1,6 +1,8 @@
 # {{ cephadm_managed }}
 global
-    log         127.0.0.1 local2
+{% if spec.haproxy_log_target != 'none' %}
+    log         stdout format raw local0 {{ spec.haproxy_log_level }}
+{% endif %}
     chroot      /var/lib/haproxy
     pidfile     /var/lib/haproxy/haproxy.pid
     maxconn     8000
@@ -20,7 +22,12 @@ global
 
 defaults
     mode                    {{ mode }}
+{% if spec.haproxy_log_target != 'none' %}
     log                     global
+{% endif %}
+{% if spec.haproxy_log_target != 'none' and spec.haproxy_log_level == 'debug' %}
+    option                  log-health-checks
+{% endif %}
 {% if mode == 'http' %}
     option                  httplog
     option                  dontlognull
