@@ -2196,6 +2196,11 @@ on every one of these values, so:
   to K+M, which also repairs a ``size`` that the older ``stretch set`` changed.
 - Both are refused for every pool type while stretch mode is enabled: stretch
   mode sets the stretch values of its pools itself.
+- ``stretch set``'s ``min_size`` keeps main's meaning, a total over all zones,
+  from 1 to ``size``. The pool keeps ``min_size`` per zone (Section 11.2), so
+  ``stretch set`` stores the total divided by the zone count, rounded up:
+  ``size`` 4 with ``min_size`` 3 needs 2 replicas in each zone. Rounding up
+  never accepts writes with fewer replicas than the total asked for.
 
 **11.4.2 Enable/Disable Stretch Mode** (``try_enable_stretch_mode``,
 ``try_disable_stretch_mode``)

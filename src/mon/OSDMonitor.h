@@ -1037,6 +1037,12 @@ public:
       bool recovering,
       std::ostream *ss);
 
+  // ceph osd pool stretch set takes min_size as a total over all zones, as
+  // main does. The min_size per zone that the pool keeps, rounded up, or a
+  // negative error.
+  static int stretch_set_zone_min_size(int64_t min_size, int64_t size,
+                                       int64_t num_zones, std::ostream *ss);
+
   // Whether ceph osd pool stretch unset may clear the stretch values of an
   // EC pool with k data chunks and k_plus_m chunks, giving it size and
   // min_size.

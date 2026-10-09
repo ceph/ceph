@@ -892,7 +892,9 @@ Here are the breakdowns of the arguments:
 .. describe:: {min_size}
             
    The minimum number of replicas that must be active for I/O operations to be
-   serviced.
+   serviced, counted over all zones, from 1 to ``{size}``. The pool keeps it
+   per zone, divided by the number of zones and rounded up, so ``{size}`` 4
+   with ``{min_size}`` 3 needs 2 replicas in each zone.
 
    :Type: Integer
    :Required: Yes.

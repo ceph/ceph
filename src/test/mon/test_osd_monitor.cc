@@ -844,6 +844,49 @@ TEST_F(OSDMonitorDisableStretchModeTest, SameRuleFails) {
             "using", ss.str());
 }
 
+class OSDMonitorStretchSetMinSizeTest : public ::testing::Test {
+protected:
+  stringstream ss;
+
+  int zone_min_size(int64_t min_size, int64_t size, int64_t num_zones) {
+    ss.str("");
+    return OSDMonitor::stretch_set_zone_min_size(min_size, size, num_zones,
+                                                 &ss);
+  }
+};
+
+// Test main's documented 2x2 pool, min_size 2, keeps 1 per zone
+TEST_F(OSDMonitorStretchSetMinSizeTest, TwoOfFourIsOnePerZone) {
+  EXPECT_EQ(1, zone_min_size(2, 4, 2)) << ss.str();
+}
+
+// Test a total that does not divide evenly is rounded up per zone
+TEST_F(OSDMonitorStretchSetMinSizeTest, ThreeOfFourRoundsUp) {
+  EXPECT_EQ(2, zone_min_size(3, 4, 2)) << ss.str();
+}
+
+// Test a min_size of the whole pool keeps every replica per zone
+TEST_F(OSDMonitorStretchSetMinSizeTest, WholePool) {
+  EXPECT_EQ(2, zone_min_size(4, 4, 2)) << ss.str();
+}
+
+// Test a three-site pool of 6, min_size 4, keeps 2 per zone
+TEST_F(OSDMonitorStretchSetMinSizeTest, ThreeSites) {
+  EXPECT_EQ(2, zone_min_size(4, 6, 3)) << ss.str();
+}
+
+// Test failure for a min_size above the pool size
+TEST_F(OSDMonitorStretchSetMinSizeTest, AboveSizeFails) {
+  EXPECT_EQ(-EINVAL, zone_min_size(5, 4, 2));
+  EXPECT_EQ("pool min_size must be from 1 to the pool size 4", ss.str());
+}
+
+// Test failure for a min_size of 0 or less
+TEST_F(OSDMonitorStretchSetMinSizeTest, BelowOneFails) {
+  EXPECT_EQ(-EINVAL, zone_min_size(0, 4, 2));
+  EXPECT_EQ(-EINVAL, zone_min_size(-1, 4, 2));
+}
+
 // A k=2 m=1 EC pool
 class OSDMonitorStretchUnsetECTest : public ::testing::Test {
 protected:

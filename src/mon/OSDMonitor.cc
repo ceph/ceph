@@ -10551,9 +10551,10 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
     pool_min_size = bucket_count;
   }
 
-  if (pool_min_size < 0) {
-    ss << "pool min_size must be non-negative";
-    return -EINVAL;
+  const int zone_min_size =
+    stretch_set_zone_min_size(pool_min_size, pool_size, num_zones, &ss);
+  if (zone_min_size < 0) {
+    return zone_min_size;
   }
 
   p.peering_crush_bucket_count = static_cast<uint32_t>(bucket_count);
@@ -10563,7 +10564,7 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
   p.size = static_cast<__u8>(pool_size);
   // Store num_zones (extracted from CRUSH rule topology)
   p.num_zones = static_cast<__u8>(num_zones);
-  p.min_size = static_cast<__u8>(pool_min_size);
+  p.min_size = static_cast<__u8>(zone_min_size);
   // Store replica (calculated or provided)
   p.replica = static_cast<__u8>(replica);
   p.last_change = pending_inc.epoch;
@@ -17612,6 +17613,17 @@ int OSDMonitor::validate_disable_stretch_mode(
     }
   }
   return 0;
+}
+
+int OSDMonitor::stretch_set_zone_min_size(int64_t min_size, int64_t size,
+                                          int64_t num_zones, ostream *ss)
+{
+  if (min_size < 1 || min_size > size) {
+    *ss << "pool min_size must be from 1 to the pool size " << size;
+    return -EINVAL;
+  }
+  // a total over all zones, kept per zone and rounded up
+  return (min_size + num_zones - 1) / num_zones;
 }
 
 int OSDMonitor::check_stretch_unset_ec(const string& pool_name,
