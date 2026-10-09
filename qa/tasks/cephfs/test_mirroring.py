@@ -996,9 +996,10 @@ class TestMirroring(CephFSTestCase):
         cp = self.find_checkpoint(res['checkpoints'], snap_name)
         self.assertIsNone(cp, f'checkpoint {snap_name} should not be listed')
 
-    def start_mirror_daemon(self):
+    def start_mirror_daemon(self, *args):
+        cmd = ' '.join(['cephfs-mirror', '--id', 'mirror', *args])
         self.mount_a.run_shell_payload(
-            'nohup cephfs-mirror --id mirror </dev/null >/dev/null 2>&1 &')
+            f'nohup {cmd} </dev/null >/dev/null 2>&1 &')
 
         @retry_assert(timeout=60, interval=2)
         def wait_ready():
@@ -2665,6 +2666,47 @@ class TestMirroring(CephFSTestCase):
                              f'{remote_replacement}/{replacement_file}'))
 
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_incremental_sync_with_faked_inos(self):
+        """client_use_faked_inos does not make a changed directory look replaced."""
+        self.setup_mount_b(mds_perm='rw')
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        peer_spec = "client.mirror_remote@ceph"
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+        peer_uuid = self.get_peer_uuid(peer_spec)
+
+        dir_name = 'faked_inos'
+        self.mount_a.run_shell(['mkdir', '-p', f'{dir_name}/parent'])
+        self.mount_a.write_file(f'{dir_name}/parent/unchanged', data='unchanged')
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+
+        try:
+            self.stop_mirror_daemon()
+            self.start_mirror_daemon('--client_use_faked_inos=true')
+            self.wait_for_mirror_daemon_recovery(
+                self.primary_fs_name, self.primary_fs_id, f'/{dir_name}', peer_uuid)
+            self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap0'])
+            self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                        peer_spec, f'/{dir_name}', 'snap0', 1)
+            # not under .snap: ceph-fuse encodes the snapid into st_ino there
+            ino = self.mount_b.stat(f'{dir_name}/parent')['st_ino']
+
+            self.mount_a.write_file(f'{dir_name}/parent/new', data='new')
+            self.mount_a.run_shell(['sync'])
+            self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap1'])
+            self.check_peer_status_idle(self.primary_fs_name, self.primary_fs_id,
+                                        peer_spec, f'/{dir_name}', 'snap1', 2)
+            self.verify_snapshot(dir_name, 'snap1')
+            # synced in place, not purged and copied again
+            self.assertEqual(ino, self.mount_b.stat(f'{dir_name}/parent')['st_ino'])
+
+            self.remove_directory(self.primary_fs_name, self.primary_fs_id,
+                                  f'/{dir_name}')
+        finally:
+            self.stop_mirror_daemon()
+            self.start_mirror_daemon()
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
     def test_cephfs_mirror_incremental_sync_with_type_mixup(self):
