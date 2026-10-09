@@ -126,6 +126,42 @@ class EnsureMirroringClientCapsTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 'invalid_mds_caps')
 
 
+class CephFSSnapshotTest(ControllerTestCase):
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([CephFS])
+
+    @patch.object(CephFS, '_cephfs_instance')
+    def test_ls_snapshots_success(self, mock_instance):
+        path = '/volumes/g1/sv1'
+        expected = [{
+            'name': 'snap1',
+            'path': '/volumes/g1/sv1/.snap/snap1',
+            'created': '2024-01-01T00:00:00Z'
+        }]
+        mock_instance.return_value.ls_snapshots.return_value = expected
+
+        self._get(f'/api/cephfs/1/snapshot?path={urllib.parse.quote(path)}')
+        self.assertStatus(200)
+        self.assertJsonBody(expected)
+        mock_instance.assert_called_once_with('1')
+        mock_instance.return_value.ls_snapshots.assert_called_once_with(path)
+
+    @patch('dashboard.controllers.cephfs.cephfs')
+    @patch.object(CephFS, '_cephfs_instance')
+    def test_ls_snapshots_missing_snapdir(self, mock_instance, mock_cephfs):
+        path = '/volumes/g1/sv1'
+        mock_cephfs.ObjectNotFound = Exception
+        mock_cephfs.PermissionError = Exception
+        mock_instance.return_value.ls_snapshots.side_effect = mock_cephfs.ObjectNotFound(
+            errno.ENOENT, 'No such file or directory'
+        )
+
+        self._get(f'/api/cephfs/1/snapshot?path={urllib.parse.quote(path)}')
+        self.assertStatus(200)
+        self.assertJsonBody([])
+
+
 class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-methods
 
     @classmethod
