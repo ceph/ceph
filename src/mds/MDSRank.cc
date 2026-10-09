@@ -3338,8 +3338,9 @@ int MDSRank::_command_export_dir(
     std::string_view path,
     mds_rank_t target)
 {
+  auto fp = filepath(path, {.drop_trailing = true});
+
   std::lock_guard l(mds_lock);
-  filepath fp(path);
 
   if (target == whoami || !mdsmap->is_up(target) || !mdsmap->is_in(target)) {
     derr << "bad MDS target " << target << dendl;
@@ -3376,10 +3377,11 @@ void MDSRank::command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Format
   }
 
   auto dump = [&](Formatter *f) {
+    auto fp = filepath(root, {.drop_trailing = true});
     std::lock_guard l(mds_lock);
-    CInode *in = mdcache->cache_traverse(filepath(root.c_str()));
+    CInode *in = mdcache->cache_traverse(fp);
     if (!in) {
-      ss << "inode for path '" << filepath(root.c_str()) << "' is not in cache";
+      ss << "inode for path '" << fp << "' is not in cache";
       return;
     }
     f->open_array_section("inodes");
@@ -3415,7 +3417,8 @@ CDir *MDSRank::_command_dirfrag_get(
     return NULL;
   }
 
-  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  auto fp = filepath(path, {.drop_trailing = true});
+  CInode *in = mdcache->cache_traverse(fp);
   if (!in) {
     // TODO really we should load something in if it's not in cache,
     // but the infrastructure is harder, and we might still be unable
@@ -3491,7 +3494,8 @@ bool MDSRank::command_dirfrag_merge(
     return false;
   }
 
-  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  auto fp = filepath(path, {.drop_trailing = true});
+  CInode *in = mdcache->cache_traverse(fp);
   if (!in) {
     ss << "directory '" << path << "' inode not in cache";
     return false;
@@ -3521,7 +3525,8 @@ bool MDSRank::command_dirfrag_ls(
     return false;
   }
 
-  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  auto fp = filepath(path, {.drop_trailing = true});
+  CInode *in = mdcache->cache_traverse(fp);
   if (!in) {
     ss << "directory inode not in cache";
     return false;
@@ -3682,7 +3687,8 @@ void MDSRank::command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostrea
   bool dentry_dump = false;
   cmd_getval(cmdmap, "dentry_dump", dentry_dump);
 
-  CInode *in = mdcache->cache_traverse(filepath(path.c_str()));
+  auto fp = filepath(path, {.drop_trailing = true});
+  CInode *in = mdcache->cache_traverse(fp);
   if (!in) {
     ss << "directory inode not in cache";
     return;

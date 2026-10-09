@@ -7106,7 +7106,11 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
 
   populate_metadata(mount_root.empty() ? "/" : mount_root);
 
-  auto fp = filepath(mount_root, CEPH_INO_ROOT);
+  /* This circumvents normal Client cache construction where we locally process
+   * "."/"..". The MDS does not understand a path ending with a "/" or
+   * including a ".".
+   */
+  auto fp = filepath(mount_root, CEPH_INO_ROOT, {.drop_trailing = true});
   while (true) {
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
     req->set_filepath(fp);
@@ -8258,6 +8262,8 @@ int Client::do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPe
   tout(cct) << mode << std::endl;
   ldout(cct, 10) << __func__ << ": " << relpath << dendl;
 
+  const auto path = filepath(relpath, {.drop_trailing = true});
+
   std::scoped_lock lock(client_lock);
   InodeRef dirinode;
   int r = get_fd_inode(dirfd, &dirinode);
@@ -8266,7 +8272,7 @@ int Client::do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPe
   }
 
   walk_dentry_result wdr;
-  if (int rc = path_walk(dirinode, filepath(relpath), &wdr, perm, {.require_target = false}); rc < 0) {
+  if (int rc = path_walk(dirinode, path, &wdr, perm, {.require_target = false}); rc < 0) {
     return rc;
   }
 
@@ -8284,7 +8290,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
 
-  const filepath path(relpath);
+  const auto path = filepath(relpath, {.drop_trailing = true});
 
   std::scoped_lock lock(client_lock);
   for (;;) {
@@ -16601,12 +16607,14 @@ int Client::ll_unlink(Inode *in, const char *name, const UserPerm& perm)
 
 int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms, bool check_perms)
 {
-  std::string trimmed_path = filepath(name).get_trimmed_path();
+  const auto path = filepath(name, {.drop_trailing = true});
+  std::string trimmed_path = path.get_trimmed_path();
+
   ldout(cct, 8) << "_rmdir(" << dir->ino << " " << trimmed_path << " uid "
 		<< perms.uid() << " gid " << perms.gid() << ")" << dendl;
 
   walk_dentry_result wdr;
-  if (int rc = path_walk(dir, filepath(name), &wdr, perms, {.followsym = false}, trimmed_path); rc < 0) {
+  if (int rc = path_walk(dir, path, &wdr, perms, {.followsym = false}, trimmed_path); rc < 0) {
     return rc;
   }
 
