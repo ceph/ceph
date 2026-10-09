@@ -108,14 +108,18 @@ int main(int argc, char *argv[])
   DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::AppMain main(&dp);
 
-  LinuxKeyringSecret::initialize_process_keyring();
-
   main.init_frontends1(rgw::InstanceType::Daemon, rgw::ProtocolType::HTTP_S3);
   main.init_numa();
 
   if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
+
+  if (const auto ec = LinuxKeyringSecret::initialize_process_keyring(); ec) {
+    derr << "WARNING: failed to install the process keyring (" << ec.message()
+         << "); the SSE-KMS secret cache will stay disabled" << dendl;
+  }
+
   ceph::mutex mutex = ceph::make_mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
   init_timer.init();

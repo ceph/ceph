@@ -1191,6 +1191,10 @@ static int maybe_cache_kms_fetch(
     optional_yield y) {
   if (kms_cache == nullptr ||
       !dpp->get_cct()->_conf->rgw_crypt_s3_kms_cache_enabled) {
+    ldpp_dout(dpp, 5) << "KMS Cache: bypassed, "
+                      << (kms_cache == nullptr ? "no cache in this process"
+                                               : "cache disabled")
+                      << dendl;
     const auto ret = fetch(actual_key);
     if (perfcounter) {
       if (ret == -ENOENT) {

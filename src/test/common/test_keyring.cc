@@ -1,6 +1,8 @@
 #include <common/keyring.h>
 #include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
+
+#include <thread>
 extern "C" {
 #include <keyutils.h>
 }
@@ -14,6 +16,11 @@ class LinuxKeyringTest : public ::testing::Test {
   LinuxKeyringTest() : keyring(new LinuxKeyring()) {}
 
   void SetUp() override {
+    const auto init_ec = LinuxKeyringSecret::initialize_process_keyring();
+    if (init_ec) { 
+      GTEST_SKIP()<< "Cannot install a process keyring: " << init_ec.message()
+                  << ". Skipping test";
+    }
     std::error_code ec;
     if (!keyring->supported(&ec)) {
       GTEST_SKIP() << "Linux Keyring is unsupported. " << ec
@@ -35,6 +42,21 @@ TEST_F(LinuxKeyringTest, Basics) {
 
   ASSERT_FALSE(keyring_secret->remove());
   ASSERT_TRUE(keyring_secret->read(out));
+}
+
+TEST_F(LinuxKeyringTest, SecretIsReadableFromAnotherThread) {
+  const std::string secret("secret");
+  auto maybe_keyring_secret = keyring->add("testkey-crossthread", secret);
+  ASSERT_TRUE(maybe_keyring_secret.has_value()) << maybe_keyring_secret.error();
+  auto keyring_secret = std::move(maybe_keyring_secret.value());
+
+  std::string out;
+  std::error_code ec;
+  std::thread reader([&] { ec = keyring_secret->read(out); });
+  reader.join();
+
+  ASSERT_FALSE(ec) << ec.message();
+  ASSERT_EQ(secret, out);
 }
 
 TEST_F(LinuxKeyringTest, Lifecycle) {
