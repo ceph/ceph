@@ -98,12 +98,20 @@ Starting the Upgrade
    exception: if an MDS daemon is found to be actively serving a filesystem
    other than its own service's (a standby takeover), both filesystems are
    prepared together, as restarting an active MDS of an unprepared
-   filesystem would be unsafe. To restore the previous behavior of preparing
-   all filesystems at once, set:
+   filesystem would be unsafe. To prepare all targeted filesystems at once
+   instead, set:
 
    .. prompt:: bash #
 
       ceph config set mgr mgr/cephadm/upgrade_fs_one_at_a_time false
+
+   Even with this option disabled, the behavior differs slightly from earlier
+   releases: only the filesystems whose MDS daemons are part of the upgrade
+   are prepared, which matters for staggered upgrades that select a subset of
+   the MDS daemons (for example ``--services mds.<fs_name>``), and only the
+   filesystems failed by the upgrade itself are made joinable again on
+   completion, so a filesystem that was already failed before the upgrade is
+   left as it was.
 
 Before you use cephadm to upgrade Ceph, verify that all hosts are currently
 online and that your cluster is healthy by running the following command:

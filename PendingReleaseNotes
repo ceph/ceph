@@ -66,8 +66,11 @@
   is offline (``fail_fs = true``) or degraded (scaled down to ``max_mds 1``)
   at any moment, instead of all filesystems simultaneously. Total upgrade
   duration is unchanged, as MDS daemons were already redeployed serially.
-  The previous behaviour can be restored with
+  Preparing all targeted filesystems at once can be restored with
   ``ceph config set mgr mgr/cephadm/upgrade_fs_one_at_a_time false``.
+  In both modes, only the filesystems whose MDS daemons are part of the
+  upgrade are prepared, and only filesystems failed by the upgrade itself
+  are made joinable again on completion.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
