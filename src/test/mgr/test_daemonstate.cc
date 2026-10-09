@@ -227,3 +227,18 @@ TEST_F(DeviceStateTest, RemoveLifeExpectancyBeforeSet)
 }
 
 /* End Negative Tests */
+
+/* Start DeviceState Tests */
+
+TEST(DaemonStateIndex, WithDeviceCreateNopPrunesDevice)
+{
+  DaemonStateIndex index;
+
+  bool cb_called = false;
+  index.with_device_create("sda", [&](DeviceState&) { cb_called = true; });
+
+  ASSERT_TRUE(cb_called);
+
+  bool found = index.with_device("sda", [](const DeviceState&) {});
+  ASSERT_FALSE(found);
+}
