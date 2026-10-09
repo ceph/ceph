@@ -1,0 +1,80 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab
+
+#include "gtest/gtest.h"
+
+#include "common/ceph_context.h"
+#include "common/TrackedOp.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
+#include "messages/MCommand.h"
+#include "mgr/MgrOpRequest.h"
+
+// The MgrOpRequest test harness does not yet exist on the base branch. The
+// fixture below (and the BasicSetup test) is cherry-picked from the pending
+// scaffolding in ceph/ceph PR #71237 (MgrOpRequestTestHelper). It is kept
+// self-contained here as a temporary measure and should be reconciled with
+// src/test/mgr/TestMgr.h when that PR lands. #81341 cherry-picks the same
+// scaffolding; if both land, the scaffolding is added once.
+class MgrOpRequestTestHelper : public ::testing::Test {
+public:
+  static inline boost::intrusive_ptr<CephContext> cct;
+  std::unique_ptr<OpTracker> tracker;
+
+  static void SetUpTestSuite() {
+    if (!cct) {
+      std::vector<const char*> args = {"unittest_mgr_mgroprequest"};
+      cct = global_init(
+          nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+          CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+      common_init_finish(cct.get());
+    }
+  }
+
+  void SetUp() override {
+    tracker = std::make_unique<OpTracker>(cct.get(), true, 1);
+  }
+
+  void TearDown() override {
+    tracker.reset();
+  }
+};
+
+TEST_F(MgrOpRequestTestHelper, BasicSetup) {
+  auto msg = ceph::make_message<MCommand>();
+  msg->set_tid(123);
+
+  auto req = tracker->create_request<MgrOpRequest>(msg);
+  ASSERT_TRUE(req);
+  ASSERT_EQ(req->get_req(), msg);
+}
+
+// Flag bit values mirrored from the private constants in
+// src/mgr/MgrOpRequest.h. They are not publicly accessible, so the raw
+// latest-flag value returned by state_flag() is compared against these.
+static constexpr uint8_t kFlagStartMonCommand = 1 << 3;   // 0x08
+static constexpr uint8_t kFlagFinishMonCommand = 1 << 4;  // 0x10
+
+TEST_F(MgrOpRequestTestHelper, MarkFinishMonCommandSetsCorrectFlag) {
+  auto msg = ceph::make_message<MCommand>();
+  auto req = tracker->create_request<MgrOpRequest>(msg);
+  ASSERT_TRUE(req);
+
+  req->mark_start_mon_command();
+  EXPECT_EQ(req->state_flag(), kFlagStartMonCommand)
+      << "mark_start_mon_command() should set the start-mon-command flag.";
+
+  req->mark_finish_mon_command();
+  EXPECT_EQ(req->state_flag(), kFlagFinishMonCommand)
+      << "Current: flag_start_mon_command set twice, flag_finish_mon_command "
+         "never set; Expected: flag_finish_mon_command set after "
+         "mark_finish_mon_command().";
+  // The finish call must advance the state off the start flag, i.e. it must
+  // not re-set the start-mon-command flag a second time.
+  EXPECT_NE(req->state_flag(), kFlagStartMonCommand)
+      << "mark_finish_mon_command() must not leave the op in the "
+         "start-mon-command state (start flag double-set).";
+  EXPECT_EQ(req->_get_state_string(), "mon command finished")
+      << "_get_state_string() should report the finished state after "
+         "mark_finish_mon_command().";
+}
