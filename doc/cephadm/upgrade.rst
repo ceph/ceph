@@ -158,6 +158,27 @@ ceph ``osd ok-to-upgrade`` with the specified bucket name and type, and max set 
    This includes the name or type of any CRUSH bucket.
 
 
+Limiting the Gateway and RGW Upgrade Batch Size
+===============================================
+
+The number of gateway and RGW daemons that cephadm upgrades in one pass is
+controlled by :confval:`mgr/cephadm/max_parallel_gateway_upgrades`. The
+remaining daemons are upgraded by the subsequent passes, so the upgrade still
+completes without operator intervention. Lower the value to reduce the load
+that an upgrade places on the cluster, and raise it to upgrade large numbers of
+gateway daemons faster:
+
+.. prompt:: bash #
+
+  ceph config set mgr mgr/cephadm/max_parallel_gateway_upgrades 8
+
+Daemons are grouped by service, and whole services are added to a pass. This
+means that the daemons of one service which are ok-to-stop are never split across
+upgrade passes, and that a pass can exceed the configured value when a single service
+has more daemons than the limit. Setting the option to ``0`` disables the limit and
+restores the previous behavior of upgrading all daemons of the type in one pass.
+
+
 Monitoring the Upgrade
 ======================
 
