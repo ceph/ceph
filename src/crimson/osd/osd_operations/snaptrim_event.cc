@@ -45,6 +45,8 @@ PG::BackgroundProcessLock::lock_with_op(SnapTrimEvent &st_event) noexcept
   return st_event.enter_stage<interruptor>(wait
   ).then_interruptible([this] {
     return mutex.lock();
+  }).then_interruptible([this] {
+    locked = true;
   });
 }
 
