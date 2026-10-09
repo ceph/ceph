@@ -154,7 +154,8 @@ int RGWGC::fifo_list(int index, const std::string& marker, uint32_t max,
         decode(info, iter);
       } catch (const buffer::error&) {
         ldpp_dout(this, 0) << "ERROR: fifo_list failed to decode entry oid="
-                           << fifo_oid(index) << dendl;
+                           << fifo_oid(index) << " marker=" << e.marker
+                           << " len=" << e.data.length() << dendl;
         return -EIO;
       }
       // grace period (rgw_gc_obj_min_wait) not over. stop listing
@@ -263,15 +264,15 @@ int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag, optiona
   cls_rgw_gc_obj_info info;
   info.chain = chain;
   info.tag = tag;
+  info.time = ceph::real_clock::now() +
+    ceph::make_timespan(cct->_conf->rgw_gc_obj_min_wait);
 
   int i = tag_index(tag);
 
-  ObjectWriteOperation op;
-  gc_log_enqueue2(op, cct->_conf->rgw_gc_obj_min_wait, info);
+  ldpp_dout(this, 20) << "RGWGC::send_chain on fifo: " << fifo_oid(i)
+                      << " tag is: " << tag << dendl;
 
-  ldpp_dout(this, 20) << "RGWGC::send_chain - on object name: " << obj_names[i] << "tag is: " << tag << dendl;
-
-  return store->gc_operate(this, obj_names[i], std::move(op), y);
+  return fifo_push(i, info, y);
 }
 
 int RGWGC::remove(int index, int num_entries, optional_yield y)
@@ -282,59 +283,72 @@ int RGWGC::remove(int index, int num_entries, optional_yield y)
   return store->gc_operate(this, obj_names[index], std::move(op), y);
 }
 
-int RGWGC::list(int& index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool& truncated, bool& processing_queue, std::optional<int> shard_id)
+int RGWGC::list(int& index, string& marker, uint32_t max, bool expired_only,
+                std::list<cls_rgw_gc_obj_info>& result, bool& truncated,
+                bool& processing_fifo,
+                std::optional<int> shard_id)
 {
   result.clear();
-  string next_marker;
 
   int max_index = shard_id.has_value() ? (shard_id.value() + 1) : max_objs;
   if (shard_id.has_value()) {
     index = shard_id.value();
   }
 
-  for (; index < max_index && result.size() < max; index++, marker.clear()) {
-    std::list<cls_rgw_gc_obj_info> queue_entries;
+  for (; index < max_index && result.size() < max; ) {
+    string next_marker;
+    bool more = false;
+    const uint32_t remain = max - result.size();
 
-    processing_queue = false;
-    int ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, max - result.size(), expired_only, queue_entries, truncated, next_marker);
+    if (!processing_fifo) {
+      std::list<cls_rgw_gc_obj_info> queue_entries;
+      int ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index],
+                                              marker, remain, expired_only,
+                                              queue_entries, more, next_marker);
+      if (ret < 0) {
+        return ret;
+      }
+      for (auto& e : queue_entries) {
+        result.push_back(std::move(e));
+      }
+      if (more && !queue_entries.empty()) {
+        marker = next_marker;
+        processing_fifo = false;
+        truncated = true;
+        return 0;
+      }
+      marker.clear();
+      processing_fifo = true;
+      if (result.size() == max) {
+        truncated = true;
+        return 0;
+      }
+    }
+
+    std::list<cls_rgw_gc_obj_info> fifo_entries;
+    int ret = fifo_list(index, marker, max - result.size(), expired_only,
+                        fifo_entries, &more, &next_marker, null_yield);
     if (ret < 0) {
       return ret;
     }
-
-    if (queue_entries.size() == 0)
-      continue;
-
-    std::list<cls_rgw_gc_obj_info>::iterator iter;
-    for (iter = queue_entries.begin(); iter != queue_entries.end(); ++iter) {
-      result.push_back(*iter);
+    for (auto& e : fifo_entries) {
+      result.push_back(std::move(e));
     }
-
-    marker = next_marker;
-
-    if (index == max_index - 1) {
-      processing_queue = truncated;
-      /* we cut short here, truncated will hold the correct value */
-      return 0;
-    }
-
-    if (result.size() == max) {
-      if (truncated) {
-        processing_queue = true;
-      } else {
-        index += 1; //move to next gc object
-      }
-
-      /* close approximation, it might be that the next of the objects don't hold
-       * anything, in this case truncated should have been false, but we can find
-       * that out on the next iteration
-       */
+    if (more) {
+      marker = next_marker;
+      processing_fifo = true;
       truncated = true;
       return 0;
     }
+    processing_fifo = false;
+    marker.clear();
+    ++index;
   }
-  truncated = false;
-  processing_queue = false;
 
+  truncated = (index < max_index);
+  if (!truncated) {
+    processing_fifo = false;
+  }
   return 0;
 }
 
@@ -448,6 +462,63 @@ public:
   }
 }; // class RGWGCIOManger
 
+int RGWGC::process_chains(RGWGCIOManager& io_manager, IoCtx*& ctx,
+                          string& last_pool, int index,
+                          std::list<cls_rgw_gc_obj_info>& entries, utime_t end)
+{
+  for (auto& info : entries) {
+    ldpp_dout(this, 20) << "RGWGC::process iterating over entry tag='" <<
+      info.tag << "', time=" << info.time << ", chain.objs.size()=" <<
+      info.chain.objs.size() << dendl;
+
+    if (ceph_clock_now() >= end) {
+      return -EAGAIN;
+    }
+    if (info.chain.objs.empty()) {
+      continue;
+    }
+    for (const auto& obj : info.chain.objs) {
+      if (obj.pool != last_pool) {
+        IoCtx *new_ctx = new IoCtx;
+        int ret = rgw_init_ioctx(this, store->get_rados_handle(), obj.pool, *new_ctx);
+        if (ret < 0) {
+          delete new_ctx;
+          if (ret != -ENOENT) {
+            return ret;
+          }
+          ldpp_dout(this, 0) << "ERROR: failed to create ioctx pool=" <<
+            obj.pool << dendl;
+          continue;
+        }
+        delete ctx;
+        ctx = new_ctx;
+        last_pool = obj.pool;
+      }
+
+      ctx->locator_set_key(obj.loc);
+      ctx->set_pool_full_try();
+
+      const string& oid = obj.key.name;
+
+      ldpp_dout(this, 5) << "RGWGC::process removing " << obj.pool <<
+        ":" << obj.key.name << dendl;
+      ObjectWriteOperation op;
+      cls_refcount_put(op, info.tag, true);
+
+      int ret = io_manager.schedule_io(ctx, oid, &op, index, info.tag);
+      if (ret < 0) {
+        ldpp_dout(this, 0) <<
+          "WARNING: failed to schedule deletion for oid=" << oid << dendl;
+        return ret;
+      }
+      if (going_down()) {
+        return -EAGAIN;
+      }
+    }
+  }
+  return 0;
+}
+
 int RGWGC::process(int index, int max_secs, bool expired_only,
                    RGWGCIOManager& io_manager, optional_yield y)
 {
@@ -478,102 +549,73 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
   if (ret < 0)
     return ret;
 
-  string marker;
-  string next_marker;
-  bool truncated = false;
   IoCtx *ctx = new IoCtx;
-  do {
-    int max = 100;
-    std::list<cls_rgw_gc_obj_info> entries;
+  string last_pool;
 
-    int ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, truncated, next_marker);
-    ldpp_dout(this, 20) <<
-    "RGWGC::process cls_rgw_gc_queue_list_entries returned with return value:" << ret <<
-    ", entries.size=" << entries.size() << ", truncated=" << truncated <<
-    ", next_marker='" << next_marker << "'" << dendl;
-    if (entries.size() == 0) {
-      ret = 0;
-      goto done;
+  for (const bool use_fifo : {false, true}) {
+    if (use_fifo && going_down()) {
+      break;
     }
 
-    if (ret < 0)
-      goto done;
+    string marker;
+    string next_marker;
+    bool truncated = false;
+    do {
+      int max = 100;
+      std::list<cls_rgw_gc_obj_info> entries;
 
-    marker = next_marker;
-
-    string last_pool;
-    std::list<cls_rgw_gc_obj_info>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      cls_rgw_gc_obj_info& info = *iter;
-
-      ldpp_dout(this, 20) << "RGWGC::process iterating over entry tag='" <<
-	info.tag << "', time=" << info.time << ", chain.objs.size()=" <<
-	info.chain.objs.size() << dendl;
-
-      cls_rgw_obj_chain& chain = info.chain;
-
-      utime_t now = ceph_clock_now();
-      if (now >= end) {
+      if (!use_fifo) {
+        ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index],
+                                            marker, max, expired_only, entries,
+                                            truncated, next_marker);
+      } else {
+        ret = fifo_list(index, marker, max, expired_only, entries, &truncated,
+                        &next_marker, y);
+      }
+      ldpp_dout(this, 20) <<
+        "RGWGC::process " << (use_fifo ? "fifo_list" : "cls_rgw_gc_queue_list_entries") <<
+        " returned with return value:" << ret <<
+        ", entries.size=" << entries.size() << ", truncated=" << truncated <<
+        ", next_marker='" << next_marker << "'" << dendl;
+      if (ret < 0) {
         goto done;
       }
-      if (! chain.objs.empty()) {
-	for (const auto& obj : chain.objs) {
-	  if (obj.pool != last_pool) {
-	    delete ctx;
-	    ctx = new IoCtx;
-	    ret = rgw_init_ioctx(this, store->get_rados_handle(), obj.pool, *ctx);
-	    if (ret < 0) {
-	      if (ret != -ENOENT) {
-		goto done;
-	      }
-	      last_pool = "";
-	      ldpp_dout(this, 0) << "ERROR: failed to create ioctx pool=" <<
-		obj.pool << dendl;
-	      continue;
-	    }
-	    last_pool = obj.pool;
-	  }
+      if (entries.empty()) {
+        break;
+      }
 
-	  ctx->locator_set_key(obj.loc);
-	  ctx->set_pool_full_try(); // allow deletion at pool quota limit
+      marker = next_marker;
 
-	  const string& oid = obj.key.name; /* just stored raw oid there */
-
-	  ldpp_dout(this, 5) << "RGWGC::process removing " << obj.pool <<
-	    ":" << obj.key.name << dendl;
-	  ObjectWriteOperation op;
-	  cls_refcount_put(op, info.tag, true);
-
-	  ret = io_manager.schedule_io(ctx, oid, &op, index, info.tag);
-	  if (ret < 0) {
-	    ldpp_dout(this, 0) <<
-	      "WARNING: failed to schedule deletion for oid=" << oid << dendl;
-      //If deleting oid failed for any of them, we will not delete queue entries
-      goto done;
-	  }
-	  if (going_down()) {
-	    // leave early, even if tag isn't removed, it's ok since it
-	    // will be picked up next time around
-	    goto done;
-	  }
-	} // chains loop
-      } // else -- chains not empty
-    } // entries loop
-    if (entries.size() > 0) {
+      ret = process_chains(io_manager, ctx, last_pool, index, entries, end);
+      if (ret < 0) {
+        goto done;
+      }
       ret = io_manager.drain_ios();
       if (ret < 0) {
         goto done;
       }
-      //Remove the entries from the queue
-      ldpp_dout(this, 5) << "RGWGC::process removing entries, marker: " << marker << dendl;
-      ret = io_manager.remove_queue_entries(index, entries.size(), null_yield);
-      if (ret < 0) {
-        ldpp_dout(this, 0) <<
-          "WARNING: failed to remove queue entries" << dendl;
-        goto done;
+      if (!use_fifo) {
+        ldpp_dout(this, 5) << "RGWGC::process removing queue entries, marker: " << marker << dendl;
+        ret = io_manager.remove_queue_entries(index, entries.size(), null_yield);
+        if (ret < 0) {
+          ldpp_dout(this, 0) <<
+            "WARNING: failed to remove queue entries" << dendl;
+          goto done;
+        }
+      } else {
+        ldpp_dout(this, 5) << "RGWGC::process trimming fifo entries, marker: " << marker << dendl;
+        ret = fifo_trim(index, marker, y);
+        if (ret < 0) {
+          ldpp_dout(this, 0) <<
+            "WARNING: failed to trim fifo entries" << dendl;
+          goto done;
+        }
+        if (perfcounter) {
+          perfcounter->inc(l_rgw_gc_retire, entries.size());
+        }
       }
-    }
-  } while (truncated);
+    } while (truncated && !going_down());
+  }
 
 done:
   /* we don't drain here, because if we're going down we don't want to
