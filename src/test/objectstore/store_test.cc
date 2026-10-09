@@ -34,6 +34,7 @@
 #include "os/ObjectStore.h"
 #if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/Allocator.h"
 #include "os/bluestore/BlueFS.h"
 #endif
 #include "include/Context.h"
@@ -278,6 +279,7 @@ class MultiLabelTest : public CheckedUmount {
     bdev->close();
     return r;
   }
+  void online_expand_reserves_new_label(const char* allocator);
 };
 
 class CorruptedOnodesTest : public CheckedUmount {
@@ -11982,6 +11984,96 @@ TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithObjects) {
   auto it = label.meta.find("epoch");
   ASSERT_NE(it, label.meta.end());
   ASSERT_EQ(label.meta["multi"], "yes");
+}
+
+// An online expand (expand_devices() while mounted, i.e.
+// "ceph tell osd.N bluestore bluefs-bdev-expand") writes bdev label copies
+// into the new space; they must not be handed out by the allocator.
+void MultiLabelTest::online_expand_reserves_new_label(const char* allocator) {
+  static constexpr uint64_t _1M = 1024 * 1024;
+  static constexpr uint64_t _1G = 1024 * _1M;
+  SetVal(g_conf(), "bluestore_block_size", stringify(_1G - 64 * _1M).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  SetVal(g_conf(), "bluestore_allocator", allocator);
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  BlueStore* bstore = dynamic_cast<BlueStore*>(store.get());
+  ASSERT_NE(nullptr, bstore);
+  string block = get_data_dir() + "/block";
+  ASSERT_EQ(0, ::truncate(block.c_str(), 2 * _1G));
+  {
+    stringstream ss;
+    ASSERT_EQ(0, bstore->expand_devices(ss));
+  }
+  bluestore_bdev_label_t label;
+  ASSERT_EQ(0, BlueStore::read_bdev_label_at_pos(g_ceph_context, block, _1G, &label));
+
+  auto label_free = [&]() {
+    uint64_t bytes = 0;
+    bstore->debug_get_alloc()->foreach([&](uint64_t o, uint64_t l) {
+      uint64_t s = std::max(o, _1G);
+      uint64_t e = std::min(o + l, _1G + BDEV_LABEL_BLOCK_SIZE);
+      if (s < e) {
+        bytes += e - s;
+      }
+    });
+    return bytes;
+  };
+  EXPECT_EQ(0u, label_free()) << "bdev label copy at 1G is free in the allocator";
+
+  // rewriting the labels and remounting must leave label and store consistent
+  ASSERT_EQ(0, bstore->write_meta("online_expand_test", "1"));
+  umount();
+  EXPECT_EQ(0, store->fsck(false));
+  ASSERT_EQ(0, BlueStore::read_bdev_label_at_pos(g_ceph_context, block, _1G, &label));
+  EXPECT_EQ("1", label.meta["online_expand_test"]);
+  ASSERT_EQ(0, mount());
+  EXPECT_EQ(0u, label_free()) << "bdev label copy at 1G is free after remount";
+}
+
+TEST_P(MultiLabelTest, OnlineExpandReservesNewLabelHybrid) {
+  online_expand_reserves_new_label("hybrid");
+}
+
+TEST_P(MultiLabelTest, OnlineExpandReservesNewLabelAvl) {
+  online_expand_reserves_new_label("avl");
+}
+
+TEST_P(MultiLabelTest, OnlineExpandReservesNewLabelBitmap) {
+  online_expand_reserves_new_label("bitmap");
+}
+
+TEST_P(MultiLabelTest, OnlineExpandReservesNewLabelBtree2) {
+  online_expand_reserves_new_label("hybrid_btree2");
+}
+
+// Without multi labels an online expand must not write extra label copies.
+TEST_P(MultiLabelTest, OnlineExpandSingleLabelWritesNoCopy) {
+  static constexpr uint64_t _1M = 1024 * 1024;
+  static constexpr uint64_t _1G = 1024 * _1M;
+  SetVal(g_conf(), "bluestore_block_size", stringify(_1G - 64 * _1M).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "false");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  BlueStore* bstore = dynamic_cast<BlueStore*>(store.get());
+  ASSERT_NE(nullptr, bstore);
+  string block = get_data_dir() + "/block";
+  ASSERT_EQ(0, ::truncate(block.c_str(), 2 * _1G));
+  {
+    stringstream ss;
+    ASSERT_EQ(0, bstore->expand_devices(ss));
+  }
+  bluestore_bdev_label_t label;
+  EXPECT_NE(0, BlueStore::read_bdev_label_at_pos(g_ceph_context, block, _1G, &label))
+    << "single-label store got a label copy at 1G";
+  ASSERT_EQ(0, BlueStore::read_bdev_label_at_pos(g_ceph_context, block, 0, &label));
+  EXPECT_EQ(2 * _1G, label.size);
 }
 
 TEST_P(CorruptedOnodesTest, Recover_TolerateMissingHeadShard)
