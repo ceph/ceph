@@ -15,6 +15,7 @@ import { PerformanceCounterModule } from '~/app/ceph/performance-counter/perform
 import { CoreModule } from '~/app/core/core.module';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OsdService } from '~/app/shared/api/osd.service';
+import { HostService } from '~/app/shared/api/host.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
@@ -44,6 +45,7 @@ describe('OsdListComponent', () => {
   let modalServiceShowSpy: jasmine.Spy;
   let osdService: OsdService;
   let orchService: OrchestratorService;
+  let hostService: HostService;
 
   const fakeAuthStorageService = {
     getPermissions: () => {
@@ -124,6 +126,8 @@ describe('OsdListComponent', () => {
       close: jest.fn()
     });
     orchService = TestBed.inject(OrchestratorService);
+    hostService = TestBed.inject(HostService);
+    spyOn(hostService, 'inventoryDeviceList').and.returnValue(of([{ available: true } as any]));
     if (typeof window !== 'undefined') {
       window.ResizeObserver = window.ResizeObserver || ResizeObserverPolyfill;
     }
@@ -682,6 +686,55 @@ describe('OsdListComponent', () => {
         }
       ];
       await testTableActions(true, [], tests);
+    });
+
+    it('should disable Create when no eligible devices are available', async () => {
+      hostService.inventoryDeviceList.and.returnValue(of([]));
+      const features = [
+        OrchestratorFeature.OSD_CREATE,
+        OrchestratorFeature.OSD_DELETE,
+        OrchestratorFeature.OSD_GET_REMOVE_STATUS
+      ];
+      const resultNoEligibleDevices = {
+        disabled: true,
+        disableDesc: component.noEligibleDevicesMessage
+      };
+      const tests = [
+        {
+          expectResults: {
+            Create: resultNoEligibleDevices,
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[0],
+          expectResults: {
+            Create: resultNoEligibleDevices,
+            Delete: { disabled: false, disableDesc: '' }
+          }
+        }
+      ];
+      await testTableActions(true, features, tests);
+      expect(component.hasEligibleDevices).toBe(false);
+    });
+
+    it('should enable Create when eligible devices are available', async () => {
+      hostService.inventoryDeviceList.and.returnValue(of([{ available: true } as any]));
+      const features = [
+        OrchestratorFeature.OSD_CREATE,
+        OrchestratorFeature.OSD_DELETE,
+        OrchestratorFeature.OSD_GET_REMOVE_STATUS
+      ];
+      const tests = [
+        {
+          expectResults: {
+            Create: { disabled: false, disableDesc: '' },
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        }
+      ];
+      await testTableActions(true, features, tests);
+      expect(component.hasEligibleDevices).toBe(true);
     });
   });
 });
