@@ -17,7 +17,16 @@ import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum'
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { ChartPoint } from '~/app/shared/models/area-chart-point';
-import { catchError, shareReplay, switchMap, takeUntil, tap } from 'rxjs/operators';
+import {
+  catchError,
+  distinctUntilChanged,
+  filter,
+  shareReplay,
+  skip,
+  switchMap,
+  takeUntil,
+  tap
+} from 'rxjs/operators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { PerformanceCardService } from '~/app/shared/api/performance-card.service';
@@ -65,7 +74,7 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   replicaZonesInfo: any = [];
   metadataSyncData: {};
   showMultisiteCard = true;
-  loading = true;
+  loading = false;
   multisiteSyncStatus$: Observable<any>;
   subject = new ReplaySubject<any>();
   fetchDataSub: Subscription;
@@ -91,18 +100,15 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.fetchDataSub = combineLatest([
         this.rgwDaemonService.list(),
-        this.rgwBucketService.fetchAndTransformBuckets(),
-        this.rgwBucketService.totalNumObjects$,
-        this.rgwBucketService.totalUsedCapacity$,
-        this.rgwBucketService.averageObjectSize$,
         this.rgwBucketService.getTotalBucketsAndUsersLength()
-      ]).subscribe(([daemonData, _, objectCount, usedCapacity, averageSize, bucketData]) => {
+      ]).subscribe(([daemonData, bucketData]) => {
         this.rgwDaemonCount = daemonData.length;
-        this.objectCount = objectCount;
-        this.totalPoolUsedBytes = usedCapacity;
-        this.averageObjectSize = averageSize;
         this.rgwBucketCount = bucketData.buckets_count;
         this.UserCount = bucketData.users_count;
+        this.objectCount = bucketData.objects_count || 0;
+        this.totalPoolUsedBytes = bucketData.objects_size || 0;
+        this.averageObjectSize =
+          this.objectCount > 0 ? this.totalPoolUsedBytes / this.objectCount : 0;
       });
       this.getSyncStatus();
     });
@@ -145,6 +151,18 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
       ),
       shareReplay(1)
     );
+    // Show loading only when Object Gateway daemon selection changes.
+    this.rgwDaemonService.selectedDaemon$
+      .pipe(
+        filter((daemon) => !!daemon?.id),
+        distinctUntilChanged((prev, curr) => prev?.id === curr?.id),
+        skip(1),
+        takeUntil(this.destroy$)
+      )
+      .subscribe(() => {
+        this.loading = true;
+        this.getSyncStatus();
+      });
   }
 
   ngOnDestroy() {

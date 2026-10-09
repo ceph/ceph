@@ -16,6 +16,7 @@ import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 
+import { ContextComponent } from '~/app/core/context/context.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { RgwBucketFormComponent } from './rgw-bucket-form/rgw-bucket-form.component';
@@ -189,7 +190,8 @@ import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-
     TimePickerComponent,
     AreaChartComponent,
     ComponentsModule,
-    ContentSwitcherModule
+    ContentSwitcherModule,
+    ContextComponent
   ],
   exports: [
     RgwDaemonResourcePageComponent,
