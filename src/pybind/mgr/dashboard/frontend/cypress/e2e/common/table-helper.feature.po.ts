@@ -112,7 +112,7 @@ And('I should see row {string} does not have {string}', (row: string, options: s
   if (options) {
     cy.get('.cds--search-input').first().clear().type(row);
     for (const option of options.split(',')) {
-      cy.contains(`[cdstablerow] [cdstabledata] .tag`, option).should('not.exist');
+      cy.contains(`[cdstablerow] [cdstabledata] cds-tag span`, option).should('not.exist');
     }
   }
 });
