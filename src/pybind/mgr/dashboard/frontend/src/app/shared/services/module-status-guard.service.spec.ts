@@ -4,7 +4,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { of as observableOf, throwError } from 'rxjs';
+import { EMPTY, of as observableOf, throwError } from 'rxjs';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { MgrModuleService } from '../api/mgr-module.service';
@@ -109,5 +109,27 @@ describe('ModuleStatusGuardService', () => {
 
   it('should skip backend check for user without config-opt permission', fakeAsync(() => {
     testCanActivate({ available: true, message: 'foo' }, true, '/', 'rook', false);
+  }));
+
+  it('should short-circuit and not call the status endpoint when the backend config call fails', fakeAsync(() => {
+    // getConfig throws -> catchError navigates to redirectTo and returns EMPTY,
+    // so the switchMap (status request) must never be reached.
+    spyOn(authStorageService, 'getPermissions').and.returnValue({
+      configOpt: { read: true }
+    } as any);
+    spyOn(mgrModuleService, 'getConfig').and.returnValue(throwError(() => new Error('network')));
+    const httpGetSpy = spyOn(httpClient, 'get').and.returnValue(EMPTY);
+
+    let emitted = false;
+    ngZone.run(() => {
+      service.canActivateChild(route).subscribe(() => {
+        emitted = true;
+      });
+    });
+
+    tick();
+    expect(httpGetSpy).not.toHaveBeenCalled();
+    expect(emitted).toBe(false);
+    expect(router.url).toBe('/foo');
   }));
 });
