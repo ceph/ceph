@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <list>
 #include <chrono>
+#include <vector>
 #include <iostream>
 #include <memory_resource>
 
@@ -988,7 +990,7 @@ private:
   std::pmr::vector<CachedExtentRef> existing_block_list{&block_list_mr_};
   existing_block_stats_t existing_block_stats;
 
-  std::list<view_ref> views;
+  std::vector<view_ref> views;
 
   /**
    * retire_set

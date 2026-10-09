@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <iosfwd>
 #include <list>
+#include <vector>
 #include <map>
 
 std::ostream& operator<<(std::ostream& out, const ceph_filelock& l);
@@ -124,7 +125,7 @@ public:
   void encode(ceph::bufferlist& bl) const;
   void decode(ceph::bufferlist::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ceph_lock_state_t> generate_test_instances();
+  static std::vector<ceph_lock_state_t> generate_test_instances();
   bool empty() const {
     return held_locks.empty() && waiting_locks.empty() &&
 	   client_held_lock_counts.empty() &&

@@ -4,6 +4,7 @@
 #ifndef CEPH_CLS_LOCK_OPS_H
 #define CEPH_CLS_LOCK_OPS_H
 
+#include <vector>
 #include "include/types.h"
 #include "include/utime.h"
 #include "cls/lock/cls_lock_types.h"
@@ -47,7 +48,7 @@ struct cls_lock_lock_op
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_lock_lock_op> generate_test_instances();
+  static std::vector<cls_lock_lock_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_lock_lock_op)
 
@@ -71,7 +72,7 @@ struct cls_lock_unlock_op
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_lock_unlock_op> generate_test_instances();
+  static std::vector<cls_lock_unlock_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_lock_unlock_op)
 
@@ -98,7 +99,7 @@ struct cls_lock_break_op
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_lock_break_op> generate_test_instances();
+  static std::vector<cls_lock_break_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_lock_break_op)
 
@@ -119,7 +120,7 @@ struct cls_lock_get_info_op
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_lock_get_info_op> generate_test_instances();
+  static std::vector<cls_lock_get_info_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_lock_get_info_op)
 
@@ -149,7 +150,7 @@ struct cls_lock_get_info_reply
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_lock_get_info_reply> generate_test_instances();
+  static std::vector<cls_lock_get_info_reply> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(cls_lock_get_info_reply)
 
@@ -170,7 +171,7 @@ struct cls_lock_list_locks_reply
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_lock_list_locks_reply> generate_test_instances();
+  static std::vector<cls_lock_list_locks_reply> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_lock_list_locks_reply)
 
@@ -203,7 +204,7 @@ struct cls_lock_assert_op
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_lock_assert_op> generate_test_instances();
+  static std::vector<cls_lock_assert_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_lock_assert_op)
 
@@ -239,7 +240,7 @@ struct cls_lock_set_cookie_op
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<cls_lock_set_cookie_op> generate_test_instances();
+  static std::vector<cls_lock_set_cookie_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_lock_set_cookie_op)
 

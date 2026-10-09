@@ -11,8 +11,8 @@
 #include "include/uuid.h"
 #include "include/stringify.h"
 
-using std::list;
 using std::ostream;
+using std::vector;
 
 using ceph::bufferlist;
 using ceph::Formatter;
@@ -25,9 +25,9 @@ void bluefs_extent_t::dump(Formatter *f) const
   f->dump_unsigned("bdev", bdev);
 }
 
-list<bluefs_extent_t> bluefs_extent_t::generate_test_instances()
+vector<bluefs_extent_t> bluefs_extent_t::generate_test_instances()
 {
-  list<bluefs_extent_t> ls;
+  vector<bluefs_extent_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().offset = 1;
@@ -165,9 +165,9 @@ void bluefs_layout_t::dump(Formatter *f) const
   f->dump_stream("dedicated_wal") << dedicated_wal;
 }
 
-list<bluefs_layout_t> bluefs_layout_t::generate_test_instances()
+vector<bluefs_layout_t> bluefs_layout_t::generate_test_instances()
 {
-  list<bluefs_layout_t> ls;
+  vector<bluefs_layout_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().shared_bdev = 1;
@@ -221,9 +221,9 @@ void bluefs_super_t::dump(Formatter *f) const
   f->dump_object("log_fnode", log_fnode);
 }
 
-list<bluefs_super_t> bluefs_super_t::generate_test_instances()
+vector<bluefs_super_t> bluefs_super_t::generate_test_instances()
 {
-  list<bluefs_super_t> ls;
+  vector<bluefs_super_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().seq = 1;
@@ -310,9 +310,9 @@ void bluefs_fnode_t::dump(Formatter *f) const
   f->close_section();
 }
 
-list<bluefs_fnode_t> bluefs_fnode_t::generate_test_instances()
+vector<bluefs_fnode_t> bluefs_fnode_t::generate_test_instances()
 {
-  list<bluefs_fnode_t> ls;
+  vector<bluefs_fnode_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().ino = 123;
@@ -416,9 +416,9 @@ void bluefs_transaction_t::dump(Formatter *f) const
   f->dump_unsigned("crc", op_bl.crc32c(-1));
 }
 
-list<bluefs_transaction_t> bluefs_transaction_t::generate_test_instances()
+vector<bluefs_transaction_t> bluefs_transaction_t::generate_test_instances()
 {
-  list<bluefs_transaction_t> ls;
+  vector<bluefs_transaction_t> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().op_init();

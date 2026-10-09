@@ -13,6 +13,7 @@
  *
  */
 
+#include <array>
 
 #include <gtest/gtest.h>
 #include "osd/ECExtentCache.h"
@@ -101,9 +102,7 @@ struct Client : public ECExtentCache::BackendReadListener
 
   void cache_execute(ECExtentCache::OpRef &op)
   {
-    list<ECExtentCache::OpRef> l;
-    l.emplace_back(op);
-    cache.execute(l);
+    cache.execute(std::array {op});
   }
 
   const stripe_info_t *get_stripe_info() const { return &sinfo; }
@@ -122,6 +121,33 @@ TEST(ECExtentCache, double_write_done)
   });
   cl.cache_execute(*op);
   cl.complete_write(*op);
+}
+
+TEST(ECExtentCache, reentrant_write_callback)
+{
+  Client cl(32, 2, 1, 64);
+  auto to_write = iset_from_vector({{{0, 10}}, {{0, 10}}}, cl.get_stripe_info());
+  optional op = cl.cache.prepare(cl.oid, nullopt, to_write, 10, 10, false,
+    [&cl](ECExtentCache::OpRef &op)
+    {
+      cl.cache_ready(op->get_hoid(), op->get_result());
+    });
+  std::vector<int> calls;
+
+  (*op)->add_on_write([&] {
+    calls.emplace_back(1);
+    (*op)->add_on_write([&calls] {
+      calls.emplace_back(3);
+    });
+  });
+  (*op)->add_on_write([&calls] {
+    calls.emplace_back(2);
+  });
+
+  cl.cache_execute(*op);
+  cl.complete_write(*op);
+
+  EXPECT_EQ((std::vector<int> {1, 2, 3}), calls);
 }
 
 TEST(ECExtentCache, simple_write)
@@ -741,9 +767,7 @@ struct MultiClient : public ECExtentCache::BackendReadListener
 
   void cache_execute(ECExtentCache::OpRef &op)
   {
-    list<ECExtentCache::OpRef> l;
-    l.emplace_back(op);
-    cache.execute(l);
+    cache.execute(std::array {op});
   }
 
   const stripe_info_t *get_stripe_info() const { return &sinfo; }
@@ -815,12 +839,7 @@ TEST(ECExtentCache, CloneInvalidateStaleSize)
     });
 
   // Execute both together, as start_rmw does.
-  {
-    list<ECExtentCache::OpRef> l;
-    l.emplace_back(*op_clone);
-    l.emplace_back(*op_x2);
-    cl.cache.execute(l);
-  }
+  cl.cache.execute(std::array {*op_clone, *op_x2});
 
   // cache_maybe_ready processes:
   //  - X is at front, reads outstanding → stops (from step 1)

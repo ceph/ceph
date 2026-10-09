@@ -744,17 +744,17 @@ struct seastore_test_t :
     }
   };
   struct list_test_case_t {
+    unsigned limit;
     bound_t left;
     bound_t right;
-    unsigned limit;
   };
   // list_test_cases_t :: [<limit, left_bound, right_bound>]
-  using list_test_cases_t = std::list<std::tuple<unsigned, bound_t, bound_t>>;
+  using list_test_cases_t = std::vector<list_test_case_t>;
 
   void test_list(
     unsigned temp_to_create,   /// create temp 0..temp_to_create-1
     unsigned normal_to_create, /// create normal 0..normal_to_create-1
-    list_test_cases_t cases              /// cases to test
+    const list_test_cases_t& cases        /// cases to test
   ) {
     std::vector<ghobject_t> objs;
 

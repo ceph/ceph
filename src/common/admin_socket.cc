@@ -445,8 +445,8 @@ void AdminSocket::do_accept()
 void AdminSocket::do_tell_queue()
 {
   ldout(m_cct,10) << __func__ << dendl;
-  std::list<cref_t<MCommand>> q;
-  std::list<cref_t<MMonCommand>> lq;
+  std::vector<cref_t<MCommand>> q;
+  std::vector<cref_t<MMonCommand>> lq;
   {
     std::lock_guard l(tell_lock);
     q.swap(tell_queue);

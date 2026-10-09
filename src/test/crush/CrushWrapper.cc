@@ -22,6 +22,7 @@
  */
 
 #include <cmath>
+#include <vector>
 #include <iostream>
 #include <gtest/gtest.h>
 
@@ -54,6 +55,102 @@ public:
 protected:
   CephContext *cct = nullptr;
 };
+
+TEST_F(CrushWrapperTest, get_children)
+{
+  auto c = std::make_unique<CrushWrapper>();
+  constexpr int root_type = 1;
+  int root;
+
+  c->set_type_name(root_type, "root");
+  c->set_type_name(0, "osd");
+  ASSERT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+                             root_type, 0, nullptr, nullptr, &root));
+  ASSERT_EQ(0, c->set_item_name(root, "default"));
+
+  const map<string, string> location {{"root", "default"}};
+  ASSERT_EQ(0, c->insert_item(cct, 7, 1.0, "osd.7", location));
+  ASSERT_EQ(0, c->insert_item(cct, 3, 1.0, "osd.3", location));
+
+  vector<int> children {99};
+  ASSERT_EQ(2, c->get_children(root, children));
+  EXPECT_EQ((vector<int> {99, 7, 3}), children);
+
+  EXPECT_EQ(0, c->get_children(7, children));
+  EXPECT_EQ((vector<int> {99, 7, 3}), children);
+
+  EXPECT_EQ(-ENOENT, c->get_children(-100, children));
+  EXPECT_EQ((vector<int> {99, 7, 3}), children);
+}
+
+TEST_F(CrushWrapperTest, get_leaves)
+{
+  auto c = std::make_unique<CrushWrapper>();
+  constexpr int root_type = 2;
+  constexpr int host_type = 1;
+  int root;
+
+  c->set_type_name(root_type, "root");
+  c->set_type_name(host_type, "host");
+  c->set_type_name(0, "osd");
+  ASSERT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+                             root_type, 0, nullptr, nullptr, &root));
+  ASSERT_EQ(0, c->set_item_name(root, "default"));
+
+  const map<string, string> first_location {
+    {"root", "default"}, {"host", "first"}
+  };
+  const map<string, string> second_location {
+    {"root", "default"}, {"host", "second"}
+  };
+
+  ASSERT_EQ(0, c->insert_item(cct, 7, 1.0, "osd.7", first_location));
+  ASSERT_EQ(0, c->insert_item(cct, 3, 1.0, "osd.3", second_location));
+
+  set<int> leaves {99};
+  ASSERT_EQ(0, c->get_leaves("default", &leaves));
+  EXPECT_EQ((set<int> {3, 7}), leaves);
+
+  ASSERT_EQ(0, c->get_leaves("osd.7", &leaves));
+  EXPECT_EQ((set<int> {7}), leaves);
+
+  EXPECT_EQ(-ENOENT, c->get_leaves("missing", &leaves));
+  EXPECT_TRUE(leaves.empty());
+}
+
+TEST_F(CrushWrapperTest, subtree_traversals)
+{
+  auto c = std::make_unique<CrushWrapper>();
+  constexpr int root_type = 2;
+  constexpr int host_type = 1;
+  int root;
+
+  c->set_type_name(root_type, "root");
+  c->set_type_name(host_type, "host");
+  c->set_type_name(0, "osd");
+  ASSERT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+                             root_type, 0, nullptr, nullptr, &root));
+  ASSERT_EQ(0, c->set_item_name(root, "default"));
+
+  const map<string, string> first_location {
+    {"root", "default"}, {"host", "first"}
+  };
+  const map<string, string> second_location {
+    {"root", "default"}, {"host", "second"}
+  };
+
+  ASSERT_EQ(0, c->insert_item(cct, 7, 1.0, "osd.7", first_location));
+  ASSERT_EQ(0, c->insert_item(cct, 3, 1.0, "osd.3", second_location));
+  ASSERT_EQ(0, c->set_subtree_class("default", "ssd"));
+  EXPECT_STREQ("ssd", c->get_item_class(7));
+  EXPECT_STREQ("ssd", c->get_item_class(3));
+
+  map<int, float> weights;
+  ASSERT_EQ(0, c->get_take_weight_osd_map(root, &weights));
+  ASSERT_EQ(2, std::size(weights));
+  EXPECT_FLOAT_EQ(0.5f, weights.at(7));
+  EXPECT_FLOAT_EQ(0.5f, weights.at(3));
+}
 
 TEST_F(CrushWrapperTest, get_immediate_parent) {
   std::unique_ptr<CrushWrapper> c(new CrushWrapper);
@@ -1300,6 +1397,35 @@ TEST_F(CrushWrapperTest, remove_class_name) {
   ASSERT_GE(0, c.get_or_create_class_id("ssd"));
   ASSERT_EQ(0, c.remove_class_name("ssd"));
   ASSERT_EQ(-ENOENT, c.remove_class_name("ssd"));
+}
+
+TEST_F(CrushWrapperTest, class_usage_reporting)
+{
+  CrushWrapper c;
+  c.create();
+
+  const auto class_id = c.get_or_create_class_id("ssd");
+  constexpr int class_root = -2;
+  c.class_bucket[-1][class_id] = class_root;
+
+  const auto first_rule = c.add_rule(-1, 1, CRUSH_RULE_TYPE_REPLICATED);
+  ASSERT_GE(first_rule, 0);
+  ASSERT_EQ(0, c.set_rule_step_take(first_rule, 0, class_root));
+  c.set_rule_name(first_rule, "first");
+
+  const auto second_rule = c.add_rule(-1, 1, CRUSH_RULE_TYPE_REPLICATED);
+  ASSERT_GE(second_rule, 0);
+  ASSERT_EQ(0, c.set_rule_step_take(second_rule, 0, class_root));
+  c.set_rule_name(second_rule, "second");
+
+  ostringstream report;
+  EXPECT_TRUE(c.class_is_in_use(class_id, &report));
+  EXPECT_EQ("still referenced by crush_rule(s): 'first','second'", report.str());
+  EXPECT_TRUE(c.class_is_in_use(class_id));
+
+  ostringstream unused_report;
+  EXPECT_FALSE(c.class_is_in_use(1 + class_id, &unused_report));
+  EXPECT_TRUE(unused_report.str().empty());
 }
 
 TEST_F(CrushWrapperTest, try_remap_rule) {

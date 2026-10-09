@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
 #include "erasure-code/ErasureCodeInterface.h"
@@ -106,7 +108,7 @@ private:
     std::uint32_t flags);
 
   void objects_read_and_reconstruct(
-    const std::map<hobject_t, std::list<ec_align_t>> &reads,
+    const std::map<hobject_t, std::vector<ec_align_t>> &reads,
     bool fast_read,
     uint64_t object_size,
     GenContextURef<ec_extents_t &&> &&func) override;

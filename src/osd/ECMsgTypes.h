@@ -16,6 +16,8 @@
 #ifndef ECBMSGTYPES_H
 #define ECBMSGTYPES_H
 
+#include <deque>
+
 #include <fmt/format.h>
 
 #include "osd_types.h"
@@ -88,7 +90,7 @@ struct ECSubWrite {
   void decode(ceph::buffer::list::const_iterator &p_bl,
 	      ceph::buffer::list::const_iterator &d_bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ECSubWrite> generate_test_instances();
+  static std::deque<ECSubWrite> generate_test_instances();
 private:
   // no outside copying -- slow
   ECSubWrite(ECSubWrite& other);
@@ -107,14 +109,17 @@ struct ECSubWriteReply {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ECSubWriteReply> generate_test_instances();
+  static std::vector<ECSubWriteReply> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ECSubWriteReply)
 
 struct ECSubRead {
+  using read_extent = boost::tuple<uint64_t, uint64_t, uint32_t>;
+  using read_extents = std::vector<read_extent>;
+
   pg_shard_t from;
   ceph_tid_t tid;
-  std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
+  std::map<hobject_t, read_extents> to_read;
   std::set<hobject_t> attrs_to_read;
   std::map<hobject_t, std::vector<std::pair<int, int>>> subchunks;
   std::set<hobject_t> omap_headers_to_read;
@@ -130,14 +135,17 @@ struct ECSubRead {
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ECSubRead> generate_test_instances();
+  static std::vector<ECSubRead> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(ECSubRead)
 
 struct ECSubReadReply {
+  using returned_extent = std::pair<uint64_t, ceph::buffer::list>;
+  using returned_extents = std::vector<returned_extent>;
+
   pg_shard_t from;
   ceph_tid_t tid;
-  std::map<hobject_t, std::list<std::pair<uint64_t, ceph::buffer::list> >> buffers_read;
+  std::map<hobject_t, returned_extents> buffers_read;
   std::map<hobject_t, std::map<std::string, ceph::buffer::list, std::less<>>> attrs_read;
   std::map<hobject_t, int> errors;
   std::map<hobject_t, ceph::buffer::list> omap_headers_read;
@@ -151,7 +159,7 @@ struct ECSubReadReply {
   void decode(ceph::buffer::list::const_iterator &p_bl,
 	      ceph::buffer::list::const_iterator &d_pl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ECSubReadReply> generate_test_instances();
+  static std::vector<ECSubReadReply> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ECSubReadReply)
 

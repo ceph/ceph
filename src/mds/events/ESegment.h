@@ -16,6 +16,7 @@
 #ifndef CEPH_MDS_ESEGMENT_H
 #define CEPH_MDS_ESEGMENT_H
 
+#include <deque>
 #include <string_view>
 
 #include "../LogEvent.h"
@@ -34,7 +35,7 @@ public:
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
   void replay(MDSRank *mds) override;
-  static std::list<ESegment> generate_test_instances();
+  static std::deque<ESegment> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(ESegment)
 

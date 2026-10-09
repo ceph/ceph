@@ -21,11 +21,11 @@
 #else
 
 #include <condition_variable>
-#include <list>
 #include <mutex>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 #include "include/buffer_fwd.h"
 #include "include/common_fwd.h"
@@ -196,8 +196,8 @@ private:
   std::unique_ptr<AdminSocketHook> raise_hook;
 
   std::mutex tell_lock;
-  std::list<ceph::cref_t<MCommand>> tell_queue;
-  std::list<ceph::cref_t<MMonCommand>> tell_legacy_queue;
+  std::vector<ceph::cref_t<MCommand>> tell_queue;
+  std::vector<ceph::cref_t<MMonCommand>> tell_legacy_queue;
 
   struct hook_info {
     AdminSocketHook* hook;

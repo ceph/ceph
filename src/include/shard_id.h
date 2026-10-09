@@ -16,7 +16,7 @@
 
 #include <compare> // for std::strong_ordering
 #include <cstdint>
-#include <list>
+#include <vector>
 #include <iosfwd>
 
 #include "buffer.h"
@@ -48,7 +48,7 @@ struct shard_id_t {
     decode(id, bl);
   }
   void dump(ceph::Formatter *f) const;
-  static std::list<shard_id_t> generate_test_instances();
+  static std::vector<shard_id_t> generate_test_instances();
   shard_id_t& operator++() { ++id; return *this; }
   friend constexpr std::strong_ordering operator<=>(const shard_id_t &lhs,
                                                     const shard_id_t &rhs) {

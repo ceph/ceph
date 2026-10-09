@@ -5,7 +5,6 @@
 
 #include <cstdint>
 #include <future>
-#include <list>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -102,7 +101,7 @@ struct rgw_data_change {
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
-  static std::list<rgw_data_change> generate_test_instances();
+  static std::vector<rgw_data_change> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_data_change)
 inline std::ostream& operator <<(std::ostream& m,

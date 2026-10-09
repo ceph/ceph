@@ -47,6 +47,7 @@
 #include "mgr/OSDPerfMetricTypes.h"
 
 #include <atomic>
+#include <deque>
 #include <list>
 #include <memory>
 #include <string>
@@ -688,7 +689,7 @@ public:
   // more work after the above, but with a PeeringCtx
   void find_unfound(epoch_t queued, PeeringCtx &rctx);
 
-  virtual void get_watchers(std::list<obj_watch_item_t> *ls) = 0;
+  virtual void get_watchers(std::vector<obj_watch_item_t>& watchers) = 0;
 
   void dump_pgstate_history(ceph::Formatter *f);
   void dump_missing(ceph::Formatter *f);
@@ -756,7 +757,7 @@ public:
   };
 
   virtual void set_dynamic_perf_stats_queries(
-    const std::list<OSDPerfMetricQuery> &queries) {
+    const std::vector<OSDPerfMetricQuery>& queries) {
   }
   virtual void get_dynamic_perf_stats(DynamicPerfStats *stats) {
   }
@@ -1055,7 +1056,7 @@ protected:
    *     queues because we assume they cannot apply at that time (this is
    *     probably mostly true).
    *
-   *  3. The requeue_ops helper will push ops onto the waiting_for_map std::list if
+   *  3. The requeue_ops helper will push ops onto the waiting_for_map queue if
    *     it is non-empty.
    *
    * These three behaviors are generally sufficient to maintain ordering, with
@@ -1067,22 +1068,22 @@ protected:
   // ops with newer maps than our (or blocked behind them)
   // track these by client, since inter-request ordering doesn't otherwise
   // matter.
-  std::unordered_map<entity_name_t,std::list<OpRequestRef>> waiting_for_map;
+  std::unordered_map<entity_name_t, std::deque<OpRequestRef>> waiting_for_map;
 
   // ops waiting on peered
-  std::list<OpRequestRef>            waiting_for_peered;
+  std::vector<OpRequestRef>          waiting_for_peered;
 
-  /// ops waiting on readble
-  std::list<OpRequestRef>            waiting_for_readable;
+  /// ops waiting on readable
+  std::deque<OpRequestRef>           waiting_for_readable;
 
   // ops waiting on active (require peered as well)
-  std::list<OpRequestRef>            waiting_for_active;
-  std::list<OpRequestRef>            waiting_for_flush;
-  std::list<OpRequestRef>            waiting_for_scrub;
+  std::vector<OpRequestRef>          waiting_for_active;
+  std::vector<OpRequestRef>          waiting_for_flush;
+  std::deque<OpRequestRef>           waiting_for_scrub;
 
-  std::list<OpRequestRef>            waiting_for_cache_not_full;
-  std::list<OpRequestRef>            waiting_for_clean_to_primary_repair;
-  std::map<hobject_t, std::list<OpRequestRef>> waiting_for_unreadable_object,
+  std::vector<OpRequestRef>          waiting_for_cache_not_full;
+  std::vector<OpRequestRef>          waiting_for_clean_to_primary_repair;
+  std::map<hobject_t, std::vector<OpRequestRef>> waiting_for_unreadable_object,
 			     waiting_for_degraded_object,
 			     waiting_for_blocked_object;
 
@@ -1092,16 +1093,20 @@ protected:
   std::map<hobject_t,ObjectContextRef> objects_blocked_on_snap_promotion;
 
   // Callbacks should assume pg (and nothing else) is locked
-  std::map<hobject_t, std::list<Context*>> callbacks_for_degraded_object;
+  std::map<hobject_t, std::vector<Context*>> callbacks_for_degraded_object;
 
   std::map<eversion_t,
-      std::list<
+      std::vector<
 	std::tuple<OpRequestRef, version_t, int,
 		   std::vector<pg_log_op_return_item_t>>>> waiting_for_ondisk;
 
-  void requeue_object_waiters(std::map<hobject_t, std::list<OpRequestRef>>& m);
+  template <typename OperationsT>
+  void requeue_ops_impl(OperationsT& operations, bool can_wait_for_readable);
+
+  void requeue_object_waiters(std::map<hobject_t, std::vector<OpRequestRef>>& waiters);
   void requeue_op(OpRequestRef op);
-  void requeue_ops(std::list<OpRequestRef> &l);
+  void requeue_ops(std::vector<OpRequestRef>& operations);
+  void requeue_ops(std::deque<OpRequestRef>& operations);
 
   // stats that persist lazily
   object_stat_collection_t unstable_stats;

@@ -20,6 +20,7 @@
 #include <functional>
 #include <ostream>
 #include <map>
+#include <deque>
 #include <vector>
 
 #include "boost/variant.hpp"
@@ -104,7 +105,7 @@ class mClockScheduler : public Scheduler, md_config_obs_t {
     crimson_mclock_cleaning_job_t>;
   using priority_t = unsigned;
   using SubQueue = std::map<priority_t,
-	std::list<item_t>,
+	std::deque<item_t>,
 	std::greater<priority_t>>;
   mclock_queue_t scheduler;
   /**

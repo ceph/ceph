@@ -1,7 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <vector>
 #include <cstring>
+#include <iterator>
 
 #include "test/crimson/gtest_seastar.h"
 
@@ -19,6 +21,74 @@ namespace {
   [[maybe_unused]] seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_test);
   }
+}
+
+TEST(buffer_space_test_t, returns_ordered_missing_ranges)
+{
+  const extent_len_t page = CEPH_PAGE_SIZE;
+  BufferSpace buffers;
+
+  EXPECT_EQ(page, buffers.load_ranges(0, page).length);
+  EXPECT_EQ(page, buffers.load_ranges(2 * page, page).length);
+  EXPECT_EQ(page, buffers.load_ranges(4 * page, page).length);
+
+  const auto missing = buffers.load_ranges(0, 5 * page);
+  ASSERT_EQ(2, std::size(missing.ranges));
+  auto range = std::begin(missing.ranges);
+
+  EXPECT_EQ(page, range->offset);
+  EXPECT_EQ(page, range->get_length());
+  ++range;
+  EXPECT_EQ(3 * page, range->offset);
+  EXPECT_EQ(page, range->get_length());
+  EXPECT_EQ(2 * page, missing.length);
+  ++range;
+  EXPECT_EQ(std::end(missing.ranges), range);
+}
+
+struct token_bucket_test_t : public seastar_test_suite_t {};
+
+TEST_F(token_bucket_test_t, preserves_blocker_identity_and_fifo_order)
+{
+  run_async([] {
+    TokenBucket bucket {1};
+    auto ready = bucket.get(1);
+
+    ASSERT_TRUE(ready.available());
+    ready.get();
+
+    auto first = bucket.get(3);
+    constexpr std::size_t blocker_count = 1'024;
+    std::vector<seastar::future<>> waiting;
+    waiting.reserve(blocker_count);
+
+    for (std::size_t i = 0; i < blocker_count; ++i) {
+      waiting.emplace_back(bucket.get(1));
+    }
+
+    ASSERT_FALSE(first.available());
+    for (const auto& pending : waiting) {
+      ASSERT_FALSE(pending.available());
+    }
+
+    bucket.release(1);
+    ASSERT_FALSE(first.available());
+    bucket.release(1);
+    ASSERT_FALSE(first.available());
+    bucket.release(1);
+    ASSERT_TRUE(first.available());
+    first.get();
+
+    for (std::size_t i = 0; i < blocker_count; ++i) {
+      bucket.release(1);
+      ASSERT_TRUE(waiting[i].available());
+      waiting[i].get();
+
+      if (1 + i < blocker_count) {
+        ASSERT_FALSE(waiting[1 + i].available());
+      }
+    }
+  });
 }
 
 struct cache_test_t : public seastar_test_suite_t {

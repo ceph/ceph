@@ -503,9 +503,9 @@ void ConnectionReport::dump(ceph::Formatter *f) const
   f->close_section(); // peer scores
 }
 
-std::list<ConnectionReport> ConnectionReport::generate_test_instances()
+std::vector<ConnectionReport> ConnectionReport::generate_test_instances()
 {
-  std::list<ConnectionReport> o;
+  std::vector<ConnectionReport> o;
   o.emplace_back();
   o.emplace_back();
   o.back().rank = 1;
@@ -532,9 +532,9 @@ void ConnectionTracker::dump(ceph::Formatter *f) const
   f->close_section(); // reports
 }
 
-std::list<ConnectionTracker> ConnectionTracker::generate_test_instances()
+std::vector<ConnectionTracker> ConnectionTracker::generate_test_instances()
 {
-  std::list<ConnectionTracker> o;
+  std::vector<ConnectionTracker> o;
   o.emplace_back();
   o.emplace_back();
   ConnectionTracker& e = o.back();
