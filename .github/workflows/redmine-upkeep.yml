@@ -9,6 +9,10 @@ on:
         description: 'issue to update'
         type: string
         default: ''
+      filter:
+        description: '--filter: limit to specific filter (e.g. "Pending Backport")'
+        type: string
+        default: ''
       limit:
         description: '--limit: limit issue traversal'
         default: 50
@@ -18,6 +22,7 @@ on:
         default: false
         type: boolean
   schedule:
+    - cron: '*/5 * * * *'
     - cron: '0 */12 * * *'
   pull_request_target:
     types: [closed]
@@ -71,12 +76,26 @@ jobs:
              --github-action
              --git-dir=./ceph/
              ${{ inputs.debug && '--debug' || '' }}
+             ${{ inputs.filter != '' && format('--filter="{0}"', inputs.filter) || '' }}
              ${{ format('--limit={0}', inputs.limit) }}
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run redmine-upkeep via schedule
-        if: github.event_name == 'schedule'
+      - name: Run fast redmine-upkeep via schedule
+        if: github.event_name == 'schedule' && github.event.schedule == '*/5 * * * *'
+        run: >
+             python3 ceph/src/script/redmine-upkeep.py
+             --github-action
+             --git-dir=./ceph/
+             --filter="Pending Backport"
+             --limit=50
+        env:
+          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run full redmine-upkeep via schedule
+        if: github.event_name == 'schedule' && github.event.schedule == '0 */12 * * *'
         run: >
              python3 ceph/src/script/redmine-upkeep.py
              --github-action
