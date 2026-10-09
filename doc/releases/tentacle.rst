@@ -4,6 +4,20 @@ Tentacle
 
 Tentacle is the 20th stable release of Ceph.
 
+.. important::
+
+   **Upgrade to the latest minor release of Tentacle.** Upgrades from Squid
+   v19.2.6 to Tentacle releases earlier than v20.2.4 may fail: v20.2.4
+   introduced the key type changes, so Tentacle daemons older than v20.2.4
+   fail to start. The Managers upgrade, the rest may not, and the only way out
+   is to redeploy the Managers with the previous image and start over.
+
+   This is a specific case of a general rule: upgrading to the **latest** minor
+   release of the target series is the only supported and tested path from an
+   older release. A release cannot be tested against releases that did not exist
+   when it shipped -- v19.2.6 postdates v20.2.3, so v19.2.6 to v20.2.3 was never
+   a tested combination.
+
 v20.2.4 Tentacle
 ================
 
@@ -29,7 +43,6 @@ Critical Upgrade Steps
 * Please review the :ref:`CVE-2025-30156-upgrade-steps` on the :ref:`CVE-2025-30156` documentation.
 * Please review the :ref:`CVE-2026-54330-upgrade-steps` on the :ref:`CVE-2026-54330` documentation.
 * Please review the :ref:`CVE-2026-50152-recommendations` on the :ref:`CVE-2026-50152` documentation.
-
 
 Changelog
 ---------
@@ -1303,6 +1316,14 @@ noautoscale`` after upgrade success is confirmed.
 .. note::
 
    You can monitor the progress of your upgrade at each stage with the ``ceph versions`` command, which will tell you what Ceph version(s) are running for each type of daemon.
+
+.. note::
+
+   Upgrade to the latest minor release of Tentacle. Upgrades from Squid v19.2.6
+   to Tentacle releases earlier than v20.2.4 may fail: v20.2.4 introduced the key
+   type changes, so Tentacle daemons older than v20.2.4 fail to start. The
+   Managers upgrade, the rest may not, and the only way out is to redeploy the
+   Managers with the previous image and start over.
 
 Upgrading Cephadm Clusters
 --------------------------
