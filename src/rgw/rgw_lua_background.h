@@ -155,9 +155,9 @@ private:
   std::condition_variable cond;
 
   std::map<std::string, std::unique_ptr<std::vector<char>>> lua_bytecode_cache; // script-name -> bytecode
-//  bool updating = false;
   std::shared_mutex updating_mutex;
   boost::lockfree::queue<std::string*> processing_q{16};
+  boost::lockfree::queue<std::string*> removal_q{16};
 
   void run();
 
@@ -190,7 +190,12 @@ private:
   void resume(rgw::sal::Driver*) override;
 
   // for lua bytecode caching
+  // compile the script and store its bytecode in the cache,
+  // or remove the bytecode from the cache if the script no longer exists
   void process_script_add(std::string script);
+  // remove the bytecode of the script from the cache
+  void process_script_remove(std::string script);
+  // get the bytecode of the script from the cache, return -ENOENT if not found
   int get_script_bytecode(std::string key, std::vector<char>& lua_bytecode);
 };
 
