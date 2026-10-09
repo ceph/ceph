@@ -6,6 +6,18 @@
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
 
+* RADOS: ``ceph mon enable_stretch_mode`` and ``disable_stretch_mode`` now
+  change every pool, replicated and erasure-coded, as
+  ``ceph osd pool set <pool> num_zones`` does, and set the pool creation
+  defaults; enabling can be run again, and fails if a legacy erasure-coded pool
+  exists. ``ceph osd pool default set`` and ``get`` set and show the defaults
+  that ``ceph osd pool create`` uses. The new option
+  ``osd_pool_default_replica`` gives the replicas per zone, and
+  ``osd_pool_default_size`` becomes its legacy name. These changes take effect
+  once ``require_osd_release`` is raised to this release; until then pools
+  cannot be created, and ``num_zones`` cannot be changed. If the cluster is in
+  stretch mode then, the pool creation defaults become those of
+  ``enable_stretch_mode``.
 * RADOS: In degraded stretch mode, the PGs of a stretch pool whose CRUSH rule
   takes its zones with a device class (``step take <zone> class <class>``)
   can now go active; before, they stayed peered until stretch mode recovered.

@@ -52,13 +52,16 @@ place that will cause the cluster to re-replicate the data until the
 Changing Per-Pool Zone and Replica Counts
 ========================================
 
-Outside global stretch mode, ``ceph osd pool set <pool> num_zones`` supports
-one or two zones. Setting the current zone count again leaves the pool and
-its CRUSH rule unchanged.
+``ceph osd pool set <pool> num_zones`` supports one or two zones. Setting the
+current zone count again leaves the pool and its CRUSH rule unchanged.
 
-To transition a replicated pool from one zone to two, supply ``--replica``,
-``--zone_failure_domain``, and ``--osd_failure_domain``. The pool size becomes
-twice the per-zone replica count. Changing ``replica`` on a two-zone pool
+To transition a replicated pool from one zone to two, ``--replica``,
+``--zone_failure_domain``, ``--osd_failure_domain``, ``--root`` and ``--class``
+can be supplied. Those that are not take their values from the pool creation
+defaults (see :ref:`pool-creation-defaults`). The pool size becomes twice the
+per-zone replica count. An erasure-coded pool must be a FastEC pool: a legacy
+erasure-coded pool cannot be stretched until it is converted with
+``ceph osd pool set <pool> allow_ec_optimizations true``. Changing ``replica`` on a two-zone pool
 assigns a CRUSH rule named ``<pool>-replica-<count>`` and recalculates
 ``min_size`` from the per-zone replica count. With
 ``osd_pool_default_min_size=0``, the calculation is
@@ -67,8 +70,8 @@ configured default minimum and the replica count. This replaces any custom
 pool ``min_size`` when the replica count changes.
 
 Setting ``num_zones`` to one clears the pool's stretch peering settings and
-assigns a single-zone CRUSH rule. Replicated pools revert to
-``osd_pool_default_size`` and its default minimum size. Erasure-coded pools
+assigns a single-zone CRUSH rule. Replicated pools get ``--replica`` replicas,
+else :confval:`osd_pool_default_replica`, and its default minimum size. Erasure-coded pools
 revert to the size and minimum size derived from their erasure-code profile.
 An explicit ``--crush_rule`` can select the replacement rule. Replaced rules
 are removed only when no other pool references them.
@@ -192,65 +195,45 @@ allowing you to have both stretch and non-stretch pools in the same cluster.
 
 .. _stretch_mode1:
 
-Global Stretch Mode (previously known as Stretch Mode) (Legacy Support)
+Stretch Mode
 ============
 
-Global Stretch Mode (previously known as Stretch Mode) is designed to handle netsplit scenarios between two data centers as well
+Stretch mode is designed to handle netsplit scenarios between two data centers as well
 as the loss of one data center. It handles the netsplit scenario by choosing the surviving zone
 that has the best connection to the tiebreaker Monitor. It handles the loss of one data center by
-reducing the ``min_size`` of all pools to ``1``, allowing the cluster to continue operating
+letting the stretched pools go active with the copies in the surviving data center, where
+``min_size`` applies, allowing the cluster to continue operating
 within the surviving data center. When the unavailable data center comes back, Ceph will
 converge according to the configured replication policy and return to normal operation.
 
 
-Global Stretch Mode (Legacy Support) vs Per-Pool Stretch Mode
----------------------------------------------
+Enabling Stretch Mode for Every Pool
+------------------------------------
 
-Ceph supports two approaches to stretch mode configuration:
+``ceph mon enable_stretch_mode`` and ``ceph mon disable_stretch_mode`` change
+every pool and the pool creation defaults. They keep no state of their own:
+afterwards each pool can be changed on its own, and stretched and local pools,
+replicated or erasure-coded, can be mixed. Stretch mode itself, as shown by
+``ceph mon dump`` and ``ceph osd dump``, is enabled while any pool has two
+zones.
 
-**Global Stretch Mode (Legacy Support):**
+``ceph mon enable_stretch_mode`` sets every pool to two zones, as
+``ceph osd pool set <pool> num_zones 2`` does. Replicated pools get two
+replicas in each zone and the CRUSH rule given to the command. Erasure-coded
+pools get CRUSH rules of their own. The command fails, and changes nothing, if
+a legacy erasure-coded pool exists. It also sets
+:confval:`osd_pool_default_num_zones` to ``2``,
+:confval:`osd_pool_default_replica` to ``2`` and
+:confval:`osd_pool_default_zone_failure_domain` to the dividing bucket type, so
+that new pools are stretched too. It can be run again.
 
-Enabled using the ``ceph mon enable_stretch_mode`` command. When global stretch
-mode is enabled, *all existing pools and future pools* in the cluster are
-automatically configured with stretch mode settings. This provides cluster-wide
-protection and is appropriate when you want uniform stretch mode behavior across
-all data.
+``ceph mon disable_stretch_mode`` sets every stretched pool to one zone and
+stretched replicated pools to three replicas. It sets
+:confval:`osd_pool_default_num_zones` to ``1`` and
+:confval:`osd_pool_default_replica` to ``3``.
 
-The MonMap field ``global_stretch_mode_enabled`` is set to ``true`` when global
-stretch mode is active. You can verify this with:
-
-.. prompt:: bash $
-
-   ceph mon dump
-
-Or in JSON format:
-
-.. prompt:: bash $
-
-   ceph quorum_status
-
-**Per-Pool Stretch Mode:**
-
-Enabled by creating pools with the ``num_zones=N`` parameter (see :ref:`creating_stretch_pools`)
-or by using ``ceph osd pool set {pool-name} num_zones {N}`` on existing pools. With per-pool stretch
-mode, only the specified pools operate in stretch mode while other pools remain
-unaffected. This provides more granular control and is useful when only specific
-pools require cross-datacenter redundancy.
-
-When using per-pool stretch mode without global stretch mode enabled,
-``global_stretch_mode_enabled`` remains ``false`` in the MonMap.
-
-**Choosing Between Global and Per-Pool:**
-
-- Use **global stretch mode** when all your data needs cross-datacenter protection
-  and you want a uniform, cluster-wide configuration.
-  
-- Use **per-pool stretch mode** when you need selective protection, such as critical
-  data in some pools that must span datacenters while other pools can remain local
-  to a single datacenter.
-
-Note that both modes provide the same stretch mode functionality (zone-aware peering,
-degraded mode, recovery mode) but differ in their scope of application.
+Until an upgrade is committed with ``ceph osd require-osd-release``, both
+commands behave as in earlier releases.
 
 Connectivity Monitor Election Strategy
 ---------------------------------------
@@ -400,16 +383,15 @@ connect to Monitors only if they are in the same data center as the Monitors.
 New Monitors will not be allowed to join the cluster if they do not specify a
 CRUSH location.
 
-When you run ``ceph mon enable_stretch_mode``, the cluster enables **global stretch mode**,
-which sets the MonMap field ``global_stretch_mode_enabled`` to ``true`` and applies
-stretch mode configuration to all existing and future pools. You can verify this status
-with ``ceph mon dump`` or ``ceph quorum_status``.
+``ceph mon enable_stretch_mode`` also changes the pool creation defaults so
+that future pools are stretched. See :ref:`pool-creation-defaults`.
 
 If all OSDs and Monitors in one of the ``datacenter`` become inaccessible at once,
 the cluster in the surviving ``datacenter`` enters  *degraded stretch mode*.
 A health state warning will be
-raised, pools' ``min_size`` will be reduced to ``1``, and the cluster will be
-allowed to go active with the components and data at the single remaining zone. Pool ``size``
+raised, and the cluster will be
+allowed to go active with the components and data at the single remaining zone.
+A stretched pool's ``min_size`` applies to each zone, so it does not change. Pool ``size``
 does not change, so warnings will be raised that the PGs are undersized,
 but a special stretch mode flag will prevent the OSDs from
 creating extra copies in the remaining data center. This means that the data
@@ -420,7 +402,7 @@ stretch mode*. This changes the health state warning and allows peering, but req
 only from the ``datacenter`` that was ``up`` throughout the duration of the
 downtime. When all PGs are in a known state, and are neither ``degraded`` nor
 ``undersized`` / ``incomplete``, the cluster transitions back to regular stretch mode, ends the
-warning, restores pools' ``min_size`` to its original value of ``2``, requires
+warning, requires
 PGs at both zones to peer, and no longer requires the zone that was up throughout the
 duration of the downtime when peering. This makes failover to the other zone
 possible, if needed.
@@ -438,22 +420,22 @@ To exit stretch mode, run the following command:
 
 .. describe:: {crush_rule}
 
-   The non-stretch CRUSH rule to use for all pools. If this
-   is not specified, the pools will move to the default CRUSH rule.
+   The non-stretch CRUSH rule to use for the replicated pools. If this
+   is not specified, they will move to the default CRUSH rule.
+   Erasure-coded pools get single-zone rules of their own.
 
    :Type: String
    :Required: No.
 
 This command moves the cluster back to normal mode;
 the cluster will no longer be in stretch mode.
-All pools will be set with their prior ``size`` and ``min_size``
-values, and the MonMap field ``global_stretch_mode_enabled`` will be set to ``false``.
+Every stretched pool is set to one zone, and replicated pools to three
+replicas, and the pool creation defaults are set for local pools.
 At this point the user is responsible for scaling down the cluster
 to the desired number of OSDs if they choose to operate with fewer OSDs.
 
-Note that this command disables global stretch mode. If you want to disable
-stretch mode for individual pools only, use ``ceph osd pool stretch unset``
-instead of this command.
+To set individual pools to one zone only, use
+``ceph osd pool set <pool> num_zones 1`` instead of this command.
 
 Note that the command will not execute when the cluster is in
 recovery stretch mode. The command executes only when the cluster

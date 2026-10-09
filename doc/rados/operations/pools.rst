@@ -361,6 +361,45 @@ To remove a snapshot of a pool, run a command of the following form:
 
    ceph osd pool rmsnap {pool-name} {snap-name}
 
+.. _pool-creation-defaults:
+
+Pool Creation Defaults
+======================
+
+``ceph osd pool create`` takes every parameter that it is not given from an
+``osd_pool_default_*`` configuration option. To show the defaults that it
+would use now, and where each comes from, run:
+
+.. prompt:: bash $
+
+   ceph osd pool default get
+
+To set defaults, run a command that takes the parameters of
+``ceph osd pool create``, for example:
+
+.. prompt:: bash $
+
+   ceph osd pool default set --replica 2 --num_zones 2 --zone_failure_domain datacenter
+
+The command writes each given parameter to the ``global`` section of the
+configuration database. It never changes an existing pool. It makes the checks
+that ``ceph osd pool create`` would make with the resulting defaults and
+refuses a default that would make pool creation fail, for example
+``--num_zones 2`` on a cluster that cannot be stretched. It also refuses a value
+that a ``mon`` section of the configuration database or a monitor's local
+configuration would override. To set such a default, remove the overriding
+value first, as :ref:`pool-default-overridden` describes, and then run
+``ceph osd pool default set`` again.
+
+``--replica`` is the number of copies in each zone, so a replicated pool with
+two zones and two replicas per zone has a ``size`` of ``4``. ``--size`` is the
+legacy name of ``--replica``: it gives the size of a single-zone pool and is
+refused together with ``--replica``, or with a ``num_zones``, given or default,
+greater than ``1``. ``--k`` and ``--m`` change the
+default erasure code profile, and ``--erasure_code_profile`` copies an existing
+profile into it. ``--rule`` names a default CRUSH rule, and ``--rule none``
+returns to generated rules.
+
 .. _setpoolvalues:
 
 Setting Pool Values
