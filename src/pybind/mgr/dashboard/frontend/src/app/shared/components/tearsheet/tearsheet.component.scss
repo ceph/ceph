@@ -133,6 +133,7 @@ cd-tearsheet .cds--modal-container.cds--modal-container--md .cds--modal-scroll-c
   margin: 0;
   padding: 0;
   height: 100%;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 // Wide tearsheet: body is a flex child of .cds--modal-container--lg / --md; must shrink so
@@ -142,7 +143,7 @@ cd-tearsheet .cds--modal-container.cds--modal-container--md > .tearsheet-body {
   flex: 1 1 auto;
   min-height: 0;
   min-block-size: 0;
-  height: auto;
+  height: 100%;
 }
 
 .tearsheet-left-influencer {
@@ -170,6 +171,7 @@ cd-tearsheet .cds--modal-container.cds--modal-container--md > .tearsheet-body {
   min-height: 0;
   min-block-size: 0;
   inline-size: 100%;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .tearsheet-main > .cds--css-grid > .tearsheet-content {
