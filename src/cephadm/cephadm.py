@@ -174,7 +174,12 @@ from cephadmlib.daemon_form import (
     create as daemon_form_create,
     register as register_daemon_form,
 )
-from cephadmlib.deploy import DeploymentType
+from cephadmlib.deploy import (
+    DeploymentType,
+    PREV_SUFFIX,
+    STAGED_SUFFIX,
+    UNIT_FILES,
+)
 from cephadmlib.container_daemon_form import (
     ContainerDaemonForm,
     daemon_to_container,
@@ -1212,6 +1217,13 @@ def deploy_daemon(
     data_dir = ident.data_dir(ctx.data_dir)
     if deployment_type == DeploymentType.RECONFIG and not os.path.exists(data_dir):
         raise Error('cannot reconfig, data path %s does not exist' % data_dir)
+    if deployment_type == DeploymentType.STAGE:
+        if not os.path.exists(data_dir):
+            raise Error('cannot stage, data path %s does not exist' % data_dir)
+        if daemon_type == CephadmAgent.daemon_type or not c:
+            raise Error('staging is only supported for containerized daemons')
+        if sidecars:
+            raise Error('staging a daemon with sidecar containers is not supported')
     if daemon_type == 'mon' and not os.path.exists(data_dir):
         assert config
         assert keyring
@@ -1267,9 +1279,28 @@ def deploy_daemon(
                 except Exception as e:
                     logger.warning(f'[D3N] failed to persist D3N state in {data_dir}: {e}')
 
+    if deployment_type == DeploymentType.STAGE:
+        assert c
+        # Prove the target image actually runs on this host (CPU baseline,
+        # container engine, SELinux, corrupt pull...) *before* anything is
+        # taken down, using the daemon's own entrypoint.
+        verify_staged_image(ctx, c)
+        deploy_daemon_units(
+            ctx,
+            ident,
+            uid,
+            gid,
+            c,
+            enable=daemon_type not in DISABLED_SERVICES,
+            osd_fsid=osd_fsid,
+            endpoints=endpoints,
+            init_containers=init_containers,
+            stop_timeout=getattr(ctx, 'termination_grace_period_seconds', None),
+            stage=True,
+        )
     # only write out unit files and start daemon
     # with systemd if this is not a reconfig
-    if deployment_type != DeploymentType.RECONFIG:
+    elif deployment_type != DeploymentType.RECONFIG:
         if daemon_type == CephadmAgent.daemon_type:
             config_js = fetch_configs(ctx)
             assert isinstance(config_js, dict)
@@ -1381,6 +1412,117 @@ def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
             break
 
 
+def verify_staged_image(ctx: CephadmContext, c: 'CephContainer') -> str:
+    """Run the daemon's entrypoint with --version in a throwaway container
+    of the target image. Raises Error if the image cannot be executed on
+    this host. Returns the version string."""
+    entrypoint = c.entrypoint
+    if not entrypoint:
+        raise Error('cannot verify staged image: container has no entrypoint')
+    try:
+        out = CephContainer(
+            ctx,
+            image=c.image,
+            entrypoint=entrypoint,
+            args=['--version'],
+        ).run(verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+    except RuntimeError as e:
+        raise Error(f'staged image {c.image} failed to run {entrypoint} --version: {e}')
+    version = out.strip()
+    logger.info('Staged image %s runs %s: %s', c.image, entrypoint, version)
+    return version
+
+
+def switch_staged_unit_files(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    expected_image: Optional[str] = None,
+    rollback: bool = False,
+) -> Dict[str, Any]:
+    """Swap the unit.*.staged files written by a staged deploy into place
+    (or, with rollback, put the unit.*.prev files back) and restart the
+    daemon. The whole downtime is the stop/start of the container.
+
+    Idempotent: calling it again after a successful switch (or rollback)
+    only makes sure the unit is running.
+    """
+    data_dir = ident.data_dir(ctx.data_dir)
+    if not os.path.isdir(data_dir):
+        raise Error(f'{ident.daemon_name}: data dir {data_dir} does not exist')
+    unit_name = ident.unit_name
+    src_suffix, dst_suffix = (PREV_SUFFIX, STAGED_SUFFIX) if rollback else (STAGED_SUFFIX, PREV_SUFFIX)
+
+    def path(name: str, suffix: str = '') -> str:
+        return os.path.join(data_dir, name + suffix)
+
+    def read_image(p: str) -> Optional[str]:
+        try:
+            with open(p) as fh:
+                return fh.read().strip()
+        except OSError:
+            return None
+
+    pending = [n for n in UNIT_FILES if os.path.exists(path(n, src_suffix))]
+    result: Dict[str, Any] = {
+        'name': ident.daemon_name,
+        'rollback': rollback,
+        'switched': [],
+        'image': read_image(path('unit.image')),
+    }
+
+    if not pending:
+        # Nothing to swap: either already done (previous call succeeded but
+        # the caller never heard back) or never staged. Distinguish by the
+        # image the live files point at.
+        live_image = read_image(path('unit.image'))
+        if expected_image and live_image != expected_image:
+            raise Error(f'{ident.daemon_name}: nothing staged for '
+                        f'{"rollback" if rollback else "switch"} and live image '
+                        f'{live_image!r} is not the expected {expected_image!r}')
+        _, state, _ = check_unit(ctx, unit_name)
+        if state != 'running':
+            call(ctx, ['systemctl', 'reset-failed', unit_name], verbosity=CallVerbosity.DEBUG)
+            call_throws(ctx, ['systemctl', 'start', unit_name])
+            result['started'] = True
+        result['already_switched'] = True
+        return result
+
+    if 'unit.run' not in pending:
+        raise Error(f'{ident.daemon_name}: unit.run{src_suffix} is missing, '
+                    f'refusing to switch a partial set ({pending})')
+
+    staged_image = read_image(path('unit.image', src_suffix))
+    if expected_image and staged_image != expected_image:
+        raise Error(f'{ident.daemon_name}: staged image {staged_image!r} '
+                    f'is not the expected {expected_image!r}; re-stage first')
+    if staged_image and not rollback:
+        # The image must still be present locally: a pull inside the
+        # downtime window is exactly what staging is meant to avoid.
+        _, _, code = call(ctx, [ctx.container_engine.path, 'image', 'inspect', staged_image],
+                          verbosity=CallVerbosity.QUIET)
+        if code:
+            raise Error(f'{ident.daemon_name}: staged image {staged_image} '
+                        f'is not present on this host')
+
+    # --- downtime window starts here
+    call_throws(ctx, ['systemctl', 'stop', unit_name])
+    for n in pending:
+        live = path(n)
+        if os.path.exists(live):
+            os.replace(live, path(n, dst_suffix))
+        os.replace(path(n, src_suffix), live)
+        result['switched'].append(n)
+    result['image'] = read_image(path('unit.image'))
+    clean_cgroup(ctx, ident.fsid, unit_name)
+    call(ctx, ['systemctl', 'reset-failed', unit_name], verbosity=CallVerbosity.DEBUG)
+    call_throws(ctx, ['systemctl', 'enable', unit_name])
+    call_throws(ctx, ['systemctl', 'start', unit_name])
+    # --- downtime window ends here
+    logger.info('%s %s: %s -> %s', 'Rolled back' if rollback else 'Switched',
+                ident.daemon_name, ', '.join(result['switched']), result['image'])
+    return result
+
+
 def deploy_daemon_units(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -1394,6 +1536,7 @@ def deploy_daemon_units(
     init_containers: Optional[List[InitContainer]] = None,
     sidecars: Optional[List[SidecarContainer]] = None,
     stop_timeout: Optional[int] = None,
+    stage: bool = False,
 ) -> None:
     data_dir = ident.data_dir(ctx.data_dir)
     pre_start_commands: List[runscripts.Command] = []
@@ -1439,6 +1582,10 @@ def deploy_daemon_units(
         pre_start_commands=pre_start_commands,
         post_stop_commands=post_stop_commands,
         timeout=stop_timeout,
+        # When staging, every unit file is written next to the live one and
+        # systemd is left alone: the running daemon keeps its current unit.*
+        # files (and image) until `switch-staged` runs.
+        suffix=STAGED_SUFFIX if stage else '',
     )
 
     # sysctl
@@ -1459,6 +1606,12 @@ def deploy_daemon_units(
         success_exit_status=container.success_exit_status,
     )
     call_throws(ctx, ['systemctl', 'daemon-reload'])
+
+    if stage:
+        # Nothing else: the daemon keeps running on its current image.
+        logger.info('Staged unit files for %s in %s (not restarted)',
+                    ident.daemon_name, data_dir)
+        return
 
     unit_name = get_unit_name(ident.fsid, ident.daemon_type, ident.daemon_id)
     call(ctx, ['systemctl', 'stop', unit_name],
@@ -3469,6 +3622,12 @@ def get_deployment_type(
     deployment_type: DeploymentType = DeploymentType.DEFAULT
     if ctx.reconfig:
         deployment_type = DeploymentType.RECONFIG
+    if getattr(ctx, 'stage', False):
+        if ctx.reconfig:
+            raise Error('--stage and --reconfig are mutually exclusive')
+        if not os.path.exists(os.path.join(ident.data_dir(ctx.data_dir), 'unit.run')):
+            raise Error(f'cannot stage {ctx.name}: it has not been deployed on this host')
+        deployment_type = DeploymentType.STAGE
     (_, state, _) = check_unit(ctx, ident.unit_name)
     if state == 'running' or is_container_running(ctx, CephContainer.for_daemon(ctx, ident, 'bash')):
         # if reconfig was set, that takes priority over redeploy. If
@@ -3845,6 +4004,30 @@ def command_signal(ctx: CephadmContext) -> int:
 
     return send_signal_to_container_entrypoint(ctx, container_name, ctx.signal_name or ctx.signal_number)
 
+
+##################################
+
+
+@infer_fsid
+def command_switch_staged(ctx: CephadmContext) -> int:
+    """Apply (or roll back) a staged redeploy: swap the unit.*.staged
+    (or unit.*.prev) files into place and restart the daemon."""
+    if not ctx.fsid:
+        raise Error('must pass --fsid to specify cluster')
+    ident = DaemonIdentity.from_context(ctx)
+    if ident.daemon_type not in get_supported_daemons():
+        raise Error('daemon type %s not recognized' % ident.daemon_type)
+
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
+    result = switch_staged_unit_files(
+        ctx,
+        ident,
+        expected_image=ctx.expected_image or None,
+        rollback=ctx.rollback,
+    )
+    print(json.dumps(result, indent=4))
+    return 0
 
 ##################################
 
@@ -5343,6 +5526,11 @@ def _add_deploy_parser_args(
         action='store_true',
         help='Reconfigure a previously deployed daemon')
     parser_deploy.add_argument(
+        '--stage',
+        action='store_true',
+        help='Write the new unit files next to the live ones (unit.*.staged) '
+             'without restarting the daemon; apply later with switch-staged')
+    parser_deploy.add_argument(
         '--allow-ptrace',
         action='store_true',
         help='Allow SYS_PTRACE on daemon container')
@@ -5796,6 +5984,27 @@ def _get_parser():
         '--name', '-n',
         required=True,
         help='daemon name (type.id)')
+
+    parser_switch_staged = subparsers.add_parser(
+        'switch-staged',
+        help='apply a staged redeploy: swap unit.*.staged into place and restart the daemon')
+    parser_switch_staged.set_defaults(func=command_switch_staged)
+    parser_switch_staged.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_switch_staged.add_argument(
+        '--name', '-n',
+        required=True,
+        action=CustomValidation,
+        help='daemon name (type.id)')
+    parser_switch_staged.add_argument(
+        '--expected-image',
+        default='',
+        help='refuse to switch unless the staged unit.image matches this image')
+    parser_switch_staged.add_argument(
+        '--rollback',
+        action='store_true',
+        help='put the unit.*.prev files of the previous switch back and restart')
 
     parser_logs = subparsers.add_parser(
         'logs', help='print journald logs for a daemon container')
