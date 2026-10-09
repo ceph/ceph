@@ -530,6 +530,11 @@ EOF
     ceph osd setcrushmap -i $dir/crushmap.new.bin || return 1
 
     ceph osd pool create data2 --rule bad_rule --num-zones 2 2>&1 | grep "CRUSH rule 4 uses different datacenter buckets than configured for stretch mode" || return 1
+
+    # the same check when a pool is set to two zones
+    ceph osd pool create data3 --num-zones 1 || return 1
+    ceph osd pool set data3 num_zones 2 --crush_rule bad_rule 2>&1 | grep "CRUSH rule 4 uses different datacenter buckets than configured for stretch mode" || return 1
+    test "$(ceph osd pool get data3 num_zones -f json | jq .num_zones)" = 1 || return 1
 }
 
 function TEST_stretch_replica_device_class_pools() {

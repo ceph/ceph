@@ -9252,6 +9252,14 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       ss << "CRUSH rule type does not match pool";
       return -EINVAL;
     }
+    // a pool joining stretch mode must divide the cluster as stretch mode does
+    if (osdmap.stretch_mode_enabled) {
+      CrushWrapper newcrush = _get_pending_crush();
+      int r = validate_stretch_mode_new_pool(
+        newcrush, crush_rule, osdmap.stretch_bucket_count,
+        osdmap.stretch_mode_bucket, osdmap.pools, zone_failure_domain, &ss);
+      if (r) return r;
+    }
     unsigned size, min_size;
     int replica_copy = p.replica;
     int err = prepare_pool_size(p.get_type(), p.erasure_code_profile, 0,
