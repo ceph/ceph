@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
@@ -10,7 +11,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1.component';
 import { FormHelper } from '~/testing/unit-test-helper';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-import { ComboBoxModule, GridModule, InputModule } from 'carbon-components-angular';
+import { ComboBoxModule, GridModule, InputModule, RadioModule } from 'carbon-components-angular';
 
 import { of } from 'rxjs';
 
@@ -35,9 +36,11 @@ describe('NvmeofSubsystemsStepOneComponent', () => {
         NgbTypeaheadModule,
         InputModule,
         GridModule,
-        ComboBoxModule
+        ComboBoxModule,
+        RadioModule
       ],
-      providers: [NgbActiveModal]
+      providers: [NgbActiveModal],
+      schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
   });
 
