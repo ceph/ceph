@@ -153,13 +153,13 @@ function(do_build_boost root_dir version)
   endif()
   set(b2_targets stage)
   set(b2_install_targets install)
-  if(WITH_ASAN)
+  if(BOOST_CONTEXT_SANITIZER_DEFINE)
     # via boost_features, not ${b2}: the `headers` step lacks the
     # libs/context/build target below
     list(APPEND boost_features context-impl=ucontext)
-    # build the library with the BOOST_USE_ASAN consumers get from Boost::context,
-    # so fiber_activation_record has one layout (else heap-buffer-overflow)
-    list(APPEND boost_features define=BOOST_USE_ASAN)
+    # build the library with the BOOST_USE_{ASAN,TSAN} consumers get tree-wide,
+    # so fiber_activation_record has one layout (else memory corruption)
+    list(APPEND boost_features define=${BOOST_CONTEXT_SANITIZER_DEFINE})
     # `context-impl` is declared in libs/context/build/Jamfile.v2; the stage and
     # install targets never load it, so b2 aborts with `unknown feature
     # "<context-impl>"`. Name the context project as a target so its Jamfile loads
@@ -289,8 +289,7 @@ macro(build_boost version)
       set_target_properties(Boost::${c} PROPERTIES
         INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_VALGRIND")
     endif()
-    # ASan's BOOST_USE_ASAN/BOOST_USE_UCONTEXT are defined tree-wide in the
-    # top-level CMakeLists.txt, not per-target.
+    # BOOST_USE_{ASAN,TSAN,UCONTEXT} are set tree-wide in CMakeLists.txt
     list(APPEND Boost_LIBRARIES ${Boost_${upper_c}_LIBRARY})
   endforeach()
   foreach(c ${Boost_BUILD_COMPONENTS})
