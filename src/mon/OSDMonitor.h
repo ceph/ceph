@@ -978,6 +978,17 @@ public:
   // CRUSH map. crush must outlive the result.
   PoolCreateCluster pool_create_cluster(const CrushWrapper& crush);
 
+  // Whether osd_pool_default_crush_rule can serve a new pool that gives no
+  // rule: a rule of the pool's type that, for more than one zone, divides
+  // the cluster as the pool's zones would.
+  static bool default_rule_suits_pool(
+      CrushWrapper& crush,
+      int64_t rule,
+      int pool_type,
+      int64_t num_zones,
+      const std::string& zone_failure_domain,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools);
+
   // The reason why a command waits for the upgrade to be committed.
   static std::string num_zones_upgrade_hint();
 

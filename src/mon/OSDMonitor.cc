@@ -15297,6 +15297,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         ? params.replica : 0;
     const int num_replica_per_zone = params.replica;
 
+    // the default rule, when it suits the pool, instead of a generated one
+    if (!params.crush_params_given() &&
+        (pool_type == pg_pool_t::TYPE_ERASURE ? implicit_rule_creation
+                                              : rule_name.empty() && num_zones > 1)) {
+      CrushWrapper crush = _get_pending_crush();
+      if (default_rule_suits_pool(crush, params.default_rule, pool_type,
+                                  num_zones, zone_failure_domain,
+                                  osdmap.pools)) {
+        rule_name = crush.get_rule_name(params.default_rule);
+      }
+    }
+
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
@@ -17453,6 +17465,52 @@ PoolCreateCluster OSDMonitor::pool_create_cluster(const CrushWrapper& crush)
     return 0;
   };
   return cluster;
+}
+
+bool OSDMonitor::default_rule_suits_pool(
+    CrushWrapper& crush,
+    int64_t rule,
+    int pool_type,
+    int64_t num_zones,
+    const string& zone_failure_domain,
+    const mempool::osdmap::map<int64_t, pg_pool_t>& pools)
+{
+  if (rule < 0 || !crush.rule_exists(rule) ||
+      !crush.rule_valid_for_pool_type(rule, pool_type)) {
+    return false;
+  }
+  if (num_zones == 1) {
+    return true;
+  }
+  const int zone_type = crush.get_type_id(zone_failure_domain);
+  if (zone_type < 0) {
+    return false;
+  }
+  // the rule must choose num_zones zones, or take each zone itself
+  set<int> zones_taken;
+  bool chooses_zones = false;
+  for (int step = 0; step < crush.get_rule_len(rule); ++step) {
+    const int op = crush.get_rule_op(rule, step);
+    const int arg1 = crush.get_rule_arg1(rule, step);
+    if (op == CRUSH_RULE_TAKE) {
+      if (arg1 < 0 && crush.get_bucket_type(arg1) == zone_type) {
+        zones_taken.insert(arg1);
+      }
+    } else if ((op == CRUSH_RULE_CHOOSE_FIRSTN ||
+                op == CRUSH_RULE_CHOOSE_INDEP ||
+                op == CRUSH_RULE_CHOOSELEAF_FIRSTN ||
+                op == CRUSH_RULE_CHOOSELEAF_INDEP) &&
+               crush.get_rule_arg2(rule, step) == zone_type &&
+               arg1 == num_zones) {
+      chooses_zones = true;
+    }
+  }
+  if (!chooses_zones && std::ssize(zones_taken) != num_zones) {
+    return false;
+  }
+  stringstream ss;
+  return validate_stretch_mode_new_pool(crush, rule, num_zones, zone_type,
+                                        pools, zone_failure_domain, &ss) == 0;
 }
 
 string OSDMonitor::num_zones_upgrade_hint()

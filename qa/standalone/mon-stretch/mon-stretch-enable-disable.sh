@@ -149,6 +149,13 @@ function TEST_enable_stretches_every_pool() {
     ceph osd pool create newrep 8 8 || return 1
     test "$(pool_num_zones newrep)" = 2 || return 1
     test "$(pool_field newrep size)" = 4 || return 1
+    test "$(pool_field newrep crush_rule)" != 1 || return 1
+
+    # a default rule that suits stretched pools replaces a generated one
+    ceph osd pool default set --rule stretch_rule || return 1
+    ceph osd pool create newrep2 8 8 || return 1
+    test "$(pool_num_zones newrep2)" = 2 || return 1
+    test "$(pool_field newrep2 crush_rule)" = 1 || return 1
     wait_for_clean || return 1
 }
 
