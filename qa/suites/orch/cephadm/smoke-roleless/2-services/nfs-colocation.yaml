@@ -1,0 +1,146 @@
+tasks:
+
+# stop kernel nfs server, if running
+- exec:
+    all-hosts:
+      - systemctl stop nfs-server
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create foofs
+
+# deploy 3 NFS daemons across 2 hosts -- forces colocation on one host
+# first daemon per host uses base ports, second uses auto-incremented ports
+- cephadm.apply:
+    specs:
+      - service_type: nfs
+        service_id: colo
+        placement:
+          count: 3
+        spec:
+          port: 12049
+          monitoring_port: 19587
+
+- cephadm.wait_for_service:
+    service: nfs.colo
+
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        # ---- Verify 3 NFS daemons are running ----
+        NFS_COUNT=$(ceph orch ps --service-name nfs.colo --format json | jq '[.[] | select(.status_desc == "running")] | length')
+        if [ "$NFS_COUNT" -ne 3 ]; then
+          echo "Expected 3 running NFS daemons, got: $NFS_COUNT"
+          ceph orch ps --service-name nfs.colo
+          exit 1
+        fi
+
+        # ---- Verify colocation: at least one host has 2 NFS daemons ----
+        HOSTS_JSON=$(ceph orch ps --service-name nfs.colo --format json)
+        HOST_COUNTS=$(echo "$HOSTS_JSON" | jq '[.[] | .hostname] | group_by(.) | map(length) | sort | reverse')
+        MAX_PER_HOST=$(echo "$HOST_COUNTS" | jq '.[0]')
+        if [ "$MAX_PER_HOST" -lt 2 ]; then
+          echo "Expected at least 2 NFS daemons colocated on one host, max per host: $MAX_PER_HOST"
+          ceph orch ps --service-name nfs.colo
+          exit 1
+        fi
+
+        # ---- Verify each daemon has unique ports ----
+        PORTS=$(echo "$HOSTS_JSON" | jq '[.[] | .ports[0]]')
+        UNIQUE_PORTS=$(echo "$PORTS" | jq 'unique | length')
+        TOTAL_PORTS=$(echo "$PORTS" | jq 'length')
+        if [ "$UNIQUE_PORTS" -ne "$TOTAL_PORTS" ]; then
+          echo "Port conflict detected among NFS daemons"
+          echo "Ports: $PORTS"
+          ceph orch ps --service-name nfs.colo
+          exit 1
+        fi
+
+        # ---- Verify auto-incremented ports ----
+        # The base port is 12049; colocated daemon should get 12050
+        EXPECTED_PORTS="12049 12050"
+        for port in $EXPECTED_PORTS; do
+          if ! echo "$PORTS" | jq -e "any(. == $port)" > /dev/null; then
+            echo "Expected port $port not found in daemon ports: $PORTS"
+            exit 1
+          fi
+        done
+
+        # ---- Create an NFS export and verify it works ----
+        ceph nfs export create cephfs --fsname foofs --cluster-id colo --pseudo-path /colotest
+
+        EXPORTS=$(ceph nfs export ls colo)
+        if ! echo "$EXPORTS" | grep -q "/colotest"; then
+          echo "NFS export /colotest not found"
+          echo "Exports: $EXPORTS"
+          exit 1
+        fi
+
+# ---- Test custom colocation_ports ----
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        # Remove the auto-port service
+        ceph orch rm nfs.colo
+        sleep 15
+
+        # Wait for daemons to be removed
+        while [ "$(ceph orch ps --service-name nfs.colo --format json | jq 'length')" -gt 0 ]; do
+          sleep 5
+        done
+
+- cephadm.apply:
+    specs:
+      - service_type: nfs
+        service_id: colocustom
+        placement:
+          count: 3
+        spec:
+          port: 12049
+          monitoring_port: 19587
+          colocation_ports:
+            - data_port: 13049
+              monitoring_port: 19588
+              cluster_qos_port: 31312
+            - data_port: 14049
+              monitoring_port: 19589
+              cluster_qos_port: 31313
+
+- cephadm.wait_for_service:
+    service: nfs.colocustom
+
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        # ---- Verify 3 NFS daemons with custom ports ----
+        NFS_COUNT=$(ceph orch ps --service-name nfs.colocustom --format json | jq '[.[] | select(.status_desc == "running")] | length')
+        if [ "$NFS_COUNT" -ne 3 ]; then
+          echo "Expected 3 running NFS daemons, got: $NFS_COUNT"
+          ceph orch ps --service-name nfs.colocustom
+          exit 1
+        fi
+
+        # ---- Verify custom ports are assigned ----
+        PORTS=$(ceph orch ps --service-name nfs.colocustom --format json | jq '[.[] | .ports[0]] | sort')
+        for port in 12049 13049 14049; do
+          if ! echo "$PORTS" | jq -e "any(. == $port)" > /dev/null; then
+            echo "Expected custom port $port not found in: $PORTS"
+            ceph orch ps --service-name nfs.colocustom
+            exit 1
+          fi
+        done
+
+        # ---- Create export on custom-port service ----
+        ceph nfs export create cephfs --fsname foofs --cluster-id colocustom --pseudo-path /customtest
+
+        EXPORTS=$(ceph nfs export ls colocustom)
+        if ! echo "$EXPORTS" | grep -q "/customtest"; then
+          echo "NFS export /customtest not found"
+          exit 1
+        fi
