@@ -1848,7 +1848,6 @@ CDentry *CDir::_load_dentry(
     bufferlist &bl,
     const int pos,
     const std::set<snapid_t> *snaps,
-    double rand_threshold,
     bool *force_dirty)
 {
   auto q = bl.cbegin();
@@ -2022,7 +2021,6 @@ CDentry *CDir::_load_dentry(
         if (in->get_inode()->is_dirty_rstat())
           in->mark_dirty_rstat();
 
-        in->maybe_ephemeral_rand(rand_threshold);
         //in->hack_accessed = false;
         //in->hack_load_stamp = ceph_clock_now();
         //num_new_inodes_loaded++;
@@ -2182,7 +2180,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   int count = 0;
   unsigned pos = omap.size() - 1;
-  double rand_threshold = get_inode()->get_ephemeral_rand();
   for (auto p = omap.rbegin(); p != omap.rend(); ++p, --pos) {
     string_snap_t key;
     dentry_key_t::decode_helper(p->first, key.name, key.snapid);
@@ -2204,7 +2201,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     try {
       dn = _load_dentry(
             p->first, key.name, key.snapid, p->second, pos, snaps,
-            rand_threshold, &force_dirty);
+            &force_dirty);
     } catch (const buffer::error &err) {
       mdcache->mds->clog->warn() << "Corrupt dentry '" << key.name << "' in "
                                   "dir frag " << dirfrag() << ": "
@@ -2928,10 +2925,15 @@ void CDir::_committed(int r, version_t v)
 mds_rank_t CDir::get_export_pin(bool inherit) const
 {
   mds_rank_t export_pin = inode->get_export_pin(inherit);
-  if (export_pin == MDS_RANK_EPHEMERAL_DIST)
+  if (export_pin == MDS_RANK_EPHEMERAL_DIST) {
     export_pin = mdcache->hash_into_rank_bucket(ino(), get_frag());
-  else if (export_pin == MDS_RANK_EPHEMERAL_RAND)
-    export_pin = mdcache->hash_into_rank_bucket(ino());
+  } else if (export_pin == MDS_RANK_EPHEMERAL_RAND) {
+    if (inode->should_random_pin_frag(get_frag())) {
+      export_pin = mdcache->hash_into_rank_bucket(ino(), get_frag());
+    } else {
+      export_pin = MDS_RANK_NONE;
+    }
+  }
   return export_pin;
 }
 
@@ -3908,8 +3910,8 @@ bool CDir::should_merge() const
   if (get_frag() == frag_t())
     return false;
 
-  if (inode->is_ephemeral_dist()) {
-    unsigned min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
+  if (inode->is_ephemerally_pinned()) {
+    unsigned min_frag_bits = mdcache->get_ephemeral_frag_bits();
     if (min_frag_bits > 0 && get_frag().bits() < min_frag_bits + 1)
       return false;
   }
