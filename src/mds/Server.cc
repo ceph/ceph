@@ -973,7 +973,24 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       reply->metric_spec = supported_metric_spec;
     }
     session->auth_caps.get_cap_auths(&reply->cap_auths);
-    mds->send_message_client(reply, session);
+    auto delay = g_conf().get_val<double>("mds_inject_session_open_reply_delay");
+    if (unlikely(delay > 0)) {
+      // the session is open here, but the client is not told so until the
+      // reply goes out; pushes to the session meanwhile race the reply.
+      dout(0) << __func__ << " delaying session open reply to "
+	      << session->info.inst << " by " << delay << "s (injected)" << dendl;
+      int64_t session_id = session->get_client().v;
+      mds->timer.add_event_after(delay, new LambdaContext([this, session_id, reply](int r) {
+	    ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
+	    if (!session || !session->is_open()) {
+	      return;
+	    }
+	    mds->send_message_client(reply, session);
+	  }));
+    } else {
+      mds->send_message_client(reply, session);
+    }
     if (mdcache->is_readonly()) {
       auto m = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
       mds->send_message_client(m, session);
