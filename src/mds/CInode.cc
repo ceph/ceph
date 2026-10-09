@@ -3960,7 +3960,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			     SnapRealm *dir_realm,
 			     snapid_t snapid,
 			     unsigned max_bytes,
-			     int getattr_caps)
+			     int getattr_caps,
+			     bool new_caps)
 {
   client_t client = session->get_client();
   ceph_assert(snapid);
@@ -4028,7 +4029,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 		 session->is_stale() ||
 		 (dir_realm && realm != dir_realm) ||
 		 is_frozen() ||
-		 state_test(CInode::STATE_EXPORTINGCAPS);
+		 state_test(CInode::STATE_EXPORTINGCAPS) ||
+		 (!new_caps && !get_client_cap(client));
   if (no_caps)
     dout(20) << __func__ << " no caps"
 	     << (!valid?", !valid":"")
@@ -4036,6 +4038,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 	     << ((dir_realm && realm != dir_realm)?", snaprealm differs ":"")
 	     << (is_frozen()?", frozen inode":"")
 	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
+	     << ((!new_caps && !get_client_cap(client))?", no new caps":"")
 	     << dendl;
 
 

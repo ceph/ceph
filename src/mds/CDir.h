@@ -502,6 +502,17 @@ public:
 
   void mark_complete();
 
+  /* A readdir is walking this dirfrag: it has been sent a page and has more
+   * to come. Trimming leaves the dirfrag complete for a while so that the
+   * rest of the walk does not have to fetch it all again. */
+  void note_readdir(ceph::coarse_mono_time now) { readdir_stamp = now; }
+  void clear_readdir() { readdir_stamp = ceph::coarse_mono_time(); }
+  bool is_being_read(ceph::coarse_mono_time now,
+		     ceph::timespan interval) const {
+    return readdir_stamp != ceph::coarse_mono_time() &&
+	   now - readdir_stamp < interval;
+  }
+
   // -- reference counting --
   void first_get() override;
   void last_put() override;
@@ -723,6 +734,9 @@ protected:
   int num_inodes_with_caps = 0;
 
   uint8_t backend_hit_count = 0;  // hit counter for lazy bg prefetch threshold
+
+  // when a readdir last sent a page of this dirfrag that was not its last
+  ceph::coarse_mono_time readdir_stamp;
 
   // state
   version_t committing_version = 0;
