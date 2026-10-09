@@ -721,6 +721,17 @@ public:
     return data_shards;
   }
 
+  // CRCs only survive XOR, so they can be checked through the code only
+  // with every data shard and the first parity shard, which is their XOR.
+  bool can_check_crcs(const shard_id_set &shards) const {
+    for (auto shard : data_shards) {
+      if (!shards.contains(shard)) {
+        return false;
+      }
+    }
+    return shards.contains(shard_id_t(k));
+  }
+
   auto get_parity_shards() const {
     return parity_shards;
   }
