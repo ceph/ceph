@@ -246,8 +246,8 @@ class UpgradeState:
                  error: Optional[str] = None,
                  paused: Optional[bool] = None,
                  fail_fs: bool = False,
-                 fs_original_max_mds: Optional[Dict[str, int]] = None,
-                 fs_original_allow_standby_replay: Optional[Dict[str, bool]] = None,
+                 fs_original_max_mds: Optional[Dict[int, int]] = None,
+                 fs_original_allow_standby_replay: Optional[Dict[int, bool]] = None,
                  fs_failed_for_upgrade: Optional[List[int]] = None,
                  daemon_types: Optional[List[str]] = None,
                  hosts: Optional[List[str]] = None,
@@ -270,8 +270,8 @@ class UpgradeState:
         self.target_version: Optional[str] = target_version
         self.error: Optional[str] = error
         self.paused: bool = paused or False
-        self.fs_original_max_mds: Optional[Dict[str, int]] = fs_original_max_mds
-        self.fs_original_allow_standby_replay: Optional[Dict[str,
+        self.fs_original_max_mds: Optional[Dict[int, int]] = fs_original_max_mds
+        self.fs_original_allow_standby_replay: Optional[Dict[int,
                                                              bool]] = fs_original_allow_standby_replay
         # filesystems that THIS upgrade put into 'fs fail' state, so completion
         # only re-joins those (and not filesystems an admin failed for other
@@ -327,6 +327,12 @@ class UpgradeState:
             c = {k: v for k, v in data.items() if k in valid_params}
             if 'repo_digest' in c:
                 c['target_digests'] = [c.pop('repo_digest')]
+            # these dicts are keyed by fscid (int), but JSON object keys are
+            # always strings: convert them back, or lookups by fscid would miss
+            # after a mgr failover and the filesystems would never be restored
+            for k in ('fs_original_max_mds', 'fs_original_allow_standby_replay'):
+                if c.get(k):
+                    c[k] = {int(fscid): v for fscid, v in c[k].items()}
             return cls(**c)
         else:
             return None
