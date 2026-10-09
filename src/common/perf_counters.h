@@ -242,9 +242,11 @@ public:
     std::pair<uint64_t, T> cur;
     avg_tracker() : last(0, 0), cur(0, 0) {}
     T current_avg() const {
-      if (cur.first == last.first)
+      auto &[cur_sum, cur_count] = cur;
+      auto &[last_sum, last_count] = last;
+      if (cur_count == last_count)
         return 0;
-      return (cur.second - last.second) / (cur.first - last.first);
+      return (cur_sum - last_sum) / (cur_count - last_count);
     }
     void consume_next(const std::pair<uint64_t, T> &next) {
       last = cur;
