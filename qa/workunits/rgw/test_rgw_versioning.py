@@ -50,6 +50,27 @@ def main():
     bucket = connection.create_bucket(Bucket=BUCKET_NAME)
     connection.BucketVersioning(BUCKET_NAME).enable()
 
+    # TESTCASE 'per-storage-class stats reconcile versioned bucket accounting'
+    log.debug('TEST: per-storage-class stats reconcile versioned bucket accounting\n')
+    versioned_key = 'storage-class-versioned-object'
+    bucket.put_object(Key=versioned_key, Body=b'first version')
+    bucket.put_object(Key=versioned_key, Body=b'second version')
+    bucket.Object(versioned_key).delete()  # leave a delete marker behind
+    plain_stats = json.loads(exec_cmd(
+        f'radosgw-admin bucket stats --bucket {BUCKET_NAME}'))
+    class_stats = json.loads(exec_cmd(
+        f'radosgw-admin bucket stats --bucket {BUCKET_NAME} '
+        '--show-storage-classes'))
+    main_stats = plain_stats['usage'].get('rgw.main', {})
+    classes = class_stats['rgw.storage_classes']
+    assert sum(v['num_objects'] for v in classes.values()) == \
+        main_stats.get('num_objects', 0), \
+        'versioned per-class object count does not reconcile with rgw.main'
+    assert sum(v['size'] for v in classes.values()) == \
+        main_stats.get('size', 0), \
+        'versioned per-class size does not reconcile with rgw.main'
+    bucket.object_versions.filter(Prefix=versioned_key).delete()
+
     # reproducer for bug from https://tracker.ceph.com/issues/59663
     # TESTCASE 'verify that index entries and OLH objects are cleaned up after redundant deletes'
     log.debug('TEST: verify that index entries and OLH objects are cleaned up after redundant deletes\n')
