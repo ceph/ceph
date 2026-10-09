@@ -1150,6 +1150,7 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
+    DEEP_SCRUB_REFORMAT,   // perform data reformatting when deep-scrubbing
   };
 
   enum type_t {
