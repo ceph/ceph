@@ -9038,32 +9038,27 @@ int OSDMonitor::prepare_num_zones_crush_rule(
     const pg_pool_t& p, int *crush_rule, ostream *ss)
 {
   *crush_rule = -1;
+  const PoolCreateParams d = load_pool_defaults(g_conf());
   if (n == 1) {
     const string rule_name = cmd_getval_or<string>(
         cmdmap, "crush_rule", p.is_erasure() ? poolstr + "-single-zone" : "");
-    const string root = cmd_getval_or<string>(
-        cmdmap, "root", g_conf().get_val<string>("osd_pool_default_root"));
+    const string root = cmd_getval_or<string>(cmdmap, "root", d.root);
     return prepare_pool_crush_rule(
         p.get_type(), poolstr, p.erasure_code_profile, rule_name, 1, root,
         0, "", "", "", crush_rule, ss);
   }
   const string zone_failure_domain = cmd_getval_or<string>(
-      cmdmap, "zone_failure_domain",
-      g_conf().get_val<string>("osd_pool_default_zone_failure_domain"));
+      cmdmap, "zone_failure_domain", d.zone_failure_domain);
   string rule_name = cmd_getval_or<string>(cmdmap, "crush_rule", "");
   if (p.is_replicated()) {
     return prepare_pool_crush_rule(
         p.get_type(), poolstr, "", rule_name, n,
-        cmd_getval_or<string>(
-          cmdmap, "root", g_conf().get_val<string>("osd_pool_default_root")),
-        cmd_getval_or<int64_t>(
-          cmdmap, "replica", g_conf().get_osd_pool_default_replica()),
+        cmd_getval_or<string>(cmdmap, "root", d.root),
+        cmd_getval_or<int64_t>(cmdmap, "replica", d.replica),
         zone_failure_domain,
-        cmd_getval_or<string>(
-          cmdmap, "osd_failure_domain",
-          g_conf().get_val<string>("osd_pool_default_osd_failure_domain")),
-        cmd_getval_or<string>(
-          cmdmap, "class", g_conf().get_val<string>("osd_pool_default_class")),
+        cmd_getval_or<string>(cmdmap, "osd_failure_domain",
+                              d.osd_failure_domain),
+        cmd_getval_or<string>(cmdmap, "class", d.device_class),
         crush_rule, ss);
   }
   // an EC pool's profile gives what is not on the command line
@@ -9125,7 +9120,7 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       p.peering_crush_mandatory_member = 0;
       if (p.type == pg_pool_t::TYPE_REPLICATED) {
         const auto size = cmd_getval_or<int64_t>(
-          cmdmap, "replica", g_conf().get_osd_pool_default_replica());
+          cmdmap, "replica", load_pool_defaults(g_conf()).replica);
         if (size < 1 || size > std::numeric_limits<decltype(p.size)>::max()) {
           ss << "default pool size exceeds the supported range";
           return -ERANGE;
@@ -9202,14 +9197,14 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       ss << "Error: num_zones == 1 but pool is already stretched";
       return -EINVAL;
     }
+    const PoolCreateParams d = load_pool_defaults(g_conf());
     const string zone_failure_domain = cmd_getval_or<string>(
-        cmdmap, "zone_failure_domain",
-        g_conf().get_val<string>("osd_pool_default_zone_failure_domain"));
+        cmdmap, "zone_failure_domain", d.zone_failure_domain);
     int crush_rule = -1;
 
     if (p.type == pg_pool_t::TYPE_REPLICATED) {
       const int64_t replica = cmd_getval_or<int64_t>(
-          cmdmap, "replica", g_conf().get_osd_pool_default_replica());
+          cmdmap, "replica", d.replica);
       if (replica < 1) {
         ss << "replica must be at least 1";
         return -EINVAL;
