@@ -16,14 +16,41 @@ Key Features:
 supported top-level scopes.
 """
 
+import sys
 import errno
 import enum
 import logging
-from typing import List, NamedTuple, Optional, Tuple, Protocol
+
+from typing import (
+    Any,
+    Dict,
+    List,
+    NamedTuple,
+    Optional,
+    Protocol,
+    TYPE_CHECKING,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
+
+if sys.version_info >= (3, 11):  # pragma: no cover
+    from typing import Self
+elif TYPE_CHECKING:  # pragma: no cover
+    from typing_extensions import Self
+else:  # pragma: no cover
+    # fallback type that should be ignored at runtime
+    Self = Any  # type: ignore
 
 log = logging.getLogger(__name__)
 
 XATTR_SUBVOLUME_EARMARK_NAME = 'user.ceph.subvolume.earmark'
+
+
+class EarmarkTopScope(enum.Enum):
+    NFS = "nfs"
+    SMB = "smb"
 
 
 class FSOperations(Protocol):
@@ -38,12 +65,26 @@ class FSOperations(Protocol):
     def getxattr(self, path: str, key: str) -> bytes: ...
 
 
-class EarmarkTopScope(enum.Enum):
-    NFS = "nfs"
-    SMB = "smb"
+class EarmarkContents(Protocol):
+    @property
+    def top(self) -> EarmarkTopScope: ...
+
+    @property
+    def subsections(self) -> List[str]: ...
+
+    def __str__(self) -> str: ...
+
+    def upgrades(self, other: 'EarmarkContents') -> bool: ...
+
+    @classmethod
+    def parse(cls, value: str) -> Self: ...
 
 
-class EarmarkException(Exception):
+class EarmarkError(Exception):
+    pass
+
+
+class EarmarkException(EarmarkError):
     def __init__(self, error_code: int, error_message: str) -> None:
         self.errno = error_code
         self.error_str = error_message
@@ -55,13 +96,181 @@ class EarmarkException(Exception):
         return f"{self.errno} ({self.error_str})"
 
 
-class EarmarkContents(NamedTuple):
-    top: 'EarmarkTopScope'
+class EarmarkParseError(ValueError, EarmarkError):
+    pass
+
+
+class EarmarkConflictError(EarmarkError):
+    def __init__(
+        self, msg: str, current: Any = None, wanted: Any = None
+    ) -> None:
+        super().__init__(msg)
+        self.current_earmark = current
+        self.wanted_earmark = wanted
+
+
+class NFSEarmark(NamedTuple):
+    top: EarmarkTopScope
+    # to be backwards compatible we allow freeform subsections in nfs
+    # (for now) but we may want to get stricter about this in the
+    # future since this is never used in practice
     subsections: List[str]
 
+    def __str__(self) -> str:
+        return f'{self.top.value}'
 
-class EarmarkParseError(ValueError):
-    pass
+    @classmethod
+    def parse(cls, value: str) -> Self:
+        """Given an earmark string, return a new NFSEarmark object or raise an
+        EarmarkParseError if the string is not a valid nfs earmark.
+        """
+        parts = value.split('.')
+        if parts[0] != EarmarkTopScope.NFS.value:
+            raise EarmarkParseError(
+                f'wrong top scope for NFS earmark: {value!r}'
+            )
+        for part in parts[1:]:
+            if not part:
+                raise EarmarkParseError(
+                    f'empty subsection in NFS earmark: {value!r}'
+                )
+        return cls(EarmarkTopScope.NFS, parts[1:])
+
+    @classmethod
+    def default(cls) -> Self:
+        """Return a new NFSEarmark with default values."""
+        return cls(EarmarkTopScope.NFS, [])
+
+    def __eq__(self, other: Any) -> bool:
+        """Equality check."""
+        if isinstance(other, str):
+            try:
+                _other = self.parse(other)
+            except EarmarkParseError:
+                return False
+        elif isinstance(other, self.__class__):
+            _other = other
+        else:
+            return NotImplemented
+        return (
+            self.top is _other.top and self.subsections == _other.subsections
+        )
+
+    def upgrades(self, current: EarmarkContents) -> bool:
+        """Returns true if this earmark can be used to upgrade the current
+        earmark value applied to some path.
+        """
+        if self.top != current.top:
+            raise EarmarkConflictError(
+                f'earmark has already been set by {current.top.value}',
+                current,
+                self,
+            )
+        # No need to upgrade nfs at this time
+        return False
+
+
+class SMBEarmark(NamedTuple):
+    top: EarmarkTopScope
+    cluster_id: str
+
+    @property
+    def subsections(self) -> List[str]:
+        """Return earmark subsections as a list of strings."""
+        return [] if not self.cluster_id else ['cluster', self.cluster_id]
+
+    def __str__(self) -> str:
+        earmark = f'{self.top.value}'
+        if self.cluster_id:
+            earmark = f'{earmark}.cluster.{self.cluster_id}'
+        return earmark
+
+    @classmethod
+    def parse(cls, value: str) -> Self:
+        """Given an earmark string, return a new SMBEarmark object or raise an
+        EarmarkParseError if the string is not a valid smb earmark.
+        """
+        cid = ''
+        parts = value.split('.')
+        if parts[0] != EarmarkTopScope.SMB.value:
+            raise EarmarkParseError(
+                f'wrong top scope for SMB earmark: {value!r}'
+            )
+        if len(parts) > 3:
+            raise EarmarkParseError(
+                f'too many subsections for SMB earmark: {value!r}'
+            )
+        elif len(parts) == 3:
+            cflag, cid = parts[1:]
+            if cflag != 'cluster' or not cid:
+                raise EarmarkParseError(
+                    f'invalid subsection in SMB earmark: {value!r}'
+                )
+        elif len(parts) == 2:
+            raise EarmarkParseError(
+                f'too few subsections for SMB earmark: {value!r}'
+            )
+        return cls(EarmarkTopScope.SMB, cid)
+
+    @classmethod
+    def from_cluster_id(cls, cluster_id: str) -> Self:
+        """Given an smb cluster_id, return a new SMBEarmark object."""
+        return cls(EarmarkTopScope.SMB, cluster_id)
+
+    def __eq__(self, other: Any) -> bool:
+        """Equality check."""
+        if isinstance(other, str):
+            try:
+                _other = self.parse(other)
+            except EarmarkParseError:
+                return False
+        elif isinstance(other, self.__class__):
+            _other = other
+        else:
+            return NotImplemented
+        return self.top is _other.top and self.cluster_id == _other.cluster_id
+
+    def upgrades(self, current: EarmarkContents) -> bool:
+        """Returns true if this earmark can be used to upgrade the current
+        earmark value applied to some path.
+        """
+        if self.top != current.top:
+            raise EarmarkConflictError(
+                f'earmark has already been set by {current.top.value}',
+                current,
+                self,
+            )
+        ce = cast(SMBEarmark, current)
+        if not ce.cluster_id:
+            return True
+        if ce.cluster_id == self.cluster_id:
+            return False
+        raise EarmarkConflictError(
+            f'earmark has already been set by smb cluster {ce.cluster_id}',
+            current,
+            self,
+        )
+
+
+_earmark_types: Dict[EarmarkTopScope, Type[EarmarkContents]] = {
+    EarmarkTopScope.NFS: NFSEarmark,
+    EarmarkTopScope.SMB: SMBEarmark,
+}
+
+
+def parse_earmark(value: str) -> Optional[EarmarkContents]:
+    """Given an earmark string return an EarmarkContents object from
+    parsing the string. If the value is empty return None.
+    If the value can not be parsed raise EarmarkParseError.
+    """
+    if not value:
+        return None
+    _top = value.split('.', 1)[0]
+    try:
+        top = EarmarkTopScope(_top)
+    except ValueError:
+        raise EarmarkParseError(f"Invalid top-level scope: {_top}")
+    return _earmark_types[top].parse(value)
 
 
 class CephFSVolumeEarmarking:
@@ -90,67 +299,26 @@ class CephFSVolumeEarmarking:
                 errno.EFAULT, f"Unexpected error {action} earmark: {e}"
             ) from e
 
-    @staticmethod
-    def parse_earmark(value: str) -> Optional[EarmarkContents]:
+    def _validate_earmark(self, earmark: Union[str, EarmarkContents]) -> bool:
         """
-        Parse an earmark value. Returns None if the value is an empty string.
-        Raises EarmarkParseError if the top-level scope is not valid or the earmark
-        string is not properly structured.
-        Returns an EarmarkContents for valid earmark values.
-
-        :param value: The earmark string to parse.
-        :return: An EarmarkContents instance if valid, None if empty.
-        """
-        if not value:
-            return None
-
-        parts = value.split('.')
-
-        # Check if the top-level scope is valid
-        if parts[0] not in (scope.value for scope in EarmarkTopScope):
-            raise EarmarkParseError(f"Invalid top-level scope: {parts[0]}")
-
-        # Check if all parts are non-empty to ensure valid dot-separated format
-        if not all(parts):
-            raise EarmarkParseError("Earmark contains empty sections.")
-
-        # Return parsed earmark with top scope and subsections
-        return EarmarkContents(
-            top=EarmarkTopScope(parts[0]), subsections=parts[1:]
-        )
-
-    def _validate_earmark(self, earmark: str) -> bool:
-        """
-        Validates the earmark string further by checking specific conditions for scopes like 'smb'.
+        Validates the earmark. If the earmark is a string, it will be parsed
+        and checked.
 
         :param earmark: The earmark string to validate.
         :return: True if valid, False otherwise.
         """
+        if not isinstance(earmark, str):
+            return True
         try:
-            parsed = self.parse_earmark(earmark)
+            parse_earmark(earmark)
         except EarmarkParseError:
             return False
-
-        # If parsed is None, it's considered valid since the earmark is empty
-        if not parsed:
-            return True
-
-        # Specific validation for 'smb' scope
-        if parsed.top == EarmarkTopScope.SMB:
-            # Valid formats: 'smb' or 'smb.cluster.{cluster_id}'
-            if not (
-                len(parsed.subsections) == 0
-                or (
-                    len(parsed.subsections) == 2
-                    and parsed.subsections[0] == 'cluster'
-                    and parsed.subsections[1]
-                )
-            ):
-                return False
-
         return True
 
     def get_earmark(self) -> Optional[str]:
+        """Get an earmark string or None if no earmark is set on the current
+        path.
+        """
         try:
             earmark_value = self.fs.getxattr(
                 self.path, XATTR_SUBVOLUME_EARMARK_NAME
@@ -159,7 +327,17 @@ class CephFSVolumeEarmarking:
         except Exception as e:
             return self._handle_cephfs_error(e, "getting")
 
-    def set_earmark(self, earmark: str) -> None:
+    def get_parsed_earmark(self) -> Optional[EarmarkContents]:
+        """Get a parsed earmark object or None if no earmark is set on the
+        current path.
+        """
+        earmark_value = self.get_earmark()
+        if earmark_value is None:
+            return None
+        return parse_earmark(earmark_value)
+
+    def set_earmark(self, earmark: Union[str, EarmarkContents]) -> None:
+        """Set the given earmark value on the current path."""
         # Validate the earmark before attempting to set it
         if not self._validate_earmark(earmark):
             raise EarmarkException(
@@ -174,7 +352,7 @@ class CephFSVolumeEarmarking:
             self.fs.setxattr(
                 self.path,
                 XATTR_SUBVOLUME_EARMARK_NAME,
-                earmark.encode('utf-8'),
+                str(earmark).encode('utf-8'),
                 0,
             )
             log.info(f"Earmark '{earmark}' set on {self.path}.")
@@ -182,4 +360,40 @@ class CephFSVolumeEarmarking:
             self._handle_cephfs_error(e, "setting")
 
     def clear_earmark(self) -> None:
+        """Remove the earmark value from the current path."""
         self.set_earmark("")
+
+    def test_and_set(
+        self, earmark: EarmarkContents
+    ) -> Tuple[bool, Optional[EarmarkContents]]:
+        """Perform a test-and-set operation on the earmark value for the given
+        path. If the new earmark is accepted the function returns (True, <new
+        earmark>), if the earmark does not need updating the function return
+        (False, <current earmark>). If the earmark is not compatible raise an
+        EarmarkConflictError exception.
+        """
+        current = self.get_parsed_earmark()
+        if not _upgrade_earmark(current, earmark):
+            return False, current
+        self.set_earmark(earmark)
+        return True, earmark
+
+
+def _upgrade_earmark(
+    current: Optional[EarmarkContents],
+    wanted: EarmarkContents,
+) -> bool:
+    """Given two earmarks, current and wanted, return True if the wanted
+    earmark is an "upgrade" from the current earmark.
+    If the current earmark is None/falsey then the earmark may be upgraded.
+    If the earmarks are equal they do not need to be upgraded (returns false).
+    Otherwise, the `upgrades` method of the wanted earmark will be passed
+    the current earmark.
+    This function will raise a EarmarkConflictError if the earmarks are
+    totally incompatible.
+    """
+    if not current:
+        return True
+    if current == wanted:
+        return False
+    return wanted.upgrades(current)
