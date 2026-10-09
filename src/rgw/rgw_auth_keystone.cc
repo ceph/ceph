@@ -595,51 +595,78 @@ auto EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
                                  optional_yield y) const
     -> access_token_result
 {
-  using server_signature_t = VersionAbstractor::server_signature_t;
-  boost::optional<rgw::keystone::TokenEnvelope> token;
-  boost::optional<std::string> secret;
-  int failure_reason;
+  const std::string key(access_key_id);
+  const auto fetch = [&]() -> SecretCache::result_t {
+    try {
+      auto [token, ret] = get_from_keystone(dpp, access_key_id,
+                                            string_to_sign, signature, y);
+      if (!token) {
+        return tl::unexpected(ret);
+      }
+      auto [secret, sret] = get_secret_from_keystone(
+          dpp, token->get_user_id(), access_key_id, y);
+      return SecretCache::secret_entry{std::move(*token), std::move(secret),
+                                       secret_cache.expiry()};
+    } catch (const int err) {
+      return tl::unexpected(err);
+    }
+  };
 
-  /* Get a token from the cache if one has already been stored */
-  boost::optional<boost::tuple<rgw::keystone::TokenEnvelope, std::string>>
-    t = secret_cache.find(std::string(access_key_id));
+  SecretCache::result_t result;
+  for (;;) {
+    auto value = secret_cache.lookup_or_insert(key);
+    bool fetched = false;
+    result = call_once(*value, y, [&] { fetched = true; return fetch(); });
 
-  /* Check that credentials can correctly be used to sign data */
-  if (t) {
-    /* We should ignore checking signature in cache if caller tells us to which
-     * means we're handling a HTTP OPTIONS call. */
-    if (ignore_signature) {
+    if (fetched) {
+      // keystone validated this request. keep the entry only when there
+      // is a secret for other requests to verify against
+      if (!result || !result->secret || !secret_cache.enabled()) {
+        secret_cache.remove(key, value);
+      }
+      break;
+    }
+    if (!result) {
+      secret_cache.remove(key, value);
+      // a signature mismatch belongs to the request that fetched
+      if (result.error() != -ERR_SIGNATURE_NO_MATCH) {
+        break;
+      }
+    } else if (!result->secret) {
+      secret_cache.remove(key, value);
+    } else if (result->token.expired() || ceph_clock_now() > result->expires) {
+      secret_cache.remove(key, value);
+      continue;
+    } else if (ignore_signature) {
       ldpp_dout(dpp, 20) << "ignore_signature set and found in cache" << dendl;
-      return {t->get<0>(), t->get<1>(), 0};
+      break;
     } else {
-      std::string sig(signature);
-      server_signature_t server_signature = signature_factory(cct, t->get<1>(), string_to_sign);
+      const std::string sig(signature);
+      const auto server_signature =
+          signature_factory(cct, *result->secret, string_to_sign);
       if (sig.compare(server_signature) == 0) {
-        return {t->get<0>(), t->get<1>(), 0};
-      } else {
-        ldpp_dout(dpp, 0) << "Secret string does not correctly sign payload, cache miss" << dendl;
+        break;
+      }
+      ldpp_dout(dpp, 0) << "Secret string does not correctly sign payload, cache miss" << dendl;
+    }
+    // the shared result is no use to this request. fetch with its own
+    // signature and drop the entry once keystone has answered
+    result = fetch();
+    if (result) {
+      secret_cache.remove(key, value);
+      if (result->secret && secret_cache.enabled()) {
+        // publish the fresh secret unless a newer fetch got there first
+        auto fresh = std::make_shared<SecretCache::value_t>();
+        call_once(*fresh, y, [&] { return result; });
+        secret_cache.add(key, std::move(fresh));
       }
     }
-  } else {
-    ldpp_dout(dpp, 0) << "No stored secret string, cache miss" << dendl;
+    break;
   }
-
-  /* No cached token, token expired, or secret invalid: fall back to keystone */
-  std::tie(token, failure_reason) =
-      get_from_keystone(dpp, access_key_id, string_to_sign, signature, y);
-
-  if (token) {
-    /* Fetch secret from keystone for the access_key_id */
-    std::tie(secret, failure_reason) =
-        get_secret_from_keystone(dpp, token->get_user_id(), access_key_id, y);
-
-    if (secret) {
-      /* Add token, secret pair to cache, and set timeout */
-      secret_cache.add(std::string(access_key_id), *token, *secret);
-    }
+  if (!result) {
+    return {boost::none, boost::none, result.error()};
   }
-
-  return {token, secret, failure_reason};
+  return {std::move(result->token), std::move(result->secret), 0};
 }
 
 EC2Engine::acl_strategy_t
@@ -768,63 +795,6 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t, accepted_roles.admin, std::string(access_key_id)));
     return result_t::grant(std::move(apl), completer_factory(secret_key));
-  }
-}
-
-bool SecretCache::find(const std::string& token_id,
-                       SecretCache::token_envelope_t& token,
-		       std::string &secret)
-{
-  std::lock_guard<std::mutex> l(lock);
-
-  map<std::string, secret_entry>::iterator iter = secrets.find(token_id);
-  if (iter == secrets.end()) {
-    return false;
-  }
-
-  secret_entry& entry = iter->second;
-  secrets_lru.erase(entry.lru_iter);
-
-  const utime_t now = ceph_clock_now();
-  if (entry.token.expired() || now > entry.expires) {
-    secrets.erase(iter);
-    return false;
-  }
-  token = entry.token;
-  secret = entry.secret;
-
-  secrets_lru.push_front(token_id);
-  entry.lru_iter = secrets_lru.begin();
-
-  return true;
-}
-
-void SecretCache::add(const std::string& token_id,
-                      const SecretCache::token_envelope_t& token,
-		      const std::string& secret)
-{
-  std::lock_guard<std::mutex> l(lock);
-
-  map<string, secret_entry>::iterator iter = secrets.find(token_id);
-  if (iter != secrets.end()) {
-    secret_entry& e = iter->second;
-    secrets_lru.erase(e.lru_iter);
-  }
-
-  const utime_t now = ceph_clock_now();
-  secrets_lru.push_front(token_id);
-  secret_entry& entry = secrets[token_id];
-  entry.token = token;
-  entry.secret = secret;
-  entry.expires = now + s3_token_expiry_length;
-  entry.lru_iter = secrets_lru.begin();
-
-  while (secrets_lru.size() > max) {
-    list<string>::reverse_iterator riter = secrets_lru.rbegin();
-    iter = secrets.find(*riter);
-    assert(iter != secrets.end());
-    secrets.erase(iter);
-    secrets_lru.pop_back();
   }
 }
 

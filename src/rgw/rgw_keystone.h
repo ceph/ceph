@@ -12,6 +12,7 @@
 
 #include "rgw_common.h"
 #include "rgw_http_client.h"
+#include "common/async/call_once.h"
 #include "common/ceph_mutex.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "global/global_init.h"
@@ -224,6 +225,14 @@ class TokenCache {
   std::atomic<bool> down_flag = { false };
   const boost::intrusive_ptr<CephContext> cct;
 
+public:
+  using admin_result = std::pair<int, std::string>;
+  using admin_once = ceph::async::once_result<admin_result>;
+private:
+  // the admin token request in flight, shared by every caller that
+  // misses the cache while it runs
+  std::shared_ptr<admin_once> admin_request_once;
+
   std::string admin_token_id;
   std::string barbican_token_id;
   std::map<std::string, token_entry> tokens;
@@ -274,7 +283,6 @@ public:
     }
     return boost::none;
   }
-  bool find_admin(TokenEnvelope& token);
   bool find_barbican(TokenEnvelope& token);
   void add(const std::string& token_id, const TokenEnvelope& token);
   void add_service(const std::string& token_id, const TokenEnvelope& token);
@@ -282,6 +290,10 @@ public:
   void add_barbican(const TokenEnvelope& token);
   void invalidate(const DoutPrefixProvider *dpp, const std::string& token_id);
   void invalidate_admin(const DoutPrefixProvider *dpp);
+  // returns the cached admin token, or the request to join when there
+  // is none
+  std::shared_ptr<admin_once> admin_request(TokenEnvelope& token);
+  void admin_request_done();
   bool going_down() const;
 private:
   void add_locked(const std::string& token_id, const TokenEnvelope& token,
