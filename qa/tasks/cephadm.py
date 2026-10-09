@@ -781,6 +781,10 @@ def ceph_bootstrap(ctx, config):
             cmd += ['--skip-monitoring-stack']
         if config.get('single_host_defaults'):
             cmd += ['--single-host-defaults']
+        if config.get('allow_mismatched_release'):
+            cmd += ['--allow-mismatched-release']
+        if config.get('log_to_file'):
+            cmd += ['--log-to-file']
         if not config.get('avoid_pacific_features', False):
             cmd += ['--skip-admin-label']
         # bootstrap makes the keyring root 0600, so +r it for our purposes
