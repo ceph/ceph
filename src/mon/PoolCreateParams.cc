@@ -438,6 +438,42 @@ string profile_to_string(const std::map<string, string>& profile)
   return out.str();
 }
 
+string pool_default_value(const PoolCreateParams& p, const string& param)
+{
+  if (param == "pool_type") {
+    return string(pg_pool_t::get_type_name(p.pool_type));
+  } else if (param == "num_zones") {
+    return std::to_string(p.num_zones);
+  } else if (param == "rule") {
+    return std::to_string(p.default_rule);
+  } else if (param == "zone_failure_domain") {
+    return p.zone_failure_domain;
+  } else if (param == "osd_failure_domain") {
+    return p.osd_failure_domain;
+  } else if (param == "root") {
+    return p.root;
+  } else if (param == "class") {
+    return p.device_class;
+  } else if (param == "replica" || param == "size") {
+    return std::to_string(p.copies_per_zone());
+  } else if (param == "min_size") {
+    return std::to_string(p.min_size);
+  } else if (param == "erasure_code_profile" || param == "k" || param == "m") {
+    return profile_to_string(p.profile);
+  } else if (param == "pg_num") {
+    return std::to_string(p.pg_num);
+  } else if (param == "pgp_num") {
+    return std::to_string(p.pgp_num);
+  } else if (param == "autoscale_mode") {
+    return p.autoscale_mode;
+  } else if (param == "bulk") {
+    return p.bulk ? "true" : "false";
+  } else if (param == "crimson") {
+    return p.crimson ? "true" : "false";
+  }
+  return "";
+}
+
 std::map<string, string> db_pool_default_overrides(const ConfigMap& config_map)
 {
   const auto names = pool_default_option_names();

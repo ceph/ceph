@@ -1060,46 +1060,20 @@ void ConfigMonitor::dump_pool_defaults(Formatter *f, ostream& out)
   const string profile =
     g_conf().get_val<string>("osd_pool_default_erasure_code_profile");
   auto value_of = [&](const string& param) -> string {
-    if (param == "pool_type") {
-      return string(pg_pool_t::get_type_name(d.pool_type));
-    } else if (param == "num_zones") {
-      return stringify(d.num_zones);
-    } else if (param == "rule") {
+    if (param == "rule") {
       const auto id = d.default_rule;
       if (id < 0) {
         return "none";
       }
       const char *name = osdmap.crush->get_rule_name(id);
       return name ? string(name) : stringify(id);
-    } else if (param == "zone_failure_domain") {
-      return d.zone_failure_domain;
-    } else if (param == "osd_failure_domain") {
-      return d.osd_failure_domain;
-    } else if (param == "root") {
-      return d.root;
-    } else if (param == "class") {
-      return d.device_class;
-    } else if (param == "replica") {
-      return stringify(d.replica);
-    } else if (param == "min_size") {
-      return stringify(d.min_size);
     } else if (param == "erasure_code_profile") {
       return profile;
-    } else if (param == "k") {
-      return d.k() ? stringify(*d.k()) : string();
-    } else if (param == "m") {
-      return d.m() ? stringify(*d.m()) : string();
-    } else if (param == "pg_num") {
-      return stringify(d.pg_num);
-    } else if (param == "pgp_num") {
-      return stringify(d.pgp_num);
-    } else if (param == "autoscale_mode") {
-      return d.autoscale_mode;
-    } else if (param == "bulk") {
-      return d.bulk ? "true" : "false";
-    } else {
-      return d.crimson ? "true" : "false";
+    } else if (param == "k" || param == "m") {
+      const auto v = param == "k" ? d.k() : d.m();
+      return v ? stringify(*v) : string();
     }
+    return pool_default_value(d, param);
   };
   auto option_of = [&](const string& param) -> string {
     if (param == "replica" &&
@@ -1196,41 +1170,12 @@ int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
   }
 
   // the options to write
+  if (p.is_given("rule")) {
+    p.default_rule = rule_id;
+  }
   map<string,string> values;
   for (const auto& param : p.given) {
-    const string& option = pool_default_options().at(param);
-    if (param == "pool_type") {
-      values[option] = string(pg_pool_t::get_type_name(p.pool_type));
-    } else if (param == "num_zones") {
-      values[option] = stringify(p.num_zones);
-    } else if (param == "rule") {
-      values[option] = stringify(rule_id);
-    } else if (param == "zone_failure_domain") {
-      values[option] = p.zone_failure_domain;
-    } else if (param == "osd_failure_domain") {
-      values[option] = p.osd_failure_domain;
-    } else if (param == "root") {
-      values[option] = p.root;
-    } else if (param == "class") {
-      values[option] = p.device_class;
-    } else if (param == "replica" || param == "size") {
-      values[option] = stringify(p.copies_per_zone());
-    } else if (param == "min_size") {
-      values[option] = stringify(p.min_size);
-    } else if (param == "erasure_code_profile" || param == "k" ||
-               param == "m") {
-      values[option] = profile_to_string(p.profile);
-    } else if (param == "pg_num") {
-      values[option] = stringify(p.pg_num);
-    } else if (param == "pgp_num") {
-      values[option] = stringify(p.pgp_num);
-    } else if (param == "autoscale_mode") {
-      values[option] = p.autoscale_mode;
-    } else if (param == "bulk") {
-      values[option] = p.bulk ? "true" : "false";
-    } else if (param == "crimson") {
-      values[option] = p.crimson ? "true" : "false";
-    }
+    values[pool_default_options().at(param)] = pool_default_value(p, param);
   }
 
   err = check_pool_default_overrides(values, ss);

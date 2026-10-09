@@ -822,6 +822,43 @@ TEST(ProfileToStringTest, Empty) {
   EXPECT_EQ("", profile_to_string({}));
 }
 
+// Test the pool type, numbers and flags are written as their options hold them
+TEST_F(PoolParamsTest, DefaultValueStrings) {
+  PoolCreateParams p = with({{"num_zones", int64_t(2)}, {"pg_num", int64_t(64)},
+                             {"bulk", true}}, ERASURE);
+  EXPECT_EQ("erasure", pool_default_value(p, "pool_type"));
+  EXPECT_EQ("2", pool_default_value(p, "num_zones"));
+  EXPECT_EQ("64", pool_default_value(p, "pg_num"));
+  EXPECT_EQ("true", pool_default_value(p, "bulk"));
+  EXPECT_EQ("false", pool_default_value(p, "crimson"));
+}
+
+// Test --size is written as the replicas per zone
+TEST_F(PoolParamsTest, DefaultValueSizeIsReplica) {
+  const PoolCreateParams p = with({{"size", int64_t(2)}});
+  EXPECT_EQ("2", pool_default_value(p, "size"));
+  EXPECT_EQ("2", pool_default_value(p, "replica"));
+}
+
+// Test k is written as the whole profile it changes
+TEST_F(PoolParamsTest, DefaultValueKIsProfile) {
+  set("osd_pool_default_erasure_code_profile", "plugin=isa k=2 m=1");
+  const PoolCreateParams p = with({{"k", int64_t(4)}}, ERASURE);
+  EXPECT_EQ("k=4 m=1 plugin=isa", pool_default_value(p, "k"));
+  EXPECT_EQ("k=4 m=1 plugin=isa", pool_default_value(p, "erasure_code_profile"));
+}
+
+// Test the rule is written as its id
+TEST_F(PoolParamsTest, DefaultValueRuleId) {
+  set("osd_pool_default_crush_rule", "3");
+  EXPECT_EQ("3", pool_default_value(defaults(), "rule"));
+}
+
+// Test an unknown parameter gives an empty value
+TEST_F(PoolParamsTest, DefaultValueUnknown) {
+  EXPECT_EQ("", pool_default_value(defaults(), "no_such_param"));
+}
+
 // Test the written options are unique and use the new replica name
 TEST(PoolDefaultOptionsTest, OptionNames) {
   const auto names = pool_default_option_names();

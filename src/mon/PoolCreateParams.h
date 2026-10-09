@@ -126,6 +126,11 @@ std::set<std::string> pool_default_option_names();
 // holds it.
 std::string profile_to_string(const std::map<std::string, std::string>& profile);
 
+// The value of param in p, in the form its option (pool_default_options())
+// holds it: the rule as its id, and k and m as the whole profile.
+std::string pool_default_value(const PoolCreateParams& p,
+                               const std::string& param);
+
 // The pool default options that the configuration database sets for
 // monitors other than by an unmasked global value, with the section that
 // sets them ("mon", "mon.a", or a masked "global/host:x").
