@@ -403,11 +403,11 @@ TEST_F(PoolParamsTest, KWithoutM) {
   EXPECT_EQ(0, check_line(p, PoolCommand::DEFAULT_SET)) << ss.str();
 }
 
-// Test CRUSH parameters of an EC pool need k and m, but not for the defaults
+// Test CRUSH parameters of an EC pool do not need k and m: the pool's own
+// profile records them
 TEST_F(PoolParamsTest, ErasureCrushParamsWithoutKM) {
   const PoolCreateParams p = with({{"class", string("ssd")}}, ERASURE);
-  EXPECT_EQ(-EINVAL, check_line(p, PoolCommand::CREATE));
-  EXPECT_EQ(CRUSH_PARAMS + " require k and m", ss.str());
+  EXPECT_EQ(0, check_line(p, PoolCommand::CREATE)) << ss.str();
   EXPECT_EQ(0, check_line(p, PoolCommand::DEFAULT_SET)) << ss.str();
 }
 
@@ -555,6 +555,35 @@ TEST_F(PoolParamsTest, SizeWithDefaultTwoZonesFails) {
             "instead (osd_pool_default_num_zones)", ss.str());
 }
 
+// Test a pool is created in one zone before the commit over the default two
+// zones, and a legacy size then stays the pool's size
+TEST_F(PoolParamsTest, OneZoneOverDefaultTwoZones) {
+  set("osd_pool_default_num_zones", "2");
+  PoolCreateParams p = defaults();
+  EXPECT_TRUE(create_in_one_zone(p));
+  EXPECT_EQ(1, p.num_zones);
+  EXPECT_EQ(0, check(p)) << ss.str();
+  PoolCreateParams s = with({{"size", int64_t(4)}});
+  EXPECT_TRUE(create_in_one_zone(s));
+  size_over_default_zones_as_replica(s);
+  EXPECT_EQ(1, s.num_zones);
+  EXPECT_TRUE(s.is_given("size"));
+  EXPECT_EQ(4, s.copies_per_zone());
+  EXPECT_EQ(0, check(s)) << ss.str();
+}
+
+// Test a num_zones of 2 given on the command line is not created in one zone
+// before the commit, and a given num_zones of 1 is
+TEST_F(PoolParamsTest, OneZoneRefusesGivenTwoZones) {
+  PoolCreateParams p = with({{"num_zones", int64_t(2)}});
+  EXPECT_FALSE(create_in_one_zone(p));
+  EXPECT_EQ(2, p.num_zones);
+  set("osd_pool_default_num_zones", "2");
+  PoolCreateParams one = with({{"num_zones", int64_t(1)}});
+  EXPECT_TRUE(create_in_one_zone(one));
+  EXPECT_EQ(1, one.num_zones);
+}
+
 // Test success when an EC pool gets the legacy size, which it ignores
 TEST_F(PoolParamsTest, ErasureIgnoresSize) {
   EXPECT_EQ(0, check(with({{"size", int64_t(4)}, {"num_zones", int64_t(2)}},
@@ -616,8 +645,7 @@ TEST_F(PoolParamsTest, ErasureKOneFails) {
   EXPECT_EQ("k=1 must be >= 2", ss.str());
   set("osd_pool_default_erasure_code_profile", "plugin=isa k=1 m=1");
   EXPECT_EQ(-EINVAL, check(with({}, ERASURE)));
-  EXPECT_EQ("k=1 must be >= 2 (osd_pool_default_erasure_code_profile)",
-            ss.str());
+  EXPECT_EQ("k=1 must be >= 2 (erasure code profile 'default')", ss.str());
 }
 
 // Test failure when k of a named profile is 1, naming the profile
@@ -633,8 +661,7 @@ TEST_F(PoolParamsTest, NamedProfileKOneFails) {
 TEST_F(PoolParamsTest, ErasureMZeroFails) {
   set("osd_pool_default_erasure_code_profile", "plugin=isa k=2 m=0");
   EXPECT_EQ(-EINVAL, check(with({}, ERASURE)));
-  EXPECT_EQ("m=0 must be >= 1 (osd_pool_default_erasure_code_profile)",
-            ss.str());
+  EXPECT_EQ("m=0 must be >= 1 (erasure code profile 'default')", ss.str());
 }
 
 // Test failure when k+m is above 127
@@ -657,7 +684,7 @@ TEST_F(PoolParamsTest, ErasureWithoutKMFails) {
   c.normalize_profile = nullptr;
   EXPECT_EQ(-EINVAL, check(with({}, ERASURE), c));
   EXPECT_EQ("the erasure code profile has no k or m "
-            "(osd_pool_default_erasure_code_profile)", ss.str());
+            "(erasure code profile 'default')", ss.str());
 }
 
 // Test failure when an EC pool's min_size is outside k..k+m
@@ -852,8 +879,7 @@ TEST_F(PoolParamsTest, DefaultsCheckDefaultType) {
   set("osd_pool_default_type", "erasure");
   ss.str("");
   EXPECT_EQ(-EINVAL, check_pool_defaults(defaults(), cluster(), &ss));
-  EXPECT_EQ("k=1 must be >= 2 (osd_pool_default_erasure_code_profile)",
-            ss.str());
+  EXPECT_EQ("k=1 must be >= 2 (erasure code profile 'default')", ss.str());
 }
 
 // Test given EC parameters are checked as an EC pool too
@@ -918,7 +944,7 @@ TEST_F(PoolParamsTest, EffectiveZoneFailureDomain) {
 TEST_F(PoolParamsTest, FromDefault) {
   EXPECT_EQ(" (osd_pool_default_replica)", with({}).from_default("replica"));
   EXPECT_EQ("", with({{"replica", int64_t(2)}}).from_default("replica"));
-  EXPECT_EQ(" (osd_pool_default_erasure_code_profile)",
+  EXPECT_EQ(" (erasure code profile 'default')",
             with({}, ERASURE).from_default("k"));
 }
 
@@ -928,8 +954,8 @@ TEST(PoolDefaultOptionsTest, EveryParameterHasAnOption) {
   for (const char *param : {"pool_type", "num_zones", "rule",
                             "zone_failure_domain", "osd_failure_domain",
                             "root", "class", "replica", "size", "min_size",
-                            "erasure_code_profile", "k", "m", "pg_num",
-                            "pgp_num", "autoscale_mode", "bulk", "crimson"}) {
+                            "pg_num", "pgp_num", "autoscale_mode", "bulk",
+                            "crimson"}) {
     EXPECT_TRUE(options.contains(param)) << param;
   }
 }
@@ -941,13 +967,12 @@ TEST(PoolDefaultOptionsTest, SizeAndReplicaShareOneOption) {
   EXPECT_EQ(options.at("replica"), options.at("size"));
 }
 
-// Test the profile, k and m all write the default profile option
-TEST(PoolDefaultOptionsTest, ProfileKMShareOneOption) {
+// Test k and m are kept in the default profile, not in an option
+TEST(PoolDefaultOptionsTest, ProfileKMAreNotOptions) {
   const auto& options = pool_default_options();
-  EXPECT_EQ("osd_pool_default_erasure_code_profile",
-            options.at("erasure_code_profile"));
-  EXPECT_EQ(options.at("erasure_code_profile"), options.at("k"));
-  EXPECT_EQ(options.at("erasure_code_profile"), options.at("m"));
+  EXPECT_FALSE(options.contains("erasure_code_profile"));
+  EXPECT_FALSE(options.contains("k"));
+  EXPECT_FALSE(options.contains("m"));
 }
 
 // Test a profile map is written as key=value items in key order
@@ -980,12 +1005,12 @@ TEST_F(PoolParamsTest, DefaultValueSizeIsReplica) {
   EXPECT_EQ("2", pool_default_value(p, "replica"));
 }
 
-// Test k is written as the whole profile it changes
-TEST_F(PoolParamsTest, DefaultValueKIsProfile) {
+// Test k and m are values of the default profile, not a whole profile
+TEST_F(PoolParamsTest, DefaultValueKM) {
   set("osd_pool_default_erasure_code_profile", "plugin=isa k=2 m=1");
   const PoolCreateParams p = with({{"k", int64_t(4)}}, ERASURE);
-  EXPECT_EQ("k=4 m=1 plugin=isa", pool_default_value(p, "k"));
-  EXPECT_EQ("k=4 m=1 plugin=isa", pool_default_value(p, "erasure_code_profile"));
+  EXPECT_EQ("4", pool_default_value(p, "k"));
+  EXPECT_EQ("1", pool_default_value(p, "m"));
 }
 
 // Test the rule is written as its id
@@ -1049,10 +1074,10 @@ TEST(CheckPoolReplicaCopiesTest, OptionsShareTheLimit) {
 // Test the written options are unique and use the new replica name
 TEST(PoolDefaultOptionsTest, OptionNames) {
   const auto names = pool_default_option_names();
-  EXPECT_EQ(15u, names.size());
+  EXPECT_EQ(14u, names.size());
   EXPECT_TRUE(names.contains("osd_pool_default_replica"));
   EXPECT_FALSE(names.contains("osd_pool_default_size"));
-  EXPECT_TRUE(names.contains("osd_pool_default_erasure_code_profile"));
+  EXPECT_FALSE(names.contains("osd_pool_default_erasure_code_profile"));
 }
 
 class PoolDefaultOverridesTest : public ::testing::Test {

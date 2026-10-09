@@ -1005,6 +1005,44 @@ TEST(OSDMonitorStretchPoolDefaultsTest, OneZone) {
   EXPECT_EQ(expected, OSDMonitor::stretch_pool_defaults(1, 3, ""));
 }
 
+class OSDMonitorProfileCopyNameTest : public ::testing::Test {
+protected:
+  const map<string, string> contents = {{"plugin", "isa"}, {"k", "2"},
+                                        {"m", "2"}};
+  const map<string, string> other = {{"plugin", "jerasure"}, {"k", "2"},
+                                     {"m", "2"}};
+  map<string, map<string, string>> profiles;
+
+  string copy_name(const string& base) {
+    return OSDMonitor::profile_copy_name(
+      base, contents, [this](const string& name) -> const map<string, string>* {
+        auto p = profiles.find(name);
+        return p == profiles.end() ? nullptr : &p->second;
+      });
+  }
+};
+
+// Test a free name is used as it is
+TEST_F(OSDMonitorProfileCopyNameTest, FreeName) {
+  EXPECT_EQ("pool-k2-m2", copy_name("pool-k2-m2"));
+}
+
+// Test a profile of that name with the same contents is shared
+TEST_F(OSDMonitorProfileCopyNameTest, SameContents) {
+  profiles["pool-k2-m2"] = contents;
+  EXPECT_EQ("pool-k2-m2", copy_name("pool-k2-m2"));
+}
+
+// Test a profile of that name with other contents gets a suffix
+TEST_F(OSDMonitorProfileCopyNameTest, OtherContents) {
+  profiles["pool-k2-m2"] = other;
+  EXPECT_EQ("pool-k2-m2-1", copy_name("pool-k2-m2"));
+  profiles["pool-k2-m2-1"] = other;
+  EXPECT_EQ("pool-k2-m2-2", copy_name("pool-k2-m2"));
+  profiles["pool-k2-m2-2"] = contents;
+  EXPECT_EQ("pool-k2-m2-2", copy_name("pool-k2-m2"));
+}
+
 // Test the commit hint names the command and the release
 TEST(OSDMonitorUpgradeHintTest, NamesCommandAndRelease) {
   EXPECT_EQ("the upgrade is committed with 'ceph osd require-osd-release "

@@ -26,7 +26,12 @@ class ConfigMonitor : public PaxosService
 
   void encode_pending_to_kvmon();
 
-  int prepare_pool_default_set(const cmdmap_t& cmdmap, std::ostream& ss);
+  // Whether pending changes any value.
+  bool has_pending_changes() const;
+  // default_profile is set to the new default EC profile if k or m change.
+  int prepare_pool_default_set(
+    const cmdmap_t& cmdmap, std::ostream& ss,
+    std::optional<std::map<std::string,std::string>>* default_profile);
   void dump_pool_defaults(ceph::Formatter *f, std::ostream& out);
   std::string pool_default_source(const std::string& option);
 

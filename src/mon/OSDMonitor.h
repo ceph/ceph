@@ -22,6 +22,7 @@
 #ifndef CEPH_OSDMONITOR_H
 #define CEPH_OSDMONITOR_H
 
+#include <functional>
 #include <map>
 #include <set>
 #include <utility>
@@ -423,6 +424,8 @@ private:
   // ...
   MOSDMap *build_latest_full(uint64_t features);
   MOSDMap *build_incremental(epoch_t first, epoch_t last, uint64_t features);
+  // whether session, with these features, must not get osdmaps
+  bool withhold_maps(const MonSession *session, uint64_t features) const;
   void send_full(MonOpRequestRef op);
   void send_incremental(MonOpRequestRef op, epoch_t first);
 
@@ -574,10 +577,10 @@ private:
 				 std::ostream *ss);
   void maybe_remove_unused_crush_rule(int64_t skip_pool, int old_rule_id);
   void note_created_crush_rule(const std::string& name);
+  void note_created_ec_profile(const std::string& name);
   bool remove_what_failed_op_created(MonOpRequestRef op);
   // the command or pool operation being prepared
   MonOpRequestRef preparing_op;
-  bool crush_rule_removal_pending(const std::string& rule_name, int rule_id);
   bool erasure_code_profile_removal_pending(const std::string& name) const;
   int prepare_pool_size(const unsigned pool_type,
                         const std::string &erasure_code_profile,
@@ -1007,9 +1010,16 @@ public:
   bool num_zones_supported() const {
     return osdmap.require_osd_release >= NUM_ZONES_RELEASE;
   }
+  // the pending update commits the upgrade
+  bool num_zones_commit_pending() const {
+    return !num_zones_supported() &&
+           osdmap.require_osd_release < NUM_ZONES_RELEASE &&
+           pending_inc.new_require_osd_release >= NUM_ZONES_RELEASE;
+  }
   // What check_pool_params() needs from this cluster, with crush as its
   // CRUSH map. crush must outlive the result.
   PoolCreateCluster pool_create_cluster(CrushWrapper& crush);
+  bool crush_rule_removal_pending(const std::string& rule_name, int rule_id);
 
   // -EINVAL unless rule places a pool over zones in num_zones buckets of the
   // zone type, with its share of size in each.
@@ -1036,14 +1046,44 @@ public:
       int zone_type,
       unsigned size);
 
+  // The reason why a command waits for the upgrade to be committed.
   static std::string num_zones_upgrade_hint();
+
+  // The pool creation defaults that the stretch mode commands write: the
+  // zone count and replicas per zone, and the zone failure domain unless it
+  // is empty.
   static std::map<std::string, std::string> stretch_pool_defaults(
       int num_zones, int replica, const std::string& zone_failure_domain);
+
+  // The pool creation defaults that global stretch mode of an earlier
+  // release becomes when the upgrade is committed; none without stretch mode.
   static std::map<std::string, std::string> stretch_mode_defaults_at_commit(
       bool stretch_mode_enabled,
       const CrushWrapper& crush,
       int stretch_mode_bucket,
       uint64_t stretch_pool_size);
+
+  // Set the default EC profile, the template of generated profiles, and
+  // propose it.
+  void propose_default_profile(
+      const std::map<std::string, std::string>& profile);
+
+  // The data and coding chunk counts of profile's plugin.
+  int profile_chunk_counts(const std::map<std::string, std::string>& profile,
+                           unsigned *k, unsigned *m, std::ostream *ss) const;
+
+  // The name for a pool's own copy of a profile with these contents: base,
+  // else the first base-<n>, that lookup finds free or holding the same
+  // contents.
+  static std::string profile_copy_name(
+      const std::string& base,
+      const std::map<std::string, std::string>& contents,
+      const std::function<const std::map<std::string, std::string>*(
+        const std::string&)>& lookup);
+
+  // At the upgrade commit: every EC pool that refers to the default profile
+  // gets a verbatim copy of its own, in the pending OSDMap.
+  void copy_default_profile_to_pools();
 
   // What ceph mon enable_stretch_mode or disable_stretch_mode does to a pool.
   enum class StretchModeChange {

@@ -94,6 +94,11 @@ constexpr int64_t MAX_POOL_SIZE = 128;
 // zone of a pool over zones.
 constexpr int64_t MAX_POOL_REPLICA_COPIES = 10;
 
+// Before the upgrade is committed a pool is created in one zone, as earlier
+// releases create it, whatever osd_pool_default_num_zones says. Fails, and
+// changes nothing, if the command line gives another num_zones.
+bool create_in_one_zone(PoolCreateParams& p);
+
 // What check_pool_params() needs from the cluster.
 struct PoolCreateCluster {
   const CrushWrapper *crush = nullptr;
@@ -132,7 +137,8 @@ std::string effective_zone_failure_domain(const PoolCreateParams& p);
 // " (<option>, ...)", or "" when the command line gave them all.
 std::string rule_from_defaults(const PoolCreateParams& p);
 
-// The option that ceph osd pool default set writes for each parameter.
+// The option that ceph osd pool default set writes for each parameter. k and
+// m are not options: they are kept in the default erasure code profile.
 const std::map<std::string, std::string>& pool_default_options();
 
 // The options that ceph osd pool default set writes.
@@ -156,7 +162,8 @@ int check_pool_replica_copies(int64_t n, std::string_view what,
                               std::ostream* ss);
 
 // The value of param in p, in the form its option (pool_default_options())
-// holds it: the rule as its id, and k and m as the whole profile.
+// holds it, the rule as its id. k and m are values of the default profile,
+// not options.
 std::string pool_default_value(const PoolCreateParams& p,
                                const std::string& param);
 

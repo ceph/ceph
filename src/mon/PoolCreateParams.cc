@@ -62,8 +62,10 @@ string PoolCreateParams::from_default(const string& param) const
   if (is_given(param)) {
     return "";
   }
-  if ((param == "k" || param == "m") && !erasure_code_profile.empty()) {
-    return " (erasure code profile '" + erasure_code_profile + "')";
+  if (param == "k" || param == "m") {
+    return " (erasure code profile '" +
+      (erasure_code_profile.empty() ? string("default") : erasure_code_profile) +
+      "')";
   }
   auto i = pool_default_options().find(param);
   return i == pool_default_options().end() ? "" : " (" + i->second + ")";
@@ -206,12 +208,6 @@ int check_command_line(const PoolCreateParams& p, PoolCommand command,
     *ss << "cannot specify both erasure_code_profile and " << CRUSH_PARAMS;
     return -EINVAL;
   }
-  // Without k/m the pool uses the shared default profile, which cannot
-  // record per-pool crush parameters.
-  if (create && erasure && p.crush_params_given() && !p.ec_params_given()) {
-    *ss << CRUSH_PARAMS << " require k and m";
-    return -EINVAL;
-  }
   if (create && replicated && p.ec_params_given()) {
     *ss << "cannot specify k/m parameters for replicated pools";
     return -EINVAL;
@@ -284,6 +280,15 @@ string rule_from_defaults(const PoolCreateParams& p)
     out += (out.size() > 2 ? ", " : "") + option;
   }
   return out + ")";
+}
+
+bool create_in_one_zone(PoolCreateParams& p)
+{
+  if (p.is_given("num_zones") && p.num_zones != 1) {
+    return false;
+  }
+  p.num_zones = 1;
+  return true;
 }
 
 int check_pool_params(const PoolCreateParams& p,
@@ -475,9 +480,6 @@ const std::map<string, string>& pool_default_options()
     {"replica", "osd_pool_default_replica"},
     {"size", "osd_pool_default_replica"},
     {"min_size", "osd_pool_default_min_size"},
-    {"erasure_code_profile", "osd_pool_default_erasure_code_profile"},
-    {"k", "osd_pool_default_erasure_code_profile"},
-    {"m", "osd_pool_default_erasure_code_profile"},
     {"pg_num", "osd_pool_default_pg_num"},
     {"pgp_num", "osd_pool_default_pgp_num"},
     {"autoscale_mode", "osd_pool_default_pg_autoscale_mode"},
@@ -562,8 +564,9 @@ string pool_default_value(const PoolCreateParams& p, const string& param)
     return std::to_string(p.copies_per_zone());
   } else if (param == "min_size") {
     return std::to_string(p.min_size);
-  } else if (param == "erasure_code_profile" || param == "k" || param == "m") {
-    return profile_to_string(p.profile);
+  } else if (param == "k" || param == "m") {
+    const auto v = param == "k" ? p.k() : p.m();
+    return v ? std::to_string(*v) : string();
   } else if (param == "pg_num") {
     return std::to_string(p.pg_num);
   } else if (param == "pgp_num") {
