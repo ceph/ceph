@@ -28,6 +28,7 @@
 #include "crimson/osd/state.h"
 
 #include "messages/MOSDOp.h"
+#include "messages/MOSDShardMap.h"
 #include "osd/PeeringState.h"
 #include "osd/osd_types.h"
 #include "osd/osd_perf_counters.h"
@@ -213,6 +214,9 @@ private:
                                      Ref<MOSDPGCreate2> m);
   seastar::future<> handle_osd_op(crimson::net::ConnectionRef conn,
                                   Ref<MOSDOp> m);
+  /// Build and send an MOSDShardMap to conn if our shard table has changed
+  /// since we last sent one on this connection.
+  seastar::future<> maybe_send_shard_map(crimson::net::ConnectionRef conn);
   seastar::future<> handle_rep_op(crimson::net::ConnectionRef conn,
                                   Ref<MOSDRepOp> m);
   seastar::future<> handle_rep_op_reply(crimson::net::ConnectionRef conn,

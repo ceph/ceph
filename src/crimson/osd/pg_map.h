@@ -34,6 +34,16 @@ public:
     return iter == pg_to_core.end() ? NULL_CORE : iter->second.first;
   }
 
+  /// Returns full (core, store_index) pair if present, or {NULL_CORE, NULL_STORE_INDEX}
+  std::optional<std::pair<core_id_t, store_index_t>> get_pg_mapping_pair(spg_t pgid) {
+    auto iter = pg_to_core.find(pgid);
+    if (iter == pg_to_core.end()) {
+      return std::nullopt;
+    }
+    ceph_assert_always(iter->second.first != NULL_CORE);
+    return iter->second;
+  }
+
   /// Returns mapping for pgid, creates new one if it doesn't already exist
   seastar::future<std::pair<core_id_t, store_index_t>> get_or_create_pg_mapping(
     spg_t pgid,

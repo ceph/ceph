@@ -34,6 +34,7 @@
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDBackoff.h"
 #include "messages/MOSDMap.h"
+#include "messages/MOSDShardMap.h"
 
 #include "messages/MPoolOp.h"
 #include "messages/MPoolOpReply.h"
@@ -1116,6 +1117,11 @@ Dispatcher::dispatch_result_t Objecter::ms_dispatch2(const MessageRef &m)
     handle_osd_map(ref_cast<MOSDMap>(m).get());
     return Dispatcher::ACKNOWLEDGED();
 
+  case MSG_OSD_SHARD_MAP:
+    /* ref not consumed! Crimson-OSD only; classic OSDs never send this. */
+    handle_osd_shard_map(ref_cast<MOSDShardMap>(m).get());
+    return Dispatcher::HANDLED();
+
   default:
     return Dispatcher::UNHANDLED();
   }
@@ -1248,6 +1254,43 @@ void Objecter::_scan_requests(
     _linger_cancel(*iter);
     (*iter)->put();
   }
+}
+
+void Objecter::handle_osd_shard_map(MOSDShardMap *m)
+{
+  // Crimson OSD advertises its PG→reactor-core mapping so we can set
+  // shard_hint on future MOSDOp messages, skipping the OSD's core-0
+  // round-trip.  Classic OSDs never send this message.
+  ldout(cct, 10) << __func__ << " osd." << m->whoami
+                 << " epoch=" << m->bind_epoch
+                 << " pgs=" << m->pg_to_core.size() << dendl;
+
+  ceph::shunique_lock sul(rwlock, acquire_shared);
+  if (!initialized)
+    return;
+
+  auto p = osd_sessions.find(m->whoami);
+  if (p == osd_sessions.end()) {
+    ldout(cct, 10) << __func__ << " no session for osd." << m->whoami
+                   << ", ignoring" << dendl;
+    return;
+  }
+  OSDSession *s = p->second;
+  std::unique_lock sl(s->lock);
+
+  // Only accept newer shard maps; discard stale ones that arrived out of order.
+  if (m->bind_epoch <= s->shard_map_epoch) {
+    ldout(cct, 10) << __func__ << " osd." << m->whoami
+                   << " stale shard_map epoch " << m->bind_epoch
+                   << " <= " << s->shard_map_epoch << ", ignoring" << dendl;
+    return;
+  }
+
+  s->shard_map_epoch = m->bind_epoch;
+  s->shard_hints = m->pg_to_core;
+  ldout(cct, 10) << __func__ << " osd." << m->whoami
+                 << " updated shard_hints, " << s->shard_hints.size()
+                 << " PGs cached" << dendl;
 }
 
 void Objecter::handle_osd_map(MOSDMap *m)
@@ -3676,6 +3719,15 @@ void Objecter::_send_op(Op *op)
 
   ceph_assert(op->tid > 0);
   MOSDOp *m = _prepare_osd_op(op);
+
+  // Set shard_hint from the per-session cache populated by handle_osd_shard_map.
+  // This lets a Crimson OSD skip its core-0 PG mapping round-trip on the hot path.
+  {
+    auto it = op->session->shard_hints.find(op->target.actual_pgid);
+    if (it != op->session->shard_hints.end()) {
+      m->set_shard_hint(it->second);
+    }
+  }
 
   if (op->target.actual_pgid != m->get_spg()) {
     ldout(cct, 10) << __func__ << " " << op->tid << " pgid change from "

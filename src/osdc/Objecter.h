@@ -2505,6 +2505,13 @@ public:
     std::map<spg_t,std::map<hobject_t,OSDBackoff>> backoffs;
     std::map<uint64_t,OSDBackoff*> backoffs_by_id;
 
+    // Crimson-OSD shard hint cache: spg_t -> reactor core id.
+    // Populated by handle_osd_shard_map(); used by _prepare_osd_op()
+    // to set MOSDOp::shard_hint and skip the core-0 mapping round-trip.
+    // Protected by this->lock.
+    epoch_t shard_map_epoch = 0;
+    std::map<spg_t, uint32_t> shard_hints;
+
     int osd;
     // NB locking two sessions at the same time is only safe because
     // it is only done in _recalc_linger_op_target with s and
@@ -2799,6 +2806,7 @@ private:
   void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
+  void handle_osd_shard_map(class MOSDShardMap *m);
   void wait_for_osd_map(epoch_t e=0);
 
   template<typename CompletionToken>
