@@ -214,7 +214,7 @@ public:
     return recovery_state.get_osdmap();
   }
 
-  epoch_t get_osdmap_epoch() const override final {
+  epoch_t get_osdmap_epoch() const final {
     return recovery_state.get_osdmap()->get_epoch();
   }
 
@@ -1411,7 +1411,10 @@ protected:
 
 // ScrubberPasskey getters/misc:
 public:
- const pg_info_t& get_pg_info(ScrubberPasskey) const final { return info; }
+  const pg_info_t& get_pg_info(ScrubberPasskey) const final
+  {
+    return info;
+  }
 
  OSDService* get_pg_osd(ScrubberPasskey) const { return osd; }
 
