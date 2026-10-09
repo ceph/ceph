@@ -22,7 +22,6 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
   @ViewChild('formDir') formDir: NgForm;
 
   form: CdFormGroup;
-  mode: string;
   isSubmitLoading = false;
 
   readonly steps = [{ label: $localize`Role details`, invalid: false }];
@@ -49,7 +48,6 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
   }
 
   ngOnInit(): void {
-    this.mode = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.title = this.isEdit ? $localize`Edit session duration` : $localize`Create role`;
     this.modalHeaderLabel = this.isEdit ? $localize`Role` : $localize`User account`;
     this.description = this.isEdit
@@ -58,9 +56,7 @@ export class RgwAccountRoleFormComponent extends BaseModal implements OnInit {
     this.submitButtonLabel = this.isEdit
       ? this.actionLabels.SAVE_CHANGES
       : this.actionLabels.CREATE;
-    this.submitButtonLoadingLabel = this.isEdit
-      ? this.actionLabels.SAVING
-      : this.actionLabels.CREATING;
+    this.submitButtonLoadingLabel = this.isEdit ? $localize`Saving` : this.actionLabels.CREATING;
 
     this.createForm();
     if (this.isEdit && this.role) {

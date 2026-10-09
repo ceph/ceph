@@ -7,6 +7,7 @@ import { ButtonModule, InputModule, ModalModule } from 'carbon-components-angula
 import { of, throwError } from 'rxjs';
 
 import { RgwAccountRoleFormComponent } from './rgw-account-role-form.component';
+import { RgwAccountRolePolicyFieldsComponent } from '../rgw-account-role-policy-fields/rgw-account-role-policy-fields.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RgwRoleService } from '~/app/shared/api/rgw-role.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -29,7 +30,7 @@ describe('RgwAccountRoleFormComponent', () => {
         ModalModule,
         ButtonModule
       ],
-      declarations: [RgwAccountRoleFormComponent]
+      declarations: [RgwAccountRoleFormComponent, RgwAccountRolePolicyFieldsComponent]
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwAccountRoleFormComponent);

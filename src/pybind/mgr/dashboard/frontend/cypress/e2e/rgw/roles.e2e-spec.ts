@@ -6,6 +6,9 @@ describe('RGW roles page', () => {
   const accounts = new AccountsPageHelper();
   const accountName = 'roles-test-account';
   const roleName = 'testRole';
+  // Minimal valid IAM trust policy (empty "{}" is rejected by RGW role create).
+  const trustPolicy =
+    '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam:::user/testuser"},"Action":["sts:AssumeRole"]}]}';
 
   before(() => {
     cy.login();
@@ -16,6 +19,7 @@ describe('RGW roles page', () => {
   after(() => {
     cy.login();
     accounts.navigateTo();
+    cy.get('cd-table').should('exist');
     accounts.delete(accountName, null, null, true, false, false, false);
   });
 
@@ -31,7 +35,7 @@ describe('RGW roles page', () => {
 
   describe('Create, Edit & Delete rgw roles', () => {
     it('should create rgw role', () => {
-      roles.create(roleName, '/', '{}');
+      roles.create(roleName, '/', trustPolicy);
       roles.checkExist(roleName, true);
     });
 

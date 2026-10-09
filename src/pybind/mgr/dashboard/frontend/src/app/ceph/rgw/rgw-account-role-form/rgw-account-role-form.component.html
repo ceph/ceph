@@ -164,93 +164,15 @@
             @for (policy of permissionPolicies.controls; track $index; let i = $index) {
               <!-- Direct FormGroup bind: formGroupName hits CdFormGroup.get and throws after removeAt. -->
               <div [formGroup]="$any(policy)">
-                <div class="form-item">
-                  <cds-text-label
-                    label="Policy name"
-                    [labelInputID]="'policy_name_' + i"
-                    [invalid]="policyNameRef.isInvalid"
-                    [invalidText]="policyNameError"
-                  >
-                    Policy name
-                    <input
-                      cdsText
-                      type="text"
-                      [id]="'policy_name_' + i"
-                      name="policy_name"
-                      formControlName="policy_name"
-                      placeholder="S3ReadWritePolicy"
-                      cdValidate
-                      #policyNameRef="cdValidate"
-                      [invalid]="policyNameRef.isInvalid"
-                    />
-                  </cds-text-label>
-                  <ng-template #policyNameError>
-                    @if (
-                      policy.get('policy_name')?.hasError('required') &&
-                      (formDir.submitted || policy.get('policy_name')?.dirty)
-                    ) {
-                      <span
-                        class="invalid-feedback"
-                        i18n
-                        >This field is required.</span
-                      >
-                    }
-                    @if (
-                      policy.get('policy_name')?.hasError('uniqueName') &&
-                      (formDir.submitted || policy.get('policy_name')?.dirty)
-                    ) {
-                      <span
-                        class="invalid-feedback"
-                        i18n
-                        >Policy name already exists.</span
-                      >
-                    }
-                  </ng-template>
-                </div>
-
-                <div class="form-item">
-                  <cds-textarea-label
-                    [labelInputID]="'policy_doc_' + i"
-                    [invalid]="policyDocRef.isInvalid"
-                    [invalidText]="policyDocError"
-                  >
-                    JSON
-                    <textarea
-                      cdsTextArea
-                      [id]="'policy_doc_' + i"
-                      name="policy_doc"
-                      formControlName="policy_doc"
-                      [placeholder]="policyDocPlaceholder"
-                      rows="8"
-                      cols="200"
-                      cdValidate
-                      #policyDocRef="cdValidate"
-                      [invalid]="policyDocRef.isInvalid"
-                    ></textarea>
-                  </cds-textarea-label>
-                  <ng-template #policyDocError>
-                    @if (
-                      policy.get('policy_doc')?.hasError('required') &&
-                      (formDir.submitted || policy.get('policy_doc')?.dirty)
-                    ) {
-                      <span
-                        class="invalid-feedback"
-                        i18n
-                        >This field is required.</span
-                      >
-                    }
-                    @if (
-                      policy.get('policy_doc')?.hasError('invalidJson') &&
-                      (formDir.submitted || policy.get('policy_doc')?.dirty)
-                    ) {
-                      <span
-                        class="invalid-feedback"
-                        i18n
-                        >Must be a valid JSON.</span
-                      >
-                    }
-                  </ng-template>
-                </div>
+                <cd-rgw-account-role-policy-fields
+                  [formGroup]="$any(policy)"
+                  [formDir]="formDir"
+                  [fieldId]="'' + i"
+                  [showUniqueNameError]="true"
+                  namePlaceholder="S3ReadWritePolicy"
+                  [docPlaceholder]="policyDocPlaceholder"
+                  [rows]="8"
+                ></cd-rgw-account-role-policy-fields>
 
                 <div>
                   <button

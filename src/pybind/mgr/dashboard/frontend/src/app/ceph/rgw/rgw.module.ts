@@ -110,6 +110,7 @@ import ChevronUpIcon from '@carbon/icons/es/chevron--up/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
 import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
+import TrashCanIcon from '@carbon/icons/es/trash-can/16';
 
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
 import { TimePickerComponent } from '~/app/shared/components/time-picker/time-picker.component';
@@ -140,6 +141,10 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RgwAccountRolesListComponent } from './rgw-account-roles-list/rgw-account-roles-list.component';
 import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account-role-form.component';
+import { RgwAccountRoleDetailsComponent } from './rgw-account-role-details/rgw-account-role-details.component';
+import { RgwAccountRolePolicyFormComponent } from './rgw-account-role-policy-form/rgw-account-role-policy-form.component';
+import { RgwAccountRolePolicyFieldsComponent } from './rgw-account-role-policy-fields/rgw-account-role-policy-fields.component';
+import { RgwAccountRolePoliciesSidePanelComponent } from './rgw-account-role-policies-side-panel/rgw-account-role-policies-side-panel.component';
 import { RgwBucketResourceSidebarComponent } from './rgw-bucket-resource-sidebar/rgw-bucket-resource-sidebar.component';
 import { RgwBucketResourcePageComponent } from './rgw-bucket-resource-page/rgw-bucket-resource-page.component';
 import { RgwBucketResourceBreadcrumbResolver } from './rgw-bucket-resource-page/rgw-bucket-resource-breadcrumb.resolver';
@@ -262,6 +267,10 @@ import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-
     RgwNotificationFormComponent,
     RgwAccountRolesListComponent,
     RgwAccountRoleFormComponent,
+    RgwAccountRoleDetailsComponent,
+    RgwAccountRolePolicyFormComponent,
+    RgwAccountRolePolicyFieldsComponent,
+    RgwAccountRolePoliciesSidePanelComponent,
     RgwBucketResourceSidebarComponent,
     RgwBucketResourcePageComponent,
     RgwBucketTagsTableComponent
@@ -283,7 +292,8 @@ export class RgwModule {
       ChevronUpIcon,
       ProgressBarRoundIcon,
       ToolsIcon,
-      UserAccessLocked
+      UserAccessLocked,
+      TrashCanIcon
     ]);
   }
 }
