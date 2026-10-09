@@ -11,8 +11,9 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "librbd/Types.h"
+#include <vector>
 #include <iosfwd>
-#include <list>
+#include <utility>
 #include <variant>
 #include <boost/none.hpp>
 #include <boost/optional.hpp>
@@ -452,7 +453,7 @@ struct EventEntry {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static std::list<EventEntry> generate_test_instances();
+  static std::vector<EventEntry> generate_test_instances();
 
 private:
   static const uint32_t EVENT_FIXED_SIZE = 14; /// version encoding, type
@@ -527,7 +528,7 @@ enum MirrorPeerState {
 };
 
 struct MirrorPeerClientMeta {
-  typedef std::list<MirrorPeerSyncPoint> SyncPoints;
+  using SyncPoints = std::vector<MirrorPeerSyncPoint>;
 
   static const ClientMetaType TYPE = MIRROR_PEER_CLIENT_META_TYPE;
 
@@ -540,9 +541,10 @@ struct MirrorPeerClientMeta {
   MirrorPeerClientMeta() {
   }
   MirrorPeerClientMeta(const std::string &image_id,
-                       const SyncPoints &sync_points = SyncPoints(),
+                       SyncPoints sync_points = SyncPoints(),
                        const SnapSeqs &snap_seqs = SnapSeqs())
-    : image_id(image_id), sync_points(sync_points), snap_seqs(snap_seqs) {
+    : image_id(image_id), sync_points(std::move(sync_points)),
+      snap_seqs(snap_seqs) {
   }
 
   inline bool operator==(const MirrorPeerClientMeta &meta) const {
@@ -593,7 +595,7 @@ struct ClientData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static std::list<ClientData> generate_test_instances();
+  static std::vector<ClientData> generate_test_instances();
 };
 
 // Journal Tag data structures
@@ -648,7 +650,7 @@ struct TagData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static std::list<TagData> generate_test_instances();
+  static std::vector<TagData> generate_test_instances();
 };
 
 std::ostream &operator<<(std::ostream &out, const EventType &type);

@@ -10,7 +10,7 @@
 #include "include/encoding.h"
 #include "librbd/watcher/Types.h"
 #include <iosfwd>
-#include <list>
+#include <vector>
 #include <memory>
 #include <string>
 
@@ -500,7 +500,7 @@ struct NotifyMessage {
   void dump(Formatter *f) const;
   NotifyOp get_notify_op() const;
 
-  static std::list<NotifyMessage>  generate_test_instances();
+  static std::vector<NotifyMessage>  generate_test_instances();
 };
 
 struct ResponseMessage {
@@ -513,7 +513,7 @@ struct ResponseMessage {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static std::list<ResponseMessage> generate_test_instances();
+  static std::vector<ResponseMessage> generate_test_instances();
 };
 
 std::ostream &operator<<(std::ostream &out,

@@ -8123,7 +8123,7 @@ int namespace_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  std::list<std::string> data;
+  std::vector<std::string> data;
   std::string last_read = nspace::key_for_name(start_after);
   bool more = true;
 

@@ -249,12 +249,12 @@ int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
 
 bool TokenEnvelope::has_role(const std::string& r) const
 {
-  list<Role>::const_iterator iter;
-  for (iter = roles.cbegin(); iter != roles.cend(); ++iter) {
-      if (fnmatch(r.c_str(), ((*iter).name.c_str()), 0) == 0) {
-        return true;
-      }
+  for (const auto& role : roles) {
+    if (fnmatch(r.c_str(), role.name.c_str(), 0) == 0) {
+      return true;
+    }
   }
+
   return false;
 }
 

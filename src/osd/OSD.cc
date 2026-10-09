@@ -2922,62 +2922,57 @@ will start to track new ops received afterwards.";
     op_shardedwq.dump(f);
     f->close_section();
   } else if (prefix == "dump_blocklist") {
-    list<pair<entity_addr_t,utime_t> > bl;
-    list<pair<entity_addr_t,utime_t> > rbl;
+    vector<pair<entity_addr_t, utime_t>> blocklisted;
+    vector<pair<entity_addr_t, utime_t>> range_blocklisted;
     OSDMapRef curmap = service.get_osdmap();
-    curmap->get_blocklist(&bl, &rbl);
+    curmap->get_blocklist(blocklisted, range_blocklisted);
 
     f->open_array_section("blocklist");
-    for (list<pair<entity_addr_t,utime_t> >::iterator it = bl.begin();
-	it != bl.end(); ++it) {
+    for (const auto& [address, expires] : blocklisted) {
       f->open_object_section("entry");
       f->open_object_section("entity_addr_t");
-      it->first.dump(f);
+      address.dump(f);
       f->close_section(); //entity_addr_t
-      it->second.localtime(f->dump_stream("expire_time"));
+      expires.localtime(f->dump_stream("expire_time"));
       f->close_section(); //entry
     }
     f->close_section(); //blocklist
     f->open_array_section("range_blocklist");
-    for (list<pair<entity_addr_t,utime_t> >::iterator it = rbl.begin();
-	it != rbl.end(); ++it) {
+    for (const auto& [address, expires] : range_blocklisted) {
       f->open_object_section("entry");
       f->open_object_section("entity_addr_t");
-      it->first.dump(f);
+      address.dump(f);
       f->close_section(); //entity_addr_t
-      it->second.localtime(f->dump_stream("expire_time"));
+      expires.localtime(f->dump_stream("expire_time"));
       f->close_section(); //entry
     }
     f->close_section(); //blocklist
   } else if (prefix == "dump_watchers") {
-    list<obj_watch_item_t> watchers;
+    vector<obj_watch_item_t> watchers;
     // scan pg's
     vector<PGRef> pgs;
     _get_pgs(&pgs);
     for (auto& pg : pgs) {
-      list<obj_watch_item_t> pg_watchers;
-      pg->get_watchers(&pg_watchers);
-      watchers.splice(watchers.end(), pg_watchers);
+      pg->get_watchers(watchers);
     }
 
     f->open_array_section("watchers");
-    for (list<obj_watch_item_t>::iterator it = watchers.begin();
-	it != watchers.end(); ++it) {
+    for (const auto& watcher : watchers) {
 
       f->open_object_section("watch");
 
-      f->dump_string("namespace", it->obj.nspace);
-      f->dump_string("object", it->obj.oid.name);
+      f->dump_string("namespace", watcher.obj.nspace);
+      f->dump_string("object", watcher.obj.oid.name);
 
       f->open_object_section("entity_name");
-      it->wi.name.dump(f);
+      watcher.wi.name.dump(f);
       f->close_section(); //entity_name_t
 
-      f->dump_unsigned("cookie", it->wi.cookie);
-      f->dump_unsigned("timeout", it->wi.timeout_seconds);
+      f->dump_unsigned("cookie", watcher.wi.cookie);
+      f->dump_unsigned("timeout", watcher.wi.timeout_seconds);
 
       f->open_object_section("entity_addr_t");
-      it->wi.addr.dump(f);
+      watcher.wi.addr.dump(f);
       f->close_section(); //entity_addr_t
 
       f->close_section(); //watch
@@ -10612,7 +10607,8 @@ void OSD::set_perf_queries(const ConfigPayload &config_payload) {
   const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries = osd_config_payload.config;
   dout(10) << "setting " << queries.size() << " queries" << dendl;
 
-  std::list<OSDPerfMetricQuery> supported_queries;
+  std::vector<OSDPerfMetricQuery> supported_queries;
+  supported_queries.reserve(std::size(queries));
   for (auto &it : queries) {
     auto &query = it.first;
     if (!query.key_descriptor.empty()) {
@@ -11151,7 +11147,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
       dout(20) << __func__ << " empty q, waiting" << dendl;
       osd->cct->get_heartbeat_map()->clear_timeout(hb);
       sdata->shard_lock.unlock();
+      ++sdata->waiting_threads;
       sdata->sdata_cond.wait(wait_lock);
+      --sdata->waiting_threads;
       wait_lock.unlock();
       sdata->shard_lock.lock();
       if (sdata->scheduler->empty() &&
@@ -11170,7 +11168,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
     }
   }
 
-  list<Context *> oncommits;
+  vector<Context *> oncommits;
   if (is_smallest_thread_index) {
     sdata->context_queue.move_to(oncommits);
   }
@@ -11223,7 +11221,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
       // Reapply default wq timeouts
       osd->cct->get_heartbeat_map()->reset_timeout(hb,
         timeout_interval.load(), suicide_interval.load());
-      // Populate the oncommits list if there were any additions
+      // Populate the oncommits batch if there were any additions.
       // to the context_queue while we were waiting
       if (is_smallest_thread_index) {
         sdata->context_queue.move_to(oncommits);
@@ -11479,18 +11477,14 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
 
   dout(20) << fmt::format("{} {}", __func__, item) << dendl;
 
-  bool empty = true;
   {
     std::lock_guard l{sdata->shard_lock};
-    empty = sdata->scheduler->empty();
     sdata->scheduler->enqueue(std::move(item));
   }
 
   {
     std::lock_guard l{sdata->sdata_wait_lock};
-    if (empty) {
-      sdata->sdata_cond.notify_all();
-    } else if (sdata->waiting_threads) {
+    if (sdata->waiting_threads) {
       sdata->sdata_cond.notify_one();
     }
   }

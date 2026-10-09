@@ -1236,7 +1236,7 @@ int RGWPSCreateNotifOp::init_processing(optional_yield y)
   }
 
 
-  for (const auto& c : configurations.list) {
+  for (const auto& c : configurations.entries) {
     const auto& notif_name = c.id;
     if (notif_name.empty()) {
       s->err.message = "Missing required element Id";
@@ -1311,7 +1311,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
   const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   const RGWPubSub::Bucket b(ps, s->bucket.get());
 
-  if(configurations.list.empty()) {
+  if (configurations.entries.empty()) {
     // get all topics on a bucket
     rgw_pubsub_bucket_topics bucket_topics;
     op_ret = b.get_topics(this, bucket_topics, y);
@@ -1324,7 +1324,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     return;
   }
 
-  for (const auto& c : configurations.list) {
+  for (const auto& c : configurations.entries) {
     const auto& notif_name = c.id;
 
     const auto arn = rgw::ARN::parse(c.topic_arn);
@@ -1380,7 +1380,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
     return;
   }
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
-    if (configurations.list.empty()) {
+    if (configurations.entries.empty()) {
       return remove_notification_v2(this, driver, s->bucket.get(),
                                     /*delete all notif=true*/"", y);
     }
@@ -1392,7 +1392,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
               << s->bucket << ", ret = " << ret << dendl;
       return ret;
     }
-    for (const auto &c : configurations.list) {
+    for (const auto& c : configurations.entries) {
       const auto &notif_name = c.id;
 
       const auto arn = rgw::ARN::parse(c.topic_arn);
@@ -1632,7 +1632,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
     // get info of a specific notification
     const auto unique_topic = find_unique_topic(bucket_topics, notif_name);
     if (unique_topic) {
-      notifications.list.emplace_back(*unique_topic);
+      notifications.entries.emplace_back(*unique_topic);
       return;
     }
     op_ret = -ENOENT;
@@ -1645,7 +1645,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
         // not an s3 notification
         continue;
     }
-    notifications.list.emplace_back(topic.second);
+    notifications.entries.emplace_back(topic.second);
   }
 }
 

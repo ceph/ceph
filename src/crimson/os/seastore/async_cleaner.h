@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include <boost/intrusive/set.hpp>
 #include <seastar/core/metrics_types.hh>
 
@@ -423,7 +425,7 @@ public:
    */
   using get_extents_if_live_iertr = base_iertr;
   using get_extents_if_live_ret = get_extents_if_live_iertr::future<
-    std::list<CachedExtentRef>>;
+    std::vector<CachedExtentRef>>;
   virtual get_extents_if_live_ret get_extents_if_live(
     Transaction &t,
     extent_types_t type,
@@ -1947,7 +1949,7 @@ public:
     return paddr;
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(
+  alloc_paddr_results_t alloc_paddrs(
     extent_len_t length, paddr_t hint) {
     // TODO: implement allocation strategy (dirty metadata and multiple devices)
     auto rbs = rb_group->get_rb_managers();

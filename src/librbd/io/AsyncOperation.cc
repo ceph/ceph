@@ -20,18 +20,15 @@ namespace {
 
 struct C_CompleteFlushes : public Context {
   ImageCtx *image_ctx;
-  std::list<Context *> flush_contexts;
+  std::vector<Context *> flush_contexts;
 
   explicit C_CompleteFlushes(ImageCtx *image_ctx,
-                             std::list<Context *> &&flush_contexts)
+                             std::vector<Context *> &&flush_contexts)
     : image_ctx(image_ctx), flush_contexts(std::move(flush_contexts)) {
   }
   void finish(int r) override {
     std::shared_lock owner_locker{image_ctx->owner_lock};
-    while (!flush_contexts.empty()) {
-      Context *flush_ctx = flush_contexts.front();
-      flush_contexts.pop_front();
-
+    for (auto *flush_ctx : flush_contexts) {
       ldout(image_ctx->cct, 20) << "completed flush: " << flush_ctx << dendl;
       flush_ctx->complete(0);
     }

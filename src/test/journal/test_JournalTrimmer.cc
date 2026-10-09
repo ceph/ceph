@@ -6,24 +6,22 @@
 #include "include/stringify.h"
 #include "test/journal/RadosTestFixture.h"
 #include <limits>
-#include <list>
+#include <vector>
 
 class TestJournalTrimmer : public RadosTestFixture {
 public:
 
   void TearDown() override {
-    for (MetadataList::iterator it = m_metadata_list.begin();
-         it != m_metadata_list.end(); ++it) {
-      (*it)->remove_listener(&m_listener);
+    for (const auto& metadata : m_metadata_list) {
+      metadata->remove_listener(&m_listener);
     }
     m_metadata_list.clear();
 
-    for (std::list<journal::JournalTrimmer*>::iterator it = m_trimmers.begin();
-         it != m_trimmers.end(); ++it) {
+    for (auto *trimmer : m_trimmers) {
       C_SaferCond ctx;
-      (*it)->shut_down(&ctx);
+      trimmer->shut_down(&ctx);
       ASSERT_EQ(0, ctx.wait());
-      delete *it;
+      delete trimmer;
     }
     RadosTestFixture::TearDown();
   }
@@ -60,9 +58,8 @@ public:
     return m_ioctx.operate(oid, &op);
   }
 
-  typedef std::list<ceph::ref_t<journal::JournalMetadata>> MetadataList;
-  MetadataList m_metadata_list;
-  std::list<journal::JournalTrimmer*> m_trimmers;
+  std::vector<ceph::ref_t<journal::JournalMetadata>> m_metadata_list;
+  std::vector<journal::JournalTrimmer*> m_trimmers;
 };
 
 TEST_F(TestJournalTrimmer, Committed) {
@@ -194,4 +191,3 @@ TEST_F(TestJournalTrimmer, RemoveObjectsWithOtherClient) {
   trimmer->remove_objects(true, &ctx2);
   ASSERT_EQ(0, ctx2.wait());
 }
-

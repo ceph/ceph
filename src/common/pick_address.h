@@ -4,8 +4,8 @@
 #ifndef CEPH_PICK_ADDRESS_H
 #define CEPH_PICK_ADDRESS_H
 
+#include <span>
 #include <string>
-#include <list>
 
 #include "include/common_fwd.h"
 
@@ -65,10 +65,12 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
  * check if any of the listed addresses is configured on the local host.
  *
  * @param cct context
- * @param ls list of addresses
- * @param match [out] pointer to match, if an item in @a ls is found configured locally.
+ * @param addresses addresses to examine
+ * @param match [out] match, if an item in @a addresses is configured locally.
  */
-bool have_local_addr(CephContext *cct, const std::list<entity_addr_t>& ls, entity_addr_t *match);
+bool have_local_addr(CephContext *cct,
+                     std::span<const entity_addr_t> addresses,
+                     entity_addr_t& match);
 
 /**
  * filter the addresses in @c ifa with specified interfaces, networks and IPv

@@ -9,8 +9,8 @@
 #include "librbd/journal/Types.h"
 #include "librbd/mirror/Types.h"
 #include "tools/rbd_mirror/BaseRequest.h"
-#include <list>
 #include <string>
+#include <vector>
 
 struct Context;
 namespace librbd { struct ImageCtx; }
@@ -77,7 +77,7 @@ private:
    *
    * @endverbatim
    */
-  typedef std::list<cls::journal::Tag> Tags;
+  using Tags = std::vector<cls::journal::Tag>;
 
   std::string m_local_mirror_uuid;
   ProgressContext* m_progress_ctx;

@@ -8,8 +8,8 @@
 #include "common/RefCountedObj.h"
 #include "include/Context.h"
 #include "journal/Future.h"
-#include <list>
 #include <map>
+#include <vector>
 #include <boost/noncopyable.hpp>
 #include "include/ceph_assert.h"
 
@@ -68,7 +68,7 @@ private:
   friend std::ostream &operator<<(std::ostream &, const FutureImpl &);
 
   typedef std::map<FlushHandler::ref, ceph::ref_t<FutureImpl>> FlushHandlers;
-  typedef std::list<Context *> Contexts;
+  using Contexts = std::vector<Context *>;
 
   enum FlushState {
     FLUSH_STATE_NONE,

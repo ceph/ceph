@@ -392,9 +392,9 @@ void KeyServer::dump(Formatter *f) const
   f->dump_object("data", data);
 }
 
-std::list<KeyServer> KeyServer::generate_test_instances()
+std::deque<KeyServer> KeyServer::generate_test_instances()
 {
-  std::list<KeyServer> ls;
+  std::deque<KeyServer> ls;
   ls.emplace_back(nullptr, nullptr);
   return ls;
 }
@@ -649,4 +649,3 @@ int KeyServer::build_session_auth_info(uint32_t service_id,
   double const auth_service_ticket_ttl= cct->_conf.get_val<double>("auth_service_ticket_ttl");
   return _build_session_auth_info(service_id, parent_ticket, key_type, info, auth_service_ticket_ttl);
 }
-

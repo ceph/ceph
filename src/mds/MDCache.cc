@@ -20,13 +20,15 @@
 
 #include <errno.h>
 
-#include <deque>
-#include <ostream>
-#include <string>
-#include <string_view>
 #include <map>
-#include <memory>
+#include <deque>
 #include <queue>
+#include <memory>
+#include <ranges>
+#include <string>
+#include <ostream>
+#include <iterator>
+#include <string_view>
 
 #include "MDSRank.h"
 #include "Server.h"
@@ -1303,7 +1305,7 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, const vector<dirfrag_t>& bo
   adjust_bounded_subtree_auth(dir, bounds, auth);
 }
 
-void MDCache::map_dirfrag_set(const list<dirfrag_t>& dfs, set<CDir*>& result)
+void MDCache::map_dirfrag_set(const vector<dirfrag_t>& dfs, set<CDir*>& result)
 {
   dout(10) << "map_dirfrag_set " << dfs << dendl;
 
@@ -1429,24 +1431,6 @@ void MDCache::verify_subtree_bounds(CDir *dir, const set<CDir*>& bounds)
   ceph_assert(bounds == subtrees[dir]);
 }
 
-void MDCache::verify_subtree_bounds(CDir *dir, const list<dirfrag_t>& bounds)
-{
-  // for debugging only.
-  ceph_assert(subtrees.count(dir));
-
-  // make sure that any bounds i do have are properly noted as such.
-  int failed = 0;
-  for (const auto &fg : bounds) {
-    CDir *bd = get_dirfrag(fg);
-    if (!bd) continue;
-    if (subtrees[dir].count(bd) == 0) {
-      dout(0) << "verify_subtree_bounds failed: extra bound " << *bd << dendl;
-      failed++;
-    }
-  }
-  ceph_assert(failed == 0);
-}
-
 void MDCache::project_subtree_rename(CInode *diri, CDir *olddir, CDir *newdir)
 {
   dout(10) << "project_subtree_rename " << *diri << " from " << *olddir
@@ -1463,11 +1447,14 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
   if (pop) {
     auto p = projected_subtree_renames.find(diri);
     ceph_assert(p != projected_subtree_renames.end());
-    ceph_assert(!p->second.empty());
-    ceph_assert(p->second.front().first == olddir);
-    ceph_assert(p->second.front().second == newdir);
-    p->second.pop_front();
-    if (p->second.empty())
+    auto& renames = p->second;
+
+    ceph_assert(!renames.empty());
+    ceph_assert(renames.front().first == olddir);
+    ceph_assert(renames.front().second == newdir);
+    renames.erase(std::begin(renames));
+
+    if (renames.empty())
       projected_subtree_renames.erase(p);
   }
 
@@ -2257,7 +2244,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
   }
 
   // build list of inodes to wrlock, dirty, and update
-  list<CInode*> lsi;
+  vector<CInode *> lsi;
   CInode *cur = in;
   CDentry *parentdn = NULL;
   bool first = true;
@@ -2395,7 +2382,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     // dirfrag -> diri
     mut->auth_pin(pin);
-    lsi.push_front(pin);
+    lsi.push_back(pin);
 
     pin->pre_cow_old_inode();  // avoid cow mayhem!
 
@@ -2481,7 +2468,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
   ceph_assert(parent->is_auth());
   blob->add_dir_context(parent);
   blob->add_dir(parent, true);
-  for (const auto& in : lsi) {
+  for (auto *in : lsi | std::views::reverse) {
     journal_dirty_inode(mut.get(), blob, in);
   }
  
@@ -3032,7 +3019,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
   mds->balancer->handle_mds_failure(who);
 
   // clean up any requests peer to/from this node
-  list<MDRequestRef> finish;
+  deque<MDRequestRef> finish;
   for (auto p = active_requests.begin();
        p != active_requests.end();
        ++p) {
@@ -5065,7 +5052,7 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
   // for sending cache expire message
   set<CInode*> isolated_inodes;
   set<CInode*> refragged_inodes;
-  list<pair<CInode*,int> > updated_realms;
+  vector<pair<CInode *, int>> updated_realms;
 
   // dirs
   for (const auto &p : ack->strong_dirfrags) {
@@ -7408,7 +7395,7 @@ void MDCache::trim_non_auth()
        ++p) 
     p->first->get(CDir::PIN_SUBTREETEMP);
 
-  list<CDentry*> auth_list;
+  vector<CDentry *> auth_list;
   
   // trim non-auth items from the lru
   for (;;) {
@@ -10241,11 +10228,10 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
   }
 
   map<client_t, ref_t<MClientSnap>> updates;
-  list<SnapRealm*> q;
+  vector<SnapRealm *> q;
   q.push_back(in->snaprealm);
-  while (!q.empty()) {
-    SnapRealm *realm = q.front();
-    q.pop_front();
+  for (size_t cursor = 0; cursor < size(q); ++cursor) {
+    SnapRealm *realm = q[cursor];
 
     dout(10) << " realm " << *realm << " on " << *realm->inode << dendl;
     realm->invalidate_cached_snaps();
@@ -12933,7 +12919,7 @@ void MDCache::show_subtrees(int dbl, bool force_print)
   dout(15) << "show_subtrees" << dendl;
 
   // queue stuff
-  list<pair<CDir*,int> > q;
+  deque<pair<CDir *, int>> q;
   string indent;
   set<CDir*> seen;
 

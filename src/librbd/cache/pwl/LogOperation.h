@@ -8,6 +8,9 @@
 #include "librbd/cache/pwl/LogEntry.h"
 #include "librbd/cache/pwl/SyncPoint.h"
 
+#include <memory>
+#include <vector>
+
 namespace librbd {
 namespace cache {
 namespace pwl {
@@ -29,7 +32,7 @@ class AbstractWriteLog;
 
 using GenericLogOperationSharedPtr = std::shared_ptr<GenericLogOperation>;
 
-using GenericLogOperationsVector = std::vector<GenericLogOperationSharedPtr>;
+using GenericLogOperationBatch = std::vector<GenericLogOperationSharedPtr>;
 
 class GenericLogOperation {
 protected:
@@ -173,7 +176,7 @@ public:
   Context *on_ops_appending;
   C_Gather *extent_ops_persist;
   Context *on_ops_persist;
-  GenericLogOperationsVector operations;
+  GenericLogOperationBatch operations;
   utime_t dispatch_time; /* When set created */
   PerfCounters *perfcounter = nullptr;
   std::shared_ptr<SyncPoint> sync_point;

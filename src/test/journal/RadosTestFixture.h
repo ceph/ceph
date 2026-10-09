@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <vector>
+
 #include "test/librados/test.h"
 #include "common/ceph_mutex.h"
 #include "common/Timer.h"
@@ -70,5 +72,5 @@ public:
 
   Listener m_listener;
 
-  std::list<ceph::ref_t<journal::JournalMetadata>> m_metadatas;
+  std::vector<ceph::ref_t<journal::JournalMetadata>> m_metadatas;
 };

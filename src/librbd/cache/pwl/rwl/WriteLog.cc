@@ -18,6 +18,8 @@
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
 #include "librbd/plugin/Api.h"
+
+#include <algorithm>
 #include <map>
 #include <vector>
 
@@ -96,7 +98,7 @@ void WriteLog<I>::complete_read(
  * Acquires lock
  */
 template <typename I>
-void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops)
+void WriteLog<I>::alloc_op_log_entries(const GenericLogOperationBatch &ops)
 {
   TOID(struct WriteLogPoolRoot) pool_root;
   pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
@@ -131,10 +133,10 @@ void WriteLog<I>::alloc_op_log_entries(GenericLogOperations &ops)
  * of these must already have been persisted to its reserved area.
  */
 template <typename I>
-int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
+int WriteLog<I>::append_op_log_entries(const GenericLogOperationBatch &ops)
 {
   CephContext *cct = m_image_ctx.cct;
-  GenericLogOperationsVector entries_to_flush;
+  GenericLogOperationBatch entries_to_flush;
   TOID(struct WriteLogPoolRoot) pool_root;
   pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
   int ret = 0;
@@ -219,7 +221,7 @@ int WriteLog<I>::append_op_log_entries(GenericLogOperations &ops)
  * be contiguous in persistent memory.
  */
 template <typename I>
-void WriteLog<I>::flush_op_log_entries(GenericLogOperationsVector &ops)
+void WriteLog<I>::flush_op_log_entries(const GenericLogOperationBatch &ops)
 {
   if (ops.empty()) {
     return;
@@ -468,7 +470,7 @@ void WriteLog<I>::write_data_to_buffer(
 template <typename I>
 bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
   CephContext *cct = m_image_ctx.cct;
-  GenericLogEntriesVector retiring_entries;
+  GenericLogEntryBatch retiring_entries;
   uint32_t initial_first_valid_entry;
   uint32_t first_valid_entry;
 
@@ -589,9 +591,8 @@ bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
 }
 
 template <typename I>
-void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntries entries_to_flush,
-				          DeferredContexts &post_unlock,
-					  bool has_write_entry) {
+void WriteLog<I>::construct_flush_entries(pwl::GenericLogEntryBatch entries_to_flush,
+					  bool) {
   bool invalidating = this->m_invalidating; // snapshot so we behave consistently
 
   for (auto &log_entry : entries_to_flush) {
@@ -627,29 +628,36 @@ const unsigned long int ops_flushed_together = 4;
 template <typename I>
 void WriteLog<I>::flush_then_append_scheduled_ops(void)
 {
-  GenericLogOperations ops;
+  GenericLogOperationBatch ops;
   bool ops_remain = false;
+
   ldout(m_image_ctx.cct, 20) << dendl;
+
   do {
     {
       ops.clear();
       std::lock_guard locker(m_lock);
-      if (m_ops_to_flush.size()) {
-        auto last_in_batch = m_ops_to_flush.begin();
-        unsigned int ops_to_flush = m_ops_to_flush.size();
-        if (ops_to_flush > ops_flushed_together) {
-          ops_to_flush = ops_flushed_together;
-        }
+
+      ops_remain = false;
+      if (!m_ops_to_flush.empty()) {
+        ops.reserve(ops_flushed_together);
+        const auto ops_to_flush = std::min<std::size_t>(
+          std::size(m_ops_to_flush), ops_flushed_together);
+
         ldout(m_image_ctx.cct, 20) << "should flush " << ops_to_flush << dendl;
-        std::advance(last_in_batch, ops_to_flush);
-        ops.splice(ops.end(), m_ops_to_flush, m_ops_to_flush.begin(), last_in_batch);
+
+        for (std::size_t i = 0; i < ops_to_flush; ++i) {
+          ops.push_back(std::move(m_ops_to_flush.front()));
+          m_ops_to_flush.pop_front();
+        }
+
         ops_remain = !m_ops_to_flush.empty();
-        ldout(m_image_ctx.cct, 20) << "flushing " << ops.size() << ", remain "
-                                   << m_ops_to_flush.size() << dendl;
-      } else {
-        ops_remain = false;
+        ldout(m_image_ctx.cct, 20) << "flushing " << std::size(ops)
+                                   << ", remain " << std::size(m_ops_to_flush)
+                                   << dendl;
       }
     }
+
     if (ops_remain) {
       enlist_op_flusher();
     }
@@ -657,11 +665,12 @@ void WriteLog<I>::flush_then_append_scheduled_ops(void)
     /* Ops subsequently scheduled for flush may finish before these,
      * which is fine. We're unconcerned with completion order until we
      * get to the log message append step. */
-    if (ops.size()) {
+    if (!ops.empty()) {
       flush_pmem_buffer(ops);
-      schedule_append_ops(ops, nullptr);
+      schedule_append_ops(std::move(ops), nullptr);
     }
   } while (ops_remain);
+
   append_scheduled_ops();
 }
 
@@ -671,23 +680,24 @@ void WriteLog<I>::flush_then_append_scheduled_ops(void)
  */
 template <typename I>
 void WriteLog<I>::append_scheduled_ops(void) {
-  GenericLogOperations ops;
+  GenericLogOperationBatch ops;
   int append_result = 0;
   bool ops_remain = false;
   bool appending = false; /* true if we set m_appending */
+
   ldout(m_image_ctx.cct, 20) << dendl;
+
   do {
     ops.clear();
     this->append_scheduled(ops, ops_remain, appending, true);
 
-    if (ops.size()) {
+    if (!ops.empty()) {
       std::lock_guard locker(this->m_log_append_lock);
       alloc_op_log_entries(ops);
       append_result = append_op_log_entries(ops);
     }
 
-    int num_ops = ops.size();
-    if (num_ops) {
+    if (!ops.empty()) {
       /* New entries may be flushable. Completion will wake up flusher. */
       this->complete_op_log_entries(std::move(ops), append_result);
     }
@@ -709,18 +719,19 @@ void WriteLog<I>::enlist_op_flusher()
 
 template <typename I>
 void WriteLog<I>::setup_schedule_append(
-    pwl::GenericLogOperationsVector &ops, bool do_early_flush,
+    pwl::GenericLogOperationBatch &ops, bool do_early_flush,
     C_BlockIORequestT *req) {
   if (do_early_flush) {
     /* This caller is waiting for persist, so we'll use their thread to
      * expedite it */
     flush_pmem_buffer(ops);
     this->schedule_append(ops);
-  } else {
-    /* This is probably not still the caller's thread, so do the payload
-     * flushing/replicating later. */
-    schedule_flush_and_append(ops);
+    return;
   }
+
+  /* This is probably not still the caller's thread, so do the payload
+   * flushing/replicating later. */
+  schedule_flush_and_append(std::move(ops));
 }
 
 /*
@@ -729,17 +740,16 @@ void WriteLog<I>::setup_schedule_append(
  * all prior log entries are persisted everywhere.
  */
 template <typename I>
-void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops, C_BlockIORequestT *req)
+void WriteLog<I>::schedule_append_ops(GenericLogOperationBatch ops,
+                                      C_BlockIORequestT *)
 {
   bool need_finisher;
-  GenericLogOperationsVector appending;
-
-  std::copy(std::begin(ops), std::end(ops), std::back_inserter(appending));
   {
     std::lock_guard locker(m_lock);
 
     need_finisher = this->m_ops_to_append.empty() && !this->m_appending;
-    this->m_ops_to_append.splice(this->m_ops_to_append.end(), ops);
+    this->m_ops_to_append.insert(std::end(this->m_ops_to_append),
+                                 std::begin(ops), std::end(ops));
   }
 
   if (need_finisher) {
@@ -754,7 +764,7 @@ void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops, C_BlockIOReques
     this->m_work_queue.queue(append_ctx);
   }
 
-  for (auto &op : appending) {
+  for (auto &op : ops) {
     op->appending();
   }
 }
@@ -764,16 +774,18 @@ void WriteLog<I>::schedule_append_ops(GenericLogOperations &ops, C_BlockIOReques
  * then get their log entries appended.
  */
 template <typename I>
-void WriteLog<I>::schedule_flush_and_append(GenericLogOperationsVector &ops)
+void WriteLog<I>::schedule_flush_and_append(GenericLogOperationBatch ops)
 {
-  GenericLogOperations to_flush(ops.begin(), ops.end());
   bool need_finisher;
+
   ldout(m_image_ctx.cct, 20) << dendl;
   {
     std::lock_guard locker(m_lock);
 
     need_finisher = m_ops_to_flush.empty();
-    m_ops_to_flush.splice(m_ops_to_flush.end(), to_flush);
+    for (auto &op : ops) {
+      m_ops_to_flush.push_back(std::move(op));
+    }
   }
 
   if (need_finisher) {
@@ -853,7 +865,7 @@ void WriteLog<I>::process_work() {
 /*
  * Flush the pmem regions for the data blocks of a set of operations
  *
- * V is expected to be GenericLogOperations<I>, or GenericLogOperationsVector<I>
+ * V is expected to be GenericLogOperationBatch.
  */
 template <typename I>
 template <typename V>

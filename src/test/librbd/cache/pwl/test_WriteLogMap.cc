@@ -5,6 +5,7 @@
 #include "test/librbd/test_support.h"
 
 #include "librbd/cache/pwl/LogMap.cc"
+#include <vector>
 
 void register_test_write_log_map() {
 }
@@ -49,8 +50,7 @@ struct TestLogEntry {
   };
 };
 
-typedef std::list<std::shared_ptr<TestLogEntry>> TestLogEntries;
-typedef LogMapEntry<TestLogEntry> TestMapEntry;
+typedef std::vector<std::shared_ptr<TestLogEntry>> TestLogEntries;
 typedef LogMapEntries<TestLogEntry> TestLogMapEntries;
 typedef LogMap<TestLogEntry> TestLogMap;
 
@@ -65,8 +65,6 @@ public:
 };
 
 TEST_F(TestWriteLogMap, Simple) {
-  TestLogEntries es;
-  TestLogMapEntries lme;
   TestLogMap  map(m_cct);
 
   /* LogEntry takes offset, length, in bytes */
@@ -123,13 +121,12 @@ TEST_F(TestWriteLogMap, OverlapFront) {
   TestLogMapEntries found0 = map.find_map_entries(BlockExtent(0, 100));
   int numfound = found0.size();
   ASSERT_EQ(2, numfound);
-  ASSERT_EQ(e1, found0.front().log_entry);
-  ASSERT_EQ(0, found0.front().block_extent.block_start);
-  ASSERT_EQ(8, found0.front().block_extent.block_end);
-  found0.pop_front();
-  ASSERT_EQ(e0, found0.front().log_entry);
-  ASSERT_EQ(8, found0.front().block_extent.block_start);
-  ASSERT_EQ(12, found0.front().block_extent.block_end);
+  ASSERT_EQ(e1, found0[0].log_entry);
+  ASSERT_EQ(0, found0[0].block_extent.block_start);
+  ASSERT_EQ(8, found0[0].block_extent.block_end);
+  ASSERT_EQ(e0, found0[1].log_entry);
+  ASSERT_EQ(8, found0[1].block_extent.block_start);
+  ASSERT_EQ(12, found0[1].block_extent.block_end);
 
   /* 0-7 will be e1 */
   for (int i=0; i<8; i++) {
@@ -161,13 +158,12 @@ TEST_F(TestWriteLogMap, OverlapBack) {
   TestLogMapEntries found0 = map.find_map_entries(BlockExtent(0, 100));
   int numfound = found0.size();
   ASSERT_EQ(2, numfound);
-  ASSERT_EQ(e0, found0.front().log_entry);
-  ASSERT_EQ(0, found0.front().block_extent.block_start);
-  ASSERT_EQ(4, found0.front().block_extent.block_end);
-  found0.pop_front();
-  ASSERT_EQ(e1, found0.front().log_entry);
-  ASSERT_EQ(4, found0.front().block_extent.block_start);
-  ASSERT_EQ(12, found0.front().block_extent.block_end);
+  ASSERT_EQ(e0, found0[0].log_entry);
+  ASSERT_EQ(0, found0[0].block_extent.block_start);
+  ASSERT_EQ(4, found0[0].block_extent.block_end);
+  ASSERT_EQ(e1, found0[1].log_entry);
+  ASSERT_EQ(4, found0[1].block_extent.block_start);
+  ASSERT_EQ(12, found0[1].block_extent.block_end);
 
   /* 0-3 will be e0 */
   for (int i=0; i<4; i++) {
@@ -259,19 +255,15 @@ TEST_F(TestWriteLogMap, OverlapMiddle) {
   found0 = map.find_map_entries(BlockExtent(0, 100));
   numfound = found0.size();
   ASSERT_EQ(3, numfound);
-  ASSERT_EQ(e0, found0.front().log_entry);
-  found0.pop_front();
-  ASSERT_EQ(e3, found0.front().log_entry);
-  found0.pop_front();
-  ASSERT_EQ(e2, found0.front().log_entry);
+  ASSERT_EQ(e0, found0[0].log_entry);
+  ASSERT_EQ(e3, found0[1].log_entry);
+  ASSERT_EQ(e2, found0[2].log_entry);
   entries = map.find_log_entries(BlockExtent(0, 100));
   entriesfound = entries.size();
   ASSERT_EQ(3, entriesfound);
-  ASSERT_EQ(e0, entries.front());
-  entries.pop_front();
-  ASSERT_EQ(e3, entries.front());
-  entries.pop_front();
-  ASSERT_EQ(e2, entries.front());
+  ASSERT_EQ(e0, entries[0]);
+  ASSERT_EQ(e3, entries[1]);
+  ASSERT_EQ(e2, entries[2]);
 
   entries.clear();
   entries.emplace_back(e0);
@@ -281,9 +273,8 @@ TEST_F(TestWriteLogMap, OverlapMiddle) {
   found0 = map.find_map_entries(BlockExtent(0, 100));
   numfound = found0.size();
   ASSERT_EQ(2, numfound);
-  ASSERT_EQ(e3, found0.front().log_entry);
-  found0.pop_front();
-  ASSERT_EQ(e2, found0.front().log_entry);
+  ASSERT_EQ(e3, found0[0].log_entry);
+  ASSERT_EQ(e2, found0[1].log_entry);
 }
 
 TEST_F(TestWriteLogMap, OverlapSplit) {
@@ -308,29 +299,24 @@ TEST_F(TestWriteLogMap, OverlapSplit) {
   TestLogMapEntries found0 = map.find_map_entries(BlockExtent(0, 100));
   int numfound = found0.size();
   ASSERT_EQ(6, numfound);
-  ASSERT_EQ(e0, found0.front().log_entry);
-  ASSERT_EQ(0, found0.front().block_extent.block_start);
-  ASSERT_EQ(1, found0.front().block_extent.block_end);
-  found0.pop_front();
-  ASSERT_EQ(e1, found0.front().log_entry);
-  ASSERT_EQ(1, found0.front().block_extent.block_start);
-  ASSERT_EQ(2, found0.front().block_extent.block_end);
-  found0.pop_front();
-  ASSERT_EQ(e0, found0.front().log_entry);
-  ASSERT_EQ(2, found0.front().block_extent.block_start);
-  ASSERT_EQ(4, found0.front().block_extent.block_end);
-  found0.pop_front();
-  ASSERT_EQ(e2, found0.front().log_entry);
-  ASSERT_EQ(4, found0.front().block_extent.block_start);
-  ASSERT_EQ(5, found0.front().block_extent.block_end);
-  found0.pop_front();
-  ASSERT_EQ(e3, found0.front().log_entry);
-  ASSERT_EQ(5, found0.front().block_extent.block_start);
-  ASSERT_EQ(7, found0.front().block_extent.block_end);
-  found0.pop_front();
-  ASSERT_EQ(e0, found0.front().log_entry);
-  ASSERT_EQ(7, found0.front().block_extent.block_start);
-  ASSERT_EQ(8, found0.front().block_extent.block_end);
+  ASSERT_EQ(e0, found0[0].log_entry);
+  ASSERT_EQ(0, found0[0].block_extent.block_start);
+  ASSERT_EQ(1, found0[0].block_extent.block_end);
+  ASSERT_EQ(e1, found0[1].log_entry);
+  ASSERT_EQ(1, found0[1].block_extent.block_start);
+  ASSERT_EQ(2, found0[1].block_extent.block_end);
+  ASSERT_EQ(e0, found0[2].log_entry);
+  ASSERT_EQ(2, found0[2].block_extent.block_start);
+  ASSERT_EQ(4, found0[2].block_extent.block_end);
+  ASSERT_EQ(e2, found0[3].log_entry);
+  ASSERT_EQ(4, found0[3].block_extent.block_start);
+  ASSERT_EQ(5, found0[3].block_extent.block_end);
+  ASSERT_EQ(e3, found0[4].log_entry);
+  ASSERT_EQ(5, found0[4].block_extent.block_start);
+  ASSERT_EQ(7, found0[4].block_extent.block_end);
+  ASSERT_EQ(e0, found0[5].log_entry);
+  ASSERT_EQ(7, found0[5].block_extent.block_start);
+  ASSERT_EQ(8, found0[5].block_extent.block_end);
 }
 
 } // namespace pwl

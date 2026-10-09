@@ -17,7 +17,9 @@
 
 #include <fmt/format.h>
 
+#include <vector>
 #include <fstream>
+#include <iterator>
 
 #include "common/debug.h"
 
@@ -769,7 +771,8 @@ uint64_t
 DataScan::get_pool_objects(const std::vector<librados::IoCtx*>& data_ios)
 {
   uint64_t total = 0;
-  std::list<std::string> pool_names;
+  std::vector<std::string> pool_names;
+  pool_names.reserve(std::size(data_ios));
 
   for (auto ioctx : data_ios) {
     if (!ioctx)
@@ -810,8 +813,7 @@ DataScan::get_metadata_pool_objects(
     bool worker_sliced)
 {
   uint64_t total = 0;
-  std::list<std::string> pool_names;
-  pool_names.push_back(metadata_io.get_pool_name());
+  const std::vector<std::string> pool_names {metadata_io.get_pool_name()};
 
   librados::stats_map stats;
   int ret = rados.get_pool_stats(pool_names, stats);
@@ -1265,7 +1267,7 @@ int DataScan::scan_links()
     }
   };
 
-  map<inodeno_t, list<link_info_t>> dup_primaries;
+  map<inodeno_t, vector<link_info_t>> dup_primaries;
   map<inodeno_t, link_info_t> bad_nlink_inos;
   multimap<inodeno_t, link_info_t> injected_inos;
 

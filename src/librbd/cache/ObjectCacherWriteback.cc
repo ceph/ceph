@@ -28,6 +28,7 @@
 
 #include "include/ceph_assert.h"
 
+#include <vector>
 #include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
@@ -262,7 +263,7 @@ void ObjectCacherWriteback::complete_writes(const std::string& oid)
   ceph_assert(ceph_mutex_is_locked(m_lock));
   std::queue<write_result_d*>& results = m_writes[oid];
   ldout(m_ictx->cct, 20) << "complete_writes() oid " << oid << dendl;
-  std::list<write_result_d*> finished;
+  std::vector<write_result_d *> finished;
 
   while (!results.empty()) {
     write_result_d *result = results.front();
@@ -275,9 +276,7 @@ void ObjectCacherWriteback::complete_writes(const std::string& oid)
   if (results.empty())
     m_writes.erase(oid);
 
-  for (std::list<write_result_d*>::iterator it = finished.begin();
-       it != finished.end(); ++it) {
-    write_result_d *result = *it;
+  for (auto *result : finished) {
     ldout(m_ictx->cct, 20) << "complete_writes() completing " << result
                            << dendl;
     result->oncommit->complete(result->ret);

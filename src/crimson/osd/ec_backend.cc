@@ -65,7 +65,7 @@ ECBackend::_read(const hobject_t& hoid,
   LOG_PREFIX(ECBackend::_read);
   const auto [aligned_off, aligned_len] =
     sinfo.ro_offset_len_to_stripe_ro_offset_len(off, len);
-  std::map<hobject_t, std::list<ec_align_t>> reads;
+  std::map<hobject_t, std::vector<ec_align_t>> reads;
   reads[hoid].emplace_back(
     ec_align_t{aligned_off, aligned_len, flags});
   seastar::promise<ceph::bufferlist> promise;
@@ -555,7 +555,7 @@ ECBackend::maybe_chunked_read(
 }
 
 void ECBackend::objects_read_and_reconstruct(
-  const std::map<hobject_t, std::list<ec_align_t>> &reads,
+  const std::map<hobject_t, std::vector<ec_align_t>> &reads,
   bool fast_read,
   uint64_t object_size,
   GenContextURef<ec_extents_t &&> &&func)

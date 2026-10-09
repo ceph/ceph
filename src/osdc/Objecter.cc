@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <sstream>
+#include <iterator>
 
 #include "osd/OSDMap.h"
 #include "osd/error_code.h"
@@ -65,7 +66,6 @@
 
 #include "osdc/SplitOp.h"
 
-using std::list;
 using std::make_pair;
 using std::map;
 using std::ostream;
@@ -1127,13 +1127,13 @@ void Objecter::_scan_requests(
   bool cluster_full,
   map<int64_t, bool> *pool_full_map,
   map<ceph_tid_t, Op*>& need_resend,
-  list<LingerOp*>& need_resend_linger,
+  vector<LingerOp*>& need_resend_linger,
   map<ceph_tid_t, CommandOp*>& need_resend_command,
   ceph::shunique_lock<ceph::shared_mutex>& sul)
 {
   ceph_assert(sul.owns_lock() && sul.mutex() == &rwlock);
 
-  list<LingerOp*> unregister_lingers;
+  vector<LingerOp*> unregister_lingers;
 
   std::unique_lock sl(s->lock);
 
@@ -1242,11 +1242,9 @@ void Objecter::_scan_requests(
 
   sl.unlock();
 
-  for (auto iter = unregister_lingers.begin();
-       iter != unregister_lingers.end();
-       ++iter) {
-    _linger_cancel(*iter);
-    (*iter)->put();
+  for (auto op : unregister_lingers) {
+    _linger_cancel(op);
+    op->put();
   }
 }
 
@@ -1274,7 +1272,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     pool_full_map[it->first] = _osdmap_pool_full(it->second);
 
 
-  list<LingerOp*> need_resend_linger;
+  vector<LingerOp*> need_resend_linger;
   map<ceph_tid_t, Op*> need_resend;
   map<ceph_tid_t, CommandOp*> need_resend_command;
 
@@ -1444,9 +1442,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     sl.unlock();
     put_session(s);
   }
-  for (auto p = need_resend_linger.begin();
-       p != need_resend_linger.end(); ++p) {
-    LingerOp *op = *p;
+  for (auto op : need_resend_linger) {
     ceph_assert(op->session);
     if (!op->session->is_homeless()) {
       logger->inc(l_osdc_linger_resend);
@@ -2028,9 +2024,13 @@ void Objecter::close_session(OSDSession *s)
   }
   unique_lock sl(s->lock);
 
-  std::list<LingerOp*> homeless_lingers;
-  std::list<CommandOp*> homeless_commands;
-  std::list<Op*> homeless_ops;
+  std::vector<LingerOp*> homeless_lingers;
+  std::vector<CommandOp*> homeless_commands;
+  std::vector<Op*> homeless_ops;
+
+  homeless_lingers.reserve(std::size(s->linger_ops));
+  homeless_commands.reserve(std::size(s->command_ops));
+  homeless_ops.reserve(std::size(s->ops));
 
   while (!s->linger_ops.empty()) {
     auto i = s->linger_ops.begin();
@@ -2060,17 +2060,16 @@ void Objecter::close_session(OSDSession *s)
   // Assign any leftover ops to the homeless session
   {
     unique_lock hsl(homeless_session->lock);
-    for (auto i = homeless_lingers.begin();
-	 i != homeless_lingers.end(); ++i) {
-      _session_linger_op_assign(homeless_session, *i);
+    for (auto op : homeless_lingers) {
+      _session_linger_op_assign(homeless_session, op);
     }
-    for (auto i = homeless_ops.begin();
-	 i != homeless_ops.end(); ++i) {
-      _session_op_assign(homeless_session, *i);
+
+    for (auto op : homeless_ops) {
+      _session_op_assign(homeless_session, op);
     }
-    for (auto i = homeless_commands.begin();
-	 i != homeless_commands.end(); ++i) {
-      _session_command_op_assign(homeless_session, *i);
+
+    for (auto op : homeless_commands) {
+      _session_command_op_assign(homeless_session, op);
     }
   }
 

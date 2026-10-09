@@ -5,6 +5,7 @@
 
 #include <array>
 #include <memory>
+#include <vector>
 
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
@@ -208,7 +209,7 @@ class PerShardState {
   }
 
   OSDSuperblock per_shard_superblock;
-  std::list<OSDPerfMetricQuery> m_perf_queries;
+  std::vector<OSDPerfMetricQuery> m_perf_queries;
   std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> m_perf_limits;
 
   // This is an extent cache for the erasure coding. Specifically, this acts as
