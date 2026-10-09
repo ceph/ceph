@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -ex
+export PS4='+ $BASH_SOURCE:$LINENO: '
+set -exv
 
 if [ -d .git ]; then
     git submodule update --init --recursive --recommend-shallow
@@ -76,16 +77,22 @@ elif type ccache > /dev/null 2>&1 ; then
     ARGS+=" -DWITH_CCACHE=ON"
 fi
 
-cxx_compiler="g++"
-c_compiler="gcc"
-# 20 is used for more future-proof
-for i in $(seq 20 -1 11); do
-  if type -t gcc-$i > /dev/null; then
-    cxx_compiler="g++-$i"
-    c_compiler="gcc-$i"
-    break
-  fi
-done
+if [ "$(uname)" != FreeBSD ] ; then
+	cxx_compiler="g++"
+	c_compiler="gcc"
+	# 20 is used for more future-proof
+	for i in $(seq 20 -1 11); do
+	  if type -t gcc-$i > /dev/null; then
+		cxx_compiler="g++-$i"
+		c_compiler="gcc-$i"
+		break
+	  fi
+	done
+else
+	# To force Clang (default behavior on FreeBSD)
+	export CC=clang
+	export CXX=clang++
+fi
 ARGS+=" -DCMAKE_CXX_COMPILER=$cxx_compiler"
 ARGS+=" -DCMAKE_C_COMPILER=$c_compiler"
 
