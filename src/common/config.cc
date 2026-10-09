@@ -544,7 +544,6 @@ void md_config_t::parse_env(unsigned entity_type,
   //
   uint64_t pod_limit = 0, pod_request = 0;
   if (auto pod_lim = getenv("POD_MEMORY_LIMIT"); pod_lim) {
-    string err;
     uint64_t v = atoll(pod_lim);
     if (v) {
       switch (entity_type) {

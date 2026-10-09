@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include "ceph_ver.h"
+#include "common/PluginRegistry.h"
 #include "compressor/CompressionPlugin.h"
 #include "compressor_example.h"
 

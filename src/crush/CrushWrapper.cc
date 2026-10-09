@@ -11,6 +11,7 @@
 #include "common/errno.h"
 #include "common/TextTable.h"
 #include "include/stringify.h"
+#include "include/weightf_t.h"
 
 #define dout_subsys ceph_subsys_crush
 
@@ -1919,8 +1920,6 @@ int CrushWrapper::reclassify(
   const map<string,pair<string,string>>& classify_bucket
   )
 {
-  map<int,string> reclassified_bucket; // orig_id -> class
-
   // classify_root
   for (auto& i : classify_root) {
     string root = i.first;
@@ -4041,7 +4040,6 @@ int CrushWrapper::_choose_type_stack(
   int rule) const
 {
   vector<int> w = *pw;
-  vector<int> o;
 
   ldout(cct, 10) << __func__ << " stack " << stack
 		 << " orig " << orig

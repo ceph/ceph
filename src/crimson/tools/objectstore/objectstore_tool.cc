@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 
 #include "common/hobject.h"
+#include "common/hobject_fmt.h"
 #include "crimson/os/alienstore/alien_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"

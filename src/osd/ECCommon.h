@@ -18,6 +18,9 @@
 #include <boost/intrusive/list.hpp>
 #include <utility>
 #include <fmt/format.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"

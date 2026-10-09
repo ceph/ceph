@@ -19,6 +19,7 @@
 
 #include "include/stringify.h"
 #include "include/str_list.h"
+#include "include/variant_print.h"
 #include "auth/RotatingKeyRing.h"
 #include "json_spirit/json_spirit_writer.h"
 
@@ -2890,7 +2891,6 @@ bool DaemonServer::_handle_command(
     cmdctx->reply(r, ss);
     return true;
   } else if (prefix == "device ls") {
-    std::set<string> devids;
     TextTable tbl;
     if (f) {
       f->open_array_section("devices");

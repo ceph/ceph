@@ -986,8 +986,6 @@ TEST(LibCephFS, SnapDiffLib)
     // Make sure SnapDiff returns an error when provided with the same
     // snapshot name for both parties A and B.
     {
-      string snap_path = test_mount.make_snap_path("snap2");
-      string snap_other_path = snap_path;
       std::cout << "---------invalid snapdiff params, the same snaps---------" << std::endl;
       ASSERT_EQ(-EINVAL, test_mount.for_each_readdir_snapdiff(
         "",
@@ -1001,8 +999,6 @@ TEST(LibCephFS, SnapDiffLib)
     // snapshot name for one of the parties
     {
       std::cout << "---------invalid snapdiff params, no snap_other ---------" << std::endl;
-      string snap_path = test_mount.make_snap_path("snap2");
-      string snap_other_path;
       ASSERT_EQ(-EINVAL, test_mount.for_each_readdir_snapdiff(
         "",
         "snap2",

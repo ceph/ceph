@@ -468,10 +468,8 @@ bool NVMeofGwMon::nvme_gw_show_command(ceph::Formatter* f, bufferlist &rdata, co
     f->dump_unsigned("GW-epoch", map.gw_epoch[group_key]);
   if (map.created_gws[group_key].size() != 0) {
     sstrm << "[ ";
-    NvmeGwId gw_id;
     BeaconSubsystems   *subsystems = NULL;
     for (auto& gw_created_pair: map.created_gws[group_key]) {
-      gw_id = gw_created_pair.first;
       auto& st = gw_created_pair.second;
       if (st.availability != gw_availability_t::GW_DELETING) {
         // not show ana group of deleting gw in the list -

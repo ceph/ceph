@@ -1190,7 +1190,6 @@ void ECBackend::submit_transaction(
   OpRequestRef client_op
 ) {
   auto op = std::make_shared<ECClassicalOp>();
-  auto obc_map = t->obc_map;
   op->t = std::move(t);
   op->hoid = hoid;
   op->delta_stats = delta_stats;

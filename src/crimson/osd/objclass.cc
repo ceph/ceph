@@ -9,6 +9,7 @@
 #include "common/config.h"
 #include "crimson/common/config_proxy.h"
 #include "common/debug.h"
+#include "include/encoding_chrono.h"
 
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/ops_executer.h"

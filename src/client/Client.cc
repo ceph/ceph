@@ -59,6 +59,7 @@ using namespace std::literals::string_view_literals;
 #include <sys/statvfs.h>
 
 #include "common/config.h"
+#include "common/OnFinisher.h"
 #include "common/version.h"
 #include "common/async/blocked_completion.h"
 #include "common/strescape.h"
@@ -96,6 +97,7 @@ using namespace std::literals::string_view_literals;
 #include "common/admin_socket.h"
 #include "common/errno.h"
 #include "include/str_list.h"
+#include "include/xlist_print.h"
 
 #define dout_subsys ceph_subsys_client
 
@@ -8041,10 +8043,6 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
   target = InodeRef();
   int symlinks = 0;
   unsigned i = 0;
-
-  if (trimmed_path == "") {
-    std::string trimmed_path = path.get_trimmed_path();
-  }
 
   ldout(cct, 10) << __func__ << ": cur=" << *diri << " path=" << binstrprint(trimmed_path) << dendl;
 

@@ -38,6 +38,11 @@
 #include "common/errno.h"
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
+#include "include/encoding_boost_optional.h"
+#include "include/encoding_list.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 #include "include/rbd_types.h"
 #include "include/rbd/object_map_types.h"
 

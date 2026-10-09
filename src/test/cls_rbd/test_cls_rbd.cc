@@ -2496,7 +2496,6 @@ TEST_P(TestClsRbd, group_snap_set_empty_id) {
   string group_id = "group_id_snap_add_empty_id";
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
-  string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {"", "snap_name", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(-EINVAL, group_snap_set(&ioctx, group_id, snap));
 }

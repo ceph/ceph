@@ -1,5 +1,7 @@
 #include "FSMapUser.h"
 #include "common/Formatter.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
 
 void FSMapUser::encode(ceph::buffer::list& bl, uint64_t features) const
 {
@@ -67,8 +69,6 @@ void FSMapUser::print(std::ostream& out) const
 
 void FSMapUser::print_summary(ceph::Formatter *f, std::ostream *out) const
 {
-  std::map<std::string,int> by_state;
-
   if (f) {
     f->dump_unsigned("epoch", get_epoch());
     for (auto &p : filesystems) {

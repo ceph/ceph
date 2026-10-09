@@ -4,6 +4,7 @@
 #include "ConfigMap.h"
 #include "crush/CrushWrapper.h"
 #include "common/entity_name.h"
+#include "common/Formatter.h"
 
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
@@ -224,11 +225,10 @@ bool ConfigMap::parse_mask(
       }
       continue;
     }
-    string type, id;
+    string type;
     auto dotpos = i.find('.');
     if (dotpos != std::string::npos) {
       type = i.substr(0, dotpos);
-      id = i.substr(dotpos + 1);
     } else {
       type = i;
     }

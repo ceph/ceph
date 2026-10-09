@@ -12,6 +12,7 @@
 
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
+#include "common/hobject_fmt.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "mon/MonClient.h"

@@ -241,6 +241,7 @@ class MultiLabelTest : public CheckedUmount {
   std::string get_data_dir() {
     return data_dir;
   }
+#ifdef WITH_BLUESTORE
   bool bdev_supports_label() {
     BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
     if (!bstore) return false;
@@ -248,6 +249,7 @@ class MultiLabelTest : public CheckedUmount {
     if (!bdev) return false;
     return bdev->supported_bdev_label();
   }
+#endif // WITH_BLUESTORE
   bool corrupt_disk_at(uint64_t position) {
     int fd = -1;
     auto close_fd = make_scope_guard([&] {
@@ -262,6 +264,7 @@ class MultiLabelTest : public CheckedUmount {
     if (r != 0) return false;
     return true;
   }
+#ifdef WITH_BLUESTORE
   bool read_bdev_label(bluestore_bdev_label_t* label, uint64_t position) {
     string bdev_path = get_data_dir() + "/block";
     int r = BlueStore::read_bdev_label_at_pos(g_ceph_context, bdev_path, position, label);
@@ -278,6 +281,7 @@ class MultiLabelTest : public CheckedUmount {
     bdev->close();
     return r;
   }
+#endif // WITH_BLUESTORE
 };
 
 class CorruptedOnodesTest : public CheckedUmount {
@@ -937,7 +941,7 @@ TEST_P(StoreTest, FiemapHoles) {
     //fiemap test from 0 to SKIP_STEP * (MAX_EXTENTS - 1) + 3
     bufferlist bl;
     store->fiemap(ch, oid, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3, bl);
-    map<uint64_t,uint64_t> m, e;
+    map<uint64_t,uint64_t> m;
     auto p = bl.cbegin();
     decode(m, p);
     cout << " got " << m << std::endl;
@@ -957,7 +961,7 @@ TEST_P(StoreTest, FiemapHoles) {
     // fiemap test from SKIP_STEP to SKIP_STEP * (MAX_EXTENTS - 2) + 3
     bufferlist bl;
     store->fiemap(ch, oid, SKIP_STEP, SKIP_STEP * (MAX_EXTENTS - 2) + 3, bl);
-    map<uint64_t,uint64_t> m, e;
+    map<uint64_t,uint64_t> m;
     auto p = bl.cbegin();
     decode(m, p);
     cout << " got " << m << std::endl;
@@ -5169,7 +5173,6 @@ public:
       if (objects.size() == 0)
         break;
       ObjectStore::Transaction t;
-      std::map<std::string, ceph::buffer::list> attrset;
       for (vector<ghobject_t>::iterator p = objects.begin();
            p != objects.end(); ++p) {
         t.remove(cid, *p);
@@ -5682,7 +5685,6 @@ public:
     ObjectStore::Transaction& t = tt.emplace_back();
 
     map<string, bufferlist, less<>> attrs;
-    set<string> keys;
 
     while (entries--) {
       bufferlist name, value;

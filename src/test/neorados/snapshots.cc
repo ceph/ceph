@@ -116,7 +116,6 @@ CORO_TEST_F(NeoRadosSnapshots, Rollback, NeoRadosTest) {
 
 CORO_TEST_F(NeoRadosSnapshots, SnapGetName, NeoRadosTest) {
   static const auto snapfoo = "snapfoo"s;
-  static const auto snapbar = "snapbar"s;
   co_await create_obj(oid);
   co_await rados().create_pool_snap(pool(), snapfoo, asio::use_awaitable);
   auto rid = rados().lookup_snap(pool(), snapfoo);

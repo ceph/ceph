@@ -88,7 +88,7 @@ void generate_log(librados::IoCtx& ioctx, string& oid, int max, real_time start_
 real_time get_time(real_time start_time, int i, bool modify_time)
 {
   // coverity[store_truncates_time_t:SUPPRESS]
-  return modify_time ? start_time + (i * 1s) : start_time;
+  return modify_time ? start_time + i * real_clock::duration{1s} : start_time;
 }
 
 void check_entry(cls::log::entry& entry, real_time start_time, int i, bool modified_time)
@@ -219,9 +219,6 @@ TEST_P(TestClsLog, test_log_add_different_time)
   }
 
   vector<cls::log::entry>::iterator iter;
-
-  /* returned entries should be sorted by time */
-  map<int, cls::log::entry> check_ents;
 
   int i;
 

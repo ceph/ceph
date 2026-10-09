@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#include "common/hobject_fmt.h"
 #include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "include/uuid_fmt.h"
@@ -17,6 +18,7 @@
 #include "crimson/common/perf_counters_collection.h"
 #include "cyan_collection.h"
 #include "cyan_object.h"
+#include "include/encoding_set.h"
 
 namespace {
   seastar::logger& logger() {
@@ -209,11 +211,14 @@ seastar::future<> CyanStore::Shard::mkfs()
   if (!store_active) {
     return seastar::now();
   }
+
+  using ceph::encode;
+
   std::string fn =
     path + "/collections" + std::to_string(seastar::this_shard_id());
   ceph::bufferlist bl;
   std::set<coll_t> collections;
-  ceph::encode(collections, bl);
+  encode(collections, bl);
   return crimson::write_file(std::move(bl), fn);
 }
 
@@ -256,6 +261,8 @@ CyanStore::get_default_device_class()
 
 CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 {
+  using ceph::decode;
+
   if (!store_active) {
     return mount_ertr::now();
   }
@@ -270,7 +277,7 @@ CyanStore::mount_ertr::future<> CyanStore::Shard::mount()
 
   std::set<coll_t> collections;
   auto p = bl.cbegin();
-  ceph::decode(collections, p);
+  decode(collections, p);
 
   for (auto& coll : collections) {
     std::string fn = fmt::format("{}/{}{}", path, coll,
@@ -304,8 +311,9 @@ seastar::future<> CyanStore::Shard::umount()
         std::to_string(seastar::this_shard_id()+ seastar::this_smp_shard_count() * store_index));
       return crimson::write_file(std::move(bl), fn);
     }).then([&collections, this] {
+      using ceph::encode;
       ceph::bufferlist bl;
-      ceph::encode(collections, bl);
+      encode(collections, bl);
       std::string fn = fmt::format("{}/collections{}",
         path, std::to_string(seastar::this_shard_id()+ seastar::this_smp_shard_count() * store_index));
       return crimson::write_file(std::move(bl), fn);

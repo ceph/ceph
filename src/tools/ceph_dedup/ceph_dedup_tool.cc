@@ -472,7 +472,6 @@ void ChunkScrub::chunk_scrub_common()
       // check all objects
       chunk_refs_by_object_t *byo =
 	static_cast<chunk_refs_by_object_t*>(refs.r.get());
-      std::set<hobject_t> real_refs;
 
       uint64_t pool_missing = 0;
       uint64_t object_missing = 0;
@@ -537,7 +536,6 @@ int estimate_dedup_ratio(const po::variables_map &opts)
   uint64_t max_read_size = default_op_size;
   uint64_t max_seconds = 0;
   int ret;
-  std::map<std::string, std::string>::const_iterator i;
   bool debug = false;
   ObjectCursor begin;
   ObjectCursor end;
@@ -686,11 +684,10 @@ int chunk_scrub_common(const po::variables_map &opts)
 {
   Rados rados;
   IoCtx io_ctx, chunk_io_ctx;
-  std::string object_name, target_object_name;
+  std::string object_name;
   std::string chunk_pool_name, op_name;
   int ret;
   unsigned max_thread = get_opts_max_thread(opts);
-  std::map<std::string, std::string>::const_iterator i;
   uint32_t report_period = get_opts_report_period(opts);
   ObjectCursor begin;
   ObjectCursor end;
@@ -886,7 +883,6 @@ int make_dedup_object(const po::variables_map &opts)
   IoCtx io_ctx, chunk_io_ctx;
   std::string object_name, chunk_pool_name, op_name, pool_name, fp_algo;
   int ret;
-  std::map<std::string, std::string>::const_iterator i;
 
   op_name = get_opts_op_name(opts);
   pool_name = get_opts_pool_name(opts);

@@ -7348,8 +7348,6 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
   // handle these vxattrs
   if ((xattr_name.substr(0, 15) == "ceph.dir.layout"sv) ||
       (xattr_name.substr(0, 16) == "ceph.file.layout"sv)) {
-    std::string layout_field;
-
     struct layout_xattr_info_t {
       enum class InheritanceStatus : uint32_t {
 	DEFAULT = 0,
