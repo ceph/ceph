@@ -36,6 +36,8 @@ void ceph_heap_profiler_stats(char *buf, int length);
 
 void ceph_heap_release_free_memory();
 
+void ceph_heap_release_to_system(size_t bytes);
+
 double ceph_heap_get_release_rate();
 
 void ceph_heap_get_release_rate(double value);

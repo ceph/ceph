@@ -141,6 +141,7 @@ int main(int argc, char *argv[])
   sighandler_alrm = signal(SIGALRM, godown_alarm);
 
   main.init_perfcounters();
+  main.init_heap_release();
   main.init_http_clients();
 
   r = main.init_storage();

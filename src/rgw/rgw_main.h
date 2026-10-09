@@ -18,6 +18,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <thread>
 
 #include "common/async/context_pool.h"
 
@@ -130,6 +131,7 @@ class AppMain {
   RGWProcessEnv env;
   class AdminSocketHook* heap_profiler_hook{nullptr};
   void unregister_heap_profiler_hook(); // idempotent; used by shutdown() and ~AppMain()
+  std::jthread heap_releaser;
 
   class IOContextPoolHolder {
   private:
@@ -177,6 +179,7 @@ public:
   void init_numa();
   int init_storage();
   void init_perfcounters();
+  void init_heap_release();
   void init_http_clients();
   void cond_init_apis();
   void init_ldap();
