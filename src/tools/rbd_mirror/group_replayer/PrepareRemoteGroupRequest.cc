@@ -246,13 +246,19 @@ void PrepareRemoteGroupRequest<I>::handle_get_mirror_images(int r) {
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
   }
 
-  if (r < 0) {
-    derr << "error getting local mirror image: " << cpp_strerror(r) << dendl;
+  if (r == -ENOENT) {
+    derr << "remote group member " << spec.image_id
+         << " has no mirror image metadata" << dendl;
+    finish(-EBADMSG);
+    return;
+  } else if (r < 0) {
+    derr << "error getting remote mirror image: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
 
-  m_remote_images.insert({spec.pool_id, mirror_image.global_image_id});
+  m_remote_images.insert({mirror_image.global_image_id,
+    {spec.pool_id, spec.image_id}});
 
   m_images.pop_front();
   get_mirror_images();
@@ -279,4 +285,3 @@ void PrepareRemoteGroupRequest<I>::finish(int r) {
 } // namespace rbd
 
 template class rbd::mirror::group_replayer::PrepareRemoteGroupRequest<librbd::ImageCtx>;
-

@@ -185,8 +185,12 @@ run_cmd_internal() {
     set -e
 
     if [ -n "${RBD_MIRROR_SHOW_CLI_CMD}" ]; then
-        cat "$CMD_STDOUT"
-        cat "$CMD_STDERR" 1>&2
+        # CLI output is diagnostic only. Large commands (for example, listing
+        # objects after testing a multi-GiB image) can fill a non-blocking log
+        # consumer and make cat fail with EAGAIN. Do not fail the test because
+        # its diagnostic stream could not accept all output.
+        cat "$CMD_STDOUT" || :
+        cat "$CMD_STDERR" 1>&2 || :
     fi
 
     if [ -n "${RBD_MIRROR_SAVE_CLI_OUTPUT}" ]; then 
@@ -573,6 +577,7 @@ start_mirror()
 {
     local cluster=$1
     local instance
+    local rbd_mirror_bin=rbd-mirror
 
     set_cluster_instance "${cluster}" cluster instance
 
@@ -580,7 +585,11 @@ start_mirror()
     local log=${TEMPDIR}/rbd-mirror-${cluster}-${instance}.out
     ulimit -c unlimited
 
-    rbd-mirror \
+    if [ -x "${CEPH_BIN}/rbd-mirror" ]; then
+        rbd_mirror_bin=${CEPH_BIN}/rbd-mirror
+    fi
+
+    "${rbd_mirror_bin}" \
         --cluster ${cluster} \
         --id ${MIRROR_USER_ID_PREFIX}${instance} \
         --rbd-mirror-delete-retry-interval=5 \
@@ -1919,6 +1928,23 @@ compare_images()
     return ${ret}
 }
 
+compare_images_by_checksum()
+{
+    local local_cluster=$1
+    local cluster=$2
+    local local_pool=$3
+    local remote_pool=$4
+    local image=$5
+    local rmt_checksum loc_checksum
+
+    # Avoid materializing two copies of large images in TEMPDIR. This test can
+    # otherwise exceed the tmpfs quota even when both RBD images are healthy.
+    rmt_checksum=$(set -o pipefail; rbd --cluster ${cluster} export --no-progress ${remote_pool}/${image} - | sha256sum) || return 1
+    loc_checksum=$(set -o pipefail; rbd --cluster ${local_cluster} export --no-progress ${local_pool}/${image} - | sha256sum) || return 1
+
+    test "${rmt_checksum}" = "${loc_checksum}"
+}
+
 wait_for_image_snapshot_with_group_snap_info() {
     local cluster=$1
     local pool=$2
@@ -2764,6 +2790,24 @@ check_group_snap_doesnt_exist()
     test 0 = "${count}" || { fail "snap count = ${count}"; return 1; }
 }
 
+wait_for_group_snap_doesnt_exist()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap=$3
+    local count
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        sleep ${s}
+        get_group_snap_count "${cluster}" "${group_spec}" "${snap}" count
+        test 0 = "${count}" && return 0
+    done
+
+    fail "wait for group snap ${snap} to be removed failed on ${cluster}"
+    return 1
+}
+
 check_group_snap_exists()
 {
     local cluster=$1
@@ -3302,10 +3346,16 @@ test_group_status_in_pool_dir()
     local description_pattern=$5
     local current_state=stopped
 
-    run_admin_cmd "rbd --cluster ${cluster} mirror group status ${group_spec} --format xml --pretty-format" || { fail; return 1; }
+    # The group can transiently be in CREATING while ownership is handed
+    # between daemon replayers. Let the enclosing wait loop retry the query.
+    try_admin_cmd "rbd --cluster ${cluster} mirror group status ${group_spec} --format xml --pretty-format" || { fail; return 1; }
 
     test -n "${state_pattern}" && { test "${state_pattern}" = $(xmlstarlet sel -t -v "//group/state" < "${CMD_STDOUT}" ) || { fail; return 1; } }
-    test -n "${description_pattern}" && { test "${description_pattern}" = "$(xmlstarlet sel -t -v "//group/description" "${CMD_STDOUT}" )" || { fail; return 1; } }
+    if [ -n "${description_pattern}" ]; then
+        local description
+        description=$(xmlstarlet sel -t -v "//group/description" "${CMD_STDOUT}")
+        [[ "${description}" == *"${description_pattern}"* ]] || { fail; return 1; }
+    fi
 
     if echo ${state_pattern} | grep '^up+' >/dev/null; then
         xmlstarlet sel -Q -t -v "//group/daemon_service/daemon_id[contains(text(), ${MIRROR_USER_ID_PREFIX})]" "${CMD_STDOUT}" || { fail; return 1; }

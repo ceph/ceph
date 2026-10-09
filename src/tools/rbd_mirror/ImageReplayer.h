@@ -92,6 +92,11 @@ public:
     std::lock_guard l{m_lock};
     return m_state_desc;
   }
+
+  inline int get_error_code() const {
+    std::lock_guard l{m_lock};
+    return m_last_r;
+  }
   void set_state_description(int r, const std::string &desc);
 
   // TODO temporary until policy handles release of image replayers
@@ -146,7 +151,8 @@ public:
   void print_status(Formatter *f);
 
   void prune_snapshot(uint64_t snap_id);
-  void set_remote_snap_id_end_limit(uint64_t snap_id);
+  void set_remote_snap_id_end_limit(uint64_t snap_id,
+    const cls::rbd::GroupSpec &local_group_spec);
   uint64_t get_remote_snap_id_end_limit();
   uint64_t get_last_snapshot_bytes() const;
 

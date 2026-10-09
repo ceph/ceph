@@ -39,16 +39,19 @@ public:
   std::string group_name;
 
   std::string local_group_id;
+  cls::rbd::MirrorGroup local_mirror_group;
   librbd::mirror::PromotionState local_promotion_state =
     librbd::mirror::PROMOTION_STATE_UNKNOWN;
   std::map<std::string /*global-id*/, std::pair<int64_t /*pool_id*/, std::string /*image_id*/>> local_images;
+  std::vector<cls::rbd::GroupImageSpec> local_images_without_mirror_metadata;
 
   std::string remote_group_id;
   librbd::mirror::PromotionState remote_promotion_state =
     librbd::mirror::PROMOTION_STATE_UNKNOWN;
   std::string remote_mirror_peer_uuid;
-  std::set<GlobalImageId> remote_images;
-
+  std::map<std::string /*global-id*/,
+    std::pair<int64_t /*pool_id*/, std::string /*image_id*/>>
+    remote_images;
 };
 
 } // namespace group_replayer
@@ -58,4 +61,3 @@ public:
 extern template class rbd::mirror::group_replayer::GroupStateBuilder<librbd::ImageCtx>;
 
 #endif // CEPH_RBD_MIRROR_GROUP_REPLAYER_STATE_BUILDER_H
-

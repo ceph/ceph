@@ -124,7 +124,8 @@ void GroupEnableRequest<I>::prepare_group_images() {
     &GroupEnableRequest<I>::handle_prepare_group_images>(this);
 
   auto req = snapshot::GroupPrepareImagesRequest<I>::create(m_group_ioctx,
-    m_group_id, m_image_ctxs, m_images, nullptr, &m_mirror_peer_uuids, "", // no specific image
+    m_group_id, m_image_ctxs, m_images, &m_mirror_images, &m_mirror_peer_uuids,
+    "", // no specific image
     snapshot::GroupPrepareImagesRequest<I>::OP_ENABLE, false, ctx);
   req->send();
 }
@@ -177,7 +178,7 @@ void GroupEnableRequest<I>::validate_images() {
     }
   }
 
-  set_mirror_group_enabling();
+  check_primary_group_snap_complete();
 }
 
 template <typename I>
@@ -225,6 +226,8 @@ template <typename I>
 void GroupEnableRequest<I>::check_primary_group_snap_complete() {
   ldout(m_cct, 10) << dendl;
 
+  m_group_snaps.clear();
+
   auto ctx = util::create_context_callback<
     GroupEnableRequest<I>,
     &GroupEnableRequest<I>::handle_check_primary_group_snap_complete>(
@@ -245,6 +248,18 @@ void GroupEnableRequest<I>::handle_check_primary_group_snap_complete(int r) {
                  << dendl;
     m_ret_val = r;
     close_images();
+    return;
+  }
+
+  r = validate_snapshot_dependencies();
+  if (r < 0) {
+    m_ret_val = r;
+    close_images();
+    return;
+  }
+
+  if (m_mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLING) {
+    set_mirror_group_enabling();
     return;
   }
 
@@ -282,6 +297,50 @@ void GroupEnableRequest<I>::handle_check_primary_group_snap_complete(int r) {
 
   // No usable mirror group snapshot found. Create a new primary group snapshot.
   create_primary_group_snapshot();
+}
+
+template <typename I>
+int GroupEnableRequest<I>::validate_snapshot_dependencies() {
+  std::set<std::pair<int64_t, std::string>> current_images;
+  for (const auto &image : m_images) {
+    current_images.emplace(image.spec.pool_id, image.spec.image_id);
+  }
+
+  for (const auto &group_snap : m_group_snaps) {
+    if (cls::rbd::get_group_snap_namespace_type(group_snap.snapshot_namespace) !=
+        cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
+      continue;
+    }
+
+    for (const auto &image_snap : group_snap.snaps) {
+      if (current_images.contains({image_snap.pool, image_snap.image_id})) {
+        continue;
+      }
+
+      librados::IoCtx image_ioctx;
+      int r = util::create_ioctx(m_group_ioctx, "image", image_snap.pool, {},
+        &image_ioctx);
+      if (r < 0) {
+        lderr(m_cct) << "cannot enable mirror group: snapshot '"
+                     << group_snap.name << "' references unavailable image '"
+                     << image_snap.image_id << "'" << dendl;
+        return -EINVAL;
+      }
+
+      cls::rbd::MirrorImage mirror_image;
+      r = cls_client::mirror_image_get(&image_ioctx, image_snap.image_id,
+        &mirror_image);
+      if (r < 0 || mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+        lderr(m_cct) << "cannot enable mirror group: snapshot '"
+                     << group_snap.name << "' references image '"
+                     << image_snap.image_id
+                     << "' which is not enabled for mirroring" << dendl;
+        return -EINVAL;
+      }
+    }
+  }
+
+  return 0;
 }
 
 /**
@@ -451,8 +510,14 @@ void GroupEnableRequest<I>::create_primary_image_snapshots() {
 
   uuid_d uuid_gen;
   for (size_t i = 0; i < num_images; i++) {
-    uuid_gen.generate_random();
-    m_global_image_ids[i] = uuid_gen.to_string();
+    if (m_mirror_images[i].state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+      // An image moved out of another mirrored group remains mirrored as a
+      // standalone image. Its global image id cannot be changed.
+      m_global_image_ids[i] = m_mirror_images[i].global_image_id;
+    } else {
+      uuid_gen.generate_random();
+      m_global_image_ids[i] = uuid_gen.to_string();
+    }
   }
 
   auto ctx = librbd::util::create_context_callback<
@@ -535,7 +600,7 @@ void GroupEnableRequest<I>::set_mirror_images_enabled() {
   auto gather_ctx = new C_Gather(m_cct, ctx);
 
   auto num_images = m_image_ctxs.size();
-  m_mirror_images.resize(num_images);
+  ceph_assert(m_mirror_images.size() == num_images);
   for (size_t i = 0; i < num_images; i++) {
     auto ictx = m_image_ctxs[i];
 
@@ -545,7 +610,7 @@ void GroupEnableRequest<I>::set_mirror_images_enabled() {
 
     auto req = ImageStateUpdateRequest<I>::create(
       ictx->md_ctx, ictx->id, cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-      m_mirror_images[i], gather_ctx->new_sub());
+      m_mirror_images[i], gather_ctx->new_sub(), true);
 
     req->send();
   }
@@ -621,6 +686,45 @@ void GroupEnableRequest<I>::handle_group_unlink_peer(int r) {
 
   if (r < 0) {
     lderr(m_cct) << "failed to unlink mirror group snapshot: "
+                 << cpp_strerror(r) << dendl;
+  }
+
+  notify_group_memberships_updated();
+}
+
+template <typename I>
+void GroupEnableRequest<I>::notify_group_memberships_updated() {
+  ldout(m_cct, 10) << dendl;
+
+  auto ctx = util::create_context_callback<GroupEnableRequest<I>,
+    &GroupEnableRequest<I>::handle_notify_group_memberships_updated>(this);
+  auto gather_ctx = new C_Gather(m_cct, ctx);
+
+  for (size_t i = 0; i < m_image_ctxs.size(); ++i) {
+    // Newly enabled images never had a standalone ImageReplayer. Existing
+    // snapshot-mirrored images do, so explicitly transfer their ownership to
+    // this group before announcing the enabled group.
+    if (m_mirror_images[i].state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+      continue;
+    }
+
+    auto image_ctx = m_image_ctxs[i];
+    MirroringWatcher<I>::notify_group_membership_updated(image_ctx->md_ctx,
+      image_ctx->id, m_global_image_ids[i], m_group_id,
+      m_mirror_group.global_group_id,
+      m_image_ctxs.size(), librbd::mirroring_watcher::GROUP_MEMBERSHIP_ATTACH,
+      gather_ctx->new_sub());
+  }
+
+  gather_ctx->activate();
+}
+
+template <typename I>
+void GroupEnableRequest<I>::handle_notify_group_memberships_updated(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to notify group membership updates: "
                  << cpp_strerror(r) << dendl;
   }
 

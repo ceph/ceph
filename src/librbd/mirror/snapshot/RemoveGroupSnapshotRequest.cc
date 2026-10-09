@@ -12,6 +12,8 @@
 #include "librbd/api/Utils.h"
 #include "librbd/mirror/snapshot/RemoveGroupSnapshotRequest.h"
 
+#include <algorithm>
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::mirror::snapshot::RemoveGroupSnapshotRequest: " << this \
@@ -46,17 +48,22 @@ void RemoveGroupSnapshotRequest<I>::remove_group_image_snapshots() {
       &RemoveGroupSnapshotRequest<I>::handle_remove_group_image_snapshots>(this);
 
   C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
-  for (size_t i = 0; i < m_group_snap->snaps.size(); ++i) {
-    auto &snap = m_group_snap->snaps[i];
+  for (auto &snap : m_group_snap->snaps) {
     if (snap.snap_id == CEPH_NOSNAP) {
       continue;
     }
 
-    ImageCtx *ictx = (*m_image_ctxs)[i];
-    if (!ictx) {
-      ldout(m_cct, 10) << "failed to remove individual snapshot" << dendl;
+    auto it = std::find_if(m_image_ctxs->begin(), m_image_ctxs->end(),
+      [&snap](auto image_ctx) {
+        return image_ctx != nullptr && image_ctx->id == snap.image_id &&
+               image_ctx->md_ctx.get_id() == snap.pool;
+      });
+    if (it == m_image_ctxs->end()) {
+      ldout(m_cct, 10) << "image context not found for snapshot: image_id="
+                       << snap.image_id << ", pool_id=" << snap.pool << dendl;
       continue;
     }
+    ImageCtx *ictx = *it;
 
     ldout(m_cct, 10) << "removing individual snapshot: "
                      << snap.snap_id << ", from image id:"

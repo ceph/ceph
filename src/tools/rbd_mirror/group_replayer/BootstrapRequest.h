@@ -11,8 +11,10 @@
 
 #include <atomic>
 #include <list>
+#include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 
 class Context;
@@ -77,6 +79,8 @@ public:
       GroupStateBuilder<ImageCtxT> **state_builder,
       Context* on_finish);
 
+  int get_local_image_id(const std::string &global_image_id,
+    std::string *image_id);
   void send() override;
   void cancel() override;
 
@@ -84,26 +88,109 @@ private:
   /**
    * @verbatim
    *
-   * <start>
-   *    |
-   *    v                           (error)
-   * PREPARE_LOCAL_GROUP  * * * * * * * * * * *
-   *    |                                     *
-   *    v                            (error)  *
-   * PREPARE_REMOTE_GROUP_NAME  * * * * * * * *
-   *    |                                     *
-   *    | (remote dne)                        *
-   *    \------------> REMOVE_LOCAL_GROUP * * *
-   *    |             (if local non-primary)  *
-   *    |                                     *
-   *    | (local dne)                         *
-   *    \------------> CREATE_LOCAL_GROUP * * *
-   *    |              (if remote primary)    *
-   *    v                       |             *
-   * CREATE_IMAGE_REPLAYERS <---/             *
-   *    |                                     *
-   *    v                                     *
-   * <finish> < * * * * * * * * * * * * * * * *
+   *                                                                 <start>
+   *                                                                    |
+   *                                                                    v
+   *                                                            GET_LOCAL_GROUP_ID
+   *                                                                    | local group exists?
+   *                                                      yes           v             no
+   *                                     + <--------------------------- + --------------------------> +
+   *                                     |                                                           |
+   *                                     v                                                           v
+   *                              GROUP_GET_INFO                          + ----------------> PREPARE_REMOTE_GROUP
+   *                                     |                                ^                          |  m_remote_group_prepare_result = r
+   *                                     v                                |                          |
+   *                            CHECK_RESYNC_REQUESTED                    |      remote not primary  v  remote primary
+   *                                     |  m_resync_requested ?          |      + <---------------- + ----------------> +
+   *                   false             v           true                 |      |                                       |
+   *            + <--------------------- + -----------------------------> +      |                                       v
+   *            |                                                         ^      |   + -----------------------> CONTINUE_BOOTSTRAP(r)
+   *            |                                                         |      |   ^                                   |  local primary ?
+   *            v                                                        ╭─╮     v   |                   false           v
+   *  PREPARE_LOCAL_GROUP <----------------------------------------------╯|╰-<-- +   |         + <---------------------- +
+   *            |                               Normal bootstrap path     |          |         |                         |
+   *            |                            + -------------------------> +          |         |                         | true
+   *            v   m_resync_requested  ?    |         false                         |         |                         |
+   *            + -------------------------> +                                       |         |                         |
+   *                                         |         true                          |         |                         |
+   *                                         + ------------------------------------> +         |                         |
+   *  if m_remote_group_prepare_result != 0), then r = m_remote_group_prepare_result           |                         |
+   *                                                                                           v logic to decide path    v
+   *                                                                       + <---------------- + ----------------------> +
+   *                                                                       | remote dne        | local dne               |
+   *                                                                       v                   v                         |
+   *                                                              REMOVE_LOCAL_GROUP      CREATE_LOCAL_GROUP             |
+   *                                         m_local_group_removed = true  |                   |                         |
+   *                                                                       v                   v                         v
+   *                                                                       + ----------------> + <---------------------- +
+   *                                                                                           |
+   *                                                                                           v
+   *                                                                                        finish(0)
+   *                                                                                           | local group removed?
+   *                                                                                   false   v   true
+   *                                                                             + <---------- + ----------> +
+   *                                                                             |                           | r = -ENOENT
+   *                                                                             v                           |
+   *                             (skip for local primary or missing local group) LOAD_LOCAL_GROUP_SNAPSHOTS  |
+   *                                                                             |                           |
+   *                                                                             v                           |
+   *                                                                 LOAD_REMOTE_GROUP_SNAPSHOTS             |
+   *                                                                             |                           |
+   *                                                                             v                           |
+   *                                                               SELECT_TARGET_GROUP_MEMBERSHIP            |
+   *                                                                             |                           |
+   *                                                                             v                           |
+   *                                                               RECONCILE_LOCAL_GROUP_MEMBERS             |
+   *                                                                             |                           |
+   *                                                                             v                           |
+   *                                                                     CREATE_REPLAYERS                    |
+   *                                                                             |                           |
+   *                                                                             v                           v
+   *                                                                             + ---------> + <----------- +
+   *                                                                                          |
+   *                                                                                          v
+   *                                                                                      COMPLETE(r)
+   *                                                                                          |
+   *                                                                                          v
+   *                                                                                       <finish>
+   *
+   *  LOCAL GROUP CREATING PATH
+   *  =========================
+   *
+   *       GROUP_GET_INFO
+   *              | state = creating
+   *              v
+   *      PREPARE_LOCAL_GROUP
+   *              |
+   *              v
+   *      PREPARE_REMOTE_GROUP
+   *              |
+   *              v
+   *      CONTINUE_BOOTSTRAP
+   *
+   *
+   *  TARGET MEMBERSHIP SELECTION PATH
+   *  ================================
+   *
+   *      SELECT_TARGET_GROUP_MEMBERSHIP
+   *                    |
+   *                    | success
+   *                    |----------------> RECONCILE_LOCAL_GROUP_MEMBERS
+   *                    |                             |
+   *                    |                             v
+   *                    |                       CREATE_REPLAYERS
+   *                    |                             |
+   *                    |                             v
+   *                    |                        COMPLETE(0)
+   *                    |
+   *                    | split-brain
+   *                    |----------------> CREATE_REPLAYERS (status only)
+   *                    |                             |
+   *                    |                             v
+   *                    |                      COMPLETE(-EEXIST)
+   *                    |
+   *                    | other error
+   *                    |----------------> COMPLETE(error)
    *
    * @endverbatim
    */
@@ -121,6 +208,11 @@ private:
   bool *m_resync_requested;
   GroupCtx *m_local_group_ctx;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *m_image_replayers;
+  std::deque<cls::rbd::GroupImageSpec> m_remove_group_images;
+  std::deque<cls::rbd::GroupImageSpec> m_add_group_images;
+  std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
+  std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
+  std::map<std::string, std::pair<int64_t, std::string>> m_target_remote_images;
   GroupStateBuilder<ImageCtxT> **m_state_builder = nullptr;
   Context *m_on_finish;
 
@@ -148,6 +240,21 @@ private:
 
   void remove_local_group();
   void handle_remove_local_group(int r);
+
+  void load_local_group_snapshots();
+  void handle_load_local_group_snapshots(int r);
+  void load_remote_group_snapshots();
+  void handle_load_remote_group_snapshots(int r);
+  int select_target_group_membership();
+  int check_image_handoff_order(
+      const cls::rbd::GroupSnapshot& target_snap) const;
+
+  void reconcile_local_group_members();
+  void remove_next_group_member();
+  void handle_remove_group_member(int r);
+  void add_next_group_member();
+  void handle_add_group_member(int r);
+  void handle_reconcile_local_group_members(int r);
 
   int create_replayers();
 

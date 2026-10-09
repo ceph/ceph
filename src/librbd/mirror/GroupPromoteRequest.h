@@ -61,62 +61,127 @@ private:
    *    v
    * PREPARE_GROUP_IMAGES
    *    |
-   *    v         (if force promote else skip)
-   * CHECK_ROLL_BACK_NEEDED
+   *    | regular promote
+   *    |-------------------------> PROMOTION_PATH
    *    |
-   *    v          (regular group promote)
-   * PREPARE_GROUP_PROMOTION--------------------------->|
-   *    |                                               |
-   *    v (incomplete)                                  |
-   * CREATE_GROUP_ORPHAN_SNAPSHOT                       |
-   *    |                                               |
-   *    v                                               |
-   * CREATE_IMAGES_ORPHAN_SNAPSHOTS                     |
-   *    |                                               |
-   *    v                                               |
-   * MARK_GROUP_ORPHAN_SNAPSHOT_COMPLETE                |
-   *    |                                               |
-   *    v                                               |
-   * DRAIN_IMAGES_WATCHERS                              |
-   *    |                                               |
-   *    v                       (no rollback needed)    |
-   * ACQUIRE_EXCLUSIVE_LOCKS ---------------------------|
-   *    |                                               |
-   *    v  (skip if not needed)                         |
-   * REMOVE_IMAGES_FROM_GROUP                           |
-   *    |                                               |
-   *    v                                               |
-   * ROLLBACK                                           |
-   *    |                                               |
-   *    v  (incomplete)                                 |
-   * CREATE_PRIMARY_GROUP_SNAPSHOT <--------------------|
+   *    | force promote
+   *    |-------------------------> CHECK_ROLL_BACK_NEEDED
+   *                                    |
+   *                                    | no rollback
+   *                                    |-----------------> PROMOTION_PATH
+   *                                    |
+   *                                    | membership already reconciled
+   *                                    |-----------------> PROMOTION_PATH
+   *                                    |
+   *                                    | reconciliation required
+   *                                    |-----------------> RECONCILE_ROLLBACK_MEMBERSHIP
+   *                                                               |
+   *                                                               v
+   *                                                    CONVERT_ADDED_IMAGES
+   *                                                               |
+   *                                                               v
+   *                                                    REFRESH_GROUP_IMAGES
+   *                                                               |
+   *                                                               v
+   *                                                    PREPARE_GROUP_IMAGES
+   *                                                               |
+   *                                                               v
+   *                                                    CHECK_ROLL_BACK_NEEDED
+   *                                                               |
+   *                                                               v
+   *                                                    PROMOTION_PATH
+   *
+   * PROMOTION_PATH
    *    |
-   *    v  (skip if group is empty)    (on error)
-   * CREATE_IMAGES_PRIMARY_SNAPSHOTS -----------------------------\
-   *    |                                                         |
-   *    v  (skip if group is empty)    (on error)                 |
-   * DISABLE_NON_PRIMARY_FEATURES -----------------------\        |
-   *    |                                                |        |
-   *    v  (complete)                  (on error)        |        |
-   * UPDATE_PRIMARY_GROUP_SNAPSHOT ----------------------|        |
-   *    |                                                |        |
-   *    v                                                v        |
-   * GROUP_UNLINK_PEER               ENABLE_NON_PRIMARY_FEATURES  |
-   *    |                                                |        |
-   *    v  (skip if not required)                        |        |
-   * DISABLE_REMOVED_IMAGES                              |        |
-   *    |                                                |        |
-   *    v  (skip if not required)                        |        |
-   * REMOVE_NON_MEMBER_IMAGES                            |        |
-   *    |                                                |        |
-   *    v  (skip if not needed)                          v        v
-   * RELEASE_EXCLUSIVE_LOCKS <-------------REMOVE_PRIMARY_GROUP_SNAPSHOT
+   *    v
+   * PREPARE_GROUP_PROMOTION
+   *    |
+   *    | orphan not required
+   *    |-------------------------> PRIMARY_SNAPSHOT_PATH
+   *    |
+   *    | orphan required
+   *    |-------------------------> CREATE_GROUP_ORPHAN_SNAPSHOT
+   *                                           |
+   *                                           v
+   *                              CREATE_IMAGES_ORPHAN_SNAPSHOTS
+   *                                           |
+   *                                           v
+   *                         MARK_GROUP_ORPHAN_SNAPSHOT_COMPLETE
+   *                                           |
+   *                                           v
+   *                                DRAIN_IMAGES_WATCHERS
+   *                                           |
+   *                                           v
+   *                               ACQUIRE_EXCLUSIVE_LOCKS
+   *                                           |
+   *                                           | rollback needed
+   *                                           |---------------> ROLLBACK
+   *                                           |                    |
+   *                                           |                    v
+   *                                           |           PRIMARY_SNAPSHOT_PATH
+   *                                           |
+   *                                           | no rollback
+   *                                           |---------------> PRIMARY_SNAPSHOT_PATH
+   *
+   * PRIMARY_SNAPSHOT_PATH
+   *    |
+   *    v
+   * CREATE_PRIMARY_GROUP_SNAPSHOT
+   *    |
+   *    | group empty
+   *    |-------------------------> COMPLETE_PRIMARY_SNAPSHOT_PATH
+   *    |
+   *    | members remain
+   *    |-------------------------> CREATE_IMAGES_PRIMARY_SNAPSHOTS
+   *                                           |
+   *                                           v
+   *                              DISABLE_NON_PRIMARY_FEATURES
+   *                                           |
+   *                                           v
+   *                              COMPLETE_PRIMARY_SNAPSHOT_PATH
+   *
+   * COMPLETE_PRIMARY_SNAPSHOT_PATH
+   *    |
+   *    v
+   * UPDATE_PRIMARY_GROUP_SNAPSHOT
+   *    |
+   *    v
+   * GROUP_UNLINK_PEER
+   *    |
+   *    | no removed images
+   *    |-------------------------> RELEASE_EXCLUSIVE_LOCKS
+   *    |                                      |
+   *    |                                      v
+   *    |                             FINAL_CLEANUP_PATH
+   *    |
+   *    | removed images
+   *    |-------------------------> DISABLE_REMOVED_IMAGES
+   *                                           |
+   *                                           v
+   *                                  CLOSE_REMOVED_IMAGES
+   *                                           |
+   *                                           v
+   *                                  REMOVE_NON_MEMBER_IMAGES
+   *                                           |
+   *                                           v
+   *                                  RELEASE_EXCLUSIVE_LOCKS
+   *                                           |
+   *                                           v
+   *                                  FINAL_CLEANUP_PATH
+   *
+   * FINAL_CLEANUP_PATH
    *    |
    *    v
    * CLOSE_IMAGES
    *    |
    *    v
    * <finish>
+   *
+   * Errors before images are prepared go directly to <finish>. Later errors
+   * before lock acquisition follow CLOSE_IMAGES -> <finish>. Errors after
+   * lock acquisition follow RELEASE_EXCLUSIVE_LOCKS -> CLOSE_IMAGES ->
+   * <finish>. If primary snapshot creation changed image features, cleanup
+   * first runs ENABLE_NON_PRIMARY_FEATURES and REMOVE_PRIMARY_GROUP_SNAPSHOT.
    *
    * @endverbatim
    */
@@ -145,6 +210,7 @@ private:
 
   int m_ret_val = 0;
   bool m_need_rollback = false;
+  bool m_membership_reconciled = false;
   std::vector<uint64_t> m_rollback_snap_ids;
   cls::rbd::GroupSnapshot m_rollback_group_snap;
   cls::rbd::GroupSnapshot m_orphan_group_snap;
@@ -171,6 +237,13 @@ private:
 
   void check_rollback_needed();
 
+  void reconcile_rollback_membership();
+  void handle_reconcile_rollback_membership(int r);
+  void convert_added_images();
+  void handle_convert_added_images(int r);
+  void refresh_group_images();
+  void handle_refresh_group_images(int r);
+
   void prepare_group_promotion();
 
   bool build_group_snapshot_metadata(
@@ -190,9 +263,6 @@ private:
 
   void acquire_exclusive_locks();
   void handle_acquire_exclusive_locks(int r);
-
-  void remove_images_from_group();
-  void handle_remove_images_from_group(int r);
 
   void rollback();
   void handle_rollback(int r);
@@ -214,6 +284,8 @@ private:
 
   void disable_removed_images();
   void handle_disable_removed_images(int r);
+  void close_removed_images();
+  void handle_close_removed_images(int r);
 
   void remove_non_member_images();
   void handle_remove_non_member_images(int r);
