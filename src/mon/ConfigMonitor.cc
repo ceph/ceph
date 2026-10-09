@@ -614,9 +614,40 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     }
     goto update;
   } else if (prefix == "osd pool default set") {
-    err = prepare_pool_default_set(cmdmap, ss);
+    // k and m are kept in the OSDMap's default profile
+    if ((cmdmap.contains("k") || cmdmap.contains("m")) &&
+        !mon.osdmon()->is_writeable()) {
+      mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+      return false;
+    }
+    // a rule that the pending OSDMap update removes is found gone once the
+    // update has committed
+    if (string rule; cmd_getval(cmdmap, "rule", rule) && rule != "none") {
+      const int id = mon.osdmon()->osdmap.crush->get_rule_id(rule);
+      if (id >= 0 && mon.osdmon()->crush_rule_removal_pending(rule, id)) {
+        mon.osdmon()->wait_for_finished_proposal(
+          op, new C_RetryMessage(this, op));
+        return false;
+      }
+    }
+    std::optional<map<string,string>> default_profile;
+    err = prepare_pool_default_set(cmdmap, ss, &default_profile);
     if (err) {
       goto reply;
+    }
+    if (default_profile) {
+      if (!has_pending_changes()) {
+        pending.clear();
+        mon.osdmon()->propose_default_profile(*default_profile);
+        mon.osdmon()->wait_for_finished_proposal(
+          op, new Monitor::C_Command(
+            mon, op, 0, ss.str(), mon.osdmon()->get_last_committed() + 1));
+        return false;
+      }
+      // commit with the options
+      paxos.plug();
+      mon.osdmon()->propose_default_profile(*default_profile);
+      paxos.unplug();
     }
     pending_description = "osd pool default set";
     goto update;
@@ -1010,9 +1041,8 @@ namespace {
 // The parameters that ceph osd pool default get shows, in order.
 const vector<string> POOL_DEFAULT_PARAMS = {
   "pool_type", "num_zones", "rule", "zone_failure_domain",
-  "osd_failure_domain", "root", "class", "replica", "min_size",
-  "erasure_code_profile", "k", "m", "pg_num", "pgp_num", "autoscale_mode",
-  "bulk", "crimson"};
+  "osd_failure_domain", "root", "class", "replica", "min_size", "k", "m",
+  "pg_num", "pgp_num", "autoscale_mode", "bulk", "crimson"};
 
 } // anonymous namespace
 
@@ -1069,10 +1099,12 @@ map<string, string> ConfigMonitor::pool_default_db_overrides()
 
 void ConfigMonitor::dump_pool_defaults(Formatter *f, ostream& out)
 {
-  const PoolCreateParams d = load_pool_defaults(g_conf());
   const OSDMap& osdmap = mon.osdmon()->osdmap;
-  const string profile =
-    g_conf().get_val<string>("osd_pool_default_erasure_code_profile");
+  PoolCreateParams d = load_pool_defaults(g_conf());
+  const bool have_default_profile = osdmap.has_erasure_code_profile("default");
+  if (have_default_profile) {
+    d.profile = osdmap.get_erasure_code_profile("default");
+  }
   auto value_of = [&](const string& param) -> string {
     if (param == "rule") {
       const auto id = d.default_rule;
@@ -1081,15 +1113,14 @@ void ConfigMonitor::dump_pool_defaults(Formatter *f, ostream& out)
       }
       const char *name = osdmap.crush->get_rule_name(id);
       return name ? string(name) : stringify(id);
-    } else if (param == "erasure_code_profile") {
-      return profile;
-    } else if (param == "k" || param == "m") {
-      const auto v = param == "k" ? d.k() : d.m();
-      return v ? stringify(*v) : string();
     }
     return pool_default_value(d, param);
   };
   auto option_of = [&](const string& param) -> string {
+    if (param == "k" || param == "m") {
+      // kept in the OSDMap, not an option; the option makes default if missing
+      return have_default_profile ? "-" : "osd_pool_default_erasure_code_profile";
+    }
     if (param == "replica" &&
         g_conf().get_val<uint64_t>("osd_pool_default_replica") == 0) {
       return "osd_pool_default_size";
@@ -1109,7 +1140,7 @@ void ConfigMonitor::dump_pool_defaults(Formatter *f, ostream& out)
   for (const auto& param : POOL_DEFAULT_PARAMS) {
     const string option = option_of(param);
     const string value = value_of(param);
-    const string source = pool_default_source(option);
+    const string source = option == "-" ? "osdmap" : pool_default_source(option);
     if (f) {
       f->open_object_section(param);
       f->dump_string("value", value);
@@ -1127,8 +1158,9 @@ void ConfigMonitor::dump_pool_defaults(Formatter *f, ostream& out)
   }
 }
 
-int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
-                                            ostream& ss)
+int ConfigMonitor::prepare_pool_default_set(
+  const cmdmap_t& cmdmap, ostream& ss,
+  std::optional<map<string,string>>* default_profile)
 {
   if (!mon.osdmon()->num_zones_supported()) {
     ss << "ceph osd pool default set is refused until "
@@ -1137,14 +1169,12 @@ int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
   }
   const OSDMap& osdmap = mon.osdmon()->osdmap;
 
-  // 1. the defaults, 2. the profile, 3. the command line
+  // 1. the defaults, 2. the default profile, 3. the command line
   PoolCreateParams p = load_pool_defaults(g_conf());
-  string profile_name;
-  cmd_getval(cmdmap, "erasure_code_profile", profile_name);
   int err = use_profile(
-    p, profile_name,
-    osdmap.has_erasure_code_profile(profile_name)
-      ? &osdmap.get_erasure_code_profile(profile_name) : nullptr,
+    p, "",
+    osdmap.has_erasure_code_profile("default")
+      ? &osdmap.get_erasure_code_profile("default") : nullptr,
     &ss);
   if (err) {
     return err;
@@ -1191,7 +1221,12 @@ int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
   }
   map<string,string> values;
   for (const auto& param : p.given) {
-    values[pool_default_options().at(param)] = pool_default_value(p, param);
+    if (param != "k" && param != "m") {
+      values[pool_default_options().at(param)] = pool_default_value(p, param);
+    }
+  }
+  if (p.is_given("k") || p.is_given("m")) {
+    *default_profile = p.profile;
   }
 
   err = check_pool_default_overrides(values, ss);
@@ -1237,6 +1272,17 @@ int ConfigMonitor::check_pool_default_overrides(
     }
   }
   return 0;
+}
+
+bool ConfigMonitor::has_pending_changes() const
+{
+  for (const auto& [key, value] : pending) {
+    auto q = current.find(key);
+    if (value ? q == current.end() || *value != q->second : q != current.end()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void ConfigMonitor::propose_global_options(const map<string,string>& values,
