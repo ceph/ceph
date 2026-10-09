@@ -6,6 +6,7 @@
 #include "common/WorkQueue.h"
 #include "include/scope_guard.h"
 
+#include <iomanip>  // for std::quoted
 #include <string_view>
 #include <utility>
 #include "rgw_auth_registry.h"
