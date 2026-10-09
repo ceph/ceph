@@ -1,9 +1,13 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+#include <boost/intrusive/list.hpp>
+#include <memory>
+#include "common/ceph_mutex.h"
 
 #pragma once
 
 struct RGWKmipWorker;
+struct RGWKmipWorkerPool;
 class RGWKMIPManagerImpl: public RGWKMIPManager {
 protected:
   ceph::mutex lock = ceph::make_mutex("RGWKMIPManager");
@@ -17,10 +21,10 @@ protected:
   boost::intrusive::list<Request, boost::intrusive::member_hook< Request,
   boost::intrusive::list_member_hook<>, &Request::req_hook>> requests;
   bool going_down = false;
-  RGWKmipWorker *worker = 0;
+  std::unique_ptr<RGWKmipWorkerPool> worker_pool;
 public:
-  RGWKMIPManagerImpl(CephContext *cct) : RGWKMIPManager(cct) {};
-  int add_request(RGWKMIPTransceiver *);
+  RGWKMIPManagerImpl(CephContext *cct);
+  ~RGWKMIPManagerImpl() override;  int add_request(RGWKMIPTransceiver *);
   int start();
   void stop();
   friend RGWKmipWorker;
