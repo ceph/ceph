@@ -701,3 +701,17 @@ uint64_t RadosTestPPBase::get_perf_counter_by_path(std::string_view path) {
 
   return value;
 }
+
+// After a write is committed, it isn't necessarily true that the log is
+// committed. We do a read of the written area, which allows us to be
+// sure that the shards have all received the message that the log can be
+// committed, allowing us to test split ops with certainty that it won't be
+// bounced due to unstability.
+void RadosTestPPBase::ensure_log_committed(const char* oid, uint64_t offset, uint64_t length) {
+  ObjectReadOperation read;
+  read.read(offset, length, NULL, NULL);
+
+  bufferlist bl;
+  int rc = ioctx.operate(oid, &read, &bl);
+  ASSERT_EQ(0, rc);
+}
