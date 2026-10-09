@@ -3,6 +3,8 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/container_ios.h"
+#include "include/stringify.h"
 
 #include "mgr/MetricCollector.h"
 #include "mgr/OSDPerfMetricTypes.h"
