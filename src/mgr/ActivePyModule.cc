@@ -234,6 +234,37 @@ std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
   return pickled_ret_str;
 }
 
+PyObject *ActivePyModule::dispatch_remote_direct(
+    const std::string &method,
+    PyObject *args,
+    PyObject *kwargs)
+{
+  assert_gil();
+
+  auto boundMethod = PyObject_GetAttrString(pClassInstance, method.c_str());
+  if (boundMethod == nullptr) {
+    PyErr_Clear();
+    PyErr_SetString(PyExc_NameError, "Method not found");
+    return nullptr;
+  }
+
+  dout(20) << "Calling " << py_module->get_name()
+           << "." << method << "..." << dendl;
+
+  auto ret = PyObject_Call(boundMethod, args, kwargs);
+  Py_DECREF(boundMethod);
+  if (ret == nullptr) {
+    const bool do_crash_dump = !PyErr_ExceptionMatches(PyExc_NotImplementedError);
+    std::string caller = "ActivePyModule::dispatch_remote_direct "s + method;
+    std::string formatted = handle_pyerror(do_crash_dump, get_name(), caller);
+    set_wrapped_remote_exception("Remote method threw exception: "s + formatted,
+                                  do_crash_dump);
+    return nullptr;
+  }
+  dout(20) << "Success calling '" << method << "'" << dendl;
+  return ret;
+}
+
 void ActivePyModule::config_notify()
 {
   if (is_dead()) {

@@ -225,6 +225,95 @@ class TestModuleSelftest(MgrTestCase):
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
             "mgr", "self-test", "remote")
 
+    def _set_subinterpreter_modules(self, value):
+        # mgr_subinterpreter_modules is a startup-only option: setting it
+        # only takes effect for a freshly-started mgr, so every change
+        # (including reverting it back to "") needs its own restart.
+        # Compare active_gid against its pre-restart value (like
+        # _load_module()'s has_restarted()), not just non-empty, since a
+        # stale mgrmap could otherwise satisfy a weaker check before the
+        # new process is actually up.
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "config", "set", "mgr", "mgr_subinterpreter_modules", value)
+        active_id = self.mgr_cluster.get_active_id()
+        initial_gid = self.mgr_cluster.get_active_gid()
+        self.mgr_cluster.mgr_restart(active_id)
+
+        def has_restarted():
+            mgr_map = self.mgr_cluster.get_mgr_map()
+            return (mgr_map['active_gid'] != initial_gid
+                    and mgr_map['available'])
+        self.wait_until_true(has_restarted, timeout=30)
+
+    def test_subinterpreter_remote_dispatch(self):
+        """
+        Exercise remote()'s fast path (default config) vs pickled path
+        (selftest/influx isolated via mgr_subinterpreter_modules, which
+        needs a mgr restart to take effect). Also checks the self-call
+        case.
+        """
+        self._require_mgr_module("influx")
+        self._load_module("selftest")
+        self._load_module("influx")
+
+        def run_checks(expect_same_interpreter):
+            mutation = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "remote-mutation"))
+            self.assertEqual(mutation["same_interpreter"],
+                             expect_same_interpreter)
+
+            bench = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "remote-benchmark"))
+            log.info("remote() benchmark (%s interpreter): %s",
+                     "same" if expect_same_interpreter else "cross", bench)
+
+        # Default config: same interpreter.
+        run_checks(expect_same_interpreter=True)
+
+        # Isolate both into separate sub-interpreters.
+        self.addCleanup(self._set_subinterpreter_modules, "")
+        self._set_subinterpreter_modules("selftest,influx")
+
+        run_checks(expect_same_interpreter=False)
+
+        # selftest calling itself must still get the fast path even while
+        # isolated (identity check in shares_interpreter()).
+        self_mutation = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "self-test", "remote-self-mutation"))
+        self.assertTrue(self_mutation["same_interpreter"])
+
+    def test_subinterpreter_remote_benchmark(self):
+        """
+        Informational timing only (see test_subinterpreter_remote_dispatch
+        for correctness). Compares fast vs pickled path overhead; look
+        for "remote() pickle-skip fast path speedup" in the log.
+        """
+        self._require_mgr_module("influx")
+        self._load_module("selftest")
+        self._load_module("influx")
+
+        def run_benchmark():
+            return json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "remote-benchmark", "10000", "100"))
+
+        fast = run_benchmark()
+        log.info("remote() benchmark, same interpreter (fast path): %s", fast)
+
+        self.addCleanup(self._set_subinterpreter_modules, "")
+        self._set_subinterpreter_modules("influx")
+
+        slow = run_benchmark()
+        log.info("remote() benchmark, cross interpreter (pickled path): %s",
+                 slow)
+
+        speedup = slow["per_call_us"] / fast["per_call_us"]
+        log.info(
+            "remote() pickle-skip fast path speedup: %.1fx "
+            "(same-interpreter %.2f us/call vs cross-interpreter %.2f "
+            "us/call, payload_size=%d, iterations=%d)",
+            speedup, fast["per_call_us"], slow["per_call_us"],
+            fast["payload_size"], fast["iterations"])
+
     def test_selftest_cluster_log(self):
         """
         Use the selftest module to test the cluster/audit log interface.
