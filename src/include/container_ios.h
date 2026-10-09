@@ -26,7 +26,7 @@
 #include <vector>
 #include <optional>
 #include <iomanip>
-#include <iosfwd>
+#include <ostream>
 #include <unordered_map>
 #include <unordered_set>
 
