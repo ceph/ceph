@@ -2656,7 +2656,7 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
                          CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
                          AT_SYMLINK_NOFOLLOW);
         if (r < 0) {
-          derr << ": failed to stat epath=" << epath << ", r=" << r << dendl;
+          derr << ": failed to stat epath=" << _epath << ", r=" << r << dendl;
           return r;
         }
 
