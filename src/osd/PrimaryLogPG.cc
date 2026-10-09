@@ -6006,6 +6006,9 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (ctx->op->ec_direct_read()) {
       int r = pgbackend->objects_read_local(
         soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+      if (r == -EIO) {
+        r = rep_repair_primary_object(soid, ctx);
+      }
       if (r >= 0) {
         bytes_read = r;
         // Don't update op.extent.length - causes issues with recursive

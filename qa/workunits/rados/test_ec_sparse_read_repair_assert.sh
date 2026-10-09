@@ -22,11 +22,6 @@ BLOCKSIZE=4096
 
 # --- setup -------------------------------------------------------------------
 
-# ec_optimizations causes SplitOp to set CEPH_OSD_FLAG_EC_DIRECT_READ on
-# SPARSE_READ ops, routing them to individual shard OSDs and taking the
-# buggy else-branch in do_sparse_read().
-ceph config set osd osd_pool_default_flag_ec_optimizations true
-
 # Required for ceph tell osd.X injectdataerr to make bluestore readv return -EIO.
 ceph config set osd bluestore_debug_inject_read_err true
 
@@ -36,11 +31,17 @@ ceph osd erasure-code-profile set "$PROFILE" \
 
 ceph osd pool create "$POOL" erasure "$PROFILE"
 ceph osd pool set "$POOL" allow_ec_overwrites true
+# ec_optimizations causes SplitOp to set CEPH_OSD_FLAG_EC_DIRECT_READ on
+# SPARSE_READ ops, routing them to individual shard OSDs and taking the
+# buggy else-branch in do_sparse_read().
+ceph osd pool set "$POOL" allow_ec_optimizations true
 ceph osd pool application enable "$POOL" rados
 
 # Confirm the pool has ec_optimizations and split_reads flags — these are
 # required for the CEPH_OSD_FLAG_EC_DIRECT_READ path to be taken.
-ceph osd pool get "$POOL" all | grep -q allow_ec_optimizations
+ceph osd pool get "$POOL" allow_ec_optimizations \
+    | grep -q 'allow_ec_optimizations: true'
+ceph osd pool ls detail | grep "'$POOL'" | grep -q split_reads
 
 # --- write an object ---------------------------------------------------------
 
@@ -105,7 +106,6 @@ fi
 
 # --- cleanup -----------------------------------------------------------------
 
-ceph config rm osd osd_pool_default_flag_ec_optimizations || true
 ceph config rm osd bluestore_debug_inject_read_err || true
 ceph osd pool delete "$POOL" "$POOL" --yes-i-really-really-mean-it
 ceph osd erasure-code-profile rm "$PROFILE" || true
