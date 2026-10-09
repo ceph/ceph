@@ -22,6 +22,7 @@
 #include <iostream>
 #include <ostream>
 #include <cstring>
+#include <boost/endian/conversion.hpp>
 #include <string>
 #include "include/rados/rados_types.hpp"
 #include "include/rados/buffer.h"
@@ -31,12 +32,12 @@
 
 namespace rgw::dedup {
   struct key_t;
-#define CEPHTOH_16 le16toh
-#define CEPHTOH_32 le32toh
-#define CEPHTOH_64 le64toh
-#define HTOCEPH_16 htole16
-#define HTOCEPH_32 htole32
-#define HTOCEPH_64 htole64
+  inline uint16_t CEPHTOH_16(uint16_t v) { return boost::endian::little_to_native(v); }
+  inline uint32_t CEPHTOH_32(uint32_t v) { return boost::endian::little_to_native(v); }
+  inline uint64_t CEPHTOH_64(uint64_t v) { return boost::endian::little_to_native(v); }
+  inline uint16_t HTOCEPH_16(uint16_t v) { return boost::endian::native_to_little(v); }
+  inline uint32_t HTOCEPH_32(uint32_t v) { return boost::endian::native_to_little(v); }
+  inline uint64_t HTOCEPH_64(uint64_t v) { return boost::endian::native_to_little(v); }
 
   static constexpr unsigned HASH_UNITS = BLAKE3_OUT_LEN/sizeof(uint64_t);
   static constexpr unsigned DISK_BLOCK_SIZE  = 8*1024;
