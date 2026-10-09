@@ -474,7 +474,9 @@ Pool Creation Defaults
 ======================
 
 ``ceph osd pool create`` takes every parameter that it is not given from a pool
-creation default, an ``osd_pool_default_*`` configuration option.
+creation default, an ``osd_pool_default_*`` configuration option. Together the
+defaults are one template that every pool created afterwards starts from: one
+pool type and one set of parameters, not separate defaults for each pool type.
 ``ceph osd pool default get`` shows the defaults, and
 ``ceph osd pool default set`` changes them after checking them.
 
@@ -521,9 +523,10 @@ two copies in each:
   their values. It never changes an existing pool.
 * It checks the resulting defaults as ``ceph osd pool create`` would, and
   writes nothing if a check fails, for example ``--num_zones 2`` on a cluster
-  that cannot be stretched. Pool creation can still fail with defaults that
-  pass, for example on the OSDs' PG limit, or with two zones while an
-  individual stretch pool exists.
+  that cannot be stretched, or ``--k`` and ``--m`` while the default pool type
+  is ``replicated``, or ``--replica`` while it is ``erasure``. Pool creation
+  can still fail with defaults that pass, for example on the OSDs' PG limit,
+  or with two zones while an individual stretch pool exists.
 * It refuses a value that a ``mon`` or ``mon.<id>`` section of the
   configuration database, or a Monitor's local configuration, would override.
   Remove the overriding value first, as :ref:`pool-default-config-override`

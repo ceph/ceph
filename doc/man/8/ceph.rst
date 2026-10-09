@@ -1377,14 +1377,17 @@ Usage::
 
     ceph osd pool default get
 
-Subcommand ``default set`` sets the defaults that ``osd pool create`` uses. It
+Subcommand ``default set`` sets the template that ``osd pool create`` uses for
+every pool created afterwards: one pool type and one set of parameters for all
+pools. It
 takes the parameters of ``osd pool create`` except ``--size``, all given by
 name, and writes them to the ``global`` section of the configuration database;
 ``--replica`` is written to ``osd_pool_default_size``, and ``--k`` and ``--m``
 change the ``default`` erasure code profile instead. It never changes an
 existing pool. It refuses defaults that fail the checks that ``osd pool create``
-makes on its parameters, and values that a ``mon`` section of the configuration
-database or a Monitor's local configuration would override. ``--rule`` must
+makes on its parameters, such as ``--k`` and ``--m`` for a replicated default
+type, and values that a ``mon`` section of the configuration database or a
+Monitor's local configuration would override. ``--rule`` must
 name a replicated rule, and ``--rule none`` sets
 ``osd_pool_default_crush_rule`` back to -1. A default of one copy needs
 ``mon_allow_pool_size_one`` and ``--yes-i-really-mean-it``. See "Pool Creation
