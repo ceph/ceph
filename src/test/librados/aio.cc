@@ -1226,7 +1226,6 @@ TEST_P(LibRadosAioEC, RoundTrip2) {
 }
 
 TEST_P(LibRadosAioEC, RoundTripAppend) {
-  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion, my_completion2, my_completion3, my_completion4;
   const auto& params = GetParam();
@@ -1274,15 +1273,23 @@ TEST_P(LibRadosAioEC, RoundTripAppend) {
     TestAlarm alarm;
     ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion3));
   }
-  EXPECT_EQ(-EOPNOTSUPP, rados_aio_get_return_value(my_completion3));
-
+  // crimson-osd supports only FastEC, which allows overwrites, so it
+  // accepts an unaligned append
   int tbsize = bsize + hbsize;
-  char *buf3 = (char *)new char[tbsize];
-  memset(buf3, 0, tbsize);
+  if (is_crimson_cluster()) {
+    EXPECT_EQ(0, rados_aio_get_return_value(my_completion3));
+    tbsize += hbsize;
+  } else {
+    EXPECT_EQ(-EOPNOTSUPP, rados_aio_get_return_value(my_completion3));
+  }
+
+  int rbsize = bsize * 3;
+  char *buf3 = (char *)new char[rbsize];
+  memset(buf3, 0, rbsize);
   ASSERT_EQ(0, rados_aio_create_completion2(nullptr,
 	      nullptr, &my_completion4));
   ASSERT_EQ(0, rados_aio_read(test_data.m_ioctx, "foo",
-			      my_completion4, buf3, bsize * 3, 0));
+			      my_completion4, buf3, rbsize, 0));
   {
     TestAlarm alarm;
     ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion4));
@@ -1290,6 +1297,9 @@ TEST_P(LibRadosAioEC, RoundTripAppend) {
   ASSERT_EQ(tbsize, rados_aio_get_return_value(my_completion4));
   ASSERT_EQ(0, memcmp(buf3, buf, bsize));
   ASSERT_EQ(0, memcmp(buf3 + bsize, buf2, hbsize));
+  if (is_crimson_cluster()) {
+    ASSERT_EQ(0, memcmp(buf3 + bsize + hbsize, buf2, hbsize));
+  }
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
   rados_aio_release(my_completion3);
@@ -1715,7 +1725,6 @@ TEST_P(LibRadosAioEC, ExecuteClass) {
 }
 
 TEST_P(LibRadosAioEC, MultiWrite) {
-  SKIP_IF_CRIMSON();
   AioTestDataEC test_data;
   rados_completion_t my_completion, my_completion2, my_completion3;
   const auto& params = GetParam();
@@ -1744,7 +1753,15 @@ TEST_P(LibRadosAioEC, MultiWrite) {
     TestAlarm alarm;
     ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
   }
-  ASSERT_EQ(-EOPNOTSUPP, rados_aio_get_return_value(my_completion2));
+  // crimson-osd supports only FastEC, which allows overwrites, so it
+  // accepts an unaligned write
+  int expected_size = sizeof(buf);
+  if (is_crimson_cluster()) {
+    ASSERT_EQ(0, rados_aio_get_return_value(my_completion2));
+    expected_size += sizeof(buf2);
+  } else {
+    ASSERT_EQ(-EOPNOTSUPP, rados_aio_get_return_value(my_completion2));
+  }
 
   char buf3[(sizeof(buf) + sizeof(buf2)) * 3];
   memset(buf3, 0, sizeof(buf3));
@@ -1756,8 +1773,11 @@ TEST_P(LibRadosAioEC, MultiWrite) {
     TestAlarm alarm;
     ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion3));
   }
-  ASSERT_EQ((int)sizeof(buf), rados_aio_get_return_value(my_completion3));
+  ASSERT_EQ(expected_size, rados_aio_get_return_value(my_completion3));
   ASSERT_EQ(0, memcmp(buf3, buf, sizeof(buf)));
+  if (is_crimson_cluster()) {
+    ASSERT_EQ(0, memcmp(buf3 + sizeof(buf), buf2, sizeof(buf2)));
+  }
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
   rados_aio_release(my_completion3);
