@@ -4,6 +4,7 @@ on:
   pull_request_target:
     branches:
       - main
+      - vampire
       - umbrella
       - tentacle
       - squid
