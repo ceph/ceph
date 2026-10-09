@@ -38,7 +38,6 @@
 #include <dirent.h>
 #include <optional>
 #include <random>
-#include <sstream>
 #include <string.h>
 
 using namespace std;
@@ -71,6 +70,13 @@ public:
   }
   void set_diff_mask(unsigned mask) {
     diff_mask = mask;
+  }
+  void remount() {
+    ceph_shutdown(cmount);
+    ceph_create(&cmount, NULL);
+    ceph_conf_read_file(cmount, NULL);
+    ceph_conf_parse_env(cmount, NULL);
+    ceph_assert(0 == ceph_mount(cmount, NULL));
   }
   int conf_get(const char *option, char *buf, size_t len) {
     return ceph_conf_get(cmount, option, buf, len);
@@ -128,13 +134,18 @@ public:
 
   bool wait_for_subtree_on_rank(const char* relpath, const char* rank) {
     const auto path = make_file_path(relpath);
+    const auto rank_id = std::stoi(rank);
     for (unsigned attempt = 0; attempt < 30; ++attempt) {
       auto subtrees = tell_rank(rank, "get subtrees");
       if (!subtrees.is_null()) {
-        std::ostringstream oss;
-        json_spirit::write(subtrees, oss);
-        if (oss.str().find(path) != std::string::npos) {
-          return true;
+        for (const auto& subtree : subtrees.get_array()) {
+          const auto& entry = subtree.get_obj();
+          if (entry.at("dir").get_obj().at("path").get_str() == path &&
+              entry.at("is_auth").get_bool() &&
+              entry.at("auth_first").get_int() == rank_id &&
+              entry.at("auth_second").get_int() == -2) {
+            return true;
+          }
         }
       }
       sleep(1);
@@ -473,8 +484,8 @@ public:
     const vector<pair<string, uint64_t>>& expected0)
   {
     vector<pair<string, uint64_t>> expected(expected0);
-    auto end = expected.end();
     auto check_fn = [&](const dirent* dire, uint64_t snapid) {
+      auto end = expected.end();
       pair<string, uint64_t> p = std::make_pair(dire->d_name, snapid);
       auto it = std::find(expected.begin(), end, p);
       if (it == end) {
@@ -2231,6 +2242,102 @@ TEST(LibCephFS, SnapDiffHardlinkReplicaInode)
   ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }
 
+// A deleted directory is encoded as soon as it is found, while a remote
+// dentry whose inode is not in the MDS cache ends the reply. If both have
+// the same name, the reply must not end between them: the next request
+// resumes after the last name and would never return the new entry.
+TEST(LibCephFS, SnapDiffDeletedDirReplacedByRemoteNotInCache)
+{
+  TestMount test_mount("snapdiff_remote_same_name");
+
+  ASSERT_EQ(0, test_mount.mkdir("d"));
+  ASSERT_EQ(0, test_mount.mkdir("other"));
+  ASSERT_EQ(0, test_mount.setxattr("d", "ceph.dir.pin", "0"));
+  // unrelated entries, so "n" is not alone in the dirfrag
+  for (const char* name : {"d/a", "d/b", "d/c", "d/x", "d/y", "d/z"}) {
+    ASSERT_LE(0, test_mount.write_full(name, name));
+  }
+  ASSERT_EQ(0, test_mount.mkdir("d/n"));
+  ASSERT_LE(0, test_mount.write_full("other/f", "data"));
+  ASSERT_TRUE(test_mount.wait_for_subtree_on_rank("d", "0"));
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  // replace the directory by a hardlink to a file in another directory
+  ASSERT_EQ(0, test_mount.rmdir("d/n"));
+  ASSERT_EQ(0, test_mount.link("other/f", "d/n"));
+  // new entries, so that the reply usually has entries before "n"
+  const int new_files = 8;
+  char path[PATH_MAX];
+  for (int i = 0; i < new_files; i++) {
+    snprintf(path, sizeof(path), "d/new%d", i);
+    ASSERT_LE(0, test_mount.write_full(path, path));
+  }
+  // don't let caps held on the new files add snapshotted dentries
+  test_mount.remount();
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  struct ceph_statx stx;
+  ASSERT_EQ(0, test_mount.statx("other/f", &stx, CEPH_STATX_INO, 0));
+  uint64_t snapid1;
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+
+  // Release the client's caps and drop the hardlinked inode from the MDS
+  // cache, so that the snapdiff of "d" finds the remote dentry unloaded.
+  auto in_mds_cache = [&](uint64_t ino) {
+    cmdmap_t cmdmap;
+    cmdmap["number"] = (int64_t)ino;
+    // there is no JSON output for an inode that is not in the cache
+    auto dump = test_mount.tell_rank0("dump inode", std::move(cmdmap));
+    return dump.type() == json_spirit::obj_type &&
+           dump.get_obj().count("ino") > 0;
+  };
+  auto drop_remote_inode = [&](bool load_deleted_dir) {
+    test_mount.remount();
+    bool dropped = false;
+    for (int attempt = 0; attempt < 10 && !dropped; ++attempt) {
+      if (attempt)
+        sleep(1);
+      ASSERT_FALSE(test_mount.tell_rank0("cache drop").is_null());
+      dropped = !in_mds_cache(stx.stx_ino);
+    }
+    ASSERT_TRUE(dropped) << "inode 0x" << std::hex << stx.stx_ino
+                         << " is still in the MDS cache";
+    if (load_deleted_dir) {
+      // The deleted directory is a remote dentry in the snapshot as well.
+      // Load its inode, so that the reply has entries before the hardlink
+      // and the remote dentry ends it in the middle of the group.
+      struct ceph_statx dir_stx;
+      auto path = test_mount.make_snap_path("snap1", "d/n");
+      ASSERT_EQ(0, test_mount.statx(path.c_str(), &dir_stx,
+                                    CEPH_STATX_INO, 0));
+      ASSERT_FALSE(in_mds_cache(stx.stx_ino));
+    }
+  };
+
+  vector<pair<string, uint64_t>> expected;
+  expected.emplace_back("n", snapid1);
+  expected.emplace_back("n", snapid2);
+  for (int i = 0; i < new_files; i++) {
+    expected.emplace_back("new" + stringify(i), snapid2);
+  }
+
+  for (bool load_deleted_dir : {false, true}) {
+    SCOPED_TRACE(load_deleted_dir ? "deleted dir in cache"
+                                  : "deleted dir not in cache");
+    ASSERT_NO_FATAL_FAILURE(drop_remote_inode(load_deleted_dir));
+    test_mount.verify_snap_diff(expected, "d", "snap1", "snap2");
+
+    ASSERT_NO_FATAL_FAILURE(drop_remote_inode(load_deleted_dir));
+    test_mount.verify_snap_diff(expected, "d", "snap2", "snap1");
+  }
+
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
 TEST(LibCephFS, SnapDiffNoChangeWithUnchangedHead)
 {
   TestMount test_mount;
@@ -2446,4 +2553,117 @@ TEST(LibCephFS, SnapDiffStatDelta) {
 
   test_mount.rmsnap("snap1");
   test_mount.rmsnap("snap2");
+}
+
+// Large xattrs and varying file counts force overflow at the last entry.
+TEST(LibCephFS, SnapDiffDeletedEntryAtFragEnd) {
+  TestMount test_mount("snapdiff_deleted_frag_end");
+
+  const int max_files = 24;
+  const string xattr_value(60000, 'x');
+  char path[PATH_MAX];
+  for (int n = 1; n <= max_files; n++) {
+    snprintf(path, sizeof(path), "d%d", n);
+    ASSERT_EQ(0, test_mount.mkdir(path));
+    for (int i = 0; i < n; i++) {
+      snprintf(path, sizeof(path), "d%d/f%d", n, i);
+      ASSERT_LE(0, test_mount.write_full(path, path));
+      ASSERT_EQ(0, test_mount.setxattr(path, "user.big", xattr_value.c_str()));
+    }
+  }
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  for (int n = 1; n <= max_files; n++) {
+    for (int i = 0; i < n; i++) {
+      snprintf(path, sizeof(path), "d%d/f%d", n, i);
+      ASSERT_EQ(0, test_mount.unlink(path));
+    }
+  }
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  uint64_t snapid1;
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+
+  for (int n = 1; n <= max_files; n++) {
+    vector<pair<string, uint64_t>> expected;
+    for (int i = 0; i < n; i++) {
+      expected.emplace_back("f" + stringify(i), snapid1);
+    }
+    snprintf(path, sizeof(path), "d%d", n);
+    SCOPED_TRACE(path);
+    test_mount.verify_snap_diff(expected, path, "snap1", "snap2");
+  }
+
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffCreatedEntryAtFragEnd) {
+  TestMount test_mount("snapdiff_created_frag_end");
+
+  const int max_files = 24;
+  const string xattr_value(60000, 'x');
+  char path[PATH_MAX];
+  for (int n = 1; n <= max_files; n++) {
+    snprintf(path, sizeof(path), "d%d", n);
+    ASSERT_EQ(0, test_mount.mkdir(path));
+  }
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+
+  for (int n = 1; n <= max_files; n++) {
+    for (int i = 0; i < n; i++) {
+      snprintf(path, sizeof(path), "d%d/f%d", n, i);
+      ASSERT_LE(0, test_mount.write_full(path, path));
+      ASSERT_EQ(0, test_mount.setxattr(path, "user.big", xattr_value.c_str()));
+    }
+  }
+  // Drop caps before snap2 to avoid COW adding another head dentry.
+  test_mount.remount();
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  uint64_t snapid1;
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+
+  for (int n = 1; n <= max_files; n++) {
+    vector<pair<string, uint64_t>> expected;
+    for (int i = 0; i < n; i++) {
+      expected.emplace_back("f" + stringify(i), snapid2);
+    }
+    snprintf(path, sizeof(path), "d%d", n);
+    SCOPED_TRACE(path);
+    test_mount.verify_snap_diff(expected, path, "snap1", "snap2");
+  }
+
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffRemoteDentryNotInCache) {
+  TestMount test_mount("snapdiff_remote_dentry");
+
+  ASSERT_EQ(0, test_mount.mkdir("primary"));
+  ASSERT_EQ(0, test_mount.mkdir("links"));
+  ASSERT_EQ(0, test_mount.setxattr("links", "ceph.dir.pin", "0"));
+  ASSERT_LE(0, test_mount.write_full("primary/file", "data"));
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+  ASSERT_EQ(0, test_mount.link("primary/file", "links/link"));
+  // Empty directories are not exported.
+  ASSERT_TRUE(test_mount.wait_for_subtree_on_rank("links", "0"));
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  test_mount.remount();
+  ASSERT_FALSE(test_mount.tell_rank0("cache drop").is_null());
+
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  vector<pair<string, uint64_t>> expected;
+  expected.emplace_back("link", snapid2);
+  test_mount.verify_snap_diff(expected, "links", "snap1", "snap2");
+
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }

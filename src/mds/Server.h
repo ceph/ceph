@@ -591,6 +591,7 @@ private:
     unsigned diff_mask,
     const bufferlist& dnbl,
     std::function<bool(CDentry*, CInode*, bool)> add_result_cb,
+    std::function<void(CDentry*)> stop_before_cb,
     bool *waiting = nullptr);
 
   MDSRank *mds;
