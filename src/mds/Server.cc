@@ -3521,8 +3521,9 @@ bool Server::check_access(const MDRequestRef& mdr, CInode *in, unsigned mask)
 
 /**
  * Block client requests from non-quarantine-aware clients when the target
- * inode is under quarantine. Adds a waiter on the subvolume root inode so
- * the request will be retried when quarantine is lifted.
+ * inode is under quarantine. Drops the request's locks and adds a waiter on
+ * the subvolume root inode so the request will be retried when quarantine
+ * is lifted.
  *
  * Returns true if the request was blocked (caller should return nullptr).
  */
@@ -3546,8 +3547,12 @@ bool Server::check_quarantine_block(const MDRequestRef& mdr, CInode *in)
       dout(10) << __func__ << " blocking request from old client "
                << mdr->get_client() << " on quarantined inode " << *in
                << " (subvol root " << subvol_ino << ")" << dendl;
+      // Drop the locks taken during path traversal (and auth pins) before
+      // waiting: they include snaplock rdlocks on the subvolume root, which
+      // the in-progress quarantine operation needs to xlock -- holding them
+      // here deadlocks quarantine enable. The request re-traverses on retry.
       subvol_in->add_waiter(CInode::WAIT_QUARANTINE,
-                            new C_MDS_RetryRequest(mdcache, mdr));
+                            CF_MDS_RetryRequestFactory(mdcache, mdr, true).build());
       return true;
     }
     snaprealm = snaprealm->parent;
