@@ -15377,7 +15377,7 @@ def test_bucket_logging_bucket_auth_type():
     assert _verify_records(body, src_bucket_name, 'REST.GET.OBJECT', [key], "Standard", 1)
     assert _verify_record_field(body, src_bucket_name, 'REST.GET.OBJECT', key, "Standard", "AuthType", "-")
 
-    #AuthType "QueryString" (presigned)
+    #AuthType "QueryString" (presigned SigV4)
     params = {'Bucket': src_bucket_name, 'Key': key}
     url = client.generate_presigned_url(ClientMethod='get_object', Params=params, ExpiresIn=100000, HttpMethod='GET')
 
@@ -15396,6 +15396,30 @@ def test_bucket_logging_bucket_auth_type():
     body = _get_body(response)
     assert _verify_records(body, src_bucket_name, 'REST.GET.OBJECT', [key], "Standard", 1)
     assert _verify_record_field(body, src_bucket_name, 'REST.GET.OBJECT', key, "Standard", "AuthType", "QueryString")
+
+    assert _verify_record_field(body, src_bucket_name, 'REST.GET.OBJECT', key, "Standard", "SigVersion", "SigV4")
+
+    #AuthType "QueryString" (presigned SigV2)
+    client_v2 = get_v2_client()
+    params = {'Bucket': src_bucket_name, 'Key': key}
+    url = client_v2.generate_presigned_url(ClientMethod='get_object', Params=params, ExpiresIn=100000, HttpMethod='GET')
+
+    res = requests.options(url, verify=get_config_ssl_verify()).__dict__
+    assert res['status_code'] == 400
+
+    res = requests.get(url, verify=get_config_ssl_verify()).__dict__
+    assert res['status_code'] == 200
+
+    _flush_logs(client, src_bucket_name)
+    response = client.list_objects_v2(Bucket=log_bucket_name)
+    log_keys = _get_keys(response)
+
+    log_key = log_keys[-1]
+    response = client.get_object(Bucket=log_bucket_name, Key=log_key)
+    body = _get_body(response)
+    assert _verify_records(body, src_bucket_name, 'REST.GET.OBJECT', [key], "Standard", 1)
+    assert _verify_record_field(body, src_bucket_name, 'REST.GET.OBJECT', key, "Standard", "AuthType", "QueryString")
+    assert _verify_record_field(body, src_bucket_name, 'REST.GET.OBJECT', key, "Standard", "SigVersion", "SigV2")
 
 
 def _bucket_logging_key_filter(log_type):
