@@ -61,6 +61,16 @@
   a few times in random workloads.  ``mds_dir_prefetch_backend_max`` (default 1)
   limits the number of concurrent background fetches.  This reduces latency in
   large directories while retaining cache warmth for hot directories.
+* cephadm: During ``ceph orch upgrade``, CephFS filesystems are now prepared
+  and restored one at a time during the MDS phase, so at most one filesystem
+  is offline (``fail_fs = true``) or degraded (scaled down to ``max_mds 1``)
+  at any moment, instead of all filesystems simultaneously. Total upgrade
+  duration is unchanged, as MDS daemons were already redeployed serially.
+  Preparing all targeted filesystems at once can be restored with
+  ``ceph config set mgr mgr/cephadm/upgrade_fs_one_at_a_time false``.
+  In both modes, only the filesystems whose MDS daemons are part of the
+  upgrade are prepared, and only filesystems failed by the upgrade itself
+  are made joinable again on completion.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
