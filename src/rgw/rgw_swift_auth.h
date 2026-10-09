@@ -84,6 +84,8 @@ public:
     return "rgw::auth::swift::TempURLEngine";
   }
 
+  static std::vector<std::string_view> get_supported_digest_algorithms();
+
   result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s, optional_yield y) const override;
 };
 
