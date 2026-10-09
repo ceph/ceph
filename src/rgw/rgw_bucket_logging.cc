@@ -550,9 +550,19 @@ int log_record(rgw::sal::Driver* driver,
   const auto tt = ceph::coarse_real_time::clock::to_time_t(s->time);
   std::tm t{};
   localtime_r(&tt, &t);
-  auto user_or_account = s->account_name;
+  // AWS S3 spec: log the assumed-role ARN for STS-credentialed requests.
+  std::string user_or_account;
+  if (s->auth.identity && s->auth.identity->get_identity_type() == TYPE_ROLE) {
+    if (auto caller_arn = s->auth.identity->get_caller_identity(); caller_arn) {
+      user_or_account = caller_arn->to_string();
+    }
+  }
   if (user_or_account.empty()) {
-    s->user->get_id().to_str(user_or_account);
+    if (s->account_name.empty()) {
+      s->user->get_id().to_str(user_or_account);
+    } else {
+      user_or_account = s->account_name;
+    }
   }
   auto fqdn = s->info.host;
   if (!s->info.domain.empty() && !fqdn.empty()) {
