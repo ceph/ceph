@@ -165,6 +165,18 @@ To enable a bucket quota for the account::
     radosgw-admin quota set --quota-scope=bucket --account-id={accountid} --max-objects=1000000
     radosgw-admin quota enable --quota-scope=bucket --account-id={accountid}
 
+Account Suspend
+---------------
+
+To suspend an account (block its users and roles, and mark account-owned
+buckets as suspended)::
+
+    radosgw-admin account suspend --account-id={accountid}
+
+To re-enable the account::
+
+    radosgw-admin account enable --account-id={accountid}
+
 Migrate an Existing User into an Account
 ----------------------------------------
 
@@ -173,7 +185,12 @@ An existing user can be adopted into an account with ``user modify``::
     radosgw-admin user modify --uid={userid} --account-id={accountid}
 
 .. note:: Ownership of all of the user's buckets will be transferred to
-   the account.
+   the account. Existing object ACLs may still name the pre-migration user
+   id as the object owner. Account members that rely on IAM (rather than
+   those ACLs) need object ownership updated as well. Run ``bucket chown``
+   after migration so object ACLs match the account::
+
+       radosgw-admin bucket chown --bucket={bucket} --account-id={accountid}
 
 .. note:: Account membership is permanent. Once added, users cannot be
    removed from their account.
