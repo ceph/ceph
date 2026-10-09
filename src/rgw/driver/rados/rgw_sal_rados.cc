@@ -4737,6 +4737,24 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   if (ret < 0)
     return ret;
 
+  if (obj_op.meta.canceled) {
+    // another write of the key won the race, and the completion is
+    // answered as success. the cancel removed the parts' index entries and
+    // the caller deletes the meta object, so nothing will name the parts
+    // again: send them to GC, as an abort would
+    cls_rgw_obj_chain chain;
+    store->getRados()->update_gc_chain(dpp, target_obj->get_obj(), manifest, &chain);
+    if (store->getRados()->get_gc() == nullptr) {
+      store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id(), y);
+    } else {
+      auto [r, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), y);
+      if (r < 0 && leftover_chain) {
+        ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << r << dendl;
+        store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id(), y);
+      }
+    }
+  }
+
   return ret;
 }
 
