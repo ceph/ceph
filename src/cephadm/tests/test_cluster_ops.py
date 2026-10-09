@@ -192,6 +192,50 @@ class TestDaemonOrdering:
         # All hosts should be included
         assert set(ordered) == set(host_daemon_map.keys())
 
+    def test_priority_uses_most_critical_daemon(self):
+        """A host is ranked by its most critical daemon, not its least."""
+        # Stopping the host stops the mon too, so a host running a mon must
+        # rank with the mon, whatever else happens to run beside it.
+        assert cluster_ops.get_daemon_type_priority(
+            ['node-exporter', 'mon']
+        ) == cluster_ops.get_daemon_type_priority(['mon'])
+
+    def test_order_hosts_by_role_not_by_ubiquitous_daemons(self):
+        """crash and node-exporter run everywhere and must not flatten the order."""
+        # cephadm places crash and node-exporter on every host by default, so
+        # ranking a host by its least critical daemon gives every host the same
+        # priority and loses the ordering entirely.
+        host_daemon_map = {
+            'mon-host': ['mon', 'osd', 'crash', 'node-exporter'],
+            'osd-host': ['osd', 'crash', 'node-exporter'],
+            'grafana-host': ['grafana', 'prometheus', 'node-exporter'],
+        }
+
+        ordered = cluster_ops.order_hosts_for_shutdown(host_daemon_map, None)
+
+        # Monitoring first, then plain OSD hosts, then the host holding a mon.
+        assert ordered == ['grafana-host', 'osd-host', 'mon-host']
+
+    def test_order_hosts_stops_mon_host_after_osd_host(self):
+        """The documented guarantee: core services are stopped last."""
+        host_daemon_map = {
+            'node-1': ['mon', 'mgr', 'osd'],  # admin
+            'node-2': ['mon', 'osd', 'rgw'],
+            'node-3': ['osd'],
+        }
+
+        ordered = cluster_ops.order_hosts_for_shutdown(host_daemon_map, 'node-1')
+
+        # node-3 carries only OSDs, node-2 carries a mon: node-3 goes first.
+        assert ordered.index('node-3') < ordered.index('node-2')
+        assert ordered[-1] == 'node-1'
+
+    def test_priority_of_unknown_daemon_types(self):
+        """Unrecognized daemons are stopped last rather than first."""
+        assert cluster_ops.get_daemon_type_priority(
+            ['not-a-real-daemon']
+        ) == len(cluster_ops.DAEMON_SHUTDOWN_ORDER)
+
 
 class TestRemoteSystemctl:
     """Tests for remote systemctl operations."""
