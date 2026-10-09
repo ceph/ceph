@@ -1,5 +1,5 @@
 from __future__ import print_function
-from typing import Any, Dict, Optional, List as _List
+from typing import Any, Dict, Optional, Set, List as _List
 import os
 import argparse
 import json
@@ -48,9 +48,48 @@ def _get_bluestore_info(devices: _List[str]) -> Dict[str, Any]:
     return result
 
 
+def bluestore_device_realpaths(report: Dict[str, Any]) -> Set[str]:
+    """Real paths of any block device paths referenced by a BlueStore raw report."""
+    paths: Set[str] = set()
+    for _uuid, details in report.items():
+        if not isinstance(details, dict):
+            continue
+        for key in ('device', 'device_db', 'device_wal'):
+            dev = details.get(key)
+            if not dev:
+                continue
+            try:
+                paths.add(os.path.realpath(dev))
+            except OSError:
+                paths.add(dev)
+    return paths
+
+
+def get_seastore_info(
+    devices: _List[str],
+    bluestore_realpaths: Set[str],
+) -> Dict[str, Any]:
+    """
+    SeaStore raw OSDs: on-disk SeaStore signature on each device from ``lsblk`` (no host tree).
+    """
+    result: Dict[str, Any] = {}
+    for device in devices:
+        try:
+            if os.path.realpath(device) in bluestore_realpaths:
+                continue
+        except OSError:
+            pass
+        row = disk.seastore_raw_device_report(device)
+        if not row:
+            continue
+        osd_uuid = row['osd_uuid']
+        result[osd_uuid] = row
+    return result
+
+
 class List(object):
 
-    help = 'list BlueStore OSDs on raw devices'
+    help = 'list BlueStore and SeaStore OSDs on raw devices'
 
     def __init__(self, argv: _List[str]) -> None:
         self.argv = argv
@@ -74,6 +113,10 @@ class List(object):
                 try:
                     if disk.has_bluestore_label(parent_device):
                         logger.warning(('ignoring child device {} whose parent {} is a BlueStore OSD.'.format(path, parent_device),
+                                        'device is likely a phantom Atari partition. device info: {}'.format(info_device)))
+                        continue
+                    if disk.has_seastore_label(parent_device):
+                        logger.warning(('ignoring child device {} whose parent {} is a SeaStore OSD.'.format(path, parent_device),
                                         'device is likely a phantom Atari partition. device info: {}'.format(info_device)))
                         continue
                 except OSError as e:
@@ -143,13 +186,14 @@ class List(object):
             # the child so as not to give a false negative.
             self.exclude_atari_partitions()
             self.exclude_lvm_osd_devices()
-
         else:
-            self.devices_to_scan = devices
+            self.devices_to_scan = list(devices)
 
-        result: Dict[str, Any] = {}
         logger.debug('inspecting devices: {}'.format(self.devices_to_scan))
-        result = _get_bluestore_info(self.devices_to_scan)
+        bluestore_report = _get_bluestore_info(self.devices_to_scan)
+        bluestore_paths = bluestore_device_realpaths(bluestore_report)
+        seastore_report = get_seastore_info(self.devices_to_scan, bluestore_paths)
+        result: Dict[str, Any] = {**bluestore_report, **seastore_report}
 
         return result
 
@@ -168,7 +212,7 @@ class List(object):
         List OSDs on raw devices with raw device labels (usually the first
         block of the device).
 
-        Full listing of all identifiable (currently, BlueStore) OSDs
+        Full listing of all identifiable BlueStore and SeaStore OSDs
         on raw devices:
 
             ceph-volume raw list
