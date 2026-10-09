@@ -4508,6 +4508,7 @@ options:
   flags:
   - runtime
   with_legacy: true
+
 - name: rgw_gcors_allow_origins
   type: str
   level: advanced
@@ -4532,3 +4533,14 @@ options:
   desc: When not empty, this value is returned as a response header Access-Control-Expose-Headers.
   services:
   - rgw
+
+- name: rgw_copious_policy_logging
+  type: bool
+  level: advanced
+  desc: Log the details of each policy evaluation in extreme verbosity
+  default: false
+  services:
+  - rgw
+  flags:
+  - runtime
+  with_legacy: true
