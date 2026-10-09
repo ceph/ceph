@@ -928,6 +928,13 @@ add_executable(unittest_ceph_crypto
 add_ceph_unittest(unittest_ceph_crypto)
 target_link_libraries(unittest_ceph_crypto global)
 
+# unittest_ceph_crypto_fips: flips the process-global fips default
+# property, so it gets a process of its own
+add_executable(unittest_ceph_crypto_fips
+  ceph_crypto_fips.cc)
+add_ceph_unittest(unittest_ceph_crypto_fips)
+target_link_libraries(unittest_ceph_crypto_fips ceph-common)
+
 # unittest_utf8
 add_executable(unittest_utf8
   utf8.cc)
