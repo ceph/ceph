@@ -103,8 +103,8 @@ functionality.
 Supporting stretch EC pools will require changes to several CLI commands. The design 
 document will focus on just the changes that will be made to the pool create CLI 
 to give an idea of how the new CLI will work. Similar changes will be made to the 
-CLIs that allow modification of a pool. It also expected that changes will be made 
-to the CLIs that control stretch mode.
+CLIs that allow modification of a pool. Section 2.3 describes the pool creation
+defaults and the changes to the CLIs that control stretch mode.
 
 
 
@@ -195,16 +195,14 @@ These are the primary parameters required for standard deployments.
 
 **--num_zones**
   - *Definition*: For a stretched cluster configuration defines the number of zones, each which store a full replica of the pool. (EC or Replica)
-  - *Default Value*: ``1``
+  - *Default Value*: ``osd_pool_default_num_zones`` (``1``; Section 2.3)
   - *Behavior*: Setting this to >1 creates a stretched pool.
      A non-stretched pool achieves redundancy across OSDs.  A stretched pool creates redundancy
      across ``num_zones``.
   - *Pool Size*: For an EC pool, the resulting pool ``size`` is ``num_zones × (k + m)``. For a
     replicated pool created with ``num_zones`` greater than 1 and without ``--size``, it is
-    ``num_zones × replica``, with ``--replica`` defaulting to
-    ``osd_pool_stretch_default_replica`` (2), so 4 for 2 zones. In global stretch mode
-    (``ceph mon enable_stretch_mode``) a replicated pool's size is the number of zones ×
-    ``mon_global_stretch_pool_replica``, and ``--size`` is refused.
+    ``num_zones × replica``, with ``--replica`` defaulting to ``osd_pool_default_replica``
+    (Section 2.3.2).
 
 
 2.1.4 Advanced Parameters
@@ -217,7 +215,7 @@ For a replicated pool, ``--root``, ``--zone_failure_domain``, ``--osd_failure_do
 
 **--zone_failure_domain**
   - *Definition*: The CRUSH bucket type over which zone-redundancy is achieved.
-  - *Default Value*: ``datacenter``
+  - *Default Value*: ``osd_pool_default_zone_failure_domain`` (``datacenter``; Section 2.3.2)
   - *Purpose*: This is the CRUSH bucket type that defines a zone.
   - *Note*: Mutually exclusive with ``--rule``
 
@@ -252,13 +250,15 @@ For a replicated pool, ``--root``, ``--zone_failure_domain``, ``--osd_failure_do
 **--erasure_code_profile**
   - *Definition*: An existing EC profile to use, instead of one generated from ``--k`` and ``--m``.
   - *Note*: Can be used with any ``--num_zones``, multi-zone configurations included. This is
-    permanent, not a transitional measure. Mutually exclusive with ``--k``/``--m`` and with
-    ``--root``, ``--zone_failure_domain``, ``--osd_failure_domain`` and ``--class``. See
-    Section 2.1.5.
+    permanent, not a transitional measure. A profile defines ``k``, ``m``, the plugin and its
+    keys, and the CRUSH options (its ``crush-*`` keys), so the parameters it defines cannot be
+    given again: ``--k``, ``--m``, ``--root``, ``--zone_failure_domain``,
+    ``--osd_failure_domain`` and ``--class`` are refused with it rather than overriding the
+    profile, and their defaults (Section 2.3.2) are not applied. See Section 2.1.5.
 
 **--replica**
   - *Definition*: For replicated pools, the number of replicas within each zone. (Replica only)
-  - *Default Value*: ``osd_pool_stretch_default_replica`` (2)
+  - *Default Value*: ``osd_pool_default_replica`` (3; Section 2.3.2)
 
 .. note::
 
@@ -319,9 +319,8 @@ An erasure coded pool takes its profile from one of three sources:
   not exist (see *Generated profiles* below).
 * **Named** (``--erasure_code_profile <name>`` or the positional equivalent): an existing
   profile, normally created with ``ceph osd erasure-code-profile set``. The command does not
-  create the profile and does not check it when it is selected. If it does not exist, the
-  command fails with "cannot determine the erasure code plugin because there is no 'plugin'
-  entry in the erasure_code_profile {}".
+  create the profile. If it does not exist, the command fails with "erasure code profile
+  '<name>' does not exist".
 * **Default** (neither): the ``default`` profile. If ``default`` does not exist, for example
   after ``ceph osd erasure-code-profile rm default``, it is created from
   ``osd_pool_default_erasure_code_profile`` as written, without plugin normalization.
@@ -331,11 +330,22 @@ A profile from any of these sources can be used with ``--num_zones`` greater tha
 stays supported: multi-zone pools do not have to be created from ``--k`` and ``--m``. The
 profile's CRUSH keys and ``num_zones`` build the pool's rule (*CRUSH rule* below).
 
+**Profile reuse** (planned): EC still needs a profile for every pool, but
+``ceph osd pool create`` creates as few profiles as it can. A pool that does not name a profile
+uses an existing profile whose contents equal what it needs (``--k``, ``--m`` and the CRUSH
+options applied to ``osd_pool_default_erasure_code_profile``), whatever that profile is
+called. A new profile is generated only when none matches. A pool that gives neither
+``--k``/``--m`` nor a profile then follows the current ``osd_pool_default_erasure_code_profile``,
+rather than the ``default`` profile that was created from it once. The rules below describe
+today's behaviour.
+
 **Parameter combinations**
 
-For an erasure pool, ``ceph osd pool create`` rejects these with EINVAL:
+A named profile defines ``k``, ``m`` and the CRUSH options, so none of them can be given with
+``--erasure_code_profile``. For an erasure pool, ``ceph osd pool create`` rejects these with
+EINVAL:
 
-* ``--erasure_code_profile`` with ``--k`` and ``--m``: "cannot specify both
+* ``--erasure_code_profile`` with ``--k`` or ``--m``: "cannot specify both
   erasure_code_profile and k/m parameters".
 * Only one of ``--k`` and ``--m``: "erasure_code_profile requires both k and m".
 * ``--erasure_code_profile`` with any of ``--root``, ``--zone_failure_domain``,
@@ -465,14 +475,13 @@ rule from the profile's keys alone.
   the generated name created in advance. With neither ``--k``/``--m`` nor
   ``--erasure_code_profile``, it uses the ``default`` profile and, unlike a single-zone pool, a
   rule of its own named after the pool.
-* This FastEC check at creation is the only release check. The OSD feature bit of Section 15
-  is not implemented.
+* This FastEC check at creation is the only release check today. Section 15 gates
+  ``num_zones`` greater than 1 on ``require_osd_release``, which is not implemented yet.
 
 **num_zones is set per pool**
 
-``num_zones`` is set on every pool, at creation with ``--num_zones`` (default 2 in global
-stretch mode, otherwise ``osd_pool_default_num_zones``, 1), and is never part of an erasure code
-profile.
+``num_zones`` is set on every pool, at creation with ``--num_zones`` (default
+``osd_pool_default_num_zones``, Section 2.3.2), and is never part of an erasure code profile.
 ``ceph osd pool get <pool> num_zones`` shows it, and ``ceph osd pool set <pool> num_zones <n>``
 changes it (Section 13.2). A ``num_zones`` key set in a profile with
 ``ceph osd erasure-code-profile set`` is ignored.
@@ -480,8 +489,9 @@ changes it (Section 13.2). A ``num_zones`` key set in a profile with
 **Changes after creation**
 
 * ``ceph osd pool set <pool> size`` is refused for EC pools ("can not change the size of an
-  erasure-coded pool"). ``ceph mon disable_stretch_mode`` is the exception: it resets every
-  pool, EC pools included, to ``osd_pool_default_size``.
+  erasure-coded pool"). An EC pool's ``size`` changes only with its ``num_zones`` (Section
+  13.2), which ``ceph mon enable_stretch_mode`` and ``disable_stretch_mode`` also change
+  (Section 2.3.4).
 * ``ceph osd pool stretch set`` and ``unset`` are refused while stretch mode is enabled
   (Section 11.4.1).
 * A pool's profile cannot be replaced. ``erasure_code_profile`` can be read with
@@ -520,7 +530,7 @@ Only a pool deletion removes a profile automatically. A profile stays when:
   ``<name>.<id>.DELETED``, and the profile and the rule both stay;
 * ``ceph osd pool create`` fails after the generated profile was committed, for example on a
   CRUSH topology error, a ``--rule`` that does not exist, stretch mode validation, the FastEC
-  check, the PG limit or global stretch mode. The profile stays, and so does the rule named after the pool if the failure came
+  check or the PG limit. The profile stays, and so does the rule named after the pool if the failure came
   after the rule was created. A retry with the same ``k``, ``m`` and CRUSH options reuses both.
   A retry with different CRUSH options fails until the profile is removed. A retry with a
   different ``k`` or ``m`` generates a new profile but reuses the leftover rule without checking
@@ -554,8 +564,7 @@ same epoch as the pool does not affect PG removal.
 In earlier releases a profile created with ``ceph osd erasure-code-profile set`` remained until
 ``ceph osd erasure-code-profile rm`` removed it, and could be used again for later pools. Now it
 is deleted with the last pool that uses it. Creating a pool with a deleted profile fails with
-"cannot determine the erasure code plugin because there is no 'plugin' entry in the
-erasure_code_profile {}". Scripts and tests that set a profile once and reuse it after deleting
+"erasure code profile '<name>' does not exist". Scripts and tests that set a profile once and reuse it after deleting
 its pools must set it again before each reuse. Scripts that run
 ``ceph osd erasure-code-profile rm`` after deleting the pool keep working, because removing a
 missing profile succeeds, but the ``rm`` no longer does anything.
@@ -606,6 +615,337 @@ Create an EC pool where the system automatically scales the PG count but enforce
 .. code-block:: bash
 
    ceph osd pool create bulk_ec --pool_type erasure --k 6 --m 3 --autoscale_mode on --pg_num_min 128 --bulk
+
+2.3 Pool Creation Defaults and Global Stretch Mode Commands
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Global stretch mode is refactored. ``ceph mon enable_stretch_mode`` and
+``ceph mon disable_stretch_mode`` stay. Instead of switching a separate mode with its own
+flag, options and pool restrictions, they change the pool creation defaults and the existing
+pools. Whether a pool is stretched is decided only by its own
+``num_zones``, and every ``ceph osd pool create`` parameter takes its default from a
+configuration option. As a result:
+
+* ``enable_stretch_mode`` and ``disable_stretch_mode`` work with replicated and EC pools,
+  including metadata pools such as ``.mgr``;
+* clusters that use global stretch mode can upgrade and then create local pools, stretched EC
+  pools or both;
+* a preferred pool configuration can be set in advance, so creating a pool needs only its name.
+
+2.3.1 Global Stretch Mode Before the Refactor
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+* Only replicated pools with two zones: EC pool creation is refused and every new pool must
+  have ``num_zones`` 2. On main, enabling also refuses existing EC pools. stretchy-C accepts
+  them, but only if the one rule passed is an EC rule, so a cluster with both replicated and EC
+  pools cannot be enabled.
+* Pool settings are fixed. The replica count is ``mon_global_stretch_pool_replica``, and the
+  zone failure domain is the stretch bucket type. ``--size``, or a ``--replica`` or
+  ``--min_size`` other than the global value, is refused at creation, and so are later changes
+  to ``size``, ``min_size``, ``replica`` or ``num_zones`` and ``ceph osd pool stretch unset``.
+* Enabling gives every existing pool the CRUSH rule passed to the command. A new pool without
+  ``--rule`` gets a generated rule on stretchy-C. On main it takes the rule that most stretch
+  pools use, so once they are all deleted pool creation fails with "No suitable CRUSH rule
+  exists".
+* ``global_stretch_mode_enabled`` in the MonMap records the mode. Earlier releases record it as
+  ``stretch_mode_enabled`` in the MonMap and the OSDMap.
+* ``ceph mon disable_stretch_mode`` resets every pool, EC pools included, to
+  ``osd_pool_default_size`` and to the given rule, else the default replicated rule.
+* Halving a replicated pool's ``min_size`` in degraded stretch mode, and restoring it from
+  ``mon_stretch_pool_min_size``, was removed when ``min_size`` became per zone (Section 11.2).
+
+2.3.2 Configuration Options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Every ``ceph osd pool create`` parameter takes its default from a generic
+``osd_pool_default_*`` option. These stretch-specific options are dropped or renamed:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Change
+   * - ``osd_pool_stretch_default_replica``
+     - Dropped
+   * - ``mon_global_stretch_pool_replica``
+     - Dropped
+   * - ``mon_stretch_pool_size``
+     - Dropped
+   * - ``mon_stretch_pool_min_size``
+     - Dropped
+   * - ``default_crush_zone_failure_domain``
+     - Renamed to ``osd_pool_default_zone_failure_domain``
+   * - ``osd_pool_default_size``
+     - Legacy: still accepted, as the old name of ``osd_pool_default_replica``
+
+Notes:
+
+* ``osd_pool_default_replica`` (3) is the number of copies per zone, the default of
+  ``--replica``. It replaces ``osd_pool_default_size``, which becomes its legacy name, and the
+  dropped replica and size options. A replicated pool's ``size`` is ``num_zones`` × replicas,
+  and a pool still reports that total: with ``osd_pool_default_replica`` 3 and ``num_zones`` 2,
+  ``ceph osd pool get <pool> size`` reports 6. For a single-zone pool the replica count is the
+  ``size``, as before. Without ``ceph mon enable_stretch_mode`` (Section 2.3.4), a two-zone
+  replicated pool therefore defaults to 3 replicas per zone (``size`` 6) instead of 2.
+* Giving the old option a per-zone meaning is safe for existing stretch clusters. On main,
+  stretch mode does not use ``osd_pool_default_size`` while it is enabled, because pools get
+  ``mon_stretch_pool_size`` instead. It is read only on enabling (pools must start at it) and
+  disabling (pools return to it).
+* The user documentation that mentions ``osd_pool_default_size`` needs updating to match. That
+  covers its reference entry (``doc/rados/configuration/pool-pg-config-ref.rst``) and pages
+  such as ``doc/rados/operations/stretch-mode.rst``, ``doc/rados/operations/health-checks.rst``
+  and ``doc/rados/troubleshooting/troubleshooting-pg.rst``.
+* ``osd_pool_default_min_size`` gives ``min_size`` per zone (Section 11.2) and replaces
+  ``mon_stretch_pool_min_size``.
+* Global stretch mode no longer overrides ``osd_pool_default_num_zones`` (1) with 2, or
+  ``osd_pool_default_zone_failure_domain`` (``datacenter``) with the stretch bucket type.
+* New options ``osd_pool_default_osd_failure_domain`` (``host``), ``osd_pool_default_root``
+  (``default``) and ``osd_pool_default_class`` (any class) replace defaults that are built in
+  today. EC pools take the root and OSD failure domain from their profile (Section 2.1.5).
+* ``osd_pool_default_crush_rule`` (set with ``--rule``, Section 2.3.3) is used by a pool that
+  gives no ``--rule``, if the rule suits the pool's type. Otherwise the pool gets a generated
+  rule. Today it is used only by single-zone replicated pools.
+* Code that reads ``osd_pool_default_size`` as a pool's total size must change to
+  ``num_zones`` × ``osd_pool_default_replica``: the ``TOO_FEW_OSDS`` health check (``PGMap``), the
+  mgr's check for enough OSDs (``mgr_module.py``), the rook module's replica count and
+  ``OSDMap::build_simple``.
+* ``ceph osd pool set <pool> num_zones 2`` uses the same defaults (Section 13.2).
+* What an upgrade does with the dropped options is in Section 2.3.5.
+
+2.3.3 Setting the Defaults
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``ceph osd pool default`` sets and shows the pool creation defaults of Section 2.3.2. It
+never changes an existing pool. Every value always has a default, and the defaults are kept
+consistent with each other, so there is nothing to clear: ``set`` replaces a value, including
+with its built-in value.
+
+.. code-block:: text
+
+   ceph osd pool default set
+        [--pool_type <replicated|erasure>]
+        [--num_zones <num_zones>]
+        [--rule <rule> |
+         [--zone_failure_domain <type>] [--osd_failure_domain <type>]
+         [--root <crush_root>] [--class <device_class>]]
+        [--replica <replica> | --size <size>] [--min_size <min_size>]
+        [--erasure_code_profile <profile> | [--k <k>] [--m <m>]]
+        [--pg_num <pg_num>] [--pgp_num <pgp_num>]
+        [--autoscale_mode <on|off|warn>] [--bulk <true|false>] [--crimson <true|false>]
+
+   ceph osd pool default get
+
+* ``set`` writes each given parameter to ``osd_pool_default_<parameter>`` in the ``global``
+  section of the configuration database, with these exceptions: ``--pool_type`` sets
+  ``osd_pool_default_type``, ``--size`` sets ``osd_pool_default_replica`` (see below),
+  ``--autoscale_mode`` sets ``osd_pool_default_pg_autoscale_mode``, ``--bulk`` sets
+  ``osd_pool_default_flag_bulk``, ``--rule`` sets ``osd_pool_default_crush_rule``, ``--k``
+  and ``--m`` set ``k`` and ``m`` in
+  ``osd_pool_default_erasure_code_profile``, and ``--erasure_code_profile`` copies the keys of
+  an existing profile into ``osd_pool_default_erasure_code_profile``. That option is kept as
+  today; because it holds a copy, the default does not depend on the named profile still
+  existing. As with ``ceph osd pool create``, ``--erasure_code_profile`` is refused together
+  with ``--k``, ``--m`` or a CRUSH option the profile defines. The three write the same option,
+  so the stored defaults cannot disagree. ``--rule`` is likewise refused together with
+  ``--zone_failure_domain``, ``--osd_failure_domain``, ``--root`` or ``--class``. While a
+  default rule is set, pools that use it ignore the CRUSH option defaults. ``--rule none``
+  returns to generated rules.
+* ``set`` makes the checks that ``ceph osd pool create`` would make with the resulting
+  defaults, for a pool of the default type and for each pool type whose own parameters it
+  is given, so a default that would make pool creation fail is refused. For example,
+  ``--num_zones`` must be at least 1, and 2 needs a cluster that can be stretched: exactly
+  two buckets of the zone failure domain type, monitors in both and one tiebreaker monitor
+  outside them (Section 11.1). ``--zone_failure_domain`` must be an existing CRUSH type.
+  ``--replica 1`` or ``--size 1`` needs ``mon_allow_pool_size_one`` and
+  ``--yes-i-really-mean-it``.
+  ``--crimson`` needs crimson to be allowed on the cluster (``ceph osd set-allow-crimson``).
+  A crimson pool's autoscale mode is ``off`` unless one is given. Boolean parameters are given
+  as ``--bulk`` or ``--bulk=false``.
+* ``set`` also fails if a value it writes would not take effect on the monitors, because a
+  ``mon``-section value in the configuration database or a monitor's local configuration file
+  overrides it. If such an override appears later, a health warning reports it (name to be
+  decided, for example ``POOL_DEFAULT_OVERRIDDEN``).
+* If any check fails, nothing is written. Parameters that are not given are left as they are.
+* ``get`` shows every default that ``ceph osd pool create`` would use now, and where each
+  value comes from, with ``-f json`` for machine-readable output. Ceph's ``get`` commands are
+  not consistent. ``ceph osd pool get`` needs a variable or ``all``, ``ceph config get`` takes
+  an optional key, and ``ceph fs get`` and ``ceph osd erasure-code-profile get`` show
+  everything. This command shows everything.
+
+``--size`` is a legacy parameter, kept because scripts and other projects use ``--size`` and
+``osd_pool_default_size``. It sets ``osd_pool_default_replica``, whose legacy name is
+``osd_pool_default_size`` (Section 2.3.2), so it means the total number of copies only for a
+single-zone pool. ``--size`` is therefore refused together with ``--replica``, and with a
+``num_zones``, given or default, greater than 1.
+
+``set`` leaves out these ``ceph osd pool create`` parameters:
+
+* ``<pool_name>``, ``--expected_num_objects``, ``--pg_num_min``, ``--pg_num_max``,
+  ``--target_size_bytes`` and ``--target_size_ratio`` describe one pool: its name, its
+  expected content and its autoscaler bounds. They are not cluster-wide preferences.
+* ``--force_pg_limit`` and ``--yes_i_really_mean_it`` override a check for one command. They
+  are not settings.
+
+Setting ``--num_zones 1`` makes future pools single-zone and leaves the ``num_zones`` of
+existing pools alone. ``set`` never enables or disables stretch mode, which follows only from
+the pools (Section 2.3.4).
+
+**How the defaults are used.** ``ceph osd pool create`` takes every parameter it is not given
+from these defaults. Every default has a sensible built-in value (3 replicas, one zone, the
+``k`` and ``m`` of ``osd_pool_default_erasure_code_profile``, and so on), so a cluster needs
+no ``set`` before its first pool create. Users can still change the options directly with
+``ceph config set`` and ``ceph config rm``, which skips the checks of ``set``; this is not
+blocked. Pool create therefore checks the defaults it uses as it checks given parameters. It
+refuses an inconsistent combination with an error that names the default options at fault.
+
+Pool create and ``set`` build and check the parameters in the same four steps: load the
+defaults; use the erasure code profile, the named one or the default; apply the command line;
+check the values that result, using the cluster where a check needs it (CRUSH types, roots and
+classes, plugins, whether the cluster can be stretched). Which parameters may be given
+together is checked on the command line itself, and differs only where pool create describes
+one pool and ``set`` the defaults of every pool: for example ``--k`` alone changes the default
+profile, but a pool needs both ``--k`` and ``--m``. A ``min_size`` default is not checked,
+because pool create limits it to the pool's size.
+
+.. note::
+
+   **Review required** for the shape of ``ceph osd pool default``:
+
+   * Ceph ``set`` commands usually take one variable and value (``ceph osd pool set <pool>
+     <var> <val>``, ``ceph config set <who> <name> <value>``) or ``key=value`` pairs
+     (``ceph osd erasure-code-profile set``). This command takes the flags of
+     ``ceph osd pool create`` instead, a departure from Ceph convention.
+   * The parameter names follow ``ceph osd pool create`` (``--replica``, ``--rule``,
+     ``--autoscale_mode``) rather than ``ceph osd pool set`` (``size``, ``crush_rule``,
+     ``pg_autoscale_mode``). This choice may be reversed.
+   * The command duplicates ``ceph config set`` and ``get`` for these options. Its value is
+     the self-consistency checks and the pool create syntax.
+
+2.3.4 Enabling and Disabling Stretch Mode
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``ceph mon enable_stretch_mode [<tiebreaker_mon>] <new_crush_rule> <dividing_bucket>`` and
+``ceph mon disable_stretch_mode [<crush_rule>] [--yes-i-really-mean-it]`` keep their command
+syntax. They change every existing pool, metadata pools such as ``.mgr`` included.
+``enable_stretch_mode`` sets a replicated pool to ``num_zones`` 2 and 2 replicas per zone, and
+an EC pool to ``num_zones`` 2 with no other configuration changed. ``disable_stretch_mode``
+sets every pool to ``num_zones`` 1, and a replicated pool to 3 replicas: it sets
+``osd_pool_default_replica`` to 3, the built-in default, whatever it was before
+``enable_stretch_mode``. Each pool is changed
+as ``ceph osd pool set <pool> num_zones`` changes it (Section 13.2), which also enables or
+disables stretch mode (Section 11.4.2). The replica counts come from ``osd_pool_default_replica``,
+which each command sets first (2 on enable, 3 on disable; table below). A legacy EC pool can
+never be stretched, so ``enable_stretch_mode`` refuses to run, and changes nothing, if any
+legacy EC pool exists. Converting such a pool to FastEC is a manual step (Section 13.2). As
+on main, ``disable_stretch_mode`` is refused in recovery stretch mode. Run
+``ceph osd force_healthy_stretch_mode`` first.
+
+Nothing has to be prepared with ``ceph osd pool default`` before ``enable_stretch_mode``.
+Every default has a sensible built-in value (Section 2.3.3). ``enable_stretch_mode`` changes
+only the stretch defaults in the table below: replicas per zone to 2, ``num_zones`` to 2 and
+the zone failure domain to ``dividing_bucket``. Every other default keeps its value. It
+stretches the existing EC pools too, with rules generated for them; the only prerequisite for
+an EC pool is FastEC. The default pool configuration that results must pass the same checks
+as ``ceph osd pool default set``, so that the next ``ceph osd pool create`` works. If it
+would not pass, ``enable_stretch_mode`` is refused and changes nothing.
+
+Differences from ``enable_stretch_mode`` and ``disable_stretch_mode`` on main:
+
+* ``enable_stretch_mode`` can be run again. Main refuses it while stretch mode is enabled
+  ("stretch mode is already engaged"). It now sets the defaults again and stretches the pools
+  that are not stretched yet.
+* ``enable_stretch_mode`` accepts replicated pools of any size. Main refuses unless every
+  replicated pool has the default ``size`` and ``min_size``. Every replicated pool now ends
+  with 2 replicas per zone: a local pool of size 4 or 1 becomes 2 × 2, and a two-zone pool
+  with 3 replicas per zone drops to 2.
+* ``enable_stretch_mode`` stretches EC pools, which main refuses. This is intended: each EC
+  pool's raw usage doubles (``num_zones × (k + m)`` shards), and every changed pool
+  backfills.
+* While the defaults are stretched, a replicated pool created with ``--num_zones 1`` also
+  gets ``osd_pool_default_replica`` (2) replicas, where it got 3 before.
+
+They also change these pool creation defaults:
+
+.. list-table::
+   :header-rows: 1
+
+   * -
+     - ``enable_stretch_mode``
+     - ``disable_stretch_mode``
+   * - ``osd_pool_default_num_zones``
+     - 2
+     - 1
+   * - ``osd_pool_default_replica`` (replicas per zone)
+     - 2
+     - 3
+   * - ``osd_pool_default_zone_failure_domain``
+     - The ``dividing_bucket`` argument
+     - Unchanged
+
+.. warning::
+
+   **Major open issue**: one replica default serves both stretched and local pools. Setting
+   ``osd_pool_default_replica`` to 2 gives local pools 2 replicas while stretch mode is
+   enabled. Separate defaults for stretched and local pools may be needed after all (Section
+   2.3.6).
+
+The arguments are used as follows:
+
+* ``dividing_bucket`` is the CRUSH bucket type that splits the cluster into its two zones, for
+  example ``datacenter``. It becomes the default zone failure domain.
+* ``tiebreaker_mon`` is a legacy argument. Without it, the monitors pick the one monitor
+  outside both zones (Section 11.4.2). It is still accepted, and used as today, so that
+  existing callers keep working and a cluster with more than one monitor outside the zones
+  can still name its tiebreaker.
+* ``new_crush_rule`` is given to every replicated pool that ``enable_stretch_mode`` changes,
+  and ``crush_rule``, if given, to every replicated pool that ``disable_stretch_mode`` changes,
+  as ``--crush_rule`` would be (Section 13.2); see the warning below. They are checked as
+  today: ``new_crush_rule`` must be a replicated rule with a ``take`` step, stretched across
+  the ``dividing_bucket`` type and covering exactly two zones, and ``crush_rule`` must be a
+  replicated rule that differs from each pool's current rule. EC pools get their generated
+  rules. ``ceph osd pool set <pool> crush_rule`` changes an EC pool's rule afterwards.
+
+.. warning::
+
+   **Review required**: ``new_crush_rule`` and ``crush_rule`` apply to replicated pools only.
+   Today ``enable_stretch_mode`` gives the rule to every pool, and ``disable_stretch_mode``
+   gives every pool its ``crush_rule`` or the default replicated rule. After this change EC
+   pools ignore these arguments and get their own rules.
+
+``enable_stretch_mode`` and ``disable_stretch_mode`` keep no state. Afterwards each pool can be
+changed on its own, and local and stretched pools, replicated or EC, can be mixed. For a
+mixture, setting ``num_zones`` to 2 on the pools that need it and giving every parameter when
+creating new pools achieves the same without changing the defaults.
+
+2.3.5 Upgrade
+^^^^^^^^^^^^^
+
+Section 15 describes the upgrade and its commit, when ``require_osd_release`` is raised. At the
+commit the pool creation defaults that were in effect are kept:
+
+* Released versions record global stretch mode as ``stretch_mode_enabled`` in the MonMap and
+  the OSDMap; it is not a configuration option. If it is enabled, ``osd_pool_default_num_zones``
+  is set to 2 and ``osd_pool_default_zone_failure_domain`` to the type of the OSDMap's
+  ``stretch_mode_bucket``. Stretch mode itself stays enabled.
+* In global stretch mode, half of ``mon_stretch_pool_size`` (2 by default) goes to
+  ``osd_pool_default_replica``. ``mon_stretch_pool_min_size`` is ignored, since ``min_size``
+  defaults per zone.
+* ``osd_pool_stretch_default_replica``, ``mon_global_stretch_pool_replica`` and
+  ``default_crush_zone_failure_domain`` exist only on stretchy-C. They were never released,
+  so there is nothing to convert.
+* After the conversion, the readers of ``osd_pool_default_size`` listed in Section 2.3.2 see
+  the per-zone value. ``TOO_FEW_OSDS`` only moves a health warning, the mgr's check matters
+  only before ``.mgr`` exists, and ``OSDMap::build_simple`` runs only when a cluster is
+  created. The rook module is the one functional risk: it passes ``osd_pool_default_size`` to
+  Rook as a pool's replica count, so it must change in the same release.
+
+2.3.6 Open Questions
+^^^^^^^^^^^^^^^^^^^^
+
+* **One replica default for stretched and local pools** (major). ``osd_pool_default_replica``
+  counts replicas per zone for every pool, so the stretched value 2 also applies to local
+  pools while stretch mode is enabled. Separate defaults for stretched and local pools would
+  avoid this, at the cost of a stretch-specific option.
 
 
 1. Approaches Considered but Rejected
@@ -1617,17 +1957,13 @@ stretch cluster pattern as closely as possible, with EC-specific adaptations.
 11.1 Pool Lifecycle
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. note::
-   **CLI Under Review**: We are reviewing the CLIs for enabling stretch mode and 
-   setting stretch mode on a pool. We aim to either get rid of it completely 
-   (i.e., infer stretch mode automatically when you create a pool with ``num_zones > 1``) 
-   or just have an enable/disable stretch mode CLI with no arguments. We also 
-   will ensure the new CLI works with both stretch-EC and stretch-replica pools for R1.
+A pool with ``num_zones > 1``, replicated or EC, operates in stretch mode. Stretch mode is
+enabled when such a pool is created or a pool's ``num_zones`` is set to 2. Global stretch
+mode (``ceph mon enable_stretch_mode`` and ``disable_stretch_mode``) changes the pool creation
+defaults and every existing pool (Section 2.3).
 
-A replicated EC pool implicitly operates in stretch mode. Creation and configuration will be
-simplified based on the final CLI iteration as noted above.
-
-- **CRUSH rule**: Set to the stretch CRUSH rule when stretch mode is active.
+- **CRUSH rule**: A stretch rule generated for the pool's ``num_zones``, unless ``--rule``
+  gives one.
 - **min_size**: Set at pool creation; never automatically changed by the
   monitor during stretch mode state transitions. Users may still adjust it
   manually via ``ceph osd pool set <pool> min_size <value>``.
@@ -1643,12 +1979,16 @@ simplified based on the final CLI iteration as noted above.
 
    * - Requirement
      - Reason
-   * - All OSDs have the ``num_zones > 1`` feature bit
+   * - The upgrade is committed (``require_osd_release`` raised to the release with
+       this design)
      - Ensures all OSDs understand extended acting-set semantics (Section 15)
-   * - Stretch mode must be enabled on the cluster
-     - ``num_zones > 1`` pools require the stretch mode state machine for
-       zone failover
-   * - ``zone_failure_domain`` must match the stretch mode failure domain
+   * - Monitors in both zones and a tiebreaker monitor in a third location, each
+       with a CRUSH location at the zone failure domain
+     - Creating the pool enables stretch mode if it is not enabled yet, and
+       ``num_zones > 1`` pools need the stretch mode state machine for zone
+       failover (Section 2.3.4)
+   * - ``zone_failure_domain`` must match the stretch mode failure domain once
+       stretch mode is enabled
      - The CRUSH rule must align with the stretch cluster topology
 
 11.2 Minimum PG Size Semantics
@@ -1689,11 +2029,11 @@ by the OSDMonitor upon stretch mode transitions.
 .. mermaid::
 
    stateDiagram-v2
-       [*] --> Healthy: enable_stretch_mode
+       [*] --> Healthy: first pool with num_zones 2
        Healthy --> Degraded: zone failure detected
        Degraded --> Recovery: failed zone returns
        Recovery --> Healthy: all PGs clean
-       Healthy --> [*]: disable_stretch_mode
+       Healthy --> [*]: last pool with num_zones 2 deleted or set to 1
        Degraded --> Recovery: force_recovery_stretch_mode CLI
        Recovery --> Healthy: force_healthy_stretch_mode CLI
 
@@ -1714,45 +2054,45 @@ several places. These gaps must be filled for EC pools with ``num_zones > 1``.
 
 Both ``stretch_set`` and ``stretch_unset`` are refused for EC pools.
 
-**11.4.2 Enable/Disable Stretch Mode** (``try_enable_stretch_mode_pools``)
+**11.4.2 Enable/Disable Stretch Mode** (``try_enable_stretch_mode``,
+``try_disable_stretch_mode``)
 
-*Currently rejects EC pools.* Change to accept EC pools with ``num_zones > 1``:
+Stretch mode is enabled with the first pool that gets ``num_zones = 2``, at
+creation (Section 2.1.5) or with ``ceph osd pool set <pool> num_zones 2``
+(Section 13.2), which ``ceph mon enable_stretch_mode`` also uses. Replicated and
+EC pools are accepted alike. Enabling it:
 
-- Set ``peering_crush_bucket_count``, ``peering_crush_bucket_target``,
-  ``peering_crush_bucket_barrier`` (same values as replica)
-- Set ``crush_rule`` to the stretch CRUSH rule
-- Set ``size = r × (k + m)`` (should already be correct from pool creation)
+- picks the tiebreaker monitor: the one monitor outside both zones, or the
+  monitor named by ``enable_stretch_mode``'s legacy ``tiebreaker_mon`` argument.
+  Without that argument it is refused if there is no monitor outside both zones,
+  or more than one.
+- switches the monitors to the connectivity election strategy;
+- records stretch mode, the zone type and the zone count in the OSDMap.
 
-**Pool Creation Gate**: Pool creation with ``num_zones > 1`` must be rejected if
-stretch mode is not already enabled on the cluster. This is validated in
-``OSDMonitor::prepare_new_pool``.
+Each pool with ``num_zones = 2`` has ``peering_crush_bucket_count``,
+``peering_crush_bucket_target`` and ``peering_crush_bucket_barrier`` set (same
+values as replica, Section 11.6). Stretch mode is disabled when the last pool
+with ``num_zones > 1`` is deleted or set to ``num_zones = 1``.
 
 Creating a pool with ``num_zones = 2`` while stretch mode is already enabled
 configures only the new pool; it does not change the cluster's stretch mode
-state. In degraded or recovery stretch mode the new pool is given the degraded
-``peering_crush_bucket_count`` and the ``peering_crush_mandatory_member`` that
-the existing stretch pools have (Section 11.6), so it can go active in the
-surviving zone, and the healthy transition (11.4.4) restores it with them.
-After ``ceph mon enable_stretch_mode`` the new pool's
-``peering_crush_mandatory_member`` is not yet set this way.
+state. In degraded or recovery stretch mode the new pool keeps its full ``size``
+and ``peering_crush_bucket_target``, as the existing stretch pools do. It is
+given the degraded ``peering_crush_bucket_count`` and the
+``peering_crush_mandatory_member`` that the existing stretch pools have (Section
+11.6), so it can go active in the surviving zone, and the healthy transition
+(11.4.4) restores it with them.
 
 **11.4.3 Degraded Stretch Mode** (``trigger_degraded_stretch_mode``)
 
-*Currently sets* ``newp.min_size = pgi.second.min_size / 2`` *for replica
-pools.* For EC pools, ``min_size`` is **not modified**. Only
+``min_size`` is **not modified** for any pool. Only
 ``peering_crush_bucket_count`` and ``peering_crush_mandatory_member`` are
-updated, as for replicated pools.
-
-A replicated pool created after ``ceph mon enable_stretch_mode`` while the
-cluster is in degraded stretch mode keeps its full ``size`` and
-``peering_crush_bucket_target``, as the existing stretch pools do, and is given
-the degraded ``peering_crush_bucket_count`` and the surviving zone as
-``peering_crush_mandatory_member``, so the healthy transition (11.4.4)
-restores it with the other stretch pools.
+updated.
 
 **11.4.4 Healthy Stretch Mode** (``trigger_healthy_stretch_mode``)
 
-*Currently reads* ``mon_stretch_pool_min_size`` *config for replica pools.*
+``min_size`` is **not modified** for any pool. ``peering_crush_bucket_count``
+is restored and ``peering_crush_mandatory_member`` is cleared (Section 11.6).
 
 **11.4.5 Recovery Stretch Mode** (``trigger_recovery_stretch_mode``)
 
@@ -1963,11 +2303,32 @@ Umbrella release. This document does not define a separate migration mechanism.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``ceph osd pool set <pool> num_zones <n>`` changes ``num_zones`` for an existing pool,
-between 1 and 2, outside global stretch mode (see *Changing Per-Pool Zone and Replica Counts*
-in the stretch mode user documentation). ``num_zones`` is set per pool, not in the profile
-(Section 2.1.5). Upon the change, the pool gets a new CRUSH rule for the new zone count, and the
-standard recovery process performs all necessary expansion (or contraction) to match the
-new configuration — no manual data migration is required.
+between 1 and 2 (see *Changing Per-Pool Zone and Replica Counts* in the stretch mode user
+documentation). ``ceph mon enable_stretch_mode`` and ``disable_stretch_mode`` run it on every
+pool (Section 2.3.4). ``num_zones`` is set per pool, not in the profile (Section 2.1.5). The
+change:
+
+* sets ``size`` to ``num_zones × (k + m)`` for an EC pool. For a replicated pool going to two
+  zones it is ``num_zones`` × replicas per zone (``--replica``, else
+  ``osd_pool_default_replica``); going to one zone it is ``osd_pool_default_replica``;
+* resets ``min_size`` to its per-zone default (Section 11.2);
+* gives the pool a CRUSH rule for the new ``num_zones``: the one named with
+  ``--crush_rule``, else a generated rule. Going to two zones, the generated rule uses
+  ``--zone_failure_domain``, ``--root``, ``--osd_failure_domain`` and ``--class``, else their
+  defaults (Section 2.3.2), and an EC pool's rule is named ``<pool>-stretch``. Going to one
+  zone, a replicated pool gets the default replicated rule and an EC pool the rule
+  ``<pool>-single-zone``. The old rule is removed if no other pool uses it;
+* for an EC pool going to two zones, requires FastEC. A legacy EC pool can never be
+  stretched, so the change is refused. Its owner can convert the pool first with
+  ``ceph osd pool set <pool> allow_ec_optimizations true``; neither this change nor
+  ``enable_stretch_mode`` does that for them. (Today the change turns FastEC on itself.);
+* sets or clears the ``peering_crush_bucket_*`` fields, and enables or disables stretch mode
+  for the first or last pool with two zones (Section 11.4.2).
+
+Today ``--zone_failure_domain`` is required for two zones, and for a replicated pool also
+``--replica`` and ``--osd_failure_domain``; they are to take the defaults instead. The standard
+recovery process then performs all necessary expansion (or contraction) to match the new
+configuration — no manual data migration is required.
 
 
 14. Implementation Order
@@ -2000,9 +2361,11 @@ recovery traverse the inter-zone link via the Primary.
 4. **Stretch Mode and Peering for Replicated EC**
    Broken into the following sub-stories (see Sections 11.1–11.6):
 
-   a. **Enable/Disable Stretch Mode for EC** (OSDMonitor): Allow
-      ``mon enable_stretch_mode`` when the cluster has EC pools with
-      ``num_zones > 1``.
+   a. **Pool Creation Defaults and Global Stretch Mode Commands** (OSDMonitor):
+      Refactor global stretch mode into configuration option defaults for every
+      pool creation parameter, ``ceph osd pool default`` to set and show them, and
+      ``mon enable_stretch_mode``/``disable_stretch_mode`` commands that change
+      the defaults and every existing pool, replicated and EC (Section 2.3).
    c. **Stretch Mode Transitions for EC** (OSDMonitor): Implement
       degraded/recovery/healthy transitions. Update
       ``peering_crush_bucket_count`` and ``peering_crush_mandatory_member``
@@ -2051,6 +2414,9 @@ recovery traverse the inter-zone link via the Primary.
     Add perf counters tracking cross-zone bytes, operation counts, latency
     histograms, and zone-local vs remote-zone-zone read ratios to give operators visibility
     into inter-zone link utilization (Section 17).
+
+12. **User Documentation**
+    Rewrite the stretch mode user documentation to the outline in Section 19.
 
 14.2 Later Release — Recovery Bandwidth Optimization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2121,11 +2487,7 @@ bandwidth optimizations.
    Implement removal of residual online OSDs from the up set when their zone
    is offline (Section 11.8).
 
-4. **In-Place Replica Count Modification**
-   Allow ``num_zones`` to be changed on an existing pool via EC profile swap
-   (Section 13.2).
-
-5. **3-Zone (``num_zones=3``) Full Integration Testing**
+4. **3-Zone (``num_zones=3``) Full Integration Testing**
    Full integration and real-world testing of 3-zone configurations
    (Section 5).
 
@@ -2133,39 +2495,109 @@ bandwidth optimizations.
 15. Upgrade & Backward Compatibility
 --------------------------------------
 
-Replicated EC pools with ``num_zones=1`` are fully backward compatible. An ``num_zones=1``
-profile produces a standard ``(k+m)`` acting set with no additional replication,
-no new on-disk format, and no new wire messages. Existing OSDs and clients will
-handle these pools without modification, because the resulting behavior is
-identical to a conventional EC pool.
+The upgrade relies on Ceph's encoding conventions. Code that uses a pool's ``num_zones`` never
+checks ``require_osd_release``: the encoding carries the compatibility, and only the commands
+of Section 15.3 check the release. Raising ``require_osd_release`` to the release with this
+design commits the upgrade (Section 15.4). This replaces the OSD feature bit that this section
+proposed before.
 
-Pools with ``num_zones > 1`` introduce a larger acting set (``num_zones × (k + m)`` shards),
-new CRUSH rules, and — in later releases — new inter-OSD messages
-(Replicate Transaction, Read Permissions, etc.). To prevent mixed-version
-clusters from misinterpreting these pools:
+15.1 Encoding
+~~~~~~~~~~~~~
 
-- A new **OSD feature bit** will gate the creation of ``num_zones > 1`` pools. The
-  monitor will reject pool creation or ``num_zones`` changes that set ``num_zones > 1``
-  unless all OSDs in the cluster advertise this feature bit.
-- This ensures that every OSD in the cluster understands the extended acting
-  set semantics, shard numbering, and any new message types before an ``num_zones > 1``
-  pool can be instantiated.
-- No data migration is required when upgrading: the feature bit is purely an
-  admission control mechanism. Once all OSDs are upgraded and the bit is
-  present, ``num_zones > 1`` pools can be created normally.
+* **Encode follows** ``require_osd_release``. The monitors encode every OSDMap with
+  ``OSDMap::get_encoding_features()``. That drops the ``SERVER_<release>`` feature bits of
+  releases newer than ``require_osd_release``, and ``pg_pool_t::encode`` picks its struct
+  version from the features. Until the commit, every OSDMap is therefore written in the
+  earlier release's format, which earlier daemons can read and which allows a downgrade.
+* **New fields get a new version.** ``num_zones`` and ``replica`` are encoded only in the
+  struct version of the release that ships this design, gated on that release's feature bit.
+  On main, version 33 belongs to Umbrella (``shard_mapping`` and the EC shard counts).
+  stretchy-C appends ``replica`` and ``num_zones`` to it, which is right only if this design
+  ships in Umbrella. Otherwise they move to version 34, gated on the next release's feature
+  bit, which main does not define yet.
+* **Decode derives what an older version lacks.** For an older version, ``num_zones`` is
+  ``peering_crush_bucket_target`` for a stretch pool and 1 otherwise. ``replica`` is
+  ``size / num_zones``, and the per-zone ``min_size`` is ``min_size / num_zones``. Every pool
+  in memory therefore has ``num_zones`` and ``replica``, whichever format it was read from.
+* **Encode in an older format writes the older meaning,** so that decode, encode and decode
+  again give the same pool. ``size`` is already the total. ``min_size`` must be written as
+  the total, the per-zone ``min_size`` × ``num_zones``. Today stretchy-C writes the per-zone
+  value, so each decode of the older format halves it again (2, 1, 0); this must be fixed.
+* **Only representable states before the commit.** Until the commit a pool must stay
+  representable in the older format. Its ``num_zones`` must equal
+  ``peering_crush_bucket_target``, or be 1 for a pool that is not stretched, and no EC pool
+  may have ``num_zones`` greater than 1. The commands that could break this are refused until
+  then (Section 15.3).
+
+15.2 Maps and Configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* **OSDMap:** ``stretch_mode_enabled``, ``stretch_bucket_count``, ``stretch_mode_bucket`` and
+  the degraded and recovering state keep their encoding. Their meaning changes at the commit,
+  from "global stretch mode is enabled" to "a pool has ``num_zones`` greater than 1". Only the
+  monitors read them; the OSDs do not.
+* **MonMap:** ``stretch_mode_enabled``, the tiebreaker, the disallowed leaders and the
+  stretch-marked-down monitors keep their encoding. stretchy-C's
+  ``global_stretch_mode_enabled`` (MonMap encoding version 11) was never released. It is
+  removed before release, without compatibility code.
+* **Configuration:** the pool creation defaults are converted at the commit (Section 2.3.5).
+* **Messages and log entries** that later releases add are gated by ``require_osd_release``
+  in the same way (Section 10.3).
+
+15.3 During the Upgrade
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Before the commit, the configuration still holds the values from before the upgrade, the
+cluster can still be downgraded, and upgraded and earlier monitors may be in quorum together.
+The monitors therefore keep the earlier release's behaviour, so that a command gives the same
+result whichever monitor handles it:
+
+* Pool creation is refused, both ``ceph osd pool create`` and pool creation through librados
+  (``POOL_OP_CREATE``). The error asks for ``require_osd_release`` to be raised. Pool creation
+  is rare, and refusing it avoids sizing a pool from configuration values that have not been
+  converted yet.
+* Any use of ``num_zones`` on ``ceph osd pool set`` is an error, even with the value 1.
+* ``ceph mon enable_stretch_mode`` and ``disable_stretch_mode`` behave as on main, and
+  ``ceph osd pool default set`` is refused. ``ceph osd pool default get`` shows the defaults
+  at any time; before the commit they are the values that the commit may still convert.
+* Existing pools keep working. Upgraded daemons decode a stretched pool with ``num_zones`` 2,
+  and the monitors keep writing it in the earlier format.
 
 .. note::
-   **Upgrade Scenarios**: We are still thinking through upgrade scenarios from older 
-   releases (e.g. can we infer ``num_zones = 2`` pools automatically at upgrade time?).
-   
-   Open design decisions that will be resolved at implementation:
 
-   What to do with stretched replica pools during upgrade. One option is to leave 
-   these as is (with num_zones = 1 and the current interpretation of min-size) 
-   and continue to support all the arguments on enable/disable stretch mode. An
-   alternative option would be to try and automatically convert these pools to 
-   num_zones = 2 and the new interpretation of min-size. These pools should 
-   currently have a custom CRUSH rule which should be maintained.
+   **Review required**: refusing pool creation until the upgrade is committed also stops
+   components that create pools on demand. For example, RGW creates pools through librados
+   (``rgw_tools.cc``). A cluster whose ``require_osd_release`` is left unraised cannot create
+   pools at all.
+
+15.4 At the Commit
+~~~~~~~~~~~~~~~~~~
+
+``ceph osd require-osd-release <release>`` commits the upgrade. As for any release, it is
+refused until every monitor runs the release and every up OSD has its feature bit, unless it is
+forced, and after it the cluster cannot be downgraded. With the commit:
+
+1. The next OSDMap is written in the new format, including ``num_zones`` and ``replica``. No
+   pool is rewritten: the new format only stores what every daemon already derived.
+2. If ``stretch_mode_enabled`` is set, the cluster is in global stretch mode, because earlier
+   releases set it only with ``ceph mon enable_stretch_mode``. The monitors then convert the
+   pool creation defaults once (Section 2.3.5).
+3. The monitors switch to the new behaviour. Pool creation and ``num_zones`` changes are
+   allowed, ``ceph osd pool default`` works, the stretch mode commands behave as in Section
+   2.3.4, and ``stretch_mode_enabled`` means that a pool is stretched.
+
+15.5 Pools from Earlier Releases
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* A pool with ``num_zones`` 1 is fully backward compatible. Replicated EC with one zone produces
+  a standard ``(k+m)`` acting set, with no new on-disk format and no new wire messages, so
+  existing OSDs and clients handle it as a conventional EC pool.
+* A stretched replicated pool from an earlier release is decoded with ``num_zones`` set to
+  ``peering_crush_bucket_target``, ``replica`` to ``size / num_zones`` and ``min_size``
+  counted per zone, and keeps its custom CRUSH rule. Its behaviour does not change.
+* No data migration is needed. Pools with ``num_zones`` greater than 1 bring a larger acting
+  set (``num_zones × (k + m)`` shards), new CRUSH rules and, in later releases, new inter-OSD
+  messages. That is why they can only be created after the commit.
 
 16. Kernel Changes
 -------------------
@@ -2244,3 +2676,62 @@ system to generate a CRUSH rule that starts with ``take DC1``, ensuring all
 data for that pool resides completely within that datacenter. This allows non-redundant 
 applications to leverage zone-local storage without incurring the latency or bandwidth 
 costs of crossing the inter-zone link.
+
+
+19. User Documentation
+----------------------
+
+The stretch mode user documentation (``doc/rados/operations/stretch-mode.rst``)
+will be rewritten to this outline, which is still to be agreed:
+
+1. **Introduction**: what a stretch cluster is, and why and when to use one.
+
+   - An explanation of stretch mode.
+   - The *Stretch Cluster Issues* section, reworked to explain why stretching a
+     pool by hand is hard and stretch mode should be used instead.
+   - Part of the *Limitations* section, for example that there are only two
+     zones.
+   - References to the asynchronous replication alternatives for block, file
+     and object.
+   - A note that stretch clusters were redesigned in the Vampire release.
+   - A note that ``ceph osd pool stretch`` is not the same as a stretch
+     cluster.
+
+2. **Configuration prerequisites**: monitors at three sites, including the
+   tiebreaker monitor, and the CRUSH zones.
+
+3. **Creating pools**:
+
+   - ``ceph osd pool create`` examples for replicated and EC pools.
+   - Mixing local and stretched pools.
+   - What happens automatically when ``num_zones`` is 2: a suitable multi-zone
+     CRUSH rule is written (unless one is given), stretch mode is enabled, the
+     tiebreaker monitor is configured and the monitors switch to the
+     connectivity election strategy.
+
+4. **Modifying pools**: changing ``num_zones``, and changing ``min_size``, which
+   applies per zone.
+
+5. **Enabling and disabling stretch mode** (global stretch mode):
+
+   - Example commands.
+   - What they do: set the configuration options so that future pools are
+     stretched by default, and change the existing pools to stretched.
+   - Setting the pool creation defaults without changing existing pools
+     (Section 2.3.3).
+   - For a mixture of pool types, setting ``num_zones`` to 2 on the existing
+     pools and giving every parameter when creating new pools may be simpler
+     and achieves the same thing.
+
+6. **Other commands**: replacing a failed tiebreaker monitor, forcing recovery
+   stretch mode and forcing healthy stretch mode.
+
+7. **CRUSH rules**:
+
+   - The monitors write the CRUSH rule when a stretched pool is created or its
+     ``num_zones`` changes, but a pool can be given its own rule instead.
+   - Examples of the generated rules, explaining how primaries are placed.
+   - An example of an alternative rule that puts all primaries in the same
+     zone.
+   - Device classes: the current documentation says that they do not work with
+     stretch mode. Check whether that has been fixed and document it here.
