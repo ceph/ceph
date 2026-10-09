@@ -600,31 +600,13 @@ perform repairs if :confval:`osd_scrub_auto_repair` (default ``false``) is set t
 The ``pg repair`` command will not solve every problem. Ceph does not
 automatically repair PGs when they are found to contain inconsistencies.
 
-The checksum of a RADOS object or an omap is not always available. Checksums
-are calculated incrementally. If a replicated object is updated
-non-sequentially, the write operation involved in the update changes the object
-and invalidates its checksum. The whole object is not read while the checksum
-is recalculated. The ``pg repair`` command is able to make repairs even when
-checksums are not available to it, as in the case of Filestore. Users working
-with replicated Filestore pools might prefer manual repair to ``ceph pg
-repair``.
-
-This material is relevant for Filestore, but not for BlueStore, which has its
-own internal checksums. The matched-record checksum and the calculated checksum
-cannot prove that any specific copy is in fact authoritative. If there is no
-checksum available, ``pg repair`` favors the data on the primary, but this
+BlueStore verifies a checksum on every read, which lets ``pg repair`` identify
+the corrupt copy of an object in most cases. A checksum is not always available
+for every kind of inconsistency, however. If no checksum can identify the
+authoritative copy, ``pg repair`` favors the data on the primary, but this
 might not be the uncorrupted replica. Because of this uncertainty, human
-intervention is necessary when an inconsistency is discovered. This
+intervention is necessary when such an inconsistency is discovered. This
 intervention sometimes involves use of ``ceph-objectstore-tool``.
-
-
-PG Repair Walkthrough
----------------------
-
-https://ceph.io/geen-categorie/ceph-manually-repair-object/ - This page
-contains a walkthrough of the repair of a PG on the deprecated Filestore OSD back end. It is recommended reading if you
-want to repair a PG on a Filestore OSD but have never done so. The walkthrough does not
-apply to modern BlueStore OSDs.
 
 
 Erasure Coded PGs are not ``active+clean``
