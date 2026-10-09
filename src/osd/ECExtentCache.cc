@@ -20,6 +20,25 @@ void ECExtentCache::Object::request(OpRef &op) {
 
   extent_set eset = op->get_pin_eset(line_size);
 
+  shard_extent_set_t obj_hole(pg.sinfo.get_k_plus_m());
+  if (op->projected_size > projected_size) {
+    /* This write is growing the size of the object. This essentially counts
+     * as a write (although the cache will not get populated). Future reads
+     * to this area will be skipped, but this makes them essentially zero
+     * reads. The op pins every line in the hole so that erase_line() cannot
+     * discard it before this op completes.
+     */
+    shard_extent_set_t read_mask(pg.sinfo.get_k_plus_m());
+
+    pg.sinfo.ro_size_to_read_mask(op->projected_size, obj_hole);
+    pg.sinfo.ro_size_to_read_mask(projected_size, read_mask);
+    obj_hole.subtract(read_mask);
+
+    extent_set hole_eset = obj_hole.get_extent_superset();
+    hole_eset.align(line_size);
+    eset.union_of(hole_eset);
+  }
+
   for (auto &&[start, len] : eset) {
     for (uint64_t to_pin = start; to_pin < start + len; to_pin += line_size) {
       LineRef l;
@@ -74,20 +93,7 @@ void ECExtentCache::Object::request(OpRef &op) {
     do_not_read.insert(requesting);
   }
   do_not_read.insert(op->writes);
-  if (op->projected_size > projected_size) {
-    /* This write is growing the size of the object. This essentially counts
-     * as a write (although the cache will not get populated). Future reads
-     * to this area will be skipped, but this makes them essentially zero
-     * reads.
-     */
-    shard_extent_set_t obj_hole(pg.sinfo.get_k_plus_m());
-    shard_extent_set_t read_mask(pg.sinfo.get_k_plus_m());
-
-    pg.sinfo.ro_size_to_read_mask(op->projected_size, obj_hole);
-    pg.sinfo.ro_size_to_read_mask(projected_size, read_mask);
-    obj_hole.subtract(read_mask);
-    do_not_read.insert(obj_hole);
-  }
+  do_not_read.insert(obj_hole);
 
   projected_size = op->projected_size;
 
