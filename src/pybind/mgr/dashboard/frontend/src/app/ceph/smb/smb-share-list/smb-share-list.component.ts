@@ -1,4 +1,5 @@
 import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { Observable, BehaviorSubject, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -18,8 +19,7 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-
-export const SHARE_PATH = 'cephfs/smb/share';
+import { resolveSmbRouteData } from '../smb-route.util';
 
 @Component({
   selector: 'cd-smb-share-list',
@@ -47,99 +47,127 @@ export class SmbShareListComponent implements OnInit {
   smbShares$: Observable<SMBShare[]>;
   subject$ = new BehaviorSubject<SMBShare[]>([]);
   modalRef: NgbModalRef;
+  isRgw = false;
+  shareListDescription = '';
+  private smbBasePath: string;
 
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
     private smbService: SmbService,
     private taskWrapper: TaskWrapperService,
-    private modalService: ModalCdsService
+    private modalService: ModalCdsService,
+    private route: ActivatedRoute
   ) {
     this.permission = this.authStorageService.getPermissions().smb;
   }
 
   ngOnInit() {
-    this.columns = [
-      {
-        name: $localize`ID`,
-        prop: 'share_id',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Name`,
-        prop: 'name',
-        flexGrow: 2
-      },
-      {
-        name: $localize`File System`,
-        prop: 'cephfs.volume',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Path`,
-        prop: 'cephfs.path',
-        cellTransformation: CellTemplate.path,
-        flexGrow: 2
-      },
-      {
-        name: $localize`Subvolume group`,
-        prop: 'cephfs.subvolumegroup',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Subvolume`,
-        prop: 'cephfs.subvolume',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Provider`,
-        prop: 'cephfs.provider',
-        flexGrow: 2
-      },
-      {
-        name: $localize`IOPS Limit`,
-        prop: 'cephfs.qos',
-        cellTemplate: this.iopsLimitTpl,
-        flexGrow: 2
-      },
-      {
-        name: $localize`Bandwidth Limit`,
-        prop: 'cephfs.qos',
-        cellTemplate: this.bwLimitTpl,
-        flexGrow: 2
-      },
-      {
-        name: $localize`Delay Max`,
-        prop: 'cephfs.qos',
-        cellTemplate: this.delayMaxTpl,
-        flexGrow: 2
-      }
-    ];
-    this.tableActions = [
-      {
-        name: `${this.actionLabels.CREATE}`,
-        permission: 'create',
-        icon: Icons.add,
-        routerLink: () => [`/${SHARE_PATH}/${URLVerbs.CREATE}`, this.clusterId],
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
-      },
-      {
-        name: this.actionLabels.EDIT,
-        permission: 'update',
-        icon: Icons.edit,
-        routerLink: () => [
-          `/${SHARE_PATH}/${URLVerbs.EDIT}`,
-          this.clusterId,
-          this.selection.first().name
+    const smbRoute = resolveSmbRouteData(this.route);
+    this.isRgw = smbRoute.isRgw;
+    this.smbBasePath = smbRoute.smbBasePath;
+    this.shareListDescription = this.isRgw
+      ? $localize`Logical unit hosted by the cluster that maps to an RGW bucket`
+      : $localize`Logical unit hosted by the cluster that maps to the given CephFS volume and path`;
+    this.columns = this.isRgw
+      ? [
+          {
+            name: $localize`ID`,
+            prop: 'share_id',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Name`,
+            prop: 'name',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Bucket`,
+            prop: 'rgw.bucket',
+            flexGrow: 2
+          }
         ]
-      },
-      {
-        permission: 'delete',
-        icon: Icons.destroy,
-        click: () => this.deleteShareModal(),
-        name: this.actionLabels.DELETE
-      }
-    ];
+      : [
+          {
+            name: $localize`ID`,
+            prop: 'share_id',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Name`,
+            prop: 'name',
+            flexGrow: 2
+          },
+          {
+            name: $localize`File System`,
+            prop: 'cephfs.volume',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Path`,
+            prop: 'cephfs.path',
+            cellTransformation: CellTemplate.path,
+            flexGrow: 2
+          },
+          {
+            name: $localize`Subvolume group`,
+            prop: 'cephfs.subvolumegroup',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Subvolume`,
+            prop: 'cephfs.subvolume',
+            flexGrow: 2
+          },
+          {
+            name: $localize`Provider`,
+            prop: 'cephfs.provider',
+            flexGrow: 2
+          },
+          {
+            name: $localize`IOPS Limit`,
+            prop: 'cephfs.qos',
+            cellTemplate: this.iopsLimitTpl,
+            flexGrow: 2
+          },
+          {
+            name: $localize`Bandwidth Limit`,
+            prop: 'cephfs.qos',
+            cellTemplate: this.bwLimitTpl,
+            flexGrow: 2
+          },
+          {
+            name: $localize`Delay Max`,
+            prop: 'cephfs.qos',
+            cellTemplate: this.delayMaxTpl,
+            flexGrow: 2
+          }
+        ];
+    const createAction: CdTableAction = {
+      name: `${this.actionLabels.CREATE}`,
+      permission: 'create',
+      icon: Icons.add,
+      routerLink: () => [`/${this.smbBasePath}/share/${URLVerbs.CREATE}`, this.clusterId],
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
+    };
+    const editAction: CdTableAction = {
+      name: this.actionLabels.EDIT,
+      permission: 'update',
+      icon: Icons.edit,
+      routerLink: () => [
+        `/${this.smbBasePath}/share/${URLVerbs.EDIT}`,
+        this.clusterId,
+        this.selection.first().name
+      ]
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.destroy,
+      click: () => this.deleteShareModal(),
+      name: this.actionLabels.DELETE
+    };
+
+    this.tableActions = [createAction, editAction, deleteAction];
 
     this.smbShares$ = this.subject$.pipe(
       switchMap(() =>
@@ -171,7 +199,7 @@ export class SmbShareListComponent implements OnInit {
       itemNames: [`Share: ${share_id} (${name}) from cluster: ${cluster_id}`],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${SHARE_PATH}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${this.smbBasePath}/share/${URLVerbs.DELETE}`, {
             share_id: share_id
           }),
           call: this.smbService.deleteShare(cluster_id, share_id)

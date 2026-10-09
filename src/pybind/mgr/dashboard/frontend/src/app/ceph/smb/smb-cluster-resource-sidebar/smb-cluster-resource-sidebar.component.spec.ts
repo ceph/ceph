@@ -32,7 +32,8 @@ describe('SmbClusterResourceSidebarComponent', () => {
         {
           provide: ActivatedRoute,
           useValue: {
-            paramMap: of(convertToParamMap({ cluster_id: 'test-cluster' }))
+            paramMap: of(convertToParamMap({ cluster_id: 'test-cluster' })),
+            snapshot: { data: { smbBasePath: 'cephfs/smb', isRgw: false } }
           }
         }
       ],

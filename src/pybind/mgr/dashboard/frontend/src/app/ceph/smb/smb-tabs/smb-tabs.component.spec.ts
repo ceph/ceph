@@ -1,7 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ActivatedRoute, Router } from '@angular/router';
+import { By } from '@angular/platform-browser';
 
 import { SmbTabsComponent } from './smb-tabs.component';
-import { By } from '@angular/platform-browser';
 
 describe('SmbTabsComponent', () => {
   let component: SmbTabsComponent;
@@ -9,7 +10,14 @@ describe('SmbTabsComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [SmbTabsComponent]
+      declarations: [SmbTabsComponent],
+      providers: [
+        { provide: Router, useValue: { url: '/cephfs/smb/cluster', navigate: jest.fn() } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { data: { smbBasePath: 'cephfs/smb', isRgw: false } } }
+        }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbTabsComponent);

@@ -1,4 +1,5 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { catchError, map, switchMap } from 'rxjs/operators';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 
@@ -24,13 +25,18 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 
-export const CLUSTER_PATH = 'cephfs/smb/cluster';
-
 @Component({
   selector: 'cd-smb-cluster-list',
   templateUrl: './smb-cluster-list.component.html',
   styleUrls: ['./smb-cluster-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(CLUSTER_PATH) }],
+  providers: [
+    {
+      provide: URLBuilderService,
+      useFactory: (route: ActivatedRoute) =>
+        new URLBuilderService(`${route.snapshot.data['smbBasePath'] ?? 'cephfs/smb'}/cluster`),
+      deps: [ActivatedRoute]
+    }
+  ],
   standalone: false
 })
 export class SmbClusterListComponent implements OnInit {
@@ -44,6 +50,7 @@ export class SmbClusterListComponent implements OnInit {
   subject$ = new BehaviorSubject<SMBCluster[]>([]);
   selection = new CdTableSelection();
   modalRef: NgbModalRef;
+  private smbBasePath: string;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -51,12 +58,14 @@ export class SmbClusterListComponent implements OnInit {
     private smbService: SmbService,
     private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
-    private urlBuilder: URLBuilderService
+    private urlBuilder: URLBuilderService,
+    private route: ActivatedRoute
   ) {
     this.permission = this.authStorageService.getPermissions().smb;
   }
 
   ngOnInit() {
+    this.smbBasePath = this.route.snapshot.data['smbBasePath'] ?? 'cephfs/smb';
     this.columns = [
       {
         name: $localize`Name`,
@@ -99,7 +108,7 @@ export class SmbClusterListComponent implements OnInit {
           map((clusters: SMBCluster[]) =>
             clusters.map((cluster: SMBCluster) => ({
               ...cluster,
-              cdLink: `/cephfs/smb/cluster/${encodeURIComponent(cluster.cluster_id)}/overview`
+              cdLink: `/${this.smbBasePath}/cluster/${encodeURIComponent(cluster.cluster_id)}/overview`
             }))
           ),
           catchError(() => {
@@ -126,7 +135,7 @@ export class SmbClusterListComponent implements OnInit {
       itemNames: [cluster_id],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${CLUSTER_PATH}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${this.smbBasePath}/cluster/${URLVerbs.DELETE}`, {
             cluster_id: cluster_id
           }),
           call: this.smbService.removeCluster(cluster_id)

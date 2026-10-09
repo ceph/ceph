@@ -23,7 +23,8 @@ describe('SmbUsersgroupsResourceSidebarComponent', () => {
     );
 
     const activatedRouteMock = {
-      paramMap: paramMapSubject.asObservable()
+      paramMap: paramMapSubject.asObservable(),
+      snapshot: { data: { smbBasePath: 'cephfs/smb', isRgw: false } }
     };
 
     await TestBed.configureTestingModule({

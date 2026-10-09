@@ -12,7 +12,6 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { DomainSettings, JoinSource, SMBJoinAuth } from '../smb.model';
 import { Observable } from 'rxjs';
 import { Router } from '@angular/router';
-import { JOIN_AUTH_PATH } from '../smb-join-auth-list/smb-join-auth-list.component';
 
 @Component({
   selector: 'cd-smb-domain-setting-modal',
@@ -24,6 +23,7 @@ export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
   domainSettingsForm: CdFormGroup;
   realmNames: string[];
   joinAuths$: Observable<SMBJoinAuth[]>;
+  smbBasePath = 'cephfs/smb';
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -100,7 +100,7 @@ export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
 
   navigateCreateJoinSource() {
     this.closeModal();
-    this.router.navigate([`${JOIN_AUTH_PATH}/${URLVerbs.CREATE}`]);
+    this.router.navigate([`${this.smbBasePath}/active-directory/${URLVerbs.CREATE}`]);
   }
 
   removeJoinSource(index: number) {

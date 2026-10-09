@@ -548,55 +548,8 @@ export class TaskMessageService {
       this.commonOperations.deactivate,
       (metadata) => this.snapshotSchedule(metadata)
     ),
-    // smb
-    'cephfs/smb/cluster/create': this.newTaskMessage(
-      this.commonOperations.create,
-      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
-    ),
-    'cephfs/smb/cluster/edit': this.newTaskMessage(
-      this.commonOperations.update,
-      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
-    ),
-    'cephfs/smb/cluster/delete': this.newTaskMessage(
-      this.commonOperations.delete,
-      (metadata: { cluster_id: string }) => this.smbCluster(metadata)
-    ),
-    'cephfs/smb/share/create': this.newTaskMessage(
-      this.commonOperations.create,
-      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
-    ),
-    'cephfs/smb/share/edit': this.newTaskMessage(
-      this.commonOperations.update,
-      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
-    ),
-    'cephfs/smb/share/delete': this.newTaskMessage(
-      this.commonOperations.delete,
-      (metadata: Record<'share_id', string>) => this.smbShare(metadata)
-    ),
-    'cephfs/smb/active-directory/create': this.newTaskMessage(
-      this.commonOperations.create,
-      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-    ),
-    'cephfs/smb/active-directory/edit': this.newTaskMessage(
-      this.commonOperations.update,
-      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-    ),
-    'cephfs/smb/active-directory/delete': this.newTaskMessage(
-      this.commonOperations.delete,
-      (metadata: { authId: string }) => this.smbJoinAuth(metadata)
-    ),
-    'cephfs/smb/standalone/create': this.newTaskMessage(
-      this.commonOperations.create,
-      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-    ),
-    'cephfs/smb/standalone/edit': this.newTaskMessage(
-      this.commonOperations.update,
-      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-    ),
-    'cephfs/smb/standalone/delete': this.newTaskMessage(
-      this.commonOperations.delete,
-      (metadata: { usersGroupsId: string }) => this.smbUsersgroups(metadata)
-    ),
+    // smb (cephfs/smb and rgw/smb)
+    ...this.buildSmbMessages(),
     'ceph-user/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata: { userEntity: string }) => this.cephUser(metadata)
@@ -605,6 +558,30 @@ export class TaskMessageService {
       this.bootstrap()
     )
   };
+
+  private buildSmbMessages(): Record<string, TaskMessage> {
+    const entries: [string, TaskMessageOperation, (metadata: any) => string][] = [
+      ['cluster/create', this.commonOperations.create, (m) => this.smbCluster(m)],
+      ['cluster/edit', this.commonOperations.update, (m) => this.smbCluster(m)],
+      ['cluster/delete', this.commonOperations.delete, (m) => this.smbCluster(m)],
+      ['share/create', this.commonOperations.create, (m) => this.smbShare(m)],
+      ['share/edit', this.commonOperations.update, (m) => this.smbShare(m)],
+      ['share/delete', this.commonOperations.delete, (m) => this.smbShare(m)],
+      ['active-directory/create', this.commonOperations.create, (m) => this.smbJoinAuth(m)],
+      ['active-directory/edit', this.commonOperations.update, (m) => this.smbJoinAuth(m)],
+      ['active-directory/delete', this.commonOperations.delete, (m) => this.smbJoinAuth(m)],
+      ['standalone/create', this.commonOperations.create, (m) => this.smbUsersgroups(m)],
+      ['standalone/edit', this.commonOperations.update, (m) => this.smbUsersgroups(m)],
+      ['standalone/delete', this.commonOperations.delete, (m) => this.smbUsersgroups(m)]
+    ];
+    const messages: Record<string, TaskMessage> = {};
+    for (const base of ['cephfs/smb', 'rgw/smb']) {
+      for (const [path, operation, involves] of entries) {
+        messages[`${base}/${path}`] = this.newTaskMessage(operation, involves);
+      }
+    }
+    return messages;
+  }
 
   newTaskMessage(
     operation: TaskMessageOperation,
