@@ -475,6 +475,16 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         self.wait_till_rbytes_is_right(v, sv, size)
 
         self.run_ceph_cmd(f'fs subvolume rm {v} {sv} --retain-snapshots')
+
+        # The reporter publishes the bar 1s after the clone is queued and
+        # removes it as soon as the copy finishes. The first "ceph status"
+        # sample is immediate, so it lands before that timer, and the next
+        # sample is 10s later. A 10GB copy can finish inside that gap. Hold
+        # the clone in pending long enough that the bar is still up at the
+        # second sample. 0% progress still reports "1 ongoing clones".
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', '15')
+        self.addCleanup(self.config_rm, 'mgr', 'mgr/volumes/snapshot_clone_delay')
+
         self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
 
         with safe_while(tries=15, sleep=10) as proceed:
@@ -614,7 +624,9 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
 
         self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
         self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
-        size = self._do_subvolume_io(sv, None, None, 30, 100)
+        # 10GB so the first clones are still copying when the second sample
+        # is taken. A 3GB copy can finish before that sample.
+        size = self._do_subvolume_io(sv, None, None, 100, 100)
 
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
@@ -622,9 +634,22 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         for i in c[:5]:
             self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
 
-        tuple_ = self.get_both_progress_fractions_and_onpen_count()
-        if isinstance(tuple_, (list, tuple)) and len(tuple_) == 3:
-            on_p, onpen_p, onpen_count = tuple_
+        # The bar is published at 0% as soon as a clone is queued. Adding
+        # more 0% clones does not lower the average, so wait until the
+        # first set has actually copied some data.
+        msg = 'clone progress stayed at 0%'
+        with safe_while(tries=20, sleep=1, action=msg) as proceed:
+            while proceed():
+                on_p, onpen_p, onpen_count = \
+                    self.get_both_progress_fractions_and_onpen_count()
+                if onpen_p > 0:
+                    break
+
+        # Keep the clones launched below at 0% (pending) so they pull the
+        # ongoing+pending average down. Without this they start copying
+        # during the launch loop and the average may not fall.
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', '15')
+        self.addCleanup(self.config_rm, 'mgr', 'mgr/volumes/snapshot_clone_delay')
 
         # this should cause onpen progress bar to go back
         for i in c[5:]:
@@ -814,7 +839,10 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
         sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
         sv_path = sv_path[1:]
 
-        size = self._do_subvolume_io(sv, None, None, 30, 100)
+        # 10GB so all cloner threads stay busy longer than the 1s poll
+        # and the mgr's progress report to the mon. A 3GB copy can finish
+        # first, and the bar then reports fewer than MAX_THREADS ongoing.
+        size = self._do_subvolume_io(sv, None, None, 100, 100)
         self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
         self.wait_till_rbytes_is_right(v, sv, size)
 
@@ -823,7 +851,7 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
 
         msg = ('messages for progress bars for snapshot cloning are not how '
                'they were expected')
-        with safe_while(tries=20, sleep=1, action=msg) as proceed:
+        with safe_while(tries=30, sleep=1, action=msg) as proceed:
             while proceed():
                 pevs = self.get_pevs_from_ceph_status(c)
 
@@ -860,10 +888,7 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
     def test_for_4_ongoing_clones(self):
         self._run_test(MAX_THREADS=4, NUM_OF_CLONES=8)
 
-    # NOTE: once in many runs with teuthology clones finish much faster than
-    # expected. causing the message on the clone progress bars to have less
-    # than 6 clones leading to failure. if this happens too often perhaps Sepia
-    # lab machines are too fast and deleting this test should be considered
-    # since other tests in this class also test this feature.
     def test_for_6_ongoing_clones(self):
-        self._run_test(MAX_THREADS=6, NUM_OF_CLONES=24)
+        # Two clones past the thread count are enough for the "total"
+        # bar. Queuing many more made the launch longer than the copy.
+        self._run_test(MAX_THREADS=6, NUM_OF_CLONES=8)
