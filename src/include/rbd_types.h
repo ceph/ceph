@@ -78,6 +78,13 @@
 #define RBD_MAX_BLOCK_NAME_SIZE 24
 
 /**
+ * Default snapshot limit when none is explicitly set on the image.
+ * Matches the krbd RBD_MAX_SNAP_COUNT (510) so images stay within
+ * the kernel client hard limit unless the user raises or clears it.
+ */
+#define RBD_DEFAULT_SNAP_LIMIT	510
+
+/**
  * Maximum string length of the RBD v2 image id (not including
  * null termination). This limit was derived from the existing
  * RBD_MAX_BLOCK_NAME_SIZE limit which needs to hold the "rbd_data."

@@ -661,9 +661,9 @@ TEST_P(TestClsRbd, snapshot_limits)
 
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, RBD_FEATURE_LAYERING, oid, -1));
 
-  // if snapshot doesn't set limit, the limit is UINT64_MAX
+  // if snapshot doesn't set limit, the default is RBD_DEFAULT_SNAP_LIMIT
   ASSERT_EQ(0, snapshot_get_limit(&ioctx, oid, &limit));
-  ASSERT_EQ(UINT64_MAX, limit);
+  ASSERT_EQ(RBD_DEFAULT_SNAP_LIMIT, limit);
 
   snapshot_set_limit(&op, 2);
 
@@ -676,9 +676,17 @@ TEST_P(TestClsRbd, snapshot_limits)
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 20, "snap2"));
   ASSERT_EQ(-EDQUOT, snapshot_add(&ioctx, oid, 30, "snap3"));
 
+  // UINT64_MAX must be persisted (not key removal) so clear stays unlimited
+  librados::ObjectWriteOperation clear_op;
+  snapshot_set_limit(&clear_op, UINT64_MAX);
+  ASSERT_EQ(0, ioctx.operate(oid, &clear_op));
+  ASSERT_EQ(0, snapshot_get_limit(&ioctx, oid, &limit));
+  ASSERT_EQ(UINT64_MAX, limit);
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 30, "snap3"));
+
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 10));
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 20));
-
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 30));
 }
 
 TEST_P(TestClsRbd, parents_v1)
