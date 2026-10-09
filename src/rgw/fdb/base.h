@@ -191,6 +191,13 @@ concept value_callback =
  value_invocable<FnT> &&
  std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>>>;
 
+template <typename FnT>
+concept raw_key_value_callback =
+ std::invocable<FnT&, std::span<const std::uint8_t>,
+                       std::span<const std::uint8_t>> &&
+ std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>,
+                                           std::span<const std::uint8_t>>>;
+
 template <typename T>
 concept decoded_value_sink =
  not value_invocable<std::remove_reference_t<T>> and
@@ -321,11 +328,20 @@ inline constexpr fdb_error_t operation_cancelled_error = 1101;
 struct future_value final
 {
  private:
- std::unique_ptr<FDBFuture, decltype(&fdb_future_destroy)> future_ptr;
+ // Stateless and non-final so std::unique_ptr<> can store it at no size cost:
+ struct deleter
+ {
+  void operator()(FDBFuture *future) const noexcept
+  {
+   fdb_future_destroy(future);
+  }
+ };
+
+ std::unique_ptr<FDBFuture, deleter> future_ptr;
 
  public:
  explicit future_value(FDBFuture *future_handle)
-  : future_ptr(future_handle, &fdb_future_destroy)
+  : future_ptr(future_handle)
  {}
 
  FDBFuture *raw_handle() const noexcept { return future_ptr.get(); }
@@ -347,7 +363,7 @@ struct future_value final
 
 inline byte_view as_byte_view(concepts::libfdb_key_view auto key)
 {
- return byte_view(reinterpret_cast<const std::uint8_t *>(key.data()), key.size());
+ return byte_view(reinterpret_cast<const std::uint8_t *>(std::data(key)), std::size(key));
 }
 
 } // namespace detail
@@ -547,12 +563,12 @@ inline std::vector<std::uint8_t> make_versioned_encoding(std::string_view prefix
 
  std::ranges::copy(prefix, std::back_inserter(out));
 
- if (not std::in_range<std::uint32_t>(out.size())) {
+ if (not std::in_range<std::uint32_t>(std::size(out))) {
   throw std::invalid_argument("version-stamped prefix is too large");
  }
 
- const auto versionstamp_offset = static_cast<std::uint32_t>(out.size());
- out.resize(out.size() + versionstamp_byte_count);
+ const auto versionstamp_offset = static_cast<std::uint32_t>(std::size(out));
+ out.resize(std::size(out) + versionstamp_byte_count);
 
  std::ranges::copy(suffix, std::back_inserter(out));
 
@@ -720,8 +736,8 @@ struct fdb_bytes final
 constexpr fdb_bytes as_fdb_bytes(const byte_view bytes)
 {
  return {
-  .data = bytes.data(),
-  .length = checked_fdb_size(bytes.size())
+  .data = std::data(bytes),
+  .length = checked_fdb_size(std::size(bytes))
  };
 }
 
@@ -743,12 +759,12 @@ constexpr byte_view result_bytes(const std::uint8_t *data, const int length)
 
 inline std::string_view as_string_view(const byte_view bytes) noexcept
 {
- if (bytes.empty()) {
+ if (std::empty(bytes)) {
   return {};
  }
 
  return std::string_view(
-  reinterpret_cast<const char *>(bytes.data()), bytes.size());
+  reinterpret_cast<const char *>(std::data(bytes)), std::size(bytes));
 }
 
 inline std::string_view key_view(const auto& result)
@@ -837,7 +853,7 @@ inline auto apply_option_value(auto& set_option,
  return std::invoke(set_option, code, input.data, input.length);
 }
 
-inline void apply_options(const auto& option_map, auto&& set_option)
+inline void apply_options(auto&& option_map, auto&& set_option)
 {
  std::ranges::for_each(option_map, [&set_option](const auto& option) {
     const auto apply = [&set_option, code = option.first](const auto& value) {
@@ -850,6 +866,21 @@ inline void apply_options(const auto& option_map, auto&& set_option)
         libfdb_exception::make_fdb_error_string(ec)));
     }
   });
+}
+
+// FoundationDB retains only these transaction options across on_error():
+constexpr bool transaction_option_is_persistent(
+  const FDBTransactionOption option) noexcept
+{
+ switch (option) {
+ default:
+  return false;
+ case FDB_TR_OPTION_TIMEOUT:
+ case FDB_TR_OPTION_RETRY_LIMIT:
+ case FDB_TR_OPTION_MAX_RETRY_DELAY:
+ case FDB_TR_OPTION_AUTHORIZATION_TOKEN:
+  return true;
+ }
 }
 
 // The global DB state and management thread:
@@ -1096,6 +1127,7 @@ class transaction final
 
  database_handle dbh;
  std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_handle;
+ transaction_options options;
  std::vector<versionstamp> version_stamps;
 
  state_t state = state_t::active;
@@ -1124,6 +1156,19 @@ class transaction final
   }
  }
 
+ void restore_options()
+ {
+  auto nonpersistent = options | std::views::filter([](const auto& option) {
+   return not detail::transaction_option_is_persistent(option.first);
+  });
+
+  detail::apply_options(
+   nonpersistent,
+   [handle = raw_handle()](auto option, auto data, auto size) {
+    return fdb_transaction_set_option(handle, option, data, size);
+   });
+ }
+
  void reset_for_replay(const fdb_error_t error)
  {
   require_active("reset_for_replay()");
@@ -1140,6 +1185,7 @@ class transaction final
 
   // Discard versionstamps registered by the abandoned attempt:
   version_stamps.clear();
+  restore_options();
  }
 
  bool get_single_value_from_transaction(
@@ -1153,15 +1199,16 @@ class transaction final
 
  public:
  transaction(database_handle database)
-  : dbh(require_database(std::move(database))),
-    txn_handle(dbh->create_transaction(), &fdb_transaction_destroy)
+  : transaction(std::move(database), transaction_options {})
  {}
 
  transaction(database_handle database, const transaction_options& opts)
-  : transaction(std::move(database))
+  : dbh(require_database(std::move(database))),
+    txn_handle(dbh->create_transaction(), &fdb_transaction_destroy),
+    options(opts)
  {
   detail::apply_options(
-    opts,
+    options,
     [handle = raw_handle()](auto option, auto data, auto size) {
       return fdb_transaction_set_option(handle, option, data, size);
     });
@@ -1587,6 +1634,7 @@ inline void ceph::libfdb::transaction::recover_from_commit_error(
  }
 
  version_stamps.clear();
+ restore_options();
 }
 
 inline void ceph::libfdb::transaction::resolve_versionstamps(
