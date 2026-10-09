@@ -2248,7 +2248,7 @@ void PeeringState::calc_replicated_acting_stretch(
 
   std::map<int, bucket_candidates_t> ancestors;
   auto get_ancestor = [&](int osd) mutable {
-    int ancestor = osdmap->crush->get_parent_of_type(
+    int ancestor = osdmap->crush->get_nonshadow_parent_of_type(
       osd,
       pool.info.peering_crush_bucket_barrier,
       pool.info.crush_rule);

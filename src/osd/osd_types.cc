@@ -2352,8 +2352,8 @@ bool pg_pool_t::stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
   set<int> ancestors;
   const shared_ptr<CrushWrapper>& crush = osdmap.crush;
   for (int osdid : want) {
-    int ancestor = crush->get_parent_of_type(osdid, barrier_id,
-					     crush_rule);
+    int ancestor = crush->get_nonshadow_parent_of_type(osdid, barrier_id,
+						       crush_rule);
     ancestors.insert(ancestor);
   }
   if (ancestors.size() < barrier_count) {
