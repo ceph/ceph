@@ -16,24 +16,31 @@
 #ifndef CEPH_COMMON_MUTEX_DEBUG_H
 #define CEPH_COMMON_MUTEX_DEBUG_H
 
+#include <pthread.h>
+
 #include <atomic>
 #include <system_error>
 #include <thread>
 
-#include <pthread.h>
-
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 
+#include "acconfig.h"
 #include "ceph_time.h"
 #include "likely.h"
 #include "lockdep.h"
-
+#ifdef CEPH_LOCKSTAT
+#include "lockstat.h"
+#endif
 namespace ceph {
 namespace mutex_debug_detail {
 
 class mutex_debugging_base
+#ifdef CEPH_LOCKSTAT
+  : public lockstat_detail::LockStat
+#endif
 {
+
 protected:
   std::string group;
   int id = -1;
@@ -51,7 +58,15 @@ protected:
   void _locked(); // just locked
   void _will_unlock(); // about to unlock
 
+#ifdef CEPH_LOCKSTAT
+  mutex_debugging_base(
+      lockstat_detail::LockStatTraits::LockStatType lockType,
+      const lockstat_detail::LockStatTraits* traits,
+      bool ld = true,
+      bool bt = false);
+#else
   mutex_debugging_base(std::string group, bool ld = true, bool bt = false);
+#endif
   ~mutex_debugging_base();
 
 public:
@@ -71,10 +86,13 @@ public:
 };
 
 // Since this is a /debugging/ mutex just define it in terms of the
-// pthread error check mutex.
-template<bool Recursive>
-class mutex_debug_impl : public mutex_debugging_base
-{
+// pthread error check mutex (or adaptive / recursive when selected).
+template <bool Recursive, bool Adaptive = false>
+class mutex_debug_impl : public mutex_debugging_base {
+  static_assert(
+      !(Recursive && Adaptive),
+      "recursive and adaptive mutexes are mutually exclusive");
+
 private:
   pthread_mutex_t m;
 
@@ -82,13 +100,23 @@ private:
     pthread_mutexattr_t a;
     pthread_mutexattr_init(&a);
     int r;
-    if (recursive)
+    if constexpr (Recursive) {
       r = pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
-    else
+    } else if constexpr (Adaptive) {
+#ifdef HAVE_PTHREAD_MUTEX_ADAPTIVE_NP
+      r = pthread_mutexattr_settype(&a, PTHREAD_MUTEX_ADAPTIVE_NP);
+#else
+      static_assert(
+          !Adaptive, "adaptive mutex requires PTHREAD_MUTEX_ADAPTIVE_NP");
+      r = -1;
+#endif
+    } else {
       r = pthread_mutexattr_settype(&a, PTHREAD_MUTEX_ERRORCHECK);
+    }
     ceph_assert(r == 0);
     r = pthread_mutex_init(&m, &a);
     ceph_assert(r == 0);
+    pthread_mutexattr_destroy(&a);
   }
 
   bool enable_lockdep(bool no_lockdep) const {
@@ -103,12 +131,27 @@ private:
 
 public:
   static constexpr bool recursive = Recursive;
+  static constexpr bool adaptive = Adaptive;
 
+
+#ifdef CEPH_LOCKSTAT
+  static constexpr lockstat_detail::LockStatTraits::LockStatType LockType =
+      lockstat_detail::LockStatTraits::LockStatType::MUTEX;
+
+  mutex_debug_impl(
+      const lockstat_detail::LockStatTraits* traits,
+      bool ld = true,
+      bool bt = false) :
+    mutex_debugging_base(LockType, traits, ld, bt)
+  {
+    _init();
+  }
+#else
   mutex_debug_impl(std::string group, bool ld = true, bool bt = false)
     : mutex_debugging_base(group, ld, bt) {
     _init();
   }
-
+#endif
   // Mutex is Destructible
   ~mutex_debug_impl() {
     int r = pthread_mutex_destroy(&m);
@@ -124,7 +167,22 @@ public:
   mutex_debug_impl& operator =(mutex_debug_impl&&) = delete;
 
   void lock_impl() {
+#ifdef CEPH_LOCKSTAT
+    const auto wait_start_clock =
+        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+            ? lockstat_detail::lockstat_clock::now()
+            : lockstat_detail::lockstat_clock::zero();
+    int r = 0;
+    if (is_tripwire_enabled()) {
+      struct timespec timeout_tripwire;
+      get_timeout_tripwire(&timeout_tripwire);
+      r = pthread_mutex_timedlock(&m, &timeout_tripwire);
+    } else {
+      r = pthread_mutex_lock(&m);
+    }
+#else
     int r = pthread_mutex_lock(&m);
+#endif
     // Allowed error codes for Mutex concept
     if (unlikely(r == EPERM ||
 		 r == EDEADLK ||
@@ -132,17 +190,53 @@ public:
       throw std::system_error(r, std::generic_category());
     }
     ceph_assert(r == 0);
+#ifdef CEPH_LOCKSTAT
+    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
+                 get_traits())) {
+      m_hold_start = lockstat_detail::lockstat_clock::now();
+      m_hold_mode = lockstat_detail::LockMode::WRITE;
+      record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
+    }
+#endif
   }
 
   void unlock_impl() noexcept {
+#ifdef CEPH_LOCKSTAT
+    const auto hold_start = m_hold_start;
+    if (unlikely(hold_start != lockstat_detail::lockstat_clock::zero())) {
+      const auto hold_time =
+          lockstat_detail::lockstat_clock::now() - hold_start;
+      const auto hold_mode = m_hold_mode;
+      m_hold_start = lockstat_detail::lockstat_clock::zero();
+      if (get_traits()) {
+        record_hold_time(hold_time, hold_mode);
+      }
+    }
+#endif
     int r = pthread_mutex_unlock(&m);
     ceph_assert(r == 0);
   }
 
-  bool try_lock_impl() {
+  bool try_lock_impl(bool explicit_try = true) {
+#ifdef CEPH_LOCKSTAT
+    const auto wait_start_clock =
+        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+            ? lockstat_detail::lockstat_clock::now()
+            : lockstat_detail::lockstat_clock::zero();
+#endif
     int r = pthread_mutex_trylock(&m);
     switch (r) {
     case 0:
+#ifdef CEPH_LOCKSTAT
+      if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
+                   get_traits())) {
+        m_hold_start = lockstat_detail::lockstat_clock::now();
+        m_hold_mode = explicit_try
+            ? lockstat_detail::LockMode::TRY_WRITE
+            : lockstat_detail::LockMode::WRITE;
+        record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
+      }
+#endif
       return true;
     case EBUSY:
       return false;
@@ -153,6 +247,37 @@ public:
   pthread_mutex_t* native_handle() {
     return &m;
   }
+
+#ifdef CEPH_LOCKSTAT
+  void
+  condvar_wait_begin()
+  {
+    const auto hold_start = m_hold_start;
+    if (unlikely(hold_start != lockstat_detail::lockstat_clock::zero())) {
+      const auto hold_time =
+          lockstat_detail::lockstat_clock::now() - hold_start;
+      const auto hold_mode = m_hold_mode;
+      m_hold_start = lockstat_detail::lockstat_clock::zero();
+      if (get_traits()) {
+        record_hold_time(hold_time, hold_mode);
+      }
+    }
+  }
+
+  void
+  condvar_wait_end(
+      lockstat_detail::lockstat_clock::time_point /*wait_start_clock*/)
+  {
+    // Resume hold tracking after pthread_cond_wait re-acquires the mutex.
+    // Do not record condvar sleep as mutex wait time; that is not lock
+    // contention.
+    if (unlikely(lockstat_detail::LockStat::is_lockstat_enabled() &&
+                 get_traits())) {
+      m_hold_start = lockstat_detail::lockstat_clock::now();
+      m_hold_mode = lockstat_detail::LockMode::WRITE;
+    }
+  }
+#endif
 
   void _post_lock() {
     if (!recursive) {
@@ -185,7 +310,7 @@ public:
     if (enable_lockdep(no_lockdep))
       _will_lock(recursive);
 
-    if (_try_lock(no_lockdep))
+    if (_try_lock(no_lockdep, false))
       return;
 
     lock_impl();
@@ -202,8 +327,8 @@ public:
   }
 
 private:
-  bool _try_lock(bool no_lockdep) {
-    bool locked = try_lock_impl();
+  bool _try_lock(bool no_lockdep, bool explicit_try = true) {
+    bool locked = try_lock_impl(explicit_try);
     if (locked) {
       if (enable_lockdep(no_lockdep))
 	_locked();
@@ -211,12 +336,24 @@ private:
     }
     return locked;
   }
+
+#ifdef CEPH_LOCKSTAT
+  lockstat_detail::lockstat_clock::time_point m_hold_start{
+      lockstat_detail::lockstat_clock::zero()};
+  lockstat_detail::LockMode m_hold_mode{lockstat_detail::LockMode::WRITE};
+#endif
 };
 
 
 } // namespace mutex_debug_detail
-typedef mutex_debug_detail::mutex_debug_impl<false> mutex_debug;
-typedef mutex_debug_detail::mutex_debug_impl<true> mutex_recursive_debug;
+
+typedef mutex_debug_detail::mutex_debug_impl<false, false> mutex_debug;
+typedef mutex_debug_detail::mutex_debug_impl<true, false> mutex_recursive_debug;
+#ifdef HAVE_PTHREAD_MUTEX_ADAPTIVE_NP
+typedef mutex_debug_detail::mutex_debug_impl<false, true> mutex_adaptive_debug;
+#else
+typedef mutex_debug mutex_adaptive_debug;
+#endif
 } // namespace ceph
 
 #endif

@@ -1,0 +1,26 @@
+{
+  "version": 10,
+  "include": [
+    "defaults.json",
+    "host.json",
+    "user.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "debug",
+      "inherits": [
+        "_default-debug",
+        "_host",
+        "_user-debug"
+      ]
+    },
+    {
+      "name": "release",
+      "inherits": [
+        "_default-release",
+        "_host",
+        "_user-release"
+      ]
+    }
+  ]
+}

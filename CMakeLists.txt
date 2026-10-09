@@ -457,7 +457,34 @@ endif(WITH_LZ4)
 CMAKE_DEPENDENT_OPTION(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep" ON
   "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
 
+option(WITH_CEPH_ADAPTIVE_MUTEX
+  "Use PTHREAD_MUTEX_ADAPTIVE_NP as ceph::mutex (perf experiment)" OFF)
+if(WITH_CEPH_ADAPTIVE_MUTEX AND NOT HAVE_PTHREAD_MUTEX_ADAPTIVE_NP)
+  message(WARNING
+    "WITH_CEPH_ADAPTIVE_MUTEX is ON but PTHREAD_MUTEX_ADAPTIVE_NP is unavailable; "
+    "ceph::mutex will remain non-adaptive")
+endif()
+
 option(WITH_CPUTRACE "Enable Cputrace support via the admin socket" OFF)
+
+# Determine default for WITH_CEPH_LOCKSTAT based on compiler/version
+set(_lockstat_default OFF)
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64")
+  foreach(_lang IN ITEMS C CXX)
+    if(DEFINED CMAKE_${_lang}_COMPILER_ID AND DEFINED CMAKE_${_lang}_COMPILER_VERSION)
+      if(CMAKE_${_lang}_COMPILER_ID STREQUAL "GNU"
+              AND CMAKE_${_lang}_COMPILER_VERSION VERSION_GREATER_EQUAL "11")
+        set(_lockstat_default ON)
+      elseif(CMAKE_${_lang}_COMPILER_ID STREQUAL "Clang"
+              AND CMAKE_${_lang}_COMPILER_VERSION VERSION_GREATER_EQUAL "18")
+        set(_lockstat_default ON)
+      endif()
+    endif()
+  endforeach()
+endif()
+
+option(WITH_CEPH_LOCKSTAT "Enable LockStat collection" ${_lockstat_default})
 
 #if allocator is set on command line make sure it matches below strings
 set(ALLOCATOR "" CACHE STRING
