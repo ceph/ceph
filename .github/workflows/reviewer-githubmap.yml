@@ -1,0 +1,92 @@
+name: Remind Contributor to Update .githubmap
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  check-githubmap:
+    name: Check Contributor in .githubmap
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify org membership and .githubmap entry
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const reviewer = context.payload.review.user.login;
+            const reviewerType = context.payload.review.user.type;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = context.payload.pull_request.number;
+
+            // Ignore bot accounts
+            if (reviewerType === 'Bot') {
+              console.log(`Reviewer @${reviewer} is a bot account. Skipping.`);
+              return;
+            }
+
+            // 1. Verify membership in the "ceph" organization
+            let isOrgMember = false;
+            try {
+              await github.rest.orgs.checkMembershipForUser({
+                org: 'ceph',
+                username: reviewer,
+              });
+              isOrgMember = true;
+            } catch (err) {
+              try {
+                await github.rest.orgs.checkPublicMembershipForUser({
+                  org: 'ceph',
+                  username: reviewer,
+                });
+                isOrgMember = true;
+              } catch (e) {
+                console.log(`Reviewer @${reviewer} is not a member of the 'ceph' organization.`);
+              }
+            }
+
+            if (!isOrgMember) {
+              return;
+            }
+
+            // 2. Fetch .githubmap from the main branch
+            let githubMapContent = '';
+            try {
+              const response = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path: '.githubmap',
+                ref: 'main',
+              });
+              githubMapContent = Buffer.from(response.data.content, 'base64').toString('utf-8');
+            } catch (error) {
+              console.log(`Failed to fetch .githubmap from main branch: ${error.message}`);
+              return;
+            }
+
+            // 3. Parse .githubmap to check if reviewer's handle is listed
+            const isListed = githubMapContent
+              .split('\n')
+              .some(line => {
+                const trimmed = line.trim();
+                return !trimmed.startsWith('#') && new RegExp(`^${reviewer}(\\s+|$)`).test(trimmed);
+              });
+
+            if (isListed) {
+              console.log(`Reviewer @${reviewer} is already listed in .githubmap.`);
+              return;
+            }
+
+            // 4. Leave a comment prompting the contributor to add themselves
+            const commentBody = `@${reviewer} Thank you for reviewing this pull request! As a member of the Ceph organization, please add yourself to \`.githubmap\` in the \`main\` branch if you haven't already.`;
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body: commentBody,
+            });
