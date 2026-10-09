@@ -16,6 +16,7 @@
 #include "include/cephfs/libcephfs.h"
 #include "include/ceph_assert.h"
 #include "include/object.h"
+#include "include/rados.h" // for CEPH_NOSNAP
 #include "include/stringify.h"
 #include <errno.h>
 #include <sys/types.h>
