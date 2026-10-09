@@ -714,4 +714,90 @@ function TEST_ok_to_upgrade_osd_order_by_pg_count() {
     done
 }
 
+# Wait until the mgr's PGMap - what `osd ok-to-stop` and `osd ok-to-upgrade`
+# read, as opposed to the mon's OSDMap that get_osds() reads - reports PG
+# pgid with the given acting set (space separated) and a state containing
+# the given string, or until a timeout of $WAIT_FOR_CLEAN_TIMEOUT seconds.
+function wait_for_pg_acting() {
+    local pgid=$1
+    local acting="$2"
+    local state=${3:-active}
+    local -a delays=($(get_timeout_delays $WAIT_FOR_CLEAN_TIMEOUT .1))
+    local -i loop=0
+
+    flush_pg_stats || return 1
+    while true ; do
+        ceph --format json pg dump pgs 2>/dev/null | \
+            jq -e --arg pgid "$pgid" --arg acting "$acting" --arg state "$state" \
+               '.pg_stats[] | select(.pgid == $pgid)
+                | select((.acting | map(tostring) | join(" ")) == $acting)
+                | select(.state | contains($state))' > /dev/null && return 0
+        (( loop >= ${#delays[*]} )) && return 1
+        sleep ${delays[$loop]}
+        loop+=1
+    done
+}
+
+# `osd ok-to-upgrade` grows and shrinks its candidate set with the same
+# _check_offlines_pgs() as `osd ok-to-stop`. A regression (cf54988c504)
+# made that check skip every PG whose *last* acting OSD is not among the
+# candidates, so a subset that leaves a PG below min_size could be
+# reported as upgradable. With one PG, 3 copies on the 3 OSDs of a host and
+# min_size 2, no two OSDs can go together. Pin the acting order of the PG
+# to the order in which the command walks the bucket, so that the pair it
+# tries first ([first, second]) never contains the last acting OSD, and
+# check that only one OSD is reported.
+function TEST_ok_to_upgrade_last_acting_outside_set() {
+    local dir=$1
+    local poolname="test"
+    local OSDS=3
+    local ceph_version="01.2.3-1234-g1234deed"
+
+    CEPH_ARGS="$ORIG_CEPH_ARGS --mon-host=$CEPH_MON "
+
+    run_mon $dir a --public-addr=$CEPH_MON || return 1
+    run_mgr $dir x || return 1
+
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true || return 1
+    done
+
+    create_pool $poolname 1 1 || return 1
+    ceph osd pool set $poolname size 3 || return 1
+    ceph osd pool set $poolname min_size 2 || return 1
+    wait_for_clean || return 1
+
+    local crush_bucket=$(ceph osd tree | grep host | awk '{ print $4 }')
+
+    # the order in which the command considers the OSDs of the bucket
+    local res=$(ceph osd ok-to-upgrade $crush_bucket $ceph_version --format=json)
+    test $(echo $res | jq '.osds_in_crush_bucket | length') -eq $OSDS || return 1
+    local order=$(echo $res | jq -r '.osds_in_crush_bucket | join(" ")')
+
+    # pin the acting order of the only PG to that order: the last OSD the
+    # command would add to a pair is the last acting member
+    local pgid=$(get_pg $poolname obj)
+    ceph osd set-require-min-compat-client luminous || return 1
+    ceph osd pg-upmap $pgid $order || return 1
+    wait_for_clean || return 1
+    wait_for_pg_acting $pgid "$order" clean || return 1
+
+    # the upmap must not have changed the order in which the command walks
+    # the bucket, or the pair it tries first may contain the last acting
+    # OSD and the test would pass without the fix
+    res=$(ceph osd ok-to-upgrade $crush_bucket $ceph_version --format=json)
+    test "$(echo $res | jq -r '.osds_in_crush_bucket | join(" ")')" = "$order" || return 1
+
+    # 3 copies, min_size 2: exactly one OSD of the host can be upgraded at
+    # a time, whatever max says. The regression reported two.
+    local max
+    for max in 0 2 3; do
+      res=$(ceph osd ok-to-upgrade $crush_bucket $ceph_version $max --format=json)
+      test $(echo $res | jq '.all_osds_upgraded') = false || return 1
+      test $(echo $res | jq '.ok_to_upgrade') = true || return 1
+      test $(echo $res | jq '.osds_ok_to_upgrade | length') -eq 1 || return 1
+    done
+}
+
 main ok-to-upgrade "$@"
