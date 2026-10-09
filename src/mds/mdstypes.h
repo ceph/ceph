@@ -183,6 +183,10 @@ struct fnode_t {
   // version at which we last scrubbed our personal data structures
   version_t localized_scrub_version = 0;
   utime_t localized_scrub_stamp;
+
+  // total length of this fragment's omap values (the encoded dentries) as
+  // the next commit will write them
+  int64_t frag_bytes = 0;
 };
 WRITE_CLASS_ENCODER(fnode_t)
 

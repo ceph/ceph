@@ -229,6 +229,29 @@ void sr_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
+uint64_t sr_t::get_variable_encoded_len() const
+{
+  constexpr uint64_t struct_header_len = sizeof(__u8) + sizeof(__u8) + sizeof(__u32);
+  uint64_t len = 0;
+  for (const auto& [snapid, info] : snaps) {
+    len += sizeof(uint64_t)                              // the key
+      + struct_header_len                                // SnapInfo's
+      + sizeof(uint64_t) + sizeof(uint64_t)              // snapid, ino
+      + 2 * sizeof(__u32)                                // stamp
+      + sizeof(__u32) + info.name.length()
+      + sizeof(__u32)                                    // count of metadata
+      + sizeof(__u32) + info.alternate_name.length();
+    for (const auto& [key, value] : info.metadata) {
+      len += sizeof(__u32) + key.length() + sizeof(__u32) + value.length();
+    }
+  }
+  // the key, then snaplink_t's struct header, ino and first
+  len += past_parents.size() *
+    (sizeof(uint64_t) + struct_header_len + 2 * sizeof(uint64_t));
+  len += past_parent_snaps.size() * sizeof(uint64_t);
+  return len;
+}
+
 void sr_t::decode(bufferlist::const_iterator& p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(6, 4, 4, p);

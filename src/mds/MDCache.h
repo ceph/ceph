@@ -267,6 +267,12 @@ class MDCache {
     return symlink_recovery;
   }
 
+  bool get_verify_frag_bytes(void) const {
+    return verify_frag_bytes;
+  }
+
+  uint64_t get_empty_encoded_inode_len(uint64_t features);
+
   bool get_use_global_snaprealm_seq(void) const {
     return use_global_snaprealm_seq;
   }
@@ -453,6 +459,11 @@ class MDCache {
                           snapid_t follows=CEPH_NOSNAP,
 			  CInode **pcow_inode=0, CDentry::linkage_t *dnl=0);
   void journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
+  // Adds the size diff of dentry's omap value length to its dirfrag's frag_bytes,
+  // on the fnode that mut projected.
+  // NOTE: This will be called after dn's projected state is final and before the event is
+  // submitted
+  void account_dentry_bytes(MutationImpl *mut, CDentry *dn);
 
   void project_rstat_inode_to_frag(const MutationRef& mut,
 				   CInode *cur, CDir *parent, snapid_t first,
@@ -1159,6 +1170,9 @@ private:
                      bool scrub_mdsdir, Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);
   void repair_dirfrag_stats(CDir *dir);
+  // sets a complete, auth pinned dirfrag's frag_bytes to the sum of its
+  // counted sizes and journals it as EUpdate "repair_dirfrag_bytes"
+  void repair_dirfrag_bytes(CDir *dir);
   void rdlock_dirfrags_stats(CInode *diri, MDSInternalContext *fin);
 
   void uninline_data_work(MDRequestRef mdr);
@@ -1609,6 +1623,10 @@ private:
 
   // Stores the symlink target on the file object's head
   bool symlink_recovery;
+  // Checks each computed dentry value length against a full encode
+  bool verify_frag_bytes;
+  uint64_t empty_encoded_inode_len = 0;
+  uint64_t empty_encoded_inode_len_features = 0;
   enum dirfrag_killpoint kill_dirfrag_at;
 
   // File size recovery
