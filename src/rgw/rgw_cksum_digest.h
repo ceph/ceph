@@ -42,7 +42,7 @@ namespace rgw { namespace cksum {
       : d(std::move(rhs.d))
     {}
     void Restart() override { d.Restart(); }
-    void Update(const unsigned char* data, uint64_t len) override {
+    void Update(const unsigned char* data, size_t len) override {
       d.Update(data, len);
     }
     void Update(const ceph::buffer::list& bl) {

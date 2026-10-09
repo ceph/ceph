@@ -1403,7 +1403,7 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
                                                CephContext* cct,
                                                RGWGetObj_Filter* next,
                                                std::unique_ptr<BlockCrypt> crypt,
-                                               std::vector<size_t> parts_len,
+                                               std::vector<uint64_t> parts_len,
                                                std::vector<std::pair<uint32_t, std::string>> part_keys,
                                                off_t encrypted_total_size,
                                                bool has_compression,
@@ -1462,7 +1462,7 @@ RGWGetObj_BlockDecrypt::~RGWGetObj_BlockDecrypt() {
 
 int RGWGetObj_BlockDecrypt::read_manifest_parts(const DoutPrefixProvider *dpp,
                                                 const bufferlist& manifest_bl,
-                                                std::vector<size_t>& parts_len)
+                                                std::vector<uint64_t>& parts_len)
 {
   RGWObjManifest manifest;
   if (manifest_bl.length()) {
@@ -1562,7 +1562,7 @@ int RGWGetObj_BlockDecrypt::process_part_boundaries(size_t& plain_part_ofs_out) 
   uint32_t part_idx = 0;
   int res = 0;
 
-  for (size_t part : parts_len) {
+  for (uint64_t part : parts_len) {
     // Get actual S3 part number + salt from the attribute (not calculated!)
     uint32_t this_part_num = 0;
     std::string_view this_salt;
@@ -1968,7 +1968,7 @@ bool rgw_get_aead_decrypted_size(const DoutPrefixProvider* dpp,
 
   /* Try CRYPT_PARTS first (more accurate for multipart) */
   if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
-    std::vector<size_t> parts_len;
+    std::vector<uint64_t> parts_len;
     try {
       auto iter = i->second.cbegin();
       using ceph::decode;
@@ -1981,7 +1981,7 @@ bool rgw_get_aead_decrypted_size(const DoutPrefixProvider* dpp,
     }
     if (!parts_len.empty()) {
       uint64_t total = 0;
-      for (size_t enc_part : parts_len) {
+      for (uint64_t enc_part : parts_len) {
         total += aead_encrypted_to_plaintext_size(enc_part, dpp);
       }
       *decrypted_size = total;

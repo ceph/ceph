@@ -75,7 +75,7 @@ namespace rgw::dedup {
   public:
     // @max_calls_per_sec - max requests per second allowed, 0 means unlimited
     // disbaled by default
-    Throttle(size_t max_calls_per_sec=0) {
+    Throttle(uint32_t max_calls_per_sec=0) {
       set_max_calls_per_sec(max_calls_per_sec);
       reset();
     }
@@ -86,7 +86,7 @@ namespace rgw::dedup {
       max_calls = max_calls_per_sec;
     }
 
-    inline size_t get_max_calls_per_second() const {
+    inline uint32_t get_max_calls_per_second() const {
       return max_calls;
     }
 
