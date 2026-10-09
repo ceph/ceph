@@ -104,6 +104,9 @@ if(WITH_CCACHE)
   endif()
 endif(WITH_CCACHE)
 
+set(CEPH_VENDOR_RELEASE "" CACHE STRING
+  "Vendor release string appended to the ceph version string")
+
 option(WITH_SCCACHE "Build with sccache.")
 if(WITH_SCCACHE)
   find_program(SCCACHE_EXECUTABLE sccache

@@ -44,6 +44,11 @@ const char *git_version_to_str(void)
   return STRINGIFY(CEPH_GIT_VER);
 }
 
+static const char *get_ceph_vendor_release(void)
+{
+  return CEPH_VENDOR_RELEASE;
+}
+
 std::string const pretty_version_to_str(void)
 {
   std::ostringstream oss;
@@ -56,6 +61,10 @@ std::string const pretty_version_to_str(void)
       << " (crimson)"
 #endif
       ;
+  const char *vendor_release = get_ceph_vendor_release();
+  if (vendor_release[0] != '\0') {
+    oss << " release " << vendor_release;
+  }
   return oss.str();
 }
 

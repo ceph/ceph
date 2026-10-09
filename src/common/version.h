@@ -33,4 +33,11 @@ std::string const pretty_version_to_str(void);
 // Release type ("dev", "rc", or "stable")
 const char *ceph_release_type(void);
 
+/* Optional vendor release suffix. Default is empty, can be overridden at build
+ * time by users to specify their specific version of ceph
+ */
+#ifndef CEPH_VENDOR_RELEASE
+#define CEPH_VENDOR_RELEASE ""
+#endif
+
 #endif
