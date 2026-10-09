@@ -88,6 +88,255 @@ Starting the Upgrade
    #. Bring CephFS filesystems back up, bringing the state of active
       MDS daemon(s) from ``up:standby`` to ``up:active``.
 
+   When a cluster has more than one CephFS filesystem, cephadm upgrades the
+   MDS daemons one filesystem at a time by default. It prepares (fails, or
+   scales down to ``max_mds 1``) a single filesystem, upgrades its MDS
+   daemons, restores that filesystem, and only then proceeds to the next one.
+   Because MDS daemons are upgraded serially in any case, this does not slow
+   the upgrade down; it only narrows the disruption to one filesystem at a
+   time instead of taking every filesystem offline simultaneously. One
+   exception: if an MDS daemon is found to be actively serving a filesystem
+   other than its own service's (a standby takeover), both filesystems are
+   prepared together, as restarting an active MDS of an unprepared
+   filesystem would be unsafe. To restore the previous behavior of preparing
+   all filesystems at once, set:
+
+   .. prompt:: bash #
+
+      ceph config set mgr mgr/cephadm/upgrade_fs_one_at_a_time false
+
+.. _cephadm-upgrade-staged-switch:
+
+Staged switch
+-------------
+
+Redeploying a daemon writes its new unit files and restarts it in one
+``cephadm deploy`` call, and most of that call is spent on work that does not
+need the daemon to be down: starting cephadm on the host, looking up the
+uid/gid in the target image, writing files, ``systemctl daemon-reload``. When
+a whole group of daemons has to be taken out of service before any of them
+can be restarted - the MDS of a filesystem with ``fail_fs = true`` - all of
+that runs inside the outage window, once per daemon.
+
+The *staged switch* moves it out of the window. For each group, cephadm:
+
+#. stages the new deployment on every host while the daemons still serve
+   (``cephadm deploy --stage``: new config, keyring and unit files written
+   next to the live ones, the target image executed once; the daemons of a
+   host in one ``cephadm`` call),
+#. takes the group out of service,
+#. switches every daemon to its staged deployment, all hosts in parallel
+   (``cephadm switch-staged``: one ``systemctl stop`` / ``start`` each),
+#. waits until the monitors report every daemon back on the target version,
+#. puts the group back into service.
+
+Anything that can go wrong with the image (pull, registry, an image that
+cannot execute on the host) goes wrong in step 1, with the group still
+serving. If a daemon does not come back on the target version in step 4,
+every daemon of the group is switched back to its previous deployment, the
+group is restored on the previous release and the upgrade is paused with an
+``UPGRADE_SWITCH_FAILED`` warning; a failure in step 1 or 2 pauses it with
+``UPGRADE_STAGE_FAILED`` without restarting anything.
+
+The staged switch is opt-in and implemented for MDS and OSD daemons. For
+MDS, a group is one filesystem (see above) and step 2 is ``fs fail``:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/orchestrator/fail_fs true
+   ceph config set mgr mgr/cephadm/upgrade_staged_switch true
+
+With it, a filesystem is down for roughly one container restart plus MDS
+re-registration and journal replay, instead of one redeploy per MDS daemon.
+
+Related options:
+
+* ``mgr/cephadm/upgrade_staged_switch_types`` (default ``mds``): the daemon
+  types the staged switch applies to; only types with a staged switch policy
+  are honoured. Add ``osd`` for the OSD policy described below.
+* ``mgr/cephadm/upgrade_staged_switch_timeout`` (default ``120`` seconds):
+  how long to wait in step 4 before switching back.
+* ``mgr/cephadm/upgrade_staged_switch_max_parallel`` (default ``16``): how
+  many hosts to stage or switch at once.
+* ``mgr/cephadm/upgrade_staged_switch_stage_ahead`` (default ``true``): for
+  a daemon type whose policy knows in advance which daemons it will switch
+  (OSDs), stage them all once, at the start of their phase, instead of group
+  by group; a group then re-stages only the daemons whose target image or
+  generated configuration changed since. The MDS policy stages each
+  filesystem when it is picked either way.
+* ``mgr/cephadm/upgrade_staged_switch_flush_mds_journal`` (default
+  ``true``): flush the journal of each active MDS rank, one rank at a time,
+  before ``fs fail``, so the replay after the switch is shorter. This adds
+  metadata pool I/O and time *before* the outage window, never inside it;
+  set it to ``false`` to spare a busy metadata pool. It is also what gets
+  past a ``fs fail`` refused because of ``MDS_TRIM``.
+
+When other standby MDS daemons pinned to the filesystem (``mds_join_fs``) are
+not managed by cephadm, they must run the target release before the
+filesystem is re-joined, or the monitors could hand a rank to an older
+daemon and then refuse the upgraded ones; cephadm checks this and switches
+back rather than re-joining in that case. The ``mds.<fs>`` service must also
+have at least as many daemons as the filesystem has ranks (``max_mds``): the
+ranks left over would otherwise go to standbys outside the service, which the
+staged switch does not upgrade; cephadm pauses the upgrade before taking the
+filesystem down if that is not the case. With several filesystems, consider
+``ceph fs set <fs> refuse_standby_for_another_fs true`` so that standbys of
+one filesystem do not take ranks in another while it is being upgraded.
+
+.. _cephadm-upgrade-staged-switch-osd:
+
+Staged switch of OSDs, one CRUSH bucket at a time
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The regular OSD phase redeploys OSDs one after the other (or in small
+batches, see :confval:`mgr/cephadm/max_parallel_osd_upgrades`), each
+redeploy restarting one OSD and waiting for its PGs to peer. On a large
+cluster this is where most of the upgrade's wall-clock time goes. With the
+staged switch, a group is **every OSD still to upgrade under one CRUSH
+bucket** of a given type, and the group is restarted in one go:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_staged_switch true
+   ceph config set mgr mgr/cephadm/upgrade_staged_switch_types mds,osd
+   ceph config set mgr mgr/cephadm/upgrade_staged_switch_osd_crush_level host
+
+For each pass of the upgrade, cephadm:
+
+#. walks the buckets of that type and asks the monitors, with ``ceph osd
+   ok-to-stop`` on the exact set of OSDs still to upgrade under the bucket,
+   whether **every PG stays active** (keeps at least ``min_size`` copies)
+   without them. The first bucket that passes is the group; when none does,
+   typically because the PGs of the previous group are still recovering,
+   cephadm waits and asks again on the next pass (``ceph orch upgrade
+   status`` says why) - the upgrade is not paused,
+#. stages the new deployment of every OSD of the group while they serve
+   (hosts in parallel, the OSDs of a host in one ``cephadm`` call). With
+   ``mgr/cephadm/upgrade_staged_switch_stage_ahead`` (the default), every
+   OSD to upgrade has already been staged once, at the start of the OSD
+   phase, and only the OSDs whose target image or generated configuration
+   changed since are staged again here,
+#. sets ``noout`` on exactly those OSDs (``ceph osd set-group noout``),
+   checks that no OSD outside the group has gone down (or come back) since
+   the group was chosen and asks ``ok-to-stop`` once more - if either says
+   the cluster is not the one the group was chosen for, nothing is
+   restarted and the next pass starts over - and switches them: one ``cephadm switch-staged``
+   call per host naming every OSD of the group on it, so the OSDs of a host
+   go down and come back around a single ``systemctl stop`` / ``start``,
+#. waits until the osdmap shows every one of them up again with a new
+   ``up_from``, ``ceph osd metadata`` reports the target version for each,
+   and every PG each of them holds has peered again since it booted (active,
+   as reported since then),
+#. clears ``noout`` on the group,
+#. waits until every one of them is back in the acting set of every PG it
+   holds and misses no object of it: the recovery (log-based, or a
+   backfill) of what was written while it was down is done. Only then is
+   the next group chosen.
+
+Waiting for the OSDs of a group to be back in their PGs and caught up, and
+not only to boot, keeps the next group from being chosen while they are
+still peering or recovering: until then ``ok-to-stop`` counts them out (for
+a degraded PG it counts only the OSDs missing no object) and refuses every
+bucket sharing a PG with them, which with ``auto`` would make cephadm
+descend a level - or hand the pass to the regular path - for no lasting
+reason.
+
+Step 4 is bounded by ``mgr/cephadm/upgrade_staged_switch_osd_timeout``: an
+OSD that does not come back, comes back on the wrong version or whose PGs
+do not peer again is a failed switch, and the upgrade pauses (see below).
+Step 6 is not: how long recovery takes depends on what was written during
+the restart and on the recovery settings, not on the upgrade, and an OSD
+that needs a backfill (its PG log was trimmed while it was down) takes as
+long as the backfill. cephadm waits, without pausing the upgrade, and
+``ceph orch upgrade status`` says what for ("Waiting for the osd of rack r1
+to settle: its OSDs are recovering what was written while they were down
+(...)"). An OSD of the group that goes down again meanwhile is not waited
+for; ``ok-to-stop`` takes it into account when the next group is chosen.
+
+The bucket type is ``mgr/cephadm/upgrade_staged_switch_osd_crush_level``
+(default ``host``): any bucket type of the CRUSH map except the roots, or
+``auto``. With ``auto``, cephadm starts at the highest bucket type below the
+root (``datacenter``, ``room``, ``rack`` ... down to ``host``) and takes the
+first bucket, at the highest level, whose OSDs pass ``ok-to-stop`` as a set;
+this is re-evaluated for every group, so a rack that cannot be stopped as a
+whole (a pool with a ``host`` failure domain and two of its copies in that
+rack, say) is upgraded host by host while the other racks go in one go. With
+an explicit type, cephadm never descends. In both cases, when no bucket
+passes but single OSDs do - buckets that can never be stopped as a whole, a
+pool with an ``osd`` failure domain, say - the regular per-OSD path takes the
+pass rather than waiting for a verdict that will not change, and the buckets
+are tried again on the next pass with fewer OSDs left in them.
+
+A refusal is not always lasting. When a PG that keeps a bucket from passing
+is not ``active+clean`` (still recovering what was written while the
+previous group was down, degraded, peering...), the verdict will change once
+it has settled: cephadm waits for the bucket at its own level, asking again
+every 2 seconds, rather than descending to smaller groups that happen to
+pass meanwhile or handing the pass to the regular path. Only when every such
+PG is ``active+clean`` - the placement itself keeps the bucket from going -
+does it descend. PGs that stay degraded for another reason (an OSD down
+elsewhere) look the same; past ``upgrade_staged_switch_osd_timeout`` of
+waiting, cephadm stops waiting and descends as for a lasting refusal.
+
+A group is named after the deepest bucket that holds all of its OSDs: once
+the other datacenters of a region are upgraded, what is left of the region
+is one datacenter, and it is picked - and shown in the logs and in ``ceph
+orch upgrade status`` - as that datacenter, not as the region (a bucket with
+a single child holding the same OSDs, a datacenter of one rack, keeps its
+own name). With ``auto``, such a bucket is only tried at its own level.
+
+What ``ok-to-stop`` guarantees is that no PG becomes inactive, i.e. every
+PG keeps ``min_size`` copies; with ``size 3, min_size 2`` a group that
+passes may leave PGs with exactly ``min_size`` copies for the duration of
+the restart. This is the same criterion the regular path applies per OSD
+(and ``ceph osd ok-to-upgrade`` per batch); choose the level accordingly.
+``--limit`` caps the size of a group, ``--crush_bucket_type`` /
+``--crush_bucket_name`` restrict it to that bucket, and an OSD that is down,
+on an offline host or not in the CRUSH map is left to the regular path.
+
+Related options:
+
+* ``mgr/cephadm/upgrade_staged_switch_osd_crush_level`` (default ``host``):
+  the CRUSH bucket type switched together, or ``auto``.
+* ``mgr/cephadm/upgrade_staged_switch_osd_noout`` (default ``true``): set
+  ``noout`` on the OSDs of the group for the duration of the restart, so a
+  restart that outlasts ``mon_osd_down_out_interval`` does not mark them
+  out. A leftover flag (cephadm could not clear it) shows up as
+  ``OSD_FLAGS`` in ``ceph health detail``; clear it with ``ceph osd
+  unset-group noout <osd ids>``.
+* ``mgr/cephadm/upgrade_staged_switch_osd_timeout`` (default ``600``
+  seconds): how long step 4 waits for the whole group to be back, on the
+  target version and its PGs peered again. Recovery and backfill (step 6)
+  are not counted.
+* ``mgr/cephadm/upgrade_staged_switch_osd_max_group`` (default ``0``, no
+  limit): the most OSDs a group may hold; a bigger bucket is skipped (with
+  ``auto``, the next level down is tried).
+* ``mgr/cephadm/upgrade_staged_switch_osd_pause`` (default ``0``, no pause):
+  seconds to wait between two groups, counted from the moment every PG of
+  the previous group's OSDs is ``active+clean``. A lever against effects of
+  restarting OSDs back to back that the PG states do not show (cold caches,
+  client latency...). ``ceph orch upgrade status`` shows the pause; setting
+  the option back to ``0`` ends it.
+
+Unlike the MDS policy, a failed OSD switch is **never rolled back**: an OSD
+that booted on the new release may have upgraded its store, and starting
+the previous ``ceph-osd`` on it is a downgrade Ceph does not support. When
+``cephadm switch-staged`` fails on a host (it checks every OSD before
+stopping any, so nothing on that host restarted) or an OSD is not back on
+the target version within the timeout, the upgrade is paused with
+``UPGRADE_SWITCH_FAILED``, the OSDs are left as they are (on the new image
+where the switch went through) with ``noout`` still set on the group, and
+``ceph orch upgrade resume`` retries the switch or the verification of that
+same group. ``cephadm switch-staged --rollback`` remains available by hand
+for an OSD that did not start on the new image at all.
+
+The two cephadm commands can also be used by hand, for any containerized
+daemon type: ``cephadm deploy --name <daemon> --fsid <fsid> --image <image>
+--stage`` followed by ``cephadm switch-staged --fsid <fsid> --name <daemon>
+--expected-image <image>``, and ``--rollback`` to undo the last switch.
+``switch-staged`` accepts ``--name`` several times: the daemons named are
+checked first, then stopped together, swapped, and started together.
+
 Before you use cephadm to upgrade Ceph, verify that all hosts are currently
 online and that your cluster is healthy by running the following command:
 

@@ -61,6 +61,41 @@
   a few times in random workloads.  ``mds_dir_prefetch_backend_max`` (default 1)
   limits the number of concurrent background fetches.  This reduces latency in
   large directories while retaining cache warmth for hot directories.
+* cephadm: A new opt-in ``mgr/cephadm/upgrade_staged_switch`` option makes
+  ``ceph orch upgrade`` stage the new deployment of a group of daemons on every
+  host while they still serve (``cephadm deploy --stage``), take the group out
+  of service, switch every daemon to the staged deployment in parallel
+  (``cephadm switch-staged``), verify with the monitors that all of them are
+  back on the target release, and restore the group. The outage is one container
+  restart instead of one serial redeploy per daemon. On failure the daemons are
+  switched back to their previous deployment and the group is restored on the
+  previous release. The mechanism is daemon-type agnostic; this release ships
+  the MDS policy (one filesystem at a time, requires
+  ``mgr/orchestrator/fail_fs``). The two new ``cephadm`` commands can also be
+  used by hand.
+
+* cephadm: The staged switch now has an OSD policy (add ``osd`` to
+  ``mgr/cephadm/upgrade_staged_switch_types``): every OSD still to upgrade
+  under one CRUSH bucket of the type given by
+  ``mgr/cephadm/upgrade_staged_switch_osd_crush_level`` (default ``host``;
+  ``auto`` picks the highest bucket type below the root that works, group by
+  group) is staged while serving, then restarted in one go, one bucket per
+  pass, provided ``ceph osd ok-to-stop`` on that exact set reports that every
+  PG stays active. ``noout`` is set on the group for the duration of the
+  restart (``mgr/cephadm/upgrade_staged_switch_osd_noout``), and the monitors
+  (osdmap ``up_from`` and ``osd metadata``) are what confirm the restart and
+  the version before the group is released. A failed OSD switch is never
+  rolled back: the upgrade pauses and resumes at the same group.
+  ``cephadm switch-staged`` now accepts ``--name`` several times and restarts
+  the daemons named around a single ``systemctl stop`` / ``start``.
+
+* cephadm: During ``ceph orch upgrade``, CephFS filesystems are now prepared
+  and restored one at a time during the MDS phase, so at most one filesystem
+  is offline (``fail_fs = true``) or degraded (scaled down to ``max_mds 1``)
+  at any moment, instead of all filesystems simultaneously. Total upgrade
+  duration is unchanged, as MDS daemons were already redeployed serially.
+  The previous behaviour can be restored with
+  ``ceph config set mgr mgr/cephadm/upgrade_fs_one_at_a_time false``.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
