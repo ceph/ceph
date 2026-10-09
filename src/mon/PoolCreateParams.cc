@@ -256,8 +256,8 @@ int check_pool_params(const PoolCreateParams& p,
     return -EINVAL;
   }
   if (!erasure) {
-    if (p.is_given("size") && (p.size < 1 || p.size > 10)) {
-      *ss << "pool size must be between 1 and 10";
+    if (p.is_given("size") &&
+        check_pool_replica_copies(p.size, "pool size", ss) < 0) {
       return -EINVAL;
     }
     if (p.is_given("size") && p.num_zones > 1) {
@@ -265,8 +265,9 @@ int check_pool_params(const PoolCreateParams& p,
              "instead" << p.from_default("num_zones");
       return -EINVAL;
     }
-    if (!p.is_given("size") && (p.replica < 1 || p.replica > 10)) {
-      *ss << "replica must be between 1 and 10" << p.from_default("replica");
+    if (!p.is_given("size") &&
+        check_pool_replica_copies(p.replica, "replica", ss) < 0) {
+      *ss << p.from_default("replica");
       return -EINVAL;
     }
     if (p.is_given("min_size") && p.min_size &&
@@ -442,4 +443,125 @@ const std::map<string, string>& pool_default_options()
     {"crimson", "osd_pool_default_crimson"},
   };
   return options;
+}
+
+std::set<string> pool_default_option_names()
+{
+  std::set<string> names;
+  for (const auto& [param, option] : pool_default_options()) {
+    names.insert(option);
+  }
+  return names;
+}
+
+string profile_to_string(const std::map<string, string>& profile)
+{
+  std::ostringstream out;
+  for (const auto& [key, value] : profile) {
+    if (out.tellp() > 0)
+      out << " ";
+    out << key << "=" << value;
+  }
+  return out.str();
+}
+
+int check_size_one(bool allowed, bool force, std::ostream* ss)
+{
+  if (!allowed) {
+    *ss << "configuring pool size as 1 is disabled by default.";
+    return -EPERM;
+  }
+  if (!force) {
+    *ss << "WARNING: setting pool size 1 could lead to data loss "
+           "without recovery. If you are *ABSOLUTELY CERTAIN* that is what "
+           "you want, pass the flag --yes-i-really-mean-it.";
+    return -EPERM;
+  }
+  return 0;
+}
+
+int check_pool_replica_copies(int64_t n, std::string_view what,
+                              std::ostream* ss)
+{
+  if (n < 1 || n > MAX_POOL_REPLICA_COPIES) {
+    *ss << what << " must be between 1 and " << MAX_POOL_REPLICA_COPIES;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+string pool_default_value(const PoolCreateParams& p, const string& param)
+{
+  if (param == "pool_type") {
+    return string(pg_pool_t::get_type_name(p.pool_type));
+  } else if (param == "num_zones") {
+    return std::to_string(p.num_zones);
+  } else if (param == "rule") {
+    return std::to_string(p.default_rule);
+  } else if (param == "zone_failure_domain") {
+    return p.zone_failure_domain;
+  } else if (param == "osd_failure_domain") {
+    return p.osd_failure_domain;
+  } else if (param == "root") {
+    return p.root;
+  } else if (param == "class") {
+    return p.device_class;
+  } else if (param == "replica" || param == "size") {
+    return std::to_string(p.copies_per_zone());
+  } else if (param == "min_size") {
+    return std::to_string(p.min_size);
+  } else if (param == "erasure_code_profile" || param == "k" || param == "m") {
+    return profile_to_string(p.profile);
+  } else if (param == "pg_num") {
+    return std::to_string(p.pg_num);
+  } else if (param == "pgp_num") {
+    return std::to_string(p.pgp_num);
+  } else if (param == "autoscale_mode") {
+    return p.autoscale_mode;
+  } else if (param == "bulk") {
+    return p.bulk ? "true" : "false";
+  } else if (param == "crimson") {
+    return p.crimson ? "true" : "false";
+  }
+  return "";
+}
+
+std::map<string, string> db_pool_default_overrides(const ConfigMap& config_map)
+{
+  const auto names = pool_default_option_names();
+  std::map<string, string> overrides;
+  auto scan = [&](const string& section, const Section& s, bool masked_only) {
+    for (const auto& [name, option] : s.options) {
+      if (!names.contains(name) || overrides.contains(name))
+        continue;
+      if (!option.mask.empty()) {
+        overrides[name] = section + "/" + option.mask.to_str();
+      } else if (!masked_only) {
+        overrides[name] = section;
+      }
+    }
+  };
+  if (auto i = config_map.by_type.find("mon"); i != config_map.by_type.end()) {
+    scan("mon", i->second, false);
+  }
+  for (const auto& [id, section] : config_map.by_id) {
+    if (id.rfind("mon.", 0) == 0)
+      scan(id, section, false);
+  }
+  scan("global", config_map.global, true);
+  return overrides;
+}
+
+std::set<string> local_pool_default_overrides(const ConfigValues& values)
+{
+  std::set<string> overrides;
+  for (const auto& name : pool_default_option_names()) {
+    for (int level = CONF_FILE; level <= CONF_FINAL; ++level) {
+      if (values.get_value(name, level).second) {
+        overrides.insert(name);
+        break;
+      }
+    }
+  }
+  return overrides;
 }

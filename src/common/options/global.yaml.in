@@ -2613,7 +2613,8 @@ options:
 - name: osd_pool_default_size
   type: uint
   level: advanced
-  desc: the number of copies of an object for new replicated pools
+  desc: the number of copies of an object for new replicated pools; legacy name of
+    osd_pool_default_replica
   fmt_desc: Sets the number of replicas for objects in the pool. The default
     value is the same as
     ``ceph osd pool set {pool-name} size {size}``.

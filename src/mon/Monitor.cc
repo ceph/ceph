@@ -3823,6 +3823,11 @@ void Monitor::handle_command(MonOpRequestRef op)
     mdsmon()->dispatch(op);
     return;
   }
+  if (prefix == "osd pool default set" || prefix == "osd pool default get") {
+    // the pool creation defaults are configuration options
+    configmon()->dispatch(op);
+    return;
+  }
   if ((module == "osd" ||
        prefix == "pg map" ||
        prefix == "pg repeer") &&
