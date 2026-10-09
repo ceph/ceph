@@ -332,7 +332,10 @@ public:
   using access_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
     crimson::ct_error::permission_denied,
-    crimson::ct_error::enoent>;
+    crimson::ct_error::enoent,
+    // the backing device file does not fit on its filesystem; a
+    // configuration problem rather than a device failure
+    crimson::ct_error::enospc>;
 
   using mkfs_ertr = access_ertr;
   using mkfs_ret = mkfs_ertr::future<>;

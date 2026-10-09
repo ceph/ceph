@@ -878,8 +878,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     cds.emplace((device_id_t)id,
                 device_spec_t{magic, dtype, btype, (device_id_t)id});
     co_await dev->mkfs(
-      device_config_t::create_cache(new_osd_fsid, id, dtype, btype, magic)
-    ).handle_error(crimson::ct_error::assert_all("not possible"));
+      device_config_t::create_cache(new_osd_fsid, id, dtype, btype, magic));
   }
 
   device_set_t dds;
