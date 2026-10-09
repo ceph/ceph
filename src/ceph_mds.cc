@@ -118,7 +118,7 @@ int main(int argc, const char **argv)
   } else {
     dout(1) << __func__ << " not setting numa affinity" << dendl;
   }
-  std::string val, action;
+  std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
