@@ -80,6 +80,7 @@ jobs:
              ${{ format('--limit={0}', inputs.limit) }}
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run fast redmine-upkeep via schedule
         if: github.event_name == 'schedule' && github.event.schedule == '*/5 * * * *'
