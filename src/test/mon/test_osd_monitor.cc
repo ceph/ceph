@@ -844,6 +844,62 @@ TEST_F(OSDMonitorDisableStretchModeTest, SameRuleFails) {
             "using", ss.str());
 }
 
+class OSDMonitorCommitDefaultsTest
+  : public OSDMonitorValidateStretchModeNewPoolTest {
+protected:
+  map<string, string> defaults(bool stretch_mode_enabled, int bucket_type,
+                               uint64_t stretch_pool_size = 4) {
+    return OSDMonitor::stretch_mode_defaults_at_commit(
+      stretch_mode_enabled, crush, bucket_type, stretch_pool_size);
+  }
+};
+
+// Test nothing is converted without stretch mode
+TEST_F(OSDMonitorCommitDefaultsTest, NoStretchModeNoDefaults) {
+  EXPECT_TRUE(defaults(false, crush.get_type_id("zone")).empty());
+}
+
+// Test global stretch mode becomes two-zone defaults with half the pool size
+TEST_F(OSDMonitorCommitDefaultsTest, StretchModeDefaults) {
+  const map<string, string> expected = {
+    {"osd_pool_default_num_zones", "2"},
+    {"osd_pool_default_replica", "2"},
+    {"osd_pool_default_zone_failure_domain", "zone"}};
+  EXPECT_EQ(expected, defaults(true, crush.get_type_id("zone")));
+}
+
+// Test the zone failure domain is the type of the stretch bucket
+TEST_F(OSDMonitorCommitDefaultsTest, DatacenterStretchBucket) {
+  EXPECT_EQ("datacenter",
+            defaults(true, crush.get_type_id("datacenter"))
+              .at("osd_pool_default_zone_failure_domain"));
+}
+
+// Test a stretch pool size of 6 gives 3 replicas per zone
+TEST_F(OSDMonitorCommitDefaultsTest, StretchPoolSizeSix) {
+  EXPECT_EQ("3", defaults(true, crush.get_type_id("zone"), 6)
+                   .at("osd_pool_default_replica"));
+}
+
+// Test an odd stretch pool size rounds the replicas per zone down
+TEST_F(OSDMonitorCommitDefaultsTest, StretchPoolSizeFive) {
+  EXPECT_EQ("2", defaults(true, crush.get_type_id("zone"), 5)
+                   .at("osd_pool_default_replica"));
+}
+
+// Test an unknown stretch bucket type leaves the zone failure domain alone
+TEST_F(OSDMonitorCommitDefaultsTest, UnknownBucketTypeKeepsZoneDefault) {
+  const auto d = defaults(true, 77);
+  EXPECT_FALSE(d.contains("osd_pool_default_zone_failure_domain"));
+  EXPECT_EQ("2", d.at("osd_pool_default_num_zones"));
+}
+
+// Test the commit hint names the command and the release
+TEST(OSDMonitorUpgradeHintTest, NamesCommandAndRelease) {
+  EXPECT_EQ("the upgrade is committed with 'ceph osd require-osd-release "
+            "umbrella'", OSDMonitor::num_zones_upgrade_hint());
+}
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

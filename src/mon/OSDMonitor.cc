@@ -9085,6 +9085,10 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
     ss << "error parsing int value '" << val << "': " << interr;
     return -EINVAL;
   }
+  if (!num_zones_supported()) {
+    ss << "num_zones cannot be changed until " << num_zones_upgrade_hint();
+    return -EPERM;
+  }
   if (n < 1) {
     ss << "num_zones must be at least 1";
     return -EINVAL;
@@ -10378,6 +10382,10 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
   pg_pool_t p = *osdmap.get_pg_pool(pool);
   if (pending_inc.new_pools.count(pool))
     p = pending_inc.new_pools[pool];
+  if (p.is_erasure() && !num_zones_supported()) {
+    ss << "an EC pool cannot be stretched until " << num_zones_upgrade_hint();
+    return -EPERM;
+  }
 
   int64_t bucket_count = cmd_getval_or<int64_t>(cmdmap, "peering_crush_bucket_count", 0);
   if (bucket_count <= 0) {
@@ -10480,6 +10488,12 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
        << ") cannot exceed the number of " << bucket_barrier_str 
        << " zones (" << num_zones << ") spanned by crush rule " << crush_rule_str;
     return -EINVAL;
+  }
+  if (bucket_target != num_zones && !num_zones_supported()) {
+    ss << "peering_crush_bucket_target (" << bucket_target << ") must equal "
+       << "the number of zones (" << num_zones << ") until "
+       << num_zones_upgrade_hint();
+    return -EPERM;
   }
   
   int64_t replica = cmd_getval_or<int64_t>(cmdmap, "replica", 0);
@@ -13481,6 +13495,23 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply_no_propose;
     }
+    if (rel >= NUM_ZONES_RELEASE && !num_zones_supported()) {
+      const auto defaults = stretch_mode_defaults_at_commit(
+        osdmap.stretch_mode_enabled, *osdmap.crush, osdmap.stretch_mode_bucket,
+        g_conf().get_val<uint64_t>("mon_stretch_pool_size"));
+      if (!defaults.empty()) {
+        for (PaxosService *service :
+               {static_cast<PaxosService*>(mon.configmon()),
+                static_cast<PaxosService*>(mon.kvmon())}) {
+          if (!service->is_writeable()) {
+            service->wait_for_writeable(op, new C_RetryMessage(this, op));
+            return false;
+          }
+        }
+        mon.configmon()->propose_global_options(defaults,
+                                                "osd require-osd-release");
+      }
+    }
     pending_inc.new_require_osd_release = rel;
     goto update;
   } else if (prefix == "osd down" ||
@@ -14981,6 +15012,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    if (!num_zones_supported() &&
+        !g_conf().get_val<bool>("mon_debug_allow_pool_create_before_commit")) {
+      ss << "pool creation is refused until " << num_zones_upgrade_hint();
+      err = -EPERM;
+      goto reply_no_propose;
+    }
+
     int pool_type;
     if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
@@ -15052,6 +15090,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     err = check_command_line(params, PoolCommand::CREATE, &ss);
     if (err) {
+      goto reply_no_propose;
+    }
+    if (!num_zones_supported() && params.num_zones != 1) {
+      ss << "a pool with num_zones " << params.num_zones
+         << " cannot be created until " << num_zones_upgrade_hint();
+      err = -EPERM;
       goto reply_no_propose;
     }
     {
@@ -16369,6 +16413,13 @@ bool OSDMonitor::preprocess_pool_op_create(MonOpRequestRef op)
     _pool_op_reply(op, 0, osdmap.get_epoch());
     return true;
   }
+  if (!num_zones_supported() &&
+      !g_conf().get_val<bool>("mon_debug_allow_pool_create_before_commit")) {
+    dout(10) << __func__ << " pool creation is refused until "
+             << num_zones_upgrade_hint() << dendl;
+    _pool_op_reply(op, -EPERM, osdmap.get_epoch());
+    return true;
+  }
 
   return false;
 }
@@ -17390,6 +17441,32 @@ PoolCreateCluster OSDMonitor::pool_create_cluster(const CrushWrapper& crush)
     return 0;
   };
   return cluster;
+}
+
+string OSDMonitor::num_zones_upgrade_hint()
+{
+  std::ostringstream out;
+  out << "the upgrade is committed with 'ceph osd require-osd-release "
+      << NUM_ZONES_RELEASE << "'";
+  return out.str();
+}
+
+map<string, string> OSDMonitor::stretch_mode_defaults_at_commit(
+    bool stretch_mode_enabled,
+    const CrushWrapper& crush,
+    int stretch_mode_bucket,
+    uint64_t stretch_pool_size)
+{
+  if (!stretch_mode_enabled) {
+    return {};
+  }
+  map<string, string> defaults = {
+    {"osd_pool_default_num_zones", "2"},
+    {"osd_pool_default_replica", stringify(stretch_pool_size / 2)}};
+  if (const char *type = crush.get_type_name(stretch_mode_bucket); type) {
+    defaults["osd_pool_default_zone_failure_domain"] = type;
+  }
+  return defaults;
 }
 
 map<int64_t, OSDMonitor::StretchModeChange>

@@ -975,6 +975,16 @@ public:
   // CRUSH map. crush must outlive the result.
   PoolCreateCluster pool_create_cluster(const CrushWrapper& crush);
 
+  // The reason why a command waits for the upgrade to be committed.
+  static std::string num_zones_upgrade_hint();
+
+  // The pool creation defaults that global stretch mode of an earlier
+  // release becomes when the upgrade is committed; none without stretch mode.
+  static std::map<std::string, std::string> stretch_mode_defaults_at_commit(
+      bool stretch_mode_enabled,
+      const CrushWrapper& crush,
+      int stretch_mode_bucket,
+      uint64_t stretch_pool_size);
 
   // What ceph mon enable_stretch_mode or disable_stretch_mode does to a pool.
   enum class StretchModeChange {

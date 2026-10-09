@@ -1142,6 +1142,11 @@ void ConfigMonitor::dump_pool_defaults(Formatter *f, ostream& out)
 int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
                                             ostream& ss)
 {
+  if (!mon.osdmon()->num_zones_supported()) {
+    ss << "ceph osd pool default set is refused until "
+       << OSDMonitor::num_zones_upgrade_hint();
+    return -EPERM;
+  }
   const OSDMap& osdmap = mon.osdmon()->osdmap;
 
   // 1. the defaults, 2. the profile, 3. the command line
