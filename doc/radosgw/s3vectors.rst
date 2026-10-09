@@ -792,7 +792,8 @@ same keys.
 
 Request parameters:
 
-- ``vectors``: Between 1 and 500 vectors. Each has:
+- ``vectors``: Between 1 and 500 vectors. The maximum could be changed, see
+  below. Each has:
 
   - ``key``: The identifier of the vector inside the index. Must be between 1
     and 1024 characters long.
@@ -811,6 +812,10 @@ Request parameters:
     Any field that was declared in ``filterableMetadataKeys`` must hold a value
     of the declared type, and must be present if the key was declared with
     ``mustExist``.
+
+The maximum number of vectors in a request is set by:
+
+.. confval:: rgw_s3vector_max_put_vectors
 
 An empty response body is returned on success.
 
