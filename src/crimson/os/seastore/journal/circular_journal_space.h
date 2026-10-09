@@ -69,6 +69,11 @@ class CircularJournalSpace : public JournalAllocator {
 
   open_ret open(bool is_mkfs) final;
 
+  ceph::unique_leakable_ptr<ceph::buffer::raw>
+  alloc_record_md_buffer(extent_len_t mdlength) final {
+    return device->alloc_journal_md_buffer(mdlength);
+  }
+
  public:
   CircularJournalSpace(RBMDevice * device);
 
@@ -263,6 +268,11 @@ class CircularJournalSpace : public JournalAllocator {
 
   bool is_checksum_needed() {
     return !device->is_end_to_end_data_protection();
+  }
+
+  RBMDevice& get_device() {
+    assert(device);
+    return *device;
   }
 
  private:
