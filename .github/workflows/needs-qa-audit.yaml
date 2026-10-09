@@ -1,0 +1,191 @@
+name: needs-qa Audit
+
+on:
+  pull_request_target:
+    types: [labeled]
+    branches:
+      - umbrella
+      - tentacle
+      - squid
+
+# Group concurrency by PR number to serialize executions and prevent race conditions
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: needs-qa Audit
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+      checks: read
+      statuses: read
+    steps:
+      - name: Verify needs-qa Requirements
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          ORG_TOKEN: ${{ secrets.ORG_READ_PAT }}
+        with:
+          script: |
+            const payload = context.payload;
+            const label = payload.label;
+
+            // One-shot gate: only act on the moment needs-qa is applied, and
+            // only for that specific label (this workflow fires on any label).
+            if (!label || label.name !== 'needs-qa') {
+              core.info(`[needs-qa] Labeled event was for '${label ? label.name : 'unknown'}', not 'needs-qa'. Skipping.`);
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pr = payload.pull_request;
+            const prNumber = pr.number;
+            const baseBranch = pr.base.ref;
+            const headSha = pr.head.sha;
+
+            async function checkAuthorization(username) {
+              let authorized = false;
+              try {
+                const { data: permData } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner, repo: context.repo.repo, username: username
+                });
+                authorized = (permData.permission === 'admin' || permData.permission === 'maintain')
+              } catch (e) {
+                core.info(`[needs-qa] Failed to fetch repo permissions for @${username}: ${e.message}`);
+              }
+
+              if (!authorized && context.repo.owner === 'ceph' && process.env.ORG_TOKEN) {
+                try {
+                  const orgOctokit = getOctokit(process.env.ORG_TOKEN);
+                  const { data: teamData } = await orgOctokit.rest.teams.getMembershipForUserInOrg({
+                    org: 'ceph', team_slug: 'ceph-release-manager', username: username
+                  });
+                  authorized = (teamData.state === 'active');
+                } catch (e) {
+                  core.info(`[needs-qa] Failed to fetch org team membership for @${username}: ${e.message}`);
+                }
+              }
+              return authorized;
+            }
+
+            // ==========================================
+            // 1. MAINTAINER APPROVAL
+            // ==========================================
+            core.info(`[needs-qa] Checking maintainer approval for PR #${prNumber}...`);
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner, repo, pull_number: prNumber
+            });
+
+            // A user can approve, then re-review after new commits, so only the
+            // most recent review per user reflects their current stance.
+            const latestReviewByUser = new Map();
+            for (const review of reviews) {
+              if (!review.user) continue;
+              latestReviewByUser.set(review.user.login, review);
+            }
+
+            let approved = false;
+            let approverLogin = null;
+            for (const [login, review] of latestReviewByUser) {
+              if (review.state !== 'APPROVED') continue;
+              if (await checkAuthorization(login)) {
+                approved = true;
+                approverLogin = login;
+                break;
+              }
+            }
+            core.info(`[needs-qa] Maintainer approval: ${approved}${approverLogin ? ` (by @${approverLogin})` : ''}`);
+
+            // ==========================================
+            // 2. REQUIRED STATUS CHECKS
+            // ==========================================
+            core.info(`[needs-qa] Checking required status checks against branch protection for '${baseBranch}'...`);
+
+            // Reading branch protection needs the "administration" scope, which is a
+            // GitHub App/PAT-only permission -- GITHUB_TOKEN can never be granted it
+            // via the workflow permissions: block. Route through ORG_READ_PAT instead
+            // (already available for the team-membership lookup above).
+            let requiredContexts = [];
+            if (process.env.ORG_TOKEN) {
+              try {
+                const orgOctokit = getOctokit(process.env.ORG_TOKEN);
+                const { data: protection } = await orgOctokit.rest.repos.getBranchProtection({ owner, repo, branch: baseBranch });
+                requiredContexts = protection.required_status_checks?.contexts || [];
+              } catch (e) {
+                core.info(`[needs-qa] Failed to fetch branch protection for '${baseBranch}': ${e.message}. Treating as no required checks.`);
+              }
+            } else {
+              core.info('[needs-qa] ORG_READ_PAT not configured; cannot read branch protection. Treating as no required checks.');
+            }
+
+            let checksPass = true;
+            let failingContexts = [];
+
+            if (requiredContexts.length > 0) {
+              const checkRuns = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref: headSha });
+              const latestCheckRunByName = new Map();
+              for (const run of checkRuns) {
+                latestCheckRunByName.set(run.name, run);
+              }
+
+              const { data: combinedStatus } = await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref: headSha });
+              const statusByContext = new Map();
+              for (const s of combinedStatus.statuses) {
+                statusByContext.set(s.context, s);
+              }
+
+              // GitHub's own branch-protection semantics treat success, skipped, AND
+              // neutral conclusions as satisfying a required check -- only failure
+              // (or similar terminal-failure conclusions) blocks.
+              const passingConclusions = ['success', 'skipped', 'neutral'];
+              for (const ctx of requiredContexts) {
+                const run = latestCheckRunByName.get(ctx);
+                if (run) {
+                  if (run.status === 'completed' && passingConclusions.includes(run.conclusion)) continue;
+                  failingContexts.push(ctx);
+                  continue;
+                }
+                const status = statusByContext.get(ctx);
+                if (status && status.state === 'success') continue;
+                failingContexts.push(ctx);
+              }
+              checksPass = failingContexts.length === 0;
+            } else {
+              core.info(`[needs-qa] No required status checks configured on '${baseBranch}'. Treating as satisfied.`);
+            }
+
+            core.info(`[needs-qa] Required checks pass: ${checksPass}${failingContexts.length ? ` (failing: ${failingContexts.join(', ')})` : ''}`);
+
+            // ==========================================
+            // 3. DECISION
+            // ==========================================
+            if (approved && checksPass) {
+              core.info(`[needs-qa] PR #${prNumber} qualifies for needs-qa. No action taken.`);
+              return;
+            }
+
+            const appliedBy = payload.sender?.login;
+            const reasons = [];
+            if (!approved) {
+              reasons.push('- No `APPROVED` review from a maintainer (repo admin/maintain permission, or a member of the `ceph-release-manager` team).');
+            }
+            if (!checksPass) {
+              reasons.push(`- Required status check(s) not passing: ${failingContexts.map(c => `\`${c}\``).join(', ')}`);
+            }
+
+            core.info(`[needs-qa] PR #${prNumber} does not qualify. Removing 'needs-qa' label. Reasons: ${reasons.join(' ')}`);
+
+            try {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number: prNumber, name: 'needs-qa' });
+            } catch (e) {
+              core.info(`[needs-qa] Failed to remove label: ${e.message}`);
+            }
+
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: prNumber,
+              body: `⚠️ **\`needs-qa\` Removed**\n\n${appliedBy ? `@${appliedBy}, this` : 'This'} PR does not yet meet the requirements for \`needs-qa\`:\n\n${reasons.join('\n')}\n\nOnce these are resolved, a maintainer can reapply the \`needs-qa\` label.`
+            });
