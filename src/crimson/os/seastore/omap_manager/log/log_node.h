@@ -995,7 +995,7 @@ struct LogNode
 
   bool is_first_multi_block(const std::string &key) const {
     auto iter = iter_begin();
-    return (iter->get_chunk_idx() == 1 && iter->get_key() == key);
+    return (iter->get_chunk_idx() == 1 && iter->get_key_view() == key);
   }
 
   bool has_multi_block_kv() const {
@@ -1005,7 +1005,7 @@ struct LogNode
 
   bool has_multi_block_kv(const std::string &key) const {
     auto iter = iter_begin();
-    return (iter->get_chunk_idx() >= 1 && iter->get_key() == key);
+    return (iter->get_chunk_idx() >= 1 && iter->get_key_view() == key);
   }
 
   void update_delta() {
