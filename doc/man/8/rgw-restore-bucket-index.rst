@@ -18,11 +18,11 @@ Description
 user administration utility. It scans the data pool for objects that
 belong to a given bucket and tries to add those objects back to the
 bucket index. It's intended as a **last resort** after a
-**catastrophic** loss of a bucket index. Please thorougly review the
+**catastrophic** loss of a bucket index. Please review thoroughly the
 *Warnings* listed below.
 
 The utility works with regular (i.e., un-versioned) buckets, versioned
-buckets, and buckets were versioning has been suspended.
+buckets, and buckets where versioning has been suspended.
 
 Warnings
 ========
@@ -34,13 +34,13 @@ active use while this utility is running.
 
 The results are unpredictable if only some bucket's objects are
 missing from the bucket index. In such a case, consider using the
-"object reindex" subcommand of `radosgw-admin` to restore object's to
+"object reindex" subcommand of `radosgw-admin` to restore objects to
 the bucket index one-by-one.
 
 For objects in versioned buckets, if the latest version is a delete
 marker, it will be restored. If a delete marker has been written over
 with a new version, then that delete marker will not be restored. This
-should have minimal impact on results in that the it recovers the
+should have minimal impact on results in that it recovers the
 latest version and previous versions are all accessible.
 
 Command-Line Arguments
