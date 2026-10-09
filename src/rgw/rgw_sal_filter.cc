@@ -525,11 +525,14 @@ void FilterDriver::get_quota(RGWQuota& quota)
   return next->get_quota(quota);
 }
 
-void FilterDriver::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
-				RGWRateLimitInfo& user_ratelimit,
-				RGWRateLimitInfo& anon_ratelimit)
+void FilterDriver::get_ratelimit(
+    RGWRateLimitInfo& bucket_ratelimit,
+    RGWRateLimitInfo& user_ratelimit,
+    RGWRateLimitInfo& account_ratelimit,
+    RGWRateLimitInfo& anon_ratelimit)
 {
-  return next->get_ratelimit(bucket_ratelimit, user_ratelimit, anon_ratelimit);
+  return next->get_ratelimit(
+      bucket_ratelimit, user_ratelimit, account_ratelimit, anon_ratelimit);
 }
 
 int FilterDriver::set_buckets_enabled(const DoutPrefixProvider* dpp,
