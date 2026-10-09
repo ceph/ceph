@@ -962,8 +962,8 @@ optional:
 
 To use a custom rule:
 
-* Specify ``--rule {rule}`` on ``ceph osd pool create``, ``--crush_rule {rule}``
-  on ``ceph osd pool set {pool-name} num_zones 2``, or later
+* Specify ``--crush_rule {rule}`` on ``ceph osd pool create`` or on
+  ``ceph osd pool set {pool-name} num_zones 2``, or later
   ``ceph osd pool set {pool-name} crush_rule {rule}``.
 * ``ceph mon enable_stretch_mode --new_crush_rule {rule}`` gives every
   replicated pool the same rule, which must place 2 copies in each zone.

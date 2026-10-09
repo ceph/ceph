@@ -1342,7 +1342,8 @@ The positional parameters are pg_num, pgp_num and the pool type (default
 replicated pool, or the erasure code profile, the CRUSH rule and
 expected_num_objects for an erasure-coded pool. Each can also be given by
 name, for example
-``--pg_num 32 --pool_type erasure --erasure_code_profile myprofile``.
+``--pg_num 32 --pool_type erasure --erasure_code_profile myprofile``, and the
+CRUSH rule as ``--crush_rule``.
 
 ``--num_zones`` is the number of zones (1 or 2), each holding a full copy of
 the pool. ``--replica`` is the number of copies in each zone of a replicated
@@ -1362,7 +1363,7 @@ set where the CRUSH rule generated for the pool places it. They cannot be given
 with a CRUSH rule or an erasure code profile, and a replicated pool accepts them
 only with more than one zone.
 
-``--pg_num_min``, ``--pg_num_max``, ``--autoscale_mode``, ``--bulk``,
+``--pg_num_min``, ``--pg_num_max``, ``--pg_autoscale_mode``, ``--bulk``,
 ``--target_size_bytes`` and ``--target_size_ratio`` set the pool's PG
 autoscaler properties. ``--force-pg-limit`` creates the pool even if it exceeds
 ``mon_max_pg_per_osd``. ``--crimson`` creates a pool for Crimson OSDs

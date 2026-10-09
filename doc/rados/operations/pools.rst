@@ -226,7 +226,7 @@ following:
   :Type: String
   :Required: No.
 
-.. describe:: --autoscale_mode=<on,off,warn>
+.. describe:: --pg_autoscale_mode=<on,off,warn>
 
    - ``on``: the Ceph cluster will autotune changes to the number of PGs in the pool based on actual usage.
    - ``warn``: the Ceph cluster will recommend changes to the number of PGs in the pool based on actual usage.
@@ -500,13 +500,13 @@ so one command sets several defaults and checks them together:
 
    ceph osd pool default set [--pool_type {replicated|erasure}]
         [--num_zones {num_zones}]
-        [--rule {rule} |
+        [--crush_rule {rule} |
          [--zone_failure_domain {type}] [--osd_failure_domain {type}]
          [--root {crush_root}] [--class {device_class}]]
         [--replica {replica}] [--min_size {min_size}]
         [--k {k}] [--m {m}]
         [--pg_num {pg_num}] [--pgp_num {pgp_num}]
-        [--autoscale_mode {on|off|warn}] [--bulk[=false]] [--crimson[=false]]
+        [--pg_autoscale_mode {on|off|warn}] [--bulk[=false]] [--crimson[=false]]
         [--yes-i-really-mean-it]
 
 For example, to stretch every new replicated pool over two data centers, with
@@ -528,11 +528,12 @@ two copies in each:
   configuration database, or a Monitor's local configuration, would override.
   Remove the overriding value first, as :ref:`pool-default-config-override`
   describes, then run the command again.
-* ``--rule`` names an existing replicated rule and cannot be combined with
-  ``--zone_failure_domain``, ``--osd_failure_domain``, ``--root`` or
-  ``--class``. ``--rule none`` sets :confval:`osd_pool_default_crush_rule`
-  back to ``-1``: a replicated pool in one zone then gets the replicated rule
-  with the lowest ID, and a pool over zones a generated rule.
+* ``--crush_rule`` names an existing replicated rule and cannot be combined
+  with ``--zone_failure_domain``, ``--osd_failure_domain``, ``--root`` or
+  ``--class``. ``--crush_rule none`` sets
+  :confval:`osd_pool_default_crush_rule` back to ``-1``: a replicated pool in
+  one zone then gets the replicated rule with the lowest ID, and a pool over
+  zones a generated rule.
 * ``--replica 1`` also needs ``mon_allow_pool_size_one`` and
   ``--yes-i-really-mean-it``.
 * On an upgraded cluster, the command is refused until the upgrade is
@@ -554,9 +555,9 @@ Parameters and Options
    * - ``--num_zones``
      - :confval:`osd_pool_default_num_zones`
      -
-   * - ``--rule``
+   * - ``--crush_rule``
      - :confval:`osd_pool_default_crush_rule`
-     - The pool property ``crush_rule`` in ``ceph osd pool set`` and ``get``
+     -
    * - ``--zone_failure_domain``
      - :confval:`osd_pool_default_zone_failure_domain`
      -
@@ -587,10 +588,9 @@ Parameters and Options
    * - ``--pgp_num``
      - :confval:`osd_pool_default_pgp_num`
      -
-   * - ``--autoscale_mode``
+   * - ``--pg_autoscale_mode``
      - :confval:`osd_pool_default_pg_autoscale_mode`
-     - The pool property ``pg_autoscale_mode`` in ``ceph osd pool set`` and
-       ``get``
+     -
    * - ``--bulk``
      - :confval:`osd_pool_default_flag_bulk`
      -

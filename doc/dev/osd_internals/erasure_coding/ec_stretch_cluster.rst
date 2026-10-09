@@ -360,7 +360,7 @@ Syntax
         [--expected_num_objects <expected_num_objects>]
 
         # CRUSH placement options (mutually exclusive)
-        [ --rule <crush_rule_name> |
+        [ --crush_rule <crush_rule_name> |
           [--root <crush_root>] [--zone_failure_domain <zone_failure_domain>]
           [--osd_failure_domain <osd_failure_domain>] [--class <device_class>] ]
 
@@ -378,7 +378,7 @@ Syntax
         [--min_size <min_size>]
 
         # Autoscaling and general options
-        [--autoscale_mode <on|off|warn>]
+        [--pg_autoscale_mode <on|off|warn>]
         [--pg_num_min <pg_num_min>]
         [--pg_num_max <pg_num_max>]
         [--bulk]
@@ -397,7 +397,7 @@ The legacy positional syntax is kept for backward compatibility:
 
    ceph osd pool create {pool_name} [{pg_num} [{pgp_num}]] erasure \
             [erasure_code_profile] [crush_rule_name] [expected_num_objects] \
-            [--autoscale_mode=<on,off,warn>]
+            [--pg_autoscale_mode=<on,off,warn>]
 
 It can be combined with the named parameters that do not conflict with it. For example,
 ``--pg_num`` cannot be given with its positional counterpart.
@@ -435,9 +435,15 @@ names no profile.
 **--min_size**: the OSDs needed in each zone for I/O (:ref:`Pool Fields <ecsc-pool-fields>`). An
 erasure coded pool's default is ``k + min(1, m-1)``.
 
-**--rule**: an existing CRUSH rule to use (:ref:`The CRUSH Rule of a Pool
+**--crush_rule**: an existing CRUSH rule to use (:ref:`The CRUSH Rule of a Pool
 <ecsc-the-rule-of-a-pool>`). ``none`` is not special here: it fails with "specified rule none
 doesn't exist".
+
+``--crush_rule`` and ``--pg_autoscale_mode`` have the names of the pool properties of ``ceph osd
+pool set``. ``rule`` and ``autoscale_mode``, their names in earlier releases, are still accepted
+by ``ceph osd pool create``, ``ceph osd pool default set`` and ``ceph osd pool set``, but not
+documented; a parameter given under both names is refused ("cannot specify both --crush_rule and
+--rule").
 
 **--zone_failure_domain**, **--osd_failure_domain**, **--root**, **--class**: the CRUSH options: the
 zone type, the bucket type over which copies or shards are spread within a zone, the CRUSH root, and
@@ -446,7 +452,7 @@ a device class (needed only when the cluster mixes device classes). See :ref:`Pl
 
 The other parameters keep their meaning: ``--pg_num``; ``--pgp_num``, kept for backward
 compatibility and not to be modified; ``--expected_num_objects``, to pre-split placement groups;
-the autoscaler's ``--autoscale_mode``, ``--pg_num_min``, ``--pg_num_max``, ``--bulk``,
+the autoscaler's ``--pg_autoscale_mode``, ``--pg_num_min``, ``--pg_num_max``, ``--bulk``,
 ``--target_size_bytes`` and ``--target_size_ratio``; ``--crimson``, for Crimson OSDs
 (experimental); ``--force-pg-limit``, to exceed ``mon_max_pg_per_osd``; and
 ``--yes-i-really-mean-it``, to allow a pool name that begins with a dot, such as ``.rgw.root``.
@@ -471,7 +477,7 @@ exist". The following combinations are then refused with ``EINVAL``, before anyt
 * Only one of ``--k`` and ``--m``: "erasure_code_profile requires both k and m".
 * ``--erasure_code_profile`` with a CRUSH option: "cannot specify both erasure_code_profile and
   crush parameters (crush_root, zone_failure_domain, osd_failure_domain, crush_device_class)".
-* ``--rule`` with a CRUSH option: "cannot specify both crush rule and crush parameters (...)".
+* ``--crush_rule`` with a CRUSH option: "cannot specify both crush rule and crush parameters (...)".
 * ``--k`` or ``--m`` for a replicated pool: "cannot specify k/m parameters for replicated
   pools".
 * ``--replica`` for an erasure coded pool: "replica is only applicable to replicated pools".
@@ -492,7 +498,7 @@ The values that result, given or default, are then checked:
   to ``replica`` ("pool min_size must be between 1 and replica, which is set to <n>").
 * Erasure coded pools: ``k`` at least 2 ("k=<k> must be >= 2"), ``m`` at least 1 ("m=<m> must be
   >= 1"), ``k+m`` at most 127 ("(k+m)=<k+m> must be <= 127", as shard ids are 8-bit signed
-  integers), and ``num_zones × (k+m)`` at most 128 ("a pool can have at most 128 OSDs, but <n>
+  integers), and ``num_zones × (k+m)`` at most 128 ("a PG can have at most 128 OSDs, but <n>
   zones of k+m=<k+m> need <size>"). An LRC profile skips these checks, because the LRC plugin
   checks its own ``k``, ``m`` and ``l`` and adds local parity chunks. ``m`` greater than ``k``
   is allowed; the plugin can reject values when it normalizes the profile (ISA rejects ``m``
@@ -737,10 +743,10 @@ generated one is generated again. ``ceph osd erasure-code-profile set`` waits in
 
 ``ceph osd pool create`` commits the profile it generates in a first OSDMap update, and then runs
 again to create the pool. If the creation then fails, for example on a CRUSH topology error, a
-``--rule`` that does not exist or does not place the pool in its zones, stretch mode validation, the
-FastEC check or the PG limit, the command removes the profile, unless a pool uses it, as it removes
-the rule it generated (:ref:`Rule Lifetime <ecsc-rule-lifetime>`). ``default``, which the command
-creates again when it is missing, stays.
+``--crush_rule`` that does not exist or does not place the pool in its zones, stretch mode
+validation, the FastEC check or the PG limit, the command removes the profile, unless a pool uses
+it, as it removes the rule it generated (:ref:`Rule Lifetime <ecsc-rule-lifetime>`). ``default``,
+which the command creates again when it is missing, stays.
 
 No other change removes a profile. A profile stays when:
 
@@ -844,8 +850,8 @@ The CRUSH Rule of a Pool
 
 ``ceph osd pool create`` gives a pool the first of these that applies:
 
-1. **The rule named with** ``--rule``. It must exist ("specified rule <rule> doesn't exist") and
-   is used unchanged.
+1. **The rule named with** ``--crush_rule``. It must exist ("specified rule <rule> doesn't
+   exist") and is used unchanged.
 2. **The default rule, if it suits the pool**: ``osd_pool_default_crush_rule``, or, for a
    single-zone replicated pool while that is -1, the first replicated rule. It suits the pool when
    no CRUSH option is given and it is of the pool's type and places the pool in its zones. A
@@ -940,10 +946,10 @@ Two kinds of rule stay:
 
 * **The default replicated rule** (:ref:`The CRUSH Rule of a Pool <ecsc-the-rule-of-a-pool>`, item
   2), as it is when a rule would be removed. While ``osd_pool_default_crush_rule`` names a rule, for
-  example after ``ceph osd pool default set --rule``, that rule is kept and ``replicated_rule`` is
-  not: it goes when its last pool, such as ``.mgr``, moves to another rule. Rule ids are reused
-  lowest first, so after ``--rule none`` the first replicated rule can be a rule generated for a
-  pool over zones.
+  example after ``ceph osd pool default set --crush_rule``, that rule is kept and
+  ``replicated_rule`` is not: it goes when its last pool, such as ``.mgr``, moves to another rule.
+  Rule ids are reused lowest first, so after ``--crush_rule none`` the first replicated rule can be
+  a rule generated for a pool over zones.
 * **A rule created by hand that no pool has used yet**, for example with
   ``ceph osd crush rule create-replicated``. Only a change that leaves a rule unused removes it,
   so such a rule stays until ``ceph osd crush rule rm`` removes it or a pool is given it.
@@ -977,7 +983,7 @@ to commit, and then a named rule fails as missing and a generated name is built 
 covers every command that gives a pool a rule (``ceph osd pool create``,
 ``ceph osd pool set <pool> crush_rule``, ``num_zones`` and ``replica``,
 ``ceph osd pool stretch set`` and ``unset``, ``ceph mon disable_stretch_mode``),
-``ceph osd pool default set --rule``, and ``ceph osd crush rule create-simple``,
+``ceph osd pool default set --crush_rule``, and ``ceph osd crush rule create-simple``,
 ``create-replicated`` and ``create-erasure``. ``ceph mon enable_stretch_mode`` looks a rule it is
 given up in the pending update, so it fails at once.
 
@@ -1003,7 +1009,7 @@ An erasure coded pool is confined with ``--root``. In a cluster with the data ce
 ``DC2``, ``--root DC1`` generates a rule that starts with ``take DC1``, so all of the pool's data
 stays in ``DC1``. ``--num_zones 1`` must be given when ``osd_pool_default_num_zones`` is 2, as it is
 after ``ceph mon enable_stretch_mode``. A replicated pool with ``num_zones`` 1 refuses ``--root``
-(:ref:`Checks <ecsc-checks>`); it is given a rule that takes the bucket, with ``--rule``.
+(:ref:`Checks <ecsc-checks>`); it is given a rule that takes the bucket, with ``--crush_rule``.
 
 .. _ecsc-pool-creation-defaults:
 
@@ -1026,7 +1032,7 @@ Parameter                  Option                                     Built-in v
 ``--num_zones``            ``osd_pool_default_num_zones``             1
 ``--replica``              ``osd_pool_default_size``                  3
 ``--min_size``             ``osd_pool_default_min_size``              0: computed (below)
-``--rule``                 ``osd_pool_default_crush_rule``            -1: none
+``--crush_rule``           ``osd_pool_default_crush_rule``            -1: none
 ``--zone_failure_domain``  ``osd_pool_default_zone_failure_domain``   ``datacenter``
 ``--osd_failure_domain``   ``osd_pool_default_osd_failure_domain``    ``host``
 ``--root``                 ``osd_pool_default_root``                  ``default``
@@ -1036,7 +1042,7 @@ Parameter                  Option                                     Built-in v
                                                                       <ecsc-the-default-profile>`)
 ``--pg_num``               ``osd_pool_default_pg_num``
 ``--pgp_num``              ``osd_pool_default_pgp_num``
-``--autoscale_mode``       ``osd_pool_default_pg_autoscale_mode``
+``--pg_autoscale_mode``    ``osd_pool_default_pg_autoscale_mode``
 ``--bulk``                 ``osd_pool_default_flag_bulk``             ``false``
 ``--crimson``              ``osd_pool_default_crimson``               ``false``
 =========================  =========================================  ==================
@@ -1092,22 +1098,19 @@ ceph osd pool default set and get
    ceph osd pool default set
         [--pool_type <replicated|erasure>]
         [--num_zones <num_zones>]
-        [--rule <rule> |
+        [--crush_rule <rule> |
          [--zone_failure_domain <type>] [--osd_failure_domain <type>]
          [--root <crush_root>] [--class <device_class>]]
         [--replica <replica>] [--min_size <min_size>]
         [--k <k>] [--m <m>]
         [--pg_num <pg_num>] [--pgp_num <pgp_num>]
-        [--autoscale_mode <on|off|warn>] [--bulk[=false]] [--crimson[=false]]
+        [--pg_autoscale_mode <on|off|warn>] [--bulk[=false]] [--crimson[=false]]
         [--yes-i-really-mean-it]
 
    ceph osd pool default get
 
 The parameters are those of ``ceph osd pool create`` except the legacy ``--size``, given as flags
 with the same names, so a default is set with the flag that overrides it when a pool is created.
-Two of them differ from the pool properties of ``ceph osd pool set`` and ``get``, and from the
-options: ``--rule`` is the property ``crush_rule`` (``osd_pool_default_crush_rule``), and
-``--autoscale_mode`` is ``pg_autoscale_mode`` (``osd_pool_default_pg_autoscale_mode``).
 ``--replica`` writes ``osd_pool_default_size``. ``get`` shows each parameter with its option.
 
 The defaults are one template for every later pool, so ``set`` refuses parameters of the other pool
@@ -1136,12 +1139,12 @@ or not at all.
 * ``set`` has no ``--erasure_code_profile``. A pool that names a profile takes its ``k``, ``m``,
   plugin keys and placement from it, and the other keys of ``default`` are changed with ``ceph osd
   erasure-code-profile set default`` (:ref:`The default Profile <ecsc-the-default-profile>`).
-* ``--rule`` names an existing replicated rule ("rule '<rule>' is not a replicated rule"), because
-  single-zone replicated pools take the default rule without a suitability check (:ref:`The CRUSH
-  Rule of a Pool <ecsc-the-rule-of-a-pool>`), and stores the rule's id. It is refused together with
-  the CRUSH options. Pools that use the default rule do not use the CRUSH option defaults, although
-  creating a replicated pool over zones still checks them. ``--rule none`` stores -1: no default
-  rule.
+* ``--crush_rule`` names an existing replicated rule ("rule '<rule>' is not a replicated rule"),
+  because single-zone replicated pools take the default rule without a suitability check
+  (:ref:`The CRUSH Rule of a Pool <ecsc-the-rule-of-a-pool>`), and stores the rule's id. It is
+  refused together with the CRUSH options. Pools that use the default rule do not use the CRUSH
+  option defaults, although creating a replicated pool over zones still checks them.
+  ``--crush_rule none`` stores -1: no default rule.
 * ``set`` checks the parameters that result as ``ceph osd pool create`` checks them (:ref:`Checks
   <ecsc-checks>`), for a pool of the default type and for each pool type whose own parameters it is
   given (``--k`` or ``--m``: erasure; ``--replica``: replicated), using the cluster
@@ -1188,9 +1191,8 @@ The shape of the command departs from Ceph convention, which suits a command tha
   ``key=value`` pairs (``ceph osd erasure-code-profile set``). ``ceph osd pool default set`` takes
   the flags of ``ceph osd pool create`` instead, so that one command sets several defaults and
   checks them together.
-* As it takes the flags of ``ceph osd pool create``, it takes their names: ``--replica``,
-  ``--rule`` and ``--autoscale_mode``, not the ``size``, ``crush_rule`` and ``pg_autoscale_mode``
-  of ``ceph osd pool set``.
+* As it takes the flags of ``ceph osd pool create``, it takes their names: ``--replica``, not the
+  ``size`` of ``ceph osd pool set``.
 * The command duplicates ``ceph config set`` and ``get`` for these options. Its value is the
   self-consistency checks and the pool create syntax.
 
@@ -1280,7 +1282,7 @@ Going to two zones:
   generated, must pass the placement check of :ref:`The CRUSH Rule of a Pool
   <ecsc-the-rule-of-a-pool>`. The pool's zone type is ``--zone_failure_domain``, else that of the
   rule, else ``osd_pool_default_zone_failure_domain``.
-* ``size`` becomes ``2 × replica`` or ``2 × (k+m)``, at most 128 OSDs, and ``min_size`` is reset to
+* ``size`` becomes ``2 × replica`` or ``2 × (k+m)``, at most 128, and ``min_size`` is reset to
   its per-zone default (:ref:`Configuration Options <ecsc-configuration-options>`).
 * The ``peering_crush_bucket_*`` fields are set (:ref:`peering_crush_bucket Values
   <ecsc-peering-crush-bucket-values>`), the ``nonprimary_shards`` are recomputed, and stretch mode
@@ -1434,7 +1436,7 @@ cluster, with ``k=4, m=2`` in each rack, for a ``size`` of 12 shards:
 
 .. code-block:: bash
 
-   ceph osd pool create bulk_ec --pool_type erasure --k 6 --m 3 --autoscale_mode on \
+   ceph osd pool create bulk_ec --pool_type erasure --k 6 --m 3 --pg_autoscale_mode on \
         --pg_num_min 128 --bulk
 
 
