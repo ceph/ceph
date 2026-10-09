@@ -17,7 +17,7 @@ from teuthology.orchestra import run
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError, ConnectionLostError
 
-from tasks.cephfs.filesystem import Filesystem
+from tasks.cephfs.filesystem import Filesystem, CephClusterBase
 from .helpers.gen_io_load import GenIoLoad
 
 log = logging.getLogger(__name__)
@@ -33,7 +33,8 @@ class DirectoryNotEmptyError(SystemError):
 class OperationNotPermittedError(SystemError):
     pass
 
-class CephFSMountBase(object):
+
+class CephFSMountBase(CephClusterBase):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring=None, client_keyring_path=None,
                  hostfs_mntpt=None, cephfs_name=None, cephfs_mntpt=None,
@@ -52,6 +53,8 @@ class CephFSMountBase(object):
                              mounted as root
         """
         self.ctx = ctx
+        super().__init__(self.ctx)
+
         self.test_dir = test_dir
 
         self._verify_attrs(client_id=client_id,
@@ -1323,10 +1326,14 @@ class CephFSMountBase(object):
                                "seek={0}".format(int(seek))
                                ], wait=wait)
 
-    def gen_io_load(self, path, raise_on_thread_crash=False, timeout=60*60*15,
-                    sleep=0):
-        writer = GenIoLoad(self, path=path, timeout=timeout, sleep=sleep,
-                           raise_on_thread_crash=raise_on_thread_crash)
+    def gen_io_load(self, path, client_id, data_pool_name=None, initial_wait=60,
+                    writer_sleep=0, writer_timeout=60*60*15,
+                    raise_on_writer_crash=False):
+        writer = GenIoLoad(path=path, mount=self, client_id=client_id,
+                           data_pool_name=data_pool_name,
+                           initial_wait=initial_wait, writer_sleep=writer_sleep,
+                           writer_timeout=writer_timeout,
+                           raise_on_writer_crash=raise_on_writer_crash)
         writer.start()
         return writer
 

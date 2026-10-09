@@ -167,7 +167,7 @@ if os.path.exists("./CMakeCache.txt") and os.path.exists("./bin"):
 
 
 try:
-    from tasks.ceph_manager import CephManager
+    from tasks.ceph_manager import CephManager, RunCephCmd
     import tasks.cephfs.fuse_mount
     import tasks.cephfs.kernel_mount
     import tasks.cephfs.filesystem
@@ -858,7 +858,7 @@ class LocalCephManager(CephManager):
                                    timeout=timeout, stdout=stdout)
 
 
-class LocalCephCluster(tasks.cephfs.filesystem.CephClusterBase):
+class LocalCephCluster(tasks.cephfs.filesystem.CephClusterBase, RunCephCmd):
     def __init__(self, ctx, cluster_name='ceph'):
         # Deliberately skip calling CephCluster constructor
         self._ctx = ctx
