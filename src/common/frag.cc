@@ -22,6 +22,7 @@
 #include <boost/endian/conversion.hpp>
 #include <fmt/format.h>
 
+#include <iomanip> // for std::hex, std::setw(), std::setfill()
 #include <iostream>
 #include <sstream>
 
