@@ -2676,6 +2676,7 @@ void Client::_closed_mds_session(MetaSession *s, int err, bool rejected)
   else
     s->state = MetaSession::STATE_CLOSED;
   s->con->mark_down();
+  s->deferred_msgs.clear();
   signal_context_list(s->waiting_for_open);
   mount_cond.notify_all();
   remove_session_caps(s, err);
@@ -2689,6 +2690,50 @@ static void reinit_mds_features(MetaSession *session,
 				const MConstRef<MClientSession>& m) {
   session->mds_features = std::move(m->supported_features);
   session->mds_metric_flags = std::move(m->metric_spec.metric_flags);
+}
+
+bool Client::maybe_defer_mds_msg(MetaSession *session, const MessageConstRef& m)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
+  /*
+   * The MDS may push messages on a session that it considers open before
+   * the client has received the session OPEN reply, e.g., when the session
+   * was opened on the MDS by an earlier attempt and the connection was then
+   * reset. The MDS features are only known once the reply arrives, and
+   * without them some of these messages (snap traces) cannot be decoded.
+   * Hold them back, in order, until the session is open.
+   */
+  if (session->state != MetaSession::STATE_OPENING) {
+    return false;
+  }
+
+  ldout(cct, 5) << __func__ << " mds." << session->mds_num << " session is "
+		<< session->get_state_name() << ", deferring " << *m << dendl;
+  session->deferred_msgs.push_back(m);
+  return true;
+}
+
+void Client::replay_deferred_mds_msgs(MetaSession *session)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+  ceph_assert(session->state == MetaSession::STATE_OPEN);
+
+  auto msgs = std::move(session->deferred_msgs);
+  session->deferred_msgs.clear();
+  for (auto& m : msgs) {
+    ldout(cct, 5) << __func__ << " mds." << session->mds_num << " " << *m << dendl;
+    switch (m->get_type()) {
+    case CEPH_MSG_CLIENT_SNAP:
+      _handle_snap(session, ref_cast<MClientSnap>(m));
+      break;
+    case CEPH_MSG_CLIENT_CAPS:
+      _handle_caps(session, ref_cast<MClientCaps>(m));
+      break;
+    default:
+      ceph_abort_msg("unexpected deferred mds message");
+    }
+  }
 }
 
 void Client::handle_client_session(const MConstRef<MClientSession>& m)
@@ -2722,14 +2767,21 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
        * The connection maybe broken and the session in client side
        * has been reinitialized, need to update the seq anyway.
        */
-      if (!session->seq && m->get_seq())
-        session->seq = m->get_seq();
+      bool reset_seq = !session->seq && m->get_seq();
 
       reinit_mds_features(session.get(), m);
       cap_auths = std::move(m->cap_auths);
 
       renew_caps(session.get());
       session->state = MetaSession::STATE_OPEN;
+
+      // Process the pushes that arrived before this reply now that the
+      // MDS features are known, ahead of anything waiting for the open.
+      replay_deferred_mds_msgs(session.get());
+      // The push seq in the reply already accounts for the replayed pushes.
+      if (reset_seq)
+        session->seq = m->get_seq();
+
       if (is_unmounting())
 	mount_cond.notify_all();
       else
@@ -5627,8 +5679,18 @@ void Client::handle_snap(const MConstRef<MClientSnap>& m)
   if (!session) {
     return;
   }
+  if (maybe_defer_mds_msg(session.get(), m)) {
+    return;
+  }
 
-  got_mds_push(session.get());
+  _handle_snap(session.get(), m);
+}
+
+void Client::_handle_snap(MetaSession *session, const MConstRef<MClientSnap>& m)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
+  got_mds_push(session);
 
   map<Inode*, SnapContext> to_move;
   SnapRealm *realm = 0;
@@ -5636,7 +5698,7 @@ void Client::handle_snap(const MConstRef<MClientSnap>& m)
   if (m->head.op == CEPH_SNAP_OP_SPLIT) {
     ceph_assert(m->head.split);
     auto p = m->bl.cbegin();
-    auto [info, _] = get_snap_realm_info(session.get(), p);
+    auto [info, _] = get_snap_realm_info(session, p);
     ceph_assert(info.ino() == m->head.split);
     
     // flush, then move, ino's.
@@ -5674,7 +5736,7 @@ void Client::handle_snap(const MConstRef<MClientSnap>& m)
     }
   }
 
-  update_snap_trace(session.get(), m->bl, NULL, m->head.op != CEPH_SNAP_OP_DESTROY);
+  update_snap_trace(session, m->bl, NULL, m->head.op != CEPH_SNAP_OP_DESTROY);
 
   if (realm) {
     for (auto p = to_move.begin(); p != to_move.end(); ++p) {
@@ -5739,6 +5801,18 @@ void Client::handle_caps(const MConstRef<MClientCaps>& m)
   if (!session) {
     return;
   }
+  if (maybe_defer_mds_msg(session.get(), m)) {
+    return;
+  }
+
+  _handle_caps(session.get(), m);
+}
+
+void Client::_handle_caps(MetaSession *session, const MConstRef<MClientCaps>& m)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
+  mds_rank_t mds = session->mds_num;
 
   if (m->osd_epoch_barrier && !objecter->have_map(m->osd_epoch_barrier)) {
     // Pause RADOS operations until we see the required epoch
@@ -5750,7 +5824,7 @@ void Client::handle_caps(const MConstRef<MClientCaps>& m)
     set_cap_epoch_barrier(m->osd_epoch_barrier);
   }
 
-  got_mds_push(session.get());
+  got_mds_push(session);
 
   // check whether the current inode is under subvolume for metrics collection
   if (m->subvolume_id > 0) {
@@ -5805,20 +5879,20 @@ void Client::handle_caps(const MConstRef<MClientCaps>& m)
   }
 
   switch (m->get_op()) {
-    case CEPH_CAP_OP_EXPORT: return handle_cap_export(session.get(), in, m);
-    case CEPH_CAP_OP_FLUSHSNAP_ACK: return handle_cap_flushsnap_ack(session.get(), in, m);
-    case CEPH_CAP_OP_IMPORT: /* no return */ handle_cap_import(session.get(), in, m);
+    case CEPH_CAP_OP_EXPORT: return handle_cap_export(session, in, m);
+    case CEPH_CAP_OP_FLUSHSNAP_ACK: return handle_cap_flushsnap_ack(session, in, m);
+    case CEPH_CAP_OP_IMPORT: /* no return */ handle_cap_import(session, in, m);
   }
 
   if (auto it = in->caps.find(mds); it != in->caps.end()) {
     Cap &cap = in->caps.at(mds);
 
     switch (m->get_op()) {
-      case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(session.get(), in, m);
+      case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(session, in, m);
       case CEPH_CAP_OP_IMPORT:
       case CEPH_CAP_OP_REVOKE:
-      case CEPH_CAP_OP_GRANT: return handle_cap_grant(session.get(), in, &cap, m);
-      case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(session.get(), in, &cap, m);
+      case CEPH_CAP_OP_GRANT: return handle_cap_grant(session, in, &cap, m);
+      case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(session, in, &cap, m);
     }
   } else {
     ldout(cct, 5) << __func__ << " don't have " << *in << " cap on mds." << mds << dendl;
