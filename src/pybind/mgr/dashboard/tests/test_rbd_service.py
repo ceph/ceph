@@ -153,10 +153,11 @@ class RbdServiceTest(unittest.TestCase):
             ('15m', False),
             ('1h', False),
             ('5d', False),
+            ('2w', False),
+            ('11', False),
             ('m', True),
             ('d', True),
             ('1s', True),
-            ('11', True),
             ('1m1', True),
         ]
         for interval, error in test_cases:

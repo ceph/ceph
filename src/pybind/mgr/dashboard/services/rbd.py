@@ -3,6 +3,7 @@
 import errno
 import json
 import math
+import re
 from enum import IntEnum
 
 import cherrypy
@@ -779,14 +780,16 @@ class RbdSnapshotService(object):
 
 
 class RBDSchedulerInterval:
+    # should align with pattern in src/pybind/mgr/rbd_support/schedule.py
+    _PATTERN = re.compile(r'^(\d+)(w|d|h|m)?$')
+
     def __init__(self, interval: str):
-        self.amount = int(interval[:-1])
-        self.unit = interval[-1]
-        if self.unit not in 'mhd':
-            raise ValueError(f'Invalid interval unit {self.unit}')
+        if not self._PATTERN.fullmatch(interval):
+            raise ValueError(f'Invalid interval {interval}, valid units are w, d, h, m')
+        self.interval = interval
 
     def __str__(self):
-        return f'{self.amount}{self.unit}'
+        return self.interval
 
 
 class RbdMirroringService:
