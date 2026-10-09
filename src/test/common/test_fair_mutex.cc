@@ -4,6 +4,7 @@
 #include <mutex>
 #include <numeric>
 #include <future>
+#include <thread> // for std::this_thread::sleep_for()
 #include <gtest/gtest.h>
 #include "common/fair_mutex.h"
 
