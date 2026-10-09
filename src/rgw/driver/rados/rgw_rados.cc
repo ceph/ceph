@@ -6055,6 +6055,13 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     return ret;
   }
 
+  // avoid double compression; temporary restores preserve cloud data for expiry
+  const auto& type = svc.zone->get_zone_params().get_compression_type(dest_placement);
+  if (type != "none" && !days && !attrs.count(RGW_ATTR_CRYPT_MODE) &&
+      !attrs.count(RGW_ATTR_COMPRESSION)) {
+    plugin = Compressor::create(cct, type);
+  }
+
   // For Permanent restore, `log_op` depends on flag set on the bucket->get_info().flags
   bool log_op = (dest_bucket_info.flags & rgw::sal::FLAG_LOG_OP);
 
@@ -6105,6 +6112,24 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     ldpp_dout(dpp, -1) << "ERROR: object truncated during fetching, expected "
         << accounted_size << " bytes but received " << cb.get_data_len() << dendl;
     return ret;
+  }
+
+  // compressed bytes written back as-is: index the plaintext size
+  bool compressed = false;
+  RGWCompressionInfo info;
+  if (rgw_compression_info_from_attrset(attrs, compressed, info) == 0 && compressed) {
+    accounted_size = info.orig_size;
+  }
+
+  if (compressor && compressor->is_compressed()) {
+    bufferlist tmp;
+    RGWCompressionInfo cs_info;
+    cs_info.compression_type = plugin->get_type_name();
+    cs_info.orig_size = accounted_size;
+    cs_info.compressor_message = compressor->get_compressor_message();
+    cs_info.blocks = std::move(compressor->get_compression_blocks());
+    encode(cs_info, tmp);
+    attrs[RGW_ATTR_COMPRESSION] = std::move(tmp);
   }
 
   {
