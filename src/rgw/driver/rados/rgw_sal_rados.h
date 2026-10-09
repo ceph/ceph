@@ -943,6 +943,16 @@ public:
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
 protected:
+  // a part's past prefixes, not yet in processed_prefixes: their index keys
+  // go in remove_objs, their objects in chain
+  void collect_part_history(const DoutPrefixProvider* dpp,
+                            RadosMultipartPart* part,
+                            std::list<rgw_obj_index_key>& remove_objs,
+                            boost::container::flat_set<std::string>& processed_prefixes,
+                            cls_rgw_obj_chain& chain);
+  // send a chain of part history to GC under the upload id
+  int send_part_history(const DoutPrefixProvider* dpp, optional_yield y,
+                        cls_rgw_obj_chain& chain);
   int cleanup_part_history(const DoutPrefixProvider* dpp,
                            optional_yield y,
                            RadosMultipartPart* part,

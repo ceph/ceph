@@ -4160,13 +4160,12 @@ int RadosMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
-                                               optional_yield y,
-                                               RadosMultipartPart *part,
-                                               list<rgw_obj_index_key>& remove_objs,
-                                               boost::container::flat_set<std::string>& processed_prefixes)
+void RadosMultipartUpload::collect_part_history(const DoutPrefixProvider* dpp,
+                                                RadosMultipartPart *part,
+                                                list<rgw_obj_index_key>& remove_objs,
+                                                boost::container::flat_set<std::string>& processed_prefixes,
+                                                cls_rgw_obj_chain& chain)
 {
-  cls_rgw_obj_chain chain;
   for (auto& ppfx : part->get_past_prefixes()) {
     auto [it, inserted] = processed_prefixes.emplace(ppfx);
     if (!inserted) {
@@ -4189,6 +4188,15 @@ int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
       chain.push_obj(raw_part_obj.pool.to_str(), part_key, raw_part_obj.loc);
     }
   }
+}
+
+int RadosMultipartUpload::send_part_history(const DoutPrefixProvider* dpp,
+                                            optional_yield y,
+                                            cls_rgw_obj_chain& chain)
+{
+  if (chain.empty()) {
+    return 0;
+  }
   if (store->getRados()->get_gc() == nullptr) {
     // Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
     store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id(), y);
@@ -4205,6 +4213,17 @@ int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
     }
   }
   return 0;
+}
+
+int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
+                                               optional_yield y,
+                                               RadosMultipartPart *part,
+                                               list<rgw_obj_index_key>& remove_objs,
+                                               boost::container::flat_set<std::string>& processed_prefixes)
+{
+  cls_rgw_obj_chain chain;
+  collect_part_history(dpp, part, remove_objs, processed_prefixes, chain);
+  return send_part_history(dpp, y, chain);
 }
 
 
@@ -4531,6 +4550,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // AEAD: (S3 part number, GCM salt) per selected part, in manifest-segment order.
   std::vector<std::pair<uint32_t, std::string>> part_keys;
 
+  cls_rgw_obj_chain history; // the parts' past prefixes
   do {
     ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
     if (ret == -ENOENT) {
@@ -4642,7 +4662,9 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
       remove_objs.push_back(remove_key);
 
-      cleanup_part_history(dpp, y, part, remove_objs, it->second);
+      // the part's past prefixes go to GC once the head is written: the
+      // completion may yet be refused, and the upload keep them listed
+      collect_part_history(dpp, part, remove_objs, it->second, history);
 
       ofs += obj_part.size;
       accounted_size += obj_part.accounted_size;
@@ -4737,6 +4759,14 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   if (ret < 0)
     return ret;
 
+  // the head is written, so the parts' history can go. A completion refused
+  // before this point leaves the upload listing it: were it collected, the
+  // part's next upload would take its base prefix again, and
+  // cls_rgw_mp_upload_part_info_update would refuse it (-EEXIST)
+  if (int r = send_part_history(dpp, y, history); r < 0) {
+    ldpp_dout(dpp, 0) << "WARNING: failed to send the parts' history to GC, ret="
+                      << r << dendl;
+  }
   return ret;
 }
 
