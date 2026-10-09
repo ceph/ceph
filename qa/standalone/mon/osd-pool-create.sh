@@ -249,7 +249,7 @@ function check_pool_priority() {
     bin/ceph osd dump
 
     # Restart everything so mon converts the priorities
-    kill_daemons
+    kill_daemons $dir
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     activate_osd $dir 0 || return 1
