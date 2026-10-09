@@ -506,10 +506,12 @@ private:
 			  std::ostream *ss);
   void check_legacy_ec_plugin(const std::string& plugin, 
 			      const std::string& profile) const;
+public:
   int normalize_profile(const std::string& profilename,
 			ceph::ErasureCodeProfile &profile,
 			bool force,
 			std::ostream *ss);
+private:
   int crush_rule_create_replica(const std::string &name,
                                 const std::string &root,
                                 int64_t num_zones,
@@ -917,12 +919,31 @@ public:
    * @param ss Output stream for error messages
    * @return 0 on success, negative error code on failure
    */
-  int validate_stretch_mode_new_pool(int crush_rule, const std::string& zone_failure_domain, std::ostream *ss);
+  static int validate_stretch_mode_new_pool(CrushWrapper& crush, int crush_rule, int stretch_bucket_count, int stretch_mode_bucket,
+    const mempool::osdmap::map<int64_t, pg_pool_t>& pools, const std::string& zone_failure_domain, std::ostream *ss);
 
+  // The release that ships per-pool num_zones. Until require_osd_release
+  // reaches it the monitors keep the behavior of earlier releases.
+  static constexpr ceph_release_t NUM_ZONES_RELEASE = ceph_release_t::umbrella;
+  bool num_zones_supported() const {
+    return osdmap.require_osd_release >= NUM_ZONES_RELEASE;
+  }
   // What check_pool_params() needs from this cluster, with crush as its
   // CRUSH map. crush must outlive the result.
   PoolCreateCluster pool_create_cluster(CrushWrapper& crush);
 
+  // Whether osd_pool_default_crush_rule can serve a new pool that gives no
+  // rule: a rule of the pool's type that, for more than one zone, divides
+  // the cluster as the pool's zones would.
+  static bool default_rule_suits_pool(
+      CrushWrapper& crush,
+      int64_t rule,
+      int pool_type,
+      int64_t num_zones,
+      const std::string& zone_failure_domain,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools);
+
+  static std::string num_zones_upgrade_hint();
   /**
   *
   * Set all stretch mode values of all pools back to pre-stretch mode values.
