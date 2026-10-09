@@ -41,6 +41,7 @@
 
 #include "erasure-code/ErasureCodeInterface.h"
 #include "mon/MonOpRequest.h"
+#include "mon/PoolCreateParams.h"
 #include <boost/functional/hash.hpp>
 
 class Monitor;
@@ -505,7 +506,7 @@ private:
 			  std::ostream *ss);
   void check_legacy_ec_plugin(const std::string& plugin, 
 			      const std::string& profile) const;
-  int normalize_profile(const std::string& profilename, 
+  int normalize_profile(const std::string& profilename,
 			ceph::ErasureCodeProfile &profile,
 			bool force,
 			std::ostream *ss);
@@ -520,9 +521,14 @@ private:
                                 int *rule,
                                 std::ostream *ss);
   int crush_rule_create_erasure(const std::string &name,
-				const std::string &profile,
-				int *rule,
-				std::ostream *ss);
+                                int64_t num_zones,
+                                const std::string &root,
+                                const std::string &zone_failure_domain,
+                                const std::string &osd_failure_domain,
+                                const std::string &device_class,
+                                const std::string &profile,
+                                int *rule,
+                                std::ostream *ss);
   int get_crush_rule(const std::string &rule_name,
 		     int *crush_rule,
 		     std::ostream *ss);
@@ -530,26 +536,39 @@ private:
 		       ceph::ErasureCodeInterfaceRef *erasure_code,
 		       std::ostream *ss) const;
   int prepare_pool_crush_rule(const unsigned pool_type,
-			      const std::string &erasure_code_profile,
-			      const std::string &rule_name,
-			      int *crush_rule,
-			      std::ostream *ss);
+                              const std::string &pool_name,
+                              const std::string &erasure_code_profile,
+                              const std::string &rule_name,
+                              int64_t num_zones,
+                              const std::string &root,
+                              int num_replica_per_zone,
+                              const std::string &zone_failure_domain,
+                              const std::string &osd_failure_domain,
+                              const std::string &device_class,
+                              int *crush_rule,
+                              std::ostream *ss);
   bool erasure_code_profile_in_use(
     const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
     const std::string &profile,
     std::ostream *ss);
+  bool should_remove_ec_profile(const int64_t pool,
+                                const std::string &profile,
+                                std::ostream *ss);
   int parse_erasure_code_profile(const std::vector<std::string> &erasure_code_profile,
 				 std::map<std::string,std::string> *erasure_code_profile_map,
 				 std::ostream *ss);
   int prepare_pool_size(const unsigned pool_type,
-			const std::string &erasure_code_profile,
+                        const std::string &erasure_code_profile,
                         uint8_t repl_size,
-			unsigned *size, unsigned *min_size,
-			std::ostream *ss);
+                        int &replica,
+                        int64_t &num_zones,
+                        unsigned *size, unsigned *min_size,
+                        std::ostream *ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
-				const std::string &erasure_code_profile,
-				unsigned *stripe_width,
-				std::ostream *ss);
+                                const std::string &erasure_code_profile,
+                                bool ec_optimized,
+                                unsigned *stripe_width,
+                                std::ostream *ss);
   uint32_t get_osd_num_by_crush(int crush_rule);
   int check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, std::ostream* ss);
   int prepare_new_pool(std::string& name,
@@ -561,10 +580,18 @@ private:
                        uint64_t repl_size,
 		       const uint64_t target_size_bytes,
 		       const float target_size_ratio,
+           int64_t min_size,
 		       const std::string &erasure_code_profile,
-                       const unsigned pool_type,
-                       const uint64_t expected_num_objects,
-                       FastReadType fast_read,
+                       const std::string &root,
+           int64_t num_zones,
+                       int replica,
+                       int num_replica_per_zone,
+                       const std::string &zone_failure_domain,
+                       const std::string &osd_failure_domain,
+                       const std::string &device_class,
+           const unsigned pool_type,
+           const uint64_t expected_num_objects,
+           FastReadType fast_read,
 		       std::string pg_autoscale_mode,
 		       bool bulk,
 		       bool crimson,
@@ -891,6 +918,10 @@ public:
    * @return 0 on success, negative error code on failure
    */
   int validate_stretch_mode_new_pool(int crush_rule, const std::string& zone_failure_domain, std::ostream *ss);
+
+  // What check_pool_params() needs from this cluster, with crush as its
+  // CRUSH map. crush must outlive the result.
+  PoolCreateCluster pool_create_cluster(CrushWrapper& crush);
 
   /**
   *

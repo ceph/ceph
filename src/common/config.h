@@ -358,6 +358,10 @@ public:
     uint8_t min_size = get_val<uint64_t>(values, "osd_pool_default_min_size");
     return min_size ? std::min(min_size, size) : (size - size / 2);
   }
+  uint64_t get_osd_pool_default_total_size(const ConfigValues& values) const {
+    return get_val<int64_t>(values, "osd_pool_default_num_zones") *
+      get_val<uint64_t>(values, "osd_pool_default_size");
+  }
 
   friend class test_md_config_t;
 };
