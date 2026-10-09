@@ -31,6 +31,7 @@ on:
       - squid
       - tentacle
       - umbrella
+      - vampire
 # TODO enable/setup after upkeep has caught up
 #  push:
 #    tags:
