@@ -409,6 +409,17 @@
   read-only fsck, gated by the new ``bluestore_accept_corrupted_onode_recovery``
   option (``never`` or ``read-only``, default ``read-only``); mount, repair, and
   ``ceph-bluestore-tool trim`` still abort.
+* MGR: ``ceph osd perf`` now reports per-OSD latency KPIs pulled from the
+  Manager's cached perf counters: ``op_latency``, ``op_r_latency``,
+  ``op_w_latency``, ``bluestore_w_latency``, ``bluestore_r_latency`` and
+  ``kv_sync_latency``. The plain-text table no longer shows the
+  ``commit_latency(ms)`` and ``apply_latency(ms)`` columns: on BlueStore both
+  always reported the same number. The JSON output still includes the
+  ``commit_latency_ms``, ``apply_latency_ms``, ``commit_latency_ns`` and
+  ``apply_latency_ns`` keys, but they are deprecated and will be removed in a
+  future release. Prometheus and the Dashboard read ``os_perf_stat`` from the
+  PG map directly rather than from this CLI, so ``ceph_osd_commit_latency_ms``,
+  ``ceph_osd_apply_latency_ms`` and the matching Grafana panels keep working.
 
 >=20.0.0
 
