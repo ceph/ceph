@@ -110,7 +110,7 @@ void filepath::set_trimmed() {
   trimmed = true;
 }
 
-void filepath::_set_path(std::string_view s)
+void filepath::_set_path(std::string_view s, bool drop_trailing)
 {
   _path.clear(); /* remove everything include NUL */
   if (!s.empty()) {
@@ -137,7 +137,15 @@ void filepath::_set_path(std::string_view s)
         while (*it == '/') {
           ++it;
         }
-        if (it == s.end()) {
+        /* Regarding drop_trailing: IEEE Std 1003.1-2024 §4.16:
+         *
+         *    When a process resolves a pathname of a directory entry that is
+         *    to be created immediately after the pathname is resolved,
+         *    pathname resolution terminates when all components of the path
+         *    prefix of the last component have been resolved. It is then the
+         *    responsibility of the process to create the final component.
+         */
+        if (it == s.end() && drop_trailing) {
           /* a final '/' in a path is semantically significant, equivalent to ".../." , add it back: */
           _path.push_back('/');
           _path.push_back('.');

@@ -8255,6 +8255,8 @@ int Client::do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPe
   tout(cct) << mode << std::endl;
   ldout(cct, 10) << __func__ << ": " << relpath << dendl;
 
+  const auto path = filepath(relpath, {.drop_trailing = false});
+
   std::scoped_lock lock(client_lock);
   InodeRef dirinode;
   int r = get_fd_inode(dirfd, &dirinode);
@@ -8263,7 +8265,7 @@ int Client::do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPe
   }
 
   walk_dentry_result wdr;
-  if (int rc = path_walk(dirinode, filepath(relpath), &wdr, perm, {.require_target = false}); rc < 0) {
+  if (int rc = path_walk(dirinode, path, &wdr, perm, {.require_target = false}); rc < 0) {
     return rc;
   }
 
@@ -8281,7 +8283,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
 
-  const filepath path(relpath);
+  const auto path = filepath(relpath, {.drop_trailing = false});
 
   std::scoped_lock lock(client_lock);
   for (;;) {

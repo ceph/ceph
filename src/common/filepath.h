@@ -26,6 +26,8 @@
 
 #include <limits>
 
+#include <concepts>
+#include <cstddef>
 #include <iosfwd>
 #include <list>
 #include <string_view>
@@ -114,6 +116,9 @@ private:
 
 class filepath {
 public:
+  struct FilePath_ExtraArgs {
+    bool drop_trailing = true;
+  };
   static constexpr unsigned DENTRY_RESERVED = 10; /* for performance */
 
   /* small vector to avoid allocations in general */
@@ -126,7 +131,17 @@ public:
   static std::list<filepath> generate_test_instances();
 
   filepath() = default;
+  filepath(std::nullptr_t) = delete;
+  filepath(inodeno_t i) : _ino(i) {}
+  filepath(const char* p) { _set_path(p); }
+
+  template <std::integral T>
+  filepath(T i) : _ino(static_cast<inodeno_t>(i)) {}
+
   filepath(std::string_view p, inodeno_t i) : _ino(i) { _set_path(p); }
+  filepath(std::string_view s) { _set_path(s); }
+  filepath(std::string_view s, const FilePath_ExtraArgs& args) { _set_path(s, args.drop_trailing); }
+
   filepath(const filepath& o) = default;
   filepath(filepath&& o) {
     if (this != &o) {
@@ -138,14 +153,6 @@ public:
       o.clear();
     }
   }
-  filepath(inodeno_t i) : _ino(i) {}
-  filepath(int i) : _ino(inodeno_t(i)) {}
-  filepath(int64_t i) : _ino(inodeno_t(i)) {}
-  filepath(std::string_view s) { _set_path(s); }
-  filepath(const char* s) {
-    _set_path(s);
-  }
-
   filepath& operator=(filepath&& o) {
     if (this != &o) {
       _ino = o._ino;
@@ -316,7 +323,7 @@ private:
    * N.B.: to generate a snappath, you must do it via the bits API (push/pop
    * dentry). This method takes external path strings from user APIs.
    */
-  void _set_path(std::string_view s);
+  void _set_path(std::string_view s, bool drop_trailing=true);
 
   void _check_path() const {
     if (_bits_dirty) {
