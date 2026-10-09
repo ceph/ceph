@@ -68,19 +68,13 @@ running the following command:
 
 .. prompt:: bash #
 
-   ceph osd pool set noautoscale
+   ceph osd set noautoscale
 
 To set the ``noautoscale`` flag to ``off``, run the following command:
 
 .. prompt:: bash #
 
-   ceph osd pool unset noautoscale
-
-To get the current value of the flag, run the following command:
-
-.. prompt:: bash #
-
-   ceph osd pool get noautoscale
+   ceph osd unset noautoscale
 
 Viewing PG scaling recommendations
 ----------------------------------
