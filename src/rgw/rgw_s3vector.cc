@@ -647,6 +647,15 @@ namespace rgw::s3vector {
     return metric;
   }
 
+  LanceDBDistanceType to_lancedb_distance(DistanceMetric metric) {
+    switch (metric) {
+      case DistanceMetric::COSINE: return LANCEDB_DISTANCE_COSINE;
+      case DistanceMetric::EUCLIDEAN:
+      case DistanceMetric::UNKNOWN: return LANCEDB_DISTANCE_L2;
+    }
+    return LANCEDB_DISTANCE_L2;
+  }
+
   void create_index_t::dump(ceph::Formatter* f) const {
     f->open_object_section("");
     ::encode_json("dataType", data_type, f);
@@ -1151,6 +1160,75 @@ namespace rgw::s3vector {
     return 0;
   }
 
+  // get index stats
+
+  void get_index_stats_t::dump(ceph::Formatter* f) const {
+    f->open_object_section("");
+    ::encode_json("indexName", index_name, f);
+    ::encode_json("vectorBucketName", vector_bucket_name, f);
+    f->close_section();
+  }
+
+  void get_index_stats_t::decode_json(JSONObj* obj) {
+    decode_index_name(vector_bucket_name, index_name, obj);
+  }
+
+  void get_index_stats_reply_t::dump(ceph::Formatter* f) const {
+    f->open_object_section("");
+    f->open_object_section("indexStats");
+    ::encode_json("numIndexedRows", num_indexed_rows, f);
+    ::encode_json("numUnindexedRows", num_unindexed_rows, f);
+    ::encode_json("numIndexSegments", num_index_segments, f);
+    f->close_section();
+    f->close_section();
+  }
+
+  int get_index_stats(const get_index_stats_t& configuration, rgw::sal::Driver* driver, [[maybe_unused]] const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_index_stats_reply_t& reply) {
+    log_configuration(dpp, "GetIndexStats", configuration);
+    int open_result = 0;
+    auto table_handle = open_table_with_session_handle(dpp, driver, tenant, configuration.vector_bucket_name, configuration.index_name, open_result);
+    if (!table_handle) {
+      return -ENOENT;
+    }
+    LanceDBTable* table = table_handle.table;
+    LanceDBConnection* conn = table_handle.conn_handle.conn;
+
+    char* error_message = nullptr;
+    LanceDBIndexStats stats = {};
+    if (const auto err = lancedb_table_index_stats(table, vector_index_name, &stats, &error_message);
+        err == LANCEDB_SUCCESS) {
+      reply.num_indexed_rows = stats.num_indexed_rows;
+      reply.num_unindexed_rows = stats.num_unindexed_rows;
+      reply.num_index_segments = stats.num_indices;
+    } else if (err == LANCEDB_INDEX_NOT_FOUND) {
+      // benign, expected state: the index metadata exists but the vector index
+      // has not been built yet (e.g. before the background rebuild runs). Report
+      // all rows as unindexed rather than failing the request.
+      if (error_message) {
+        lancedb_free_string(error_message);
+      }
+      reply.num_indexed_rows = 0;
+      reply.num_unindexed_rows = lancedb_table_count_rows(table);
+      reply.num_index_segments = 0;
+    } else {
+      // a genuine backend failure (IO, corruption, runtime, ...). Do not mask it
+      // behind fabricated stats — surface it so GetIndexStats fails cleanly.
+      ldpp_dout(dpp, 1) << "ERROR: failed to get index stats for "
+          << configuration.index_name << ": "
+          << (error_message ? error_message : "unknown") << dendl;
+      if (error_message) {
+        lancedb_free_string(error_message);
+      }
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      return -ERR_INTERNAL_ERROR;
+    }
+
+    lancedb_table_free(table);
+    lancedb_connection_free(conn);
+    return 0;
+  }
+
   // list indexes
 
   void list_indexes_t::dump(ceph::Formatter* f) const {
@@ -1610,8 +1688,9 @@ namespace rgw::s3vector {
     decode_index_name(vector_bucket_name, index_name, obj);
     JSONDecoder::decode_json("vectors", vectors, obj, true);
 
-    if (vectors.empty() or vectors.size() > 500) {
-      throw JSONDecoder::err(fmt::format("vectors array must contain 1-500 items, got {}", vectors.size()));
+    // the maximum number of vectors is configurable, and is verified in put_vectors()
+    if (vectors.empty()) {
+      throw JSONDecoder::err("vectors array must contain at least 1 item");
     }
   }
 
@@ -2008,7 +2087,7 @@ namespace rgw::s3vector {
       return;
     }
     // we are not failing the operation if we cannot notify the background process on index update
-    notify_index_update(dpp, tenant_name(tenant), configuration.vector_bucket_name, configuration.index_name);
+    notify_index_update(dpp, tenant_name(tenant), configuration.vector_bucket_name, configuration.index_name, num_rows);
     lancedb_table_free(table);
     lancedb_connection_free(conn);
     ctx->result = 0;
@@ -2016,6 +2095,14 @@ namespace rgw::s3vector {
 
   int put_vectors(const put_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
     log_configuration(dpp, "PutVectors", configuration);
+    const auto max_vectors = dpp->get_cct()->_conf->rgw_s3vector_max_put_vectors;
+    if (configuration.vectors.size() > max_vectors) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector too many vectors in request, got "
+        << configuration.vectors.size() << " maximum is " << max_vectors << dendl;
+      errors.push_back({"vectors",
+        fmt::format("must contain 1-{} items, got {}", max_vectors, configuration.vectors.size())});
+      return -EINVAL;
+    }
     PutVectorsCtx ctx{&configuration, driver, tenant, dpp, &errors, 0};
     lancedb_run_on_stack(put_vectors_impl, &ctx, 256*1024, 1024*1024);
     return ctx.result;
@@ -2067,6 +2154,7 @@ namespace rgw::s3vector {
   int populate_vectors_from_arrow(
       DoutPrefixProvider* dpp,
       struct ArrowArray** c_arrays_ptr,
+      size_t count,
       struct ArrowSchema* c_schema_ptr,
       std::vector<vector_item_t>& vectors,
       const std::string& index_name,
@@ -2075,72 +2163,81 @@ namespace rgw::s3vector {
       bool vector_query,
       bool use_metadata,
       const bool* matches = nullptr) {
-    if (auto schema = arrow::ImportSchema(c_schema_ptr); schema.ok()) {
-      if (auto array = arrow::ImportRecordBatch(reinterpret_cast<struct ArrowArray*>(*c_arrays_ptr), *schema); array.ok()) {
-        const auto& record_batch = *array;
-        const auto num_columns = static_cast<unsigned int>(record_batch->num_columns());
-        for (auto row = 0U; row < record_batch->num_rows(); row++) {
-          if (matches && !matches[row]) continue;
-          vector_item_t vector_item;
-          if (use_data) vector_item.data.emplace();
-          for (auto col = 0U; col < num_columns; col++) {
-            auto column = record_batch->column(col);
-            auto field = record_batch->schema()->field(col);
-
-            if (field->name() == key_field_str) {
-              const auto key_array = std::static_pointer_cast<arrow::StringArray>(column);
-              if (!key_array->IsNull(row)) {
-                vector_item.key = key_array->GetString(row);
-              } else {
-                vector_item.key = "";
-              }
-            } else if (field->name() == data_field_str && vector_item.data) {
-              const auto data_array = std::static_pointer_cast<arrow::FixedSizeListArray>(column);
-              if (!data_array->IsNull(row)) {
-                const auto values = std::static_pointer_cast<arrow::FloatArray>(data_array->values());
-                const auto start = data_array->value_offset(row);
-                const auto length = data_array->value_length();
-                for (auto i = 0; i < length; i++) {
-                  vector_item.data->push_back(values->Value(start + i));
-                }
-              } else {
-                ldpp_dout(dpp, 5) << "WARNING: s3vector got no data in record batch for index: " << index_name <<dendl;
-              }
-            } else if (field->name() == distance_field_str) {
-              if (!use_distance) continue;
-              const auto distance_array = std::static_pointer_cast<arrow::FloatArray>(column);
-              if (!distance_array->IsNull(row)) {
-                vector_item.distance = distance_array->Value(row);
-              } else {
-                ldpp_dout(dpp, 5) << "WARNING: s3vector got no distance in record batch for index: " << index_name <<dendl;
-              }
-            } else if (field->name() == metadata_field_str) {
-              if (!use_metadata) continue;
-              const auto metadata_array = std::static_pointer_cast<arrow::StringArray>(column);
-              if (!metadata_array->IsNull(row)) {
-                vector_item.metadata = metadata_array->GetString(row);
-              }
-            } else {
-              ldpp_dout(dpp, 5) << "WARNING: s3vector got unknown field: " << field->name() <<
-                " in record batch for index: " << index_name <<dendl;
-              continue;
-            }
-          }
-          vectors.push_back(vector_item);
-        }
-      } else {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to import record batch from arrow arrays for index: " <<
-          index_name << ". error: " << array.status().ToString() << dendl;
-        lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
-        return -EINVAL;
-      }
-    } else {
+    const auto schema = arrow::ImportSchema(c_schema_ptr);
+    if (!schema.ok()) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to import schema from arrow C ABI for index: " <<
         index_name << ". error: " << schema.status().ToString() << dendl;
+      lancedb_free_arrow_arrays(reinterpret_cast<FFI_ArrowArray**>(c_arrays_ptr), count);
+      lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
       return -EINVAL;
     }
 
-    lancedb_free_arrow_arrays(reinterpret_cast<FFI_ArrowArray**>(c_arrays_ptr), 1);
+    // the results may be split between several record batches
+    // "matches" holds an entry for each row of all batches, in the order of the batches
+    size_t match_index = 0;
+    for (size_t batch = 0; batch < count; ++batch) {
+      const auto array = arrow::ImportRecordBatch(reinterpret_cast<struct ArrowArray*>(c_arrays_ptr[batch]), *schema);
+      if (!array.ok()) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to import record batch from arrow arrays for index: " <<
+          index_name << ". error: " << array.status().ToString() << dendl;
+        lancedb_free_arrow_arrays(reinterpret_cast<FFI_ArrowArray**>(c_arrays_ptr), count);
+        lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
+        return -EINVAL;
+      }
+      const auto& record_batch = *array;
+      const auto num_columns = static_cast<unsigned int>(record_batch->num_columns());
+      for (auto row = 0U; row < record_batch->num_rows(); row++) {
+        if (matches && !matches[match_index++]) continue;
+        vector_item_t vector_item;
+        if (use_data) vector_item.data.emplace();
+        for (auto col = 0U; col < num_columns; col++) {
+          auto column = record_batch->column(col);
+          auto field = record_batch->schema()->field(col);
+
+          if (field->name() == key_field_str) {
+            const auto key_array = std::static_pointer_cast<arrow::StringArray>(column);
+            if (!key_array->IsNull(row)) {
+              vector_item.key = key_array->GetString(row);
+            } else {
+              vector_item.key = "";
+            }
+          } else if (field->name() == data_field_str && vector_item.data) {
+            const auto data_array = std::static_pointer_cast<arrow::FixedSizeListArray>(column);
+            if (!data_array->IsNull(row)) {
+              const auto values = std::static_pointer_cast<arrow::FloatArray>(data_array->values());
+              const auto start = data_array->value_offset(row);
+              const auto length = data_array->value_length();
+              for (auto i = 0; i < length; i++) {
+                vector_item.data->push_back(values->Value(start + i));
+              }
+            } else {
+              ldpp_dout(dpp, 5) << "WARNING: s3vector got no data in record batch for index: " << index_name <<dendl;
+            }
+          } else if (field->name() == distance_field_str) {
+            if (!use_distance) continue;
+            const auto distance_array = std::static_pointer_cast<arrow::FloatArray>(column);
+            if (!distance_array->IsNull(row)) {
+              vector_item.distance = distance_array->Value(row);
+            } else {
+              ldpp_dout(dpp, 5) << "WARNING: s3vector got no distance in record batch for index: " << index_name <<dendl;
+            }
+          } else if (field->name() == metadata_field_str) {
+            if (!use_metadata) continue;
+            const auto metadata_array = std::static_pointer_cast<arrow::StringArray>(column);
+            if (!metadata_array->IsNull(row)) {
+              vector_item.metadata = metadata_array->GetString(row);
+            }
+          } else {
+            ldpp_dout(dpp, 5) << "WARNING: s3vector got unknown field: " << field->name() <<
+              " in record batch for index: " << index_name <<dendl;
+            continue;
+          }
+        }
+        vectors.push_back(vector_item);
+      }
+    }
+
+    lancedb_free_arrow_arrays(reinterpret_cast<FFI_ArrowArray**>(c_arrays_ptr), count);
     lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
     return 0;
   }
@@ -2176,7 +2273,7 @@ namespace rgw::s3vector {
       lancedb_free_arrow_schema(reinterpret_cast<FFI_ArrowSchema*>(c_schema_ptr));
       return 0;
     }
-    return populate_vectors_from_arrow(dpp, c_arrays_ptr, c_schema_ptr, vectors, index_name, use_data, use_distance, vector_query, use_metadata);
+    return populate_vectors_from_arrow(dpp, c_arrays_ptr, count_out, c_schema_ptr, vectors, index_name, use_data, use_distance, vector_query, use_metadata);
   }
 
   int get_vectors(const get_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply) {
@@ -2465,6 +2562,10 @@ namespace rgw::s3vector {
     }
     lancedb_table_free(table);
     lancedb_connection_free(conn);
+    if (result == LANCEDB_SUCCESS) {
+    // upon deleting vectors, it needs to verify whether to re-build the index
+      notify_index_delete(dpp, tenant_name(tenant), configuration.vector_bucket_name, configuration.index_name, configuration.keys.size());
+    }
     return lancedb_error_to_errno(result);
   }
 
@@ -2486,6 +2587,12 @@ namespace rgw::s3vector {
     ::encode_json("returnMetadata", return_metadata, f);
     ::encode_json("topK", top_k, f);
     ::encode_json("postFiltering", post_filtering, f);
+    if (explain_plan) {
+      ::encode_json("explainPlan", explain_plan, f);
+    }
+    if (explain_only) {
+      ::encode_json("explainOnly", explain_only, f);
+    }
     f->close_section();
   }
 
@@ -2497,6 +2604,8 @@ namespace rgw::s3vector {
     JSONDecoder::decode_json("returnMetadata", return_metadata, obj);
     JSONDecoder::decode_json("topK", top_k, obj, true);
     JSONDecoder::decode_json("postFiltering", post_filtering, obj);
+    JSONDecoder::decode_json("explainPlan", explain_plan, obj);
+    JSONDecoder::decode_json("explainOnly", explain_only, obj);
 
     if (top_k < 1 || top_k > max_top_k) {
       throw JSONDecoder::err(fmt::format("topK must be between 1 and {}, got {}", max_top_k, top_k));
@@ -2510,12 +2619,17 @@ namespace rgw::s3vector {
 
   void query_vectors_reply_t::dump(ceph::Formatter* f) const {
     f->open_object_section("");
-    ::encode_json("distanceMetric", distance_metric_to_string(distance_metric), f);
-    f->open_array_section("vectors");
-    for (const auto& vector : vectors) {
-      vector.dump(f);
+    if (query_plan) {
+      ::encode_json("queryPlan", *query_plan, f);
     }
-    f->close_section();
+    if (!vectors.empty() || !query_plan) {
+      ::encode_json("distanceMetric", distance_metric_to_string(distance_metric), f);
+      f->open_array_section("vectors");
+      for (const auto& vector : vectors) {
+        vector.dump(f);
+      }
+      f->close_section();
+    }
     f->close_section();
   }
 
@@ -2634,6 +2748,29 @@ namespace rgw::s3vector {
       return lancedb_error_to_errno(result);
     }
 
+    // get the query plan before execute (explain_plan does NOT consume the query)
+    if (configuration.explain_plan || configuration.explain_only) {
+      char* plan_str = nullptr;
+      if (const LanceDBError result = lancedb_vector_query_explain_plan(query, true, &plan_str, &error_message); result != LANCEDB_SUCCESS) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to get explain plan for index: " << configuration.index_name << ". error: " << error_message << dendl;
+        lancedb_free_string(error_message);
+        // non-fatal: continue without the plan
+      } else {
+        reply.query_plan = std::string(plan_str);
+        lancedb_free_string(plan_str);
+      }
+    }
+
+    // if explain_only, skip query execution entirely
+    if (configuration.explain_only) {
+      lancedb_vector_query_free(query);
+      lancedb_expr_free(json_filter_expr);
+      reply.distance_metric = get_distance_metric(table, dpp);
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      return 0;
+    }
+
     // execute consumes query regardless of success/failure
     LanceDBQueryResult* query_result = lancedb_vector_query_execute(query);
     if (!query_result) {
@@ -2689,7 +2826,7 @@ namespace rgw::s3vector {
         ret = 0;
       } else {
         const bool need_distance = configuration.return_distance || (effective_top_k > configuration.top_k);
-        ret = populate_vectors_from_arrow(dpp, c_arrays_ptr, c_schema_ptr, reply.vectors, configuration.index_name,
+        ret = populate_vectors_from_arrow(dpp, c_arrays_ptr, count_out, c_schema_ptr, reply.vectors, configuration.index_name,
             false, need_distance, true, configuration.return_metadata, matches);
         if (ret == 0 && reply.vectors.size() > configuration.top_k) {
           // if we received more than k vectors (due to using the factor when post filtering)
