@@ -1032,64 +1032,87 @@ void SnapMapper::Scrubber::run()
 {
   dout(10) << __func__ << dendl;
 
+  // Collect the purged_snaps rows up front and sort them numerically by
+  // (pool, begin) for the binary search below (the on-disk key order is
+  // not numeric), then walk the mapping keys once: O(M log P) instead of
+  // a fresh purged_snaps omap walk per mapping key, O(M*P). Rows of one
+  // pool may also OVERLAP on disk (record_purged_snaps() joins only
+  // ADJACENT rows), so maxend[] carries the max end of the same-pool
+  // rows up to each row: every same-pool row with begin <= snap may
+  // cover the snap, not just the last one.
+  std::vector<std::tuple<int64_t, snapid_t, snapid_t>> purged;
+  const auto r = store->omap_iterate(
+    ch, purged_snaps_hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = PURGED_SNAP_PREFIX,
+      .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+    },
+    [this, &purged] (std::string_view key, std::string_view value) mutable {
+      if (!_parse_p(key, value)) {
+        return ObjectStore::omap_iter_ret_t::STOP;
+      }
+      purged.emplace_back(pool, begin, end);
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    });
+  if (r < 0) {
+    derr << "omap_iterate() on purged_snaps_hoid returns " << r << dendl;
+    return;
+  }
+  std::sort(purged.begin(), purged.end());
+  if (purged.empty()) {
+    dout(10) << __func__ << " no purged_snaps, rest ok" << dendl;
+    return;
+  }
+  std::vector<snapid_t> maxend(purged.size());
+  for (size_t i = 0; i < purged.size(); ++i) {
+    maxend[i] =
+      (i > 0 && std::get<0>(purged[i - 1]) == std::get<0>(purged[i]))
+      ? std::max(maxend[i - 1], std::get<2>(purged[i]))
+      : std::get<2>(purged[i]);
+  }
+
   store->omap_iterate(
     ch, mapping_hoid,
     ObjectStore::omap_iter_seek_t{
       .seek_position = MAPPING_PREFIX,
       .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
     },
-    [this] (std::string_view key, std::string_view value) mutable {
+    [this, &purged, &maxend] (std::string_view key, std::string_view value) mutable {
       if (!_parse_m(key, value)) {
         return ObjectStore::omap_iter_ret_t::STOP;
       }
-      // advance to next purged_snaps range?
-      const auto ret = store->omap_iterate(
-        ch, purged_snaps_hoid,
-        ObjectStore::omap_iter_seek_t{
-          .seek_position = PURGED_SNAP_PREFIX,
-          .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
-        },
-        [this] (std::string_view key, std::string_view value) mutable {
-          _parse_p(key, value);
-          if (pool >= 0 &&
-                 (mapping.hoid.pool > pool ||
-                  (mapping.hoid.pool == pool && mapping.snap >= end))) {
-            return ObjectStore::omap_iter_ret_t::NEXT;
-	  } else {
-            return ObjectStore::omap_iter_ret_t::STOP;
-	  }
+      // O(log P): find the last row that starts at or before this
+      // mapping's snap; maxend[] covers every same-pool row up to it
+      auto it = std::lower_bound(
+        purged.begin(), purged.end(),
+        std::pair(mapping.hoid.pool, mapping.snap),
+        [] (const auto& range, const auto& q) {
+          return std::get<0>(range) < q.first ||
+                 (std::get<0>(range) == q.first &&
+                  std::get<1>(range) <= q.second);
         });
-      if (ret < 0) {
-	// beware _parse_p() also modifies pool
-	pool = -1;
-	derr << "omap_iterate() on purged_snaps_hoid returns " << ret << dendl;
-      } else if (const auto more = static_cast<bool>(ret); !more) {
-	pool = -1;
+      bool in_purged = false;
+      if (it != purged.begin() &&
+          std::get<0>(*--it) == mapping.hoid.pool) {
+        in_purged = maxend[it - purged.begin()] > mapping.snap;
       }
-      if (pool < 0) {
-        dout(10) << __func__ << " passed final purged_snaps interval, rest ok"
-                 << dendl;
-        return ObjectStore::omap_iter_ret_t::STOP;
-      }
-      if (mapping.hoid.pool < pool ||
-          mapping.snap < begin) {
+      if (!in_purged) {
         // ok
         dout(20) << fmt::format(
-                      "{} ok {} snap {} precedes pool {} purged_snaps [{}, {})",
-                      __func__, mapping.hoid, mapping.snap, pool, begin, end)
+                      "{} ok {} snap {} not in any purged_snaps interval",
+                      __func__, mapping.hoid, mapping.snap)
                  << dendl;
       } else {
-        ceph_assert(mapping.snap >= begin);
-        ceph_assert(mapping.snap < end);
-        ceph_assert(mapping.hoid.pool == pool);
         // invalid
         dout(10) << fmt::format(
-                      "{} stray {} snap {} in pool {} shard {} purged_snaps[{}, {})",
-                      __func__, mapping.hoid, mapping.snap, pool, shard, begin, end)
+                      "{} stray {} snap {} in pool {} shard {} purged_snaps "
+                      "(covered, max end {})",
+                      __func__, mapping.hoid, mapping.snap, mapping.hoid.pool,
+                      shard, maxend[it - purged.begin()])
                  << dendl;
         stray.emplace_back(std::tuple<int64_t,snapid_t,uint32_t,shard_id_t>(
-          		   pool, mapping.snap, mapping.hoid.get_hash(),
-          		   shard
+          		   mapping.hoid.pool, mapping.snap,
+          		   mapping.hoid.get_hash(), shard
           		   ));
       }
       return ObjectStore::omap_iter_ret_t::NEXT;
