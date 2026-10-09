@@ -53,6 +53,11 @@ CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs', 'node-proxy']
 # that are part of the upgrade order here
 NON_CEPH_IMAGE_TYPES = MONITORING_STACK_TYPES + ['nvmeof', 'smb'] + MGMT_GATEWAY_STACK_TYPES
 
+# daemon types that can be passed to --daemon-types for targeted upgrades.
+# Named explicitly to avoid confusion with CEPH_UPGRADE_ORDER (all types
+# in the upgrade loop) or CEPH_IMAGE_TYPES (types sharing the ceph image).
+SUPPORTED_UPGRADE_DAEMON_TYPE_FILTER_TYPES = CEPH_IMAGE_TYPES + ['nvmeof']
+
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter
 cephadmNoImage = CephadmNoImage.token
 
