@@ -1,27 +1,27 @@
-import { Component, NgZone, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Router } from '@angular/router';
+import { BehaviorSubject, Observable, of } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
+
 import { NfsService } from '~/app/shared/api/nfs.service';
-import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { NFSCluster } from '../models/nfs-cluster-config';
-import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
-import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
-import { BehaviorSubject, Observable } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
-const BASE_URL = 'cephfs/nfs';
+import { getFsalFromRoute, getPathfromFsal } from '../utils';
+
 @Component({
   selector: 'cd-nfs-cluster',
   templateUrl: './nfs-cluster.component.html',
   styleUrls: ['./nfs-cluster.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
   standalone: false
 })
-export class NfsClusterComponent extends ListWithDetails implements OnInit {
+export class NfsClusterComponent implements OnInit {
   @ViewChild('hostnameTpl', { static: true })
   hostnameTpl: TemplateRef<any>;
 
@@ -40,26 +40,30 @@ export class NfsClusterComponent extends ListWithDetails implements OnInit {
   subject = new BehaviorSubject<NFSCluster[]>([]);
 
   constructor(
-    public actionLabels: ActionLabelsI18n,
-    protected ngZone: NgZone,
     private authStorageService: AuthStorageService,
     private nfsService: NfsService,
-    private orchService: OrchestratorService
-  ) {
-    super();
-  }
+    private orchService: OrchestratorService,
+    private router: Router
+  ) {}
 
   ngOnInit(): void {
     this.orchService.status().subscribe((status: OrchestratorStatus) => {
       this.orchStatus = status;
     });
     this.permission = this.authStorageService.getPermissions().nfs;
-    this.clusters$ = this.subject.pipe(switchMap(() => this.nfsService.nfsClusterList()));
+    this.clusters$ = this.subject.pipe(
+      switchMap(() => this.nfsService.nfsClusterList().pipe(catchError(() => of([]))))
+    );
+    const nfsBasePath = `/${getPathfromFsal(getFsalFromRoute(this.router.url))}/nfs/cluster`;
     this.columns = [
       {
         name: $localize`Name`,
         prop: 'name',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.redirect,
+        customTemplateConfig: {
+          redirectLink: [nfsBasePath, '::prop', 'overview']
+        }
       },
       {
         name: $localize`Hostnames`,

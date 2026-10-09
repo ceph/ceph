@@ -77,6 +77,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
   selectedFsName: string = '';
   selectedSubvolGroup: string = '';
   selectedSubvol: string = '';
+  selectedClusterId: string = '';
   defaultSubVolGroup = DEFAULT_SUBVOLUME_GROUP;
 
   pathDataSource = (text$: Observable<string>) => {
@@ -156,10 +157,18 @@ export class NfsFormComponent extends CdForm implements OnInit {
     } else {
       this.action = this.actionLabels.CREATE;
       this.route.params.subscribe(
-        (params: { fs_name: string; subvolume_group: string; subvolume?: string }) => {
+        (params: {
+          fs_name: string;
+          subvolume_group: string;
+          subvolume?: string;
+          cluster_id?: string;
+        }) => {
           this.selectedFsName = params.fs_name;
           this.selectedSubvolGroup = params.subvolume_group;
           if (params.subvolume) this.selectedSubvol = params.subvolume;
+          if (params.cluster_id) {
+            this.selectedClusterId = decodeURIComponent(params.cluster_id);
+          }
         }
       );
 
@@ -444,7 +453,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
       this.allClusters.push({ cluster_id: cluster });
     }
     if (!this.isEdit && this.allClusters.length > 0) {
-      this.nfsForm.get('cluster_id').setValue(this.allClusters[0].cluster_id);
+      const preselected =
+        this.selectedClusterId &&
+        this.allClusters.find((c) => c.cluster_id === this.selectedClusterId);
+      this.nfsForm
+        .get('cluster_id')
+        .setValue(preselected ? preselected.cluster_id : this.allClusters[0].cluster_id);
     }
   }
 

@@ -5,8 +5,6 @@
     columnMode="flex"
     [columns]="columns"
     selectionType="single"
-    [hasDetails]="true"
-    (setExpandedRow)="setExpandedRow($event)"
     (fetchData)="loadData()"
     (updateSelection)="updateSelection($event)"
   >
@@ -16,10 +14,6 @@
       [permission]="permission"
       [tableActions]="tableActions"
     ></cd-table-actions>
-    <cd-nfs-cluster-details
-      *cdTableDetail
-      [selection]="expandedRow"
-    ></cd-nfs-cluster-details>
   </cd-table>
 }
 

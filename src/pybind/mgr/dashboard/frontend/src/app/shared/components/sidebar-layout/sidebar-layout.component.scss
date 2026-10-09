@@ -2,6 +2,10 @@
 @use '@carbon/colors';
 @use '@carbon/layout';
 
+cd-sidebar-layout {
+  display: block;
+}
+
 .sidebar-layout--full {
   height: 100%;
   width: 100%;
