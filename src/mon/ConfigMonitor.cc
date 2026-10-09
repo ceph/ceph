@@ -1176,8 +1176,8 @@ int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
   }
 
   // 4. the checks that the next ceph osd pool create would make
-  err = check_pool_defaults(p, mon.osdmon()->pool_create_cluster(*osdmap.crush),
-                            &ss);
+  CrushWrapper crush = mon.osdmon()->_get_pending_crush();
+  err = check_pool_defaults(p, mon.osdmon()->pool_create_cluster(crush), &ss);
   if (err) {
     return err;
   }

@@ -7696,7 +7696,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   params.pool_type = pg_pool_t::TYPE_REPLICATED;
   params.num_zones = 1;
   {
-    const CrushWrapper crush = _get_pending_crush();
+    CrushWrapper crush = _get_pending_crush();
     ret = check_pool_params(params, pool_create_cluster(crush), &ss);
     if (ret < 0) {
       dout(10) << __func__ << " " << ss.str() << dendl;
@@ -15099,7 +15099,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
     {
-      const CrushWrapper crush = _get_pending_crush();
+      CrushWrapper crush = _get_pending_crush();
       err = check_pool_params(params, pool_create_cluster(crush), &ss);
       if (err) {
         goto reply_no_propose;
@@ -17403,7 +17403,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   return;
 }
 
-PoolCreateCluster OSDMonitor::pool_create_cluster(const CrushWrapper& crush)
+PoolCreateCluster OSDMonitor::pool_create_cluster(CrushWrapper& crush)
 {
   PoolCreateCluster cluster;
   cluster.crush = &crush;
@@ -17418,16 +17418,9 @@ PoolCreateCluster OSDMonitor::pool_create_cluster(const CrushWrapper& crush)
     }
     return normalize_profile("", profile, false, ss);
   };
-  auto stretch_crush = std::make_shared<CrushWrapper>();
-  {
-    bufferlist bl;
-    crush.encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
-    auto it = bl.cbegin();
-    stretch_crush->decode(it);
-  }
-  cluster.validate_stretch = [this, stretch_crush](const string& zone,
-                                                   int64_t num_zones,
-                                                   ostream *ss) {
+  cluster.validate_stretch = [this, &crush](const string& zone,
+                                           int64_t num_zones,
+                                           ostream *ss) {
     // stretch mode divides the cluster in two
     if (num_zones != 2) {
       return 0;
@@ -17437,7 +17430,7 @@ PoolCreateCluster OSDMonitor::pool_create_cluster(const CrushWrapper& crush)
     if (!mon.monmon()->pending_map.stretch_mode_enabled) {
       stringstream mss;
       mon.monmon()->try_enable_stretch_mode(mss, &okay, &errcode, false, "",
-                                            zone, *stretch_crush);
+                                            zone, crush);
       if (!okay) {
         *ss << "Failed to validate monitor stretch mode: " << mss.str();
         return errcode;
@@ -17445,7 +17438,7 @@ PoolCreateCluster OSDMonitor::pool_create_cluster(const CrushWrapper& crush)
     }
     stringstream oss;
     try_enable_stretch_mode(oss, &okay, &errcode, false, zone, num_zones, {},
-                            "", *stretch_crush, false);
+                            "", crush, false);
     if (!okay) {
       *ss << "Failed to validate pool stretch mode: " << oss.str();
       return errcode;
@@ -17809,7 +17802,7 @@ int OSDMonitor::disable_stretch_mode(ostream& ss, const string& crush_rule)
     p.num_zones = 1;
     p.replica = LOCAL_REPLICA;
     p.given = {"num_zones", "replica"};
-    const CrushWrapper crush = _get_pending_crush();
+    CrushWrapper crush = _get_pending_crush();
     r = check_pool_defaults(p, pool_create_cluster(crush), &ss);
     if (r < 0) {
       return r;

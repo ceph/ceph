@@ -976,7 +976,7 @@ public:
   }
   // What check_pool_params() needs from this cluster, with crush as its
   // CRUSH map. crush must outlive the result.
-  PoolCreateCluster pool_create_cluster(const CrushWrapper& crush);
+  PoolCreateCluster pool_create_cluster(CrushWrapper& crush);
 
   // Whether osd_pool_default_crush_rule can serve a new pool that gives no
   // rule: a rule of the pool's type that, for more than one zone, divides
