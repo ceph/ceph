@@ -11,9 +11,8 @@ class RGWHandler_REST_s3Vector : public RGWHandler_REST {
   RGWOp *op_post() override;
 
 public:
-  RGWHandler_REST_s3Vector(const rgw::auth::StrategyRegistry& auth_registry,
-                           const bufferlist& bl_post_body)
-    : auth_registry(auth_registry), bl_post_body(bl_post_body) {}
+  explicit RGWHandler_REST_s3Vector(const rgw::auth::StrategyRegistry& auth_registry)
+    : auth_registry(auth_registry) {}
   ~RGWHandler_REST_s3Vector() override = default;
 
   int init(rgw::sal::Driver* driver, req_state *s, rgw::io::BasicClient *cio) override;

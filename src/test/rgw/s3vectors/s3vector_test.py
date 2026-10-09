@@ -3148,6 +3148,50 @@ def test_put_vectors_metadata_limits():
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
+
+@pytest.mark.vector_test
+def test_put_vectors_payload_size():
+    """Test that the payload of a request may be larger than 1MB,
+    and that it is limited by rgw_s3vector_max_request_size (20MB by default)."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 256
+    num_vectors = 500
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # a payload of more than 1MB is allowed
+    vectors = generate_vectors(num_vectors, dimension)
+    assert len(json.dumps(vectors)) > 1024*1024
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    vector_ids = [v['key'] for v in vectors[:100]]
+    verify_get_vectors(conn, bucket_name, index_name, vector_ids, expected_dimension=dimension)
+
+    # a payload of more than 20MB is rejected
+    vectors = [
+        {'key': f'big-{i}', 'data': generate_data(dimension, i),
+         'metadata': json.dumps({'big': 'x'*(39*1024)})}
+        for i in range(num_vectors)
+    ]
+    assert len(json.dumps(vectors)) > 20*1024*1024
+    with pytest.raises(conn.exceptions.ClientError) as exc_info:
+        conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert exc_info.value.response['Error']['Code'] == 'EntityTooLarge'
+    assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 400
+
+    # cleanup
+    _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
 @pytest.mark.vector_test
 def test_put_vectors_missing_filterable_fields():
     """Test that vectors with missing filterable metadata fields are inserted with nulls."""
