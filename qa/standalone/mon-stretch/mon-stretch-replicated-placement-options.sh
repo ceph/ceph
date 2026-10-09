@@ -14,13 +14,18 @@ function TEST_single_zone_replicated_placement_options() {
     local dir=$1
     run_mon $dir a || return 1
 
-    for args in "8 replicated" "8 replicated --num-zones 1" \
-                "8 8 replicated replicated_rule"; do
-        for opt in "--root default" "--zone_failure_domain datacenter" \
-                   "--osd_failure_domain host" "--class hdd"; do
+    local opts=("--root default" "--zone_failure_domain datacenter"
+                "--osd_failure_domain host" "--class hdd")
+    for args in "8 replicated" "8 replicated --num-zones 1"; do
+        for opt in "${opts[@]}"; do
             expect_failure $dir "require num_zones > 1" \
                 ceph osd pool create rep $args $opt || return 1
         done
+    done
+    # with a rule, the options conflict with the rule first
+    for opt in "${opts[@]}"; do
+        expect_failure $dir "cannot specify both crush rule and crush parameters" \
+            ceph osd pool create rep 8 8 replicated replicated_rule $opt || return 1
     done
     ! ceph osd pool ls | grep -qx rep || return 1
     ceph osd pool create plain 8 replicated --num-zones 1 || return 1

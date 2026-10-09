@@ -195,16 +195,19 @@ function TEST_pool_create_stretch_ec() {
 
     ceph osd crush add-bucket host3 host
     ceph osd crush move host3 datacenter=dc1
+
+    # The zone weights are checked before the rule is built, so the OSDs
+    # join with weight 0 until both zones have them.
     
     ceph osd pool create data0 erasure --num-zones 2 --k 2 --m 1 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
 
-    ceph osd crush set osd.0 1.0 host=host1
+    ceph osd crush set osd.0 0 host=host1
     ceph osd pool create data0 erasure --num-zones 2 --k 2 --m 1 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
 
-    ceph osd crush set osd.1 1.0 host=host2
+    ceph osd crush set osd.1 0 host=host2
     ceph osd pool create data0 erasure --num-zones 2 --k 2 --m 1 2>&1 | grep "Error EINVAL: zone dc1 does not have 3 hosts with at least one OSD" || return 1
 
-    ceph osd crush set osd.2 1.0 host=host3
+    ceph osd crush set osd.2 0 host=host3
     ceph osd pool create data0 erasure --num-zones 2 --k 2 --m 1 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host4 host
@@ -219,13 +222,16 @@ function TEST_pool_create_stretch_ec() {
     ceph osd crush move host6 datacenter=dc2
     ceph osd pool create data0 erasure --num-zones 2 --k 2 --m 1 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
 
-    ceph osd crush set osd.3 1.0 host=host4
+    ceph osd crush set osd.3 0 host=host4
     ceph osd pool create data0 erasure --num-zones 2 --k 2 --m 1 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
 
-    ceph osd crush set osd.4 1.0 host=host5
+    ceph osd crush set osd.4 0 host=host5
     ceph osd pool create data0 erasure --num-zones 2 --k 2 --m 1 2>&1 | grep "Error EINVAL: zone dc2 does not have 3 hosts with at least one OSD" || return 1
 
-    ceph osd crush set osd.5 1.0 host=host6
+    ceph osd crush set osd.5 0 host=host6
+    for osd in 0 1 2 3 4 5; do
+        ceph osd crush reweight osd.$osd 1.0 || return 1
+    done
     ceph osd pool create data0 erasure --num-zones 2 --k 2 --m 1 || return 1
 
     ceph osd crush rule dump data0 | jq '.steps[3].op' | grep "choose_firstn" || return 1
@@ -277,10 +283,12 @@ function TEST_pool_create_stretch_replica() {
     ceph osd crush move host2 datacenter=dc1
     ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
 
-    ceph osd crush set osd.0 1.0 host=host1
+    # The zone weights are checked before the rule is built, so the OSDs
+    # join with weight 0 until both zones have them.
+    ceph osd crush set osd.0 0 host=host1
     ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc1 does not have 2 hosts with at least one OSD" || return 1
 
-    ceph osd crush set osd.1 1.0 host=host2
+    ceph osd crush set osd.1 0 host=host2
     ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc2 has only 0 items of type host" || return 1
 
     ceph osd crush add-bucket host3 host
@@ -292,10 +300,13 @@ function TEST_pool_create_stretch_replica() {
     ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
 
 
-    ceph osd crush set osd.2 1.0 host=host3
+    ceph osd crush set osd.2 0 host=host3
     ceph osd pool create data0 --num-zones 2 --replica 2 2>&1 | grep "Error EINVAL: zone dc2 does not have 2 hosts with at least one OSD" || return 1
 
-    ceph osd crush set osd.3 1.0 host=host4
+    ceph osd crush set osd.3 0 host=host4
+    for osd in 0 1 2 3; do
+        ceph osd crush reweight osd.$osd 1.0 || return 1
+    done
 
     ceph osd pool create data0 --num-zones 2 --replica 2 || return 1
     # replica (2) copies in each of the 2 zones
@@ -529,7 +540,8 @@ EOF
     crushtool -c $dir/crushmap.txt -o $dir/crushmap.new.bin || return 1
     ceph osd setcrushmap -i $dir/crushmap.new.bin || return 1
 
-    ceph osd pool create data2 --rule bad_rule --num-zones 2 2>&1 | grep "CRUSH rule 4 uses different datacenter buckets than configured for stretch mode" || return 1
+    # pool create checks the cluster for stretch mode before the rule
+    ceph osd pool create data2 --rule bad_rule --num-zones 2 2>&1 | grep "there are 3datacenter's in the cluster but stretch mode currently only works with 2" || return 1
 
     # the same check when a pool is set to two zones
     ceph osd pool create data3 --num-zones 1 || return 1
@@ -759,7 +771,8 @@ function TEST_stretch_diff_bucket_barrier() {
     # Wait for stretch mode to be fully committed before testing validation
     ceph mon dump | grep "stretch_mode_enabled 1" || return 1
 
-    ceph osd pool create pool_dc replicated --zone-failure-domain=datacenter --num-zones 2 --class=ssd 2>&1 | grep "Error EINVAL: number of zones 0 for type datacenter is not equal to num_failure_domains 2" || return 1
+    # the stretch checks come before the rule is built
+    ceph osd pool create pool_dc replicated --zone-failure-domain=datacenter --num-zones 2 --class=ssd 2>&1 | grep "there are 0datacenter's in the cluster but stretch mode currently only works with 2" || return 1
 
 }
 
