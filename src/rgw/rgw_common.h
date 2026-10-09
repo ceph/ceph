@@ -1422,6 +1422,9 @@ struct req_state : DoutPrefixProvider {
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */
   bool system_request{false};
+  /* In multisite setup, secondary sends expected version of the metadata
+   * using the params: rgwx-expected-version-* on admin metadata GET */
+  boost::optional<obj_version> expected_version;
 
   std::string canned_acl;
   bool has_acl_header{false};
@@ -1481,6 +1484,14 @@ struct req_state : DoutPrefixProvider {
   CephContext* get_cct() const override { return cct; }
   unsigned get_subsys() const override { return ceph_subsys_rgw; }
 };
+
+/* check whether req_state (dpp) contains expected version */
+inline boost::optional<obj_version>
+rgw_expected_version(const DoutPrefixProvider *dpp)
+{
+  auto s = dynamic_cast<const req_state*>(dpp);
+  return s ? s->expected_version : boost::none;
+}
 
 void set_req_state_err(req_state*, int);
 void set_req_state_err(req_state*, int, const std::string&);
