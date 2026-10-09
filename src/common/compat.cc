@@ -14,6 +14,12 @@
  *
  */
 
+#include "acconfig.h"
+#ifdef HAVE_MEMSET_S
+// must precede the first <string.h>, which include/compat.h pulls in
+# define __STDC_WANT_LIB_EXT1__ 1
+#endif
+
 #include "include/compat.h"
 #include "include/sock_compat.h"
 #include "common/safe_io.h"
@@ -25,10 +31,6 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "acconfig.h"
-#ifdef HAVE_MEMSET_S
-# define __STDC_WANT_LIB_EXT1__ 1
-#endif
 #include <string.h>
 #include <thread>
 #ifndef _WIN32

@@ -72,6 +72,8 @@ include(CheckSymbolExists)
 cmake_push_check_state(RESET)
 set(CMAKE_REQUIRED_LIBRARIES rt)
 check_symbol_exists(_POSIX_TIMERS "unistd.h;time.h" HAVE_POSIX_TIMERS)
+# FreeBSD has timer_create in librt
+check_symbol_exists(timer_create "time.h" HAVE_TIMER_CREATE)
 cmake_pop_check_state()
 if(HAVE_POSIX_TIMERS)
   find_library(RT_LIBRARY NAMES rt)
