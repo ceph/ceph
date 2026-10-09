@@ -77,4 +77,35 @@ static constexpr uint64_t BLUEFS_SUPER_BLOCK_SIZE = 4096;
 static constexpr uint64_t SUPER_RESERVED = BDEV_LABEL_BLOCK_SIZE + BLUEFS_SUPER_BLOCK_SIZE;
 
 
+struct FragMetric {
+  // Computes fragmentation as the number of disjoint segments
+  // produced by a stream of mapped ranges.
+  // frag_score == current disjoint segment count.
+
+  std::unordered_set<uint64_t> endpoints;
+  uint64_t frag_score = 0;
+
+  FragMetric() {}
+
+  inline void note(uint64_t offset, uint64_t length) {
+    bool merge_left = endpoints.count(offset);
+    bool merge_right = endpoints.count(offset + length);
+    if (merge_left && merge_right) {
+      endpoints.erase(offset);
+      endpoints.erase(offset + length);
+      frag_score--;
+    } else if (merge_left) {
+      endpoints.erase(offset);
+      endpoints.insert(offset + length);
+    } else if (merge_right) {
+      endpoints.erase(offset + length);
+      endpoints.insert(offset);
+    } else {
+      endpoints.insert(offset);
+      endpoints.insert(offset + length);
+      frag_score++;
+    }
+  }
+};
+
 #endif
