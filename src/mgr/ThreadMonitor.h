@@ -50,6 +50,13 @@ public:
   void stop_monitoring();
   void register_thread(const pid_t thread_id, const pid_t serve_thread_id, const std::string& name, const PyModuleRef py_module);
 
+  // Parse the utime (field 14) and stime (field 15) out of a single
+  // /proc/<pid>/task/<tid>/stat line. Returns false if the line is malformed
+  // or the utime/stime fields cannot be extracted, in which case utime/stime
+  // are left untouched. Exposed as a static helper so the parsing logic can be
+  // unit tested without touching the live /proc filesystem.
+  static bool parse_thread_stat(const std::string& line, long long& utime, long long& stime);
+
 protected:
   std::vector<std::string> get_tracked_keys() const noexcept override {
     return std::vector<std::string>{"mgr_module_monitor_interval"};
