@@ -16,7 +16,7 @@ from itertools import zip_longest
 from io import StringIO
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from nose.tools import eq_ as eq
 from nose.tools import assert_not_equal, assert_equal, assert_true, assert_false
@@ -1930,6 +1930,124 @@ def test_multipart_object_sync():
 
     zonegroup_meta_checkpoint(zonegroup)
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def get_default_placement(zone):
+    cmd = ['zonegroup', 'get'] + zone.zonegroup.zonegroup_args()
+    out, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(out).get('default_placement') or 'default-placement'
+
+def get_zone_compression(zone, placement_id, storage_class='STANDARD'):
+    out, _ = zone.cluster.admin(['zone', 'get'] + zone.zone_args(), read_only=True)
+    for p in json.loads(out)['placement_pools']:
+        if p['key'] == placement_id:
+            return p['val']['storage_classes'][storage_class].get('compression_type', '')
+    return ''
+
+def get_obj_compression_type(zone, bucket_name, key):
+    cmd = ['object', 'stat', '--bucket', bucket_name, '--object', key] + zone.zone_args()
+    cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
+    out, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(out).get('compression', {}).get('compression_type', 'none')
+
+def wait_for_compression(zone_conn, bucket_name, compression):
+    """ write a canary object until it is stored with the given compression
+    type, which shows that the gateway has reloaded the placement config """
+    key = 'compression-canary'
+    body = b'compression canary ' * 4096
+    timeout = max(60, config.reconfigure_delay)
+    deadline = time.time() + timeout
+    actual = None
+    error = None
+    while True:
+        try:
+            zone_conn.s3_client.put_object(Bucket=bucket_name, Key=key, Body=body)
+            actual = get_obj_compression_type(zone_conn.zone, bucket_name, key)
+            error = None
+            if actual == compression:
+                return
+            log.debug('canary compression=%s, waiting for %s', actual, compression)
+        except (ClientError, BotoCoreError) as e:
+            # requests may fail while the gateway reloads
+            error = e
+            log.debug('canary write failed: %s', e)
+        assert time.time() < deadline, \
+            'compression=%s not applied within %ds (last canary compression=%s, ' \
+            'last error=%s)' % (compression, timeout, actual, error)
+        time.sleep(1)
+
+def set_zone_compression(zone_conn, bucket_name, compression, placement_id,
+                         storage_class='STANDARD'):
+    zone = zone_conn.zone
+    compression = compression or 'none'
+    if (get_zone_compression(zone, placement_id, storage_class) or 'none') == compression:
+        return
+    cmd = ['zone', 'placement', 'modify', '--placement-id', placement_id,
+           '--storage-class', storage_class, '--compression', compression]
+    zone.cluster.admin(cmd + zone.zone_args())
+    zone.zonegroup.period.update(zone, commit=True)
+    log.info('Set compression=%s on zone %s', compression, zone.name)
+    if compression == 'random':
+        # each canary write picks its own algorithm, so it can't be verified
+        time.sleep(config.reconfigure_delay)
+    else:
+        wait_for_compression(zone_conn, bucket_name, compression)
+
+def check_multipart_compression_change(initial, changed):
+    """ change the placement compression type between the parts of a
+    multipart upload, and verify that the upload completes using the
+    compression type that was configured when it was initiated """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone_conn = zonegroup_conns.master_zone
+    zone = zone_conn.zone
+
+    placement_id = get_default_placement(zone)
+    original = get_zone_compression(zone, placement_id)
+    bucket_name = gen_bucket_name()
+    zone_conn.s3_client.create_bucket(Bucket=bucket_name)
+    key_name = 'MULTIPART'
+
+    part_size = 5 * 1024 * 1024  # 5M min part size
+    pattern = b'The quick brown fox jumps over the lazy dog. '
+    part_data = (pattern * (part_size // len(pattern) + 1))[:part_size]
+
+    upload_id = None
+    try:
+        set_zone_compression(zone_conn, bucket_name, initial, placement_id)
+
+        response = zone_conn.s3_client.create_multipart_upload(Bucket=bucket_name, Key=key_name)
+        upload_id = response['UploadId']
+        parts = []
+
+        def upload_part(part_num):
+            response = zone_conn.s3_client.upload_part(Bucket=bucket_name, Key=key_name,
+                                                       PartNumber=part_num, UploadId=upload_id,
+                                                       Body=part_data)
+            parts.append({'PartNumber': part_num, 'ETag': response['ETag']})
+
+        upload_part(1)
+        set_zone_compression(zone_conn, bucket_name, changed, placement_id)
+        upload_part(2)
+
+        zone_conn.s3_client.complete_multipart_upload(Bucket=bucket_name, Key=key_name,
+                                                      UploadId=upload_id,
+                                                      MultipartUpload={'Parts': parts})
+        upload_id = None
+
+        eq(get_obj_compression_type(zone, bucket_name, key_name), initial)
+        response = zone_conn.s3_client.get_object(Bucket=bucket_name, Key=key_name)
+        assert response['Body'].read() == part_data * 2
+    finally:
+        if upload_id:
+            zone_conn.s3_client.abort_multipart_upload(Bucket=bucket_name, Key=key_name,
+                                                       UploadId=upload_id)
+        set_zone_compression(zone_conn, bucket_name, original, placement_id)
+
+def test_multipart_compression_enabled_during_upload():
+    check_multipart_compression_change('none', 'zstd')
+
+def test_multipart_compression_disabled_during_upload():
+    check_multipart_compression_change('zstd', 'none')
 
 def test_encrypted_object_sync():
     zonegroup = realm.master_zonegroup()

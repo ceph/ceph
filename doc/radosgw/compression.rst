@@ -85,6 +85,26 @@ For example:
 .. note:: A ``default`` zone is created for you if you have not done any
    previous :ref:`Multisite Configuration <multisite>`.
 
+Multipart Uploads
+-----------------
+
+The compression ``type`` of a multipart upload is determined when the upload is
+initiated, and all of its parts use it. Changing the setting while a multipart
+upload is in progress does not affect that upload; only multipart uploads
+initiated afterwards use the new ``type``.
+
+.. note:: Multipart uploads initiated before upgrading to a release with this
+   behavior do not record their compression ``type``, so their remaining parts
+   use the current setting. If the setting changes while such an upload is in
+   progress, CompleteMultipartUpload can fail with ``InvalidPart``. Avoid
+   changing the compression ``type`` until all RGW daemons are upgraded and
+   multipart uploads that were in progress during the upgrade have completed.
+
+.. note:: For encrypted multipart uploads, toggling the
+   :ref:`feature_compress_encrypted` zonegroup feature while an upload is in
+   progress can still cause CompleteMultipartUpload to fail with
+   ``InvalidPart``.
+
 
 Statistics
 ==========

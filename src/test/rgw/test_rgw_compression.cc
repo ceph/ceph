@@ -185,3 +185,46 @@ TEST(Compress, BillionZeros)
 
   ASSERT_EQ(d_sink.get_sink().length() , size*1000);
 }
+
+TEST(MultipartUploadInfo, DecodeV4LeavesCompressionUnset)
+{
+  // multipart_upload_info as encoded by an rgw without the stored
+  // compression type (v4)
+  using ceph::encode;
+  bufferlist bl;
+  ENCODE_START(4, 1, bl);
+  encode(rgw_placement_rule("default-placement", "STANDARD"), bl);
+  encode(false, bl); // obj_retention_exist
+  encode(false, bl); // obj_legal_hold_exist
+  encode(RGWObjectRetention{}, bl);
+  encode(RGWObjectLegalHold{}, bl);
+  encode(uint16_t(rgw::cksum::Type::none), bl);
+  encode(uint16_t(rgw::cksum::Cksum::FLAG_CKSUM_NONE), bl);
+  ENCODE_FINISH(bl);
+
+  multipart_upload_info info;
+  auto p = bl.cbegin();
+  decode(info, p);
+  EXPECT_EQ("default-placement", info.dest_placement.name);
+  EXPECT_FALSE(info.compression_type);
+}
+
+TEST(MultipartUploadInfo, CompressionTypeRoundTrip)
+{
+  // "none" must stay distinct from unset
+  for (const auto& type : {std::optional<std::string>{},
+                           std::optional<std::string>{"none"},
+                           std::optional<std::string>{"zstd"}}) {
+    multipart_upload_info in;
+    in.dest_placement = rgw_placement_rule("default-placement", "STANDARD");
+    in.compression_type = type;
+    bufferlist bl;
+    encode(in, bl);
+
+    multipart_upload_info out;
+    auto p = bl.cbegin();
+    decode(out, p);
+    EXPECT_EQ(type, out.compression_type);
+    EXPECT_EQ("default-placement", out.dest_placement.name);
+  }
+}
