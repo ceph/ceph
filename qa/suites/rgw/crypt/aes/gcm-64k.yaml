@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt sse algorithm: aes-256-gcm
+        rgw crypt aead chunk size: 65536
