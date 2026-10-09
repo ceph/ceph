@@ -3,6 +3,7 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import {
   ALLOW_READ_THROUGH_TEXT,
   HOST_STYLE,
+  LOCATION_CONSTRAINT_TEXT,
   MULTIPART_MIN_PART_TEXT,
   MULTIPART_SYNC_THRESHOLD_TEXT,
   RETAIN_HEAD_OBJECT_TEXT,
@@ -10,6 +11,7 @@ import {
   TARGET_ACCESS_KEY_TEXT,
   TARGET_PATH_TEXT,
   TARGET_SECRET_KEY_TEXT,
+  TARGET_STORAGE_CLASS_TEXT,
   TIER_TYPE_DISPLAY,
   TIER_TYPE,
   GLACIER_RESTORE_DAY_TEXT,
@@ -49,6 +51,8 @@ export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
   restoreDaysText = RESTORE_DAYS_TEXT;
   readthroughrestoreDaysText = READTHROUGH_RESTORE_DAYS_TEXT;
   restoreStorageClassText = RESTORE_STORAGE_CLASS_TEXT;
+  targetStorageClassText = TARGET_STORAGE_CLASS_TEXT;
+  locationConstraintText = LOCATION_CONSTRAINT_TEXT;
   zoneGroupText = ZONEGROUP_TEXT;
   groupedACLs: GroupedACLs = {};
   localStorageClassDetails = { zone_name: '', data_pool: '' };

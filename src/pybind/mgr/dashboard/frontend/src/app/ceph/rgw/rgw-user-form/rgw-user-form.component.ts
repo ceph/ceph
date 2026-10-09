@@ -132,7 +132,15 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       ],
       account_id: [null, [this.tenantedAccountValidator.bind(this)]],
       account_root_user: [false],
-      account_policies: [[]],
+      account_policies: [
+        [],
+        [
+          CdValidators.requiredIf({
+            account_id: { op: '!empty' },
+            account_root_user: false
+          })
+        ]
+      ],
       max_buckets_mode: [1],
       max_buckets: [
         1000,

@@ -1009,6 +1009,13 @@ class RgwUser(RgwRESTController):
                account_policies: Optional[str] = None):
         """Create a new RGW user."""
 
+        account_root_user_bool = str_to_bool(account_root_user) \
+            if account_root_user is not None else False
+
+        # Enforce account-level user limit before creating
+        if account_id and not account_root_user_bool:
+            self._check_account_user_limit(daemon_name, account_id)
+
         params = {'uid': uid, 'display-name': display_name}
 
         # Add optional parameters
@@ -1041,6 +1048,24 @@ class RgwUser(RgwRESTController):
             self._process_account_policies(uid, account_policies)
 
         return result
+
+    def _check_account_user_limit(self, daemon_name, account_id: str) -> None:
+        account = self.proxy(daemon_name, 'GET', 'account', {'id': account_id})
+        max_users = account.get('max_users', -1)
+
+        if max_users < 0:
+            # Negative values mean unlimited — no restriction.
+            return
+
+        current_count = RgwAccounts.get_account_user_count(account_id)
+
+        if current_count >= max_users:
+            raise DashboardException(
+                msg=f'User limit for this account has been reached '
+                    f'(max_users={max_users}, current={current_count})',
+                http_status_code=400,
+                component='rgw'
+            )
 
     def _process_account_policies(self, uid, account_policies):
         """Process account policies for a user."""

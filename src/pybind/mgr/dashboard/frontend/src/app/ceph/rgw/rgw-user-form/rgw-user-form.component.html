@@ -341,8 +341,14 @@
             i18n-placeholder
             [appendInline]="true"
             [items]="managedPolicies"
+            cdRequiredField="Policies"
+            cdValidate
+            #policies="cdValidate"
+            [invalid]="policies.isInvalid"
+            invalidText="This field is required"
             (selected)="multiSelector($event)"
             itemValueKey="name"
+            i18n-invalidText
             i18n-label
             i18n
           >
