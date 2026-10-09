@@ -96,9 +96,10 @@ class Module(MgrModule):
     @MirroringCLICommand.Write('fs snapshot mirror add')
     def snapshot_mirror_add_dir(self,
                                 fs_name: str,
-                                path: str):
+                                path: str,
+                                priority_mode: Optional[str] = None):
         """Add a directory for snapshot mirroring"""
-        return self.fs_snapshot_mirror.add_dir(fs_name, path)
+        return self.fs_snapshot_mirror.add_dir(fs_name, path, priority_mode)
 
     @MirroringCLICommand.Write('fs snapshot mirror remove')
     def snapshot_mirror_remove_dir(self,
@@ -106,6 +107,21 @@ class Module(MgrModule):
                                    path: str):
         """Remove a snapshot mirrored directory"""
         return self.fs_snapshot_mirror.remove_dir(fs_name, path)
+
+    @MirroringCLICommand.Write('fs snapshot mirror priority set')
+    def snapshot_mirror_priority_set(self,
+                                     fs_name: str,
+                                     path: str,
+                                     priority_mode: str):
+        """Set the priority mode (thread-shared|per-thread) of a mirrored directory"""
+        return self.fs_snapshot_mirror.set_priority(fs_name, path, priority_mode)
+
+    @MirroringCLICommand.Read('fs snapshot mirror priority get')
+    def snapshot_mirror_priority_get(self,
+                                     fs_name: str,
+                                     path: str):
+        """Get the priority mode of a mirrored directory"""
+        return self.fs_snapshot_mirror.get_priority(fs_name, path)
 
     @MirroringCLICommand.Read('fs snapshot mirror ls')
     def snapshot_mirror_ls(self,

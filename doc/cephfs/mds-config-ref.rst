@@ -79,3 +79,5 @@ feature and a worked example.
 .. confval:: mds_dmclock_reservation
 .. confval:: mds_dmclock_weight
 .. confval:: mds_dmclock_limit
+
+.. confval:: cephfs_mirror_max_datasync_threads_per_directory
