@@ -523,3 +523,63 @@ class TestPgAutoscaler(object):
         expected_result[-40].pg_target = 500
         expected_result[-5].pg_target = 300
         self.helper_test(osd_dic, rules, pools, expected_result)
+
+    def test_zero_pg_target_due_to_integer_division(self):
+        """
+        When mon_target_pg_per_osd < len(root_ids) for every OSD, integer
+        floor division produces 0 for each OSD's contribution and pg_target
+        stays at 0 for all roots.  get_subtree_resource_status must return
+        those roots with pg_target == 0 so that callers can skip them safely.
+        """
+        # Each OSD appears in both roots, so len(root_ids) == 2.
+        # With mon_target_pg_per_osd == 1:  1 // 2 == 0 for every OSD.
+        self.autoscaler.mon_target_pg_per_osd = 1
+        osd_dic = {
+            -1: [0, 1],
+            -2: [0, 1],
+        }
+        rules = [
+            {
+                "rule_id": 0,
+                "rule_name": "replicated_rule",
+                "ruleset": 0,
+                "type": 1,
+                "min_size": 1,
+                "max_size": 10,
+                "root_id": -1,
+            },
+            {
+                "rule_id": 1,
+                "rule_name": "ssd_rule",
+                "ruleset": 1,
+                "type": 1,
+                "min_size": 1,
+                "max_size": 10,
+                "root_id": -2,
+            },
+        ]
+        pools = {
+            "pool_a": {
+                "pool": 0,
+                "pool_name": "pool_a",
+                "pg_num_target": 32,
+                "size": 1,
+                "crush_rule": 0,
+                "options": {},
+            },
+            "pool_b": {
+                "pool": 1,
+                "pool_name": "pool_b",
+                "pg_num_target": 32,
+                "size": 1,
+                "crush_rule": 1,
+                "options": {},
+            },
+        }
+
+        expected_result = defaultdict(CrushRootResourceStatus)
+        for root in osd_dic:
+            expected_result[root] = CrushRootResourceStatus()
+        expected_result[-1].pg_target = 0
+        expected_result[-2].pg_target = 0
+        self.helper_test(osd_dic, rules, pools, expected_result)
