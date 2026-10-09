@@ -23,12 +23,29 @@ Notable Changes
 * :ref:`CVE-2026-54330` is a flaw in RGW not properly verifying its SigV4 cryptographic signatures in RGW's SigV4 verifier.
 
 
+.. _tentacle-20-2-4-critical-upgrade-steps:
+
 Critical Upgrade Steps
 ----------------------
 
-* Please review the :ref:`CVE-2025-30156-upgrade-steps` on the :ref:`CVE-2025-30156` documentation.
-* Please review the :ref:`CVE-2026-54330-upgrade-steps` on the :ref:`CVE-2026-54330` documentation.
-* Please review the :ref:`CVE-2026-50152-recommendations` on the :ref:`CVE-2026-50152` documentation.
+* :ref:`CVE-2025-30156` introduces a new CephX key type, ``aes256k``. After
+  the upgrade, expect new ``AUTH_*`` health warnings until all daemon and
+  client keys have been rotated. cephadm rotates daemon keys but not client
+  keys; Rook rotates daemon keys and only some client keys. See
+  :ref:`cephx-upgrade` and the :ref:`CVE-2025-30156-upgrade-steps`.
+* :ref:`CVE-2026-54330`: RGW now rejects SigV4 requests that carry
+  ``x-amz-*`` headers not listed in ``X-Amz-SignedHeaders``. This check is
+  permanent. This release also rejects unsigned ``Content-Type`` and
+  ``x-amz-content-sha256`` headers, which is a regression (`issue#79674
+  <https://tracker.ceph.com/issues/79674>`_, `issue#79803
+  <https://tracker.ceph.com/issues/79803>`_). Affected clients receive
+  ``403 AccessDenied``. Multisite deployments must set
+  ``rgw_sigv4_insecure=true`` before upgrading. See the
+  :ref:`CVE-2026-54330-upgrade-steps`.
+* :ref:`CVE-2026-50152`: any CephX key with ``mon allow r`` caps could read
+  the Monitor config-key store, including the cephadm SSH key. Rotate the
+  cephadm SSH key after upgrading. See the
+  :ref:`CVE-2026-50152-recommendations`.
 
 
 Changelog
@@ -1292,6 +1309,15 @@ Telemetry
 
 Upgrading from Reef or Squid
 ----------------------------
+
+.. warning::
+
+   Upgrading from Reef, or from a Squid release older than 19.2.6, lands on
+   20.2.4 or later, which changes behaviour for the four CVEs fixed in that
+   release. Read the :ref:`tentacle-20-2-4-critical-upgrade-steps` first, in
+   particular the stricter RGW SigV4 verifier
+   (:ref:`CVE-2026-54330-upgrade-steps`) and the required CephX key rotation
+   (:ref:`CVE-2025-30156-upgrade-steps`).
 
 Before starting, ensure that your cluster is stable and healthy with no
 ``down``, ``recovering``, ``incomplete``, ``undersized`` or ``backfilling`` PGs.
