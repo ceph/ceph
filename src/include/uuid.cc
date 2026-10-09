@@ -52,9 +52,9 @@ void uuid_d::dump(ceph::Formatter *f) const
   f->dump_stream("uuid") << to_string();
 }
 
-std::list<uuid_d> uuid_d::generate_test_instances()
+std::vector<uuid_d> uuid_d::generate_test_instances()
 {
-  std::list<uuid_d> o;
+  std::vector<uuid_d> o;
   // these are sourced from examples at
   // https://www.boost.org/doc/libs/1_62_0/libs/uuid/uuid.html#Synopsis_generators
   boost::uuids::string_generator gen;

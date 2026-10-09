@@ -108,9 +108,9 @@ void osd_info_t::decode(ceph::buffer::list::const_iterator& bl)
   decode(lost_at, bl);
 }
 
-list<osd_info_t> osd_info_t::generate_test_instances()
+vector<osd_info_t> osd_info_t::generate_test_instances()
 {
-  list<osd_info_t> o;
+  vector<osd_info_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().last_clean_begin = 1;
@@ -192,9 +192,9 @@ void osd_xinfo_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-list<osd_xinfo_t> osd_xinfo_t::generate_test_instances()
+vector<osd_xinfo_t> osd_xinfo_t::generate_test_instances()
 {
-  list<osd_xinfo_t> o;
+  vector<osd_xinfo_t> o;
   o.emplace_back();
   o.emplace_back();
   o.back().down_stamp = utime_t(2, 3);
@@ -1393,9 +1393,9 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->close_section();
 }
 
-auto OSDMap::Incremental::generate_test_instances() -> list<Incremental>
+auto OSDMap::Incremental::generate_test_instances() -> vector<Incremental>
 {
-  list<Incremental> o;
+  vector<Incremental> o;
   o.emplace_back();
   return o;
 }
@@ -4343,9 +4343,9 @@ void OSDMap::dump(Formatter *f, CephContext *cct) const
   f->close_section();
 }
 
-list<OSDMap> OSDMap::generate_test_instances()
+std::deque<OSDMap> OSDMap::generate_test_instances()
 {
-  list<OSDMap> o;
+  std::deque<OSDMap> o;
   o.emplace_back();
 
   CephContext *cct = new CephContext(CODE_ENVIRONMENT_UTILITY);

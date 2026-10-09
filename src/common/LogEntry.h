@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <iostream>
 #include <list>
+#include <vector>
 #include <map>
 #include <string>
 #include <unordered_set>
@@ -84,7 +85,7 @@ public:
   }
 
   void dump(ceph::Formatter *f) const;
-  static std::list<LogEntryKey> generate_test_instances();
+  static std::vector<LogEntryKey> generate_test_instances();
 
   friend bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
     return l.rank == r.rank && l.stamp == r.stamp && l.seq == r.seq;
@@ -133,7 +134,7 @@ struct LogEntry {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<LogEntry> generate_test_instances();
+  static std::vector<LogEntry> generate_test_instances();
   static clog_type str_to_level(std::string const &str);
   static std::string_view level_to_str(clog_type t) {
     switch (t) {
@@ -192,7 +193,7 @@ struct LogSummary {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<LogSummary> generate_test_instances();
+  static std::vector<LogSummary> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(LogSummary)
 

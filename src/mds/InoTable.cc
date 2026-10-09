@@ -187,9 +187,9 @@ void InoTable::dump(Formatter *f) const
 }
 
 
-std::list<InoTable> InoTable::generate_test_instances()
+std::vector<InoTable> InoTable::generate_test_instances()
 {
-  std::list<InoTable> ls;
+  std::vector<InoTable> ls;
   ls.push_back(InoTable());
   return ls;
 }
