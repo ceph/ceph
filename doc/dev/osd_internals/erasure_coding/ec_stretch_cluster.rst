@@ -1988,7 +1988,7 @@ defaults and every existing pool (Section 2.3).
        with a CRUSH location at the zone failure domain
      - Creating the pool enables stretch mode if it is not enabled yet, and
        ``num_zones > 1`` pools need the stretch mode state machine for zone
-       failover (Section 2.3.4)
+       failover (Sections 2.3.4 and 11.3.1)
    * - ``zone_failure_domain`` must match the stretch mode failure domain once
        stretch mode is enabled
      - The CRUSH rule must align with the stretch cluster topology
@@ -2023,10 +2023,13 @@ mode transition occurs.
 11.3 Stretch Mode State Machine
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When stretch mode is enabled, the state machine behaves identically to the
-replica stretch mode state machine — leveraging the existing OSDMonitor
-infrastructure. ``min_size`` is set at pool creation and is never mutated
-by the OSDMonitor upon stretch mode transitions.
+The first pool with ``num_zones = 2`` enables stretch mode and the last one to
+go disables it. ``ceph mon enable_stretch_mode`` and ``disable_stretch_mode``
+do so by changing every pool's ``num_zones`` (Section 2.3.4). The degraded,
+recovery and healthy transitions are those of the replica stretch mode state
+machine, leveraging the existing OSDMonitor infrastructure. ``min_size`` is set
+at pool creation and is never mutated by the OSDMonitor upon stretch mode
+transitions.
 
 .. mermaid::
 
@@ -2035,14 +2038,136 @@ by the OSDMonitor upon stretch mode transitions.
        Healthy --> Degraded: zone failure detected
        Degraded --> Recovery: failed zone returns
        Recovery --> Healthy: all PGs clean
-       Healthy --> [*]: last pool with num_zones 2 deleted or set to 1
        Degraded --> Recovery: force_recovery_stretch_mode CLI
        Recovery --> Healthy: force_healthy_stretch_mode CLI
+       Healthy --> [*]: last stretch pool deleted or set to num_zones 1
+       Degraded --> [*]: last stretch pool deleted or set to num_zones 1
+       Recovery --> [*]: last stretch pool deleted or set to num_zones 1
 
 **Concrete example — K=2, M=1, --num-zones 2 (size=6):**
 
 ``min_size`` is set to ``2`` at creation and remains ``2`` in every stretch state.
 I/O will stop if either zone has less than ``2`` shards active.
+
+11.3.1 Entering Stretch Mode
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Stretch mode is enabled by the first pool that gets ``num_zones = 2``: at
+creation (``ceph osd pool create ... --num_zones 2``,
+``OSDMonitor::prepare_new_pool``), with ``ceph osd pool set <pool> num_zones 2``
+(``prepare_command_pool_set_num_zones``, Section 13.2), or with ``ceph mon
+enable_stretch_mode``, which sets every pool to two zones (Section 2.3.4). The
+command is refused unless:
+
+- the CRUSH map has exactly two buckets of the zone failure domain type, and
+  their weights differ by no more than ``mon_stretch_max_bucket_weight_delta``
+  times the lighter one's;
+- every monitor has a CRUSH location at the zone failure domain, both zones
+  have a monitor, and exactly one monitor is outside them (or ``ceph mon
+  enable_stretch_mode`` names the tiebreaker);
+- the monitors in quorum support the connectivity election strategy.
+
+Enabling stretch mode changes:
+
+- **MonMap** (``MonmapMonitor::try_enable_stretch_mode``): the election
+  strategy becomes connectivity, the monitor outside both zones becomes
+  ``tiebreaker_mon`` and is added to ``disallowed_leaders``, and
+  ``stretch_mode_enabled`` is set.
+- **OSDMap** (``OSDMonitor::try_enable_stretch_mode``):
+  ``stretch_mode_enabled``, ``stretch_bucket_count = 2`` and
+  ``stretch_mode_bucket`` (the zone failure domain type) are set, and the
+  degraded and recovering flags are cleared.
+- **Pool**: ``peering_crush_bucket_count`` and ``peering_crush_bucket_target``
+  are 2, ``peering_crush_bucket_barrier`` is the zone failure domain type and
+  there is no ``peering_crush_mandatory_member`` (Section 11.6).
+
+Once both maps have committed, every monitor engages stretch mode and drops OSD
+sessions from outside its own zone (``Monitor::try_engage_stretch_mode``).
+``osd pool set`` commits the MonMap and OSDMap changes in one Paxos round, but
+it stages the MonMap change before it checks the zone weights. ``osd pool
+create`` makes every check first, but proposes the MonMap change on its own, so
+that change can commit first. The monitors then call an election, and the
+resent command finds the MonMap already in stretch mode and makes only the
+OSDMap and pool changes.
+
+A later pool with ``num_zones = 2``, created or set, joins the current state,
+which may be degraded or recovering, without changing it (Section 11.4.2). Its
+zone failure domain must be the OSDMap's ``stretch_mode_bucket`` and its rule
+must cover the same zone buckets as the other stretch pools
+(``validate_stretch_mode_new_pool``).
+
+11.3.2 Degraded, Recovery and Healthy
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- **Healthy to Degraded**: the leader finds a zone, other than the
+  tiebreaker's, with no monitor in quorum and all of its OSDs down
+  (``Monitor::maybe_go_degraded_stretch_mode``). The OSDMap gets
+  ``degraded_stretch_mode = 1``. Every stretch pool gets
+  ``peering_crush_bucket_count = 1`` and the surviving zone as
+  ``peering_crush_mandatory_member``. The MonMap lists the failed zone's
+  monitors in ``stretch_marked_down_mons``, so they cannot lead.
+- **Degraded to Recovery**: when a new OSDMap brings OSDs up, the ratio of up
+  OSDs exceeds ``mon_stretch_cluster_recovery_ratio`` and every zone, and the
+  tiebreaker's location, has a monitor in quorum; or with ``ceph osd
+  force_recovery_stretch_mode``. The OSDMap gets
+  ``recovering_stretch_mode = 1``. Pools are not changed.
+- **Recovery to Healthy**: once ``mon_stretch_recovery_min_wait`` has passed and
+  no PG is degraded, inactive or unknown; or with ``ceph osd
+  force_healthy_stretch_mode``. Both flags are cleared, every stretch pool gets
+  ``peering_crush_bucket_count = 2`` and no mandatory member back, and
+  ``stretch_marked_down_mons`` is emptied.
+
+11.3.3 Leaving Stretch Mode
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Stretch mode is disabled when the last stretch pool goes:
+
+- ``ceph osd pool delete`` of the last pool with ``peering_crush_bucket_count``
+  and ``peering_crush_bucket_target`` set (``OSDMonitor::_prepare_remove_pool``,
+  ``is_last_stretch_pool``). This applies only while both the MonMap and the
+  OSDMap are in stretch mode. The deletion is retried until the MonmapMonitor
+  is writeable, and both maps change in one Paxos round.
+- ``ceph osd pool set <pool> num_zones 1`` on the last stretch pool, counting
+  the pool changes pending in the same epoch, or ``ceph mon
+  disable_stretch_mode``, which sets every stretch pool to one zone (Section
+  2.3.4). The pool gets a single-zone CRUSH rule (``--crush_rule``, otherwise
+  the default replicated rule or a new ``<pool>-single-zone`` EC rule), and its
+  ``peering_crush_*`` fields are cleared. A replicated pool gets ``--replica``
+  or ``osd_pool_default_replica`` copies and the default ``min_size`` for them;
+  an EC pool gets ``size`` K+M and ``min_size`` K + min(1, M-1).
+
+Disabling stretch mode changes:
+
+- **MonMap** (``MonmapMonitor::clear_stretch_mode_state``):
+  ``stretch_mode_enabled`` is cleared, and ``tiebreaker_mon``,
+  ``disallowed_leaders`` and ``stretch_marked_down_mons`` are emptied. Every
+  disallowed leader is removed, including any added with ``ceph mon add
+  disallowed_leader``. The election strategy stays connectivity.
+- **OSDMap**: ``stretch_mode_enabled``, ``stretch_bucket_count``,
+  ``stretch_mode_bucket``, ``degraded_stretch_mode`` and
+  ``recovering_stretch_mode`` are cleared.
+
+The monitors then disengage stretch mode and stop checking which zone an OSD
+session comes from. No other pool changes, as none is a stretch pool.
+
+Deleting the last stretch pool or setting it to ``num_zones 1`` does not check
+the stretch mode state, so stretch mode is left the same way from Healthy,
+Degraded or Recovery. In Degraded or Recovery, the degraded and recovering flags
+and ``stretch_marked_down_mons`` are cleared without a transition to Healthy,
+while the failed zone may still be down. ``ceph mon disable_stretch_mode`` is
+refused in Recovery.
+
+.. note::
+
+   **Open questions for reviewers**
+
+   - Should leaving stretch mode in Degraded or Recovery be refused, as ``ceph
+     mon disable_stretch_mode`` is refused in Recovery? Or is leaving at once
+     intended, because no stretch pool is left to protect?
+   - Entering can leave the MonMap in stretch mode with no stretch pool: when
+     ``osd pool set`` is refused for uneven zone weights, or when the client
+     does not resend ``osd pool create``. Should both commit the MonMap change
+     only with the pool, in the same Paxos round, as ``osd pool delete`` does?
 
 11.4 OSDMonitor Changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2075,22 +2200,14 @@ on every one of these values, so:
 **11.4.2 Enable/Disable Stretch Mode** (``try_enable_stretch_mode``,
 ``try_disable_stretch_mode``)
 
-Stretch mode is enabled with the first pool that gets ``num_zones = 2``, at
-creation (Section 2.1.5) or with ``ceph osd pool set <pool> num_zones 2``
-(Section 13.2), which ``ceph mon enable_stretch_mode`` also uses. Replicated and
-EC pools are accepted alike. Enabling it:
-
-- picks the tiebreaker monitor: the one monitor outside both zones, or the
-  monitor named by ``enable_stretch_mode``'s legacy ``tiebreaker_mon`` argument.
-  Without that argument it is refused if there is no monitor outside both zones,
-  or more than one.
-- switches the monitors to the connectivity election strategy;
-- records stretch mode, the zone type and the zone count in the OSDMap.
-
-Each pool with ``num_zones = 2`` has ``peering_crush_bucket_count``,
-``peering_crush_bucket_target`` and ``peering_crush_bucket_barrier`` set (same
-values as replica, Section 11.6). Stretch mode is disabled when the last pool
-with ``num_zones > 1`` is deleted or set to ``num_zones = 1``.
+Stretch mode is enabled with the first pool that gets ``num_zones = 2`` and
+disabled when the last one goes (Sections 11.3.1 and 11.3.3). Replicated and EC
+pools are accepted alike. The tiebreaker monitor is the one monitor outside both
+zones, or the monitor named by ``enable_stretch_mode``'s legacy
+``tiebreaker_mon`` argument. Without that argument enabling is refused if there
+is no monitor outside both zones, or more than one. Each pool with ``num_zones =
+2`` has ``peering_crush_bucket_count``, ``peering_crush_bucket_target`` and
+``peering_crush_bucket_barrier`` set (same values as replica, Section 11.6).
 
 Creating a pool with ``num_zones = 2`` while stretch mode is already enabled
 configures only the new pool; it does not change the cluster's stretch mode
