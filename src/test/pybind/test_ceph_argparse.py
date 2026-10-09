@@ -1107,6 +1107,25 @@ class TestOSD(TestArgparse):
                                                         '128', '128',
                                                         'INVALID', 'profile',
                                                         'rule']))
+        # crush_rule and pg_autoscale_mode, and their old names
+        for rule, mode in (('crush_rule', 'pg_autoscale_mode'),
+                           ('rule', 'autoscale_mode')):
+            args = validate_command(sigdict, ['osd', 'pool', 'create',
+                                              'poolname',
+                                              '--' + rule, 'r',
+                                              '--' + mode, 'warn'])
+            self.assertEqual('r', args[rule])
+            self.assertEqual('warn', args[mode])
+
+    def test_pool_default_set(self):
+        # crush_rule and pg_autoscale_mode, and their old names
+        for rule, mode in (('crush_rule', 'pg_autoscale_mode'),
+                           ('rule', 'autoscale_mode')):
+            args = validate_command(sigdict, ['osd', 'pool', 'default', 'set',
+                                              '--' + rule, 'r',
+                                              '--' + mode, 'warn'])
+            self.assertEqual('r', args[rule])
+            self.assertEqual('warn', args[mode])
 
     def test_pool_delete(self):
         self._assert_valid_command(['osd', 'pool', 'delete',
@@ -1154,7 +1173,8 @@ class TestOSD(TestArgparse):
 
     def test_pool_set(self):
         for var in ('size', 'min_size',
-                    'pg_num', 'pgp_num', 'crush_rule',
+                    'pg_num', 'pgp_num', 'crush_rule', 'rule',
+                    'pg_autoscale_mode', 'autoscale_mode',
                     'hashpspool', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
                     'deep_scrub_interval', 'recovery_priority',
