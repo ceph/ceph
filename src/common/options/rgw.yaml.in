@@ -3519,6 +3519,22 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_kmip_socket_io_timeout_sec
+  type: int
+  level: advanced
+  desc: KMIP socket read/write timeout in seconds (0 = no timeout)
+  long_desc: >
+    Limits how long each read or write on a KMIP connection may block
+    (SO_RCVTIMEO/SO_SNDTIMEO), so a KMIP server that stops answering makes
+    requests fail instead of waiting. Applied after the TCP connect and TLS
+    handshake, which it does not cover. 0, the default, means no timeout:
+    a read then waits until the server answers or the connection fails.
+  default: 0
+  min: 0
+  max: 300
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_crypt_suppress_logs
   type: bool
   level: advanced
