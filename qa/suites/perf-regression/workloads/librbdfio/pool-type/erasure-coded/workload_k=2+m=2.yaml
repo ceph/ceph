@@ -1,0 +1,125 @@
+tasks:
+- cephadm.shell:
+    mon.a:
+      - |
+        set -ex
+
+        # Create erasure code profile k=2 m=2
+
+        ceph osd erasure-code-profile set reedsol \
+          plugin=isa k=2 m=2 technique=reed_sol_van stripe_unit=4K \
+          crush-failure-domain=osd
+
+        ceph osd pool create rbd_erasure 64 64 erasure reedsol
+        ceph osd pool create rbd_replicated 64 64 replicated
+        ceph osd pool set rbd_replicated size 3
+
+        ceph osd pool set rbd_erasure allow_ec_overwrites true
+        ceph osd pool set rbd_erasure allow_ec_optimizations true
+
+        rbd pool init rbd_erasure
+        rbd pool init rbd_replicated
+
+        ceph osd pool set noautoscale
+        ceph balancer off
+        ceph osd set nodeep-scrub
+        ceph osd set noscrub
+
+        HOST=$(hostname -f)
+        for i in $(seq 0 15); do
+          rbd create --size 44800 \
+            --pool rbd_replicated \
+            --data-pool rbd_erasure \
+            cbt-librbdfio-${HOST}-${i}
+        done
+
+- cbt:
+    cluster:
+      user: ubuntu
+      osds_per_node: 4
+      iterations: 1
+
+    report:
+      force_refresh: True
+      create_pdf: True
+      output_directory: "/home/ubuntu/cephtest/archive/cbt/reports/"
+      results_file_root: "output"
+      no_error_bars: True
+
+    benchmarks:
+      librbdfio:
+        create_report: True
+        time: 60
+        ramp: 20
+        time_based: True
+        norandommap: True
+        vol_size: 44800
+        use_existing_volumes: True
+        wait_pgautoscaler_timeout: 30
+        poolname: 'rbd_replicated'
+        rbdname: 'cbt-librbdfio'
+        procs_per_volume: [1]
+        volumes_per_client: [16]
+        osd_ra: [4096]
+        log_iops: True
+        log_bw: True
+        log_lat: True
+        fio_out_format: 'json'
+        log_avg_msec: 100
+        prefill:
+          blocksize: '64k'
+          numjobs: 1
+
+        workloads:
+          0-precondition:
+            jobname: 'precond1rw'
+            mode: 'randwrite'
+            time: 600
+            op_size: 65536
+            numjobs: [ 1 ]
+            total_iodepth: [ 16 ]
+            monitor: False
+
+          1-4krandomwrite:
+            jobname: 'randwrite'
+            mode: 'randwrite'
+            op_size: 4096
+            numjobs: [ 1 ]
+            total_iodepth: [ 4, 8, 12, 16, 32, 48, 64, 128, 256, 384 ]
+
+          2-4krandomread:
+            jobname: 'randread'
+            mode: 'randread'
+            op_size: 4096
+            numjobs: [ 1 ]
+            total_iodepth: [ 4, 8, 12, 16, 32, 48, 64, 128, 256, 384 ]
+
+          3-256krandomwrite:
+            jobname: 'randwrite'
+            mode: 'randwrite'
+            op_size: 262144
+            numjobs: [ 1 ]
+            total_iodepth: [ 1, 2, 4, 8, 16, 32, 64, 96, 128, 256 ]
+
+          4-256krandomread:
+            jobname: 'randread'
+            mode: 'randread'
+            op_size: 262144
+            numjobs: [ 1 ]
+            total_iodepth: [ 1, 2, 4, 8, 16, 24, 32, 64, 96, 128 ]
+
+          5-4Mrandomwrite:
+            jobname: 'randwrite'
+            mode: 'randwrite'
+            op_size: 4194304
+            numjobs: [ 1 ]
+            total_iodepth: [ 1, 2, 3, 4, 6, 8, 16, 24, 32, 48 ]
+
+          6-4Mrandomread:
+            jobname: 'randread'
+            mode: 'randread'
+            op_size: 4194304
+            numjobs: [ 1 ]
+            total_iodepth: [ 1, 2, 4, 8, 12, 16, 20, 24, 28, 32 ]
+
+# - cbt_regression:
