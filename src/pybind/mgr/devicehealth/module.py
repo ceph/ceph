@@ -350,59 +350,71 @@ class Module(MgrModule):
         self.log.debug(f"finished reading legacy pool, complete = {done}")
         return done
 
-    @MgrModuleRecoverDB
     def _do_serve(self) -> None:
-        last_scrape = None
+        last_scrape: Optional[datetime] = None
         finished_loading_legacy = False
 
         while self.run:
-            # sleep first, in case of exceptions causing retry:
-            sleep_interval = self.sleep_interval or 60
+            last_scrape, finished_loading_legacy = self._serve_once(
+                last_scrape, finished_loading_legacy)
+
+    # The retry budget of MgrModuleRecoverDB covers a single pass: the
+    # database lock can be lost any number of times over the life of the
+    # module, e.g. whenever the mgr pool is unavailable for longer than
+    # cephsqlite_lock_renewal_timeout.
+    @MgrModuleRecoverDB
+    def _serve_once(self,
+                    last_scrape: Optional[datetime],
+                    finished_loading_legacy: bool) -> Tuple[Optional[datetime], bool]:
+        # sleep first, in case of exceptions causing retry:
+        sleep_interval = self.sleep_interval or 60
+        if not finished_loading_legacy:
+            sleep_interval = 2
+        self.log.debug('Sleeping for %d seconds', sleep_interval)
+        self.event.wait(sleep_interval)
+        self.event.clear()
+
+        if self.db_ready() and self.enable_monitoring:
+            self.log.debug('Running')
+
             if not finished_loading_legacy:
-                sleep_interval = 2
-            self.log.debug('Sleeping for %d seconds', sleep_interval)
-            self.event.wait(sleep_interval)
-            self.event.clear()
+                finished_loading_legacy = self.check_legacy_pool()
 
-            if self.db_ready() and self.enable_monitoring:
-                self.log.debug('Running')
+            if last_scrape is None:
+                ls = self.get_kv('last_scrape')
+                if ls:
+                    try:
+                        last_scrape = datetime.strptime(ls, TIME_FORMAT)
+                    except ValueError:
+                        pass
+                self.log.debug('Last scrape %s', last_scrape)
 
-                if not finished_loading_legacy:
-                    finished_loading_legacy = self.check_legacy_pool()
+            self.check_health()
 
-                if last_scrape is None:
-                    ls = self.get_kv('last_scrape')
-                    if ls:
-                        try:
-                            last_scrape = datetime.strptime(ls, TIME_FORMAT)
-                        except ValueError:
-                            pass
-                    self.log.debug('Last scrape %s', last_scrape)
+            now = datetime.utcnow()
+            if not last_scrape:
+                next_scrape = now
+            else:
+                # align to scrape interval
+                scrape_frequency = self.scrape_frequency or 86400
+                seconds = (last_scrape - datetime.utcfromtimestamp(0)).total_seconds()
+                seconds -= seconds % scrape_frequency
+                seconds += scrape_frequency
+                next_scrape = datetime.utcfromtimestamp(seconds)
+            if last_scrape:
+                self.log.debug('Last scrape %s, next scrape due %s',
+                               last_scrape.strftime(TIME_FORMAT),
+                               next_scrape.strftime(TIME_FORMAT))
+            else:
+                self.log.debug('Last scrape never, next scrape due %s',
+                               next_scrape.strftime(TIME_FORMAT))
+            if now >= next_scrape:
+                self.scrape_all()
+                self.predict_all_devices()
+                last_scrape = now
+                self.set_kv('last_scrape', last_scrape.strftime(TIME_FORMAT))
 
-                self.check_health()
-
-                now = datetime.utcnow()
-                if not last_scrape:
-                    next_scrape = now
-                else:
-                    # align to scrape interval
-                    scrape_frequency = self.scrape_frequency or 86400
-                    seconds = (last_scrape - datetime.utcfromtimestamp(0)).total_seconds()
-                    seconds -= seconds % scrape_frequency
-                    seconds += scrape_frequency
-                    next_scrape = datetime.utcfromtimestamp(seconds)
-                if last_scrape:
-                    self.log.debug('Last scrape %s, next scrape due %s',
-                                   last_scrape.strftime(TIME_FORMAT),
-                                   next_scrape.strftime(TIME_FORMAT))
-                else:
-                    self.log.debug('Last scrape never, next scrape due %s',
-                                   next_scrape.strftime(TIME_FORMAT))
-                if now >= next_scrape:
-                    self.scrape_all()
-                    self.predict_all_devices()
-                    last_scrape = now
-                    self.set_kv('last_scrape', last_scrape.strftime(TIME_FORMAT))
+        return last_scrape, finished_loading_legacy
 
     def serve(self) -> None:
         self.log.info("Starting")
