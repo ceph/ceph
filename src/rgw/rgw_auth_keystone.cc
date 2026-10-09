@@ -426,6 +426,10 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   keystone_url.append("v3/s3tokens");
 
+  bool admin_token_retried = false;
+
+admin_token_retry:
+
   /* get authentication token for Keystone. */
   std::string admin_token;
   bool admin_token_cached = false;
@@ -469,6 +473,24 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   /* send request */
   ret = validate.process(dpp, y);
+
+  /* If the admin token is invalid (e.g. after a Fernet key rotation on
+   * the Keystone side), Keystone will return 401. In that case, we
+   * invalidate the cached admin token and retry once with a fresh one,
+   * mirroring the behavior of TokenEngine::get_from_keystone. */
+  bool admin_token_unauthorized = (validate.get_http_status() ==
+    decltype(validate)::HTTP_STATUS_UNAUTHORIZED);
+
+  if (admin_token_unauthorized && admin_token_cached) {
+    ldpp_dout(dpp, 20) << "s3 keystone: invalidating admin_token cache due to 401" << dendl;
+    token_cache.invalidate_admin(dpp);
+
+    if (!admin_token_retried) {
+      ldpp_dout(dpp, 20) << "s3 keystone: retrying with uncached admin_token" << dendl;
+      admin_token_retried = true;
+      goto admin_token_retry;
+    }
+  }
 
   /* if the supplied signature is wrong, we will get 401 from Keystone */
   if (validate.get_http_status() ==
@@ -518,6 +540,10 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
   keystone_url.append("/credentials/OS-EC2/");
   keystone_url.append(std::string(access_key_id));
 
+  bool admin_token_retried = false;
+
+admin_token_retry:
+
   /* get authentication token for Keystone. */
   std::string admin_token;
   bool admin_token_cached = false;
@@ -544,6 +570,22 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
 
   /* send request */
   ret = secret.process(dpp, y);
+
+  /* If the admin token is invalid, Keystone will return 401. Invalidate
+   * the cached admin token and retry once with a fresh one. */
+  bool admin_token_unauthorized = (secret.get_http_status() ==
+    decltype(secret)::HTTP_STATUS_UNAUTHORIZED);
+
+  if (admin_token_unauthorized && admin_token_cached) {
+    ldpp_dout(dpp, 20) << "s3 keystone: invalidating admin_token cache due to 401" << dendl;
+    token_cache.invalidate_admin(dpp);
+
+    if (!admin_token_retried) {
+      ldpp_dout(dpp, 20) << "s3 keystone: retrying with uncached admin_token" << dendl;
+      admin_token_retried = true;
+      goto admin_token_retry;
+    }
+  }
 
   /* if the supplied access key isn't found, we will get 404 from Keystone */
   if (secret.get_http_status() ==
