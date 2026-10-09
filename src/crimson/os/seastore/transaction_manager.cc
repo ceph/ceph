@@ -204,8 +204,11 @@ TransactionManager::mount()
   }).safe_then([this] {
     return epm->open_for_write();
   }).safe_then([FNAME, this] {
-    epm->start_background();
+    // start_background() may run a background cycle right away (e.g.
+    // trim_dirty rewriting replayed dirty extents, retiring their absent
+    // shadow copies): the cache must be out of its boot mode by then.
     cache->boot_done();
+    epm->start_background();
     INFO("done");
   }).handle_error(
     mount_ertr::pass_further{},
