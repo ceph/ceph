@@ -18,11 +18,9 @@
 #define CEPH_DOUT_H
 
 #include <fmt/core.h> // for FMT_VERSION
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
 
 #include <ostream>
+#include <string_view>
 #include <type_traits>
 
 #include "common/CanHasPrint.h"
@@ -64,7 +62,11 @@ inline std::ostream &operator<<(
   return dpp.gen_prefix(lhs);
 }
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<DoutPrefixProvider> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<DoutPrefixProvider> : fmt::formatter<std::string_view> {
+  // defined in dout.cc to avoid depending on <fmt/ostream.h> here
+  fmt::format_context::iterator format(const DoutPrefixProvider &dpp,
+                                       fmt::format_context &ctx) const;
+};
 #endif
 
 // a prefix provider with empty prefix
