@@ -17,6 +17,12 @@
 #ifndef CEPH_DOUT_H
 #define CEPH_DOUT_H
 
+#include <fmt/core.h> // for FMT_VERSION
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
+
+#include <ostream>
 #include <type_traits>
 
 #include "common/CanHasPrint.h"
