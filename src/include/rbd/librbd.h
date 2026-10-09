@@ -81,7 +81,7 @@ typedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void *ptr);
 
 typedef void (*rbd_update_callback_t)(void *arg);
 
-typedef enum {
+typedef enum : uint8_t {
   RBD_SNAP_NAMESPACE_TYPE_USER   = 0,
   RBD_SNAP_NAMESPACE_TYPE_GROUP  = 1,
   RBD_SNAP_NAMESPACE_TYPE_TRASH  = 2,

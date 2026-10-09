@@ -713,8 +713,9 @@
   
   rbd help diff
   usage: rbd diff [--pool <pool>] [--namespace <namespace>] [--image <image>] 
-                  [--snap <snap>] [--from-snap <from-snap>] [--whole-object] 
-                  [--format <format>] [--pretty-format] 
+                  [--snap <snap>] [--snap-id <snap-id>] 
+                  [--from-snap <from-snap>] [--from-snap-id <from-snap-id>] 
+                  [--whole-object] [--format <format>] [--pretty-format] 
                   <image-or-snap-spec> 
   
   Print extents that differ since a previous snap, or image creation.
@@ -729,7 +730,9 @@
     --namespace arg       namespace name
     --image arg           image name
     --snap arg            snapshot name
+    --snap-id arg         snapshot id
     --from-snap arg       snapshot starting point
+    --from-snap-id arg    snapshot starting id
     --whole-object        compare whole object
     --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
@@ -782,8 +785,8 @@
   
   rbd help export
   usage: rbd export [--pool <pool>] [--namespace <namespace>] [--image <image>] 
-                    [--snap <snap>] [--path <path>] [--no-progress] 
-                    [--export-format <export-format>] 
+                    [--snap <snap>] [--path <path>] [--snap-id <snap-id>] 
+                    [--no-progress] [--export-format <export-format>] 
                     <source-image-or-snap-spec> <path-name> 
   
   Export image to file.
@@ -801,13 +804,15 @@
     --image arg                  source image name
     --snap arg                   source snapshot name
     --path arg                   export file (or '-' for stdout)
+    --snap-id arg                snapshot id
     --no-progress                disable progress output
     --export-format arg          format of image file
   
   rbd help export-diff
   usage: rbd export-diff [--pool <pool>] [--namespace <namespace>] 
                          [--image <image>] [--snap <snap>] [--path <path>] 
-                         [--from-snap <from-snap>] [--whole-object] 
+                         [--snap-id <snap-id>] [--from-snap <from-snap>] 
+                         [--from-snap-id <from-snap-id>] [--whole-object] 
                          [--no-progress] 
                          <source-image-or-snap-spec> <path-name> 
   
@@ -826,7 +831,9 @@
     --image arg                  source image name
     --snap arg                   source snapshot name
     --path arg                   export file (or '-' for stdout)
+    --snap-id arg                snapshot id
     --from-snap arg              snapshot starting point
+    --from-snap-id arg           snapshot starting id
     --whole-object               compare whole object
     --no-progress                disable progress output
   
