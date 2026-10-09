@@ -21,10 +21,6 @@
 #include <string>
 
 #include <netinet/in.h>
-#include "common/fmt_common.h"
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
 
 #include "include/ceph_features.h"
 #include "include/blobhash.h"
@@ -100,13 +96,7 @@ public:
   void dump(ceph::Formatter *f) const;
 
   template <typename FormatContext>
-  auto fmt_print_ctx(FormatContext& ctx) const {
-    if (is_new() || _num < 0) {
-      return fmt::format_to(ctx.out(), "{}.?", type_str());
-    } else {
-      return fmt::format_to(ctx.out(), "{}.{}",type_str(), _num);
-    }
-  }
+  auto fmt_print_ctx(FormatContext& ctx) const;
 
   static std::list<entity_name_t> generate_test_instances();
 };
@@ -738,9 +728,6 @@ struct entity_addrvec_t {
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<entity_addrvec_t> : fmt::ostream_formatter {};
-#endif
 
 namespace std {
 template<> struct hash<entity_addrvec_t> {
