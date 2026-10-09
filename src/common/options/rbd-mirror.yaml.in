@@ -2,6 +2,13 @@
 ---
 
 options:
+- name: rbd_mirror_remote_osd_op_timeout
+  type: secs
+  level: advanced
+  desc: timeout for OSD operations against the remote cluster (0 is unlimited)
+  default: 300
+  services:
+  - rbd-mirror
 - name: rbd_mirror_journal_commit_age
   type: float
   level: advanced
