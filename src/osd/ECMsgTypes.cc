@@ -19,10 +19,12 @@
 #include "common/ceph_context.h"
 
 using std::list;
+using std::deque;
 using std::make_pair;
 using std::map;
 using std::pair;
 using std::set;
+using std::vector;
 using ceph::bufferlist;
 using ceph::Formatter;
 
@@ -126,9 +128,9 @@ void ECSubWrite::dump(Formatter *f) const
   f->dump_bool("backfill_or_async_recovery", backfill_or_async_recovery);
 }
 
-list<ECSubWrite> ECSubWrite::generate_test_instances()
+deque<ECSubWrite> ECSubWrite::generate_test_instances()
 {
-  list<ECSubWrite> o;
+  deque<ECSubWrite> o;
   o.emplace_back();
   o.back().tid = 1;
   o.back().at_version = eversion_t(2, 100);
@@ -187,9 +189,9 @@ void ECSubWriteReply::dump(Formatter *f) const
   f->dump_bool("applied", applied);
 }
 
-list<ECSubWriteReply> ECSubWriteReply::generate_test_instances()
+vector<ECSubWriteReply> ECSubWriteReply::generate_test_instances()
 {
-  list<ECSubWriteReply> o;
+  vector<ECSubWriteReply> o;
   o.push_back(ECSubWriteReply());
   o.back().tid = 20;
   o.back().last_complete = eversion_t(100, 2000);
@@ -382,9 +384,9 @@ void ECSubRead::dump(Formatter *f) const
       });
 }
 
-list<ECSubRead> ECSubRead::generate_test_instances()
+vector<ECSubRead> ECSubRead::generate_test_instances()
 {
-  list<ECSubRead> o;
+  vector<ECSubRead> o;
   hobject_t hoid1(sobject_t("asdf", 1));
   hobject_t hoid2(sobject_t("asdf2", CEPH_NOSNAP));
   o.push_back(ECSubRead());
@@ -602,9 +604,9 @@ void ECSubReadReply::dump(Formatter* f) const
       });
 }
 
-list<ECSubReadReply> ECSubReadReply::generate_test_instances()
+vector<ECSubReadReply> ECSubReadReply::generate_test_instances()
 {
-  list<ECSubReadReply> o;
+  vector<ECSubReadReply> o;
   hobject_t hoid1(sobject_t("asdf", 1));
   hobject_t hoid2(sobject_t("asdf2", CEPH_NOSNAP));
   bufferlist bl;

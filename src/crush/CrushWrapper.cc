@@ -15,6 +15,7 @@
 #define dout_subsys ceph_subsys_crush
 
 using std::cout;
+using std::deque;
 using std::list;
 using std::map;
 using std::make_pair;
@@ -3969,9 +3970,9 @@ void CrushWrapper::dump_tree(
   }
 }
 
-list<CrushWrapper> CrushWrapper::generate_test_instances()
+deque<CrushWrapper> CrushWrapper::generate_test_instances()
 {
-  list<CrushWrapper> o;
+  deque<CrushWrapper> o;
   o.emplace_back();
   // fixme
   return o;
