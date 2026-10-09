@@ -253,6 +253,26 @@ struct TestMockIoObjectRequest : public TestMockFixture {
     }
   }
 
+  void expect_mapext(MockTestImageCtx &mock_image_ctx,
+                     const std::string& oid, uint64_t off, uint64_t len,
+                     librados::snap_t snap_id,
+                     const std::map<uint64_t, uint64_t>& mapped_extents,
+                     int r) {
+    auto& mock_io_ctx = librados::get_mock_io_ctx(
+      mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
+    auto& expect = EXPECT_CALL(
+      mock_io_ctx, sparse_read(oid, off, len, _, _, snap_id));
+    if (r < 0) {
+      expect.WillOnce(Return(r));
+    } else {
+      expect.WillOnce(WithArg<3>(Invoke(
+        [mapped_extents, r](std::map<uint64_t, uint64_t>* out_extents) {
+          *out_extents = mapped_extents;
+          return r;
+        })));
+    }
+  }
+
   void expect_read_parent(MockUtils &mock_utils, uint64_t object_no,
                           ReadExtents* extents, librados::snap_t snap_id,
                           int r) {
@@ -1784,6 +1804,59 @@ TEST_F(TestMockIoObjectRequest, ListSnaps) {
   ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
 }
 
+TEST_F(TestMockIoObjectRequest, ListSnapsMapExtents) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.snaps = {1};
+
+  librados::snap_set_t snap_set;
+  snap_set.seq = 1;
+  librados::clone_info_t clone_info;
+  clone_info.cloneid = 1;
+  clone_info.snaps = {1};
+  clone_info.size = 4096;
+  snap_set.clones.push_back(clone_info);
+
+  expect_list_snaps(mock_image_ctx, snap_set, 0);
+  expect_mapext(mock_image_ctx, ictx->get_object_name(0), 0, 4096, 1,
+                {{0, 512}, {2048, 1024}}, 2);
+
+  SnapshotDelta snapshot_delta;
+  C_SaferCond ctx;
+  auto req = MockObjectListSnapsRequest::create(
+    &mock_image_ctx, 0, {{0, 4096}}, {0, 1},
+    LIST_SNAPS_FLAG_MAP_SPARSE_EXTENTS, {}, &snapshot_delta, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  SnapshotDelta expected_snapshot_delta;
+  expected_snapshot_delta[{1, 1}].insert(
+    0, 512, {SPARSE_EXTENT_STATE_DATA, 512});
+  expected_snapshot_delta[{1, 1}].insert(
+    2048, 1024, {SPARSE_EXTENT_STATE_DATA, 1024});
+  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
+
+  expect_list_snaps(mock_image_ctx, snap_set, 0);
+  expect_mapext(mock_image_ctx, ictx->get_object_name(0), 0, 4096, 1, {},
+                -EOPNOTSUPP);
+
+  SnapshotDelta fallback_snapshot_delta;
+  C_SaferCond fallback_ctx;
+  req = MockObjectListSnapsRequest::create(
+    &mock_image_ctx, 0, {{0, 4096}}, {0, 1},
+    LIST_SNAPS_FLAG_MAP_SPARSE_EXTENTS, {}, &fallback_snapshot_delta,
+    &fallback_ctx);
+  req->send();
+  ASSERT_EQ(0, fallback_ctx.wait());
+
+  SnapshotDelta expected_fallback_snapshot_delta;
+  expected_fallback_snapshot_delta[{1, 1}].insert(
+    0, 4096, {SPARSE_EXTENT_STATE_DATA, 4096});
+  ASSERT_EQ(expected_fallback_snapshot_delta, fallback_snapshot_delta);
+}
+
 TEST_F(TestMockIoObjectRequest, ListSnapsGrowFromSizeAtStart) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
@@ -2761,4 +2834,3 @@ TEST(SparseBufferlist, Merge) {
 
 } // namespace io
 } // namespace librbd
-
