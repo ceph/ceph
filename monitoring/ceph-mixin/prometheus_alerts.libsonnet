@@ -1008,7 +1008,7 @@
         {
           alert: 'NVMeoFHighGatewayCPU',
           'for': '10m',
-          expr: 'label_replace(avg by(instance, cluster) (rate(ceph_nvmeof_reactor_seconds_total{mode="busy"}[1m])),"instance","$1","instance","(.*):.*") > %.2f' % [$._config.NVMeoFHighGatewayCPU],
+          expr: '100 * label_replace(avg by(instance, cluster) (rate(ceph_nvmeof_reactor_seconds_total{mode="busy"}[1m])),"instance","$1","instance","(.*):.*") > %.2f' % [$._config.NVMeoFHighGatewayCPU],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'CPU used by {{ $labels.instance }} NVMe-oF Gateway is high%(cluster)s' % $.MultiClusterSummary(),
