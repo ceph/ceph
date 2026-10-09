@@ -24,6 +24,8 @@ public:
   void SetUp() override;
   void TearDown() override;
 
+  int open_image(const std::string &image_name, const std::string &snap_name,
+                 librbd::ImageCtx **ictx);
   int open_image(const std::string &image_name, librbd::ImageCtx **ictx);
   void close_image(librbd::ImageCtx *ictx);
 
