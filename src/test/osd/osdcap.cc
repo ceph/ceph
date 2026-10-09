@@ -1381,6 +1381,34 @@ TEST(OSDCap, AllowProfile) {
   ASSERT_FALSE(cap.is_capable("pool1", "", {}, "rbd_info", false, false,
                               {{"rbd", "other_method", true, false, true}},
                               addr));
+
+  // RGW: rwx on pools tagged with the rgw application
+  cap.grants.clear();
+  ASSERT_TRUE(cap.parse("profile rgw", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  ASSERT_TRUE(cap.is_capable("foo", "", {{"rgw", {}}}, "asdf", true, true, {},
+                             addr));
+  ASSERT_TRUE(cap.is_capable("foo", "", {{"rgw", {{"k", "v"}}}}, "asdf", true,
+                             true, {}, addr));
+  ASSERT_TRUE(cap.is_capable("foo", "ns", {{"rgw", {}}}, "asdf", true, true, {},
+                             addr));
+  ASSERT_TRUE(cap.is_capable("foo", "", {{"rgw", {}}}, "asdf", false, true,
+                             {{"rgw", "", true, true, true}}, addr));
+  ASSERT_FALSE(cap.is_capable("foo", "", {}, "asdf", true, false, {}, addr));
+  ASSERT_FALSE(cap.is_capable("foo", "", {{"rbd", {}}}, "asdf", true, false, {},
+                              addr));
+  ASSERT_FALSE(cap.is_capable("foo", "", {{"rgw", {}}}, "asdf", false, true,
+                              {{"rgw", "", true, true, false}}, addr));
+
+  // pool restriction narrows the tag scope
+  cap.grants.clear();
+  ASSERT_TRUE(cap.parse("profile rgw pool=zone.rgw.log", NULL));
+  ASSERT_TRUE(cap.is_capable("zone.rgw.log", "", {{"rgw", {}}}, "asdf", true,
+                             true, {}, addr));
+  ASSERT_FALSE(cap.is_capable("other", "", {{"rgw", {}}}, "asdf", true, true,
+                              {}, addr));
+  ASSERT_FALSE(cap.is_capable("zone.rgw.log", "", {}, "asdf", true, true, {},
+                              addr));
 }
 
 TEST(OSDCap, network) {

@@ -2356,6 +2356,47 @@ class TestRGWService:
                 })
                 assert f == ('false' if disable_sync_traffic else 'true')
 
+    @pytest.mark.parametrize('service_type', ['rgw', 'nfs'])
+    @pytest.mark.parametrize('mon_version,osd_version,profile', [
+        ('20.2.5', '20.2.5', True),
+        ('20.2.6', '20.2.10', True),
+        ('20.2.5-1', '20.2.5-1', True),
+        ('20.2.4', '20.2.5', False),
+        ('20.2.5', '20.2.4', False),
+        ('unknown', '20.2.5', False),
+        ('20.2.5', 'unknown', False),
+        (None, '20.2.5', False),
+        ('20.2.5', None, False),
+    ])
+    @patch("cephadm.services.cephadmservice.CephadmService.get_keyring_with_caps")
+    def test_rgw_keyring_caps(self, get_keyring_with_caps, cephadm_module: CephadmOrchestrator,
+                             service_type, mon_version, osd_version, profile):
+        get_keyring_with_caps.return_value = ''
+        service = service_registry.get_service(service_type)
+        cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
+            'mons': [{'name': 'a'}, {'name': 'b'}],
+        })
+        cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
+            'osds': [{'osd': 0, 'up': 1}, {'osd': 1, 'up': 0}],
+            'require_osd_release': 'tentacle',
+        })
+        versions = {('mon', 'a'): '20.2.5', ('mon', 'b'): mon_version,
+                    ('osd', '0'): '20.2.5', ('osd', '1'): osd_version}
+
+        def metadata(daemon_type, daemon_id):
+            version = versions[(daemon_type, daemon_id)]
+            return {'ceph_version': f'ceph version {version} (sha) tentacle (stable)'} if version else None
+
+        with patch.object(cephadm_module, 'get_metadata', side_effect=metadata):
+            if service_type == 'rgw':
+                service.get_keyring('foo.bar')
+                caps = ['mon', 'profile rgw', 'mgr', 'profile rgw', 'osd', 'profile rgw'] if profile else [
+                    'mon', 'allow *', 'mgr', 'allow rw', 'osd', 'allow rwx tag rgw *=*']
+            else:
+                service.create_rgw_keyring(CephadmDaemonDeploySpec('host1', 'foo.bar', 'nfs.foo'))
+                caps = ['mon', 'allow r', 'osd', 'profile rgw' if profile else 'allow rwx tag rgw *=*']
+        assert get_keyring_with_caps.call_args[0][1] == caps
+
 
 class TestMonService:
 
