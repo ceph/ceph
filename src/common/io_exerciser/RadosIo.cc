@@ -296,7 +296,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       uint64_t range = 100;
       uint64_t rand_value = rng();
       int index = rand_value % range;
-      if (index <= balanced_read_percentage) {
+      if (index < balanced_read_percentage) {
         flags = librados::OPERATION_BALANCE_READS;
       }
     }
