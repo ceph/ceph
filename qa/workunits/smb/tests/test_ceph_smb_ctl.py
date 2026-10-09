@@ -146,83 +146,193 @@ class RemoteCtlBase:
         assert jres.returncode == 0, "set-debug-level smb orig level failed"
 
 
+def _local_rcontrol(smb_cfg, args, **kwargs):
+    return cephutil.cephadm_shell_cmd(
+        smb_cfg,
+        [CEPH_SMB_CTL] + args,
+        **kwargs,
+    )
+
+
+def _remote_rcontrol(smb_cfg, args, **kwargs):
+    grpc_host = f"{smb_cfg.server.ip_address}:54445"
+    ca_dir = pathlib.Path(smb_cfg.testdir) / 'ca'
+    ca_mnt = pathlib.Path('/tls')
+    assert (ca_dir / 'remote-control-client.crt').is_file()
+    assert (ca_dir / 'remote-control-client.key').is_file()
+    assert (ca_dir / 'rcroot.crt').is_file()
+    _args = [
+        CEPH_SMB_CTL,
+        f'--address={grpc_host}',
+        f"--tls-cert={ca_mnt}/remote-control-client.crt",
+        f"--tls-key={ca_mnt}/remote-control-client.key",
+        f"--tls-ca-cert={ca_mnt}/rcroot.crt",
+    ]
+    return cephutil.cephadm_shell_cmd(
+        smb_cfg,
+        _args + args,
+        volumes=[f'{ca_dir}:{ca_mnt}:ro'],
+        **kwargs,
+    )
+
+
 @pytest.mark.ceph_smb_ctl_local
 class TestCephSMBCtlLocal(RemoteCtlBase):
     def _rcontrol(self, smb_cfg, args, **kwargs):
-        return cephutil.cephadm_shell_cmd(
-            smb_cfg,
-            [CEPH_SMB_CTL] + args,
-            **kwargs,
-        )
+        return _local_rcontrol(smb_cfg, args, **kwargs)
 
 
 @pytest.mark.ceph_smb_ctl_remote
 class TestCephSMBCtlRemote(RemoteCtlBase):
     def _rcontrol(self, smb_cfg, args, **kwargs):
-        grpc_host = f"{smb_cfg.server.ip_address}:54445"
-        ca_dir = pathlib.Path(smb_cfg.testdir) / 'ca'
-        ca_mnt = pathlib.Path('/tls')
-        assert (ca_dir / 'remote-control-client.crt').is_file()
-        assert (ca_dir / 'remote-control-client.key').is_file()
-        assert (ca_dir / 'rcroot.crt').is_file()
-        _args = [
-            CEPH_SMB_CTL,
-            f'--address={grpc_host}',
-            f"--tls-cert={ca_mnt}/remote-control-client.crt",
-            f"--tls-key={ca_mnt}/remote-control-client.key",
-            f"--tls-ca-cert={ca_mnt}/rcroot.crt",
-        ]
-        return cephutil.cephadm_shell_cmd(
-            smb_cfg,
-            _args + args,
-            volumes=[f'{ca_dir}:{ca_mnt}:ro'],
-            **kwargs,
+        return _remote_rcontrol(smb_cfg, args, **kwargs)
+
+
+def _ctdb_status_checks(obj):
+    assert obj
+    assert 'node_status' in obj
+    assert 'nodes' in obj['node_status']
+    assert obj['node_status']['nodes']
+    for node in obj['node_status']['nodes']:
+        assert 'pnn' in node
+        assert 'address' in node
+        assert 'flags' in node
+    assert 'vnn_status' in obj
+    assert 'recovery_mode' in obj
+
+
+def _clusterlevel_showall_checks(obj):
+    assert obj
+    assert 'active_level' in obj
+    assert 'major' in obj['active_level']
+    assert 'minor' in obj['active_level']
+    assert 'nodes' in obj
+    assert obj['nodes']
+    for node in obj['nodes']:
+        assert 'pnn' in node
+        assert 'supported_ranges' in node
+        assert node['supported_ranges']
+    assert 'highest_level' in obj
+    if obj['upgrade_possible']:
+        assert 'major' in obj['highest_level']
+        assert 'minor' in obj['highest_level']
+    else:
+        # highest_level is only meaningful when an upgrade is possible;
+        # otherwise it must be reported as absent.
+        assert obj['highest_level'] is None
+
+
+def _clusterlevel_upgrade_checks(obj):
+    assert obj
+    assert obj['dry_run'] is True
+    assert 'status' in obj
+    assert 'new_level' in obj
+    if obj['status'] in (
+        'CLUSTER_LEVEL_UPGRADE_STATUS_DRY_RUN_OK',
+        'CLUSTER_LEVEL_UPGRADE_STATUS_UPGRADED',
+    ):
+        assert 'major' in obj['new_level']
+        assert 'minor' in obj['new_level']
+    else:
+        # new_level is only meaningful for dry_run_ok/upgraded
+        assert obj['new_level'] is None
+
+
+def _clusterlevel_features_checks(obj):
+    assert obj
+    assert 'cluster_support' in obj
+    assert obj['cluster_support']
+    assert 'ctdb_socket' in obj
+    assert 'ctdb_protocol' in obj
+    assert 'supported_ranges' in obj
+    assert obj['supported_ranges']
+
+
+@pytest.mark.ceph_smb_ctl_ctdb
+class TestCephSMBCtlRemoteCtdb:
+    def test_ctdb_status(self, smb_cfg):
+        jres = _remote_rcontrol(smb_cfg, ['ctdb-status'], load_json=True)
+        assert jres.returncode == 0
+        _ctdb_status_checks(jres.obj)
+
+    def test_clusterlevel_show(self, smb_cfg):
+        jres = _remote_rcontrol(
+            smb_cfg, ['clusterlevel-show'], load_json=True
         )
+        assert jres.returncode == 0
+        assert jres.obj
+        assert 'major' in jres.obj
+        assert 'minor' in jres.obj
+
+    def test_clusterlevel_showall(self, smb_cfg):
+        jres = _remote_rcontrol(
+            smb_cfg, ['clusterlevel-showall'], load_json=True
+        )
+        assert jres.returncode == 0
+        _clusterlevel_showall_checks(jres.obj)
+
+    def test_clusterlevel_upgrade_dry_run(self, smb_cfg):
+        jres = _remote_rcontrol(
+            smb_cfg, ['clusterlevel-upgrade'], load_json=True
+        )
+        assert jres.returncode == 0
+        _clusterlevel_upgrade_checks(jres.obj)
+
+    def test_clusterlevel_features(self, smb_cfg):
+        jres = _remote_rcontrol(
+            smb_cfg, ['clusterlevel-features'], load_json=True
+        )
+        assert jres.returncode == 0
+        _clusterlevel_features_checks(jres.obj)
 
 
 def _get_obj(value):
     return value.to_simplified()
 
 
+def _api_client(smb_cfg):
+    # alter paths to include python-common
+    import sys
+
+    curr = pathlib.Path('.').absolute()
+    while curr.parent != pathlib.Path('/'):
+        pcomm = curr / 'src/python-common'
+        if pcomm.is_dir():
+            sys.path.append(str(pcomm))
+            break
+        curr = curr.parent
+
+    # import the needed packges
+    try:
+        import ceph.smb.ctl.client as rclient
+        import ceph.smb.ctl.config as rconfig
+    except ImportError:
+        pytest.skip('failed to import ceph.smb.ctl.client OR dependency')
+
+    # set up a grpc client w/in the test
+    grpc_host = f"{smb_cfg.server.ip_address}:54445"
+    ca_dir = pathlib.Path(smb_cfg.testdir) / 'ca'
+    tls_cert = ca_dir / 'remote-control-client.crt'
+    tls_key = ca_dir / 'remote-control-client.key'
+    tls_ca_cert = ca_dir / 'rcroot.crt'
+    assert tls_cert.is_file()
+    assert tls_key.is_file()
+    assert tls_ca_cert.is_file()
+
+    cc = rconfig.Config(
+        address=grpc_host,
+        channel_type=rconfig.ChannelType.SECURE,
+        tls_cert=rconfig.TLSPath.create(tls_cert),
+        tls_key=rconfig.TLSPath.create(tls_key),
+        tls_ca_cert=rconfig.TLSPath.create(tls_ca_cert),
+    )
+    return rclient.Client(cc)
+
+
 @pytest.mark.ceph_smb_ctl_remote
 class TestCephSMBCtlAPI:
     def _client(self, smb_cfg):
-        # alter paths to include python-common
-        import sys
-
-        curr = pathlib.Path('.').absolute()
-        while curr.parent != pathlib.Path('/'):
-            pcomm = curr / 'src/python-common'
-            if pcomm.is_dir():
-                sys.path.append(str(pcomm))
-                break
-            curr = curr.parent
-
-        # import the needed packges
-        try:
-            import ceph.smb.ctl.client as rclient
-            import ceph.smb.ctl.config as rconfig
-        except ImportError:
-            pytest.skip('failed to import ceph.smb.ctl.client OR dependency')
-
-        # set up a grpc client w/in the test
-        grpc_host = f"{smb_cfg.server.ip_address}:54445"
-        ca_dir = pathlib.Path(smb_cfg.testdir) / 'ca'
-        tls_cert = ca_dir / 'remote-control-client.crt'
-        tls_key = ca_dir / 'remote-control-client.key'
-        tls_ca_cert = ca_dir / 'rcroot.crt'
-        assert tls_cert.is_file()
-        assert tls_key.is_file()
-        assert tls_ca_cert.is_file()
-
-        cc = rconfig.Config(
-            address=grpc_host,
-            channel_type=rconfig.ChannelType.SECURE,
-            tls_cert=rconfig.TLSPath.create(tls_cert),
-            tls_key=rconfig.TLSPath.create(tls_key),
-            tls_ca_cert=rconfig.TLSPath.create(tls_ca_cert),
-        )
-        return rclient.Client(cc)
+        return _api_client(smb_cfg)
 
     def test_get_info(self, smb_cfg):
         obj = _get_obj(self._client(smb_cfg).info())
@@ -283,3 +393,27 @@ class TestCephSMBCtlAPI:
                 break
 
         assert changed, "config digest never changed"
+
+
+@pytest.mark.ceph_smb_ctl_ctdb
+class TestCephSMBCtlAPICtdb:
+    def test_ctdb_status(self, smb_cfg):
+        obj = _get_obj(_api_client(smb_cfg).ctdb_status())
+        _ctdb_status_checks(obj)
+
+    def test_get_active_cluster_level(self, smb_cfg):
+        obj = _get_obj(_api_client(smb_cfg).get_active_cluster_level())
+        assert 'major' in obj
+        assert 'minor' in obj
+
+    def test_get_cluster_level_details(self, smb_cfg):
+        obj = _get_obj(_api_client(smb_cfg).get_cluster_level_details())
+        _clusterlevel_showall_checks(obj)
+
+    def test_upgrade_cluster_level_dry_run(self, smb_cfg):
+        obj = _get_obj(_api_client(smb_cfg).upgrade_cluster_level())
+        _clusterlevel_upgrade_checks(obj)
+
+    def test_get_cluster_level_features(self, smb_cfg):
+        obj = _get_obj(_api_client(smb_cfg).get_cluster_level_features())
+        _clusterlevel_features_checks(obj)
