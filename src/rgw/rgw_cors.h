@@ -19,7 +19,7 @@
 #include <string>
 #include <include/types.h>
 #include "include/encoding.h" // for WRITE_CLASS_ENCODER()
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #define RGW_CORS_GET    0x1
 #define RGW_CORS_PUT    0x2
@@ -173,7 +173,7 @@ static inline uint8_t get_multi_cors_method_flags(const char *req_meth) {
     else if (method == "HEAD") flags |= RGW_CORS_HEAD;
     else if (method == "COPY") flags |= RGW_CORS_COPY;
   };
-  ceph::for_each_substr(allowed_methods, ";,= \t", apply_flag);
+  ceph::for_each_substr(allowed_methods, apply_flag);
 
   return flags;
 }
