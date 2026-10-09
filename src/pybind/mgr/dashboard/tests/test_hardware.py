@@ -5,6 +5,36 @@ from ..exceptions import DashboardException
 from ..services.hardware import STATUS_CRITICAL, STATUS_OK, STATUS_UNKNOWN, \
     STATUS_WARNING, HardwareService
 
+# mirrors NodeProxyCache.data[host] shape.
+MOCK_HOST_BLOB = {
+    'host': 'host1',
+    'sn': 'ABC123',
+    'status': {
+        'storage': {
+            '1': {
+                'disk-0': {'status': {'health': 'OK'}},
+                'disk-1': {'status': {'health': 'Critical'}},
+            }
+        },
+        'fans': {
+            '1': {
+                'fan-0': {'status': {'health': 'OK'}},
+                'fan-1': {'status': {'health': 'Warning'}},
+            }
+        },
+        'processors': {'1': {'cpu-0': {'status': {'health': 'OK'}}}},
+        'memory':     {'1': {'dimm-0': {'status': {'health': 'OK'}}}},
+        'network':    {'1': {'nic-0': {'status': {'health': 'OK'}}}},
+        'power':      {'1': {'psu-0': {'status': {'health': 'OK'}}}},
+        'temperatures': {'1': {'temp-0': {'status': {'health': 'OK'}}}},
+    },
+    'firmware': {
+        'id-bmc':  {'name': 'BMC',  'version': '2.14'},
+        'id-bios': {'name': 'BIOS', 'version': '1.8.3'},
+        'id-lc':   {'name': 'Lifecycle Controller', 'version': 'unknown'},
+    }
+}
+
 MOCK_HARDWARE_DATA = {
     'memory': {
         'host1': {
@@ -314,3 +344,121 @@ class HardwareGetSummaryTest(unittest.TestCase):
         self.assertEqual(cat['ok'], 1)
         self.assertEqual(cat['warn'], 1)
         self.assertEqual(cat['critical'], 1)
+
+
+class HardwareGetHostsTest(unittest.TestCase):
+    def _make_mock_client(self, hostnames, blobs):
+        """
+        Build a mock OrchClient where:
+          hardware.list_hosts() returns hostnames
+          hardware.fullreport(hostname=h) returns { h: blobs[h] }
+        """
+        fake_client = mock.Mock()
+        fake_client.hardware.list_hosts.return_value = hostnames
+        fake_client.hardware.fullreport.side_effect = (
+            lambda hostname: {hostname: blobs.get(hostname, {})}
+        )
+        return fake_client
+
+    @mock.patch('dashboard.services.hardware.OrchClient.instance')
+    def test_response_shape(self, mock_instance):
+        mock_instance.return_value = self._make_mock_client(
+            ['host1'], {'host1': MOCK_HOST_BLOB}
+        )
+        result = HardwareService.get_hosts(page=1, per_page=10)
+        self.assertIn('hosts', result)
+        self.assertIn('total', result)
+        self.assertIn('page', result)
+        self.assertIn('per_page', result)
+
+    @mock.patch('dashboard.services.hardware.OrchClient.instance')
+    def test_host_summary_fields(self, mock_instance):
+        mock_instance.return_value = self._make_mock_client(
+            ['host1'], {'host1': MOCK_HOST_BLOB}
+        )
+        result = HardwareService.get_hosts(page=1, per_page=10)
+        host = result['hosts'][0]
+        self.assertEqual(host['hostname'], 'host1')
+        self.assertEqual(host['sn'], 'ABC123')
+        self.assertIn('health', host)
+        self.assertIn('storage', host)
+        self.assertIn('fans', host)
+        self.assertIn('firmware', host)
+
+    @mock.patch('dashboard.services.hardware.OrchClient.instance')
+    def test_storage_counts(self, mock_instance):
+        # storage has 1 OK + 1 Critical -> storage.critical=1, health=Critical
+        mock_instance.return_value = self._make_mock_client(
+            ['host1'], {'host1': MOCK_HOST_BLOB}
+        )
+        result = HardwareService.get_hosts(page=1, per_page=10)
+        storage = result['hosts'][0]['storage']
+        self.assertEqual(storage['total'], 2)
+        self.assertEqual(storage['ok'], 1)
+        self.assertEqual(storage['critical'], 1)
+        self.assertEqual(storage['health'], STATUS_CRITICAL)
+
+    @mock.patch('dashboard.services.hardware.OrchClient.instance')
+    def test_fans_counts(self, mock_instance):
+        # fans has 1 OK + 1 Warning -> fans.health=Warning
+        mock_instance.return_value = self._make_mock_client(
+            ['host1'], {'host1': MOCK_HOST_BLOB}
+        )
+        result = HardwareService.get_hosts(page=1, per_page=10)
+        fans = result['hosts'][0]['fans']
+        self.assertEqual(fans['total'], 2)
+        self.assertEqual(fans['ok'], 1)
+        self.assertEqual(fans['warning'], 1)
+        self.assertEqual(fans['health'], STATUS_WARNING)
+
+    @mock.patch('dashboard.services.hardware.OrchClient.instance')
+    def test_firmware_skips_unknown_version(self, mock_instance):
+        # 'Lifecycle Controller' has version='unknown' — should be excluded
+        mock_instance.return_value = self._make_mock_client(
+            ['host1'], {'host1': MOCK_HOST_BLOB}
+        )
+        result = HardwareService.get_hosts(page=1, per_page=10)
+        fw = result['hosts'][0]['firmware']
+        self.assertIn('BMC', fw)
+        self.assertIn('BIOS', fw)
+        self.assertNotIn('Lifecycle Controller', fw)
+        self.assertEqual(fw['BMC'], '2.14')
+
+    @mock.patch('dashboard.services.hardware.OrchClient.instance')
+    def test_overall_health_worst_wins(self, mock_instance):
+        # storage has Critical -> overall host health must be Critical
+        mock_instance.return_value = self._make_mock_client(
+            ['host1'], {'host1': MOCK_HOST_BLOB}
+        )
+        result = HardwareService.get_hosts(page=1, per_page=10)
+        self.assertEqual(result['hosts'][0]['health'], STATUS_CRITICAL)
+
+    @mock.patch('dashboard.services.hardware.OrchClient.instance')
+    def test_pagination_total(self, mock_instance):
+        # 3 hosts, page=1 per_page=2 -> total=3, 2 hosts returned
+        blobs = {f'host{i}': {**MOCK_HOST_BLOB, 'host': f'host{i}'} for i in range(3)}
+        mock_instance.return_value = self._make_mock_client(
+            list(blobs.keys()), blobs
+        )
+        result = HardwareService.get_hosts(page=1, per_page=2)
+        self.assertEqual(result['total'], 3)
+        self.assertEqual(len(result['hosts']), 2)
+        self.assertEqual(result['page'], 1)
+        self.assertEqual(result['per_page'], 2)
+
+    @mock.patch('dashboard.services.hardware.OrchClient.instance')
+    def test_pagination_second_page(self, mock_instance):
+        # 3 hosts, page=2 per_page=2 -> 1 host on second page
+        blobs = {f'host{i}': {**MOCK_HOST_BLOB, 'host': f'host{i}'} for i in range(3)}
+        mock_instance.return_value = self._make_mock_client(
+            list(blobs.keys()), blobs
+        )
+        result = HardwareService.get_hosts(page=2, per_page=2)
+        self.assertEqual(len(result['hosts']), 1)
+
+    @mock.patch('dashboard.services.hardware.OrchClient.instance')
+    def test_empty_cluster(self, mock_instance):
+        mock_instance.return_value = self._make_mock_client([], {})
+        result = HardwareService.get_hosts(page=1, per_page=10)
+        self.assertEqual(result['total'], 0)
+        self.assertEqual(result['hosts'], [])

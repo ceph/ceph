@@ -351,6 +351,10 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def node_proxy_list_hosts(self) -> OrchResult[List[str]]:
+        """Return hostnames that have reported node-proxy data."""
+        raise NotImplementedError()
+
     def node_proxy_summary(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
         """
         Return node-proxy summary
