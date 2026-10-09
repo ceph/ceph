@@ -28,7 +28,7 @@ from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 from ceph.cephadm.version_entry import UpgradeStatus
 
-from mgr_module import MonCommandFailed
+from mgr_module import HandleCommandResult, MonCommandFailed
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -1047,9 +1047,76 @@ class CephadmUpgrade:
             return True
         return False
 
+    def _osd_ok_to_stop_peers(
+            self,
+            d: DaemonDescription,
+            need_upgrade: List[Tuple[DaemonDescription, bool]],
+            target_image: str,
+    ) -> List[str]:
+        """
+        Return the ids of the other OSDs on the same host as *d* that still
+        need to be upgraded, sorted by OSD id.
+
+        ``osd ok-to-stop --max N`` grows the requested set by walking up the
+        CRUSH tree and adding sibling OSDs in ascending id order, without
+        knowing which of them already run the target image. When it is seeded
+        with a single OSD, the batch it returns is mostly made of the
+        lowest-numbered OSDs under the same parent, which are already upgraded
+        after the first pass. Each later pass then upgrades a single OSD.
+        Seeding it with the OSDs that are still pending on the same host keeps
+        the batch made of OSDs that actually need to be upgraded.
+        """
+        peers: List[DaemonDescription] = []
+        for dd, _ in need_upgrade:
+            if (
+                dd.daemon_type != 'osd'
+                or dd.daemon_id is None
+                or dd.daemon_id == d.daemon_id
+                or dd.hostname != d.hostname
+            ):
+                continue
+            # skipped by _to_upgrade(), see there
+            if not dd.container_image_id and dd.container_image_name == target_image:
+                continue
+            if not self.is_osd_upgrade_valid_for_failure_domain(dd):
+                continue
+            peers.append(dd)
+
+        def _osd_id_key(dd: DaemonDescription) -> Tuple[int, str]:
+            assert dd.daemon_id is not None
+            return (int(dd.daemon_id), '') if dd.daemon_id.isdigit() else (-1, dd.daemon_id)
+
+        return [cast(str, dd.daemon_id) for dd in sorted(peers, key=_osd_id_key)]
+
+    def _osd_ok_to_stop_batch(
+            self,
+            s: DaemonDescription,
+            peers: List[str],
+            known: Optional[List[str]] = None,  # NOTE: output argument!
+    ) -> HandleCommandResult:
+        """
+        Run ``osd ok-to-stop`` on *s* together with *peers*, capped at
+        ``max_parallel_osd_upgrades``. If the whole set cannot be stopped,
+        drop peers from the end until it can, or until only *s* is left.
+        """
+        assert s.daemon_id is not None
+        limit = max(1, self.mgr.max_parallel_osd_upgrades)
+        ids = ([s.daemon_id] + [p for p in peers if p != s.daemon_id])[:limit]
+        svc = service_registry.get_service('osd')
+        while True:
+            r = svc.ok_to_stop(ids, known=known, force=True)
+            # -EAGAIN: PGs in unknown state, a smaller set will not help
+            if not r.retval or len(ids) == 1 or r.retval == -errno.EAGAIN:
+                return r
+            logger.debug(
+                f'Upgrade: osd.{",osd.".join(ids)} not ok to stop together '
+                f'({r.stderr}), retrying with {len(ids) - 1} OSD(s)')
+            ids = ids[:-1]
+
     def _wait_for_ok_to_stop(
             self, s: DaemonDescription,
             known: Optional[List[str]] = None,  # NOTE: output argument!
+            peers: Optional[List[str]] = None,
     ) -> bool:
         # only wait a little bit; the service might go away for something
         assert s.daemon_type is not None
@@ -1061,8 +1128,11 @@ class CephadmUpgrade:
 
             # setting force flag to retain old functionality.
             # note that known is an output argument for ok_to_stop()
-            r = service_registry.get_service(daemon_type_to_service(s.daemon_type)).ok_to_stop([
-                s.daemon_id], known=known, force=True)
+            if s.daemon_type == 'osd' and peers:
+                r = self._osd_ok_to_stop_batch(s, peers, known=known)
+            else:
+                r = service_registry.get_service(daemon_type_to_service(s.daemon_type)).ok_to_stop([
+                    s.daemon_id], known=known, force=True)
 
             if not r.retval:
                 logger.info(f'Upgrade: {r.stdout}')
@@ -1722,8 +1792,10 @@ class CephadmUpgrade:
                         continue
                 else:
                     # NOTE: known_ok_to_stop is an output argument for
-                    # _wait_for_ok_to_stop
-                    if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
+                    # _wait_for_ok_to_stop. Seed ok-to-stop with the OSDs
+                    # still pending on the same host, see _osd_ok_to_stop_peers.
+                    peers = self._osd_ok_to_stop_peers(d, need_upgrade, target_image)
+                    if not self._wait_for_ok_to_stop(d, known_ok_to_stop, peers=peers):
                         return False, to_upgrade
 
             if d.daemon_type == 'mon' and self._enough_mons_for_ok_to_stop():
