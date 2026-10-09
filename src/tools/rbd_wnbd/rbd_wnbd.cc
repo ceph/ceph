@@ -18,6 +18,7 @@
 #include "include/int_types.h"
 
 #include <atomic>
+#include <iomanip>  // for std::quoted
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
