@@ -46,7 +46,6 @@ export class RgwBucketDetailsComponent implements OnChanges {
     };
     const result = this.xmlService.parse(xml);
     if (result) {
-
       const xmlGrantees: any = result['AccessControlPolicy']['AccessControlList']['Grant'];
       if (Array.isArray(xmlGrantees)) {
         for (let i = 0; i < xmlGrantees.length; i++) {
