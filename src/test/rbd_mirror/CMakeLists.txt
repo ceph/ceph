@@ -61,6 +61,7 @@ target_link_libraries(unittest_rbd_mirror
   rbd_mirror_types
   rbd_api
   rbd_internal
+  rbd_asio_context_wq
   rbd_test_mock
   journal
   journal_test_mock
@@ -85,6 +86,7 @@ target_link_libraries(ceph_test_rbd_mirror
   rbd_mirror_types
   rbd_api
   rbd_internal
+  rbd_asio_context_wq
   journal
   cls_rbd_client
   cls_journal_client
