@@ -381,10 +381,21 @@ struct PrimaryActive : ScrubState<PrimaryActive, ScrubMachine, AwaitScrub> {
 
   using reactions = boost::mpl::list<
     sc::transition<events::reset_t, Inactive>,
+    sc::custom_reaction<events::primary_activate_t>,
     sc::custom_reaction<events::start_scrub_t>,
     sc::custom_reaction<events::op_stats_t>,
     sc::transition< boost::statechart::event_base, Crash >
     >;
+
+  /* PG::on_clean() fires primary_activate_t every time the PG enters
+   * Started/Primary/Active/Clean, and within one interval that can happen
+   * more than once: Clean accepts DoRecovery, so a repair (PG::repair_object)
+   * takes the PG back through Recovering and into Clean again. Nothing
+   * changed for the scrubber, so ignore the repeat, as classic's ScrubMachine
+   * does by leaving PrimaryActivate unconsumed in PrimaryActive. */
+  sc::result react(const events::primary_activate_t &) {
+    return discard_event();
+  }
 
   sc::result react(const events::start_scrub_t &event) {
     return discard_event();
