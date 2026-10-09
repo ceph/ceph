@@ -64,7 +64,8 @@ int write_stats(const DoutPrefixProvider* dpp,
                 optional_yield y,
                 librados::Rados& rados,
                 const rgw_raw_obj& obj,
-                const RGWBucketEnt& bucket);
+                const RGWBucketEnt& bucket,
+                const std::optional<std::unordered_map<std::string, RGWBucketEnt>>* storage_class_ents = nullptr);
 
 /// Read the total usage stats of all buckets.
 int read_stats(const DoutPrefixProvider* dpp,
@@ -73,7 +74,8 @@ int read_stats(const DoutPrefixProvider* dpp,
                const rgw_raw_obj& obj,
                RGWStorageStats& stats,
                ceph::real_time* last_synced,
-               ceph::real_time* last_updated);
+               ceph::real_time* last_updated,
+               std::optional<std::unordered_map<std::string, RGWStorageStats>>* sc_stats = nullptr);
 
 /// Read the total usage stats of all buckets asynchronously.
 int read_stats_async(const DoutPrefixProvider* dpp,
