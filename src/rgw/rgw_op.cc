@@ -6385,6 +6385,69 @@ int RGWCopyObj::init_processing(optional_yield y)
   return 0;
 }
 
+static void preserve_copy_source_storage_class(const DoutPrefixProvider* dpp,
+                                               req_state* s, rgw::sal::Driver* driver,
+                                               rgw_placement_rule& src_placement)
+{
+  if (!s->cct->_conf.get_val<bool>("rgw_copy_obj_preserve_source_storage_class")) {
+    return;
+  }
+  if (s->dialect != "s3" || s->system_request ||
+      s->info.env->exists("HTTP_X_AMZ_STORAGE_CLASS") ||
+      !s->info.storage_class.empty() ||
+      !s->penv.site->get_zonegroup().equals(s->bucket->get_info().zonegroup)) {
+    return;
+  }
+  const auto& src_attrs = s->src_object->get_attrs();
+  if (src_attrs.count(RGW_ATTR_CLOUDTIER_STORAGE_CLASS)) {
+    return;
+  }
+
+  rgw_placement_rule source_rule = src_placement;
+  auto manifest_attr = src_attrs.find(RGW_ATTR_MANIFEST);
+  if (manifest_attr != src_attrs.end()) {
+    RGWObjManifest manifest;
+    try {
+      decode(manifest, manifest_attr->second);
+    } catch (const buffer::error& error) {
+      ldpp_dout(dpp, 1) << "not preserving source storage class: "
+                        << "failed to decode manifest: " << error.what() << dendl;
+      return;
+    }
+    if (manifest.is_tier_type_s3()) { // not cloud-s3 or cloud-s3-glacier
+      return;
+    }
+    if (source_rule.storage_class.empty()) {
+      source_rule = manifest.get_tail_placement().placement_rule;
+    }
+  }
+
+  if (source_rule.empty()) {
+    source_rule = s->src_object->get_bucket()->get_placement_rule();
+  }
+
+  rgw_placement_rule dest_placement = s->dest_placement;
+  dest_placement.storage_class = source_rule.get_storage_class();
+  if (!driver->valid_placement(dest_placement)) {
+    ldpp_dout(dpp, 1) << "not preserving source storage class: "
+                      << dest_placement.to_str()
+                      << " is not valid for the destination" << dendl;
+    return;
+  }
+
+  std::unique_ptr<rgw::sal::PlacementTier> tier;
+  const int ret = driver->get_zone()->get_zonegroup().get_placement_tier(dest_placement, &tier);
+  if ((ret < 0 && ret != -ENOENT) || (tier && tier->is_tier_type_s3())) {
+    ldpp_dout(dpp, 1) << "not preserving source storage class: "
+                      << dest_placement.to_str()
+                      << " is not a supported local copy destination" << dendl;
+    return;
+  }
+
+  src_placement.storage_class = dest_placement.storage_class;
+  s->dest_placement = std::move(dest_placement);
+}
+
 int RGWCopyObj::verify_permission(optional_yield y)
 {
   RGWAccessControlPolicy src_acl;
@@ -6404,6 +6467,8 @@ int RGWCopyObj::verify_permission(optional_yield y)
     if (op_ret < 0) {
       return op_ret;
     }
+
+    preserve_copy_source_storage_class(this, s, driver, src_placement);
 
     /* follow up on previous checks that required reading source object head */
     if (need_to_check_storage_class) {
