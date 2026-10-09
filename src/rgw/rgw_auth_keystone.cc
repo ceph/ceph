@@ -1,7 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <errno.h>
@@ -31,6 +34,115 @@ using namespace std;
 namespace rgw {
 namespace auth {
 namespace keystone {
+
+bool
+path_matches_pattern(const std::string_view pattern, const std::string_view path)
+{
+  size_t pi = 0, si = 0;
+  size_t star_pi = std::string::npos, star_si = 0;
+  size_t dstar_pi = std::string::npos, dstar_si = 0;
+
+  while (si < path.size()) {
+    if (pi + 1 < pattern.size() && pattern[pi] == '*' &&
+        pattern[pi + 1] == '*') {
+      dstar_pi = pi;
+      dstar_si = si;
+      pi += 2;
+      if (pi < pattern.size() && pattern[pi] == '/')
+        pi++;
+      continue;
+    }
+    if (pi < pattern.size() && pattern[pi] == '*') {
+      star_pi = pi;
+      star_si = si;
+      pi++;
+      continue;
+    }
+
+    if (pi < pattern.size() && pattern[pi] == path[si]) {
+      pi++;
+      si++;
+      continue;
+    }
+    
+    if (dstar_pi != std::string::npos) {
+      pi = dstar_pi + 2;
+      if (pi < pattern.size() && pattern[pi] == '/')
+        pi++;
+      si = ++dstar_si;
+      continue;
+    }
+    // single * only refuses to cross '/' when it's between slashes in pattern
+    bool star_between_slashes = star_pi != std::string::npos &&
+        (star_pi > 0 && pattern[star_pi - 1] == '/') &&
+        (star_pi + 1 < pattern.size() && pattern[star_pi + 1] == '/');
+    if (star_pi != std::string::npos &&
+        (!star_between_slashes || path[star_si] != '/')) {
+      pi = star_pi + 1;
+      si = ++star_si;
+      continue;
+    }
+    return false;
+  }
+  while (pi < pattern.size() && pattern[pi] == '*')
+    pi++;
+  return pi == pattern.size();
+}
+
+/* Build the set of accepted service types from config. Returns an empty set
+ * when the option is unconfigured, which callers treat as "accept all".
+ * Cached and only rebuilt when rgw_keystone_accepted_service_types changes,
+ * since re-splitting it on every request is wasted work. */
+static std::shared_ptr<const std::unordered_set<std::string>>
+build_accepted_service_types(CephContext* const cct)
+{
+  static std::mutex m;
+  static std::string cached_raw;
+  static std::shared_ptr<const std::unordered_set<std::string>> cached;
+
+  std::string accepted_types =
+      cct->_conf.get_val<std::string>("rgw_keystone_accepted_service_types");
+
+  std::lock_guard l{m};
+  if (!cached || accepted_types != cached_raw) {
+    auto result = std::make_shared<std::unordered_set<std::string>>();
+    std::vector<std::string> parsed;
+    get_str_vec(accepted_types, ",", parsed);
+    for (auto& s : parsed) {
+      boost::algorithm::trim(s);
+      if (!s.empty()) {
+        result->insert(std::move(s));
+      }
+    }
+    cached = std::move(result);
+    cached_raw = std::move(accepted_types);
+  }
+  return cached;
+}
+
+bool
+check_access_rules(
+    const DoutPrefixProvider* dpp,
+    const std::vector<rgw::keystone::TokenEnvelope::AccessRule>& rules,
+    std::string_view method,
+    std::string_view path)
+{
+  if (rules.empty()) {
+    return true;
+  }
+
+  for (const auto& rule : rules) {
+    if (rule.method == method && path_matches_pattern(rule.path, path)) {
+      ldpp_dout(dpp, 10) << "Access rule matched: " << rule.method << " "
+                         << rule.path << dendl;
+      return true;
+    }
+  }
+
+  ldpp_dout(dpp, 5) << "No access rule matched for method=" << method
+                    << " path=" << path << dendl;
+  return false;
+}
 
 bool
 TokenEngine::is_applicable(const std::string& token) const noexcept
@@ -70,6 +182,9 @@ admin_token_retry:
   }
 
   validate.append_header("X-Subject-Token", token);
+  if (dpp->get_cct()->_conf.get_val<bool>("rgw_keystone_verify_access_rules")) {
+    validate.append_header("OpenStack-Identity-Access-Rules", "1.0");
+  }
 
   std::string admin_token;
   bool admin_token_cached = false;
@@ -285,6 +400,26 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   if (t) {
     ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
                    << dendl;
+    if (dpp->get_cct()->_conf.get_val<bool>("rgw_keystone_verify_access_rules")) {
+      const auto& raw_rules = t->get_access_rules();
+      const auto accepted_svcs = build_accepted_service_types(dpp->get_cct());
+      std::vector<token_envelope_t::AccessRule> rules_to_check;
+      if (accepted_svcs->empty()) {
+        rules_to_check = raw_rules;
+      } else {
+        for (const auto& rule : raw_rules) {
+          if (accepted_svcs->count(rule.service)) {
+            rules_to_check.push_back(rule);
+          }
+        }
+      }
+      if (!check_access_rules(dpp, rules_to_check, s->info.method, s->decoded_uri)) {
+        ldpp_dout(dpp, 0) << "access rules check failed for cached token, method="
+                          << s->info.method << " path=" << s->decoded_uri
+                          << dendl;
+        return result_t::deny(-EACCES);
+      }
+    }
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t));
     return result_t::grant(std::move(apl));
@@ -395,6 +530,26 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
+      if (dpp->get_cct()->_conf.get_val<bool>("rgw_keystone_verify_access_rules")) {
+        const auto& raw_rules = t->get_access_rules();
+        const auto accepted_svcs = build_accepted_service_types(dpp->get_cct());
+        std::vector<token_envelope_t::AccessRule> rules_to_check;
+        if (accepted_svcs->empty()) {
+          rules_to_check = raw_rules;
+        } else {
+          for (const auto& rule : raw_rules) {
+            if (accepted_svcs->count(rule.service)) {
+              rules_to_check.push_back(rule);
+            }
+          }
+        }
+        if (!check_access_rules(dpp, rules_to_check, s->info.method, s->decoded_uri)) {
+          ldpp_dout(dpp, 0) << "access rules check failed for method="
+                            << s->info.method << " path=" << s->decoded_uri
+                            << dendl;
+          return result_t::deny(-EACCES);
+        }
+      }
       token_cache.add(token_id, *t);
       auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                                 get_creds_info(*t));
