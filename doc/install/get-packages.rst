@@ -1,419 +1,486 @@
 .. _packages:
 
-==============
- Get Packages
-==============
+=======================
+ Getting Ceph Packages
+=======================
 
-To install Ceph and other enabling software, you need to retrieve packages from
-the Ceph repository.
+.. meta::
+   :description: Add the Ceph package repository with cephadm, APT, or DNF, use development builds, or download packages for hosts without internet access.
+   :ceph-page-type: procedure
 
-There are three ways to get packages:
+Set up the Ceph package repository on each :term:`host <Host>`, or download
+the packages. Hosts managed by :term:`cephadm` run the daemons in containers
+and need no Ceph packages; install ``ceph-common`` on them only if you want
+the command-line tools there (see :ref:`cephadm-enable-cli`).
 
-- **Cephadm:** Cephadm can configure your Ceph repositories for you
-  based on a release name or a specific Ceph version.  Each
-  :term:`Ceph Node` in your cluster must have internet access or a local
-  package repository mirror can be used.
+Prerequisites
+=============
 
-- **Configure Repositories Manually:** You can manually configure your
-  package management tool to retrieve Ceph packages and all enabling
-  software.  Each :term:`Ceph Node` in your cluster must have internet
-  access.
+- A distribution that Ceph builds packages for. See :ref:`start-platforms`.
+- The :term:`release <Ceph Release>` that you want, for example
+  |stable-release|, the current :term:`stable release <Ceph Stable Release>`.
+  `Releases`_ lists every release.
+- Root access, or a user with ``sudo``.
+- Access to ``download.ceph.com``, or to a mirror near you; see
+  :ref:`install-mirrors`.
+- For the cephadm route, ``cephadm`` installed as described in
+  :ref:`get-cephadm`.
 
-- **Download Packages Manually:** Downloading packages manually is a convenient
-  way to install Ceph if your environment does not allow a :term:`Ceph Node` to
-  access the internet.
+Procedure
+=========
 
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
 
-Install Packages with Cephadm
-=============================
+   * - Your hosts
+     - Follow
+   * - ``cephadm`` is installed, and you want it to add the repository
+     - `Using Cephadm`_
+   * - Debian or Ubuntu
+     - `Debian and Ubuntu`_
+   * - RHEL, CentOS Stream, Rocky Linux, or another Enterprise Linux (EL)
+       distribution
+     - `RHEL`_
+   * - openSUSE, openEuler, or another distribution that ships its own Ceph
+       packages
+     - `Distribution Packages`_
+   * - A :term:`release candidate <Ceph Release Candidate>` (version x.1.z),
+       which is not a development build
+     - `Debian and Ubuntu`_ or `RHEL`_, with the version or the name of the
+       coming release in place of the release name, for example
+       ``https://download.ceph.com/debian-21.1.1/`` (bookworm, jammy, noble,
+       trixie)
+   * - Unreleased builds, for development and testing
+     - `Development Packages`_
+   * - No internet access
+     - `Downloading Packages Manually`_
 
-#. Install cephadm with the distribution-specific package manager or with curl.
-   For more details, see :ref:`get-cephadm`.
-#. Configure the Ceph repository based on the release name:
+Stable releases and release candidates are signed with the release key,
+``release.asc``; development builds from shaman are not.
+
+.. _install-packages-with-cephadm:
+
+.. _get-packages-cephadm:
+
+Using Cephadm
+-------------
+
+.. warning:: ``cephadm add-repo`` replaces ``/etc/yum.repos.d/ceph.repo`` on
+   EL, or ``/etc/apt/sources.list.d/ceph.list`` and
+   ``/etc/apt/trusted.gpg.d/ceph.release.gpg`` on Debian and Ubuntu, without
+   keeping a copy. Copy these files first if you have changed them. On EL, the
+   command also installs the ``epel-release`` package.
+
+#. Add the repository for the release:
 
    .. prompt:: bash #
       :substitutions:
 
       cephadm add-repo --release |stable-release|
 
-   For Octopus (15.2.0) and later releases, you can also specify a specific
-   version:
+   ``Completed adding repo.`` is the last line of the output; on EL,
+   ``Enabling EPEL...`` appears before it. To pin a specific release instead,
+   give ``--version`` and the version in x.y.z form, for example
+   ``cephadm add-repo --version 20.2.4``.
 
-   .. prompt:: bash #
+#. On EL, enable the CRB repository as in steps 3 and 4 of `RHEL`_. Some
+   dependencies come from it: on EL 10, ``ceph-common`` needs ``lttng-ust``.
 
-      cephadm add-repo --version 15.2.1
-
-   For development packages, you can specify a specific branch name:
-
-   .. prompt:: bash #
-
-      cephadm add-repo --dev my-branch
-
-#. Install the appropriate packages.  You can install them using your
-   package management tool (e.g., APT, Yum) directly, or you can
-   use the cephadm wrapper command.  For example:
+#. Install the command-line tools:
 
    .. prompt:: bash #
 
       cephadm install ceph-common
 
+   On success, ``Installing packages ['ceph-common']...`` is the last line of
+   the output, and the output of the package manager goes to
+   ``/var/log/ceph/cephadm.log``. If the package manager fails, cephadm
+   prints ``Non-zero exit code``, the command that failed, and its output.
 
-Configure Repositories Manually
-===============================
+.. _configure-repositories-manually:
 
-All Ceph deployments require Ceph packages (except for development). You should
-also add keys and recommended packages.
+.. _ceph-release-packages:
 
-- **Keys: (Recommended)** Whether you add repositories or download packages
-  manually, you should download keys to verify the packages. If you do not get
-  the keys, you may encounter security warnings.
+.. _debian-packages:
 
-- **Ceph: (Required)** All Ceph deployments require Ceph release packages,
-  except for deployments that use development packages (development, QA, and
-  bleeding edge deployments only).
+Debian and Ubuntu
+-----------------
 
-- **Ceph Development: (Optional)** If you are developing for Ceph, testing Ceph
-  development builds, or if you want features from the bleeding edge of Ceph
-  development, you may get Ceph development packages.
+APT finds Ceph in ``https://download.ceph.com/debian-{release-name}/``.
 
+#. Install the release key, which APT uses to check package signatures:
 
+   .. prompt:: bash $
 
-Add Keys
---------
+      wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo tee /etc/apt/trusted.gpg.d/ceph.asc
 
-Add a key to your system's list of trusted keys to avoid a security warning. For
-major releases (e.g., ``luminous``, ``mimic``, ``nautilus``) and development releases
-(``release-name-rc1``, ``release-name-rc2``), use the ``release.asc`` key.
+   ``tee`` prints the key, a PGP public key block.
 
+#. Add the repository.
 
-APT
-~~~
+   .. warning:: This command replaces ``/etc/apt/sources.list.d/ceph.list``,
+      including any entry for another Ceph release.
 
-To install the ``release.asc`` key, execute the following:
+   .. prompt:: bash $
+      :substitutions:
 
-.. prompt:: bash $
+      echo "deb https://download.ceph.com/debian-|stable-release|/ $(. /etc/os-release && echo $VERSION_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ceph.list
 
-   wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo tee /etc/apt/trusted.gpg.d/ceph.asc
+   ``tee`` prints the line that it wrote. The command reads the codename of
+   your distribution release, such as ``noble`` or ``bookworm``, from
+   ``/etc/os-release``. For an earlier release, replace the release name in
+   the URL. To pin a specific release, use ``debian-{version}`` instead, for
+   example ``debian-20.2.4``.
 
+#. Update the package index:
 
-RPM
-~~~
+   .. prompt:: bash $
 
-To install the ``release.asc`` key, execute the following:
+      sudo apt-get update
 
-.. prompt:: bash $
+   The output includes a line for ``download.ceph.com`` and no error lines,
+   which start with ``E:``.
 
-   sudo rpm --import 'https://download.ceph.com/keys/release.asc'
+.. _rpm-packages:
 
-
-Ceph Release Packages
----------------------
-
-Release repositories use the ``release.asc`` key to verify packages.
-To install Ceph packages with the Advanced Package Tool (APT) or
-Yellowdog Updater, Modified (YUM), you must add Ceph repositories.
-
-You may find releases for Debian/Ubuntu (installed with APT) at::
-
-    https://download.ceph.com/debian-{release-name}
-
-You may find releases for CentOS/RHEL and others (installed with YUM) at::
-
-    https://download.ceph.com/rpm-{release-name}
-
-For Octopus and later releases, you can also configure a repository for a
-specific version ``x.y.z``.  For Debian/Ubuntu packages::
-
-    https://download.ceph.com/debian-{version}
-
-For RPMs::
-
-    https://download.ceph.com/rpm-{version}
-
-The major releases of Ceph are summarized at: `Releases`_
-
-.. tip:: For non-US users: There might be a mirror close to you where
-         to download Ceph from. For more information see: :ref:`install-mirrors`.
-
-Debian Packages
-~~~~~~~~~~~~~~~
-
-Add a Ceph package repository to your system's list of APT sources. For newer
-versions of Debian/Ubuntu, call ``lsb_release -sc`` on the command line to
-get the short codename, and replace ``{codename}`` in the following command.
-
-.. prompt:: bash $
-   :substitutions:
-
-   sudo apt-add-repository 'deb https://download.ceph.com/debian-|stable-release|/ {codename} main'
-
-For early Linux distributions, you may execute the following command
-
-.. prompt:: bash $
-   :substitutions:
-
-   echo deb https://download.ceph.com/debian-|stable-release|/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
-
-For earlier Ceph releases, replace ``{release-name}`` with the name  with the
-name of the Ceph release. You may call ``lsb_release -sc`` on the command  line
-to get the short codename, and replace ``{codename}`` in the following command.
-
-.. prompt:: bash $
-
-   sudo apt-add-repository 'deb https://download.ceph.com/debian-{release-name}/ {codename} main'
-
-For older Linux distributions, replace ``{release-name}`` with the name of the
-release
-
-.. prompt:: bash $
-
-   echo deb https://download.ceph.com/debian-{release-name}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
-
-For development release packages, add our package repository to your system's
-list of APT sources.  See `the testing Debian repository`_ for a complete list
-of Debian and Ubuntu releases supported.
-
-.. prompt:: bash $
-
-   echo deb https://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
-
-.. tip:: For non-US users: There might be a mirror close to you where
-         to download Ceph from. For more information see: :ref:`install-mirrors`.
-
-
-RPM Packages
-~~~~~~~~~~~~
+.. _get-packages-rhel:
 
 RHEL
-^^^^
+----
 
-For major releases, you may add a Ceph entry to the ``/etc/yum.repos.d``
-directory. Create a ``ceph.repo`` file. In the example below, replace
-``{ceph-release}`` with  a major release of Ceph (e.g., "|stable-release|")
-and ``{distro}`` with your Linux distribution (e.g., ``el9``, etc.).  You
-may view ``https://download.ceph.com/rpm-{ceph-release}/`` directory to see which
-distributions Ceph supports. Some Ceph packages (e.g., EPEL) must take priority
-over standard packages, so you must ensure that you set
-``priority=2``.
+These steps apply to RHEL and the other Enterprise Linux (EL) distributions,
+such as CentOS Stream and Rocky Linux. Their package manager is DNF; ``yum``
+still works as an alias of ``dnf``.
 
-.. code-block:: ini
+#. Import the release key:
 
-    [ceph]
-    name=Ceph packages for $basearch
-    baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/$basearch
-    enabled=1
-    priority=2
-    gpgcheck=1
-    gpgkey=https://download.ceph.com/keys/release.asc
+   .. prompt:: bash $
 
-    [ceph-noarch]
-    name=Ceph noarch packages
-    baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
-    enabled=1
-    priority=2
-    gpgcheck=1
-    gpgkey=https://download.ceph.com/keys/release.asc
+      sudo rpm --import 'https://download.ceph.com/keys/release.asc'
 
-    [ceph-source]
-    name=Ceph source packages
-    baseurl=https://download.ceph.com/rpm-{ceph-release}/{distro}/SRPMS
-    enabled=0
-    priority=2
-    gpgcheck=1
-    gpgkey=https://download.ceph.com/keys/release.asc
+   The command prints nothing on success.
 
+#. Enable EPEL (Extra Packages for Enterprise Linux), a Fedora project
+   repository that supplies dependencies such as ``gperftools-libs``. Replace
+   ``{distro_release}`` with the major version of your distribution, for
+   example ``10`` for EL 10:
 
-For specific packages, you may retrieve them by downloading the release package
-by name. Our development process generates a new release of Ceph every 3-4
-weeks. These packages are faster-moving than the major releases.  Development
-packages have new features integrated quickly, while still undergoing several
-weeks of QA prior to release.
+   .. prompt:: bash $
 
-The repository package installs the repository details on your local system for
-use with ``yum``. Replace ``{distro}`` with your Linux distribution,
-``{ceph-release}`` with the specific release of Ceph, and ``{version}``
-with the latest repository package version number.
+      sudo dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-{distro_release}.noarch.rpm
 
-.. prompt:: bash $
+   The output recommends enabling the CodeReady Builder (CRB) repository,
+   which step 4 does; ``Complete!`` is its last line.
 
-   su -c 'rpm -Uvh https://download.ceph.com/rpm-{ceph-release}/{distro}/noarch/ceph-release-{version}.{distro}.noarch.rpm'
+#. Install the ``config-manager`` command of DNF:
 
-You can download the RPMs directly from:
+   .. prompt:: bash $
 
-.. code-block:: none
+      sudo dnf install -y dnf-plugins-core
 
-   https://download.ceph.com/rpm-{ceph-release}/{distro}/{arch}/
+   ``Complete!`` is the last line of the output.
 
-For example:
+#. Enable the CRB repository, which supplies other dependencies, such as
+   ``lua-devel`` and, on EL 10, ``lttng-ust``. On RHEL itself, run
+   ``sudo crb enable`` instead of the command below: this helper from the
+   ``epel-release`` package enables the repository through
+   ``subscription-manager``.
 
-.. code-block:: none
-   :substitutions:
+   .. prompt:: bash $
 
-   https://download.ceph.com/rpm-|stable-release|/el10/x86_64/
+      sudo dnf config-manager --set-enabled crb
 
-.. tip:: For non-US users: There might be a mirror close to you where
-         to download Ceph from. For more information see: :ref:`install-mirrors`.
+   The command prints nothing on success.
 
+#. Create the file ``/etc/yum.repos.d/ceph.repo`` with the following content,
+   replacing ``{distro}`` with ``el9`` or ``el10``.
 
-openSUSE Leap 15.1
-^^^^^^^^^^^^^^^^^^
+   .. warning:: This replaces an existing ``ceph.repo``, such as one written
+      by ``cephadm add-repo`` or by the ``ceph-release`` package.
 
-You need to add the Ceph package repository to your list of zypper sources. This can be done with the following command
+   .. code-block:: ini
+      :substitutions:
 
-.. prompt:: bash #
+      [ceph]
+      name=Ceph packages for $basearch
+      baseurl=https://download.ceph.com/rpm-|stable-release|/{distro}/$basearch
+      enabled=1
+      priority=2
+      gpgcheck=1
+      gpgkey=https://download.ceph.com/keys/release.asc
 
-   zypper ar https://download.opensuse.org/repositories/filesystems:/ceph/openSUSE_Leap_15.1/filesystems:ceph.repo
+      [ceph-noarch]
+      name=Ceph noarch packages
+      baseurl=https://download.ceph.com/rpm-|stable-release|/{distro}/noarch
+      enabled=1
+      priority=2
+      gpgcheck=1
+      gpgkey=https://download.ceph.com/keys/release.asc
 
+      [ceph-source]
+      name=Ceph source packages
+      baseurl=https://download.ceph.com/rpm-|stable-release|/{distro}/SRPMS
+      enabled=0
+      priority=2
+      gpgcheck=1
+      gpgkey=https://download.ceph.com/keys/release.asc
 
-openSUSE Tumbleweed
-^^^^^^^^^^^^^^^^^^^
+   Set ``priority=2`` so that packages from the Ceph repository take
+   precedence over the older ``librados2`` and ``librbd1`` packages that the
+   distribution ships: DNF prefers the repository with the lower number, and
+   the default is 99. DNF fills in ``$basearch`` with the CPU architecture;
+   ``noarch`` holds packages for every architecture, and ``SRPMS`` holds
+   source packages.
 
-The newest major release of Ceph is already available through the normal Tumbleweed repositories.
-There's no need to add another package repository manually.
+   For an earlier release, replace the release name in each ``baseurl``. To
+   pin a specific release, use ``rpm-{version}`` instead, for example
+   ``rpm-20.2.4``. ``https://download.ceph.com/rpm-{release-name}/`` lists the
+   distributions that a release is built for.
 
+   Instead of creating the file, you can install the ``ceph-release``
+   package, which writes ``ceph.repo`` for one release and distribution.
 
-openEuler
-^^^^^^^^^
+   .. warning:: The ``ceph-release`` package replaces an existing
+      ``/etc/yum.repos.d/ceph.repo`` without keeping a copy. The file that it
+      writes has no ``priority`` line, uses ``http://`` URLs, and enables the
+      source repository.
 
-Ceph releases are available in the normal openEuler repositories.
-There is no need to add another package repository manually.
-You can install Ceph by executing the following:
+   .. prompt:: bash $
+      :substitutions:
 
-.. prompt:: bash $
+      su -c 'rpm -Uvh https://download.ceph.com/rpm-|stable-release|/el10/noarch/ceph-release-1-1.el10.noarch.rpm'
 
-   sudo yum -y install ceph
+   The output ends with ``ceph-release`` at ``[100%]``. The file name has the
+   form ``ceph-release-{version}.{distro}.noarch.rpm``, and the ``noarch``
+   directory of each release and distribution holds it; for EL 9, use ``el9``
+   in both places.
 
-Also you can download packages manually from ``https://repo.openeuler.org/openEuler-{release}/everything/{arch}/Packages/``.
+.. _opensuse-tumbleweed:
 
+.. _openeuler:
 
-Ceph Development Packages
--------------------------
+Distribution Packages
+---------------------
 
-If you are developing Ceph and need to deploy and test specific Ceph branches,
-ensure that you remove repository entries for major releases first.
+openSUSE Tumbleweed and openEuler ship Ceph packages in their standard
+repositories, so you do not add a repository; install the packages with the
+package manager of the distribution. The Ceph project does not build or test
+these packages; see :ref:`start-platforms`.
 
+#. On openEuler, install Ceph:
 
-DEB Packages
-~~~~~~~~~~~~
+   .. prompt:: bash $
 
-We automatically build Ubuntu packages for current development branches in the
-Ceph source code repository.  These packages are intended for developers and QA
-only.
+      sudo yum -y install ceph
 
-Add the package repository to your system's list of APT sources, but
-replace ``{BRANCH}`` with the branch you'd like to use (e.g.,
-``wip-hack``, ``main``).  See `the shaman page`_ for a complete
-list of distributions we build.
+   ``Complete!`` is the last line of the output. The openEuler packages are
+   also in
+   ``https://repo.openeuler.org/openEuler-{release}/everything/{arch}/Packages/``.
 
-.. prompt:: bash $
+.. _deb-packages:
 
-   curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/ubuntu/$(lsb_release -sc)/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
+.. _ceph-development-packages:
 
-.. note:: If the repository is not ready, an HTTP 504 will be returned.
+Development Packages
+--------------------
 
-The use of ``latest`` in the URL means it will figure out which is the last
-commit that has been built. Alternatively, a specific SHA1 can be specified.
-For Ubuntu Jammy and the ``main`` branch of Ceph, it would look like
+.. warning:: Development packages are untested builds, for developers and
+   quality assurance only. While their repository is configured, the next
+   install or upgrade replaces the installed release with a development build.
+   The commands below replace ``/etc/apt/sources.list.d/shaman.list`` or
+   ``/etc/yum.repos.d/shaman.repo``.
 
-.. prompt:: bash $
+The Ceph CI builds packages for current branches of the Ceph source
+repository; shaman tracks the builds and chacra hosts them. `The shaman page`_
+lists the branches and distributions that are built.
 
-   curl -L https://shaman.ceph.com/api/repos/ceph/main/53e772a45fdf2d211c0c383106a66e1feedec8fd/ubuntu/jammy/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
+#. Remove the release repository file, ``/etc/apt/sources.list.d/ceph.list``
+   or ``/etc/yum.repos.d/ceph.repo``. On EL, its section names are the same as
+   those of the development repository. Afterwards,
+   ``ls /etc/apt/sources.list.d`` or ``ls /etc/yum.repos.d`` does not list
+   the file.
 
+#. Add the repository for the newest build of a branch with the command for
+   your distribution, replacing ``{BRANCH}`` with the branch name, for example
+   ``main`` or ``wip-hack``:
 
-.. warning:: Development repositories are no longer available after two weeks.
+   - Ubuntu:
 
-RPM Packages
-~~~~~~~~~~~~
+     .. prompt:: bash $
 
-For current development branches, you may add a Ceph entry to the
-``/etc/yum.repos.d`` directory. The `the shaman page`_ can be used to retrieve the full details
-of a repo file. It can be retrieved via an HTTP request, for example
+        curl -fsSL https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/ubuntu/$(. /etc/os-release && echo $VERSION_CODENAME)/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
-.. prompt:: bash $
+   - EL 10 (for EL 9, use ``centos/9`` instead of ``rocky/10``):
 
-   curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/rocky/10/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
+     .. prompt:: bash $
 
-The use of ``latest`` in the URL means it will figure out which is the last
-commit that has been built. Alternatively, a specific SHA1 can be specified.
-For EL 10 and the ``main`` branch of Ceph, it would look like
+        curl -fsSL https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/rocky/10/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
 
-.. prompt:: bash $
+   - Ubuntu or EL 9, with cephadm, which writes ``ceph.list`` or
+     ``ceph.repo`` instead (on EL 10, cephadm asks shaman for ``centos/10``,
+     which shaman does not build, so use the ``curl`` command above):
 
-   curl -L https://shaman.ceph.com/api/repos/ceph/main/488e6be0edff7eb18343fd5c7e2d7ed56435888f/rocky/10/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
+     .. prompt:: bash #
 
+        cephadm add-repo --dev {BRANCH}
 
-.. warning:: Development repositories are no longer available after two weeks.
+   ``tee`` prints the repository definition that it wrote. For ``cephadm``,
+   ``Completed adding repo.`` is the last line of the output.
 
-.. note:: If the repository is not ready, an HTTP 504 will be returned.
+   ``latest`` in the URL selects the newest commit of the branch that shaman
+   has built. To use one commit that shaman has built, replace ``latest``
+   with its SHA1, the commit ID in the Ceph Git repository. With cephadm, add
+   ``--dev-commit {SHA1}`` to the ``cephadm add-repo --dev {BRANCH}``
+   command; ``--dev-commit`` alone fails. For example, on Ubuntu 22.04
+   (jammy):
 
-Download Packages Manually
---------------------------
+   .. prompt:: bash $
 
-If you are attempting to install behind a firewall in an environment without internet
-access, you must retrieve the packages (mirrored with all the necessary dependencies)
-before attempting an install.
+      curl -fsSL https://shaman.ceph.com/api/repos/ceph/main/{SHA1}/ubuntu/jammy/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
+   The same works with ``rocky/10`` and ``/etc/yum.repos.d/shaman.repo``.
+   Development repositories are no longer available after two weeks.
 
-Debian Packages
-~~~~~~~~~~~~~~~
+#. If you used ``curl`` on Ubuntu, update the package index, as in step 3 of
+   `Debian and Ubuntu`_. ``cephadm`` does this for you.
 
-The repository package installs the repository details on your local system for
-use with ``apt``. Replace ``{release}`` with the latest Ceph release. Replace
-``{version}`` with the latest Ceph version number. Replace ``{distro}`` with
-your Linux distribution codename. Replace ``{arch}`` with the CPU architecture.
+.. _download-packages-manually:
 
-.. prompt:: bash $
+Downloading Packages Manually
+-----------------------------
 
-   wget -q https://download.ceph.com/debian-{release}/pool/main/c/ceph/ceph_{version}{distro}_{arch}.deb
+For a host without internet access, download the packages, with every
+dependency, on a host that has access, and copy them over. For a cluster that
+cephadm deploys, see :ref:`cephadm-airgap` instead. Copy the release key,
+``https://download.ceph.com/keys/release.asc``, as well, and install it on the
+target host as in step 1 of `Debian and Ubuntu`_ or `RHEL`_; without it, the
+package manager cannot verify the packages and shows security warnings.
 
+- Debian and Ubuntu: to get every package that the host needs, mirror the
+  repository; see :ref:`install-mirrors`. Single package files are in the
+  ``pool`` directory of the repository, and each file name includes the
+  Debian revision (``-1``), the codename, and the architecture. For example,
+  this command downloads only the ``ceph`` metapackage, which depends on the
+  daemon packages:
 
-RPM Packages
-~~~~~~~~~~~~
+  .. prompt:: bash $
 
-Ceph requires additional third party libraries.
-To add the EPEL repository, execute a command of the following form. Replace
-``{distro_release}`` with the major version of your distribution, for example
-``10`` for EL 10.
+     wget -q https://download.ceph.com/debian-20.2.4/pool/main/c/ceph/ceph_20.2.4-1jammy_amd64.deb
 
-.. prompt:: bash $
+  ``wget -q`` prints nothing, even when the download fails. ``ls`` then
+  lists ``ceph_20.2.4-1jammy_amd64.deb``.
 
-   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-{distro_release}.noarch.rpm
+- EL: download the RPMs from the directory of your distribution and
+  architecture and from the ``noarch`` directory beside it, for example:
 
-Packages are built for various RHEL and derivative platforms.
-See :ref:`start-platforms` for more details.  The
-repository package installs the repository details on your local system for use
-with ``yum``. Replace ``{distro}`` with your distribution.
+  .. code-block:: none
+     :substitutions:
 
-.. prompt:: bash $
-   :substitutions:
+     https://download.ceph.com/rpm-|stable-release|/el10/x86_64/
+     https://download.ceph.com/rpm-|stable-release|/el10/noarch/
 
-   su -c 'rpm -Uvh https://download.ceph.com/rpm-|stable-release|/{distro}/noarch/ceph-release-{version}.{distro}.noarch.rpm'
+  The general form is
+  ``https://download.ceph.com/rpm-{release-name}/{distro}/{arch}/``. Download
+  the dependencies from EPEL and CRB as well (steps 2 to 4 of `RHEL`_).
 
-For example, for EL 10 (``el10``)
+Verification
+============
 
-.. prompt:: bash $
-   :substitutions:
+- On Debian and Ubuntu, check where APT gets Ceph from:
 
-   su -c 'rpm -Uvh https://download.ceph.com/rpm-|stable-release|/el10/noarch/ceph-release-1-0.el10.noarch.rpm'
+  .. prompt:: bash $
 
-You can download the RPMs directly from
+     apt-cache policy ceph
 
-.. code-block:: none
-   :substitutions:
+  The ``Candidate`` line shows the Ceph version, for example
+  ``20.2.4-1noble``, and the version table lists it from
+  ``https://download.ceph.com``, or from a ``chacra.ceph.com`` URL for
+  development packages.
 
-   https://download.ceph.com/rpm-|stable-release|
+- On EL, list the enabled repositories:
 
+  .. prompt:: bash $
 
-For earlier Ceph releases, replace ``{release-name}`` with the name
-of the Ceph release and ``{distro}`` with your distribution.
+     dnf repolist
 
-.. prompt:: bash $
+  The output lists the Ceph repositories, for example ``ceph`` and
+  ``ceph-noarch``.
 
-   su -c 'rpm -Uvh https://download.ceph.com/rpm-{release-name}/{distro}/noarch/ceph-release-{version}.{distro}.noarch.rpm'
+- On EL, if you downloaded RPMs by hand, check their signatures on a host
+  that has the release key (step 1 of `RHEL`_):
 
+  .. prompt:: bash $
 
+     rpm -K *.rpm
 
-.. _the testing Debian repository: https://download.ceph.com/debian-testing/dists
+  Each line ends with ``digests signatures OK``.
+
+Troubleshooting
+===============
+
+- **"cephadm: command not found".** ``cephadm`` is not installed, or you
+  downloaded the binary with ``curl``. Install it as described in
+  :ref:`get-cephadm`, or run the binary as ``./cephadm`` from its directory.
+- **"version must be in the form x.y.z (e.g., 15.2.0)".** Give ``--version``
+  a full version, such as ``20.2.4``.
+- **"failed to fetch repository metadata. please check the provided
+  parameters are correct and try again" from cephadm.** On EL, cephadm found
+  no repository for this release or version and your distribution. Check the
+  name or the version, and browse ``https://download.ceph.com/rpm-{version}/``
+  for the distributions that it is built for.
+- **"Unable to find a match: epel-release" from cephadm.** On RHEL itself,
+  ``cephadm add-repo`` writes ``ceph.repo`` and then fails to install the
+  ``epel-release`` package, which RHEL does not ship. Install EPEL as in
+  step 2 of `RHEL`_, then run ``cephadm add-repo`` again.
+- **"Distro ... version ... not supported".** cephadm cannot add a repository
+  on this distribution. Use the packages that the distribution ships, or
+  follow the route for your distribution on this page.
+- **"Ceph team does not build Fedora specific packages and therefore cannot
+  add repos for this distro".** Fedora ships its own Ceph packages; install
+  them with ``dnf`` without adding a repository.
+- **"nothing provides" in the output of "cephadm install ceph-common" on
+  EL.** The CRB repository is not enabled. Do step 2 of `Using Cephadm`_,
+  then run the command again.
+- **"NO_PUBKEY E84AC2C0460F3994" or "Missing key
+  08B73419AC32B4E966C1A330E84AC2C0460F3994" from "apt-get update" or
+  "cephadm add-repo".** APT has no copy of the release key that it can read.
+  Do step 1 of `Debian and Ubuntu`_, then run the command again.
+- **"does not have a Release file" from "apt-get update".** This Ceph release
+  has no packages for your distribution release. The ``dists`` directory of
+  the repository, such as
+  ``https://download.ceph.com/debian-{release-name}/dists/``, lists the
+  codenames that it has; see also :ref:`start-platforms`.
+- **"apt-cache policy ceph" shows no version from download.ceph.com.** The
+  file ``/etc/apt/sources.list.d/ceph.list`` is missing or empty. On Debian
+  12, ``apt-add-repository`` writes an empty
+  ``archive_uri-https_download_ceph_com_*.list`` file instead; delete that
+  file and add the repository with step 2 of `Debian and Ubuntu`_.
+- **A dnf or rpm warning that ends with "NOKEY".** The release key is not
+  imported. Repeat step 1 of `RHEL`_.
+- **"digests SIGNATURES NOT OK" from "rpm -K".** The release key is not
+  imported on this host, or the file is damaged. Repeat step 1 of `RHEL`_,
+  then download the file again if the check still fails.
+- **"The requested URL returned error: 504" from curl.** Shaman has not built
+  this repository yet, or has removed it. Try again later, or choose another
+  branch or commit on `the shaman page`_.
+
+Next Steps
+==========
+
+- :ref:`install_storage_cluster`: install the packages with APT or DNF.
+- :ref:`cephadm_deploying_new_cluster`: deploy a cluster with cephadm.
+- :ref:`manual-deployment`: deploy a cluster by hand on hosts that have the
+  packages.
+
+Additional Resources
+====================
+
+- :ref:`os-recommendations`
+- `Releases`_
+- :ref:`install-mirrors`
+- :ref:`containers`
+
 .. _the shaman page: https://shaman.ceph.com
 
 .. Needs to be an external link because doc/releases/index.rst is not in
