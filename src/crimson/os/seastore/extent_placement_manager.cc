@@ -197,8 +197,11 @@ SegmentedOolWriter::alloc_write_ool_extents(
       size += e->get_length();
     }
     try {
+      auto throttle_start = std::chrono::steady_clock::now();
       co_await trans_intr::make_interruptible(
         token_bucket.get(size));
+      t.get_phase_durations().ool_throttle +=
+        std::chrono::steady_clock::now() - throttle_start;
       co_await do_write(t, extents);
     } catch (...) {
       token_bucket.release(size);
@@ -1288,8 +1291,11 @@ RandomBlockOolWriter::alloc_write_ool_extents(
       size += extent->get_length();
     }
     try {
+      auto throttle_start = std::chrono::steady_clock::now();
       co_await trans_intr::make_interruptible(
         token_bucket.get(size));
+      t.get_phase_durations().ool_throttle +=
+        std::chrono::steady_clock::now() - throttle_start;
       // Backpressure on accumulated deferred frees of conflicted OOL writes.
       co_await trans_intr::make_interruptible(
         rb_cleaner->wait_for_conflict_drain());
