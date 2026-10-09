@@ -103,6 +103,7 @@
 #include "compressor/Compressor.h"
 
 #include "rgw_d3n_datacache.h"
+#include "rgw_inject.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -3627,6 +3628,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   auto& ioctx = ref.ioctx;
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
+  // for testing: the index op is prepared, the head not yet written
+  rgw_inject_delay(rctx.dpp, rctx.y, "write_meta_before_head_write");
   r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, std::move(op), rctx.y, 0, &trace, &epoch);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
@@ -3687,6 +3690,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   if (versioned_op && meta.olh_epoch) {
     bool add_log = log_op && store->svc.zone->need_to_log_data();
+    // for testing: the version's head and index entry are written, the olh
+    // not yet linked to it
+    rgw_inject_delay(rctx.dpp, rctx.y, "write_meta_before_olh_link");
     r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, add_log);
     if (r < 0) {
       return r;
@@ -5546,6 +5552,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   write_op.meta.modify_tail = !copy_itself;
   write_op.meta.keep_tail = copy_itself;
 
+  // for testing: the source is read, the destination head not yet written
+  rgw_inject_delay(dpp, y, "copy_obj_before_write_meta");
   ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace);
   if (ret < 0) {
     goto done_ret;
@@ -7055,6 +7063,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         return r;
       }
 
+      // for testing: the current version is checked, the delete marker not
+      // yet linked
+      rgw_inject_delay(dpp, y, "delete_obj_before_olh_link");
       r = store->set_olh(dpp, target->get_ctx(), target->get_bucket_info(), marker, true,
                              &meta, params.olh_epoch, params.unmod_since, params.high_precision_time,
                              y, params.zones_trace, add_log, skip_olh_obj_update);
@@ -7101,6 +7112,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       }
 
       result.delete_marker = dirent.is_delete_marker();
+      // for testing: the version's index entry is read and checked, the
+      // version not yet unlinked
+      rgw_inject_delay(dpp, y, "delete_obj_before_unlink_instance");
       r = store->unlink_obj_instance(
 	dpp, target->get_ctx(), target->get_bucket_info(), obj,
 	params.olh_epoch, y, params.bilog_flags,
@@ -7233,6 +7247,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     index_op.set_bilog_flags(params.bilog_flags | RGW_BILOG_NULL_VERSION);
   }
 
+  // for testing: the head's state is read, its index op not yet prepared
+  rgw_inject_delay(dpp, y, "delete_obj_before_head_delete");
   r = index_op.prepare(dpp, CLS_RGW_OP_DEL, &state->write_tag, y);
   if (r < 0) {
     return r;
@@ -9603,6 +9619,12 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
     bilog.add_maybe_flush(committed_epoch, key, op_tag, delete_marker,
                           meta ? meta->mtime : ceph::real_clock::now(), zones_trace);
     int r = bilog.flush(y);
+    if (const auto k = cct->_conf.get_val<std::string>("rgw_debug_inject_link_olh_log_err_key");
+        r == 0 && !k.empty() && obj_instance.key.name == k) {
+      // for testing: the index links the version, and the bilog step
+      // after it fails
+      r = -EIO;
+    }
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__
                         << ": failed to flush bilog entry for " << key
@@ -10392,6 +10414,9 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  // for testing: the index unlinks the version and logs its removal, the
+  // olh log not yet applied
+  rgw_inject_delay(dpp, y, "unlink_instance_before_olh_update");
   ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, y,
 		   zones_trace, null_verid, log_op, force);
   if (ret == -ECANCELED) { /* already did what we needed, no need to retry, raced with another user */
