@@ -6,6 +6,7 @@ import errno
 import json
 import mock
 import os
+import platform
 import pytest
 import socket
 import unittest
@@ -3609,6 +3610,12 @@ class TestRmClusterConfigCleanup(fake_filesystem_unittest.TestCase):
         self.setUpPyfakefs()
         if not fake_filesystem.is_root():
             fake_filesystem.set_uid(0)
+
+        # fakefs + shutil.rmtree breaks on py3.12
+        if platform.system() == 'FreeBSD':
+            patcher = mock.patch('shutil.rmtree')
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
         # Create directories that _rm_cluster expects
         self.fs.create_dir('/var/lib/ceph')
