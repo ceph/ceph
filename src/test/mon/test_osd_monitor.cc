@@ -951,6 +951,23 @@ TEST_F(OSDMonitorCommitDefaultsTest, UnknownBucketTypeKeepsZoneDefault) {
   EXPECT_EQ("2", d.at("osd_pool_default_num_zones"));
 }
 
+// Test enable_stretch_mode's defaults name the zone failure domain
+TEST(OSDMonitorStretchPoolDefaultsTest, TwoZones) {
+  const map<string, string> expected = {
+    {"osd_pool_default_num_zones", "2"},
+    {"osd_pool_default_replica", "2"},
+    {"osd_pool_default_zone_failure_domain", "datacenter"}};
+  EXPECT_EQ(expected, OSDMonitor::stretch_pool_defaults(2, 2, "datacenter"));
+}
+
+// Test disable_stretch_mode's defaults leave the zone failure domain alone
+TEST(OSDMonitorStretchPoolDefaultsTest, OneZone) {
+  const map<string, string> expected = {
+    {"osd_pool_default_num_zones", "1"},
+    {"osd_pool_default_replica", "3"}};
+  EXPECT_EQ(expected, OSDMonitor::stretch_pool_defaults(1, 3, ""));
+}
+
 // Test the commit hint names the command and the release
 TEST(OSDMonitorUpgradeHintTest, NamesCommandAndRelease) {
   EXPECT_EQ("the upgrade is committed with 'ceph osd require-osd-release "

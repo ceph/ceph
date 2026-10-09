@@ -17511,11 +17511,19 @@ map<string, string> OSDMonitor::stretch_mode_defaults_at_commit(
   if (!stretch_mode_enabled) {
     return {};
   }
+  const char *type = crush.get_type_name(stretch_mode_bucket);
+  return stretch_pool_defaults(2, stretch_pool_size / 2, type ? type : "");
+}
+
+map<string, string> OSDMonitor::stretch_pool_defaults(
+    int num_zones, int replica, const string& zone_failure_domain)
+{
   map<string, string> defaults = {
-    {"osd_pool_default_num_zones", "2"},
-    {"osd_pool_default_replica", stringify(stretch_pool_size / 2)}};
-  if (const char *type = crush.get_type_name(stretch_mode_bucket); type) {
-    defaults["osd_pool_default_zone_failure_domain"] = type;
+    {pool_default_options().at("num_zones"), stringify(num_zones)},
+    {pool_default_options().at("replica"), stringify(replica)}};
+  if (!zone_failure_domain.empty()) {
+    defaults[pool_default_options().at("zone_failure_domain")] =
+      zone_failure_domain;
   }
   return defaults;
 }
@@ -17644,10 +17652,8 @@ int OSDMonitor::enable_stretch_mode(ostream& ss,
   if (r < 0) {
     return r;
   }
-  const map<string,string> defaults = {
-    {"osd_pool_default_num_zones", "2"},
-    {"osd_pool_default_replica", stringify(STRETCH_MODE_REPLICA)},
-    {"osd_pool_default_zone_failure_domain", dividing_bucket}};
+  const map<string,string> defaults =
+    stretch_pool_defaults(2, STRETCH_MODE_REPLICA, dividing_bucket);
   {
     // the next ceph osd pool create must work with the defaults that result
     PoolCreateParams p = load_pool_defaults(g_conf());
@@ -17793,9 +17799,8 @@ int OSDMonitor::disable_stretch_mode(ostream& ss, const string& crush_rule)
   if (r < 0) {
     return r;
   }
-  const map<string,string> defaults = {
-    {"osd_pool_default_num_zones", "1"},
-    {"osd_pool_default_replica", stringify(LOCAL_REPLICA)}};
+  const map<string,string> defaults =
+    stretch_pool_defaults(1, LOCAL_REPLICA, "");
   {
     // the next ceph osd pool create must work with the defaults that result
     PoolCreateParams p = load_pool_defaults(g_conf());

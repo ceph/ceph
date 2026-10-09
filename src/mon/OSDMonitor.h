@@ -992,6 +992,12 @@ public:
   // The reason why a command waits for the upgrade to be committed.
   static std::string num_zones_upgrade_hint();
 
+  // The pool creation defaults that the stretch mode commands write: the
+  // zone count and replicas per zone, and the zone failure domain unless it
+  // is empty.
+  static std::map<std::string, std::string> stretch_pool_defaults(
+      int num_zones, int replica, const std::string& zone_failure_domain);
+
   // The pool creation defaults that global stretch mode of an earlier
   // release becomes when the upgrade is committed; none without stretch mode.
   static std::map<std::string, std::string> stretch_mode_defaults_at_commit(
