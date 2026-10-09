@@ -7253,6 +7253,26 @@ protected:
       dev *= dev;
       stddev += reweight * dev;
       sum += reweight;
+
+      const char *c = osdmap->crush->get_item_class(qi.id);
+      if (c) {
+        string cname(c);
+        if (class_stats.count(cname)) {
+          auto& cs = class_stats[cname];
+          double c_avg = cs.average_util();
+          if (c_avg > 0) {
+            double c_var = util / c_avg;
+            if (cs.min_var < 0 || c_var < cs.min_var)
+              cs.min_var = c_var;
+            if (cs.max_var < 0 || c_var > cs.max_var)
+              cs.max_var = c_var;
+
+            double c_dev = util - c_avg;
+            cs.stddev += reweight * (c_dev * c_dev);
+            cs.sum += reweight;
+          }
+        }
+      }
     }
   }
 
@@ -7286,6 +7306,12 @@ protected:
 			      &kb_used_omap_i, &kb_used_meta_i, &kb_avail_i)) {
 	kb += kb_i;
 	kb_used += kb_used_i;
+	const char *c = osdmap->crush->get_item_class(i);
+        if (c) {
+          string cname(c);
+          class_stats[cname].kb += kb_i;
+          class_stats[cname].kb_used += kb_used_i;
+        }
       }
     }
     return kb > 0 ? 100.0 * (double)kb_used / (double)kb : 0;
@@ -7353,6 +7379,22 @@ protected:
   }
 
 protected:
+  struct ClassStats {
+    int64_t kb = 0;
+    int64_t kb_used = 0;
+    double min_var = -1;
+    double max_var = -1;
+    double stddev = 0;
+    double sum = 0;
+
+    double average_util() const {
+      return kb > 0 ? 100.0 * (double)kb_used / (double)kb : 0.0;
+    }
+    double dev() const {
+      return sum > 0 ? sqrt(stddev / sum) : 0.0;
+    }
+  };
+
   const OSDMap *osdmap;
   const PGMap& pgmap;
   bool tree;
@@ -7364,6 +7406,7 @@ protected:
   int class_id = -1;
   set<int> allowed;
   set<int> dumped_osds;
+  std::map<string, ClassStats> class_stats;
 };
 
 
@@ -7487,6 +7530,14 @@ public:
     out << "MIN/MAX VAR: " << lowprecision_t(min_var)
 	<< "/" << lowprecision_t(max_var) << "  "
 	<< "STDDEV: " << lowprecision_t(dev());
+    for (const auto& [cname, cs] : class_stats) {
+      if (cs.sum > 0) {
+        out << "\nCLASS " << cname << ": "
+            << "MIN/MAX VAR: " << lowprecision_t(cs.min_var)
+            << "/" << lowprecision_t(cs.max_var) << "  "
+            << "STDDEV: " << lowprecision_t(cs.dev());
+      }
+    }
     return out.str();
   }
 };
@@ -7578,6 +7629,21 @@ public:
     f->dump_float("min_var", min_var);
     f->dump_float("max_var", max_var);
     f->dump_float("dev", dev());
+    f->close_section();
+
+    f->open_object_section("summary_by_class");
+    for (const auto& [cname, cs] : class_stats) {
+      if (cs.sum > 0) {
+        f->open_object_section(cname.c_str());
+        f->dump_int("total_kb", cs.kb);
+        f->dump_int("total_kb_used", cs.kb_used);
+        f->dump_float("average_utilization", cs.average_util());
+        f->dump_float("min_var", cs.min_var);
+        f->dump_float("max_var", cs.max_var);
+        f->dump_float("dev", cs.dev());
+        f->close_section();
+      }
+    }
     f->close_section();
   }
 };
