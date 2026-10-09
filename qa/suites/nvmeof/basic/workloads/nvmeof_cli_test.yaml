@@ -45,7 +45,7 @@ tasks:
 
 - workunit:
     no_coverage_and_limits: true
-    timeout: 30m
+    timeout: 45m
     clients:
       client.0:
         - nvmeof/fio_test.sh --rbd_iostat
@@ -53,6 +53,7 @@ tasks:
         - nvmeof/basic_tests.sh
         - nvmeof/add_delete_test.sh
         - nvmeof/cross_namespace_copy_test.sh
+        - nvmeof/controller_get_io_statistics_test.sh
     env:
       RBD_POOL: mypool
       IOSTAT_INTERVAL: '10'
