@@ -4,10 +4,15 @@
 #include "Checkpoint.h"
 #include "Utils.h"
 
+#include "common/Clock.h"
+#include "common/debug.h"
+#include "common/errno.h"
 #include "common/strtol.h"
 
 #include <cstdio>
 #include <vector>
+
+#define dout_subsys ceph_subsys_cephfs_mirror
 
 namespace cephfs {
 namespace mirror {
@@ -127,6 +132,15 @@ int write_checkpoint_metadata(CephContext *cct, MountRef mnt,
                                const CheckpointInfo &info) {
   auto snap_path = snapshot_path(cct, dir_root, snap_name);
   auto checkpoint_metadata = info.to_metadata();
+  // Demotion sets updated_at = created_at. Persist the original created_at
+  // string so the two values stay identical across writers.
+  if (info.status == CheckpointStatus::CREATED &&
+      info.updated_at == info.created_at) {
+    auto created = snap_metadata.find(CHECKPOINT_CREATED_AT_KEY);
+    if (created != snap_metadata.end()) {
+      checkpoint_metadata[CHECKPOINT_UPDATED_AT_KEY] = created->second;
+    }
+  }
 
   // Write/update checkpoint metadata keys
   for (const auto &[key, val] : checkpoint_metadata) {
@@ -164,6 +178,94 @@ int write_checkpoint_metadata(CephContext *cct, MountRef mnt,
   }
 
   return 0;
+}
+
+void demote_checkpoint_to_created(CheckpointInfo *info) {
+  info->status = CheckpointStatus::CREATED;
+  info->error_msg.clear();
+  if (info->created_at.is_zero()) {
+    info->updated_at = ceph_clock_now();
+  } else {
+    info->updated_at = info->created_at;
+  }
+}
+
+int reset_directory_checkpoints(CephContext *cct, MountRef mnt,
+                                const std::string &dir_root) {
+  ldout(cct, 10) << "reset_directory_checkpoints: dir_root=" << dir_root << dendl;
+  if (!mnt) {
+    return -EINVAL;
+  }
+
+  auto snap_dir = snapshot_dir_path(cct, dir_root);
+  ceph_dir_result *dirp = nullptr;
+  int r = ceph_opendir(mnt, snap_dir.c_str(), &dirp);
+  if (r < 0) {
+    if (r == -ENOENT) {
+      return 0;
+    }
+    lderr(cct) << "reset_directory_checkpoints: failed to open snap directory="
+               << snap_dir << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  std::vector<std::string> snaps;
+  auto entry = ceph_readdir(mnt, dirp);
+  while (entry != nullptr) {
+    std::string d_name(entry->d_name);
+    if (d_name != "." && d_name != ".." && d_name.rfind("_", 0) != 0) {
+      snaps.emplace_back(std::move(d_name));
+    }
+    entry = ceph_readdir(mnt, dirp);
+  }
+
+  r = ceph_closedir(mnt, dirp);
+  if (r < 0) {
+    lderr(cct) << "reset_directory_checkpoints: failed to close snap directory="
+               << snap_dir << ": " << cpp_strerror(r) << dendl;
+  }
+
+  int rv = 0;
+  for (const auto &snap_name : snaps) {
+    auto path = snapshot_path(snap_dir, snap_name);
+    snap_info info;
+    r = ceph_get_snap_info(mnt, path.c_str(), &info);
+    if (r < 0) {
+      lderr(cct) << "reset_directory_checkpoints: failed to fetch snap info for "
+                 << path << ": " << cpp_strerror(r) << dendl;
+      rv = r;
+      continue;
+    }
+
+    uint64_t snap_id = info.id;
+    std::map<std::string, std::string> metadata;
+    if (info.nr_snap_metadata) {
+      metadata = decode_snap_metadata(info.snap_metadata, info.nr_snap_metadata);
+      ceph_free_snap_info_buffer(&info);
+    }
+    if (!has_checkpoint(metadata)) {
+      continue;
+    }
+
+    CheckpointInfo cp = read_checkpoint_metadata(snap_id, snap_name, metadata);
+    if (cp.status == CheckpointStatus::CREATED) {
+      continue;
+    }
+
+    ldout(cct, 10) << "reset_directory_checkpoints: demoting snap_id=" << snap_id
+                   << " snap_name=" << snap_name << " from "
+                   << checkpoint_status_to_string(cp.status) << dendl;
+    demote_checkpoint_to_created(&cp);
+    r = write_checkpoint_metadata(cct, mnt, dir_root, snap_name, metadata, cp);
+    if (r < 0) {
+      lderr(cct) << "reset_directory_checkpoints: failed to demote snap_id="
+                 << snap_id << " snap_name=" << snap_name << ": "
+                 << cpp_strerror(r) << dendl;
+      rv = r;
+    }
+  }
+
+  return rv;
 }
 
 } // namespace mirror

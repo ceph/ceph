@@ -54,8 +54,11 @@ Every checkpoint goes through these states:
               └────────┘
 
 - **created**: Waiting for synchronization or sync in progress
-- **complete**: Successfully replicated to remote site
+- **complete**: Successfully replicated to the current peer
 - **failed**: Sync encountered an error (check error message for details)
+
+``complete`` describes the current peer only. Removing that peer returns
+``complete`` and ``failed`` checkpoints to ``created``. See `Peer Removal`_.
 
 Prerequisites
 =============
@@ -351,6 +354,23 @@ When you rename a snapshot that has a checkpoint:
 - Always use ``checkpoint ls`` to verify current snapshot names before removing checkpoints
 - Update any automation scripts if you rename snapshots
 
+Peer Removal
+------------
+
+Removing the snapshot-mirror peer clears replicated checkpoint state.
+``checkpoint ls`` keeps the checkpoints, but ``complete`` and ``failed`` go
+back to ``created``. ``created_at`` is unchanged, ``updated_at`` is set back
+to ``created_at``, and any error message is removed.
+
+A peer added later does not inherit ``complete``. The checkpoint stays
+``created`` until that snapshot is synced to the new peer. If the new peer
+already has the snapshot, the mirror daemon marks the checkpoint ``complete``
+again once it sees the remote snapshot.
+
+.. code-block:: bash
+
+    ceph fs snapshot mirror peer_remove myfs <peer_uuid>
+    ceph fs snapshot mirror checkpoint ls myfs /data
 
 Additional Resources
 ====================

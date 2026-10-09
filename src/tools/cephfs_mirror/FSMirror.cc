@@ -15,11 +15,14 @@
 #include "msg/Messenger.h"
 #include "FSMirror.h"
 #include "PeerReplayer.h"
+#include "Checkpoint.h"
 #include "aio_utils.h"
 #include "ServiceDaemon.h"
 #include "Utils.h"
 
 #include "common/Cond.h"
+
+#include <vector>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_cephfs_mirror
@@ -517,6 +520,26 @@ void FSMirror::remove_peer(const Peer &peer) {
     dout(5) << ": shutting down replayer for peer=" << peer << dendl;
     shutdown_replayer(replayer.get());
   }
+
+  // The replayer can no longer mark checkpoints complete. Drop replicated
+  // status so checkpoint ls does not keep reporting the removed peer's
+  // snapshots as synced. Mirroring is single-peer, so no peer means nothing
+  // is replicated.
+  std::vector<std::string> dirs;
+  {
+    std::scoped_lock locker(m_lock);
+    dirs.assign(m_directories.begin(), m_directories.end());
+  }
+  if (m_mount) {
+    for (const auto &dir_root : dirs) {
+      int r = reset_directory_checkpoints(m_cct, m_mount, dir_root);
+      if (r < 0) {
+        derr << ": failed to reset checkpoints for dir_root=" << dir_root
+             << ": " << cpp_strerror(r) << dendl;
+      }
+    }
+  }
+
   remove_persisted_sync_stats_by_prefix(PeerReplayer::sync_stat_omap_prefix(m_filesystem, peer));
   if (m_perf_counters) {
     m_perf_counters->dec(l_cephfs_mirror_fs_mirror_peers);

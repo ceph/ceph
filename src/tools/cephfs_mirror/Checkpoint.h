@@ -82,6 +82,16 @@ int write_checkpoint_metadata(CephContext *cct, MountRef mnt,
                               const std::map<std::string, std::string> &snap_metadata,
                               const CheckpointInfo &info);
 
+// COMPLETE/FAILED -> CREATED. created_at is kept; updated_at is set back to
+// created_at; any error message is cleared.
+void demote_checkpoint_to_created(CheckpointInfo *info);
+
+// Drop replicated checkpoint state for every checkpoint under dir_root.
+// Already-created checkpoints are left unchanged. Missing snap directories
+// are not an error.
+int reset_directory_checkpoints(CephContext *cct, MountRef mnt,
+                                const std::string &dir_root);
+
 // Check if checkpoint key exists in snapshot metadata
 inline bool has_checkpoint(const std::map<std::string, std::string> &snap_metadata) {
   return snap_metadata.find(CHECKPOINT_STATUS_KEY) != snap_metadata.end();
