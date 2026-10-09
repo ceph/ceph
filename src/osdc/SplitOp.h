@@ -583,3 +583,9 @@ class ReplicaSplitOp : public SplitOp {
   }
 };
 
+#ifdef UNIT_TESTS_BUILT
+bool test_validate_operations(Objecter::Op *op, const pg_pool_t *pi,
+                              bool is_erasure, uint64_t replica_min_read_size,
+                              CephContext *cct, bool &has_primary_ops,
+                              bool &single_direct_op);
+#endif
