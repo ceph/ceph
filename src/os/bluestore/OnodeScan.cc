@@ -11,13 +11,12 @@
  * Foundation.  See file COPYING.
  */
 #include "BlueStore.h"
+#include "BlueStore_objects.h"
+#include "BlueStore_inlines.h"
 #include "common/pretty_binary.h"
 #include "simple_bitmap.h"
 #include "common/debug.h"
 using namespace std;
-
-// kv store prefixes, copied from BlueStore.cc
-const string PREFIX_OBJ = "O";         // object name -> onode_t
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bs.onode_scan "
@@ -54,8 +53,7 @@ struct bool_vector_t {
   }
 };
 
-class BlueStore::Decoder_AllocationsAndStatFS : public BlueStore::ExtentMap::ExtentDecoder {
-  using Extent = BlueStore::Extent;
+class BlueStore::Decoder_AllocationsAndStatFS : public ExtentMap::ExtentDecoder {
   BlueStore &store;
   read_alloc_stats_t &stats;
   SimpleBitmap &sbmap;

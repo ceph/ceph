@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <ostream>
 #include "BlueStore.h"
+#include "BlueStore_objects.h"
 
 static const std::string transition_table[26] = {
 "bcdfghjklmnprstuvxyz", //a
@@ -82,8 +83,9 @@ std::ostream &operator<<(std::ostream &out, const maybe_K &k) {
 }
 // cheap, not very reliable but portable detector where heap starts
 static std::unique_ptr<char> heap_begin(new char);
-std::ostream& operator<<(std::ostream& out, const BlueStore::Buffer& b);
-std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
+
+namespace bluestore {
+std::ostream& operator<<(std::ostream& out, const bluestore::Blob::printer &p)
 {
   using P = BlueStore::printer;
   out << "Blob(";
@@ -205,15 +207,15 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
     out << " spanning.id=" << p.blob.id;
   }
   if (!(p.mode & P::JUSTID) &&
-    p.blob.shared_blob &&
-    (p.blob.shared_blob->get_sbid() != 0)) {
-    out << " " << *p.blob.shared_blob;
+    p.blob.get_shared_blob() &&
+    (p.blob.get_shared_blob()->get_sbid() != 0)) {
+    out << " " << *p.blob.get_shared_blob();
   }
   out << ")";
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const BlueStore::Extent::printer &p)
+std::ostream& operator<<(std::ostream& out, const bluestore::Extent::printer &p)
 {
   out << std::hex << "0x" << p.ext.logical_offset << "~" << p.ext.length
     << ": 0x" << p.ext.blob_offset << "~" << p.ext.length << std::dec
@@ -221,7 +223,7 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Extent::printer &p)
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const BlueStore::Onode::printer &p)
+std::ostream& operator<<(std::ostream& out, const bluestore::Onode::printer &p)
 {
   using P = BlueStore::printer;
   const BlueStore::Onode& o = p.onode;
@@ -289,4 +291,5 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Onode::printer &p)
     }
   }
   return out;
+}
 }
