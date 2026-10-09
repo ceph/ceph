@@ -16,6 +16,8 @@
 #ifndef MGR_CLIENT_H_
 #define MGR_CLIENT_H_
 
+#include <boost/variant/static_visitor.hpp>
+
 #include "msg/Connection.h"
 #include "msg/Dispatcher.h"
 #include "mon/MgrMap.h"
