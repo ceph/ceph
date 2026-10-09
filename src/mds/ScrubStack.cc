@@ -1210,7 +1210,7 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 				header->get_uninline_skipped()
 	};
 	counters[header->get_tag()] = c;
-	scrubbing_map.erase(it++);
+	it = scrubbing_map.erase(it);
       } else {
 	++it;
       }
@@ -1349,7 +1349,7 @@ void ScrubStack::advance_scrub_status()
       sc.uninline_failed = header->get_uninline_failed();
       sc.uninline_skipped = header->get_uninline_skipped();
 
-      scrubbing_map.erase(it++);
+      it = scrubbing_map.erase(it);
     } else {
       ++it;
     }
@@ -1383,7 +1383,7 @@ void ScrubStack::handle_mds_failure(mds_rank_t mds)
     if (it->second.gather_set.erase(mds) &&
 	it->second.gather_set.empty()) {
       CInode *in = it->first;
-      remote_scrubs.erase(it++);
+      it = remote_scrubs.erase(it);
       remove_from_waiting(in, false);
       kick = true;
     } else {
