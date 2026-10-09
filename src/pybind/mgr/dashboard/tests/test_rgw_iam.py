@@ -1,5 +1,5 @@
 from unittest import TestCase
-from unittest.mock import call, patch
+from unittest.mock import Mock, call, patch
 
 from ..controllers.rgw_iam import RgwRolePolicyController, RgwUserAccountsController
 from ..exceptions import DashboardException
@@ -477,6 +477,25 @@ class TestRgwAccountsRolePolicies(TestCase):
                 error_msg='Error getting role policy with code {code}: {err}')
 
         self.assertEqual(str(ctx.exception), 'Error getting role policy with code 7: boom')
+
+    @patch('dashboard.services.rgw_iam.mgr.send_rgwadmin_command')
+    @patch('dashboard.services.rgw_client._get_daemons')
+    def test_send_rgw_cmd_appends_realm_zone(self, mock_get_daemons, mock_cmd):
+        daemon = Mock()
+        daemon.realm_name = 'test_realm'
+        daemon.zone_name = 'test_zone'
+        mock_get_daemons.return_value = {'dummy-daemon': daemon}
+        mock_cmd.return_value = (0, ['RGW123'], '')
+
+        result = RgwAccounts.send_rgw_cmd(['account', 'list'], daemon_name='dummy-daemon')
+
+        self.assertEqual(result, ['RGW123'])
+        cmd = mock_cmd.call_args[0][0]
+        self.assertEqual(cmd[:2], ['account', 'list'])
+        self.assertIn('--rgw-realm', cmd)
+        self.assertIn('test_realm', cmd)
+        self.assertIn('--rgw-zone', cmd)
+        self.assertIn('test_zone', cmd)
 
 
 class TestRgwRolePolicyController(ControllerTestCase):
