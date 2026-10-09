@@ -1243,3 +1243,8 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   OSDs deployed prior to the Pacific release with a 64 KiB allocation unit.
   It can be disabled with the new ``bluestore_warn_on_legacy_min_alloc_size``
   option, globally or per OSD / device class using a configuration mask.
+* RADOS: A new ``POOL_MIXED_MIN_ALLOC_SIZE`` health warning reports pools
+  that span BlueStore OSDs using different allocation units
+  (``min_alloc_size``), leading to non-uniform space usage and performance
+  across the pool's PGs. It can be disabled with the new
+  ``mon_warn_on_pool_mixed_min_alloc_size`` option.
