@@ -1471,7 +1471,8 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                             ceph::real_time unmod_since, bool high_precision_time,
 			    optional_yield y,
                             rgw_zone_set *zones_trace = nullptr,
-                            bool log_data_change = false);
+                            bool log_data_change = false,
+                            const cls_rgw_link_olh_cond* cond = nullptr);
   int bucket_index_refresh_instance(const DoutPrefixProvider *dpp,
                                     RGWBucketInfo& bucket_info,
                                     const rgw_obj& obj_instance,
@@ -1520,7 +1521,8 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
               optional_yield y,
 	      rgw_zone_set *zones_trace = nullptr,
 	      bool log_data_change = false,
-	      bool skip_olh_obj_update = false); // can skip the OLH object update if, for example, repairing index
+	      bool skip_olh_obj_update = false, // can skip the OLH object update if, for example, repairing index
+	      const cls_rgw_link_olh_cond* cond = nullptr); // link only if the current version meets this
   int repair_olh(const DoutPrefixProvider *dpp, RGWObjState* state, const RGWBucketInfo& bucket_info,
                  const rgw_obj& obj, optional_yield y);
   int unlink_obj_instance(const DoutPrefixProvider *dpp,
