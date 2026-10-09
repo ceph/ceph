@@ -344,6 +344,11 @@ if(WITH_RADOSGW_STANDALONE)
   )
 endif()
 
+if(WITH_RADOSGW_CUOBJ)
+  list(APPEND librgw_common_srcs rgw_cuobj.cc)
+  list(APPEND rgw_common_libs ${CUOBJSERVER_LIBRARY})
+endif()
+
 add_library(rgw_common STATIC
   ${librgw_common_srcs}
   ${librgw_driver_srcs})
