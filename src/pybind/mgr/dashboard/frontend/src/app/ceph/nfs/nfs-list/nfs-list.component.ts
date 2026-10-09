@@ -101,7 +101,13 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const createAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
-      routerLink: () => `/${prefix}/nfs/create`,
+      routerLink: () => {
+        const clusterId = this.selection.first()?.cluster_id || this.clusterId;
+        if (clusterId) {
+          return [`/${prefix}/nfs/create`, { cluster_id: clusterId }];
+        }
+        return `/${prefix}/nfs/create`;
+      },
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: this.actionLabels.CREATE
     };

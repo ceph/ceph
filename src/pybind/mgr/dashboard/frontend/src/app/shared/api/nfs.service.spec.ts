@@ -59,6 +59,18 @@ describe('NfsService', () => {
     expect(req.request.method).toBe('DELETE');
   });
 
+  it('should call listClusters with info by default', () => {
+    service.listClusters().subscribe();
+    const req = httpTesting.expectOne('api/nfs-ganesha/cluster?info=true');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call listClusters without info when requested', () => {
+    service.listClusters(false).subscribe();
+    const req = httpTesting.expectOne('api/nfs-ganesha/cluster?info=false');
+    expect(req.request.method).toBe('GET');
+  });
+
   it('should call lsDir', () => {
     service.lsDir('a', 'foo_dir').subscribe();
     const req = httpTesting.expectOne('ui-api/nfs-ganesha/lsdir/a?root_dir=foo_dir');
