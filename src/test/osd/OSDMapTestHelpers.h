@@ -20,6 +20,7 @@
 #include <vector>
 #include "crush/CrushWrapper.h"
 #include "crush/crush.h"
+#include "osd/ECUtil.h"
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 
@@ -215,15 +216,7 @@ public:
     
     // Only set nonprimary_shards if OPTIMIZATIONS flag is set
     if (flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) {
-      // Mark shards 1 to k-1 (inclusive) as nonprimary in each zone
-      // Shard 0 can be primary, shards k to k+m-1 (coding shards) can be primary
-      // For multi-zone pools, this pattern repeats for each zone
-      for (int zone = 0; zone < num_zones; zone++) {
-        for (int i = 1; i < k; i++) {
-          shard_id_t shard = shard_id_t(i + (k + m) * zone);
-          pool.nonprimary_shards.insert(shard);
-        }
-      }
+      pool.nonprimary_shards = ECUtil::nonprimary_shards(k, m, {}, num_zones);
     }
     
     return pool;

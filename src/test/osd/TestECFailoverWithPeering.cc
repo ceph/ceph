@@ -2207,11 +2207,8 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
     updated.num_zones = 2;
     // min_size = num_zones * (k+m) - m
     updated.min_size = 2 * (k + m) - m;
-    // Add nonprimary_shards for zone 1 (shards 1..k-1 in zone 1 are non-primary).
     if (pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) {
-      for (int i = 1; i < k; ++i) {
-        updated.nonprimary_shards.insert(shard_id_t(i + (k + m)));
-      }
+      updated.nonprimary_shards = ECUtil::nonprimary_shards(k, m, {}, 2);
     }
 
     // Apply pool update, pg_upmap extension, and pg_temp clear in a single
@@ -2366,11 +2363,8 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
     restored.size = k + m;
     restored.num_zones = 1;
     restored.min_size = static_cast<unsigned>((k + m) - m);
-    // Remove zone-1 nonprimary_shards entries.
     if (pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) {
-      for (int i = 1; i < k; ++i) {
-        restored.nonprimary_shards.erase(shard_id_t(i + (k + m)));
-      }
+      restored.nonprimary_shards = ECUtil::nonprimary_shards(k, m, {}, 1);
     }
 
     // Shrink pool, pg_upmap, and clear pg_temp in one incremental to avoid a
