@@ -976,6 +976,15 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   debug_op_summary("orig_op:", op, cct);
 
+  // Reject if the pool has the EIO flag set, so that the op reaches
+  // _op_submit() and is failed there.  Splitting would send sub-ops that
+  // _op_submit() fails and frees immediately, and a single-op direct read
+  // would skip _op_submit()'s _calc_target(), and with it the EIO check.
+  if (pi->has_flag(pg_pool_t::FLAG_EIO)) {
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: pool EIO" << dendl;
+    return false;
+  }
+
   // Reject if the operation is a snapshot operation
   if (op->snapid != CEPH_NOSNAP || !op->snapc.empty()) {
     ldout(cct, DBG_LVL) << __func__ <<" REJECT: snapshot operation" << dendl;
