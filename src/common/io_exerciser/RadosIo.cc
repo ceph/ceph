@@ -69,6 +69,7 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
   int rc;
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
+  io.set_no_version_on_read(true);
   if (!is_replicated_pool) {
     cc = std::make_unique<ConsistencyChecker>(rados, asio, pool);
   }
