@@ -7221,6 +7221,14 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     return r;
   }
 
+  // remove only the head that was read. a write that replaced it meanwhile
+  // sent the old manifest to GC; removing the new head and sending the old
+  // manifest again would leak the new tail
+  r = store->append_atomic_test(dpp, state, op);
+  if (r < 0) {
+    return r;
+  }
+
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   RGWRados::Bucket bop(store, bucket_info);
@@ -10008,6 +10016,21 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
         remove_instances.insert(entry.key);
         break;
       case CLS_RGW_OLH_OP_LINK_OLH:
+        if (!entry.delete_marker) {
+          // a version linked after its removal was logged is in the index
+          // again, whether or not it becomes current: keep its head. a null
+          // version written after a DeleteObject of the null version logged
+          // its removal shares the key's head object, and would lose it to
+          // that removal. a null delete marker linked after it does not
+          // bring the removed null version back. a DeleteObject names the
+          // null version "null", a write of it an empty instance
+          remove_instances.erase(entry.key);
+          if (entry.key.instance.empty()) {
+            remove_instances.erase(cls_rgw_obj_key(entry.key.name, "null"));
+          } else if (entry.key.instance == "null") {
+            remove_instances.erase(cls_rgw_obj_key(entry.key.name, ""));
+          }
+        }
         // only overwrite a link of the same epoch if its key sorts before
         // or there is a CLS_RGW_OLH_OP_UNLINK_OLH before this op in this batch
         if (need_to_remove || link_epoch < entry.epoch || key.instance.empty() ||
