@@ -671,10 +671,28 @@ int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
 
 #ifdef WITH_RADOSGW_LANCEDB
   {
+    // the namespace of the vector bucket takes the place of the tenant in its key
+    rgw::s3vector::bucket_namespace_t ns;
+    if (const auto* account_id = std::get_if<rgw_account_id>(&info.owner); account_id) {
+      // the tenant of the vector bucket is the one of the account that owns it
+      RGWAccountInfo account;
+      Attrs account_attrs;
+      RGWObjVersionTracker account_objv;
+      if (const int r = store->load_account_by_id(dpp, y, *account_id, account,
+                                                  account_attrs, account_objv); r < 0) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to load account " << *account_id <<
+          " of s3vector bucket " << info.bucket << ". error: " << r << dendl;
+        return r;
+      }
+      ns.account = *account_id;
+      ns.tenant = account.tenant;
+    } else {
+      ns.tenant = info.bucket.tenant;
+    }
     // the indexes hold the data of a vector bucket, like the objects of an ordinary
     // one: they are removed only when the caller asks for it, and prevent the removal
     // of the vector bucket otherwise
-    const int r = rgw::s3vector::remove_indexes(dpp, store, &info.bucket.tenant,
+    const int r = rgw::s3vector::remove_indexes(dpp, store, ns,
                                                 info.bucket.name, delete_children, y);
     if (r == -ENOENT) {
       // the backend of the vector bucket does not exist. this happens when the bucket
@@ -686,7 +704,7 @@ int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
       return r;
     }
     // the data of the vector bucket is gone, and so should be its cached session
-    rgw::s3vector::notify_session_delete(dpp, info.bucket.tenant, info.bucket.name);
+    rgw::s3vector::notify_session_delete(dpp, ns, info.bucket.name);
   }
 #endif
 
@@ -2959,14 +2977,15 @@ int RadosStore::load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_buck
 }
 
 int RadosStore::list_vector_buckets(const DoutPrefixProvider* dpp,
-			     const rgw_owner& owner, const std::string& tenant,
+			     const rgw_owner& owner, const std::string& ns,
 			     const std::string& marker, const std::string& end_marker,
 			     uint64_t max, BucketList& listing,
 			     optional_yield y) {
   librados::Rados& rados = *getRados()->get_rados_handle();
   const rgw_raw_obj& obj = get_owner_vector_buckets_obj(svc()->user, svc()->zone, owner);
 
-  return rgwrados::buckets::list(dpp, y, rados, obj, tenant,
+  // the namespace takes the place of the tenant in the keys of the vector buckets
+  return rgwrados::buckets::list(dpp, y, rados, obj, ns,
                                     marker, end_marker, max, listing);
 }
 
