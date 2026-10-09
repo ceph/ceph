@@ -1301,7 +1301,8 @@ int RGWRadosList::process_bucket(
 	// and sorted
 	prev_versioned_key_name = entry.key.name;
 
-	rgw_obj_key uninstanced(entry.key.name);
+	rgw_obj_key uninstanced(entry.key);
+	uninstanced.instance.clear();
 
 	ret = do_stat_key(uninstanced);
 	if (ret < 0) {
