@@ -19353,6 +19353,7 @@ def _bucket_logging_cleanup(cleanup_type, logging_type, single_prefix, concurren
         # make sure that only the new objects are logged
         exact_match = True
 
+    time.sleep(20)
     response = client.list_objects_v2(Bucket=log_bucket_name)
     keys = _get_keys(response)
 
@@ -19365,12 +19366,17 @@ def _bucket_logging_cleanup(cleanup_type, logging_type, single_prefix, concurren
         return
 
     if concurrency:
-        assert len(keys) >= 1 and len(keys) <= num_buckets
-    else:
-        if single_prefix and logging_type == 'Journal' and cleanup_type not in ['target', 'updating']:
-            assert len(keys) == 1
+        if cleanup_type != 'deletion':
+          assert len(keys) >= 1 and len(keys) <= num_buckets
         else:
-            assert len(keys) == num_buckets
+          assert len(keys) >= 1 and len(keys) <= 2*num_buckets
+    elif single_prefix and logging_type == 'Journal' and cleanup_type not in ['target', 'updating']:
+         assert len(keys) == 1
+    elif logging_type == 'Standard' and cleanup_type == 'deletion':
+          #the log object is rolled over in source_bucket_cleanup() and in the log_record for a DeleteBucket op
+         assert len(keys) == 2*num_buckets
+    else:
+        assert len(keys) == num_buckets
 
     prefixes = []
     for src_bucket_name in buckets:
@@ -19394,6 +19400,8 @@ def _bucket_logging_cleanup(cleanup_type, logging_type, single_prefix, concurren
     for src_bucket_name in buckets:
         assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', src_names, logging_type, num_keys, exact_match)
         assert _verify_records(body, src_bucket_name, 'REST.DELETE.OBJECT', src_names, logging_type, num_keys, exact_match)
+        if cleanup_type == 'deletion' and logging_type == 'Standard':
+          assert _verify_records(body, src_bucket_name, 'REST.DELETE.BUCKET', buckets, logging_type, 1, exact_match)
 
 
 @pytest.mark.bucket_logging
