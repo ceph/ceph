@@ -76,8 +76,8 @@ class NFSRados:
             export_urls = ioctx.read(config_obj, size)
             url = '%url "{}"\n\n'.format(self._make_rados_url(obj))
             export_urls = export_urls.replace(url.encode('utf-8'), b'')
-            ioctx.remove_object(obj)
             ioctx.write_full(config_obj, export_urls)
+            ioctx.remove_object(obj)
             if should_notify:
                 _check_rados_notify(ioctx, config_obj)
             log.debug("Object deleted: %s", url)
