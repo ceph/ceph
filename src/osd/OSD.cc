@@ -11147,7 +11147,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, hea
       dout(20) << __func__ << " empty q, waiting" << dendl;
       osd->cct->get_heartbeat_map()->clear_timeout(hb);
       sdata->shard_lock.unlock();
+      ++sdata->waiting_threads;
       sdata->sdata_cond.wait(wait_lock);
+      --sdata->waiting_threads;
       wait_lock.unlock();
       sdata->shard_lock.lock();
       if (sdata->scheduler->empty() &&
@@ -11475,18 +11477,14 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
 
   dout(20) << fmt::format("{} {}", __func__, item) << dendl;
 
-  bool empty = true;
   {
     std::lock_guard l{sdata->shard_lock};
-    empty = sdata->scheduler->empty();
     sdata->scheduler->enqueue(std::move(item));
   }
 
   {
     std::lock_guard l{sdata->sdata_wait_lock};
-    if (empty) {
-      sdata->sdata_cond.notify_all();
-    } else if (sdata->waiting_threads) {
+    if (sdata->waiting_threads) {
       sdata->sdata_cond.notify_one();
     }
   }
