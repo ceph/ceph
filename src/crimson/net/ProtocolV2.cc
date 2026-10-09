@@ -157,7 +157,9 @@ void ProtocolV2::start_accept(SocketFRef&& new_socket,
   frame_assembler->set_socket(std::move(new_socket));
   has_socket = true;
   is_socket_valid = true;
-  logger().info("{} ProtocolV2::start_accept(): target_addr={}", conn, _peer_addr);
+  logger().info("{} ProtocolV2::start_accept(): target_addr={}, listener_core={}",
+                conn, _peer_addr,
+                conn.listener_core ? int(*conn.listener_core) : -1);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 
@@ -1363,9 +1365,10 @@ ProtocolV2::server_connect()
       throw std::system_error(
           make_error_code(crimson::net::error::bad_peer_address));
     }
-    if (!messenger.get_myaddrs().contains(client_ident.target_addr())) {
+    if (const auto my_addrs = messenger.get_myaddrs_via(conn.listener_core);
+        !my_addrs.contains(client_ident.target_addr())) {
       logger().warn("{} peer is trying to reach {} which is not us ({})",
-                    conn, client_ident.target_addr(), messenger.get_myaddrs());
+                    conn, client_ident.target_addr(), my_addrs);
       throw std::system_error(
           make_error_code(crimson::net::error::bad_peer_address));
     }
@@ -1416,7 +1419,8 @@ ProtocolV2::server_connect()
     // Looks good so far, let's check if there is already an existing connection
     // to this peer.
 
-    SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
+    SocketConnectionRef existing_conn =
+      messenger.lookup_conn(conn.peer_addr, conn.listener_core);
 
     if (existing_conn) {
       return handle_existing_connection(existing_conn);
@@ -1514,7 +1518,8 @@ ProtocolV2::server_reconnect()
     }
     peer_global_seq = reconnect.global_seq();
 
-    SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
+    SocketConnectionRef existing_conn =
+      messenger.lookup_conn(conn.peer_addr, conn.listener_core);
 
     if (!existing_conn) {
       // there is no existing connection therefore cannot reconnect to previous
@@ -1658,11 +1663,22 @@ void ProtocolV2::execute_accepting()
                     conn, ceph_entity_type_name(_peer_type),
                     conn.policy.lossy, conn.policy.server,
                     conn.policy.standby, conn.policy.resetcheck);
-      if (!messenger.get_myaddr().is_blank_ip() &&
-          (messenger.get_myaddr().get_port() != _my_addr_from_peer.get_port() ||
-          messenger.get_myaddr().get_nonce() != _my_addr_from_peer.get_nonce())) {
+      if (conn.listener_core && !conn.policy.lossy) {
+        // only lossy (client) sessions are served by the per-core
+        // listeners: a lossless peer would have to reconnect to the
+        // listener it was accepted by
+        logger().warn("{} lossless peer at a per-core listener (core {})",
+                      conn, *conn.listener_core);
+        throw std::system_error(
+            make_error_code(crimson::net::error::bad_peer_address));
+      }
+      // the address the peer reached us at
+      const auto my_addr = messenger.get_myaddrs_via(conn.listener_core).front();
+      if (!my_addr.is_blank_ip() &&
+          (my_addr.get_port() != _my_addr_from_peer.get_port() ||
+          my_addr.get_nonce() != _my_addr_from_peer.get_nonce())) {
         logger().warn("{} my_addr_from_peer {} port/nonce doesn't match myaddr {}",
-                      conn, _my_addr_from_peer, messenger.get_myaddr());
+                      conn, _my_addr_from_peer, my_addr);
         throw std::system_error(
             make_error_code(crimson::net::error::bad_peer_address));
       }
@@ -1873,8 +1889,10 @@ ProtocolV2::send_server_ident()
     flags = flags | CEPH_MSG_CONNECT_LOSSY;
   }
 
+  // the addresses the client reached us at, which it verifies
+  const auto my_addrs = messenger.get_myaddrs_via(conn.listener_core);
   auto server_ident = ServerIdentFrame::Encode(
-          messenger.get_myaddrs(),
+          my_addrs,
           messenger.get_myname().num(),
           global_seq,
           conn.policy.features_supported,
@@ -1885,7 +1903,7 @@ ProtocolV2::send_server_ident()
   logger().debug("{} WRITE ServerIdentFrame: addrs={}, gid={},"
                  " gs={}, features_supported=0x{:x}, features_required=0x{:x},"
                  " flags=0x{:x}, server_cookie=0x{:x}",
-                 conn, messenger.get_myaddrs(), messenger.get_myname().num(),
+                 conn, my_addrs, messenger.get_myname().num(),
                  global_seq, conn.policy.features_supported,
                  conn.policy.features_required | msgr2_required,
                  flags, server_cookie);

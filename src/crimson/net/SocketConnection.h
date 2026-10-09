@@ -143,9 +143,17 @@ class SocketConnection : public Connection {
                      const entity_name_t& peer_name);
 
   /// start a handshake from the server's perspective,
-  /// only call when SocketConnection first construct
+  /// only call when SocketConnection first construct.
+  /// listener_core: set if accepted by that core's per-core listener
   void start_accept(SocketFRef&& socket,
-                    const entity_addr_t& peer_addr);
+                    const entity_addr_t& peer_addr,
+                    std::optional<seastar::shard_id> listener_core);
+
+  /// the core whose per-core listener accepted this connection, if any
+  /// (see SocketMessenger::bind_core_listeners())
+  std::optional<seastar::shard_id> get_listener_core() const {
+    return listener_core;
+  }
 
   seastar::future<> close_clean_yielded();
 
@@ -208,6 +216,9 @@ private:
   // which of the peer_addrs we're connecting to (as client)
   // or should reconnect to (as peer)
   entity_addr_t target_addr;
+
+  // see get_listener_core()
+  std::optional<seastar::shard_id> listener_core;
 
   uint64_t features = 0;
 

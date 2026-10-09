@@ -10,6 +10,7 @@
 #include <fmt/format.h>
 #include <fmt/os.h>
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 #include <seastar/core/timer.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
 
@@ -596,7 +597,12 @@ seastar::future<> OSD::start()
         ERROR("cluster messenger bind(): {}", e);
       })),
     public_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC))
-    .safe_then([this, dispatchers]() mutable {
+    .safe_then([this]() -> crimson::net::Messenger::bind_ertr::future<> {
+      if (local_conf().get_val<bool>("crimson_osd_core_listeners")) {
+        return public_msgr->bind_core_listeners();
+      }
+      return crimson::net::Messenger::bind_ertr::now();
+    }).safe_then([this, dispatchers]() mutable {
       return public_msgr->start(dispatchers);
     }, crimson::net::Messenger::bind_ertr::assert_all_func(
       [FNAME] (const std::error_code& e) {
@@ -704,6 +710,12 @@ seastar::future<> OSD::_send_boot()
   INFO("hb_back_msgr: {}", hb_back_addrs);
   INFO("hb_front_msgr: {}", hb_front_addrs);
   INFO("cluster_msgr: {}", cluster_addrs);
+
+  // the public address is final by now, and so are the per-core
+  // addresses derived from it
+  auto core_addrs = public_msgr->get_core_addrs();
+  INFO("public_msgr core listeners: {}", core_addrs);
+  co_await pg_shard_manager.set_core_hints(std::move(core_addrs));
 
   auto m = crimson::make_message<MOSDBoot>(superblock,
                                   osdmap->get_epoch(),
@@ -968,6 +980,9 @@ OSD::do_ms_dispatch(
     return handle_osd_map(boost::static_pointer_cast<MOSDMap>(m));
   case CEPH_MSG_OSD_OP:
     return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
+  case CEPH_MSG_PING:
+    // clients ping connections with laggy ops, only to detect their reset
+    return seastar::now();
   case MSG_OSD_PG_CREATE2:
     return handle_pg_create(
       conn, boost::static_pointer_cast<MOSDPGCreate2>(m));
