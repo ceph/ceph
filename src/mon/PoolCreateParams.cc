@@ -66,22 +66,6 @@ string PoolCreateParams::from_default(const string& param) const
   return i == pool_default_options().end() ? "" : " (" + i->second + ")";
 }
 
-std::optional<int64_t> profile_value(const string& profile, const string& key)
-{
-  std::istringstream in(profile);
-  string token;
-  while (in >> token) {
-    if (token.rfind(key + "=", 0) == 0) {
-      try {
-        return std::stoll(token.substr(key.size() + 1));
-      } catch (const std::exception&) {
-        return std::nullopt;
-      }
-    }
-  }
-  return std::nullopt;
-}
-
 PoolCreateParams load_pool_defaults(const ConfigProxy& conf)
 {
   PoolCreateParams p;
@@ -439,32 +423,6 @@ std::set<string> pool_default_option_names()
     names.insert(option);
   }
   return names;
-}
-
-string set_profile_value(const string& profile,
-                         const string& key,
-                         const string& value)
-{
-  std::istringstream in(profile);
-  std::ostringstream out;
-  bool found = false;
-  string token;
-  while (in >> token) {
-    if (out.tellp() > 0)
-      out << " ";
-    if (token.rfind(key + "=", 0) == 0) {
-      out << key << "=" << value;
-      found = true;
-    } else {
-      out << token;
-    }
-  }
-  if (!found) {
-    if (out.tellp() > 0)
-      out << " ";
-    out << key << "=" << value;
-  }
-  return out.str();
 }
 
 string profile_to_string(const std::map<string, string>& profile)

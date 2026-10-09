@@ -803,34 +803,6 @@ TEST(PoolDefaultOptionsTest, ProfileKMShareOneOption) {
   EXPECT_EQ(options.at("erasure_code_profile"), options.at("m"));
 }
 
-// Test a key in the profile is replaced in place
-TEST(SetProfileValueTest, ReplacesKeyInPlace) {
-  EXPECT_EQ("plugin=isa k=4 m=2",
-            set_profile_value("plugin=isa k=2 m=2", "k", "4"));
-}
-
-// Test a missing key is added at the end
-TEST(SetProfileValueTest, AddsMissingKey) {
-  EXPECT_EQ("plugin=isa k=2 m=3",
-            set_profile_value("plugin=isa k=2", "m", "3"));
-}
-
-// Test an empty profile gets the key
-TEST(SetProfileValueTest, EmptyProfile) {
-  EXPECT_EQ("k=4", set_profile_value("", "k", "4"));
-}
-
-// Test a key that only starts with the same letters is not replaced
-TEST(SetProfileValueTest, SimilarKeyNotReplaced) {
-  EXPECT_EQ("km=7 k=4", set_profile_value("km=7", "k", "4"));
-}
-
-// Test extra spaces between items are dropped
-TEST(SetProfileValueTest, ExtraSpacesDropped) {
-  EXPECT_EQ("plugin=isa k=2 m=5",
-            set_profile_value("  plugin=isa   k=2  m=2 ", "m", "5"));
-}
-
 // Test a profile map is written as key=value items in key order
 TEST(ProfileToStringTest, KeyOrder) {
   EXPECT_EQ("k=4 m=2 plugin=isa technique=cauchy",
@@ -958,23 +930,3 @@ TEST_F(PoolDefaultOverridesTest, LocalLegacySizeIsNotOverride) {
     cct->_conf.get_config_values()).empty());
 }
 
-// Test an integer profile value is found
-TEST(ProfileValueTest, Found) {
-  EXPECT_EQ(4, profile_value("plugin=isa k=4 m=2", "k").value());
-  EXPECT_EQ(2, profile_value("plugin=isa k=4 m=2", "m").value());
-}
-
-// Test a missing key gives no value
-TEST(ProfileValueTest, Missing) {
-  EXPECT_FALSE(profile_value("plugin=isa k=4", "m").has_value());
-}
-
-// Test a key that only starts with the same letters is not found
-TEST(ProfileValueTest, SimilarKeyNotFound) {
-  EXPECT_FALSE(profile_value("km=7", "k").has_value());
-}
-
-// Test a value that is not a number gives no value
-TEST(ProfileValueTest, NotANumber) {
-  EXPECT_FALSE(profile_value("k=four", "k").has_value());
-}

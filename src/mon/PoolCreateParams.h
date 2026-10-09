@@ -116,23 +116,11 @@ int check_pool_defaults(const PoolCreateParams& p,
 // code profile's, else the default.
 std::string effective_zone_failure_domain(const PoolCreateParams& p);
 
-// The integer value of key in profile, an erasure code profile as
-// osd_pool_default_erasure_code_profile holds it.
-std::optional<int64_t> profile_value(const std::string& profile,
-                                     const std::string& key);
-
 // The option that ceph osd pool default set writes for each parameter.
 const std::map<std::string, std::string>& pool_default_options();
 
 // The options that ceph osd pool default set writes.
 std::set<std::string> pool_default_option_names();
-
-// Profile is an erasure code profile as osd_pool_default_erasure_code_profile
-// holds it, "key=value" items separated by spaces. Returns it with key set to
-// value, in place if key is there, else at the end.
-std::string set_profile_value(const std::string& profile,
-                              const std::string& key,
-                              const std::string& value);
 
 // An erasure code profile in the form osd_pool_default_erasure_code_profile
 // holds it.
