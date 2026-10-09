@@ -1782,3 +1782,50 @@ TEST(ECUtil, per_zone_maps_reject_absolute_shards)
   EXPECT_DEATH(semap.contains_shard(shard_id_t(4)), "");
   EXPECT_DEATH(semap.get_extent_set(shard_id_t(4)), "");
 }
+
+// Test a single-zone pool marks raw shards 1 to k-1
+TEST(ECUtil, nonprimary_shards_one_zone)
+{
+  EXPECT_EQ(shard_id_set({shard_id_t(1), shard_id_t(2), shard_id_t(3)}),
+            ECUtil::nonprimary_shards(4, 2, {}, 1));
+}
+
+// Test every zone's copy of raw shards 1 to k-1 is marked
+TEST(ECUtil, nonprimary_shards_two_zones)
+{
+  EXPECT_EQ(shard_id_set({shard_id_t(1), shard_id_t(2), shard_id_t(3),
+                          shard_id_t(7), shard_id_t(8), shard_id_t(9)}),
+            ECUtil::nonprimary_shards(4, 2, {}, 2));
+}
+
+// Test three zones of k=2 m=1
+TEST(ECUtil, nonprimary_shards_three_zones)
+{
+  EXPECT_EQ(shard_id_set({shard_id_t(1), shard_id_t(4), shard_id_t(7)}),
+            ECUtil::nonprimary_shards(2, 1, {}, 3));
+}
+
+// Test k=1 leaves every shard able to become a primary
+TEST(ECUtil, nonprimary_shards_k_one)
+{
+  EXPECT_TRUE(ECUtil::nonprimary_shards(1, 2, {}, 2).empty());
+}
+
+// Test the chunk mapping turns raw shards into shards
+TEST(ECUtil, nonprimary_shards_chunk_mapping)
+{
+  const std::vector<shard_id_t> mapping = {
+    shard_id_t(0), shard_id_t(2), shard_id_t(1)};
+  EXPECT_EQ(shard_id_set({shard_id_t(2), shard_id_t(5)}),
+            ECUtil::nonprimary_shards(2, 1, mapping, 2));
+}
+
+// Test the identity chunk mapping gives the same set as none
+TEST(ECUtil, nonprimary_shards_identity_mapping)
+{
+  const std::vector<shard_id_t> mapping = {
+    shard_id_t(0), shard_id_t(1), shard_id_t(2), shard_id_t(3),
+    shard_id_t(4), shard_id_t(5)};
+  EXPECT_EQ(ECUtil::nonprimary_shards(4, 2, {}, 2),
+            ECUtil::nonprimary_shards(4, 2, mapping, 2));
+}

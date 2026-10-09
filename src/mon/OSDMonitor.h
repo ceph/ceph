@@ -815,6 +815,9 @@ public:
                                          const std::string& interr,
                                          pg_pool_t& p,
                                          std::stringstream& ss);
+  // Recompute the shards of a FastEC pool that cannot become a primary, for
+  // its num_zones.
+  int update_nonprimary_shards(pg_pool_t& p, std::ostream *ss);
   int prepare_num_zones_crush_rule(const cmdmap_t& cmdmap,
                                    const std::string& poolstr,
                                    int64_t n,

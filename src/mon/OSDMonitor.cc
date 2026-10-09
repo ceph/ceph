@@ -96,6 +96,7 @@
 #include "perfglue/heap_profiler.h"
 
 #include "auth/cephx/CephxKeyServer.h"
+#include "osd/ECUtil.h"
 #include "osd/OSDCap.h"
 
 #include "json_spirit/json_spirit_reader.h"
@@ -8917,26 +8918,8 @@ OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable,
     // up to date copies of xattrs including OI
     // For multi-zone configurations, we need to mark non-primary shards
     // across all zones: shard + (k+m)*zone for each zone
-    p.nonprimary_shards.clear();
-    
-    // Get num_zones from pool, default to 1
-    int64_t num_zones = p.get_num_zones();
-    
-    for (raw_shard_id_t raw_shard(0); raw_shard < k + m; ++raw_shard) {
-      if (raw_shard > 0 && raw_shard < k) {
-       shard_id_t rel_shard;
-       if (erasure_code->get_chunk_mapping().size() > static_cast<size_t>(int(raw_shard))) {
-         rel_shard = erasure_code->get_chunk_mapping().at(int(raw_shard));
-	} else {
-         rel_shard = shard_id_t(int8_t(raw_shard));
-	}
-       // Add this shard across all zones
-       for (int zone = 0; zone < num_zones; ++zone) {
-         shard_id_t shard = shard_id_t(int8_t(rel_shard) + (k + m) * zone);
-	p.nonprimary_shards.insert(shard);
-       }
-      }
-    }
+    p.nonprimary_shards = ECUtil::nonprimary_shards(
+      k, m, erasure_code->get_chunk_mapping(), p.get_num_zones());
     p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
 
     // Automatically enable omap support in fast EC pools
@@ -9031,6 +9014,23 @@ void OSDMonitor::maybe_remove_unused_crush_rule(int64_t skip_pool,
   }
   pending_inc.crush.clear();
   newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+}
+
+int OSDMonitor::update_nonprimary_shards(pg_pool_t& p, ostream *ss)
+{
+  if (!p.is_erasure() || !p.has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    return 0;
+  }
+  ErasureCodeInterfaceRef erasure_code;
+  if (int r = get_erasure_code(p.erasure_code_profile, &erasure_code, ss);
+      r < 0) {
+    return r;
+  }
+  p.nonprimary_shards = ECUtil::nonprimary_shards(
+    erasure_code->get_data_chunk_count(),
+    erasure_code->get_coding_chunk_count(),
+    erasure_code->get_chunk_mapping(), p.get_num_zones());
+  return 0;
 }
 
 int OSDMonitor::prepare_num_zones_crush_rule(
@@ -9160,6 +9160,9 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
       }
       p.num_zones = 1;
       p.crush_rule = crush_rule;
+      if (int r = update_nonprimary_shards(p, &ss); r < 0) {
+        return r;
+      }
       ss << "pool unstretched (num_zones=1)";
       bool any_pool_stretched = false;
       for (const auto& [pid, committed_pool] : osdmap.pools) {
@@ -9266,6 +9269,9 @@ int OSDMonitor::prepare_command_pool_set_num_zones(
     p.size = size;
     p.min_size = min_size;
     p.num_zones = n;
+    if (int r = update_nonprimary_shards(p, &ss); r < 0) {
+      return r;
+    }
     p.peering_crush_bucket_barrier = barrier_id;
     p.peering_crush_bucket_count = n;
     p.peering_crush_bucket_target = n;
@@ -10581,6 +10587,9 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
   p.size = static_cast<__u8>(pool_size);
   // Store num_zones (extracted from CRUSH rule topology)
   p.num_zones = static_cast<__u8>(num_zones);
+  if (int r = update_nonprimary_shards(p, &ss); r < 0) {
+    return r;
+  }
   if (p.is_replicated()) {
     p.min_size = static_cast<__u8>(pool_min_size);
     // Store replica (calculated or provided)
@@ -10688,6 +10697,9 @@ int OSDMonitor::prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
   p.min_size = static_cast<__u8>(pool_min_size);
   // Clear num_zones and set replica (no longer stretch)
   p.num_zones = 1;
+  if (int r = update_nonprimary_shards(p, &ss); r < 0) {
+    return r;
+  }
   p.replica = static_cast<__u8>(replica);
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;

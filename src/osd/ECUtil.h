@@ -1233,5 +1233,21 @@ struct log_entry_t {
 
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();
+
+// The shards of an optimized EC pool that cannot become a primary: raw shards
+// 1 to k-1 in every zone. The other shards may not have up to date copies of
+// the xattrs, including the object info.
+inline shard_id_set nonprimary_shards(
+    int k, int m, const std::vector<shard_id_t> &chunk_mapping, int num_zones) {
+  shard_id_set shards;
+  for (int raw_shard = 1; raw_shard < k; ++raw_shard) {
+    const int rel_shard = static_cast<size_t>(raw_shard) < chunk_mapping.size()
+      ? int(chunk_mapping[raw_shard]) : raw_shard;
+    for (int zone = 0; zone < num_zones; ++zone) {
+      shards.insert(shard_id_t(rel_shard + (k + m) * zone));
+    }
+  }
+  return shards;
+}
 }
 
