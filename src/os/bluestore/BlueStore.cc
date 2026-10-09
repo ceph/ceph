@@ -26,6 +26,7 @@
 
 #include <boost/container/flat_set.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/endian/conversion.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_real.hpp>
 
@@ -20451,19 +20452,6 @@ static const std::string allocator_file   = "ALLOCATOR_NCB_FILE";
 static uint32_t    s_format_version = 0x01; // support future changes to allocator-map file
 static uint32_t    s_serial         = 0x01;
 
-#if 1
-#define CEPHTOH_32 le32toh
-#define CEPHTOH_64 le64toh
-#define HTOCEPH_32 htole32
-#define HTOCEPH_64 htole64
-#else
-// help debug the encode/decode by forcing alien format
-#define CEPHTOH_32 be32toh
-#define CEPHTOH_64 be64toh
-#define HTOCEPH_32 htobe32
-#define HTOCEPH_64 htobe64
-#endif
-
 // 48 Bytes header for on-disk alloator image
 const uint64_t ALLOCATOR_IMAGE_VALID_SIGNATURE = 0x1FACE0FF;
 struct allocator_image_header {
@@ -20747,7 +20735,7 @@ static uint32_t flush_extent_buffer_with_crc(BlueFS::FileWriter *p_handle, const
   p_handle->append(buffer, length);
 
   crc = ceph_crc32c(crc, (const uint8_t*)buffer, length);
-  uint32_t encoded_crc = HTOCEPH_32(crc);
+  uint32_t encoded_crc = boost::endian::native_to_little(crc);
   p_handle->append((byte*)&encoded_crc, sizeof(encoded_crc));
 
   return crc;
@@ -20822,8 +20810,8 @@ int BlueStore::store_allocator(Allocator* src_allocator)
       ret = -1;
       return;
     }
-    p_curr->offset = HTOCEPH_64(extent_offset);
-    p_curr->length = HTOCEPH_64(extent_length);
+    p_curr->offset = boost::endian::native_to_little(extent_offset);
+    p_curr->length = boost::endian::native_to_little(extent_length);
     extent_count++;
     allocation_size += extent_length;
     p_curr++;
@@ -20999,8 +20987,8 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
     const unsigned  num_extent_in_buffer = read_bytes/sizeof(extent_t);
     const extent_t *p_end                = buffer + num_extent_in_buffer;
     for (const extent_t *p_ext = buffer; p_ext < p_end; p_ext++) {
-      uint64_t offset = CEPHTOH_64(p_ext->offset);
-      uint64_t length = CEPHTOH_64(p_ext->length);
+      uint64_t offset = boost::endian::little_to_native(p_ext->offset);
+      uint64_t length = boost::endian::little_to_native(p_ext->length);
       read_alloc_size += length;
 
       if (length > 0) {
@@ -21015,7 +21003,7 @@ int BlueStore::__restore_allocator(Allocator* allocator, uint64_t *num, uint64_t
     uint32_t calc_crc = ceph_crc32c(crc, (const uint8_t*)buffer, read_bytes);
     read_bytes        = bluefs->read(p_handle.get(), offset, sizeof(crc), nullptr, (char*)&crc);
     if (read_bytes == sizeof(crc) ) {
-      crc     = CEPHTOH_32(crc);
+      crc     = boost::endian::little_to_native(crc);
       if (crc != calc_crc) {
 	derr << "data crc mismatch!!! crc=" << crc << ", calc_crc=" << calc_crc << dendl;
 	derr << "extents_bytes_left=" << extents_bytes_left << ", offset=" << offset << ", extent_count=" << extent_count << dendl;

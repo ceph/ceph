@@ -67,7 +67,38 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 #endif /* __FreeBSD__ */
 
 #if defined(__APPLE__)
-struct cpu_set_t;
+// Darwin has no sched_setaffinity(2) and no cpu_set_t.  numa.cc's non-Linux
+// stubs never inspect the value, but callers still need a complete type in
+// order to declare one (e.g. OSD::numa_cpu_set).  Shaped like the Windows
+// shim further down this file.
+#ifndef CPU_SETSIZE
+#define CPU_SETSIZE (sizeof(size_t)*8)
+#endif
+typedef union {
+  char cpuset[CPU_SETSIZE/8];
+  size_t _align;
+} cpu_set_t;
+
+// Darwin has no procfs.  Define PROCPREFIX so that the /proc readers still
+// compile; they degrade to a runtime error when the path cannot be opened.
+#define PROCPREFIX
+
+// Darwin has no posix_fadvise(2).  The call is purely advisory - it hints the
+// page cache and nothing more - so ignoring it is a faithful degradation, and
+// it is what the bundled RocksDB already does on this platform.  Keep the
+// Linux numbering: these values reach the callers through configuration
+// options (rgw_d3n_l1_fadvise, rgw_d4n_l1_fadvise), not just as literals.
+#define POSIX_FADV_NORMAL     0
+#define POSIX_FADV_RANDOM     1
+#define POSIX_FADV_SEQUENTIAL 2
+#define POSIX_FADV_WILLNEED   3
+#define POSIX_FADV_DONTNEED   4
+#define POSIX_FADV_NOREUSE    5
+static inline int posix_fadvise(int fd, off_t offset, off_t len, int advice) {
+  (void)fd; (void)offset; (void)len; (void)advice;
+  return 0;
+}
+
 #endif
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
@@ -117,6 +148,9 @@ struct cpu_set_t;
 #ifndef EREMOTEIO
 #define EREMOTEIO 121
 #endif
+#ifndef ENOKEY
+#define ENOKEY 126
+#endif
 #ifndef EKEYREJECTED
 #define EKEYREJECTED 129
 #endif
@@ -162,6 +196,9 @@ struct cpu_set_t;
 #endif
 
 #if defined(__FreeBSD__) || defined(__APPLE__)
+// off_t is already 64-bit wide on both, and neither provides off64_t.
+// Consistent with the duplicate typedef in include/types.h.
+typedef off_t off64_t;
 #define lseek64(fd, offset, whence) lseek(fd, offset, whence)
 #endif
 
@@ -306,23 +343,6 @@ int win_socketpair(int socks[2]);
 
 #ifdef __MINGW32__
 extern _CRTIMP errno_t __cdecl _putenv_s(const char *_Name,const char *_Value);
-
-#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
-#define htobe16(x) __builtin_bswap16(x)
-#define htole16(x) (x)
-#define be16toh(x) __builtin_bswap16(x)
-#define le16toh(x) (x)
-
-#define htobe32(x) __builtin_bswap32(x)
-#define htole32(x) (x)
-#define be32toh(x) __builtin_bswap32(x)
-#define le32toh(x) (x)
-
-#define htobe64(x) __builtin_bswap64(x)
-#define htole64(x) (x)
-#define be64toh(x) __builtin_bswap64(x)
-#define le64toh(x) (x)
-#endif // defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 
 #endif // __MINGW32__
 
