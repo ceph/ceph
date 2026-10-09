@@ -828,11 +828,13 @@ TEST_F(PoolParamsTest, DefaultsMinSizeNotCheckedAsErasure) {
   EXPECT_EQ(0, check_pool_defaults(p, cluster(), &ss)) << ss.str();
 }
 
-// Test a min_size default is not checked against the default replicas
-TEST_F(PoolParamsTest, DefaultsMinSizeNotCheckedAsReplicated) {
+// Test a min_size default is checked against the replicas per zone
+TEST_F(PoolParamsTest, DefaultsMinSizeCheckedAsReplicated) {
   const PoolCreateParams p = with({{"replica", int64_t(2)},
                                    {"min_size", int64_t(3)}});
-  EXPECT_EQ(0, check_pool_defaults(p, cluster(), &ss)) << ss.str();
+  EXPECT_EQ(-EINVAL, check_pool_defaults(p, cluster(), &ss));
+  EXPECT_EQ("pool min_size must be between 1 and replica, which is set to 2",
+            ss.str());
 }
 
 // Test a min_size given with k and m in one command is not checked either

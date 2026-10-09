@@ -824,8 +824,8 @@ check the values that result, using the cluster where a check needs it (CRUSH ty
 classes, plugins, whether the cluster can be stretched). Which parameters may be given
 together is checked on the command line itself, and differs only where pool create describes
 one pool and ``set`` the defaults of every pool: for example ``--k`` alone changes the default
-profile, but a pool needs both ``--k`` and ``--m``. A ``min_size`` default is not checked,
-because pool create limits it to the pool's size.
+profile, but a pool needs both ``--k`` and ``--m``. A ``min_size`` default is checked against
+the replicas per zone, as for a replicated pool; EC pools do not use it.
 
 .. note::
 
