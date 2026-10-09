@@ -137,6 +137,13 @@ class Group(GroupTemplate):
         except cephfs.NoData:
             casesensitive = True
 
+        try:
+            pool_namespace = self.fs.getxattr(self.path,
+                                               'ceph.dir.layout.pool_namespace'
+                                               ).decode('utf-8')
+        except cephfs.NoData:
+            pool_namespace = ""
+
         return {'uid': int(st["uid"]),
                 'gid': int(st["gid"]),
                 'atime': str(st["atime"]),
@@ -144,6 +151,7 @@ class Group(GroupTemplate):
                 'ctime': str(st["ctime"]),
                 'mode': int(st["mode"]),
                 'data_pool': data_pool,
+                'pool_namespace': pool_namespace,
                 'created_at': str(st["btime"]),
                 'bytes_quota': "infinite" if nsize == 0 else nsize,
                 'bytes_used': int(usedbytes),
@@ -251,7 +259,16 @@ def set_group_attrs(fs, path, attrs):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, normalization, casesensitive):
+    # set pool namespace (for namespace isolation)
+    pool_namespace = attrs.get("pool_namespace")
+    if pool_namespace is not None:
+        try:
+            fs.setxattr(path, 'ceph.dir.layout.pool_namespace',
+                         pool_namespace.encode('utf-8'), 0)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, normalization, casesensitive, namespace_isolated=False, pool_namespace=None):
     """
     create a subvolume group.
 
@@ -265,6 +282,8 @@ def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, normalizat
     :param gid: the group identifier
     :param normalization: the unicode normalization form to use (nfd, nfc, nfkd or nfkc)
     :param casesensitive: whether to make the subvolume case insensitive or not
+    :param namespace_isolated: whether to enable RADOS namespace isolation for the group
+    :param pool_namespace: an explicit RADOS namespace to use; if None, auto-generated from group name
     :return: None
     """
     group = Group(fs, vol_spec, groupname)
@@ -283,6 +302,8 @@ def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, normalizat
             'normalization': normalization,
             'casesensitive': casesensitive,
         }
+        if namespace_isolated:
+            attrs['pool_namespace'] = pool_namespace or f'{vol_spec.fs_namespace}_{groupname}'
         set_group_attrs(fs, path, attrs)
     except (cephfs.Error, VolumeException) as e:
         try:
