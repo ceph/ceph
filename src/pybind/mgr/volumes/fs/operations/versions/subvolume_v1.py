@@ -29,7 +29,18 @@ from ..clone_index import open_clone_index, create_clone_index
 
 log = logging.getLogger(__name__)
 
-class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
+
+class V3Compat:
+    '''
+    Contains stuff that is overriden code in v3 subvol class, which in turn
+    allows max code reuse.
+    '''
+
+    def has_snap(self):
+        return self.list_snapshots()
+
+
+class SubvolumeV1(SubvolumeBase, SubvolumeTemplate, V3Compat):
     """
     Version 1 subvolumes creates a subvolume with path as follows,
         volumes/<group-name>/<subvolume-name>/<uuid>/
@@ -846,7 +857,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def list_snapshots(self):
         try:
             dirpath = self.snapshot_base_path()
-            return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
+            return listsnaps(self.fs, self.vol_spec, dirpath)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []

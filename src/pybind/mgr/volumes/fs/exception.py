@@ -1,37 +1,78 @@
+from errno import errorcode
+from logging import getLogger
+from traceback import format_stack
+
+
+log = getLogger(__name__)
+
+
 class VolumeException(Exception):
-    def __init__(self, error_code, error_message):
-        self.errno = error_code
-        self.error_str = error_message
+    '''
+    Generic exception for CephFS volumes plugin.
+    '''
+
+    def __init__(self, errno=None, errmsg=None, exception=None):
+        assert (errno and errmsg) or exception, \
+            f'errno = {errno} errmsg = {errmsg} exception = {exception}'
+
+        self.errno = errno
+        self.errmsg = errmsg
+
+        self.exception = exception
+        if self.exception:
+            self.errno = self.exception.args[0]
+            self.errmsg = self.exception.args[1]
+
+        if self.errno:
+            self.errcode = errorcode.get(abs(self.errno), 'UNKNOWN_ERROR')
+        # since error numbers are always negative.
+        if self.errno > 0:
+            self.errno = -self.errno
+
+        log.info(self)
+
+        # to be logged when an exceptions is left unhandled beyond bounds of
+        # volumes plugin
+        self.traceback = 'Traceback -\n' + ''.join(format_stack())
 
     def to_tuple(self):
-        return self.errno, "", self.error_str
+        return self.errno, "", self.errmsg
 
     def __str__(self):
-        return "{0} ({1})".format(self.errno, self.error_str)
+        return (f'{self.__class__.__name__}: self.errno = {self.errno}, '
+                f'self.errcode = {self.errcode}, self.errmsg = {self.errmsg}, '
+                f'self.exception = {self.exception}')
 
-class MetadataMgrException(Exception):
-    def __init__(self, error_code, error_message):
-        self.errno = error_code
-        self.error_str = error_message
 
-    def __str__(self):
-        return "{0} ({1})".format(self.errno, self.error_str)
+class MetadataMgrException(VolumeException):
+    pass
 
-class IndexException(Exception):
-    def __init__(self, error_code, error_message):
-        self.errno = error_code
-        self.error_str = error_message
 
-    def __str__(self):
-        return "{0} ({1})".format(self.errno, self.error_str)
+class IndexException(VolumeException):
+    pass
 
-class OpSmException(Exception):
-    def __init__(self, error_code, error_message):
-        self.errno = error_code
-        self.error_str = error_message
 
-    def __str__(self):
-        return "{0} ({1})".format(self.errno, self.error_str)
+class OpSmException(VolumeException):
+    pass
+
+
+class InvalidUuidError(VolumeException):
+    pass
+
+
+class V2UpgradeError(VolumeException):
+    '''
+    Subvol auto-upgrade from v2 to v3.
+    '''
+
+    def __init__(self, exception=None):
+        super().__init__(exception=exception)
+        self.errmsg = f'Error upgrading subvol from v2 to v3: {self.errmsg}'
+
+
+class EvictionError(VolumeException):
+    pass
+
 
 class NotImplementedException(Exception):
     pass
@@ -55,9 +96,8 @@ class ClusterError(Exception):
         self._result_code = result_code
         self._result_str = result_str
 
-    def __str__(self):
-        return "Error {0} (\"{1}\") while {2}".format(
-            self._result_code, self._result_str, self._action)
+        log.info(self)
 
-class EvictionError(Exception):
-    pass
+    def __str__(self):
+        return (f'{self.__class__.__name__}: {self._result_code} '
+                f'"{self._result_str}" while {self._action}')

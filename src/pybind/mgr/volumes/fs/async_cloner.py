@@ -94,7 +94,7 @@ def handle_clone_pending(fs_client, volspec, volname, index, groupname, subvolna
                                                   SubvolumeStates.STATE_PENDING,
                                                   SubvolumeActions.ACTION_SUCCESS)
     except OpSmException as oe:
-        raise VolumeException(oe.errno, oe.error_str)
+        raise VolumeException(oe.errno, oe.errmsg)
     return (next_state, False)
 
 def sync_attrs(fs_handle, target_path, source_statx):
@@ -199,7 +199,7 @@ def update_clone_failure_status(fs_client, volspec, volname, groupname, subvolna
         if ve.errno == -errno.EINTR:
             clone.add_clone_failure(-ve.errno, "user interrupted clone operation")
         else:
-            clone.add_clone_failure(-ve.errno, ve.error_str)
+            clone.add_clone_failure(-ve.errno, ve.errmsg)
 
 def log_clone_failure(volname, groupname, subvolname, ve):
     if ve.errno == -errno.EINTR:
@@ -215,12 +215,12 @@ def handle_clone_in_progress(fs_client, volspec, volname, index, groupname, subv
         next_state = SubvolumeOpSm.transition(SubvolumeTypes.TYPE_CLONE,
                                               SubvolumeStates.STATE_INPROGRESS,
                                               SubvolumeActions.ACTION_SUCCESS)
+    except OpSmException as oe:
+        raise VolumeException(oe.errno, oe.errmsg)
     except VolumeException as ve:
         update_clone_failure_status(fs_client, volspec, volname, groupname, subvolname, ve)
         log_clone_failure(volname, groupname, subvolname, ve)
         next_state = get_next_state_on_error(ve.errno)
-    except OpSmException as oe:
-        raise VolumeException(oe.errno, oe.error_str)
     return (next_state, False)
 
 def handle_clone_failed(fs_client, volspec, volname, index, groupname, subvolname, should_cancel):

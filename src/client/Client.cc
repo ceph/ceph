@@ -16236,7 +16236,7 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
  reply_error:
   trim_cache();
 
-  ldout(cct, 8) << "create(" << wdr.getpath() << ", 0" << oct << mode << dec
+  ldout(cct, 8) << "_create(" << wdr.getpath() << ", 0" << oct << mode << dec
 		<< " layout " << stripe_unit
 		<< ' ' << stripe_count
 		<< ' ' << object_size
