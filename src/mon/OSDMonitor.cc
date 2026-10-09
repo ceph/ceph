@@ -8571,8 +8571,11 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (num_zones > 1 && zone_failure_domain.empty())
     effective_zone_failure_domain = g_conf().get_val<string>("osd_pool_default_zone_failure_domain");
 
+  // a new stretch pool must divide the cluster as stretch mode does
   if (osdmap.stretch_mode_enabled && num_zones > 1) {
-    r = validate_stretch_mode_new_pool(crush_rule, zone_failure_domain, ss);
+    CrushWrapper newcrush = _get_pending_crush();
+    r = validate_stretch_mode_new_pool(newcrush, crush_rule, osdmap.stretch_bucket_count, osdmap.stretch_mode_bucket,
+      osdmap.pools, effective_zone_failure_domain, ss);
     if (r) {
       dout(10) << "validate_stretch_mode_pool returns " << r << dendl;
       return r;
@@ -9063,21 +9066,15 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
-    if (n <= 0 || n > 10) {
-      ss << "pool size must be between 1 and 10";
-      return -EINVAL;
+    if (int r = check_pool_replica_copies(n, "pool size", &ss); r < 0) {
+      return r;
     }
     if (n == 1) {
-      if (!g_conf().get_val<bool>("mon_allow_pool_size_one")) {
-	ss << "configuring pool size as 1 is disabled by default.";
-	return -EPERM;
-      }
-      bool sure = false;
-      cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
-      if (!sure) { ss << "WARNING: setting pool size 1 could lead to data loss "
-	"without recovery. If you are *ABSOLUTELY CERTAIN* that is what you want, "
-	  "pass the flag --yes-i-really-mean-it.";
-	return -EPERM;
+      if (int r = check_size_one(
+            g_conf().get_val<bool>("mon_allow_pool_size_one"),
+            cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false), &ss);
+          r < 0) {
+        return r;
       }
     }
     if (!osdmap.crush->rule_valid_for_pool_type(p.get_crush_rule(), p.type)) {
@@ -14645,8 +14642,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool force_create = false;
     cmd_getval(cmdmap, "force_pg_limit", force_create);
 
-    root = cmd_getval_or<string>(cmdmap, "root", "default");
-    int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
     const string zone_failure_domain =
       num_zones > 1 || params.is_given("zone_failure_domain")
         ? effective_zone_failure_domain(params) : string();
@@ -14654,6 +14649,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       (pool_type == pg_pool_t::TYPE_REPLICATED && num_zones > 1)
         ? params.replica : 0;
     const int num_replica_per_zone = params.replica;
+
+    // the default rule, when it suits the pool, instead of a generated one
+    if (!params.crush_params_given() &&
+        (pool_type == pg_pool_t::TYPE_ERASURE ? implicit_rule_creation
+                                              : rule_name.empty() && num_zones > 1)) {
+      CrushWrapper crush = _get_pending_crush();
+      if (default_rule_suits_pool(crush, params.default_rule, pool_type,
+                                  num_zones, zone_failure_domain,
+                                  osdmap.pools)) {
+        rule_name = crush.get_rule_name(params.default_rule);
+      }
+    }
 
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
@@ -16445,6 +16452,62 @@ void OSDMonitor::extract_sites_from_crush_rule(CrushWrapper& crush, set<int>& ru
   }
 }
 
+int OSDMonitor::validate_stretch_mode_new_pool(CrushWrapper& crush, int new_crush_rule, int stretch_bucket_count, int stretch_mode_bucket,
+  const mempool::osdmap::map<int64_t, pg_pool_t>& pools, const string& zone_failure_domain, ostream *ss)
+{
+  int dividing_id = crush.get_type_id(zone_failure_domain);
+  if (dividing_id < 0) {
+    *ss << "type '" << zone_failure_domain << "' does not exist";
+    return -EINVAL;
+  }
+  // Get the take roots from the rule
+  set<int> rule_roots;
+  crush.find_takes_by_rule(new_crush_rule, &rule_roots);
+
+  if (rule_roots.empty()) {
+    if (ss) {
+      *ss << "CRUSH rule " << new_crush_rule << " has no take operations";
+    }
+    return -EINVAL;
+  }
+  if (dividing_id != stretch_mode_bucket) {
+    if (ss) {
+      *ss << "CRUSH rule " << new_crush_rule << " is stretched across " << crush.get_type_name(dividing_id)
+          << " instead of " << crush.get_type_name(stretch_mode_bucket);
+    }
+    return -EINVAL;
+  }
+  // For each take root, find all children at the dividing type level
+  set<int> rule_sites;
+  extract_sites_from_crush_rule(crush, rule_sites, rule_roots, dividing_id);
+  if (int(rule_sites.size()) != stretch_bucket_count) {
+    if (ss) {
+      *ss << "CRUSH rule " << new_crush_rule << " covers " << rule_sites.size()
+          << " " << crush.get_type_name(dividing_id) << " buckets, but stretch mode requires exactly " << stretch_bucket_count;
+    }
+    return -EINVAL;
+  }
+
+  // Verify the sites match the expected stretch mode sites
+  for (const auto& [poolid, pool] : pools) {
+    if (pool.is_stretch_pool()) {
+      int crush_rule = pool.crush_rule;
+      int existing_dividing_id = pool.peering_crush_bucket_barrier;
+      set<int> existing_rule_roots;
+      crush.find_takes_by_rule(crush_rule, &existing_rule_roots);
+      set<int> existing_rule_sites;
+      extract_sites_from_crush_rule(crush, existing_rule_sites, existing_rule_roots, existing_dividing_id);
+      if (existing_rule_sites != rule_sites) {
+        if (ss) {
+          *ss << "CRUSH rule " << new_crush_rule << " uses different "
+              << crush.get_type_name(dividing_id) << " buckets than configured for stretch mode";
+        }
+        return -EINVAL;
+      }
+    }
+  }
+  return 0;
+}
 
 static int degraded_stretch_mandatory_member(const OSDMap& osdmap)
 {
@@ -16582,6 +16645,59 @@ PoolCreateCluster OSDMonitor::pool_create_cluster(CrushWrapper& crush)
   return cluster;
 }
 
+bool OSDMonitor::default_rule_suits_pool(
+    CrushWrapper& crush,
+    int64_t rule,
+    int pool_type,
+    int64_t num_zones,
+    const string& zone_failure_domain,
+    const mempool::osdmap::map<int64_t, pg_pool_t>& pools)
+{
+  if (rule < 0 || !crush.rule_exists(rule) ||
+      !crush.rule_valid_for_pool_type(rule, pool_type)) {
+    return false;
+  }
+  if (num_zones == 1) {
+    return true;
+  }
+  const int zone_type = crush.get_type_id(zone_failure_domain);
+  if (zone_type < 0) {
+    return false;
+  }
+  // the rule must choose num_zones zones, or take each zone itself
+  set<int> zones_taken;
+  bool chooses_zones = false;
+  for (int step = 0; step < crush.get_rule_len(rule); ++step) {
+    const int op = crush.get_rule_op(rule, step);
+    const int arg1 = crush.get_rule_arg1(rule, step);
+    if (op == CRUSH_RULE_TAKE) {
+      if (arg1 < 0 && crush.get_bucket_type(arg1) == zone_type) {
+        zones_taken.insert(arg1);
+      }
+    } else if ((op == CRUSH_RULE_CHOOSE_FIRSTN ||
+                op == CRUSH_RULE_CHOOSE_INDEP ||
+                op == CRUSH_RULE_CHOOSELEAF_FIRSTN ||
+                op == CRUSH_RULE_CHOOSELEAF_INDEP) &&
+               crush.get_rule_arg2(rule, step) == zone_type &&
+               arg1 == num_zones) {
+      chooses_zones = true;
+    }
+  }
+  if (!chooses_zones && std::ssize(zones_taken) != num_zones) {
+    return false;
+  }
+  stringstream ss;
+  return validate_stretch_mode_new_pool(crush, rule, num_zones, zone_type,
+                                        pools, zone_failure_domain, &ss) == 0;
+}
+
+string OSDMonitor::num_zones_upgrade_hint()
+{
+  std::ostringstream out;
+  out << "the upgrade is committed with 'ceph osd require-osd-release "
+      << NUM_ZONES_RELEASE << "'";
+  return out.str();
+}
 bool OSDMonitor::check_for_dead_crush_zones(const map<string,set<string>>& dead_buckets,
 					    set<int> *really_down_buckets,
 					    set<string> *really_down_mons)
