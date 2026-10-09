@@ -69,7 +69,10 @@ A profile is created in one of two ways:
 
 The ``default`` profile is a template that no pool uses. It holds what a pool
 gets when it names no profile. ``ceph osd pool default set --k {k} --m {m}``
-changes its ``k`` and ``m`` and keeps its other keys.
+changes its ``k`` and ``m`` and keeps its other keys. It refuses ``--k`` and
+``--m`` while the default pool type is ``replicated``, unless it is also given
+``--pool_type erasure``, which makes every later pool that names no type an
+erasure-coded pool.
 ``ceph osd erasure-code-profile set default ...`` replaces the whole profile:
 with ``osd_pool_default_erasure_code_profile`` and the keys given, or with only
 the keys given if they name another plugin. Pools created before the change
