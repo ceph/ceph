@@ -247,6 +247,21 @@ def test_upgrade_state_crush_roundtrip():
     assert restored.crush_bucket_name == 'rack1'
 
 
+def test_upgrade_state_fs_dicts_roundtrip_through_json():
+    # fs_original_max_mds / fs_original_allow_standby_replay are keyed by
+    # fscid (int). The upgrade state is persisted as JSON, whose object keys
+    # are strings: after a mgr failover the keys must be ints again, or the
+    # filesystems would never be scaled back up / get standby-replay back.
+    u = UpgradeState(
+        'target', 'pid',
+        fs_original_max_mds={1: 2, 2: 3},
+        fs_original_allow_standby_replay={1: True})
+    restored = UpgradeState.from_json(json.loads(json.dumps(u.to_json())))
+    assert restored
+    assert restored.fs_original_max_mds == {1: 2, 2: 3}
+    assert restored.fs_original_allow_standby_replay == {1: True}
+
+
 def _test_osd_dd(osd_id: int, digests: List[str]) -> DaemonDescription:
     return DaemonDescription(
         daemon_type='osd',
@@ -1128,6 +1143,32 @@ def test_complete_mds_upgrade_scales_up_only_finished_fs(
     assert scaled == ['cephfs']
     # cephfs2 (fscid 2) is still being upgraded: its entry must remain
     assert cephadm_module.upgrade.upgrade_state.fs_original_max_mds == {2: 2}
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_complete_mds_upgrade_scales_up_after_mgr_failover(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # Same as above, but with the upgrade state reloaded from the store as a
+    # new mgr would after a failover during the MDS phase.
+    check_mon_command.return_value = (0, '', '')
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    u = UpgradeState('target_image', 'pid', fail_fs=False,
+                     fs_original_max_mds={1: 2, 2: 2},
+                     fs_original_allow_standby_replay={1: True})
+    cephadm_module.upgrade.upgrade_state = UpgradeState.from_json(
+        json.loads(json.dumps(u.to_json())))
+
+    cephadm_module.upgrade._complete_mds_upgrade(fs_names=['cephfs'])
+
+    fs_sets = [(c.args[0]['fs_name'], c.args[0]['var'], c.args[0]['val'])
+               for c in check_mon_command.call_args_list
+               if c.args and c.args[0].get('prefix') == 'fs set']
+    assert fs_sets == [('cephfs', 'max_mds', '2'),
+                       ('cephfs', 'allow_standby_replay', '1')]
+    assert cephadm_module.upgrade.upgrade_state.fs_original_max_mds == {2: 2}
+    assert cephadm_module.upgrade.upgrade_state.fs_original_allow_standby_replay == {}
 
 
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
