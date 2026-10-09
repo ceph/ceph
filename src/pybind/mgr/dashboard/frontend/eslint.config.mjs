@@ -49,6 +49,7 @@ export default tseslint.config(
 
       // @TODO: revisit and remove them by fixing the respective errors in ts files
       '@angular-eslint/prefer-standalone': 'off',
+      '@angular-eslint/prefer-inject': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-unsafe-function-type': 'off',

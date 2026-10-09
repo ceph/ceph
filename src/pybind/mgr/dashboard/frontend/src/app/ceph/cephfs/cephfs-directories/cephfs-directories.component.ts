@@ -2,7 +2,7 @@ import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@an
 import { AbstractControl, Validators } from '@angular/forms';
 
 import { TreeViewComponent } from 'carbon-components-angular';
-import { Node } from 'carbon-components-angular/treeview/tree-node.types';
+import { Node } from '~/app/shared/models/carbon-tree-node';
 import _ from 'lodash';
 import moment from 'moment';
 
