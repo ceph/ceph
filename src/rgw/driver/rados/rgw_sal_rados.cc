@@ -4233,6 +4233,35 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
 
     RGWObjVersionTracker objv_tracker = meta_obj->get_version_tracker();
 
+    // a completion records its tag, and the version it writes, before its
+    // head write. if that version carries the tag, the upload was
+    // completed and its parts are that version's: remove only the meta
+    // object. in a versioned bucket, the version may no longer be the
+    // current one and still reference the parts
+    // get_obj_attrs() fills the attrs without marking them read, so look
+    // them up directly rather than through get_attr()
+    const auto& meta_attrs = meta_obj->get_attrs();
+    const auto record = meta_attrs.find(RGW_ATTR_MP_COMPLETION_TAG);
+    if (record != meta_attrs.end()) {
+      std::unique_ptr<rgw::sal::Object> head = recorded_head(meta_attrs);
+      ret = head_carries(dpp, y, head.get(), record->second);
+      if (ret < 0) {
+        return ret;
+      }
+      if (ret > 0) {
+        std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
+        del_op->params.bucket_owner = bucket->get_info().owner;
+        del_op->params.versioning_status = 0;
+        del_op->params.objv_tracker = &objv_tracker;
+        ret = del_op->delete_obj(dpp, y, 0);
+        if (ret == -ECANCELED) {
+          continue; // a part upload raced; look again
+        }
+        // the upload is gone, and the object it completed stays
+        return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
+      }
+    }
+
     do {
       ret = list_parts(dpp, cct, 1000, marker, &marker, &truncated, y);
       if (ret < 0) {
@@ -4320,6 +4349,60 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   }
 
   return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
+}
+
+int RadosMultipartUpload::set_completion_record(const DoutPrefixProvider* dpp, optional_yield y,
+                                                const bufferlist* tag, const std::string& instance)
+{
+  std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
+  meta_obj->set_in_extra_data(true);
+  rgw_raw_obj raw_obj;
+  static_cast<RadosObject*>(meta_obj.get())->get_raw_obj(&raw_obj);
+  rgw_rados_ref ref;
+  int ret = store->getRados()->get_raw_obj_ref(dpp, raw_obj, &ref);
+  if (ret < 0) {
+    return ret;
+  }
+  librados::ObjectWriteOperation op;
+  op.assert_exists();
+  if (tag) {
+    bufferlist instance_bl;
+    instance_bl.append(instance);
+    op.setxattr(RGW_ATTR_MP_COMPLETION_TAG, *tag);
+    op.setxattr(RGW_ATTR_MP_COMPLETION_INSTANCE, instance_bl);
+  } else {
+    op.rmxattr(RGW_ATTR_MP_COMPLETION_TAG);
+    op.rmxattr(RGW_ATTR_MP_COMPLETION_INSTANCE);
+  }
+  return rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+}
+
+// the head a completion record names. "null" names the head object of
+// the key itself, and is read without following the OLH: a completion's
+// head in a bucket that is not versioned, or the null version in one
+// whose versioning is suspended
+std::unique_ptr<rgw::sal::Object> RadosMultipartUpload::recorded_head(const rgw::sal::Attrs& meta_attrs)
+{
+  std::string instance = "null";
+  if (auto i = meta_attrs.find(RGW_ATTR_MP_COMPLETION_INSTANCE); i != meta_attrs.end()) {
+    instance = i->second.to_str();
+  }
+  return bucket->get_object(rgw_obj_key(mp_obj.get_key(), instance));
+}
+
+// 1 if the head carries the ID tag, 0 if it does not or is gone
+int RadosMultipartUpload::head_carries(const DoutPrefixProvider* dpp, optional_yield y,
+                                       rgw::sal::Object* head, const bufferlist& tag)
+{
+  int ret = head->load_obj_state(dpp, y);
+  if (ret == -ENOENT) {
+    return 0;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  bufferlist id_tag;
+  return head->get_attr(RGW_ATTR_ID_TAG, id_tag) && id_tag.contents_equal(tag);
 }
 
 std::unique_ptr<rgw::sal::Object> RadosMultipartUpload::get_meta_obj()
@@ -4531,6 +4614,57 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // AEAD: (S3 part number, GCM salt) per selected part, in manifest-segment order.
   std::vector<std::pair<uint32_t, std::string>> part_keys;
 
+  // a completion records its tag, and the version it writes, in the meta
+  // object before its head write. a record here is an earlier
+  // completion's, whose meta object was left behind
+  {
+    rgw::sal::Attrs meta_attrs;
+    ret = get_info(dpp, y, nullptr, &meta_attrs);
+    if (ret < 0) {
+      return ret;
+    }
+    if (auto i = meta_attrs.find(RGW_ATTR_MP_COMPLETION_TAG); i != meta_attrs.end()) {
+      // if the version it wrote carries the tag, that completion took
+      // effect: answer as it did, and the caller deletes the meta object.
+      // otherwise its head was never written, or was replaced or deleted
+      // and its parts sent to GC, and a head written over those parts
+      // would lose the object's data
+      std::unique_ptr<rgw::sal::Object> head = recorded_head(meta_attrs);
+      ret = head_carries(dpp, y, head.get(), i->second);
+      if (ret < 0) {
+        return ret;
+      }
+      if (ret == 0) {
+        ldpp_dout(dpp, 0) << "NOTICE: an earlier completion of upload " << get_upload_id()
+                          << " did not take effect, or was replaced; not completing it again" << dendl;
+        return -ERR_NO_SUCH_UPLOAD;
+      }
+      // the part list must be the one the earlier completion used
+      for (const auto& [num, part_etag] : part_etags) {
+        char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
+        hex_to_buf(rgw_string_unquote(part_etag).c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+        hash.Update((const unsigned char *)petag, sizeof(petag));
+      }
+      hash.Final((unsigned char *)final_etag);
+      std::string want;
+      buf_to_hex(final_etag, std::back_inserter(want));
+      fmt::format_to(std::back_inserter(want), "-{}", part_etags.size());
+      bufferlist head_etag;
+      if (!head->get_attr(RGW_ATTR_ETAG, head_etag) || rgw_bl_str(head_etag) != want) {
+        return -ERR_NO_SUCH_UPLOAD;
+      }
+      // answer with the version the earlier completion wrote, not the one
+      // generated for this request
+      if (head->get_key().need_to_encode_instance()) {
+        target_obj->set_instance(head->get_instance());
+      }
+      target_obj->set_attrs(head->get_attrs());
+      ofs = head->get_size();
+      accounted_size = head->get_accounted_size();
+      return 0;
+    }
+  }
+
   do {
     ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
     if (ret == -ENOENT) {
@@ -4732,10 +4866,28 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.if_match = if_match;
   obj_op.meta.if_nomatch = if_nomatch;
 
+  // record this completion's tag, the ID tag its head will carry, and the
+  // version it writes: its own instance in a version-enabled bucket,
+  // otherwise the null one
+  {
+    const std::string& instance = target_obj->get_instance();
+    bufferlist tag_bl;
+    tag_bl.append(tag.c_str(), tag.size() + 1);
+    ret = set_completion_record(dpp, y, &tag_bl, instance.empty() ? "null" : instance);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   const req_context rctx{dpp, y, nullptr};
   ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
-  if (ret < 0)
+  if (ret < 0) {
+    if (ret != -ETIMEDOUT) {
+      // the head was not written, so a retry may still complete the upload
+      std::ignore = set_completion_record(dpp, y, nullptr, {});
+    }
     return ret;
+  }
 
   return ret;
 }

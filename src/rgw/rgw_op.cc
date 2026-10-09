@@ -7921,6 +7921,10 @@ void RGWCompleteMultipart::execute(optional_yield y)
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
   }
+  if (s->bucket->versioning_enabled()) {
+    // a replay of an earlier completion answers with the version it wrote
+    version_id = s->object->get_instance();
+  }
 
   // size is logged in stadared mode
   int ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Standard, s->object.get(), s, canonical_name(), "", ofs, this, y, true, false);
