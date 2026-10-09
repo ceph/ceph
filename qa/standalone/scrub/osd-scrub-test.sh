@@ -919,6 +919,80 @@ function TEST_abort_periodic_for_operator() {
 
 
 
+# Operator scrub requests made while the PG is not clean (not registered
+# for scrubbing) must be carried out once it is.
+
+# degrade a 1-PG pool by stopping a replica; sets POOL, PGID, REPLICA, LAST_DEEP
+function _stop_a_replica() {
+    local dir=$1
+    POOL=test
+
+    run_mon $dir a --osd_pool_default_size=3 || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
+    for osd in 0 1 2
+    do
+      run_osd $dir $osd || return 1
+    done
+
+    create_pool $POOL 1 1
+    wait_for_clean || return 1
+    local poolid=$(ceph osd dump | grep "^pool.*[']${POOL}[']" | awk '{ print $2 }')
+    PGID="${poolid}.0"
+    rados -p $POOL put obj1 /etc/group || return 1
+
+    REPLICA=$(get_not_primary $POOL obj1)
+    LAST_DEEP=$(get_last_scrub_stamp $PGID last_deep_scrub_stamp)
+
+    kill_daemons $dir TERM osd.$REPLICA || return 1
+    ceph osd down osd.$REPLICA || return 1
+    _wait_pg_state $PGID degraded
+}
+
+function _wait_pg_state() {
+    local pgid=$1
+    local state=$2
+    for ((i=0; i < $TIMEOUT; i++)); do
+      ceph pg $pgid query | jq -r .state | grep -q "$state" && return 0
+      sleep 1
+    done
+    return 1
+}
+
+# bring the stopped replica back, with objects to recover, and hold the PG
+# before it is clean
+function _hold_in_recovery() {
+    local dir=$1
+    rados -p $POOL put obj2 /etc/group || return 1
+    ceph osd set norecover || return 1
+    activate_osd $dir $REPLICA || return 1
+    _wait_pg_state $PGID recover
+}
+
+function TEST_operator_scrub_requested_while_recovering() {
+    local dir=$1
+    local POOL PGID REPLICA LAST_DEEP
+    _stop_a_replica $dir || return 1
+    _hold_in_recovery $dir || return 1
+    ceph pg deep-scrub $PGID || return 1
+    ceph osd unset norecover || return 1
+    wait_for_clean || return 1
+    wait_for_scrub $PGID "$LAST_DEEP" last_deep_scrub_stamp || return 1
+}
+
+function TEST_operator_scrub_aborted_while_recovering() {
+    local dir=$1
+    local POOL PGID REPLICA LAST_DEEP
+    _stop_a_replica $dir || return 1
+    _hold_in_recovery $dir || return 1
+    ceph pg deep-scrub $PGID || return 1
+    ceph tell $PGID scrub-abort --format=json | \
+      jq -e '.applicable == true' || return 1
+    ceph osd unset norecover || return 1
+    wait_for_clean || return 1
+    sleep 30
+    test "$(get_last_scrub_stamp $PGID last_deep_scrub_stamp)" = "$LAST_DEEP" || return 1
+}
+
 main osd-scrub-test "$@"
 
 # Local Variables:
