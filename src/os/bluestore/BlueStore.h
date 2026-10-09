@@ -2459,7 +2459,8 @@ private:
   };
 
   // store open_db options:
-  bool db_was_opened_read_only = true;
+  bool db_in_read_only = true;
+  bool db_in_repair = false;
   bool need_to_destage_allocation_file = false;
 
   alloc_recovery_policy_t alloc_recovery_policy = alloc_recovery_policy_t::strict;
@@ -2549,7 +2550,6 @@ private:
   KVSyncThread kv_sync_thread;
   ceph::mutex kv_lock = ceph::make_mutex("BlueStore::kv_lock");
   ceph::condition_variable kv_cond;
-  bool _kv_only = false;
   bool kv_sync_started = false;
   bool kv_stop = false;
   bool kv_finalize_started = false;
@@ -2976,7 +2976,6 @@ private:
   int _write_out_fm_meta(uint64_t target_size);
   int _create_alloc();
   int _init_alloc();
-  void _post_init_alloc();
   void _close_alloc();
   int _open_collections();
   void _fsck_collections(int64_t* errors);
@@ -3268,6 +3267,7 @@ public:
   int umount() override;
 
   int open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair);
+  int reopen_repaired_db_environment();
   int close_db_environment();
   BlueFS* get_bluefs();
 
@@ -4366,8 +4366,7 @@ private:
   int  read_allocation_from_onodes_mt(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
   class OnodeScanMT;
   friend OnodeScanMT;
-  int  commit_freelist_type();
-  int  commit_to_null_manager();
+  int  commit_freelist_type(KeyValueDB::Transaction t);
   int  commit_to_real_manager();
   int  db_cleanup(int ret);
   int  reset_fm_for_restore();
