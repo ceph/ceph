@@ -19,6 +19,7 @@ void MockPeeringListener::request_local_background_io_reservation(
   unsigned priority,
   PGPeeringEventURef on_grant,
   PGPeeringEventURef on_preempt) {
+  last_io_reservation_priority = priority;
   // Check inject_event_stall first: a grant delivered across a later interval
   // change would hit a PeeringState in Reset and abort.
   if (inject_event_stall) {
@@ -43,6 +44,7 @@ void MockPeeringListener::request_remote_recovery_reservation(
   unsigned priority,
   PGPeeringEventURef on_grant,
   PGPeeringEventURef on_preempt) {
+  last_remote_recovery_reservation_priority = priority;
   if (inject_event_stall) {
     stalled_events.push_back(std::move(on_grant));
   } else if (event_loop) {
@@ -132,4 +134,3 @@ void MockPeeringListener::on_activate_complete() {
   }
   activate_complete_called = true;
 }
-
