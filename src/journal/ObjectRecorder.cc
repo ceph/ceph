@@ -36,7 +36,7 @@ void move_append_buffers(AppendBuffers& destination, AppendBuffers& source)
     destination.swap(source);
     return;
   }
-  destination.reserve(std::size(destination) + std::size(source));
+  // Keep geometric growth when small batches accumulate.
   std::ranges::move(source, std::back_inserter(destination));
   source.clear();
 }
@@ -375,6 +375,9 @@ bool ObjectRecorder::send_appends(bool force, ceph::ref_t<FutureImpl> flush_futu
     }
   }
 
+  // Partial flushes shift the retained suffix; repeated short drains of large
+  // backlogs were faster with list/deque. Whole-batch vector flushes shift none.
+  // Revisit prefix compaction if this pattern proves common in production.
   m_pending_buffers.erase(std::begin(m_pending_buffers), stop);
 
   if (append_bytes > 0) {
