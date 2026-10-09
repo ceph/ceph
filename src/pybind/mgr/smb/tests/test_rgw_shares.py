@@ -934,3 +934,283 @@ def test_rgw_share_acl_configuration(thandler):
     # Verify ACL xattr security name is configured
     assert 'acl_xattr:security_acl_name' in share_opts
     assert share_opts['acl_xattr:security_acl_name'] == 'user.NTACL'
+
+
+class _TenantAwareToolExecer:
+    """Mock tool executor for testing tenant-aware RGW operations."""
+
+    def tool_exec(self, cmd: list[str]) -> tuple[int, str, str]:
+        """Mock tool_exec that returns tenant-aware responses."""
+        # Check if this is a radosgw-admin bucket list command
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'list' in cmd:
+            bucket_list = json.dumps(
+                [
+                    'regular-bucket',
+                    'tenantA/tenant-bkt1',
+                ]
+            )
+            return (0, bucket_list, '')
+        # Check if this is a radosgw-admin user list command
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'list' in cmd:
+            user_list = json.dumps(
+                [
+                    'regularuser',
+                    'tenantA$user1',
+                ]
+            )
+            return (0, user_list, '')
+        # Check if this is a radosgw-admin bucket stats command
+        if 'radosgw-admin' in cmd and 'bucket' in cmd and 'stats' in cmd:
+            bucket_name = (
+                cmd[cmd.index('--bucket') + 1]
+                if '--bucket' in cmd
+                else 'regular-bucket'
+            )
+            if 'tenantA/tenant-bkt1' in bucket_name:
+                owner = 'tenantA$user1'
+            else:
+                owner = 'regularuser'
+            bucket_stats = json.dumps(
+                {'owner': owner, 'bucket': bucket_name, 'usage': {}}
+            )
+            return (0, bucket_stats, '')
+        # Check if this is a radosgw-admin user info command
+        if 'radosgw-admin' in cmd and 'user' in cmd and 'info' in cmd:
+            uid = (
+                cmd[cmd.index('--uid') + 1]
+                if '--uid' in cmd
+                else 'regularuser'
+            )
+            tenant = (
+                cmd[cmd.index('--tenant') + 1] if '--tenant' in cmd else ''
+            )
+            user_info = json.dumps(
+                {
+                    'user_id': uid,
+                    'tenant': tenant,
+                    'keys': [
+                        {
+                            'access_key': f'ACCESS_KEY_{uid}',
+                            'secret_key': f'SECRET_KEY_{uid}',
+                        }
+                    ],
+                }
+            )
+            return (0, user_info, '')
+        return (0, '{}', '')
+
+
+def test_rgw_share_tenant_aware_bucket_and_user():
+    """Test RGW share with tenant-aware bucket and user."""
+    ext_store = smb.config_store.MemConfigStore()
+    thandler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_TenantAwareToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='tenanttest',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    # Create share with tenant-aware bucket (without tenant prefix in input)
+    share = smb.resources.Share(
+        cluster_id='tenanttest',
+        share_id='tenantshare',
+        name='Tenant Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='tenant-bkt1',  # Will be resolved to tenantA/tenant-bkt1
+        ),
+    )
+    rg = thandler.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+
+    # Verify credential was auto-created with username only (not tenantA$user1)
+    assert ('rgw_creds', 'user1') in thandler.internal_store.data
+    cred_dict = thandler.internal_store.data[('rgw_creds', 'user1')]
+    assert cred_dict['user_id'] == 'user1'
+    assert cred_dict['access_key_id'] == 'ACCESS_KEY_user1'
+    assert cred_dict['secret_access_key'] == 'SECRET_KEY_user1'
+
+    # Verify share uses credential_ref with username only
+    share_dict = thandler.internal_store.data[
+        ('shares', 'tenanttest.tenantshare')
+    ]
+    assert share_dict['rgw']['bucket'] == 'tenant-bkt1'
+    assert share_dict['rgw']['credential_ref'] == 'user1'
+
+
+def test_rgw_share_tenant_aware_invalid_user_format():
+    """Negative test: Verify that invalid tenant-aware user_id formats fail appropriately.
+
+    This test ensures that common mistakes in tenant-aware user_id formatting
+    are caught and handled correctly. Valid format is 'tenant$userid', not
+    'tenant-userid', 'tenant/userid', or 'userid@tenant'.
+    """
+    ext_store = smb.config_store.MemConfigStore()
+    thandler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_TenantAwareToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='invalidtest',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Test 1: Invalid format with hyphen instead of dollar sign
+    invalid_credential_hyphen = smb.resources.RGWCredential(
+        rgw_credential_id='invalid-hyphen',
+        user_id='tenantA-user1',  # WRONG: should be tenantA$user1
+        access_key_id='INVALID_ACCESS_KEY',
+        secret_access_key='INVALID_SECRET_KEY',
+    )
+    share_hyphen = smb.resources.Share(
+        cluster_id='invalidtest',
+        share_id='share-hyphen',
+        name='Invalid Hyphen Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='tenant-bkt1',
+            user_id='tenantA-user1',  # WRONG format
+            credential_ref='invalid-hyphen',
+        ),
+    )
+
+    # Apply and expect it to succeed (system doesn't validate format)
+    # but the credential won't match actual RGW user
+    rg = thandler.apply([cluster, invalid_credential_hyphen, share_hyphen])
+    assert rg.success, rg.to_simplified()
+
+    # Verify the credential was stored with the incorrect format
+    assert ('rgw_creds', 'invalid-hyphen') in thandler.internal_store.data
+    cred_dict = thandler.internal_store.data[('rgw_creds', 'invalid-hyphen')]
+    assert cred_dict['user_id'] == 'tenantA-user1'  # Stored as-is
+
+    # Test 2: Invalid format with forward slash
+    invalid_credential_slash = smb.resources.RGWCredential(
+        rgw_credential_id='invalid-slash',
+        user_id='tenantA/user1',  # WRONG: should be tenantA$user1
+        access_key_id='INVALID_ACCESS_KEY',
+        secret_access_key='INVALID_SECRET_KEY',
+    )
+    share_slash = smb.resources.Share(
+        cluster_id='invalidtest',
+        share_id='share-slash',
+        name='Invalid Slash Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='tenant-bkt1',
+            user_id='tenantA/user1',  # WRONG format
+            credential_ref='invalid-slash',
+        ),
+    )
+
+    rg = thandler.apply([invalid_credential_slash, share_slash])
+    assert rg.success, rg.to_simplified()
+
+    # Test 3: Invalid format with @ symbol
+    invalid_credential_at = smb.resources.RGWCredential(
+        rgw_credential_id='invalid-at',
+        user_id='user1@tenantA',  # WRONG: should be tenantA$user1
+        access_key_id='INVALID_ACCESS_KEY',
+        secret_access_key='INVALID_SECRET_KEY',
+    )
+    share_at = smb.resources.Share(
+        cluster_id='invalidtest',
+        share_id='share-at',
+        name='Invalid At Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='tenant-bkt1',
+            user_id='user1@tenantA',  # WRONG format
+            credential_ref='invalid-at',
+        ),
+    )
+
+    rg = thandler.apply([invalid_credential_at, share_at])
+    assert rg.success, rg.to_simplified()
+
+    # Verify all three invalid shares were created
+    shares = thandler.share_ids()
+    assert ('invalidtest', 'share-hyphen') in shares
+    assert ('invalidtest', 'share-slash') in shares
+    assert ('invalidtest', 'share-at') in shares
+
+    # Note: These shares will be created but will fail at runtime when
+    # Samba tries to authenticate with RGW using the incorrect user_id format
+
+
+def test_rgw_share_tenant_aware_mismatched_credentials():
+    """Negative test: Verify behavior when credential user_id doesn't match share user_id.
+
+    This tests the scenario where the credential resource has a different user_id
+    than what's specified in the share's rgw.user_id field.
+    """
+    ext_store = smb.config_store.MemConfigStore()
+    thandler = smb.handler.ClusterConfigHandler(
+        internal_store=smb.config_store.MemConfigStore(),
+        public_store=ext_store,
+        priv_store=ext_store,
+        mon_cmd_issuer=None,
+        tool_execer=_TenantAwareToolExecer(),
+    )
+
+    cluster = _cluster(
+        cluster_id='mismatch',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+
+    # Create credential for one user
+    credential = smb.resources.RGWCredential(
+        rgw_credential_id='cred-user1',
+        user_id='tenantA$user1',
+        access_key_id='USER1_ACCESS_KEY',
+        secret_access_key='USER1_SECRET_KEY',
+    )
+
+    # Create share that references the credential but specifies a different user_id
+    share = smb.resources.Share(
+        cluster_id='mismatch',
+        share_id='mismatchshare',
+        name='Mismatched Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='tenant-bkt1',
+            user_id='tenantA$user2',  # Different user than credential
+            credential_ref='cred-user1',  # References user1's credential
+        ),
+    )
+
+    rg = thandler.apply([cluster, credential, share])
+    assert rg.success, rg.to_simplified()
+
+    # Verify the share was created with the mismatched configuration
+    share_dict = thandler.internal_store.data[
+        ('shares', 'mismatch.mismatchshare')
+    ]
+    assert share_dict['rgw']['user_id'] == 'tenantA$user2'
+    assert share_dict['rgw']['credential_ref'] == 'cred-user1'
+
+    # Verify the credential exists with user1
+    cred_dict = thandler.internal_store.data[('rgw_creds', 'cred-user1')]
+    assert cred_dict['user_id'] == 'tenantA$user1'
+
+    # Note: This configuration will be created but will likely fail at runtime
+    # when Samba tries to access the bucket with mismatched credentials

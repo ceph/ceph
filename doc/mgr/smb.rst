@@ -1263,9 +1263,10 @@ rgw
     bucket
         Required string. The name of the RGW bucket to be shared
     user_id
-        Optional string. The RGW user ID that owns the bucket. If not provided,
-        the system will automatically determine the bucket owner and fetch the
-        necessary credentials.
+        Optional string. The RGW user ID that owns the bucket. For tenant-aware
+        users, use the format ``tenant_name$userid`` (e.g., ``tenantA$user1``). If not
+        provided, the system will automatically determine the bucket owner and fetch
+        the necessary credentials.
     credential_ref
         Optional string. The ``rgw_credential_id`` value of a
         ``ceph.smb.rgw.credential`` resource that contains RGW access and
@@ -1345,6 +1346,27 @@ Another example of an RGW-backed share with an explicit ``user_id``:
     rgw:
       bucket: my-bucket
       user_id: s3user
+
+An example of an RGW-backed share with tenant-aware bucket and user ID, using
+explicit credentials:
+
+.. code-block:: yaml
+
+    # Define RGW credentials for tenant-aware user
+    - resource_type: ceph.smb.rgw.credential
+      rgw_credential_id: external-rgw-ten
+      user_id: tenantA$user1
+      access_key_id: AKIAIOSFODNN7EXAMPLE
+      secret_access_key: wqr12nho8btyR4blkjoop
+
+    # Define share with bucket
+    - resource_type: ceph.smb.share
+      cluster_id: smb1
+      share_id: tshare1
+      name: tshare1
+      rgw:
+        bucket: tenant-bkt1
+        credential_ref: external-rgw-ten
 
 The following is an example of a CephFS share with QoS settings including burst
 multipliers and human-readable bandwidth limits:
