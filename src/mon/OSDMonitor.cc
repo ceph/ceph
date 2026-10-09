@@ -8485,12 +8485,10 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->peering_crush_mandatory_member = CRUSH_ITEM_NONE;
     if (osdmap.degraded_stretch_mode) {
       pi->peering_crush_bucket_count = osdmap.degraded_stretch_mode;
-      pi->peering_crush_bucket_target = osdmap.degraded_stretch_mode;
       // pi->peering_crush_bucket_mandatory_member = CRUSH_ITEM_NONE;
       // TODO: drat, we don't record this ^ anywhere, though given that it
       // necessarily won't exist elsewhere it likely doesn't matter
       pi->min_size = pi->min_size / 2;
-      pi->size = pi->size / 2; // only support 2 zones now
     }
   }
 
