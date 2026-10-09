@@ -1,0 +1,43 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - Telemetry requires re-opt-in
+      - telemetry module includes new collections
+tasks:
+- install:
+    branch: umbrella
+    exclude_packages:
+      - ceph-osd-classic
+      - ceph-volume
+      - ceph-osd-crimson
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:umbrella
+    compiled_cephadm_branch: umbrella
+    conf:
+      osd:
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+- workunit:
+    clients:
+      client.0:
+        - pool-fields-upgrade-setup.sh
+    env:
+      POOL_FIELD_SCENARIO: 2az
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - ceph config set global log_to_journald false --force
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+      - ceph versions | jq -e '.overall | length == 1'
+      - ceph versions | jq -e '.overall | keys' | grep $sha1
+      - ceph osd require-osd-release umbrella
+- workunit:
+    clients:
+      client.0:
+        - pool-fields-upgrade-verify.sh
+    env:
+      POOL_FIELD_SCENARIO: 2az
