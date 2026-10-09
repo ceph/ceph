@@ -15,7 +15,7 @@ import operator
 
 from ceph.fs.earmarking import EarmarkTopScope
 
-from . import config_store, resources, rgw
+from . import config_store, resources, rgw, utils
 from .enums import (
     AuthMode,
     ConfigNS,
@@ -212,6 +212,118 @@ def ug_refs(cluster: resources.Cluster) -> Collection[str]:
     }
 
 
+def _get_or_create_rgw_credential(
+    staging: Staging,
+    share: resources.Share,
+    user_id: str,
+    access_key: str,
+    secret_key: str,
+) -> str:
+    """Get or create RGW credential with in-place key updates.
+
+    Uses hash-based credential IDs (cluster_id, user_id) to enable credential
+    reuse and seamless key rotation. Credentials are mutable: if user_id matches
+    but keys differ, the credential is updated in-place.
+
+    Credentials are isolated per cluster to prevent cross-cluster reuse.
+
+    Args:
+        staging: Staging store for credential lookup/creation
+        share: Share resource being configured
+        user_id: RGW user ID
+        access_key: RGW access key ID
+        secret_key: RGW secret access key
+
+    Returns:
+        Credential ID (hash-based or random on collision) to link to the share
+    """
+    # Step 1: Compute hash-based credential ID (cluster + user only)
+    # No access_key in hash - enables in-place updates on key rotation
+    candidate_credential_id = utils.compute_credential_hash(
+        share.cluster_id, user_id
+    )
+
+    # Step 2: Try to load existing credential by hash ID
+    existing_cred = None
+    try:
+        existing_cred = staging.get_rgw_credential(candidate_credential_id)
+    except KeyError:
+        # Credential doesn't exist - will create it
+        log.debug(
+            'Creating new credential %s for user %s',
+            candidate_credential_id,
+            user_id,
+        )
+
+    # Step 3: If credential exists, validate user_id match and update keys if needed
+    if existing_cred is not None:
+        # Cluster isolation is guaranteed by hash (different clusters produce
+        # different hashes), so cluster linkage check is not needed here.
+
+        # Check if user_id matches (should always be true for hash match)
+        if existing_cred.user_id != user_id:
+            # Hash collision detected - fall back to random ID
+            log.warning(
+                'Hash collision on %s for user %s: credential is for different user. '
+                'Creating new credential with random ID.',
+                candidate_credential_id,
+                user_id,
+            )
+            credential_id = utils.rand_name(share.cluster_id)
+            new_cred = resources.RGWCredential(
+                rgw_credential_id=credential_id,
+                user_id=user_id,
+                access_key_id=access_key,
+                secret_access_key=secret_key,
+                linked_to_cluster=share.cluster_id,
+            )
+            staging.stage(new_cred)
+            return credential_id
+
+        # Check if keys need updating
+        if (
+            existing_cred.access_key_id != access_key
+            or existing_cred.secret_access_key != secret_key
+        ):
+            # Keys changed - update credential in-place
+            log.info(
+                'Updating credentials for user %s in credential %s '
+                '(key rotation detected)',
+                user_id,
+                candidate_credential_id,
+            )
+            # Update credential with new keys
+            updated_cred = resources.RGWCredential(
+                rgw_credential_id=candidate_credential_id,
+                user_id=user_id,
+                access_key_id=access_key,
+                secret_access_key=secret_key,
+                linked_to_cluster=existing_cred.linked_to_cluster,
+            )
+            staging.stage(updated_cred)
+        else:
+            # Keys match - reuse credential as-is
+            log.debug(
+                'Reusing existing credential %s for user %s',
+                candidate_credential_id,
+                user_id,
+            )
+
+        return candidate_credential_id
+
+    # Step 4: Credential doesn't exist - create it
+    new_cred = resources.RGWCredential(
+        rgw_credential_id=candidate_credential_id,
+        user_id=user_id,
+        access_key_id=access_key,
+        secret_access_key=secret_key,
+        linked_to_cluster=share.cluster_id,
+    )
+    staging.stage(new_cred)
+
+    return candidate_credential_id
+
+
 @functools.singledispatch
 def cross_check_resource(
     resource: SMBResource,
@@ -383,6 +495,9 @@ def _check_share_resource(
             and cluster.external_ceph_cluster.ref
         )
 
+        # Variable to store the valid user_id for bucket validation
+        valid_user_id = ''
+
         # If credential_ref is not provided, auto-create credential
         if not share.rgw.credential_ref:
             # For external clusters, require explicit credential_ref
@@ -406,43 +521,21 @@ def _check_share_resource(
                     share.rgw.bucket,
                     share.rgw.user_id or '',
                 )
+                # Store the fetched user_id for bucket validation
+                valid_user_id = fetched_user_id
             except ValueError as e:
                 raise ErrorResult(
                     share,
                     msg=f"Failed to fetch RGW credentials: {str(e)}",
                 )
 
-            # Create credential resource automatically
-            # Use user_id as credential_id (linked to cluster via linked_to_cluster field)
-            credential_id = fetched_user_id
-
-            # Check if credential already exists
-            try:
-                cred = staging.get_rgw_credential(credential_id)
-                # Credential exists, validate it's linked to correct cluster
-                if (
-                    cred.linked_to_cluster
-                    and cred.linked_to_cluster != share.cluster_id
-                ):
-                    raise ErrorResult(
-                        share,
-                        msg='RGW credential is linked to a different cluster',
-                        status={
-                            'credential_ref': credential_id,
-                            'other_cluster_id': cred.linked_to_cluster,
-                        },
-                    )
-            except KeyError:
-                # Credential doesn't exist, create it
-                cred = resources.RGWCredential(
-                    rgw_credential_id=credential_id,
-                    user_id=fetched_user_id,
-                    access_key_id=access_key,
-                    secret_access_key=secret_key,
-                    linked_to_cluster=share.cluster_id,
-                )
-                # Stage the credential
-                staging.stage(cred)
+            credential_id = _get_or_create_rgw_credential(
+                staging,
+                share,
+                fetched_user_id,
+                access_key,
+                secret_key,
+            )
 
             # Update share to use credential_ref
             share.rgw = resources.RGWStorage(
@@ -453,6 +546,8 @@ def _check_share_resource(
             # Validate existing credential_ref
             try:
                 cred = staging.get_rgw_credential(share.rgw.credential_ref)
+                # Get user_id from the credential for bucket validation
+                valid_user_id = cred.user_id
             except KeyError:
                 raise ErrorResult(
                     share,
@@ -475,7 +570,9 @@ def _check_share_resource(
         # Validate bucket exists (skip for external clusters)
         if not is_external_cluster:
             if not rgw.validate_rgw_bucket(
-                staging._tool_execer, share.rgw.bucket
+                staging._tool_execer,
+                share.rgw.bucket,
+                valid_user_id,
             ):
                 raise ErrorResult(
                     share,
