@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import errno
+import io
 import subprocess
 import logging as log
 import boto3
+import boto3.s3.transfer
 import botocore.exceptions
 import random
 import json
@@ -58,6 +60,89 @@ def boto_connect(access_key, secret_key, config=None):
         except botocore.exceptions.ConnectionError:
             # retry with ssl
             return try_connect('443', True, 'https')
+
+def object_stat(bucket_name, object_key):
+    """Run radosgw-admin object stat and return parsed JSON."""
+    out = exec_cmd(
+        f'radosgw-admin object stat --bucket={bucket_name} --object={object_key}'
+    )
+    # some attrs (e.g. crypt.keysel) contain raw binary that isn't valid UTF-8
+    if isinstance(out, bytes):
+        out = out.decode('utf-8', errors='replace')
+    return json.loads(out)
+
+def get_compression_type(stat):
+    """
+    Extract the compression_type from object stat output.
+    Returns None if the object is not compressed.
+    """
+    compression = stat.get('compression')
+    if compression is None:
+        return None
+    ct = compression.get('compression_type', 'none')
+    if ct.lower() == 'none':
+        return None
+    return ct.lower()
+
+def get_storage_class(stat):
+    """
+    Extract the storage class from object stat output.
+    The storage class attr lives in attrs['user.rgw.storage_class'].
+    If absent, the object is in the STANDARD storage class.
+    """
+    attrs = stat.get('attrs', {})
+    sc = attrs.get('user.rgw.storage_class', '')
+    # The value may be a raw string possibly with trailing null bytes
+    sc = sc.strip().strip('\x00')
+    if not sc:
+        return 'STANDARD'
+    return sc
+
+def get_crypt_mode(stat):
+    """
+    Extract the encryption mode from object stat output.
+    Returns None if the object is not encrypted.
+    """
+    attrs = stat.get('attrs', {})
+    mode = attrs.get('user.rgw.crypt.mode', '')
+    mode = mode.strip().strip('\x00')
+    return mode if mode else None
+
+def get_crypt_attr_raw(bucket_name, object_key, name):
+    """
+    Read a crypt attr whole, straight off the object's head rados object.
+
+    Object stat can't be used where the exact bytes matter: it truncates
+    an attr at the first null byte.
+    """
+    out = exec_cmd(f'radosgw-admin object manifest --bucket={bucket_name}'
+                   f' --object={object_key}')
+    # the head object is always the first entry
+    head = json.loads(out)['objects'][0]['raw_obj']
+    return exec_cmd(f'rados -p {head["pool"]} getxattr {head["oid"]}'
+                    f' user.rgw.crypt.{name}')
+
+def make_compressible_body(size_bytes):
+    """Generate compressible data of the requested size."""
+    pattern = b'The quick brown fox jumps over the lazy dog. '
+    repeats = (size_bytes // len(pattern)) + 1
+    return (pattern * repeats)[:size_bytes]
+
+MULTIPART_THRESHOLD = 8 * 1024 * 1024
+
+def upload_object(client, bucket_name, object_key, body, extra_args):
+    """Upload body, using multipart above MULTIPART_THRESHOLD."""
+    if len(body) > MULTIPART_THRESHOLD:
+        transfer_config = boto3.s3.transfer.TransferConfig(
+            multipart_threshold=MULTIPART_THRESHOLD,
+            multipart_chunksize=MULTIPART_THRESHOLD,
+        )
+        client.upload_fileobj(io.BytesIO(body), bucket_name, object_key,
+                              ExtraArgs=extra_args,
+                              Config=transfer_config)
+    else:
+        client.put_object(Bucket=bucket_name, Key=object_key, Body=body,
+                          **extra_args)
 
 def put_objects(bucket, key_list):
     objs = []

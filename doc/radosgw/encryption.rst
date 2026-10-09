@@ -58,6 +58,60 @@ The encryption algorithm for new objects can be configured with::
                upgraded. Once all instances support GCM, you can enable
                ``aes-256-gcm`` for new uploads.
 
+Re-encrypting Existing Objects
+------------------------------
+
+Changing ``rgw crypt sse algorithm`` does not rewrite objects that are
+already stored. An existing object keeps the encryption it was written
+with, and CopyObject is the way to change it.
+
+Copying an object onto itself with the encryption headers set rewrites it
+with the algorithm the gateway is configured with now::
+
+  aws s3api copy-object --bucket bucket --key key --copy-source bucket/key \
+      --server-side-encryption aws:kms --ssekms-key-id <key id>
+
+The copy decrypts the object and encrypts it again under the configured
+algorithm, with the encryption type and key named in the request. The same
+request can also change the encryption type, for example from SSE-C to
+SSE-KMS.
+
+Use a single CopyObject request as shown. ``aws s3 cp`` copies an object
+of 8 MiB or more as a multipart upload instead, which can give it a new ETag.
+CopyObject accepts objects up to ``rgw max put size``, 5 GiB by default.
+
+For SSE-C the gateway has no stored copy of the key, so the request names
+both: the key the object was written with as the copy source key, and the
+key to write it with as the destination key. Giving the same key twice
+re-encrypts the object where it stands, and giving a different one rotates
+the key as well::
+
+  aws s3api copy-object --bucket bucket --key key --copy-source bucket/key \
+      --copy-source-sse-customer-algorithm AES256 \
+      --copy-source-sse-customer-key <current key> \
+      --sse-customer-algorithm AES256 --sse-customer-key <new key>
+
+A bucket's default encryption does not make a copy onto the same object
+legal on its own: unless the copy replaces the metadata or changes the
+storage class, it has to name the encryption in the request.
+
+The copy is also compressed for the destination storage class, but only in
+zonegroups where the ``compress-encrypted`` feature is enabled. Without it,
+an encrypted destination is stored uncompressed whatever the storage class
+is configured to use.
+
+On a versioned bucket the copy creates a new version, and earlier versions
+keep their original encryption. An object that was uploaded in multiple
+parts is rewritten as a single part, and keeps the ETag it was given at
+upload.
+
+Like any CopyObject, the copy is a new write:
+
+- its ACL comes from the request, and is private if the request sets none
+- the requester becomes its owner
+- its last modified time is reset, so lifecycle rules count from the copy
+- its storage class is the one the request names, or the bucket default
+
 GCM Encryption Format
 ---------------------
 
@@ -161,6 +215,9 @@ Bucket Encryption APIs
 
 Bucket Encryption APIs to support server-side encryption with Amazon
 S3-managed keys (SSE-S3) or AWS KMS customer master keys (SSE-KMS). 
+
+A bucket's default encryption applies to PutObject, PostObject, CopyObject
+and new multipart uploads that carry no encryption headers.
 
 See `PutBucketEncryption`_, `GetBucketEncryption`_, `DeleteBucketEncryption`_
 

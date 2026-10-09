@@ -24,6 +24,14 @@
   remove bilog entries that other zones have not synced yet.
 * RGW: ``radosgw-admin bilog trim`` no longer accepts ``--start-marker``, since
   FIFO-backed bilogs can only be trimmed from the front.
+* RGW: CopyObject now applies the destination bucket's default encryption
+  when the request carries no encryption headers. Like PutObject, it also
+  rejects SSE-C combined with SSE-KMS or SSE-S3 headers, and SSE-KMS
+  headers sent without ``x-amz-server-side-encryption: aws:kms``.
+* RGW: A CopyObject request whose source and destination are the same object
+  is now accepted when it sets ``x-amz-server-side-encryption`` or SSE-C
+  headers, so an existing object can be re-encrypted in place without
+  replacing its metadata.
 
 * RGW: Fixed a bug in same-account evaluation of bucket policy statements that
   allow the account principal. Users and roles in that account now require a
