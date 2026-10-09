@@ -1938,6 +1938,90 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(vsecond["counters"]["snaps_synced"], vfirst["counters"]["snaps_synced"])
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def test_cephfs_mirror_writeback_error(self):
+        """A buffered writeback failure must not commit a corrupt snapshot."""
+        dir_path = '/writeback_error'
+        dir_name = dir_path.lstrip('/')
+        peer_spec = 'client.mirror_remote@ceph'
+        snap_name = 'snap0'
+
+        self.config_set('client.mirror',
+                        'cephfs_mirror_max_consecutive_failures_per_directory', 1)
+        self.config_set('client.mirror',
+                        'cephfs_mirror_retry_failed_directories_interval', 5)
+        # Keep the entire file buffered until fsync/close. The remote layout
+        # makes it one 8 MiB object, exceeding the injected 4 MiB OSD write limit.
+        # Thus pwrite succeeds and the subsequent writeback returns EMSGSIZE.
+        self.config_set('client.mirror_remote', 'client_oc_max_dirty', 32 * 1024 * 1024)
+        self.config_set('client.mirror_remote', 'client_oc_target_dirty', 16 * 1024 * 1024)
+        self.config_set('client.mirror_remote', 'client_oc_max_dirty_age', 3600)
+        self._setup_mirrored_directory(dir_path, mount_b=True)
+        self.mount_b.run_shell(['mkdir', dir_name])
+        self.mount_b.setfattr(dir_name, 'ceph.dir.layout',
+                             'stripe_unit=8388608 stripe_count=1 object_size=8388608')
+        self.mount_a.write_n_mb(f'{dir_name}/file', 8)
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap_name}'])
+
+        try:
+            self.config_set('osd', 'osd_max_write_size', 4)
+            self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                          peer_spec, self.secondary_fs_name)
+            self.verify_failed_directory(self.primary_fs_name, self.primary_fs_id,
+                                         peer_spec, dir_path)
+            self.assertNotIn(snap_name, self.mount_b.ls(path=f'{dir_name}/.snap'))
+        finally:
+            self.config_rm('osd', 'osd_max_write_size')
+
+        # Retry the same snapshot without reconnecting or touching the source.
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, snap_name, 1)
+        self.verify_snapshot(dir_name, snap_name)
+        self._teardown_mirroring(dir_path, peer_spec)
+
+    def test_cephfs_mirror_remote_pool_full(self):
+        """Retry an unchanged snapshot after the remote data pool has space."""
+        dir_path = '/remote_pool_full'
+        dir_name = dir_path.lstrip('/')
+        peer_spec = 'client.mirror_remote@ceph'
+        pool_name = self.backup_fs.get_data_pool_name()
+
+        self.config_set('client.mirror',
+                        'cephfs_mirror_max_consecutive_failures_per_directory', 1)
+        self.config_set('client.mirror',
+                        'cephfs_mirror_retry_failed_directories_interval', 5)
+        self._setup_mirrored_directory(dir_path, mount_b=True)
+        self.mount_b.run_shell(['mkdir', dir_name])
+        self.mount_b.write_n_mb('pool_filler', 1)
+        self.mount_a.write_n_mb(f'{dir_name}/file', 1)
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap0'])
+
+        # Only fill the remote data pool; metadata and the primary remain
+        # writable. The quota is restored even if a failure assertion fails.
+        try:
+            self.run_ceph_cmd('osd', 'pool', 'set-quota', pool_name, 'max_bytes', '1')
+            self.wait_until_true(self.backup_fs.is_full, timeout=120)
+            self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                          peer_spec, self.secondary_fs_name)
+            self.verify_failed_directory(self.primary_fs_name, self.primary_fs_id,
+                                         peer_spec, dir_path)
+            self.assertNotIn('snap0', self.mount_b.ls(path=f'{dir_name}/.snap'))
+        finally:
+            self.run_ceph_cmd('osd', 'pool', 'set-quota', pool_name, 'max_bytes', '0')
+            self.wait_until_true(lambda: not self.backup_fs.is_full(), timeout=120)
+
+        # No daemon restart or source modification: the failed snapshot must
+        # be retried automatically, including its nonzero file contents.
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, 'snap0', 1)
+        self.verify_snapshot(dir_name, 'snap0')
+
+        # An incremental snapshot of the unchanged file must also be correct.
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap1'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, dir_path, 'snap1', 2)
+        self.verify_snapshot(dir_name, 'snap1')
+        self._teardown_mirroring(dir_path, peer_spec)
+
     def test_cephfs_mirror_service_daemon_status(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
 

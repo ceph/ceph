@@ -1798,25 +1798,36 @@ int PeerReplayer::copy_to_remote(const std::string &dir_root,  const std::string
     if (r < 0) {
       derr << ": failed to truncate remote file path=" << epath << ": "
            << cpp_strerror(r) << dendl;
-      goto freeptr;
+    } else {
+      // Write the data back before closing: a writeback error that comes
+      // back after close() is reported to nobody, and ceph_sync_fs() cannot
+      // tell which file it belongs to.
+      r = ceph_fsync(m_remote_mount, r_fd, 1);
+      if (r < 0) {
+        derr << ": failed to fsync remote file path=" << epath << ": "
+             << cpp_strerror(r) << dendl;
+      }
     }
   }
 
-freeptr:
   free(ptr);
 
 close_remote_fd:
-  if (ceph_close(m_remote_mount, r_fd) < 0) {
-    derr << ": failed to close remote fd path=" << epath << ": " << cpp_strerror(r)
-         << dendl;
-    return -EINVAL;
+  if (int close_r = ceph_close(m_remote_mount, r_fd); close_r < 0) {
+    derr << ": failed to close remote fd path=" << epath << ": "
+         << cpp_strerror(close_r) << dendl;
+    if (r >= 0) {
+      r = close_r;
+    }
   }
 
 close_local_fd:
-  if (ceph_close(m_local_mount, l_fd) < 0) {
-    derr << ": failed to close local fd path=" << epath << ": " << cpp_strerror(r)
-         << dendl;
-    return -EINVAL;
+  if (int close_r = ceph_close(m_local_mount, l_fd); close_r < 0) {
+    derr << ": failed to close local fd path=" << epath << ": "
+         << cpp_strerror(close_r) << dendl;
+    if (r >= 0) {
+      r = close_r;
+    }
   }
 
   dout(20) << ": dir_root=" << dir_root << ", epath=" << epath << " error=" << r << " synced" << dendl;
