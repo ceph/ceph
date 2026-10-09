@@ -200,10 +200,10 @@ if [ $rc != 0 ] && [ $rc != 124 ]; then
     ceph health detail > $R/fail-evidence/health_detail.txt 2>&1 || true
     ceph osd dump -f json > $R/fail-evidence/osd_dump.json 2>&1 || true
     ceph pg dump pgs -f json > $R/fail-evidence/pg_dump.json 2>&1 || true
-    for pg in $(ceph pg ls-by-pool $POOL -f json 2>/dev/null | python3 -c '
+    for pg in $(ceph pg ls -f json 2>/dev/null | python3 -c '
 import json, sys
 for p in json.load(sys.stdin)["pg_stats"]:
-    if not p["state"].startswith("active+clean"):
+    if not p["state"].startswith("active+clean") or "remapped" in p["state"]:
         print(p["pgid"])' || true); do
         ceph pg $pg query > $R/fail-evidence/$pg.query.json 2>&1 || true
         ceph pg $pg list_unfound > $R/fail-evidence/$pg.unfound.json 2>&1 || true

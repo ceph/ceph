@@ -47,8 +47,9 @@ Multi-zone pools also get:
 Stops (leaving the cluster as it is, but with any monitor it killed started
 again) on: daemon crash signature, a daemon dying that we did not kill,
 workload failure/miscompare, a workload still running long after everything
-is revived at the end, scrub inconsistency, low disk space, or PGs (and
-stretch mode) not returning to healthy after everything is revived.
+is revived at the end, scrub inconsistency, a quiesce deep scrub not
+finishing, low disk space, or PGs of any pool (and stretch mode) not returning
+to active+clean, and not remapped, after everything is revived.
 Non-fatal oddities are appended to <rundir>/findings.log with diagnostics.
 """
 
@@ -252,11 +253,15 @@ class Cluster:
         d = ceph_json(f"pg ls-by-pool {self.pool}", quiet=True)
         return d["pg_stats"] if d else []
 
+    def all_pgs(self):
+        d = ceph_json("pg ls", quiet=True)
+        return d["pg_stats"] if d else []
+
     def pg_num_settled(self):
         pools = ceph_json("osd pool ls detail", quiet=True) or []
-        p = next((p for p in pools if p["pool_name"] == self.pool), None)
-        return p is not None and p["pg_num"] == p["pg_num_target"] and \
-            p["pg_placement_num"] == p["pg_placement_num_target"]
+        return bool(pools) and all(
+            p["pg_num"] == p["pg_num_target"] and
+            p["pg_placement_num"] == p["pg_placement_num_target"] for p in pools)
 
     def stretch(self):
         if not self.multi_zone:
@@ -904,19 +909,24 @@ class Chaos:
         for o in out:
             ceph(f"osd in {o}")
 
+    @staticmethod
+    def quiesced(p):
+        s = p["state"].split("+")
+        return s[:2] == ["active", "clean"] and "remapped" not in s
+
     def wait_healthy(self, timeout):
         deadline = time.time() + timeout
         nudged = False
         start = time.time()
         while time.time() < deadline:
             st = self.c.stretch() or {}
-            pgs = self.c.pgs()
+            pgs = self.c.all_pgs()
             deg = st.get("degraded_stretch_mode", 0)
             rec = st.get("recovering_stretch_mode", 0)
             # merges or splits still in progress change PG intervals, which
             # drops the deep scrubs requested next
             if not deg and not rec and pgs and \
-               all(p["state"].startswith("active+clean") for p in pgs) and \
+               all(self.quiesced(p) for p in pgs) and \
                self.c.pg_num_settled():
                 return True
             if deg and not rec and not nudged and \
@@ -928,8 +938,8 @@ class Chaos:
             if not self.check():
                 return False
             time.sleep(10)
-        bad = [(p["pgid"], p["state"]) for p in self.c.pgs()
-               if not p["state"].startswith("active+clean")][:10]
+        bad = [(p["pgid"], p["state"]) for p in self.c.all_pgs()
+               if not self.quiesced(p)][:10]
         st = f" stretch={self.c.stretch()}" if self.c.multi_zone else ""
         self.fatal(f"NOT_HEALTHY after {timeout}s{st} pgs={bad}")
         return False
@@ -946,19 +956,25 @@ class Chaos:
             return False
         ceph("osd unset noscrub", quiet=True)
         ceph("osd unset nodeep-scrub", quiet=True)
-        stamps = {p["pgid"]: p.get("last_deep_scrub_stamp") for p in self.c.pgs()}
+        stamps = {p["pgid"]: p.get("last_deep_scrub_stamp") for p in self.c.all_pgs()}
         for pgid in stamps:
             ceph(f"pg deep-scrub {pgid}", quiet=True)
         deadline = time.time() + self.args.clean_timeout
+        late = list(stamps)
         while time.time() < deadline:
-            pgs = self.c.pgs()
-            if pgs and all(p.get("last_deep_scrub_stamp") != stamps.get(p["pgid"])
-                           for p in pgs):
+            pgs = self.c.all_pgs()
+            late = [p["pgid"] for p in pgs
+                    if p.get("last_deep_scrub_stamp") == stamps.get(p["pgid"])]
+            if pgs and not late:
                 break
             if not self.check():
                 return False
             time.sleep(10)
-        incons = ceph(f"pg ls-by-pool {self.c.pool} inconsistent", quiet=True)
+        else:
+            self.fatal(f"DEEP_SCRUB_TIMEOUT after {self.args.clean_timeout}s "
+                       f"pgs={late[:10]}")
+            return False
+        incons = ceph("pg ls inconsistent", quiet=True)
         if incons and "inconsistent" in incons:
             self.fatal(f"INCONSISTENT after deep scrub:\n{incons}")
             return False
