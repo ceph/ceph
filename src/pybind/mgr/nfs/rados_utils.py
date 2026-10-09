@@ -1,6 +1,7 @@
 import logging
 from typing import Optional, Any
 
+import rados
 from rados import TimedOut, ObjectNotFound, Rados
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 from .ganesha_conf import format_block
@@ -51,12 +52,17 @@ class NFSRados:
             log.debug("Added %s url to %s", obj, config_obj)
 
     def read_obj(self, obj: str) -> Optional[str]:
-        with self.rados.open_ioctx(self.pool) as ioctx:
-            ioctx.set_namespace(self.namespace)
-            try:
-                return ioctx.read(obj, 1048576).decode()
-            except ObjectNotFound:
-                return None
+        try:
+            with self.rados.open_ioctx(self.pool) as ioctx:
+                ioctx.set_namespace(self.namespace)
+                try:
+                    return ioctx.read(obj, 1048576).decode()
+                except ObjectNotFound:
+                    return None
+        except (ObjectNotFound, rados.Error, OSError) as e:
+            log.debug("Failed to read NFS rados object %s/%s/%s: %s",
+                      self.pool, self.namespace, obj, e)
+            return None
 
     def update_obj(self, conf_block: str, obj: str, config_obj: str,
                    should_notify: Optional[bool] = True) -> None:

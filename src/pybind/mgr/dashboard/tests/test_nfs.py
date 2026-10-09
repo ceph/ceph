@@ -8,7 +8,7 @@ from nfs.export import AppliedExportResults
 
 from .. import mgr
 from ..controllers._version import APIVersion
-from ..controllers.nfs import NFSGaneshaExports, NFSGaneshaUi
+from ..controllers.nfs import NFSGaneshaCluster, NFSGaneshaExports, NFSGaneshaUi
 from ..tests import ControllerTestCase
 from ..tools import NotificationQueue, TaskManager
 
@@ -136,6 +136,40 @@ class NFSGaneshaExportsTest(ControllerTestCase):
         self._delete('/api/nfs-ganesha/export/myc/3',
                      version=APIVersion(2, 0))
         self.assertStatus(404)
+
+
+class NFSGaneshaClusterTest(ControllerTestCase):
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([NFSGaneshaCluster])
+
+    def test_get_cluster_qos(self):
+        mgr.remote = Mock(return_value={
+            'enable_qos': False,
+            'enable_bw_control': False,
+            'enable_iops_control': False,
+            'combined_rw_bw_control': False,
+        })
+
+        self._get('/api/nfs-ganesha/cluster/qos/test1')
+        self.assertStatus(200)
+        mgr.remote.assert_called_with('nfs', 'get_cluster_qos', 'test1', True)
+
+    def test_disable_cluster_qos_bw(self):
+        mgr.remote = Mock(return_value=None)
+
+        self._request('/api/nfs-ganesha/cluster/qos/bw', 'PATCH',
+                      {'cluster_id': 'test1', 'disable_qos': True})
+        self.assertStatus(200)
+        mgr.remote.assert_called_with('nfs', 'disable_cluster_qos_bw', 'test1')
+
+    def test_disable_cluster_qos_ops(self):
+        mgr.remote = Mock(return_value=None)
+
+        self._request('/api/nfs-ganesha/cluster/qos/ops', 'PATCH',
+                      {'cluster_id': 'test1', 'qos_type': 'PerShare', 'disable_ops': True})
+        self.assertStatus(200)
+        mgr.remote.assert_called_with('nfs', 'disable_cluster_qos_ops', 'test1')
 
 
 class NFSGaneshaUiControllerTest(ControllerTestCase):
