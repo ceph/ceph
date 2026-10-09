@@ -9109,8 +9109,16 @@ void OSDMonitor::note_created_crush_rule(const string& name)
   }
 }
 
-// A request that fails removes the rules it created in an earlier update,
-// unless a pool uses them. Returns whether a removal is pending.
+void OSDMonitor::note_created_ec_profile(const string& name)
+{
+  if (preparing_op) {
+    preparing_op->created_ec_profiles.insert(name);
+  }
+}
+
+// A request that fails removes the rules and profiles it created in an
+// earlier update, unless a pool uses them. Returns whether a removal is
+// pending.
 bool OSDMonitor::remove_what_failed_op_created(MonOpRequestRef op)
 {
   bool removed = false;
@@ -9140,6 +9148,21 @@ bool OSDMonitor::remove_what_failed_op_created(MonOpRequestRef op)
       removed = true;
     }
   }
+  for (const auto& name : op->created_ec_profiles) {
+    if (!osdmap.has_erasure_code_profile(name) ||
+        pending_inc.has_erasure_code_profile(name) ||
+        erasure_code_profile_removal_pending(name) ||
+        other_pool(-1, [&name](const pg_pool_t& p) {
+          return p.is_erasure() && p.erasure_code_profile == name;
+        })) {
+      continue;
+    }
+    dout(10) << __func__ << " removing erasure code profile " << name
+             << " of a failed command" << dendl;
+    pending_inc.old_erasure_code_profiles.push_back(name);
+    removed = true;
+  }
+  op->created_ec_profiles.clear();
   return removed;
 }
 
@@ -13772,6 +13795,24 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply_no_propose;
     }
+    if (rel >= NUM_ZONES_RELEASE && !num_zones_supported()) {
+      const auto defaults = stretch_mode_defaults_at_commit(
+        osdmap.stretch_mode_enabled, *osdmap.crush, osdmap.stretch_mode_bucket,
+        g_conf().get_val<uint64_t>("mon_stretch_pool_size"));
+      if (!defaults.empty()) {
+        for (PaxosService *service :
+               {static_cast<PaxosService*>(mon.configmon()),
+                static_cast<PaxosService*>(mon.kvmon())}) {
+          if (!service->is_writeable()) {
+            service->wait_for_writeable(op, new C_RetryMessage(this, op));
+            return false;
+          }
+        }
+        mon.configmon()->propose_global_options(defaults,
+                                                "osd require-osd-release");
+      }
+      copy_default_profile_to_pools();
+    }
     pending_inc.new_require_osd_release = rel;
     goto update;
   } else if (prefix == "osd down" ||
@@ -15272,6 +15313,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    if (!num_zones_supported() &&
+        !g_conf().get_val<bool>("mon_debug_allow_pool_create_before_commit")) {
+      ss << "pool creation is refused until " << num_zones_upgrade_hint();
+      err = -EPERM;
+      goto reply_no_propose;
+    }
+    // the commit converts only the pools before it in its update
+    if (num_zones_commit_pending()) {
+      goto wait;
+    }
+
     int pool_type;
     if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
@@ -15320,9 +15372,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         if (osdmap.has_erasure_code_profile(profile_name)) {
           profile = &osdmap.get_erasure_code_profile(profile_name);
         }
-      } else if (!args.count("k") && !args.count("m") &&
-                 osdmap.has_erasure_code_profile("default")) {
-        // the default profile, unless k and m make a profile of their own
+      } else if (osdmap.has_erasure_code_profile("default")) {
+        // the template of the pool's own profile
         profile = &osdmap.get_erasure_code_profile("default");
       }
       err = use_profile(params, profile_name == "default" ? "" : profile_name,
@@ -15343,6 +15394,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     err = check_command_line(params, PoolCommand::CREATE, &ss);
     if (err) {
+      goto reply_no_propose;
+    }
+    if (!num_zones_supported() && params.num_zones != 1) {
+      ss << "a pool with num_zones " << params.num_zones
+         << " cannot be created until " << num_zones_upgrade_hint();
+      err = -EPERM;
       goto reply_no_propose;
     }
     {
@@ -15367,84 +15424,72 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       given_value("osd_failure_domain", params.osd_failure_domain);
     string device_class = given_value("class", params.device_class);
     if (pool_type == pg_pool_t::TYPE_ERASURE) {
-      if (params.ec_params_given()) {
-        const int64_t k = *params.k();
-        const int64_t m = *params.m();
-        ostringstream profile_name_stream;
-        profile_name_stream << poolstr << "-k" << k << "-m" << m;
-        string auto_profile_name = profile_name_stream.str();
+      const bool plain = erasure_code_profile.empty() &&
+        !params.ec_params_given() && !params.crush_params_given();
+      if (erasure_code_profile.empty() &&
+          !osdmap.has_erasure_code_profile("default")) {
+        if (pending_inc.has_erasure_code_profile("default")) {
+          goto wait;
+        }
+        map<string,string> profile_map;
+        err = osdmap.get_erasure_code_profile_default(cct, profile_map, &ss);
+        if (err)
+          goto reply_no_propose;
+        pending_inc.set_erasure_code_profile("default", profile_map);
+        goto wait;
+      }
+      if (plain && !num_zones_supported()) {
+        // earlier releases: the pool uses the default profile
+        erasure_code_profile = "default";
+      }
+      // otherwise a pool that names no profile gets one of its own
+      if (erasure_code_profile.empty()) {
+        // the default profile with k, m and the crush parameters given
+        map<string,string> profile_map = params.profile;
+        if (!root.empty())
+          profile_map["crush-root"] = root;
+        if (params.is_given("zone_failure_domain"))
+          profile_map["crush-zone-failure-domain"] = params.zone_failure_domain;
+        if (!osd_failure_domain.empty()) {
+          // ErasureCode::init() prefers the new key if present.
+          if (profile_map.contains("crush-osd-failure-domain"))
+            profile_map["crush-osd-failure-domain"] = osd_failure_domain;
+          else
+            profile_map["crush-failure-domain"] = osd_failure_domain;
+        }
+        if (!device_class.empty())
+          profile_map["crush-device-class"] = device_class;
 
-        const map<string,string> &existing_profile = osdmap.get_erasure_code_profile(auto_profile_name);
-
-        if (!existing_profile.empty()) {
-          auto it_k = existing_profile.find("k");
-          auto it_m = existing_profile.find("m");
-
-          bool params_match = (it_k != existing_profile.end() && it_k->second == to_string(k)) &&
-                              (it_m != existing_profile.end() && it_m->second == to_string(m));
-
-          if (!params_match) {
-            ss << "EC profile '" << auto_profile_name << "' already exists with different k/m parameters";
+        err = normalize_profile(poolstr, profile_map, false, &ss);
+        if (err)
+          goto reply_no_propose;
+        unsigned k = 0, m = 0;
+        err = profile_chunk_counts(profile_map, &k, &m, &ss);
+        if (err)
+          goto reply_no_propose;
+        const string name =
+          poolstr + "-k" + stringify(k) + "-m" + stringify(m);
+        if (osdmap.has_erasure_code_profile(name)) {
+          if (osdmap.get_erasure_code_profile(name) != profile_map) {
+            ss << "EC profile '" << name << "' already exists with different "
+               << "contents; remove it with ceph osd erasure-code-profile rm "
+               << name << ", or use it with --erasure_code_profile " << name;
             err = -EEXIST;
             goto reply_no_propose;
           }
-          erasure_code_profile = auto_profile_name;
         } else {
-          // osd_pool_default_erasure_code_profile with the given k and m
-          map<string,string> profile_map = params.profile;
-          // Record the crush parameters from the command line in the
-          // profile, so that it matches them when checked below.
-          if (!root.empty())
-            profile_map["crush-root"] = root;
-          if (params.is_given("zone_failure_domain"))
-            profile_map["crush-zone-failure-domain"] = params.zone_failure_domain;
-          if (!osd_failure_domain.empty()) {
-            // ErasureCode::init() prefers the new key if present.
-            if (profile_map.contains("crush-osd-failure-domain"))
-              profile_map["crush-osd-failure-domain"] = osd_failure_domain;
-            else
-              profile_map["crush-failure-domain"] = osd_failure_domain;
+          if (pending_inc.has_erasure_code_profile(name)) {
+            dout(20) << "EC profile " << name << " is already pending" << dendl;
+            goto wait;
           }
-          if (!device_class.empty())
-            profile_map["crush-device-class"] = device_class;
-
-          err = normalize_profile(auto_profile_name, profile_map, false, &ss);
-          if (err)
-            goto reply_no_propose;
-
-          if (pending_inc.has_erasure_code_profile(auto_profile_name)) {
-            dout(20) << "EC profile " << auto_profile_name << " is already pending" << dendl;
-	    goto wait;
-	  }
-
-          dout(20) << "auto-creating EC Profile " << auto_profile_name << "=" << profile_map << dendl;
-
-          pending_inc.set_erasure_code_profile(auto_profile_name, profile_map);
-
-          erasure_code_profile = auto_profile_name;
+          dout(20) << "auto-creating EC Profile " << name << "=" << profile_map
+                   << dendl;
+          pending_inc.set_erasure_code_profile(name, profile_map);
+          note_created_ec_profile(name);
           goto wait;
         }
-      } else {
-      if (erasure_code_profile == "")
-	erasure_code_profile = "default";
-      if (erasure_code_profile == "default") {
-	if (!osdmap.has_erasure_code_profile(erasure_code_profile)) {
-	  if (pending_inc.has_erasure_code_profile(erasure_code_profile)) {
-              dout(20) << "EC profile " << erasure_code_profile << " is already pending" << dendl;
-	    goto wait;
-	  }
-
-	  map<string,string> profile_map;
-            err = osdmap.get_erasure_code_profile_default(cct, profile_map, &ss);
-	  if (err)
-	    goto reply_no_propose;
-	  dout(20) << "erasure code profile " << erasure_code_profile << " set" << dendl;
-	  pending_inc.set_erasure_code_profile(erasure_code_profile, profile_map);
-	  goto wait;
-	}
-	}
+        erasure_code_profile = name;
       }
-
       // the pending changes may remove the profile with the last pool that
       // used it; decide once they are committed
       if (erasure_code_profile_removal_pending(erasure_code_profile)) {
@@ -15452,36 +15497,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                  << " is being removed" << dendl;
         goto wait;
       }
-      const map<string,string> &existing_profile = osdmap.get_erasure_code_profile(erasure_code_profile);
-      auto it_crush_root = existing_profile.find("crush-root");
-      auto it_zone = existing_profile.find("crush-zone-failure-domain");
-      auto it_osd  = existing_profile.find("crush-osd-failure-domain");
-      if (it_osd == existing_profile.end())
-        it_osd = existing_profile.find("crush-failure-domain");
-      auto it_class = existing_profile.find("crush-device-class");
-      const string given_zone =
-        given_value("zone_failure_domain", params.zone_failure_domain);
-      bool crush_match =  (root.empty() ||
-                            (it_crush_root != existing_profile.end() &&
-                            it_crush_root->second == root)) &&
-                          (given_zone.empty() ||
-                            (it_zone != existing_profile.end() &&
-                            it_zone->second == given_zone)) &&
-                          (osd_failure_domain.empty() ||
-                            (it_osd != existing_profile.end() &&
-                            it_osd->second == osd_failure_domain)) &&
-                          (device_class.empty() ||
-                            (it_class != existing_profile.end() &&
-                            it_class->second == device_class));
-      if (!crush_match) {
-        ss << "EC profile '" << erasure_code_profile << "' already exists with different"
-              " crush parameters than specified (crush_root/zone_failure_domain/osd_failure_domain/device_class)";
-        err = -EINVAL;
-        goto reply_no_propose;
-      }
       if (rule_name == "") {
 	implicit_rule_creation = true;
-        if (erasure_code_profile == "default" && num_zones == 1) {
+        if (plain && num_zones == 1) {
 	  rule_name = "erasure-code";
 	} else {
 	  dout(1) << "implicitly use rule named after the pool: "
@@ -15619,6 +15637,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	 << "followed by --yes-i-really-really-mean-it.";
       err = -EPERM;
       goto reply_no_propose;
+    }
+    // the commit may have given the pool a copy of the default profile
+    if (num_zones_commit_pending()) {
+      goto wait;
     }
     err = _prepare_remove_pool(pool, &ss, force_no_fake);
     if (err == -EAGAIN) {
@@ -16698,6 +16720,15 @@ bool OSDMonitor::preprocess_pool_op_create(MonOpRequestRef op)
   int64_t pool = osdmap.lookup_pg_pool_name(m->name.c_str());
   if (pool >= 0) {
     _pool_op_reply(op, 0, osdmap.get_epoch());
+    return true;
+  }
+  // in stretch mode a pool needs the defaults that stretch it, which exist
+  // only once the upgrade is committed
+  if (!num_zones_supported() && osdmap.stretch_mode_enabled &&
+      !g_conf().get_val<bool>("mon_debug_allow_pool_create_before_commit")) {
+    dout(10) << __func__ << " pool creation in stretch mode is refused until "
+             << num_zones_upgrade_hint() << dendl;
+    _pool_op_reply(op, -EPERM, osdmap.get_epoch());
     return true;
   }
 
@@ -17912,6 +17943,7 @@ string OSDMonitor::num_zones_upgrade_hint()
       << NUM_ZONES_RELEASE << "'";
   return out.str();
 }
+
 map<string, string> OSDMonitor::stretch_mode_defaults_at_commit(
     bool stretch_mode_enabled,
     const CrushWrapper& crush,
@@ -17924,6 +17956,103 @@ map<string, string> OSDMonitor::stretch_mode_defaults_at_commit(
   const char *type = crush.get_type_name(stretch_mode_bucket);
   return stretch_pool_defaults(2, stretch_pool_size / 2, type ? type : "");
 }
+
+void OSDMonitor::propose_default_profile(const map<string, string>& profile)
+{
+  ceph_assert(is_writeable());
+  pending_inc.set_erasure_code_profile("default", profile);
+  propose_pending();
+}
+
+int OSDMonitor::profile_chunk_counts(const map<string, string>& profile,
+                                     unsigned *k, unsigned *m,
+                                     ostream *ss) const
+{
+  auto plugin = profile.find("plugin");
+  if (plugin == profile.end()) {
+    *ss << "the erasure code profile has no plugin";
+    return -EINVAL;
+  }
+  ErasureCodeProfile copy = profile;
+  ErasureCodeInterfaceRef erasure_code;
+  int err = ErasureCodePluginRegistry::instance().factory(
+    plugin->second, g_conf().get_val<string>("erasure_code_dir"), copy,
+    &erasure_code, ss);
+  if (err) {
+    return err;
+  }
+  *k = erasure_code->get_data_chunk_count();
+  *m = erasure_code->get_chunk_count() - *k;
+  return 0;
+}
+
+string OSDMonitor::profile_copy_name(
+    const string& base,
+    const map<string, string>& contents,
+    const std::function<const map<string, string>*(const string&)>& lookup)
+{
+  string name = base;
+  for (int n = 1; ; ++n) {
+    const auto existing = lookup(name);
+    if (!existing || *existing == contents) {
+      return name;
+    }
+    name = base + "-" + stringify(n);
+  }
+}
+
+void OSDMonitor::copy_default_profile_to_pools()
+{
+  auto lookup = [this](const string& name) -> const map<string, string>* {
+    if (auto p = pending_inc.new_erasure_code_profiles.find(name);
+        p != pending_inc.new_erasure_code_profiles.end()) {
+      return &p->second;
+    }
+    return osdmap.has_erasure_code_profile(name)
+      ? &osdmap.get_erasure_code_profile(name) : nullptr;
+  };
+  const auto *default_profile = lookup("default");
+  if (!default_profile) {
+    return;
+  }
+  const map<string, string> profile = *default_profile;
+  // the pools as the update of the commit leaves them
+  auto pools = osdmap.get_pools();
+  for (const auto& [id, p] : pending_inc.new_pools) {
+    pools[id] = p;
+  }
+  for (const auto id : pending_inc.old_pools) {
+    pools.erase(id);
+  }
+  auto pool_name = [this](int64_t id) {
+    auto i = pending_inc.new_pool_names.find(id);
+    return i != pending_inc.new_pool_names.end() ? i->second
+                                                 : osdmap.get_pool_name(id);
+  };
+  for (const auto& [id, pool] : pools) {
+    if (!pool.is_erasure() || pool.erasure_code_profile != "default") {
+      continue;
+    }
+    unsigned k = 0, m = 0;
+    std::ostringstream err;
+    string base;
+    if (profile_chunk_counts(profile, &k, &m, &err) == 0) {
+      base = pool_name(id) + "-k" + stringify(k) + "-m" + stringify(m);
+    } else {
+      dout(0) << __func__ << " " << err.str() << dendl;
+      base = pool_name(id) + "-default";
+    }
+    const string name = profile_copy_name(base, profile, lookup);
+    pending_inc.set_erasure_code_profile(name, profile);
+    pg_pool_t *p = pending_inc.get_new_pool(id, &pool);
+    p->erasure_code_profile = name;
+    p->last_change = pending_inc.epoch;
+    mon.clog->info() << "pool '" << pool_name(id)
+                     << "' now uses erasure code profile '" << name
+                     << "', a copy of profile 'default'";
+  }
+}
+
 map<string, string> OSDMonitor::stretch_pool_defaults(
     int num_zones, int replica, const string& zone_failure_domain)
 {
@@ -17936,6 +18065,7 @@ map<string, string> OSDMonitor::stretch_pool_defaults(
   }
   return defaults;
 }
+
 map<int64_t, OSDMonitor::StretchModeChange>
 OSDMonitor::plan_stretch_mode_changes(
     const mempool::osdmap::map<int64_t, pg_pool_t>& pools, bool enable)
