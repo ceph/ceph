@@ -229,12 +229,6 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
 
   get_all_avail_shards(hoid, have, shards, for_recovery, error_shards);
 
-  std::unique_ptr<shard_id_map<vector<pair<int, int>>>> need_sub_chunks =
-      nullptr;
-  if (sinfo.supports_sub_chunks()) {
-    need_sub_chunks = std::make_unique<shard_id_map<vector<pair<int, int>>>>(
-      sinfo.get_k_plus_m());
-  }
   shard_id_set need_set;
   shard_id_set want;
 
@@ -250,11 +244,9 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     shard_id_set want_for_plugin = want;
     shard_id_t kth = *kth_iter;
     want_for_plugin.erase_range(kth, sinfo.get_k_plus_m() - (int)kth);
-    r = ec_impl->minimum_to_decode(want_for_plugin, have, need_set,
-                                     need_sub_chunks.get());
+    r = ec_impl->minimum_to_decode(want_for_plugin, have, need_set);
   } else {
-    r = ec_impl->minimum_to_decode(want, have, need_set,
-                                     need_sub_chunks.get());
+    r = ec_impl->minimum_to_decode(want, have, need_set);
   }
 
   if (r < 0) {
@@ -264,13 +256,6 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   }
 
   if (do_redundant_reads) {
-    if (need_sub_chunks) {
-      vector<pair<int, int>> subchunks_list;
-      subchunks_list.push_back(make_pair(0, ec_impl->get_sub_chunk_count()));
-      for (auto &&i: have) {
-        (*need_sub_chunks)[i] = subchunks_list;
-      }
-    }
     need_set.insert(have);
   }
 
@@ -308,9 +293,6 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     shard_id_t shard_id(shard);
     extent_set extents = extra_extents;
     shard_read_t shard_read;
-    if (need_sub_chunks) {
-      shard_read.subchunk = need_sub_chunks->at(shard_id);
-    }
     shard_read.pg_shard = shards[shard_id];
 
     if (read_request.shard_want_to_read.contains(shard)) {
@@ -561,14 +543,10 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
         need_omap_header = false;
         need_omap_keys = false;
       }
-      if (shard_read.subchunk) {
-        messages[shard_read.pg_shard].subchunks[hoid] = *shard_read.subchunk;
-        reads_sent = true;
-      } else {
-        static const std::vector default_sub_chunk = {make_pair(0, 1)};
-        messages[shard_read.pg_shard].subchunks[hoid] = default_sub_chunk;
-        reads_sent = true;
-      }
+      // Sub-chunks are not supported, but replicas running older code
+      // require a whole-chunk sub-chunk entry for every object read.
+      static const std::vector default_sub_chunk = {make_pair(0, 1)};
+      messages[shard_read.pg_shard].subchunks[hoid] = default_sub_chunk;
       rop.obj_to_source[hoid].insert(shard_read.pg_shard);
       rop.source_to_obj[shard_read.pg_shard].insert(hoid);
     }
@@ -591,9 +569,8 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   std::optional<ECSubRead> local_read_op;
   std::vector<std::pair<int, Message*>> m;
   m.reserve(messages.size());
-  std::pair<int, int> subchunk_info =
-    std::make_pair(ec_impl->get_sub_chunk_count(),
-      sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count());
+  // Matches default_sub_chunk above: every read is of whole chunks.
+  std::pair<int, int> subchunk_info(1, sinfo.get_chunk_size());
   for (auto &&[pg_shard, read]: messages) {
     rop.in_progress.insert(pg_shard);
     shard_to_read_map[pg_shard].insert(rop.tid);
@@ -803,13 +780,6 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
       read_request);
     ceph_assert(r == 0);
 
-    const int subchunk_size =
-        sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
-    dout(20) << __func__
-             << " to_read=" << to_read
-             << " subchunk_size=" << subchunk_size
-             << " chunk_size=" << sinfo.get_chunk_size() << dendl;
-
     for_read_op.insert(make_pair(hoid, read_request));
   }
 
@@ -836,13 +806,6 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct_for_rmw(
     const int r =
         get_min_avail_to_read_shards(hoid, false, false, read_request);
     ceph_assert(r == 0);
-
-    const int subchunk_size = sinfo.get_chunk_size() / ec_impl->
-        get_sub_chunk_count();
-    dout(20) << __func__
-             << " read_request=" << read_request
-             << " subchunk_size=" << subchunk_size
-             << " chunk_size=" << sinfo.get_chunk_size() << dendl;
 
     for_read_op.insert(make_pair(hoid, read_request));
   }
@@ -906,7 +869,6 @@ bool ec_align_t::operator==(const ec_align_t &other) const {
 
 bool ECCommon::shard_read_t::operator==(const shard_read_t &other) const {
   return extents == other.extents &&
-      subchunk == other.subchunk &&
       pg_shard == other.pg_shard &&
       omap_source == other.omap_source;
 }

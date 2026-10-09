@@ -301,16 +301,9 @@ public:
       for (pg_shard_t p: _have) {
         have.insert(p.shard);
       }
-      std::unique_ptr<shard_id_map<std::vector<std::pair<int, int>>>>
-          min_sub_chunks = nullptr;
-      if (sinfo->supports_sub_chunks()) {
-        min_sub_chunks = std::make_unique<shard_id_map<std::vector<std::pair<
-          int, int>>>>(sinfo->get_k_plus_m());
-      }
       shard_id_set min;
 
-      return ec_impl->minimum_to_decode(want, have, min, min_sub_chunks.get())
-          == 0;
+      return ec_impl->minimum_to_decode(want, have, min) == 0;
     }
   };
 
