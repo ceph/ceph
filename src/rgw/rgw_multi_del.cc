@@ -103,6 +103,7 @@ void rgw::multi_delete::dispatch(const std::vector<Item>& items,
                                  uint32_t max_aio,
                                  boost::asio::yield_context yield,
                                  Exec exec,
+                                 ApplyOlh apply_olh,
                                  OnDispatch on_dispatch)
 {
   auto group = ceph::async::spawn_throttle{yield, std::max<uint32_t>(1, max_aio)};
@@ -151,8 +152,13 @@ void rgw::multi_delete::dispatch(const std::vector<Item>& items,
 
   for (const auto& indexes : grouped_items) {
     const auto index = indexes.back();
-    group.spawn([&exec, &items, index] (boost::asio::yield_context y) {
+    const bool skipped = indexes.size() > 1;
+    group.spawn([&exec, &apply_olh, &items, index, skipped] (boost::asio::yield_context y) {
       exec(items[index], false, y);
+      // the last delete may fail before it applies the olh updates skipped above
+      if (skipped) {
+        apply_olh(rgw_obj_key(items[index].key.name, "", items[index].key.ns), y);
+      }
     });
     if (on_dispatch) {
       on_dispatch();

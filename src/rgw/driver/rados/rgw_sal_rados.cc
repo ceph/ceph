@@ -3137,6 +3137,34 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
   return ret;
 }
 
+int RadosObject::update_olh(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
+{
+  RGWObjState* s = nullptr;
+  int r = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(),
+                                           &s, nullptr, false, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to read olh state for obj=" << get_key()
+                      << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  if (!s->is_olh) {
+    return 0;
+  }
+  auto iter = s->attrset.lower_bound(RGW_ATTR_OLH_PENDING_PREFIX);
+  if (iter == s->attrset.end() ||
+      !boost::algorithm::starts_with(iter->first, RGW_ATTR_OLH_PENDING_PREFIX)) {
+    return 0;
+  }
+  r = store->getRados()->update_olh(dpp, *rados_ctx, s, bucket->get_info(), get_obj(), y,
+                                    nullptr, false, flags & FLAG_LOG_OP);
+  if (r < 0 && r != -ECANCELED) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to apply pending olh log for obj=" << get_key()
+                      << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  return 0;
+}
+
 int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Read &read_op, optional_yield y, rgw_obj* target_obj)
 {
   read_op.params.attrs = &state.attrset;
