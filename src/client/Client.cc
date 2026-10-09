@@ -16722,7 +16722,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 #if defined(__linux__)
   bool source_locked = is_inode_locked(wdr_from.diri);
   bool dest_locked = is_inode_locked(wdr_to.diri);
-  if (source_locked || dest_locked)
+  if ((source_locked || dest_locked) && fscrypt_as)
     return -ENOKEY;
 #endif
   if (wdr_from.diri->snapid != wdr_to.diri->snapid)
