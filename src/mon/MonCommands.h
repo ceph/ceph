@@ -819,7 +819,8 @@ COMMAND("osd crush rule create-stretch-replicated "
 	"osd", "rw")
 COMMAND("osd crush rule create-erasure "
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
-	"name=profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=]",
+        "name=profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=] "
+        "name=num_zones,type=CephInt,range=1,req=false",
 	"create crush rule <name> for erasure coded pool created with <profile> (default default)",
 	"osd", "rw")
 COMMAND("osd crush rule rm "
@@ -1188,6 +1189,15 @@ COMMAND("osd pool create "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
 	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "
 	"name=force_pg_limit,type=CephBool,req=false "
+        "name=k,type=CephInt,range=2,req=false "
+        "name=m,type=CephInt,range=1,req=false "
+        "name=num_zones,type=CephInt,range=1,req=false "
+        "name=root,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=zone_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=osd_failure_domain,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] "
+        "name=replica,type=CephInt,range=1,req=false "
+        "name=class,type=CephString,goodchars=" CLASS_GOODCHARS ",req=false "
+        "name=min_size,type=CephInt,range=1,req=false "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=crimson,type=CephBool,req=false",
 	"create pool", "osd", "rw")
@@ -1267,6 +1277,7 @@ COMMAND("osd pool get "
           "|read_ratio"
           "|recovery_op_priority"
           "|recovery_priority"
+                  "|replica"
           "|scrub_max_interval"
           "|scrub_min_interval"
           "|scrub_priority"
@@ -1321,6 +1332,7 @@ COMMAND("osd pool set "
           "|nopgchange"
           "|noscrub"
           "|nosizechange"
+                  "|num_zones"
           "|pct_update_delay"
           "|pg_autoscale_bias"
           "|pg_autoscale_mode"
@@ -1332,6 +1344,7 @@ COMMAND("osd pool set "
           "|read_ratio"
           "|recovery_op_priority"
           "|recovery_priority"
+                  "|replica"
           "|scrub_max_interval"
           "|scrub_min_interval"
           "|scrub_priority"
@@ -1402,6 +1415,7 @@ COMMAND("osd pool stretch set "
 		"name=crush_rule,type=CephString "
 		"name=size,type=CephInt,range=0 "
 		"name=min_size,type=CephInt,range=0 "
+                "name=replica,type=CephInt,range=1,req=false "
 		"name=yes_i_really_mean_it,type=CephBool,req=false",
         "make the pool stretched across the specified number of CRUSH buckets",
         "osd", "rw")
@@ -1409,7 +1423,8 @@ COMMAND("osd pool stretch unset "
 		"name=pool,type=CephPoolname "
 		"name=crush_rule,type=CephString "
 		"name=size,type=CephInt,range=0 "
-		"name=min_size,type=CephInt,range=0 ",
+		"name=min_size,type=CephInt,range=0 "
+                "name=replica,type=CephInt,range=1,req=false",
 		"unset the stretch mode for the pool",
 		"osd", "rw")
 COMMAND("osd pool availability-status", \
