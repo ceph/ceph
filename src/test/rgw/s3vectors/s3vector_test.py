@@ -499,6 +499,15 @@ def test_create_vector_bucket():
     log.info('create_vector_bucket result: %s', result)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     assert result['vectorBucketArn'] == 'arn:aws:s3vectors:::bucket/{}'.format(bucket_name)
+    # creating a vector bucket with a name that is taken should fail with a conflict
+    with pytest.raises(conn.exceptions.ClientError) as exc_info:
+        conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 409
+    assert exc_info.value.response['Error']['Code'] == 'BucketAlreadyExists'
+    # the failed request should not harm the existing vector bucket
+    assert _vector_bucket_exists(conn, bucket_name)
+    result = conn.get_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     # cleanup
     _delete_all_vector_buckets(conn)
 
