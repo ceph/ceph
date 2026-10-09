@@ -185,7 +185,8 @@ public:
   }
 
   /// clear override value
-  int rm_val(ConfigValues& values, const std::string_view key);
+  int rm_val(ConfigValues& values, const ConfigTracker& observers,
+             const std::string_view key);
 
   /// get encoded map<string,map<int32_t,string>> of entire config
   void get_config_bl(const ConfigValues& values,
@@ -268,7 +269,8 @@ private:
   Option::value_t _get_val_nometa(const ConfigValues& values,
 				  const Option& o) const;
 
-  int _rm_val(ConfigValues& values, const std::string_view key, int level);
+  int _rm_val(ConfigValues& values, const ConfigTracker& observers,
+              const std::string_view key, int level);
 
   void _refresh(ConfigValues& values, const Option& opt);
 
@@ -333,6 +335,9 @@ public:  // for global_init
   }
 private:
   static std::string get_cluster_name(const char* conffile_path);
+  bool unsafe_runtime_change(const Option& opt,
+                             const ConfigTracker& observers);
+
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
   std::string conf_path;
