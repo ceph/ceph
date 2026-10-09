@@ -13,6 +13,7 @@
  *
  */
 
+#include <iomanip>  // for std::setfill, std::setw
 #include <gtest/gtest.h>
 #include "test/unit.cc"
 
