@@ -193,6 +193,18 @@ function TEST_set_refuses_overridden_values() {
     ceph osd pool default set --replica 2 || return 1
 }
 
+# Test a value masked to another host does not override this monitor's
+function TEST_health_ignores_mask_of_other_host() {
+    local dir=$1
+    run_mon $dir a || return 1
+
+    ceph osd pool default set --replica 2 || return 1
+    ceph config set global/host:nosuchhost osd_pool_default_replica 4 || return 1
+    sleep 10
+    ceph health detail | grep -q POOL_DEFAULT_OVERRIDDEN && return 1
+    return 0
+}
+
 # Test a later override raises POOL_DEFAULT_OVERRIDDEN
 function TEST_health_warns_of_override() {
     local dir=$1

@@ -33,6 +33,11 @@ class ConfigMonitor : public PaxosService
 public:
   ConfigMonitor(Monitor &m, Paxos &p, const std::string& service_name);
 
+  // The pool default options that the configuration database sets for this
+  // monitor other than by an unmasked global value, with the section that
+  // sets them, as this monitor evaluates its masks.
+  std::map<std::string, std::string> pool_default_db_overrides();
+
   void init() override;
 
   void load_config();

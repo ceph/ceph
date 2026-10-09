@@ -1053,6 +1053,20 @@ string ConfigMonitor::pool_default_source(const string& option)
   return source;
 }
 
+map<string, string> ConfigMonitor::pool_default_db_overrides()
+{
+  map<string, string> overrides;
+  for (const auto& name : pool_default_option_names()) {
+    const string source = pool_default_source(name);
+    // the local sources are reported on their own
+    if (source != "default" && source != "global" && source != "file" &&
+        source != "env" && source != "cmdline" && source != "override") {
+      overrides[name] = source;
+    }
+  }
+  return overrides;
+}
+
 void ConfigMonitor::dump_pool_defaults(Formatter *f, ostream& out)
 {
   const PoolCreateParams d = load_pool_defaults(g_conf());

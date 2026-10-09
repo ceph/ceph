@@ -724,7 +724,8 @@ bool HealthMonitor::check_member_health()
       return std::nullopt;
     };
     list<string> detail;
-    for (const auto& [name, section] : db_pool_default_overrides(config_map)) {
+    for (const auto& [name, section] :
+           mon.configmon()->pool_default_db_overrides()) {
       if (global_value(name)) {
         detail.push_back(name + " is set in section " + section +
                          " of the configuration database");
