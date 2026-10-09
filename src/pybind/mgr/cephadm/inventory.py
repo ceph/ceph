@@ -337,6 +337,7 @@ class SpecStore():
         self.spec_deleted = {}  # type: Dict[str, Tuple[datetime.datetime, bool]]
         self.spec_preview = {}  # type: Dict[str, ServiceSpec]
         self._needs_configuration: Dict[str, bool] = {}
+        self._last_working_specs: Dict[str, ServiceSpec] = {}
 
     @property
     def all_specs(self) -> Mapping[str, ServiceSpec]:
@@ -397,6 +398,16 @@ class SpecStore():
                 created = str_to_datetime(cast(str, j['created']))
                 self._specs[service_name] = spec
                 self.spec_created[service_name] = created
+
+                if 'last_working_spec' in j:
+                    try:
+                        self._last_working_specs[service_name] = ServiceSpec.from_json(
+                            j['last_working_spec']
+                        )
+                    except Exception as e:
+                        self.mgr.log.warning(
+                            'unable to load last_working_spec for %s: %s' % (service_name, e)
+                        )
 
                 if 'deleted' in j:
                     deleted_ts = str_to_datetime(cast(str, j['deleted']))
@@ -470,7 +481,8 @@ class SpecStore():
             data['force_delete_data'] = force_delete_data
         if name in self._needs_configuration:
             data['needs_configuration'] = self._needs_configuration[name]
-
+        if name in self._last_working_specs:
+            data['last_working_spec'] = self._last_working_specs[name].to_json()
         self.mgr.set_store(
             SPEC_STORE_PREFIX + name,
             json.dumps(data, sort_keys=True),
@@ -597,6 +609,8 @@ class SpecStore():
                 del self.spec_deleted[service_name]
             if service_name in self._needs_configuration:
                 del self._needs_configuration[service_name]
+            if service_name in self._last_working_specs:
+                del self._last_working_specs[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
         return found
 
@@ -638,6 +652,25 @@ class SpecStore():
             self._save(name)
         else:
             self.mgr.log.warning(f'Attempted to mark unknown service "{name}" as needing configuration')
+
+    def get_last_working_spec(self, name: str) -> Optional[ServiceSpec]:
+        """Return the last successfully deployed spec for *name*, or None."""
+        return self._last_working_specs.get(name)
+
+    def mark_last_working_spec(self, name: str) -> None:
+        """Record the current spec for *name* as the last known working spec.
+
+        Called after a successful deployment so that a later failed attempt
+        never overwrites the last good state.  Persisted to survive mgr restarts.
+        """
+        if name not in self._specs:
+            self.mgr.log.warning(
+                f'Attempted to mark unknown service "{name}" as last working spec'
+            )
+            return
+        self._last_working_specs[name] = self._specs[name]
+        self._save(name)
+        self.mgr.log.debug(f'SpecStore: recorded last working spec for {name}')
 
     def mark_configured(self, name: str) -> None:
         if name in self._specs:
