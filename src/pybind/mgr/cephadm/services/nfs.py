@@ -160,6 +160,24 @@ class NFSService(CephService):
         # choose_next_action() ignores False/None in the symmetric diff, so
         # False <-> None transitions do not trigger reconfig or redeploy.
 
+        # Placement-derived ceph_nodes: sorted IPs of all placement hosts.
+        # When placement changes the IP list changes, deps diverge, and
+        # choose_next_action() triggers a SIGHUP-based reconfig so every
+        # existing NFS daemon receives an updated CEPH_NODES_LIST without
+        # a full redeploy.
+        try:
+            hosts = get_placement_hosts(
+                spec,
+                mgr.cache.get_schedulable_hosts(),
+                mgr.cache.get_draining_hosts(),
+            )
+        except OrchestratorError:
+            hosts = []
+        ceph_node_ips = sorted(
+            str(mgr.inventory.get_addr(h.hostname)) for h in hosts
+        )
+        deps.append(f'ceph_nodes:{",".join(ceph_node_ips)}')
+
         # Metrics related
         if nfs_spec.enable_nfs_metrics:
             deps.append(f'enable_nfs_metrics: {nfs_spec.enable_nfs_metrics}')
@@ -836,6 +854,22 @@ class NFSService(CephService):
             curr_deps,
             sym_diff,
         )
+        # Placement-only change (ceph_nodes): push updated ganesha.conf
+        # and signal ganesha.nfsd to reload via SIGHUP instead of a full
+        # container restart or redeploy.
+        only_ceph_nodes_updated = all(
+            s.startswith('ceph_nodes:') for s in sym_diff
+        )
+        if only_ceph_nodes_updated:
+            logger.info(
+                'Reconfigure NFS with SIGHUP due to ceph_nodes change (%s)',
+                spec.service_name() if spec else daemon_type,
+            )
+            return utils.NextDaemonStep(
+                utils.Action.RECONFIG,
+                skip_restart_for_reconfig=True,
+                send_signal_to_daemon='SIGHUP',
+            )
         action = utils.Action.RECONFIG
         # check what has changed, based on that decide action
         only_kmip_updated = all(s.startswith('kmip') for s in sym_diff)
