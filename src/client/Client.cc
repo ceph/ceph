@@ -1921,7 +1921,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     ceph_assert(it != inode_map.end());
     diri = it->second;
     
-    string dname = request->path.last_dentry();
+    auto dname = std::string(request->path.last_dentry());
     
     LeaseStat dlease;
     dlease.duration_ms = 0;
@@ -2937,7 +2937,11 @@ ref_t<MClientRequest> Client::build_client_request(MetaRequest *request, mds_ran
 		   << dendl;
   }
   req->set_filepath(request->get_filepath());
-  req->set_filepath2(request->get_filepath2());
+  if (request->holds_filepath2()) {
+    req->set_filepath2(request->get_filepath2());
+  } else if (request->holds_string2()) {
+    req->set_string2(request->get_string2());
+  }
   req->set_alternate_name(request->alternate_name);
   req->set_data(request->data);
   req->fscrypt_auth = request->fscrypt_auth;
@@ -7094,10 +7098,7 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
 
   populate_metadata(mount_root.empty() ? "/" : mount_root);
 
-  filepath fp(CEPH_INO_ROOT);
-  if (!mount_root.empty()) {
-    fp = filepath(mount_root.c_str());
-  }
+  auto fp = filepath(mount_root, CEPH_INO_ROOT);
   while (true) {
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
     req->set_filepath(fp);
@@ -8133,13 +8134,15 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
       if (i < path.depth() - 1) {
 	// dir symlink
 	// replace consumed components of path with symlink dir target
-	if (symlink[0] == '/') {
+	filepath resolved(symlink, diri->ino);
+        for (auto j = i+1; j < path.depth(); ++j) {
+          resolved.push_dentry(path[j]);
+        }
+        path = std::move(resolved);
+	i = 0;
+	if (path.absolute()) {
 	  diri = root;
 	}
-	filepath resolved(std::move(symlink));
-	resolved.append(path.postfixpath(i + 1));
-	path = std::move(resolved);
-	i = 0;
 	continue;
       } else if (extra_options.followsym) {
 	if (symlink[0] == '/') {
@@ -8252,6 +8255,8 @@ int Client::do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPe
   tout(cct) << mode << std::endl;
   ldout(cct, 10) << __func__ << ": " << relpath << dendl;
 
+  const auto path = filepath(relpath, {.drop_trailing = false});
+
   std::scoped_lock lock(client_lock);
   InodeRef dirinode;
   int r = get_fd_inode(dirfd, &dirinode);
@@ -8260,7 +8265,7 @@ int Client::do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPe
   }
 
   walk_dentry_result wdr;
-  if (int rc = path_walk(dirinode, filepath(relpath), &wdr, perm, {.require_target = false}); rc < 0) {
+  if (int rc = path_walk(dirinode, path, &wdr, perm, {.require_target = false}); rc < 0) {
     return rc;
   }
 
@@ -8278,7 +8283,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
 
-  const filepath path(relpath);
+  const auto path = filepath(relpath, {.drop_trailing = false});
 
   std::scoped_lock lock(client_lock);
   for (;;) {
@@ -8422,6 +8427,16 @@ int Client::_readlink(const InodeRef& diri, const char* relpath, char *buf, size
 
 int Client::_getattr(const InodeRef& in, int mask, const UserPerm& perms, bool force)
 {
+  if (in->snapid == CEPH_SNAPDIR) {
+    if (in->snapdir_parent) {
+      int r = _getattr(in->snapdir_parent, mask, perms, force);
+      if (r < 0)
+        return r;
+      refresh_snapdir_attrs(in.get(), in->snapdir_parent.get());
+    }
+    return 0;
+  }
+
   bool yes = in->caps_issued_mask(mask, true);
 
   ldout(cct, 10) << __func__ << " mask " << ccap_string(mask) << " issued=" << yes << dendl;
@@ -9178,9 +9193,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
 
 int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_info_t *rstat)
 {
-  ldout(cct, 10) << __func__ << " on " << in->ino << " snap/dev" << in->snapid
-	   << " mode 0" << oct << in->mode << dec
-	   << " mtime " << in->mtime << " ctime " << in->ctime << dendl;
+  ldout(cct, 10) << __func__ << " on " << *in << dendl;
   memset(st, 0, sizeof(struct stat));
   if (use_faked_inos())
     st->st_ino = in->faked_ino;
@@ -9255,9 +9268,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
 
 void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
 {
-  ldout(cct, 10) << __func__ << " on " << in->ino << " snap/dev" << in->snapid
-	   << " mode 0" << oct << in->mode << dec
-	   << " mtime " << in->mtime << " ctime " << in->ctime << " change_attr " << in->change_attr << dendl;
+  ldout(cct, 10) << __func__ << " on " << *in << dendl;
   memset(stx, 0, sizeof(struct ceph_statx));
 
   /*
@@ -10115,7 +10126,7 @@ int Client::readdir_r_cb(dir_result_t* d,
     req->head.args.readdir.frag = fg;
     req->head.args.readdir.flags = CEPH_READDIR_REPLY_BITFLAGS;
     if (dirp->last_name.length()) {
-      req->path2.set_path(dirp->last_name);
+      req->set_string2(dirp->last_name);
     } else if (dirp->hash_order()) {
       req->head.args.readdir.offset_hash = dirp->offset_high();
     }
@@ -10621,7 +10632,7 @@ int Client::readdir_snapdiff(dir_result_t* d1, snapid_t snap2,
       req->head.args.snapdiff.frag = fg;
       req->head.args.snapdiff.flags = CEPH_READDIR_REPLY_BITFLAGS;
       if (dirp->last_name.length()) {
-	req->path2.set_path(dirp->last_name);
+	req->set_string2(dirp->last_name);
       } else if (dirp->hash_order()) {
 	req->head.args.snapdiff.offset_hash = dirp->offset_high();
       }

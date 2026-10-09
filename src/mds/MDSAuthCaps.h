@@ -23,7 +23,7 @@
 
 #include "include/encoding.h"
 #include "msg/msg_types.h" // for struct entity_addr_t
-#include "include/filepath.h"
+#include "common/filepath.h"
 
 #include <boost/optional.hpp>
 
