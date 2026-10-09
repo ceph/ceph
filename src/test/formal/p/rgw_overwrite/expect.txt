@@ -1,0 +1,517 @@
+tcPutsSafe                     holds
+tcPutsIndex                    violated the bucket index lists
+tcPutsCancelKeepsVer           holds
+tcBugNoIdTagGuard              violated leaked
+tcPutVsCompleteSafe            holds
+tcPutVsCompleteLeak            violated leaked
+tcPutVsCompleteLoserGc         holds
+tcBugCancelSkipsRemoveObjs     violated orphaned in the multipart namespace
+tcCompletesSafe                holds
+tcCompletesLeak                violated leaked
+tcCompletesLoserGc             holds
+tcSameCompletes                holds
+tcBugNoLockRenewal             violated deleted
+tcBugReplayNoEtag              violated answered success with ETag 0
+tcReupload                     holds
+tcBugNoMetaVersionCheck        violated leaked
+tcBugHistoryNoSkip             violated deleted
+tcAbortVsComplete              holds
+tcBugAbortNoLock               violated deleted
+tcAssumeLockHeld               violated deleted
+tcLcAbortVsComplete            violated deleted
+tcLcAbortTakesLock             holds
+tcCrashThenRetry               violated deleted
+tcCrashThenAbort               violated deleted
+tcMetaDeleteFailsThenRetry     violated deleted
+tcMetaDeleteFailsThenAbort     violated deleted
+tcSparesHeadCrashRetry         holds
+tcSparesHeadCrashAbort         holds
+tcSparesHeadCrashPutRetry      violated deleted
+tcDelVsPutSafe                 holds
+tcDelVsPutLeak                 violated leaked
+tcDelVsPutGuard                holds
+tcDelsAndPutSafe               holds
+tcDelsAndPutIndex              violated the bucket index lists
+tcDelsCancelKeepsVer           holds
+tcDelVsCompleteSafe            holds
+tcDelVsCompleteLeak            violated leaked
+tcDelVsCompleteGuard           holds
+tcCopyVsPutSrc                 holds
+tcBugCopyNoRefs                violated deleted
+tcCopyVsDelSrc                 holds
+tcCopyVsPutDstSafe             holds
+tcCopyVsPutDstLeak             violated leaked
+tcCopyVsPutDstDropRefs         holds
+tcCopyThenDeletes              holds
+tcCopySelfVsPutLoss            violated deleted
+tcCopySelfGuarded              holds
+tcCopyMpu                      holds
+tcCrashCopyRetry               violated deleted
+tcIxFailPutLoss                violated deleted
+tcIxFailPutIndex               violated the bucket index lists
+tcIxFailCopyLoss               violated deleted
+tcIxFailRetryLoss              violated deleted
+tcIxKeepsWritePut              holds
+tcIxKeepsWriteCopy             holds
+tcIxKeepsWriteRetry            holds
+tcListVsPut                    holds
+tcListVsDel                    holds
+tcListVsComplete               holds
+tcAssumeWritersPrompt          violated the bucket index lists
+tcDedupThenDeletes             holds
+tcDedupVsPutTgtSafe            holds
+tcDedupVsPutTgtLeak            violated leaked
+tcDedupVsDelTgtLeak            violated leaked
+tcDedupVsDelTgtGuarded         violated leaked
+tcDedupVsPutSrc                holds
+tcDedupVsCopySelfLoss          violated deleted
+tcDedupVsCopySelfGuarded       violated deleted
+tcReshardVsPuts                holds
+tcReshardVsDel                 holds
+tcReshardVsMpu                 holds
+tcBugReshardNoLog              violated the bucket index lists
+tcBugReshardNoCheckExisting    violated the bucket stats say
+tcBugOldShardsOpen             violated the bucket index lists
+
+# conditional requests
+tcCreates                      holds
+tcCreateVsCompleteSafe         holds
+tcCreateVsCompleteCond         violated but removed index entries
+tcCreateVsCompleteKeepsParts   holds
+tcIfMatchVsPut                 holds
+tcBugCondNoIdTagGuard          violated over one that fails its condition
+tcMatchAnyVsMatchSafe          holds
+tcMatchAnyVsMatchCond          violated answered success without changing the head
+tcMatchAnyVsMatchLossFails     holds
+tcCondDelVsPutSafe             holds
+tcCondDelVsPutLeak             violated leaked
+tcCondDelVsPutCond             violated over one that fails its condition
+tcCondDelVsPutGuard            holds
+tcCondDelVsMatchSafe           holds
+tcCondDelVsMatchCond           violated over one that fails its condition
+tcCondDelVsMatchGuard          violated answered success without changing the head
+tcCondDelVsMatchLossFails      holds
+tcCondCompleteVsPut            holds
+
+# the fixes together
+tcFixedPuts                        holds
+tcFixedPutOne                      holds
+tcFixedPutVsComplete               holds
+tcFixedCompletes                   holds
+tcFixedSameCompletes               holds
+tcFixedReupload                    holds
+tcFixedAbort                       holds
+tcFixedLcAbort                     holds
+tcFixedRetry                       holds
+tcFixedThenAbort                   holds
+tcFixedPutThenRetry                holds
+tcFixedDelVsPut                    holds
+tcFixedDelsAndPut                  holds
+tcFixedDelVsComplete               holds
+tcFixedCopyOne                     holds
+tcFixedCopyVsPutSrc                holds
+tcFixedCopyVsDelSrc                holds
+tcFixedCopyVsPutDst                holds
+tcFixedCopyThenDeletes             holds
+tcFixedCopySelfVsPut               holds
+tcFixedCopyMpu                     holds
+tcFixedCrashCopyRetry              holds
+tcFixedListVsPut                   holds
+tcFixedListVsDel                   holds
+tcFixedListVsComplete              holds
+tcFixedDedupThenDeletes            holds
+tcFixedDedupVsPutTgt               violated leaked
+tcFixedDedupVsDelTgt               violated leaked
+tcFixedDedupVsPutSrc               holds
+tcFixedDedupVsCopySelf             violated deleted
+tcFixedReshardVsPuts               holds
+tcFixedReshardVsDel                holds
+tcFixedReshardVsMpu                holds
+tcFixedIxPuts                      holds
+tcFixedIxPutOne                    holds
+tcFixedIxPutVsComplete             holds
+tcFixedIxCompletes                 holds
+tcFixedIxSameCompletes             holds
+tcFixedIxReupload                  holds
+tcFixedIxAbort                     holds
+tcFixedIxLcAbort                   holds
+tcFixedIxRetry                     holds
+tcFixedIxThenAbort                 holds
+tcFixedIxPutThenRetry              holds
+tcFixedIxDelVsPut                  holds
+tcFixedIxDelsAndPut                holds
+tcFixedIxDelVsComplete             holds
+tcFixedIxCopyOne                   holds
+tcFixedIxCopyVsPutSrc              holds
+tcFixedIxCopyVsDelSrc              holds
+tcFixedIxCopyVsPutDst              holds
+tcFixedIxCopyThenDeletes           holds
+tcFixedIxCopySelfVsPut             holds
+tcFixedIxCopyMpu                   holds
+tcFixedIxCrashCopyRetry            holds
+tcFixedIxListVsPut                 holds
+tcFixedIxListVsDel                 holds
+tcFixedIxListVsComplete            holds
+tcFixedIxDedupThenDeletes          holds
+tcFixedIxDedupVsPutTgt             violated leaked
+tcFixedIxDedupVsDelTgt             violated leaked
+tcFixedIxDedupVsPutSrc             holds
+tcFixedIxDedupVsCopySelf           violated deleted
+tcFixedIxReshardVsPuts             holds
+tcFixedIxReshardVsDel              holds
+tcFixedIxReshardVsMpu              holds
+
+# proposed fixes for findings 3 and 11
+tcStallListVsPut                   violated
+tcStallListVsDel                   violated
+tcStallListVsComplete              violated
+tcStallListPutDel                  violated
+tcStallListNewPut                  violated
+tcRelinkListVsPut                  holds
+tcRelinkListVsDel                  holds
+tcRelinkListVsComplete             holds
+tcRelinkListPutDel                 holds
+tcRelinkListNewPut                 holds
+tcMarkCrashRetry                   holds
+tcMarkCrashThenAbort               holds
+tcMarkCrashPutThenRetry            holds
+tcMarkCrashCrashCopyRetry          holds
+tcMarkCrashSameCompletes           holds
+tcMarkCrashAbort                   holds
+tcMarkCrashLcAbort                 holds
+tcMarkMetaDelRetry                 holds
+tcMarkMetaDelThenAbort             holds
+tcMarkMetaDelPutThenRetry          holds
+tcMarkMetaDelCrashCopyRetry        holds
+tcMarkMetaDelSameCompletes         holds
+tcMarkMetaDelAbort                 holds
+tcMarkMetaDelLcAbort               holds
+tcMarkLapseAbort                   violated deleted
+tcMarkLapseLcAbort                 violated deleted
+tcMarkLapseSameCompletes           violated deleted
+tcFixedCreates                     holds
+tcFixedCreateVsComplete            violated but removed index entries
+tcFixedIfMatchVsPut                holds
+tcFixedMatchAnyVsMatch             violated answered success without changing the head
+tcFixedCondDelVsPut                holds
+tcFixedCondDelVsMatch              violated answered success without changing the head
+tcFixedCondCompleteVsPut           holds
+tcFixedIxCreates                   holds
+tcFixedIxCreateVsComplete          violated but removed index entries
+tcFixedIxIfMatchVsPut              holds
+tcFixedIxMatchAnyVsMatch           violated answered success without changing the head
+tcFixedIxCondDelVsPut              holds
+tcFixedIxCondDelVsMatch            violated answered success without changing the head
+tcFixedIxCondCompleteVsPut         holds
+
+# the fixes together, and the two for conditional requests
+tcCondFixedCreates                 holds
+tcCondFixedCreateVsComplete        holds
+tcCondFixedIfMatchVsPut            holds
+tcCondFixedMatchAnyVsMatch         holds
+tcCondFixedCondDelVsPut            holds
+tcCondFixedCondDelVsMatch          holds
+tcCondFixedCondCompleteVsPut       holds
+tcCondFixedIxCreates               holds
+tcCondFixedIxCreateVsComplete      holds
+tcCondFixedIxIfMatchVsPut          holds
+tcCondFixedIxMatchAnyVsMatch       holds
+tcCondFixedIxCondDelVsPut          holds
+tcCondFixedIxCondDelVsMatch        holds
+tcCondFixedIxCondCompleteVsPut     holds
+
+# S3 answers, against the Smithy model and the S3 User Guide
+tcAnsPuts                              holds
+tcAnsPutVsComplete                     holds
+tcAnsCompletes                         holds
+tcAnsSameCompletes                     holds
+tcAnsReupload                          holds
+tcAnsAbort                             holds
+tcAnsLcAbort                           violated 404 NoSuchKey
+tcAnsRetry                             holds
+tcAnsThenAbort                         holds
+tcAnsPutThenRetry                      holds
+tcAnsDelVsPut                          holds
+tcAnsDelsAndPut                        holds
+tcAnsDelVsComplete                     holds
+tcAnsCopyVsPutSrc                      holds
+tcAnsCopyVsDelSrc                      holds
+tcAnsCopySelfVsPut                     holds
+tcAnsCopyMpu                           holds
+tcAnsListVsPut                         holds
+tcAnsCreates                           holds
+tcAnsCreateVsComplete                  holds
+tcAnsIfMatchVsPut                      violated UnknownError
+tcAnsMatchAnyVsMatch                   violated UnknownError
+tcAnsCondDelVsPut                      holds
+tcAnsCondDelVsMatch                    holds
+tcAnsCondCompleteVsPut                 violated UnknownError
+tcAnsCondDels                          violated removed no object
+tcAnsInvalidThenReupload               violated BucketAlreadyExists
+tcAnsIxFailPut                         holds
+tcAnsIxFailRetry                       holds
+tcAnsGuardCondDelVsMatch               violated removed no object
+tcAnsTakesLockLcAbort                  holds
+tcAnsLossFailsIfMatchVsPut             holds
+tcAnsLossFailsCondCompleteVsPut        holds
+tcAnsNoKeyCondDels                     holds
+tcAnsHistoryInvalidThenReupload        holds
+tcAnsFixedPuts                         holds
+tcAnsFixedPutVsComplete                holds
+tcAnsFixedCompletes                    holds
+tcAnsFixedSameCompletes                holds
+tcAnsFixedReupload                     holds
+tcAnsFixedAbort                        holds
+tcAnsFixedLcAbort                      holds
+tcAnsFixedRetry                        holds
+tcAnsFixedThenAbort                    holds
+tcAnsFixedPutThenRetry                 holds
+tcAnsFixedDelVsPut                     holds
+tcAnsFixedDelsAndPut                   holds
+tcAnsFixedDelVsComplete                holds
+tcAnsFixedCopyVsDelSrc                 holds
+tcAnsFixedCopyMpu                      holds
+tcAnsFixedReshardVsMpu                 holds
+tcAnsFixedCreates                      holds
+tcAnsFixedCreateVsComplete             holds
+tcAnsFixedIfMatchVsPut                 holds
+tcAnsFixedMatchAnyVsMatch              holds
+tcAnsFixedCondDelVsPut                 holds
+tcAnsFixedCondDelVsMatch               holds
+tcAnsFixedCondCompleteVsPut            holds
+tcAnsFixedCondDels                     holds
+tcAnsFixedInvalidThenReupload          holds
+tcAnsFixedIxPutVsComplete              holds
+tcAnsFixedIxCompletes                  holds
+tcAnsFixedIxSameCompletes              holds
+tcAnsFixedIxReupload                   holds
+tcAnsFixedIxRetry                      holds
+tcAnsFixedIxCreateVsComplete           holds
+tcAnsFixedIxCondCompleteVsPut          holds
+tcAnsFixedIxCondDels                   holds
+tcAnsFixedIxInvalidThenReupload        holds
+tcAnsFixedMarkCrashRetry               holds
+tcAnsFixedMarkCrashThenAbort           holds
+tcAnsFixedMarkCrashInvalidThenReupload holds
+
+# versioned buckets: the completion record skipped (Pr, as in PR 72103), checked
+# against the current version (Cur), or naming its version instance (Inst)
+tcMarkCrashDelAfterRetry           holds
+tcMarkCrashPutThenAbort            holds
+tcMarkMetaDelDelAfterRetry         holds
+tcMarkMetaDelPutThenAbort          holds
+tcVECurCrashAbort                  holds
+tcVECurCrashDelAfterRetry          holds
+tcVECurCrashLcAbort                holds
+tcVECurCrashPutThenAbort           violated deleted
+tcVECurCrashPutThenRetry           holds
+tcVECurCrashRetry                  holds
+tcVECurCrashSameCompletes          holds
+tcVECurCrashThenAbort              holds
+tcVECurMetaDelAbort                holds
+tcVECurMetaDelDelAfterRetry        holds
+tcVECurMetaDelLcAbort              holds
+tcVECurMetaDelPutThenAbort         violated deleted
+tcVECurMetaDelPutThenRetry         holds
+tcVECurMetaDelRetry                holds
+tcVECurMetaDelSameCompletes        holds
+tcVECurMetaDelThenAbort            holds
+tcVEDelAfterRetry                  holds
+tcVEDelVsPut                       holds
+tcVEInstCrashAbort                 holds
+tcVEInstCrashDelAfterRetry         holds
+tcVEInstCrashLcAbort               holds
+tcVEInstCrashPutThenAbort          holds
+tcVEInstCrashPutThenRetry          holds
+tcVEInstCrashRetry                 holds
+tcVEInstCrashSameCompletes         holds
+tcVEInstCrashThenAbort             holds
+tcVEInstMetaDelAbort               holds
+tcVEInstMetaDelDelAfterRetry       holds
+tcVEInstMetaDelLcAbort             holds
+tcVEInstMetaDelPutThenAbort        holds
+tcVEInstMetaDelPutThenRetry        holds
+tcVEInstMetaDelRetry               holds
+tcVEInstMetaDelSameCompletes       holds
+tcVEInstMetaDelThenAbort           holds
+tcVEPrCrashAbort                   violated deleted
+tcVEPrCrashDelAfterRetry           violated deleted
+tcVEPrCrashLcAbort                 violated deleted
+tcVEPrCrashPutThenAbort            violated deleted
+tcVEPrCrashPutThenRetry            holds
+tcVEPrCrashRetry                   holds
+tcVEPrCrashSameCompletes           holds
+tcVEPrCrashThenAbort               violated deleted
+tcVEPrMetaDelAbort                 violated deleted
+tcVEPrMetaDelDelAfterRetry         violated deleted
+tcVEPrMetaDelLcAbort               violated deleted
+tcVEPrMetaDelPutThenAbort          violated deleted
+tcVEPrMetaDelPutThenRetry          holds
+tcVEPrMetaDelRetry                 holds
+tcVEPrMetaDelSameCompletes         holds
+tcVEPrMetaDelThenAbort             violated deleted
+tcVEPuts                           holds
+tcVEPutThenAbort                   holds
+tcVERetry                          holds
+tcVSCurCrashAbort                  holds
+tcVSCurCrashDelAfterRetry          holds
+tcVSCurCrashLcAbort                holds
+tcVSCurCrashPutThenAbort           holds
+tcVSCurCrashPutThenRetry           holds
+tcVSCurCrashRetry                  holds
+tcVSCurCrashSameCompletes          holds
+tcVSCurCrashThenAbort              holds
+tcVSCurMetaDelAbort                holds
+tcVSCurMetaDelDelAfterRetry        holds
+tcVSCurMetaDelLcAbort              holds
+tcVSCurMetaDelPutThenAbort         holds
+tcVSCurMetaDelPutThenRetry         holds
+tcVSCurMetaDelRetry                holds
+tcVSCurMetaDelSameCompletes        holds
+tcVSCurMetaDelThenAbort            holds
+tcVSDelAfterRetry                  holds
+tcVSDelVsPut                       holds
+tcVSInstCrashAbort                 holds
+tcVSInstCrashDelAfterRetry         holds
+tcVSInstCrashLcAbort               holds
+tcVSInstCrashPutThenAbort          holds
+tcVSInstCrashPutThenRetry          holds
+tcVSInstCrashRetry                 holds
+tcVSInstCrashSameCompletes         holds
+tcVSInstCrashThenAbort             holds
+tcVSInstMetaDelAbort               holds
+tcVSInstMetaDelDelAfterRetry       holds
+tcVSInstMetaDelLcAbort             holds
+tcVSInstMetaDelPutThenAbort        holds
+tcVSInstMetaDelPutThenRetry        holds
+tcVSInstMetaDelRetry               holds
+tcVSInstMetaDelSameCompletes       holds
+tcVSInstMetaDelThenAbort           holds
+tcVSPrCrashAbort                   violated deleted
+tcVSPrCrashDelAfterRetry           violated deleted
+tcVSPrCrashLcAbort                 violated deleted
+tcVSPrCrashPutThenAbort            holds
+tcVSPrCrashPutThenRetry            violated deleted
+tcVSPrCrashRetry                   violated deleted
+tcVSPrCrashSameCompletes           violated deleted
+tcVSPrCrashThenAbort               violated deleted
+tcVSPrMetaDelAbort                 violated deleted
+tcVSPrMetaDelDelAfterRetry         violated deleted
+tcVSPrMetaDelLcAbort               violated deleted
+tcVSPrMetaDelPutThenAbort          holds
+tcVSPrMetaDelPutThenRetry          violated deleted
+tcVSPrMetaDelRetry                 violated deleted
+tcVSPrMetaDelSameCompletes         violated deleted
+tcVSPrMetaDelThenAbort             violated deleted
+tcVSPuts                           holds
+tcVSPutThenAbort                   holds
+tcVSRetry                          holds
+
+# sharding: hashed (H) or ordered (O) layouts of one or two shards before and after a
+# reshard; entries copied by their object's name (Obj) or their index key name (Idx, PR 70053)
+tcShH1H2IdxThenAbort               violated orphaned in the multipart namespace
+tcShH1H2IdxThenComplete            violated orphaned in the multipart namespace
+tcShH1H2IdxVEThenComplete          violated orphaned in the multipart namespace
+tcShH1H2IdxVEVsPuts                holds
+tcShH1H2IdxVsDel                   violated leaked
+tcShH1H2IdxVsMpu                   violated orphaned in the multipart namespace
+tcShH1H2IdxVsPuts                  holds
+tcShH1H2IdxVSThenComplete          violated orphaned in the multipart namespace
+tcShH1H2IdxVSVsPuts                holds
+tcShH1H2ObjThenAbort               holds
+tcShH1H2ObjThenComplete            holds
+tcShH1H2ObjVEThenComplete          holds
+tcShH1H2ObjVEVsPuts                holds
+tcShH1H2ObjVsDel                   violated leaked
+tcShH1H2ObjVsMpu                   holds
+tcShH1H2ObjVsPuts                  holds
+tcShH1H2ObjVSThenComplete          holds
+tcShH1H2ObjVSVsPuts                holds
+tcShH1O2IdxThenAbort               violated orphaned in the multipart namespace
+tcShH1O2IdxThenComplete            violated orphaned in the multipart namespace
+tcShH1O2IdxVEThenComplete          violated orphaned in the multipart namespace
+tcShH1O2IdxVEVsPuts                holds
+tcShH1O2IdxVsDel                   violated leaked
+tcShH1O2IdxVsMpu                   violated orphaned in the multipart namespace
+tcShH1O2IdxVsPuts                  holds
+tcShH1O2IdxVSThenComplete          violated orphaned in the multipart namespace
+tcShH1O2IdxVSVsPuts                holds
+tcShH1O2ObjThenAbort               holds
+tcShH1O2ObjThenComplete            holds
+tcShH1O2ObjVEThenComplete          holds
+tcShH1O2ObjVEVsPuts                holds
+tcShH1O2ObjVsDel                   violated leaked
+tcShH1O2ObjVsMpu                   holds
+tcShH1O2ObjVsPuts                  holds
+tcShH1O2ObjVSThenComplete          holds
+tcShH1O2ObjVSVsPuts                holds
+tcShH2H2IdxThenAbort               violated orphaned in the multipart namespace
+tcShH2H2IdxThenComplete            violated orphaned in the multipart namespace
+tcShH2H2IdxVEThenComplete          violated orphaned in the multipart namespace
+tcShH2H2IdxVEVsPuts                holds
+tcShH2H2IdxVsDel                   violated leaked
+tcShH2H2IdxVsMpu                   violated orphaned in the multipart namespace
+tcShH2H2IdxVsPuts                  holds
+tcShH2H2IdxVSThenComplete          violated orphaned in the multipart namespace
+tcShH2H2IdxVSVsPuts                holds
+tcShH2H2ObjThenAbort               holds
+tcShH2H2ObjThenComplete            holds
+tcShH2H2ObjVEThenComplete          holds
+tcShH2H2ObjVEVsPuts                holds
+tcShH2H2ObjVsDel                   violated leaked
+tcShH2H2ObjVsMpu                   holds
+tcShH2H2ObjVsPuts                  holds
+tcShH2H2ObjVSThenComplete          holds
+tcShH2H2ObjVSVsPuts                holds
+tcShH2O2IdxThenAbort               violated orphaned in the multipart namespace
+tcShH2O2IdxThenComplete            violated orphaned in the multipart namespace
+tcShH2O2IdxVEThenComplete          violated orphaned in the multipart namespace
+tcShH2O2IdxVEVsPuts                holds
+tcShH2O2IdxVsDel                   violated leaked
+tcShH2O2IdxVsMpu                   violated orphaned in the multipart namespace
+tcShH2O2IdxVsPuts                  holds
+tcShH2O2IdxVSThenComplete          violated orphaned in the multipart namespace
+tcShH2O2IdxVSVsPuts                holds
+tcShH2O2ObjThenAbort               holds
+tcShH2O2ObjThenComplete            holds
+tcShH2O2ObjVEThenComplete          holds
+tcShH2O2ObjVEVsPuts                holds
+tcShH2O2ObjVsDel                   violated leaked
+tcShH2O2ObjVsMpu                   holds
+tcShH2O2ObjVsPuts                  holds
+tcShH2O2ObjVSThenComplete          holds
+tcShH2O2ObjVSVsPuts                holds
+tcShO2H2IdxThenAbort               violated orphaned in the multipart namespace
+tcShO2H2IdxThenComplete            violated orphaned in the multipart namespace
+tcShO2H2IdxVEThenComplete          violated orphaned in the multipart namespace
+tcShO2H2IdxVEVsPuts                holds
+tcShO2H2IdxVsDel                   violated leaked
+tcShO2H2IdxVsMpu                   violated orphaned in the multipart namespace
+tcShO2H2IdxVsPuts                  holds
+tcShO2H2IdxVSThenComplete          violated orphaned in the multipart namespace
+tcShO2H2IdxVSVsPuts                holds
+tcShO2H2ObjThenAbort               holds
+tcShO2H2ObjThenComplete            holds
+tcShO2H2ObjVEThenComplete          holds
+tcShO2H2ObjVEVsPuts                holds
+tcShO2H2ObjVsDel                   violated leaked
+tcShO2H2ObjVsMpu                   holds
+tcShO2H2ObjVsPuts                  holds
+tcShO2H2ObjVSThenComplete          holds
+tcShO2H2ObjVSVsPuts                holds
+tcShGuardH1H2ObjVsDel              holds
+
+# attribute updates: a copy onto itself and a tagging update (set_attrs), on main (Main), with
+# PR 72101's guard (Guard), and with the guarded copy retried (Retry, proposed)
+tcAttrGuardTagThenCopy             holds
+tcAttrGuardTagVsPut                holds
+tcAttrGuardVsPut                   holds
+tcAttrGuardVsTag                   violated was answered success, but the object carries
+tcAttrMainTagThenCopy              holds
+tcAttrMainTagVsPut                 holds
+tcAttrMainVsPut                    violated already deleted
+tcAttrMainVsTag                    violated was answered success, but the object carries
+tcAttrRetryTagThenCopy             holds
+tcAttrRetryTagVsPut                holds
+tcAttrRetryVsPut                   holds
+tcAttrRetryVsTag                   holds
