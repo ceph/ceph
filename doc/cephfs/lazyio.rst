@@ -2,6 +2,16 @@
 LazyIO
 ======
 
+.. warning::
+   LazyIO relaxes CephFS cache coherency guarantees.  Applications may read
+   stale data, and overlapping writes from different clients may produce
+   undefined behavior or silent data corruption.  Do not use this feature
+   unless you fully understand its consequences and are handling your own
+   data consistency — for example, via explicit
+   ``lazyio_propagate()`` / ``lazyio_synchronize()`` calls and
+   application-level barriers.  This feature is intended only for HPC and
+   similar specialized workloads that coordinate I/O externally.
+
 LazyIO relaxes POSIX semantics. Buffered reads/writes are allowed even when a
 file is opened by multiple applications on multiple clients. Applications are
 responsible for managing cache coherency themselves.
@@ -13,11 +23,23 @@ Enable LazyIO
 
 LazyIO can be enabled in the following ways.
 
-- ``client_force_lazyio`` option enables LAZY_IO globally for libcephfs and
-  ceph-fuse mount. This is strictly a startup flag.
+- ``client_force_lazyio`` option enables LazyIO globally for libcephfs and
+  ceph-fuse mount. This option takes effect only at mount time and cannot
+  be changed at runtime. LazyIO allows buffered reads and writes via the
+  page cache even when multiple clients hold the file open, which can
+  significantly improve I/O throughput for applications that manage their
+  own data consistency. For ceph-fuse, pass
+  ``--client_force_lazyio`` on the command line. For ``/etc/fstab``, add
+  ``ceph.client_force_lazyio=true`` to the options column.
 
-- ``ceph_lazyio(...)`` and ``ceph_ll_lazyio(...)`` enable LAZY_IO for file handle
-  in libcephfs.
+- ``lazyio`` / ``nolazyio`` mount option enables LazyIO globally for the
+  kernel CephFS client (kclient).  Pass it via ``mount -o lazyio`` or
+  add it to ``/etc/fstab``.  This is the kclient equivalent of
+  ``client_force_lazyio`` and supports remount.  Available since Linux
+  v6.22.
+
+- ``ceph_lazyio(...)`` and ``ceph_ll_lazyio(...)`` enable LazyIO for a file
+  handle in libcephfs.
 
 Using LazyIO
 ============
