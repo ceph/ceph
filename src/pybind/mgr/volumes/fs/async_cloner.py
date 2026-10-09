@@ -10,7 +10,8 @@ import cephfs
 from mgr_util import lock_timeout_log
 
 from .async_job import AsyncJobs
-from .exception import IndexException, MetadataMgrException, OpSmException, VolumeException
+from .exception import IndexException, MetadataMgrException, OpSmException, VolumeException, \
+    JobDeferred, is_quarantined_error
 from .fs_util import copy_file
 from .operations.versions.op_sm import SubvolumeOpSm
 from .operations.versions.subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeActions
@@ -198,6 +199,10 @@ def update_clone_failure_status(fs_client, volspec, volname, groupname, subvolna
                         SubvolumeOpType.CLONE_INTERNAL) as clone:
         if ve.errno == -errno.EINTR:
             clone.add_clone_failure(-ve.errno, "user interrupted clone operation")
+        elif is_quarantined_error(ve):
+            # the clone (target) is accessible (we are updating it), so it's
+            # the source subvolume that got quarantined.
+            clone.add_clone_failure(-ve.errno, "source subvolume is quarantined")
         else:
             clone.add_clone_failure(-ve.errno, ve.error_str)
 
@@ -230,6 +235,9 @@ def handle_clone_failed(fs_client, volspec, volname, index, groupname, subvolnam
                 subvolname, failed=True) as (subvol0, subvol1, subvol2):
             subvol1.detach_snapshot(subvol2, index)
     except (MetadataMgrException, VolumeException) as e:
+        if is_quarantined_error(e):
+            # retried (and detached) once quarantine is lifted
+            raise JobDeferred("cannot detach clone from snapshot: {0}".format(e)) from e
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
 
@@ -239,6 +247,9 @@ def handle_clone_complete(fs_client, volspec, volname, index, groupname, subvoln
                 groupname, subvolname) as (subvol0, subvol1, subvol2):
             subvol1.detach_snapshot(subvol2, index)
     except (MetadataMgrException, VolumeException) as e:
+        if is_quarantined_error(e):
+            # retried (and detached) once quarantine is lifted
+            raise JobDeferred("cannot detach clone from snapshot: {0}".format(e)) from e
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
 
@@ -267,6 +278,12 @@ def start_clone_sm(fs_client, volspec, volname, index, groupname, subvolname, st
                 set_clone_state(fs_client, volspec, volname, groupname, subvolname, next_state)
                 current_state = next_state
     except (MetadataMgrException, VolumeException) as e:
+        if is_quarantined_error(e):
+            # the clone (target) is quarantined -- its state cannot be read or
+            # updated. the clone resumes from its current state once quarantine
+            # is lifted.
+            raise JobDeferred(f"clone ({volname}, {groupname}, {subvolname}) is quarantined "
+                              f"(current_state: {current_state})") from e
         log.error(f"clone failed for ({volname}, {groupname}, {subvolname}) "
                   f"(current_state: {current_state}, reason: {e} {os.strerror(-e.args[0])})")
         raise

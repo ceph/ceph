@@ -4,10 +4,11 @@ import logging
 import threading
 import traceback
 from collections import deque
+from typing import Any, Dict, Tuple
 from mgr_util import lock_timeout_log, CephfsClient
 
 from .operations.volume import list_volumes
-from .exception import NotImplementedException
+from .exception import NotImplementedException, JobDeferred
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +51,12 @@ class JobThread(threading.Thread):
                             log.info("thread [{0}] terminating due to reconfigure".format(thread_name))
                             self.async_job.threads.remove(self)
                             return
+                        if not self.async_job.run_event.is_set():
+                            # paused while idle (waiting for a job): do not
+                            # pick up a job -- it would run with cancel_event
+                            # set (see pause()) and get canceled. wait for
+                            # resume at the top of the loop instead.
+                            break
                         timo = self.async_job.wakeup_timeout
                         if timo is not None:
                             volnames = list_volumes(self.vc.mgr)
@@ -60,11 +67,21 @@ class JobThread(threading.Thread):
                         vol_job = self.async_job.get_job()
                         if vol_job:
                             break
-                        self.async_job.cv.wait(timeout=timo)
+                        self.async_job.cv.wait(timeout=self.async_job.get_wait_timeout())
+                    if vol_job is None:
+                        continue
                     self.async_job.register_async_job(vol_job[0], vol_job[1], thread_id)
 
                 # execute the job (outside lock)
-                self.async_job.execute_job(vol_job[0], vol_job[1], should_cancel=lambda: thread_id.should_cancel())
+                try:
+                    self.async_job.execute_job(vol_job[0], vol_job[1], should_cancel=lambda: thread_id.should_cancel())
+                except JobDeferred as jd:
+                    # not a failure -- does not count towards the retry cap
+                    with lock_timeout_log(self.async_job.lock):
+                        self.async_job.defer_job(vol_job[0], vol_job[1], str(jd))
+                else:
+                    with lock_timeout_log(self.async_job.lock):
+                        self.async_job.undefer_job(vol_job[0], vol_job[1])
                 retries = 0
             except NotImplementedException:
                 raise
@@ -123,6 +140,10 @@ class AsyncJobs(threading.Thread):
     # not made configurable on purpose
     WAKEUP_TIMEOUT = 5.0
 
+    # backoff bounds (seconds) for deferred jobs (see JobDeferred)
+    DEFER_MIN = 5.0
+    DEFER_MAX = 300.0
+
     def __init__(self, volume_client, name_pfx, nr_concurrent_jobs):
         threading.Thread.__init__(self, name="{0}.tick".format(name_pfx))
 
@@ -156,6 +177,12 @@ class AsyncJobs(threading.Thread):
         # each async job group uses its own libcephfs connection (pool)
         self.fs_client = CephfsClient(self.vc.mgr)
         self.wakeup_timeout = None
+
+        # jobs that asked to be retried later (by raising JobDeferred).
+        # self.deferred = {volname: {job: (deadline, attempts)}}, deadline
+        # being time.monotonic() based. this is in-memory only: after a mgr
+        # restart a deferred job is simply tried again (and deferred again).
+        self.deferred: Dict[str, Dict[Any, Tuple[float, int]]] = {}
 
         self.threads = []
         self.spawn_all_threads()
@@ -218,12 +245,13 @@ class AsyncJobs(threading.Thread):
         # XXX: cancel_all_jobs() sets jobthread.cancel_event causing all ongoing
         # jobs to cancel. But if there are no jobs (that is self.q is empty),
         # cancel_all_jobs() will return without doing anything and
-        # jobthread.cancel_event won't be set. This results in future jobs to be
-        # executed even when config option to pause is already set. Similarly,
-        # when there's only 1 ongoing job, jobthread.cancel_event is set for it
-        # but not for other threads causing rest of threads to pick new jobs
-        # when they are queued.
-        # Therefore, set jobthread.cancel_event explicitly.
+        # jobthread.cancel_event won't be set. Similarly, when there's only 1
+        # ongoing job, jobthread.cancel_event is set for it but not for other
+        # threads.
+        # Therefore, set jobthread.cancel_event explicitly. Note that idle
+        # threads do not pick up new jobs while paused (they check run_event
+        # before fetching a job), so new jobs stay queued rather than getting
+        # canceled.
         log.debug('pause() pausing rest of worker threads')
         for t in self.threads:
             # is_set(), although technically redundant, is called to emphasize
@@ -233,6 +261,10 @@ class AsyncJobs(threading.Thread):
             # (some) threads.
             if not t.cancel_event.is_set():
                 t.cancel_event.set()
+        # wake up idle threads (waiting for a job) so that they notice the
+        # pause and wait for resume instead.
+        with lock_timeout_log(self.lock):
+            self.cv.notifyAll()
         log.debug('pause() all jobs cancelled and cancel_event have been set for '
                   'all threads, queue and threads have been paused')
 
@@ -262,17 +294,78 @@ class AsyncJobs(threading.Thread):
         """
         self.nr_concurrent_jobs = nr_concurrent_jobs
 
+    def defer_job(self, volname, job, reason=''):
+        """
+        skip `job` until its backoff expires. called under `self.lock`.
+        """
+        vol_deferred = self.deferred.setdefault(volname, {})
+        attempts = vol_deferred.get(job, (0.0, 0))[1] + 1
+        delay = min(self.DEFER_MIN * (2 ** (attempts - 1)), self.DEFER_MAX)
+        vol_deferred[job] = (time.monotonic() + delay, attempts)
+        msg = "deferring job {0}.{1} for {2}s (attempt#{3}): {4}".format(
+            volname, job, delay, attempts, reason)
+        if attempts == 1:
+            log.warning(msg)
+        else:
+            log.debug(msg)
+
+    def undefer_job(self, volname, job):
+        """
+        forget backoff state of `job`. called under `self.lock`.
+        """
+        vol_deferred = self.deferred.get(volname)
+        if vol_deferred and vol_deferred.pop(job, None) is not None:
+            log.info("job {0}.{1} is no longer deferred".format(volname, job))
+            if not vol_deferred:
+                self.deferred.pop(volname)
+
+    def clear_deferred(self, volname):
+        """
+        make all deferred jobs of a volume eligible right away (e.g., when the
+        condition causing the deferral is known to be resolved).
+        """
+        with lock_timeout_log(self.lock):
+            if self.deferred.pop(volname, None):
+                log.info("cleared deferred jobs for volume '{0}'".format(volname))
+                if volname not in self.q:
+                    self.q.append(volname)
+                    self.jobs[volname] = []
+                self.cv.notifyAll()
+
+    def _get_deferred_jobs(self, volname, now):
+        return [job for job, (deadline, _) in self.deferred.get(volname, {}).items()
+                if deadline > now]
+
+    def get_wait_timeout(self):
+        """
+        how long an idle worker thread should wait for work: bounded by the
+        earliest deferral expiry so that deferred jobs get picked up again
+        even when nothing else wakes the thread. called under `self.lock`.
+        """
+        timo = self.wakeup_timeout
+        now = time.monotonic()
+        deadlines = [deadline for volname in self.q
+                     for deadline, _ in self.deferred.get(volname, {}).values()
+                     if deadline > now]
+        if deadlines:
+            next_expiry = min(deadlines) - now
+            timo = next_expiry if timo is None else min(timo, next_expiry)
+        return timo
+
     def get_job(self):
         log.debug("processing {0} volume entries".format(len(self.q)))
         nr_vols = len(self.q)
         to_remove = []
         next_job = None
+        now = time.monotonic()
         while nr_vols > 0:
             volname = self.q[0]
             # do this now so that the other thread pick up jobs for other volumes
             self.q.rotate(1)
             running_jobs = [j[0] for j in self.jobs[volname]]
-            (ret, job) = self.get_next_job(volname, running_jobs)
+            # deferred jobs are skipped just like running ones
+            skip_jobs = running_jobs + self._get_deferred_jobs(volname, now)
+            (ret, job) = self.get_next_job(volname, skip_jobs)
             if job:
                 next_job = (volname, job)
                 break
@@ -288,7 +381,10 @@ class AsyncJobs(threading.Thread):
             # to the tracking list and the jobs get kickstarted.
             # note that, we do not iterate the volume list fully if there is a
             # jobs to process (that will take place eventually).
-            if ret == 0 and not job and not running_jobs:
+            #
+            # a volume with deferred jobs is kept around so that the jobs are
+            # picked up again once their backoff expires.
+            if ret == 0 and not job and not skip_jobs:
                 to_remove.append(volname)
             nr_vols -= 1
         for vol in to_remove:
@@ -297,6 +393,8 @@ class AsyncJobs(threading.Thread):
                 self.q.remove(vol)
             if vol in self.jobs:
                 self.jobs.pop(vol)
+            # backoff state of jobs that no longer exist
+            self.deferred.pop(vol, None)
         return next_job
 
     def register_async_job(self, volname, job, thread_id):
@@ -354,6 +452,7 @@ class AsyncJobs(threading.Thread):
 
             if update_queue:
                 self.jobs.pop(volname)
+                self.deferred.pop(volname, None)
         except (KeyError, ValueError):
             pass
 
@@ -403,13 +502,15 @@ class AsyncJobs(threading.Thread):
         """
         get the next job for asynchronous execution as (retcode, job) tuple. if no
         jobs are available return (0, None) else return (0, job). on error return
-        (-ret, None). called under `self.lock`.
+        (-ret, None). jobs in `running_jobs` (executing or deferred) must not be
+        returned. called under `self.lock`.
         """
         raise NotImplementedException()
 
     def execute_job(self, volname, job, should_cancel):
         """
         execute a job for a volume. the job can block on I/O operations, sleep for long
-        hours and do all kinds of synchronous work. called outside `self.lock`.
+        hours and do all kinds of synchronous work. raise JobDeferred to have the job
+        retried later with a backoff. called outside `self.lock`.
         """
         raise NotImplementedException()

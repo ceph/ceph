@@ -14,3 +14,5 @@ tasks:
         - tasks.cephfs.test_quarantine.TestQuarantineSnapshot
         - tasks.cephfs.test_quarantine.TestQuarantineSubvolumeOps
         - tasks.cephfs.test_quarantine.TestQuarantineMultipleSubvolumes
+        - tasks.cephfs.test_quarantine.TestQuarantineMgrOps
+        - tasks.cephfs.test_quarantine.TestQuarantineMgrAsyncJobs
