@@ -1171,6 +1171,31 @@ def test_complete_mds_upgrade_scales_up_after_mgr_failover(
     assert cephadm_module.upgrade.upgrade_state.fs_original_allow_standby_replay == {}
 
 
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.check_mon_command")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_prepare_for_mds_upgrade_untracks_fs_when_fs_fail_fails(
+        get, check_mon_command, cephadm_module: CephadmOrchestrator):
+    # The fs is recorded as failed by the upgrade before 'fs fail' is issued
+    # (mgr failover safety). If the mon rejects 'fs fail', the entry must be
+    # dropped again so completion does not treat the fs as failed by us.
+    def mon_command(cmd):
+        if cmd.get('prefix') == 'fs fail':
+            raise RuntimeError('fs fail failed: EPERM')
+        return (0, '', '')
+    check_mon_command.side_effect = mon_command
+    get.side_effect = lambda what: _fsmap_two_filesystems() if what == "fs_map" else None
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, fail_fs=True)
+
+    need_upgrade = [DaemonDescription(daemon_type='mds',
+                                      daemon_id='cephfs.host1.abcde',
+                                      service_name='mds.cephfs')]
+    with pytest.raises(RuntimeError):
+        cephadm_module.upgrade._prepare_for_mds_upgrade('18', need_upgrade)
+
+    assert cephadm_module.upgrade.upgrade_state.fs_failed_for_upgrade == []
+
+
 @pytest.mark.parametrize("current_version, use_tags, show_all_versions, tags, result",
                          [
                              # several candidate versions (from different major versions)

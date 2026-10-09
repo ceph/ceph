@@ -1559,23 +1559,26 @@ class CephadmUpgrade:
                                           f'rapid multi-rank mds upgrade')
                         # remember that WE are failing this fs, so completion
                         # only re-joins filesystems failed by the upgrade
-                        # itself. Saved before issuing 'fs fail' so a mgr
-                        # failover in between does not lose track of the
-                        # filesystem to re-join. Worst case, if 'fs fail'
-                        # fails below, setting a joinable fs joinable again
-                        # on completion is a no-op.
+                        # itself. Saved before issuing 'fs fail': once the fs
+                        # is failed it is NOT_JOINABLE and would never be
+                        # recorded again, so a mgr failover between the two
+                        # would leave it failed forever. If 'fs fail' is
+                        # rejected (check_mon_command raises on a nonzero
+                        # rc), drop the entry again.
                         if fscid not in self.upgrade_state.fs_failed_for_upgrade:
                             self.upgrade_state.fs_failed_for_upgrade.append(fscid)
                             self._save_upgrade_state()
-                        ret, out, err = self.mgr.check_mon_command({
-                            'prefix': 'fs fail',
-                            'fs_name': fs_name
-                        })
-                        if ret != 0:
+                        try:
+                            self.mgr.check_mon_command({
+                                'prefix': 'fs fail',
+                                'fs_name': fs_name
+                            })
+                        except Exception as e:
                             self.mgr.log.error(
-                                'Upgrade: fs fail for %s failed: %s', fs_name, err)
-                            continue_upgrade = False
-                            continue
+                                'Upgrade: fs fail for %s failed: %s', fs_name, e)
+                            self.upgrade_state.fs_failed_for_upgrade.remove(fscid)
+                            self._save_upgrade_state()
+                            raise
                         continue_upgrade = False
                         continue
                     # fs already failed: fall through to wait for in-rank active
