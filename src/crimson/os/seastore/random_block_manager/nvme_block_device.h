@@ -312,21 +312,6 @@ public:
   nvme_command_ertr::future<> try_enable_end_to_end_protection();
 
   /*
-   * Data Health
-   *
-   * Returns list of LBAs which have almost corrupted data. Data of the LBAs
-   * will be corrupted very soon. Caller can overwrite, unmap or refresh data to
-   * protect data
-   */
-   virtual nvme_command_ertr::future<std::list<uint64_t>> get_data_health() {
-     std::list<uint64_t> fragile_lbas;
-     return nvme_command_ertr::future<std::list<uint64_t>>(
-	nvme_command_ertr::ready_future_marker{},
-	fragile_lbas
-     );
-   }
-
-  /*
    * Recovery Level
    *
    * Regulate magnitude of SSD-internal data recovery. Caller can get good read

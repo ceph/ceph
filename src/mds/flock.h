@@ -7,10 +7,10 @@
 #include "include/ceph_fs.h" // for ceph_filelock
 #include "include/client_t.h"
 
+#include <map>
+#include <vector>
 #include <cstdint>
 #include <iosfwd>
-#include <list>
-#include <map>
 
 std::ostream& operator<<(std::ostream& out, const ceph_filelock& l);
 
@@ -114,17 +114,15 @@ public:
    * previous lock or making a previous lock smaller.
    *
    * @param removal_lock The lock to remove
-   * @param activated_locks A return parameter, holding activated wait locks.
    */
-  void remove_lock(const ceph_filelock removal_lock,
-                   std::list<ceph_filelock>& activated_locks);
+  void remove_lock(const ceph_filelock removal_lock);
 
   bool remove_all_from(client_t client);
 
   void encode(ceph::bufferlist& bl) const;
   void decode(ceph::bufferlist::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static std::list<ceph_lock_state_t> generate_test_instances();
+  static std::vector<ceph_lock_state_t> generate_test_instances();
   bool empty() const {
     return held_locks.empty() && waiting_locks.empty() &&
 	   client_held_lock_counts.empty() &&
@@ -138,20 +136,24 @@ public:
   std::map<client_t, int> client_waiting_lock_counts;
 
 private:
+  using lock_map = std::multimap<uint64_t, ceph_filelock>;
+  using lock_iterator = lock_map::iterator;
+  struct lock_overlaps;
+
   static const unsigned MAX_DEADLK_DEPTH = 5;
 
   /**
    * Check if adding the lock causes deadlock
    *
    * @param fl The blocking filelock 
-   * @param overlapping_locks list of all overlapping locks 
-   * @param first_fl 
-   * @depth recursion call depth
+   * @param overlapping_locks all overlapping locks, classified by owner
+   * @param first_fl first lock in the deadlock search
+   * @param depth recursion depth
    */
   bool is_deadlock(const ceph_filelock& fl,
-		   std::list<std::multimap<uint64_t, ceph_filelock>::iterator>&
-		   overlapping_locks,
-		   const ceph_filelock *first_fl=NULL, unsigned depth=0) const;
+                   const lock_overlaps& overlapping_locks,
+                   const ceph_filelock *first_fl = nullptr,
+                   unsigned depth = 0) const;
 
   /**
    * Add a lock to the waiting_locks list
@@ -169,29 +171,17 @@ private:
    * as needed.
    * This function should only be called once you know the lock will be
    * inserted, as it DOES adjust new_lock. You can call this function
-   * on an empty list, in which case it does nothing.
-   * This function does not remove elements from old_locks, so regard the list
-   * as bad information following function invocation.
+   * with no overlaps, in which case it does nothing. The iterators in
+   * overlaps may be invalidated and must not be used after this call.
    *
+   * @param overlaps locks owned by the same process that overlap or neighbor
+   *    new_lock
    * @param new_lock The new lock the process has requested.
-   * @param old_locks list of all locks currently held by same
-   *    client/process that overlap new_lock.
-   * @param neighbor_locks locks owned by same process that neighbor new_lock on
-   *    left or right side.
    */
-  void adjust_locks(std::list<std::multimap<uint64_t, ceph_filelock>::iterator> old_locks,
-                    ceph_filelock& new_lock,
-                    std::list<std::multimap<uint64_t, ceph_filelock>::iterator>
-                      neighbor_locks);
+  void adjust_locks(const lock_overlaps& overlaps, ceph_filelock& new_lock);
 
-  //get last lock prior to start position
-  std::multimap<uint64_t, ceph_filelock>::iterator
-  get_lower_bound(uint64_t start,
-                  std::multimap<uint64_t, ceph_filelock>& lock_map);
-  //get latest-starting lock that goes over the byte "end"
-  std::multimap<uint64_t, ceph_filelock>::iterator
-  get_last_before(uint64_t end,
-                  std::multimap<uint64_t, ceph_filelock>& lock_map);
+  // Get the latest-starting lock that covers last_offset:
+  lock_iterator get_last_before(uint64_t last_offset, lock_map& locks);
 
   /*
    * See if an iterator's lock covers any of the same bounds as a given range
@@ -199,62 +189,26 @@ private:
    * byte is at start + length - 1.
    * If the length is 0, the lock covers from "start" to the end of the file.
    */
-  bool share_space(std::multimap<uint64_t, ceph_filelock>::iterator& iter,
-		   uint64_t start, uint64_t end);
-  
-  bool share_space(std::multimap<uint64_t, ceph_filelock>::iterator& iter,
-                   const ceph_filelock &lock) {
-    uint64_t end = lock.start;
-    if (lock.length) {
-      end += lock.length - 1;
-    } else { // zero length means end of file
-      end = uint64_t(-1);
-    }
-    return share_space(iter, lock.start, end);
-  }
-  /*
-   *get a list of all locks overlapping with the given lock's range
-   * lock: the lock to compare with.
-   * overlaps: an empty list, to be filled.
-   * Returns: true if at least one lock overlaps.
-   */
-  bool get_overlapping_locks(const ceph_filelock& lock,
-                             std::list<std::multimap<uint64_t,
-                                 ceph_filelock>::iterator> & overlaps,
-                             std::list<std::multimap<uint64_t,
-                                 ceph_filelock>::iterator> *self_neighbors);
+  bool share_space(const lock_iterator& iter, uint64_t start,
+                   uint64_t last_offset);
 
-  
-  bool get_overlapping_locks(const ceph_filelock& lock,
-			     std::list<std::multimap<uint64_t, ceph_filelock>::iterator>& overlaps) {
-    return get_overlapping_locks(lock, overlaps, NULL);
+  bool share_space(const lock_iterator& iter,
+                   const ceph_filelock& requested_lock) {
+    const auto last_offset = requested_lock.length
+      ? requested_lock.start + requested_lock.length - 1
+      : uint64_t(-1);
+
+    return share_space(iter, requested_lock.start, last_offset);
   }
 
   /**
-   * Get a list of all waiting locks that overlap with the given lock's range.
-   * lock: specifies the range to compare with
-   * overlaps: an empty list, to be filled
-   * Returns: true if at least one waiting_lock overlaps
+   * Get all locks overlapping with the given lock's range, classified by
+   * owner. Neighboring locks are collected only when requested.
+   *
+   * @param requested_lock the lock to compare with
    */
-  bool get_waiting_overlaps(const ceph_filelock& lock,
-                            std::list<std::multimap<uint64_t,
-                                ceph_filelock>::iterator>& overlaps);
-  /*
-   * split a list of locks up by whether they're owned by same
-   * process as given lock
-   * owner: the owning lock
-   * locks: the list of locks (obtained from get_overlapping_locks, probably)
-   *        Will have all locks owned by owner removed
-   * owned_locks: an empty list, to be filled with the locks owned by owner
-   */
-  void split_by_owner(const ceph_filelock& owner,
-		      std::list<std::multimap<uint64_t,
-		          ceph_filelock>::iterator> & locks,
-		      std::list<std::multimap<uint64_t,
-		          ceph_filelock>::iterator> & owned_locks);
-
-  ceph_filelock *contains_exclusive_lock(std::list<std::multimap<uint64_t,
-                                         ceph_filelock>::iterator>& locks);
+  lock_overlaps get_overlapping_locks(const ceph_filelock& requested_lock,
+                                      bool collect_neighbors = false);
 
   CephContext *cct;
   int type;

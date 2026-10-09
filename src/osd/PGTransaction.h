@@ -15,10 +15,12 @@
 #ifndef PGTRANSACTION_H
 #define PGTRANSACTION_H
 
+#include <deque>
 #include <map>
 #include <memory>
 #include <optional>
 #include <variant>
+#include <vector>
 
 #include "common/hobject.h"
 #ifndef WITH_CRIMSON
@@ -536,9 +538,6 @@ public:
   /* Calls t() on all pair<hobject_t, ObjectOperation> & such that clone/rename
    * sinks are always called before clone sources
    *
-   * TODO: add a fast path for the single object case and possibly the single
-   * object clone from source case (make_writeable made a clone).
-   *
    * This structure only requires that the source->sink graph be acyclic.
    * This is much more general than is actually required by PrimaryLogPG.
    * Only 4 flavors of multi-object transactions actually happen:
@@ -547,15 +546,23 @@ public:
    * 3) clone clone -> head for rollback
    * 4) 2 + 3
    *
-   * We can bypass the below logic for single object transactions trivially
-   * (including case 1 above since temp doesn't show up again).
-   * For 2-3, we could add something ad-hoc to ensure that they happen in the
+   * Single-object transactions return before constructing the graph. This
+   * includes case 1 above since the temporary object does not appear again.
+   * For 2-4, we could add something ad-hoc to ensure that they happen in the
    * right order, but it actually seems easier to just do the graph construction.
    */
   template <typename T>
   void safe_create_traverse(T &&t) {
-    std::map<hobject_t, std::list<hobject_t>> dgraph;
-    std::list<hobject_t> stack;
+    if (op_map.size() < 2) {
+      if (!op_map.empty()) {
+	t(*op_map.begin());
+      }
+
+      return;
+    }
+
+    std::map<hobject_t, std::vector<hobject_t>> dgraph;
+    std::deque<hobject_t> stack;
 
     // Populate stack with roots, dgraph with edges
     for (auto &&opair: op_map) {
@@ -594,7 +601,10 @@ public:
 	 * recurse.  When this node is encountered again, it'll
 	 * be a leaf */
 	ceph_assert(!diter->second.empty());
-	stack.splice(stack.begin(), diter->second);
+	for (auto child = diter->second.rbegin();
+	     child != diter->second.rend(); ++child) {
+	  stack.push_front(std::move(*child));
+	}
 	dgraph.erase(diter);
       }
     }

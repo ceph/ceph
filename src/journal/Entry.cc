@@ -136,8 +136,8 @@ bool Entry::is_readable(bufferlist::const_iterator iter, uint32_t *bytes_needed)
   return true;
 }
 
-std::list<Entry> Entry::generate_test_instances() {
-  std::list<Entry> o;
+std::vector<Entry> Entry::generate_test_instances() {
+  std::vector<Entry> o;
 
   o.push_back(Entry(1, 123, bufferlist()));
 

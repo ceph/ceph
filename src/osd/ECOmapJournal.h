@@ -79,11 +79,11 @@ class ECOmapValue {
 class ECOmapRemovedRanges {
  public:
   eversion_t version;
-  std::list<std::pair<std::string, std::optional<std::string>>> ranges;
+  std::vector<std::pair<std::string, std::optional<std::string>>> ranges;
 
   explicit ECOmapRemovedRanges(const eversion_t version) : version(version) {}
   ECOmapRemovedRanges(
-    const eversion_t version, std::list<std::pair<std::string,
+    const eversion_t version, std::vector<std::pair<std::string,
     std::optional<std::string>>> ranges)
     : version(version), ranges(std::move(ranges)) {}
 
@@ -106,14 +106,14 @@ class ECOmapHeader {
 class ECOmapJournal {
   using UpdateMapType = std::map<std::string, ECOmapValue>;
   using RangeMapType = std::map<std::string, std::optional<std::string>>;
-  using const_iterator = std::list<ECOmapJournalEntry>::const_iterator;
+  using const_iterator = std::vector<ECOmapJournalEntry>::const_iterator;
  private:
   // Unprocessed journal entries 
-  std::map<hobject_t, std::list<ECOmapJournalEntry>> entries;
+  std::map<hobject_t, std::vector<ECOmapJournalEntry>> entries;
 
   // Processed journal entries
   std::map<hobject_t, std::map<std::string, ECOmapValue>> key_map;
-  std::map<hobject_t, std::list<ECOmapRemovedRanges>> removed_ranges_map;
+  std::map<hobject_t, std::vector<ECOmapRemovedRanges>> removed_ranges_map;
   std::map<hobject_t, ECOmapHeader> header_map;
 
   // Contains the set of versions and lost object booleans corresponding to
@@ -121,10 +121,6 @@ class ECOmapJournal {
   std::map<hobject_t, std::map<version_t, bool>> object_state_map;
 
   const DoutPrefixProvider& dpp;
-
-  // Function to get specific object's unprocessed entries
-  std::list<ECOmapJournalEntry>& get_entries(const hobject_t &hoid);
-  std::list<ECOmapJournalEntry> snapshot_entries(const hobject_t &hoid) const;
 
   void process_entries(const hobject_t &hoid);
   bool remove_processed_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);

@@ -40,7 +40,7 @@ SegmentedOolWriter::alloc_write_ertr::future<>
 SegmentedOolWriter::write_record(
   Transaction& t,
   record_t&& record,
-  std::list<LogicalCachedExtentRef>&& extents,
+  std::vector<LogicalCachedExtentRef>&& extents,
   bool with_atomic_roll_segment)
 {
   LOG_PREFIX(SegmentedOolWriter::write_record);
@@ -85,7 +85,7 @@ SegmentedOolWriter::write_record(
 SegmentedOolWriter::alloc_write_iertr::future<>
 SegmentedOolWriter::do_write(
   Transaction& t,
-  std::list<CachedExtentRef>& extents)
+  extent_queue_t& extents)
 {
   LOG_PREFIX(SegmentedOolWriter::do_write);
   assert(!extents.empty());
@@ -100,11 +100,11 @@ SegmentedOolWriter::do_write(
     });
   }
   record_t record(record_type_t::OOL, t.get_src());
-  std::list<LogicalCachedExtentRef> pending_extents;
+  std::vector<LogicalCachedExtentRef> pending_extents;
   auto commit_time = seastar::lowres_system_clock::now();
 
-  for (auto it = extents.begin(); it != extents.end();) {
-    auto& ext = *it;
+  while (!extents.empty()) {
+    auto& ext = extents.front();
     assert(ext->is_logical());
     auto extent = ext->template cast<LogicalCachedExtent>();
     record_size_t wouldbe_rsize = record.size;
@@ -152,7 +152,7 @@ SegmentedOolWriter::do_write(
         std::move(bl)},
       modify_time);
     pending_extents.push_back(extent);
-    it = extents.erase(it);
+    extents.pop_front();
 
     assert(record_submitter.check_action(record.size) == action);
     if (action == action_t::SUBMIT_FULL) {
@@ -164,9 +164,9 @@ SegmentedOolWriter::do_write(
       ).si_then([this, &t, &extents] {
         if (!extents.empty()) {
           return do_write(t, extents);
-        } else {
-          return alloc_write_iertr::now();
         }
+
+        return alloc_write_iertr::now();
       });
     }
     // SUBMIT_NOT_FULL: evaluate the next extent
@@ -184,7 +184,7 @@ SegmentedOolWriter::do_write(
 SegmentedOolWriter::alloc_write_iertr::future<>
 SegmentedOolWriter::alloc_write_ool_extents(
   Transaction& t,
-  std::list<CachedExtentRef>& extents)
+  extent_queue_t& extents)
 {
   if (extents.empty()) {
     co_return;
@@ -603,7 +603,7 @@ ExtentPlacementManager::write_preallocated_ool_extents(
          t, extents.size());
   assert(writer_refs.size());
   return seastar::do_with(
-      std::map<ExtentOolWriter*, std::list<CachedExtentRef>>(),
+      extents_by_writer_t(),
       [this, &t, &extents](auto& alloc_map) {
     for (auto& extent : extents) {
       auto writer_ptr = get_writer(
@@ -1275,7 +1275,7 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics(store_index_t s
 RandomBlockOolWriter::alloc_write_iertr::future<>
 RandomBlockOolWriter::alloc_write_ool_extents(
   Transaction& t,
-  std::list<CachedExtentRef>& extents)
+  extent_queue_t& extents)
 {
   if (extents.empty()) {
     co_return;
@@ -1314,7 +1314,7 @@ RandomBlockOolWriter::alloc_write_ool_extents(
 RandomBlockOolWriter::alloc_write_iertr::future<>
 RandomBlockOolWriter::do_write(
   Transaction& t,
-  std::list<CachedExtentRef>& extents)
+  extent_queue_t& extents)
 {
   LOG_PREFIX(RandomBlockOolWriter::do_write);
   assert(!extents.empty());

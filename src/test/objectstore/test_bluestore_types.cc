@@ -15,6 +15,7 @@
 #include "perfglue/heap_profiler.h"
 #include "os/bluestore/Writer.h"
 #include "common/pretty_binary.h"
+#include <list>
 #include <bitset>
 #include <sstream>
 #include <boost/random/mersenne_twister.hpp>
@@ -26,6 +27,21 @@ typedef boost::mt11213b generator_type;
 #define STRINGIFY(x) _STR(x)
 
 using namespace std;
+
+struct legacy_deferred_transaction final {
+  uint64_t seq = 0;
+  std::list<bluestore_deferred_op_t> ops;
+  interval_set<uint64_t> released;
+
+  DENC(legacy_deferred_transaction, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.seq, p);
+    denc(v.ops, p);
+    denc(v.released, p);
+    DENC_FINISH(p);
+  }
+};
+WRITE_CLASS_DENC(legacy_deferred_transaction)
 
 TEST(bluestore, sizeof) {
 #define P(t) cout << STRINGIFY(t) << "\t" << sizeof(t) << std::endl
@@ -58,6 +74,41 @@ TEST(bluestore, sizeof) {
   cout << "map<uint64_t,uint64_t>\t" << sizeof(map<uint64_t, uint64_t>)
        << std::endl;
   cout << "map<char,char>\t" << sizeof(map<char, char>) << std::endl;
+}
+
+TEST(bluestore_deferred_transaction_t, preserves_legacy_list_encoding)
+{
+  legacy_deferred_transaction legacy;
+  legacy.seq = 123;
+  legacy.ops.emplace_back();
+  legacy.ops.emplace_back();
+  legacy.ops.back().op = bluestore_deferred_op_t::OP_WRITE;
+  legacy.ops.back().extents.emplace_back(1, 7);
+  legacy.ops.back().extents.emplace_back(100, 5);
+  legacy.ops.back().data.append("deferred data");
+  legacy.released.insert(4096, 8192);
+
+  bluestore_deferred_transaction_t current;
+  current.seq = legacy.seq;
+  current.ops.assign(std::begin(legacy.ops), std::end(legacy.ops));
+  current.released = legacy.released;
+
+  bufferlist legacy_encoding;
+  bufferlist current_encoding;
+  encode(legacy, legacy_encoding);
+  encode(current, current_encoding);
+  EXPECT_TRUE(legacy_encoding.contents_equal(current_encoding));
+
+  bluestore_deferred_transaction_t decoded;
+  auto p = legacy_encoding.cbegin();
+  decode(decoded, p);
+
+  ASSERT_EQ(2, std::size(decoded.ops));
+  EXPECT_EQ(legacy.seq, decoded.seq);
+  EXPECT_EQ(bluestore_deferred_op_t::OP_WRITE, decoded.ops.back().op);
+  EXPECT_EQ(2, std::size(decoded.ops.back().extents));
+  EXPECT_TRUE(decoded.ops.back().data.contents_equal("deferred data", 13));
+  EXPECT_EQ(legacy.released, decoded.released);
 }
 
 // Note: Reusable for future bit-flip fuzzing.

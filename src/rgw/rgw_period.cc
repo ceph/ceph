@@ -103,9 +103,9 @@ int RGWPeriod::update_sync_status(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-std::list<RGWPeriod> RGWPeriod::generate_test_instances()
+std::vector<RGWPeriod> RGWPeriod::generate_test_instances()
 {
-  std::list<RGWPeriod> o;
+  std::vector<RGWPeriod> o;
   o.emplace_back();
   o.emplace_back();
   return o;
