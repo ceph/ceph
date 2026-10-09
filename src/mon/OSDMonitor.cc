@@ -33,6 +33,7 @@
 #include "mon/ConfigMonitor.h"
 #include "mon/KVMonitor.h"
 #include "mon/Paxos.h"
+#include "mon/PoolCreateParams.h"
 
 #include "mon/MonitorDBStore.h"
 #include "mon/Session.h"
@@ -284,9 +285,6 @@ const uint32_t MAX_POOL_APPLICATIONS = 4;
 const uint32_t MAX_POOL_APPLICATION_KEYS = 64;
 const uint32_t MAX_POOL_APPLICATION_LENGTH = 128;
 
-const string CRUSH_ROOT_DEFAULT = "default";
-const string ZONE_FAILURE_DOMAIN_DEFAULT = "datacenter";
-const string OSD_FAILURE_DOMAIN_DEFAULT = "host";
 bool is_osd_writable(const OSDCapGrant& grant, const std::string* pool_name) {
   // Note: this doesn't include support for the application tag match
   if ((grant.spec.allow & OSD_CAP_W) != 0) {
@@ -5603,7 +5601,7 @@ namespace {
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    SUPPORTS_OMAP };
+    SUPPORTS_OMAP, NUM_ZONES, REPLICA };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6427,6 +6425,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
       {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
       {"supports_omap", SUPPORTS_OMAP},
+      {"num_zones", NUM_ZONES},
+      {"replica", REPLICA},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6702,6 +6702,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case SUPPORTS_OMAP:
             f->dump_bool("supports_omap", p->supports_omap());
             break;
+          case NUM_ZONES:
+            f->dump_int("num_zones", p->get_num_zones());
+            break;
+          case REPLICA:
+            f->dump_int("replica", p->get_replica());
+            break;
 	}
       }
       f->close_section();
@@ -6891,6 +6897,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case SUPPORTS_OMAP:
             ss << "supports_omap: " <<
               (p->supports_omap() ? "true" : "false") << "\n";
+            break;
+          case NUM_ZONES:
+            ss << "num_zones: " << p->get_num_zones() << "\n";
+            break;
+          case REPLICA:
+            ss << "replica: " << p->get_replica() << "\n";
             break;
 	}
 	rdata.append(ss.str());
@@ -7661,13 +7673,45 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   bool bulk = false;
   bool force_create = false;
   int ret = 0;
-  ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
-			 0, 0, 0, 0, 0, 0, 0.0,
-			 erasure_code_profile,
-			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
-			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
-       force_create,
-			 &ss);
+  // librados creates a replicated pool from the defaults, as
+  // ceph osd pool create <pool> does
+  PoolCreateParams params = load_pool_defaults(g_conf());
+  params.pool_type = pg_pool_t::TYPE_REPLICATED;
+  if (!num_zones_supported()) {
+    params.num_zones = 1;
+  }
+  {
+    CrushWrapper crush = _get_pending_crush();
+    ret = check_pool_params(params, pool_create_cluster(crush), &ss);
+    if (ret < 0) {
+      dout(10) << __func__ << " " << ss.str() << dendl;
+      return ret;
+    }
+  }
+  const int64_t num_zones = params.num_zones;
+  int crush_rule = m->crush_rule;
+  string zone_failure_domain;
+  if (num_zones > 1) {
+    zone_failure_domain = effective_zone_failure_domain(params);
+    // the default rule, when it suits the pool, instead of a generated one
+    CrushWrapper crush = _get_pending_crush();
+    if (crush_rule < 0 &&
+        default_rule_suits_pool(crush, params.default_rule,
+                                pg_pool_t::TYPE_REPLICATED, num_zones,
+                                zone_failure_domain, osdmap.pools,
+                                params.replica)) {
+      crush_rule = params.default_rule;
+    }
+  }
+  ret = prepare_new_pool(m->name, crush_rule, rule_name,
+                         0, 0, 0, 0, 0, 0, 0.0, 0,
+                         erasure_code_profile, params.root, num_zones,
+                         num_zones > 1 ? params.replica : 0, params.replica,
+                         zone_failure_domain, params.osd_failure_domain,
+                         params.device_class,
+                         pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
+                         cct->_conf.get_val<bool>("osd_pool_default_crimson"),
+                         force_create, &ss);
 
   if (ret < 0) {
     dout(10) << __func__ << " got " << ret << " " << ss.str() << dendl;
@@ -7802,9 +7846,10 @@ int OSDMonitor::crush_rule_create_replica(const string &name,
     return -EALREADY;
   } else {
     int ruleno;
-    string effective_root = !root.empty() ? root : CRUSH_ROOT_DEFAULT;
-    string effective_zone_failure_domain = !zone_failure_domain.empty() ? zone_failure_domain : g_conf().get_val<string>("osd_pool_default_zone_failure_domain");
-    string effective_osd_failure_domain = !osd_failure_domain.empty() ? osd_failure_domain : OSD_FAILURE_DOMAIN_DEFAULT;
+    const PoolCreateParams d = load_pool_defaults(g_conf());
+    string effective_root = !root.empty() ? root : d.root;
+    string effective_zone_failure_domain = !zone_failure_domain.empty() ? zone_failure_domain : d.zone_failure_domain;
+    string effective_osd_failure_domain = !osd_failure_domain.empty() ? osd_failure_domain : d.osd_failure_domain;
     if (num_zones > 1) {
       // default crush params
       dout(20) << __func__ << " creating simple_stretch_rule " << name
@@ -7836,9 +7881,14 @@ int OSDMonitor::crush_rule_create_replica(const string &name,
 }
 
 int OSDMonitor::crush_rule_create_erasure(const string &name,
-					     const string &profile,
-					     int *rule,
-					     ostream *ss)
+                                          int64_t num_zones,
+                                          const std::string &root,
+                                          const std::string &zone_failure_domain,
+                                          const std::string &osd_failure_domain,
+                                          const std::string &device_class,
+                                          const string &profile,
+                                          int *rule,
+                                          ostream *ss)
 {
   int ruleid = osdmap.crush->get_rule_id(name);
   if (ruleid != -ENOENT) {
@@ -7856,11 +7906,18 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
     ErasureCodeInterfaceRef erasure_code;
     int err = get_erasure_code(profile, &erasure_code, ss);
     if (err) {
+      if (err == -EAGAIN) {
+        // Profile is pending, need to wait for it to be committed
+        dout(20) << __func__ << ": erasure code profile " << profile
+                 << " is pending, retry" << dendl;
+        return err;
+      }
       *ss << "failed to load plugin using profile " << profile << std::endl;
       return err;
     }
 
-    err = erasure_code->create_rule(name, newcrush, ss);
+    err = erasure_code->create_rule(name, num_zones, root,
+      zone_failure_domain, osd_failure_domain, device_class, newcrush, ss);
     erasure_code.reset();
     if (err < 0)
       return err;
@@ -7997,6 +8054,29 @@ bool OSDMonitor::erasure_code_profile_in_use(
   return found;
 }
 
+bool OSDMonitor::should_remove_ec_profile(
+  const int64_t pool,
+  const string &profile,
+  ostream *ss)
+{
+  // Never remove the default profile
+  if (profile == "default") {
+    *ss << "not removing 'default' erasure code profile";
+    return false;
+  }
+
+  // Check if any other pool, as the pending changes leave it, uses it
+  if (const auto other = other_pool(pool, [&profile](const pg_pool_t& p) {
+    return p.is_erasure() && p.erasure_code_profile == profile;
+  })) {
+    *ss << "pool " << *other << " uses erasure code profile '" << profile << "'";
+    return false;
+  }
+
+  // Profile is not used by any other pool - safe to remove
+  return true;
+}
+
 int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_profile,
 					   map<string,string> *erasure_code_profile_map,
 					   ostream *ss)
@@ -8039,10 +8119,13 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 }
 
 int OSDMonitor::prepare_pool_size(const unsigned pool_type,
-				  const string &erasure_code_profile,
+                                  const string &erasure_code_profile,
                                   uint8_t repl_size,
-				  unsigned *size, unsigned *min_size,
-				  ostream *ss)
+                                  int &replica,
+                                  int64_t &num_zones,
+                                  unsigned *size,
+                                  unsigned *min_size,
+                                  ostream *ss)
 {
   int err = 0;
   bool set_min_size = false;
@@ -8056,15 +8139,29 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 	   << repl_size << " does not match!";
 	return -EINVAL;
       }
-      *min_size = g_conf().get_val<uint64_t>("mon_stretch_pool_min_size");
+      replica = g_conf().get_val<uint64_t>("mon_global_stretch_pool_replica");
+      num_zones = 2;
+      *size = num_zones * replica;
+      *min_size = g_conf().get_osd_pool_default_min_size(replica);
       set_min_size = true;
     }
-    if (repl_size == 0) {
-      repl_size = g_conf().get_val<uint64_t>("osd_pool_default_size");
+    // Use replica parameter if specified (works for both single-zone and multi-zone)
+    if (replica > 0) {
+      *size = num_zones * replica;
+      if (!set_min_size)
+        *min_size = (num_zones > 1)
+            ? g_conf().get_osd_pool_default_min_size(replica)
+            : g_conf().get_osd_pool_default_min_size(*size);
+    } else { // Use size parameter (legacy)
+      if (repl_size == 0) {
+        repl_size = g_conf().get_osd_pool_default_replica();
+      }
+      *size = repl_size;
+      if (!set_min_size)
+        *min_size = g_conf().get_osd_pool_default_min_size(repl_size);
+      // Update replica to maintain invariant: size = num_zones * replica
+      replica = *size / num_zones;
     }
-    *size = repl_size;
-    if (!set_min_size)
-      *min_size = g_conf().get_osd_pool_default_min_size(repl_size);
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
@@ -8075,7 +8172,9 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
-	*size = erasure_code->get_chunk_count();
+        unsigned base_size = erasure_code->get_chunk_count();
+
+        *size = num_zones * base_size;
 	*min_size =
 	  erasure_code->get_data_chunk_count() +
 	  std::min<int>(1, erasure_code->get_coding_chunk_count() - 1);
@@ -8089,13 +8188,19 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
     err = -EINVAL;
     break;
   }
+  if (err == 0 && *size > MAX_POOL_SIZE) {
+    *ss << "a pool can have at most " << MAX_POOL_SIZE << " OSDs, but this "
+        << "one needs " << *size;
+    err = -EINVAL;
+  }
   return err;
 }
 
 int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
-					  const string &erasure_code_profile,
-					  uint32_t *stripe_width,
-					  ostream *ss)
+                                          const string &erasure_code_profile,
+                                          bool ec_optimized,
+                                          uint32_t *stripe_width,
+                                          ostream *ss)
 {
   int err = 0;
   switch (pool_type) {
@@ -8116,7 +8221,8 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       if (stripe_unit == 0) {
         if (((erasure_code->get_supported_optimizations() & 
               ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0) &&
-            (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations"))) {
+            (ec_optimized ||
+             cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations"))) {
             stripe_unit = 16 * 1024;
         } else {
           stripe_unit = 4 * 1024;
@@ -8202,10 +8308,17 @@ int OSDMonitor::handle_crush_rule_creation_result(int err, const string& rule_na
 }
 
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
-					const string &erasure_code_profile,
-					const string &rule_name,
-					int *crush_rule,
-					ostream *ss)
+                                        const string &pool_name,
+                                        const string &erasure_code_profile,
+                                        const string &rule_name,
+                                        int64_t num_zones,
+                                        const string &root,
+                                        int num_replica_per_zone,
+                                        const string &zone_failure_domain,
+                                        const string &osd_failure_domain,
+                                        const string &device_class,
+                                        int *crush_rule,
+                                        ostream *ss)
 {
 
   if (*crush_rule < 0) {
@@ -8214,10 +8327,8 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
       {
 	if (rule_name == "") {
 	  if (osdmap.stretch_mode_enabled) {
-	    *crush_rule = get_replicated_stretch_crush_rule();
-	  } else {
-	    // Use default rule
-	    *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct);
+            int err = crush_rule_create_replica(pool_name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, false, crush_rule, ss);
+            return handle_crush_rule_creation_result(err, pool_name);
 	  }
 	  if (*crush_rule < 0) {
 	    // Errors may happen e.g. if no valid rule is available
@@ -8232,23 +8343,15 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
       break;
     case pg_pool_t::TYPE_ERASURE:
       {
-	int err = crush_rule_create_erasure(rule_name,
-					       erasure_code_profile,
-					       crush_rule, ss);
-	switch (err) {
-	case -EALREADY:
-	  dout(20) << "prepare_pool_crush_rule: rule "
-		   << rule_name << " try again" << dendl;
-	  // fall through
-	case 0:
-	  // need to wait for the crush rule to be proposed before proceeding
-	  err = -EAGAIN;
-	  break;
-	case -EEXIST:
-	  err = 0;
-	  break;
- 	}
-	return err;
+        int err = crush_rule_create_erasure(rule_name,
+                                            num_zones,
+                                            root,
+                                            zone_failure_domain,
+                                            osd_failure_domain,
+                                            device_class,
+                                            erasure_code_profile,
+                                            crush_rule, ss);
+        return handle_crush_rule_creation_result(err, pool_name);
       }
       break;
     default:
@@ -8273,6 +8376,14 @@ int OSDMonitor::get_crush_rule(const string &rule_name,
   int ret;
   ret = osdmap.crush->get_rule_id(rule_name);
   if (ret != -ENOENT) {
+    // the pending changes may remove the rule with the last pool that used
+    // it; decide once they are committed
+    if (pending_inc.crush.length() &&
+        _get_pending_crush().get_rule_id(rule_name) != ret) {
+      dout(20) << __func__ << ": rule " << rule_name
+               << " is being removed, try again" << dendl;
+      return -EAGAIN;
+    }
     // found it, use it
     *crush_rule = ret;
   } else {
@@ -8391,23 +8502,35 @@ int OSDMonitor::check_pg_num(int64_t pool,
  * @param pg_autoscale_mode autoscale mode, one of on, off, warn
  * @param bool bulk indicates whether pool should be a bulk pool
  * @param bool crimson indicates whether pool is a crimson pool
+ * @param num_zones indicates number of zones for stretch mode
  * @param ss human readable error message, if any.
  *
  * @return 0 on success, negative errno on failure.
  */
+static int degraded_stretch_mandatory_member(const OSDMap& osdmap);
+
 int OSDMonitor::prepare_new_pool(string& name,
 				 int crush_rule,
 				 const string &crush_rule_name,
-                                 unsigned pg_num, unsigned pgp_num,
+         unsigned pg_num,
+         unsigned pgp_num,
 				 unsigned pg_num_min,
 				 unsigned pg_num_max,
-                                 const uint64_t repl_size,
+         const uint64_t repl_size,
 				 const uint64_t target_size_bytes,
 				 const float target_size_ratio,
+         int64_t requested_min_size,
 				 const string &erasure_code_profile,
-                                 const unsigned pool_type,
-                                 const uint64_t expected_num_objects,
-                                 FastReadType fast_read,
+                                 const string &root,
+         int64_t num_zones,
+                                 int replica,
+                                 int num_replica_per_zone,
+                                 const string &zone_failure_domain,
+                                 const string &osd_failure_domain,
+                                 const string &device_class,
+         const unsigned pool_type,
+         const uint64_t expected_num_objects,
+         FastReadType fast_read,
 				 string pg_autoscale_mode,
 				 bool bulk,
 				 bool crimson,
@@ -8431,50 +8554,55 @@ int OSDMonitor::prepare_new_pool(string& name,
     pgp_num = g_conf().get_val<uint64_t>("osd_pool_default_pgp_num");
   if (!pgp_num)
     pgp_num = pg_num;
-  if (pg_num > g_conf().get_val<uint64_t>("mon_max_pool_pg_num")) {
-    *ss << "'pg_num' must be greater than 0 and less than or equal to "
-        << g_conf().get_val<uint64_t>("mon_max_pool_pg_num")
-        << " (you may adjust 'mon max pool pg num' for higher values)";
-    return -ERANGE;
-  }
-  if (pgp_num > pg_num) {
-    *ss << "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'"
-        << ", which in this case is " << pg_num;
-    return -ERANGE;
-  }
-
-  if (crimson) {
-    /* crimson-osd requires that the pool be replicated and that pg_num/pgp_num
-     * be static.  User must also have specified set-allow-crimson */
-    const auto *suffix = " (--crimson specified or osd_pool_default_crimson set)";
-    if (pg_autoscale_mode != "off") {
-      *ss << "crimson-osd does not support changing pg_num or pgp_num, "
-	  << "pg_autoscale_mode must be set to 'off'" << suffix;
-      return -EINVAL;
-    } else if (!osdmap.get_allow_crimson()) {
-      *ss << "set-allow-crimson must be set to create a pool with the "
-	  << "crimson flag" << suffix;
-      return -EINVAL;
-    }
-  }
 
   if (pool_type == pg_pool_t::TYPE_REPLICATED && fast_read == FAST_READ_ON) {
     *ss << "'fast_read' can only apply to erasure coding pool";
     return -EINVAL;
   }
   int r;
-  r = prepare_pool_crush_rule(pool_type, erasure_code_profile,
-				 crush_rule_name, &crush_rule, ss);
+  r = prepare_pool_crush_rule(pool_type, name, erasure_code_profile,
+                                 crush_rule_name, num_zones, root, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, &crush_rule, ss);
   if (r) {
     dout(10) << "prepare_pool_crush_rule returns " << r << dendl;
     return r;
   }
+  // set zone_failure_domain to default value if it is not set for stretch
+  string effective_zone_failure_domain = zone_failure_domain;
+  if (num_zones > 1 && zone_failure_domain.empty())
+    effective_zone_failure_domain = g_conf().get_val<string>("osd_pool_default_zone_failure_domain");
+
+  if (osdmap.stretch_mode_enabled && num_zones > 1) {
+    r = validate_stretch_mode_new_pool(crush_rule, zone_failure_domain, ss);
+    if (r) {
+      dout(10) << "validate_stretch_mode_pool returns " << r << dendl;
+      return r;
+    }
+  }
+
   unsigned size, min_size;
-  r = prepare_pool_size(pool_type, erasure_code_profile, repl_size,
-                        &size, &min_size, ss);
+  r = prepare_pool_size(pool_type, erasure_code_profile, repl_size, replica,
+                        num_zones, &size, &min_size, ss);
   if (r) {
     dout(10) << "prepare_pool_size returns " << r << dendl;
     return r;
+  }
+  if (requested_min_size > 0) {
+    min_size = requested_min_size;
+  }
+  // the plugin knows the chunk counts, LRC's local parity chunks included
+  if (requested_min_size > 0 && pool_type == pg_pool_t::TYPE_ERASURE) {
+    ErasureCodeInterfaceRef erasure_code;
+    r = get_erasure_code(erasure_code_profile, &erasure_code, ss);
+    if (r) {
+      return r;
+    }
+    const unsigned data_chunks = erasure_code->get_data_chunk_count();
+    const unsigned zone_size = size / num_zones;
+    if (min_size < data_chunks || min_size > zone_size) {
+      *ss << "pool min_size must be between " << data_chunks << " and "
+          << zone_size;
+      return -EINVAL;
+    }
   }
   if (g_conf()->mon_osd_crush_smoke_test) {
     CrushWrapper newcrush = _get_pending_crush();
@@ -8509,7 +8637,9 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
 
   uint32_t stripe_width = 0;
-  r = prepare_pool_stripe_width(pool_type, erasure_code_profile, &stripe_width, ss);
+  // a pool over zones is always FastEC
+  r = prepare_pool_stripe_width(pool_type, erasure_code_profile, num_zones > 1,
+                                &stripe_width, ss);
   if (r) {
     dout(10) << "prepare_pool_stripe_width returns " << r << dendl;
     return r;
@@ -8581,6 +8711,8 @@ int OSDMonitor::prepare_new_pool(string& name,
 
   pi->size = size;
   pi->min_size = min_size;
+  pi->num_zones = num_zones;
+  pi->replica = replica;
   pi->crush_rule = crush_rule;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
@@ -8644,6 +8776,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   } else {
       pi->erasure_code_profile = "";
   }
+
   pi->stripe_width = stripe_width;
 
   if (osdmap.require_osd_release >= ceph_release_t::nautilus &&
@@ -8677,8 +8810,21 @@ int OSDMonitor::prepare_new_pool(string& name,
         return r.error().error;
       }
     } else {
-      if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
-        // Silently fail if the pool cannot support ec optimizations.
+      if (pool_type == pg_pool_t::TYPE_ERASURE && num_zones > 1) {
+        if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
+      // FastEC validation failed, pool creation must fail
+      *ss << "Multi-zone erasure coded pools require FastEC support. "
+          << "The erasure code profile '" << erasure_code_profile << "' "
+              << "does not support FastEC: " << r.error().message
+              << " Please use a FastEC-compatible profile (e.g., plugin=jerasure"
+              << " technique=reed_sol_van, or plugin=isa).";
+          return r.error().error;
+    }
+    dout(20) << __func__ << " enabled FastEC for multi-zone pool " << name
+             << " with profile " << erasure_code_profile << dendl;
+  } else if (pool_type == pg_pool_t::TYPE_ERASURE &&
+             cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
+        // Silently ignore if the pool cannot support ec optimizations
         std::ignore = enable_pool_ec_optimizations(*pi, true, false);
       }
     }
@@ -8775,18 +8921,10 @@ OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable,
     // raw_shard (raw_shard 0) and the coding parity raw_shards because
     // the other shards (including local parity for LRC) may not have
     // up to date copies of xattrs including OI
-    p.nonprimary_shards.clear();
-    for (raw_shard_id_t raw_shard; raw_shard < k + m; ++raw_shard) {
-      if (raw_shard > 0 && raw_shard < k) {
-	shard_id_t shard;
-	if (erasure_code->get_chunk_mapping().size() > raw_shard ) {
-	  shard = shard_id_t(erasure_code->get_chunk_mapping().at(int(raw_shard)));
-	} else {
-	  shard = shard_id_t(int(raw_shard));
-	}
-	p.nonprimary_shards.insert(shard);
-      }
-    }
+    // For multi-zone configurations, we need to mark non-primary shards
+    // across all zones: shard + (k+m)*zone for each zone
+    p.nonprimary_shards = ECUtil::nonprimary_shards(
+      k, m, erasure_code->get_chunk_mapping(), p.get_num_zones());
     p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
 
     // Automatically enable omap support in fast EC pools
@@ -8916,6 +9054,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "can not change the size of an erasure-coded pool";
       return -ENOTSUP;
     }
+    if (p.get_num_zones() > 1) {
+      ss << "cannot set 'size' for stretch pools (num_zones=" << p.get_num_zones()
+         << "); use 'replica' parameter instead";
+      return -EINVAL;
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -8949,7 +9092,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       }
     }
     p.size = n;
-    p.min_size = g_conf().get_osd_pool_default_min_size(p.size);
+    // Only adjust min_size if it becomes invalid (exceeds new size)
+    if (p.min_size > n) {
+      p.min_size = g_conf().get_osd_pool_default_min_size(p.size);
+    }
+    // When setting size directly (legacy) in a single zone, update replica to match size.
+    p.replica = n;
   } else if (var == "min_size") {
     if (p.has_flag(pg_pool_t::FLAG_NOSIZECHANGE)) {
       ss << "pool min size change is disabled; you must unset nosizechange flag for the pool first";
@@ -8961,24 +9109,28 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
 
     if (p.type != pg_pool_t::TYPE_ERASURE) {
-      if (n < 1 || n > p.size) {
-	ss << "pool min_size must be between 1 and size, which is set to " << (int)p.size;
-	return -EINVAL;
+      // min_size counts the copies in each zone
+      const unsigned replica = p.replica ? p.replica : p.size;
+      if (n < 1 || n > replica) {
+        ss << "pool min_size must be between 1 and replica, which is set to "
+           << replica;
+        return -EINVAL;
       }
     } else {
        ErasureCodeInterfaceRef erasure_code;
        int k;
+       int k_plus_m;
        stringstream tmp;
        int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
        if (err == 0) {
 	 k = erasure_code->get_data_chunk_count();
+         k_plus_m = erasure_code->get_chunk_count();
        } else {
 	 ss << __func__ << " get_erasure_code failed: " << tmp.str();
 	 return err;
        }
-
-       if (n < k || n > p.size) {
-	 ss << "pool min_size must be between " << k << " and size, which is set to " << (int)p.size;
+       if (n < k || n > k_plus_m) {
+         ss << "pool min_size must be between k=" << k << " and k+m=" << k_plus_m << " (inclusively)";
 	 return -EINVAL;
        }
     }
@@ -9658,45 +9810,53 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "read_ratio must be between 0 and 100";
         return -ERANGE;
       }
+    } else if (var == "num_zones") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (n < 1) {
+        ss << "num_zones must be at least 1";
+        return -EINVAL;
+      }
+      // Set num_zones
+      p.num_zones = n;
+    } else if (var == "replica") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (n < 1) {
+        ss << "replica must be at least 1";
+        return -EINVAL;
+      }
+      // Prevent changing replica when global stretch mode is enabled
+      if (mon.monmap->global_stretch_mode_enabled) {
+        ss << "cannot change " << var << " when global stretch mode is enabled.";
+        return -EINVAL;
+      }
+      // replica is only meaningful for replicated pools
+      if (p.type != pg_pool_t::TYPE_REPLICATED) {
+        ss << "replica is only applicable to replicated pools";
+        return -EACCES;
+      }
+      int64_t num_zones = p.get_num_zones();
+      if (num_zones < 1) {
+        ss << "replica can only be set when num_zones > 0";
+        return -EINVAL;
+      }
+      // Set replica
+      p.replica = n;
     }
-
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
     switch (desc.type) {
     case pool_opts_t::STR:
       if (unset) {
-	p.opts.unset(desc.key);
+        p.opts.unset(desc.key);
       } else {
-	p.opts.set(desc.key, static_cast<std::string>(val));
+        p.opts.set(desc.key, static_cast<std::string>(val));
       }
-      break;
-    case pool_opts_t::INT:
-      if (interr.length()) {
-	ss << "error parsing integer value '" << val << "': " << interr;
-	return -EINVAL;
-      }
-      if (n == 0) {
-	p.opts.unset(desc.key);
-      } else {
-	p.opts.set(desc.key, static_cast<int64_t>(n));
-      }
-      break;
-    case pool_opts_t::DOUBLE:
-      if (floaterr.length()) {
-	ss << "error parsing floating point value '" << val << "': " << floaterr;
-	return -EINVAL;
-      }
-      if (f == 0) {
-	p.opts.unset(desc.key);
-      } else {
-	p.opts.set(desc.key, static_cast<double>(f));
-      }
-      break;
-    default:
-      ceph_assert(!"unknown type");
     }
-  } else {
-    ss << "unrecognized variable '" << var << "'";
-    return -EINVAL;
   }
   if (val != "unset") {
     ss << "set pool " << pool << " " << var << " to " << val;
@@ -9780,28 +9940,6 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
   }
-  // Check if the number of peering_crush_bucket_count and peering_crush_bucket_target
-  // exceeds the number of subtrees of the specified bucket_barrier in the cluster.
-  vector<int> subtrees;
-  bool sure = false;
-  crush.get_subtree_of_type(bucket_barrier, &subtrees);
-  cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
-  if (static_cast<uint32_t>(bucket_count) > subtrees.size()) {
-    if (!sure) {
-      ss << "peering_crush_bucket_count=" << bucket_count
-        << " > " << bucket_barrier_str << "=" <<  subtrees.size()
-        << " can lead to data unavailability, pass --yes-i-really-mean-it to proceed";
-      return -EPERM;
-    }
-  } else if (static_cast<uint32_t>(bucket_target) > subtrees.size()) {
-    if (!sure) {
-      ss << "peering_crush_bucket_target=" << bucket_target
-        << " > " << bucket_barrier_str << "=" <<  subtrees.size()
-        << " can lead to data unavailability, pass --yes-i-really-mean-it to proceed";
-      return -EPERM;
-    }
-  }
-
   string crush_rule_str;
   cmd_getval(cmdmap, "crush_rule", crush_rule_str);
   if (crush_rule_str.empty()) {
@@ -12110,15 +12248,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd crush rule create-stretch-replicated") {
     string name = cmd_getval_or<string>(cmdmap, "rule_name", "stretch_replica_rule");
-    string root = cmd_getval_or<string>(cmdmap, "root", "default");
+    // crush_rule_create_replica() takes an empty root or failure domain from
+    // its osd_pool_default_* option
+    string root = cmd_getval_or<string>(cmdmap, "root", "");
     int64_t num_zones = cmd_getval_or<int64_t>(cmdmap, "num_zones", 2);
     int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
-    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", g_conf().get_val<string>("osd_pool_default_zone_failure_domain"));
-    string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
+    string zone_failure_domain = cmd_getval_or<string>(cmdmap, "zone_failure_domain", "");
+    string osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "");
     bool force = false;
     cmd_getval(cmdmap, "force", force);
     string device_class;
     cmd_getval(cmdmap, "class", device_class);
+
     int rule;
     err = crush_rule_create_replica(name, root, num_zones, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, force, &rule, &ss);
     if (err < 0) {
@@ -12298,8 +12439,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto wait;
     if (err)
       goto reply_no_propose;
-    string name, poolstr;
+    string name;
     cmd_getval(cmdmap, "name", name);
+    int num_zones = cmd_getval_or<int64_t>(cmdmap, "num_zones", 1);
     string profile;
     cmd_getval(cmdmap, "profile", profile);
     if (profile == "")
@@ -12328,7 +12470,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     int rule;
-    err = crush_rule_create_erasure(name, profile, &rule, &ss);
+    err = crush_rule_create_erasure(name, num_zones, "", "", "", "", profile, &rule, &ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
@@ -14212,10 +14354,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                                get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
-    int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
     int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
     int64_t pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", 0);
-    int64_t pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
     string pool_type_str;
     cmd_getval(cmdmap, "pool_type", pool_type_str);
     if (pool_type_str.empty())
@@ -14255,38 +14395,207 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    bool implicit_rule_creation = false;
-    int64_t expected_num_objects = 0;
-    string rule_name;
-    cmd_getval(cmdmap, "rule", rule_name);
-    string erasure_code_profile;
-    cmd_getval(cmdmap, "erasure_code_profile", erasure_code_profile);
+    // The legacy positional syntax of a replicated pool gives the rule in the
+    // erasure_code_profile field and expected_num_objects in the rule field.
+    cmdmap_t args = cmdmap;
+    int64_t expected_num_objects =
+      cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
+    if (string positional_rule;
+        pool_type == pg_pool_t::TYPE_REPLICATED &&
+        cmd_getval(cmdmap, "erasure_code_profile", positional_rule) &&
+        !positional_rule.empty()) {
+      if (string positional_objects;
+          cmd_getval(cmdmap, "rule", positional_objects) &&
+          !positional_objects.empty()) {
+        string interr;
+        expected_num_objects =
+          strict_strtoll(positional_objects.c_str(), 10, &interr);
+        if (interr.length()) {
+          ss << "error parsing integer value '" << positional_objects << "': "
+             << interr;
+          err = -EINVAL;
+          goto reply_no_propose;
+        }
+      }
+      args["rule"] = positional_rule;
+      args.erase("erasure_code_profile");
+    }
 
+    // 1. the defaults, 2. the profile, 3. the command line, 4. the checks
+    PoolCreateParams params = load_pool_defaults(g_conf());
+    params.pool_type = pool_type;
     if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      string profile_name;
+      cmd_getval(args, "erasure_code_profile", profile_name);
+      const map<string,string> *profile = nullptr;
+      if (!profile_name.empty() && profile_name != "default") {
+        if (osdmap.has_erasure_code_profile(profile_name)) {
+          profile = &osdmap.get_erasure_code_profile(profile_name);
+        }
+      } else if (!args.count("k") && !args.count("m") &&
+                 osdmap.has_erasure_code_profile("default")) {
+        // the default profile, unless k and m make a profile of their own
+        profile = &osdmap.get_erasure_code_profile("default");
+      }
+      err = use_profile(params, profile_name == "default" ? "" : profile_name,
+                        profile, &ss);
+      if (err) {
+        goto reply_no_propose;
+      }
+      if (profile_name == "default") {
+        params.given.insert("erasure_code_profile");
+      }
+    }
+    apply_command_line(params, args);
+    // a pool cannot opt out of the crimson default
+    params.crimson = params.crimson ||
+      cct->_conf.get_val<bool>("osd_pool_default_crimson");
+    if (params.is_given("pg_num") && !params.is_given("pgp_num")) {
+      params.pgp_num = params.pg_num;
+    }
+    err = check_command_line(params, PoolCommand::CREATE, &ss);
+    if (err) {
+      goto reply_no_propose;
+    }
+    {
+      CrushWrapper crush = _get_pending_crush();
+      err = check_pool_params(params, pool_create_cluster(crush), &ss);
+      if (err) {
+        goto reply_no_propose;
+      }
+    }
+
+    const int64_t num_zones = params.num_zones;
+    string erasure_code_profile = params.erasure_code_profile;
+    string rule_name = params.rule;
+    bool implicit_rule_creation = false;
+    // An EC pool's rule takes the CRUSH parameters from its profile unless
+    // they are given.
+    auto given_value = [&params](const char *param, const string& value) {
+      return params.is_given(param) ? value : string();
+    };
+    string root = given_value("root", params.root);
+    string osd_failure_domain =
+      given_value("osd_failure_domain", params.osd_failure_domain);
+    string device_class = given_value("class", params.device_class);
+    if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      if (params.ec_params_given()) {
+        const int64_t k = *params.k();
+        const int64_t m = *params.m();
+        ostringstream profile_name_stream;
+        profile_name_stream << poolstr << "-k" << k << "-m" << m;
+        string auto_profile_name = profile_name_stream.str();
+
+        const map<string,string> &existing_profile = osdmap.get_erasure_code_profile(auto_profile_name);
+
+        if (!existing_profile.empty()) {
+          auto it_k = existing_profile.find("k");
+          auto it_m = existing_profile.find("m");
+
+          bool params_match = (it_k != existing_profile.end() && it_k->second == to_string(k)) &&
+                              (it_m != existing_profile.end() && it_m->second == to_string(m));
+
+          if (!params_match) {
+            ss << "EC profile '" << auto_profile_name << "' already exists with different k/m parameters";
+            err = -EEXIST;
+            goto reply_no_propose;
+          }
+          erasure_code_profile = auto_profile_name;
+        } else {
+          // osd_pool_default_erasure_code_profile with the given k and m
+          map<string,string> profile_map = params.profile;
+          // Record the crush parameters from the command line in the
+          // profile, so that it matches them when checked below.
+          if (!root.empty())
+            profile_map["crush-root"] = root;
+          if (params.is_given("zone_failure_domain"))
+            profile_map["crush-zone-failure-domain"] = params.zone_failure_domain;
+          if (!osd_failure_domain.empty()) {
+            // ErasureCode::init() prefers the new key if present.
+            if (profile_map.contains("crush-osd-failure-domain"))
+              profile_map["crush-osd-failure-domain"] = osd_failure_domain;
+            else
+              profile_map["crush-failure-domain"] = osd_failure_domain;
+          }
+          if (!device_class.empty())
+            profile_map["crush-device-class"] = device_class;
+
+          err = normalize_profile(auto_profile_name, profile_map, false, &ss);
+          if (err)
+            goto reply_no_propose;
+
+          if (pending_inc.has_erasure_code_profile(auto_profile_name)) {
+            dout(20) << "EC profile " << auto_profile_name << " is already pending" << dendl;
+            goto wait;
+          }
+
+          dout(20) << "auto-creating EC Profile " << auto_profile_name << "=" << profile_map << dendl;
+
+          pending_inc.set_erasure_code_profile(auto_profile_name, profile_map);
+
+          erasure_code_profile = auto_profile_name;
+          goto wait;
+        }
+      } else {
       if (erasure_code_profile == "")
 	erasure_code_profile = "default";
-      //handle the erasure code profile
       if (erasure_code_profile == "default") {
 	if (!osdmap.has_erasure_code_profile(erasure_code_profile)) {
 	  if (pending_inc.has_erasure_code_profile(erasure_code_profile)) {
-	    dout(20) << "erasure code profile " << erasure_code_profile << " already pending" << dendl;
+              dout(20) << "EC profile " << erasure_code_profile << " is already pending" << dendl;
 	    goto wait;
 	  }
 
 	  map<string,string> profile_map;
-	  err = osdmap.get_erasure_code_profile_default(cct,
-						      profile_map,
-						      &ss);
+            err = osdmap.get_erasure_code_profile_default(cct, profile_map, &ss);
 	  if (err)
 	    goto reply_no_propose;
 	  dout(20) << "erasure code profile " << erasure_code_profile << " set" << dendl;
 	  pending_inc.set_erasure_code_profile(erasure_code_profile, profile_map);
 	  goto wait;
 	}
+        }
+      }
+
+      // the pending changes may remove the profile with the last pool that
+      // used it; decide once they are committed
+      if (std::ranges::find(pending_inc.old_erasure_code_profiles,
+                            erasure_code_profile) !=
+          pending_inc.old_erasure_code_profiles.end()) {
+        dout(20) << "EC profile " << erasure_code_profile
+                 << " is being removed" << dendl;
+        goto wait;
+      }
+      const map<string,string> &existing_profile = osdmap.get_erasure_code_profile(erasure_code_profile);
+      auto it_crush_root = existing_profile.find("crush-root");
+      auto it_zone = existing_profile.find("crush-zone-failure-domain");
+      auto it_osd  = existing_profile.find("crush-osd-failure-domain");
+      if (it_osd == existing_profile.end())
+        it_osd = existing_profile.find("crush-failure-domain");
+      auto it_class = existing_profile.find("crush-device-class");
+      const string given_zone =
+        given_value("zone_failure_domain", params.zone_failure_domain);
+      bool crush_match =  (root.empty() ||
+                            (it_crush_root != existing_profile.end() &&
+                            it_crush_root->second == root)) &&
+                          (given_zone.empty() ||
+                            (it_zone != existing_profile.end() &&
+                            it_zone->second == given_zone)) &&
+                          (osd_failure_domain.empty() ||
+                            (it_osd != existing_profile.end() &&
+                            it_osd->second == osd_failure_domain)) &&
+                          (device_class.empty() ||
+                            (it_class != existing_profile.end() &&
+                            it_class->second == device_class));
+      if (!crush_match) {
+        ss << "EC profile '" << erasure_code_profile << "' already exists with different"
+              " crush parameters than specified (crush_root/zone_failure_domain/osd_failure_domain/device_class)";
+        err = -EINVAL;
+        goto reply_no_propose;
       }
       if (rule_name == "") {
 	implicit_rule_creation = true;
-	if (erasure_code_profile == "default") {
+        if (erasure_code_profile == "default" && num_zones == 1) {
 	  rule_name = "erasure-code";
 	} else {
 	  dout(1) << "implicitly use rule named after the pool: "
@@ -14294,26 +14603,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  rule_name = poolstr;
 	}
       }
-      expected_num_objects =
-	cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
     } else {
-      //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
-      //     and put expected_num_objects to rule field
-      if (erasure_code_profile != "") { // cmd is from CLI
-        if (rule_name != "") {
-          string interr;
-          expected_num_objects = strict_strtoll(rule_name.c_str(), 10, &interr);
-          if (interr.length()) {
-            ss << "error parsing integer value '" << rule_name << "': " << interr;
-            err = -EINVAL;
-            goto reply_no_propose;
-          }
-        }
-        rule_name = erasure_code_profile;
-      } else { // cmd is well-formed
-        expected_num_objects =
-	  cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
-      }
+      // the defaults give a replicated pool's rule
+      root = params.root;
+      osd_failure_domain = params.osd_failure_domain;
+      device_class = params.device_class;
     }
 
     if (!implicit_rule_creation && rule_name != "") {
@@ -14339,33 +14633,39 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     else if (fast_read_param > 0)
       fast_read = FAST_READ_ON;
 
-    int64_t repl_size = 0;
-    cmd_getval(cmdmap, "size", repl_size);
+    const int64_t repl_size = params.is_given("size") ? params.size : 0;
+    const int64_t min_size = params.is_given("min_size") ? params.min_size : 0;
     int64_t target_size_bytes = 0;
     double target_size_ratio = 0.0;
     cmd_getval(cmdmap, "target_size_bytes", target_size_bytes);
     cmd_getval(cmdmap, "target_size_ratio", target_size_ratio);
-
-    string pg_autoscale_mode;
-    cmd_getval(cmdmap, "autoscale_mode", pg_autoscale_mode);
-
-    bool bulk = cmd_getval_or<bool>(cmdmap, "bulk", 0);
-
-    bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
-      cct->_conf.get_val<bool>("osd_pool_default_crimson");
+    const string pg_autoscale_mode =
+      given_value("autoscale_mode", params.autoscale_mode);
+    const bool bulk = params.is_given("bulk") && params.bulk;
     bool force_create = false;
     cmd_getval(cmdmap, "force_pg_limit", force_create);
+
+    root = cmd_getval_or<string>(cmdmap, "root", "default");
+    int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
+    const string zone_failure_domain =
+      num_zones > 1 || params.is_given("zone_failure_domain")
+        ? effective_zone_failure_domain(params) : string();
+    const int replica = params.is_given("replica") ||
+      (pool_type == pg_pool_t::TYPE_REPLICATED && num_zones > 1)
+        ? params.replica : 0;
+    const int num_replica_per_zone = params.replica;
+
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
-			   pg_num, pgp_num, pg_num_min, pg_num_max,
-                           repl_size, target_size_bytes, target_size_ratio,
-			   erasure_code_profile, pool_type,
+                           params.pg_num, params.pgp_num, pg_num_min, pg_num_max,
+                           repl_size, target_size_bytes, target_size_ratio, min_size,
+                           erasure_code_profile, root, num_zones, replica, num_replica_per_zone, zone_failure_domain, osd_failure_domain, device_class, pool_type,
                            (uint64_t)expected_num_objects,
                            fast_read,
 			   pg_autoscale_mode,
 			   bulk,
-			   crimson,
+                           params.crimson,
          force_create,
 			   &ss);
     if (err < 0) {
@@ -14376,8 +14676,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply_no_propose;
       case -EAGAIN:
         goto wait;
-      case -ERANGE:
-        goto reply_no_propose;
       default:
 	goto reply_no_propose;
       }
@@ -15596,7 +15894,17 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 bool OSDMonitor::prepare_pool_op_create(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
+  preparing_op = op;
+  auto clear_preparing_op = make_scope_guard([this] { preparing_op.reset(); });
   int err = prepare_new_pool(op);
+  if (err == -EAGAIN) {
+    // the rule generated for the pool is committed first
+    wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+    return true;
+  }
+  if (err < 0) {
+    remove_what_failed_op_created(op);
+  }
   wait_for_finished_proposal(op, new OSDMonitor::C_PoolOp(this, op, err, pending_inc.epoch));
   return true;
 }
@@ -15906,6 +16214,17 @@ int OSDMonitor::_prepare_remove_pool(
     }
   }
 
+  // Check if EC profile can be removed
+  if (pi->is_erasure() && !pi->erasure_code_profile.empty()) {
+    ostringstream profile_ss;
+    if (should_remove_ec_profile(pool, pi->erasure_code_profile, &profile_ss)) {
+      dout(10) << __func__ << " removing EC profile " << pi->erasure_code_profile << " for pool " << pool << dendl;
+      pending_inc.old_erasure_code_profiles.push_back(pi->erasure_code_profile);
+    } else {
+      dout(10) << __func__ << " not removing EC profile " << pi->erasure_code_profile << ": " << profile_ss.str() << dendl;
+    }
+  }
+
   return 0;
 }
 
@@ -16127,6 +16446,16 @@ void OSDMonitor::extract_sites_from_crush_rule(CrushWrapper& crush, set<int>& ru
 }
 
 
+static int degraded_stretch_mandatory_member(const OSDMap& osdmap)
+{
+  for (const auto& [id, p] : osdmap.get_pools()) {
+    if (p.peering_crush_bucket_count == osdmap.degraded_stretch_mode &&
+        p.peering_crush_mandatory_member != CRUSH_ITEM_NONE) {
+      return p.peering_crush_mandatory_member;
+    }
+  }
+  return CRUSH_ITEM_NONE;
+}
 void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 					 int *errcode, bool commit,
 					 const string& dividing_bucket,
@@ -16206,6 +16535,51 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   }
   *okay = true;
   return;
+}
+
+PoolCreateCluster OSDMonitor::pool_create_cluster(CrushWrapper& crush)
+{
+  PoolCreateCluster cluster;
+  cluster.crush = &crush;
+  cluster.max_pool_pg_num = g_conf().get_val<uint64_t>("mon_max_pool_pg_num");
+  cluster.allow_crimson = osdmap.get_allow_crimson();
+  cluster.normalize_profile = [this](map<string, string>& profile,
+                                     ostream *ss) {
+    if (!profile.contains("plugin")) {
+      *ss << "cannot determine the erasure code plugin because there is no "
+          << "'plugin' entry in the erasure_code_profile " << profile;
+      return -EINVAL;
+    }
+    return normalize_profile("", profile, false, ss);
+  };
+  cluster.validate_stretch = [this, &crush](const string& zone,
+                                           int64_t num_zones,
+                                           ostream *ss) {
+    // stretch mode divides the cluster in two
+    if (num_zones != 2) {
+      return 0;
+    }
+    bool okay = false;
+    int errcode = 0;
+    if (!mon.monmon()->pending_map.stretch_mode_enabled) {
+      stringstream mss;
+      mon.monmon()->try_enable_stretch_mode(mss, &okay, &errcode, false, "",
+                                            zone, crush);
+      if (!okay) {
+        *ss << "Failed to validate monitor stretch mode: " << mss.str();
+        return errcode;
+      }
+    }
+    stringstream oss;
+    try_enable_stretch_mode(oss, &okay, &errcode, false, zone, num_zones, {},
+                            "", crush, false);
+    if (!okay) {
+      *ss << "Failed to validate pool stretch mode: " << oss.str();
+      return errcode;
+    }
+    return 0;
+  };
+  return cluster;
 }
 
 bool OSDMonitor::check_for_dead_crush_zones(const map<string,set<string>>& dead_buckets,

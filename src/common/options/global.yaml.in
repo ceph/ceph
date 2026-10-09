@@ -2632,6 +2632,22 @@ options:
   max: 10
   flags:
   - runtime
+- name: osd_pool_default_replica
+  type: uint
+  level: advanced
+  desc: the number of copies per zone of an object for new replicated pools
+  long_desc: A replicated pool with num_zones zones gets num_zones times this many copies.
+    0 uses osd_pool_default_size, the legacy name of this option; any other value overrides it.
+  default: 0
+  services:
+  - mon
+  min: 0
+  max: 10
+  see_also:
+  - osd_pool_default_size
+  - osd_pool_default_num_zones
+  flags:
+  - runtime
 - name: osd_pool_default_min_size
   type: uint
   level: advanced
@@ -2907,6 +2923,44 @@ options:
   - mon
   see_also:
   - osd_pool_default_num_zones
+  flags:
+  - runtime
+- name: osd_pool_default_osd_failure_domain
+  type: str
+  level: advanced
+  desc: Default CRUSH failure domain within a zone for new pools
+  long_desc: The CRUSH bucket type (for example, host or rack) that the copies of a replicated
+    pool over more than one zone are spread over, within each zone. It is used only for the
+    CRUSH rule generated for such a pool and by ceph osd crush rule create-stretch-replicated.
+    Erasure coded pools take it from their profile instead.
+  default: host
+  services:
+  - mon
+  see_also:
+  - osd_pool_default_zone_failure_domain
+  flags:
+  - runtime
+- name: osd_pool_default_root
+  type: str
+  level: advanced
+  desc: Default CRUSH root for new pools
+  long_desc: The CRUSH root of the rule generated for a replicated pool over more than one
+    zone, and the default root of ceph osd crush rule create-stretch-replicated. Erasure
+    coded pools take it from their profile instead.
+  default: default
+  services:
+  - mon
+  flags:
+  - runtime
+- name: osd_pool_default_class
+  type: str
+  level: advanced
+  desc: Default device class for new pools; empty means any class
+  long_desc: The device class of the rule generated for a replicated pool over more than
+    one zone; empty means any class. Erasure coded pools take it from their profile
+    instead.
+  services:
+  - mon
   flags:
   - runtime
 # min target size for a HitSet
