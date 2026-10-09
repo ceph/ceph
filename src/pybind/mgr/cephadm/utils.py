@@ -300,3 +300,18 @@ def get_default_ssh_config() -> str:
         ssh_config += f'  Ciphers {FIPS_SSH_CIPHERS}\n'
 
     return ssh_config
+
+
+def build_ceph_volume_cmd(
+    log_level: str,
+    command: List[str],
+    prefix: Optional[List[str]] = None,
+) -> List[str]:
+    """Build ceph-volume argv after cephadm's '--' separator.
+
+    prefix is for flags that must appear before '--' (e.g. --config-json).
+    """
+    cmd: List[str] = list(prefix or [])
+    cmd.extend(['--', '--log-level', log_level])
+    cmd.extend(command)
+    return cmd
