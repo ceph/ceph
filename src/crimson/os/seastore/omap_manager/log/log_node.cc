@@ -154,8 +154,7 @@ void LogNode::set_bitmap(d_bitmap_t map) {
   append_remove(bl);
 }
 
-template <typename F>
-void LogNode::for_each_live_entry(F&& fn) {
+d_bitmap_t LogNode::get_live_bitmap() {
   d_bitmap_t bitmap;
   if (auto p = maybe_get_delta_buffer()) {
     if (auto ret = p->get_latest_d_bitmap()) {
@@ -165,18 +164,7 @@ void LogNode::for_each_live_entry(F&& fn) {
   } else {
     bitmap = get_d_bitmap();
   }
-
-  uint32_t index = 0;
-  auto iter = iter_begin();
-  while (iter != iter_end()) {
-    if (!bitmap.is_set(index)) {
-      if (fn(*iter, index)) {
-	return;
-      }
-    }
-    ++iter;
-    ++index;
-  }
+  return bitmap;
 }
 
 void LogNode::list(const std::optional<std::string> &first,
@@ -236,13 +224,13 @@ LogNode::get_value_ret LogNode::get_value(const std::string &key, copy_t c)
     std::nullopt);
 }
 
-bool LogNode::remove_entry(const std::string key)
+bool LogNode::remove_entry(std::string_view key)
 {
   auto iter = iter_begin();
   uint32_t index = 0;
   bool removed = false;
   while(iter != iter_end()) {
-    if (iter->get_key() == key) {
+    if (iter->get_key_view() == key) {
       set_cur_bitmap(index, index);
       // Duplicate keys may exist if the old entry was removed.
       removed = true;

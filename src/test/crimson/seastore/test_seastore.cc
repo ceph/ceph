@@ -2237,6 +2237,85 @@ TEST_P(seastore_test_t, pgmeta_io)
   });
 }
 
+// A set of pg log keys with gaps in it does not qualify as a range, so
+// omap_rm_keys() falls back to matching the keys while walking the chain.
+// Both groups it splits its input into - the dup_ keys and the rest - must be
+// removed from their own chain. See https://tracker.ceph.com/issues/81486.
+TEST_P(seastore_test_t, pglog_rm_discontinuous_keys)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*sharded_seastore);
+    test_obj.set_log_object(*sharded_seastore);
+
+    auto generate_key = [](epoch_t e, version_t v) {
+      char key[32] = {0};
+      key[31] = 0;
+      ritoa<uint64_t, 10, 20>(v, key + 31);
+      key[10] = '.';
+      ritoa<uint32_t, 10, 10>(e, key + 10);
+      return std::string(key);
+    };
+
+    // Fill both chains, a pg log entry and its dup_ twin per version. The
+    // values are large enough for the entries to span several LogNodes.
+    const epoch_t epoch = 11;
+    const int entries = 128;
+    std::set<std::string> log_keys, dup_keys;
+    for (int i = 0; i < entries; i++) {
+      std::string key = generate_key(epoch, 100 + i);
+      bufferlist l;
+      l.append(std::string(240, (char)((i % 10) + '0')));
+      std::map<std::string, bufferlist> kvs;
+      kvs[key] = l;
+      kvs["dup_" + key] = l;
+      CTransaction t;
+      test_obj.set_omaps(t, kvs);
+      do_transaction(std::move(t));
+      log_keys.insert(key);
+      dup_keys.insert("dup_" + key);
+    }
+    auto kvs = test_obj.get_omaps(*sharded_seastore, std::string());
+    EXPECT_EQ(kvs.size(), test_obj.omap.size());
+
+    // Every other key of each group: the gaps keep is_continuous_fixed_width()
+    // from recognizing a range.
+    auto every_other = [](const std::set<std::string> &keys) {
+      std::set<std::string> ret;
+      int i = 0;
+      for (const auto &key : keys) {
+        if (i++ % 2 == 0) {
+          ret.insert(key);
+        }
+      }
+      return ret;
+    };
+    auto removed_log = every_other(log_keys);
+    auto removed_dup = every_other(dup_keys);
+    ASSERT_FALSE(crimson::os::seastore::log_manager::is_continuous_fixed_width(
+      removed_log));
+    ASSERT_FALSE(crimson::os::seastore::log_manager::is_continuous_fixed_width(
+      removed_dup));
+
+    std::set<std::string> to_remove = removed_log;
+    to_remove.insert(removed_dup.begin(), removed_dup.end());
+    test_obj.rm_omaps(*sharded_seastore, to_remove);
+
+    kvs = test_obj.get_omaps(*sharded_seastore, std::string());
+    EXPECT_EQ(kvs.size(), test_obj.omap.size());
+    for (const auto &key : to_remove) {
+      EXPECT_EQ(kvs.find(key), kvs.end()) << "key " << key << " not removed";
+      test_obj.check_omap_key(*sharded_seastore, key);
+    }
+    // the keys in the gaps are still there
+    for (const auto &key : test_obj.omap) {
+      EXPECT_NE(kvs.find(key.first), kvs.end()) << "key " << key.first
+        << " wrongly removed";
+      test_obj.check_omap_key(*sharded_seastore, key.first);
+    }
+  });
+}
+
 INSTANTIATE_TEST_SUITE_P(
   seastore_test,
   seastore_test_t,
