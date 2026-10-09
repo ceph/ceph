@@ -38,61 +38,14 @@ namespace ss = neorados::cls::sem_set;
 
 using neorados::WriteOp;
 
-class DataLogTestBase : public CoroTest {
+class DataLogTestBase : public NeoRadosTest {
 private:
-  const std::string prefix_{std::string{"test framework "} +
-			    testing::UnitTest::GetInstance()->
-			    current_test_info()->name() +
-			    std::string{": "}};
-
-  std::optional<neorados::RADOS> rados_;
-  neorados::IOContext pool_;
-  const std::string pool_name_ = get_temp_pool_name(
-    testing::UnitTest::GetInstance()->current_test_info()->name());
-  std::unique_ptr<DoutPrefix> dpp_;
-
-  boost::asio::awaitable<uint64_t> create_pool() {
-    co_return co_await ::create_pool(rados(), pool_name(),
-				     boost::asio::use_awaitable);
-  }
-
-  boost::asio::awaitable<void> clean_pool() {
-    co_await rados().delete_pool(pool().get_pool(),
-				boost::asio::use_awaitable);
-  }
-
   virtual asio::awaitable<std::unique_ptr<RGWDataChangesLog>>
   create_datalog() = 0;
 
 protected:
 
   std::unique_ptr<RGWDataChangesLog> datalog;
-
-  neorados::RADOS& rados() noexcept { return *rados_; }
-  const std::string& pool_name() const noexcept { return pool_name_; }
-  const neorados::IOContext& pool() const noexcept { return pool_; }
-  std::string_view prefix() const noexcept { return prefix_; }
-  const DoutPrefixProvider* dpp() const noexcept { return dpp_.get(); }
-  auto execute(std::string_view oid, neorados::WriteOp&& op,
-	       std::uint64_t* ver = nullptr) {
-    return rados().execute(oid, pool(), std::move(op),
-			   boost::asio::use_awaitable, ver);
-  }
-  auto execute(std::string_view oid, neorados::ReadOp&& op,
-	       std::uint64_t* ver = nullptr) {
-    return rados().execute(oid, pool(), std::move(op), nullptr,
-			   boost::asio::use_awaitable, ver);
-  }
-  auto execute(std::string_view oid, neorados::WriteOp&& op,
-	       neorados::IOContext ioc, std::uint64_t* ver = nullptr) {
-    return rados().execute(oid, std::move(ioc), std::move(op),
-			   boost::asio::use_awaitable, ver);
-  }
-  auto execute(std::string_view oid, neorados::ReadOp&& op,
-	       neorados::IOContext ioc, std::uint64_t* ver = nullptr) {
-    return rados().execute(oid, std::move(ioc), std::move(op), nullptr,
-			   boost::asio::use_awaitable, ver);
-  }
 
   asio::awaitable<void>
   read_all_sems(int index,
@@ -186,22 +139,17 @@ protected:
 
 public:
 
-  /// \brief Create RADOS handle and pool for the test
   boost::asio::awaitable<void> CoSetUp() override {
-    rados_ = co_await neorados::RADOS::Builder{}
-      .build(asio_context, boost::asio::use_awaitable);
-    dpp_ = std::make_unique<DoutPrefix>(rados().cct(), 0, prefix().data());
-    pool_.set_pool(co_await create_pool());
+    co_await NeoRadosTest::CoSetUp();
     datalog = co_await create_datalog();
     co_return;
   }
 
   ~DataLogTestBase() override = default;
 
-  /// \brief Delete pool used for testing
   boost::asio::awaitable<void> CoTearDown() override {
     co_await datalog->async_shutdown();
-    co_await clean_pool();
+    co_await NeoRadosTest::CoTearDown();
     co_return;
   }
 };
