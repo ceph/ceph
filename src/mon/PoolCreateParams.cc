@@ -9,6 +9,7 @@
 #include "common/config.h"
 #include "common/config_proxy.h"
 #include "common/config_values.h"
+#include "common/strtol.h"
 #include "crush/CrushWrapper.h"
 #include "include/str_map.h"
 #include "mon/ConfigMap.h"
@@ -29,11 +30,12 @@ std::optional<int64_t> map_value(const std::map<string, string>& profile,
   if (i == profile.end()) {
     return std::nullopt;
   }
-  try {
-    return std::stoll(i->second);
-  } catch (const std::exception&) {
+  string err;
+  const long long value = strict_strtoll(i->second, 10, &err);
+  if (!err.empty()) {
     return std::nullopt;
   }
+  return value;
 }
 
 } // anonymous namespace

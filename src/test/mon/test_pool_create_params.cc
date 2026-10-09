@@ -207,6 +207,13 @@ TEST_F(PoolParamsTest, DefaultProfileWithoutKM) {
   EXPECT_FALSE(defaults().m().has_value());
 }
 
+// Test a k or m that is not a whole number gives none
+TEST_F(PoolParamsTest, DefaultProfileKMNotNumbers) {
+  set("osd_pool_default_erasure_code_profile", "plugin=isa k=3x m=2.5");
+  EXPECT_FALSE(defaults().k().has_value());
+  EXPECT_FALSE(defaults().m().has_value());
+}
+
 // Test the placement defaults are loaded
 TEST_F(PoolParamsTest, PlacementLoaded) {
   set("osd_pool_default_zone_failure_domain", "rack");
