@@ -26,6 +26,7 @@
 #include "ECBackend.h"
 #include "ECSwitch.h"
 #include "OSD.h"
+#include "erasure-code/lrc/ErasureCodeLrcLayers.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "OSDMap.h"
 #include "PGLog.h"
@@ -896,7 +897,8 @@ PGBackend *PGBackend::build_pg_backend(
   ObjectStore::CollectionHandle &ch,
   ObjectStore *store,
   CephContext *cct,
-  ECExtentCache::LRU &ec_extent_cache_lru)
+  ECExtentCache::LRU &ec_extent_cache_lru,
+  ceph_release_t require_osd_release)
 {
   ErasureCodeProfile ec_profile = profile;
   switch (pool.type) {
@@ -904,6 +906,10 @@ PGBackend *PGBackend::build_pg_backend(
     return new ReplicatedBackend(l, coll, ch, store, cct);
   }
   case pg_pool_t::TYPE_ERASURE: {
+    // Resolve the LRC sub-plugin for the upgrade window (before
+    // require_osd_release is committed).
+    ceph::pin_lrc_layer_plugin(
+      ec_profile, require_osd_release < ceph_release_t::tentacle);
     ErasureCodeInterfaceRef ec_impl;
     stringstream ss;
     ceph::ErasureCodePluginRegistry::instance().factory(

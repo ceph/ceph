@@ -505,10 +505,11 @@ private:
 			  std::ostream *ss);
   void check_legacy_ec_plugin(const std::string& plugin, 
 			      const std::string& profile) const;
-  int normalize_profile(const std::string& profilename, 
-			ceph::ErasureCodeProfile &profile,
-			bool force,
-			std::ostream *ss);
+  int normalize_profile(const std::string& profilename,
+                        ceph::ErasureCodeProfile &profile,
+                        bool force,
+                        std::ostream *ss,
+                        bool pin_layer_plugin = true);
   int crush_rule_create_erasure(const std::string &name,
 				const std::string &profile,
 				int *rule,
