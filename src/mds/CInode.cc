@@ -3253,8 +3253,31 @@ void CInode::pre_cow_old_inode()
 
   dout(20) << __func__ << " using_global_snaprealm_seq:" << (using_global_snaprealm_seq ? "yes ":"no ")
            << " follows " << follows << " on " << *this << " snaprealm=" << *realm << dendl;
-  if (first <= follows)
-    cow_old_inode(follows, true);
+
+  if (first > follows) {
+    return;
+  }
+
+  /*
+   * @follows is taken from the global snaprealm so that @first stays
+   * monotonic across snaprealms, which is what makes an inode moving between
+   * realms easily managable - that is the sole reason the global seq is
+   * consulted here.
+   *
+   * Mint an old_inode only if a snapshot in OUR realm can reference the
+   * version we are about to replace.  Otherwise just move @first past
+   * @follows and keep the range bookkeeping.
+   *
+   * NOTE: this is the same split MDCache::journal_cow_dentry() already uses.
+   */
+  if (!realm->has_snaps_in_range(first, follows)) {
+    dout(20) << __func__ << " no snapshot in [" << first << "," << follows
+             << "], advancing first only on " << *this << dendl;
+    first = follows + 1;
+    return;
+  }
+
+  cow_old_inode(follows, true);
 }
 
 bool CInode::has_snap_data(snapid_t snapid)
