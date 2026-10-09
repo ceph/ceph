@@ -1089,6 +1089,13 @@ void ECBackend::clear_recovery_state() {
   recovery_backend.recovery_ops.clear();
 }
 
+void ECBackend::assert_idle() const {
+  ec_omap_journal.assert_idle();
+  read_pipeline.assert_idle();
+  rmw_pipeline.assert_idle();
+  recovery_backend.assert_idle();
+}
+
 void ECBackend::dump_recovery_info(Formatter *f) const {
   f->open_array_section("recovery_ops");
   for (map<hobject_t, RecoveryBackend::RecoveryOp>::const_iterator i =

@@ -15,22 +15,22 @@
 #pragma once
 
 #include "osd/PGLog.h"
+#include "osd/PGBackend.h"
 #include "os/ObjectStore.h"
-#include "MockPGBackend.h"
 
 // MockPGLogEntryHandler
 //
 // This is a fully functional implementation of the PGLog::LogEntryHandler
-// interface. It calls code in PGBackend to perform the requested operations
-// although some of the stubs in MockPGBackend return questionable information
-// about the object size so the generated ObjectStore::Transaction is probably
-// not correct. The main purpose is to use partial_write to update the PWLC
-// information when appending entries to the log
+// interface. Like PG::PGLogEntryHandler it calls into the PG's backend to
+// perform the requested operations, so give it the real backend where one
+// exists (ECPeeringTestFixture does). With the MockPGBackend stub the
+// generated ObjectStore::Transaction is not correct and only partial_write,
+// which updates the PWLC information, does anything useful.
 class MockPGLogEntryHandler : public PGLog::LogEntryHandler {
  public:
-  MockPGBackend *backend;
+  PGBackend *backend;
   ObjectStore::Transaction *t;
-  MockPGLogEntryHandler(MockPGBackend *backend, ObjectStore::Transaction *t) : backend(backend), t(t) {}
+  MockPGLogEntryHandler(PGBackend *backend, ObjectStore::Transaction *t) : backend(backend), t(t) {}
 
   // LogEntryHandler
   void remove(const hobject_t &hoid) override {

@@ -65,6 +65,14 @@ public:
     return is_optimized_actual;
   }
 
+  // Legacy EC is not covered: it is scheduled for removal.
+  void assert_idle() const
+  {
+    if (is_optimized_unchecked()) {
+      optimized.assert_idle();
+    }
+  }
+
   class ECRecPred : public IsPGRecoverablePredicate
   {
   public:
