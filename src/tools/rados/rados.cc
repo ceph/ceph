@@ -131,7 +131,8 @@ void usage(ostream& out)
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
 "   listsnaps <obj-name>             list the snapshots of this object\n"
-"   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup] [--run-name run_name] [--no-hints] [--reuse-bench]\n"
+"   bench <seconds> write|seq|rand|rollback [-t concurrent_operations] [--no-cleanup] [--run-name run_name] [--no-hints] [--reuse-bench]\n"
+"                                    --snap <name> is required for rollback\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
 "                                    default is to clean up after write benchmark\n"
 "                                    default run-name is 'benchmark_last_metadata'\n"
@@ -269,6 +270,9 @@ void usage(ostream& out)
 "        read or write contents to the omap\n"
 "   --xattr | write-xattr (deprecated)\n"
 "        read or write contents to the extended attributes\n"
+"   --mutate-percent=N\n"
+"        percentage of objects to overwrite after the snapshot is taken\n"
+"        (0-100, default: 50). The rollback still covers every object.\n"
 "\n"
 "LOAD GEN OPTIONS:\n"
 "   --num-objects                    total number of objects\n"
@@ -1093,6 +1097,8 @@ class RadosBencher : public ObjBencher {
   bool iterator_valid;
   OpDest destination;
   omap_read_params_t omap_read;
+  bool rollback_mode = false;
+  snap_t rollback_snapid = CEPH_NOSNAP;
 
 protected:
   int completions_init(int concurrentios) override {
@@ -1171,6 +1177,12 @@ protected:
     return io_ctx.aio_operate(oid, completions[slot], &op);
   }
 
+  int aio_rollback(const std::string& oid, int slot) override {
+    librados::ObjectWriteOperation op;
+    op.snap_rollback(rollback_snapid);
+    return io_ctx.aio_operate(oid, completions[slot], &op);
+  }
+
   int aio_remove(const std::string& oid, int slot) override {
     return io_ctx.aio_remove(oid, completions[slot]);
   }
@@ -1236,6 +1248,98 @@ public:
   }
   void set_omap_read_patams(const omap_read_params_t& omap_read_params) {
     omap_read = omap_read_params;
+  }
+
+  int prepare_rollback_environment(const char* snapname, int64_t mutate_percent,
+                                   const std::string &run_name) {
+    if (!snapname) {
+      return -EINVAL;
+    }
+
+    int ret = io_ctx.snap_create(snapname);
+    if (ret < 0) {
+      return ret;
+    }
+
+    io_ctx.snap_set_read(CEPH_NOSNAP);
+    if (mutate_percent > 0) {
+      // Handle the default fallback run name if the user didn't
+      // specify --run-name
+      std::string meta_obj = run_name.empty() ? BENCH_LASTRUN_METADATA : run_name;
+      bufferlist metadata_bl;
+
+      ret = io_ctx.read(meta_obj, metadata_bl, 4096, 0);
+      if (ret < 0) {
+        cerr << "error: unable to read benchmark metadata from object '" << meta_obj
+             << "': " << cpp_strerror(ret) << std::endl;
+        cerr << "hint: make sure you have run a 'write' benchmark with '--no-cleanup' using the same --run-name before running rollback." << std::endl;
+        return ret;
+      }
+
+      uint64_t object_size = 0;
+      int num_ops = 0;
+      int prev_pid = 0;
+      uint64_t op_size = 0;
+
+      try {
+        ceph::bench::decode_bench_metadata(metadata_bl, &object_size, &num_ops, &prev_pid, &op_size);
+      } catch (const ceph::buffer::error& e) {
+        cerr << "error: failed to decode benchmark metadata from '" << meta_obj
+             << "': " << e.what() << std::endl;
+        return -EINVAL;
+      }
+
+      // Same object count fetch_bench_metadata() hands to rollback_bench().
+      unsigned ops_per_object = 1;
+      if (op_size > 0 && object_size > op_size) {
+        ops_per_object = object_size / op_size;
+      }
+      const int num_objects = (num_ops + ops_per_object - 1) / ops_per_object;
+      if (num_objects <= 0) {
+        cerr << "error: benchmark metadata in '" << meta_obj
+             << "' recorded no objects to roll back" << std::endl;
+        return -EINVAL;
+      }
+
+      // Overwrite object N, the same name rollback_bench() rolls back.
+      // A pool listing would also dirty unrelated names that contain the
+      // prefix, and would leave io_ctx in the last object's namespace.
+      const std::string hostname = ceph::bench::get_local_hostname();
+      cout << "Mutating " << mutate_percent << "% of " << num_objects
+           << " objects from the previous write benchmark" << std::endl;
+      int modified_count = 0;
+      for (int n = 0; n < num_objects; ++n) {
+        if (ceph::util::generate_random_number(0, 99) >= mutate_percent) {
+          continue;
+        }
+        const std::string oid = ceph::bench::generate_object_name_fast(hostname, prev_pid, n);
+        bufferlist bl;
+        bl.append("post_snapshot_divergent_bench_payload");
+        ret = io_ctx.write_full(oid, bl);
+        if (ret < 0) {
+          cerr << "error: failed to mutate '" << oid << "': "
+               << cpp_strerror(ret) << std::endl;
+          return ret;
+        }
+        ++modified_count;
+      }
+      cout << "Mutated " << modified_count << " of " << num_objects
+           << " objects" << std::endl;
+    }
+
+    cout << "Starting snapshot rollback benchmark metric evaluation..." << std::endl;
+    return 0;
+  }
+
+  void set_rollback(bool rollback, snap_t snapid) {
+    cout << "Setting rollback snap-id: " << snapid << std::endl;
+    rollback_mode = rollback;
+    rollback_snapid = snapid;
+    if (rollback) {
+      // Clear any read-snapshot context on the io_ctx to ensure
+      // object discovery iterates over the live head objects
+      io_ctx.snap_set_read(CEPH_NOSNAP);
+    }
   }
 };
 
@@ -1954,6 +2058,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   uint64_t max_backlog = 0;
   uint64_t target_throughput = 0;
   int64_t read_percent = -1;
+  // Overwrite this fraction of the previous write's objects before
+  // rolling every object back. The chosen objects are not recorded.
+  // --mutate-percent=0 leaves them unchanged.
+  int64_t mutate_percent = 50;
   uint64_t num_objs = 0;
   int run_length = 0;
 
@@ -2099,6 +2207,16 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("read-percent");
   if (i != opts.end()) {
     if (rados_sistrtoll(i, &read_percent)) {
+      return -EINVAL;
+    }
+  }
+  i = opts.find("mutate-percent");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &mutate_percent)) {
+      return -EINVAL;
+    }
+    if (mutate_percent < 0 || mutate_percent > 100) {
+      cerr << "error: --mutate-percent must be an integer value between 0 and 100" << std::endl;
       return -EINVAL;
     }
   }
@@ -2318,8 +2436,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cerr << "pool name must be specified with --snap" << std::endl;
       return 1;
     }
+    bool is_rollback_bench = (!nargs.empty() &&
+                              strcmp(nargs[0], "bench") == 0 &&
+                              nargs.size() >= 3 && strcmp(nargs[2], "rollback") == 0);
     ret = io_ctx.snap_lookup(snapname, &snapid);
-    if (ret < 0) {
+    if (ret < 0 && !is_rollback_bench) {
       cerr << "error looking up snap '" << snapname << "': " << cpp_strerror(ret) << std::endl;
       return 1;
     }
@@ -3399,6 +3520,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       operation = OP_SEQ_READ;
     else if (strcmp(nargs[2], "rand") == 0)
       operation = OP_RAND_READ;
+    else if (strcmp(nargs[2], "rollback") == 0)
+      operation = OP_ROLLBACK;
     else {
       usage(cerr);
       return 1;
@@ -3420,6 +3543,27 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
+    if (operation == OP_ROLLBACK) {
+      if (!snapname) {
+        cerr << "error: --snap <name> is required for a rollback benchmark" << std::endl;
+        return 1;
+      }
+      cout << "Preparing snapshot environment..." << std::endl;
+      ret = bencher.prepare_rollback_environment(snapname, mutate_percent, run_name);
+      if (ret < 0) {
+        cerr << "Failed to prepare rollback environment: " << cpp_strerror(ret) << std::endl;
+        return ret;
+      }
+      // A failed lookup leaves snapid at CEPH_NOSNAP. Rollback to the head
+      // is reported as success and does not restore the snapshot.
+      ret = io_ctx.snap_lookup(snapname, &snapid);
+      if (ret < 0) {
+        cerr << "error looking up snap '" << snapname << "': "
+             << cpp_strerror(ret) << std::endl;
+        return 1;
+      }
+      bencher.set_rollback(true, snapid);
+    }
     bencher.set_show_time(show_time);
     bencher.set_destination(static_cast<OpDest>(bench_dest));
     bencher.set_omap_read_patams(omap_read);
@@ -4326,6 +4470,8 @@ int main(int argc, const char **argv)
       opts["dest-obj"] = "true";
     } else if (ceph_argparse_flag(args, i, "--xattr", (char*)nullptr)) {
       opts["dest-xattr"] = "true";
+    } else if (ceph_argparse_witharg(args, i, &val, "--mutate-percent", (char*)nullptr)) {
+      opts["mutate-percent"] = val;
     } else if (ceph_argparse_flag(args, i, "--with-clones", (char*)nullptr)) {
       opts["with-clones"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--omap-read-start-after", (char*)nullptr)) {
