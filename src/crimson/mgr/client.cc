@@ -102,6 +102,11 @@ void Client::ms_handle_connect(
 {
   LOG_PREFIX(Client::ms_handle_connect);
   DEBUGDPP("prev_shard: {}", *this, prv_shard);
+  // OSD sessions pinned to other reactors also dispatch here. The mgr
+  // session itself stays on this shard.
+  if (prv_shard != seastar::this_shard_id()) {
+    return;
+  }
   ceph_assert_always(prv_shard == seastar::this_shard_id());
   gates.dispatch_in_background(__func__, *this,
   [this, c, FNAME] {
@@ -124,6 +129,9 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef c, bool /* is_replace *
 {
   LOG_PREFIX(Client::ms_handle_reset);
   DEBUGDPP("", *this);
+  if (seastar::this_shard_id() != 0) {
+    return;
+  }
   gates.dispatch_in_background(__func__, *this,
   [this, c, FNAME] {
     DEBUGDPP("dispatching in background", *this);

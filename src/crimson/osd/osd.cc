@@ -41,6 +41,7 @@
 #include "osd/ClassHandler.h"
 #include "osd/OSDCap.h"
 #include "osd/PGPeeringEvent.h"
+#include "messages/MOSDPGQuery2.h"
 #include "osd/PeeringState.h"
 
 #include "crimson/admin/osd_admin.h"
@@ -1777,6 +1778,17 @@ seastar::future<> OSD::handle_peering_op(
   DEBUG("{} from {}", m->get_spg(), from);
   m->set_features(conn->get_features());
   std::unique_ptr<PGPeeringEvent> evt(m->get_event());
+  // The monitor creates a PG only on the acting primary. A replica
+  // learns the PG from a later pg_log. The info query arrives first and
+  // does not carry create info, so the replica drops it. Attach create
+  // info from the query history when this OSD is in the acting set;
+  // handle_pg_create_info drops it if the PG does not map here.
+  if (!evt->create_info && m->get_type() == MSG_OSD_PG_QUERY2) {
+    auto q = static_cast<MOSDPGQuery2*>(m.get());
+    evt->create_info.reset(new PGCreateInfo(
+      q->get_spg(), q->query.epoch_sent, q->query.history,
+      PastIntervals{}, false));
+  }
   return pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
     conn,
     pg_shard_t{from, m->get_spg().shard},
