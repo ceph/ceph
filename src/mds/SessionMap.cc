@@ -33,6 +33,7 @@
 #include "common/strescape.h" // for get_trimmed_path()
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
+#include "SnapRealm.h"
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
@@ -1165,8 +1166,30 @@ int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
 			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid, info.inst.addr, trimmed_path,
                             check_quarantine_access)) {
-    return -EACCES;
+    if (!in->find_snaprealm()) {
+      if (path.find("mnt") != string::npos) {
+      }
+      return -EACCES;
+    }
+
+    path = in->find_snaprealm()->srnode.subvol_prev_path;
+    if (path[0] == '/') {
+      path = path.substr(1);
+    }
+
+    dout(5) << __func__ << " subvol data path (path=" << path << ") access " <<
+      "was denied. checking access for path in ceph.dir.subvolume.prevpath. " <<
+      "prevpath = " << path << dendl;
+    if (!auth_caps.is_capable(fs_name, path, inode->uid, inode->gid,
+                              inode->mode, caller_uid, caller_gid,
+                              caller_gid_list, mask, new_uid, new_gid,
+                              info.inst.addr, trimmed_path,
+                              check_quarantine_access)) {
+      dout(5) << "prevpath (" << path << ") access was also denied." << dendl;
+      return -EACCES;
+    }
   }
+
   return 0;
 }
 
