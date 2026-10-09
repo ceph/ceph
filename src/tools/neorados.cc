@@ -222,6 +222,10 @@ ba::awaitable<void> read(R::RADOS& r, const std::vector<std::string>& p)
 	fmt::format("when reading from object '{}' in pool '{}'",
 		    obj, pool));
 
+    if (bl.length() == 0) {
+      // the object shrank since we stat'ed it
+      break;
+    }
     off += bl.length();
     bl.write_stream(std::cout);
     bl.clear();
