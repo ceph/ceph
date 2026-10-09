@@ -41,6 +41,10 @@ tasks:
       - \(SLOW_OPS\)
       - overall HEALTH
       - slow request
+      # (BLOCK/DB/WAL)_DEVICE_DISCARD_QUEUE: this test creates a single pool,
+      # writes heavily to it with fio and then deletes it in a controlled env.
+      # The discard queue buildup is transient and harmless, warn is ignored.
+      - \((BLOCK|DB|WAL)_DEVICE_DISCARD_QUEUE\)
 - workunit:
     clients:
       client.0:
