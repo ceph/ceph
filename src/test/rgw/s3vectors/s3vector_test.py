@@ -4023,7 +4023,6 @@ def test_query_vectors_post_filter_topk():
     _ = _delete_vector_bucket(conn, bucket_name)
     set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1)
 
-
 @pytest.mark.vector_test
 def test_sal_error_propagation():
     """Verify that SAL errors propagate through LanceDB back to the S3Vector API.
@@ -4495,3 +4494,383 @@ def test_tenant_delete_vector_bucket_isolated():
         _cleanup_vector_bucket(conn1, bucket_name, conn1.s3)
 
 
+def _setup_vector_bucket_with_index(conn, bucket_name, index_name, dimension=4):
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = conn.create_index(
+        vectorBucketName=bucket_name,
+        indexName=index_name,
+        dataType='float32',
+        dimension=dimension,
+        distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0)},
+        {'key': 'v1', 'data': generate_data(dimension, 1)}
+    ]
+    result = conn.put_vectors(
+        vectorBucketName=bucket_name,
+        indexName=index_name,
+        vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+# Basic vector bucket policy management test 
+@pytest.mark.vector_test
+def test_put_get_delete_vector_bucket_policy():
+    owner = connection()
+    bucket_name = gen_bucket_name()
+    index_name = "test-index"
+    _ensure_s3_bucket_for_vector_bucket(bucket_name) 
+    _setup_vector_bucket_with_index(owner, bucket_name, index_name)
+
+    bucket_arn = 'arn:aws:s3vectors:::bucket/{}'.format(bucket_name)
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": "*",
+                       "Action": "s3vectors:GetVectors",
+                       "Resource": bucket_arn}]
+    })
+
+    result = owner.put_vector_bucket_policy(
+        vectorBucketName=bucket_name, policy=policy)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 204
+
+    #get
+    result = owner.get_vector_bucket_policy(vectorBucketName=bucket_name)
+    returned_policy = json.loads(result['policy'])
+    assert returned_policy == json.loads(policy)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    #delete
+    result = owner.delete_vector_bucket_policy(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 204
+
+    # post delete get must fail
+    with pytest.raises(owner.exceptions.ClientError) as err_info:
+        owner.get_vector_bucket_policy(vectorBucketName=bucket_name)
+    assert err_info.value.response['Error']['Code'] == 'NoSuchBucketPolicy'
+
+    #cleanup
+    owner.delete_vector_bucket_policy(vectorBucketName=bucket_name)
+    _delete_vector_bucket(owner, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+# Test of index operations with policy
+@pytest.mark.vector_test
+def test_create_get_list_delete_index_with_policy():
+    owner = connection()
+    other = another_user()
+    other_arn = f"arn:aws:iam:::user/{other.uid}"
+    bucket_name = gen_bucket_name()
+    index_name = 'test-index'
+    dimension = 128
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = owner.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                           dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": other_arn},
+            "Action": "s3vectors:CreateIndex",
+            "Resource": f"arn:aws:s3vectors:::bucket/{bucket_name}"
+        }]
+    })
+    owner.put_vector_bucket_policy(vectorBucketName=bucket_name, policy=policy)
+
+    result = other.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.get_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.list_indexes(vectorBucketName=bucket_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": other_arn},
+            "Action": ["s3vectors:GetIndex", "s3vectors:ListIndexes", "s3vectors:DeleteIndex"],
+            "Resource": f"arn:aws:s3vectors:::bucket/{bucket_name}"
+        }]
+    })
+    owner.put_vector_bucket_policy(vectorBucketName=bucket_name, policy=policy)
+
+    result = other.get_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert result['index']['indexName'] == index_name
+
+    result = other.list_indexes(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert index_name in [i['indexName'] for i in result['indexes']]
+
+    result = other.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    _delete_vector_bucket(owner, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+# Vector operations with policy
+@pytest.mark.vector_test
+def test_put_get_list_query_delete_vectors_with_policy():
+    owner = connection()
+    other = another_user()
+    other_arn = f"arn:aws:iam:::user/{other.uid}"
+    bucket_name = gen_bucket_name()
+    index_name = 'test-index'
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    _setup_vector_bucket_with_index(owner, bucket_name, index_name, dimension=dimension)
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                          vectors=[{'key': 'v1', 'data': generate_data(dimension, 1)}])
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['v0'])
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.list_vectors(vectorBucketName=bucket_name, indexName=index_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                            queryVector=generate_data(dimension, 0), topK=1)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.delete_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['v0'])
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": other_arn},
+            "Action": [
+                "s3vectors:PutVectors",
+                "s3vectors:GetVectors",
+                "s3vectors:ListVectors",
+                "s3vectors:QueryVectors"
+            ],
+            "Resource": f"arn:aws:s3vectors:::bucket/{bucket_name}"
+        }]
+    })
+    owner.put_vector_bucket_policy(vectorBucketName=bucket_name, policy=policy)
+
+    other_vec_data = generate_data(dimension, 2)
+    result = other.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                               vectors=[{'key': 'v-other', 'data': other_vec_data}])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = other.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['v-other'])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = other.list_vectors(vectorBucketName=bucket_name, indexName=index_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = other.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                 queryVector=other_vec_data, topK=1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.delete_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['v-other'])
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": other_arn},
+            "Action": "s3vectors:DeleteVectors",
+            "Resource": f"arn:aws:s3vectors:::bucket/{bucket_name}"
+        }]
+    })
+    owner.put_vector_bucket_policy(vectorBucketName=bucket_name, policy=policy)
+
+    result = other.delete_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['v-other'])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    _delete_vector_bucket(owner, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.vector_test
+def test_vector_bucket_policy_ops_with_implicit_deny():
+    owner = connection()
+    other = another_user()
+    bucket_name = gen_bucket_name()
+    index_name = 'test-index'
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    _setup_vector_bucket_with_index(owner, bucket_name, index_name, dimension=dimension)
+
+    # bucket-level operations
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.get_vector_bucket(vectorBucketName=bucket_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    # ListVectorBuckets always succeeds, but shows only the caller's own buckets
+    result = other.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert bucket_name not in [b['vectorBucketName'] for b in result['vectorBuckets']]
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.delete_vector_bucket(vectorBucketName=bucket_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    # index-level operations
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.create_index(vectorBucketName=bucket_name, indexName='new-index',
+                           dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.get_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.list_indexes(vectorBucketName=bucket_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    # vector-level operations
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                          vectors=[{'key': 'v2', 'data': generate_data(dimension, 2)}])
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['v0'])
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.list_vectors(vectorBucketName=bucket_name, indexName=index_name)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                            queryVector=generate_data(dimension, 0), topK=1)
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.delete_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['v0'])
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    # cleanup
+    _delete_vector_bucket(owner, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+
+@pytest.mark.vector_test
+def test_vector_bucket_policy_account_level():
+    dimension = 4
+    index_name = 'test-index'
+
+    # two root users of the same account
+    owner = another_account_user()
+    account_peer = another_account_user(account_id=owner.account_id)
+    # a regular user that does not belong to the account
+    outsider = another_user()
+    outsider_arn = f"arn:aws:iam:::user/{outsider.uid}"
+
+    bucket_name = gen_bucket_name()
+    try:
+        _create_vector_bucket(owner, bucket_name, owner.s3)
+        result = owner.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                    dataType='float32', dimension=dimension,
+                                    distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = owner.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                   vectors=[{'key': 'v0', 'data': generate_data(dimension, 0)}])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # same-account peer can perform all operations without any bucket policy
+        result = account_peer.get_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        result = account_peer.list_vector_buckets()
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert bucket_name in [b['vectorBucketName'] for b in result['vectorBuckets']]
+
+        result = account_peer.get_index(vectorBucketName=bucket_name, indexName=index_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        result = account_peer.list_indexes(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert index_name in [i['indexName'] for i in result['indexes']]
+
+        result = account_peer.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                          keys=['v0'])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        result = account_peer.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                            queryVector=generate_data(dimension, 0), topK=1)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # outsider is denied all operations without a policy
+        with pytest.raises(outsider.exceptions.ClientError) as err_info:
+            outsider.get_vector_bucket(vectorBucketName=bucket_name)
+        assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+        with pytest.raises(outsider.exceptions.ClientError) as err_info:
+            outsider.get_index(vectorBucketName=bucket_name, indexName=index_name)
+        assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+        with pytest.raises(outsider.exceptions.ClientError) as err_info:
+            outsider.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=['v0'])
+        assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+        # a policy grants the outsider read access; write operations remain denied
+        policy = json.dumps({
+            "Version": "2012-10-17",
+            "Statement": [{
+                "Effect": "Allow",
+                "Principal": {"AWS": outsider_arn},
+                "Action": ["s3vectors:GetVectors", "s3vectors:QueryVectors",
+                           "s3vectors:GetIndex", "s3vectors:ListIndexes"],
+                "Resource": f"arn:aws:s3vectors:::bucket/{bucket_name}"
+            }]
+        })
+        owner.put_vector_bucket_policy(vectorBucketName=bucket_name, policy=policy)
+
+        result = outsider.get_index(vectorBucketName=bucket_name, indexName=index_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        result = outsider.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                      keys=['v0'])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        with pytest.raises(outsider.exceptions.ClientError) as err_info:
+            outsider.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                 vectors=[{'key': 'v1', 'data': generate_data(dimension, 1)}])
+        assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+        # the same-account peer is not affected by the policy: it still has full access
+        result = account_peer.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                          keys=['v0'])
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    finally:
+        _cleanup_vector_bucket(owner, bucket_name, owner.s3)
