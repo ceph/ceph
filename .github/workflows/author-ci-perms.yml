@@ -78,19 +78,25 @@ jobs:
               return;
             }
 
+            // On 'synchronize', permissions should be checked against whoever
+            // pushed the new commits, not the original PR author. A
+            // write-access collaborator pushing to someone else's PR
+            // shouldn't trigger the 'needs-ci-approval' label.
+            const actor = context.payload.action === 'synchronize' ? context.payload.sender.login : author;
+
             let permission = 'none';
             try {
               const response = await github.rest.repos.getCollaboratorPermissionLevel({
                 owner,
                 repo,
-                username: author,
+                username: actor,
               });
               permission = response.data.permission;
             } catch (error) {
-              if (pr.user.type === 'Bot' && error.status === 404) {
-                console.log(`Bot account ${author} not found as a direct collaborator, defaulting to 'none' permission.`);
+              if (actor === author && pr.user.type === 'Bot' && error.status === 404) {
+                console.log(`Bot account ${actor} not found as a direct collaborator, defaulting to 'none' permission.`);
               } else {
-                console.log(`Failed to fetch permissions for ${author}: ${error.message}`);
+                console.log(`Failed to fetch permissions for ${actor}: ${error.message}`);
               }
             }
             // On a public repo every user has at least 'read', so checking for
