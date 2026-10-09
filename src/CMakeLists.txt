@@ -1327,3 +1327,171 @@ if(DOXYGEN_FOUND)
     rgw
     COMMENT "Generate C++ documentation")
 endif()
+
+# Precompiled headers (WITH_PCH, Clang only).
+#
+# Applied to the targets measured to benefit.  The figures are compiler CPU
+# per target with against without PCH, PCH build included, ccache off; Debug
+# (-Og) over whole targets, Release over 16 TUs each, October 2026.  Read them
+# as ordinal, not exact.
+#
+#                          Debug  Release
+#   common-common-objs     -69%     -74%
+#   rbd                    -67%     -53%
+#   common-objs            -48%     -23%
+#   bluestore              -39%     -32%
+#   common-msg-objs        -39%     -58%
+#   ceph-mgr               -28%     -11%
+#
+# Group payloads add a target's own entry headers to the core one; for rgw,
+# mon, osd, mds and the two unit tests the core payload alone saved them only
+# 8 to 29%:
+#
+#   rgw_common_standalone  -69%     -64%
+#   rgw_common             -65%     -63%
+#   rbd_mirror_internal    -63%     -64%
+#   rgw_a                  -62%     -66%
+#   rgw_a_standalone       -59%     -71%
+#   rbd_internal           -56%     -61%
+#   unittest_librbd        -55%     -61%
+#   mon                    -51%     -54%
+#   osd                    -48%     -51%
+#   mds                    -47%     -49%
+#   unittest_rbd_mirror    -39%     -50%
+#
+# A change to a group header rebuilds all of the target's TUs, not only
+# those including it.  That pays off only if more of them include it than
+# the share of cost they keep with the payload: Monitor.h is in 64% of mon's
+# TUs, which keep 49% of their cost.  BlueStore.h, MDCache.h and Objecter.h
+# failed this; Message.h for ceph-mgr, bluestore_types.h and the msg/async
+# headers took only 2 to 6% more.
+#
+# rgw_common alone is a fifth of a whole build's compile CPU; weigh the
+# percentages against that.
+#
+# A target's size and per-file cost do not predict its gain (rgw_a ranks
+# highest on both, yet gained only 12% from the core payload), so measure
+# before adding an entry.  A PCH takes between 70 and 220MB.
+#
+# The payload hides a missing #include; builds without WITH_PCH catch it.
+if(WITH_PCH)
+  # Gives each of <targets> a precompiled header of the headers in <payload>:
+  # <system> headers, or paths relative to src/.
+  function(ceph_pch_apply payload)
+    list(TRANSFORM payload PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/" REGEX "^[^<]")
+    # A ">" would end the generator expression.
+    list(TRANSFORM payload REPLACE ">$" "$<ANGLE-R>")
+    list(TRANSFORM payload PREPEND "$<$<COMPILE_LANGUAGE:CXX>:")
+    list(TRANSFORM payload APPEND ">")
+    foreach(tgt IN LISTS ARGN)
+      # Some targets exist only with certain build options.
+      if(NOT TARGET ${tgt})
+        continue()
+      endif()
+      # fmt is not on the tree-wide include path with WITH_SYSTEM_FMT.  Not
+      # target_link_libraries(): CMake forbids mixing its plain signature,
+      # which several of these targets use, with the keyword one.
+      target_include_directories(${tgt} SYSTEM PRIVATE
+        $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_INCLUDE_DIRECTORIES>)
+      target_compile_definitions(${tgt} PRIVATE
+        $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
+      if(WITH_CCACHE)
+        # Clang stores input mtimes in the PCH, so a rebuilt one differs and
+        # every object built against it misses the cache.
+        # Only with ccache, so that without it Clang keeps checking the PCH's
+        # inputs.
+        target_compile_options(${tgt} PRIVATE
+          "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
+      endif()
+      target_precompile_headers(${tgt} PRIVATE ${payload})
+      # A PCH is built with its target's settings, and Clang uses it without a
+      # warning even where a source's own settings differ.  Such sources are
+      # compiled without it.
+      get_target_property(dir ${tgt} SOURCE_DIR)
+      get_target_property(sources ${tgt} SOURCES)
+      list(FILTER sources EXCLUDE REGEX "\\$<")
+      list(TRANSFORM sources PREPEND "${dir}/" REGEX "^[^/]")
+      foreach(src IN LISTS sources)
+        foreach(prop COMPILE_FLAGS COMPILE_OPTIONS COMPILE_DEFINITIONS
+            INCLUDE_DIRECTORIES)
+          get_source_file_property(value ${src} TARGET_DIRECTORY ${tgt} ${prop})
+          if(value)
+            set_source_files_properties(${src} TARGET_DIRECTORY ${tgt}
+              PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+          endif()
+        endforeach()
+      endforeach()
+    endforeach()
+  endfunction()
+
+  # Core payload: std, fmt, boost and Ceph headers frequent and expensive
+  # across these targets; target-specific ones go into the groups below, or
+  # every target would rebuild when they change.  Core changes, mostly to the
+  # generated option headers, rebuild these targets in most weeks anyway.
+  # -ftime-trace's per-header parse time understates the gain: the PCH also
+  # does the template instantiations the headers need.
+  # dout.h is safe: dout_subsys and dout_prefix expand at the use site.  A TU
+  # that #undefs dout_prefix must define it again.
+  set(core
+    <algorithm>
+    <atomic>
+    <chrono>
+    <functional>
+    <iostream>
+    <map>
+    <memory>
+    <mutex>
+    <optional>
+    <regex>
+    <set>
+    <shared_mutex>
+    <sstream>
+    <string>
+    <string_view>
+    <thread>
+    <unordered_map>
+    <variant>
+    <vector>
+    <boost/variant.hpp>
+    <fmt/chrono.h>
+    <fmt/format.h>
+    <fmt/ostream.h>
+    common/ceph_context.h
+    common/ceph_mutex.h
+    common/ceph_time.h
+    common/cmdparse.h
+    common/config_proxy.h
+    common/dout.h
+    include/buffer.h
+    include/Context.h
+    include/denc.h
+    include/encoding.h
+    include/types.h
+    include/uuid.h
+    msg/msg_types.h)
+  ceph_pch_apply("${core}"
+    bluestore
+    ceph-mgr
+    common-common-objs
+    common-msg-objs
+    common-objs
+    rbd)
+  # Group payloads: the core one plus a group's own headers.
+  ceph_pch_apply("${core};librbd/ImageCtx.h"
+    rbd_internal
+    rbd_mirror_internal)
+  ceph_pch_apply("${core};test/librbd/mock/MockImageCtx.h"
+    unittest_librbd
+    unittest_rbd_mirror)
+  ceph_pch_apply("${core};mds/MDSRank.h"
+    mds)
+  ceph_pch_apply("${core};mon/Monitor.h"
+    mon)
+  ceph_pch_apply("${core};osd/osd_types.h;osd/PG.h"
+    osd)
+  ceph_pch_apply("${core};rgw/rgw_common.h;rgw/rgw_sal.h"
+    rgw_a
+    rgw_a_standalone
+    rgw_common
+    rgw_common_standalone)
+endif()
