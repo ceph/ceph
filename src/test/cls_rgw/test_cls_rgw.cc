@@ -72,18 +72,29 @@ void index_prepare(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_
 void index_complete(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
                     const string& tag, int epoch, const cls_rgw_obj_key& key,
                     rgw_bucket_dir_entry_meta& meta, uint16_t bi_flags = 0,
-                    bool log_op = true)
+                    bool log_op = true, const string& olh_tag_str = {})
 {
   ObjectWriteOperation op;
   rgw_bucket_entry_ver ver;
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
+  
   meta.accounted_size = meta.size;
+  
   cls_rgw_bucket_complete_op(op, index_op, tag, ver, key, meta, nullptr, log_op, bi_flags, nullptr);
+  
   ASSERT_EQ(0, ioctx.operate(oid, &op));
+  
   if (!key.instance.empty()) {
     bufferlist olh_tag;
-    olh_tag.append(tag);
+    
+    // let's not conflate the op tag with the olh tag as those are two different things;
+    if (olh_tag_str.empty()) {
+      olh_tag.append(tag);       // preserve existing tests' semantics
+    } else {
+      olh_tag.append(olh_tag_str);
+    }
+    
     rgw_zone_set zone_set;
     ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, key, olh_tag,
                                          false, tag, &meta, epoch,
@@ -1621,6 +1632,73 @@ TEST_P(TestClsRgw, bi_put_entries)
   }
 }
 
+TEST_F(cls_rgw, bi_get_plain_versioned_instance)
+{
+  const string bucket_oid = "bi-get-versioned";
+
+  {
+    ObjectWriteOperation op;
+    cls_rgw_bucket_init_index(op);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+  }
+
+  cls_rgw_obj_key v1;
+  v1.name = "foo";
+  v1.instance = "version-1";
+
+  cls_rgw_obj_key v2;
+  v2.name = "foo";
+  v2.instance = "version-2";
+
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = RGWObjCategory::None;
+  meta.size = 1024;
+
+  const string loc;
+  const string olh_tag = "olh-tag";
+
+  // create version 1
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD,
+                "tag-1", v1, loc);
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD,
+                 "tag-1", 1, v1, meta, 0, true, olh_tag);
+
+  // create version 2
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD,
+                "tag-2", v2, loc);
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD,
+                 "tag-2", 2, v2, meta, 0, true, olh_tag);
+
+  // fetch version 1's plain BI entry
+  rgw_cls_bi_entry bi_entry;
+  ASSERT_EQ(0, cls_rgw_bi_get(ioctx, bucket_oid,
+                              BIIndexType::Plain,
+                              v1, &bi_entry));
+
+  ASSERT_EQ(BIIndexType::Plain, bi_entry.type);
+
+  rgw_bucket_dir_entry entry;
+  auto p = bi_entry.data.cbegin();
+  ASSERT_NO_THROW(decode(entry, p));
+
+  EXPECT_EQ(v1, entry.key);
+  EXPECT_EQ(1, entry.versioned_epoch);
+
+  // fetch version 2's plain BI entry
+  bi_entry = {};
+
+  ASSERT_EQ(0, cls_rgw_bi_get(ioctx, bucket_oid,
+                              BIIndexType::Plain,
+                              v2, &bi_entry));
+
+  entry = {};
+  p = bi_entry.data.cbegin();
+  ASSERT_NO_THROW(decode(entry, p));
+
+  EXPECT_EQ(v2, entry.key);
+  EXPECT_EQ(2, entry.versioned_epoch);
+}
+
 
 INSTANTIATE_TEST_SUITE_P(, TestClsRgw,
   ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
@@ -1628,3 +1706,4 @@ INSTANTIATE_TEST_SUITE_P(, TestClsRgw,
   return pool_type_name(info.param);
   }
 );
+
