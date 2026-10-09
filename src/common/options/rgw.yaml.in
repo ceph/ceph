@@ -3928,15 +3928,6 @@ options:
   services:
   - rgw
   - rgw
-- name: rgw_sts_entry
-  type: str
-  level: advanced
-  desc: STS URL prefix
-  long_desc: URL path prefix for internal STS requests.
-  default: sts
-  services:
-  - rgw
-  with_legacy: true
 - name: rgw_sts_key
   type: str
   level: advanced
@@ -3995,30 +3986,6 @@ options:
   - rgw
   min: 1
   max: 100000
-- name: rgw_sts_token_introspection_url
-  type: str
-  level: advanced
-  desc: STS Web Token introspection URL
-  long_desc: URL for introspecting an STS Web Token.
-  services:
-  - rgw
-  with_legacy: true
-- name: rgw_sts_client_id
-  type: str
-  level: advanced
-  desc: Client Id
-  long_desc: Client Id needed for introspecting a Web Token.
-  services:
-  - rgw
-  with_legacy: true
-- name: rgw_sts_client_secret
-  type: str
-  level: advanced
-  desc: Client Secret
-  long_desc: Client Secret needed for introspecting a Web Token.
-  services:
-  - rgw
-  with_legacy: true
 - name: rgw_max_concurrent_requests
   type: int
   level: basic
