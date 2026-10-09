@@ -1243,3 +1243,11 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   OSDs deployed prior to the Pacific release with a 64 KiB allocation unit.
   It can be disabled with the new ``bluestore_warn_on_legacy_min_alloc_size``
   option, globally or per OSD / device class using a configuration mask.
+* RADOS: BlueStore can now automatically reshard a legacy (non-sharded)
+  RocksDB database at OSD startup when the new ``bluestore_reshard_db_on_mount``
+  option is set to ``true``, equivalent to running ``ceph-bluestore-tool
+  reshard`` offline. This allows migrating all OSDs created prior to Pacific
+  to the sharded RocksDB layout with a rolling restart instead of a manual,
+  node-by-node offline procedure. As with the offline procedure, resharding
+  must not be interrupted: an OSD whose resharding is interrupted has to be
+  redeployed, so OSDs should be restarted one host at a time.
