@@ -10330,6 +10330,8 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     dout(20) << __func__ << ": exists, removing" << dendl;
     ctx->op_t->remove(obs.oi.soid);
     ctx->use_replace_op = true;
+    // the old omap goes with the object, even if the source has none
+    ctx->clean_regions.mark_omap_dirty();
   } else {
     ctx->delta_stats.num_objects++;
     obs.exists = true;
