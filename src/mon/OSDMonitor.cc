@@ -17795,10 +17795,15 @@ int OSDMonitor::disable_stretch_mode(ostream& ss, const string& crush_rule)
 {
   dout(10) << __func__ << " crush_rule '" << crush_rule << "'" << dendl;
   const auto plan = plan_stretch_mode_changes(osdmap.pools, false);
-  if (plan.empty() && !osdmap.stretch_mode_enabled &&
-      !mon.monmon()->pending_map.stretch_mode_enabled) {
-    ss << "stretch mode is already disabled";
-    return -EINVAL;
+  const bool stretch_mode = osdmap.stretch_mode_enabled ||
+    mon.monmon()->pending_map.stretch_mode_enabled;
+  if (plan.empty() && !stretch_mode) {
+    // stretch mode left with its last pool, but may have left its defaults
+    const PoolCreateParams d = load_pool_defaults(g_conf());
+    if (d.num_zones == 1 && d.replica == LOCAL_REPLICA) {
+      ss << "stretch mode is already disabled";
+      return -EINVAL;
+    }
   }
   int r = validate_disable_stretch_mode(*osdmap.crush, osdmap.pools,
                                         crush_rule, osdmap.recovering_stretch_mode,
@@ -17872,7 +17877,7 @@ int OSDMonitor::disable_stretch_mode(ostream& ss, const string& crush_rule)
     p.last_change = pending_inc.epoch;
     pending_inc.new_pools[id] = p;
   }
-  if (plan.empty()) {
+  if (plan.empty() && stretch_mode) {
     // stretch mode without a stretched pool
     mon.monmon()->clear_stretch_mode_state();
     pending_inc.change_stretch_mode = true;
@@ -17884,7 +17889,12 @@ int OSDMonitor::disable_stretch_mode(ostream& ss, const string& crush_rule)
   }
   mon.configmon()->propose_global_options(defaults, "mon disable_stretch_mode");
   need_immediate_propose = true;
-  ss << "stretch mode disabled; " << plan.size() << " pool(s) changed";
+  if (plan.empty() && !stretch_mode) {
+    ss << "stretch mode was already disabled; the pool creation defaults are "
+       << "now one zone with " << LOCAL_REPLICA << " replicas";
+  } else {
+    ss << "stretch mode disabled; " << plan.size() << " pool(s) changed";
+  }
   return 0;
 }
 
