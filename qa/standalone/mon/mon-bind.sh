@@ -79,6 +79,8 @@ function TEST_mon_client_connect() {
     # now forward the public port to the bind port.
     port_forward ${MONA_PUBLIC} ${MONA_BIND}
 
+    sleep 10 # wait for port to bind before pinging
+
     # attempt to connect. we expect that to work
     ceph ping mon.a || return 1
 }
