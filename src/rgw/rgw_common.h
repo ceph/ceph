@@ -1926,6 +1926,13 @@ extern int verify_object_lock(
 extern void rgw_uri_escape_char(char c, std::string& dst);
 extern std::string url_decode(const std::string_view& src_str,
                               bool in_query = false);
+/* Strict variant: decodes src_str into dest_str and returns true, or returns
+ * false (leaving dest_str unspecified) if src_str contains a malformed
+ * percent-escape -- a '%' not followed by two hex digits, including a '%'
+ * within two characters of the end. Request-routing callers use this to reject
+ * a malformed path instead of routing on a silently-altered value. */
+extern bool url_decode(const std::string_view& src_str, std::string& dest_str,
+                       bool in_query = false);
 extern void url_encode(const std::string& src, std::string& dst,
                        bool encode_slash = true);
 extern std::string url_encode(const std::string& src, bool encode_slash = true);
