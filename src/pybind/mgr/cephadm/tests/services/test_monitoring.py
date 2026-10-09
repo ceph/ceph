@@ -154,7 +154,8 @@ class TestMonitoring:
                             "peers": [],
                             "use_url_prefix": False,
                             "ip_to_bind_to": "1.2.3.1",
-                        }
+                        },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -269,7 +270,8 @@ class TestMonitoring:
                             'web_config': '/etc/alertmanager/web.yml',
                             "use_url_prefix": True,
                             "ip_to_bind_to": "fd12:3456:789a::10",
-                        }
+                        },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -366,7 +368,8 @@ class TestMonitoring:
                             'web_config': '/etc/alertmanager/web.yml',
                             "use_url_prefix": False,
                             "ip_to_bind_to": "",
-                        }
+                        },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -479,7 +482,8 @@ class TestMonitoring:
                             'peers': [],
                             "use_url_prefix": False,
                             "ip_to_bind_to": "",
-                        }
+                        },
+                        "skip_port_check": False,
                     }),
                     use_current_daemon_image=False,
                     error_ok=True,
@@ -527,7 +531,9 @@ class TestMonitoring:
                                                         "https_enabled": True,
                                                         "files": {
                                                             "ceph-exporter.crt": "mycert",
-                                                            "ceph-exporter.key": "mykey"}}}),
+                                                            "ceph-exporter.key": "mykey"}},
+                                                    "skip_port_check": False,
+                                                }),
                                                 error_ok=True,
                                                 use_current_daemon_image=False)
 
@@ -570,7 +576,8 @@ class TestMonitoring:
                             'extra_container_args': None,
                             'extra_entrypoint_args': None,
                         },
-                        "config_blobs": {}
+                        "config_blobs": {},
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -632,7 +639,8 @@ class TestMonitoring:
                                 'node_exporter.key': f"{ceph_generated_key}",
                             },
                             'web_config': '/etc/node-exporter/web.yml',
-                        }
+                        },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -785,6 +793,7 @@ class TestMonitoring:
                             'ip_to_bind_to': '1.2.3.1',
                             "use_url_prefix": False
                         },
+                        "skip_port_check": False,
                     }),
                     use_current_daemon_image=False,
                     error_ok=True,
@@ -1053,6 +1062,7 @@ class TestMonitoring:
                             "use_url_prefix": False,
                             'web_config': '/etc/prometheus/web.yml'
                         },
+                        "skip_port_check": False,
                     }),
                     use_current_daemon_image=False,
                     error_ok=True,
@@ -1130,6 +1140,7 @@ class TestMonitoring:
                                 "loki.yml": y
                             },
                         },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -1190,6 +1201,7 @@ class TestMonitoring:
                                 "promtail.yml": y
                             },
                         },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -1410,6 +1422,7 @@ class TestMonitoring:
                         "config_blobs": {
                             "files": files,
                         },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -1559,6 +1572,7 @@ class TestMonitoring:
                         "config_blobs": {
                             "files": files,
                         },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -1681,6 +1695,7 @@ class TestMonitoring:
                         "config_blobs": {
                             "files": files,
                         },
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
@@ -1897,6 +1912,7 @@ spec:
                                 'extra_entrypoint_args': None,
                             },
                             "config_blobs": {},
+                            "skip_port_check": False,
                         }),
                         error_ok=True,
                         use_current_daemon_image=False,
