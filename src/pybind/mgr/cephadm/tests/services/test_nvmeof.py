@@ -127,6 +127,7 @@ prometheus_connection_list_cache_expiration = 60
 verify_nqns = True
 verify_keys = True
 verify_listener_ip = True
+listener_network_masks =
 # This is a development flag, do not change it
 abort_on_errors = True
 # This is a development flag, do not change it
@@ -472,6 +473,7 @@ prometheus_connection_list_cache_expiration = 60
 verify_nqns = True
 verify_keys = True
 verify_listener_ip = True
+listener_network_masks =
 # This is a development flag, do not change it
 abort_on_errors = True
 # This is a development flag, do not change it
@@ -674,6 +676,7 @@ prometheus_connection_list_cache_expiration = 60
 verify_nqns = True
 verify_keys = True
 verify_listener_ip = True
+listener_network_masks =
 # This is a development flag, do not change it
 abort_on_errors = True
 # This is a development flag, do not change it
