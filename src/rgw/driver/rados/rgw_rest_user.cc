@@ -447,6 +447,38 @@ void RGWOp_User_Modify::execute(optional_yield y)
   op_ret = RGWUserAdminOp_User::modify(s, driver, op_state, flusher, y);
 }
 
+// Removing a user with purge-data deletes their buckets. A caller with only
+// "users" caps isn't an admin and may not delete an admin-locked bucket this
+// way.
+static int verify_no_admin_locked_buckets(req_state* s, rgw::sal::Driver* driver,
+                                          const rgw_user& uid, optional_yield y)
+{
+  const size_t max = s->cct->_conf->rgw_list_buckets_max_chunk;
+  rgw::sal::BucketList listing;
+  do {
+    int r = driver->list_buckets(s, uid, uid.tenant, listing.next_marker,
+                                 std::string(), max, false, listing, y);
+    if (r < 0) {
+      return r;
+    }
+    for (const auto& ent : listing.buckets) {
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      r = driver->load_bucket(s, ent.bucket, &bucket, y);
+      if (r == -ENOENT) {
+        continue;
+      }
+      if (r < 0) {
+        return r;
+      }
+      if (bucket->get_info().admin_locked()) {
+        ldpp_dout(s, 4) << "bucket " << ent.bucket << " is admin-locked" << dendl;
+        return -EACCES;
+      }
+    }
+  } while (!listing.next_marker.empty());
+  return 0;
+}
+
 class RGWOp_User_Remove : public RGWRESTOp {
 
 public:
@@ -478,6 +510,13 @@ void RGWOp_User_Remove::execute(optional_yield y)
     op_state.set_user_id(uid);
 
   op_state.set_purge_data(purge_data);
+
+  if (purge_data && !uid.empty() && !rgw_admin_lock_exempt(s)) {
+    op_ret = verify_no_admin_locked_buckets(s, driver, uid, y);
+    if (op_ret < 0) {
+      return;
+    }
+  }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
                                          nullptr, nullptr, s->info, s->err, y);

@@ -111,6 +111,15 @@ as follows:
 :command:`bucket unsuspend`
   Unsuspend a previously suspended bucket.
 
+:command:`bucket admin-lock`
+  Only allow admin and system users to change the bucket's configuration
+  (including its bucket policy and ACLs) or the retention, legal hold or ACL of
+  objects in it, to bypass governance retention, or to delete the bucket.
+  Must run on the metadata master zone.
+
+:command:`bucket admin-unlock`
+  Remove the admin lock from a bucket. Must run on the metadata master zone.
+
 :command:`bucket rm`
   Remove a bucket.
 

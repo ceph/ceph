@@ -228,6 +228,96 @@ inspect the bucket ``flags`` value (``1`` means ``BUCKET_SUSPENDED``).
 .. note:: Suspending a user still suspends all of that user's buckets and
    blocks all requests for that user, regardless of per-bucket state.
 
+.. _radosgw-bucket-admin-lock:
+
+Bucket Admin Lock
+-----------------
+
+An admin lock keeps a bucket's owner from weakening an audit or records bucket
+that an operator has set up. Object lock protects the objects; the admin lock
+protects the bucket's configuration.
+
+While a bucket is admin-locked, only admin and system users can:
+
+- change its configuration: bucket policy, ACLs, versioning, lifecycle, object
+  lock, tags, CORS, encryption, website, logging, notifications, replication,
+  metadata search, public access block, ownership controls, request payment
+  and Swift container metadata
+- change the retention, legal hold or ACL of objects in it, or bypass
+  governance retention
+- delete it
+
+Everyone else, the owner included, gets ``403 AccessDenied``. Reading, writing
+and listing objects are not affected. ACLs here are the S3 bucket and object
+ACLs (see :doc:`s3/bucketops` and :doc:`s3/objectops`) and the Swift container
+read and write ACLs. They are separate from the bucket policy, and the lock
+covers both.
+
+To lock and unlock a bucket, on the metadata master zone:
+
+.. prompt:: bash #
+
+   radosgw-admin bucket admin-lock --bucket=mybucket
+   radosgw-admin bucket admin-unlock --bucket=mybucket
+
+Use ``bucket stats`` to verify the ``admin_locked`` field. RGWs that don't know
+about the admin lock ignore it, so upgrade all RGWs before relying on it.
+
+Object writes are not locked: the owner can write new objects with their own
+retention date, ACL and tags, change the tags of existing objects, and an
+overwrite or copy replaces an object's ACL. Before locking, set a default
+retention, a public access block and ``BucketOwnerEnforced`` object ownership,
+and don't rely on object tags in lifecycle rules or policies.
+
+.. warning:: The lock is not a boundary against credentials that can become
+   admin credentials. ``users`` caps (read included, which returns other
+   users' keys), ``metadata`` caps and, in multisite, ``zone`` read caps (which
+   return the zone's system key) can all be used to get admin or system keys,
+   so grant them only to people and tools you trust as admins. Where keys
+   aren't needed, grant ``user-info-without-keys=read`` instead of
+   ``users=read``. Users with a
+   Keystone role matching ``rgw_keystone_accepted_admin_roles`` are admin
+   users, so make sure no role a tenant can be granted matches it.
+
+Through the admin API (see :ref:`radosgw admin ops`), ``buckets`` and
+``ratelimit`` caps can't link, unlink, remove or resync a locked bucket, change
+its quota or rate limit, or remove objects from it, and ``users`` caps can't
+remove its owner with ``purge-data``. User and global rate limits apply to a
+locked bucket too.
+
+In a multisite configuration, a secondary zone forwards bucket configuration
+changes, bucket deletes, and the admin API link, unlink, remove, rate limit
+and user calls to the metadata master, which checks them as the user who sent
+them. The secondary checks the following itself, against its synced copy of
+the lock:
+
+- bucket logging, metadata search and Swift container metadata
+- notifications, unless all zonegroups support :ref:`feature_notification_v2`
+- object retention, legal hold and ACL changes
+- the admin API quota, resync and object remove calls
+
+Keystone admin roles are only known to the zone the admin authenticates with,
+so send their changes to the metadata master. A secondary running an older
+release forwards ``bucket rm`` as the bucket owner, and the master refuses it
+while the bucket is locked.
+
+Limitations:
+
+- A request already past its last lock check can complete, such as the delete
+  of an empty bucket, an admin API call, or a user removal with ``purge-data``.
+- Object, delete and admin API checks use the bucket info the RGW has cached.
+  An RGW that missed the update keeps its old copy for up to
+  ``rgw_cache_expiry_interval``; ``bucket admin-lock`` prints "failed to
+  distribute cache" when that happens.
+- The lock covers the bucket itself. User, role and account policies, the
+  bucket logging target and notification topics are managed separately: lock
+  the logging target too, and note that deleting a topic stops the bucket's
+  notifications to it.
+- A Swift container PUT with quota or website metadata is refused, even when
+  the values don't change.
+- Over NFS, a setattr on an object can rewrite its ACL.
+- On an archive zone, the archived copy of a deleted bucket keeps the lock.
+
 
 Remove a User
 -------------

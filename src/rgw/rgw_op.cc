@@ -8,10 +8,12 @@
 #include <span>
 #include <sstream>
 #include <string_view>
+#include <thread>
 
 #include <unistd.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 #include <fmt/format.h>
@@ -457,6 +459,183 @@ static int read_public_access_conf(const DoutPrefixProvider *dpp,
   auto account_config = get_public_access_conf_from_attr(account_attrs);
   config = config_union(bucket_config, account_config);
   return 0;
+}
+
+void rgw_inject_delay(const DoutPrefixProvider* dpp, std::string_view point,
+                      optional_yield y)
+{
+  const auto& conf = dpp->get_cct()->_conf;
+  if (conf->rgw_inject_delay_sec <= 0 ||
+      std::string_view(conf->rgw_inject_delay_pattern) != point) {
+    return;
+  }
+  ldpp_dout(dpp, 1) << "injecting delay at " << point << dendl;
+  const auto dur = ceph::make_timespan(conf->rgw_inject_delay_sec);
+  if (y) {
+    auto yield = y.get_yield_context();
+    boost::asio::steady_timer timer(yield.get_executor(), dur);
+    boost::system::error_code ec;
+    timer.async_wait(yield[ec]); // an error just ends the delay early
+  } else {
+    std::this_thread::sleep_for(dur); // librgw, no yield context
+  }
+}
+
+bool rgw_admin_lock_exempt(const req_state* s)
+{
+  if (!s->auth.identity->is_admin()) {
+    return false;
+  }
+  // A request another zone forwarded on behalf of a user arrives with the
+  // zone's system key and the user in rgwx-uid, and s->user is that user.
+  // Judge it as the user, not as the system key.
+  if (s->system_request) {
+    const std::string uid = s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "uid");
+    if (!uid.empty()) {
+      const rgw_owner owner = parse_owner(uid);
+      const auto* user = std::get_if<rgw_user>(&owner);
+      if (!user || rgw::sal::User::empty(s->user.get()) ||
+          s->user->get_id() != *user) {
+        return false; // an account, or not the user we expect
+      }
+      const auto& info = s->user->get_info();
+      return info.admin || info.system;
+    }
+  }
+  return true;
+}
+
+bool rgw_bucket_admin_locked_for(const req_state* s,
+                                 rgw::sal::Bucket* bucket)
+{
+  return bucket && bucket->get_info().admin_locked() &&
+         !rgw_admin_lock_exempt(s);
+}
+
+bool rgw_bucket_admin_locked_for(const req_state* s)
+{
+  return rgw_bucket_admin_locked_for(s, s->bucket.get());
+}
+
+/*
+ * Requests that change an admin-locked bucket: its configuration, or the
+ * retention, legal hold or ACL of objects in it. Object reads and writes,
+ * listing and deletes that respect object lock are not in this list.
+ */
+static bool admin_lock_applies(RGWOpType type, const req_state* s)
+{
+  switch (type) {
+  case RGW_OP_DELETE_BUCKET:
+  case RGW_OP_SET_BUCKET_VERSIONING:
+  case RGW_OP_SET_BUCKET_WEBSITE:
+  case RGW_OP_PUT_METADATA_BUCKET:
+  case RGW_OP_PUT_ACLS:
+  case RGW_OP_PUT_CORS:
+  case RGW_OP_DELETE_CORS:
+  case RGW_OP_PUT_BUCKET_ENCRYPTION:
+  case RGW_OP_DELETE_BUCKET_ENCRYPTION:
+  case RGW_OP_SET_REQUEST_PAYMENT:
+  case RGW_OP_PUT_BUCKET_POLICY:
+  case RGW_OP_DELETE_BUCKET_POLICY:
+  case RGW_OP_PUT_LC:
+  case RGW_OP_DELETE_LC:
+  case RGW_OP_PUT_BUCKET_OBJ_LOCK:
+  case RGW_OP_PUT_OBJ_RETENTION:
+  case RGW_OP_PUT_OBJ_LEGAL_HOLD:
+  case RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS:
+  case RGW_OP_DELETE_BUCKET_OWNERSHIP_CONTROLS:
+  case RGW_OP_PUT_BUCKET_LOGGING:
+  case RGW_OP_CONFIG_BUCKET_META_SEARCH:
+  case RGW_OP_DEL_BUCKET_META_SEARCH:
+  case RGW_OP_PUBSUB_NOTIF_CREATE:
+  case RGW_OP_PUBSUB_NOTIF_DELETE:
+  case RGW_OP_PUT_BUCKET_TAGGING:
+  case RGW_OP_DELETE_BUCKET_TAGGING:
+  case RGW_OP_PUT_BUCKET_REPLICATION:
+  case RGW_OP_DELETE_BUCKET_REPLICATION:
+  case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
+  case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
+    return true;
+  case RGW_OP_SET_ATTRS:
+  case RGW_OP_DELETE_ATTRS:
+    return rgw::sal::Object::empty(s->object.get());
+  default:
+    return false;
+  }
+}
+
+bool rgw_admin_lock_covers(RGWOp* op)
+{
+  return admin_lock_applies(op->get_type(), op->get_req_state());
+}
+
+int rgw_verify_bucket_admin_lock(const DoutPrefixProvider* dpp,
+                                 const req_state* s, RGWOpType type,
+                                 rgw::sal::Bucket* bucket)
+{
+  if (rgw::sal::Bucket::empty(bucket) ||
+      !bucket->get_info().admin_locked() ||
+      !admin_lock_applies(type, s) ||
+      rgw_admin_lock_exempt(s)) {
+    return 0;
+  }
+  ldpp_dout(dpp, 4) << "bucket " << bucket->get_name()
+      << " is admin-locked" << dendl;
+  return -EACCES;
+}
+
+int rgw_admin_api_verify_bucket_lock(req_state* s, rgw::sal::Driver* driver,
+                                     std::string tenant, std::string bucket_name,
+                                     const std::string& bucket_id, optional_yield y,
+                                     bool split_tenant)
+{
+  if (bucket_name.empty() || rgw_admin_lock_exempt(s)) {
+    return 0;
+  }
+  if (auto pos = bucket_name.find('/');
+      split_tenant && pos != std::string::npos) {
+    tenant = bucket_name.substr(0, pos);
+    bucket_name = bucket_name.substr(pos + 1);
+  }
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  const int r = driver->load_bucket(s, rgw_bucket(tenant, bucket_name, bucket_id),
+                                    &bucket, y);
+  if (r == -ENOENT) {
+    return 0; // the op itself reports a missing bucket
+  }
+  if (r < 0) {
+    return r;
+  }
+  if (!bucket->get_info().admin_locked()) {
+    return 0;
+  }
+  ldpp_dout(s, 4) << "bucket " << bucket_name << " is admin-locked" << dendl;
+  return -EACCES;
+}
+
+// Reads the bucket again and checks the admin lock before it is removed. The
+// delete doesn't race-check the lock, so a lock set after the permission check
+// would otherwise be missed. load_bucket() returns what watch/notify keeps
+// current; try_refresh_info() is only meant for after an ECANCELED. A bucket
+// that is already gone is left to the remove that follows.
+static int recheck_bucket_admin_lock_before_delete(const DoutPrefixProvider* dpp,
+                                                   rgw::sal::Driver* driver,
+                                                   const req_state* s,
+                                                   rgw::sal::Bucket* bucket,
+                                                   optional_yield y)
+{
+  if (rgw_admin_lock_exempt(s)) {
+    return 0;
+  }
+  std::unique_ptr<rgw::sal::Bucket> fresh;
+  const int r = driver->load_bucket(dpp, bucket->get_key(), &fresh, y);
+  if (r == -ENOENT) {
+    return 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+  return rgw_verify_bucket_admin_lock(dpp, s, RGW_OP_DELETE_BUCKET, fresh.get());
 }
 
 static int read_bucket_policy(const DoutPrefixProvider *dpp, 
@@ -4102,7 +4281,7 @@ int put_swift_bucket_metadata(const DoutPrefixProvider* dpp,
     return op_ret;
   }
 
-  return retry_raced_bucket_write(
+  return retry_raced_bucket_write_checked(
       dpp, s->bucket.get(),
       [s, has_policy, policy_rw_mask, &policy, cors_config, has_cors, &attrs,
        dpp, rmattr_names, swift_ver_location] {
@@ -4161,6 +4340,10 @@ int put_swift_bucket_metadata(const DoutPrefixProvider* dpp,
         constexpr ceph::real_time no_set_mtime{};
         return s->bucket->put_info(dpp, exclusive, no_set_mtime, s->yield);
       },
+      [dpp, s] {
+        return rgw_verify_bucket_admin_lock(dpp, s, RGW_OP_PUT_METADATA_BUCKET,
+                                            s->bucket.get());
+      },
       y);
 }
 
@@ -4172,6 +4355,42 @@ static void set_default_bucket_encryption(
         std::vector<std::string>{"SSE-C"});
     config.encode(attrs[RGW_ATTR_BUCKET_ENCRYPTION_POLICY]);
   }
+}
+
+// For a Swift PUT of an existing container: sets *changed when the request
+// would change it. swift_ver_location was filled in from the bucket when the
+// request didn't set it. Other attrs are compared with the ones loaded with
+// the bucket; generic attrs (Content-Type etc.) are stored with a trailing NUL.
+// Quota and website metadata aren't stored as attrs, so they always count as
+// a change.
+static int swift_put_changes_container(const DoutPrefixProvider* dpp,
+                                       req_state* s, bool has_policy,
+                                       bool has_cors,
+                                       const std::set<std::string>& rmattr_names,
+                                       const std::optional<std::string>& swift_ver_location,
+                                       bool* changed)
+{
+  std::map<std::string, ceph::bufferlist> meta;
+  const int r = rgw_get_request_metadata(dpp, s->cct, s->info, meta, false);
+  if (r < 0) {
+    return r;
+  }
+  const auto& battrs = s->bucket->get_attrs();
+  auto differs = [&battrs] (const std::string& name, const ceph::bufferlist& bl) {
+    const auto i = battrs.find(name);
+    return i == battrs.end() || !i->second.contents_equal(bl);
+  };
+  *changed = has_policy || has_cors || !rmattr_names.empty() ||
+      *swift_ver_location != s->bucket->get_info().swift_ver_location;
+  for (const auto& [name, bl] : meta) {
+    *changed = *changed || differs(name, bl);
+  }
+  for (const auto& [name, val] : s->generic_attrs) {
+    ceph::bufferlist bl;
+    bl.append(val.c_str(), val.size() + 1);
+    *changed = *changed || differs(name, bl);
+  }
+  return 0;
 }
 
 void RGWCreateBucket::execute(optional_yield y)
@@ -4322,6 +4541,25 @@ void RGWCreateBucket::execute(optional_yield y)
       return;
     } else {
       // For swift, update the bucket metadata and do not call createbucket.
+      if (rgw_bucket_admin_locked_for(s)) {
+        // clients PUT the container before uploading to it; that is fine as
+        // long as the request doesn't change anything
+        bool changed = false;
+        op_ret = swift_put_changes_container(this, s, has_policy, has_cors,
+                                             rmattr_names,
+                                             createparams.swift_ver_location,
+                                             &changed);
+        if (op_ret < 0) {
+          return;
+        }
+        if (changed) {
+          ldpp_dout(this, 4) << "bucket " << s->bucket->get_name()
+              << " is admin-locked" << dendl;
+          s->err.message = "The bucket is admin-locked";
+          op_ret = -EACCES;
+        }
+        return;
+      }
       op_ret = put_swift_bucket_metadata(
           this, s, policy, has_policy, policy_rw_mask, cors_config, has_cors,
           createparams.swift_ver_location, rmattr_names, y);
@@ -4447,6 +4685,16 @@ void RGWDeleteBucket::execute(optional_yield y)
     if (op_ret < 0) {
       return;
     }
+  }
+
+  // the bucket may have been admin-locked since the permission check, look
+  // again before anything is removed or forwarded to the
+  // master, which checks again itself
+  rgw_inject_delay(this, "delay_delete_bucket", y);
+  op_ret = recheck_bucket_admin_lock_before_delete(this, driver, s,
+                                                   s->bucket.get(), y);
+  if (op_ret < 0) {
+    return;
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
@@ -6001,7 +6249,8 @@ int RGWDeleteObj::verify_permission(optional_yield y)
 
   if (s->bucket->get_info().obj_lock_enabled() && bypass_governance_mode) {
     // require s3BypassGovernanceRetention for x-amz-bypass-governance-retention
-    bypass_perm = verify_bucket_permission(this, s, arn, rgw::IAM::s3BypassGovernanceRetention);
+    bypass_perm = verify_bucket_permission(this, s, arn, rgw::IAM::s3BypassGovernanceRetention) &&
+                  !rgw_bucket_admin_locked_for(s);
   }
 
   if (s->bucket->get_info().mfa_enabled() &&
@@ -8262,7 +8511,8 @@ int RGWDeleteMultiObj::verify_permission(optional_yield y)
 
   if (s->bucket->get_info().obj_lock_enabled() && bypass_governance_mode) {
     // require s3BypassGovernanceRetention for x-amz-bypass-governance-retention
-    bypass_perm = verify_bucket_permission(this, s, rgw::IAM::s3BypassGovernanceRetention);
+    bypass_perm = verify_bucket_permission(this, s, rgw::IAM::s3BypassGovernanceRetention) &&
+                  !rgw_bucket_admin_locked_for(s);
   }
 
   return 0;
@@ -8616,6 +8866,13 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     goto auth_fail;
   }
 
+  if (path.obj_key.empty() && rgw_bucket_admin_locked_for(s, bucket.get())) {
+    ldpp_dout(dpp, 4) << "bucket " << path.bucket_name
+        << " is admin-locked" << dendl;
+    ret = -EACCES;
+    goto auth_fail;
+  }
+
   if (!path.obj_key.empty()) { // object deletion
     ACLOwner bucket_owner;
 
@@ -8633,6 +8890,15 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
       goto delop_fail;
     }
   } else { // bucket deletion
+    // look at the lock again, it may have been set since the check above
+    ret = recheck_bucket_admin_lock_before_delete(dpp, driver, s,
+                                                  bucket.get(), s->yield);
+    if (ret == -EACCES) {
+      goto auth_fail;
+    }
+    if (ret < 0) {
+      goto delop_fail;
+    }
     if (!driver->is_meta_master()) {
       // apply bucket deletion on the master zone first
       req_info req = s->info;
