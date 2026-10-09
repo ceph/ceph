@@ -58,7 +58,9 @@ class PerfCounterInstance
   }
   const DataPoint& get_latest_data() const
   {
-    return buffer.back();
+    // back() is UB on an empty circular_buffer; return a zero sentinel.
+    static const DataPoint empty{utime_t(), 0};
+    return buffer.empty() ? empty : buffer.back();
   }
   const boost::circular_buffer<AvgDataPoint> & get_data_avg() const
   {
