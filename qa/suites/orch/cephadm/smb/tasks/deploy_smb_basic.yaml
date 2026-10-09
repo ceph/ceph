@@ -29,7 +29,7 @@ tasks:
       host.a:
         # create a subvolume so we can verify that we're sharing something
         - cmd: ceph fs subvolumegroup create cephfs g1
-        - cmd: ceph fs subvolume create cephfs sub1 --group-name=g1 --mode=0777
+        - cmd: ceph fs subvolume create cephfs sub1 --group-name=g1 --protocols=smb
         # Create a user access the file system from samba
         - cmd: ceph fs authorize cephfs client.smbdata / rw
         # Create a rados pool and store the config in it
