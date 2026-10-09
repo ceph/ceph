@@ -11,6 +11,8 @@
 CPU and RAM per daemon. Bare minimums, and what counts as a core with
 hyperthreading, are on :ref:`minimum-hardware`.
 
+.. _hardware-cpu:
+
 CPU
 ===
 
@@ -38,6 +40,16 @@ CPU
 Run non-Ceph CPU-intensive processes, for example OpenStack Nova, on
 separate hosts, not on Monitor and Manager nodes, to avoid resource
 contention.
+
+Ceph enables performance optimizations on platforms supporting the SIMD
+instructions in SSE, AVX, AVX2, and AVX-512. Beginning with the Umbrella
+release, containerized deployments on the x86 architecture require CPU support
+for the x86-64-v3 microarchitecture level, because the container image is
+built on Rocky Linux 10 (see :ref:`umbrella-container-base-image`).
+x86-64-v3 has been supported since
+the Intel Haswell (2013) and AMD Bulldozer (2015) microarchitectures.
+Packages continue to work on older CPUs and the baseline is set by
+the distribution.
 
 Memory
 ======
