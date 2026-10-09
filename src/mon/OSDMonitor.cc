@@ -15766,7 +15766,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       // a global stretch mode pool is divided as the cluster is
       zone_failure_domain = osdmap.crush->get_type_name(osdmap.stretch_mode_bucket);
     }
-    osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
+    cmd_getval(cmdmap, "osd_failure_domain", osd_failure_domain);
+    if (pool_type == pg_pool_t::TYPE_REPLICATED && osd_failure_domain.empty()) {
+      osd_failure_domain = "host";
+    }
     cmd_getval(cmdmap, "class", device_class);
 
     if (pool_type == pg_pool_t::TYPE_REPLICATED && num_zones > 1 &&
