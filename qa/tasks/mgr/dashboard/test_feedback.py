@@ -6,7 +6,7 @@ class FeedbackTest(MgrModuleTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls._ceph_cmd(['mgr', 'module', 'enable', 'feedback'], wait=3)
+        cls._ceph_cmd(['mgr', 'module', 'enable', 'feedback', '--force'], wait=3)
         cls._get(
             '/api/mgr/module',
             retries=5,
