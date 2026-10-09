@@ -3,7 +3,7 @@ os_version: "9.stream"
 
 tasks:
 - install:
-    tag: v20.2.0
+    tag: v20.2.2
     exclude_packages:
       - ceph-volume
       - ceph-osd-classic
@@ -13,7 +13,7 @@ tasks:
 - print: "**** done install task..."
 
 - cephadm:
-    image: quay.io/ceph/ceph:v20.2.0
+    image: quay.io/ceph/ceph:v20.2.2
     compiled_cephadm_branch: tentacle 
 
 - nvmeof:
