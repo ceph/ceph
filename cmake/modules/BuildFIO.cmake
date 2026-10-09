@@ -9,7 +9,10 @@ function(build_fio)
       ${alloc_lib_path} DIRECTORY)
     get_filename_component(alloc_lib_name
       ${alloc_lib_path} NAME)
-    set(FIO_EXTLIBS "EXTLIBS='-L${alloc_lib_dir} -l:${alloc_lib_name}'")
+    if(GOOGLE_TCMALLOC)
+      set(alloc_rpath "-Wl,-rpath,${alloc_lib_dir} ")
+    endif()
+    set(FIO_EXTLIBS "EXTLIBS='-L${alloc_lib_dir} ${alloc_rpath}-l:${alloc_lib_name}'")
   endif()
 
   include(FindMake)
@@ -39,6 +42,7 @@ function(build_fio)
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
     BUILD_COMMAND ${make_cmd} fio EXTFLAGS=-Wno-format-truncation "${FIO_EXTLIBS}"
     INSTALL_COMMAND cp <BINARY_DIR>/fio ${CMAKE_BINARY_DIR}/bin
+    DEPENDS ${ALLOC_LIBS}
     LOG_CONFIGURE ON
     LOG_BUILD ON
     LOG_INSTALL ON
