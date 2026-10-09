@@ -79,12 +79,17 @@ int mempool::pick_a_shard_int(void) {
 
 mempool::pool_t& mempool::get_pool(mempool::pool_index_t ix)
 {
-  // We rely on this array being initialized before any invocation of
-  // this function, even if it is called by ctors in other compilation
-  // units that are being initialized before this compilation unit.
-  static mempool::pool_t table[num_pools];
-  table[ix].pool_index = ix;
-  return table[ix];
+  // Built thread-safely on first use, even from static ctors in other
+  // compilation units; that is also the only time pool_index is written.
+  static struct table_t {
+    pool_t pools[num_pools];
+    table_t() {
+      for (size_t i = 0; i < num_pools; ++i) {
+        pools[i].pool_index = static_cast<pool_index_t>(i);
+      }
+    }
+  } table;
+  return table.pools[ix];
 }
 
 const char *mempool::get_pool_name(mempool::pool_index_t ix) {

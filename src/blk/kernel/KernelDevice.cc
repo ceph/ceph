@@ -584,7 +584,7 @@ void KernelDevice::_aio_stop()
 {
   if (aio) {
     dout(10) << __func__ << dendl;
-    aio_stop = true;
+    aio_stop.store(true, std::memory_order_relaxed);
 
     IOContext wakeup_ctx(cct, nullptr, false);
     bufferlist bl;
@@ -599,7 +599,7 @@ void KernelDevice::_aio_stop()
       }
     }
 
-    aio_stop = false;
+    aio_stop.store(false, std::memory_order_relaxed);
     io_queue->shutdown();
   }
 }
@@ -691,7 +691,7 @@ void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   int inject_crash_count = 0;
-  while (!aio_stop) {
+  while (!aio_stop.load(std::memory_order_relaxed)) {
     dout(40) << __func__ << " polling" << dendl;
     int max = cct->_conf->bdev_aio_reap_max;
     aio_t *aio[max];

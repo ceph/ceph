@@ -914,11 +914,13 @@ void CephContext::start_service_thread()
       return;
     }
     _service_thread = new CephContextServiceThread(this);
-    _service_thread->create("service");
   }
 
+  // create the counters before the thread, whose loop reads them
   if (!(get_init_flags() & CINIT_FLAG_NO_CCT_PERF_COUNTERS))
     _enable_perf_counter();
+
+  _service_thread->create("service");
 
   // make logs flush on_exit()
   if (_conf->log_flush_on_exit)
