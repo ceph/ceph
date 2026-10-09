@@ -3718,17 +3718,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   return 0;
 
 done_cancel:
-  // if r == -ETIMEDOUT, rgw can't determine whether or not the rados op succeeded
-  // we shouldn't be calling index_op->cancel() in this case
-  // Instead, we should leave that pending entry in the index so than bucket listing can recover with check_disk_state() and cls_rgw_suggest_changes()
-  if (r != -ETIMEDOUT) {
-    int ret = index_op->cancel(rctx.dpp, meta.remove_objs, rctx.y, log_op);
-    if (ret < 0) {
-      ldpp_dout(rctx.dpp, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
-    }
-
-    meta.canceled = true;
-  }
+  const int err = r;
 
   /* we lost in a race. There are a few options:
    * - existing object was rewritten (ECANCELED)
@@ -3744,14 +3734,19 @@ done_cancel:
       r = 0;
     }
   } else {
+    // a conditional write that lost the race did not take effect, and
+    // cannot claim its condition held for the head that won: answer a
+    // conflict, for the client to retry, as S3 does
     if (meta.if_match != NULL) {
       // only overwrite existing object
       if (strcmp(meta.if_match, "*") == 0) {
         if (r == -ENOENT) {
           r = -ERR_PRECONDITION_FAILED;
         } else if (r == -ECANCELED) {
-          r = 0;
+          r = -ERR_CONDITIONAL_REQUEST_CONFLICT;
         }
+      } else if (r == -ECANCELED) {
+        r = -ERR_CONDITIONAL_REQUEST_CONFLICT;
       }
     }
 
@@ -3761,10 +3756,25 @@ done_cancel:
         if (r == -EEXIST) {
           r = -ERR_PRECONDITION_FAILED;
         } else if (r == -ENOENT) {
-          r = 0;
+          r = -ERR_CONDITIONAL_REQUEST_CONFLICT;
         }
       }
     }
+  }
+
+  // if err == -ETIMEDOUT, rgw can't determine whether or not the rados op succeeded
+  // we shouldn't be calling index_op->cancel() in this case
+  // Instead, we should leave that pending entry in the index so than bucket listing can recover with check_disk_state() and cls_rgw_suggest_changes()
+  if (err != -ETIMEDOUT) {
+    // a write answered with an error was refused, and its request stays to
+    // be retried, as a refused completion's upload does: so do the entries
+    // it would have replaced, such as the upload's parts
+    int ret = index_op->cancel(rctx.dpp, r < 0 ? nullptr : meta.remove_objs, rctx.y, log_op);
+    if (ret < 0) {
+      ldpp_dout(rctx.dpp, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
+    }
+
+    meta.canceled = true;
   }
 
   return r;
@@ -7221,6 +7231,14 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     return r;
   }
 
+  // remove only the head that was read. a write that replaced it meanwhile
+  // sent the old manifest to GC; removing the new head and sending the old
+  // manifest again would leak the new tail
+  r = store->append_atomic_test(dpp, state, op);
+  if (r < 0) {
+    return r;
+  }
+
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   RGWRados::Bucket bop(store, bucket_info);
@@ -10008,6 +10026,21 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
         remove_instances.insert(entry.key);
         break;
       case CLS_RGW_OLH_OP_LINK_OLH:
+        if (!entry.delete_marker) {
+          // a version linked after its removal was logged is in the index
+          // again, whether or not it becomes current: keep its head. a null
+          // version written after a DeleteObject of the null version logged
+          // its removal shares the key's head object, and would lose it to
+          // that removal. a null delete marker linked after it does not
+          // bring the removed null version back. a DeleteObject names the
+          // null version "null", a write of it an empty instance
+          remove_instances.erase(entry.key);
+          if (entry.key.instance.empty()) {
+            remove_instances.erase(cls_rgw_obj_key(entry.key.name, "null"));
+          } else if (entry.key.instance == "null") {
+            remove_instances.erase(cls_rgw_obj_key(entry.key.name, ""));
+          }
+        }
         // only overwrite a link of the same epoch if its key sorts before
         // or there is a CLS_RGW_OLH_OP_UNLINK_OLH before this op in this batch
         if (need_to_remove || link_epoch < entry.epoch || key.instance.empty() ||
