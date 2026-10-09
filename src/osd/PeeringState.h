@@ -554,6 +554,7 @@ public:
   TrivialEvent(Initialize)
   TrivialEvent(GotInfo)
   TrivialEvent(NeedUpThru)
+  TrivialEvent(RechooseActing)
   TrivialEvent(Backfilled)
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RejectTooFullRemoteReservation)
@@ -842,6 +843,10 @@ public:
   struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
     PastIntervals::PriorSet prior_set;
     bool history_les_bound;  //< need osd_find_best_info_ignore_history_les
+    /// times GetMissing sent this interval back to GetLog because an
+    /// acting or async recovery shard that is not a backfill target turned
+    /// out to be behind the log tail (optimized EC)
+    unsigned rechoose_acting = 0;
 
     explicit Peering(my_context ctx);
     void exit();
@@ -1365,11 +1370,14 @@ public:
       boost::statechart::custom_reaction< QueryState >,
       boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< MLogRec >,
+      boost::statechart::custom_reaction< RechooseActing >,
       boost::statechart::transition< NeedUpThru, WaitUpThru >
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MLogRec& logevt);
+    boost::statechart::result react(const RechooseActing&);
+    bool rechoose_acting_for(const pg_shard_t &shard, const char *why);
   };
 
   struct WaitUpThru : boost::statechart::state< WaitUpThru, Peering >, NamedState {
@@ -1754,7 +1762,7 @@ private:
     bool *history_les_bound = nullptr) const;
 
   static void calc_ec_acting(
-    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    const eversion_t &log_tail,
     unsigned size,
     const std::vector<int> &acting,
     const std::vector<int> &up,
