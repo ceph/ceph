@@ -10008,14 +10008,14 @@ next:
 
     int index = 0;
     bool truncated;
-    bool processing_queue = false;
+    bool processing_fifo = false;
     formatter->open_array_section("entries");
 
     std::optional<int> gc_shard_id = specified_shard_id ? std::optional<int>(shard_id) : std::nullopt;
 
     do {
       list<cls_rgw_gc_obj_info> result;
-      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(index, marker, 1000, !include_all, result, truncated, processing_queue, gc_shard_id);
+      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(index, marker, 1000, !include_all, result, truncated, processing_fifo, gc_shard_id);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
 	return 1;

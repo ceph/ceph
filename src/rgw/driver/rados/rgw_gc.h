@@ -41,6 +41,9 @@ class RGWGC : public DoutPrefixProvider {
                 std::list<cls_rgw_gc_obj_info>& entries, bool* truncated,
                 std::string* next_marker, optional_yield y);
   int fifo_trim(int index, const std::string& marker, optional_yield y);
+  int process_chains(RGWGCIOManager& io_manager, librados::IoCtx*& ctx,
+                     std::string& last_pool, int index,
+                     std::list<cls_rgw_gc_obj_info>& entries, utime_t end);
 
   class GCWorker : public Thread {
     const DoutPrefixProvider *dpp;
@@ -70,7 +73,10 @@ public:
   int initialize(CephContext *_cct, RGWRados *_store, optional_yield y);
   void finalize();
 
-  int list(int& index, std::string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool& truncated, bool& processing_queue, std::optional<int> shard_id = std::nullopt);
+  int list(int& index, std::string& marker, uint32_t max, bool expired_only,
+           std::list<cls_rgw_gc_obj_info>& result, bool& truncated,
+           bool& processing_fifo,
+           std::optional<int> shard_id = std::nullopt);
   int process(int index, int process_max_secs, bool expired_only,
               RGWGCIOManager& io_manager, optional_yield y);
   int process(bool expired_only, optional_yield y, std::optional<int> shard_id = std::nullopt);
