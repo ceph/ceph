@@ -13,6 +13,7 @@
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "common/debug.h"
 #include "common/perf_counters.h"
 #include "auth/DummyAuth.h"
 #include "ring_buffer.h"
