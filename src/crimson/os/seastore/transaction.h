@@ -604,6 +604,7 @@ public:
     ool_block_list.clear();
     inplace_ool_block_list.clear();
     pre_alloc_list.clear();
+    pending_ool = nullptr;
     pre_inplace_rewrite_list.clear();
     retired_set.clear();
     existing_block_list.clear();
@@ -725,8 +726,14 @@ public:
     return static_cast<T&>(*view);
   }
 
+  // Paired with clear_pending_ool() when the OOL write completes.
   void set_pending_ool(seastar::lw_shared_ptr<rbm_pending_ool_t> ptr) {
+    assert(!pending_ool);
     pending_ool = ptr;
+  }
+
+  void clear_pending_ool() {
+    pending_ool = nullptr;
   }
 
   seastar::lw_shared_ptr<rbm_pending_ool_t> get_pending_ool() {
