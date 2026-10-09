@@ -7,6 +7,11 @@
 #include <ostream>
 #include <utility>
 
+#include <fmt/format.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
+
 #include "osd_types.h"
 
 #include "common/Formatter.h"
