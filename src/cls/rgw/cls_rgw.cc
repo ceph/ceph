@@ -2670,6 +2670,16 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
       } // while
     } // if
 
+    if (cur_disk.flags & rgw_bucket_dir_entry::FLAG_VER_MARKER) {
+      // a null version's key encodes to the plain entry of its versioned
+      // object, which is a version marker redirecting to the instance
+      // entries; never overwrite or remove it
+      CLS_LOG_BITX(bitx_inst, 10,
+		   "INFO: %s: key=%s is a version marker, skipping suggestion",
+		   __func__, escape_str(cur_change_key).c_str());
+      continue;
+    }
+
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: op=%c cur_disk.pending_map.empty()=%d cur_disk.exists=%d "
 		 "cur_disk.index_ver=%d cur_change.exists=%d cur_change.index_ver=%d",
