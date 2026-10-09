@@ -362,6 +362,10 @@ public:
     const uint64_t replica = get_val<uint64_t>(values, "osd_pool_default_replica");
     return replica ? replica : get_val<uint64_t>(values, "osd_pool_default_size");
   }
+  uint64_t get_osd_pool_default_total_size(const ConfigValues& values) const {
+    return get_val<int64_t>(values, "osd_pool_default_num_zones") *
+      get_osd_pool_default_replica(values);
+  }
 
   friend class test_md_config_t;
 };

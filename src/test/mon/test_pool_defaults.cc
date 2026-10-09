@@ -11,6 +11,7 @@
 #include "common/common_init.h"
 #include "common/config_proxy.h"
 #include "global/global_context.h"
+#include "osd/OSDMap.h"
 
 #include <memory>
 #include <string>
@@ -37,6 +38,19 @@ protected:
 
   uint64_t replica() const {
     return cct->_conf.get_osd_pool_default_replica();
+  }
+
+  uint64_t total_size() const {
+    return cct->_conf.get_osd_pool_default_total_size();
+  }
+
+  pg_pool_t simple_pool() {
+    OSDMap osdmap;
+    uuid_d fsid;
+    EXPECT_EQ(0, osdmap.build_simple_with_pool(cct.get(), 1, fsid, 3, 3, 3));
+    const int64_t id = osdmap.lookup_pg_pool_name("rbd");
+    EXPECT_GE(id, 0);
+    return *osdmap.get_pg_pool(id);
   }
 };
 
@@ -125,4 +139,40 @@ TEST_F(PoolDefaultsTest, PlacementDefaultsCanBeSet) {
 TEST_F(PoolDefaultsTest, OldOptionNamesAreGone) {
   EXPECT_EQ(nullptr, cct->_conf.find_option("osd_pool_stretch_default_replica"));
   EXPECT_EQ(nullptr, cct->_conf.find_option("default_crush_zone_failure_domain"));
+}
+
+// Test the size of a new pool is 3 by default
+TEST_F(PoolDefaultsTest, TotalSizeDefaultIsThree) {
+  EXPECT_EQ(3u, total_size());
+}
+
+// Test the size of a new pool is num_zones times the replicas per zone
+TEST_F(PoolDefaultsTest, TotalSizeTwoZones) {
+  set("osd_pool_default_num_zones", "2");
+  set("osd_pool_default_replica", "2");
+  EXPECT_EQ(4u, total_size());
+}
+
+// Test the legacy size counts as the replicas per zone
+TEST_F(PoolDefaultsTest, TotalSizeTwoZonesLegacySize) {
+  set("osd_pool_default_num_zones", "2");
+  set("osd_pool_default_size", "3");
+  EXPECT_EQ(6u, total_size());
+}
+
+// Test a simple OSDMap's pool has the default replica count
+TEST_F(PoolDefaultsTest, SimplePoolTakesReplica) {
+  set("osd_pool_default_replica", "2");
+  const pg_pool_t p = simple_pool();
+  EXPECT_EQ(2u, p.size);
+  EXPECT_EQ(2u, p.replica);
+  EXPECT_EQ(1u, p.num_zones);
+}
+
+// Test a simple OSDMap's pool still follows the legacy size
+TEST_F(PoolDefaultsTest, SimplePoolTakesLegacySize) {
+  set("osd_pool_default_size", "1");
+  const pg_pool_t p = simple_pool();
+  EXPECT_EQ(1u, p.size);
+  EXPECT_EQ(1u, p.replica);
 }

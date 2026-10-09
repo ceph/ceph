@@ -4944,7 +4944,8 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
 	pools[pool].set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
       if (cct->_conf->osd_pool_default_flag_bulk)
         pools[pool].set_flag(pg_pool_t::FLAG_BULK);
-      pools[pool].size = cct->_conf.get_val<uint64_t>("osd_pool_default_size");
+      pools[pool].size = cct->_conf.get_osd_pool_default_replica();
+      pools[pool].replica = pools[pool].size;
       pools[pool].min_size = cct->_conf.get_osd_pool_default_min_size(
                                  pools[pool].size);
       pools[pool].crush_rule = default_replicated_rule;
