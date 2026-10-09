@@ -360,6 +360,9 @@
 /* Defined if libedkafka is available for rgw kafka push endpoint */
 #cmakedefine WITH_RADOSGW_KAFKA_ENDPOINT
 
+/* Defined if MDS change notification (CephFS) is enabled */
+#cmakedefine WITH_MDS_NOTIFY
+
 /* Defined if lua packages can be installed by radosgw */
 #cmakedefine WITH_RADOSGW_LUA_PACKAGES
 

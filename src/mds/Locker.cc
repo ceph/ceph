@@ -4247,6 +4247,13 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     update_flags |= UPDATE_NEEDSISSUE;
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, update_flags,
 							      ack, client));
+
+#ifdef WITH_MDS_NOTIFY
+  // MDS change notification: client write/truncate flush (bypasses
+  // Server::journal_and_reply).
+  if ((dirty & (CEPH_CAP_FILE_WR | CEPH_CAP_FILE_EXCL)) && mds->change_notifier)
+    mds->change_notifier->cap_update(in);
+#endif
   if (need_flush && !*need_flush &&
       ((change_max && new_max) || // max INCREASE
        _need_flush_mdlog(in, dirty)))

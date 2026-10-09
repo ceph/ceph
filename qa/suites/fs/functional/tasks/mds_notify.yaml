@@ -1,0 +1,16 @@
+# CephFS change notification: enable the MDS-side producer with the file
+# endpoint (the endpoint is a startup option, so it goes into ceph.conf before
+# the cluster starts) and run the integration test from
+# qa/tasks/cephfs/test_mds_notify.py.
+overrides:
+  ceph:
+    conf:
+      mds:
+        mds_notify_enable: true
+        mds_notify_file: /tmp/cephfs-notify.jsonl
+        mds_notify_root: /mds_notify
+tasks:
+- cephfs_test_runner:
+    fail_on_skip: false
+    modules:
+      - tasks.cephfs.test_mds_notify

@@ -85,6 +85,7 @@ Administration
     MDS Cache Configuration <cache-configuration>
     MDS Configuration Settings <mds-config-ref>
     MDS Quality of Service <mds-qos>
+    CephFS Change Notification <change-notification>
     Manual: ceph-mds <../../man/8/ceph-mds>
     Export over NFS <nfs>
     Application best practices <app-best-practices>
