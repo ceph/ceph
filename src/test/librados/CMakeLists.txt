@@ -98,6 +98,11 @@ add_executable(ceph_test_rados_api_cls
 target_link_libraries(ceph_test_rados_api_cls
   librados ${UNITTEST_LIBS} radostest-cxx)
 
+add_executable(ceph_test_rados_api_ec_pool_create_pp
+  ec_pool_create_cxx.cc)
+target_link_libraries(ceph_test_rados_api_ec_pool_create_pp
+  librados ${UNITTEST_LIBS} radostest-cxx)
+
 add_executable(ceph_test_rados_api_misc
   misc.cc
   $<TARGET_OBJECTS:unit-main>)
@@ -162,6 +167,7 @@ install(TARGETS
   ceph_test_rados_api_c_write_operations
   ceph_test_rados_api_cmd
   ceph_test_rados_api_cmd_pp
+  ceph_test_rados_api_ec_pool_create_pp
   ceph_test_rados_api_io
   ceph_test_rados_api_io_pp
   ceph_test_rados_api_list
