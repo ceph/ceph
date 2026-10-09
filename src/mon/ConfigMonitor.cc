@@ -1157,15 +1157,11 @@ int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
   }
   if ((p.is_given("replica") && p.replica == 1) ||
       (p.is_given("size") && p.size == 1)) {
-    if (!g_conf().get_val<bool>("mon_allow_pool_size_one")) {
-      ss << "configuring pool size as 1 is disabled by default.";
-      return -EPERM;
-    }
-    if (!cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false)) {
-      ss << "WARNING: setting pool size 1 could lead to data loss "
-            "without recovery. If you are *ABSOLUTELY CERTAIN* that is what "
-            "you want, pass the flag --yes-i-really-mean-it.";
-      return -EPERM;
+    err = check_size_one(
+      g_conf().get_val<bool>("mon_allow_pool_size_one"),
+      cmd_getval_or<bool>(cmdmap, "yes_i_really_mean_it", false), &ss);
+    if (err) {
+      return err;
     }
   }
 

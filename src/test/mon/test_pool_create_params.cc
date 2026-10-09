@@ -859,6 +859,26 @@ TEST_F(PoolParamsTest, DefaultValueUnknown) {
   EXPECT_EQ("", pool_default_value(defaults(), "no_such_param"));
 }
 
+// Test size one is accepted when allowed and confirmed
+TEST(CheckSizeOneTest, AllowedAndSure) {
+  stringstream ss;
+  EXPECT_EQ(0, check_size_one(true, true, &ss)) << ss.str();
+}
+
+// Test size one is refused unless mon_allow_pool_size_one is set
+TEST(CheckSizeOneTest, NotAllowed) {
+  stringstream ss;
+  EXPECT_EQ(-EPERM, check_size_one(false, true, &ss));
+  EXPECT_EQ("configuring pool size as 1 is disabled by default.", ss.str());
+}
+
+// Test size one is refused without --yes-i-really-mean-it
+TEST(CheckSizeOneTest, NotSure) {
+  stringstream ss;
+  EXPECT_EQ(-EPERM, check_size_one(true, false, &ss));
+  EXPECT_NE(string::npos, ss.str().find("--yes-i-really-mean-it"));
+}
+
 // Test the written options are unique and use the new replica name
 TEST(PoolDefaultOptionsTest, OptionNames) {
   const auto names = pool_default_option_names();

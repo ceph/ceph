@@ -126,6 +126,11 @@ std::set<std::string> pool_default_option_names();
 // holds it.
 std::string profile_to_string(const std::map<std::string, std::string>& profile);
 
+// Whether a pool size of one may be configured: mon_allow_pool_size_one
+// (allowed) must be set and the command must pass --yes-i-really-mean-it
+// (sure).
+int check_size_one(bool allowed, bool sure, std::ostream* ss);
+
 // The value of param in p, in the form its option (pool_default_options())
 // holds it: the rule as its id, and k and m as the whole profile.
 std::string pool_default_value(const PoolCreateParams& p,

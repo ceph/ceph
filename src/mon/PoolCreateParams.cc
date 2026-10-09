@@ -438,6 +438,21 @@ string profile_to_string(const std::map<string, string>& profile)
   return out.str();
 }
 
+int check_size_one(bool allowed, bool sure, std::ostream* ss)
+{
+  if (!allowed) {
+    *ss << "configuring pool size as 1 is disabled by default.";
+    return -EPERM;
+  }
+  if (!sure) {
+    *ss << "WARNING: setting pool size 1 could lead to data loss "
+           "without recovery. If you are *ABSOLUTELY CERTAIN* that is what "
+           "you want, pass the flag --yes-i-really-mean-it.";
+    return -EPERM;
+  }
+  return 0;
+}
+
 string pool_default_value(const PoolCreateParams& p, const string& param)
 {
   if (param == "pool_type") {
