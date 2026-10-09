@@ -378,6 +378,14 @@ private:
    */
   bool validate_crush_against_features(const CrushWrapper *newcrush,
 				       std::ostream &ss);
+  /**
+   * raise the pending map's weight shift if adding @p additional nominal
+   * weight would overflow a bucket.  Pass the increase, not the new value.
+   *
+   * @returns 0 if it fits, negative error code otherwise
+   */
+  int prepare_crush_weight_headroom(CrushWrapper *newcrush, double additional,
+				    std::ostream &ss);
   void check_osdmap_subs();
   void share_map_with_random_osd();
 
