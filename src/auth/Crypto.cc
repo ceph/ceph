@@ -1081,9 +1081,9 @@ void CryptoKey::dump(Formatter *f) const
   f->dump_stream("created") << created;
 }
 
-std::list<CryptoKey> CryptoKey::generate_test_instances()
+std::vector<CryptoKey> CryptoKey::generate_test_instances()
 {
-  std::list<CryptoKey> ls;
+  std::vector<CryptoKey> ls;
   ls.emplace_back();
   ls.emplace_back();
   ls.back().type = CEPH_CRYPTO_AES;

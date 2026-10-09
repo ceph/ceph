@@ -16,14 +16,13 @@
 #ifndef CEPH_MDS_MUTATION_H
 #define CEPH_MDS_MUTATION_H
 
-#include <list>
 #include <map>
-#include <optional>
-#include <ostream>
 #include <set>
-#include <unordered_map>
 #include <vector>
 #include <memory>
+#include <ostream>
+#include <optional>
+#include <unordered_map>
 
 #include "common/ref.h" // for cref_t
 #include "include/cephfs/types.h" // for mds_rank_t
@@ -293,10 +292,10 @@ public:
 
   // for applying projected inode changes
   std::set<MDSCacheObject*> projected_nodes;
-  std::list<ScatterLock*> updated_locks;
+  std::vector<ScatterLock*> updated_locks;
 
-  std::list<CInode*> dirty_cow_inodes;
-  std::list<std::pair<CDentry*,version_t> > dirty_cow_dentries;
+  std::vector<CInode*> dirty_cow_inodes;
+  std::vector<std::pair<CDentry*,version_t> > dirty_cow_dentries;
 
 private:
   utime_t mds_stamp; ///< mds-local timestamp (real time)

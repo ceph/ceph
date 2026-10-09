@@ -66,9 +66,9 @@ void entity_inst_t::dump(ceph::Formatter *f) const
   f->dump_object("addr", addr);
 }
 
-std::list<entity_name_t> entity_name_t::generate_test_instances()
+std::vector<entity_name_t> entity_name_t::generate_test_instances()
 {
-  std::list<entity_name_t> o;
+  std::vector<entity_name_t> o;
   o.push_back(entity_name_t(entity_name_t::MON()));
   o.push_back(entity_name_t(entity_name_t::MON(1)));
   o.push_back(entity_name_t(entity_name_t::OSD(1)));
@@ -76,9 +76,9 @@ std::list<entity_name_t> entity_name_t::generate_test_instances()
   return o;
 }
 
-std::list<entity_addr_t> entity_addr_t::generate_test_instances()
+std::vector<entity_addr_t> entity_addr_t::generate_test_instances()
 {
-  std::list<entity_addr_t> o;
+  std::vector<entity_addr_t> o;
   o.push_back(entity_addr_t());
   entity_addr_t a;
   a.set_nonce(1);
@@ -96,9 +96,9 @@ std::list<entity_addr_t> entity_addr_t::generate_test_instances()
   return o;
 }
 
-std::list<entity_inst_t> entity_inst_t::generate_test_instances()
+std::vector<entity_inst_t> entity_inst_t::generate_test_instances()
 {
-  std::list<entity_inst_t> o;
+  std::vector<entity_inst_t> o;
   o.push_back(entity_inst_t());
   entity_name_t name;
   entity_addr_t addr;
@@ -408,9 +408,9 @@ void entity_addrvec_t::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-std::list<entity_addrvec_t> entity_addrvec_t::generate_test_instances()
+std::vector<entity_addrvec_t> entity_addrvec_t::generate_test_instances()
 {
-  std::list<entity_addrvec_t> ls;
+  std::vector<entity_addrvec_t> ls;
   ls.push_back(entity_addrvec_t());
   ls.push_back(entity_addrvec_t());
   ls.back().v.push_back(entity_addr_t());

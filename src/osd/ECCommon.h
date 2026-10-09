@@ -16,6 +16,9 @@
 #pragma once
 
 #include <boost/intrusive/list.hpp>
+#include <deque>
+#include <span>
+#include <vector>
 #include <utility>
 #include <fmt/format.h>
 
@@ -92,7 +95,7 @@ struct ECCommon {
 #endif
 
   virtual void objects_read_and_reconstruct(
-      const std::map<hobject_t, std::list<ec_align_t>> &reads,
+      const std::map<hobject_t, std::vector<ec_align_t>> &reads,
       bool fast_read,
       uint64_t object_size,
       GenContextURef<ec_extents_t&&> &&func) = 0;
@@ -118,8 +121,8 @@ struct ECCommon {
   enum class WantOmapKeys : bool { No = false, Yes = true };
 
   struct read_request_t {
-    const std::list<ec_align_t> to_read;
     const uint32_t flags = 0;
+    std::vector<ec_align_t> to_read;
     ECUtil::shard_extent_set_t shard_want_to_read;
     ECUtil::shard_extent_set_t zeros_for_decode;
     shard_id_map<shard_read_t> shard_reads;
@@ -131,12 +134,12 @@ struct ECCommon {
     uint64_t object_size;
 
     read_request_t(
-        const std::list<ec_align_t> &to_read,
+        std::vector<ec_align_t> to_read,
         const ECUtil::shard_extent_set_t &shard_want_to_read,
         WantAttrs want_attrs, WantOmapHeader want_omap_header, WantOmapKeys want_omap_keys,
         std::string omap_read_from, uint64_t omap_max_bytes, uint64_t object_size) :
-      to_read(to_read),
       flags(to_read.front().flags),
+      to_read(std::move(to_read)),
       shard_want_to_read(shard_want_to_read),
       zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
@@ -313,7 +316,7 @@ struct ECCommon {
 
     std::set<pg_shard_t> in_progress;
 
-    std::list<ECUtil::log_entry_t> debug_log;
+    std::deque<ECUtil::log_entry_t> debug_log;
 
     ReadOp(
         int priority,
@@ -351,7 +354,7 @@ struct ECCommon {
 
   struct ReadPipeline {
     void objects_read_and_reconstruct(
-        const std::map<hobject_t, std::list<ec_align_t>> &reads,
+        const std::map<hobject_t, std::vector<ec_align_t>> &reads,
         bool fast_read,
         uint64_t object_size,
         GenContextURef<ec_extents_t&&> &&func);
@@ -394,7 +397,7 @@ struct ECCommon {
 
     std::map<ceph_tid_t, ReadOp> tid_to_read_map;
     std::map<pg_shard_t, std::set<ceph_tid_t>> shard_to_read_map;
-    std::list<ClientAsyncReadStatus> in_progress_client_reads;
+    std::deque<ClientAsyncReadStatus> in_progress_client_reads;
 
     CephContext *cct;
     ceph::ErasureCodeInterfaceRef ec_impl;
@@ -482,11 +485,11 @@ struct ECCommon {
     friend struct FinishReadOp;
 
     void get_want_to_read_shards(
-        const std::list<ec_align_t> &to_read,
+        std::span<const ec_align_t> to_read,
         ECUtil::shard_extent_set_t &want_shard_reads);
 
     void get_want_to_read_all_shards(
-        const std::list<ec_align_t> &to_read,
+        std::span<const ec_align_t> to_read,
         ECUtil::shard_extent_set_t &want_shard_reads);
     void create_parity_read_buffer(
         ECUtil::shard_extent_map_t buffers_read,
@@ -582,7 +585,7 @@ struct ECCommon {
       OpRequestRef client_op;
 
       /// pin for cache
-      std::list<ECExtentCache::OpRef> cache_ops;
+      std::vector<ECExtentCache::OpRef> cache_ops;
       RMWPipeline *pipeline;
 
       Op(RMWPipeline &pipeline) : tid(), plan(), pipeline(&pipeline) {}
@@ -667,7 +670,7 @@ struct ECCommon {
     std::map<ceph_tid_t, OpRef> tid_to_op_map; /// Owns Op structure
     std::map<hobject_t, eversion_t> oid_to_version;
 
-    std::list<OpRef> waiting_commit;
+    std::deque<OpRef> waiting_commit;
     eversion_t completed_to;
     eversion_t committed_to;
     void start_rmw(OpRef op);

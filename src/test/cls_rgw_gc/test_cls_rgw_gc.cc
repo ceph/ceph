@@ -13,6 +13,7 @@
 #include "global/global_context.h"
 
 #include <errno.h>
+#include <list>
 #include <string>
 #include <vector>
 #include <map>
@@ -28,6 +29,33 @@ using ceph::test::destroy_pool_by_type;
 class TestClsRgwGc : public ceph::test::ClsTestFixture {
   // Inherits: rados, ioctx, pool_name, pool_type, SetUp(), TearDown()
 };
+
+TEST(ClsRgwGcEncoding, EntrySequenceRemainsCompatible)
+{
+  cls_rgw_gc_obj_info first;
+  first.tag = "first";
+  cls_rgw_gc_obj_info second;
+  second.tag = "second";
+
+  const std::list<cls_rgw_gc_obj_info> legacy {first, second};
+  const std::vector<cls_rgw_gc_obj_info> current {first, second};
+  bufferlist legacy_encoding;
+  bufferlist current_encoding;
+
+  encode(legacy, legacy_encoding);
+  encode(current, current_encoding);
+
+  ASSERT_TRUE(legacy_encoding.contents_equal(current_encoding));
+
+  auto input = std::cbegin(legacy_encoding);
+  std::vector<cls_rgw_gc_obj_info> decoded;
+  decode(decoded, input);
+
+  ASSERT_EQ(2, std::size(decoded));
+  EXPECT_EQ("first", decoded[0].tag);
+  EXPECT_EQ("second", decoded[1].tag);
+  EXPECT_EQ(0, input.get_remaining());
+}
 
 
 string str_int(string s, int i)
@@ -113,7 +141,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops1)
   }
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1;
+  vector<cls_rgw_gc_obj_info> list_info1;
   string marker, next_marker;
   uint64_t max = 1;
   bool expired_only = false, truncated;
@@ -142,7 +170,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops2)
   ASSERT_EQ(size, queue_size);
 
   //Test list queue, when queue is empty
-  list<cls_rgw_gc_obj_info> list_info;
+  vector<cls_rgw_gc_obj_info> list_info;
   string marker1, next_marker1;
   uint64_t max1 = 2;
   bool expired_only1 = false, truncated1;
@@ -171,7 +199,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops2)
   }
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  vector<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
@@ -238,7 +266,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops5)
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
   }
   //Test list queue for expired entries only
-  list<cls_rgw_gc_obj_info> list_info1, list_info2;
+  vector<cls_rgw_gc_obj_info> list_info1, list_info2;
   string marker, next_marker, marker1;
   uint64_t max = 10;
   bool expired_only = true, truncated;
@@ -322,7 +350,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops6)
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  vector<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
@@ -394,7 +422,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops7)
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  vector<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
@@ -466,7 +494,7 @@ TEST_P(TestClsRgwGc, gc_queue_ops8)
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  vector<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;

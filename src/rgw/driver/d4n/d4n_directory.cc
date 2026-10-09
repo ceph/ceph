@@ -376,7 +376,7 @@ int ObjectDirectory::set(const DoutPrefixProvider* dpp, CacheObj* object, option
   std::string key = build_index(object);
 
   std::string endpoint;
-  std::list<std::string> redisValues;
+  std::vector<std::string> redisValues;
     
   /* Creating a redisValues of the entry's properties */
   redisValues.push_back("objName");
@@ -989,7 +989,7 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
 
     //std::string hosts;
-    std::list<std::string> redisValues;
+    std::vector<std::string> redisValues;
     auto ret = set_values(dpp, block, redisValues, y);
     if (ret < 0) {
       return ret;

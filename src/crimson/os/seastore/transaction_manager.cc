@@ -709,8 +709,8 @@ TransactionManager::update_lba_mappings(
   LOG_PREFIX(TransactionManager::update_lba_mappings);
   SUBTRACET(seastore_t, "update extent lba mappings", t);
   return seastar::do_with(
-    std::list<LogicalChildNodeRef>(),
-    std::list<CachedExtentRef>(),
+    std::vector<LogicalChildNodeRef>(),
+    std::vector<CachedExtentRef>(),
     [this, &t, &pre_allocated_extents](auto &lextents, auto &pextents) {
     auto chksum_func = [&lextents, &pextents, this](auto &extent) {
       if (!extent->is_valid() ||
@@ -1752,7 +1752,7 @@ TransactionManager::get_extents_if_live(
   ceph_assert(paddr.is_absolute_segmented());
 
   auto extent = co_await cache->get_extent_if_cached(t, paddr, len, type);
-  std::list<CachedExtentRef> res;
+  std::vector<CachedExtentRef> res;
   if (extent) {
     DEBUGT("{} {}~0x{:x} {} is cached and alive -- {}",
 	   t, type, laddr, len, paddr, *extent);
@@ -1764,6 +1764,7 @@ TransactionManager::get_extents_if_live(
       laddr,
       len
     );
+    res.reserve(std::size(pin_list));
     auto paddr_seg_id = paddr.as_seg_paddr().get_segment_id();
     for (auto &pin : pin_list) {
       ceph_assert(pin->is_direct());

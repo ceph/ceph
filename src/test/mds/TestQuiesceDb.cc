@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <iostream>
 #include <future>
-#include <list>
+#include <vector>
 #include <array>
 #include <utility>
 #include <cstdlib>
@@ -116,7 +116,7 @@ class QuiesceDbTest: public testing::Test {
 
     std::unordered_map<QuiesceInterface::PeerId, QuiesceMap> latest_acks;
     using AckHook = std::function<bool(QuiesceInterface::PeerId, QuiesceMap&)>;
-    std::list<std::pair<AckHook, std::promise<void>>> ack_hooks;
+    std::vector<std::pair<AckHook, std::promise<void>>> ack_hooks;
 
     std::future<void> add_ack_hook(AckHook&& predicate)
     {
@@ -126,7 +126,7 @@ class QuiesceDbTest: public testing::Test {
     }
 
     using ListingHook = std::function<bool(QuiesceInterface::PeerId, QuiesceDbListing&)>;
-    std::list<std::pair<ListingHook, std::promise<void>>> listing_hooks;
+    std::vector<std::pair<ListingHook, std::promise<void>>> listing_hooks;
 
     std::future<void> add_listing_hook(ListingHook&& predicate)
     {

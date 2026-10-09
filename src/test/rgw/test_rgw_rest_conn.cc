@@ -6,6 +6,8 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 
+#include <vector>
+
 #include <gtest/gtest.h>
 
 using namespace std;
@@ -13,7 +15,7 @@ using namespace std;
 static constexpr const char* EP1 = "http://127.0.0.1:8000";
 static constexpr const char* EP2 = "http://127.0.0.2:8000";
 
-static RGWRESTConn make_conn(const list<string>& endpoints)
+static RGWRESTConn make_conn(const vector<string>& endpoints)
 {
   return RGWRESTConn(g_ceph_context, "remote-zone", endpoints,
                      RGWAccessKey("access", "secret"), "zonegroup", nullopt);

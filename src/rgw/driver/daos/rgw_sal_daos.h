@@ -335,7 +335,7 @@ class DaosBucket : public StoreBucket {
                          uint64_t end_epoch) override;
   virtual int remove_objs_from_index(
       const DoutPrefixProvider* dpp,
-      std::list<rgw_obj_index_key>& objs_to_unlink) override;
+      const std::vector<rgw_obj_index_key>& objs_to_unlink) override;
   virtual int check_index(
       const DoutPrefixProvider* dpp,
       std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
@@ -418,14 +418,11 @@ class DaosZoneGroup : public StoreZoneGroup {
   virtual const std::string& get_default_placement_name() const override {
     return group.default_placement.name;
   };
-  virtual int get_hostnames(std::list<std::string>& names) const override {
-    names = group.hostnames;
-    return 0;
+  virtual const std::vector<std::string>& get_hostnames() const override {
+    return group.hostnames;
   };
-  virtual int get_s3website_hostnames(
-      std::list<std::string>& names) const override {
-    names = group.hostnames_s3website;
-    return 0;
+  virtual const std::vector<std::string>& get_s3website_hostnames() const override {
+    return group.hostnames_s3website;
   };
   virtual int get_zone_count() const override { return group.zones.size(); }
   virtual int get_placement_tier(const rgw_placement_rule& rule,
@@ -601,7 +598,7 @@ class DaosObject : public StoreObject {
   virtual ~DaosObject();
 
   virtual int delete_object(const DoutPrefixProvider* dpp, optional_yield y,
-                            uint32_t flags, std::list<rgw_obj_index_key>* remove_objs,
+                            uint32_t flags, std::vector<rgw_obj_index_key>* remove_objs,
                             RGWObjVersionTracker* objv) override;
   virtual int copy_object(
       const ACLOwner& owner, const rgw_user& remote_user,
@@ -874,7 +871,7 @@ class DaosMultipartUpload : public StoreMultipartUpload {
   virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y) override;
   virtual int complete(const DoutPrefixProvider* dpp, optional_yield y,
                        CephContext* cct, std::map<int, std::string>& part_etags,
-                       std::list<rgw_obj_index_key>& remove_objs,
+                       std::vector<rgw_obj_index_key>& remove_objs,
                        uint64_t& accounted_size, bool& compressed,
                        RGWCompressionInfo& cs_info, off_t& off,
                        std::string& tag, ACLOwner& owner, uint64_t olh_epoch,
@@ -883,7 +880,7 @@ class DaosMultipartUpload : public StoreMultipartUpload {
   virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
       CephContext *cct, optional_yield y,
       const rgw_obj& obj,
-      std::list<rgw_obj_index_key>& remove_objs,
+      std::vector<rgw_obj_index_key>& remove_objs,
       prefix_map_t& processed_prefixes) override;
   virtual int get_info(const DoutPrefixProvider* dpp, optional_yield y,
                        rgw_placement_rule** rule,
@@ -1012,7 +1009,7 @@ class DaosStore : public StoreDriver {
                                   const std::string& marker,
                                   void** phandle) override;
   virtual int meta_list_keys_next(const DoutPrefixProvider* dpp, void* handle,
-                                  int max, std::list<std::string>& keys,
+                                  int max, std::vector<std::string>& keys,
                                   bool* truncated) override;
   virtual void meta_list_keys_complete(void* handle) override;
   virtual std::string meta_get_marker(void* handle) override;

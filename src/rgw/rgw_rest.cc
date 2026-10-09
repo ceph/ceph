@@ -147,35 +147,30 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
     generic_attrs_map[http2rgw.http_header] = http2rgw.rgw_attr;
   }
 
-  list<string> extended_http_attrs;
-  get_str_list(cct->_conf->rgw_extended_http_attrs, extended_http_attrs);
-
-  list<string>::iterator iter;
-  for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
+  ceph::for_each_substr(cct->_conf->rgw_extended_http_attrs, ";,= \t",
+                        [](const auto attribute) {
     string rgw_attr = RGW_ATTR_PREFIX;
     // bidirectional mimics the '-' -> '_' behavior
-    lowercase_dash_transform(*iter, std::back_inserter(rgw_attr), true);
+    lowercase_dash_transform(attribute, std::back_inserter(rgw_attr), true);
 
-    rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(*iter);
+    rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(std::string {attribute});
 
     string http_header = "HTTP_";
-    uppercase_dash_transform(*iter, std::back_inserter(http_header));
+    uppercase_dash_transform(attribute, std::back_inserter(http_header));
 
     generic_attrs_map[http_header] = rgw_attr;
-  }
+  });
 
   for (const struct rgw_http_status_code *h = http_codes; h->code; h++) {
     http_status_names[h->code] = h->name;
   }
 
-  std::list<std::string> rgw_dns_names;
-  std::string rgw_dns_names_str = cct->_conf->rgw_dns_name;
-  get_str_list(rgw_dns_names_str, ", ", rgw_dns_names);
-  hostnames_set.insert(rgw_dns_names.begin(), rgw_dns_names.end());
+  ceph::for_each_substr(cct->_conf->rgw_dns_name, ", ", [](const auto name) {
+    hostnames_set.emplace(name);
+  });
 
-  std::list<std::string> names;
-  zone_group.get_hostnames(names);
-  hostnames_set.insert(names.begin(), names.end());
+  const auto& names = zone_group.get_hostnames();
+  hostnames_set.insert(std::begin(names), std::end(names));
   hostnames_set.erase(""); // filter out empty hostnames
   ldout(cct, 20) << "RGW hostnames: " << hostnames_set << dendl;
   /* TODO: We should have a sanity check that no hostname matches the end of
@@ -188,9 +183,9 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
    * X.B.A ambiguously splits to both {X, B.A} and {X.B, A}
    */
 
-  zone_group.get_s3website_hostnames(names);
+  const auto& website_names = zone_group.get_s3website_hostnames();
   hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
-  hostnames_s3website_set.insert(names.begin(), names.end());
+  hostnames_s3website_set.insert(std::begin(website_names), std::end(website_names));
   hostnames_s3website_set.erase(""); // filter out empty hostnames
   ldout(cct, 20) << "RGW S3website hostnames: " << hostnames_s3website_set << dendl;
   /* TODO: we should repeat the hostnames_set sanity check here

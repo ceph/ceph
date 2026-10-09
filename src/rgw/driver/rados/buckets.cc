@@ -13,6 +13,8 @@
  *
  */
 
+#include <array>
+
 #include "buckets.h"
 #include "include/rados/librados.hpp"
 #include "common/async/yield_context.h"
@@ -28,8 +30,7 @@ static int set(const DoutPrefixProvider* dpp, optional_yield y,
                librados::Rados& rados, const rgw_raw_obj& obj,
                cls_user_bucket_entry&& entry, bool add)
 {
-  std::list<cls_user_bucket_entry> entries;
-  entries.push_back(std::move(entry));
+  const std::array entries {std::move(entry)};
 
   rgw_rados_ref ref;
   int r = rgw_get_rados_ref(dpp, &rados, obj, &ref);
@@ -96,12 +97,12 @@ int list(const DoutPrefixProvider* dpp, optional_yield y,
 
   do {
     const uint64_t count = max - listing.buckets.size();
-    std::list<cls_user_bucket_entry> entries;
+    std::vector<cls_user_bucket_entry> entries;
 
     librados::ObjectReadOperation op;
     int rc = 0;
-    ::cls_user_bucket_list(op, marker, end_marker, count,
-                           entries, &marker, &truncated, &rc);
+    ::cls_user_bucket_list(op, marker, end_marker, count, entries,
+                           marker, truncated, rc);
 
     bufferlist bl;
     int r = ref.operate(dpp, std::move(op), &bl, y);

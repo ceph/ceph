@@ -53,7 +53,6 @@
 
 using namespace TOPNSPC::common;
 
-using std::list;
 using std::map;
 using std::ostream;
 using std::ostringstream;
@@ -2064,7 +2063,7 @@ void MDSMonitor::count_metadata(const string &field, Formatter *f)
   f->close_section();
 }
 
-void MDSMonitor::get_versions(map<string, list<string> > &versions)
+void MDSMonitor::get_versions(map<string, vector<string>>& versions)
 {
   map<mds_gid_t,Metadata> meta;
   load_metadata(meta);
@@ -2115,7 +2114,7 @@ int MDSMonitor::print_nodes(Formatter *f)
     return r;
   }
 
-  map<string, list<string> > mdses; // hostname => mds
+  map<string, vector<string>> mdses; // hostname => mds
   for (const auto &p : metadata) {
     const mds_gid_t& gid = p.first;
     const Metadata& m = p.second;

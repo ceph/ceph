@@ -101,7 +101,6 @@
 
 using std::dec;
 using std::hex;
-using std::list;
 using std::map;
 using std::make_pair;
 using std::ostringstream;
@@ -1131,13 +1130,13 @@ void OSDMonitor::on_active()
       priority_convert = true;
     }
   } else {
-    list<MonOpRequestRef> ls;
-    take_all_failures(ls);
-    while (!ls.empty()) {
-      MonOpRequestRef op = ls.front();
+    std::deque<MonOpRequestRef> messages;
+    take_all_failures(messages);
+    while (!messages.empty()) {
+      MonOpRequestRef op = messages.front();
       op->mark_osdmon_event(__func__);
       dispatch(op);
-      ls.pop_front();
+      messages.pop_front();
     }
   }
   start_mapping();
@@ -1158,9 +1157,9 @@ void OSDMonitor::on_shutdown()
   }
 
   // discard failure info, waiters
-  list<MonOpRequestRef> ls;
-  take_all_failures(ls);
-  ls.clear();
+  std::deque<MonOpRequestRef> messages;
+  take_all_failures(messages);
+  messages.clear();
 }
 
 void OSDMonitor::update_logger()
@@ -2180,7 +2179,7 @@ void OSDMonitor::count_metadata(const string& field, Formatter *f)
   f->close_section();
 }
 
-void OSDMonitor::get_versions(std::map<string, list<string>> &versions)
+void OSDMonitor::get_versions(std::map<string, vector<string>>& versions)
 {
   for (int osd = 0; osd < osdmap.get_max_osd(); ++osd) {
     if (osdmap.is_up(osd)) {
@@ -2249,7 +2248,7 @@ int OSDMonitor::dump_osd_metadata(int osd, Formatter *f, ostream *err)
 void OSDMonitor::print_nodes(Formatter *f)
 {
   // group OSDs by their hosts
-  map<string, list<int> > osds; // hostname => osd
+  map<string, vector<int>> osds; // hostname => osd
   for (int osd = 0; osd < osdmap.get_max_osd(); osd++) {
     map<string, string> m;
     if (load_metadata(osd, m, NULL)) {
@@ -3459,32 +3458,32 @@ void OSDMonitor::process_failures()
       ++p;
     } else {
       dout(10) << "process_failures osd." << p->first << dendl;
-      list<MonOpRequestRef> ls;
-      p->second.take_report_messages(ls);
+      std::deque<MonOpRequestRef> messages;
+      p->second.take_report_messages(messages);
       failure_info.erase(p++);
 
-      while (!ls.empty()) {
-        MonOpRequestRef o = ls.front();
+      while (!messages.empty()) {
+        MonOpRequestRef o = messages.front();
         if (o) {
           o->mark_event(__func__);
           MOSDFailure *m = o->get_req<MOSDFailure>();
           send_latest(o, m->get_epoch());
 	  mon.no_reply(o);
         }
-	ls.pop_front();
+	messages.pop_front();
       }
     }
   }
 }
 
-void OSDMonitor::take_all_failures(list<MonOpRequestRef>& ls)
+void OSDMonitor::take_all_failures(std::deque<MonOpRequestRef>& messages)
 {
   dout(10) << __func__ << " on " << failure_info.size() << " osds" << dendl;
 
   for (map<int,failure_info_t>::iterator p = failure_info.begin();
        p != failure_info.end();
        ++p) {
-    p->second.take_report_messages(ls);
+    p->second.take_report_messages(messages);
   }
   failure_info.clear();
 }
@@ -6005,9 +6004,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  for (auto n : { "network_numa_nodes", "objectstore_numa_nodes" }) {
 	    p = m.find(n);
 	    if (p != m.end()) {
-	      list<string> ls = get_str_list(p->second, ",");
+	      auto nodes = get_str_vec(p->second, ",");
 	      f->open_array_section(n);
-	      for (auto node : ls) {
+	      for (const auto& node : nodes) {
 		f->dump_int("node", atoi(node.c_str()));
 	      }
 	      f->close_section();
@@ -7057,11 +7056,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       goto reply;
     }
     int id = osdmap.crush->get_item_id(name);
-    list<int> result;
+    vector<int> result;
     if (id >= 0) {
       result.push_back(id);
     } else {
       int num = osdmap.crush->get_bucket_size(id);
+      if (0 < num) {
+        result.reserve(num);
+      }
+
       for (int i = 0; i < num; ++i) {
 	result.push_back(osdmap.crush->get_bucket_item(id, i));
       }
@@ -11105,7 +11108,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
      ec_profiles.insert(make_move_iterator(begin(old_ec_profiles)),
                         make_move_iterator(end(old_ec_profiles)));
 #endif
-     list<string> referenced_by;
+     vector<string> referenced_by;
+     referenced_by.reserve(std::size(ec_profiles));
      for (auto &i: ec_profiles) {
        for (auto &j: i.second) {
          if ("crush-device-class" == j.first && device_class == j.second) {
@@ -11116,7 +11120,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
      if (!referenced_by.empty()) {
        err = -EBUSY;
        ss << "class '" << device_class
-          << "' is still referenced by erasure-code-profile(s): " << referenced_by;
+          << "' is still referenced by erasure-code-profile(s): "
+          << boost::algorithm::join(referenced_by, ",");
        goto reply_no_propose;
      }
 
@@ -13714,13 +13719,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd blocklist clear" ||
 	     prefix == "osd blacklist clear") {
     pending_inc.new_blocklist.clear();
-    std::list<std::pair<entity_addr_t,utime_t > > blocklist;
-    std::list<std::pair<entity_addr_t,utime_t > > range_b;
-    osdmap.get_blocklist(&blocklist, &range_b);
+    vector<pair<entity_addr_t, utime_t>> blocklist;
+    vector<pair<entity_addr_t, utime_t>> range_blocklist;
+    osdmap.get_blocklist(blocklist, range_blocklist);
     for (const auto &entry : blocklist) {
       pending_inc.old_blocklist.push_back(entry.first);
     }
-    for (const auto &entry : range_b) {
+    for (const auto &entry : range_blocklist) {
       pending_inc.old_range_blocklist.push_back(entry.first);
     }
     ss << " removed all blocklist entries";

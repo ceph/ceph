@@ -4,6 +4,8 @@
 #ifndef CEPH_CLS_USER_CLIENT_H
 #define CEPH_CLS_USER_CLIENT_H
 
+#include <span>
+
 #include "include/rados/librados_fwd.hpp"
 #include "cls_user_ops.h"
 #include "common/RefCountedObj.h"
@@ -18,9 +20,17 @@ public:
  * user objclass
  */
 
+void cls_user_set_buckets(librados::ObjectWriteOperation& op,
+                          std::span<const cls_user_bucket_entry> entries,
+                          bool add);
 void cls_user_set_buckets(librados::ObjectWriteOperation& op, std::list<cls_user_bucket_entry>& entries, bool add);
 void cls_user_complete_stats_sync(librados::ObjectWriteOperation& op);
 void cls_user_remove_bucket(librados::ObjectWriteOperation& op,  const cls_user_bucket& bucket);
+void cls_user_bucket_list(librados::ObjectReadOperation& op,
+                          const std::string& in_marker,
+                          const std::string& end_marker, int max_entries,
+                          std::vector<cls_user_bucket_entry>& entries,
+                          std::string& out_marker, bool& truncated, int& result);
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
 			  const std::string& in_marker,
 			  const std::string& end_marker,
