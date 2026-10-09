@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ConfigMap.h"
+#include "common/cmdparse.h"
 #include "mon/PaxosService.h"
 
 #include <map>
@@ -25,8 +26,17 @@ class ConfigMonitor : public PaxosService
 
   void encode_pending_to_kvmon();
 
+  int prepare_pool_default_set(const cmdmap_t& cmdmap, std::ostream& ss);
+  void dump_pool_defaults(ceph::Formatter *f, std::ostream& out);
+  std::string pool_default_source(const std::string& option);
+
 public:
   ConfigMonitor(Monitor &m, Paxos &p, const std::string& service_name);
+
+  // The pool default options that the configuration database sets for this
+  // monitor other than by an unmasked global value, with the section that
+  // sets them, as this monitor evaluates its masks.
+  std::map<std::string, std::string> pool_default_db_overrides();
 
   void init() override;
 
@@ -41,6 +51,12 @@ public:
 
   void handle_get_config(MonOpRequestRef op);
 
+  const ConfigMap& get_config_map() const {
+    return config_map;
+  }
+
+  int check_pool_default_overrides(
+    const std::map<std::string,std::string>& values, std::ostream& ss);
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;
