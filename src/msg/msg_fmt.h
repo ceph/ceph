@@ -8,8 +8,21 @@
  */
 
 #include <fmt/format.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
+#include "common/fmt_common.h"
 #include "msg/msg_types.h"
+
+template <typename FormatContext>
+auto entity_name_t::fmt_print_ctx(FormatContext& ctx) const {
+  if (is_new() || _num < 0) {
+    return fmt::format_to(ctx.out(), "{}.?", type_str());
+  } else {
+    return fmt::format_to(ctx.out(), "{}.{}",type_str(), _num);
+  }
+}
 
 template <>
 struct fmt::formatter<entity_name_t> {
@@ -24,3 +37,7 @@ struct fmt::formatter<entity_name_t> {
     return fmt::format_to(ctx.out(), "{}.{}", addr.type_str(), addr.num());
   }
 };
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<entity_addrvec_t> : fmt::ostream_formatter {};
+#endif
