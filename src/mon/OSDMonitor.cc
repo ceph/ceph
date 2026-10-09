@@ -8178,6 +8178,11 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
     err = -EINVAL;
     break;
   }
+  if (err == 0 && *size > MAX_POOL_SIZE) {
+    *ss << "a pool can have at most " << MAX_POOL_SIZE << " OSDs, but this "
+        << "one needs " << *size;
+    err = -EINVAL;
+  }
   return err;
 }
 

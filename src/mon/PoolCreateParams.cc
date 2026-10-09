@@ -245,8 +245,9 @@ int check_pool_params(const PoolCreateParams& p,
   const bool erasure = p.pool_type == pg_pool_t::TYPE_ERASURE;
   const string zone_failure_domain = effective_zone_failure_domain(p);
 
-  if (p.num_zones < 1) {
-    *ss << "num_zones must be >= 1" << p.from_default("num_zones");
+  if (p.num_zones < 1 || p.num_zones > cluster.max_num_zones) {
+    *ss << "num_zones must be from 1 to " << cluster.max_num_zones
+        << p.from_default("num_zones");
     return -EINVAL;
   }
   if (!erasure) {
@@ -276,31 +277,42 @@ int check_pool_params(const PoolCreateParams& p,
         return r;
       }
     }
+    // the LRC plugin checks its own k, m and l, and adds local parity chunks
+    const bool lrc = profile.contains("plugin") && profile.at("plugin") == "lrc";
     const auto k = map_value(profile, "k");
     const auto m = map_value(profile, "m");
-    if (!k || !m) {
-      *ss << "the erasure code profile has no k or m" << p.from_default("k");
-      return -EINVAL;
-    }
-    if (*k < 2) {
-      *ss << "k=" << *k << " must be >= 2" << p.from_default("k");
-      return -EINVAL;
-    }
-    if (*m < 1) {
-      *ss << "m=" << *m << " must be >= 1" << p.from_default("m");
-      return -EINVAL;
-    }
-    const int max_k_plus_m = std::numeric_limits<decltype(shard_id_t::id)>::max();
-    if (*k + *m > max_k_plus_m) {
-      *ss << "(k+m)=" << (*k + *m) << " must be <= " << max_k_plus_m
-          << p.from_default("k");
-      return -EINVAL;
-    }
-    if (p.is_given("min_size") && p.min_size &&
-        (p.min_size < *k || p.min_size > *k + *m)) {
-      *ss << "pool min_size must be between " << *k << " and " << (*k + *m)
-          << " (k + m)";
-      return -EINVAL;
+    if (!lrc) {
+      if (!k || !m) {
+        *ss << "the erasure code profile has no k or m" << p.from_default("k");
+        return -EINVAL;
+      }
+      if (*k < 2) {
+        *ss << "k=" << *k << " must be >= 2" << p.from_default("k");
+        return -EINVAL;
+      }
+      if (*m < 1) {
+        *ss << "m=" << *m << " must be >= 1" << p.from_default("m");
+        return -EINVAL;
+      }
+      const int max_k_plus_m =
+        std::numeric_limits<decltype(shard_id_t::id)>::max();
+      if (*k + *m > max_k_plus_m) {
+        *ss << "(k+m)=" << (*k + *m) << " must be <= " << max_k_plus_m
+            << p.from_default("k");
+        return -EINVAL;
+      }
+      if (p.num_zones * (*k + *m) > MAX_POOL_SIZE) {
+        *ss << "a pool can have at most " << MAX_POOL_SIZE << " OSDs, but "
+            << p.num_zones << " zones of k+m=" << (*k + *m) << " need "
+            << p.num_zones * (*k + *m) << p.from_default("k");
+        return -EINVAL;
+      }
+      if (p.is_given("min_size") && p.min_size &&
+          (p.min_size < *k || p.min_size > *k + *m)) {
+        *ss << "pool min_size must be between " << *k << " and " << (*k + *m)
+            << " (k + m)";
+        return -EINVAL;
+      }
     }
   }
   if (p.pg_num < 1 || static_cast<uint64_t>(p.pg_num) > cluster.max_pool_pg_num) {

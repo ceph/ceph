@@ -455,11 +455,74 @@ TEST_F(PoolParamsTest, DefaultsPass) {
 // Test failure when num_zones is 0, naming the option when it is a default
 TEST_F(PoolParamsTest, NumZonesZeroFails) {
   EXPECT_EQ(-EINVAL, check(with({{"num_zones", int64_t(0)}})));
-  EXPECT_EQ("num_zones must be >= 1", ss.str());
+  EXPECT_EQ("num_zones must be from 1 to 2", ss.str());
   PoolCreateParams p = defaults();
   p.num_zones = 0;
   EXPECT_EQ(-EINVAL, check(p));
-  EXPECT_EQ("num_zones must be >= 1 (osd_pool_default_num_zones)", ss.str());
+  EXPECT_EQ("num_zones must be from 1 to 2 (osd_pool_default_num_zones)",
+            ss.str());
+}
+
+// Test failure for more than two zones, which are not supported
+TEST_F(PoolParamsTest, NumZonesThreeFails) {
+  EXPECT_EQ(-EINVAL, check(with({{"num_zones", int64_t(3)}})));
+  EXPECT_EQ("num_zones must be from 1 to 2", ss.str());
+  EXPECT_TRUE(stretch_calls.empty());
+}
+
+// Test more than two zones are accepted when a test raises the limit
+TEST_F(PoolParamsTest, NumZonesThreeWithRaisedLimit) {
+  PoolCreateCluster c = cluster();
+  c.max_num_zones = 3;
+  EXPECT_EQ(0, check(with({{"num_zones", int64_t(3)}}), c)) << ss.str();
+}
+
+// Test an EC pool of up to 128 OSDs is accepted
+TEST_F(PoolParamsTest, ErasureSize128Succeeds) {
+  EXPECT_EQ(0, check(with({{"num_zones", int64_t(2)}, {"k", int64_t(40)},
+                           {"m", int64_t(24)}}, ERASURE))) << ss.str();
+}
+
+// Test failure for an EC pool of more than 128 OSDs, whose shard ids would
+// not fit in a shard_id_t
+TEST_F(PoolParamsTest, ErasureSizeAbove128Fails) {
+  EXPECT_EQ(-EINVAL, check(with({{"num_zones", int64_t(2)}, {"k", int64_t(40)},
+                                 {"m", int64_t(25)}}, ERASURE)));
+  EXPECT_EQ("a pool can have at most 128 OSDs, but 2 zones of k+m=65 need 130",
+            ss.str());
+}
+
+// An LRC profile defined with mapping and layers, as its plugin normalizes it
+map<string, string> lrc_layers_profile() {
+  return {{"plugin", "lrc"}, {"mapping", "DD_"},
+          {"layers", "[ [ \"DDc\", \"\" ] ]"},
+          {"k", "-1"}, {"m", "-1"}, {"l", "-1"}};
+}
+
+// Test an LRC profile defined with mapping and layers is accepted, as the
+// plugin checks it
+TEST_F(PoolParamsTest, LrcLayersProfileSucceeds) {
+  const auto lrc = lrc_layers_profile();
+  PoolCreateParams p = with({}, ERASURE);
+  ASSERT_EQ(0, use_profile(p, "lrcprofile", &lrc, &ss)) << ss.str();
+  EXPECT_EQ(0, check(p)) << ss.str();
+}
+
+// Test an LRC min_size may count the local parity chunks above k+m
+TEST_F(PoolParamsTest, LrcMinSizeAboveKPlusMSucceeds) {
+  const map<string, string> lrc = {
+    {"plugin", "lrc"}, {"k", "4"}, {"m", "2"}, {"l", "3"}};
+  PoolCreateParams p = with({{"min_size", int64_t(7)}}, ERASURE);
+  ASSERT_EQ(0, use_profile(p, "lrcprofile", &lrc, &ss)) << ss.str();
+  EXPECT_EQ(0, check(p)) << ss.str();
+}
+
+// Test a profile of another plugin with k=-1 still fails
+TEST_F(PoolParamsTest, NonLrcNegativeKFails) {
+  const map<string, string> isa = {{"plugin", "isa"}, {"k", "-1"}, {"m", "2"}};
+  PoolCreateParams p = with({}, ERASURE);
+  ASSERT_EQ(0, use_profile(p, "isaprofile", &isa, &ss)) << ss.str();
+  EXPECT_EQ(-EINVAL, check(p));
 }
 
 // Test failure when the legacy size is given with two zones

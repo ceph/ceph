@@ -85,10 +85,15 @@ enum class PoolCommand { CREATE, DEFAULT_SET };
 int check_command_line(const PoolCreateParams& p, PoolCommand command,
                        std::ostream* ss);
 
+// The most OSDs a pool can have: each shard id must fit in a shard_id_t.
+constexpr int64_t MAX_POOL_SIZE = 128;
+
 // What check_pool_params() needs from the cluster.
 struct PoolCreateCluster {
   const CrushWrapper *crush = nullptr;
   uint64_t max_pool_pg_num = 65536;
+  // More than two zones are not supported; unit tests may raise this.
+  int64_t max_num_zones = 2;
   bool allow_crimson = false;
   // Normalize an erasure code profile with its plugin, or fail with the
   // reason. Not set: the profile is used as it is.
