@@ -16,6 +16,7 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
+#include <deque>
 #include <list>
 #include <map>
 #include <mutex>
@@ -1838,9 +1839,14 @@ private:
   void update_crush_location();
 
   class RequestStateHook;
+  class SessionStrandHook;
 
   RequestStateHook *m_request_state_hook = nullptr;
   std::string m_admin_socket_name;
+  SessionStrandHook *m_session_strand_hook = nullptr;
+
+public:
+  void dump_session_strands(ceph::Formatter *f);
 
 public:
   /*** track pending operations ***/
@@ -2374,7 +2380,7 @@ public:
 			boost::system::error_code ec);
   void _finish_command(CommandOp *c, boost::system::error_code ec,
 		       std::string&& rs, ceph::buffer::list&& bl);
-  void handle_command_reply(MCommandReply *m);
+  void handle_command_reply(cref_t<MCommandReply> m);
 
   // -- lingering ops --
 
@@ -2512,14 +2518,33 @@ public:
     // lockdep (using std::sharedMutex) because lockdep doesn't know
     // that.
     std::shared_mutex lock;
+    boost::asio::strand<boost::asio::io_context::executor_type> strand;
+
+    std::mutex strand_track_lock;
+    std::deque<MessageRef> queued_messages;
+
+    template <typename Callable>
+    void track_enqueue(const MessageRef& m, Callable&& f) {
+      std::lock_guard l(strand_track_lock);
+      queued_messages.push_back(m);
+      boost::asio::post(strand, std::forward<Callable>(f));
+    }
+
+    void track_dequeue(const MessageRef& m) {
+      std::lock_guard l(strand_track_lock);
+      ceph_assert(!queued_messages.empty());
+      auto const& _m = queued_messages.front();
+      ceph_assert(_m == m);
+      queued_messages.pop_front();
+    }
 
     int incarnation;
     ConnectionRef con;
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
 
-    OSDSession(CephContext *cct, int o) :
-      osd(o), incarnation(0), con(NULL),
+    OSDSession(CephContext *cct, int o, boost::asio::io_context::executor_type ex) :
+      osd(o), strand(ex), incarnation(0), con(NULL),
       num_locks(cct->_conf->objecter_completion_locks_per_session),
       completion_locks(new std::mutex[num_locks]) {}
 
@@ -2558,9 +2583,8 @@ public:
   std::map<ceph_tid_t,PoolOp*> pool_ops;
   std::atomic<unsigned> num_homeless_ops{0};
 
-  OSDSession* homeless_session = new OSDSession(cct, -1);
-  OSDSession* splitop_session = new OSDSession(cct, -2); // -2 to differentiate from homeless
-
+  OSDSession* homeless_session;
+  OSDSession* splitop_session;
 
   // ops waiting for an osdmap with a new pool or confirmation that
   // the pool does not exist (may be expanded to other uses later)
@@ -2585,7 +2609,7 @@ public:
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void _finish_op(Op *op, int r);
-  boost::system::error_code process_op_reply_handlers(Op *op, std::vector<OSDOp> &out_ops);
+  boost::system::error_code process_op_reply_handlers(Op *op, const std::vector<OSDOp>& out_ops);
   void complete_op_reply(Op *op, boost::system::error_code handler_error, OSDSession *s, std::unique_lock<std::shared_mutex> &sl, int rc);
   static bool is_pg_changed(
     int oldprimary,
@@ -2685,16 +2709,26 @@ private:
    * handle a budget for in-flight ops
    * budget is taken whenever an op goes into the ops std::map
    * and returned whenever an op is removed from the std::map
-   * If throttle_op needs to throttle it will unlock client_lock.
+   * If throttle_op needs to throttle it will unlock client_lock
+   * unless called on the Objecter asio service (see _throttle_op).
    */
   int calc_op_budget(const boost::container::small_vector_base<OSDOp>& ops);
-  void _throttle_op(Op *op, ceph::shunique_lock<ceph::shared_mutex>& sul,
-		    int op_size = 0);
+  /**
+   * Take byte/op budget for a balanced-budget submit.
+   * @return true if budget was acquired immediately.
+   * @return false if budget is unavailable — caller must queue via
+   *         _wait_for_budget and must not block (completions that free
+   *         budget often run on the same asio service).
+   */
+  bool _throttle_op(Op *op, ceph::shunique_lock<ceph::shared_mutex> &sul,
+                    int op_size = 0);
   int _take_op_budget(Op *op, ceph::shunique_lock<ceph::shared_mutex>& sul) {
     ceph_assert(sul && sul.mutex() == &rwlock);
     int op_budget = calc_op_budget(op->ops);
     if (keep_balanced_budget) {
-      _throttle_op(op, sul, op_budget);
+      // Must acquire synchronously (may block off the asio service).
+      // Service-thread deferral is handled in _op_submit_with_budget.
+      ceph_assert(_throttle_op(op, sul, op_budget));
     } else { // update take_linger_budget to match this!
       op_throttle_bytes.take(op_budget);
       op_throttle_ops.take(1);
@@ -2703,10 +2737,31 @@ private:
     return op_budget;
   }
   int take_linger_budget(LingerOp *info);
+
+  /// Op deferred until inflight budget is available (service-thread path)
+  struct budget_waiter_t {
+    Op *op = nullptr;
+    int op_budget = 0;
+    int *ctx_budget = nullptr;
+    /// Test-only: signaled when budget is taken without submitting an Op
+    fu2::unique_function<void() &&> on_budget;
+  };
+  std::list<budget_waiter_t> waiting_for_budget;
+  std::atomic<unsigned> budget_waiter_count{0};
+
+  void _wait_for_budget(Op *op, int op_budget, int *ctx_budget,
+                        ceph_tid_t *ptid);
+  void _dispatch_budget_waiters();
+  bool _cancel_budget_waiter(ceph_tid_t tid, int r);
+  void _cancel_all_budget_waiters();
+
   void put_op_budget_bytes(int op_budget) {
     ceph_assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);
     op_throttle_ops.put(1);
+    if (budget_waiter_count.load(std::memory_order_acquire) > 0) {
+      boost::asio::post(service, [this] { _dispatch_budget_waiters(); });
+    }
   }
   void put_nlist_context_budget(NListContext *list_context);
   Throttle op_throttle_bytes{cct, "objecter_bytes",
@@ -2746,16 +2801,26 @@ private:
     return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
   }
 
-
   /**
    * Tell the objecter to throttle outgoing ops according to its
-   * budget (in _conf). If you do this, ops can block, in
-   * which case it will unlock client_lock and sleep until
-   * incoming messages reduce the used budget low enough for
-   * the ops to continue going; then it will lock client_lock again.
+   * budget (in _conf). If budget is unavailable, ops are deferred on
+   * a wait queue and resumed from put_op_budget_bytes (via the asio
+   * service) instead of blocking the calling thread.
    */
   void set_balanced_budget() { keep_balanced_budget = true; }
   void unset_balanced_budget() { keep_balanced_budget = false; }
+
+  /**
+   * Test helpers for the balanced-budget throttle path.
+   * If on_budget is provided and budget is unavailable, queues and
+   * invokes on_budget when budget is taken (never blocks).
+   * If on_budget is empty, waits synchronously via the same queue
+   * (for setup on non-pool threads only).
+   */
+  void
+  throttle_op_budget_for_test(int op_budget,
+                              fu2::unique_function<void() &&> on_budget = {});
+  void put_op_budget_for_test(int op_budget);
 
   void set_honor_pool_full() { honor_pool_full = true; }
   void unset_honor_pool_full() { honor_pool_full = false; }
@@ -2791,13 +2856,11 @@ private:
       return false;
     }
   }
-  void ms_fast_dispatch2(const MessageRef& m) override {
-    [[maybe_unused]] auto s = ms_dispatch2(m);
-  }
+  void ms_fast_dispatch2(const MessageRef& m) override;
 
-  void handle_osd_op_reply(class MOSDOpReply *m);
-  void handle_osd_backoff(class MOSDBackoff *m);
-  void handle_watch_notify(class MWatchNotify *m);
+  void handle_osd_op_reply(cref_t<MOSDOpReply> m);
+  void handle_osd_backoff(cref_t<MOSDBackoff> m);
+  void handle_watch_notify(cref_t<MWatchNotify> m);
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map(epoch_t e=0);
 
@@ -3344,7 +3407,7 @@ public:
  public:
 
   void _do_watch_notify(boost::intrusive_ptr<LingerOp> info,
-                        boost::intrusive_ptr<MWatchNotify> m);
+                        cref_t<MWatchNotify> m);
 
   /**
    * set up initial ops in the op std::vector, and allocate a final op slot.
