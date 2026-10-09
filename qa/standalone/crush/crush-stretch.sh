@@ -235,6 +235,13 @@ function TEST_pool_create_stretch_ec() {
     ceph osd crush rule dump data0 | jq '.steps[4].op' | grep "chooseleaf_indep" || return 1
     ceph osd crush rule dump data0 | jq '.steps[4].num' | grep "3" || return 1
     ceph osd crush rule dump data0 | jq '.steps[4].type' | grep "host" || return 1
+
+    ceph osd erasure-code-profile set osd_failure_domain_profile \
+        plugin=jerasure k=2 m=1 crush-osd-failure-domain=osd || return 1
+    ceph osd pool create data_osd_failure_domain erasure --num-zones 2 \
+        --erasure_code_profile=osd_failure_domain_profile || return 1
+    ceph osd crush rule dump data_osd_failure_domain | \
+        jq -r '.steps[4].type' | grep '^osd$' || return 1
 }
 
 # Test osd pool create for stretch replica fails when insufficient number of zones, hosts, and osds
