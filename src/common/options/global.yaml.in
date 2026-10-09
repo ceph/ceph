@@ -2107,6 +2107,14 @@ options:
   - mon
   flags:
   - cluster_create
+- name: mon_debug_allow_pool_create_before_commit
+  type: bool
+  level: dev
+  desc: Allow single-zone pool creation before require_osd_release reaches the
+    release with per-pool num_zones, for testing upgrades
+  default: false
+  services:
+  - mon
 - name: mon_debug_no_require_bluestore_for_ec_overwrites
   type: bool
   level: dev
