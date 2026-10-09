@@ -77,14 +77,17 @@ def run_command_show_failure(args):
 
 
 @functools.lru_cache
-def get_tags(path):
+def get_tags(path, version=None):
     cmdout = get_command_output(f'skopeo list-tags docker://{path}')
-    return json.loads(cmdout)['Tags']
+    alltags = json.loads(cmdout)['Tags']
+    if version is None:
+        return alltags
+    return [t for t in alltags if t.startswith(version)]
 
 
-def get_latest_tag(path):
+def get_latest_tag(path, version):
     try:
-        latest_tag = get_tags(path)[-1]
+        latest_tag = get_tags(path, version)[-1]
     except IndexError:
         return None
     return latest_tag
@@ -121,13 +124,13 @@ def get_all_matching_digest_tags(path, tag):
 
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument('-n', '--dry-run', action='store_true', help='do all local manipulations but do not push final containers to MANIFEST_HOST, or in --promote, calculate but do not copy images to release host')
-    ap.add_argument('-P', '--promote', action='store_true', help='promote newest prerelease manifest container to released (move from MANIFEST_HOST to RELEASE_MANIFEST_HOST')
+    ap.add_argument('--dry-run', '-n', action='store_true', help='do all local manipulations but do not push final containers to MANIFEST_HOST, or in --promote, calculate but do not copy images to release host')
+    ap.add_argument('--promote', '-P', action='store_true', help='promote newest prerelease manifest container to released (move from MANIFEST_HOST to RELEASE_MANIFEST_HOST')
+    ap.add_argument('--version', '-v', required=True, help='operate on this version (leading string of container tag, like v20.2.0)')
     args = ap.parse_args()
     return args
 
 def build_prerelease(sysargs):
-    global args
 
     arch_specific_host = os.environ.get('ARCH_SPECIFIC_HOST', 'quay.ceph.io')
     amd64_repo = os.environ.get('AMD64_REPO', 'ceph/prerelease-amd64')
@@ -147,7 +150,14 @@ def build_prerelease(sysargs):
         f'{arch_specific_host}/{amd64_repo}',
         f'{arch_specific_host}/{arm64_repo}',
     )
-    tags = [get_latest_tag(p) for p in repopaths]
+    tags = list()
+    for p in repopaths:
+        latest = get_latest_tag(p, sysargs.version)
+        if latest is None:
+            print(f'no {sysargs.version} tag in {p}', file=sys.stderr)
+            return(1)
+        tags.append(latest)
+
     print(f'latest tags: amd64:{tags[0]} arm64:{tags[1]}')
 
     # check that version of latest tag matches
@@ -218,7 +228,7 @@ def promote(sysargs):
 
     manifest_path = f'{manifest_host}/{manifest_repo}'
     release_path = f'{release_manifest_host}/{release_manifest_repo}'
-    latest_tag = get_latest_tag(manifest_path)
+    latest_tag = get_latest_tag(manifest_path, sysargs.version)
     all_tags = get_all_matching_digest_tags(manifest_path, latest_tag)
 
     copypaths = list()
@@ -241,6 +251,8 @@ def promote(sysargs):
 
 def main():
     args = parse_args()
+    if args.version[0] != 'v':
+        args.version = f'v{args.version}'
 
     if args.promote:
         promote(args)
