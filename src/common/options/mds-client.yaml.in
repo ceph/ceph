@@ -646,3 +646,13 @@ options:
   - mds_client
   flags:
   - runtime
+- name: client_alternate_name_visible
+  type: bool
+  level: advanced
+  desc: Expose dentry alternate_name as a vxattr
+  long_desc: Expose the field alternate_name in dentry as a extended attribute.
+    This allows for backup utilities to be able to copy all values needed for
+    features such as case sensitivity and fscrypt encryption.
+  default: false
+  services:
+  - mds_client
