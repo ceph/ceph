@@ -2694,7 +2694,7 @@ bool DaemonServer::_handle_command(
 	  r = -ENOENT;
 	}
       }
-    } else if (daemon->config_defaults_bl.length() > 0) {
+    } else if (daemon->config_defaults_bl.length() > 0 || !daemon->config_defaults.empty()) {
       TextTable tbl;
       if (f) {
 	f->open_array_section("config");
