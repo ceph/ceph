@@ -844,6 +844,63 @@ TEST_F(OSDMonitorDisableStretchModeTest, SameRuleFails) {
             "using", ss.str());
 }
 
+// A k=2 m=1 EC pool
+class OSDMonitorStretchUnsetECTest : public ::testing::Test {
+protected:
+  stringstream ss;
+
+  int check(int num_zones, int64_t size, int64_t min_size) {
+    ss.str("");
+    return OSDMonitor::check_stretch_unset_ec("ec", num_zones, 2, 3, size,
+                                              min_size, &ss);
+  }
+};
+
+// Test an older release's stretch is cleared with size k+m and min_size k
+TEST_F(OSDMonitorStretchUnsetECTest, OneZoneMinSizeKSucceeds) {
+  EXPECT_EQ(0, check(1, 3, 2)) << ss.str();
+}
+
+// Test min_size k+m is accepted
+TEST_F(OSDMonitorStretchUnsetECTest, OneZoneMinSizeKPlusMSucceeds) {
+  EXPECT_EQ(0, check(1, 3, 3)) << ss.str();
+}
+
+// Test failure for a multi-zone pool, which num_zones 1 unstretches
+TEST_F(OSDMonitorStretchUnsetECTest, TwoZonesFails) {
+  EXPECT_EQ(-EOPNOTSUPP, check(2, 3, 2));
+  EXPECT_EQ("osd pool stretch unset is not supported for EC pools with "
+            "num_zones > 1; use 'ceph osd pool set ec num_zones 1' instead",
+            ss.str());
+}
+
+// Test failure for a multi-zone pool even with its own size
+TEST_F(OSDMonitorStretchUnsetECTest, TwoZonesWithZoneSizeFails) {
+  EXPECT_EQ(-EOPNOTSUPP, check(2, 6, 2));
+}
+
+// Test failure when the size is not k+m
+TEST_F(OSDMonitorStretchUnsetECTest, SizeNotKPlusMFails) {
+  EXPECT_EQ(-EINVAL, check(1, 6, 2));
+  EXPECT_EQ("'ec' is erasure-coded: size must be 3 (k+m) and min_size "
+            "between 2 (k) and 3", ss.str());
+}
+
+// Test failure when min_size is below k
+TEST_F(OSDMonitorStretchUnsetECTest, MinSizeBelowKFails) {
+  EXPECT_EQ(-EINVAL, check(1, 3, 1));
+}
+
+// Test failure when min_size is left out (0)
+TEST_F(OSDMonitorStretchUnsetECTest, MinSizeZeroFails) {
+  EXPECT_EQ(-EINVAL, check(1, 3, 0));
+}
+
+// Test failure when min_size is above k+m
+TEST_F(OSDMonitorStretchUnsetECTest, MinSizeAboveKPlusMFails) {
+  EXPECT_EQ(-EINVAL, check(1, 3, 4));
+}
+
 class OSDMonitorCommitDefaultsTest
   : public OSDMonitorValidateStretchModeNewPoolTest {
 protected:

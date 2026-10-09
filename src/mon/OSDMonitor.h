@@ -1031,6 +1031,14 @@ public:
       bool recovering,
       std::ostream *ss);
 
+  // Whether ceph osd pool stretch unset may clear the stretch values of an
+  // EC pool with k data chunks and k_plus_m chunks, giving it size and
+  // min_size.
+  static int check_stretch_unset_ec(const std::string& pool_name,
+                                    int num_zones, int k, int k_plus_m,
+                                    int64_t size, int64_t min_size,
+                                    std::ostream *ss);
+
   // ceph mon enable_stretch_mode and disable_stretch_mode once the upgrade
   // is committed: change every pool as ceph osd pool set num_zones does and
   // set the pool creation defaults. -EAGAIN when CRUSH rules were created

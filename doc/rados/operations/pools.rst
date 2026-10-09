@@ -917,6 +917,13 @@ To move the pool back to non-stretch, run a command of the following form:
 
 This command fails while stretch mode is enabled.
 
+.. note::
+
+   For an EC (erasure-coded) pool with ``num_zones`` greater than 1, use
+   ``ceph osd pool set {pool-name} num_zones 1`` instead. This command accepts
+   an EC pool only to clear stretch values that an older release gave it, with
+   ``{size}`` K+M and ``{min_size}`` from K to K+M.
+
 Here are the breakdowns of the arguments:
 
 .. describe:: {pool-name}

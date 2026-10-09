@@ -492,7 +492,9 @@ changes it (Section 13.2). A ``num_zones`` key set in a profile with
   erasure-coded pool"). An EC pool's ``size`` changes only with its ``num_zones`` (Section
   13.2), which ``ceph mon enable_stretch_mode`` and ``disable_stretch_mode`` also change
   (Section 2.3.4).
-* ``ceph osd pool stretch set`` and ``unset`` are refused while stretch mode is enabled
+* ``ceph osd pool stretch set`` is refused for EC pools, and so is ``ceph osd pool stretch
+  unset`` for an EC pool with ``num_zones > 1``: an EC pool is stretched and unstretched only
+  with ``num_zones`` (Section 13.2). Both are also refused while stretch mode is enabled
   (Section 11.4.1).
 * A pool's profile cannot be replaced. ``erasure_code_profile`` can be read with
   ``ceph osd pool get`` but is not a ``ceph osd pool set`` variable.
@@ -2052,7 +2054,23 @@ several places. These gaps must be filled for EC pools with ``num_zones > 1``.
 **11.4.1 Pool Stretch Set / Unset** (``prepare_command_pool_stretch_set``,
 ``prepare_command_pool_stretch_unset``)
 
-Both ``stretch_set`` and ``stretch_unset`` are refused for EC pools.
+``ceph osd pool stretch set`` and ``unset`` are main's commands for an individual
+stretch pool. They take the pool's stretch values (``peering_crush_bucket_*``,
+``crush_rule``, ``size`` and ``min_size``) from the command line. An EC pool is
+stretched and unstretched only with ``ceph osd pool set <pool> num_zones <n>``
+(Section 13.2), which works out all of these, and the shards that cannot be
+primary, from the zone count. Two ways to stretch an EC pool would have to agree
+on every one of these values, so:
+
+- ``stretch set`` refuses every EC pool, with ``osd pool stretch set is not
+  supported for EC pools; use 'ceph osd pool set <pool> num_zones <N>' instead``.
+- ``stretch unset`` refuses an EC pool with ``num_zones > 1`` in the same way,
+  pointing to ``num_zones 1``. An EC pool with ``num_zones = 1`` has stretch
+  values only if an older release's ``stretch set`` gave them. As on main,
+  ``stretch unset`` clears them only with ``size`` K+M and a ``min_size`` from K
+  to K+M, which also repairs a ``size`` that the older ``stretch set`` changed.
+- Both are refused for every pool type while stretch mode is enabled: stretch
+  mode sets the stretch values of its pools itself.
 
 **11.4.2 Enable/Disable Stretch Mode** (``try_enable_stretch_mode``,
 ``try_disable_stretch_mode``)

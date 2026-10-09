@@ -10388,9 +10388,10 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
   pg_pool_t p = *osdmap.get_pg_pool(pool);
   if (pending_inc.new_pools.count(pool))
     p = pending_inc.new_pools[pool];
-  if (p.is_erasure() && !num_zones_supported()) {
-    ss << "an EC pool cannot be stretched until " << num_zones_upgrade_hint();
-    return -EPERM;
+  if (p.is_erasure()) {
+    ss << "osd pool stretch set is not supported for EC pools; "
+       << "use 'ceph osd pool set " << pool_name << " num_zones <N>' instead";
+    return -EOPNOTSUPP;
   }
 
   int64_t bucket_count = cmd_getval_or<int64_t>(cmdmap, "peering_crush_bucket_count", 0);
@@ -10552,34 +10553,6 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
     return -EINVAL;
   }
 
-  if (p.is_erasure()) {
-    if (!p.has_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
-      ss << "EC pool must have allow_ec_optimizations=true for stretch mode";
-      return -EINVAL;
-    }
-
-    ErasureCodeInterfaceRef erasure_code;
-    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &ss);
-    if (err == 0) {
-      unsigned base_size = erasure_code->get_chunk_count();
-      int expected_size = num_zones * base_size;
-      int k = erasure_code->get_data_chunk_count();
-      if (pool_size != expected_size) {
-        ss << "For EC pool in stretch mode, size must be " << expected_size
-        << " (num_zones * (k+m) = " << num_zones << " * " << base_size << "), got " << pool_size;
-        return -EINVAL;
-      }
-      if (static_cast<__u8>(pool_min_size) < k || static_cast<__u8>(pool_min_size) > base_size) {
-         ss << "For EC pool in stretch mode, min_size must be between " << k
-            << " (k) and " << base_size << " (k+m), got " << pool_min_size;
-         return -EINVAL;
-      }
-    } else {
-      ss << "get_erasure_code() failed";
-      return -EINVAL;
-    }
-  }
-
   p.peering_crush_bucket_count = static_cast<uint32_t>(bucket_count);
   p.peering_crush_bucket_target = static_cast<uint32_t>(bucket_target);
   p.peering_crush_bucket_barrier = static_cast<uint32_t>(bucket_barrier);
@@ -10587,14 +10560,9 @@ int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
   p.size = static_cast<__u8>(pool_size);
   // Store num_zones (extracted from CRUSH rule topology)
   p.num_zones = static_cast<__u8>(num_zones);
-  if (int r = update_nonprimary_shards(p, &ss); r < 0) {
-    return r;
-  }
-  if (p.is_replicated()) {
-    p.min_size = static_cast<__u8>(pool_min_size);
-    // Store replica (calculated or provided)
-    p.replica = static_cast<__u8>(replica);
-  }
+  p.min_size = static_cast<__u8>(pool_min_size);
+  // Store replica (calculated or provided)
+  p.replica = static_cast<__u8>(replica);
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
   ss << "pool " << pool_name << " stretch values are set successfully";
@@ -10688,6 +10656,21 @@ int OSDMonitor::prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
     return -EINVAL;
   }
 
+  if (p.is_erasure()) {
+    ErasureCodeInterfaceRef erasure_code;
+    int r = get_erasure_code(p.erasure_code_profile, &erasure_code, &ss);
+    if (r < 0) {
+      return r;
+    }
+    r = check_stretch_unset_ec(pool_name, p.get_num_zones(),
+                               erasure_code->get_data_chunk_count(),
+                               erasure_code->get_chunk_count(),
+                               pool_size, pool_min_size, &ss);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   // unset stretch values
   p.peering_crush_bucket_count = 0;
   p.peering_crush_bucket_target = 0;
@@ -10697,9 +10680,6 @@ int OSDMonitor::prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
   p.min_size = static_cast<__u8>(pool_min_size);
   // Clear num_zones and set replica (no longer stretch)
   p.num_zones = 1;
-  if (int r = update_nonprimary_shards(p, &ss); r < 0) {
-    return r;
-  }
   p.replica = static_cast<__u8>(replica);
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
@@ -17626,6 +17606,26 @@ int OSDMonitor::validate_disable_stretch_mode(
       *ss << "You can't disable stretch mode with the same crush rule you are using";
       return -EINVAL;
     }
+  }
+  return 0;
+}
+
+int OSDMonitor::check_stretch_unset_ec(const string& pool_name,
+                                       int num_zones, int k, int k_plus_m,
+                                       int64_t size, int64_t min_size,
+                                       ostream *ss)
+{
+  if (num_zones > 1) {
+    *ss << "osd pool stretch unset is not supported for EC pools with "
+        << "num_zones > 1; use 'ceph osd pool set " << pool_name
+        << " num_zones 1' instead";
+    return -EOPNOTSUPP;
+  }
+  // only an older release's stretch set could have stretched this pool
+  if (size != k_plus_m || min_size < k || min_size > k_plus_m) {
+    *ss << "'" << pool_name << "' is erasure-coded: size must be " << k_plus_m
+        << " (k+m) and min_size between " << k << " (k) and " << k_plus_m;
+    return -EINVAL;
   }
   return 0;
 }

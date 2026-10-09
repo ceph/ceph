@@ -73,7 +73,7 @@ with rados.Rados(conffile='$dir/ceph.conf') as r:
         ceph osd pool set early num_zones 1 || return 1
     ceph osd erasure-code-profile set ec21 plugin=isa k=2 m=1 || return 1
     ceph osd pool create ecearly 8 8 erasure ec21 || return 1
-    expect_failure $dir "cannot be stretched until" \
+    expect_failure $dir "not supported for EC pools" \
         ceph osd pool stretch set ecearly 2 2 host replicated_rule 6 2 || return 1
     ceph config rm mon mon_debug_allow_pool_create_before_commit || return 1
 
