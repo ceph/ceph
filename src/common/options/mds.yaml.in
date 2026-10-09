@@ -1563,6 +1563,15 @@ options:
   default: false
   services:
   - mds
+- name: mds_inject_session_open_reply_delay
+  type: float
+  level: dev
+  desc: delay (in seconds) the reply to a client session open request
+  long_desc: Testing only. The session is marked open on the MDS but the
+    client is not told so until after this delay.
+  default: 0
+  services:
+  - mds
 - name: mds_request_load_average_decay_rate
   type: float
   level: advanced
