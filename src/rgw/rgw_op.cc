@@ -521,9 +521,15 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     mpobj->set_in_extra_data(true);
     object = mpobj.get();
   }
-  policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->bucket_tenant);
+  // Evaluate the policy and ACL of the bucket being read, which for a copy
+  // source is the source bucket -- not the request's target bucket. Using
+  // s->bucket_tenant / s->bucket_owner here would feed the destination
+  // bucket's tenant and owner into the source-object check and let a copy
+  // requester read a source object across tenants/accounts.
+  policy = get_iam_policy_from_attr(s->cct, bucket_attrs, bucket->get_tenant());
 
-  int ret = get_obj_policy_from_attr(dpp, s->cct, driver, s->bucket_owner,
+  const ACLOwner bucket_owner{bucket_info.owner};
+  int ret = get_obj_policy_from_attr(dpp, s->cct, driver, bucket_owner,
 				     acl, storage_class, object, s->yield);
   if (ret == -ENOENT) {
     // the object doesn't exist, but we can't expose that information to clients
@@ -6432,7 +6438,12 @@ int RGWCopyObj::verify_permission(optional_yield y)
         rgw::IAM::s3GetObject :
         rgw::IAM::s3GetObjectVersion;
 
-    if (!verify_bucket_permission(this, s, ARN(s->src_object->get_obj()),
+    // Determine cross-account access against the SOURCE bucket's owner. The
+    // default overload keys this on s->bucket_owner, which is the destination
+    // bucket here; that would let the destination owner read the source object
+    // across accounts via the account-root grant in evaluate_iam_policies().
+    if (!verify_bucket_permission(this, s, src_bucket->get_owner(),
+                                  ARN(s->src_object->get_obj()),
                                   s->user_acl, src_bucket_acl,
                                   src_policy, s->iam_identity_policies,
                                   s->session_policies, action)) {

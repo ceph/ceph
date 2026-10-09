@@ -1492,6 +1492,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               req_state * const s,
+                              const rgw_owner& bucket_owner,
                               const rgw::ARN& arn,
                               const RGWAccessControlPolicy& user_acl,
                               const RGWAccessControlPolicy& bucket_acl,
@@ -1510,9 +1511,9 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 
   if (ps.identity->get_account()) {
     const bool account_root = (ps.identity->get_identity_type() == TYPE_ROOT);
-    if (!ps.identity->is_owner_of(s->bucket_owner.id)) {
+    if (!ps.identity->is_owner_of(bucket_owner)) {
       ldpp_dout(dpp, 4) << "cross-account request for bucket owner "
-          << s->bucket_owner.id << " != " << s->owner.id << dendl;
+          << bucket_owner << " != " << s->owner.id << dendl;
       constexpr bool cross_account = true;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
@@ -1539,6 +1540,23 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                                   bucket_policy, user_policies,
                                   session_policies, op,
                                   cross_account, &s->granted_by_acl);
+}
+
+bool verify_bucket_permission(const DoutPrefixProvider* dpp,
+                              req_state * const s,
+                              const rgw::ARN& arn,
+                              const RGWAccessControlPolicy& user_acl,
+                              const RGWAccessControlPolicy& bucket_acl,
+			      const boost::optional<Policy>& bucket_policy,
+                              const vector<Policy>& user_policies,
+                              const vector<Policy>& session_policies,
+                              const uint64_t op)
+{
+  // the resource is the request's target bucket, so cross-account access is
+  // determined against its owner.
+  return verify_bucket_permission(dpp, s, s->bucket_owner.id, arn, user_acl,
+                                  bucket_acl, bucket_policy, user_policies,
+                                  session_policies, op);
 }
 
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
