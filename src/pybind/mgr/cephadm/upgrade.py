@@ -1486,20 +1486,18 @@ class CephadmUpgrade:
         # Keep only the MDS daemons of a single filesystem (lowest service name)
         # so we disrupt one filesystem at a time. _do_upgrade is re-entered each
         # serve() cycle, so later filesystems are handled on subsequent passes.
+        # Only called with MDS daemons, whose service name is always
+        # 'mds.<service_id>'.
         by_fs: Dict[str, List[Tuple[DaemonDescription, bool]]] = {}
-        passthrough: List[Tuple[DaemonDescription, bool]] = []
         for d_entry in need_upgrade:
-            svc = d_entry[0].service_name()
-            if svc and svc.startswith('mds.'):
-                by_fs.setdefault(svc.removeprefix('mds.'), []).append(d_entry)
-            else:
-                passthrough.append(d_entry)
+            fs_name = d_entry[0].service_name().removeprefix('mds.')
+            by_fs.setdefault(fs_name, []).append(d_entry)
         if not by_fs:
             return need_upgrade
         first_fs = sorted(by_fs.keys())[0]
         logger.info('Upgrade: handling MDS of filesystem %s this pass '
                     '(one filesystem at a time)' % first_fs)
-        return by_fs[first_fs] + passthrough
+        return by_fs[first_fs]
 
     def _prepare_for_mds_upgrade(
         self,
@@ -2211,10 +2209,10 @@ class CephadmUpgrade:
                             'val': 'true',
                         })
                     except Exception as e:
-                        logger.error("Failed to set fs joinable "
+                        logger.error(f"Failed to set fs {fs_name} joinable "
                                      f"true due to {e}")
-                        raise OrchestratorError("Failed to set"
-                                                "fs joinable true"
+                        raise OrchestratorError(f"Failed to set fs {fs_name} "
+                                                "joinable true "
                                                 f"due to {e}")
                     if not self._wait_for_fs_mdss_active(fs_name):
                         raise OrchestratorError(
@@ -2572,7 +2570,8 @@ class CephadmUpgrade:
             if to_upgrade:
                 return
 
-            if daemon_type == 'mds' and need_upgrade:
+            if daemon_type == 'mds' and need_upgrade and \
+                    self.mgr.upgrade_fs_one_at_a_time:
                 # Every MDS selected for this pass was skipped by _to_upgrade:
                 # they were just redeployed and the daemon cache has not caught
                 # up yet (unknown image id, correct image name). Falling
