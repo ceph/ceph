@@ -1402,6 +1402,44 @@ TEST(OSDMonitorStretchPoolDefaultsTest, OneZone) {
   EXPECT_EQ(expected, OSDMonitor::stretch_pool_defaults(1, 3, ""));
 }
 
+class OSDMonitorProfileCopyNameTest : public ::testing::Test {
+protected:
+  const map<string, string> contents = {{"plugin", "isa"}, {"k", "2"},
+                                        {"m", "2"}};
+  const map<string, string> other = {{"plugin", "jerasure"}, {"k", "2"},
+                                     {"m", "2"}};
+  map<string, map<string, string>> profiles;
+
+  string copy_name(const string& base) {
+    return OSDMonitor::profile_copy_name(
+      base, contents, [this](const string& name) -> const map<string, string>* {
+        auto p = profiles.find(name);
+        return p == profiles.end() ? nullptr : &p->second;
+      });
+  }
+};
+
+// Test a free name is used as it is
+TEST_F(OSDMonitorProfileCopyNameTest, FreeName) {
+  EXPECT_EQ("pool-k2-m2", copy_name("pool-k2-m2"));
+}
+
+// Test a profile of that name with the same contents is shared
+TEST_F(OSDMonitorProfileCopyNameTest, SameContents) {
+  profiles["pool-k2-m2"] = contents;
+  EXPECT_EQ("pool-k2-m2", copy_name("pool-k2-m2"));
+}
+
+// Test a profile of that name with other contents gets a suffix
+TEST_F(OSDMonitorProfileCopyNameTest, OtherContents) {
+  profiles["pool-k2-m2"] = other;
+  EXPECT_EQ("pool-k2-m2-1", copy_name("pool-k2-m2"));
+  profiles["pool-k2-m2-1"] = other;
+  EXPECT_EQ("pool-k2-m2-2", copy_name("pool-k2-m2"));
+  profiles["pool-k2-m2-2"] = contents;
+  EXPECT_EQ("pool-k2-m2-2", copy_name("pool-k2-m2"));
+}
+
 // Test the commit hint names the command and the release
 TEST(OSDMonitorUpgradeHintTest, NamesCommandAndRelease) {
   EXPECT_EQ("the upgrade is committed with 'ceph osd require-osd-release "
@@ -1766,4 +1804,25 @@ TEST_F(OSDMonitorNumZonesPlacementTest, RuleNotRead) {
   EXPECT_EQ("datacenter", placement.zone_failure_domain);
   EXPECT_EQ("host", placement.osd_failure_domain);
   EXPECT_EQ("ssd", placement.device_class);
+}
+
+// The one check behind refusing an OSD's boot, withholding its osdmaps,
+// marking it down at a commit, and refusing require-osd-release
+TEST(OSDMonitorJoinTest, WhyOsdCannotJoin) {
+  const uint64_t vampire = CEPH_FEATURES_ALL;
+  const uint64_t vampire_no_zones =
+    CEPH_FEATURES_ALL & ~CEPH_FEATURE_OSD_STRETCH_ZONES;
+  const uint64_t umbrella = vampire_no_zones & ~CEPH_FEATURE_SERVER_VAMPIRE;
+  const auto v = ceph_release_t::vampire;
+
+  EXPECT_EQ("", OSDMonitor::why_osd_cannot_join(vampire, v, true));
+  EXPECT_EQ("", OSDMonitor::why_osd_cannot_join(vampire_no_zones, v, false));
+  EXPECT_EQ("", OSDMonitor::why_osd_cannot_join(
+              umbrella, ceph_release_t::umbrella, false));
+  EXPECT_EQ("lacks support for pools over zones",
+            OSDMonitor::why_osd_cannot_join(vampire_no_zones, v, true));
+  EXPECT_EQ("is of a release before vampire",
+            OSDMonitor::why_osd_cannot_join(umbrella, v, false));
+  EXPECT_EQ("is of a release before vampire",
+            OSDMonitor::why_osd_cannot_join(umbrella, v, true));
 }
