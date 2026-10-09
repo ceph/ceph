@@ -105,6 +105,39 @@ The following is recommended for any bucket that backs a vector bucket:
   object deletions would leave behind stale files that are not cleaned up.
 
 
+Sessions
+--------
+
+Vector operations on a vector bucket (``PutVectors``, ``GetVectors``,
+``ListVectors``, ``QueryVectors`` and ``DeleteVectors``) go through a LanceDB
+*session* that the RGW keeps for the bucket. The session holds two caches that spare the RGW from
+reading the same LanceDB files again on every request:
+
+- an *index cache*, holding the vector indexes that were loaded for queries
+- a *metadata cache*, holding the manifests, schemas and file metadata of the
+  indexes of the bucket
+
+A session is created when the vector bucket is created, or
+when a vector operation finds that the bucket has no session, and it is removed
+when the vector bucket is deleted. Operations on the vector bucket itself and on
+its indexes, such as ``CreateIndex`` and ``DeleteIndex``, do not use the session.
+
+The sizes of the caches are set with:
+
+.. confval:: rgw_s3vector_session_index_cache_size
+.. confval:: rgw_s3vector_session_metadata_cache_size
+
+Both are read when the session is created, so a change applies only to sessions
+created afterwards. The session of a bucket may be removed with the `Admin API`_
+in order to create it again with the new sizes.
+
+A session that is not used by any vector operation is removed after:
+
+.. confval:: rgw_s3vector_session_inactive_timeout
+
+The next vector operation on the bucket creates the session again, with empty
+caches. The vector bucket and its data are not affected.
+
 Multisite
 ---------
 
@@ -987,6 +1020,127 @@ Request parameters:
 
 .. note:: Deleting a key that does not exist in the index is not considered an
    error.
+
+Admin API
+---------
+
+The sessions of vector buckets are managed with the :ref:`Admin Operations <radosgw admin ops>` API,
+under the ``/admin/vectorbucket/session`` resource. Like the other admin
+operations, the requests are signed with the S3 credentials of an
+administrator, a user with the ``buckets`` capability. The response body is JSON.
+
+A single vector bucket is identified by the ``vectorbucket`` and ``tenant`` parameters,
+where a missing ``tenant`` means a vector bucket without a tenant.
+The vector buckets of a user are identified by the ``uid`` parameter,
+holding the owner in the ``<tenant>$<uid>`` form when it belongs to a tenant.
+
+.. note:: A session belongs to a single RGW process. The requests below report
+   and remove only the sessions of the RGW to which they are sent, so in a
+   deployment with several RGWs, each one has to be queried, or asked to remove
+   a session, separately. A vector bucket may have a session in one RGW and
+   none in another.
+
+Both cache entries in the responses hold the same fields::
+
+    {
+        "hits": 26,
+        "misses": 7,
+        "num_entries": 14,
+        "size_bytes": 21722
+    }
+
+- ``hits``: the number of lookups that were served from the cache
+- ``misses``: the number of lookups that had to read from the storage backend
+- ``num_entries``: the number of entries currently held in the cache
+- ``size_bytes``: the size of the entries currently held in the cache
+
+Get Session Info
+~~~~~~~~~~~~~~~~
+
+Get the session of a vector bucket. A vector bucket that exists but has no
+session, because it was not used yet, or because its session was removed, is
+reported as inactive, without the cache statistics.
+
+:caps: buckets=read
+
+::
+
+    GET /admin/vectorbucket/session?vectorbucket=<vector-bucket>[&tenant=<tenant>] HTTP/1.1
+
+Response::
+
+    {
+        "tenant": "",
+        "vectorbucket": "my-vectors",
+        "session": {
+            "active": true,
+            "index_cache": {"hits": 13, "misses": 0, "num_entries": 4, "size_bytes": 2196},
+            "metadata_cache": {"hits": 26, "misses": 7, "num_entries": 14, "size_bytes": 21722}
+        }
+    }
+
+A vector bucket that does not exist is reported with a ``404`` status and the
+``NoSuchBucket`` code.
+
+List Sessions
+~~~~~~~~~~~~~
+
+List the sessions of the vector buckets owned by a user. Vector buckets without
+a session are not listed.
+
+:caps: buckets=read
+
+::
+
+    GET /admin/vectorbucket/session?uid=<uid>[&max-entries=<n>&marker=<marker>] HTTP/1.1
+
+- ``max-entries``: the maximum number of vector buckets to go over, 1000 by
+  default. Note that the vector buckets without a session are counted but not
+  listed, so the number of listed sessions may be lower.
+- ``marker``: the name of the vector bucket to start after, taken from the
+  ``next_marker`` of a previous response.
+
+Response::
+
+    {
+        "uid": "testid",
+        "marker": "",
+        "next_marker": "my-vectors",
+        "sessions": [
+            {
+                "tenant": "",
+                "vectorbucket": "my-vectors",
+                "index_cache": {"hits": 13, "misses": 0, "num_entries": 4, "size_bytes": 2196},
+                "metadata_cache": {"hits": 26, "misses": 7, "num_entries": 14, "size_bytes": 21722}
+            }
+        ]
+    }
+
+The ``marker`` and ``next_marker`` fields are present only when the listing is
+truncated. A user that does not exist is reported with a ``404`` status and the
+``NoSuchUser`` code.
+
+Remove Session
+~~~~~~~~~~~~~~
+
+Remove the session of a vector bucket, and drop its caches. The vector bucket
+and its data are not affected, and the next vector operation on the bucket
+creates a new session. Removing the session of a vector bucket that has none
+is not considered an error.
+
+:caps: buckets=write
+
+::
+
+    DELETE /admin/vectorbucket/session?vectorbucket=<vector-bucket>[&tenant=<tenant>] HTTP/1.1
+
+The response has no body. A vector bucket that does not exist is reported with
+a ``404`` status and the ``NoSuchBucket`` code.
+
+.. note:: A request that gives both ``uid`` and ``vectorbucket``, or neither of
+   them, is rejected with a ``400`` status and the ``InvalidArgument`` code. The
+   ``/admin/vectorbucket`` resource has no operations of its own: vector buckets
+   are managed with the `S3 Vectors REST API`_.
 
 Permissions
 -----------
