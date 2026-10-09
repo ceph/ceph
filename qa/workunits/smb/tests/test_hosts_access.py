@@ -12,6 +12,8 @@ BOGUS = '192.0.2.222'
 # BOGUS_NET is a full network address version of the above.
 BOGUS_NET = '192.0.2.0/24'
 
+NtStatus = smbprotocol.header.NtStatus
+
 
 @pytest.mark.hosts_access
 class TestHostsAccessToggle1:
@@ -58,7 +60,7 @@ class TestHostsAccessToggle1:
         assert applied['share_id'] == mod_share['share_id']
         assert applied['hosts_access'] == mod_share['hosts_access']
 
-        with pytest.raises(smbprotocol.exceptions.AccessDenied):
+        with smbutil.raises_nt_error(NtStatus.STATUS_ACCESS_DENIED):
             with smbutil.connection(smb_cfg, self.share_name) as sharep:
                 fname = sharep / self.filename
                 fname.write_text('value: NOPE\n')
@@ -102,7 +104,7 @@ class TestHostsAccessToggle1:
         assert applied['share_id'] == mod_share['share_id']
         assert applied['hosts_access'] == mod_share['hosts_access']
 
-        with pytest.raises(smbprotocol.exceptions.AccessDenied):
+        with smbutil.raises_nt_error(NtStatus.STATUS_ACCESS_DENIED):
             with smbutil.connection(smb_cfg, self.share_name) as sharep:
                 fname = sharep / self.filename
                 fname.write_text('value: NOPE\n')
@@ -117,7 +119,7 @@ class TestHostsAccessToggle1:
         assert applied['share_id'] == mod_share['share_id']
         assert applied['hosts_access'] == mod_share['hosts_access']
 
-        with pytest.raises(smbprotocol.exceptions.AccessDenied):
+        with smbutil.raises_nt_error(NtStatus.STATUS_ACCESS_DENIED):
             with smbutil.connection(smb_cfg, self.share_name) as sharep:
                 fname = sharep / self.filename
                 fname.write_text('value: NOPE\n')

@@ -28,7 +28,9 @@ from . import (
 )
 from .cli import SMBCLICommand
 from .enums import (
+    ACLSupportPolicy,
     AuthMode,
+    CaseInsensitiveCheckPolicy,
     ClientSupportMode,
     InputPasswordFilter,
     JoinSourceType,
@@ -598,6 +600,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         share_name: str = '',
         user_id: str = '',
         readonly: bool = False,
+        acl_support: Optional[ACLSupportPolicy] = None,
     ) -> results.Result:
         """Create an SMB share backed by RGW"""
         try:
@@ -618,6 +621,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     user_id=fetched_user_id,
                 ),
             )
+            if acl_support is not None:
+                share.acl_support = acl_support
 
             # Apply share resource (staging may create credential too)
             return self._apply_res([share], create_only=True).squash(share)
@@ -643,6 +648,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         share_name: str = '',
         subvolume: str = '',
         readonly: bool = False,
+        case_insensitive: Optional[CaseInsensitiveCheckPolicy] = None,
+        acl_support: Optional[ACLSupportPolicy] = None,
     ) -> results.Result:
         """Create an smb share"""
         share = resources.Share(
@@ -654,8 +661,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 volume=cephfs_volume,
                 path=path,
                 subvolume=subvolume,
+                case_insensitive=case_insensitive,
             ),
         )
+        if acl_support is not None:
+            share.acl_support = acl_support
         return self._apply_res([share], create_only=True).one()
 
     @SMBCLICommand('share rm', perm='rw')

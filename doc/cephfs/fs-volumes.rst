@@ -361,7 +361,7 @@ Use a command of the following form to create a subvolume:
 
 .. prompt:: bash #
 
-   ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes>] [--group_name <subvol_group_name>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--namespace-isolated] [--earmark <earmark>] [--normalization <form>] [--casesensitive <bool>] [--enctag <enctag>]
+   ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes>] [--group_name <subvol_group_name>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--namespace-isolated] [--earmark <earmark>] [--normalization <form>] [--casesensitive <bool>] [--enctag <enctag>] [--protocols {default|smb}]
 
 
 The command succeeds even if the subvolume already exists.
@@ -436,6 +436,16 @@ The encryption tag can be used to identify a subvolume to its associated encrypt
 master key and policy. One can map the value of enctag with a corresponding master
 key. This can then be used to unlock the subvolume. This master key may be stored
 in a secure location such as a key management server.
+
+For convenience, a ``--protocols`` option exists to select defaults that are
+optimized for a particular file-sharing protocol. Pass ``--protocols=smb`` to
+automatically opt in to settings tuned for use with SMB shares. Currently, this
+sets the mode to 0777, sets case insensitivity, and sets the smb earmark. You
+may also pass ``--protocols=default`` to explicitly choose the normal defaults.
+The ``--protocols`` option may be combined with the options it sets to
+customize a particular value while taking the other preferred defaults. For
+example, ``--protocols=smb --casesensitive=1`` takes the preferred smb defaults
+for mode and earmark but forces the subvolume to be case sensitive.
 
 Removing a Subvolume
 ~~~~~~~~~~~~~~~~~~~~
