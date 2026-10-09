@@ -18,9 +18,11 @@ from cephadm.utils import (
     CEPH_UPGRADE_ORDER,
     CEPH_TYPES,
     CEPH_IMAGE_TYPES,
+    INGRESS_TYPES,
     NON_CEPH_IMAGE_TYPES,
     MONITORING_STACK_TYPES,
     GATEWAY_TYPES,
+    SERIAL_UPGRADE_DAEMON_TYPES,
     ALLOWED_CIPHERS,
     SERVICE_CIPHER,
 )
@@ -423,8 +425,17 @@ class CephadmUpgrade:
         if any(not d.container_image_digests for d in daemons if d.daemon_type == 'mgr'):
             return '', []
 
-        completed_daemons = [(d.daemon_type, any(d in self.upgrade_state.target_digests for d in (
-            d.container_image_digests or []))) for d in daemons if d.daemon_type]
+        completed_daemons = []
+        for d in daemons:
+            if not d.daemon_type:
+                continue
+            if d.daemon_type in INGRESS_TYPES:
+                completed = any(dig in self.upgrade_state.target_digests
+                                for dig in (d.deployed_by or []))
+            else:
+                completed = any(dig in self.upgrade_state.target_digests
+                                for dig in (d.container_image_digests or []))
+            completed_daemons.append((d.daemon_type, completed))
 
         done = len([True for completion in completed_daemons if completion[1]])
 
@@ -1756,7 +1767,12 @@ class CephadmUpgrade:
             # 1. Limit how many core daemons get queued in a single pass without
             #    a mon-supplied peer batch in known_ok_to_stop.
             # 2. Yield between batches of core daemons to allow the mon to catch up.
-            if d.daemon_type in ['osd', 'mds', 'mon'] and not known_ok_to_stop:
+            # Ingress daemons (haproxy, keepalived) are also rate-limited to
+            # one-at-a-time to preserve HA during upgrade: redeploying all
+            # instances simultaneously would take down the VIP and all client
+            # connections.  There is no ceph ok-to-stop for these types, so
+            # known_ok_to_stop is always empty and the break always fires.
+            if d.daemon_type in SERIAL_UPGRADE_DAEMON_TYPES and not known_ok_to_stop:
                 # osd ok-to-upgrade batch is not empty, so keep looping to
                 # add more OSDs to the batch
                 if d.daemon_type == 'osd' and self._upgrade_uses_ok_to_upgrade_for_osds() and (len(known_ok_to_upgrade) > 0):
@@ -2387,7 +2403,7 @@ class CephadmUpgrade:
                         # no ceph daemons need upgrade
                         need_upgrade_names = [d[0].name() for d in need_upgrade] + \
                             [d[0].name() for d in need_upgrade_deployer]
-                        dds = [d for d in self.mgr.cache.get_daemons_by_type(
+                        dds = [d for d in self.mgr.cache.get_daemons_by_daemon_type(
                             daemon_type) if d.name() not in need_upgrade_names]
                         _, ___, n2, ____ = self._detect_need_upgrade(dds, target_digests, target_image)
                         need_upgrade_deployer += n2
@@ -2424,7 +2440,7 @@ class CephadmUpgrade:
             # types. If we haven't actually finished upgrading all the daemons
             # of this type, we should exit the loop here
             _, n1, n2, _ = self._detect_need_upgrade(
-                self.mgr.cache.get_daemons_by_type(daemon_type), target_digests, target_image)
+                self.mgr.cache.get_daemons_by_daemon_type(daemon_type), target_digests, target_image)
             if n1 or n2:
                 continue
 

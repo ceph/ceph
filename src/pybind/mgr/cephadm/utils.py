@@ -41,9 +41,15 @@ MONITORING_STACK_TYPES = ['node-exporter', 'prometheus',
                           'alertmanager', 'grafana', 'loki', 'promtail', 'alloy',
                           'pushgateway']
 MGMT_GATEWAY_STACK_TYPES = ['mgmt-gateway', 'oauth2-proxy']
+INGRESS_TYPES = ['haproxy', 'keepalived']
 RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs', 'keepalived', 'smb']
 
-CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES + MGMT_GATEWAY_STACK_TYPES
+# Daemon types that must be upgraded one at a time (serially).
+# osd/mds/mon use the mon ok-to-stop gate; ingress daemons have no
+# such gate but must still be rolled one-at-a-time to preserve HA.
+SERIAL_UPGRADE_DAEMON_TYPES = ['osd', 'mds', 'mon'] + INGRESS_TYPES
+
+CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + INGRESS_TYPES + MONITORING_STACK_TYPES + MGMT_GATEWAY_STACK_TYPES
 
 # these daemon types use the ceph container image
 CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs', 'node-proxy']
@@ -51,7 +57,7 @@ CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs', 'node-proxy']
 # these daemons do not use the ceph image. There are other daemons
 # that also don't use the ceph image, but we only care about those
 # that are part of the upgrade order here
-NON_CEPH_IMAGE_TYPES = MONITORING_STACK_TYPES + ['nvmeof', 'smb'] + MGMT_GATEWAY_STACK_TYPES
+NON_CEPH_IMAGE_TYPES = MONITORING_STACK_TYPES + ['nvmeof', 'smb'] + MGMT_GATEWAY_STACK_TYPES + INGRESS_TYPES
 
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter
 cephadmNoImage = CephadmNoImage.token
