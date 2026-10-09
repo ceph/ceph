@@ -215,6 +215,12 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         cellTemplate: this.hostNameTpl
       },
       {
+        name: $localize`Service Instances`,
+        prop: 'service_instances',
+        flexGrow: 1.5,
+        cellTemplate: this.servicesTpl
+      },
+      {
         name: $localize`Labels`,
         prop: 'labels',
         flexGrow: 1,
@@ -380,7 +386,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       });
     } else {
       // mark host facts columns unavailable
-      for (let column = 4; column < this.columns.length; column++) {
+      // start after hostname, service_instances, labels, status, model (first 5 columns)
+      for (let column = 5; column < this.columns.length; column++) {
         this.columns[column]['cellTemplate'] = this.orchTmpl;
       }
     }
@@ -403,7 +410,11 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         mergeMap((orchStatus) => {
           this.orchStatus = orchStatus;
           const factsAvailable = this.checkHostsFactsAvailable();
-          return this.hostService.list(this.tableContext?.toParams(), factsAvailable.toString());
+          return this.hostService.list(
+            this.tableContext?.toParams(),
+            factsAvailable.toString(),
+            true
+          );
         })
       )
       .subscribe(
