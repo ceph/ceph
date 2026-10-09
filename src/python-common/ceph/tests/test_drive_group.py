@@ -721,3 +721,55 @@ def test_drive_group_osd_type_crimson_roundtrip():
     assert spec2.osd_type == 'crimson'
     j2 = spec2.to_json()
     assert j2['spec']['osd_type'] == 'crimson'
+
+
+def test_drive_group_min_alloc_size():
+    dg = DriveGroupSpec.from_json({
+        'service_type': 'osd',
+        'service_id': 'coarse_iu_qlc',
+        'placement': {'host_pattern': '*'},
+        'data_devices': {'all': True},
+        'min_alloc_size': 16384,
+    })
+    dg.validate()
+    assert dg.min_alloc_size == 16384
+
+
+def test_drive_group_min_alloc_size_invalid_type():
+    # from_json validates eagerly, so the rejection happens there rather than
+    # at an explicit validate() call.
+    with pytest.raises(DriveGroupValidationError, match='min_alloc_size'):
+        DriveGroupSpec.from_json({
+            'service_type': 'osd',
+            'service_id': 'coarse_iu_qlc',
+            'placement': {'host_pattern': '*'},
+            'data_devices': {'all': True},
+            'min_alloc_size': 16384.5,
+        })
+
+
+def test_ceph_volume_command_min_alloc_size():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='coarse_iu_qlc',
+                          data_devices=DeviceSelection(all=True),
+                          min_alloc_size=16384,
+                          )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device()*2)
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all('--bluestore-min-alloc-size 16384' in cmd for cmd in cmds), \
+        f'Expected --bluestore-min-alloc-size in {cmds}'
+
+
+def test_ceph_volume_command_no_min_alloc_size():
+    spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                          service_id='plain',
+                          data_devices=DeviceSelection(all=True),
+                          )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device()*2)
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert all('--bluestore-min-alloc-size' not in cmd for cmd in cmds), \
+        f'Unexpected --bluestore-min-alloc-size in {cmds}'

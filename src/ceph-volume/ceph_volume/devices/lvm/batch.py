@@ -282,6 +282,14 @@ class Batch(object):
             default=1.0
         )
         parser.add_argument(
+            '--bluestore-min-alloc-size',
+            type=disk.Size.parse,
+            help='Set bluestore_min_alloc_size for each OSD created, in bytes. '
+                 'Applied at mkfs of each individual OSD and immutable for that '
+                 "OSD's lifetime. Use for coarse indirection-unit QLC SSDs, whose "
+                 'allocation unit is larger than the 4 KiB default.'
+        )
+        parser.add_argument(
             '--block-db-size',
             type=disk.Size.parse,
             help='Set (or override) the "bluestore_block_db_size" value, in bytes'

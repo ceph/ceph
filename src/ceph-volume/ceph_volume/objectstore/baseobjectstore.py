@@ -171,6 +171,14 @@ class BaseObjectStore:
             self.osd_mkfs_cmd.extend(['--bdev-enable-discard', 'false'])
         if getattr(self.args, 'crush_device_class', None) == 'fcm' and self.objectstore == 'bluestore':
             self.osd_mkfs_cmd.extend(['--set-keepcaps', 'true'])
+        # min_alloc_size is a mkfs-time-only setting, so to take effect it must be passed on
+        # this command line. It cannot be supplied as a config option masked by
+        # device class, because the device class does not exist until after the
+        # OSD is running.
+        min_alloc = getattr(self.args, 'bluestore_min_alloc_size', None)
+        if min_alloc and self.objectstore == 'bluestore':
+            self.osd_mkfs_cmd.extend(['--bluestore-min-alloc-size',
+                                      str(int(min_alloc))])
         if self.cephx_secret is not None:
             self.osd_mkfs_cmd.extend(['--keyfile', '-'])
 

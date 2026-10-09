@@ -1,4 +1,5 @@
 import pytest
+import argparse
 from unittest.mock import patch, Mock, call
 from ceph_volume.objectstore.baseobjectstore import BaseObjectStore
 from ceph_volume.util import system
@@ -331,3 +332,27 @@ class TestBaseObjectStore:
         self.b.get_osdspec_affinity = lambda: 'foo'
         self.b.add_objectstore_opts()
         assert self.b.osd_mkfs_cmd == ['binary', 'arg1', '--osdspec-affinity', 'foo']
+
+    def test_build_osd_mkfs_cmd_sets_min_alloc_size(self):
+        bo = BaseObjectStore([])
+        bo.args = argparse.Namespace(bluestore_min_alloc_size=16384)
+        bo.osd_path = '/var/lib/ceph/osd/ceph-123/'
+        bo.osd_fsid = 'abcd-1234'
+        bo.objectstore = 'bluestore'
+        bo.osd_id = '123'
+        bo.monmap = '/etc/ceph/ceph.monmap'
+        result = bo.build_osd_mkfs_cmd()
+
+        assert '--bluestore-min-alloc-size' in result
+        assert result[result.index('--bluestore-min-alloc-size') + 1] == '16384'
+
+    def test_build_osd_mkfs_cmd_min_alloc_size_absent_by_default(self):
+        bo = BaseObjectStore([])
+        bo.osd_path = '/var/lib/ceph/osd/ceph-123/'
+        bo.osd_fsid = 'abcd-1234'
+        bo.objectstore = 'bluestore'
+        bo.osd_id = '123'
+        bo.monmap = '/etc/ceph/ceph.monmap'
+        result = bo.build_osd_mkfs_cmd()
+
+        assert '--bluestore-min-alloc-size' not in result
