@@ -1,0 +1,21 @@
+{
+    "accessAccounts": {
+      "test": {
+        "access": "test",
+        "secret": "test",
+        "role": "admin",
+        "userID": 0,
+        "groupID": 0,
+        "projectID": 0
+      },
+      "altuser": {
+        "access": "altuser",
+        "secret": "altpass",
+        "role": "user",
+        "userID": 0,
+        "groupID": 0,
+        "projectID": 0
+      }
+   }
+}
+

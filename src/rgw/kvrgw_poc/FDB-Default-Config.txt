@@ -1,0 +1,6 @@
+storage-servers: count=6, CPU-Cores=1, MEM-GB=1
+Log-server: count=3, CPU-Cores=1, MEM-GB=1
+stateless-servers: count=3, CPU-Cores=1, MEM-GB=1
+throttle: disable
+storage_hard_limit_mb: 1500
+engine: ssd2
