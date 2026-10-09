@@ -58,7 +58,7 @@ export class NfsService extends ApiClient {
 
   list(clusterId?: string) {
     return this.http.get(`${this.apiPath}/export`, {
-      params: { cluster_id: clusterId }
+      params: clusterId ? { cluster_id: clusterId } : {}
     });
   }
 
