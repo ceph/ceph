@@ -287,7 +287,7 @@ const STEPS: &[(&str, &str)] = &[
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("adopt",    "start RGW against the same tree"),
-    ("resolve",  "check the imported member runs as its account"),
+    ("resolve",  "check the imported root and member, and what the member runs as"),
 ];
 
 fn main() {
@@ -1578,7 +1578,8 @@ fn adopt(env: &Env) -> Result<(), String> {
     Ok(())
 }
 
-/// Check that the imported member runs as its account.
+/// Check that the imported member runs as its account, and that the
+/// account's own user is its root.
 ///
 /// The import writes one identity row per account and none for its
 /// members, and a member with no row resolves to its account's
@@ -1638,6 +1639,25 @@ fn resolve(env: &Env) -> Result<(), String> {
         return Err(format!("the member {user} was imported outside any account"));
     }
     println!("resolve  member {:?} is {user} in {account}", env.member);
+
+    /* The account's own user is its root.  Without that it is an
+     * ordinary member with no policy, and RGW refuses it everything the
+     * account owns.  The member, by the same lookup, is not. */
+    let (status, body) = rgw_call(&admin, "GET",
+        &format!("{base}/admin/user?access-key={}&format=json", env.access_key))?;
+    if status != 200 {
+        return Err(format!("the gateway does not know the account's key ({status}):\n{body}"));
+    }
+    let root_type = json_str(&body, "type").unwrap_or_default();
+    if root_type != "root" {
+        return Err(format!("the account's user is of type {root_type:?}, not its root"));
+    }
+    let (_, member_info) = rgw_call(&admin, "GET",
+        &format!("{base}/admin/user?access-key={ak}&format=json"))?;
+    if json_str(&member_info, "type").as_deref() == Some("root") {
+        return Err("the member was made its account's root".into());
+    }
+    println!("resolve  the account's user is its root;  the member is not");
 
     let (status, body) = rgw_call(&admin, "PUT",
         &format!("{base}/admin/user?caps&uid={user}&user-caps=nsfs%3Dread&format=json"))?;
