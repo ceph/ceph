@@ -5,6 +5,7 @@
 
 #include "common/hobject_fmt.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
+#include "osd/osd_types_fmt.h"
 
 SET_SUBSYS(seastore_onode);
 
