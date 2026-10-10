@@ -1160,6 +1160,7 @@ void Cache::mark_transaction_conflicted(
                       pending->pending_extents.end(),
                       e) != pending->pending_extents.end()) {
           pending->deferred_frees.push_back(e);
+          epm.account_conflict_pending_free(e->get_paddr(), e->get_length());
         } else {
           epm.mark_space_free(e->get_paddr(), e->get_length());
         }
