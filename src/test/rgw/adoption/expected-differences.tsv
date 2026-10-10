@@ -38,14 +38,15 @@
 # a defect, not an expected difference, and only the bucket's own
 # adoption marker is permitted.
 
-theirs:ours-before	manifest	etag	persists	PROVISIONAL non-MD5 objects only: their mtime token loses 8 bits to a double, ours does not, and we deliberately do not reproduce it -- DECISIONS.md 2026-10-09
+theirs:ours-before	manifest	etag	persists	PROVISIONAL only where NooBaa stored no user.content_md5. WITH rgw_non_md5_etag the values differ in the mtime's low 8 bits, which we do not reproduce (DECISIONS.md 2026-10-09); WITHOUT it -- the default -- we MD5 the object and the values are unrelated. The row cannot be read without knowing which
 theirs:ours-before	manifest	listed-etag	persists	PROVISIONAL same value by the same path, through ListObjects
 theirs:ours-before	manifest	head-etag	persists	PROVISIONAL same value by the same path, through HeadObject
 theirs:ours-before	manifest	copy.reported-etag	persists	PROVISIONAL same value by the same path, through CopyObject's result
 theirs:ours-before	manifest	listed-owner	persists	PROVISIONAL _get_object_owner() returns undefined always, so NooBaa objects have no owner; answering from the inode uid is an RGW addition
 theirs:ours-before	manifest	version.*.owner	persists	PROVISIONAL same cause as listed-owner, per version
 theirs:ours-before	inventory	xattr:security.selinux	filtered	not written by either gateway; the host's policy put it there, and it differs per machine. The inventory writer drops it rather than listing it here
-theirs:ours-before	inventory	xattr:user.nsfs.adopted	vanishes	PROVISIONAL the bucket's adoption marker is the one attribute adopt writes; absent in serve mode, and never on an object until C6
+theirs:ours-before	inventory	xattr:user.nsfs.extensions	vanishes	PROVISIONAL the marker adopt writes -- EXTENSIONS_XATTR, bucket_profile.h:85 -- deliberately not routed through disk_name() because choosing the strategy is what it is for. Absent in serve mode, and not on an object until C6
+ours-before:ours-after	inventory	xattr:user.nsfs.converting	vanishes	PROVISIONAL CONVERTING_XATTR, bucket_profile.h:107, records the middle state and is gone once conversion completes
 theirs:ours-before	run	coverage-lock	absent	NooBaa answers 501 NotImplemented to PutObjectLockConfiguration, so the axis cannot create its bucket and writes no artifact -- lock.rs:78 ignores it under fails_on_noobaa
 
 # ---- conversion:  ours-before vs ours-after ------------------------
@@ -71,7 +72,9 @@ ours-before:ours-after	manifest	meta.content_md5	vanishes	their reader re-expose
 #       *field name*, so one gateway refusing and the other accepting
 #       shows up as a removed line and an added line rather than a
 #       changed value.  The format, not the list, has to answer this.
-#   manifest  version.mtime-<...>-ino-<...>.*  the field name embeds a
-#       version id, which is an outcome and not a parameter, so these
-#       lines cannot align between two runs at all.  Blocks the
-#       versioning axis entirely until the names are normalized.
+#
+# Checked and NOT a problem:  version.mtime-<...>-ino-<...>.* field
+# names align, because NooBaa stores every version id in
+# user.noobaa.version_id -- the current version included -- and we
+# forward the stored string (NB_KEYS, xattr_strategy.cc:131) rather
+# than recomputing it.  One tree, one set of ids, all three captures.
