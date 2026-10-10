@@ -153,18 +153,33 @@ entity_addrvec_t ProtocolV2::client_ident_addrs() const
   if (!outgoing_io_shard) {
     return addrs;
   }
-  // ip/port stay the bind address. Bits 24-31 of the nonce are the
-  // sending reactor, so the peer keeps one session per reactor instead
-  // of treating each new one as a reconnect of the same peer address.
+  // ip/port stay the bind address. The nonce mixes in the sending
+  // reactor and the destination tag (0 = osdmap port, N+1 = exclusive
+  // port of reactor N) so two sessions from the same reactor to
+  // different peer reactors do not collapse in the lossless map. The
+  // tag is the reactor we asked to connect to, not a difference of
+  // this OSD's port and the peer's.
   const uint32_t shard = static_cast<uint32_t>(*outgoing_io_shard);
   ceph_assert(shard < 256);
+  const uint32_t dest_tag = outgoing_dest_tag;
   for (auto& addr : addrs.v) {
-    const uint32_t base = addr.get_nonce();
-    uint32_t stamped = (base & 0x00ffffffu) | (shard << 24);
-    if (stamped == base) {
-      stamped = base ^ 0x00008000u;
+    // Keep every bit of the daemon nonce. Masking it down to 16 bits
+    // let two OSD incarnations advertise the same address and alias a
+    // lossless session. The mix is bijective in its input, so different
+    // reactors and destination tags still do not collapse together.
+    uint32_t x = addr.get_nonce() ^ (shard * 0x9E3779B9u) ^ (dest_tag * 0x85EBCA6Bu);
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    if (x == 0 || x == addr.get_nonce()) {
+      x ^= 0xA5A5A5A5u;
     }
-    addr.set_nonce(stamped);
+    if (x == 0) {
+      x = 1;
+    }
+    addr.set_nonce(x);
   }
   return addrs;
 }
@@ -172,10 +187,43 @@ entity_addrvec_t ProtocolV2::client_ident_addrs() const
 seastar::future<SocketFRef> ProtocolV2::connect_socket()
 {
   const auto addr = conn.peer_addr;
-  auto do_connect = [addr] {
-    return Socket::connect(addr).then([](SocketRef sock) {
+  const bool steer = outgoing_steer_peer && outgoing_io_shard.has_value();
+  const unsigned shard = steer ? static_cast<unsigned>(*outgoing_io_shard) : 0;
+  const unsigned nshards = seastar::smp::count;
+  auto do_connect = [addr, steer, shard, nshards] {
+    auto to_foreign = [](SocketRef sock) {
       return seastar::make_foreign(std::move(sock));
-    });
+    };
+    if (!steer || nshards <= 1) {
+      return Socket::connect(addr).then(std::move(to_foreign));
+    }
+    // source_port % nshards == shard, so the peer accepts on this reactor.
+    // A busy port is skipped. If none is free, connect anyway and the peer
+    // forwards.
+    return seastar::do_with(unsigned(0), [=](unsigned& attempt) {
+      return seastar::repeat_until_value([&attempt, addr, shard, nshards] {
+        auto plain = [addr] {
+          return Socket::connect(addr).then([](SocketRef sock) {
+            return std::optional<SocketRef>(std::move(sock));
+          });
+        };
+        if (attempt >= 32) {
+          return plain();
+        }
+        const uint32_t port = 32768u + shard + attempt * nshards;
+        ++attempt;
+        if (port > 60999u) {
+          return plain();
+        }
+        return Socket::connect(addr, static_cast<uint16_t>(port)
+        ).then([](SocketRef sock) {
+          return std::optional<SocketRef>(std::move(sock));
+        }).handle_exception([](std::exception_ptr) {
+          return seastar::make_ready_future<std::optional<SocketRef>>(
+              std::nullopt);
+        });
+      });
+    }).then(std::move(to_foreign));
   };
   if (outgoing_io_shard &&
       *outgoing_io_shard != seastar::this_shard_id()) {
@@ -794,7 +842,20 @@ ProtocolV2::client_connect()
           // is this who we intended to talk to?
           // be a bit forgiving here, since we may be connecting based on addresses parsed out
           // of mon_host or something.
-          if (!server_ident.addrs().contains(conn.target_addr)) {
+          // An exclusive reactor port is still this OSD: the peer advertises
+          // the osdmap port, and we connected to port + stride * (sid + 1).
+          const bool server_is_target = [&] {
+            if (server_ident.addrs().contains(conn.target_addr)) {
+              return true;
+            }
+            for (const auto& addr : server_ident.addrs().v) {
+              if (is_osd_msgr_addr(addr, conn.target_addr, seastar::smp::count)) {
+                return true;
+              }
+            }
+            return false;
+          }();
+          if (!server_is_target) {
             logger().warn("{} peer identifies as {}, does not include {}",
                           conn, server_ident.addrs(), conn.target_addr);
             throw std::system_error(
@@ -804,7 +865,11 @@ ProtocolV2::client_connect()
           server_cookie = server_ident.cookie();
 
           // TODO: change peer_addr to entity_addrvec_t
-          if (server_ident.addrs().front() != conn.peer_addr) {
+          // Keep peer_addr as the exclusive port we connected to. The
+          // messenger map is keyed by it; the peer advertises the base port.
+          if (server_ident.addrs().front() != conn.peer_addr &&
+              !is_osd_msgr_addr(server_ident.addrs().front(), conn.peer_addr,
+                                seastar::smp::count)) {
             logger().warn("{} peer advertises as {}, does not match {}",
                           conn, server_ident.addrs(), conn.peer_addr);
             throw std::system_error(
@@ -1437,7 +1502,19 @@ ProtocolV2::server_connect()
       throw std::system_error(
           make_error_code(crimson::net::error::bad_peer_address));
     }
-    if (!messenger.get_myaddrs().contains(client_ident.target_addr())) {
+    const bool target_is_us = [&] {
+      if (messenger.get_myaddrs().contains(client_ident.target_addr())) {
+        return true;
+      }
+      for (const auto& addr : messenger.get_myaddrs().v) {
+        if (is_osd_msgr_addr(addr, client_ident.target_addr(),
+                             seastar::smp::count)) {
+          return true;
+        }
+      }
+      return false;
+    }();
+    if (!target_is_us) {
       logger().warn("{} peer is trying to reach {} which is not us ({})",
                     conn, client_ident.target_addr(), messenger.get_myaddrs());
       throw std::system_error(
@@ -1490,7 +1567,8 @@ ProtocolV2::server_connect()
     // Looks good so far, let's check if there is already an existing connection
     // to this peer.
 
-    SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
+    SocketConnectionRef existing_conn = messenger.lookup_conn_on_port(
+        conn.peer_addr, conn.get_local_address().port());
 
     if (existing_conn) {
       return handle_existing_connection(existing_conn);
@@ -1588,7 +1666,8 @@ ProtocolV2::server_reconnect()
     }
     peer_global_seq = reconnect.global_seq();
 
-    SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
+    SocketConnectionRef existing_conn = messenger.lookup_conn_on_port(
+        conn.peer_addr, conn.get_local_address().port());
 
     if (!existing_conn) {
       // there is no existing connection therefore cannot reconnect to previous
@@ -1733,8 +1812,8 @@ void ProtocolV2::execute_accepting()
                     conn.policy.lossy, conn.policy.server,
                     conn.policy.standby, conn.policy.resetcheck);
       if (!messenger.get_myaddr().is_blank_ip() &&
-          (messenger.get_myaddr().get_port() != _my_addr_from_peer.get_port() ||
-          messenger.get_myaddr().get_nonce() != _my_addr_from_peer.get_nonce())) {
+          !is_osd_msgr_addr(messenger.get_myaddr(), _my_addr_from_peer,
+                            seastar::smp::count)) {
         logger().warn("{} my_addr_from_peer {} port/nonce doesn't match myaddr {}",
                       conn, _my_addr_from_peer, messenger.get_myaddr());
         throw std::system_error(

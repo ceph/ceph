@@ -111,16 +111,30 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
         std::map<core_id_t, unsigned>::iterator count_iter;
         std::map<core_id_t, std::map<unsigned, unsigned>>::iterator core_shard_iter;
         std::map<unsigned, unsigned>::iterator shard_iter;
+        const bool deterministic_pg_shard =
+          crimson::common::get_conf<bool>("crimson_osd_deterministic_pg_shard");
         if (core_expected == NULL_CORE) {
           assert(store_index == NULL_STORE_INDEX);
-          count_iter = std::min_element(
-            primary_mapping.core_to_num_pgs.begin(),
-            primary_mapping.core_to_num_pgs.end(),
-            [](const auto &left, const auto &right) {
-              return left.second < right.second;
+          if (deterministic_pg_shard) {
+            // Same PG id maps to the same reactor on every OSD with this
+            // shard count. ps() is the PG seed. A peer with a different
+            // count is not listening on that port; the sender retries the
+            // advertised port.
+            core_to_update = pgid.ps() % seastar::smp::count;
+            count_iter = primary_mapping.core_to_num_pgs.find(core_to_update);
+            if (count_iter == primary_mapping.core_to_num_pgs.end()) {
+              count_iter = primary_mapping.core_to_num_pgs.begin();
             }
-          );
-          core_to_update = count_iter->first;
+          } else {
+            count_iter = std::min_element(
+              primary_mapping.core_to_num_pgs.begin(),
+              primary_mapping.core_to_num_pgs.end(),
+              [](const auto &left, const auto &right) {
+                return left.second < right.second;
+              }
+            );
+            core_to_update = count_iter->first;
+          }
         } else { // core_expected != NULL_CORE
           count_iter = primary_mapping.core_to_num_pgs.find(core_to_update);
         }
@@ -131,16 +145,33 @@ seastar::future<std::pair<core_id_t, store_index_t>> PGShardMapping::get_or_crea
           shard_index_update = 0;
         } else {
           if (seastar::this_smp_shard_count() > store_shard_nums ) {
-            auto alien_iter = primary_mapping.core_alien_to_num_pgs.find(core_to_update);
-            auto core_iter = std::min_element(
-              alien_iter->second.begin(),
-              alien_iter->second.end(),
-              [](const auto &left, const auto &right) {
-                return left.second < right.second;
+            if (deterministic_pg_shard && core_expected == NULL_CORE) {
+              // Account the PG against the reactor chosen above. Do not
+              // replace it with the least-loaded reactor; that choice
+              // differs per OSD and the sender would miss the peer.
+              bool accounted = false;
+              for (auto& [slot, aliens] : primary_mapping.core_alien_to_num_pgs) {
+                std::ignore = slot;
+                auto chosen = aliens.find(core_to_update);
+                if (chosen != aliens.end()) {
+                  chosen->second++;
+                  accounted = true;
+                  break;
+                }
               }
-            );
-            core_iter->second++;
-            core_to_update = core_iter->first;
+              ceph_assert_always(accounted);
+            } else {
+              auto alien_iter = primary_mapping.core_alien_to_num_pgs.find(core_to_update);
+              auto core_iter = std::min_element(
+                alien_iter->second.begin(),
+                alien_iter->second.end(),
+                [](const auto &left, const auto &right) {
+                  return left.second < right.second;
+                }
+              );
+              core_iter->second++;
+              core_to_update = core_iter->first;
+            }
           }
           if (seastar::this_smp_shard_count() >= store_shard_nums) {
             shard_index_update = 0; // use the first store shard index on this core

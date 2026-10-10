@@ -113,7 +113,7 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
       logger().warn("{} do_listen: listener doesn't exist", *this);
       return listen_ertr::now();
     }
-    return listener->listen(listen_addr);
+    return listener->listen(listen_addr, logic_name == "cluster");
   });
 }
 
@@ -274,7 +274,9 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
 SocketConnectionRef
 SocketMessenger::find_or_create_on_shard(const entity_addr_t& peer_addr,
                                          const entity_name_t& peer_name,
-                                         seastar::shard_id io_shard)
+                                         seastar::shard_id io_shard,
+                                         uint32_t dest_tag,
+                                         bool steer_peer)
 {
   assert(seastar::this_shard_id() == sid);
   if (!peer_addr.is_msgr2()) {
@@ -292,7 +294,7 @@ SocketMessenger::find_or_create_on_shard(const entity_addr_t& peer_addr,
 
   SocketConnectionRef conn =
     seastar::make_shared<SocketConnection>(*this, dispatchers);
-  conn->set_pinned_io_shard(io_shard);
+  conn->set_pinned_io_shard(io_shard, dest_tag, steer_peer);
   conn->start_connect(peer_addr, peer_name);
   return conn;
 }
@@ -300,24 +302,31 @@ SocketMessenger::find_or_create_on_shard(const entity_addr_t& peer_addr,
 crimson::net::ConnectionRef
 SocketMessenger::open_on_shard(const entity_addr_t& peer_addr,
                                const entity_name_t& peer_name,
-                               seastar::shard_id io_shard)
+                               seastar::shard_id io_shard,
+                               uint32_t dest_tag,
+                               bool steer_peer)
 {
-  auto conn = find_or_create_on_shard(peer_addr, peer_name, io_shard);
+  auto conn = find_or_create_on_shard(
+      peer_addr, peer_name, io_shard, dest_tag, steer_peer);
   return conn->get_local_shared_foreign_from_this();
 }
 
 seastar::future<crimson::net::ConnectionRef>
 SocketMessenger::connect_on_shard(const entity_addr_t& peer_addr,
                                   const entity_name_t& peer_name,
-                                  seastar::shard_id io_shard)
+                                  seastar::shard_id io_shard,
+                                  uint32_t dest_tag,
+                                  bool steer_peer)
 {
   assert(seastar::this_shard_id() == sid);
-  auto conn = find_or_create_on_shard(peer_addr, peer_name, io_shard);
+  auto conn = find_or_create_on_shard(
+      peer_addr, peer_name, io_shard, dest_tag, steer_peer);
   logger().info("{} connect_on_shard({})", *conn, io_shard);
   return conn->when_ready().then([conn] {
     return conn->get_local_shared_foreign_from_this();
   }).handle_exception(
-    [this, conn, peer_addr, peer_name, io_shard](std::exception_ptr) {
+    [this, conn, peer_addr, peer_name, io_shard, dest_tag, steer_peer](
+        std::exception_ptr) {
     // Nothing has been queued, so standby will not reconnect this
     // session. Close through the normal path so do_close() unregisters
     // it, then try once more. A second failure propagates with that
@@ -325,8 +334,9 @@ SocketMessenger::connect_on_shard(const entity_addr_t& peer_addr,
     logger().info("{} connect_on_shard({}) closing failed session",
                   *conn, io_shard);
     return conn->close_clean_yielded().then(
-      [this, peer_addr, peer_name, io_shard] {
-      auto again = find_or_create_on_shard(peer_addr, peer_name, io_shard);
+      [this, peer_addr, peer_name, io_shard, dest_tag, steer_peer] {
+      auto again = find_or_create_on_shard(
+          peer_addr, peer_name, io_shard, dest_tag, steer_peer);
       logger().info("{} connect_on_shard({})", *again, io_shard);
       return again->when_ready().then([again] {
         return again->get_local_shared_foreign_from_this();
@@ -504,18 +514,42 @@ crimson::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr
   return nullptr;
 }
 
+crimson::net::SocketConnectionRef
+SocketMessenger::lookup_conn_on_port(const entity_addr_t& addr,
+                                     uint16_t local_port)
+{
+  assert(seastar::this_shard_id() == sid);
+  auto found = connections.find(addr);
+  if (found == connections.end()) {
+    return nullptr;
+  }
+  for (auto& conn : found->second) {
+    if (conn->get_pinned_io_shard() || !conn->has_socket()) {
+      continue;
+    }
+    if (conn->get_local_address().port() == local_port) {
+      return conn;
+    }
+  }
+  return nullptr;
+}
+
 seastar::future<> SocketMessenger::mark_down(const entity_addr_t& a)
 {
   assert(seastar::this_shard_id() == sid);
-  // Outbound sessions are keyed by the peer's osdmap address. Accepted
-  // sessions from a sharded peer carry a reactor-stamped nonce, so match
-  // them by host, type and port as well.
   std::vector<SocketConnectionRef> matched;
   for (auto& [addr, conns] : connections) {
+    const bool same_endpoint =
+        addr.is_same_host(a) && addr.get_type() == a.get_type();
+    const unsigned port = addr.get_port();
+    const unsigned base = a.get_port();
+    // Exclusive reactor ports are base + stride * (sid + 1).
+    const bool shard_port =
+        port > base &&
+        (port - base) % CRIMSON_OSD_SHARD_PORT_STRIDE == 0 &&
+        (port - base) / CRIMSON_OSD_SHARD_PORT_STRIDE <= seastar::smp::count;
     if (addr == a ||
-        (addr.is_same_host(a) &&
-         addr.get_type() == a.get_type() &&
-         addr.get_port() == a.get_port())) {
+        (same_endpoint && (port == base || shard_port))) {
       matched.insert(matched.end(), conns.begin(), conns.end());
     }
   }

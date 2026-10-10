@@ -54,8 +54,12 @@ public:
 
   // Outbound OSD sessions: create the socket on this reactor and advertise
   // a shard-stamped nonce so the peer does not collapse the sessions.
-  void set_outgoing_io_shard(seastar::shard_id sid) {
+  void set_outgoing_io_shard(seastar::shard_id sid, uint32_t dest_tag = 0,
+                              bool steer_peer = false) {
+    assert(dest_tag < 256);
     outgoing_io_shard = sid;
+    outgoing_dest_tag = dest_tag;
+    outgoing_steer_peer = steer_peer;
   }
 
   seastar::future<> wait_ready() {
@@ -308,6 +312,10 @@ private:
 
   // Reactor that should own the outbound socket. Unset for legacy sessions.
   std::optional<seastar::shard_id> outgoing_io_shard;
+  // 0 = osdmap port, reactor+1 = that reactor's exclusive port.
+  uint32_t outgoing_dest_tag = 0;
+  // Bind a source port so the peer's port load balancer accepts on this reactor.
+  bool outgoing_steer_peer = false;
 
   // Satisfied on each entry to READY. Replaced when leaving READY.
   // Failed if the connection closes before the next READY.

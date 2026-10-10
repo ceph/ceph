@@ -147,7 +147,8 @@ class SocketConnection : public Connection {
   // Pin outbound socket I/O to this reactor before start_connect().
   // The client ident nonce is stamped with the shard so the peer keeps
   // this session distinct from the other reactors' sessions.
-  void set_pinned_io_shard(seastar::shard_id sid);
+  void set_pinned_io_shard(seastar::shard_id sid, uint32_t dest_tag = 0,
+                           bool steer_peer = false);
 
   std::optional<seastar::shard_id> get_pinned_io_shard() const {
     return pinned_io_shard;
@@ -165,6 +166,10 @@ class SocketConnection : public Connection {
   seastar::future<> close_clean_yielded();
 
   seastar::socket_address get_local_address() const;
+
+  bool has_socket() const {
+    return socket != nullptr;
+  }
 
   seastar::shard_id get_messenger_shard_id() const;
 

@@ -73,10 +73,14 @@ public:
 
   // Outbound session whose socket and IOHandler live on io_shard.
   // Resolves when that session is READY. Must run on the messenger shard.
+  // dest_tag is mixed into the client nonce when non-zero. steer_peer
+  // binds a source port so the peer accepts on io_shard.
   seastar::future<ConnectionRef> connect_on_shard(
       const entity_addr_t& peer_addr,
       const entity_name_t& peer_name,
-      seastar::shard_id io_shard);
+      seastar::shard_id io_shard,
+      uint32_t dest_tag = 0,
+      bool steer_peer = false);
 
   // Same session as connect_on_shard(), but does not wait for READY.
   // A send on the returned connection stays in the lossless out queue
@@ -84,7 +88,9 @@ public:
   ConnectionRef open_on_shard(
       const entity_addr_t& peer_addr,
       const entity_name_t& peer_name,
-      seastar::shard_id io_shard);
+      seastar::shard_id io_shard,
+      uint32_t dest_tag = 0,
+      bool steer_peer = false);
 
   bool owns_connection(Connection &conn) const override {
     assert(seastar::this_shard_id() == sid);
@@ -143,6 +149,11 @@ public:
                     const SocketConnection& conn);
 
   SocketConnectionRef lookup_conn(const entity_addr_t& addr);
+  // Same peer address can have a base-port session and an exclusive
+  // reactor-port session. Match the local port so one does not replace
+  // the other.
+  SocketConnectionRef lookup_conn_on_port(const entity_addr_t& addr,
+                                          uint16_t local_port);
 
   void accept_conn(SocketConnectionRef);
 
@@ -178,7 +189,9 @@ private:
   SocketConnectionRef find_or_create_on_shard(
       const entity_addr_t& peer_addr,
       const entity_name_t& peer_name,
-      seastar::shard_id io_shard);
+      seastar::shard_id io_shard,
+      uint32_t dest_tag,
+      bool steer_peer);
 
   /// try to bind to the first unused port of given address
   bind_ertr::future<> try_bind(const entity_addrvec_t& addr,

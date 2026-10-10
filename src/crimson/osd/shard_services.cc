@@ -333,50 +333,58 @@ seastar::future<> ShardServices::send_to_osd(
     osd_peer_conns.erase(found);
   }
 
-  // No session from this reactor to the peer yet. The messenger lives on
-  // the primary reactor, so ask it to open one whose socket is pinned
-  // here. The peer accepts it on whichever reactor the kernel picks and
-  // forwards each op to the reactor that owns the PG, as it already does
-  // for client ops. Nothing about the peer's PG placement is needed.
+  // This runs on the PG's reactor. The cluster listener accepts with
+  // Seastar's port load balancing, so a source port in this reactor's
+  // residue class is delivered here on a peer with the same shard count.
+  // Placement uses pgid.ps() % shard count when that option is on.
   const auto my_sid = seastar::this_shard_id();
-  const entity_addr_t addr = osdmap->get_cluster_addrs(peer).front();
+  const entity_addr_t base = osdmap->get_cluster_addrs(peer).front();
+  const bool steer = crimson::common::get_conf<bool>(
+      "crimson_osd_deterministic_pg_shard");
   auto msg = seastar::make_lw_shared<MessageURef>(std::move(m));
-  return osd_singleton_state.invoke_on(
-    PRIMARY_CORE,
-    [addr, my_sid, peer](OSDSingletonState& singleton) {
-      auto& msgr = static_cast<crimson::net::SocketMessenger&>(
-          singleton.cluster_msgr);
-      return msgr.connect_on_shard(
-          addr, entity_name_t(CEPH_ENTITY_TYPE_OSD, peer), my_sid
-      ).then([](crimson::net::ConnectionRef conn) {
-        return conn.get_foreign();
-      });
-    }).then([this, peer, msg](auto fconn) {
-      auto conn = crimson::make_local_shared_foreign(std::move(fconn));
-      osd_peer_conns[peer] = conn;
-      return conn->send_with_throttling(std::move(*msg));
-    }).handle_exception(
-      [this, peer, addr, my_sid, msg, FNAME](std::exception_ptr) {
-      osd_peer_conns.erase(peer);
-      // Leave the message on the lossless out queue. Failing the caller
-      // drops it. A standby session reconnects once something is queued.
-      ERROR("osd.{} connect failed, queueing on the session", peer);
-      return osd_singleton_state.invoke_on(
-        PRIMARY_CORE,
-        [addr, my_sid, peer](OSDSingletonState& singleton) {
-          auto& msgr = static_cast<crimson::net::SocketMessenger&>(
-              singleton.cluster_msgr);
-          auto conn = msgr.open_on_shard(
-              addr, entity_name_t(CEPH_ENTITY_TYPE_OSD, peer), my_sid);
+  auto attempt = [this, my_sid, peer, base, steer](auto message) {
+    return osd_singleton_state.invoke_on(
+      PRIMARY_CORE,
+      [base, my_sid, peer, steer](OSDSingletonState& singleton) {
+        auto& msgr = static_cast<crimson::net::SocketMessenger&>(
+            singleton.cluster_msgr);
+        return msgr.connect_on_shard(
+            base, entity_name_t(CEPH_ENTITY_TYPE_OSD, peer), my_sid, 0, steer
+        ).then([](crimson::net::ConnectionRef conn) {
           return conn.get_foreign();
-        }).then([this, peer, msg](auto fconn) {
-          auto conn = crimson::make_local_shared_foreign(std::move(fconn));
-          osd_peer_conns[peer] = conn;
-          if (!*msg) {
-            return seastar::now();
-          }
-          return conn->send_with_throttling(std::move(*msg));
         });
+      }).then([this, peer, message](auto fconn) {
+        auto conn = crimson::make_local_shared_foreign(std::move(fconn));
+        osd_peer_conns[peer] = conn;
+        return conn->send_with_throttling(std::move(*message));
+      });
+  };
+  // Handshake failed before the message was queued. Leave it on the
+  // lossless out queue and return success. Failing the caller drops the
+  // message; a standby session reconnects once something is queued.
+  auto queue_on = [this, my_sid, peer, base, steer, msg] {
+    return osd_singleton_state.invoke_on(
+      PRIMARY_CORE,
+      [base, my_sid, peer, steer](OSDSingletonState& singleton) {
+        auto& msgr = static_cast<crimson::net::SocketMessenger&>(
+            singleton.cluster_msgr);
+        auto conn = msgr.open_on_shard(
+            base, entity_name_t(CEPH_ENTITY_TYPE_OSD, peer), my_sid, 0, steer);
+        return conn.get_foreign();
+      }).then([this, peer, msg](auto fconn) {
+        auto conn = crimson::make_local_shared_foreign(std::move(fconn));
+        osd_peer_conns[peer] = conn;
+        if (!*msg) {
+          return seastar::now();
+        }
+        return conn->send_with_throttling(std::move(*msg));
+      });
+  };
+  return attempt(msg).handle_exception(
+    [this, peer, queue_on, FNAME](std::exception_ptr) {
+      osd_peer_conns.erase(peer);
+      ERROR("osd.{} connect failed, queueing on the session", peer);
+      return queue_on();
     });
 }
 

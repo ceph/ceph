@@ -540,9 +540,10 @@ public:
     register_metrics();
   }
 
-  // Send on this reactor's own cluster session to the peer, instead of
-  // hopping to the primary reactor's shared session. The first send to a
-  // peer waits until that session is READY; later sends stay here.
+  // Send on this reactor's own session to the same reactor on the peer.
+  // Placement is pgid.ps() % shard count, so this reactor is the peer's
+  // reactor for every PG that lives here. The first send waits until the
+  // session is READY; later sends stay on it.
   seastar::future<> send_to_osd(int peer, MessageURef m, epoch_t from_epoch);
 
   crimson::os::BackendStore get_store(store_index_t store_index) {

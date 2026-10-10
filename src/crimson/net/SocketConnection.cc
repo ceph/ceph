@@ -120,11 +120,13 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
   protocol->start_connect(_peer_addr, _peer_name);
 }
 
-void SocketConnection::set_pinned_io_shard(seastar::shard_id sid)
+void SocketConnection::set_pinned_io_shard(seastar::shard_id sid,
+                                           uint32_t dest_tag,
+                                           bool steer_peer)
 {
   assert(seastar::this_shard_id() == msgr_sid);
   pinned_io_shard = sid;
-  protocol->set_outgoing_io_shard(sid);
+  protocol->set_outgoing_io_shard(sid, dest_tag, steer_peer);
 }
 
 seastar::future<> SocketConnection::when_ready()

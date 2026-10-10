@@ -134,6 +134,19 @@ options:
 
 # Crimson OSD options:
 
+- name: crimson_osd_deterministic_pg_shard
+  type: bool
+  level: advanced
+  default: true
+  desc: Place each PG on reactor pgid.ps() modulo the shard count.
+  long_desc: When true, every OSD with the same shard count puts a PG on
+             the same reactor, so replication can be sent straight to that
+             reactor. When false, a new PG goes to the reactor with the
+             fewest PGs, which can differ per OSD. The OSD must restart
+             for a change to apply.
+  flags:
+  - startup
+
 - name: crimson_osd_obc_lru_size
   type: uint
   level: advanced
