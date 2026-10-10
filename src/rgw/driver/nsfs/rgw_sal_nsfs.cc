@@ -3619,8 +3619,6 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
 	g_conf().get_val<std::string>("rgw_nsfs_adoption_mode");
       if (m == "adopt") {
 	adoption_mode = AdoptionMode::Adopt;
-      } else if (m == "convert") {
-	adoption_mode = AdoptionMode::Convert;
       } else {
 	adoption_mode = AdoptionMode::Serve;
 	if (!m.empty() && (m != "serve")) {
@@ -3628,8 +3626,8 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
 	   * past validation somehow;  the safe reading is the one that
 	   * changes nothing on disk. */
 	  ldpp_dout(dpp, 0) << "ERROR: rgw_nsfs_adoption_mode is \"" << m
-	    << "\", which is none of serve, adopt or convert;  serving "
-	    << "read-only" << dendl;
+	    << "\", which is neither serve nor adopt;  serving read-only"
+	    << dendl;
 	}
       }
       ldpp_dout(dpp, 1) << "nsfs: adoption mode " << m
@@ -13836,18 +13834,6 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
 
   /* ---- phase 3:  the report ---- */
 
-  if (adoption_mode == AdoptionMode::Convert) {
-    /* `convert` is adopt plus rewriting each bucket's objects into our
-     * arrangement, and the rewriting is the conversion chain -- C5 to
-     * C7, phase 4.  Said out loud rather than silently treated as
-     * adopt, because an operator who asked for convert should learn
-     * that the second half has not run. */
-    ldpp_dout(dpp, 0) << "nsfs: adoption mode is convert, and the object "
-      << "rewrite is not implemented;  the deployment is adopted and "
-      << "every bucket keeps NooBaa's arrangement" << dendl;
-    say("converted", "false");
-  }
-
   say("ran", "true");
   ldpp_dout(dpp, 1) << "nsfs: adopted " << root << ": "
     << ir.accounts_created << " accounts, " << ir.users_created
@@ -14017,8 +14003,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if (out) {
       (*out)["configured"] = adoption_configured() ? "true" : "false";
       (*out)["mode"] =
-	adoption_mode == AdoptionMode::Adopt ? "adopt"
-	  : adoption_mode == AdoptionMode::Convert ? "convert" : "serve";
+	adoption_mode == AdoptionMode::Adopt ? "adopt" : "serve";
       (*out)["read_only"] = serving_read_only() ? "true" : "false";
     }
     auto it = params.find("mode");
@@ -14028,8 +14013,6 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
        * assignment, reachable only through a hint. */
       if (it->second == "adopt") {
 	adoption_mode = AdoptionMode::Adopt;
-      } else if (it->second == "convert") {
-	adoption_mode = AdoptionMode::Convert;
       } else if (it->second == "serve") {
 	adoption_mode = AdoptionMode::Serve;
       } else {

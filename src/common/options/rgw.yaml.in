@@ -4718,15 +4718,13 @@ options:
     imports nothing and marks nothing, and serves the trees read-only as
     NooBaa arranged them -- a readable view of a deployment nothing has
     changed on disk, so the decision to adopt stays reversible.  "adopt"
-    imports the accounts and bucket state and lets an adopted bucket serve
-    reads and writes.  "convert" adopts and then rewrites each bucket's
-    objects into RGW's arrangement.  Read at startup;  failures are
-    reported to the log.
+    imports the accounts and bucket state, brings each bucket's objects
+    into RGW's arrangement, and lets an adopted bucket serve reads and
+    writes.  Read at startup;  failures are reported to the log.
   default: serve
   enum_values:
   - serve
   - adopt
-  - convert
   services:
   - rgw
   with_legacy: true

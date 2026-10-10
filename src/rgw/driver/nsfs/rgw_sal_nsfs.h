@@ -642,7 +642,11 @@ protected:
    * their shape is one neither gateway reads correctly afterwards.
    * The result is a readable view of a deployment nothing has changed
    * on disk, which is what keeps the decision to adopt reversible. */
-  enum class AdoptionMode { Serve, Adopt, Convert };
+  /* Two, not three.  `convert` was a third value meaning "adopt and
+   * then rewrite the objects", which is what adopt does:  adoption
+   * brings a bucket's schema and its data into our profile, so there
+   * was no operation for the third value to name. */
+  enum class AdoptionMode { Serve, Adopt };
   AdoptionMode adoption_mode{AdoptionMode::Serve};
 
   /* null unless rgw_nsfs_noobaa_config_root names a store */

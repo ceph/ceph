@@ -10536,24 +10536,29 @@ TEST_F(NooBaaModeTest, APreflightFailureWritesNothing)
       << "a preflight failure got as far as writing";
 }
 
-/* convert adopts and says the rewrite did not run.
+/* `convert` was a mode and is not one.
  *
- * An operator who asked for convert should learn that the second half
- * -- rewriting each bucket's objects into our arrangement -- is the
- * conversion chain and has not run, rather than being quietly given
- * adopt. */
-TEST_F(NooBaaModeTest, ConvertAdoptsAndSaysTheRewriteDidNotRun)
+ * It meant "adopt and then rewrite the objects", which is what adopt
+ * does -- adoption brings a bucket's schema and its data into our
+ * profile -- so there was no operation for a third value to name.  A
+ * deployment whose configuration still says `convert` is served
+ * read-only, which is the reading that changes nothing on disk. */
+TEST_F(NooBaaModeTest, ConvertIsNoLongerAMode)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
   write_their_record("DISABLED");
 
-  auto st = ask({{"mode", "convert"}, {"run", "true"}});
-  EXPECT_EQ(st["mode"], "convert");
-  EXPECT_EQ(st["ran"], "true") << st["error"];
-  EXPECT_EQ(st["accounts"], "1");
-  EXPECT_EQ(st["converted"], "false")
-      << "convert claimed to have rewritten objects";
+  std::map<std::string, std::string> out;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"mode", "convert"}}, &out),
+	    -EINVAL)
+      << "convert was accepted as a mode";
+
+  /* and the mode it was asked to leave is untouched */
+  auto st = ask({});
+  EXPECT_EQ(st["mode"], "serve");
+  EXPECT_EQ(st["read_only"], "true");
 }
 
 /* One bucket, adopted now.
