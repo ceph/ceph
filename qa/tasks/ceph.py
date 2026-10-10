@@ -1145,6 +1145,11 @@ def cluster(ctx, config):
                     remote.sh(create_log_cmd)
                 remote.run(args=args)
             except run.CommandFailedError:
+                if is_crimson(config):
+                    # every crimson OSD accepts --no-mon-config, so the failure
+                    # is real; retrying without the flag would only wait
+                    # forever for monitors that are not up yet
+                    raise
                 # try without --no-mon-config.. this may be an upgrade test
                 remote.run(
                     args=[
@@ -2236,6 +2241,7 @@ def task(ctx, config):
             mon_bind_addrvec=config.get('mon_bind_addrvec', True),
             cephx=config.get('cephx', {}),
             monmaptool_extra_args=config.get('monmaptool_extra_args', {}),
+            crimson_compat=config.get('crimson_compat', False),
         )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
         lambda: module_setup(ctx=ctx, config=config),
