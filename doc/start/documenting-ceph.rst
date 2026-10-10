@@ -399,7 +399,7 @@ Commit the Change
 Ceph documentation commits are simple, but follow a strict convention:
 
 - When ready for merging, a PR SHOULD have a single commit. This may be
-  acheived by amending an initial commit and force-pushing, or by adding
+  achieved by amending an initial commit and force-pushing, or by adding
   additional commits then squashing. You MAY commit multiple files with
   related changes. Unrelated changes SHOULD NOT be put into the same commit
   or PR.
