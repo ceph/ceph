@@ -1150,8 +1150,20 @@ void Cache::mark_transaction_conflicted(
     }
     efforts.mutate_delta_bytes += delta_stat.bytes;
 
-    if (t.get_pending_ool()) {
-      t.get_pending_ool()->is_conflicted = true;
+    if (auto pending = t.get_pending_ool(); pending) {
+      // Extents of the in-flight write are freed in do_write().finally() on
+      // completion; the rest (other tiers, or already written) are not under
+      // I/O and are freed now.
+      pending->is_conflicted = true;
+      for (auto &e : t.pre_alloc_list) {
+        if (std::find(pending->pending_extents.begin(),
+                      pending->pending_extents.end(),
+                      e) != pending->pending_extents.end()) {
+          pending->deferred_frees.push_back(e);
+        } else {
+          epm.mark_space_free(e->get_paddr(), e->get_length());
+        }
+      }
     } else {
       for (auto &i: t.pre_alloc_list) {
 	epm.mark_space_free(i->get_paddr(), i->get_length());

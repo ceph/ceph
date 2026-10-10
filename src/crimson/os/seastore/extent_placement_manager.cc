@@ -1292,14 +1292,15 @@ RandomBlockOolWriter::alloc_write_ool_extents(
         token_bucket.get(size));
       seastar::lw_shared_ptr<rbm_pending_ool_t> ptr =
           seastar::make_lw_shared<rbm_pending_ool_t>();
-      auto& pal = t.get_pre_alloc_list();
-      ptr->pending_extents.assign(pal.begin(), pal.end());
+      // Only this write's extents: pre_alloc_list also holds extents of other
+      // tiers' writers, which rb_cleaner does not own.
+      ptr->pending_extents.assign(extents.begin(), extents.end());
       assert(!t.is_conflicted());
       t.set_pending_ool(ptr);
       co_await do_write(t, extents
       ).finally([this, ptr=ptr] {
         if (ptr->is_conflicted) {
-          for (auto &e : ptr->pending_extents) {
+          for (auto &e : ptr->deferred_frees) {
             rb_cleaner->mark_space_free(e->get_paddr(), e->get_length());
           }
         }

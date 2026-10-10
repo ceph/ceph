@@ -102,7 +102,11 @@ struct btree_cursor_stats_t {
 
 struct rbm_pending_ool_t {
   bool is_conflicted = false;
+  // Extents of the in-flight write, all on the issuing writer's tier.
   std::vector<CachedExtentRef> pending_extents;
+  // On conflict, the pre-allocated extents among pending_extents; freed by
+  // the writer once the write completes.
+  std::vector<CachedExtentRef> deferred_frees;
 };
 
 /**
