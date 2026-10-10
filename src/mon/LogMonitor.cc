@@ -714,9 +714,11 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
     goto done;
   }
 
-  done:
-    mon.no_reply(op);
-    return (!num_new);
+  return false;
+
+ done:
+  mon.no_reply(op);
+  return true;
 }
 
 struct LogMonitor::C_Log : public C_MonOp {
@@ -740,6 +742,7 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
   if (m->fsid != mon.monmap->fsid) {
     dout(0) << "handle_log on fsid " << m->fsid << " != " << mon.monmap->fsid 
 	    << dendl;
+    mon.no_reply(op);
     return false;
   }
 
