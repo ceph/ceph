@@ -1339,6 +1339,7 @@ RandomBlockOolWriter::do_write(
   assert(!extents.empty());
   DEBUGT("start with {} allocated extents",
          t, extents.size());
+  auto prepare_start = std::chrono::steady_clock::now();
   std::vector<write_info_t> writes;
   for (auto& ex : extents) {
     auto paddr = ex->get_paddr();
@@ -1416,6 +1417,8 @@ RandomBlockOolWriter::do_write(
       w.mergeable_bps.clear();
     }
   }
+  t.get_phase_durations().ool_prepare +=
+    std::chrono::steady_clock::now() - prepare_start;
 
   return trans_intr::make_interruptible(
     seastar::do_with(std::move(writes),

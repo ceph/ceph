@@ -58,6 +58,7 @@ enum class txn_stage_t : uint8_t {
     SUBMIT_RESERVE,        // enter(reserve_projected_usage) + epm reserve_projected_usage
     SUBMIT_OOL_WRITE,      // write_delayed + write_preallocated OOL extents (device I/O)
     SUBMIT_OOL_THROTTLE,   // token_bucket wait inside OOL write (subset of SUBMIT_OOL_WRITE)
+    SUBMIT_OOL_PREPARE,    // RBM write-list build + merge copy inside OOL write (subset of SUBMIT_OOL_WRITE)
     SUBMIT_LBA_UPDATE,     // update_lba_mappings
     SUBMIT_PREPARE_ENTER,  // enter(prepare) pipeline stage (global OrderedExclusive wait)
     SUBMIT_PREPARE_RECORD, // prepare_record (record encoding)
