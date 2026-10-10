@@ -423,6 +423,158 @@ TEST_P(TestClsRgw, index_suggest_complete)
   }
 }
 
+static void link_olh(librados::IoCtx& ioctx, const string& oid,
+                     const cls_rgw_obj_key& key, const string& olh_tag,
+                     const string& op_tag, bool delete_marker,
+                     rgw_bucket_dir_entry_meta& meta)
+{
+  bufferlist olh_tag_bl;
+  olh_tag_bl.append(olh_tag);
+  rgw_zone_set zone_set;
+  ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, key, olh_tag_bl,
+                                       delete_marker, op_tag, &meta, 0,
+                                       ceph::real_time{}, true, true, zone_set));
+}
+
+// count the versioned list entries of an object, and how many are CURRENT
+static void count_list_entries(librados::IoCtx& ioctx, const string& oid,
+                               const string& name, size_t* total,
+                               size_t* current)
+{
+  list<rgw_cls_bi_entry> entries;
+  bool truncated = false;
+  ASSERT_EQ(0, cls_rgw_bi_list(ioctx, oid, name, "", 1000, &entries, &truncated));
+  ASSERT_FALSE(truncated);
+  *total = *current = 0;
+  for (const auto& e : entries) {
+    if (e.type != BIIndexType::Plain ||
+        e.idx.find(string("\0v", 2)) == string::npos) {
+      continue;
+    }
+    rgw_bucket_dir_entry dirent;
+    auto p = e.data.cbegin();
+    decode(dirent, p);
+    if (dirent.key.name != name) {
+      continue;
+    }
+    ++*total;
+    if (dirent.flags & rgw_bucket_dir_entry::FLAG_CURRENT) {
+      ++*current;
+    }
+  }
+}
+
+/*
+ * A null version's instance entry is reused by every null generation. A
+ * racing delete/cancel removing that entry must also remove its list
+ * entry, or the list entry is orphaned with FLAG_CURRENT set and the
+ * object ends up with several "latest" versions.
+ */
+TEST_P(TestClsRgw, index_null_version_racing_remove)
+{
+  const string bucket_oid = "null-version-racing-remove";
+  {
+    ObjectWriteOperation op;
+    cls_rgw_bucket_init_index(op);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+  }
+
+  const string olh_tag = "olh-tag";
+  const cls_rgw_obj_key null_key("obj");
+  int epoch = 0;
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = RGWObjCategory::Main;
+  meta.size = 1024;
+
+  // a versioned instance creates the olh and the version marker
+  const cls_rgw_obj_key v1("obj", "v1");
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, olh_tag, v1, "");
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, olh_tag, ++epoch, v1, meta);
+
+  auto put_null = [&] (const string& tag) {
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, null_key, "");
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, ++epoch, null_key, meta);
+    link_olh(ioctx, bucket_oid, null_key, olh_tag, tag, false, meta);
+  };
+
+  // versioning suspended: write the null version
+  put_null("put-1");
+
+  size_t total, current;
+  count_list_entries(ioctx, bucket_oid, "obj", &total, &current);
+  ASSERT_EQ(2u, total);
+  ASSERT_EQ(1u, current);
+
+  // a delete of the null object completes while a racing write is pending,
+  // then the racing write is canceled; this removes the null instance entry
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, "del-1", null_key, "");
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, "put-2", null_key, "");
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, "del-1", ++epoch, null_key, meta);
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_CANCEL, "put-2", ++epoch, null_key, meta);
+
+  count_list_entries(ioctx, bucket_oid, "obj", &total, &current);
+  EXPECT_EQ(1u, total);
+  EXPECT_EQ(0u, current);
+
+  // the next null version must be the only current one
+  put_null("put-3");
+
+  count_list_entries(ioctx, bucket_oid, "obj", &total, &current);
+  EXPECT_EQ(2u, total);
+  EXPECT_EQ(1u, current);
+}
+
+/*
+ * The plain entry of a versioned object is a version marker. A suggestion
+ * for a null version encodes to that same key, and must not overwrite or
+ * remove the marker.
+ */
+TEST_P(TestClsRgw, index_suggest_version_marker)
+{
+  const string bucket_oid = "suggest-version-marker";
+  {
+    ObjectWriteOperation op;
+    cls_rgw_bucket_init_index(op);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+  }
+
+  const string tag = "olh-tag";
+  const cls_rgw_obj_key v1("obj", "v1");
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = RGWObjCategory::Main;
+  meta.size = 1024;
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, v1, "");
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, 1, v1, meta);
+
+  auto check_marker = [&] {
+    rgw_cls_bi_entry bi_entry;
+    ASSERT_EQ(0, cls_rgw_bi_get(ioctx, bucket_oid, BIIndexType::Plain,
+                                cls_rgw_obj_key("obj"), &bi_entry));
+    rgw_bucket_dir_entry dirent;
+    auto p = bi_entry.data.cbegin();
+    decode(dirent, p);
+    EXPECT_EQ(rgw_bucket_dir_entry::FLAG_VER_MARKER, dirent.flags);
+  };
+  check_marker();
+
+  rgw_bucket_dir_entry dirent;
+  dirent.key.name = "obj";
+  dirent.exists = true;
+  dirent.flags = rgw_bucket_dir_entry::FLAG_VER |
+                 rgw_bucket_dir_entry::FLAG_CURRENT;
+  dirent.meta = meta;
+  dirent.meta.accounted_size = meta.size;
+
+  for (char suggest_op : {CEPH_RGW_UPDATE, CEPH_RGW_REMOVE}) {
+    bufferlist updates;
+    cls_rgw_encode_suggestion(suggest_op, dirent, updates);
+    ObjectWriteOperation op;
+    cls_rgw_suggest_changes(op, updates);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+    check_marker();
+  }
+}
+
 /*
  * This case is used to test whether get_obj_vals will
  * return all validate utf8 objnames and filter out those

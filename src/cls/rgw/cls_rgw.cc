@@ -344,7 +344,7 @@ static void decreasing_str(uint64_t num, string *str)
  * regular objects only map to the first index anyway
  */
 
-static void get_list_index_key(rgw_bucket_dir_entry& entry, string *index_key)
+static void get_list_index_key(const rgw_bucket_dir_entry& entry, string *index_key)
 {
   *index_key = entry.key.name;
 
@@ -1118,6 +1118,41 @@ static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
   return 0;
 }
 
+/*
+ * Remove an index entry found by read_key_entry(). If it is a versioned
+ * instance entry, remove its list entry as well. The instance entry's
+ * versioned_epoch is the only way to locate the list entry, and for null
+ * versions the instance key is reused by every generation: once the
+ * instance entry is gone, prepare_op recreates it with versioned_epoch=0
+ * and link_olh can no longer find the old list entry, which then stays
+ * behind (possibly still flagged CURRENT).
+ */
+static int remove_key_entry(cls_method_context_t hctx, const string& idx,
+                            const rgw_bucket_dir_entry& entry,
+                            rgw_bucket_dir_header& header)
+{
+  if ((entry.flags & rgw_bucket_dir_entry::FLAG_VER) &&
+      entry.versioned_epoch > 0) {
+    string list_idx;
+    get_list_index_key(entry, &list_idx);
+    if (list_idx != idx) {
+      rgw_bucket_dir_entry list_entry;
+      int ret = read_index_entry(hctx, list_idx, &list_entry);
+      if (ret == 0) {
+        CLS_LOG(20, "%s: removing list entry list_idx=%s", __func__,
+                escape_str(list_idx).c_str());
+        ret = remove_entry(hctx, list_idx, list_entry.key, header);
+      }
+      if (ret < 0 && ret != -ENOENT) {
+        CLS_LOG(0, "ERROR: %s: failed to remove list entry list_idx=%s ret=%d",
+                __func__, escape_str(list_idx).c_str(), ret);
+        return ret;
+      }
+    }
+  }
+  return remove_entry(hctx, idx, entry.key, header);
+}
+
 // called by rgw_bucket_complete_op() for each item in op.remove_objs
 static int complete_remove_obj(cls_method_context_t hctx,
                                rgw_bucket_dir_header& header,
@@ -1246,7 +1281,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
         CLS_LOG_BITX(bitx_inst, 20,
                      "INFO: %s: removing map entry with key=%s",
                      __func__, escape_str(idx).c_str());
-        rc = remove_entry(hctx, idx, entry.key, header);
+        rc = remove_key_entry(hctx, idx, entry, header);
         if (rc < 0) {
           CLS_LOG_BITX(bitx_inst, 1,
                        "ERROR: %s: unable to remove map key, key=%s, rc=%d",
@@ -1287,7 +1322,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	CLS_LOG_BITX(bitx_inst, 20,
 		     "INFO: %s: removing map entry with key=%s",
 		     __func__, escape_str(idx).c_str());
-      rc = remove_entry(hctx, idx, entry.key, header);
+      rc = remove_key_entry(hctx, idx, entry, header);
       if (rc < 0) {
 	  CLS_LOG_BITX(bitx_inst, 1,
 		       "ERROR: %s: unable to remove map key, key=%s, rc=%d",
@@ -2634,6 +2669,16 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         }
       } // while
     } // if
+
+    if (cur_disk.flags & rgw_bucket_dir_entry::FLAG_VER_MARKER) {
+      // a null version's key encodes to the plain entry of its versioned
+      // object, which is a version marker redirecting to the instance
+      // entries; never overwrite or remove it
+      CLS_LOG_BITX(bitx_inst, 10,
+		   "INFO: %s: key=%s is a version marker, skipping suggestion",
+		   __func__, escape_str(cur_change_key).c_str());
+      continue;
+    }
 
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: op=%c cur_disk.pending_map.empty()=%d cur_disk.exists=%d "
