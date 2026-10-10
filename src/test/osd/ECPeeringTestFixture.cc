@@ -197,11 +197,11 @@ eversion_t ECPeeringTestFixture::compute_submit_trim_to() {
   if (!enable_log_trimming) {
     return eversion_t(0, 0);
   }
-  int primary = get_primary_shard_from_osdmap();
-  if (primary < 0 || primary == CRUSH_ITEM_NONE) {
+  TestPG* primary = get_primary_test_pg();
+  if (!primary || !primary->has_peering_state()) {
     return eversion_t(0, 0);
   }
-  auto* ps = get_peering_state(primary);
+  auto* ps = primary->get_peering_state();
   ps->update_trim_to();  // mirrors PrimaryLogPG pre-submit
   return ps->get_pg_trim_to();
 }
@@ -210,23 +210,23 @@ eversion_t ECPeeringTestFixture::compute_submit_pg_committed_to() {
   if (!enable_log_trimming) {
     return eversion_t(0, 0);
   }
-  int primary = get_primary_shard_from_osdmap();
-  if (primary < 0 || primary == CRUSH_ITEM_NONE) {
+  TestPG* primary = get_primary_test_pg();
+  if (!primary || !primary->has_peering_state()) {
     return eversion_t(0, 0);
   }
-  return get_peering_state(primary)->get_pg_committed_to();
+  return primary->get_peering_state()->get_pg_committed_to();
 }
 
 void ECPeeringTestFixture::on_primary_write_committed(const eversion_t& at_version) {
   if (!enable_log_trimming) {
     return;
   }
-  int primary = get_primary_shard_from_osdmap();
-  if (primary < 0 || primary == CRUSH_ITEM_NONE) {
+  TestPG* primary = get_primary_test_pg();
+  if (!primary || !primary->has_peering_state()) {
     return;
   }
-  auto* ps = get_peering_state(primary);
-  ps->complete_write(at_version, at_version);  // mirrors PrimaryLogPG::repop_all_committed
+  // mirrors PrimaryLogPG::repop_all_committed
+  primary->get_peering_state()->complete_write(at_version, at_version);
 }
 
 // Find the TestPG for a given shard by spg_t(pgid, shard_id_t(shard)).
@@ -1052,6 +1052,33 @@ void ECPeeringTestFixture::set_pool_min_size(unsigned new_min_size)
   update_osdmap_with_peering(new_osdmap);
 }
 
+void ECPeeringTestFixture::enter_degraded_stretch_mode(int surviving_zone)
+{
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  OSDMapTestHelpers::set_degraded_stretch_mode(*new_osdmap, surviving_zone);
+
+  update_osdmap_with_peering(new_osdmap);
+}
+
+void ECPeeringTestFixture::enter_recovery_stretch_mode()
+{
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  OSDMapTestHelpers::set_recovery_stretch_mode(*new_osdmap);
+
+  update_osdmap_with_peering(new_osdmap);
+}
+
+void ECPeeringTestFixture::enter_healthy_stretch_mode()
+{
+  auto new_osdmap = std::make_shared<OSDMap>();
+  new_osdmap->deepish_copy_from(*osdmap);
+  OSDMapTestHelpers::set_healthy_stretch_mode(*new_osdmap);
+
+  update_osdmap_with_peering(new_osdmap);
+}
+
 void ECPeeringTestFixture::advance_epoch()
 {
   auto new_osdmap = std::make_shared<OSDMap>();
@@ -1271,6 +1298,8 @@ void ECPeeringTestFixture::run_parallel_recovery(
   bool recover_primary,
   const std::vector<std::string>& expected_data)
 {
+  ++run_recovery_call_count;
+
   // Verify we have matching sizes
   ASSERT_EQ(obj_names.size(), expected_data.size())
     << "obj_names and expected_data must have the same size";

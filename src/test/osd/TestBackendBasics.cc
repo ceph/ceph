@@ -38,6 +38,8 @@
  *                       read with EC reconstruction.
  */
 
+#include <atomic>
+
 #include <gtest/gtest.h>
 #include "test/osd/PGBackendTestFixture.h"
 #include "test/osd/TestCommon.h"
@@ -45,6 +47,35 @@
 #include "messages/MOSDECSubOpWrite.h"
 
 using namespace std;
+
+namespace {
+
+// Counts how many genuinely single-zone (num_zones <= 1) parameter
+// instances of MultiZoneWriteThenRead proceed past that test's "is this a
+// multi-zone config?" skip guard. A correct guard keeps this at zero for
+// the whole run; a nonzero count means the guard let ordinary single-zone
+// configs through, so the test silently duplicated WriteThenRead instead
+// of exercising multi-zone behaviour.
+std::atomic<int> g_multizone_wrongly_ran{0};
+
+// TearDown() runs once after every selected test has finished, regardless
+// of suite registration order, so asserting here doesn't depend on test
+// ordering the way a check inside a single TEST_P body would.
+class MultiZoneGuardCheckEnvironment : public ::testing::Environment {
+public:
+  void TearDown() override {
+    ASSERT_EQ(g_multizone_wrongly_ran.load(), 0)
+      << "MultiZoneWriteThenRead's zone guard let "
+      << g_multizone_wrongly_ran.load()
+      << " single-zone parameter instance(s) run as if they were "
+         "multi-zone";
+  }
+};
+
+::testing::Environment* const g_multizone_guard_check_env =
+  ::testing::AddGlobalTestEnvironment(new MultiZoneGuardCheckEnvironment());
+
+}  // namespace
 
 // ---------------------------------------------------------------------------
 // TestBackendBasics fixture
@@ -81,57 +112,6 @@ public:
   void SetUp() override {
     PGBackendTestFixture::SetUp();
     initialize_scrub_infra();
-  }
-
-  /**
-   * Simulate failure of multiple OSDs by marking them down in the OSDMap.
-   * This is similar to TestECFailover::simulate_osd_failure but handles
-   * multiple failures at once.
-   */
-  void simulate_multiple_osd_failures(const std::set<int>& failed_osds) {
-    auto new_osdmap = std::make_shared<OSDMap>();
-    new_osdmap->deepish_copy_from(*osdmap);
-
-    // Build new acting set with failed OSDs replaced by CRUSH_ITEM_NONE
-    std::vector<int> new_acting;
-    int total_osds = num_zones * (k + m);
-
-    for (int i = 0; i < total_osds; i++) {
-      bool is_failed = failed_osds.contains(i);
-      new_acting.push_back(is_failed ? CRUSH_ITEM_NONE : i);
-    }
-    
-    // Get the pool to use pgtemp_primaryfirst transformation
-    const pg_pool_t* pool = new_osdmap->get_pg_pool(pgid.pool());
-    ceph_assert(pool != nullptr);
-    
-    // For EC pools with optimizations, pgtemp_primaryfirst reorders the acting set
-    std::vector<int> transformed_acting = new_osdmap->pgtemp_primaryfirst(*pool, new_acting);
-    
-    // Use OSDMap::Incremental to set pg_temp and mark OSDs as down
-    OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
-    inc.fsid = new_osdmap->get_fsid();
-    
-    for (int failed_osd : failed_osds) {
-      inc.new_state[failed_osd] = CEPH_OSD_EXISTS;  // Mark as down (exists but not UP)
-    }
-    
-    // Convert to mempool vector for pg_temp
-    mempool::osdmap::vector<int> pg_temp_vec(transformed_acting.begin(), transformed_acting.end());
-    inc.new_pg_temp[pgid] = pg_temp_vec;
-
-    new_osdmap->apply_incremental(inc);
-    
-    // Finalize the CRUSH map
-    new_osdmap->crush->finalize();
-
-    // Update listener shardsets to remove failed shards
-    for (int failed_osd : failed_osds) {
-      remove_shard_from_all_listeners(pg_shard_t(failed_osd, shard_id_t(failed_osd)));
-    }
-
-    // update_osdmap will query the OSDMap to determine the primary
-    update_osdmap(new_osdmap);
   }
 };
 
@@ -821,6 +801,167 @@ TEST_P(TestBackendBasics, TruncateToChunkSizeAndWriteToSameSize) {
 }
 
 // ---------------------------------------------------------------------------
+// TestBackendBasics: MultiZoneWriteThenRead
+// ---------------------------------------------------------------------------
+
+/**
+ * MultiZoneWriteThenRead - test write then read with multiple zones.
+ *
+ * This test verifies that EC pools configured with multiple zones (num_zones > 0)
+ * can successfully write and read data. The test:
+ * 1. Skips non-EC backends and EC backends without zones
+ * 2. Writes data to an object
+ * 3. Reads the data back
+ * 4. Verifies data integrity
+ *
+ * With zones enabled, the pool size is num_zones * (k+m), so there are more
+ * shards distributed across multiple failure domains.
+ */
+TEST_P(TestBackendBasics, MultiZoneWriteThenRead) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+
+  // Skip test for non-EC backends
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "MultiZoneWriteThenRead test only applies to EC backends";
+  }
+
+  // Skip test if only a single zone is configured, mirroring the
+  // MultiZoneFailover guard below.
+  if (backend_config.num_zones <= 1) {
+    GTEST_SKIP() << "MultiZoneWriteThenRead test requires num_zones > 1";
+  }
+
+  // Independent regression canary for the guard-inversion bug this test
+  // once had (a "num_zones == 0" guard that never fired): kept separate
+  // from the skip check above on purpose, so that if the skip guard's
+  // condition ever regresses without this line being touched too, the
+  // suite-wide assertion in MultiZoneGuardCheckEnvironment::TearDown()
+  // still catches it.
+  if (backend_config.num_zones <= 1) {
+    g_multizone_wrongly_ran++;
+  }
+
+  std::string test_data(param.size, param.fill);
+  std::string obj_name = "test_multizone_" + backend_config.label + "_" + param.label;
+
+  // Execute create+write operation and verify
+  create_and_write_verify(obj_name, test_data);
+
+  // Verify messages were sent to shards across zones
+  auto* primary_listener = get_primary_listener();
+  ASSERT_TRUE(primary_listener != nullptr) << "Primary listener should exist";
+  ASSERT_GT(primary_listener->sent_messages.size(), 0u)
+    << "Should send messages to shards across zones";
+
+  // Verify EC write messages were sent
+  int write_messages_sent = 0;
+  for (auto msg : primary_listener->sent_messages) {
+    if (msg->get_type() == MSG_OSD_EC_WRITE) {
+      write_messages_sent++;
+    }
+  }
+  ASSERT_GT(write_messages_sent, 0) << "Should send EC write messages to multiple zones";
+
+  // With zones, we expect messages to be sent to num_zones * (k+m) shards
+  // However, the actual number of messages may vary based on the write pattern
+  // and optimization flags, so we just verify that messages were sent
+
+  // Clear sent messages before read to distinguish read messages
+  primary_listener->sent_messages.clear();
+  primary_listener->sent_messages_with_dest.clear();
+
+  // Verify object can be read back correctly across zones
+  verify_object(obj_name);
+
+  // Verify read messages were sent to shards across zones
+  primary_listener = get_primary_listener();
+  ASSERT_TRUE(primary_listener != nullptr) << "Primary listener should exist";
+  ASSERT_GT(primary_listener->sent_messages.size(), 0u)
+    << "Should send read messages to EC shards across zones";
+
+  // All events should be processed by now
+  ASSERT_FALSE(event_loop->has_events()) << "Event loop should be idle after read";
+
+  primary_listener = get_primary_listener();
+  if (primary_listener) {
+    primary_listener->sent_messages.clear();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TestBackendBasics: MultiZoneFailover
+// ---------------------------------------------------------------------------
+
+/**
+ * MultiZoneFailover - test write, fail first half of OSDs, then degraded read.
+ *
+ * This test verifies that EC pools with multiple zones can handle zone failures
+ * and perform degraded reads with EC reconstruction. The test:
+ * 1. Requires num_zones > 1 (multiple zones)
+ * 2. Writes data to an object
+ * 3. Fails the first half of the OSDs (simulating a zone failure)
+ * 4. Performs a degraded read and verifies data integrity via EC reconstruction
+ *
+ * With 2 zones and k=4, m=2, we have 12 total shards (2 zones × 6 shards).
+ * Failing the first 6 OSDs (one complete zone) should still allow reads
+ * because we have k=4 data chunks and m=2 coding chunks, and the remaining
+ * 6 shards provide sufficient redundancy.
+ */
+TEST_P(TestBackendBasics, MultiZoneFailover) {
+  const auto& param = GetParam().write_read;
+  const auto& backend_config = GetParam().backend;
+
+  // Skip test for non-EC backends
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "MultiZoneFailover test only applies to EC backends";
+  }
+
+  // Skip test if zones are not configured or only one zone
+  if (backend_config.num_zones <= 1) {
+    GTEST_SKIP() << "MultiZoneFailover test requires num_zones > 1";
+  }
+
+  std::string test_data(param.size, param.fill);
+  std::string obj_name = "test_zone_failover_" + backend_config.label + "_" + param.label;
+
+  // Write data before failure and verify
+  create_and_write_verify(obj_name, test_data);
+
+  // Calculate how many OSDs to fail (first half)
+  int total_osds = backend_config.num_zones * (k + m);
+  int osds_to_fail = total_osds / 2;
+
+  // Build list of OSDs to fail (first half)
+  std::set<int> failed_osds;
+  for (int i = 0; i < osds_to_fail; i++) {
+    failed_osds.insert(i);
+  }
+
+  // Simulate failure of first half of OSDs
+  simulate_multiple_osd_failures(failed_osds);
+
+  // Verify the primary has changed (OSD 0 was in the first half)
+  auto* new_primary_listener = get_primary_listener();
+  ASSERT_TRUE(new_primary_listener != nullptr) << "Should have a primary after failover";
+
+  // The new primary should not be one of the failed OSDs
+  ASSERT_FALSE(failed_osds.contains(new_primary_listener->whoami_shard().osd));
+
+  // Perform degraded read after failover and verify data integrity
+  verify_object(obj_name);
+
+  // Verify OSDMap epoch incremented
+  EXPECT_GT(new_primary_listener->osdmap->get_epoch(), 1)
+    << "OSDMap epoch should have incremented after failover";
+
+  // Clean up
+  if (new_primary_listener) {
+    new_primary_listener->sent_messages.clear();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Backend configurations and size parameters
 // ---------------------------------------------------------------------------
 //
@@ -843,6 +984,8 @@ const std::vector<BackendConfig> kBackendConfigs = {
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, 1, "EC_ISA_Opt_k2m1_su4k"},
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, 1, "EC_ISA_Opt_k8m3_su4k"},
   {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES, 4096,  4, 2, 1, "EC_ISA_NonOpt_k4m2_su4k"},
+  // Test configuration with num_zones set to 2 (size will be 2 * (4+2) = 12)
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 2, "EC_ISA_Opt_k4m2_zones2"},
 #endif
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 1, "EC_Jerasure_Opt_k4m2_su4k"},
   {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, 1, "EC_Jerasure_Opt_k4m2_su8k"},
@@ -945,7 +1088,8 @@ public:
     // Use OSDMap::Incremental to set pg_temp with the transformed acting set
     OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
     inc.fsid = new_osdmap->get_fsid();
-    inc.new_state[failed_osd] = CEPH_OSD_EXISTS;  // Mark as down (exists but not UP)
+    ceph_assert(new_osdmap->is_up(failed_osd));
+    inc.new_state[failed_osd] = CEPH_OSD_UP;  // toggles UP: marks it down
     
     // Convert to mempool vector for pg_temp
     mempool::osdmap::vector<int> pg_temp_vec(transformed_acting.begin(), transformed_acting.end());
@@ -1069,3 +1213,120 @@ INSTANTIATE_TEST_SUITE_P(
     return info.param.label;
   }
 );
+
+// ---------------------------------------------------------------------------
+// TestECStretchBackend: two-zone EC pool (k=4, m=2, 12 OSDs, abs shard == osd)
+// ---------------------------------------------------------------------------
+
+class TestECStretchBackend : public PGBackendTestFixture {
+public:
+  TestECStretchBackend() : PGBackendTestFixture(PGBackendTestFixture::EC) {
+    ec_plugin = "jerasure";
+    num_zones = 2;
+  }
+
+  void SetUp() override {
+    PGBackendTestFixture::SetUp();
+    initialize_scrub_infra();
+  }
+
+  std::set<int> ec_read_destinations() {
+    std::set<int> osds;
+    for (auto& [osd, msg] : get_primary_listener()->sent_messages_with_dest) {
+      if (msg->get_type() == MSG_OSD_EC_READ) {
+        osds.insert(osd);
+      }
+    }
+    return osds;
+  }
+};
+
+// A fast read on a zone-0 primary with every local shard up must be served
+// entirely from zone 0.
+TEST_F(TestECStretchBackend, FastReadZone0PrimaryStaysLocal) {
+  const std::string obj = "fast_read_zone0";
+  const std::string data(4 * stripe_unit, 'A');
+  create_and_write_verify(obj, data);
+  get_primary_listener()->sent_messages_with_dest.clear();
+
+  bufferlist out;
+  ASSERT_GE(read_object(obj, 0, data.size(), out, data.size(), true), 0);
+  ASSERT_EQ(out.to_str(), data);
+
+  auto osds = ec_read_destinations();
+  ASSERT_EQ(osds.size(), size_t(k + m));
+  for (int osd : osds) {
+    EXPECT_LT(osd, k + m) << "fast read went to remote-zone osd " << osd;
+  }
+}
+
+// Direct (sync) reads on zone-1 data shards: full stripe and sub-chunk.
+TEST_F(TestECStretchBackend, DirectReadZone1DataShards) {
+  const std::string obj = "direct_read_zone1";
+  std::string data;
+  for (int rel = 0; rel < k; rel++) {
+    data += std::string(stripe_unit, 'A' + rel);
+  }
+  create_and_write_verify(obj, data);
+  hobject_t hoid = make_test_object(obj);
+
+  for (int osd = k + m; osd < k + m + k; osd++) {
+    const int rel = osd - (k + m);
+    auto* ec_switch = dynamic_cast<ECSwitch*>(get_test_pg(osd, osd)->get_backend());
+    ASSERT_NE(ec_switch, nullptr);
+
+    bufferlist full;
+    EXPECT_GE(ec_switch->objects_read_local(hoid, 0, get_stripe_width(),
+                CEPH_OSD_RMW_FLAG_EC_DIRECT_READ, &full), 0);
+    EXPECT_EQ(full.to_str(), std::string(stripe_unit, 'A' + rel)) << "osd " << osd;
+
+    bufferlist part;
+    EXPECT_GE(ec_switch->objects_read_local(hoid, rel * stripe_unit + 512, 512,
+                CEPH_OSD_RMW_FLAG_EC_DIRECT_READ, &part), 0);
+    EXPECT_EQ(part.to_str(), std::string(512, 'A' + rel)) << "osd " << osd;
+  }
+}
+
+// EIO from a local shard when the local zone has exactly k shards: the
+// retry must fetch that relative shard from its zone-1 copy.
+TEST_F(TestECStretchBackend, SubReadErrorRetriesFromRemoteZone) {
+  const std::string obj = "read_error_zone";
+  const std::string data(4 * stripe_unit, 'A');
+  create_and_write_verify(obj, data);
+  simulate_multiple_osd_failures({2, 3});
+  ASSERT_EQ(get_primary_listener()->whoami_shard().osd, 0);
+
+  hobject_t hoid = make_test_object(obj);
+  get_osd_fixture(1)->store->inject_read_error(
+    ghobject_t(hoid, ghobject_t::NO_GEN, shard_id_t(1)), -EIO);
+  get_primary_listener()->sent_messages_with_dest.clear();
+
+  bufferlist out;
+  ASSERT_GE(read_object(obj, 0, data.size(), out, data.size()), 0);
+  ASSERT_EQ(out.to_str(), data);
+
+  int reads_to_osd1 = 0;
+  bool read_from_zone1 = false;
+  for (auto& [osd, msg] : get_primary_listener()->sent_messages_with_dest) {
+    if (msg->get_type() == MSG_OSD_EC_READ) {
+      reads_to_osd1 += osd == 1;
+      read_from_zone1 |= osd >= k + m;
+    }
+  }
+  EXPECT_EQ(reads_to_osd1, 1);
+  EXPECT_TRUE(read_from_zone1);
+}
+
+// Fast read on a zone-1 primary: the op completes after k replies while
+// redundant reads to other zone-1 shards are still in flight.
+TEST_F(TestECStretchBackend, FastReadZone1PrimaryWithReadsInFlight) {
+  const std::string obj = "fast_read_zone1";
+  const std::string data(4 * stripe_unit, 'A');
+  create_and_write_verify(obj, data);
+  simulate_multiple_osd_failures({0, 1, 2, 3, 4, 5});
+  ASSERT_GE(int(get_primary_listener()->whoami_shard().shard), k + m);
+
+  bufferlist out;
+  ASSERT_GE(read_object(obj, 0, data.size(), out, data.size(), true), 0);
+  ASSERT_EQ(out.to_str(), data);
+}

@@ -92,8 +92,9 @@ issues with the current CLI design:
 
 * Create-then-set flow.  A typical setup procedure of a pool requires multiple CLI
   commands (e.g. create replica, then set num copies, then set stretched, etc... )
-* Remove the need for an EC profile.  Indeed, stretch mode EC pools will be mutually
-  exclusive with the use of a profile.
+* Remove the need to create an EC profile before the pool: ``--k`` and ``--m`` generate one
+  for the pool (Section 2.1.5). An existing profile can still be used, for multi-zone pools
+  too; this stays supported.
 
 The current CLI behaviour of accepting either positional or non-positional arguments
 will be maintained, however no positional arguments will be added for the new
@@ -115,38 +116,37 @@ The ceph osd pool create command will be extended to become a parameterized comm
 For backward compatibility, the positional arguments will be maintained and can be
 specified along side the new paramaters. 
 
-2.2.1 Full command syntax
+2.1.1 Full command syntax
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The full command syntax is listed here. Refer to the later sections for pool-type specific details.
 
 .. code-block:: text
 
-   ceph osd pool create {pool_name} 
-        [{pg_num} | --pg_num <pg_num>]
-        [{pgp_num} | --pgp_num <pgp_num>]
-        [{replicated | erasure} | --pool_type <replicated|erasure>]
-        [{expected_num_objects} | --expected_num_objects <expected_num_objects>]
-        
+   ceph osd pool create {pool_name}
+        [--pg_num <pg_num>]
+        [--pgp_num <pgp_num>]
+        [--pool_type <replicated|erasure>]
+        [--expected_num_objects <expected_num_objects>]
+
         # CRUSH Placement Options (Mutually Exclusive)
-        [ {crush_rule_name} | --crush_rule_name <crush_rule_name> | 
-          [--crush_root <crush_root>] [--zone_failure_domain <zone_failure_domain>] [--osd_failure_domain <osd_failure_domain>] [--crush_device_class <class>] ]
-        
+        [ --rule <crush_rule_name> |
+          [--root <crush_root>] [--zone_failure_domain <zone_failure_domain>] [--osd_failure_domain <osd_failure_domain>] [--class <device_class>] ]
+
         # Replica-Specific Options
         [--size <size>]
-        
+        [--replica <replica>]
+
         # Erasure-Specific Options
-        [--data_shards <num_data_shards>]
-        [--coding_shards <num_coding_shards>]
-        [--stripe_unit <stripe_unit>]
-        [ {erasure_code_profile} | --profile <profile_name> ]
-        
+        [--k <num_data_shards>]
+        [--m <num_coding_shards>]
+        [ --erasure_code_profile <profile_name> ]
+
         # Topology and Redundancy
-        [--zones <num_zones>]
-        [--min_size <min_size>]
-        
+        [--num_zones <num_zones>]
+
         # Autoscaling and General Config
-        [--autoscale_mode=<on,off,warn>]
+        [--autoscale_mode <on|off|warn>]
         [--pg_num_min <pg_num_min>]
         [--pg_num_max <pg_num_max>]
         [--bulk]
@@ -154,11 +154,8 @@ The full command syntax is listed here. Refer to the later sections for pool-typ
         [--target_size_ratio <target_size_ratio>]
         [--crimson]
         [--yes_i_really_mean_it]
-        
-        # Legacy Options
-        [--stretch_mode]
 
-2.2.2 Legacy positional syntax
+2.1.2 Legacy positional syntax
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The following syntax, taken from the current docs, will be maintained for backward compatibility:
@@ -176,13 +173,13 @@ The following syntax, taken from the current docs, will be maintained for backwa
 This syntax can be used with the new parameters which do not directly conflict.  For example --pg_num cannot 
 be used with its positional counterpart. 
 
-2.2.1 Basic Parameters
+2.1.3 Basic Parameters
 ^^^^^^^^^^^^^^^^^^^^^^
 
 These are the primary parameters required for standard deployments.
 
 **--pool_type** (or positional equivalent)
-  - *Definition*: The type of pool to create. 
+  - *Definition*: The type of pool to create.
   - *Values*: ``replicated`` or ``erasure``.
   - *Default Value*: Derived from ``osd_pool_default_type`` if omitted, but highly recommended to specify.
 
@@ -190,75 +187,80 @@ These are the primary parameters required for standard deployments.
   - *Definition*: The number of OSDs the data is striped over for each object. (Replica only)
   - *Note*: Parameter will be ignored, rather than rejected for EC pools, for backward compatibility.
 
-**--data_shards** (or **--k**)
+**--k**
   - *Definition*: Within a zone, the number of OSDs the data is striped over for each object. (EC only)
 
-**--coding_shards** (or **--m**)
+**--m**
   - *Definition*: Within a zone, the number of OSDs the coding shards are striped over. (EC only)
 
-**--zones**
+**--num_zones**
   - *Definition*: For a stretched cluster configuration defines the number of zones, each which store a full replica of the pool. (EC or Replica)
   - *Default Value*: ``1``
-  - *Behavior*: Setting this to >1 creates a stretched pool.    
-     A non-stretched pool achieves redundancy accross OSDs.  A stretched pool creates redundancy
-     accross ``zones``. 
-  - *Pool Size*: The resulting pool ``size`` is ``zones × (k + m)``.
+  - *Behavior*: Setting this to >1 creates a stretched pool.
+     A non-stretched pool achieves redundancy across OSDs.  A stretched pool creates redundancy
+     across ``num_zones``.
+  - *Pool Size*: For an EC pool, the resulting pool ``size`` is ``num_zones × (k + m)``. For a
+    replicated pool created with ``num_zones`` greater than 1 and without ``--size``, it is
+    ``num_zones × replica``, with ``--replica`` defaulting to
+    ``osd_pool_stretch_default_replica`` (2), so 4 for 2 zones. In global stretch mode
+    (``ceph mon enable_stretch_mode``) a replicated pool's size is the number of zones ×
+    ``mon_global_stretch_pool_replica``, and ``--size`` is refused.
 
 
-2.2.2 Advanced
-^^^^^^^^^^^^^^
+2.1.4 Advanced Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 These parameters are intended for advanced users and offer finer control over the cluster layout.
-
-**--stripe_unit**
-  - *Definition*: The amount of data in a shard, per stripe. Sometimes referred to as "chunk size".  (EC only)
-  - *Default Value*: 16k for Fast EC, 4k for classic EC.
-  - *Purpose*: Where beneficial for a well-known access pattern, the stripe unit can
-    be tuned to any 4k-divisible value. 
+For a replicated pool, ``--root``, ``--zone_failure_domain``, ``--osd_failure_domain`` and
+``--class`` take effect only with ``num_zones`` greater than 1 and are rejected otherwise
+(Section 2.1.5).
 
 **--zone_failure_domain**
   - *Definition*: The CRUSH bucket type over which zone-redundancy is achieved.
   - *Default Value*: ``datacenter``
   - *Purpose*: This is the CRUSH bucket type that defines a zone.
-  - *Note*: Mutually exclusive with ``--crush_rule``
-  
+  - *Note*: Mutually exclusive with ``--rule``
+
 **--osd_failure_domain**
   - *Definition*: The CRUSH bucket type over which OSD-redundancy is achieved.
   - *Default Value*: ``host``
-  - *Note*: Mutually exclusive with ``--crush_rule``
+  - *Note*: Mutually exclusive with ``--rule``
 
-**--crush_device_class**
+**--class**
   - *Definition*: Restrict placement to devices of a specific class (e.g., ``ssd`` or ``hdd``), using the CRUSH device class names in the CRUSH map.
   - *Purpose*: Only required if a cluster has a mixture of different classes of OSD.
-  - *Note*: Mutually exclusive with ``--crush_rule``
+  - *Note*: Mutually exclusive with ``--rule``
 
-**--crush_root**
+**--root**
   - *Definition*: The root of the CRUSH tree to use.  (R2 only)
   - *Default Value*: The cluster root (``default``).
   - *Topology and Validation*: Specifying the CRUSH root to use (defaults to ``default``), the CRUSH level for a zone (defaults to ``datacenter``), and the number of zones (defaults to ``1``) is sufficient to define the pool's placement:
 
-    - Example 1: In a cluster with 2 datacenters, specifying ``--zones 2`` will create a stretch pool across the 2 datacenters.
-    - Example 2: In a cluster with 2 datacenters, specifying ``--crush_root DC1`` will create an pool completely contained in DC1.
+    - Example 1: In a cluster with 2 datacenters, specifying ``--num_zones 2`` will create a stretch pool across the 2 datacenters.
+    - Example 2: In a cluster with 2 datacenters, specifying ``--root DC1`` will create a pool completely contained in DC1.
     - Validation: If there are N datacenters with the same root and you specify a number of zones M != N, the command will fail because the specified number of zones is different from the number of zones in the CRUSH hierarchy.
     - Custom Rules: If users want to use a subset of zones (e.g., a special 3-datacenter configuration), they must specify a custom CRUSH rule. A custom CRUSH rule is mutually exclusive with specifying the CRUSH root and/or CRUSH level.
 
   - *Operational Restrictions*: When there are stretch pools, adding or moving a CRUSH bucket that impacts the number of zones for the pool will require a ``yes-i-really-mean-it`` flag, as this is liable to break things.
-  - *Note*: Mutually exclusive with ``--crush_rule``
+  - *Note*: Mutually exclusive with ``--rule``
 
-**--min_size**
-  - *Definition*: The minimum number of shards required to serve I/O within a zone.
-  - *Note*: The value should be within allowed specified ranges. For replica pools this range is ``1-<num replicas>``, for EC pools this is ``<num data shards>-<num data shards>+<num coding shards>``.
+**--rule**
+  - *Definition*: Use this CRUSH rule, instead of an auto-generated rule.
+  - *Purpose*: Create a bespoke CRUSH rule for advanced use cases not covered by the auto rule generation above.
+  - *Note*: Mutually exclusive with ``--root``, ``--osd_failure_domain`` and ``--zone_failure_domain``
 
-**--crush_rule**
-  - *Definition*: Use this CRUSH rule, instead of an auto-generated rule. 
-  - *Purpose*: Create a bespoke CRUSH rule for advanced use cases not covered by the auto rule generation above. 
-  - *Note*: Mutually exclusive with ``--crush_root``, ``--osd_failure_domain`` and ``--zone_failure_domain``
+**--erasure_code_profile**
+  - *Definition*: An existing EC profile to use, instead of one generated from ``--k`` and ``--m``.
+  - *Note*: Can be used with any ``--num_zones``, multi-zone configurations included. This is
+    permanent, not a transitional measure. Mutually exclusive with ``--k``/``--m`` and with
+    ``--root``, ``--zone_failure_domain``, ``--osd_failure_domain`` and ``--class``. See
+    Section 2.1.5.
 
-**--profile**
-  - *Definition*: The legacy EC Profile to use. 
-  - *Note*: Mutually exclusive with ``--zones``: Cannot be used with multi-zone configurations. 
+**--replica**
+  - *Definition*: For replicated pools, the number of replicas within each zone. (Replica only)
+  - *Default Value*: ``osd_pool_stretch_default_replica`` (2)
 
-.. note:: 
+.. note::
 
    The following parameters are existing, standard pool configuration options included here for completeness.
 
@@ -267,7 +269,7 @@ These parameters are intended for advanced users and offer finer control over th
 
 **--pgp_num**
   - *Definition*: The total number of placement groups for placement purposes.
-  - *Note*: This should never be modified. Purely here for backward compaitbility.
+  - *Note*: This should never be modified. Purely here for backward compatibility.
 
 **--expected_num_objects**
   - *Definition*: The expected number of objects for this pool, used to pre-split placement groups at pool creation.
@@ -299,17 +301,266 @@ These parameters are intended for advanced users and offer finer control over th
   - *Definition*: Internal safety override flag. In the context of pool creation, it is specifically used to allow the creation of hidden or system-reserved pools whose names begin with a dot (e.g., ``.rgw.root``).
 
 
-2.2.3 Deprecated
-^^^^^^^^^^^^^^^^
+2.1.5 Erasure Code Profiles
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-These are used for backward compatibility only.
+Every erasure coded pool, stretched or not, has an EC profile. The pool records its name in
+``erasure_code_profile``. The profile supplies the plugin, ``k``, ``m``, technique and the
+``crush-*`` keys used to build the pool's CRUSH rule. Two things are
+new: ``ceph osd pool create`` can generate the profile from ``--k`` and ``--m``, and a profile
+is deleted with the last pool that uses it. The user documentation describes the same
+behaviour in :ref:`erasure-code-profile-lifecycle`.
 
-**--stretch_mode**
-  - *Definition*: Deprecated parameter for Replica pools which configures two zones with half the specified number of replica copies in each zone. Not supported for EC pools.
-  - *Note*: Mutually exclusive with ``--zones`` and erasure pools.
+**How a pool gets its profile**
 
+An erasure coded pool takes its profile from one of three sources:
 
-2.3 Examples
+* **Generated** (``--k`` and ``--m``): the profile ``<pool_name>-k<k>-m<m>``, created if it does
+  not exist (see *Generated profiles* below).
+* **Named** (``--erasure_code_profile <name>`` or the positional equivalent): an existing
+  profile, normally created with ``ceph osd erasure-code-profile set``. The command does not
+  create the profile and does not check it when it is selected. If it does not exist, the
+  command fails with "cannot determine the erasure code plugin because there is no 'plugin'
+  entry in the erasure_code_profile {}".
+* **Default** (neither): the ``default`` profile. If ``default`` does not exist, for example
+  after ``ceph osd erasure-code-profile rm default``, it is created from
+  ``osd_pool_default_erasure_code_profile`` as written, without plugin normalization.
+  ``--erasure_code_profile default`` has the same effect.
+
+A profile from any of these sources can be used with ``--num_zones`` greater than 1, and this
+stays supported: multi-zone pools do not have to be created from ``--k`` and ``--m``. The
+profile's CRUSH keys and ``num_zones`` build the pool's rule (*CRUSH rule* below).
+
+**Parameter combinations**
+
+For an erasure pool, ``ceph osd pool create`` rejects these with EINVAL:
+
+* ``--erasure_code_profile`` with ``--k`` and ``--m``: "cannot specify both
+  erasure_code_profile and k/m parameters".
+* Only one of ``--k`` and ``--m``: "erasure_code_profile requires both k and m".
+* ``--erasure_code_profile`` with any of ``--root``, ``--zone_failure_domain``,
+  ``--osd_failure_domain`` or ``--class``: "cannot specify both erasure_code_profile and crush
+  parameters (crush_root, zone_failure_domain, osd_failure_domain, crush_device_class)".
+* Any of those CRUSH options without ``--k``/``--m``, even with a value equal to the default:
+  "crush parameters (crush_root, zone_failure_domain, osd_failure_domain, crush_device_class)
+  require k and m". Without ``--k``/``--m`` the pool uses the shared ``default`` profile,
+  which cannot record per-pool options.
+* ``k`` less than 2: "k=<k> must be >= 2". ``k+m`` greater than 127: "(k+m)=<k+m> must be
+  <= 127", because shard ids are 8-bit signed integers.
+
+For any pool type:
+
+* ``--rule`` with any of ``--root``, ``--zone_failure_domain``, ``--osd_failure_domain`` or
+  ``--class``: "cannot specify both crush rule and crush parameters (crush_root,
+  zone_failure_domain, osd_failure_domain, crush_device_class)".
+* ``--num_zones`` less than 1: "num_zones must be >= 1".
+
+For a replicated pool, ``--k`` or ``--m`` is rejected: "cannot specify k/m parameters for
+replicated pools". A replicated pool with ``num_zones`` 1 uses the default replicated rule, or the
+rule given with ``--rule``, so any of ``--root``, ``--zone_failure_domain``,
+``--osd_failure_domain`` or ``--class`` is rejected for it rather than ignored: "crush parameters
+(crush_root, zone_failure_domain, osd_failure_domain, crush_device_class) require num_zones > 1
+for a replicated pool".
+
+``--rule`` may be combined with ``--k``/``--m`` or with ``--erasure_code_profile``. ``m``
+greater than ``k`` is allowed. The plugin can reject further values when it normalizes the
+profile (for example, ISA rejects ``m`` greater than 32). ``m`` at least 1 is enforced only
+by the ``ceph`` CLI.
+
+The existing-pool check runs first: if a pool of that name and type already exists, the
+command succeeds with "pool '<pool>' already exists", whatever profile options are given.
+
+**Generated profiles**
+
+With ``--k`` and ``--m`` the monitor looks for a profile named ``<pool_name>-k<k>-m<m>`` in the
+committed OSDMap.
+
+* **Not found**: the monitor copies every key of ``osd_pool_default_erasure_code_profile``
+  (default ``plugin=isa technique=reed_sol_van k=2 m=2``), sets ``k`` and ``m``, and records
+  the CRUSH options given on the command line:
+
+  - ``--root`` as ``crush-root``
+  - ``--zone_failure_domain`` as ``crush-zone-failure-domain``
+  - ``--osd_failure_domain`` as ``crush-osd-failure-domain`` if the default profile has that
+    key, otherwise as ``crush-failure-domain``
+  - ``--class`` as ``crush-device-class``
+
+  The plugin then normalizes the profile. This fills in unset keys (``crush-root=default``,
+  ``crush-zone-failure-domain=datacenter``, ``crush-failure-domain=host`` and so on) and can
+  rewrite others (ISA switches ``reed_sol_van`` to ``cauchy`` for some ``k`` and ``m``). If
+  normalization fails, the command fails and nothing is proposed.
+  The profile is committed in its own OSDMap update and the command is retried. The CRUSH rule
+  and then the pool follow in later updates.
+* **Found, same** ``k`` **and** ``m``: the profile is used as it is. Only the ``k`` and ``m``
+  values are compared, so a profile created in advance with
+  ``ceph osd erasure-code-profile set`` keeps its own plugin, technique and ``crush-*`` keys.
+* **Found, different** ``k`` **or** ``m``: the command fails with EEXIST, "EC profile
+  '<pool_name>-k<k>-m<m>' already exists with different k/m parameters".
+
+Each CRUSH option given on the command line must then equal the matching profile key
+(``crush-osd-failure-domain``, else ``crush-failure-domain``, for ``--osd_failure_domain``). A
+missing key counts as different. Otherwise the command fails with EINVAL, "EC profile
+'<profile>' already exists with different crush parameters than specified
+(crush_root/zone_failure_domain/osd_failure_domain/device_class)". A newly generated profile
+always matches, so this only fails for a reused profile.
+
+No command-line option sets the plugin, technique or other plugin keys of a generated
+profile. They come from ``osd_pool_default_erasure_code_profile``, or from a profile
+of the generated name created in advance. ``num_zones`` is not stored in the profile.
+
+Pool names may contain characters that ``ceph osd erasure-code-profile get`` and ``rm`` do not
+accept from the ``ceph`` CLI (it allows only ``[A-Za-z0-9-_.]``). The generated profile of such
+a pool can then only be removed by deleting the pool.
+
+**How the profile shapes the pool**
+
+At creation the monitor loads the plugin named by the profile and sets:
+
+* ``size`` to ``num_zones`` × the plugin's chunk count (``k+m`` for jerasure and ISA).
+  ``--size`` is ignored for EC pools.
+* ``min_size`` to ``k + min(1, m-1)``, not scaled by ``num_zones``: it applies to each zone's
+  block of ``k+m`` shards (Section 11.2).
+* ``ec_data_shard_count`` and ``ec_coding_shard_count`` to ``k`` and ``m``.
+* ``nonprimary_shards``, when FastEC is enabled: raw shards ``1`` to ``k-1`` (through the
+  plugin's chunk mapping) in every zone, that is shard ``s + (k+m) × zone``. For ``k=4``,
+  ``m=2`` and two zones this is ``{1,2,3,7,8,9}``.
+
+**CRUSH rule**
+
+Without ``--rule`` the rule is named after the pool. Single-zone pools with the ``default``
+profile are the exception: they share the ``erasure-code`` rule. If a committed rule of that name already exists it is reused, without checking that it
+fits ``k+m``, ``num_zones`` or the CRUSH options. Otherwise the plugin builds it:
+
+* ``num_zones`` greater than 1: a stretch rule that takes ``num_zones`` buckets of the zone type
+  under the root (``choose firstn <num_zones>``), then ``k+m`` OSD failure domains
+  (``chooseleaf_indep``) in each. The root, zone type,
+  OSD failure domain type and device class are the command-line values, else the profile's
+  ``crush-root``, ``crush-zone-failure-domain``, ``crush-osd-failure-domain`` (or
+  ``crush-failure-domain``) and ``crush-device-class``. ``crush-num-failure-domains``,
+  ``crush-num-osd-failure-domains`` and ``crush-osds-per-failure-domain`` are ignored. The root must have exactly ``num_zones``
+  buckets of the zone type, each with at least ``k+m`` OSD failure domains that contain an OSD;
+  otherwise the command fails, for example with "number of zones <n> for type <type> is not
+  equal to num_failure_domains <num_zones>". LRC rejects ``num_zones`` greater than 1.
+* ``num_zones`` equal to 1: the rule is built from the profile's keys only, as before. The
+  command-line values take effect because the generated profile records them.
+  ``--zone_failure_domain`` has no effect on such a rule.
+
+With ``--rule`` the named rule must already exist ("specified rule <rule> doesn't exist") and is
+used unchanged: ``num_zones`` and the profile's CRUSH keys are not applied to it.
+``ceph osd crush rule create-erasure <name> [<profile>] [<num_zones>]`` builds the same kind of
+rule from the profile's keys alone.
+
+**Multi-zone pools**
+
+* An erasure pool with ``num_zones`` greater than 1 must have FastEC. Creation enables
+  ``allow_ec_optimizations`` and fails if that fails, with "Multi-zone erasure coded pools
+  require FastEC support. The erasure code profile '<profile>' does not support FastEC:
+  <reason> Please use a FastEC-compatible profile (e.g., plugin=jerasure
+  technique=reed_sol_van, or plugin=isa)." The reason is one of: ``require_osd_release`` older
+  than tentacle; a plugin without FastEC support (ISA supports it with any technique and
+  jerasure only with ``reed_sol_van``; shec, clay and LRC do not); a plugin whose FastEC support
+  is marked experimental.
+* A multi-zone pool is created from ``--k``/``--m`` or from a profile. With ``--k``/``--m`` its
+  plugin and technique come from ``osd_pool_default_erasure_code_profile``, or from a profile of
+  the generated name created in advance. With neither ``--k``/``--m`` nor
+  ``--erasure_code_profile``, it uses the ``default`` profile and, unlike a single-zone pool, a
+  rule of its own named after the pool.
+* This FastEC check at creation is the only release check. The OSD feature bit of Section 15
+  is not implemented.
+
+**num_zones is set per pool**
+
+``num_zones`` is set on every pool, at creation with ``--num_zones`` (default 2 in global
+stretch mode, otherwise ``osd_pool_default_num_zones``, 1), and is never part of an erasure code
+profile.
+``ceph osd pool get <pool> num_zones`` shows it, and ``ceph osd pool set <pool> num_zones <n>``
+changes it (Section 13.2). A ``num_zones`` key set in a profile with
+``ceph osd erasure-code-profile set`` is ignored.
+
+**Changes after creation**
+
+* ``ceph osd pool set <pool> size`` is refused for EC pools ("can not change the size of an
+  erasure-coded pool"). ``ceph mon disable_stretch_mode`` is the exception: it resets every
+  pool, EC pools included, to ``osd_pool_default_size``.
+* ``ceph osd pool stretch set`` and ``unset`` are refused while stretch mode is enabled
+  (Section 11.4.1).
+* A pool's profile cannot be replaced. ``erasure_code_profile`` can be read with
+  ``ceph osd pool get`` but is not a ``ceph osd pool set`` variable.
+* ``ceph osd erasure-code-profile set <name> ... --force --yes-i-really-mean-it`` overwrites a
+  profile even if pools use it. The pools are not updated: ``size``, ``min_size``, the shard
+  counts and ``nonprimary_shards`` keep their values, while OSDs
+  build a PG's EC backend from the profile in the OSDMap they load, so this is unsafe.
+* ``ceph osd pool rename`` does not rename a generated profile or the CRUSH rule named after
+  the pool. A pool created later with the old name and the same ``k`` and ``m`` reuses both,
+  which are then shared by the two pools.
+
+**Lifetime**
+
+When an erasure coded pool is deleted, with ``ceph osd pool delete`` or through librados, the
+monitor deletes its profile in the same OSDMap update as the pool, unless:
+
+* the profile is ``default``;
+* another erasure coded pool in the committed OSDMap uses it; or
+* a pool in the pending OSDMap update uses it. The pending update holds pools being created and
+  pending changes to existing pools.
+
+This applies to every profile, whether ``ceph osd pool create`` generated it or it was created
+with ``ceph osd erasure-code-profile set``. Only erasure coded pools count as users. The command
+output does not mention the deletion; the monitor logs the decision at ``debug_mon`` 10.
+
+The pool's CRUSH rule is removed in the same update if no other pool in the committed OSDMap
+uses it, as it was before this change. The two decisions are independent: the rule check counts
+pools of any type but not pending pools, while the profile check counts only erasure coded pools
+but includes pending ones. One can be removed while the other is kept.
+
+Only a pool deletion removes a profile automatically. A profile stays when:
+
+* no pool has ever used it, for example a profile that was set but never used;
+* ``mon_fake_pool_delete`` is set and the deletion is faked: the pool is only renamed to
+  ``<name>.<id>.DELETED``, and the profile and the rule both stay;
+* ``ceph osd pool create`` fails after the generated profile was committed, for example on a
+  CRUSH topology error, a ``--rule`` that does not exist, stretch mode validation, the FastEC
+  check, the PG limit or global stretch mode. The profile stays, and so does the rule named after the pool if the failure came
+  after the rule was created. A retry with the same ``k``, ``m`` and CRUSH options reuses both.
+  A retry with different CRUSH options fails until the profile is removed. A retry with a
+  different ``k`` or ``m`` generates a new profile but reuses the leftover rule without checking
+  it. Remove them with ``ceph osd erasure-code-profile rm`` and ``ceph osd crush rule rm``.
+
+OSDs store a deleted pool's profile with its final ``pg_pool_t``, so deleting the profile in the
+same epoch as the pool does not affect PG removal.
+
+**Profile commands**
+
+* ``ceph osd erasure-code-profile set`` is unchanged. Keys are merged onto
+  ``osd_pool_default_erasure_code_profile`` (a different ``plugin`` discards the default keys),
+  ``crush-failure-domain`` must name an existing CRUSH type, and the plugin normalizes the
+  profile. ``crush-osd-failure-domain`` and ``crush-zone-failure-domain`` are not checked here;
+  a bad value fails at rule creation with "unknown type <type>" if a new rule uses the key, and
+  is never reported otherwise. Setting an existing
+  profile to identical contents succeeds without a change. Different contents need ``--force``
+  and ``--yes-i-really-mean-it``. Normalization now also adds ``crush-zone-failure-domain``
+  (default ``datacenter``), so ``ceph osd erasure-code-profile get`` shows that key.
+* ``ceph osd erasure-code-profile rm`` waits while a pool in the pending update uses the profile,
+  and fails with EBUSY, "<pool> pool(s) are using the erasure code profile '<name>'", while a
+  committed erasure coded pool uses it. Removing a profile that does not exist succeeds (return
+  code 0) with "erasure-code-profile <name> does not exist". ``default`` can be removed when no
+  pool uses it; ``ceph osd pool create`` and ``ceph osd crush rule create-erasure`` re-create it
+  when needed.
+* ``ceph osd erasure-code-profile get`` and ``ls`` show only committed profiles. ``get`` of a
+  profile deleted with its last pool fails with ENOENT, "unknown erasure code profile '<name>'".
+
+**Change of behaviour**
+
+In earlier releases a profile created with ``ceph osd erasure-code-profile set`` remained until
+``ceph osd erasure-code-profile rm`` removed it, and could be used again for later pools. Now it
+is deleted with the last pool that uses it. Creating a pool with a deleted profile fails with
+"cannot determine the erasure code plugin because there is no 'plugin' entry in the
+erasure_code_profile {}". Scripts and tests that set a profile once and reuse it after deleting
+its pools must set it again before each reuse. Scripts that run
+``ceph osd erasure-code-profile rm`` after deleting the pool keep working, because removing a
+missing profile succeeds, but the ``rm`` no longer does anything.
+
+2.2 Examples
 ~~~~~~~~~~~~
 
 The following are examples of how the new parameterized ``ceph osd pool create`` command simplifies pool creation across different topologies.
@@ -326,35 +577,35 @@ Create an erasure-coded pool using a ``k=4, m=2`` configuration (yielding a size
 
 .. code-block:: bash
 
-   ceph osd pool create my_ec_pool --pool_type erasure --data_shards 4 --coding_shards 2 --pg_num 64
+   ceph osd pool create my_ec_pool --pool_type erasure --k 4 --m 2 --pg_num 64
 
 **Example 3: Stretched Replicated Pool**
 Create a replicated pool that spans across two datacenters, achieving a total size of 4 (2 replicas in each datacenter):
 
 .. code-block:: bash
 
-   ceph osd pool create stretch_rep --pool_type replicated --size 4 --zones 2 --zone_failure_domain datacenter
+   ceph osd pool create stretch_rep --pool_type replicated --size 4 --zone_failure_domain datacenter --num_zones 2
 
 **Example 4: Stretched Erasure Coded Pool**
 Create an erasure-coded pool stretched across two racks. Using a ``k=4, m=2`` configuration per zone across 2 zones creates a total pool size of 12 shards (4 data and 2 coding per rack):
 
 .. code-block:: bash
 
-   ceph osd pool create stretch_ec --pool_type erasure --data_shards 4 --coding_shards 2 --zones 2 --zone_failure_domain rack
+   ceph osd pool create stretch_ec --pool_type erasure --k 4 --m 2 --zone_failure_domain rack --num_zones 2
 
 **Example 5: Single Datacenter Erasure Coded Pool**
-Create an EC pool confined entirely to a specific datacenter using the ``--crush_root`` parameter:
+Create an EC pool confined entirely to a specific datacenter using the ``--root`` parameter:
 
 .. code-block:: bash
 
-   ceph osd pool create dc1_ec --pool_type erasure --data_shards 4 --coding_shards 2 --crush_root DC1 
+   ceph osd pool create dc1_ec --pool_type erasure --k 4 --m 2 --root DC1
 
 **Example 6: Bulk Erasure Coded Pool with Autoscaling Limits**
 Create an EC pool where the system automatically scales the PG count but enforces a minimum boundary, marking it as a bulk pool:
 
 .. code-block:: bash
 
-   ceph osd pool create bulk_ec --pool_type erasure --data_shards 6 --coding_shards 3 --autoscale_mode on --pg_num_min 128 --bulk
+   ceph osd pool create bulk_ec --pool_type erasure --k 6 --m 3 --autoscale_mode on --pg_num_min 128 --bulk
 
 
 1. Approaches Considered but Rejected
@@ -430,14 +681,14 @@ case.
 
 - **Reference Diagrams**: For clarity, architectural diagrams and examples
   within this design documentation will primarily depict a 2-zone HA
-  configuration (``zones=2``, with 2 data centers).
+  configuration (``--num-zones 2``, with 2 data centers).
 - **Logical Scalability**: The design is logically N-way capable. The parameter
-  ``zones`` is not limited to 2; the system supports any valid CRUSH topology where
-  ``zones`` failure domains exist.
+  ``num_zones`` is not limited to 2; the system supports any valid CRUSH topology where
+  ``num_zones`` failure domains exist.
 - **Testing Strategy**: Testing will follow a phased approach:
 
   1. **Unit Tests (Initial)**: The unit test framework will include tests for
-     both 2-zone (``zones=2``) and 3-zone (``zones=3``) configurations, validating the
+     both 2-zone (``--num-zones 2``) and 3-zone (``num_zones=3``) configurations, validating the
      core peering and recovery logic for N-way topologies.
   2. **Full 2-Zone Testing (Initial Release)**: 2-zone configurations will be
      fully tested end-to-end for the initial release, covering all read, write,
@@ -472,7 +723,7 @@ The following diagram illustrates a cluster configured with ``r=2``, ``k=2``,
             v                                 v          
   +---------------------------------------------------+
   |             Logical Replication Layer             |
-  |           (zones=2, zone_failure_domain=DC)          |
+  |           (--num-zones 2, zone_failure_domain=DC)          |
   +--------------------------+------------------------+
                              |                           
               +--------------+--------------+            
@@ -507,7 +758,7 @@ The following diagram illustrates a cluster configured with ``r=2``, ``k=2``,
 
 **Shard**
   The globally unique position of a chunk within the pool's acting set. Shards
-  are numbered ``0`` through ``zones × (k + m) - 1``. In the diagram above, Zone A
+  are numbered ``0`` through ``num_zones × (k + m) - 1``. In the diagram above, Zone A
   holds Shards 0, 1, 2 and Zone B holds Shards 3, 4, 5.
 
 **Zone-local**
@@ -609,58 +860,109 @@ falls back to the Primary read path (Section 7.1).
   ``-EAGAIN`` rejection, or medium error — results in the client redirecting
   the operation to the **Primary** (regardless of the Primary's location).
 
-7.3 Direct Reads — Zone-Local — *R1*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+7.3 Direct Reads — Zone-Aware — *R1*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The client will read from a zone-local shard.
+The client selects which zone to read each data shard from based on the
+read mode flag set on the operation. Two modes are supported:
 
-- **Zone-Local Shard Identification**: The client determines which OSDs in the
-  acting set reside within its own zone by comparing OSD CRUSH
-  locations against its own. This identifies the ``k+m`` shards of the local
-  zone. The client then selects a suitable set of data shards for the
-  direct read.
+.. note::
 
-- **Unavailable Zone-local OSDs**: If the zone-local shards are not available (e.g., the
-  zone-local OSDs are down or the client cannot identify any zone-local replica), the
-  client does not attempt a direct read and instead directs the operation to
-  the Primary. In later releases this will be improved to redirect to the
-  local Zone Primary instead.
+   The stretch CRUSH rule guarantees that the acting array is zone-contiguous::
 
-- **Direct Read Execution**: If a zone-local shard is available, the client sends
-  the read directly to that OSD. As detailed in the ``ec_direct_reads.rst``
-  design, it is generally acceptable for reads to overtake in-flight writes.
-  However, the OSD is aware if it has an "uncommitted" write (a write that
-  could potentially be rolled back) for the requested object. If such a write
-  exists, or if the client's operation requires strict ordering (e.g. the
-  ``rwordered`` flag is set), the OSD rejects the operation with ``-EAGAIN``.
-  Data access errors (e.g., a media error on the underlying storage) also cause
-  the OSD to reject the operation.
+       acting[0 .. zone_size-1]             → zone 0
+       acting[zone_size .. 2*zone_size-1]   → zone 1
+       …
+
+   so the absolute raw shard index is ``rel_shard + zone_index × zone_size``.
+   This arithmetic is the same for non-stretch pools (``zone_size == pool.size``,
+   ``zone_index == 0``), so no separate code path is needed.
+
+7.3.1 Localized Reads (``CEPH_OSD_FLAG_LOCALIZE_READS``) — *R1*
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+All data shards for a single operation are read from the **same zone** — the one
+nearest to the client.
+
+- **Zone Selection**: The client scores each zone by picking one arbitrary OSD
+  from that zone's acting-set range and computing its CRUSH locality distance
+  to the client via ``CrushWrapper::get_common_ancestor_distance()``. The zone
+  with the lowest (nearest) distance wins. Ties are broken in favour of the
+  lower-indexed zone. If no zone can be scored (``crush_location`` unset, all
+  representatives absent, or no common ancestor), zone 0 is used as the
+  default, which is also the correct behaviour for non-stretch pools.
+
+- **Shard Selection**: For each required data chunk, the client selects the
+  corresponding shard from the chosen zone. Every shard in the operation comes
+  from the same zone. If any shard's OSD is unavailable (absent from the acting
+  set or not ``exists()``), the split read is aborted and the operation falls
+  back to the Primary. There is no cross-zone fallback.
+
+- **Unavailable Zone**: If any required shard in the chosen zone is unavailable,
+  the client does not attempt a direct read and instead directs the operation to
+  the Primary. In later releases this will be improved to redirect to the local
+  Zone Primary instead.
+
+7.3.2 Balanced Reads (``CEPH_OSD_FLAG_BALANCE_READS``) — *R1*
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Each data shard for a single operation is read from a **randomly chosen zone**,
+selected independently for each shard. This spreads read load across all zones
+without requiring knowledge of the client's physical location.
+
+- **Per-Shard Zone Selection**: For each required data shard ``rel_shard``
+  (``0`` to ``k-1``), a zone is chosen uniformly at random from the available
+  zones. The selection for each shard is independent; different shards in the
+  same operation may come from different zones.
+
+- **Shard Selection**: The absolute raw shard is
+  ``rel_shard + random_zone × zone_size``. If the chosen zone's OSD for a given
+  shard is unavailable (absent from the acting set or not ``exists()``), the
+  split read is aborted and the operation falls back to the Primary.
+
+- **No Locality Requirement**: Unlike Localized Reads, this mode does not
+  require ``crush_location`` to be set on the client. It is suitable as a
+  general-purpose load-balancing read strategy across all zones.
+
+7.3.3 Common Behaviour
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The following applies to both Localized and Balanced read modes:
+
+- **Direct Read Execution**: The client sends each shard read directly to the
+  target OSD. As detailed in the ``ec_direct_reads.rst`` design, it is generally
+  acceptable for reads to overtake in-flight writes. However, the OSD is aware
+  if it has an "uncommitted" write (a write that could potentially be rolled
+  back) for the requested object. If such a write exists, or if the client's
+  operation requires strict ordering (e.g. the ``rwordered`` flag is set), the
+  OSD rejects the operation with ``-EAGAIN``. Data access errors (e.g., a media
+  error on the underlying storage) also cause the OSD to reject the operation.
 
 - **Failure Handling & Redirection (R1)**:
 
-  An -EAGAIN will cause the client to retry the op. For R1, the op will be 
-  redriven to the primary.  R2 will redrive the op to the zone primary. 
+  An ``-EAGAIN`` will cause the client to retry the op. For R1, the op will be
+  redriven to the Primary. R2 will redrive the op to the Zone Primary.
 
 7.4 Read from Zone Primary — *Later Release*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In the R1 release, the primary will handle all failures. In later releases,
-an op which cannot be processed as a direct read will be directed at the 
+an op which cannot be processed as a direct read will be directed at the
 zone primary instead. The zone primary will attempt to reconstruct the
-read data from the zone-local shards directly. 
+read data from the zone-local shards directly.
 
-A conflict due to an uncommitted write will be continue to be handled by
-the primary, as the zone primary must also rejected an op if an
-uncommitted write exists for that object. 
+A conflict due to an uncommitted write will continue to be handled by
+the primary, as the zone primary must also reject an op if an
+uncommitted write exists for that object.
 
 - **Zone-local Recovery**: A read directed to a Zone Primary will attempt to serve
   the request by recovering data using only OSDs within the same data center
   (the remote zone).
 - **Zone Degradation**: If a zone has insufficient redundancy to reconstruct
   data locally, that zone should be taken offline to clients rather than serving
-  reads that would require inter-zone link access. (How? - Needs to be covered elsewhere)
+  reads that would require inter-zone link access.
 - **``-EAGAIN`` Behavior**: The Zone Primary will return ``-EAGAIN`` only in
-  short-lived transient conditions:
+  short-lived transient conditions.
 
 
 7.4.1 Safe Shard Identification & Synchronous Recovery — *Later Release*
@@ -705,6 +1007,93 @@ enhanced.
     (if not already complete) before the read is permitted.
 
 
+7.5 Zone-Aware Replica Split Ops — *R1*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note::
+
+   This section applies to **replicated pools** only. It is not specific to EC
+   and does not require Fast EC. The mechanism described here is an enhancement
+   to the existing ``ReplicaSplitOp`` implementation in
+   ``src/osdc/SplitOp.cc``.
+
+The existing ``ReplicaSplitOp`` path (see :class:`ReplicaSplitOp`) divides
+large read operations across replicas for parallel execution. When the
+``CEPH_OSD_FLAG_BALANCE_READS`` flag is set, chunks are distributed round-robin
+across all available replicas, starting from a randomly selected replica for
+load balancing. When the ``CEPH_OSD_FLAG_LOCALIZE_READS`` flag is set on a
+non-stretch replica pool today, there is no zone-awareness — the replica
+selection is still effectively unconstrained.
+
+For stretched replicated pools (``zones > 1``), when
+``CEPH_OSD_FLAG_LOCALIZE_READS`` is set, the ``ReplicaSplitOp`` restricts
+all sub-read shards to replicas that reside within the **local zone** — the
+zone nearest to the client.
+
+**Mechanism — Shard Selection**
+
+The zone is selected using the same closeness-score algorithm already employed
+by the EC split path:
+
+1. For each zone in the pool's acting set, one representative OSD is sampled
+   (the first non-``CRUSH_ITEM_NONE`` entry in that zone's acting-set range).
+2. The representative OSD's CRUSH locality distance to the client is computed
+   via ``CrushWrapper::get_common_ancestor_distance()``.
+3. The zone with the **lowest** (nearest) closeness score wins. Ties are broken
+   in favour of the lower-indexed zone. If no zone can be scored
+   (``crush_location`` unset, all representatives absent, or no common
+   ancestor), zone 0 is used as the default — which is also the correct
+   behaviour for non-stretch pools.
+4. All sub-read shards are then selected **exclusively** from the OSDs that
+   belong to the chosen zone. Shards from other zones are not used, regardless
+   of how many replicas are available there.
+
+If any OSD in the chosen zone is unavailable (absent from the acting set or
+not ``exists()``), the split-read is aborted and the operation falls back to
+the Primary, exactly as the existing failure path works today.
+
+**Non-Stretch Pools**
+
+For non-stretch replica pools (``zones == 1``), the behaviour is unchanged:
+``LOCALIZE_READS`` is treated identically to ``BALANCE_READS`` for split ops,
+because all replicas share the same zone.
+
+**Relationship to EC Zone-Aware Reads**
+
+This mechanism is the replica analogue of the EC zone-aware direct-read path
+described in Section 7.3.1. Both share the same zone-selection algorithm
+(``get_common_ancestor_distance`` / lowest closeness score), and both fall back
+to the Primary on any shard unavailability. The shared implementation lives in
+the ``SplitOp::local_zone_for_acting_set()`` static helper in ``SplitOp.cc``,
+reused by both ``ECSplitOp`` and ``ReplicaSplitOp``.
+
+
+7.6 Zone-Aware Read Enhancements — *Later Release*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following enhancements to the EC and replica zone-aware read paths are
+fully designed but are not required for R1 and will land in a later release.
+
+- **Zone Primary Fallback (EC and Replica)**: A failed localized read —
+  whether an EC direct read or a replica split op — will be redirected to the
+  local Zone Primary rather than the global Primary, consistent with the
+  improvements described in Section 7.4. This avoids cross-zone latency on
+  the fallback path when the client's zone is healthy but a single shard is
+  temporarily unavailable.
+
+- **Per-Zone ``min_size`` Interaction**: Once per-zone ``min_size`` enforcement
+  (Section 11.2) is implemented, both the EC split-op path and the replica
+  split-op path should also consult the per-zone availability state before
+  choosing a zone for localized reads. This prevents routing reads to a zone
+  that the monitor has already determined to be below its minimum shard
+  threshold.
+
+- **Zone-Aware Balanced Reads for Replica Pools**: The ``BALANCE_READS``
+  implementation for replica pools will be extended to restrict balanced reads
+  to zone-local replicas when sufficient replicas are available, combining load
+  distribution with locality.
+
+
 8. Write Path & Transaction Handling
 ------------------------------------
 
@@ -717,7 +1106,7 @@ remote zones.
 
 In R1, all writes are coordinated exclusively by the Primary.
 
-- **Mechanism**: The Primary generates all ``zones × (k + m)`` coded shard writes
+- **Mechanism**: The Primary generates all ``num_zones × (k + m)`` coded shard writes
   and sends individual write operations directly to every OSD in the acting
   set, including those in remote zones.
 - **RMW Reads**: The "read" portion of any Read-Modify-Write cycle is performed
@@ -909,7 +1298,7 @@ Primary to maintain global ordering while avoiding redundant data transfer.
      would normally replicate data to the originating Zone Primary (as in
      Section 8.2), it instead sends a **write-permission message** to that
      Zone Primary, since the Zone Primary already holds the data. Writes to
-     any *other* Zone Primaries (in an ``zones > 2`` configuration) proceed via
+     any *other* Zone Primaries (in an ``num_zones > 2`` configuration) proceed via
      the normal Replicate Transaction path (Section 8.2).
   4. Upon receiving write-permission, the Zone Primary processes the
      transaction through its local ECTransaction pipeline, generating and
@@ -928,7 +1317,7 @@ Primary to maintain global ordering while avoiding redundant data transfer.
     The write-permission message carries the assigned sequence number, ensuring
     that writes arriving at the Primary directly and writes arriving via a
     Zone Primary are globally ordered.
-  - Writes from multiple Zone Primaries (in an ``zones > 2`` configuration) are
+  - Writes from multiple Zone Primaries (in an ``num_zones > 2`` configuration) are
     serialized through the Primary's normal sequencing mechanism — no special
     handling is required beyond the existing PG log ordering.
   - The Zone Primary does not fan out to zone-local shards until it receives the
@@ -951,7 +1340,7 @@ Primary to maintain global ordering while avoiding redundant data transfer.
   stashed data is discarded (no zone-local shard writes have been issued, since
   write-permission was never received).
 
-- **R3 Enhancement: Forward to Other Zone Primaries (``zones > 2``)**:
+- **R3 Enhancement: Forward to Other Zone Primaries (``num_zones > 2``)**:
 
   .. note::
 
@@ -1221,7 +1610,7 @@ stretch cluster pattern as closely as possible, with EC-specific adaptations.
 
 .. important::
 
-   **R1 scope is simple two-zone (zones=2).** Three-zone (``zones=3``) details are
+   **R1 scope is simple two-zone (--num-zones 2).** Three-zone (``num_zones=3``) details are
    described for design completeness but will be implemented in a later
    release.
 
@@ -1231,7 +1620,7 @@ stretch cluster pattern as closely as possible, with EC-specific adaptations.
 .. note::
    **CLI Under Review**: We are reviewing the CLIs for enabling stretch mode and 
    setting stretch mode on a pool. We aim to either get rid of it completely 
-   (i.e., infer stretch mode automatically when you create a pool with ``zones > 1``) 
+   (i.e., infer stretch mode automatically when you create a pool with ``num_zones > 1``) 
    or just have an enable/disable stretch mode CLI with no arguments. We also 
    will ensure the new CLI works with both stretch-EC and stretch-replica pools for R1.
 
@@ -1239,25 +1628,26 @@ A replicated EC pool implicitly operates in stretch mode. Creation and configura
 simplified based on the final CLI iteration as noted above.
 
 - **CRUSH rule**: Set to the stretch CRUSH rule when stretch mode is active.
-- **min_size**: Managed by the monitor. Automatically adjusted during stretch
-  mode state transitions (Section 11.3).
+- **min_size**: Set at pool creation; never automatically changed by the
+  monitor during stretch mode state transitions. Users may still adjust it
+  manually via ``ceph osd pool set <pool> min_size <value>``.
 - **Peering**: Uses stretch-aware acting set calculation with parameters
   adjusted by the monitor during state transitions.
-- **Failure**: Automatic ``min_size`` reduction, degraded/recovery/healthy
-  stretch mode transitions — all managed by OSDMonitor.
+- **Failure**: Degraded/recovery/healthy stretch mode transitions managed by
+  OSDMonitor; ``min_size`` is not modified.
 
-**Prerequisites for ``zones > 1`` Pool Creation**
+**Prerequisites for ``num_zones > 1`` Pool Creation**
 
 .. list-table::
    :header-rows: 1
 
    * - Requirement
      - Reason
-   * - All OSDs have the ``zones > 1`` feature bit
+   * - All OSDs have the ``num_zones > 1`` feature bit
      - Ensures all OSDs understand extended acting-set semantics (Section 15)
    * - Stretch mode must be enabled on the cluster
-     - ``zones > 1`` pools require the stretch mode state machine for
-       ``min_size`` management and zone failover
+     - ``num_zones > 1`` pools require the stretch mode state machine for
+       zone failover
    * - ``zone_failure_domain`` must match the stretch mode failure domain
      - The CRUSH rule must align with the stretch cluster topology
 
@@ -1272,52 +1662,29 @@ replica pool, this is in the range ``1`` to ``size``, defining a tolerance of
 
 Let the number of tolerated failures derived from this setup be denoted as **F**.
 
-If the number of zones > 1, then this setting is dynamically *interpreted*
-according to the cluster's stretch mode (Healthy, Degraded, Recovery). Both
-EC and Replica pools with multiple zones will interpret ``min_size`` this way,
+If num_zones > 1, then this setting is dynamically *interpreted*
+according to the cluster's stretch mode (Healthy, Degraded, Recovery). EC pools 
+with multiple zones will interpret ``min_size`` this way,
 rather than actively modifying the ``min_size`` setting whenever a stretch
 mode transition occurs.
 
-11.2.1 Per-Pool Min-Size Interpretations — *R1*
+11.2.1 Per-Zone Min-Size Interpretations
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The pool statically tolerates up to ``F`` OSD failures, but that tolerance
-applies to different scopes based on the active stretch mode:
-
-- **Healthy Mode**: There may be up to ``F`` OSD failures across the OSDs in
-  *all zones combined*.
-- **Degraded Mode**: There may be up to ``F`` OSD failures across the OSDs in
-  the *surviving zone(s)*. The failed zone is entirely ignored.
-- **Recovery Mode**: There may be up to ``F`` OSD failures across the OSDs in
-  the *surviving zone(s)*. The recovering zone is entirely ignored.
-
-.. note::
-   A partial failure within a zone may drop a pool below its ``min_size``
-   requirement and cause I/O to stop. Manually removing the rest of the failed
-   zone will cause a transition to **Degraded Stretch Mode**, which might be
-   sufficient to bring the pool back online because the ``min_size`` requirement
-   is now met by the surviving zone. There will be no automation to promote a
-   partial zone failure to a whole zone failure.
-
-11.2.2 Per-Zone Min-Size Interpretations — *Later Release*
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-A more sophisticated implementation will reinterpret this tolerance strictly on
-a per-zone basis:
-
 - There may be up to ``F`` OSD failures *in each individual zone*.
-- If any single zone experiences more than ``F`` OSD failures, it will
-  automatically trigger a transition into **Degraded Stretch Mode**, effectively
-  treating all OSDs in the zone as failed.
+- A partial failure within a zone may drop a pool below its ``min_size``
+  requirement and cause I/O to stop. Manually removing the rest of the failed
+  zone will cause a transition to **Degraded Stretch Mode**, which might be
+  sufficient to bring the pool back online because the ``min_size`` requirement
+  is now met by the surviving zone. There will be no automation to promote a
+  partial zone failure to a whole zone failure.
 
 11.3 Stretch Mode State Machine
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When stretch mode is enabled, the state machine behaves identically to the
 replica stretch mode state machine — leveraging the existing OSDMonitor
-infrastructure. As noted above, the explicit ``min_size`` setting is simply
-*interpreted* against this state machine, rather than actively mutated by the
-OSDMonitor upon transitions.
+infrastructure. ``min_size`` is set at pool creation and is never mutated
+by the OSDMonitor upon stretch mode transitions.
 
 .. mermaid::
 
@@ -1330,123 +1697,62 @@ OSDMonitor upon transitions.
        Degraded --> Recovery: force_recovery_stretch_mode CLI
        Recovery --> Healthy: force_healthy_stretch_mode CLI
 
-**Two-Zone Transitions (zones=2) — R1**
+**Concrete example — K=2, M=1, --num-zones 2 (size=6):**
 
-.. list-table::
-   :header-rows: 1
-
-   * - Stretch State
-     - min_size
-     - Reasoning
-   * - **Healthy**
-     - ``zones × (K+M) − M``
-     - Full redundancy; tolerate up to M failures
-   * - **Degraded** (one zone down)
-     - ``K``
-     - One zone lost (K+M shards gone). Surviving zone has K+M shards;
-       can tolerate M more losses. ``K+M − M = K``.
-   * - **Recovery** (zone returning)
-     - ``K`` (same as degraded)
-     - Keep reduced min_size until resync is complete
-   * - **Healthy** (resync complete)
-     - ``zones × (K+M) − M``
-     - Full min_size restored
-
-**Concrete example — K=2, M=1, zones=2 (size=6):**
-
-.. list-table::
-   :header-rows: 1
-
-   * - Stretch State
-     - min_size
-   * - Healthy
-     - 5
-   * - Degraded
-     - 2
-   * - Recovery
-     - 2
-   * - Healthy (restored)
-     - 5
-
-**The degraded-mode formula:**
-
-- Healthy min_size: ``zones × (K+M) − M``
-- Degraded min_size: ``(num_zones−1) × (K+M) − M`` = healthy min_size minus
-  ``(K+M)``
-- **Rule: if a zone fails, reduce min_size by K+M. If a zone becomes
-  healthy again, increase min_size by K+M.**
-
-**Three-Zone Transitions (zones=3) — Later Release**
-
-.. list-table::
-   :header-rows: 1
-
-   * - Stretch State
-     - min_size
-     - Example (K=2, M=1)
-   * - Healthy (3 zones)
-     - ``3(K+M) − M``
-     - 8
-   * - One zone down
-     - ``2(K+M) − M``
-     - 5
-   * - Two zones down
-     - ``K``
-     - 2
+``min_size`` is set to ``2`` at creation and remains ``2`` in every stretch state.
+I/O will stop if either zone has less than ``2`` shards active.
 
 11.4 OSDMonitor Changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The existing OSDMonitor stretch mode code contains
 ``if (is_replicated()) { ... } else { /* not supported */ }`` patterns in
-several places. These gaps must be filled for EC pools with ``zones > 1``.
+several places. These gaps must be filled for EC pools with ``num_zones > 1``.
 
 **11.4.1 Pool Stretch Set / Unset** (``prepare_command_pool_stretch_set``,
 ``prepare_command_pool_stretch_unset``)
 
-``stretch_set`` currently works for any pool type, setting
-``peering_crush_bucket_*``, ``crush_rule``, ``size``, ``min_size``.
-
-For EC pools with ``zones > 1``, add validation:
-
-- Validate ``min_size ∈ [num_zones×(K+M)−M, num_zones×(K+M)]``
-- If ``size`` is provided, validate it matches ``zones × (K+M)``
-
-``stretch_unset`` clears all ``peering_crush_*`` fields. No EC-specific
-changes required.
+Both ``stretch_set`` and ``stretch_unset`` are refused for EC pools.
 
 **11.4.2 Enable/Disable Stretch Mode** (``try_enable_stretch_mode_pools``)
 
-*Currently rejects EC pools.* Change to accept EC pools with ``zones > 1``:
+*Currently rejects EC pools.* Change to accept EC pools with ``num_zones > 1``:
 
 - Set ``peering_crush_bucket_count``, ``peering_crush_bucket_target``,
   ``peering_crush_bucket_barrier`` (same values as replica)
 - Set ``crush_rule`` to the stretch CRUSH rule
 - Set ``size = r × (k + m)`` (should already be correct from pool creation)
-- Set ``min_size = r × (k + m) − m``
 
-**Pool Creation Gate**: Pool creation with ``zones > 1`` must be rejected if
+**Pool Creation Gate**: Pool creation with ``num_zones > 1`` must be rejected if
 stretch mode is not already enabled on the cluster. This is validated in
 ``OSDMonitor::prepare_new_pool``.
+
+Creating a pool with ``num_zones = 2`` while stretch mode is already enabled
+configures only the new pool; it does not change the cluster's stretch mode
+state. In degraded or recovery stretch mode the new pool is given the degraded
+``peering_crush_bucket_count`` and the ``peering_crush_mandatory_member`` that
+the existing stretch pools have (Section 11.6), so it can go active in the
+surviving zone, and the healthy transition (11.4.4) restores it with them.
+After ``ceph mon enable_stretch_mode`` the new pool's
+``peering_crush_mandatory_member`` is not yet set this way.
 
 **11.4.3 Degraded Stretch Mode** (``trigger_degraded_stretch_mode``)
 
 *Currently sets* ``newp.min_size = pgi.second.min_size / 2`` *for replica
-pools.* For EC pools, compute::
+pools.* For EC pools, ``min_size`` is **not modified**. Only
+``peering_crush_bucket_count`` and ``peering_crush_mandatory_member`` are
+updated, as for replicated pools.
 
-    newp.min_size = p.min_size - (k + m)
-
-For a K=2, M=1, zones=2 pool: ``min_size = 5 − 3 = 2``.
-
-Also set ``peering_crush_bucket_count`` and
-``peering_crush_mandatory_member`` as for replicated pools.
+A replicated pool created after ``ceph mon enable_stretch_mode`` while the
+cluster is in degraded stretch mode keeps its full ``size`` and
+``peering_crush_bucket_target``, as the existing stretch pools do, and is given
+the degraded ``peering_crush_bucket_count`` and the surviving zone as
+``peering_crush_mandatory_member``, so the healthy transition (11.4.4)
+restores it with the other stretch pools.
 
 **11.4.4 Healthy Stretch Mode** (``trigger_healthy_stretch_mode``)
 
 *Currently reads* ``mon_stretch_pool_min_size`` *config for replica pools.*
-For EC pools, compute from the EC profile::
-
-    newp.min_size = r × (k + m) − m
 
 **11.4.5 Recovery Stretch Mode** (``trigger_recovery_stretch_mode``)
 
@@ -1462,12 +1768,40 @@ level, but for EC pools the acting set has **shard semantics** — position
 ``i`` must serve shard ``i``. A new ``calc_ec_acting_stretch`` function (or
 an extension of the existing ``calc_ec_acting``) is required.
 
-Algorithm for each position ``i`` (0 to ``num_zones×(K+M)−1``):
+Objects are stored per absolute shard, so an OSD is usable for position ``i``
+only if it holds shard ``i`` itself. When ``num_zones > 1``, all positions of a
+zone block are served from one CRUSH zone, and no two blocks share a zone.
+The blocks are given the zones that together serve the most distinct relative
+shards, up to ``K``, so the PG stays recoverable if any assignment keeps it
+so. A zone holding fewer than ``K`` of a block's shards cannot serve it on its
+own, so ties go to the zones that together hold the most of their shards,
+counting a zone only if it holds at least ``K`` of its block's shards, then to
+the assignment that uses the most ``up`` OSDs in such zones, then holds the
+most shards, then uses the most ``up`` OSDs, then the most ``acting`` OSDs. A
+block therefore keeps being served from where its data is (for example from
+``acting`` after ``up`` swaps the zone blocks) while the ``up`` OSDs are
+backfilled, and moves to the ``up`` OSDs once they hold it.
+
+Algorithm for each position ``i`` (0 to ``num_zones×(K+M)−1``), considering
+only OSDs in the CRUSH zone chosen for its block:
 
 1. Prefer ``up[i]`` if usable
 2. Otherwise prefer ``acting[i]`` if usable
 3. Otherwise search strays for an OSD with shard ``i``
 4. If no usable OSD found, leave as ``CRUSH_ITEM_NONE``
+
+An ``up[i]`` not chosen for position ``i`` is backfilled only if its block
+would be served from ``up[i]``'s zone once the ``up`` OSDs hold their shards.
+That goal is the same zone choice made over every ``up[i]``, the usable
+``acting[i]`` and the chosen positions (other strays are left out, so calls
+restricted to ``up`` and ``acting``, such as the one from ``Recovered``, reach
+the same goal). An ``up[i]`` that already holds shard ``i`` is backfilled too:
+outside the acting set it gets no writes, and the log may be trimmed past it
+before ``Recovered``. A completed backfill target therefore always joins the
+new acting set, as it does with ``calc_ec_acting``, and ``choose_acting`` never
+finds ``want == acting`` with fewer backfill targets. An ``up[i]`` placed in a
+zone its block will not be served from, for example by a ``pg-upmap-items``
+entry into another zone, is not backfilled and the ``pg_temp`` stays.
 
 CRUSH ``bucket_max`` constraints apply: no zone may contribute more than
 ``size / peering_crush_bucket_target`` OSDs.
@@ -1506,7 +1840,7 @@ The existing ``pg_pool_t`` fields remain unchanged:
      - zones (zones) in healthy; reduced during degraded
    * - ``peering_crush_bucket_target``
      - Target CRUSH buckets for ``bucket_max`` calc
-     - zones (zones) in healthy; reduced during degraded
+     - zones; not changed by the stretch mode transitions
    * - ``peering_crush_bucket_barrier``
      - CRUSH type level (e.g., datacenter)
      - Same as replica — the failure domain
@@ -1514,7 +1848,7 @@ The existing ``pg_pool_t`` fields remain unchanged:
      - CRUSH bucket that must be represented
      - Set to surviving zone during degraded mode
 
-**Example values for zones=2, K=2, M=1 (size=6):**
+**Example values for --num-zones 2, K=2, M=1 (size=6):**
 
 .. list-table::
    :header-rows: 1
@@ -1531,13 +1865,13 @@ The existing ``pg_pool_t`` fields remain unchanged:
      - NONE
    * - Degraded
      - 1
-     - 1
-     - 6
+     - 2
+     - 3
      - surviving_site
    * - Recovery
      - 1
-     - 1
-     - 6
+     - 2
+     - 3
      - surviving_site
    * - Healthy (restored)
      - 2
@@ -1545,8 +1879,10 @@ The existing ``pg_pool_t`` fields remain unchanged:
      - 3
      - NONE
 
-``bucket_max = ceil(size / bucket_target)`` — in healthy mode, ``6 / 2 = 3 =
-K+M``. This naturally prevents more than one copy of each shard per zone.
+``bucket_max = ceil(size / bucket_target)`` — ``6 / 2 = 3 = K+M``. The stretch
+mode transitions do not change ``bucket_target``, so this holds in every state
+and naturally prevents more than one copy of each shard per zone, also in the
+surviving zone while a zone is down.
 
 11.7 Network Partition Handling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1585,7 +1921,10 @@ logic described in Section 11.2:
 
 - **Removal**: If fewer than ``k`` OSDs from a zone are present in the up set,
   the remaining OSDs for that zone are also removed. This forces a zone
-  failover and prevents partial-zone IO.
+  failover and prevents partial-zone IO. Removal from the up set alone is not
+  enough: ``calc_ec_acting_stretch`` also serves a zone block from ``acting``
+  and strays that hold its shards (Section 11.5.1), so it must also skip
+  holders in an offline zone.
 - **Reintegration**: When enough OSDs return to meet the per-zone threshold,
   they are added back into the up set. Standard peering will handle resyncing
   data — no new recovery code is required for reintegration.
@@ -1620,16 +1959,15 @@ Migration from an existing EC pool to a replicated EC stretch cluster pool will
 leverage the **Pool Migration** design, which is being implemented for the
 Umbrella release. This document does not define a separate migration mechanism.
 
-13.2 In-Place Replica Count Modification — *Later Release*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+13.2 In-Place Replica Count Modification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In a later release, users will be able to modify ``zones`` for an existing pool by
-swapping in a new EC profile that is otherwise identical (same ``k``, ``m``,
-plugin, etc.) but specifies a different ``zones`` value. Upon profile change, the
-CRUSH rule will be updated to reflect the new replica count, and the standard
-recovery process will automatically perform all necessary expansion (or
-contraction) to match the new configuration — no manual data migration is
-required.
+``ceph osd pool set <pool> num_zones <n>`` changes ``num_zones`` for an existing pool,
+between 1 and 2, outside global stretch mode (see *Changing Per-Pool Zone and Replica Counts*
+in the stretch mode user documentation). ``num_zones`` is set per pool, not in the profile
+(Section 2.1.5). Upon the change, the pool gets a new CRUSH rule for the new zone count, and the
+standard recovery process performs all necessary expansion (or contraction) to match the
+new configuration — no manual data migration is required.
 
 
 14. Implementation Order
@@ -1646,14 +1984,14 @@ R1 delivers a functional EC stretch cluster with zone-local read optimization
 recovery traverse the inter-zone link via the Primary.
 
 1. **CRUSH Rule Generation for Replicated EC**
-   Implement automatic CRUSH rule creation from the ``zones`` and
+   Implement automatic CRUSH rule creation from the ``num_zones`` and
    ``zone_failure_domain`` pool parameters (Section 4). Validate that the acting
-   set places ``k+m`` shards per ``zone``.
+   set places ``k+m`` shards per ``num_zones``.
 
-2. **EC Profile Extension: ``zones`` and ``zone_failure_domain`` Parameters**
-   Extend the EC profile and pool configuration to accept and validate ``zones``
-   and ``zone_failure_domain``. Wire these into pool creation and ``ceph osd pool``
-   commands (Section 2).
+2. **Pool Parameters: ``num_zones`` and ``zone_failure_domain``**
+   Extend pool creation and configuration to accept and validate ``num_zones``
+   and ``zone_failure_domain``. Wire these into ``ceph osd pool`` commands
+   (Section 2). Neither is part of the EC profile.
 
 3. **Primary-Capable Shard Selection for Replicated EC**
    Extend the non-primary shard selection algorithm to designate the first data
@@ -1662,15 +2000,14 @@ recovery traverse the inter-zone link via the Primary.
 4. **Stretch Mode and Peering for Replicated EC**
    Broken into the following sub-stories (see Sections 11.1–11.6):
 
-   a. **Pool Stretch Set/Unset for EC** (OSDMonitor): Allow ``osd pool
-      stretch set/unset`` on EC pools with ``zones > 1``. Add EC-specific
-      ``min_size`` range validation (Section 11.4.1).
-   b. **Enable/Disable Stretch Mode for EC** (OSDMonitor): Allow
+   a. **Enable/Disable Stretch Mode for EC** (OSDMonitor): Allow
       ``mon enable_stretch_mode`` when the cluster has EC pools with
-      ``zones > 1``. Set ``min_size = r × (k+m) − m`` (Section 11.4.2).
+      ``num_zones > 1``.
    c. **Stretch Mode Transitions for EC** (OSDMonitor): Implement
-      degraded/recovery/healthy transitions. On zone failure, reduce
-      ``min_size`` by ``k+m``; on recovery, restore it (Sections 11.4.3–5).
+      degraded/recovery/healthy transitions. Update
+      ``peering_crush_bucket_count`` and ``peering_crush_mandatory_member``
+      on zone failure/recovery; ``min_size`` is not modified
+      (Sections 11.4.3–5).
    d. **EC Peering with Stretch Constraints** (PeeringState): Create
       ``calc_ec_acting_stretch`` to respect both shard identity and CRUSH
       ``bucket_max`` constraints. Extend async recovery checks
@@ -1680,7 +2017,7 @@ recovery traverse the inter-zone link via the Primary.
       and per-zone constraints (Section 11.5.3).
 
 5. **Primary Write Fan-Out to All Shards (Direct-to-OSD Writes)**
-   Extend the Primary write path to encode and distribute ``zones × (k + m)``
+   Extend the Primary write path to encode and distribute ``num_zones × (k + m)``
    shard writes directly to all OSDs in the acting set (Section 8.1).
 
 6. **Direct-to-OSD Reads with Primary Fallback**
@@ -1708,7 +2045,7 @@ recovery traverse the inter-zone link via the Primary.
 
 10. **End-to-End 2-Zone Integration Testing**
     Full integration test suite covering read, write, recovery, scrub, and
-    zone-failover scenarios for a 2-zone (``zones=2``) configuration.
+    zone-failover scenarios for a 2-zone (``--num-zones 2``) configuration.
 
 11. **Inter-Zone Statistics**
     Add perf counters tracking cross-zone bytes, operation counts, latency
@@ -1780,19 +2117,15 @@ bandwidth optimizations.
    Upgrade direct-read failure handling to redirect to the local Zone
    Primary instead of the global Primary (Section 7.5).
 
-3. **Per-Zone min_size with Zone Failover**
-   Implement per-zone minimum shard thresholds that automatically trigger
-   zone failover (Section 11.2, later release).
-
-4. **Online OSDs in Offline Zones Handling**
+3. **Online OSDs in Offline Zones Handling**
    Implement removal of residual online OSDs from the up set when their zone
    is offline (Section 11.8).
 
-5. **In-Place Replica Count Modification**
-   Allow ``zones`` to be changed on an existing pool via EC profile swap
+4. **In-Place Replica Count Modification**
+   Allow ``num_zones`` to be changed on an existing pool via EC profile swap
    (Section 13.2).
 
-6. **3-Zone (``zones=3``) Full Integration Testing**
+5. **3-Zone (``num_zones=3``) Full Integration Testing**
    Full integration and real-world testing of 3-zone configurations
    (Section 5).
 
@@ -1800,30 +2133,30 @@ bandwidth optimizations.
 15. Upgrade & Backward Compatibility
 --------------------------------------
 
-Replicated EC pools with ``zones=1`` are fully backward compatible. An ``zones=1``
+Replicated EC pools with ``num_zones=1`` are fully backward compatible. An ``num_zones=1``
 profile produces a standard ``(k+m)`` acting set with no additional replication,
 no new on-disk format, and no new wire messages. Existing OSDs and clients will
 handle these pools without modification, because the resulting behavior is
 identical to a conventional EC pool.
 
-Pools with ``zones > 1`` introduce a larger acting set (``zones × (k + m)`` shards),
+Pools with ``num_zones > 1`` introduce a larger acting set (``num_zones × (k + m)`` shards),
 new CRUSH rules, and — in later releases — new inter-OSD messages
 (Replicate Transaction, Read Permissions, etc.). To prevent mixed-version
 clusters from misinterpreting these pools:
 
-- A new **OSD feature bit** will gate the creation of ``zones > 1`` profiles. The
-  monitor will reject pool creation or EC profile changes that set ``zones > 1``
+- A new **OSD feature bit** will gate the creation of ``num_zones > 1`` pools. The
+  monitor will reject pool creation or ``num_zones`` changes that set ``num_zones > 1``
   unless all OSDs in the cluster advertise this feature bit.
 - This ensures that every OSD in the cluster understands the extended acting
-  set semantics, shard numbering, and any new message types before an ``zones > 1``
+  set semantics, shard numbering, and any new message types before an ``num_zones > 1``
   pool can be instantiated.
 - No data migration is required when upgrading: the feature bit is purely an
   admission control mechanism. Once all OSDs are upgraded and the bit is
-  present, ``zones > 1`` pools can be created normally.
+  present, ``num_zones > 1`` pools can be created normally.
 
 .. note::
    **Upgrade Scenarios**: We are still thinking through upgrade scenarios from older 
-   releases (e.g. can we infer ``zones = 2`` pools automatically at upgrade time?).
+   releases (e.g. can we infer ``num_zones = 2`` pools automatically at upgrade time?).
    
    Open design decisions that will be resolved at implementation:
 
@@ -1831,7 +2164,7 @@ clusters from misinterpreting these pools:
    these as is (with num_zones = 1 and the current interpretation of min-size) 
    and continue to support all the arguments on enable/disable stretch mode. An
    alternative option would be to try and automatically convert these pools to 
-   num_zones = 2 and the new interpretation of min-size). These pools should 
+   num_zones = 2 and the new interpretation of min-size. These pools should 
    currently have a custom CRUSH rule which should be maintained.
 
 16. Kernel Changes
@@ -1839,7 +2172,7 @@ clusters from misinterpreting these pools:
 
 The kernel RBD client (``krbd``) implements its own EC direct read path,
 independent of the userspace ``librados`` client. For replicated EC pools, the
-``krbd`` direct read logic must be updated to understand the ``zones × (k + m)``
+``krbd`` direct read logic must be updated to understand the ``num_zones × (k + m)``
 shard layout so that it can identify and target zone-local shards within the
 client's ``zone``. Without this change, ``krbd`` may attempt direct
 reads to shards in a remote zone, negating the locality benefit.
@@ -1896,7 +2229,7 @@ multi-zone redundancy, or where redundancy is handled at a higher application
 layer. To accommodate this, a non-redundant pool can be configured with zone
 affinity. 
 
-This is achieved by setting up the pool to use a specific CRUSH root. When creating the pool, you set the ``zones`` to ``1`` (the default) and pass a ``crush_root`` parameter targeting a specific datacenter bucket or zone bucket within your CRUSH hierarchy.
+This is achieved by setting up the pool to use a specific CRUSH root. When creating the pool, you set the ``num_zones`` to ``1`` (the default) and pass a ``crush_root`` parameter targeting a specific datacenter bucket or zone bucket within your CRUSH hierarchy.
 
 Implementation Details
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -1906,7 +2239,7 @@ CRUSH rule that performs a standard ``take <crush_root>`` operation on the
 designated zone bucket.
 
 For instance, if a cluster has two datacenters defined in CRUSH as ``DC1`` and 
-``DC2``, configuring a pool with ``crush_root=DC1`` and ``zones=1`` will prompt the 
+``DC2``, configuring a pool with ``crush_root=DC1`` and ``num_zones=1`` will prompt the 
 system to generate a CRUSH rule that starts with ``take DC1``, ensuring all 
 data for that pool resides completely within that datacenter. This allows non-redundant 
 applications to leverage zone-local storage without incurring the latency or bandwidth 

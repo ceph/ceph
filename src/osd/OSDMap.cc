@@ -364,6 +364,87 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
   }
 }
 
+void OSDMap::get_stretch_zones(const pg_pool_t& pool,
+                               map<int, set<int>>* zone_osds) const
+{
+  set<int> rule_roots;
+  crush->find_takes_by_rule(pool.crush_rule, &rule_roots);
+  for (int root : rule_roots) {
+    vector<int> zones;
+    // A device-class rule takes a shadow root, whose zones are shadow buckets
+    crush->get_children_of_type(root, pool.peering_crush_bucket_barrier, &zones,
+                                false);
+    for (int zone : zones) {
+      vector<int> osds;
+      crush->get_children_of_type(zone, 0, &osds);
+      // A zone with no OSDs the rule can use cannot hold any of the pool
+      if (!osds.empty()) {
+        (*zone_osds)[zone].insert(osds.begin(), osds.end());
+      }
+    }
+  }
+}
+
+bool OSDMap::at_least_one_zone_has_min_size(const pg_pool_t& pool,
+                                        const vector<int>& acting) const
+{
+  map<int, set<int>> zones;
+  get_stretch_zones(pool, &zones);
+  for (const auto& [zone, zone_osd_set] : zones) {
+    unsigned zone_acting = 0;
+    for (int osd : acting) {
+      if (osd != CRUSH_ITEM_NONE && zone_osd_set.find(osd) != zone_osd_set.end()) {
+        ++zone_acting;
+      }
+    }
+
+    if (zone_acting >= pool.min_size) {
+      return true;
+    }
+  }
+  return false;
+}                                      
+
+unsigned OSDMap::stretch_num_acting_below_min_size(const pg_pool_t& pool,
+                                        const vector<int>& acting) const
+{
+  if (!pool.is_stretch_pool()) {
+    return 0;
+  }
+  // Special case for 3-zone clusters with 2 peering crush buckets
+  if (pool.num_zones == 3 && pool.peering_crush_bucket_count == 2) {
+    const auto cluster_min_size = pool.min_size * pool.num_zones;
+    const auto cluster_acting = std::count_if(
+      acting.begin(), acting.end(), [](int osd) {
+        return osd != CRUSH_ITEM_NONE;
+      });
+    return cluster_acting < cluster_min_size
+      ? cluster_min_size - cluster_acting
+      : 0;
+  } else {
+    // General case for stretch pools with num_zones < 3
+    map<int, set<int>> zones;
+    get_stretch_zones(pool, &zones);
+    int deficit = 0;
+    for (const auto& [zone, zone_osd_set] : zones) {
+      if (pool.peering_crush_mandatory_member != CRUSH_ITEM_NONE &&
+          crush->get_non_shadow_id(zone) != (int)pool.peering_crush_mandatory_member) {
+        continue;
+      }
+      unsigned zone_acting = 0;
+      for (int osd : acting) {
+        if (osd != CRUSH_ITEM_NONE && zone_osd_set.find(osd) != zone_osd_set.end()) {
+          ++zone_acting;
+        }
+      }
+      if (zone_acting < pool.min_size) {
+        deficit += (pool.min_size - zone_acting);
+      }
+    }
+    return deficit;
+  }
+}
+
 bool OSDMap::subtree_type_is_down(
   CephContext *cct,
   int id,
@@ -3022,46 +3103,31 @@ const std::vector<int> OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
   return acting;
 }
 
-const shard_id_t OSDMap::pgtemp_primaryfirst(const pg_pool_t& pool,
-	const pg_t pg, const shard_id_t shard) const
-{
-  if ((shard == shard_id_t::NO_SHARD) ||
-      (shard == shard_id_t(0))) {
-    return shard;
-  }
-  shard_id_t result = shard;
-  if (pool.allows_ecoptimizations()) {
-    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
-      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
-      if (shard >= pool.size - num_parity_shards) {
-	result = shard_id_t(result + num_parity_shards + 1 - pool.size);
-      } else {
-	result = shard_id_t(result + num_parity_shards);
-      }
-    }
-  }
-  return result;
-}
-
 shard_id_t OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
-	const pg_t pg, const shard_id_t shard) const
+                                            const pg_t pg, const shard_id_t primary_first_pos) const
 {
-  if ((shard == shard_id_t::NO_SHARD) ||
-      (shard == shard_id_t(0))) {
-    return shard;
+  if ((primary_first_pos == shard_id_t::NO_SHARD) ||
+      (primary_first_pos == shard_id_t(0)) ||
+      !pool.allows_ecoptimizations() ||
+      !has_pgtemp(pool.raw_pg_to_pg(pg))) {
+    return primary_first_pos;
   }
-  shard_id_t result = shard;
-  if (pool.allows_ecoptimizations()) {
-    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
-      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
-      if (shard > num_parity_shards) {
-	result = shard_id_t(result - num_parity_shards);
-      } else {
-	result = shard_id_t(result + pool.size - num_parity_shards - 1);
+  shard_id_t i(0);
+  shard_id_t j(pool.size - pool.nonprimary_shards.size());
+  for (shard_id_t shard(0); shard < pool.size; ++shard) {
+    if (pool.is_nonprimary_shard(shard_id_t(shard))) {
+      if (j == primary_first_pos) {
+        return shard;
       }
+      ++j;
+    } else {
+      if (i == primary_first_pos) {
+        return shard;
+      }
+      ++i;
     }
   }
-  return result;
+  ceph_abort("Shard out of range!");
 }
 
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
@@ -5829,6 +5895,15 @@ int OSDMap::calc_pg_upmaps(
   if (osd_weight_total == 0) {
     lderr(cct) << __func__ << " abort due to osd_weight_total == 0" << dendl;
     return 0;
+  }
+  for (auto& [osd, pgs] : pgs_by_osd) {
+    // straw2 picks a zero-weight item when every item in its bucket has zero weight
+    if (!osd_weight.count(osd)) {
+      lderr(cct) << __func__ << " abort due to osd." << osd
+                 << " with no weight under the crush rule in the up set of "
+                 << pgs.size() << " pgs" << dendl;
+      return 0;
+    }
   }
 
   float pgs_per_weight = total_pgs / osd_weight_total;

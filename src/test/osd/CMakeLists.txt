@@ -188,6 +188,26 @@ add_executable(unittest_ec_with_crush
 add_ceph_unittest(unittest_ec_with_crush)
 target_link_libraries(unittest_ec_with_crush osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
 add_dependencies(unittest_ec_with_crush ${EC_ISA_LIB} ec_jerasure)
+# unittest_ec_acting_stretch
+add_executable(unittest_ec_acting_stretch
+  TestECActingStretch.cc
+  $<TARGET_OBJECTS:unit-main>
+  $<TARGET_OBJECTS:store_test_fixture>
+  $<TARGET_OBJECTS:pg_backend_test_fixture>
+  $<TARGET_OBJECTS:ec_peering_test_fixture>
+  )
+add_ceph_unittest(unittest_ec_acting_stretch)
+target_link_libraries(unittest_ec_acting_stretch osd os global ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES})
+add_dependencies(unittest_ec_acting_stretch ec_isa ec_jerasure)
+
+# unittest_stretch_ec_min_size
+add_executable(unittest_stretch_ec_min_size
+  TestStretchECMinSize.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_stretch_ec_min_size)
+target_link_libraries(unittest_stretch_ec_min_size osd global ${BLKID_LIBRARIES})
+
 # unittest_hitset
 add_executable(unittest_hitset
   hitset.cc
@@ -205,6 +225,14 @@ if(HAS_VTA)
 endif()
 add_ceph_unittest(unittest_osd_osdcap)
 target_link_libraries(unittest_osd_osdcap osd global ${BLKID_LIBRARIES})
+
+# unittest_objecter_direct_reads
+add_executable(unittest_objecter_direct_reads
+  TestObjecterDirectReads.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_objecter_direct_reads)
+target_link_libraries(unittest_objecter_direct_reads osdc global ${BLKID_LIBRARIES})
 
 # unittest ExtentCache (Legacy)
 add_executable(unittest_extent_cache_l
@@ -274,6 +302,7 @@ set(OSD_UNITTESTS
   unittest_extent_cache_l
   unittest_hitset
   unittest_mclock_scheduler
+  unittest_objecter_direct_reads
   unittest_osd_osdcap
   unittest_osd_types
   unittest_osdscrub
@@ -303,3 +332,11 @@ add_custom_target(osd_unittests
   COMMENT "Building and running all OSD unit tests via ctest"
   VERBATIM
 )
+
+# unittest_io_sequence
+add_executable(unittest_io_sequence
+  test_io_sequence.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_io_sequence)
+target_link_libraries(unittest_io_sequence object_io_exerciser global)

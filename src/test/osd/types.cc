@@ -1863,6 +1863,22 @@ TEST(pg_pool_t_test, get_random_pg_position) {
   }
 }
 
+// Without ec_data_shard_count, k comes from the nonprimary shards, which a
+// num_zones > 1 pool repeats in every zone.
+TEST(pg_pool_t_test, get_ec_data_shard_count_multi_zone_fallback) {
+  const int k = 4, m = 2, num_zones = 2;
+  pg_pool_t p;
+  p.type = pg_pool_t::TYPE_ERASURE;
+  p.size = num_zones * (k + m);
+  p.num_zones = num_zones;
+  for (int zone = 0; zone < num_zones; ++zone) {
+    for (int i = 1; i < k; ++i) {
+      p.nonprimary_shards.insert(shard_id_t(i + (k + m) * zone));
+    }
+  }
+  EXPECT_EQ(k, p.get_ec_data_shard_count());
+}
+
 TEST(shard_id_t, iostream) {
     set<shard_id_t> shards;
     shards.insert(shard_id_t(0));

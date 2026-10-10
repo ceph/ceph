@@ -404,6 +404,10 @@ function get_unused_port() {
 # The remaining arguments are passed verbatim to ceph-mon --mkfs
 # and the ceph-mon daemon.
 #
+# The run_mon function creates the monitor data directory with
+# ceph-mon --mkfs and relies on the activate_mon function to run
+# the daemon.
+#
 # Two mandatory arguments must be provided: --fsid and --mon-host
 # Instead of adding them to every call to run_mon, they can be
 # set in the CEPH_ARGS environment variable to be read implicitly
@@ -449,6 +453,40 @@ function run_mon() {
         --run-dir=$dir \
         "$@" || return 1
 
+    activate_mon $dir $id "$@" || return 1
+
+    cat > $dir/ceph.conf <<EOF
+[global]
+fsid = $(get_config mon $id fsid)
+mon host = $(get_config mon $id mon_host)
+EOF
+}
+
+##
+# Run (activate) a monitor by the name mon.**id** with data in
+# **dir**/**id**, either just created by run_mon or left by a
+# previous run of ceph-mon. The logs can be found in
+# **dir**/mon.**id**.log and the pid file is **dir**/mon.**id**.pid.
+#
+# The remaining arguments are passed verbatim to ceph-mon.
+#
+# Examples:
+#
+# kill_daemons $dir TERM mon.a
+# activate_mon $dir a --public-addr 127.0.0.1:7018 # restart mon.a
+#
+# @param dir path name of the environment
+# @param id mon identifier
+# @param ... can be any option valid for ceph-mon
+# @return 0 on success, 1 on error
+#
+function activate_mon() {
+    local dir=$1
+    shift
+    local id=$1
+    shift
+    local data=$dir/$id
+
     ceph-mon \
         --id $id \
 	--osd-failsafe-full-ratio=.99 \
@@ -474,12 +512,6 @@ function run_mon() {
 	--mon-osd-backfillfull-ratio .99 \
 	--mon-warn-on-insecure-global-id-reclaim-allowed=false \
         "$@" || return 1
-
-    cat > $dir/ceph.conf <<EOF
-[global]
-fsid = $(get_config mon $id fsid)
-mon host = $(get_config mon $id mon_host)
-EOF
 }
 
 function test_run_mon() {
@@ -519,6 +551,23 @@ function test_run_mon() {
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"2"}' || return 1
     kill_daemons $dir || return 1
+
+    teardown $dir || return 1
+}
+
+function test_activate_mon() {
+    local dir=$1
+
+    setup $dir || return 1
+
+    run_mon $dir a || return 1
+    kill_daemons $dir TERM mon || return 1
+
+    activate_mon $dir a --osd_pool_default_size=3 || return 1
+    ceph mon dump | grep "mon.a" || return 1
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
+        config get osd_pool_default_size)
+    test "$size" = '{"osd_pool_default_size":"3"}' || return 1
 
     teardown $dir || return 1
 }
