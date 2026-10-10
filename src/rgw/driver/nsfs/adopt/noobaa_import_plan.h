@@ -50,6 +50,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 #include "../identity_db.h"
@@ -90,6 +91,15 @@ struct ImportEntry {
 
   std::vector<std::string> access_key_ids;
 
+  /* For a root account, the limits RGW's IAM API enforces on it,
+   * raised where the store carries more than RGW's defaults allow.
+   * RGW's admin path, which the import writes through, does not check
+   * them;  CreateUser and CreateAccessKey do, so an account imported
+   * above its limit would refuse every later one.  Unset keeps the
+   * default. */
+  std::optional<int32_t> max_users;
+  std::optional<int32_t> max_access_keys;
+
   bool iam_user{false};
   bool anonymous{false};
 };
@@ -109,6 +119,19 @@ struct ImportPlan {
    * block into a user at creation and never updates the copy, so a
    * difference means the account was changed afterwards. */
   std::vector<std::string> drift;
+
+  /* Every account limit raised to fit what the store carries, naming
+   * the account, the limit and both values.  What the import will do
+   * when it creates the account;  `ImportResult::limits_raised` counts
+   * what it did. */
+  std::vector<std::string> raised;
+
+  /* Every root account NooBaa did not allow to bypass governance
+   * retention.  As RGW's account root it can, since a root is allowed
+   * every action on what its account owns unless a policy denies it.
+   * RGW's root semantics were accepted over NooBaa's restriction
+   * (DECISIONS.md 2026-10-10), so this is reported, not refused. */
+  std::vector<std::string> widened;
 
   size_t accounts() const;
   size_t iam_users() const;

@@ -21,7 +21,9 @@
 #include "rgw_account.h"
 #include "rgw_auth.h"
 #include "rgw_common.h"
+#include "rgw_formats.h"
 #include "rgw_role.h"
+#include "driver/rados/rgw_user.h"
 
 #include "../rgw_sal_nsfs.h"
 #include "noobaa_import.h"
@@ -99,6 +101,69 @@ const char* bypass_governance_policy()
 	 R"("Resource":["arn:aws:s3:::*"]}]})";
 }
 
+/* `rgw::account::create()` reports the account it made to a flusher,
+ * as the admin command it serves does.  Nothing reads it here. */
+class DiscardFlusher : public RGWFormatterFlusher {
+  JSONFormatter f;
+protected:
+  void do_flush() override {
+    f.reset();
+  }
+public:
+  DiscardFlusher() : RGWFormatterFlusher(&f) {}
+};
+
+/* NooBaa's ISO 8601 timestamp, or nothing:  an unreadable one leaves
+ * RGW to stamp the time of import, as it would anyway. */
+std::optional<ceph::real_time> noobaa_time(const std::string& text)
+{
+  ceph::real_time t;
+  if (text.empty() || (parse_time(text.c_str(), &t) < 0)) {
+    return std::nullopt;
+  }
+  return t;
+}
+
+/* One access key, through the path `radosgw-admin key create` runs.
+ *
+ * That path refuses a key id another RGW user holds.  It creates every
+ * key active, so a key NooBaa holds deactivated is made inactive by a
+ * second operation, a modify, which is how RGW deactivates one. */
+int add_access_key(const DoutPrefixProvider* dpp, optional_yield y,
+		   NSFSDriver* driver, const rgw_user& uid,
+		   const NooBaaAccessKey& ak, std::string& err)
+{
+  RGWUserAdminOpState op(driver);
+  op.set_user_id(uid);
+  op.set_key_type(KEY_TYPE_S3);
+  op.set_access_key(ak.access_key);
+  op.set_secret_key(ak.secret_key);
+  op.create_date = noobaa_time(ak.creation_date);
+
+  RGWUser user;
+  int ret = user.init(dpp, driver, op, y);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = user.keys.add(dpp, op, y, &err);
+  if ((ret < 0) || !ak.deactivated) {
+    return ret;
+  }
+
+  RGWUserAdminOpState mod(driver);
+  mod.set_user_id(uid);
+  mod.set_key_type(KEY_TYPE_S3);
+  mod.set_access_key(ak.access_key);
+  mod.set_access_key_active(false);
+
+  RGWUser again;
+  ret = again.init(dpp, driver, mod, y);
+  if (ret < 0) {
+    return ret;
+  }
+  return again.keys.add(dpp, mod, y, &err);
+}
+
 } // namespace
 
 int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
@@ -144,6 +209,18 @@ int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
 	  "the email \"" + e.email + "\" is already in RGW's index, which "
 	  "is shared across users and accounts, so _id " + e.noobaa_id +
 	  " cannot take it");
+    }
+    /* An access key is unique across RGW.  The user-add path refuses
+     * one already held, but only when it reaches that key -- after the
+     * account and the user exist -- so it is checked here, before
+     * anything is written. */
+    for (const auto& k : e.access_key_ids) {
+      std::unique_ptr<User> holder;
+      if (driver->get_user_by_access_key(dpp, k, y, &holder) == 0) {
+	collisions.push_back(
+	    "the access key " + k + " of _id " + e.noobaa_id + " is already "
+	    "held by RGW user " + holder->get_id().to_str());
+      }
     }
   }
 
@@ -221,87 +298,133 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     }
 
     /* A root account:  the account, then the user that holds its
-     * keys.  An IAM user:  only the user, in its owner's account. */
+     * keys.  An IAM user:  only the user, in its owner's account.
+     *
+     * Both through RGW's admin path -- what `radosgw-admin account
+     * create`, `user create` and `key create` run -- so an imported
+     * identity is created the way RGW creates one:  its names
+     * validated, the default quotas applied, its keys checked against
+     * every key RGW holds, and the account's root marked as the root.
+     * A user that is not the root has no implicit grant, which is
+     * RGW's account model and not the import's choice. */
     if (!e.iam_user) {
-      RGWAccountInfo ai;
-      ai.id = e.account_id;
-      ai.tenant = e.tenant;
-      ai.name = e.name;
-      ai.email = e.email;
+      rgw::account::AdminOpState aop;
+      aop.account_id = e.account_id;
+      aop.tenant = e.tenant;
+      aop.account_name = e.name;
+      aop.email = e.email;
+      aop.max_users = e.max_users;
+      aop.max_access_keys = e.max_access_keys;
 
-      Attrs attrs;
-      RGWObjVersionTracker objv;
-      constexpr bool exclusive = true;
-      int ret = driver->store_account(dpp, y, exclusive, ai, nullptr,
-				      attrs, objv);
+      std::string err;
+      DiscardFlusher flusher;
+      int ret = rgw::account::create(dpp, driver, aop, err, flusher, y);
       if (ret < 0) {
-	fail(e.name, std::string("store_account: ") + cpp_strerror(-ret));
+	fail(e.name, "account create: " + cpp_strerror(-ret) +
+	     (err.empty() ? "" : " (" + err + ")"));
 	continue;
       }
       ++result.accounts_created;
-    }
-
-    RGWUserInfo ui;
-    ui.account_id = e.account_id;
-    /* What principal matching consults for an account user, so it
-     * carries their name and a name-form principal still resolves
-     * (§6.6). */
-    ui.display_name = e.display_name;
-    ui.path = e.iam_user && !src->iam_path.empty() ? src->iam_path : "/";
-    ui.create_date = ceph::real_clock::now();
-    /* A random UUID, as `CreateUser` mints.  Their `_id` is not usable
-     * here -- it is not an RGW id -- and the mapping back to it lives
-     * in the identity row. */
-    {
-      uuid_d uuid;
-      uuid.generate_random();
-      ui.user_id.id = uuid.to_string();
-      ui.user_id.tenant = e.tenant;
+      if (e.max_users || e.max_access_keys) {
+	++result.limits_raised;
+      }
     }
 
     /* The decrypted keys.  I2 opened them;  an empty secret here
      * means I2 was not run or refused, and a user written with no
      * usable credential is worse than one not written. */
+    bool usable = true;
     for (const auto& ak : src->access_keys) {
       if (ak.secret_key.empty()) {
 	fail(e.name, "access key " + ak.access_key + " has no decrypted "
 	     "secret;  run the master-key step first");
-	continue;
+	usable = false;
       }
-      RGWAccessKey k;
-      k.id = ak.access_key;
-      k.key = ak.secret_key;
-      k.active = !ak.deactivated;
-      ui.access_keys[ak.access_key] = std::move(k);
     }
-    if (ui.access_keys.size() != src->access_keys.size()) {
-      /* some key could not be carried;  already reported above */
+    if (!usable) {
       continue;
     }
 
-    std::unique_ptr<User> user = driver->get_user(ui.user_id);
-    user->get_info() = ui;
+    /* A random UUID, as `CreateUser` mints.  Their `_id` is not usable
+     * here -- it is not an RGW id -- and the mapping back to it lives
+     * in the NooBaa id table. */
+    rgw_user uid;
+    {
+      uuid_d uuid;
+      uuid.generate_random();
+      uid.id = uuid.to_string();
+      uid.tenant = e.tenant;
+    }
 
-    /* Their `allow_bypass_governance` as an IAM grant on the user.
+    RGWUserAdminOpState op(driver);
+    op.set_user_id(uid);
+    /* What principal matching consults for an account user, so it
+     * carries their name and a name-form principal still resolves
+     * (§6.6). */
+    op.set_display_name(e.display_name);
+    op.account_id = e.account_id;
+    op.set_account_root(!e.iam_user);
+    op.path = e.iam_user && !src->iam_path.empty() ? src->iam_path : "/";
+    op.create_date = noobaa_time(src->creation_date);
+    /* Their `allow_bucket_creation`, as RGW expresses it:  a negative
+     * bucket limit refuses CreateBucket to this user, whoever owns the
+     * bucket (`rgw_op.cc`).  NooBaa refuses an identity whose record
+     * lacks the flag, and so does this. */
+    if (!src->allow_bucket_creation) {
+      op.set_max_buckets(-1);
+    }
+
+    std::string err;
+    RGWUser ruser;
+    int ret = ruser.init(dpp, driver, op, y);
+    if (ret >= 0) {
+      ret = ruser.add(dpp, op, y, &err);
+    }
+    if (ret < 0) {
+      fail(e.name, "user create: " + cpp_strerror(-ret) +
+	   (err.empty() ? "" : " (" + err + ")"));
+      continue;
+    }
+    ++result.users_created;
+
+    for (const auto& ak : src->access_keys) {
+      ret = add_access_key(dpp, y, driver, uid, ak, err);
+      if (ret < 0) {
+	fail(e.name, "access key " + ak.access_key + ": " +
+	     cpp_strerror(-ret) + (err.empty() ? "" : " (" + err + ")"));
+	break;
+      }
+    }
+    if (ret < 0) {
+      continue;
+    }
+
+    /* Their `allow_bypass_governance` as an IAM grant on an IAM user.
      * RGW expresses the permission as an action, so the import writes
-     * a policy rather than a column (§2.2). */
-    if (src->posix.allow_bypass_governance) {
+     * a policy rather than a column (§2.2), the way PutUserPolicy
+     * stores one.  A root needs none:  it is allowed every action on
+     * what its account owns, and the plan reports each root NooBaa
+     * did not allow this. */
+    if (e.iam_user && src->posix.allow_bypass_governance) {
+      std::unique_ptr<User> user = driver->get_user(uid);
+      ret = user->load_user(dpp, y);
+      if (ret < 0) {
+	fail(e.name, std::string("load_user: ") + cpp_strerror(-ret));
+	continue;
+      }
       std::map<std::string, std::string> policies;
       policies["noobaa-allow-bypass-governance"] =
 	bypass_governance_policy();
       bufferlist bl;
       ceph::encode(policies, bl);
       user->get_attrs()[RGW_ATTR_USER_POLICY] = std::move(bl);
+      ret = user->store_user(dpp, y, false);
+      if (ret < 0) {
+	fail(e.name, std::string("store_user: ") + cpp_strerror(-ret));
+	continue;
+      }
       ++result.grants_written;
     }
-
-    constexpr bool exclusive = true;
-    int ret = user->store_user(dpp, y, exclusive, nullptr);
-    if (ret < 0) {
-      fail(e.name, std::string("store_user: ") + cpp_strerror(-ret));
-      continue;
-    }
-    ++result.users_created;
 
     /* The nsfs row, for a root account only:  the POSIX arm and the
      * placement fields, keyed on the account.  Every member of the
@@ -309,7 +432,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
      * whose NooBaa copy differs was reported by the plan. */
     std::string owner_key;
     if (e.iam_user) {
-      owner_key = to_string(rgw_owner{ui.user_id});
+      owner_key = to_string(rgw_owner{uid});
     } else {
       Identity row;
       row.key = e.account_id;

@@ -13,12 +13,15 @@
  *
  */
 
+#include <algorithm>
 #include <map>
 #include <set>
 
 #include "common/errno.h"
 
 #include "rgw_account.h"
+#include "rgw_sal.h"
+#include "rgw_rest_iam.h"
 
 #include "noobaa_import_plan.h"
 
@@ -67,7 +70,7 @@ std::string label(const NooBaaIdentity& id)
  * Every field the account's row carries is compared, because a
  * member's row no longer exists to hold a different value.
  * `allow_bypass_governance` is not among them:  it is imported as a
- * grant on each identity, so a member keeps its own. */
+ * grant on each IAM user, so a member keeps its own. */
 std::vector<std::string> row_drift(const NooBaaIdentity& account,
 				   const NooBaaIdentity& member)
 {
@@ -148,6 +151,11 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
      * in a policy still resolves. */
     e.display_name = id.name;
     e.anonymous = id.is_anonymous();
+    if (!e.anonymous && !id.posix.allow_bypass_governance) {
+      plan.widened.push_back(
+	  "account " + label(id) + ":  NooBaa did not allow it to bypass "
+	  "governance retention, and as RGW's account root it can");
+    }
     for (const auto& ak : id.access_keys) {
       e.access_key_ids.push_back(ak.access_key);
     }
@@ -171,6 +179,14 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
     }
 
     auto owner = account_id_by_noobaa_id.find(id.owner);
+    std::string why;
+    if (!id.iam_path.empty() && !validate_iam_path(id.iam_path, why)) {
+      plan.collisions.push_back(
+	  label(id) + " has an IAM path RGW will not accept (" + id.iam_path +
+	  "): " + why);
+      ret = -EINVAL;
+    }
+
     if (owner == account_id_by_noobaa_id.end()) {
       /* A user whose account is not in the store cannot be placed.
        * Reported rather than guessed:  there is no correct account to
@@ -202,6 +218,46 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
     plan.entries.push_back(std::move(e));
   }
 
+  /* ---- the limits ---- */
+
+  /* RGW counts an account's root user among its users, so an account
+   * holds one more than its IAM users.  A key limit is per user, so the
+   * account's is the most any one of its identities carries. */
+  {
+    std::map<std::string, std::pair<int32_t, int32_t>> need;
+    for (const auto& e : plan.entries) {
+      if (e.anonymous || e.account_id.empty()) {
+	continue;
+      }
+      auto& [users, keys] = need[e.account_id];
+      ++users;
+      keys = std::max(keys, static_cast<int32_t>(e.access_key_ids.size()));
+    }
+    for (auto& e : plan.entries) {
+      if (e.iam_user || e.anonymous) {
+	continue;
+      }
+      const auto& [users, keys] = need[e.account_id];
+      if (users > RGWAccountInfo::DEFAULT_USER_LIMIT) {
+	e.max_users = users;
+	plan.raised.push_back(
+	    "account " + e.name + " holds " + std::to_string(users) +
+	    " users, above RGW's default max_users of " +
+	    std::to_string(RGWAccountInfo::DEFAULT_USER_LIMIT) +
+	    ";  it is created with max_users " + std::to_string(users));
+      }
+      if (keys > RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT) {
+	e.max_access_keys = keys;
+	plan.raised.push_back(
+	    "account " + e.name + " has a user holding " +
+	    std::to_string(keys) + " access keys, above RGW's default "
+	    "max_access_keys of " +
+	    std::to_string(RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT) +
+	    ";  it is created with max_access_keys " + std::to_string(keys));
+      }
+    }
+  }
+
   /* ---- the gate ---- */
 
   /* RGW's `validate_name` rejects `$` and `:` and requires valid
@@ -224,6 +280,13 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
       plan.collisions.push_back(
 	  std::string("_id ") + e.noobaa_id + " has no name, so it has no "
 	  "display_name, which RGW requires");
+      ret = -EINVAL;
+    } else if (!e.anonymous && !validate_iam_user_name(e.display_name, why)) {
+      /* RGW's user-add path holds every account user's display_name,
+       * the root's included, to the IAM UserName rules */
+      plan.collisions.push_back(
+	  e.noobaa_name + " has a name RGW will not accept as an account "
+	  "user's: " + why);
       ret = -EINVAL;
     }
   }
@@ -324,12 +387,19 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
   ldpp_dout(dpp, 4) << "nsfs: import plan: " << plan.accounts()
     << " accounts, " << plan.iam_users() << " IAM users, "
     << plan.collisions.size() << " collisions, " << plan.drift.size()
-    << " drifted" << dendl;
+    << " drifted, " << plan.raised.size() << " limits raised, "
+    << plan.widened.size() << " roots widened" << dendl;
   for (const auto& c : plan.collisions) {
     ldpp_dout(dpp, 0) << "ERROR: import: " << c << dendl;
   }
   for (const auto& d : plan.drift) {
     ldpp_dout(dpp, 0) << "WARNING: import: " << d << dendl;
+  }
+  for (const auto& l : plan.raised) {
+    ldpp_dout(dpp, 0) << "NOTICE: import: " << l << dendl;
+  }
+  for (const auto& w : plan.widened) {
+    ldpp_dout(dpp, 0) << "NOTICE: import: " << w << dendl;
   }
   return ret;
 }

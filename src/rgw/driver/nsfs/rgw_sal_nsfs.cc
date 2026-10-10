@@ -13784,6 +13784,8 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
   ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
 				  get_identity_db());
   say("drift", std::to_string(plan.drift.size()));
+  say("limits_to_raise", std::to_string(plan.raised.size()));
+  say("roots_widened", std::to_string(plan.widened.size()));
   if (ret < 0) {
     say("ran", "false");
     say("collisions", std::to_string(plan.collisions.size()));
@@ -13805,6 +13807,7 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
   say("accounts_present", std::to_string(ir.accounts_skipped));
   say("users", std::to_string(ir.users_created));
   say("identity_rows", std::to_string(ir.identity_rows));
+  say("limits_raised", std::to_string(ir.limits_raised));
   say("anonymous", ir.anonymous_imported ? "true" : "false");
   if (ret < 0) {
     say("ran", "partial");

@@ -43,6 +43,7 @@
 #include "driver/nsfs/adopt/noobaa_bucket_import.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_account.h"
+#include "driver/rados/rgw_user.h"
 #include "driver/nsfs/personality.h"
 #include "rgw_auth.h"
 #include "common/ceph_json.h"
@@ -9669,6 +9670,90 @@ TEST_F(NooBaaPlanTest, ADuplicatedNooBaaIdIsRefused)
   EXPECT_TRUE(said("appears on more than one record")) << why();
 }
 
+/* An account user's name is held to the IAM UserName rules.
+ *
+ * RGW's user-add path applies them to every account user, the root
+ * included, so a name the account rules accept -- they refuse only
+ * `$` and `:` -- can still be refused when the user is written.  The
+ * plan reports it before anything is. */
+TEST_F(NooBaaPlanTest, AnAccountUsersNameFollowsTheIamRules)
+{
+  add_identity("a", R"({"_id":"a","name":"has space","email":"a"})");
+  EXPECT_EQ(build(1), -EINVAL);
+  EXPECT_TRUE(said("has space")) << why();
+  EXPECT_TRUE(said("as an account user's")) << why();
+
+  /* and an IAM path RGW would refuse */
+  std::filesystem::remove_all(store + "/identities");
+  std::filesystem::create_directories(store + "/identities");
+  add_identity("a", R"({"_id":"a","name":"acct","email":"a"})");
+  add_identity("u", R"({"_id":"u","name":"user","email":"u",
+    "owner":"a","iam_path":"eng"})");
+  EXPECT_EQ(build(2), -EINVAL);
+  EXPECT_TRUE(said("IAM path")) << why();
+
+  /* the control:  the same store with a valid path is clean */
+  add_identity("u", R"({"_id":"u","name":"user","email":"u",
+    "owner":"a","iam_path":"/eng/"})");
+  EXPECT_EQ(build(2), 0) << why();
+}
+
+/* An account above RGW's default limits is created with them raised.
+ *
+ * The admin path does not check `max_users` or `max_access_keys`;
+ * RGW's IAM API does, so an account imported above either would
+ * refuse every later CreateUser or CreateAccessKey.  RGW counts the
+ * root among an account's users.  The control is the boundary:  an
+ * account holding exactly the default fits, and nothing is raised. */
+TEST_F(NooBaaPlanTest, LimitsAreRaisedToFit)
+{
+  auto keys = [](int n) {
+    std::string k;
+    for (int i = 0; i < n; ++i) {
+      k += std::string(i ? "," : "") + R"({"access_key":"KEY)" +
+	   std::to_string(i) + R"(AAAAAAAAAAAAAAAAA","encrypted_secret_key":"x"})";
+    }
+    return k;
+  };
+  const std::string root = R"({"_id":"a","name":"acct","email":"a",
+    "access_keys":[)" + keys(RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT) + "]}";
+  add_identity("a", root.c_str());
+  const int fits = RGWAccountInfo::DEFAULT_USER_LIMIT - 1;
+  for (int i = 0; i < fits; ++i) {
+    const std::string n = "user-" + std::to_string(i);
+    const std::string rec = R"({"_id":")" + n + R"(","name":")" + n +
+      R"(","email":")" + n + R"(","owner":"a"})";
+    add_identity(n, rec.c_str());
+  }
+
+  ASSERT_EQ(build(fits + 1), 0) << why();
+  EXPECT_FALSE(entry("acct")->max_users) << "an account that fits was raised";
+  EXPECT_FALSE(entry("acct")->max_access_keys);
+  EXPECT_TRUE(plan.raised.empty()) << plan.raised[0];
+
+  /* one more user, and one more key on the root */
+  add_identity("over", R"({"_id":"over","name":"over","email":"over",
+    "owner":"a"})");
+  const std::string more = R"({"_id":"a","name":"acct","email":"a",
+    "access_keys":[)" + keys(RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT + 1) +
+    "]}";
+  add_identity("a", more.c_str());
+
+  ASSERT_EQ(build(fits + 2), 0) << why();
+  ASSERT_TRUE(entry("acct")->max_users);
+  EXPECT_EQ(*entry("acct")->max_users, RGWAccountInfo::DEFAULT_USER_LIMIT + 1);
+  ASSERT_TRUE(entry("acct")->max_access_keys);
+  EXPECT_EQ(*entry("acct")->max_access_keys,
+	    RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT + 1);
+  ASSERT_EQ(plan.raised.size(), 2u);
+  EXPECT_NE(plan.raised[0].find("max_users"), std::string::npos)
+      << plan.raised[0];
+  EXPECT_NE(plan.raised[1].find("max_access_keys"), std::string::npos)
+      << plan.raised[1];
+  /* an IAM user's entry carries no limits;  they are the account's */
+  EXPECT_FALSE(entry("over")->max_users);
+}
+
 /* A real store on disk plans without collisions.
  *
  * Skipped when `NSFS_NOOBAA_STORE` is unset.  Three accounts their CLI
@@ -9797,6 +9882,20 @@ TEST_F(NooBaaImportTest, AnAccountBecomesAnAccountAUserAndARow)
       << "the imported credential does not authenticate";
   EXPECT_EQ(user->get_info().account_id, e->account_id);
   EXPECT_EQ(user->get_display_name(), "interchange");
+  /* the account's root, which is what carries the account's implicit
+   * grant (`evaluate_iam_policies`);  without it the credential
+   * authenticates and is refused everything the account owns */
+  EXPECT_EQ(user->get_info().type, TYPE_ROOT);
+  /* their creation date, not the import's */
+  ceph::real_time made;
+  ASSERT_EQ(parse_time("2026-10-08T16:56:07.864Z", &made), 0);
+  EXPECT_EQ(user->get_info().create_date, made);
+  /* their record allows bucket creation, so RGW's limit does too */
+  EXPECT_GE(user->get_info().max_buckets, 0);
+  /* and the account carries RGW's defaults, nothing raised */
+  EXPECT_EQ(got.max_users, RGWAccountInfo::DEFAULT_USER_LIMIT);
+  EXPECT_EQ(got.max_access_keys, RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT);
+  EXPECT_EQ(result.limits_raised, 0u);
   const auto& keys = user->get_info().access_keys;
   ASSERT_EQ(keys.size(), 1u);
   /* the decrypted secret, which is what makes the credential usable
@@ -9957,6 +10056,16 @@ TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
       << "the user was not placed in its owner's account";
   EXPECT_EQ(user->get_info().path, "/eng/");
   EXPECT_EQ(user->get_display_name(), "a-user");
+  EXPECT_NE(user->get_info().type, TYPE_ROOT)
+      << "an IAM user was made its account's root";
+  /* its record carries no allow_bucket_creation, which NooBaa reads as
+   * refused, and RGW expresses as a negative bucket limit */
+  EXPECT_LT(user->get_info().max_buckets, 0);
+  /* and the root of the same account is the root */
+  std::unique_ptr<rgw::sal::User> root;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &root), 0);
+  EXPECT_EQ(root->get_info().type, TYPE_ROOT);
 
   /* the account's row is the account's, not overwritten by the
    * member -- which is what keying every identity on the account did */
@@ -10087,11 +10196,15 @@ TEST_F(NooBaaImportTest, AnUndecryptedSecretRefusesTheIdentity)
       << "a credential was written with no usable secret";
 }
 
-/* allow_bypass_governance becomes an IAM grant.
+/* allow_bypass_governance becomes an IAM grant on an IAM user, and a
+ * root needs none.
  *
  * Their flag is a boolean;  RGW expresses the same permission as an
- * action, so the import writes a policy rather than inventing a
- * column (§2.2). */
+ * action, so the import writes a policy rather than inventing a column
+ * (§2.2).  A root is RGW's account root, allowed every action on what
+ * its account owns, so a grant would add nothing.  A root NooBaa did
+ * not allow is reported instead:  RGW's root semantics were accepted
+ * over NooBaa's restriction (DECISIONS.md 2026-10-10). */
 TEST_F(NooBaaImportTest, BypassGovernanceBecomesAGrant)
 {
   std::string with{NB_ACCOUNT_PLAIN};
@@ -10099,13 +10212,23 @@ TEST_F(NooBaaImportTest, BypassGovernanceBecomesAGrant)
   ASSERT_NE(at, std::string::npos);
   with.replace(at, 11, "\"gid\": 1000,\n    \"allow_bypass_governance\": true");
   add_identity("6ac7cb27fd4af356919110a3", with.c_str());
+  add_identity("u1", R"({"_id":"u1","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3",
+    "nsfs_account_config":{"uid":1000,"gid":1000,
+      "new_buckets_path":"/lv2tb/nsfs-interchange/data/root",
+      "allow_bypass_governance":true},
+    "access_keys":[{"access_key":"USERAAAAAAAAAAAAAAAA",
+      "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
+    "master_key_id":"6ac7cb2751b72219a4bae375"})");
   write_file(store + "/master_keys.json", NB_MASTER_KEYS);
 
   ASSERT_EQ(run(), 0) << why();
-  EXPECT_EQ(result.grants_written, 1u);
+  EXPECT_EQ(result.grants_written, 1u) << "only the IAM user needs one";
+  EXPECT_TRUE(plan.widened.empty())
+      << "a root NooBaa allowed was reported as widened:  " << plan.widened[0];
 
   std::unique_ptr<rgw::sal::User> user;
-  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "USERAAAAAAAAAAAAAAAA",
 					   null_yield, &user), 0);
   auto p = user->get_attrs().find(RGW_ATTR_USER_POLICY);
   ASSERT_NE(p, user->get_attrs().end()) << "no policy was attached";
@@ -10116,12 +10239,21 @@ TEST_F(NooBaaImportTest, BypassGovernanceBecomesAGrant)
   EXPECT_NE(policies.begin()->second.find("s3:BypassGovernanceRetention"),
 	    std::string::npos);
 
-  /* and the negative case:  without the flag, no policy at all */
+  std::unique_ptr<rgw::sal::User> root;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &root), 0);
+  EXPECT_EQ(root->get_attrs().count(RGW_ATTR_USER_POLICY), 0u)
+      << "a policy was attached to the account's root";
+
+  /* a root without the flag:  no policy, and reported as widened */
   std::filesystem::remove_all(store + "/identities");
   std::filesystem::create_directories(store + "/identities");
   add_identity("other", NB_ACCOUNT_GROUPS);
   ASSERT_EQ(run(), 0) << why();
   EXPECT_EQ(result.grants_written, 0u);
+  ASSERT_EQ(plan.widened.size(), 1u);
+  EXPECT_NE(plan.widened[0].find("ix-groups"), std::string::npos)
+      << plan.widened[0];
 }
 
 /* A collision against RGW's existing state is caught before writing.
@@ -10177,6 +10309,112 @@ TEST_F(NooBaaImportTest, ACollisionWithExistingRgwStateIsCaught)
   EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p3,
 				  none), 0)
       << "an identity already imported was called a collision";
+}
+
+/* An account is created with the limits its plan raised.
+ *
+ * Five keys on the root, one above RGW's default.  Every key is the
+ * same ciphertext under a different id, which the master key opens
+ * the same way. */
+TEST_F(NooBaaImportTest, AnAccountIsCreatedWithItsRaisedLimit)
+{
+  const int n = RGWAccountInfo::DEFAULT_ACCESS_KEY_LIMIT + 1;
+  std::string k;
+  for (int i = 0; i < n; ++i) {
+    k += std::string(i ? "," : "") + R"({"access_key":"KEY)" +
+	 std::to_string(i) + R"(AAAAAAAAAAAAAAAAA","encrypted_secret_key":)"
+	 R"("AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="})";
+  }
+  const std::string rec = R"({"_id":"a","name":"acct","email":"a",
+    "allow_bucket_creation":true,"access_keys":[)" + k +
+    R"(],"master_key_id":"6ac7cb2751b72219a4bae375"})";
+  add_identity("a", rec.c_str());
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(result.limits_raised, 1u);
+
+  RGWAccountInfo got;
+  Attrs attrs;
+  RGWObjVersionTracker objv;
+  ASSERT_EQ(driver->load_account_by_id(env->dpp, null_yield,
+				       entry("acct")->account_id,
+				       got, attrs, objv), 0);
+  EXPECT_EQ(got.max_access_keys, n);
+  EXPECT_EQ(got.max_users, RGWAccountInfo::DEFAULT_USER_LIMIT)
+      << "a limit nothing exceeded was raised";
+
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "KEY0AAAAAAAAAAAAAAAAA",
+					   null_yield, &user), 0);
+  EXPECT_EQ(user->get_info().access_keys.size(), static_cast<size_t>(n));
+}
+
+/* A key NooBaa holds deactivated stays inactive.
+ *
+ * RGW's add path creates every key active, so the import deactivates
+ * one with a second operation.  A key that came back active would
+ * authenticate a credential their operator turned off. */
+TEST_F(NooBaaImportTest, ADeactivatedKeyStaysInactive)
+{
+  std::string rec{NB_ACCOUNT_PLAIN};
+  auto at = rec.find("\"encrypted_secret_key\"");
+  ASSERT_NE(at, std::string::npos);
+  rec.insert(at, "\"deactivated\": true,\n      ");
+  add_identity("6ac7cb27fd4af356919110a3", rec.c_str());
+  /* the control:  an account whose key is active */
+  add_identity("6ac7d2121e63a748e37663e0", NB_ACCOUNT_GROUPS);
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+
+  std::unique_ptr<rgw::sal::User> off;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &off), 0);
+  const auto& k = off->get_info().access_keys.at("INTERCHANGEACCESSKEY");
+  EXPECT_FALSE(k.active) << "a deactivated key came back active";
+  EXPECT_EQ(k.key, NB_PLAIN_SECRET) << "deactivating lost the secret";
+
+  std::unique_ptr<rgw::sal::User> on;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "IXGROUPSACCESSKEY001",
+					   null_yield, &on), 0);
+  EXPECT_TRUE(on->get_info().access_keys.at("IXGROUPSACCESSKEY001").active);
+}
+
+/* A key another RGW user already holds is caught before writing.
+ *
+ * Access keys are unique across RGW.  The user-add path would refuse
+ * the key, but only after the account and the user exist;  the check
+ * against RGW's state refuses it first. */
+TEST_F(NooBaaImportTest, AKeyRgwAlreadyHoldsIsCaught)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  auto c = read_store();
+  nsfs::ImportPlan p;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, p), 0);
+
+  /* the control:  nothing holds it yet */
+  std::vector<std::string> none;
+  ASSERT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p,
+				  none), 0);
+
+  /* an RGW user, from no import, takes the key */
+  RGWUserAdminOpState op(driver.get());
+  op.set_user_id(rgw_user{"", "someone"});
+  op.set_display_name("someone");
+  op.set_access_key("INTERCHANGEACCESSKEY");
+  op.set_secret_key("somebodyelsessecret");
+  RGWUser u;
+  std::string err;
+  ASSERT_EQ(u.init(env->dpp, driver.get(), op, null_yield), 0);
+  ASSERT_EQ(u.add(env->dpp, op, null_yield, &err), 0) << err;
+
+  std::vector<std::string> collisions;
+  EXPECT_EQ(nsfs::check_rgw_state(env->dpp, null_yield, driver.get(), p,
+				  collisions), -EEXIST);
+  ASSERT_EQ(collisions.size(), 1u);
+  EXPECT_NE(collisions[0].find("already held by RGW user someone"),
+	    std::string::npos) << collisions[0];
 }
 
 /* A real store on disk imports.

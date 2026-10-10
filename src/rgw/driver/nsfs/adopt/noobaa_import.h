@@ -78,6 +78,8 @@ struct ImportResult {
   size_t identity_rows{0};
   size_t roles_created{0};
   size_t grants_written{0};
+  /* accounts created with a limit above RGW's default */
+  size_t limits_raised{0};
   bool anonymous_imported{false};
 
   /* Every identity that could not be written, named.  Non-empty means
@@ -89,9 +91,10 @@ struct ImportResult {
  *
  * I3 checks the collisions visible in the store alone;  this checks
  * the same four constraints against **state RGW already holds** -- a
- * NooBaa account whose name matches an existing account, or an email
- * already in RGW's index, which is shared across users and accounts.
- * Just as fatal, and invisible without a lookup.
+ * NooBaa account whose name matches an existing account, an email
+ * already in RGW's index, which is shared across users and accounts,
+ * or an access key another RGW user already holds.  Just as fatal,
+ * and invisible without a lookup.
  *
  * An identity already imported is **not** a collision:  it is
  * recognised by their `_id` and skipped, which is what makes a re-run
