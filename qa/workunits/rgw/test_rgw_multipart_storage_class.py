@@ -42,9 +42,6 @@ def main():
     assert r.get('StorageClass') == STORAGE_CLASS, \
         'object storage class {} != {}'.format(r.get('StorageClass'), STORAGE_CLASS)
 
-    # without the fix, the part head was looked up in the bucket's default
-    # (STANDARD) pool instead of the storage class pool, so every partNumber
-    # read returned 400 InvalidPart
     for i, data in enumerate(bodies, 1):
         r = client.head_object(Bucket=BUCKET_NAME, Key=key, PartNumber=i)
         assert r['ContentLength'] == len(data), \
