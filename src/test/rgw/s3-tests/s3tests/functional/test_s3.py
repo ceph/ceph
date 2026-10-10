@@ -6769,9 +6769,6 @@ def test_multipart_get_part_storage_class():
     if len(sc) < 2:
         pytest.skip('requires a storage class other than STANDARD')
 
-    # without the fix, the part head was looked up in the bucket's default
-    # (STANDARD) pool instead of the storage class pool, so every partNumber
-    # read returned 400 InvalidPart
     _test_multipart_get_part(storage_class=sc[1])
 
 @pytest.mark.encryption
