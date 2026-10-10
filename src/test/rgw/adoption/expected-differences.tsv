@@ -1,0 +1,77 @@
+# Expected differences between two corpus captures.
+#
+# The diff gates:  a difference not matched by a row here fails the
+# comparison.  That is the point -- a comparison whose negative case
+# cannot occur proves nothing -- so every row is a claim that someone
+# has to defend, and a row with no reason is not a row.
+#
+# Five tab-separated columns:
+#
+#   pair      which two captures.  theirs:ours-before is adoption --
+#             what RGW answers over a tree it has not converted,
+#             against what NooBaa answered for the same tree.
+#             ours-before:ours-after is conversion.
+#   artifact  manifest | inventory | run
+#   key       manifest:  the field, third column, `*` globs a suffix
+#             inventory: xattr:<name>, mode, owner, or size
+#             run:       the axis whose artifacts are absent entirely
+#   class     persists  differs, and still will after conversion
+#             vanishes  differs now, must be identical after
+#             absent    one side produced nothing to compare
+#             filtered  not a difference;  the writer must drop it
+#   reason    why, in one line.  Required.
+#
+# NEVER key a row on a literal value from their side.  Their ETag and
+# version id embed an mtime whose low 8 bits are lost to a double in
+# their C++ (fs_napi.cpp:360), one `int64_t` from being fixed;  a row
+# that names the string breaks on their next release instead of
+# failing honestly.  Key on the field.
+#
+# Rows marked PROVISIONAL were derived from the NooBaa capture plus the
+# mapping in docs/NOOBAA_WRITE_SURFACE.md.  `capture/rgw` does not
+# exist yet (C2b), so no row below has been confirmed by an actual
+# diff.  The first real run is expected to move some of them.
+
+# ---- adoption:  theirs vs ours-before ------------------------------
+# In base profile we add nothing to their tree, so the inventory
+# should be *identical* here.  An inventory difference in this pair is
+# a defect, not an expected difference, and only the bucket's own
+# adoption marker is permitted.
+
+theirs:ours-before	manifest	etag	persists	PROVISIONAL non-MD5 objects only: their mtime token loses 8 bits to a double, ours does not, and we deliberately do not reproduce it -- DECISIONS.md 2026-10-09
+theirs:ours-before	manifest	listed-etag	persists	PROVISIONAL same value by the same path, through ListObjects
+theirs:ours-before	manifest	head-etag	persists	PROVISIONAL same value by the same path, through HeadObject
+theirs:ours-before	manifest	copy.reported-etag	persists	PROVISIONAL same value by the same path, through CopyObject's result
+theirs:ours-before	manifest	listed-owner	persists	PROVISIONAL _get_object_owner() returns undefined always, so NooBaa objects have no owner; answering from the inode uid is an RGW addition
+theirs:ours-before	manifest	version.*.owner	persists	PROVISIONAL same cause as listed-owner, per version
+theirs:ours-before	inventory	xattr:security.selinux	filtered	not written by either gateway; the host's policy put it there, and it differs per machine. The inventory writer drops it rather than listing it here
+theirs:ours-before	inventory	xattr:user.nsfs.adopted	vanishes	PROVISIONAL the bucket's adoption marker is the one attribute adopt writes; absent in serve mode, and never on an object until C6
+theirs:ours-before	run	coverage-lock	absent	NooBaa answers 501 NotImplemented to PutObjectLockConfiguration, so the axis cannot create its bucket and writes no artifact -- lock.rs:78 ignores it under fails_on_noobaa
+
+# ---- conversion:  ours-before vs ours-after ------------------------
+# Conversion renames every attribute into our own layout, so the
+# inventory differs wholesale and must do so.  These rows are the
+# definition of conversion being complete:  nothing on the left may
+# survive on the right.
+
+ours-before:ours-after	inventory	xattr:user.noobaa.*	vanishes	their internal namespace becomes user.nsfs.* -- NB_KEYS, xattr_strategy.cc:127
+ours-before:ours-after	inventory	xattr:user.storage_class	vanishes	NB_KEYS maps it; it is the one name their own reader hides from user metadata, via XATTR_METADATA_IGNORE_LIST
+ours-before:ours-after	inventory	xattr:user.content_md5	vanishes	maps to RGW_ATTR_ETAG alone, so a converted object stops carrying the key -- a decision, not a defect, recorded in docs/NOOBAA_WRITE_SURFACE.md
+ours-before:ours-after	inventory	xattr:user.*	vanishes	user metadata is plain user.<k> in their layout and user.nsfs.rgw.x-amz-meta-<k> in ours. Ordered after the rows above, which are narrower
+ours-before:ours-after	manifest	meta.content_md5	vanishes	their reader re-exposes user.content_md5 as a user-metadata key because it is not in their ignore list; ours does not, so the fact disappears
+
+# ---- not yet classifiable ------------------------------------------
+# Listed so the first diff has something to correct, with no class
+# asserted.  Each needs a measurement, not an argument.
+#
+#   manifest  mode / inventory mode   C1 normalizes permissions, and
+#       their files are 0660 here.  What conversion writes has not been
+#       measured against a tree they wrote.
+#   manifest  *.refused vs *.accepted  a refusal is encoded in the
+#       *field name*, so one gateway refusing and the other accepting
+#       shows up as a removed line and an added line rather than a
+#       changed value.  The format, not the list, has to answer this.
+#   manifest  version.mtime-<...>-ino-<...>.*  the field name embeds a
+#       version id, which is an outcome and not a parameter, so these
+#       lines cannot align between two runs at all.  Blocks the
+#       versioning axis entirely until the names are normalized.

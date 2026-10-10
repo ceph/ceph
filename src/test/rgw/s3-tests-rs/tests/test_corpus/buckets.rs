@@ -31,7 +31,6 @@
 //! ROOT` names the second when there is one.  See the punch list.
 
 use s3_tests_rs::client::get_client;
-use s3_tests_rs::fixtures::get_new_bucket_name;
 
 use crate::generate::{ensure_bucket, env_or, out_dir};
 use crate::manifest::Manifest;
@@ -151,9 +150,13 @@ async fn corpus_coverage_bucket_config() {
                 .map(|(n, _)| n.clone())
                 .collect();
             m.bucket(&b, concat!($name, ".accepted"), &accepted.to_string());
-            if !accepted {
-                m.bucket(&b, concat!($name, ".refused"), &code);
-            }
+            /* Emitted whether or not it was refused.  A field that
+             * appears only on failure makes a capability divergence
+             * read as a removed line plus an added line rather than a
+             * changed value, so the manifests of two gateways stop
+             * diffing where they differ most. */
+            m.bucket(&b, concat!($name, ".refused"),
+                     if accepted { "<none>" } else { code.as_str() });
             for g in &gained {
                 m.bucket(&b, concat!($name, ".gained"), g);
             }
@@ -414,7 +417,11 @@ async fn corpus_coverage_bucket_config() {
      * Same statement the suite's own logging tests use, so the
      * condition keys match what the check wants rather than what I
      * guessed. */
-    let log_target = get_new_bucket_name();
+    /* Derived, not random.  As `get_new_bucket_name()` it was a fresh
+     * name every run, which put a per-run string in the *subject*
+     * column -- so the log-target lines could not align between two
+     * captures however the fields were named. */
+    let log_target = bucket(&tier, "bconf-log-target");
     ensure_bucket(&client, &log_target).await;
     {
         let policy = format!(
@@ -427,12 +434,23 @@ async fn corpus_coverage_bucket_config() {
             .send()
             .await
         {
-            Ok(_) => m.bucket(&log_target, "log-target-policy", "set"),
-            Err(e) => m.bucket(
-                &log_target,
-                "log-target-policy.refused",
-                e.into_service_error().meta().code().unwrap_or("Unknown"),
-            ),
+            /* Both names every time, for the reason in step!():  this
+             * site previously changed the *field* with the outcome,
+             * `log-target-policy` on success and
+             * `log-target-policy.refused` on failure, so neither line
+             * had a counterpart on the other side. */
+            Ok(_) => {
+                m.bucket(&log_target, "log-target-policy", "set");
+                m.bucket(&log_target, "log-target-policy.refused", "<none>");
+            }
+            Err(e) => {
+                m.bucket(&log_target, "log-target-policy", "refused");
+                m.bucket(
+                    &log_target,
+                    "log-target-policy.refused",
+                    e.into_service_error().meta().code().unwrap_or("Unknown"),
+                );
+            }
         }
     }
     step!(
