@@ -4442,7 +4442,6 @@ public:
   void SetUp() override {
     sf::create_directories(conf_root() / "buckets");
     g_conf().set_val("rgw_nsfs_noobaa_config_root", conf_root().string());
-    g_conf().apply_changes(nullptr);
     NSFSNooBaaBucketTest::SetUp();
   }
 
@@ -10534,6 +10533,49 @@ TEST_F(NooBaaModeTest, APreflightFailureWritesNothing)
   EXPECT_EQ(out["unreadable"], "1");
   EXPECT_TRUE(out.find("accounts") == out.end())
       << "a preflight failure got as far as writing";
+}
+
+/* Serve mode refuses an attribute write.
+ *
+ * `mutation_enter()` guards the mutating SAL entry points, which is
+ * the right layer for a mutation and the wrong one for a write that
+ * happens inside some other operation.  So the refusal is also taken
+ * where the attribute is written.
+ *
+ * Both polarities, from one build:  the `serve-write-refusal` hint
+ * turns the refusal off, and the same call then succeeds.  Without
+ * that the assertion would only show that the write did not happen,
+ * not that the refusal is what stopped it. */
+TEST_F(NooBaaModeTest, ServeModeRefusesAnAttributeWrite)
+{
+  /* A real object, with an entry behind it:  `write_attrs()` writes
+   * through the FSEnt, and one that was never opened has none. */
+  ASSERT_EQ(ask({{"mode", "adopt"}})["mode"], "adopt");
+  std::ofstream{(bp / "root" / testname / testname).string()} << "x";
+
+  auto object = bucket->get_object(rgw_obj_key(testname));
+  ASSERT_NE(object.get(), nullptr);
+  auto* nsfs_obj = static_cast<rgw::sal::NSFSObject*>(object.get());
+  ASSERT_EQ(nsfs_obj->load_obj_state(env->dpp, null_yield), 0)
+      << "the object has no entry, so write_attrs would fault";
+
+  bufferlist bl;
+  bl.append("x");
+  nsfs_obj->get_attrs()[ATTR1] = bl;
+
+  ASSERT_EQ(ask({{"mode", "serve"}})["read_only"], "true");
+  EXPECT_EQ(nsfs_obj->write_attrs(env->dpp, null_yield, nullptr), -EROFS)
+      << "serve mode let an attribute write through";
+
+  std::map<std::string, std::string> h;
+  ASSERT_EQ(driver->driver_hint(env->dpp, "serve-write-refusal",
+				{{"enable", "false"}}, &h), 0);
+  EXPECT_EQ(h["enabled"], "false");
+  EXPECT_EQ(nsfs_obj->write_attrs(env->dpp, null_yield, nullptr), 0)
+      << "with the refusal off the write failed for some other reason, "
+      << "so the assertion above is not about the refusal";
+  ASSERT_EQ(driver->driver_hint(env->dpp, "serve-write-refusal",
+				{{"enable", "true"}}, &h), 0);
 }
 
 /* `convert` was a mode and is not one.

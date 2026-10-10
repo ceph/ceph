@@ -10429,6 +10429,33 @@ int NSFSObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp
 int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			    const std::vector<std::string>* rmattrs)
 {
+  /* Serve mode changes nothing on disk, and that promise is what makes
+   * the decision to adopt reversible (`NSFS_ADOPTION.md` §10).
+   *
+   * Refused here as well as at `mutation_enter()`, because this is
+   * reached from a *read*:  `NSFSReadOp::prepare()` treats an object
+   * with no etag attribute as sideloaded and generates one, which is
+   * every object a NooBaa deployment wrote with MD5 off -- their
+   * default.  So the first GET of almost any object wrote an xattr to
+   * a tree we had promised not to touch, with no mutating entry point
+   * involved for the gate to catch.
+   *
+   * The driver's own test, not the option:  the mode is read at
+   * startup into a member and the driver hint can set it, so asking
+   * configuration here would answer a different question from the one
+   * `mutation_enter()` answers.
+   *
+   * `-EROFS` rather than the gate's `-ERR_METHOD_NOT_ALLOWED`:  this
+   * is not a refused operation but a write that cannot land on this
+   * tree, and a caller reached from a read path is expected to carry
+   * on without it.  `persist_generated_attrs()` does. */
+  if (driver->refusing_attribute_writes()) {
+    ldpp_dout(dpp, 10) << "nsfs: not writing attributes on " << get_name()
+      << ": rgw_nsfs_adoption_mode is serve, so nothing is written to "
+      << "this tree" << dendl;
+    return -EROFS;
+  }
+
   return ent->write_attrs(dpp, y, state.attrset, nullptr,
 			  AttrWriteMode::MERGE, rmattrs);
 }
@@ -10632,7 +10659,7 @@ int NSFSObject::generate_etag(const DoutPrefixProvider* dpp, optional_yield y)
    * xattr itself. */
   if (ent && nsfs_apply_non_md5_etag(dpp, -1, ent->get_stx(), get_attrs(),
 				     xattr_strategy())) {
-    return write_attrs(dpp, y);
+    return persist_generated_attrs(dpp, y);
   }
 
   int64_t left = get_size();
@@ -10667,7 +10694,27 @@ int NSFSObject::generate_etag(const DoutPrefixProvider* dpp, optional_yield y)
     return iter;
   });
   get_attrs().emplace(std::move(RGW_ATTR_ETAG), std::move(etag_bl));
-  return write_attrs(dpp, y);
+  return persist_generated_attrs(dpp, y);
+}
+
+/* Persist what `generate_etag()` computed, and tolerate a tree that
+ * will not take it.
+ *
+ * The attribute is already in the in-memory map either way, so the
+ * request is answered with the value it computed;  the write is a
+ * cache of that work for the next reader.  In serve mode there is no
+ * next write at all, so losing the cache is the whole of the cost and
+ * failing the GET would be the wrong trade. */
+int NSFSObject::persist_generated_attrs(const DoutPrefixProvider* dpp,
+					optional_yield y)
+{
+  int ret = write_attrs(dpp, y);
+  if (ret == -EROFS) {
+    ldpp_dout(dpp, 20) << "nsfs: generated attributes for " << get_name()
+      << " are not persisted;  this tree is served read-only" << dendl;
+    return 0;
+  }
+  return ret;
 }
 
 /* Resolved through the bucket's format, so an object in a base bucket
@@ -13978,6 +14025,22 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 			    std::map<std::string, std::string>* out)
 {
   ldpp_dout(dpp, 10) << "NSFSDriver::driver_hint: " << hint << dendl;
+
+  if (hint == "serve-write-refusal") {
+    /* Turn the serve-mode attribute refusal off, so a test can assert
+     * what happens without it.  There is no other way to reach the
+     * un-refused behaviour, and a test that cannot reach it cannot
+     * show that the refusal is what produces the refused one. */
+    auto it = params.find("enable");
+    if (it == params.end()) {
+      return -EINVAL;
+    }
+    refuse_serve_writes = (it->second == "true");
+    if (out) {
+      (*out)["enabled"] = refuse_serve_writes ? "true" : "false";
+    }
+    return 0;
+  }
 
   if (hint == "inject-fork-race") {
     /* stand in for another instance which forks a shadow first, so that

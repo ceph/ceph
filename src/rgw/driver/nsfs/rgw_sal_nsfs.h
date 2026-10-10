@@ -673,6 +673,12 @@ protected:
   bool use_lc_thread{false};
   /* driver hint state (test only)--see driver_hint() */
   bool inject_fork_race{false};
+
+  /* Lets a test run the serve-mode attribute refusal in both
+   * polarities;  see the `serve-write-refusal` driver hint.  A control
+   * asserted only one way proves nothing, and reverting the refusal in
+   * source to show it would prove something about a different build. */
+  bool refuse_serve_writes{true};
   /* Added to the accounted size before the multipart writer compares it
    * against the bytes it actually stored.
    *
@@ -1156,6 +1162,17 @@ public:
   bool serving_read_only() const {
     return adoption_configured() && (adoption_mode == AdoptionMode::Serve);
   }
+
+  /* Whether an attribute write must be refused.
+   *
+   * Serve mode, and the refusal not disabled -- which only the
+   * `serve-write-refusal` hint can do, so that a test can assert both
+   * polarities from one build.  One predicate rather than two tests at
+   * the call site. */
+  bool refusing_attribute_writes() const {
+    return serving_read_only() && refuse_serve_writes;
+  }
+
 
   /* Run the import, if the mode says to.  Called once at startup, and
    * by the `adoption` driver hint so the suite can drive it. */
@@ -2036,6 +2053,9 @@ protected:
 private:
   int generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield y);
   int generate_etag(const DoutPrefixProvider* dpp, optional_yield y);
+  /* write what generate_etag() computed, tolerating a read-only tree */
+  int persist_generated_attrs(const DoutPrefixProvider* dpp,
+			      optional_yield y);
   int get_cur_version(const DoutPrefixProvider *dpp, rgw_obj_key &key);
 };
 
