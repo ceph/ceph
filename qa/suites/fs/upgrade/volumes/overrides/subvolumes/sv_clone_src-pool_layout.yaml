@@ -1,0 +1,5 @@
+# no client, 2 snapshots, cloned before, during and after the upgrade
+overrides:
+  volumes_upgrade:
+    subvolumes:
+      grp_src/sv_clone_src: pool_layout

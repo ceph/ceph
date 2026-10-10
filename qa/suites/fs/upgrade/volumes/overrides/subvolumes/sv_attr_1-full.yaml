@@ -1,0 +1,5 @@
+# no client, snapshots or clones; in a group without attributes
+overrides:
+  volumes_upgrade:
+    subvolumes:
+      grp_attr/sv_attr_1: full

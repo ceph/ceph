@@ -1,0 +1,8 @@
+# IO clients: client.0 (no snaps) and client.2 (two snaps) are kernel,
+# client.1 (one snap) is ceph-fuse. client.3 (admin) is always kernel.
+# NB: ceph-fuse must come first: it unmounts any (kernel) mounts already
+# present that it was not asked to mount.
+tasks:
+- ceph-fuse: [client.1]
+- kclient: [client.0, client.2, client.3]
+- print: "**** done client"

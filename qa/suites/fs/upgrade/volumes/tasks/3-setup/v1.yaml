@@ -1,0 +1,6 @@
+tasks:
+- volumes_upgrade.setup:
+    version: 1
+    io_clients: [client.0, client.1, client.2]
+    admin_client: client.3
+- print: "**** done creating v1 subvolumes, clients doing IO, clones held pending and purges paused mid-way"

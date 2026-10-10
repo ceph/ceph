@@ -1,0 +1,17 @@
+# Attribute profiles of the v1/v2 subvolumes that volumes_upgrade.setup
+# creates (assigned in subvolumes/). Each attribute is a non-default
+# subvolume attribute (see ATTRS in qa/tasks/volumes_upgrade.py) that must
+# survive auto-upgrade.
+overrides:
+  volumes_upgrade:
+    profiles:
+      # as `fs subvolume create` without options
+      bare: []
+      full: [size, owner, mode, namespace, earmark, metadata, xattr,
+             max_files, acl]
+      partial: [size]
+      # on a second data pool (added to the volume)
+      pool_layout: [pool, namespace]
+      # none of its own: in a group created with a size, uid/gid, mode and
+      # the second data pool, inheriting its data pool and uid/gid
+      group: [group]
