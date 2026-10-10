@@ -13908,15 +13908,82 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   nsfs::BucketImportResult br;
   ret = nsfs::import_one_bucket(dpp, y, this, root, bucket_name, contents,
 				mapping, br);
-  say("adopted", (ret == 0) ? "true" : "false");
+  say("configured", (ret == 0) ? "true" : "false");
   say("buckets", std::to_string(br.buckets_written));
   say("policies", std::to_string(br.policies_rewritten));
   say("policies_refused", std::to_string(br.policies_refused.size()));
   say("logging", std::to_string(br.logging_carried));
   if (ret < 0) {
+    say("adopted", "false");
     say("error", cpp_strerror(-ret));
+    return ret;
   }
-  return ret;
+
+  /* Adopting a bucket is bringing its schema *and* its objects into our
+   * profile, so the configuration above is half of it.  `set_profile`
+   * leaving base is the other half:  it marks the bucket, walks the
+   * tree, re-stages the uploads and clears the converting marker when
+   * it completes.
+   *
+   * The target is EXTENSIONS_DEFAULT, which is what a bucket this
+   * gateway creates is marked with -- so an adopted deployment ends up
+   * in one profile rather than two.
+   *
+   * Reported separately from the configuration, because the two fail
+   * for different reasons and an operator needs to know which half
+   * stopped. */
+  if (!extensions_enabled()) {
+    /* Reversible mode:  the operator has asked that nothing be marked,
+     * and a tree is handable back to NooBaa only at base.  So the
+     * objects stay in their arrangement, deliberately, and this is the
+     * one case where a bucket is configured and not adopted. */
+    say("adopted", "false");
+    say("why", "rgw_nsfs_extensions is off;  the tree stays reversible");
+    ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket_name
+      << " configured, and not converted:  extensions are off, so the "
+      << "tree stays handable back to NooBaa" << dendl;
+    return 0;
+  }
+
+  std::unique_ptr<rgw::sal::Bucket> b;
+  rgw_bucket rb;
+  rb.name = bucket_name;
+  ret = load_bucket(dpp, rb, &b, y);
+  if (ret < 0) {
+    say("adopted", "false");
+    say("error", cpp_strerror(-ret));
+    return ret;
+  }
+
+  nsfs::ConvertProgress prog;
+  ret = static_cast<NSFSBucket*>(b.get())->set_profile(
+    dpp, y, nsfs::EXTENSIONS_DEFAULT, nullptr, &prog);
+  /* Reported as the struct counts them, which is deliberately not one
+   * number:  a resumed run has only these and its marker to report
+   * from, and a half-finished walk otherwise reads the same as a bucket
+   * with history. */
+  say("objects", std::to_string(prog.objects));
+  say("directory_objects", std::to_string(prog.directory_objects));
+  say("versions", std::to_string(prog.versions));
+  say("uploads", std::to_string(prog.uploads));
+  say("parts", std::to_string(prog.parts));
+  say("profile_set", prog.profile_set ? "true" : "false");
+  say("profile", static_cast<NSFSBucket*>(b.get())->profile_name());
+  if (ret < 0) {
+    say("adopted", "false");
+    say("error", cpp_strerror(-ret));
+    return ret;
+  }
+  /* `complete` and `profile_set` fail apart, and the struct says why:
+   * a run that stops halfway has changed the profile and not finished
+   * the tree, and the bucket is servable in exactly that state.  So
+   * adoption is complete only when nothing foreign is left. */
+  say("adopted", prog.complete ? "true" : "false");
+  if (!prog.complete) {
+    say("why", "the walk did not finish;  the converting marker stands "
+	       "and a later run resumes it");
+  }
+  return 0;
 }
 
 int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,

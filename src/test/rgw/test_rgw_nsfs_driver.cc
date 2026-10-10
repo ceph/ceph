@@ -10574,8 +10574,25 @@ TEST_F(NooBaaModeTest, OneBucketCanBeAdoptedOnTheSpot)
 
   /* then the one bucket, which is the increment */
   auto one = ask({{"bucket", testname}});
-  EXPECT_EQ(one["adopted"], "true") << one["error"];
+  EXPECT_EQ(one["configured"], "true") << one["error"];
   EXPECT_EQ(one["buckets"], "1");
+
+  /* Adopted means the objects are ours too, not just the record.
+   *
+   * Asserted because the report used to say "adopted" after writing
+   * bucket configuration alone, while every object kept NooBaa's
+   * arrangement -- so the startup path and this hint both reported a
+   * state the tree was not in.  `profile` is what makes the claim
+   * checkable:  a bucket that was only configured still reads base. */
+  EXPECT_EQ(one["adopted"], "true") << one["error"];
+  EXPECT_EQ(one["profile_set"], "true");
+  /* Equality, not "not base":  the old report had no `profile` key at
+   * all, and an absent key is not base either -- so a negative
+   * assertion would have passed against the defect it is here to
+   * catch.  `strong` is EXTENSIONS_DEFAULT, which is what a bucket
+   * this gateway creates is marked with. */
+  EXPECT_EQ(one["profile"], "strong")
+      << "the bucket claims adoption and is not in our profile";
 
   /* and the state is on the bucket */
   RGWBucketInfo info;
