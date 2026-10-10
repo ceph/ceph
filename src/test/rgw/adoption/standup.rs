@@ -57,6 +57,8 @@ struct Env {
     ceph_build: Option<PathBuf>,
     /// the NooBaa HTTP port
     port: u16,
+    /// the port RGW serves on after `adopt` -- `rgw-vstart.sh`'s default
+    rgw_port: u16,
     /// the account NooBaa serves as
     account: String,
     /// the one bucket, which both gateways will serve
@@ -150,6 +152,7 @@ impl Env {
              * this with the Rust SDK and a self-signed certificate is a
              * problem worth not having. */
             port: get("port", "6001").parse().unwrap_or(6001),
+            rgw_port: get("rgw_port", "8000").parse().unwrap_or(8000),
             account: get("account", "adoption"),
             bucket: get("bucket", "adoption"),
             /* Fixed rather than generated:  the corpus has to be
@@ -226,13 +229,18 @@ impl Env {
         self.work.join("capture").join(side)
     }
 
+    fn capture_conf_for(&self, side: &str) -> PathBuf {
+        self.work.join("capture").join(format!("{side}.s3tests.conf"))
+    }
+
     fn capture_conf(&self) -> PathBuf {
         self.work.join("s3tests-noobaa.conf")
     }
 
-    fn capture_log(&self) -> PathBuf {
-        self.work.join("capture").join("noobaa.log")
+    fn capture_log_for(&self, side: &str) -> PathBuf {
+        self.work.join("capture").join(format!("{side}.log"))
     }
+
 }
 
 fn env_or(k: &str, d: &str) -> String {
@@ -277,7 +285,7 @@ fn main() {
         "build" => build(&env),
         "config" => config(&env),
         "serve" => serve(&env),
-        "capture" => capture(&env),
+        "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
         "adopt" => adopt(&env),
         "up" => ["pin", "worktree", "patch", "build", "config"]
@@ -316,6 +324,7 @@ fn list() {
         ("pin", "the commit to stand up"),
         ("data", "what --data-root is given;  the tree is data/root"),
         ("port", "the NooBaa HTTP port"),
+        ("rgw_port", "the port RGW serves on after `adopt`"),
         ("account", "the account `config` creates;  default adoption"),
         ("bucket", "the bucket `config` creates;  default adoption"),
         ("suite", "the s3-tests-rs checkout;  defaults to a sibling of this driver"),
@@ -886,19 +895,94 @@ fn serve(env: &Env) -> Result<(), String> {
 ///
 /// Idempotent:  the artifacts are rewritten, and the buckets the
 /// corpus uses have stable names so a second run meets its own.
-fn capture(env: &Env) -> Result<(), String> {
-    let Some(pid) = running(env) else {
-        return Err("the NooBaa endpoint is not running;  run `serve` first".into());
+/// Every path under the tree with its size and mtime, sorted.
+///
+/// An observing capture must not change the tree it describes, and
+/// that is checkable rather than reviewable:  take this before and
+/// after, and any difference is a write.  Three unguarded writes were
+/// found that way -- the versioning state, the copy sources and a
+/// cache-warming sentinel -- and none of the three by reading the 33
+/// mutating call sites in the axes.
+fn tree_fingerprint(root: &PathBuf) -> Vec<String> {
+    fn walk(d: &PathBuf, out: &mut Vec<String>) {
+        let Ok(rd) = std::fs::read_dir(d) else {
+            return;
+        };
+        for e in rd.filter_map(Result::ok) {
+            let p = e.path();
+            let Ok(m) = e.metadata() else {
+                continue;
+            };
+            let mtime = m
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            out.push(format!("{}\t{}\t{}", p.display(), m.len(), mtime));
+            if m.is_dir() {
+                walk(&p, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(root, &mut out);
+    out.sort();
+    out
+}
+
+fn capture(env: &Env, side: &str) -> Result<(), String> {
+    /* Which gateway is being described, and so which directory the
+     * artifacts go in and what the run is allowed to do.
+     *
+     * `noobaa` generates:  it creates the objects and records them, and
+     * the tree it leaves is the artifact the handoff is about.  `rgw`
+     * observes:  the objects are already there, so it records without
+     * creating -- and must, because creating would describe its own
+     * work rather than NooBaa's, and over a tree served read-only it
+     * would be refused outright. */
+    let (observe, label) = match side {
+        "noobaa" => (false, "noobaa"),
+        "rgw" => (true, "rgw"),
+        other => {
+            return Err(format!(
+                "capture takes `noobaa` or `rgw`, not {other:?}.\n                   noobaa generates the tree;  rgw observes it after adopt."));
+        }
     };
-    /* Whether it answers, not whether a pid exists.  The corpus will
-     * ask the same question and a clearer error here is cheaper than
-     * an SDK timeout there. */
-    if std::net::TcpStream::connect(("127.0.0.1", env.port)).is_err() {
-        return Err(format!(
-            "pid {pid} is alive but nothing accepts a connection on port {};\n  see {}",
-            env.port,
-            env.log_file().display()
-        ));
+
+    /* The precondition is the side's, because the handoff is
+     * sequential.  `noobaa` needs their endpoint up to be described.
+     * `rgw` needs it *down* -- RGW is serving the same directory, and
+     * two gateways over one tree is a different feature this exercise
+     * deliberately does not have. */
+    let pid = match (label, running(env)) {
+        ("noobaa", None) => {
+            return Err("the NooBaa endpoint is not running;  run `serve` \
+                        first".into());
+        }
+        ("rgw", Some(pid)) => {
+            return Err(format!(
+                "NooBaa is still running (pid {pid}).  The rgw side \
+                 describes the tree after the handoff:  run `stop`, then \
+                 `adopt`, then this."));
+        }
+        (_, running) => running.unwrap_or(0),
+    };
+    /* Whether the side's endpoint answers, not whether a pid exists.
+     * The corpus will ask the same question and a clearer error here
+     * is cheaper than an SDK timeout there. */
+    let port = if label == "rgw" { env.rgw_port } else { env.port };
+    if std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
+        return Err(if label == "rgw" {
+            format!(
+                "nothing accepts a connection on port {port}, where RGW \
+                 should be serving the adopted tree;  run `adopt` first")
+        } else {
+            format!(
+                "pid {pid} is alive but nothing accepts a connection on \
+                 port {port};\n  see {}",
+                env.log_file().display())
+        });
     }
     if !env.suite.join("Cargo.toml").exists() {
         return Err(format!(
@@ -909,7 +993,7 @@ fn capture(env: &Env) -> Result<(), String> {
         ));
     }
 
-    let dir = env.capture_dir("noobaa");
+    let dir = env.capture_dir(label);
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
 
@@ -935,12 +1019,22 @@ fn capture(env: &Env) -> Result<(), String> {
         println!("capture  cleared {stale} artifacts from a previous run");
     }
 
-    let conf = write_capture_conf(env)?;
+    /* The observing side's contract, enforced rather than asserted:
+     * taken before the corpus runs and compared after, so a write
+     * that slipped past a guard is caught by the step that must not
+     * make one. */
+    let before = if observe {
+        Some(tree_fingerprint(&env.tree()))
+    } else {
+        None
+    };
+
+    let conf = write_capture_conf(env, label)?;
     println!("capture  endpoint http://127.0.0.1:{}", env.port);
     println!("         conf     {}", conf.display());
     println!("         tier     {}", env.tier);
     println!("         out      {}", dir.display());
-    println!("         log      {}", env.capture_log().display());
+    println!("         log      {}", env.capture_log_for(label).display());
 
     /* nextest if it is there, the built-in harness if it is not.  The
      * house standard is nextest and its per-test failure blocks are
@@ -993,7 +1087,7 @@ fn capture(env: &Env) -> Result<(), String> {
         .arg("-c")
         .arg(&script)
         .env("ADOPTION_SUITE", env.suite.display().to_string())
-        .env("ADOPTION_CAPTURE_LOG", env.capture_log().display().to_string())
+        .env("ADOPTION_CAPTURE_LOG", env.capture_log_for(label).display().to_string())
         .env("S3TEST_CONF", conf.display().to_string())
         .env("CORPUS_OUT", dir.display().to_string())
         /* The disk half.  Same host by construction -- the NooBaa endpoint
@@ -1009,6 +1103,7 @@ fn capture(env: &Env) -> Result<(), String> {
         .env("CORPUS_TIER", &env.tier)
         /* NooBaa publishes its own modes.  See the doc comment. */
         .env("CORPUS_OBJECT_MODE", "any")
+        .env("CORPUS_OBSERVE", if observe { "1" } else { "0" })
         /* The tree's modality, read from the file rather than the
          * setting.  The corpus needs it to know whether an ETag is a
          * digest it can validate against the body or a file-instance
@@ -1045,11 +1140,31 @@ fn capture(env: &Env) -> Result<(), String> {
              asserts -- so no artifacts means no axis got as far as writing\n  \
              one.  Read {} from the top:  the first failure is the real one.",
             dir.display(),
-            env.capture_log().display()
+            env.capture_log_for(label).display()
         ));
     }
 
     println!();
+    /* And the contract.  Before the artifacts are reported, because a
+     * capture that changed the tree has described something that no
+     * longer exists. */
+    if let Some(before) = before {
+        let after = tree_fingerprint(&env.tree());
+        if after != before {
+            let added: Vec<_> = after.iter().filter(|l| !before.contains(l))
+                                     .take(8).collect();
+            return Err(format!(
+                "the observing capture changed the tree it was describing:  \
+                 {} paths before, {} after.\n  {}\n  \
+                 Something wrote through an unguarded call;  every mutating \
+                 call in an axis has to be behind `observing()`.",
+                before.len(), after.len(),
+                added.iter().map(|l| l.split('\t').next().unwrap_or(""))
+                     .collect::<Vec<_>>().join("\n  ")));
+        }
+        println!("capture  the tree is unchanged ({} paths)", before.len());
+    }
+
     println!("capture  {} artifacts in {}", artifacts.len(), dir.display());
     let mut facts = 0usize;
     for (name, n) in &artifacts {
@@ -1065,7 +1180,7 @@ fn capture(env: &Env) -> Result<(), String> {
         println!();
         println!("capture  the corpus exited {st}:  one or more axes disagreed with");
         println!("         NooBaa.  That is the finding -- the artifacts above");
-        println!("         are complete either way.  {}", env.capture_log().display());
+        println!("         are complete either way.  {}", env.capture_log_for(label).display());
     }
     Ok(())
 }
@@ -1089,8 +1204,8 @@ fn capture(env: &Env) -> Result<(), String> {
 /// an axis reaching for a second identity against NooBaa should
 /// fail rather than silently act as the first.  Each placeholder names
 /// its own section so the failure says which one was asked for.
-fn write_capture_conf(env: &Env) -> Result<PathBuf, String> {
-    let p = env.capture_conf();
+fn write_capture_conf(env: &Env, label: &str) -> Result<PathBuf, String> {
+    let p = env.capture_conf_for(label);
 
     /* 20 characters, the shape an S3 access key has, so a failure
      * reads as "this identity does not exist" rather than as a
@@ -1148,6 +1263,12 @@ fn write_capture_conf(env: &Env) -> Result<PathBuf, String> {
          # No storage_classes:  NooBaa has no placement to configure,\n\
          # and the storage-class axis falls back to a name that is valid S3\n\
          # but not STANDARD when nothing is named here.\n\
+         # The tree's modality reaches the suite here, not only RGW.\n\
+         # With MD5 off an object's ETag is a token for the file\n\
+         # instance, so the corpus must compare its own body digest\n\
+         # against the *kind* of value reported rather than against the\n\
+         # value -- which is what `non_md5_etag` selects.\n\
+         non_md5_etag = {non_md5}\n\
          \n\
          {alt}\n\
          {tenant}\n\
@@ -1155,8 +1276,18 @@ fn write_capture_conf(env: &Env) -> Result<PathBuf, String> {
          {iam_root}\n\
          {iam_alt_root}",
         tree = env.tree().display(),
-        port = env.port,
+        /* The side decides the endpoint and nothing else.  The
+         * credentials are deliberately the same:  the buckets in the
+         * tree are owned by NooBaa's accounts, and adoption imports
+         * those accounts *with their keys* -- so the corpus reaching
+         * RGW with the key NooBaa used is the import working. */
+        port = if label == "rgw" { env.rgw_port } else { env.port },
         account = env.account,
+        non_md5 = if tree_modality(env).as_deref() == Some("md5-on") {
+            "False"
+        } else {
+            "True"
+        },
         ak = env.access_key,
         sk = env.secret_key,
         alt = unused("s3 alt", "alt"),

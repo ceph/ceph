@@ -195,14 +195,20 @@ async fn corpus_coverage_multipart() {
      * completion path wrote into the cache.  Two defects lived in that
      * gap.  The sentinel object is here only to give the first listing
      * something to find. */
-    client
-        .put_object()
-        .bucket(&b)
-        .key("m-warm-sentinel")
-        .body(ByteStream::from(b"warm".to_vec()))
-        .send()
-        .await
-        .expect("sentinel put");
+    if !crate::generate::observing() {
+        client
+            .put_object()
+            .bucket(&b)
+            .key("m-warm-sentinel")
+            .body(ByteStream::from(b"warm".to_vec()))
+            .send()
+            .await
+            .expect("sentinel put");
+    }
+    /* The warming listing itself is a read, so an observing pass still
+     * makes it -- the cache is warmed by the first listing either way,
+     * and the sentinel exists only to give that listing something to
+     * find.  It is already in the tree by then. */
     let warm = client
         .list_objects_v2()
         .bucket(&b)
