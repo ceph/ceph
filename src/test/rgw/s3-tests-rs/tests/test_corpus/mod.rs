@@ -47,6 +47,7 @@ mod inventory;
 mod buckets;
 mod copy;
 mod generate;
+mod integrity;
 mod multipart;
 mod objects;
 mod storage;

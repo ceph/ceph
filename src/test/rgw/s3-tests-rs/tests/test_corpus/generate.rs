@@ -68,6 +68,11 @@ async fn corpus_coverage_keys() {
 
     let mut written: Vec<String> = Vec::new();
     let mut refused = Vec::new();
+    /* What was written, so what is read back can be compared to it.
+     * The bodies are derived from the class, so this is knowledge the
+     * axis already has rather than state it has to keep. */
+    let mut wrote_digest: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
 
     for class in KeyClass::COVERAGE {
         let key = class.key();
@@ -83,6 +88,10 @@ async fn corpus_coverage_keys() {
         match put {
             Ok(_) => {
                 written.push(key.clone());
+                wrote_digest.insert(
+                    key.clone(),
+                    crate::integrity::md5_hex(body.as_bytes()),
+                );
                 m.object(&key, "class", &format!("{class:?}"));
                 m.object(&key, "rationale", class.rationale());
             }
@@ -108,6 +117,9 @@ async fn corpus_coverage_keys() {
 
     /* What S3 says about what landed */
     let mut listed: Vec<String> = Vec::new();
+    /* Kept rather than only recorded:  the integrity check needs the
+     * ETag the gateway reported for the key it reported it for. */
+    let mut reported: Vec<(String, String)> = Vec::new();
     let mut token: Option<String> = None;
     loop {
         let mut req = client.list_objects_v2().bucket(&b).max_keys(1000);
@@ -124,6 +136,7 @@ async fn corpus_coverage_keys() {
             }
             if let Some(e) = o.e_tag() {
                 m.object(key, "etag", e);
+                reported.push((key.to_string(), e.to_string()));
             }
         }
         for p in page.common_prefixes() {
@@ -138,6 +151,25 @@ async fn corpus_coverage_keys() {
         }
     }
 
+    /* Does the ETag describe the bytes?  One GET per listed key, which
+     * is the only read of an object's content anywhere in the corpus.
+     * Recorded into the manifest before it is rendered, and the
+     * failures folded into the axis's own assertion below. */
+    m.bucket(&b, "etag-regime", crate::integrity::regime());
+    let mut integrity: Vec<String> = Vec::new();
+    for (key, etag) in &reported {
+        crate::integrity::check_body_digest(
+            &client,
+            &b,
+            key,
+            crate::integrity::EtagCheck::Plain(Some(etag)),
+            wrote_digest.get(key.as_str()).map(String::as_str),
+            &mut m,
+            &mut integrity,
+        )
+        .await;
+    }
+
     let dir = out_dir();
     std::fs::create_dir_all(&dir).expect("manifest directory");
     let path = dir.join(format!("{tier}-keys.manifest"));
@@ -149,6 +181,12 @@ async fn corpus_coverage_keys() {
         mode_problems.is_empty(),
         "an object on disk does not carry the published mode:\n  {}",
         mode_problems.join("\n  ")
+    );
+
+    assert!(
+        integrity.is_empty(),
+        "the reported ETag does not describe the object's bytes:\n  {}",
+        integrity.join("\n  ")
     );
 
     eprintln!(

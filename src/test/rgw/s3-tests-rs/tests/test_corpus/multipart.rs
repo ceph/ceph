@@ -34,12 +34,20 @@ use crate::shapes::{PartCount, PartPattern, UploadState, MPU_COVERAGE};
 /// to halve it and stay legal.
 const BASE_PART: usize = 64;
 
+/// What every part is filled with.  Named because the integrity check
+/// reproduces the part bodies from it.
+const FILL: u8 = b'm';
+
 struct Upload {
     key: String,
     parts: usize,
     total: usize,
     state: UploadState,
     upload_id: String,
+    /// the part layout, kept so the composite ETag can be computed
+    /// from the bodies this axis wrote rather than from what the
+    /// gateway reported for them
+    sizes: Vec<usize>,
 }
 
 /// Create, upload every part, and leave the upload in `state`.
@@ -81,7 +89,7 @@ async fn stage_one(
             .key(&key)
             .upload_id(&upload_id)
             .part_number(n)
-            .body(ByteStream::from(vec![b'm'; *sz]))
+            .body(ByteStream::from(vec![FILL; *sz]))
             .send()
             .await
             .expect("upload_part");
@@ -122,7 +130,7 @@ async fn stage_one(
         UploadState::InFlight => {}
     }
 
-    Upload { key, parts: pc.count(), total, state: st, upload_id }
+    Upload { key, parts: pc.count(), total, state: st, upload_id, sizes }
 }
 
 /// What `ListParts` says about an upload still in flight.  A completed
@@ -239,6 +247,32 @@ async fn corpus_coverage_multipart() {
         seen.insert(k, (o.size(), o.e_tag().map(String::from), owner));
     }
 
+    /* The assembled bytes, which the composite ETag does not cover:
+     * that ETag agrees with the *part* digests, so an assembly which
+     * took the right parts in the wrong order -- or dropped one and
+     * padded to length -- can still carry the expected value.  Every
+     * part is the same fill, so a completed object should read back as
+     * `total` bytes of it.  No ETag is involved, so this holds in
+     * either regime.
+     *
+     * Before the manifest is rendered, because it records facts. */
+    let mut body_problems: Vec<String> = Vec::new();
+    for u in &uploads {
+        if !matches!(u.state, UploadState::Completed) {
+            continue;
+        }
+        crate::integrity::check_body_digest(
+            &client,
+            &b,
+            &u.key,
+            crate::integrity::EtagCheck::Composite,
+            Some(&crate::integrity::md5_hex(&vec![FILL; u.total])),
+            &mut m,
+            &mut body_problems,
+        )
+        .await;
+    }
+
     let dir = out_dir();
     std::fs::create_dir_all(&dir).expect("manifest directory");
     let path = dir.join(format!("{tier}-mpu.manifest"));
@@ -259,6 +293,7 @@ async fn corpus_coverage_multipart() {
     /* Reference-free properties.  Each holds of any S3 implementation
      * and none needs a second gateway to compare against. */
     let mut problems = mode_problems;
+    problems.extend(body_problems);
 
     for u in &uploads {
         match u.state {
@@ -298,6 +333,28 @@ async fn corpus_coverage_multipart() {
                             u.key, u.parts
                         ));
                     }
+
+                    /* And the whole composite, not only its suffix.
+                     * The corpus chose the part layout and writes a
+                     * known fill, so `hex(MD5(d1||..||dN))-N` is
+                     * computable here -- which is what makes this a
+                     * check on the assembly rather than on the shape
+                     * of the string.  Only in the digest regime:  a
+                     * synthetic ETag has no digest to agree with. */
+                    if crate::integrity::digest_regime() {
+                        let want = crate::integrity::expected_multipart_etag(
+                            &u.sizes, FILL,
+                        );
+                        let got = e.trim_matches('"');
+                        if got != want {
+                            problems.push(format!(
+                                "{:?} reports etag {got:?};  its {} parts of \
+                                 {:?} bytes compose to {want:?}",
+                                u.key, u.parts, u.sizes
+                            ));
+                        }
+                    }
+
                 }
                 if owner.is_empty() || owner == "unknown" {
                     problems.push(format!(
