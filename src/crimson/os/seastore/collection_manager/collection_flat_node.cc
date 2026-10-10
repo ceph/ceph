@@ -3,6 +3,7 @@
 
 #include "include/buffer.h"
 #include "osd/osd_types.h"
+#include "osd/osd_types_fmt.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/collection_manager/collection_flat_node.h"
 
