@@ -1,4 +1,4 @@
-use s3_tests_rs::client::get_iam_root_client;
+use s3_tests_rs::client::{get_iam_alt_root_client, get_iam_root_client};
 use s3_tests_rs::config::get_config;
 
 fn assume_role_policy() -> String {
@@ -414,4 +414,96 @@ async fn test_account_role_policy_managed() {
     /* clean up */
     client.detach_role_policy().role_name(&name).policy_arn(policy1).send().await.unwrap();
     client.delete_role().role_name(&name).send().await.unwrap();
+}
+
+/* A role name belongs to its account, as it does in AWS IAM:  two
+ * accounts may each hold a role of the same name, and each ARN names
+ * its own account.
+ *
+ * The failure this is a control for is name-global scoping -- a
+ * uniqueness check that consults the name without the account.  That
+ * is not hypothetical here:  `store_role(exclusive=true)` originally
+ * checked by role_id, which is minted fresh per CreateRole and so
+ * never matched, and the fix chose between a name-only and a
+ * name-plus-account query.  Nothing pinned the choice until this test.
+ */
+#[tokio::test]
+async fn test_account_role_name_scoped_to_account() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let root = get_iam_root_client();
+    let alt_root = get_iam_alt_root_client();
+    let cfg = get_config();
+    let name = format!("{}SharedRoleName", cfg.iam_name_prefix);
+    let path = &cfg.iam_path_prefix;
+
+    let in_root = root
+        .create_role()
+        .role_name(&name)
+        .path(path)
+        .assume_role_policy_document(assume_role_policy())
+        .send()
+        .await
+        .unwrap();
+
+    /* The same name in a different account must be accepted, not
+     * refused as a duplicate. */
+    let in_alt = alt_root
+        .create_role()
+        .role_name(&name)
+        .path(path)
+        .assume_role_policy_document(assume_role_policy())
+        .send()
+        .await
+        .unwrap();
+
+    let arn_root = in_root.role().unwrap().arn().to_string();
+    let arn_alt = in_alt.role().unwrap().arn().to_string();
+    assert_ne!(arn_root, arn_alt);
+    assert_ne!(
+        in_root.role().unwrap().role_id(),
+        in_alt.role().unwrap().role_id()
+    );
+
+    /* Each ARN names its own account.  Comparing the ARNs to each
+     * other is not enough:  both would differ even if the account
+     * segment were absent and the ids differed. */
+    let acct_of = |arn: &str| -> String {
+        /* arn:aws:iam::<account>:role<path><name> */
+        arn.split(':').nth(4).unwrap_or_default().to_string()
+    };
+    let acct_root = acct_of(&arn_root);
+    let acct_alt = acct_of(&arn_alt);
+    assert!(!acct_root.is_empty(), "no account in ARN {arn_root}");
+    assert_ne!(acct_root, acct_alt);
+
+    /* Listing is account-scoped:  each account sees one, not two. */
+    for (client, want_arn) in [(&root, &arn_root), (&alt_root, &arn_alt)] {
+        let listed = client
+            .list_roles()
+            .path_prefix(path)
+            .send()
+            .await
+            .unwrap();
+        let matching: Vec<_> = listed
+            .roles()
+            .iter()
+            .filter(|r| r.role_name() == name)
+            .collect();
+        assert_eq!(matching.len(), 1);
+        assert_eq!(matching[0].arn(), want_arn);
+    }
+
+    /* A duplicate *within* an account is still refused. */
+    let dup = root
+        .create_role()
+        .role_name(&name)
+        .path(path)
+        .assume_role_policy_document(assume_role_policy())
+        .send()
+        .await;
+    assert!(dup.is_err());
+
+    /* clean up */
+    root.delete_role().role_name(&name).send().await.unwrap();
+    alt_root.delete_role().role_name(&name).send().await.unwrap();
 }
