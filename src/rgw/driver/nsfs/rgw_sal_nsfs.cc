@@ -10464,8 +10464,12 @@ int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
    *
    * `-EROFS` rather than the gate's `-ERR_METHOD_NOT_ALLOWED`:  this
    * is not a refused operation but a write that cannot land on this
-   * tree, and a caller reached from a read path is expected to carry
-   * on without it.  `persist_generated_attrs()` does. */
+   * tree.
+   *
+   * No read path reaches it today.  The one that did --
+   * `generate_etag()`, inherited from posix -- was removed once
+   * `get_obj_attrs()`'s synthesis was found to have superseded it, so
+   * this stands as policy rather than as a fix for a live caller. */
   if (driver->refusing_attribute_writes()) {
     ldpp_dout(dpp, 10) << "nsfs: not writing attributes on " << get_name()
       << ": rgw_nsfs_adoption_mode is serve, so nothing is written to "
@@ -10527,17 +10531,13 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   if (ret < 0)
     return ret;
 
+  /* `get_obj_attrs()` synthesizes an etag for an object that carries
+   * none, so by here one exists.  Checked rather than assumed, because
+   * everything below reports it. */
   bufferlist etag_bl;
   if (!source->get_attr(RGW_ATTR_ETAG, etag_bl)) {
-    /* Sideloaded file.  Generate necessary attributes. Only done once. */
-    int ret = source->generate_attrs(dpp, y);
-    if (ret < 0) {
-	ldpp_dout(dpp, 0) << " ERROR: could not generate attrs for " << source->get_name() << " error: " << cpp_strerror(ret) << dendl;
-	return ret;
-    }
-  }
-
-  if (!source->get_attr(RGW_ATTR_ETAG, etag_bl)) {
+    ldpp_dout(dpp, 0) << "ERROR: " << source->get_name()
+      << " has no etag after get_obj_attrs()" << dendl;
     return -EINVAL;
   }
 
@@ -10649,89 +10649,6 @@ int NSFSObject::NSFSReadOp::read(int64_t ofs, int64_t end, bufferlist& bl,
   }
 
   return source->read(ofs + part_ofs, end + 1, bl, dpp, y);
-}
-
-int NSFSObject::generate_attrs(const DoutPrefixProvider* dpp, optional_yield y)
-{
-  int ret;
-
-  ret = generate_etag(dpp, y);
-  return ret;
-}
-
-int NSFSObject::generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield y)
-{
-  return 0;
-}
-
-int NSFSObject::generate_etag(const DoutPrefixProvider* dpp, optional_yield y)
-{
-  /* rgw_non_md5_etag reaches this path too.  It runs for a sideloaded
-   * file -- one placed in the namespace outside RGW, so carrying no etag
-   * xattr -- which is precisely the case the option is for, and noobaa's
-   * ordinary case.  Reading the object end to end on first access merely
-   * to digest it is the cost being avoided.
-   *
-   * fd -1: write_attrs() persists the map, so the helper need not set the
-   * xattr itself. */
-  if (ent && nsfs_apply_non_md5_etag(dpp, -1, ent->get_stx(), get_attrs(),
-				     xattr_strategy())) {
-    return persist_generated_attrs(dpp, y);
-  }
-
-  int64_t left = get_size();
-  int64_t cur_ofs = 0;
-  MD5 hash;
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-
-  while (left > 0) {
-    bufferlist bl;
-    int len = read(cur_ofs, left, bl, dpp, y);
-    if (len < 0) {
-	ldpp_dout(dpp, 0) << " ERROR: could not read " << get_name() <<
-	  " ofs: " << cur_ofs << " error: " << cpp_strerror(len) << dendl;
-	return len;
-    } else if (len == 0) {
-      /* Done */
-      break;
-    }
-    hash.Update((const unsigned char *)bl.c_str(), bl.length());
-
-    left -= len;
-    cur_ofs += len;
-  }
-
-  hash.Final(m);
-  bufferlist etag_bl;
-  append_bl(etag_bl, CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1, [&](auto iter) {
-    iter = buf_to_hex(m, iter);
-    *iter++ = '\0';
-    return iter;
-  });
-  get_attrs().emplace(std::move(RGW_ATTR_ETAG), std::move(etag_bl));
-  return persist_generated_attrs(dpp, y);
-}
-
-/* Persist what `generate_etag()` computed, and tolerate a tree that
- * will not take it.
- *
- * The attribute is already in the in-memory map either way, so the
- * request is answered with the value it computed;  the write is a
- * cache of that work for the next reader.  In serve mode there is no
- * next write at all, so losing the cache is the whole of the cost and
- * failing the GET would be the wrong trade. */
-int NSFSObject::persist_generated_attrs(const DoutPrefixProvider* dpp,
-					optional_yield y)
-{
-  int ret = write_attrs(dpp, y);
-  if (ret == -EROFS) {
-    ldpp_dout(dpp, 20) << "nsfs: generated attributes for " << get_name()
-      << " are not persisted;  this tree is served read-only" << dendl;
-    return 0;
-  }
-  return ret;
 }
 
 /* Resolved through the bucket's format, so an object in a base bucket

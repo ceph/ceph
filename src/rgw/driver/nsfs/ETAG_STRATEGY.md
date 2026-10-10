@@ -58,12 +58,30 @@ that digests a body now honours it:
 | `RGWPostObj::execute()` | browser/form POST upload — all backends |
 | `RGWBulkUploadOp::handle_file()` | Swift bulk upload — all backends |
 | `NSFSFSIOObject::publish()` | every NFS/FSIO write, at last-writer close |
-| `NSFSObject::generate_etag()` | first read of a file with no ETag xattr |
 
-The nsfs pair are the ones a request never passes through, and
-`publish()` is the largest single win available: it `pread`s the whole
-shadow file back through a 64 KiB buffer purely to digest it, a second
-full pass over bytes the client has just written.
+`publish()` is the one a request never passes through, and it is the
+largest single win available: it `pread`s the whole shadow file back
+through a 64 KiB buffer purely to digest it, a second full pass over
+bytes the client has just written.
+
+**`NSFSObject::generate_etag()` was listed here and is gone**
+(2026-10-10).  It came from posix in the initial scaffolding
+(`3eef4f35509`) to handle a first read of a file carrying no ETag
+xattr, and `1497f554606` -- sideloading support -- did that job earlier
+and differently: `get_obj_attrs()` synthesizes the token from the
+`statx` into the object's in-memory attributes, so by the time
+`NSFSReadOp::prepare()` tested for the attribute one always existed.
+Either `get_obj_attrs()` succeeded, having filled it in, or
+`read_attrs` failed and the error propagated out of `prepare()` first.
+`generate_attrs()` and `generate_mp_etag()` went with it.
+
+So **nsfs never hashes an object on a read.**  A sideloaded object is
+answered with the `mtime-ino` token, computed per read and persisted
+nowhere, whatever `rgw_non_md5_etag` says -- that option governs what a
+*writer* digests, and an object this gateway did not write has no
+digest to report.  Proving that adoption preserved contents is the
+suite's job rather than the ETag's: `tests/test_corpus/integrity.rs`
+digests the body it GETs and records `body-md5` as its own fact.
 
 Deliberately unchanged: `RGWGetObj`'s DLO/SLO manifest hashing and the
 Swift SLO manifest sum digest segment *ETag strings*, not object bodies.

@@ -2062,13 +2062,7 @@ public:
 
 protected:
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
-  int generate_attrs(const DoutPrefixProvider* dpp, optional_yield y);
 private:
-  int generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield y);
-  int generate_etag(const DoutPrefixProvider* dpp, optional_yield y);
-  /* write what generate_etag() computed, tolerating a read-only tree */
-  int persist_generated_attrs(const DoutPrefixProvider* dpp,
-			      optional_yield y);
   int get_cur_version(const DoutPrefixProvider *dpp, rgw_obj_key &key);
 };
 
