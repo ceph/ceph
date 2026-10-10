@@ -67,8 +67,14 @@ struct Env {
     /// the s3-tests-rs checkout the corpus lives in.  A sibling of
     /// this driver, so it needs no setting in the normal case
     suite: PathBuf,
-    /// which corpus tier `capture` runs
     tier: String,
+    /// whether NooBaa computes MD5 ETags.  **A property of the tree,
+    /// fixed when `config` writes it** -- NooBaa sets
+    /// `user.content_md5` at PUT time, so a tree written with MD5 off
+    /// cannot be re-captured with it on.  `config` records it in
+    /// `work/modality` and the later steps read that rather than this,
+    /// so changing the setting cannot relabel an existing tree.
+    md5: bool,
 }
 
 /// Every setting, from `adoption.conf` and then the environment.
@@ -166,6 +172,8 @@ impl Env {
             )
             .into(),
             tier: get("tier", "coverage"),
+            md5: matches!(get("md5", "false").to_ascii_lowercase().as_str(),
+                          "1" | "on" | "true" | "yes"),
         })
     }
 
@@ -181,6 +189,16 @@ impl Env {
     /// The NC configuration directory -- the config store the
     /// account and bucket records live in.  Separate from the data
     /// root:  the records describe the tree, they are not in it.
+    /// Where the tree's modality is written.  See `Env::md5`.
+    fn modality_file(&self) -> PathBuf {
+        self.work.join("modality")
+    }
+
+    /// What the setting asks for, as a label.
+    fn modality(&self) -> &'static str {
+        if self.md5 { "md5-on" } else { "md5-off" }
+    }
+
     fn config_root(&self) -> PathBuf {
         self.work.join("config")
     }
@@ -302,6 +320,7 @@ fn list() {
         ("bucket", "the bucket `config` creates;  default adoption"),
         ("suite", "the s3-tests-rs checkout;  defaults to a sibling of this driver"),
         ("tier", "which corpus tier `capture` runs"),
+        ("md5", "true makes NooBaa compute MD5 ETags;  fixed per tree"),
     ];
     for (k, note) in shown {
         match s.get(k) {
@@ -599,6 +618,36 @@ fn native(env: &Env) -> Result<(), String> {
 /// NooBaa's CLI fails a duplicate `add`, which is correct of it and not
 /// what this driver wants.
 fn config(env: &Env) -> Result<(), String> {
+    /* The modality check, before this step creates anything.
+     *
+     * Refusing rather than overwriting:  the modality is fixed in the
+     * objects themselves, so a tree written md5-off and relabelled
+     * md5-on would claim digests that no object carries, and every
+     * later comparison would be against the label rather than the
+     * tree.
+     * Two modalities are two trees. */
+    let recorded = env.modality_file();
+    match std::fs::read_to_string(&recorded) {
+        Ok(prev) if prev.trim() != env.modality() => {
+            return Err(format!(
+                concat!(
+                    "this tree was written {}, and `md5` now asks for {}.\n",
+                    "  A modality is fixed when the objects are written, so\n",
+                    "  the two are two trees.  Point `work` at a different\n",
+                    "  directory, or remove {} to start over."
+                ),
+                prev.trim(),
+                env.modality(),
+                env.work.display()
+            ));
+        }
+        _ => {
+            std::fs::write(&recorded, format!("{}\n", env.modality()))
+                .map_err(|e| format!("cannot write {}: {e}", recorded.display()))?;
+        }
+    }
+    println!("         modality    {}", env.modality());
+
     let wt = env.worktree();
     if !wt.join("node_modules").exists() {
         return Err("no dependency tree;  run `build` first".into());
@@ -639,15 +688,27 @@ fn config(env: &Env) -> Result<(), String> {
     } else {
         std::fs::create_dir_all(&bucket_path)
             .map_err(|e| format!("cannot create {}: {e}", bucket_path.display()))?;
-        nsfs_cli(
-            env,
-            &[
-                "bucket", "add",
-                "--name", &env.bucket,
-                "--owner", &env.account,
-                "--path", &bucket_path.display().to_string(),
-            ],
-        )?;
+        /* `--force_md5_etag` is their per-bucket flag, and it is the
+         * only one of the three a fixture can reach:  the global
+         * `NSFS_CALCULATE_MD5` would need a config.json override and
+         * the account flag is not in the account `add` flag set.
+         *
+         * With it off -- their default -- an object carries no
+         * `user.content_md5` and their ETag is a file-instance token
+         * that witnesses no bytes.  With it on the ETag is a digest,
+         * which is the only modality in which the suite has anything
+         * to validate.  DECISIONS.md 2026-10-09. */
+        let bp = bucket_path.display().to_string();
+        let mut add: Vec<&str> = vec![
+            "bucket", "add",
+            "--name", &env.bucket,
+            "--owner", &env.account,
+            "--path", &bp,
+        ];
+        if env.md5 {
+            add.extend_from_slice(&["--force_md5_etag", "true"]);
+        }
+        nsfs_cli(env, &add)?;
         println!("         bucket {:?} created at {}", env.bucket, bucket_path.display());
     }
 
@@ -664,6 +725,7 @@ fn config(env: &Env) -> Result<(), String> {
      * HTTP rather than a certificate because the corpus talks to this
      * with the Rust SDK;  a self-signed cert is a problem worth not
      * having when nothing here leaves the host. */
+
     let cfg = env.config_root().join("config.json");
     std::fs::write(&cfg, "{\n    \"ALLOW_HTTP\": true\n}\n")
         .map_err(|e| format!("cannot write {}: {e}", cfg.display()))?;
@@ -676,17 +738,30 @@ fn config(env: &Env) -> Result<(), String> {
         &creds,
         format!(
             "# written by standup.rs config\nendpoint=http://127.0.0.1:{}\n\
-             access_key={}\nsecret_key={}\nbucket={}\ntree={}\n",
+             access_key={}\nsecret_key={}\nbucket={}\ntree={}\nmodality={}\n",
             env.port,
             env.access_key,
             env.secret_key,
             env.bucket,
-            env.tree().display()
+            env.tree().display(),
+            env.modality()
         ),
     )
     .map_err(|e| format!("cannot write {}: {e}", creds.display()))?;
     println!("         wrote {}", creds.display());
     Ok(())
+}
+
+/// The modality the tree was actually written with.
+///
+/// The later steps read this rather than `Env::md5`, so a setting
+/// changed after a tree exists cannot relabel it.  `None` means
+/// `config` has not run here.
+fn tree_modality(env: &Env) -> Option<String> {
+    std::fs::read_to_string(env.modality_file())
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 /// Start the NooBaa S3 endpoint over the data root.
@@ -934,6 +1009,12 @@ fn capture(env: &Env) -> Result<(), String> {
         .env("CORPUS_TIER", &env.tier)
         /* NooBaa publishes its own modes.  See the doc comment. */
         .env("CORPUS_OBJECT_MODE", "any")
+        /* The tree's modality, read from the file rather than the
+         * setting.  The corpus needs it to know whether an ETag is a
+         * digest it can validate against the body or a file-instance
+         * token it can only recognize. */
+        .env("CORPUS_MODALITY",
+             tree_modality(env).unwrap_or_else(|| "md5-off".into()))
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
@@ -1142,6 +1223,23 @@ fn stop(env: &Env) -> Result<(), String> {
 ///
 /// `rgw-vstart.sh` must be run from the build directory, which is why
 /// `ceph_build` is a setting rather than a guess.
+/// The ETag options RGW is started with, matched to the tree.
+///
+/// On an md5-off tree no object carries `user.content_md5`, so every
+/// one of them looks sideloaded to `NSFSReadOp::prepare()` and the
+/// first GET reads it end to end to compute a digest -- RGW's default
+/// is to compute MD5.  `rgw_non_md5_etag=true` makes that the cheap
+/// file-instance token instead, which is the regime the tree is in.
+///
+/// On an md5-on tree the default is right:  both gateways digest, and
+/// the suite has something to validate.
+fn rgw_etag_opts(env: &Env) -> Vec<String> {
+    match tree_modality(env).as_deref() {
+        Some("md5-on") => vec![],
+        _ => vec!["-o".into(), "rgw_non_md5_etag=true".into()],
+    }
+}
+
 fn adopt(env: &Env) -> Result<(), String> {
     if let Some(pid) = running(env) {
         return Err(format!(
@@ -1182,8 +1280,11 @@ fn adopt(env: &Env) -> Result<(), String> {
         .unwrap_or(0);
     println!("adopt    tree {} ({buckets} entries)", tree.display());
     println!("         rgw-vstart.sh --store nsfs --data-root {} \
-              --noobaa-config-root {} --adoption-mode adopt --with-lifecycle",
-             env.data.display(), env.config_root().display());
+              --noobaa-config-root {} --adoption-mode adopt --with-lifecycle {}",
+             env.data.display(), env.config_root().display(),
+             rgw_etag_opts(env).join(" "));
+    println!("         modality {}",
+             tree_modality(env).unwrap_or_else(|| "unwritten".into()));
 
     let st = Command::new("bash")
         .arg(script.display().to_string())
@@ -1204,6 +1305,7 @@ fn adopt(env: &Env) -> Result<(), String> {
             "adopt",
             "--with-lifecycle",
         ])
+        .args(rgw_etag_opts(env))
         .current_dir(build)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
