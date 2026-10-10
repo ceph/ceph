@@ -147,6 +147,65 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
   execute_connecting();
 }
 
+entity_addrvec_t ProtocolV2::client_ident_addrs() const
+{
+  auto addrs = messenger.get_myaddrs();
+  if (!outgoing_io_shard) {
+    return addrs;
+  }
+  // ip/port stay the bind address. Bits 24-31 of the nonce are the
+  // sending reactor, so the peer keeps one session per reactor instead
+  // of treating each new one as a reconnect of the same peer address.
+  const uint32_t shard = static_cast<uint32_t>(*outgoing_io_shard);
+  ceph_assert(shard < 256);
+  for (auto& addr : addrs.v) {
+    const uint32_t base = addr.get_nonce();
+    uint32_t stamped = (base & 0x00ffffffu) | (shard << 24);
+    if (stamped == base) {
+      stamped = base ^ 0x00008000u;
+    }
+    addr.set_nonce(stamped);
+  }
+  return addrs;
+}
+
+seastar::future<SocketFRef> ProtocolV2::connect_socket()
+{
+  const auto addr = conn.peer_addr;
+  auto do_connect = [addr] {
+    return Socket::connect(addr).then([](SocketRef sock) {
+      return seastar::make_foreign(std::move(sock));
+    });
+  };
+  if (outgoing_io_shard &&
+      *outgoing_io_shard != seastar::this_shard_id()) {
+    return seastar::smp::submit_to(*outgoing_io_shard, std::move(do_connect));
+  }
+  return do_connect();
+}
+
+void ProtocolV2::satisfy_ready_wait()
+{
+  if (!pr_ready.available()) {
+    pr_ready.set_value();
+  }
+}
+
+void ProtocolV2::reset_ready_wait()
+{
+  if (pr_ready.available()) {
+    pr_ready = seastar::shared_promise<>();
+  }
+}
+
+void ProtocolV2::fail_ready_wait()
+{
+  if (!pr_ready.available()) {
+    pr_ready.set_exception(std::make_exception_ptr(std::system_error(
+        std::make_error_code(std::errc::connection_reset))));
+  }
+}
+
 void ProtocolV2::start_accept(SocketFRef&& new_socket,
                               const entity_addr_t& _peer_addr)
 {
@@ -194,6 +253,7 @@ void ProtocolV2::trigger_state_phase1(state_t new_state)
     ceph_assert_always(!pr_exit_io.has_value());
     need_exit_io = true;
     pr_exit_io = seastar::shared_promise<>();
+    reset_ready_wait();
   }
 
   if (new_state == state_t::STANDBY && !conn.policy.server) {
@@ -282,6 +342,8 @@ void ProtocolV2::fault(
   const char *e_what;
   try {
     std::rethrow_exception(eptr);
+  } catch (const std::system_error& e) {
+    e_what = e.what();
   } catch (std::exception &e) {
     e_what = e.what();
   }
@@ -347,6 +409,12 @@ void ProtocolV2::fault(
                     where,
                     io_states,
                     e_what);
+    }
+    // Nothing is queued, so STANDBY will not reconnect. Any fault on
+    // this path, not only a refused connect, must wake connect_on_shard()
+    // or that waiter blocks forever.
+    if (!conn.policy.server) {
+      fail_ready_wait();
     }
     execute_standby();
   } else if (state == state_t::CONNECTING ||
@@ -653,8 +721,9 @@ ProtocolV2::client_connect()
     flags |= CEPH_MSG_CONNECT_LOSSY;
   }
 
+  auto my_addrs = client_ident_addrs();
   auto client_ident = ClientIdentFrame::Encode(
-      messenger.get_myaddrs(),
+      my_addrs,
       conn.target_addr,
       messenger.get_myname().num(),
       global_seq,
@@ -665,7 +734,7 @@ ProtocolV2::client_connect()
   logger().debug("{} WRITE ClientIdentFrame: addrs={}, target={}, gid={},"
                  " gs={}, features_supported=0x{:x}, features_required=0x{:x},"
                  " flags=0x{:x}, client_cookie=0x{:x}",
-                 conn, messenger.get_myaddrs(), conn.target_addr,
+                 conn, my_addrs, conn.target_addr,
                  messenger.get_myname().num(), global_seq,
                  conn.policy.features_supported,
                  conn.policy.features_required | msgr2_required,
@@ -780,7 +849,8 @@ seastar::future<ProtocolV2::next_step_t>
 ProtocolV2::client_reconnect()
 {
   // send_reconnect() logic
-  auto reconnect = ReconnectFrame::Encode(messenger.get_myaddrs(),
+  auto my_addrs = client_ident_addrs();
+  auto reconnect = ReconnectFrame::Encode(my_addrs,
                                           client_cookie,
                                           server_cookie,
                                           global_seq,
@@ -788,7 +858,7 @@ ProtocolV2::client_reconnect()
                                           io_states.in_seq);
   logger().debug("{} WRITE ReconnectFrame: addrs={}, client_cookie=0x{:x},"
                  " server_cookie=0x{:x}, gs={}, cs={}, in_seq={}",
-                 conn, messenger.get_myaddrs(),
+                 conn, my_addrs,
                  client_cookie, server_cookie,
                  global_seq, connect_seq, io_states.in_seq);
   return frame_assembler->write_flush_frame(reconnect).then([this] {
@@ -920,17 +990,20 @@ void ProtocolV2::execute_connecting()
                        conn, get_state_name(state));
         abort_protocol();
       }
-      return Socket::connect(conn.peer_addr);
-    }).then([this](SocketRef _new_socket) {
+      return connect_socket();
+    }).then([this](SocketFRef new_socket) {
       logger().debug("{} socket connected", conn);
       if (unlikely(state != state_t::CONNECTING)) {
         logger().debug("{} triggered {} during Socket::connect()",
                        conn, get_state_name(state));
-        return _new_socket->close().then([sock=std::move(_new_socket)] {
+        auto owner = new_socket.get_owner_shard();
+        return seastar::smp::submit_to(owner,
+            [sock=std::move(new_socket)]() mutable {
+          return sock->close();
+        }).then([] {
           abort_protocol();
         });
       }
-      SocketFRef new_socket = seastar::make_foreign(std::move(_new_socket));
       if (!has_socket) {
         frame_assembler->set_socket(std::move(new_socket));
         has_socket = true;
@@ -1029,6 +1102,7 @@ void ProtocolV2::execute_connecting()
                            conn, get_state_name(state));
             abort_protocol();
           }
+          satisfy_ready_wait();
           execute_ready();
         });
        }
@@ -2300,6 +2374,7 @@ void ProtocolV2::do_close(
   }
 
   trigger_state_phase1(state_t::CLOSING);
+  fail_ready_wait();
   gate.dispatch_in_background(
       "close_io", conn, [this, is_dispatch_reset, is_replace] {
     // this is preemptive

@@ -71,6 +71,21 @@ public:
   ConnectionRef connect(const entity_addr_t& peer_addr,
                         const entity_name_t& peer_name) override;
 
+  // Outbound session whose socket and IOHandler live on io_shard.
+  // Resolves when that session is READY. Must run on the messenger shard.
+  seastar::future<ConnectionRef> connect_on_shard(
+      const entity_addr_t& peer_addr,
+      const entity_name_t& peer_name,
+      seastar::shard_id io_shard);
+
+  // Same session as connect_on_shard(), but does not wait for READY.
+  // A send on the returned connection stays in the lossless out queue
+  // and wakes a standby session. Must run on the messenger shard.
+  ConnectionRef open_on_shard(
+      const entity_addr_t& peer_addr,
+      const entity_name_t& peer_name,
+      seastar::shard_id io_shard);
+
   bool owns_connection(Connection &conn) const override {
     assert(seastar::this_shard_id() == sid);
     return this == &static_cast<SocketConnection&>(conn).get_messenger();
@@ -153,22 +168,17 @@ public:
   Interceptor *interceptor = nullptr;
 #endif
 
-  seastar::future<> mark_down(const entity_addr_t& a) final {
-    auto conn = lookup_conn(a);
-    if (conn) {
-      return seastar::smp::submit_to(
-	conn->get_shard_id(),
-	[conn=conn.get()] {
-	conn->mark_down();
-	return seastar::now();
-      }).then([conn] { return seastar::now(); });
-    }
-    return seastar::now();
-  }
+  seastar::future<> mark_down(const entity_addr_t& a) final;
 private:
   seastar::future<> accept(SocketFRef &&, const entity_addr_t &);
 
   listen_ertr::future<> do_listen(const entity_addrvec_t& addr);
+
+  // Existing pinned session, or a new one with start_connect() already called.
+  SocketConnectionRef find_or_create_on_shard(
+      const entity_addr_t& peer_addr,
+      const entity_name_t& peer_name,
+      seastar::shard_id io_shard);
 
   /// try to bind to the first unused port of given address
   bind_ertr::future<> try_bind(const entity_addrvec_t& addr,
@@ -187,7 +197,10 @@ private:
 
   ShardedServerSocket *listener = nullptr;
   ChainedDispatchers dispatchers;
-  std::map<entity_addr_t, SocketConnectionRef> connections;
+  // One peer address can own several outbound sessions, one per local
+  // reactor. Accepted sessions are keyed by the peer's (possibly
+  // shard-stamped) identity and normally have a single entry.
+  std::map<entity_addr_t, std::vector<SocketConnectionRef>> connections;
   std::set<SocketConnectionRef> accepting_conns;
   std::vector<SocketConnectionRef> closing_conns;
   ceph::net::PolicySet<Throttle> policy_set;
