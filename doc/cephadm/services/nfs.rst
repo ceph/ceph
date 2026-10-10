@@ -200,6 +200,11 @@ These values are converted to bytes when written into a ``CEPH`` block in
 ``ganesha.conf`` (as ``client_oc``, ``client_oc_size``, and
 ``client_oc_max_dirty``) when object caching is enabled.
 
+Per-component memory-statistics capture is enabled by default. To disable it,
+set ``mem_stats_disable: true`` in the service spec. This writes
+``Mem_Stats_Disable = true;`` into the ``NFS_CORE_PARAM`` block of
+``ganesha.conf`` and triggers a full NFS daemon restart.
+
 .. _cephadm-nfs-colocation:
 
 NFS Daemon Colocation
