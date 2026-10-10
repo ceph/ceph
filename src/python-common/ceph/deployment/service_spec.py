@@ -1439,6 +1439,8 @@ class NFSServiceSpec(ServiceSpec):
                  enable_cephfs_client_log: bool = False,
                  cephfs_client_log_level: Optional[int] = None,
                  cephfs_client_log_dir: Optional[str] = None,
+                 log_match_policy: Optional[str] = None,
+                 log_conditional: Optional[Dict[str, Any]] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1491,6 +1493,10 @@ class NFSServiceSpec(ServiceSpec):
         self.tls_ktls = tls_ktls
         self.tls_debug = tls_debug
         self.tls_min_version = tls_min_version
+
+        # Conditional logging fields
+        self.log_match_policy = log_match_policy
+        self.log_conditional = log_conditional
 
     def get_colocation_port_fields(self) -> List[str]:
         """Return port fields for colocation; include rdma_port when RDMA is enabled."""
@@ -1633,6 +1639,35 @@ class NFSServiceSpec(ServiceSpec):
                 verify_non_negative_int(
                     self.cephfs_client_log_level, "cephfs_client_log_level")
             verify_dir_path(self.cephfs_client_log_dir, "cephfs_client_log_dir")
+
+        # Validate conditional logging fields
+        _valid_log_match_policies = {'MATCH_ANY', 'ANY', 'MATCH_ALL', 'ALL'}
+        _valid_log_levels = {
+            'NULL', 'FATAL', 'MAJ', 'CRIT', 'WARN', 'EVENT',
+            'INFO', 'DEBUG', 'MID_DEBUG', 'M_DBG', 'FULL_DEBUG', 'F_DBG',
+        }
+        if self.log_match_policy is not None:
+            if self.log_match_policy not in _valid_log_match_policies:
+                raise SpecValidationError(
+                    f'Invalid NFS spec: log_match_policy "{self.log_match_policy}" is not valid. '
+                    f'Valid values: {", ".join(sorted(_valid_log_match_policies))}.'
+                )
+        if self.log_conditional is not None:
+            for key, val in self.log_conditional.items():
+                if key in ('clients', 'exports'):
+                    continue
+                if not isinstance(val, str) or val not in _valid_log_levels:
+                    raise SpecValidationError(
+                        f'Invalid NFS spec: log_conditional component "{key}" has invalid '
+                        f'level "{val}". Valid levels: {", ".join(sorted(_valid_log_levels))}.'
+                    )
+        if (self.log_match_policy or '') in ('MATCH_ALL', 'ALL'):
+            conditional = self.log_conditional or {}
+            if not conditional.get('clients') or not conditional.get('exports'):
+                raise SpecValidationError(
+                    'Invalid NFS spec: log_match_policy MATCH_ALL requires both non-empty '
+                    '"clients" and "exports" in log_conditional.'
+                )
 
         # TLS certificate validation
         if self.ssl and not self.certificate_source:

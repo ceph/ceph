@@ -846,6 +846,79 @@ def test_nfs_spec_cephfs_client_log_dir_rejects_root_aliases(log_dir):
         ).validate()
 
 
+@pytest.mark.parametrize("log_conditional", [
+    None,                                               # no conditional at all
+    {'exports': [101], 'ALL': 'DEBUG'},                 # clients key missing
+    {'clients': ['192.0.2.25'], 'ALL': 'DEBUG'},        # exports key missing
+    {'clients': [], 'exports': [101], 'ALL': 'DEBUG'},  # clients key present but empty list
+    {'clients': ['192.0.2.25'], 'exports': [], 'ALL': 'DEBUG'},  # exports key present but empty list
+])
+def test_nfs_spec_log_match_all_rejected(log_conditional):
+    """MATCH_ALL is rejected whenever clients or exports are missing or empty."""
+    with pytest.raises(SpecValidationError, match='MATCH_ALL'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            log_match_policy='MATCH_ALL',
+            log_conditional=log_conditional,
+        ).validate()
+
+
+def test_nfs_spec_log_match_any_clients_only():
+    """MATCH_ANY with only clients in conditional is valid (contrast: MATCH_ALL would reject this)."""
+    NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        log_match_policy='MATCH_ANY',
+        log_conditional={'clients': ['192.0.2.25'], 'ALL': 'DEBUG'},
+    ).validate()
+
+
+@pytest.mark.parametrize("policy", ['BOGUS_POLICY', 'match_any', 'MATCH_NONE'])
+def test_nfs_spec_log_invalid_policy(policy):
+    """Unrecognised or wrong-case match policy tokens are rejected."""
+    with pytest.raises(SpecValidationError, match='log_match_policy'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            log_match_policy=policy,
+        ).validate()
+
+
+@pytest.mark.parametrize("level", ['SUPER_VERBOSE', 5, 'warn'])
+def test_nfs_spec_log_invalid_level(level):
+    """Invalid log levels (unknown string, wrong case, or non-string) are rejected."""
+    with pytest.raises(SpecValidationError, match='invalid level'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            log_conditional={'NFS4': level},
+        ).validate()
+
+
+def test_nfs_spec_log_from_json_roundtrip():
+    """log_match_policy and log_conditional survive from_json / to_json roundtrip."""
+    data = {
+        'service_type': 'nfs',
+        'service_id': 'mynfs',
+        'placement': {'count': 1},
+        'spec': {
+            'log_match_policy': 'MATCH_ANY',
+            'log_conditional': {
+                'clients': ['192.0.2.25'],
+                'exports': [101],
+                'NFS4': 'DEBUG',
+            },
+        },
+    }
+    spec = NFSServiceSpec.from_json(data)
+    assert spec.log_match_policy == 'MATCH_ANY'
+    assert spec.log_conditional['NFS4'] == 'DEBUG'
+    out = spec.to_json()
+    assert out['spec']['log_match_policy'] == 'MATCH_ANY'
+    assert out['spec']['log_conditional']['NFS4'] == 'DEBUG'
+
+
 def test_repr():
     val = """ServiceSpec.from_json(yaml.safe_load('''service_type: crash
 service_name: crash
