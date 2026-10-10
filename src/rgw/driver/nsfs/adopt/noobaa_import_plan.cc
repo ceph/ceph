@@ -61,6 +61,45 @@ std::string label(const NooBaaIdentity& id)
   return std::string("_id ") + id.id;
 }
 
+/* The fields of a member's identity row that differ from its
+ * account's, by name.
+ *
+ * Every field the account's row carries is compared, because a
+ * member's row no longer exists to hold a different value.
+ * `allow_bypass_governance` is not among them:  it is imported as a
+ * grant on each identity, so a member keeps its own. */
+std::vector<std::string> row_drift(const NooBaaIdentity& account,
+				   const NooBaaIdentity& member)
+{
+  const auto& a = account.posix;
+  const auto& m = member.posix;
+  std::vector<std::string> d;
+  if ((a.kind != m.kind) || (a.uid != m.uid) || (a.gid != m.gid)) {
+    d.push_back("uid/gid");
+  }
+  if (a.distinguished_name != m.distinguished_name) {
+    d.push_back("distinguished_name");
+  }
+  if ((a.have_supplemental_groups != m.have_supplemental_groups) ||
+      (a.supplemental_groups != m.supplemental_groups)) {
+    d.push_back("supplemental_groups");
+  }
+  if (a.new_buckets_path != m.new_buckets_path) {
+    d.push_back("new_buckets_path");
+  }
+  if (a.custom_bucket_path_allowed_list != m.custom_bucket_path_allowed_list) {
+    d.push_back("custom_bucket_path_allowed_list");
+  }
+  if (a.fs_backend != m.fs_backend) {
+    d.push_back("fs_backend");
+  }
+  if ((account.have_force_md5_etag != member.have_force_md5_etag) ||
+      (account.force_md5_etag != member.force_md5_etag)) {
+    d.push_back("force_md5_etag");
+  }
+  return d;
+}
+
 } // namespace
 
 int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
@@ -89,12 +128,12 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
      * naming an account no imported user belongs to. */
     e.account_id.clear();
     if (stored) {
-      Identity existing;
-      if (stored->get_identity_by_noobaa_id(dpp, id.id, existing) == 0) {
-	/* `key` is to_string(rgw_owner) -- the flattened owner, which is
-	 * the same thing a bucket's OwnerID holds, so reusing it is what
-	 * makes the two agree. */
-	e.account_id = existing.key;
+      std::string owner;
+      if (stored->get_owner_by_noobaa_id(dpp, id.id, owner) == 0) {
+	/* to_string(rgw_owner) -- for a root account, the account id,
+	 * which is the same thing a bucket's OwnerID holds, so reusing
+	 * it is what makes the two agree. */
+	e.account_id = owner;
 	ldpp_dout(dpp, 10) << "nsfs: import plan: " << id.name
 	  << " keeps account " << e.account_id << dendl;
       }
@@ -143,6 +182,22 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
       ret = -EINVAL;
     } else {
       e.account_id = owner->second;
+      for (const auto& root : contents.identities) {
+	if (root.id != id.owner) {
+	  continue;
+	}
+	const auto fields = row_drift(root, id);
+	if (!fields.empty()) {
+	  std::string f;
+	  for (const auto& x : fields) {
+	    f += (f.empty() ? "" : ", ") + x;
+	  }
+	  plan.drift.push_back(
+	      label(id) + " differs from its account " + label(root) +
+	      " in " + f + ";  it will run as the account");
+	}
+	break;
+      }
     }
     plan.entries.push_back(std::move(e));
   }
@@ -268,9 +323,13 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
 
   ldpp_dout(dpp, 4) << "nsfs: import plan: " << plan.accounts()
     << " accounts, " << plan.iam_users() << " IAM users, "
-    << plan.collisions.size() << " collisions" << dendl;
+    << plan.collisions.size() << " collisions, " << plan.drift.size()
+    << " drifted" << dendl;
   for (const auto& c : plan.collisions) {
     ldpp_dout(dpp, 0) << "ERROR: import: " << c << dendl;
+  }
+  for (const auto& d : plan.drift) {
+    ldpp_dout(dpp, 0) << "WARNING: import: " << d << dendl;
   }
   return ret;
 }

@@ -10753,13 +10753,24 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  /* The account is needed only on a miss, and a member is normally in
+   * the user cache already, since authenticating it put it there.  A
+   * user that will not load still resolves under its own key. */
+  rgw_account_id account;
+  {
+    std::unique_ptr<User> u = driver->get_user(who);
+    if (u->load_user(dpp, null_yield) == 0) {
+      account = u->get_info().account_id;
+    }
+  }
   nsfs::Credentials cred;
   const int ret = nsfs::resolve_credentials(
-      dpp, *driver->get_identity_db(), rgw_owner{who}, cred);
+      dpp, *driver->get_identity_db(), who, account, cred);
   if (ret == -ENOENT) {
     /* A valid account always has an identity record;  one without
      * is a provisioning fault, reported rather than repaired. */
     ldpp_dout(dpp, 0) << "ERROR: no POSIX identity recorded for " << who
+      << (account.empty() ? "" : " or its account ") << account
       << ";  impersonation is enabled, so the request is refused rather"
       " than served as the gateway" << dendl;
     return -EACCES;
@@ -13772,6 +13783,7 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
   nsfs::ImportPlan plan;
   ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
 				  get_identity_db());
+  say("drift", std::to_string(plan.drift.size()));
   if (ret < 0) {
     say("ran", "false");
     say("collisions", std::to_string(plan.collisions.size()));

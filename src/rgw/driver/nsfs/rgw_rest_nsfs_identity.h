@@ -123,8 +123,20 @@ inline void dump_identity(Formatter* f, const Identity& id)
   if (!id.fs_backend.empty()) {
     f->dump_string("fs_backend", id.fs_backend);
   }
-  if (!id.noobaa_id.empty()) {
-    f->dump_string("noobaa_id", id.noobaa_id);
+}
+
+/* Personalities registered from a row's previous contents are stale
+ * once it changes;  without this they keep being served until the
+ * FIFO cursor evicts them, which on a table above the working set may
+ * be never.  An account's row is reached by every member of the
+ * account under that member's own key, so it invalidates them all. */
+inline void note_row_changed(const std::string& key)
+{
+  const rgw_owner owner = parse_owner(key);
+  if (const auto* u = std::get_if<rgw_user>(&owner)) {
+    note_identity_changed(*u);
+  } else {
+    note_all_identities_changed();
   }
 }
 
@@ -152,6 +164,7 @@ public:
     auto* db = nsfs_driver->get_identity_db();
 
     std::string key;
+    std::string row;
     bool have_key = false;
     RESTArgs::get_string(s, "identity", "", &key, &have_key);
 
@@ -273,7 +286,6 @@ public:
     RESTArgs::get_string(s, "custom_bucket_path_allowed_list", "",
 			 &id.custom_bucket_path_allowed_list);
     RESTArgs::get_string(s, "fs_backend", "", &id.fs_backend);
-    RESTArgs::get_string(s, "noobaa_id", "", &id.noobaa_id);
 
     /* The two arms name the same thing twice and would disagree the
      * moment the directory changed. */
@@ -286,11 +298,7 @@ public:
     if (op_ret < 0) {
       return;
     }
-    /* Personalities already registered from the previous record are
-     * now stale;  without this they keep being served until the FIFO
-     * cursor evicts them, which on a table above the working set may
-     * be never. */
-    rgw::sal::nsfs::note_identity_changed(rgw_user{id.key});
+    rgw::sal::nsfs::note_row_changed(id.key);
 
     Formatter* f = flusher.get_formatter();
     flusher.start(0);
@@ -337,7 +345,7 @@ public:
 
     op_ret = nsfs_driver->get_identity_db()->remove_identity(s, key);
     if (op_ret == 0) {
-      rgw::sal::nsfs::note_identity_changed(rgw_user{key});
+      rgw::sal::nsfs::note_row_changed(key);
     }
   }
 
@@ -351,7 +359,10 @@ public:
  * an authenticated request actually produces -- a test that builds
  * an applier by hand assumes the answer it is trying to check.  With
  * `identity=` it resolves that key instead, which is what an
- * operator needs when the row in question is not their own.
+ * operator needs when the row in question is not their own.  That
+ * form reads the one row and does not fall back from a user to its
+ * account:  it answers what a row says, and the caller form answers
+ * what a request gets.
  *
  * Reporting, not enforcing:  "no impersonation" and "asked for and
  * unavailable" are answers, not failures, and come back with a 200
@@ -360,7 +371,9 @@ public:
  *
  * The response names the key it used.  A row that is never found is
  * almost always a key that is not the one the request produces, and
- * nothing else shows that. */
+ * nothing else shows that.  When a row answers, `row` names it, which
+ * for the caller form is the account's when a member has none of its
+ * own. */
 class RGWOp_NSFS_Credentials_Get : public RGWRESTOp {
 public:
   RGWOp_NSFS_Credentials_Get() = default;
@@ -377,6 +390,7 @@ public:
     }
 
     std::string key;
+    std::string row;
     bool have_key = false;
     RESTArgs::get_string(s, "identity", "", &key, &have_key);
 
@@ -392,6 +406,7 @@ public:
       }
       ret = rgw::sal::nsfs::resolve_credentials(
 	  s, *nsfs_driver->get_identity_db(), parse_owner(key), cred);
+      row = key;
     } else {
       /* the caller.  This is the path get_credentials() serves, and
        * the key comes from s->user rather than s->owner. */
@@ -400,7 +415,7 @@ public:
 	return;
       }
       key = s->user->get_id().to_str();
-      ret = nsfs_driver->get_credentials(s, s, cred);
+      ret = nsfs_driver->get_credentials(s, s, cred, &row);
     }
 
     const char* outcome;
@@ -419,6 +434,9 @@ public:
     f->open_object_section("dummy");   /* outermost is not rendered */
     f->dump_string("identity", key);
     f->dump_string("outcome", outcome);
+    if (ret != -ENOENT) {
+      f->dump_string("row", row);
+    }
     if (ret == 0) {
       f->dump_unsigned("uid", cred.uid);
       f->dump_unsigned("gid", cred.gid);

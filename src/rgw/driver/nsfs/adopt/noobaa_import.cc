@@ -115,8 +115,8 @@ int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
      * which is the whole reason the column exists -- a name-keyed
      * check would report every renamed account as a conflict with
      * itself. */
-    Identity existing;
-    if (db->get_identity_by_noobaa_id(dpp, e.noobaa_id, existing) == 0) {
+    std::string existing;
+    if (db->get_owner_by_noobaa_id(dpp, e.noobaa_id, existing) == 0) {
       continue;
     }
     if (e.anonymous) {
@@ -187,9 +187,9 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
      * rewritten:  their store is the source, but an identity RGW
      * already holds may have been changed on the RGW side since, and
      * reconciling divergence is explicitly not attempted (§6.2). */
-    Identity existing;
-    if (db->get_identity_by_noobaa_id(dpp, e.noobaa_id, existing) == 0) {
-      owner_by_noobaa_id[e.noobaa_id] = existing.key;
+    std::string existing;
+    if (db->get_owner_by_noobaa_id(dpp, e.noobaa_id, existing) == 0) {
+      owner_by_noobaa_id[e.noobaa_id] = existing;
       if (e.iam_user) {
 	++result.users_skipped;
       } else {
@@ -203,11 +203,15 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     if (e.anonymous) {
       Identity row;
       row.key = RGW_USER_ANON_ID;
-      row.noobaa_id = e.noobaa_id;
       fill_posix(*src, row);
       int ret = db->put_identity(dpp, row);
       if (ret < 0) {
 	fail("anonymous", cpp_strerror(-ret));
+	continue;
+      }
+      ret = db->put_noobaa_id(dpp, e.noobaa_id, row.key);
+      if (ret < 0) {
+	fail("anonymous", std::string("put_noobaa_id: ") + cpp_strerror(-ret));
 	continue;
       }
       owner_by_noobaa_id[e.noobaa_id] = row.key;
@@ -299,21 +303,34 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     }
     ++result.users_created;
 
-    /* The nsfs row:  the POSIX arm, the placement fields and their
-     * id.  Keyed on the flattened owner, which for an account user is
-     * the account rather than the user -- impersonation resolves an
-     * owner, and the account is what a bucket is owned by. */
-    Identity row;
-    row.key = e.account_id;
-    row.noobaa_id = e.noobaa_id;
-    fill_posix(*src, row);
-    ret = db->put_identity(dpp, row);
+    /* The nsfs row, for a root account only:  the POSIX arm and the
+     * placement fields, keyed on the account.  Every member of the
+     * account runs as it and has no row of its own (§2.8);  a member
+     * whose NooBaa copy differs was reported by the plan. */
+    std::string owner_key;
+    if (e.iam_user) {
+      owner_key = to_string(rgw_owner{ui.user_id});
+    } else {
+      Identity row;
+      row.key = e.account_id;
+      fill_posix(*src, row);
+      ret = db->put_identity(dpp, row);
+      if (ret < 0) {
+	fail(e.name, std::string("put_identity: ") + cpp_strerror(-ret));
+	continue;
+      }
+      owner_key = row.key;
+      ++result.identity_rows;
+    }
+
+    /* Last, so an identity is recognised on a re-run only once
+     * everything above it is written. */
+    ret = db->put_noobaa_id(dpp, e.noobaa_id, owner_key);
     if (ret < 0) {
-      fail(e.name, std::string("put_identity: ") + cpp_strerror(-ret));
+      fail(e.name, std::string("put_noobaa_id: ") + cpp_strerror(-ret));
       continue;
     }
-    owner_by_noobaa_id[e.noobaa_id] = row.key;
-    ++result.identity_rows;
+    owner_by_noobaa_id[e.noobaa_id] = owner_key;
   }
 
   /* ---- pass two:  the policies that need the finished mapping ---- */

@@ -12,9 +12,12 @@
  * WHAT EACH IDENTITY BECOMES.  A NooBaa root account becomes an RGW
  * **account plus an account user**:  `RGWAccountInfo` holds no
  * credentials and every NooBaa root account is a credential holder,
- * so the keys go on the user (§3.4).  Each identity also gets an nsfs
- * identity row, which is where the POSIX fields, the placement fields
- * and their `_id` live -- none of which RGW has anywhere to put.
+ * so the keys go on the user (§3.4).  The account also gets an nsfs
+ * identity row, which is where the POSIX fields and the placement
+ * fields live -- neither of which RGW has anywhere to put.  An IAM user
+ * gets no row:  on Scale every member of an account runs as the
+ * account (§2.8).  Every identity's `_id` is recorded in the NooBaa id
+ * table, against the owner it became.
  *
  * TWO PASSES, IN ONE OPERATION.  Identities first, then the policies.
  * A trust policy's principals are rewritten through the identity
@@ -26,7 +29,7 @@
  * account creation and there cannot be one, so a failure part-way
  * leaves RGW state behind and the operation has to tolerate meeting
  * its own output (§6.2).  Re-running is keyed on **their `_id`**,
- * recorded in the identity row:  the account name is not stable,
+ * recorded in the NooBaa id table:  the account name is not stable,
  * because a rename rewrites `name` and `email` and leaves `_id`
  * alone, so a name-keyed re-run would create a duplicate for every
  * renamed account and would re-mint an id for an identity already
@@ -92,7 +95,7 @@ struct ImportResult {
  *
  * An identity already imported is **not** a collision:  it is
  * recognised by their `_id` and skipped, which is what makes a re-run
- * safe.  So this consults the identity table first and only then
+ * safe.  So this consults the NooBaa id table first and only then
  * asks whether a name or email is taken by something else.
  *
  * Returns -EEXIST with every collision in `collisions`, 0 when clear.

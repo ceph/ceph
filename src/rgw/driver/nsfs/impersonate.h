@@ -99,6 +99,22 @@ int acquire_personality(const DoutPrefixProvider* dpp, const rgw_user& key,
  * either way. */
 void note_identity_changed(const rgw_user& key);
 
+/* Every identity's record may have changed.
+ *
+ * For a change to an *account's* row.  Personalities are cached under
+ * the user a request authenticated as, and a member with no row of its
+ * own was resolved through its account's, so bumping the account's
+ * own shard reaches none of them.  Nothing records which members went
+ * through which account, so every shard is bumped:  each thread then
+ * re-resolves an identity once, on its next use.  Account rows change
+ * by operator action, which is rare enough for that to be the right
+ * price. */
+void note_all_identities_changed();
+
+/* The current generation `key` is read at, for tests.  A personality
+ * registered at one generation is re-resolved once this moves. */
+uint64_t identity_generation(const rgw_user& key);
+
 /* The level-1 lookup on its own:  a pinned personality if this ring
  * already has one for `key`, without resolving credentials.
  *

@@ -281,6 +281,18 @@ void note_identity_changed(const rgw_user& key)
   generations[generation_shard(key)].fetch_add(1, std::memory_order_relaxed);
 }
 
+void note_all_identities_changed()
+{
+  for (auto& g : generations) {
+    g.fetch_add(1, std::memory_order_relaxed);
+  }
+}
+
+uint64_t identity_generation(const rgw_user& key)
+{
+  return generations[generation_shard(key)].load(std::memory_order_relaxed);
+}
+
 namespace {
 struct ShardedGenerations : GenerationSource {
   uint64_t generation(const rgw_user& key) const override {

@@ -1028,7 +1028,6 @@ public:
     id.new_buckets_path = "/gpfs/rgw1/nsfs/newbuckets";
     id.custom_bucket_path_allowed_list = "/gpfs/rgw1/nsfs/allowed";
     id.fs_backend = "GPFS";
-    id.noobaa_id = "6a2bdeabf5c8e167f92cb079";
     return id;
   }
 };
@@ -1057,7 +1056,6 @@ TEST_F(NSFSIdentityDBTest, EveryColumnRoundTrips)
   EXPECT_EQ(got.custom_bucket_path_allowed_list,
 	    put.custom_bucket_path_allowed_list);
   EXPECT_EQ(got.fs_backend, "GPFS");
-  EXPECT_EQ(got.noobaa_id, "6a2bdeabf5c8e167f92cb079");
   EXPECT_TRUE(got.distinguished_name.empty());
 }
 
@@ -1123,7 +1121,7 @@ TEST_F(NSFSIdentityDBTest, FieldsUpdateIndependently)
   ASSERT_EQ(db->get_identity(env->dpp, "user$dave", got), 0);
   EXPECT_EQ(got.fs_backend, "CEPH_FS");
   EXPECT_EQ(*got.uid, 1001u) << "an unrelated field moved";
-  EXPECT_EQ(got.noobaa_id, "6a2bdeabf5c8e167f92cb079");
+  EXPECT_EQ(got.new_buckets_path, "/gpfs/rgw1/nsfs/newbuckets");
 }
 
 /* The exclusivity rule is enforced by the schema, not by a caller.
@@ -1164,17 +1162,44 @@ TEST_F(NSFSIdentityDBTest, AUidWithoutAGidIsRefused)
   EXPECT_EQ(db->put_identity(env->dpp, id), -EINVAL);
 }
 
-/* The re-import lookup, which is why the NooBaa id is indexed. */
+/* The re-import lookup:  NooBaa's id to the owner it became. */
 TEST_F(NSFSIdentityDBTest, LookupByNoobaaId)
 {
-  ASSERT_EQ(db->put_identity(env->dpp, local_identity("user$erin")), 0);
+  std::string owner;
+  /* the control:  nothing is recorded before it is put */
+  ASSERT_EQ(db->get_owner_by_noobaa_id(
+	      env->dpp, "6a2bdeabf5c8e167f92cb079", owner), -ENOENT);
 
-  nsfs::Identity got;
-  ASSERT_EQ(db->get_identity_by_noobaa_id(
-	      env->dpp, "6a2bdeabf5c8e167f92cb079", got), 0);
-  EXPECT_EQ(got.key, "user$erin");
+  ASSERT_EQ(db->put_noobaa_id(env->dpp, "6a2bdeabf5c8e167f92cb079",
+			      "RGW12345678901234567"), 0);
+  ASSERT_EQ(db->get_owner_by_noobaa_id(
+	      env->dpp, "6a2bdeabf5c8e167f92cb079", owner), 0);
+  EXPECT_EQ(owner, "RGW12345678901234567");
 
-  EXPECT_EQ(db->get_identity_by_noobaa_id(env->dpp, "nosuchid", got), -ENOENT);
+  EXPECT_EQ(db->get_owner_by_noobaa_id(env->dpp, "nosuchid", owner), -ENOENT);
+}
+
+/* Recording an id twice is refused, and the first record survives.
+ *
+ * The table is written with a plain INSERT for exactly this:  under
+ * OR REPLACE a second import of one id would silently repoint it,
+ * which is the importer failing to recognise its own output. */
+TEST_F(NSFSIdentityDBTest, ANoobaaIdIsRecordedOnce)
+{
+  ASSERT_EQ(db->put_noobaa_id(env->dpp, "6a2bdeabf5c8e167f92cb079",
+			      "RGW12345678901234567"), 0);
+  EXPECT_EQ(db->put_noobaa_id(env->dpp, "6a2bdeabf5c8e167f92cb079",
+			      "RGW76543210987654321"), -EEXIST);
+
+  std::string owner;
+  ASSERT_EQ(db->get_owner_by_noobaa_id(
+	      env->dpp, "6a2bdeabf5c8e167f92cb079", owner), 0);
+  EXPECT_EQ(owner, "RGW12345678901234567") << "the second put repointed it";
+
+  /* the control:  a different id is accepted, so the refusal above is
+   * about the id and not about the table */
+  EXPECT_EQ(db->put_noobaa_id(env->dpp, "6a2bdeabf5c8e167f92cb07a",
+			      "RGW76543210987654321"), 0);
 }
 
 /* Delete removes it;  deleting what is absent is not an error,
@@ -1381,9 +1406,11 @@ TEST_F(NSFSIdentityDBTest, AclOwnerIsTheAccountButAuthenticatedUserIsNot)
 	 "identity is no longer expressible";
 }
 
-/* Two members of one account resolve to different credentials.
+/* A row keyed on a member takes precedence over its account's.
  *
- * This is the property that cannot be expressed through
+ * On Scale a member ordinarily has no row and runs as its account
+ * (ACCOUNT_IMPORT.md §2.8);  a per-user row is what keeps a distinct
+ * identity expressible.  It cannot be expressed through
  * get_aclowner() at all:  both members share an ACL owner, so keyed
  * on it they would be indistinguishable. */
 TEST_F(NSFSIdentityDBTest, AccountMembersResolveIndependently)
@@ -1420,10 +1447,15 @@ TEST_F(NSFSIdentityDBTest, AccountMembersResolveIndependently)
    * load_acct_info() returns.  Called once per applier -- for
    * LocalApplier it releases the held user. */
   nsfs::Credentials ca, cb;
-  ASSERT_EQ(nsfs::resolve_credentials(
-	      env->dpp, *db, ia->load_acct_info(env->dpp)->get_id(), ca), 0);
-  ASSERT_EQ(nsfs::resolve_credentials(
-	      env->dpp, *db, ib->load_acct_info(env->dpp)->get_id(), cb), 0);
+  std::string ra, rb;
+  auto ua = ia->load_acct_info(env->dpp);
+  auto ub = ib->load_acct_info(env->dpp);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, ua->get_id(),
+				      ua->get_info().account_id, ca, &ra), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, ub->get_id(),
+				      ub->get_info().account_id, cb, &rb), 0);
+  EXPECT_EQ(ra, alice.to_str());
+  EXPECT_EQ(rb, bob.to_str());
 
   EXPECT_EQ(ca.uid, 1001u);
   EXPECT_EQ(cb.uid, 1002u);
@@ -1433,30 +1465,124 @@ TEST_F(NSFSIdentityDBTest, AccountMembersResolveIndependently)
   EXPECT_TRUE(cb.groups.empty());
 }
 
-/* A member with no row of its own does not fall back to its
- * account's.  Inheriting would hand a user the account root's uid,
- * which is a grant, not a default. */
-TEST_F(NSFSIdentityDBTest, AMemberDoesNotInheritItsAccountsRow)
+/* A member with no row of its own runs as its account.
+ *
+ * The Scale model (ACCOUNT_IMPORT.md §2.8):  an account has one POSIX
+ * identity, and the import writes a row for the account and none for
+ * its members. */
+TEST_F(NSFSIdentityDBTest, AMemberWithNoRowRunsAsItsAccount)
 {
   const char* acct = "RGW12345678901234567";
+  auto member = local_applier(rgw_user{"", "carol"}, acct);
+  auto u = member->load_acct_info(env->dpp);
+  ASSERT_EQ(u->get_info().account_id, acct)
+      << "the fixture is wrong:  carol should be a member";
+
+  /* the control:  with no account row there is nothing to fall back
+   * to, so the success below is the fallback and not something else */
+  nsfs::Credentials cred;
+  std::string row = "untouched";
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, u->get_id(),
+				      u->get_info().account_id, cred, &row),
+	    -ENOENT);
+  EXPECT_EQ(row, "untouched") << "-ENOENT named a row";
+
+  nsfs::Identity acct_row;
+  acct_row.key = acct;
+  acct_row.uid = 9999; acct_row.gid = 9999;
+  acct_row.groups = std::vector<uint32_t>{70};
+  ASSERT_EQ(db->put_identity(env->dpp, acct_row), 0);
+
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, u->get_id(),
+				      u->get_info().account_id, cred, &row), 0)
+      << "a member with no row was not served as its account";
+  EXPECT_EQ(row, acct) << "the fallback did not name the account's row";
+  EXPECT_EQ(cred.uid, 9999u);
+  EXPECT_EQ(cred.gid, 9999u);
+  EXPECT_EQ(cred.groups, (std::vector<gid_t>{70}));
+
+  /* and the owner form does not fall back:  it reads one row, which
+   * is what the credentials diagnostic's `identity=` reports */
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, rgw_owner{u->get_id()},
+				      cred), -ENOENT);
+}
+
+/* A user outside any account has nothing to fall back to. */
+TEST_F(NSFSIdentityDBTest, AUserOutsideAnAccountResolvesUnderItsOwnKey)
+{
+  const rgw_user dan{"", "dan"};
+  nsfs::Credentials cred;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, dan, rgw_account_id{},
+				      cred), -ENOENT);
+
+  nsfs::Identity row;
+  row.key = dan.to_str();
+  row.uid = 1234; row.gid = 1234;
+  ASSERT_EQ(db->put_identity(env->dpp, row), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, dan, rgw_account_id{},
+				      cred), 0);
+  EXPECT_EQ(cred.uid, 1234u);
+}
+
+/* A member row that asks for an identity it cannot be given is
+ * refused, not replaced by its account's.
+ *
+ * -EPERM is a directory-backed row whose directory is not consulted;
+ * serving the account instead would run the request as someone the
+ * row did not name. */
+TEST_F(NSFSIdentityDBTest, ARefusedMemberRowDoesNotFallBack)
+{
+  const char* acct = "RGW12345678901234567";
+  const rgw_user erin{"", "erin"};
 
   nsfs::Identity acct_row;
   acct_row.key = acct;
   acct_row.uid = 9999; acct_row.gid = 9999;
   ASSERT_EQ(db->put_identity(env->dpp, acct_row), 0);
 
-  /* the control:  the account's own row does resolve */
+  /* the control:  with no row of her own, erin runs as the account */
   nsfs::Credentials cred;
-  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db,
-				      parse_owner(acct), cred), 0);
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *db, erin,
+				      rgw_account_id{acct}, cred), 0);
   ASSERT_EQ(cred.uid, 9999u);
 
-  auto member = local_applier(rgw_user{"", "carol"}, acct);
-  EXPECT_EQ(nsfs::resolve_credentials(
-	      env->dpp, *db,
-	      member->load_acct_info(env->dpp)->get_id(), cred),
-	    -ENOENT)
-      << "a member with no row was served as its account";
+  nsfs::Identity dir;
+  dir.key = erin.to_str();
+  dir.distinguished_name = "erin";
+  ASSERT_EQ(db->put_identity(env->dpp, dir), 0);
+  std::string row;
+  EXPECT_EQ(nsfs::resolve_credentials(env->dpp, *db, erin,
+				      rgw_account_id{acct}, cred, &row), -EPERM)
+      << "a refused row fell through to the account";
+  EXPECT_EQ(row, erin.to_str()) << "the refusal named another row";
+}
+
+/* Changing an account's row reaches every member's cached
+ * personality.
+ *
+ * Personalities are cached under the user a request authenticated
+ * as, so a member that resolved through its account's row is cached
+ * under the member's key.  Bumping the account key's own shard does
+ * not reach it -- the first half shows that, and is why the second
+ * mechanism exists. */
+TEST_F(NSFSIdentityDBTest, AnAccountRowChangeReachesItsMembers)
+{
+  const rgw_user acct_key{"RGW12345678901234567"};
+  const rgw_user alice{"", "alice"};
+  const rgw_user bob{"", "bob"};
+
+  const uint64_t a0 = nsfs::identity_generation(alice);
+  const uint64_t b0 = nsfs::identity_generation(bob);
+  nsfs::note_identity_changed(acct_key);
+  ASSERT_EQ(nsfs::identity_generation(alice), a0)
+      << "these keys share a shard;  pick names that do not";
+  ASSERT_EQ(nsfs::identity_generation(bob), b0)
+      << "these keys share a shard;  pick names that do not";
+
+  nsfs::note_all_identities_changed();
+  EXPECT_NE(nsfs::identity_generation(alice), a0)
+      << "a member cached through its account keeps the old identity";
+  EXPECT_NE(nsfs::identity_generation(bob), b0);
 }
 
 /* The personality table.
@@ -9032,7 +9158,7 @@ TEST_F(NSFSIdentityDBTest, ForceMd5EtagDistinguishesUnsetFromFalse)
   EXPECT_FALSE(got.force_md5_etag.has_value());
   /* the other columns survived the rewrite */
   EXPECT_EQ(got.uid, 1001u);
-  EXPECT_EQ(got.noobaa_id, "6a2bdeabf5c8e167f92cb079");
+  EXPECT_EQ(got.fs_backend, "GPFS");
 }
 
 /* I1 carries each bucket's value, in three states.
@@ -9677,12 +9803,17 @@ TEST_F(NooBaaImportTest, AnAccountBecomesAnAccountAUserAndARow)
    * and is why I2 comes first */
   EXPECT_EQ(keys.begin()->second.key, NB_PLAIN_SECRET);
 
-  /* the identity row, keyed on the account and carrying their id */
-  nsfs::Identity row;
-  ASSERT_EQ(driver->get_identity_db()->get_identity_by_noobaa_id(
-		env->dpp, "6ac7cb27fd4af356919110a3", row), 0)
+  /* their id, recorded against the account it became */
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0)
       << "re-import could not recognise what it just wrote";
-  EXPECT_EQ(row.key, e->account_id);
+  EXPECT_EQ(owner, e->account_id);
+
+  /* the identity row, keyed on the account */
+  nsfs::Identity row;
+  ASSERT_EQ(driver->get_identity_db()->get_identity(
+		env->dpp, e->account_id, row), 0);
   EXPECT_EQ(row.uid, 1000u);
   EXPECT_EQ(row.gid, 1000u);
   EXPECT_EQ(row.new_buckets_path, "/lv2tb/nsfs-interchange/data/root");
@@ -9713,10 +9844,10 @@ TEST_F(NooBaaImportTest, ASecondRunRecognisesWhatTheFirstWrote)
   /* and the account it already had is still the one it had:  the
    * second run minted a new id in its plan, and must not have used
    * it */
-  nsfs::Identity row;
-  ASSERT_EQ(driver->get_identity_db()->get_identity_by_noobaa_id(
-		env->dpp, "6ac7cb27fd4af356919110a3", row), 0);
-  EXPECT_EQ(row.key, first_id)
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0);
+  EXPECT_EQ(owner, first_id)
       << "the second run re-minted an id for an identity already imported";
 }
 
@@ -9746,10 +9877,10 @@ TEST_F(NooBaaImportTest, ARenameOnTheirSideIsStillTheSameIdentity)
       << "a rename produced a second account";
   EXPECT_EQ(result.accounts_skipped, 1u);
 
-  nsfs::Identity row;
-  ASSERT_EQ(driver->get_identity_db()->get_identity_by_noobaa_id(
-		env->dpp, "6ac7cb27fd4af356919110a3", row), 0);
-  EXPECT_EQ(row.key, id);
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0);
+  EXPECT_EQ(owner, id);
 }
 
 /* The anonymous account gets a row and nothing else.
@@ -9776,7 +9907,10 @@ TEST_F(NooBaaImportTest, AnonymousGetsARowAndNothingElse)
       << ", so an unauthenticated request has no identity";
   EXPECT_EQ(row.uid, 65534u);
   EXPECT_EQ(row.gid, 65534u);
-  EXPECT_EQ(row.noobaa_id, "6ac7d213cac521f05aac9fb4");
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7d213cac521f05aac9fb4", owner), 0);
+  EXPECT_EQ(owner, RGW_USER_ANON_ID);
 
   /* nothing was minted for it */
   const auto* e = entry("anonymous");
@@ -9789,16 +9923,21 @@ TEST_F(NooBaaImportTest, AnonymousGetsARowAndNothingElse)
       << "an RGW account named anonymous was created";
 }
 
-/* An IAM user lands in its owner's account.
+/* An IAM user lands in its owner's account, and runs as it.
  *
  * One schema serves accounts and users, so the import tells them apart
- * by `owner` and places the user in the account that owner became. */
+ * by `owner` and places the user in the account that owner became.
+ * The user gets no identity row:  on Scale every member of an account
+ * runs as the account (ACCOUNT_IMPORT.md §2.8).  This user's NooBaa
+ * copy says uid 1500 where its account says 1000 -- the drift an
+ * account update leaves behind -- so the plan reports it. */
 TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
 {
   add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
   add_identity("u1", R"({"_id":"u1","name":"a-user","email":"u@x",
     "owner":"6ac7cb27fd4af356919110a3","iam_path":"/eng/",
-    "nsfs_account_config":{"uid":1500,"gid":1500},
+    "nsfs_account_config":{"uid":1500,"gid":1500,
+      "new_buckets_path":"/lv2tb/nsfs-interchange/data/root"},
     "access_keys":[{"access_key":"USERAAAAAAAAAAAAAAAA",
       "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
     "master_key_id":"6ac7cb2751b72219a4bae375"})");
@@ -9808,22 +9947,115 @@ TEST_F(NooBaaImportTest, AnIamUserLandsInItsOwnersAccount)
   EXPECT_EQ(result.accounts_created, 1u);
   EXPECT_EQ(result.users_created, 2u) << "the account's own user, and the "
 					 "IAM user";
-  EXPECT_EQ(result.identity_rows, 2u);
+  EXPECT_EQ(result.identity_rows, 1u) << "a member got a row of its own";
 
+  const std::string account = entry("interchange")->account_id;
   std::unique_ptr<rgw::sal::User> user;
   ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "USERAAAAAAAAAAAAAAAA",
 					   null_yield, &user), 0);
-  EXPECT_EQ(user->get_info().account_id,
-	    entry("interchange")->account_id)
+  EXPECT_EQ(user->get_info().account_id, account)
       << "the user was not placed in its owner's account";
   EXPECT_EQ(user->get_info().path, "/eng/");
   EXPECT_EQ(user->get_display_name(), "a-user");
 
-  /* its own row, with its own uid */
+  /* the account's row is the account's, not overwritten by the
+   * member -- which is what keying every identity on the account did */
   nsfs::Identity row;
-  ASSERT_EQ(driver->get_identity_db()->get_identity_by_noobaa_id(
-		env->dpp, "u1", row), 0);
-  EXPECT_EQ(row.uid, 1500u);
+  ASSERT_EQ(driver->get_identity_db()->get_identity(
+		env->dpp, account, row), 0);
+  EXPECT_EQ(row.uid, 1000u) << "the member's copy replaced the account's";
+  EXPECT_EQ(driver->get_identity_db()->get_identity(
+		env->dpp, user->get_id().to_str(), row), -ENOENT)
+      << "the member got a row of its own";
+
+  /* and it runs as the account */
+  nsfs::Credentials cred;
+  ASSERT_EQ(nsfs::resolve_credentials(env->dpp, *driver->get_identity_db(),
+				      user->get_id(),
+				      user->get_info().account_id, cred), 0);
+  EXPECT_EQ(cred.uid, 1000u);
+
+  /* both ids recorded, each against what it became */
+  std::string owner;
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "6ac7cb27fd4af356919110a3", owner), 0);
+  EXPECT_EQ(owner, account);
+  ASSERT_EQ(driver->get_identity_db()->get_owner_by_noobaa_id(
+		env->dpp, "u1", owner), 0);
+  EXPECT_EQ(owner, to_string(rgw_owner{user->get_id()}));
+
+  /* the drift, named */
+  ASSERT_EQ(plan.drift.size(), 1u);
+  EXPECT_NE(plan.drift[0].find("a-user"), std::string::npos) << plan.drift[0];
+  EXPECT_NE(plan.drift[0].find("uid/gid"), std::string::npos) << plan.drift[0];
+  EXPECT_EQ(plan.drift[0].find("new_buckets_path"), std::string::npos)
+      << "a field that matches was reported:  " << plan.drift[0];
+}
+
+/* A member whose copy matches its account is not drift.
+ *
+ * The control for the report above:  NooBaa copies every field at
+ * creation, so a user nobody changed the account under is the
+ * ordinary case and must say nothing. */
+TEST_F(NooBaaImportTest, AFaithfulCopyIsNotDrift)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("u1", R"({"_id":"u1","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3",
+    "nsfs_account_config":{"uid":1000,"gid":1000,
+      "new_buckets_path":"/lv2tb/nsfs-interchange/data/root"},
+    "access_keys":[{"access_key":"USERAAAAAAAAAAAAAAAA",
+      "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
+    "master_key_id":"6ac7cb2751b72219a4bae375"})");
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_TRUE(plan.drift.empty()) << plan.drift[0];
+}
+
+/* Re-planning a store with an IAM user keeps the account's id.
+ *
+ * The regression `36cc060acb7` fixed, in the shape that brought it
+ * back:  while every identity's row was keyed on the account, the IAM
+ * user's write replaced the root's NooBaa id, the root was no longer
+ * found, and a second plan -- the one `adopt_one_bucket()` builds --
+ * minted a new account id.  Every adopted bucket was then owned by an
+ * account no imported user was in. */
+TEST_F(NooBaaImportTest, ReplanningWithAnIamUserKeepsTheAccountId)
+{
+  add_identity("6ac7cb27fd4af356919110a3", NB_ACCOUNT_PLAIN);
+  add_identity("u1", R"({"_id":"u1","name":"a-user","email":"u@x",
+    "owner":"6ac7cb27fd4af356919110a3",
+    "nsfs_account_config":{"uid":1000,"gid":1000},
+    "access_keys":[{"access_key":"USERAAAAAAAAAAAAAAAA",
+      "encrypted_secret_key":"AlSvZsxnqaN+QX3A/wUwFB0kJwM01TDOXKmNFnV51FijvRm3nJgdKQ=="}],
+    "master_key_id":"6ac7cb2751b72219a4bae375"})");
+  write_file(store + "/master_keys.json", NB_MASTER_KEYS);
+
+  ASSERT_EQ(run(), 0) << why();
+  const std::string first = entry("interchange")->account_id;
+
+  /* the control:  with nothing to consult, a plan mints afresh, so the
+   * equality below is the lookup and not a coincidence */
+  auto c = read_store();
+  nsfs::ImportPlan fresh;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, fresh), 0);
+  const nsfs::ImportEntry* f = nullptr;
+  for (const auto& e : fresh.entries) {
+    if (e.noobaa_name == "interchange") {
+      f = &e;
+    }
+  }
+  ASSERT_NE(f, nullptr);
+  ASSERT_NE(f->account_id, first);
+
+  nsfs::ImportPlan again;
+  ASSERT_EQ(nsfs::build_import_plan(env->dpp, env->cct.get(), c, again,
+				    driver->get_identity_db()), 0);
+  for (const auto& e : again.entries) {
+    EXPECT_EQ(e.account_id, first)
+	<< e.noobaa_name << " was planned into a different account";
+  }
 }
 
 /* A key with no decrypted secret is refused, not written.

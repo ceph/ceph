@@ -31,10 +31,13 @@ namespace rgw { namespace sal { namespace nsfs {
 /* The Spectrum Scale data an identity carries, which RGW has nowhere
  * to put.
  *
- * One record per *identity* rather than per account:  a NooBaa IAM
- * user holds its own copy of this block and the request path reads
- * the authenticated identity's, not its account's.  See
- * docs/ACCOUNT_IMPORT.md section 2.8.
+ * One record per *account*:  on Scale an account has one POSIX
+ * identity and every user and role in it runs as that identity.  A
+ * member has no row of its own and resolves to its account's (see
+ * resolve_credentials() below).  NooBaa stores a copy of this block on
+ * every member, but the copy is its storage layout rather than its
+ * model -- docs/ACCOUNT_IMPORT.md section 2.8.  A row keyed on a user
+ * is still possible, and takes precedence over its account's.
  *
  * `uid`+`gid` and `distinguished_name` are mutually exclusive, which
  * the schema enforces rather than leaving to a caller.  An identity
@@ -68,7 +71,6 @@ struct Identity {
   std::string new_buckets_path;
   std::string custom_bucket_path_allowed_list;
   std::string fs_backend;
-  std::string noobaa_id;
 
   /* X1.  NooBaa's per-account `force_md5_etag`, carried and **not
    * enforced** (`ACCOUNT_IMPORT.md` §6.1a).
@@ -154,6 +156,15 @@ bool placement_path_is_acceptable(std::string_view path);
  * unit suite -- never creates it either. */
 class IdentityDB : public rgw::store::POSIXUserDB {
   const std::string identity_table;
+  /* Which RGW owner each NooBaa `_id` was imported as.
+   *
+   * Provenance, kept apart from the identity table so that table holds
+   * only what a request is served as.  A root account maps to its
+   * account id, an IAM user to its user, and their anonymous account to
+   * RGW_USER_ANON_ID.  Re-import recognises an identity by it, because
+   * NooBaa's name is not stable across a rename (ACCOUNT_IMPORT.md
+   * §3.4). */
+  const std::string noobaa_id_table;
   /* The driver's second owned table.  Placement is bucket metadata
    * unique to this backend, so it lives in schema this backend owns
    * rather than changing dbstore's shared bucket table -- which nsfs
@@ -180,6 +191,8 @@ public:
        * path is orphaned the moment the directory moves. */
       identity_table(std::filesystem::path(db_name).filename().string()
 		     + "_nsfs_identity"),
+      noobaa_id_table(std::filesystem::path(db_name).filename().string()
+		      + "_nsfs_noobaa_id"),
       placement_table(std::filesystem::path(db_name).filename().string()
 		      + "_nsfs_bucket_placement") {}
 
@@ -214,11 +227,21 @@ public:
   int get_identity(const DoutPrefixProvider* dpp, const std::string& key,
 		   Identity& out) const;
 
-  /* The re-import lookup.  Indexed, because an importer resolves
-   * every record this way and a scan would be quadratic. */
-  int get_identity_by_noobaa_id(const DoutPrefixProvider* dpp,
-				const std::string& noobaa_id,
-				Identity& out) const;
+  /* Record that NooBaa's `noobaa_id` was imported as `owner_key`, a
+   * to_string(rgw_owner).
+   *
+   * A plain INSERT:  -EEXIST when the id is already recorded, whatever
+   * it maps to.  An id is imported once, and re-recording one is the
+   * importer failing to recognise its own output, which should be
+   * loud rather than silently repointed. */
+  int put_noobaa_id(const DoutPrefixProvider* dpp,
+		    const std::string& noobaa_id,
+		    const std::string& owner_key);
+
+  /* The re-import lookup.  -ENOENT when the id was never imported. */
+  int get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,
+			     const std::string& noobaa_id,
+			     std::string& owner_key) const;
 
   int remove_identity(const DoutPrefixProvider* dpp, const std::string& key);
 
@@ -274,17 +297,33 @@ struct Credentials {
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 			const rgw_owner& owner, Credentials& out);
 
-/* The key an authenticated request resolves under.
+/* An authenticated user's credentials:  its own row, else its
+ * account's.
+ *
+ * On Scale every member of an account runs as the account
+ * (ACCOUNT_IMPORT.md §2.8), so a member ordinarily has no row and
+ * resolves to the account's.  A row keyed on the user wins where one
+ * exists, which keeps a per-user identity expressible without making
+ * anyone write one.  `account` empty is a user outside any account,
+ * which resolves under its own key alone.
+ *
+ * The user's row answering -ENOENT -- absent, or carrying no ids --
+ * is what falls through;  -EPERM does not, since that row asked for an
+ * identity it cannot be given.
+ *
+ * `row`, if given, receives the key of the row that answered, on
+ * success or refusal;  it is left alone otherwise. */
+int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
+			const rgw_user& user, const rgw_account_id& account,
+			Credentials& out, std::string* row = nullptr);
+
+/* The same, for a request.
  *
  * `s->user` is the *authenticated* user:  every applier's
  * `load_acct_info()` puts it there, and for a member of an account
- * that is the member, not the account.  `s->owner` is the other
- * answer -- `get_aclowner()` substitutes the account -- and keying
- * on it would serve every member of an account as one uid and gid.
- *
- * For an account member the id is a randomly generated UUID
- * (`rgw_rest_iam_user.cc:192-194`), so it is unique across accounts;
- * the display name is not the key.
+ * that is the member, carrying its `account_id`.  `s->owner` would
+ * reach the account directly, but only the account:  it cannot see a
+ * row keyed on the member, so the precedence above would be lost.
  *
  * Under a system request carrying `rgwx-uid`, `SysReqApplier`
  * replaces `s->user` with the impersonated owner, so the request is
@@ -293,7 +332,8 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
  * is acting for is the narrower of the two.
  */
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
-			const req_state* s, Credentials& out);
+			const req_state* s, Credentials& out,
+			std::string* row = nullptr);
 
 std::string groups_to_text(const std::vector<uint32_t>& groups);
 bool groups_from_text(const std::string& text, std::vector<uint32_t>& out);

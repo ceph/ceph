@@ -82,8 +82,8 @@ namespace nsfs {
 /* Their identifiers, to what an RGW principal should say.
  *
  * Built from the plan, so it is the same mapping I4 wrote by.  Not
- * durable:  the identity row's `noobaa_id` column is the durable
- * form, and a later run rebuilds this from it. */
+ * durable:  the NooBaa id table (IdentityDB::get_owner_by_noobaa_id)
+ * is the durable form, and a later run rebuilds this from it. */
 struct IdentityMapping {
   /* their `_id` -> the RGW account id */
   std::map<std::string, std::string> account_by_noobaa_id;

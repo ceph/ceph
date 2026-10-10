@@ -99,8 +99,7 @@ std::optional<uint32_t> column_u32(sqlite3_stmt* st, int col)
  * rather than silently shifting a read. */
 constexpr const char* IDENTITY_COLUMNS =
   "Identity, Uid, Gid, SupplementalGroups, DistinguishedName, "
-  "NewBucketsPath, CustomBucketPathAllowedList, FsBackend, NoobaaId, "
-  "ForceMd5Etag";
+  "NewBucketsPath, CustomBucketPathAllowedList, FsBackend, ForceMd5Etag";
 
 int row_to_identity(const DoutPrefixProvider* dpp, sqlite3_stmt* st,
 		    Identity& out)
@@ -124,10 +123,9 @@ int row_to_identity(const DoutPrefixProvider* dpp, sqlite3_stmt* st,
   out.new_buckets_path = column_text(st, 5);
   out.custom_bucket_path_allowed_list = column_text(st, 6);
   out.fs_backend = column_text(st, 7);
-  out.noobaa_id = column_text(st, 8);
   /* NULL is "said nothing", which is not the same as 0 */
-  if (sqlite3_column_type(st, 9) != SQLITE_NULL) {
-    out.force_md5_etag = (sqlite3_column_int64(st, 9) != 0);
+  if (sqlite3_column_type(st, 8) != SQLITE_NULL) {
+    out.force_md5_etag = (sqlite3_column_int64(st, 8) != 0);
   }
   return 0;
 }
@@ -203,7 +201,6 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "  NewBucketsPath TEXT,"
     "  CustomBucketPathAllowedList TEXT,"
     "  FsBackend TEXT,"
-    "  NoobaaId TEXT,"
     /* X1.  A column added here does not reach a table that already
      * exists -- `CREATE TABLE IF NOT EXISTS` does nothing to one --
      * and that is accepted rather than migrated:  nsfs has not
@@ -220,8 +217,16 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "  CHECK (SupplementalGroups IS NULL"
     "         OR SupplementalGroups NOT GLOB '*[^0-9,]*')"
     ");"
-    "CREATE INDEX IF NOT EXISTS '" + identity_table + "_noobaa_id' ON '"
-    + identity_table + "' (NoobaaId);"
+
+    /* Provenance:  NooBaa's `_id` to the owner it was imported as.
+     * The primary key is the whole uniqueness rule, and nothing writes
+     * here with OR REPLACE, so a second import of one id is refused
+     * rather than repointed. */
+    "CREATE TABLE IF NOT EXISTS '" + noobaa_id_table + "' ("
+    "  NoobaaId TEXT NOT NULL PRIMARY KEY,"
+    "  Owner TEXT NOT NULL,"
+    "  CHECK (NoobaaId != '' AND Owner != '')"
+    ");"
 
     /* P1.  Bucket placement, in a table this backend owns.
      *
@@ -268,7 +273,7 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
 
   const std::string sql =
     "INSERT OR REPLACE INTO '" + identity_table + "' (" + IDENTITY_COLUMNS
-    + ") VALUES (?,?,?,?,?,?,?,?,?,?);";
+    + ") VALUES (?,?,?,?,?,?,?,?,?);";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
@@ -294,9 +299,8 @@ int IdentityDB::put_identity(const DoutPrefixProvider* dpp, const Identity& id)
   bind_text_or_null(st, 6, id.new_buckets_path);
   bind_text_or_null(st, 7, id.custom_bucket_path_allowed_list);
   bind_text_or_null(st, 8, id.fs_backend);
-  bind_text_or_null(st, 9, id.noobaa_id);
-  id.force_md5_etag ? sqlite3_bind_int64(st, 10, *id.force_md5_etag ? 1 : 0)
-		    : sqlite3_bind_null(st, 10);
+  id.force_md5_etag ? sqlite3_bind_int64(st, 9, *id.force_md5_etag ? 1 : 0)
+		    : sqlite3_bind_null(st, 9);
 
   if (sqlite3_step(st) != SQLITE_DONE) {
     /* a CHECK violation lands here, and it is the expected way an
@@ -333,17 +337,51 @@ int IdentityDB::get_identity(const DoutPrefixProvider* dpp,
   return row_to_identity(dpp, st, out);
 }
 
-int IdentityDB::get_identity_by_noobaa_id(const DoutPrefixProvider* dpp,
-					  const std::string& noobaa_id,
-					  Identity& out) const
+int IdentityDB::put_noobaa_id(const DoutPrefixProvider* dpp,
+			       const std::string& noobaa_id,
+			       const std::string& owner_key)
+{
+  if (noobaa_id.empty() || owner_key.empty()) {
+    return -EINVAL;
+  }
+
+  const std::string sql =
+    "INSERT INTO '" + noobaa_id_table + "' (NoobaaId, Owner) VALUES (?,?);";
+
+  sqlite3_stmt* st = nullptr;
+  if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
+      != SQLITE_OK) {
+    ldpp_dout(dpp, 0) << "ERROR: preparing NooBaa id insert: "
+      << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  auto done = make_scope_guard([st] { sqlite3_finalize(st); });
+  sqlite3_bind_text(st, 1, noobaa_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(st, 2, owner_key.c_str(), -1, SQLITE_TRANSIENT);
+
+  if (sqlite3_step(st) != SQLITE_DONE) {
+    if (sqlite3_extended_errcode(handle()) == SQLITE_CONSTRAINT_PRIMARYKEY) {
+      ldpp_dout(dpp, 4) << "NooBaa id " << noobaa_id
+	<< " is already recorded" << dendl;
+      return -EEXIST;
+    }
+    ldpp_dout(dpp, 0) << "ERROR: recording NooBaa id " << noobaa_id << ": "
+      << sqlite3_errmsg(handle()) << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+int IdentityDB::get_owner_by_noobaa_id(const DoutPrefixProvider* dpp,
+				       const std::string& noobaa_id,
+				       std::string& owner_key) const
 {
   if (noobaa_id.empty()) {
     return -EINVAL;
   }
 
   const std::string sql =
-    std::string("SELECT ") + IDENTITY_COLUMNS + " FROM '" + identity_table
-    + "' WHERE NoobaaId = ?;";
+    "SELECT Owner FROM '" + noobaa_id_table + "' WHERE NoobaaId = ?;";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
@@ -360,7 +398,8 @@ int IdentityDB::get_identity_by_noobaa_id(const DoutPrefixProvider* dpp,
   if (rc != SQLITE_ROW) {
     return -EIO;
   }
-  return row_to_identity(dpp, st, out);
+  owner_key = column_text(st, 0);
+  return 0;
 }
 
 int IdentityDB::remove_identity(const DoutPrefixProvider* dpp,
@@ -453,13 +492,30 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 }
 
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
-			const req_state* s, Credentials& out)
+			const rgw_user& user, const rgw_account_id& account,
+			Credentials& out, std::string* row)
+{
+  rgw_owner owner{user};
+  int ret = resolve_credentials(dpp, db, owner, out);
+  if ((ret == -ENOENT) && !account.empty()) {
+    owner = account;
+    ret = resolve_credentials(dpp, db, owner, out);
+  }
+  if (row && ((ret == 0) || (ret == -EPERM))) {
+    *row = to_string(owner);
+  }
+  return ret;
+}
+
+int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
+			const req_state* s, Credentials& out, std::string* row)
 {
   if (!s || !s->user) {
     /* nothing authenticated:  nothing to impersonate as */
     return -ENOENT;
   }
-  return resolve_credentials(dpp, db, s->user->get_id(), out);
+  return resolve_credentials(dpp, db, s->user->get_id(),
+			     s->user->get_info().account_id, out, row);
 }
 
 

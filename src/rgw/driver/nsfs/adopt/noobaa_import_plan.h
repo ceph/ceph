@@ -102,6 +102,14 @@ struct ImportPlan {
    * constraint.  Non-empty refuses the plan. */
   std::vector<std::string> collisions;
 
+  /* Every IAM user whose POSIX block differs from its account's,
+   * naming the fields.  A warning, not a collision:  the user is
+   * imported and runs as its account, which changes what it can reach
+   * on disk (ACCOUNT_IMPORT.md §2.8).  NooBaa copies the account's
+   * block into a user at creation and never updates the copy, so a
+   * difference means the account was changed afterwards. */
+  std::vector<std::string> drift;
+
   size_t accounts() const;
   size_t iam_users() const;
 };
@@ -116,7 +124,8 @@ struct ImportPlan {
  *
  * `cct` is for RGW's account id generator and nothing else. */
 /* `stored`, when given, is consulted before an account id is minted:
- * an identity already imported keeps the id it was imported with.
+ * an identity already imported keeps the id it was imported with,
+ * found by its NooBaa `_id` in the provenance table.
  *
  * Without it every call mints, and two calls over one store produce
  * two different ids for the same NooBaa account -- which is what
