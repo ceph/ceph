@@ -45,7 +45,6 @@ fn full_record(key: &str) -> Vec<(&'static str, String)> {
         ("custom_bucket_path_allowed_list",
          "/gpfs/rgw1/nsfs/allowed".to_string()),
         ("fs_backend", "GPFS".to_string()),
-        ("noobaa_id", "6a2bdeabf5c8e167f92cb079".to_string()),
     ]
 }
 
@@ -92,7 +91,6 @@ async fn test_identity_every_field_round_trips() {
     assert_eq!(j["custom_bucket_path_allowed_list"],
                "/gpfs/rgw1/nsfs/allowed");
     assert_eq!(j["fs_backend"], "GPFS");
-    assert_eq!(j["noobaa_id"], "6a2bdeabf5c8e167f92cb079");
     assert!(j.get("distinguished_name").is_none(),
         "an unset field was rendered anyway");
 
@@ -125,8 +123,6 @@ async fn test_identity_fields_update_independently() {
         ("custom_bucket_path_allowed_list", "/gpfs/rgw1/nsfs/elsewhere",
          serde_json::json!("/gpfs/rgw1/nsfs/elsewhere")),
         ("fs_backend", "CEPH_FS", serde_json::json!("CEPH_FS")),
-        ("noobaa_id", "0000000000000000deadbeef",
-         serde_json::json!("0000000000000000deadbeef")),
     ];
 
     for (field, value, want) in changes {
@@ -595,9 +591,13 @@ async fn test_credentials_for_another_identity() {
 /// two differ: `get_aclowner()` reports the account, `s->user`
 /// reports the member.
 ///
-/// A row is written under both, with different uids.  If the driver
-/// ever keys on the ACL owner, the member is served as 9999 and this
-/// fails.  That is the whole point of it.
+/// On Scale every member of an account runs as the account, so a
+/// member ordinarily has no row and is served the account's.  A row
+/// keyed on the member takes precedence where one exists.  Both
+/// halves are here:  with a row under each, the member is served as
+/// its own (4242, not 9999), which fails if the driver keys on the
+/// ACL owner;  with the member's row removed, it is served as the
+/// account (9999), which fails if it keys on the member alone.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_credentials_of_an_account_member() {
@@ -669,6 +669,21 @@ async fn test_credentials_of_an_account_member() {
     assert_ne!(j["uid"], serde_json::json!(9999),
         "the member was served as its account");
     assert_eq!(j["groups"], serde_json::json!([77]));
+    assert_eq!(j["row"], member, "the answer did not come from the member's row");
+
+    /* no row of its own:  the member runs as its account, and the
+     * answer says which row it came from */
+    scrub(&member).await;
+    let j = as_json(&nsfs_credentials_as(&mak, &msk).await).expect("not JSON");
+    assert_eq!(j["identity"], member,
+        "the request resolved under {} rather than the member",
+        j["identity"]);
+    assert_eq!(j["outcome"], "resolved",
+        "a member with no row was not served as its account");
+    assert_eq!(j["row"], account,
+        "the fallback did not come from the account's row");
+    assert_eq!(j["uid"], 9999);
+    assert_eq!(j["gid"], 9999);
 
     /* clean up */
     scrub(&member).await;

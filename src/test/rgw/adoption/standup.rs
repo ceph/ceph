@@ -59,8 +59,19 @@ struct Env {
     port: u16,
     /// the port RGW serves on after `adopt` -- `rgw-vstart.sh`'s default
     rgw_port: u16,
+    /// NooBaa's IAM port.  HTTPS only -- their IAM listener has no
+    /// HTTP form -- with the self-signed certificate they generate
+    /// when the config root holds none
+    iam_port: u16,
     /// the account NooBaa serves as
     account: String,
+    /// the IAM user `member` creates in that account
+    member: String,
+    /// a credential on the adopted gateway carrying `users=*`, which
+    /// `resolve` needs to give the imported member the `nsfs` cap.
+    /// The default is the `[iam]` user `vstart.sh` creates
+    rgw_admin_key: String,
+    rgw_admin_secret: String,
     /// the one bucket, which both gateways will serve
     bucket: String,
     /// fixed, so the corpus can be pointed at it without discovery
@@ -153,7 +164,12 @@ impl Env {
              * problem worth not having. */
             port: get("port", "6001").parse().unwrap_or(6001),
             rgw_port: get("rgw_port", "8000").parse().unwrap_or(8000),
+            iam_port: get("iam_port", "7005").parse().unwrap_or(7005),
             account: get("account", "adoption"),
+            member: get("member", "adoption-member"),
+            rgw_admin_key: get("rgw_admin_key", "ABCDEFGHIJKLMNOPQRST"),
+            rgw_admin_secret: get("rgw_admin_secret",
+                                  "abcdefghijklmnopqrstuvwxyzabcdefghijklmn"),
             bucket: get("bucket", "adoption"),
             /* Fixed rather than generated:  the corpus has to be
              * pointed at this endpoint, and a credential that changes
@@ -218,6 +234,11 @@ impl Env {
         self.work.join("nsfs.log")
     }
 
+    /// The member's credential, which NooBaa generates and shows once.
+    fn member_credentials(&self) -> PathBuf {
+        self.work.join("member-credentials")
+    }
+
     /// Where a capture's artifacts go.
     ///
     /// **The side is in the path, never in the artifacts.**  The
@@ -262,9 +283,11 @@ const STEPS: &[(&str, &str)] = &[
     ("build",    "install the dependency tree, and build NooBaa's native addon"),
     ("config",   "write the NooBaa account and bucket records over the data root"),
     ("serve",    "start the NooBaa NSFS endpoint"),
+    ("member",   "create an IAM user in the account, through NooBaa's IAM API"),
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("adopt",    "start RGW against the same tree"),
+    ("resolve",  "check the imported member runs as its account"),
 ];
 
 fn main() {
@@ -285,9 +308,11 @@ fn main() {
         "build" => build(&env),
         "config" => config(&env),
         "serve" => serve(&env),
+        "member" => member(&env),
         "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
         "adopt" => adopt(&env),
+        "resolve" => resolve(&env),
         "up" => ["pin", "worktree", "patch", "build", "config"]
             .iter()
             .try_for_each(|s| match *s {
@@ -324,8 +349,11 @@ fn list() {
         ("pin", "the commit to stand up"),
         ("data", "what --data-root is given;  the tree is data/root"),
         ("port", "the NooBaa HTTP port"),
+        ("iam_port", "the NooBaa IAM port, HTTPS"),
         ("rgw_port", "the port RGW serves on after `adopt`"),
         ("account", "the account `config` creates;  default adoption"),
+        ("member", "the IAM user `member` creates;  default adoption-member"),
+        ("rgw_admin_key", "a users=* key on RGW for `resolve`;  default vstart's [iam]"),
         ("bucket", "the bucket `config` creates;  default adoption"),
         ("suite", "the s3-tests-rs checkout;  defaults to a sibling of this driver"),
         ("tier", "which corpus tier `capture` runs"),
@@ -337,10 +365,10 @@ fn list() {
             _ => println!("  {k:12} (unset)  {note}"),
         }
     }
-    println!("\n`up` runs through `config`.  `serve`, `capture`, `stop` and `adopt`");
-    println!("are each run deliberately:  they start and stop gateways over a tree");
-    println!("that is the artifact, and chaining them past a failure is how a tree");
-    println!("gets destroyed rather than handed over.");
+    println!("\n`up` runs through `config`.  `serve`, `member`, `capture`, `stop`, `adopt`");
+    println!("and `resolve` are each run deliberately:  they start and stop gateways");
+    println!("over a tree that is the artifact, and chaining them past a failure is");
+    println!("how a tree gets destroyed rather than handed over.");
 }
 
 /* ---------------------------------------------------------------- */
@@ -775,9 +803,10 @@ fn tree_modality(env: &Env) -> Option<String> {
 
 /// Start the NooBaa S3 endpoint over the data root.
 ///
-/// HTTP only.  `--https_port -1` turns TLS off the way they turn IAM
-/// off, and the corpus talks to this with the Rust SDK, for which a
-/// self-signed certificate is a problem worth not having.
+/// S3 over HTTP only.  `--https_port -1` turns its TLS off, and the
+/// corpus talks to this with the Rust SDK, for which a self-signed
+/// certificate is a problem worth not having.  IAM is the exception:
+/// it has no HTTP form, and `member` needs it.
 ///
 /// Backgrounded with its pid recorded, because the handoff is
 /// sequential:  something has to stop this before RGW opens the same
@@ -819,7 +848,8 @@ fn serve(env: &Env) -> Result<(), String> {
              * starting, and the failure surfaced as `EACCES listen
              * EACCES` from start_https_server, which reads as a
              * permission problem on the port asked for rather than as
-             * a port nobody asked for.  IAM already defaults to -1. */
+             * a port nobody asked for.  IAM defaults to -1 in NC;  it
+             * is the one listener turned *on*, below. */
             /* `--flag=-1`, not `--flag -1`.
              *
              * They parse with minimist, which reads a bare `-1` as a
@@ -831,6 +861,12 @@ fn serve(env: &Env) -> Result<(), String> {
             "--https_port=-1",
             "--https_port_sts=-1",
             "--https_port_vector=-1",
+            /* IAM, because an IAM user is a record only their IAM API
+             * writes -- `manage_nsfs.js` cannot address one.  HTTPS is
+             * its only form;  with no `certificates/` in the config
+             * root they generate a self-signed certificate, which
+             * `member` accepts. */
+            &format!("--https_port_iam={}", env.iam_port),
         ])
         .current_dir(&wt)
         .stdout(Stdio::from(log))
@@ -867,6 +903,85 @@ fn serve(env: &Env) -> Result<(), String> {
         env.port,
         env.log_file().display()
     ))
+}
+
+/// Create an IAM user in the account, through NooBaa's IAM API.
+///
+/// **The account's own credential, against their endpoint.**  An IAM
+/// user is a record only their IAM API writes -- `manage_nsfs.js`
+/// cannot address one -- so this is the one way to get a member that
+/// *they* wrote, carrying the fields their code copies into it:
+/// `owner`, `iam_path`, and a copy of the account's
+/// `nsfs_account_config` (ACCOUNT_IMPORT.md §2.8).
+///
+/// Signed by `curl --aws-sigv4` rather than an SDK, because this
+/// driver has no dependencies and curl is already on every host it
+/// runs on.  `-k`, because the certificate is the one they generate.
+///
+/// **The credential is shown once.**  NooBaa returns the secret from
+/// `CreateAccessKey` and never again, so it is written to
+/// `member-credentials` as it arrives.  Idempotent on that file:  a
+/// member that exists with its credential recorded is left alone;  one
+/// that exists without it is given a new key, since the old secret is
+/// unrecoverable.
+fn member(env: &Env) -> Result<(), String> {
+    if running(env).is_none() {
+        return Err("the NooBaa endpoint is not running;  run `serve` first".into());
+    }
+    if std::net::TcpStream::connect(("127.0.0.1", env.iam_port)).is_err() {
+        return Err(format!(
+            "nothing accepts a connection on port {}, their IAM port.  An \
+             endpoint started\n  before `serve` turned IAM on has to be \
+             restarted:  `stop`, then `serve`.",
+            env.iam_port
+        ));
+    }
+
+    let exists = iam_call(env, &[("Action", "GetUser"), ("UserName", &env.member)]).is_ok();
+    if exists && env.member_credentials().exists() {
+        println!("member   {:?} already present, credential in {}",
+                 env.member, env.member_credentials().display());
+        return Ok(());
+    }
+    if !exists {
+        let body = iam_call(env, &[("Action", "CreateUser"), ("UserName", &env.member)])?;
+        println!("member   {:?} created, NooBaa id {}", env.member,
+                 xml_tag(&body, "UserId").unwrap_or("?"));
+    } else {
+        println!("member   {:?} present without a recorded credential;  \
+                  issuing a new one", env.member);
+    }
+
+    let body = iam_call(env, &[("Action", "CreateAccessKey"), ("UserName", &env.member)])?;
+    let (Some(ak), Some(sk)) = (xml_tag(&body, "AccessKeyId"), xml_tag(&body, "SecretAccessKey"))
+    else {
+        return Err(format!("CreateAccessKey answered without a key:\n{body}"));
+    };
+    std::fs::write(
+        env.member_credentials(),
+        format!("# written by standup.rs member\nuser={}\naccess_key={ak}\nsecret_key={sk}\n",
+                env.member),
+    )
+    .map_err(|e| format!("cannot write {}: {e}", env.member_credentials().display()))?;
+    println!("         access key {ak}, recorded in {}", env.member_credentials().display());
+    Ok(())
+}
+
+/// One IAM action against NooBaa, signed as the account.
+fn iam_call(env: &Env, params: &[(&str, &str)]) -> Result<String, String> {
+    let mut form: Vec<String> = params.iter().map(|(k, v)| format!("{k}={v}")).collect();
+    form.push("Version=2010-05-08".into());
+    let (status, body) = curl(&[
+        "-k",
+        "--aws-sigv4", "aws:amz:us-east-1:iam",
+        "--user", &format!("{}:{}", env.access_key, env.secret_key),
+        "--data", &form.join("&"),
+        &format!("https://127.0.0.1:{}/", env.iam_port),
+    ])?;
+    if status != 200 {
+        return Err(format!("{} answered {status}:\n{body}", params[0].1));
+    }
+    Ok(body)
 }
 
 /// Run the corpus against the NooBaa endpoint, and keep what it produced.
@@ -1461,6 +1576,136 @@ fn adopt(env: &Env) -> Result<(), String> {
     }
     println!("adopt    ceph.conf confirms the base path");
     Ok(())
+}
+
+/// Check that the imported member runs as its account.
+///
+/// The import writes one identity row per account and none for its
+/// members, and a member with no row resolves to its account's
+/// (ACCOUNT_IMPORT.md §2.8).  This asks the adopted gateway, as the
+/// member and with the key NooBaa minted for it, what a request would
+/// be served as -- `GET /admin/nsfs/credentials`, whose `row` names the
+/// row that answered.
+///
+/// **`row`, not the uid, is the discrimination.**  `config` gives the
+/// account the running uid and NooBaa copies it into the member, so
+/// a member resolving under a row of its own would report the same
+/// uid.  The control is the member's own key, asked for by name, which
+/// must have no row.
+///
+/// The diagnostic is capped (`nsfs=read`), which an imported member
+/// does not carry, so it is granted first through Admin Ops by
+/// `rgw_admin_key`.  Granted through the gateway rather than with
+/// `radosgw-admin`, which would open the store a second time beside
+/// the running gateway.
+fn resolve(env: &Env) -> Result<(), String> {
+    if let Some(pid) = running(env) {
+        return Err(format!(
+            "NooBaa is still running (pid {pid});  `resolve` asks the adopted \
+             gateway.  Run `stop`, then `adopt`."));
+    }
+    if std::net::TcpStream::connect(("127.0.0.1", env.rgw_port)).is_err() {
+        return Err(format!(
+            "nothing accepts a connection on port {};  run `adopt` first",
+            env.rgw_port));
+    }
+    let creds = std::fs::read_to_string(env.member_credentials()).map_err(|e| {
+        format!("cannot read {}: {e};  run `member` while NooBaa serves",
+                env.member_credentials().display())
+    })?;
+    let field = |k: &str| -> Option<String> {
+        creds.lines().find_map(|l| l.strip_prefix(&format!("{k}=")).map(str::to_string))
+    };
+    let (Some(ak), Some(sk)) = (field("access_key"), field("secret_key")) else {
+        return Err(format!("{} carries no key", env.member_credentials().display()));
+    };
+    let admin = format!("{}:{}", env.rgw_admin_key, env.rgw_admin_secret);
+    let base = format!("http://127.0.0.1:{}", env.rgw_port);
+
+    /* who the member became */
+    let (status, body) = rgw_call(&admin, "GET",
+        &format!("{base}/admin/user?access-key={ak}&format=json"))?;
+    if status != 200 {
+        return Err(format!(
+            "the gateway does not know the member's key ({status}):  the \
+             import did not bring it across.\n{body}"));
+    }
+    let (Some(user), Some(account)) = (json_str(&body, "user_id"), json_str(&body, "account_id"))
+    else {
+        return Err(format!("no user_id and account_id in:\n{body}"));
+    };
+    if account.is_empty() {
+        return Err(format!("the member {user} was imported outside any account"));
+    }
+    println!("resolve  member {:?} is {user} in {account}", env.member);
+
+    let (status, body) = rgw_call(&admin, "PUT",
+        &format!("{base}/admin/user?caps&uid={user}&user-caps=nsfs%3Dread&format=json"))?;
+    if status != 200 {
+        return Err(format!("granting nsfs=read to {user} failed ({status}):\n{body}"));
+    }
+
+    /* the control:  no row of its own */
+    let (_, own) = rgw_call(&admin, "GET",
+        &format!("{base}/admin/nsfs/credentials?identity={user}&format=json"))?;
+    if json_str(&own, "outcome").as_deref() != Some("none") {
+        return Err(format!("the member has a row of its own:\n{own}"));
+    }
+
+    /* and what it runs as */
+    let (status, body) = rgw_call(&format!("{ak}:{sk}"), "GET",
+        &format!("{base}/admin/nsfs/credentials?format=json"))?;
+    if status != 200 {
+        return Err(format!("the member's own request failed ({status}):\n{body}"));
+    }
+    println!("         {body}");
+    let outcome = json_str(&body, "outcome").unwrap_or_default();
+    let row = json_str(&body, "row").unwrap_or_default();
+    if outcome != "resolved" || row != account {
+        return Err(format!(
+            "the member did not run as its account:  outcome {outcome:?}, \
+             row {row:?}, expected {account:?}"));
+    }
+    println!("resolve  the member runs as its account's row");
+    Ok(())
+}
+
+/// One request to the adopted gateway, signed by `who` (`key:secret`).
+fn rgw_call(who: &str, method: &str, url: &str) -> Result<(u16, String), String> {
+    curl(&["-X", method, "--aws-sigv4", "aws:amz:us-east-1:s3", "--user", who, url])
+}
+
+/// curl, returning the status and the body.
+fn curl(args: &[&str]) -> Result<(u16, String), String> {
+    let out = Command::new("curl")
+        .args(["-s", "-w", "\n%{http_code}"])
+        .args(args)
+        .output()
+        .map_err(|e| format!("cannot run curl: {e}"))?;
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    let (body, code) = text.rsplit_once('\n').unwrap_or(("", &text));
+    let status = code.trim().parse().map_err(|_| {
+        format!("curl {} failed:  {}", args.last().unwrap_or(&""),
+                String::from_utf8_lossy(&out.stderr).trim())
+    })?;
+    Ok((status, body.to_string()))
+}
+
+/// The text of the first `<tag>`, for the IAM responses.
+fn xml_tag<'a>(body: &'a str, tag: &str) -> Option<&'a str> {
+    let open = format!("<{tag}>");
+    let start = body.find(&open)? + open.len();
+    let len = body[start..].find(&format!("</{tag}>"))?;
+    Some(&body[start..start + len])
+}
+
+/// A top-level string field of a flat JSON answer.  Enough for the
+/// Admin Ops replies this reads, whose values carry no escapes.
+fn json_str(body: &str, key: &str) -> Option<String> {
+    let pat = format!("\"{key}\":");
+    let rest = body[body.find(&pat)? + pat.len()..].trim_start();
+    let rest = rest.strip_prefix('"')?;
+    Some(rest[..rest.find('"')?].to_string())
 }
 
 /// The pid of the NooBaa endpoint this driver started, if it is up.

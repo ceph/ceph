@@ -11,9 +11,9 @@ Four steps.  **The first three run today.  The fourth is not built** —
 step 4 says what is missing.
 
 ```
-  1. stand NooBaa up        standup.rs up && standup.rs serve
+  1. stand NooBaa up        standup.rs up && standup.rs serve && standup.rs member
   2. generate and ingest    standup.rs capture
-  3. hand off to RGW        standup.rs stop && standup.rs adopt
+  3. hand off to RGW        standup.rs stop && standup.rs adopt && standup.rs resolve
   4. verify                 not built -- C2b
 ```
 
@@ -29,16 +29,20 @@ config store, the data root and the captures.
 ```sh
 cd src/test/rgw/adoption
 ./standup.rs up          # pin, worktree, patch, build, config
-./standup.rs serve       # their endpoint, HTTP, on 6001
+./standup.rs serve       # their endpoint, HTTP, on 6001;  IAM, HTTPS, on 7005
+./standup.rs member      # an IAM user in the account, through their IAM API
 ```
 
 `up` is the slow one — their dependency tree and their native addon,
 tens of minutes on a first run.  Everything after it is seconds.
 
 **What this produces.**  A pinned NooBaa NSFS gateway serving a data
-root, with an account and a bucket their own CLI created — records
-*they* wrote, rather than records composed from our reading of their
-schema.
+root, with an account and a bucket their own CLI created, and an IAM
+user in that account their IAM API created — records *they* wrote,
+rather than records composed from our reading of their schema.  Their
+CLI cannot address an IAM user, which is why `member` goes through the
+API.  NooBaa shows the member's secret once;  `member` keeps it in
+`$ADOPTION_WORK/member-credentials`.
 
 `README.md` beside this file owns the detail — why source and not a
 container, why a `--detach`ed worktree, why the dependency tree is
@@ -84,6 +88,7 @@ the two capture formats in §7).
 ```sh
 ./standup.rs stop        # leaves the tree
 ./standup.rs adopt       # RGW over the same tree
+./standup.rs resolve     # the imported member runs as its account
 ```
 
 **Sequential, never concurrent.**  NooBaa writes, stops, then RGW opens
@@ -107,6 +112,15 @@ mode says so.  There is no verb and no endpoint.  `ACCOUNT_IMPORT.md`
 **What this produces.**  An RGW gateway serving the tree NooBaa wrote,
 with that deployment's accounts, users, identity rows and bucket state
 imported.
+
+`resolve` then checks the identity half of that.  The import writes
+one identity row per account and none for its members, and a member
+with no row runs as its account (`ACCOUNT_IMPORT.md` §2.8).  It signs
+`GET /admin/nsfs/credentials` with the key NooBaa minted for the
+member, and requires the answer to come from the account's row.  The
+member must also have no row of its own.  The diagnostic needs the
+`nsfs` cap, which `resolve` grants first through Admin Ops, as
+vstart's `[iam]` user unless `rgw_admin_key` says otherwise.
 
 ## 4.  Verify — **not built**
 
