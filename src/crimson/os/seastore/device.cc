@@ -5,7 +5,13 @@
 
 #include <sys/stat.h>
 
+#include <filesystem>
+#include <system_error>
+
+#include <seastar/core/seastar.hh>
 #include <seastar/core/smp.hh>
+
+#include "include/types.h"
 
 #include "segment_manager.h"
 #include "random_block_manager.h"
@@ -174,6 +180,52 @@ Device::make_device(
   }
 }
 
+namespace {
+
+/// Translate the errno of a failed device file creation into the matching
+/// seastore error. Keeping the conditions apart matters: "the device file
+/// does not fit on this filesystem" and "the disk is broken" need very
+/// different responses from whoever reads the log.
+check_create_device_ret create_device_error(const std::error_code &ec)
+{
+  switch (ec.value()) {
+  case ENOSPC:
+    return crimson::ct_error::enospc::make();
+  case EACCES:
+  case EPERM:
+    return crimson::ct_error::permission_denied::make();
+  case ENOENT:
+    return crimson::ct_error::enoent::make();
+  default:
+    return crimson::ct_error::input_output_error::make();
+  }
+}
+
+/// Spell out an ENOSPC: the bare errno leaves the reader guessing how much
+/// room was wanted and how much there was. Note that the size is per device,
+/// and a seastore OSD may create several devices under the same mount point.
+check_create_device_ret no_space_error(const std::string &path, size_t size)
+{
+  LOG_PREFIX(block_check_create_device);
+  // query the directory, not the file: the failed attempt has already been
+  // cleaned up by the time we get here
+  auto dir = std::filesystem::path(path).parent_path();
+  return seastar::file_system_space(
+    dir.empty() ? "." : dir.native()
+  ).handle_exception([](auto) {
+    // the explanation is best-effort; the error itself is what matters
+    return std::filesystem::space_info{};
+  }).then([path, size, FNAME](auto space) -> check_create_device_ret {
+    ERROR("path={} out of space: need 0x{:x} ({}), the filesystem has {} "
+          "available of {}; lower seastore_device_size or use a larger device",
+          path, size, byte_u_t(size),
+          byte_u_t(space.available), byte_u_t(space.capacity));
+    return crimson::ct_error::enospc::make();
+  });
+}
+
+}
+
 check_create_device_ret check_create_device(
   const std::string path,
   size_t size)
@@ -199,29 +251,50 @@ check_create_device_ret check_create_device(
       }).finally([&f] {
         return f.close();
       });
+    }).handle_exception([FNAME, path](auto eptr) {
+      // The open above is exclusive|create, so reaching here means we are
+      // the ones who created the file. Take it away again: a device file
+      // left behind half-allocated is indistinguishable from a complete
+      // one to the next mkfs, which would then "succeed" and only fail
+      // once the OSD is serving writes.
+      WARN("path={} removing the partially created device file", path);
+      return seastar::remove_file(path).handle_exception([FNAME, path](auto rm_eptr) {
+        ERROR("path={} could not remove the partially created device file -- {}; "
+              "delete it before retrying", path, rm_eptr);
+      }).then([eptr = std::move(eptr)]() mutable {
+        return seastar::make_exception_future<>(std::move(eptr));
+      });
     });
-  }).then_wrapped([path, FNAME](auto f) -> check_create_device_ret {
-    if (f.failed()) {
-      try {
-	f.get();
-	return seastar::now();
-      } catch (const std::system_error &e) {
-	if (e.code().value() == EEXIST) {
-          DEBUG("path={} exists", path);
-	  return seastar::now();
-	} else {
-          ERROR("path={} creation error -- {}", path, e);
-	  return crimson::ct_error::input_output_error::make();
-	}
-      } catch (...) {
-        ERROR("path={} creation error", path);
-	return crimson::ct_error::input_output_error::make();
-      }
+  }).then_wrapped([path, size, FNAME](auto f) -> check_create_device_ret {
+    if (!f.failed()) {
+      DEBUG("path={} complete", path);
+      std::ignore = f.discard_result();
+      return seastar::now();
     }
 
-    DEBUG("path={} complete", path);
-    std::ignore = f.discard_result();
-    return seastar::now();
+    std::error_code ec;
+    try {
+      f.get();
+      return seastar::now();
+    } catch (const std::system_error &e) {
+      ec = e.code();
+    } catch (const std::exception &e) {
+      ERROR("path={} creation error -- {}", path, e.what());
+      return crimson::ct_error::input_output_error::make();
+    } catch (...) {
+      ERROR("path={} creation error", path);
+      return crimson::ct_error::input_output_error::make();
+    }
+
+    if (ec.value() == EEXIST) {
+      DEBUG("path={} exists", path);
+      return seastar::now();
+    }
+    if (ec.value() == ENOSPC) {
+      return no_space_error(path, size);
+    }
+    ERROR("path={} size=0x{:x} creation error -- {}", path, size, ec.message());
+    return create_device_error(ec);
   });
 }
 }
