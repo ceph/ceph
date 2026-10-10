@@ -227,7 +227,10 @@ class UpgradeImagePrePull:
         results: Dict[str, Tuple[int, Optional[Dict[str, Any]], str]] = {}
 
         async def _pull_on_host(host: str) -> None:
-            if not self._is_same_upgrade(origin_id) or self.upgrade.upgrade_state.paused:
+            upgrade_state = self.upgrade.upgrade_state
+            if not self._is_same_upgrade(origin_id) or upgrade_state is None:
+                return
+            if upgrade_state.paused:
                 return
             try:
                 await self._registry_login_if_needed(host)

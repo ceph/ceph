@@ -1856,11 +1856,19 @@ class CephadmServe:
                                 timeout: Optional[int] = None,
                                 ) -> Any:
         try:
-            out, err, code = await self._run_cephadm(
-                host, entity, command, args, no_fsid=no_fsid, error_ok=error_ok,
-                image=image, log_output=log_output,
-                use_current_daemon_image=use_current_daemon_image,
-                timeout=timeout)
+            # Omit the default so callers that do not set a timeout keep the
+            # historical _run_cephadm call signature.
+            if timeout is None:
+                out, err, code = await self._run_cephadm(
+                    host, entity, command, args, no_fsid=no_fsid, error_ok=error_ok,
+                    image=image, log_output=log_output,
+                    use_current_daemon_image=use_current_daemon_image)
+            else:
+                out, err, code = await self._run_cephadm(
+                    host, entity, command, args, no_fsid=no_fsid, error_ok=error_ok,
+                    image=image, log_output=log_output,
+                    use_current_daemon_image=use_current_daemon_image,
+                    timeout=timeout)
             if code:
                 raise OrchestratorError(f'host {host} `cephadm {command}` returned {code}: {err}')
         except Exception as e:

@@ -1389,6 +1389,7 @@ def test_upgrade_start_blocks_on_insufficient_cpu_isa_level(cephadm_module: Ceph
                             '', '21.2.0', host_placement='test2')
                         ).startswith('Initiating upgrade')
 
+
 def test_upgrade_prepull_method_from_config():
     assert UpgradeImagePrePullMethod.from_config('') is UpgradeImagePrePullMethod.NONE
     assert UpgradeImagePrePullMethod.from_config(' ') is UpgradeImagePrePullMethod.NONE
