@@ -13,7 +13,7 @@
 #include "crimson/os/futurized_store.h"
 #include "include/expected.hpp"
 #include "objectstore_tool.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types_fmt.h"
 #include "seastar/core/future.hh"
 #include "seastar/core/smp.hh"
 
