@@ -5847,32 +5847,49 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
 
 /* Set or clear it.  An empty `from` removes the attribute, which is
  * what finishing the conversion does. */
-int NSFSBucket::mark_converting(const DoutPrefixProvider* dpp,
-				bool from_noobaa)
+int NSFSBucket::mark_converting(const DoutPrefixProvider* dpp)
 {
   int ret = dir->open(dpp);
   if (ret < 0) {
     return ret;
   }
 
-  if (from_noobaa) {
-    const std::string v{nsfs::CONVERTING_FROM_NOOBAA};
-    if (::fsetxattr(dir->get_fd(), nsfs::CONVERTING_XATTR,
-		    v.data(), v.size(), 0) < 0) {
-      ret = -errno;
-      ldpp_dout(dpp, 0) << "ERROR: writing " << nsfs::CONVERTING_XATTR
-	<< " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-  } else if ((::fremovexattr(dir->get_fd(), nsfs::CONVERTING_XATTR) < 0) &&
-	     (errno != ENODATA)) {
+  /* The value is the format being converted FROM, and NooBaa's is the
+   * only other format there is;  `load()` refuses a value it has no
+   * reader for rather than guessing. */
+  const std::string v{nsfs::CONVERTING_FROM_NOOBAA};
+  if (::fsetxattr(dir->get_fd(), nsfs::CONVERTING_XATTR,
+		  v.data(), v.size(), 0) < 0) {
+    ret = -errno;
+    ldpp_dout(dpp, 0) << "ERROR: writing " << nsfs::CONVERTING_XATTR
+      << " on bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  converting = true;
+  /* the fallbacks the subtree inherits follow the marker */
+  apply_format();
+  return 0;
+}
+
+int NSFSBucket::clear_converting(const DoutPrefixProvider* dpp)
+{
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* Absent already is the state being asked for, so ENODATA is not an
+   * error -- a resumed run clears a marker a previous one removed. */
+  if ((::fremovexattr(dir->get_fd(), nsfs::CONVERTING_XATTR) < 0) &&
+      (errno != ENODATA)) {
     ret = -errno;
     ldpp_dout(dpp, 0) << "ERROR: removing " << nsfs::CONVERTING_XATTR
       << " from bucket " << get_name() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
-  converting = from_noobaa;
+  converting = false;
   /* the fallbacks the subtree inherits follow the marker */
   apply_format();
   return 0;
@@ -6137,7 +6154,7 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
    * with no mask is a base bucket carrying an attribute base does not
    * consult, which is nothing.  So the harmless one is written first.
    */
-  ret = mark_converting(dpp, true);
+  ret = mark_converting(dpp);
   if (ret < 0) {
     return ret;
   }
@@ -7319,7 +7336,7 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
   }
 
-  ret = mark_converting(dpp, false);
+  ret = clear_converting(dpp);
   if (ret < 0) {
     return ret;
   }

@@ -6117,7 +6117,7 @@ public:
     auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
     ASSERT_EQ(b->resolve_profile(env->dpp), 0);
     ASSERT_STREQ(b->profile_name(), "strong");
-    ASSERT_EQ(b->mark_converting(env->dpp, true), 0);
+    ASSERT_EQ(b->mark_converting(env->dpp), 0);
     ASSERT_TRUE(b->is_converting());
   }
 
@@ -7224,7 +7224,7 @@ TEST_F(NSFSUpgradeTest, ConvertingTwiceIsTheSameAsOnce)
   const auto after_one = xattr_names(bucket_path() / "once.bin");
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
-  ASSERT_EQ(b->mark_converting(env->dpp, true), 0);
+  ASSERT_EQ(b->mark_converting(env->dpp), 0);
   nsfs::ConvertProgress prog;
   ASSERT_EQ(b->convert_tree(env->dpp, null_yield, nullptr, &prog), 0);
   EXPECT_TRUE(prog.complete);

@@ -1648,11 +1648,24 @@ public:
   /* test support only -- reachable through the unmark-bucket hint */
   int unmark_extensions(const DoutPrefixProvider* dpp);
 
-  /* Set or clear the converting marker.  Written by the upgrade from
-   * base to a named profile and cleared when it finishes;  nothing
-   * else may touch it, because it is what says a foreign reader is
-   * still needed. */
-  int mark_converting(const DoutPrefixProvider* dpp, bool from_noobaa);
+  /* Write the converting marker, and remove it.
+   *
+   * Two functions rather than one with a flag.  The flag was named
+   * `from_noobaa`, which reads as the source format -- and the
+   * attribute's *value* is exactly that, so `mark_converting(dpp,
+   * false)` read as "converting, but not from NooBaa" when it meant
+   * "stop converting".  The value dimension is real and the set/clear
+   * dimension is real;  one bool cannot carry both.
+   *
+   * There is one source format, so `mark_converting` names it in the
+   * body rather than taking it.  A second format is when a parameter
+   * earns its place.
+   *
+   * Written by the upgrade leaving base and removed when it finishes;
+   * nothing else may touch it, because it is what says a foreign
+   * reader is still needed. */
+  int mark_converting(const DoutPrefixProvider* dpp);
+  int clear_converting(const DoutPrefixProvider* dpp);
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
 		      optional_yield y) override;
