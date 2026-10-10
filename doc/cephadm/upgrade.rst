@@ -2,6 +2,8 @@
 Upgrading Ceph
 ==============
 
+.. _cephadm-upgrade:
+
 Cephadm can safely upgrade Ceph from one point release to the next.  For
 example, you can upgrade from v15.2.0 (the first Octopus release) to the next
 point release, v15.2.1.
@@ -59,6 +61,55 @@ The automated upgrade process follows Ceph best practices.  For example:
    If autoscaling was already off before the upgrade, cephadm does not change
    it unless you have set ``pg_autoscale_during_upgrade`` to ``true`` (opt-in
    to turn autoscaling on for the duration of the upgrade).
+
+
+Upgrade image pre-pull
+======================
+
+On clusters with many hosts and large container images, pulling the target
+image from a registry on each host during the upgrade can add significant
+time. This is especially noticeable during MDS upgrades when CephFS may
+already be offline while a host still downloads the image.
+
+When enabled, cephadm pre-pulls the target image to in-scope hosts
+**before any daemon is upgraded**. Configure this with
+``mgr/cephadm/upgrade_prepull_method``:
+
+``''`` / ``none`` (default)
+  Disabled. Upgrade behaves as before (per-host pull on demand during
+  daemon upgrade).
+
+``registry``
+  Pull in parallel batches on each in-scope host from the cluster registry
+  (Harbor, Quay, etc.). Use this when every node already has registry
+  connectivity. The existing first pull on one host still learns the target
+  digest and Ceph version (and rejects a bad target) before the cluster-wide
+  pre-pull. The longer pull timeout, and a staggered upgrade's reuse of the
+  image already inspected at start, apply only while this method is
+  ``registry``. Hosts already completed are skipped after a pause or mgr failover.
+  If pre-pull fails on any host, the upgrade is paused before any daemon is
+  upgraded. Staggered upgrades pre-pull only on hosts in the current upgrade
+  scope.
+
+Enable pre-pull:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_prepull_method registry
+
+Disable again (either form):
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_prepull_method none
+   # or clear to empty
+   ceph config set mgr mgr/cephadm/upgrade_prepull_method ''
+
+Optional tuning (hosts pulled per serve iteration):
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/cephadm/upgrade_prepull_max_parallel 8
 
 
 Starting the Upgrade
