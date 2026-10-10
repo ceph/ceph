@@ -65,9 +65,12 @@ For example, to create a vector bucket named ``my-vectors``, first create a
 regular S3 bucket named ``my-vectors`` at the RGW endpoint, and only then call
 ``CreateVectorBucket``.
 
-.. note:: S3 buckets are kept in separate namespaces, and a name may be used by both
+.. note:: S3 and vector bucket entrypoints are kept in separate namespaces, and a name may be used by both
    at the same time. Listing S3 buckets does not show vector buckets,
-   and listing vector buckets does not show S3 buckets.
+   and listing vector buckets does not show S3 buckets. However there instance
+   metadata are stored in the same namespace. Their distinct bucket IDs will
+   keep the data separate.
+
 
 Ownership
 `````````

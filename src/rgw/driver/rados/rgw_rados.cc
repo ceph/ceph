@@ -2688,6 +2688,7 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
     // Normal index layout that does not exist
     init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
                                index_type, index_shards);
+    info.flags |= BUCKET_VECTOR | BUCKET_DATASYNC_DISABLED;
 
     if (creation_time) {
       info.creation_time = *creation_time;
