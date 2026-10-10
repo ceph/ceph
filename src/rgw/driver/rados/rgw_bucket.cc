@@ -2964,6 +2964,8 @@ class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   RGWDataChangesLog *svc_datalog{nullptr};
 
 protected:
+  virtual bool is_vector_bucket() const;
+
   virtual int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
                   const std::string& entry, RGWBucketCompleteInfo& bci,
                   const std::optional<RGWBucketCompleteInfo>& old_bci,
@@ -3018,6 +3020,11 @@ protected:
   std::string get_marker(void *handle) override;
 };
 
+bool RGWBucketInstanceMetadataHandler::is_vector_bucket() const
+{
+  return false;
+}
+
 int RGWBucketInstanceMetadataHandler::get(std::string& entry, RGWMetadataObject **obj,
                                           optional_yield y, const DoutPrefixProvider *dpp)
 {
@@ -3027,6 +3034,10 @@ int RGWBucketInstanceMetadataHandler::get(std::string& entry, RGWMetadataObject 
   int ret = svc_bucket->read_bucket_instance_info(entry, &bci.info, &mtime, &bci.attrs, y, dpp);
   if (ret < 0) {
     return ret;
+  }
+
+  if (bci.info.is_vector() != is_vector_bucket()) {
+    return -ENOENT;
   }
 
   *obj = new RGWBucketInstanceMetadataObject(bci, bci.info.objv_tracker.read_version, mtime);
@@ -3050,6 +3061,13 @@ int RGWBucketInstanceMetadataHandler::put(std::string& entry, RGWMetadataObject*
 
   auto newobj = static_cast<RGWBucketInstanceMetadataObject*>(obj);
   RGWBucketCompleteInfo& bci = newobj->get_bci();
+
+  // The metadata sections remain distinct even though instance storage is shared.
+  // A put must not change the type of an existing instance.
+  if (bci.info.is_vector() != is_vector_bucket() ||
+      (old && old->info.is_vector() != is_vector_bucket())) {
+    return -EINVAL;
+  }
 
   // initializate/update the bucket instance info
   ret = put_prepare(dpp, y, entry, bci, old, objv_tracker, from_remote_zone);
@@ -3259,6 +3277,10 @@ int RGWBucketInstanceMetadataHandler::remove(std::string& entry, RGWObjVersionTr
     return ret;
   }
 
+  if (bci.info.is_vector() != is_vector_bucket()) {
+    return -ENOENT;
+  }
+
   // skip bucket instance removal. each zone will handle it independently during trimming
 
   std::ignore = update_bucket_topic_mappings(dpp, &bci, /*current_bci=*/nullptr,
@@ -3293,7 +3315,34 @@ int RGWBucketInstanceMetadataHandler::list_keys_next(const DoutPrefixProvider* d
                                                      bool* truncated)
 {
   auto lister = static_cast<RGWMetadataLister*>(handle);
-  return lister->get_next(dpp, max, keys, truncated);
+  bool more = false;
+  do {
+    int ret = lister->get_next(dpp, max, keys, &more);
+    if (ret < 0) {
+      return ret;
+    }
+
+    // Instance keys share a namespace, so their type must be read from the
+    // cached bucket info. Keep zone-local vector instances out of full sync.
+    for (auto i = keys.begin(); i != keys.end();) {
+      RGWBucketInfo info;
+      ret = svc_bucket->read_bucket_instance_info(*i, &info, nullptr, nullptr,
+                                                 null_yield, dpp);
+      if (ret == -ENOENT) {
+        i = keys.erase(i);
+      } else if (ret < 0) {
+        return ret;
+      } else if (info.is_vector() != is_vector_bucket()) {
+        i = keys.erase(i);
+      } else {
+        ++i;
+      }
+    }
+  } while (max > 0 && keys.empty() && more);
+  if (truncated) {
+    *truncated = more;
+  }
+  return 0;
 }
 
 void RGWBucketInstanceMetadataHandler::list_keys_complete(void *handle)
@@ -3323,12 +3372,15 @@ class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadata
 
 class RGWVectorBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
 protected:
+  bool is_vector_bucket() const override { return true; }
+
   int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
                   const std::string& entry, RGWBucketCompleteInfo& bci,
                   const std::optional<RGWBucketCompleteInfo>& old_bci,
                   const RGWObjVersionTracker& objv_tracker,
                   bool from_remote_zone) override {
     bci.info.layout.current_index.layout.type = rgw::BucketIndexType::Indexless;
+    bci.info.flags |= BUCKET_DATASYNC_DISABLED;
     return 0;
   }
   int put_post(const DoutPrefixProvider* dpp, optional_yield y,

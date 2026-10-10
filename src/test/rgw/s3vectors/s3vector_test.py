@@ -676,6 +676,109 @@ def test_get_vector_bucket():
 
 
 @pytest.mark.vector_bucket_test
+@pytest.mark.parametrize('delete_first', ['vector', 's3'])
+def test_vector_bucket_shared_instance_namespace(delete_first):
+    """Same-name buckets share instance storage, but resolve and delete independently."""
+    conn = connection()
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+    vector_created = False
+    s3_created = False
+
+    def admin_json(args):
+        # Keep startup warnings on stderr out of the JSON response on stdout.
+        out, ret = admin(args, stderr=None)
+        assert ret == 0, out
+        return json.loads(out)
+
+    def metadata_get(key):
+        return admin_json(['metadata', 'get', key])['data']
+
+    try:
+        _create_s3bucket(s3conn, bucket_name)
+        s3_created = True
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        vector_created = True
+
+        s3_entry = metadata_get(f'bucket:{bucket_name}')
+        vector_entry = metadata_get(f'vectorbucket:{bucket_name}')
+        s3_id = s3_entry['bucket']['bucket_id']
+        vector_id = vector_entry['bucket']['bucket_id']
+        assert s3_id != vector_id
+        s3_key = f'{bucket_name}:{s3_id}'
+        vector_key = f'{bucket_name}:{vector_id}'
+
+        # These calls use the common bucket controller, including for the vector
+        # instance. Name-only lookup must still resolve the S3 entrypoint.
+        for bucket_id, index_type in ((s3_id, 'Normal'),
+                                      (vector_id, 'Indexless')):
+            result = admin_json(['bucket', 'layout', '--bucket', bucket_name,
+                                 '--bucket-id', bucket_id])
+            layout = result['layout']['current_index']['layout']
+            assert layout['type'] == index_type
+        result = admin_json(['bucket', 'stats', '--bucket', bucket_name])
+        assert result['id'] == s3_id
+
+        # Metadata sections are used by full metadata sync. Each section must
+        # list and expose only its own bucket type despite sharing storage.
+        for section, own_key, other_key in (
+            ('bucket.instance', s3_key, vector_key),
+            ('vectorbucket.instance', vector_key, s3_key),
+        ):
+            keys = admin_json(['metadata', 'list', section])
+            assert own_key in keys
+            assert other_key not in keys
+            metadata_get(f'{section}:{own_key}')
+            _, ret = admin(['metadata', 'get', f'{section}:{other_key}'])
+            assert ret != 0
+
+        if delete_first == 'vector':
+            # A vector bucket deletion must leave S3 objects untouched.
+            s3conn.put_object(Bucket=bucket_name, Key='probe', Body=b's3 data')
+            conn.delete_vector_bucket(vectorBucketName=bucket_name)
+            vector_created = False
+            obj = s3conn.get_object(Bucket=bucket_name, Key='probe')
+            try:
+                assert obj['Body'].read() == b's3 data'
+            finally:
+                obj['Body'].close()
+            s3conn.delete_object(Bucket=bucket_name, Key='probe')
+            metadata_get(f'bucket.instance:{s3_key}')
+            _, ret = admin(['metadata', 'get', f'vectorbucket.instance:{vector_key}'])
+            assert ret != 0
+            _, ret = admin(['bucket', 'layout', '--bucket', bucket_name,
+                            '--bucket-id', vector_id])
+            assert ret != 0
+
+            # Reusing the vector bucket name allocates another instance id.
+            conn.create_vector_bucket(vectorBucketName=bucket_name)
+            vector_created = True
+            new_entry = metadata_get(f'vectorbucket:{bucket_name}')
+            assert new_entry['bucket']['bucket_id'] not in (s3_id, vector_id)
+            assert metadata_get(f'bucket:{bucket_name}')['bucket']['bucket_id'] == s3_id
+        else:
+            s3conn.delete_bucket(Bucket=bucket_name)
+            s3_created = False
+            assert _vector_bucket_exists(conn, bucket_name)
+            metadata_get(f'vectorbucket.instance:{vector_key}')
+            _, ret = admin(['metadata', 'get', f'bucket:{bucket_name}'])
+            assert ret != 0
+            # Restore the backing bucket so the RGW backend can clean up normally.
+            _create_s3bucket(s3conn, bucket_name)
+            s3_created = True
+    finally:
+        if vector_created:
+            try:
+                conn.delete_vector_bucket(vectorBucketName=bucket_name)
+            except conn.exceptions.ClientError as err:
+                log.warning("failed to delete vector bucket '%s': %s", bucket_name, err)
+        if s3_created:
+            s3conn.delete_object(Bucket=bucket_name, Key='probe')
+            s3conn.delete_bucket(Bucket=bucket_name)
+
+
+@pytest.mark.vector_bucket_test
 def test_delete_vector_bucket():
     conn = connection()
     bucket_name = gen_bucket_name()
