@@ -13770,7 +13770,8 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
   }
 
   nsfs::ImportPlan plan;
-  ret = nsfs::build_import_plan(dpp, ctx(), contents, plan);
+  ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
+				  get_identity_db());
   if (ret < 0) {
     say("ran", "false");
     say("collisions", std::to_string(plan.collisions.size()));
@@ -13864,7 +13865,8 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
    * name any identity, so the mapping has to cover all of them even
    * when one bucket is being adopted. */
   nsfs::ImportPlan plan;
-  ret = nsfs::build_import_plan(dpp, ctx(), contents, plan);
+  ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
+				  get_identity_db());
   if (ret < 0) {
     say("adopted", "false");
     say("collisions", std::to_string(plan.collisions.size()));

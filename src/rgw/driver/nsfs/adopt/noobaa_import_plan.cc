@@ -65,7 +65,8 @@ std::string label(const NooBaaIdentity& id)
 
 int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
 		      const NooBaaStoreContents& contents,
-		      ImportPlan& plan)
+		      ImportPlan& plan,
+		      const IdentityDB* stored)
 {
   plan = ImportPlan{};
 
@@ -82,7 +83,25 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
     ImportEntry e;
     e.noobaa_id = id.id;
     e.noobaa_name = id.name;
-    e.account_id = rgw::account::generate_id(cct);
+    /* Reuse the id this identity was imported with, if it was.  A
+     * second mint for an account that already exists is the defect
+     * this exists to avoid:  the bucket would be written an owner
+     * naming an account no imported user belongs to. */
+    e.account_id.clear();
+    if (stored) {
+      Identity existing;
+      if (stored->get_identity_by_noobaa_id(dpp, id.id, existing) == 0) {
+	/* `key` is to_string(rgw_owner) -- the flattened owner, which is
+	 * the same thing a bucket's OwnerID holds, so reusing it is what
+	 * makes the two agree. */
+	e.account_id = existing.key;
+	ldpp_dout(dpp, 10) << "nsfs: import plan: " << id.name
+	  << " keeps account " << e.account_id << dendl;
+      }
+    }
+    if (e.account_id.empty()) {
+      e.account_id = rgw::account::generate_id(cct);
+    }
     e.name = id.name;
     e.email = id.email;
     /* The account user's display_name, which is what principal

@@ -52,6 +52,7 @@
 
 #include <string>
 #include <vector>
+#include "../identity_db.h"
 
 #include "common/dout.h"
 
@@ -114,8 +115,22 @@ struct ImportPlan {
  * been imported.
  *
  * `cct` is for RGW's account id generator and nothing else. */
+/* `stored`, when given, is consulted before an account id is minted:
+ * an identity already imported keeps the id it was imported with.
+ *
+ * Without it every call mints, and two calls over one store produce
+ * two different ids for the same NooBaa account -- which is what
+ * `adopt_one_bucket()` did.  It builds its own plan to resolve a
+ * principal against the complete mapping, and wrote the bucket an
+ * owner naming an account that the imported *user* was not in, so
+ * every request to an adopted bucket was an implicit deny.  Found by
+ * the first full stand-up cycle, 2026-10-10.
+ *
+ * `nullptr` is for a caller with no store to consult -- the plan tests
+ * build one from store contents alone. */
 int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
 		      const NooBaaStoreContents& contents,
-		      ImportPlan& plan);
+		      ImportPlan& plan,
+		      const IdentityDB* stored = nullptr);
 
 }}} // namespace rgw::sal::nsfs
