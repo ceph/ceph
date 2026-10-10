@@ -5,20 +5,31 @@
 # cannot occur proves nothing -- so every row is a claim that someone
 # has to defend, and a row with no reason is not a row.
 #
-# Five tab-separated columns:
+# Six tab-separated columns:
 #
 #   pair      which two captures.  theirs:ours-before is adoption --
-#             what RGW answers over a tree it has not converted,
+#             what RGW answers over a tree it has not yet converted,
 #             against what NooBaa answered for the same tree.
-#             ours-before:ours-after is conversion.
+#             ours-before:ours-after is conversion.  "before" is before
+#             *conversion*:  the bucket has been adopted by then, so
+#             this pair measures what adoption changed.
+#   when      the modality this row applies in -- md5-off, md5-on, or
+#             blank for both.  A modality is a property of the tree,
+#             fixed when NooBaa wrote its objects, so the two are two
+#             trees and one file covers both rather than two drifting.
 #   artifact  manifest | inventory | run
 #   key       manifest:  the field, third column, `*` globs a suffix
 #             inventory: xattr:<name>, mode, owner, or size
 #             run:       the axis whose artifacts are absent entirely
-#   class     persists  differs, and still will after conversion
-#             vanishes  differs now, must be identical after
-#             absent    one side produced nothing to compare
-#             filtered  not a difference;  the writer must drop it
+#   class     equal      must be identical, and a difference fails
+#             recognize:<r>  normalize both sides through <r>, then
+#                        compare -- so the row still asserts that both
+#                        are the same *kind* of value, where `persists`
+#                        would assert nothing
+#             persists   differs, and still will after conversion
+#             vanishes   differs now, must be identical after
+#             absent     one side produced nothing to compare
+#             filtered   not a difference;  the writer must drop it
 #   reason    why, in one line.  Required.
 #
 # NEVER key a row on a literal value from their side.  Their ETag and
@@ -29,52 +40,89 @@
 #
 # Rows marked PROVISIONAL were derived from the NooBaa capture plus the
 # mapping in docs/NOOBAA_WRITE_SURFACE.md.  `capture/rgw` does not
-# exist yet (C2b), so no row below has been confirmed by an actual
-# diff.  The first real run is expected to move some of them.
+# exist yet (C2b), so **no row here has been confirmed by an actual
+# diff** and the first real run is expected to move some of them.  Four
+# of twenty carry the mark;  the rest rest on a measurement or on code
+# that was read for the purpose.
 
-# ---- adoption:  theirs vs ours-before ------------------------------
-# In base profile we add nothing to their tree, so the inventory
-# should be *identical* here.  An inventory difference in this pair is
-# a defect, not an expected difference, and only the bucket's own
-# adoption marker is permitted.
+# ---- the content proof, in either modality --------------------------
+# The strongest rows here, and the only ones that witness bytes:  the
+# suite digests each body it GETs and records `body-md5` itself, so
+# three captures are three independent reads of the same bytes by two
+# gateways.  Nothing else in either artifact looks at content -- the
+# manifest records what S3 says and the inventory what is on disk.
+# Validation is the suite's job and not the gateway's;  `DECISIONS.md`
+# 2026-10-09.
 
-theirs:ours-before	manifest	etag	persists	PROVISIONAL only where NooBaa stored no user.content_md5. WITH rgw_non_md5_etag the values differ in the mtime's low 8 bits, which we do not reproduce (DECISIONS.md 2026-10-09); WITHOUT it -- the default -- we MD5 the object and the values are unrelated. The row cannot be read without knowing which
-theirs:ours-before	manifest	listed-etag	persists	PROVISIONAL same value by the same path, through ListObjects
-theirs:ours-before	manifest	head-etag	persists	PROVISIONAL same value by the same path, through HeadObject
-theirs:ours-before	manifest	copy.reported-etag	persists	PROVISIONAL same value by the same path, through CopyObject's result
-theirs:ours-before	manifest	listed-owner	persists	PROVISIONAL _get_object_owner() returns undefined always, so NooBaa objects have no owner; answering from the inode uid is an RGW addition
-theirs:ours-before	manifest	version.*.owner	persists	PROVISIONAL same cause as listed-owner, per version
-theirs:ours-before	inventory	xattr:security.selinux	filtered	not written by either gateway; the host's policy put it there, and it differs per machine. The inventory writer drops it rather than listing it here
-theirs:ours-before	inventory	xattr:user.nsfs.extensions	vanishes	PROVISIONAL the marker adopt writes -- EXTENSIONS_XATTR, bucket_profile.h:85 -- deliberately not routed through disk_name() because choosing the strategy is what it is for. Absent in serve mode, and not on an object until C6
-ours-before:ours-after	inventory	xattr:user.nsfs.converting	vanishes	PROVISIONAL CONVERTING_XATTR, bucket_profile.h:107, records the middle state and is gone once conversion completes
-theirs:ours-before	run	coverage-lock	absent	NooBaa answers 501 NotImplemented to PutObjectLockConfiguration, so the axis cannot create its bucket and writes no artifact -- lock.rs:78 ignores it under fails_on_noobaa
+theirs:ours-before		manifest	body-md5	equal	adoption writes one attribute per bucket and rewrites no object, so every byte must read back the same
+ours-before:ours-after		manifest	body-md5	equal	conversion rewrites metadata, not content;  a difference here is data loss
+theirs:ours-before		manifest	body-len	equal	same, and it localises a truncation to the length rather than the digest
 
-# ---- conversion:  ours-before vs ours-after ------------------------
-# Conversion renames every attribute into our own layout, so the
-# inventory differs wholesale and must do so.  These rows are the
-# definition of conversion being complete:  nothing on the left may
-# survive on the right.
+# ---- adoption:  what the ETag says, by modality ---------------------
+# **nsfs never hashes an object on a read** (`ETAG_STRATEGY.md`).  An
+# object this gateway did not write is answered with the `mtime-ino`
+# token synthesized from its `statx`, per read, persisted nowhere --
+# whatever `rgw_non_md5_etag` says, because that option governs what a
+# *writer* digests.  NooBaa does the same thing for the same reason.
+# So in md5-off both sides report a token;  in md5-on they stored a
+# digest and we forward it.
 
-ours-before:ours-after	inventory	xattr:user.noobaa.*	vanishes	their internal namespace becomes user.nsfs.* -- NB_KEYS, xattr_strategy.cc:127
-ours-before:ours-after	inventory	xattr:user.storage_class	vanishes	NB_KEYS maps it; it is the one name their own reader hides from user metadata, via XATTR_METADATA_IGNORE_LIST
-ours-before:ours-after	inventory	xattr:user.content_md5	vanishes	maps to RGW_ATTR_ETAG alone, so a converted object stops carrying the key -- a decision, not a defect, recorded in docs/NOOBAA_WRITE_SURFACE.md
-ours-before:ours-after	inventory	xattr:user.*	vanishes	user metadata is plain user.<k> in their layout and user.nsfs.rgw.x-amz-meta-<k> in ours. Ordered after the rows above, which are narrower
-ours-before:ours-after	manifest	meta.content_md5	vanishes	their reader re-exposes user.content_md5 as a user-metadata key because it is not in their ignore list; ours does not, so the fact disappears
+theirs:ours-before	md5-off	manifest	etag	recognize:synthetic-identity	both report a file-instance token, and the values differ:  their mtime component loses its low 8 bits to a double in fs_napi.cpp:360, which we do not reproduce.  Recognized rather than tolerated, so a side that started reporting a digest fails
+theirs:ours-before	md5-off	manifest	listed-etag	recognize:synthetic-identity	same value by the same path, through ListObjects
+theirs:ours-before	md5-off	manifest	head-etag	recognize:synthetic-identity	same value by the same path, through HeadObject
+theirs:ours-before	md5-off	manifest	copy.reported-etag	recognize:synthetic-identity	same value by the same path, through CopyObject's result
+theirs:ours-before	md5-on	manifest	etag	equal	NooBaa stored user.content_md5 and we forward it unchanged -- xattr_strategy.cc:128 -- so the two agree by construction rather than by recomputation
+ours-before:ours-after	md5-on	manifest	etag	equal	conversion renames the attribute into our layout and must preserve its value
+
+# ---- adoption:  everything else ------------------------------------
+# In base profile we add nothing to their tree, so the inventory should
+# be *identical* here apart from what adoption itself writes.  An
+# inventory difference in this pair that no row names is a defect.
+
+theirs:ours-before		manifest	listed-owner	persists	PROVISIONAL _get_object_owner() returns undefined always, so NooBaa objects have no owner;  answering from the inode uid is an RGW addition
+theirs:ours-before		manifest	version.*.owner	persists	PROVISIONAL same cause as listed-owner, per version
+theirs:ours-before		inventory	xattr:security.selinux	filtered	not written by either gateway;  the host's policy put it there and it differs per machine.  The inventory writer drops it rather than listing it here
+theirs:ours-before		inventory	xattr:user.nsfs.extensions	vanishes	PROVISIONAL the marker adoption writes -- EXTENSIONS_XATTR, bucket_profile.h:85 -- deliberately not routed through disk_name() because choosing the strategy is what it is for
+theirs:ours-before		run	coverage-lock	absent	NooBaa answers 501 NotImplemented to PutObjectLockConfiguration, so the axis cannot create its bucket and writes no artifact -- lock.rs:78 ignores it under fails_on_noobaa
+
+# ---- conversion:  the layout changes wholesale ----------------------
+# These rows are the definition of conversion being complete:  nothing
+# on the left may survive on the right.
+
+ours-before:ours-after		inventory	xattr:user.nsfs.converting	vanishes	PROVISIONAL CONVERTING_XATTR, bucket_profile.h:107, records adoption underway and is gone when the walk completes
+ours-before:ours-after		inventory	xattr:user.noobaa.*	vanishes	their internal namespace becomes user.nsfs.* -- NB_KEYS, xattr_strategy.cc:127
+ours-before:ours-after		inventory	xattr:user.storage_class	vanishes	NB_KEYS maps it;  it is the one name their own reader hides from user metadata, via XATTR_METADATA_IGNORE_LIST
+ours-before:ours-after		inventory	xattr:user.content_md5	vanishes	maps to RGW_ATTR_ETAG alone, so a converted object stops carrying the key -- a decision, not a defect, recorded in docs/NOOBAA_WRITE_SURFACE.md
+ours-before:ours-after		inventory	xattr:user.*	vanishes	user metadata is plain user.<k> in their layout and user.nsfs.rgw.x-amz-meta-<k> in ours.  Ordered after the rows above, which are narrower
+ours-before:ours-after		manifest	meta.content_md5	vanishes	their reader re-exposes user.content_md5 as a user-metadata key because it is not in their ignore list;  ours does not, so the fact disappears
 
 # ---- not yet classifiable ------------------------------------------
-# Listed so the first diff has something to correct, with no class
-# asserted.  Each needs a measurement, not an argument.
+# One item, with no class asserted because it needs a measurement
+# rather than an argument:
 #
-#   manifest  mode / inventory mode   C1 normalizes permissions, and
-#       their files are 0660 here.  What conversion writes has not been
+#   inventory  mode    C1 normalizes permissions and their files are
+#       0660 in the capture.  What conversion writes has not been
 #       measured against a tree they wrote.
-#   manifest  *.refused vs *.accepted  a refusal is encoded in the
-#       *field name*, so one gateway refusing and the other accepting
-#       shows up as a removed line and an added line rather than a
-#       changed value.  The format, not the list, has to answer this.
 #
-# Checked and NOT a problem:  version.mtime-<...>-ino-<...>.* field
-# names align, because NooBaa stores every version id in
-# user.noobaa.version_id -- the current version included -- and we
-# forward the stored string (NB_KEYS, xattr_strategy.cc:131) rather
-# than recomputing it.  One tree, one set of ids, all three captures.
+# ---- checked, and not problems -------------------------------------
+# Kept so they are not re-raised.
+#
+#   version.mtime-<...>-ino-<...>.* field names **align**.  NooBaa
+#       stores every version id in user.noobaa.version_id -- the
+#       current version included -- and we forward the stored string
+#       (NB_KEYS, xattr_strategy.cc:131) rather than recomputing it.
+#       One tree, one set of ids, all three captures.
+#
+#   *.refused is **fixed in the generator**, not here:  the field is
+#       emitted whether or not a configuration was refused, with
+#       <none> where it was not, so a capability divergence is one
+#       changed value rather than a removed line and an added one.
+#       Same for log-target-policy, whose subject was a random bucket
+#       name and is now derived.
+#
+#   the ETag a sideloaded object reports is a synthetic token on both
+#       sides and in every configuration, because neither gateway
+#       hashes an object it did not write -- nsfs synthesizes from the
+#       statx on read (ETAG_STRATEGY.md), NooBaa does the same.  So the
+#       md5-off rows above are about two tokens, never a token against
+#       a digest.
