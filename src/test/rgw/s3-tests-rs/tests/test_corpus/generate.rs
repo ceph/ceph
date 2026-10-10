@@ -21,11 +21,54 @@ pub fn out_dir() -> PathBuf {
     PathBuf::from(env_or("CORPUS_OUT", "target/corpus"))
 }
 
+/// Note on the manifest how this capture was taken.
+///
+/// Two captures of one tree are comparable;  a generated one and an
+/// observed one are not, because only the first created what it
+/// describes -- so the facts a write produces are present in one and
+/// structurally absent from the other.  The
+/// `expected-differences.tsv` row for `put-*` is keyed on this.
+pub fn note_mode(m: &mut Manifest, bucket: &str) {
+    m.bucket(bucket, "capture-mode",
+             if observing() { "observe" } else { "generate" });
+}
+
+/// Record what is there;  create nothing.
+///
+/// The second half of a comparison reads the tree the *first* gateway
+/// wrote.  An axis that created its objects first would describe its
+/// own, which says nothing about that tree -- and over a tree being
+/// served read-only the creation is refused outright.
+///
+/// **The model stays the driver.**  The alternative was to take the
+/// first capture's manifest as a work list and re-ask each fact of the
+/// second gateway, which needs no per-axis change -- but then the
+/// artifact becomes the specification and the parameter matrix stops
+/// being the authority.  Keeping it here means the axis still knows
+/// the shape it is looking for, still drives both artifacts, and still
+/// asserts at capture time rather than deferring everything to a
+/// diff.
+///
+/// What an observing axis keeps:  every fact it records, and every
+/// assertion about the *tree*.  What it drops:  assertions about its
+/// own writing, which have no subject here.
+pub fn observing() -> bool {
+    matches!(env_or("CORPUS_OBSERVE", "0").as_str(),
+             "1" | "on" | "true" | "yes")
+}
+
 /// Create the bucket if it is not there.  Stable names are the point,
 /// so a rerun meets its own buckets;  that is tolerated rather than
 /// treated as an error, and a corpus run against a dirty root is the
 /// operator's problem to notice.
 pub async fn ensure_bucket(client: &aws_sdk_s3::Client, name: &str) {
+    /* An observing pass describes a tree another gateway wrote, so it
+     * creates nothing -- not even the bucket.  Here rather than in each
+     * axis, because every axis opens this way and they would otherwise
+     * have to be kept in step by hand. */
+    if observing() {
+        return;
+    }
     match client.create_bucket().bucket(name).send().await {
         Ok(_) => {}
         Err(e) => {
@@ -65,6 +108,7 @@ async fn corpus_coverage_keys() {
 
     let mut m = Manifest::new();
     m.bucket(&b, "tier", &tier);
+    note_mode(&mut m, &b);
 
     let mut written: Vec<String> = Vec::new();
     let mut refused = Vec::new();
@@ -77,6 +121,23 @@ async fn corpus_coverage_keys() {
     for class in KeyClass::COVERAGE {
         let key = class.key();
         let body = format!("{:?}", class);
+
+        /* What the *model* says about this key, recorded in either
+         * mode:  the class and its rationale come from `KeyClass`, not
+         * from the gateway, so an observing pass has them too.  Only
+         * the outcome of a write is a fact a write produces. */
+        m.object(&key, "class", &format!("{class:?}"));
+        m.object(&key, "rationale", class.rationale());
+
+        /* The body is derived from the class as well, so an observing
+         * pass knows what the bytes should be without having written
+         * them -- which is what lets the content check below survive. */
+        wrote_digest.insert(key.clone(),
+                            crate::integrity::md5_hex(body.as_bytes()));
+        if observing() {
+            continue;
+        }
+
         let put = client
             .put_object()
             .bucket(&b)
@@ -88,12 +149,6 @@ async fn corpus_coverage_keys() {
         match put {
             Ok(_) => {
                 written.push(key.clone());
-                wrote_digest.insert(
-                    key.clone(),
-                    crate::integrity::md5_hex(body.as_bytes()),
-                );
-                m.object(&key, "class", &format!("{class:?}"));
-                m.object(&key, "rationale", class.rationale());
             }
             Err(e) => {
                 /* A refusal is a fact about the gateway, not a failure
@@ -205,7 +260,14 @@ async fn corpus_coverage_keys() {
      * comparison would pass vacuously. */
     assert!(!m.is_empty(), "the corpus produced no facts");
 
-    check_listing_invariants(&written, &listed);
+    /* Not asked of an observing pass:  it wrote nothing, so there is
+     * no "what was written" for the listing to agree with.  The facts
+     * and the content check above are what it is here for;  whether
+     * the tree holds the right keys is the diff's question, and the
+     * expected-difference list is where a missing key is named. */
+    if !observing() {
+        check_listing_invariants(&written, &listed);
+    }
 }
 
 /// Properties true of any S3 implementation, so they need no reference

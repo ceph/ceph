@@ -10,7 +10,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::error::extract_s3_error;
 
-use crate::generate::{ensure_bucket, env_or, out_dir};
+use crate::generate::{ensure_bucket, env_or, note_mode, observing, out_dir};
 use crate::manifest::Manifest;
 use crate::names::bucket;
 use crate::shapes::{MetaClass, SizeClass, TagClass};
@@ -83,6 +83,7 @@ async fn corpus_coverage_objects() {
 
     let mut m = Manifest::new();
     m.bucket(&b, "tier", &tier);
+    note_mode(&mut m, &b);
 
     let mut written: Vec<String> = Vec::new();
     let mut refused: Vec<(String, String)> = Vec::new();
@@ -90,13 +91,17 @@ async fn corpus_coverage_objects() {
     /* size */
     for sc in SizeClass::COVERAGE {
         let key = sc.key();
-        let r = client
-            .put_object()
-            .bucket(&b)
-            .key(&key)
-            .body(ByteStream::from(sc.body()))
-            .send()
-            .await;
+        let r = if observing() {
+            None
+        } else {
+            Some(client
+                .put_object()
+                .bucket(&b)
+                .key(&key)
+                .body(ByteStream::from(sc.body()))
+                .send()
+                .await)
+        };
         record(&mut m, &mut written, &mut refused, &key, r, |m| {
             m.object(&key, "class", &format!("{sc:?}"));
             m.object(&key, "declared-len", &sc.len().to_string());
@@ -114,7 +119,7 @@ async fn corpus_coverage_objects() {
         for (k, v) in mc.headers() {
             req = req.metadata(k, v);
         }
-        let r = req.send().await;
+        let r = if observing() { None } else { Some(req.send().await) };
         record(&mut m, &mut written, &mut refused, &key, r, |m| {
             m.object(&key, "class", &format!("{mc:?}"));
             m.object(&key, "rationale", mc.rationale());
@@ -134,7 +139,7 @@ async fn corpus_coverage_objects() {
         if let Some(h) = tc.header() {
             req = req.tagging(h);
         }
-        let r = req.send().await;
+        let r = if observing() { None } else { Some(req.send().await) };
         record(&mut m, &mut written, &mut refused, &key, r, |m| {
             m.object(&key, "class", &format!("{tc:?}"));
             m.object(&key, "declared-tags", &tc.count().to_string());
@@ -172,6 +177,13 @@ async fn corpus_coverage_objects() {
      * disagreement the listing invariants catch. */
     let mut problems = Vec::new();
     for key in &written {
+        /* A writer's invariant, so not an observing pass's:  `written`
+         * there is the derived key list, and a key the first gateway
+         * refused is legitimately absent from the tree.  Whether one is
+         * missing is the diff's question. */
+        if observing() {
+            continue;
+        }
         let rendered = m.render();
         let needle = format!("object\t{}\thead-failed\t", crate::manifest::encode(key));
         if rendered.contains(&needle) {
@@ -194,18 +206,31 @@ fn record<T, E>(
     written: &mut Vec<String>,
     refused: &mut Vec<(String, String)>,
     key: &str,
-    r: Result<T, aws_smithy_runtime_api::client::result::SdkError<
-        E, aws_smithy_runtime_api::http::Response>>,
+    /* `None` when observing:  nothing was written, so there is no
+     * outcome to report -- but the model facts `on_ok` carries are the
+     * axis's own and are recorded either way. */
+    r: Option<Result<T, aws_smithy_runtime_api::client::result::SdkError<
+        E, aws_smithy_runtime_api::http::Response>>>,
     on_ok: impl FnOnce(&mut Manifest),
 ) where
     E: aws_sdk_s3::error::ProvideErrorMetadata + std::fmt::Debug,
 {
+    /* The model's facts first, and unconditionally.
+     *
+     * They say what the axis asked for -- the class, the declared
+     * length, the headers it meant to send -- so they are true whether
+     * the gateway accepted it, refused it, or was never asked because
+     * this pass is observing.  Recording them only on success made a
+     * refused key's class appear in an observing capture and not in a
+     * generating one, which is a difference about the recorder rather
+     * than about the tree. */
+    on_ok(m);
+
     match r {
-        Ok(_) => {
+        None | Some(Ok(_)) => {
             written.push(key.to_string());
-            on_ok(m);
         }
-        Err(e) => {
+        Some(Err(e)) => {
             let info = extract_s3_error(&e);
             m.object(key, "put-refused", &info.error_code);
             m.object(key, "put-status", &info.status.to_string());

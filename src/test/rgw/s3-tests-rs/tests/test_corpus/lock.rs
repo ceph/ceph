@@ -156,6 +156,18 @@ async fn corpus_coverage_object_lock() {
                 .build(),
         )
         .build();
+    /* Observing is not available here, and saying so beats half-doing
+     * it.  The axis's subject is a bucket-level configuration, and a
+     * bucket NooBaa refused to create -- it answers 501 to
+     * PutObjectLockConfiguration -- is not in the tree to be
+     * described.  The expected-difference list carries that as
+     * `run coverage-lock absent`. */
+    if crate::generate::observing() {
+        eprintln!("corpus {tier}/lock: observing, and there is nothing to \
+                   observe -- the axis's bucket is created by the axis");
+        return;
+    }
+
     client
         .put_object_lock_configuration()
         .bucket(&b)

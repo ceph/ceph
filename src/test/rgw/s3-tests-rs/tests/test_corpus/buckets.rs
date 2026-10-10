@@ -32,7 +32,7 @@
 
 use s3_tests_rs::client::get_client;
 
-use crate::generate::{ensure_bucket, env_or, out_dir};
+use crate::generate::{ensure_bucket, env_or, out_dir, note_mode, observing};
 use crate::manifest::Manifest;
 use crate::names::bucket;
 
@@ -135,6 +135,31 @@ async fn corpus_coverage_bucket_config() {
              *
              * Clearing rather than varying the values, because
              * run-varying values would stop the manifests diffing. */
+            /* An observing pass applies nothing, so it clears
+             * nothing either:  the configuration it describes was put
+             * there by the first gateway, and clearing would destroy
+             * the thing being described.
+             *
+             * `gained` is meaningless without an apply -- before and
+             * after are the same read -- and `accepted` and `refused`
+             * are outcomes of applying.  What survives is the
+             * read-back, which is the fact about the tree. */
+            if observing() {
+                let read_back: bool = $read;
+                m.bucket(&b, concat!($name, ".reads-back"),
+                         &read_back.to_string());
+                for (n, _) in bucket_state(&b) {
+                    m.bucket(&b, concat!($name, ".present"), &n);
+                }
+                steps.push(Step {
+                    name: $name,
+                    accepted: read_back,
+                    code: String::new(),
+                    gained: Vec::new(),
+                    read_back,
+                });
+            } else {
+
             let _: Result<(), String> = $clear;
             let before = bucket_state(&b);
             let outcome: Result<(), String> = $apply;
@@ -169,6 +194,7 @@ async fn corpus_coverage_bucket_config() {
                 gained,
                 read_back,
             });
+            }
         }};
     }
 

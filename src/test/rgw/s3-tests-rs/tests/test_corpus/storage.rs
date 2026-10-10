@@ -33,7 +33,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::config::configured_storage_classes;
 
-use crate::generate::{ensure_bucket, env_or, out_dir};
+use crate::generate::{ensure_bucket, env_or, note_mode, observing, out_dir};
 use crate::manifest::Manifest;
 use crate::names::bucket;
 use crate::shapes::{StorageClass, STORAGE_COVERAGE};
@@ -81,6 +81,7 @@ async fn corpus_coverage_storage_class() {
 
     let mut m = Manifest::new();
     m.bucket(&b, "tier", &tier);
+    note_mode(&mut m, &b);
 
     let configured = configured_class();
     m.bucket(&b, "storage-classes.configured", &configured);
@@ -111,6 +112,16 @@ async fn corpus_coverage_storage_class() {
             req = req.storage_class(aws_sdk_s3::types::StorageClass::from(c.as_str()));
         }
 
+        if observing() {
+            /* The key and the class asked for are both derived, so an
+             * observing pass has them without the write.
+             * `declared-class` goes with them:  it is what the axis
+             * asked for, not what the gateway answered. */
+            m.object(&key, "declared-class",
+                     asked.as_deref().unwrap_or("STANDARD"));
+            written.push((*class, key, asked));
+            continue;
+        }
         match req.send().await {
             Ok(_) => {
                 m.object(&key, "declared-class",

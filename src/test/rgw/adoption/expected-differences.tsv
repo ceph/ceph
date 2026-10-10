@@ -83,6 +83,22 @@ theirs:ours-before		manifest	listed-owner	persists	PROVISIONAL _get_object_owner
 theirs:ours-before		manifest	version.*.owner	persists	PROVISIONAL same cause as listed-owner, per version
 theirs:ours-before		inventory	xattr:security.selinux	filtered	not written by either gateway;  the host's policy put it there and it differs per machine.  The inventory writer drops it rather than listing it here
 theirs:ours-before		inventory	xattr:user.nsfs.extensions	vanishes	PROVISIONAL the marker adoption writes -- EXTENSIONS_XATTR, bucket_profile.h:85 -- deliberately not routed through disk_name() because choosing the strategy is what it is for
+theirs:ours-before		manifest	put-*	absent	the outcome of a write, and only the capture that wrote has one.  An observing pass -- how capture/rgw is taken, since it must not create objects in the tree it is describing -- records no put-status, put-refused or put-message.  Keyed on the prefix because a refused key has three of them.  `capture-mode` on the bucket says which kind of capture a manifest is
+theirs:ours-before		manifest	capture-mode	persists	it says which kind of capture this is, so it differs by construction -- and the rows above are conditioned on it.  Listed rather than filtered, because a reader comparing two manifests needs to see which is which before trusting anything else
+theirs:ours-before		manifest	*-failed	absent	head-failed, tagging-failed and their kind are recorded when an operation *this pass* performed failed.  An observing pass performs none, so it has neither the failure nor the key it failed on -- the gateway refused to create it
+theirs:ours-before		manifest	head-status	absent	same:  the status of a HEAD this pass made against a key it failed to write
+theirs:ours-before		manifest	delete-marker-id-reported	absent	whether the DELETE returned a version id -- an outcome of a delete an observing pass does not make.  The marker itself is in the tree and is listed
+theirs:ours-before		manifest	versions-before-suspend	absent	the axis counts what its own puts reported either side of suspending the bucket.  An observing pass suspends nothing and puts nothing;  what the tree holds is in version.* instead
+theirs:ours-before		manifest	versions-after-suspend	absent	same
+theirs:ours-before		manifest	*.accepted	absent	bucket configuration:  whether applying it succeeded.  An observing pass applies nothing -- and must not, since clearing and re-applying would destroy the configuration it is there to describe
+theirs:ours-before		manifest	*.refused	absent	bucket configuration:  the code a refused apply returned.  Emitted with <none> when it was accepted, so it is always present in a generating capture and never in an observing one
+theirs:ours-before		manifest	copy.reported-etag	absent	what CopyObject's own response said.  An observing pass makes no copy;  what the destination holds is in head-etag, which does compare
+theirs:ours-before		manifest	copy.reported-version-id	absent	same
+theirs:ours-before		manifest	warmed-with	persists	the key count a warming listing saw, taken partway through the run -- so it reports the harness's own sequence rather than the tree, and differs between any two passes that build the tree differently.  A fact about the capture, not about what was captured
+theirs:ours-before		manifest	*.gained	absent	which stored names changed when the configuration was applied.  Differential, so it needs a before and an after that only an applying pass has
+theirs:ours-before		manifest	*.present	absent	the observing pass's counterpart to `.gained`:  which stored names are there, absolutely rather than differentially.  Present only in an observed capture, which is the same kind of row in the other direction
+theirs:ours-before		manifest	parts-listed	absent	from ListParts, which needs an upload id -- an outcome only the pass that created the upload has.  An observing capture does not ask
+theirs:ours-before		manifest	part.*.size	absent	same:  the per-part facts come from ListParts on an upload still in flight
 theirs:ours-before		run	coverage-lock	absent	NooBaa answers 501 NotImplemented to PutObjectLockConfiguration, so the axis cannot create its bucket and writes no artifact -- lock.rs:78 ignores it under fails_on_noobaa
 
 # ---- conversion:  the layout changes wholesale ----------------------

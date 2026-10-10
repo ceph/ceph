@@ -19,7 +19,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use s3_tests_rs::client::get_client;
 use s3_tests_rs::fixtures::check_configure_versioning_retry;
 
-use crate::generate::{ensure_bucket, env_or, out_dir};
+use crate::generate::{ensure_bucket, env_or, note_mode, observing, out_dir};
 use crate::manifest::Manifest;
 use crate::names::bucket;
 
@@ -119,41 +119,58 @@ async fn run(tier: &str, label: &str, status: &str) {
     let client = get_client();
     let b = bucket(tier, label);
     ensure_bucket(&client, &b).await;
-    check_configure_versioning_retry(&client, &b, status, status).await;
+    /* Setting the versioning state is a *write* to the bucket, so an
+     * observing pass does not do it -- the state it describes was put
+     * there by the first gateway.  Left unguarded it put a version
+     * into the tree it was meant only to read, which the comparison
+     * caught as 3 versions against 2. */
+    if !observing() {
+        check_configure_versioning_retry(&client, &b, status, status).await;
+    }
 
     let mut m = Manifest::new();
     m.bucket(&b, "tier", tier);
     m.bucket(&b, "versioning", status);
+    note_mode(&mut m, &b);
 
     /* what the puts reported, to check the listing against */
     let mut reported: Vec<(String, String)> = Vec::new();
 
+    /* An observing pass makes no versions and no delete markers.  The
+     * ids are outcomes -- discovered from ListObjectVersions below
+     * rather than returned by a put it did not make -- but how many
+     * versions a key is *supposed* to have is the axis's own fact and
+     * is recorded either way. */
     for (key, n) in [("v-one", 1usize), ("v-three", 3)] {
-        for id in put_versions(&client, &b, key, n).await {
-            reported.push((key.to_string(), id));
+        if !observing() {
+            for id in put_versions(&client, &b, key, n).await {
+                reported.push((key.to_string(), id));
+            }
         }
         m.object(key, "declared-versions", &n.to_string());
     }
 
     /* a delete marker over nothing, and one over versions */
     for key in ["v-dm-only", "v-dm-over-versions"] {
-        if key.ends_with("versions") {
-            for id in put_versions(&client, &b, key, 2).await {
-                reported.push((key.to_string(), id));
+        if !observing() {
+            if key.ends_with("versions") {
+                for id in put_versions(&client, &b, key, 2).await {
+                    reported.push((key.to_string(), id));
+                }
+            }
+            let r = client
+                .delete_object()
+                .bucket(&b)
+                .key(key)
+                .send()
+                .await
+                .expect("delete should succeed on a versioned bucket");
+            if let Some(v) = r.version_id() {
+                reported.push((key.to_string(), v.to_string()));
+                m.object(key, "delete-marker-id-reported", "yes");
             }
         }
-        let r = client
-            .delete_object()
-            .bucket(&b)
-            .key(key)
-            .send()
-            .await
-            .expect("delete should succeed on a versioned bucket");
         m.object(key, "delete-requested", "yes");
-        if let Some(v) = r.version_id() {
-            reported.push((key.to_string(), v.to_string()));
-            m.object(key, "delete-marker-id-reported", "yes");
-        }
     }
 
     let mut ownerless = Vec::new();
@@ -232,22 +249,31 @@ async fn corpus_coverage_versioning_suspended() {
     let b = bucket(&tier, "ver-suspended");
     ensure_bucket(&client, &b).await;
 
-    /* enable, write a real version, then suspend and write again:  the
-     * second write is the null version, which is the artifact this
-     * bucket exists for */
-    check_configure_versioning_retry(&client, &b, "Enabled", "Enabled").await;
-    let pre = put_versions(&client, &b, "v-across-suspend", 1).await;
-    check_configure_versioning_retry(&client, &b, "Suspended", "Suspended")
-        .await;
-    let post = put_versions(&client, &b, "v-across-suspend", 1).await;
-
     let mut m = Manifest::new();
     m.bucket(&b, "tier", &tier);
     m.bucket(&b, "versioning", "Suspended");
-    m.object("v-across-suspend", "versions-before-suspend",
-             &pre.len().to_string());
-    m.object("v-across-suspend", "versions-after-suspend",
-             &post.len().to_string());
+    note_mode(&mut m, &b);
+
+    /* enable, write a real version, then suspend and write again:  the
+     * second write is the null version, which is the artifact this
+     * bucket exists for.  All of it is writing -- including setting the
+     * versioning state, which is a write to the bucket -- so an
+     * observing pass does none of it and reads what the first gateway
+     * left.  Unguarded it put a version into the tree it was meant only
+     * to read, which the comparison caught as three versions against
+     * two. */
+    if !observing() {
+        check_configure_versioning_retry(&client, &b, "Enabled", "Enabled")
+            .await;
+        let pre = put_versions(&client, &b, "v-across-suspend", 1).await;
+        check_configure_versioning_retry(&client, &b, "Suspended",
+                                         "Suspended").await;
+        let post = put_versions(&client, &b, "v-across-suspend", 1).await;
+        m.object("v-across-suspend", "versions-before-suspend",
+                 &pre.len().to_string());
+        m.object("v-across-suspend", "versions-after-suspend",
+                 &post.len().to_string());
+    }
 
     let mut ownerless = Vec::new();
     let listed = list_versions_into(&client, &b, &mut m, &mut ownerless).await;

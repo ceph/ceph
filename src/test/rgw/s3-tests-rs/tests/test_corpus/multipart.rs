@@ -68,6 +68,17 @@ async fn stage_one(
     m.object(&key, "part-pattern", pp.label());
     m.object(&key, "upload-state", st.label());
 
+    /* An observing pass stages nothing.  Everything above is the
+     * model -- the key, the part layout and the state come from the
+     * axis's own matrix -- so the descriptor is returned without the
+     * S3 work, and the readers below find whatever the first gateway
+     * left in the tree.  The upload id is the one field that is an
+     * outcome, so it is empty and `list_parts` is not asked. */
+    if crate::generate::observing() {
+        return Upload { key, parts: pc.count(), total, state: st,
+                        upload_id: String::new(), sizes };
+    }
+
     let create = client
         .create_multipart_upload()
         .bucket(b)
@@ -137,6 +148,8 @@ async fn stage_one(
 /// or aborted upload is not asked:  whether `ListParts` should answer
 /// after completion is an open question, recorded in the punch list,
 /// and the corpus must not assume an answer to it.
+/* `ListParts` needs an upload id, which only a pass that created the
+ * upload has;  an observing pass skips it. */
 async fn list_parts_into(
     client: &aws_sdk_s3::Client,
     b: &str,
@@ -220,7 +233,10 @@ async fn corpus_coverage_multipart() {
 
     for u in &uploads {
         if u.state == UploadState::InFlight {
-            list_parts_into(&client, &b, u, &mut m).await;
+            if !crate::generate::observing() {
+                list_parts_into(&client, &b, u, &mut m)
+                    .await;
+            }
         }
     }
 

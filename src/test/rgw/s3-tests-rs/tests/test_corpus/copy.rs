@@ -49,6 +49,19 @@ async fn make_source(
     key: &str,
     shape: CopySource,
 ) -> usize {
+    /* An observing pass creates no sources.  The *size* each shape
+     * declares is derived, so it is returned without the write -- and
+     * writing them would be worse than useless:  re-putting a source
+     * undoes a Replace copy the first gateway made onto it, which is
+     * exactly what the self-copy case exists to catch.  The comparison
+     * found that rather than a review. */
+    if crate::generate::observing() {
+        return match shape {
+            CopySource::Empty => 0,
+            CopySource::Plain => 128,
+            CopySource::Multipart => PART * 2,
+        };
+    }
     match shape {
         CopySource::Empty => {
             client
@@ -156,7 +169,10 @@ async fn corpus_coverage_copy() {
     ensure_bucket(&client, &b).await;
     ensure_bucket(&client, &other).await;
     ensure_bucket(&client, &versioned).await;
-    check_configure_versioning_retry(&client, &versioned, "Enabled", "Enabled").await;
+    if !crate::generate::observing() {
+        check_configure_versioning_retry(&client, &versioned, "Enabled",
+                                        "Enabled").await;
+    }
 
     let mut m = Manifest::new();
     m.bucket(&b, "tier", &tier);
@@ -220,7 +236,19 @@ async fn corpus_coverage_copy() {
         m.object(&dst_key, "copy.tagging-directive", tags.label());
         m.object(&dst_key, "copy.source", &src_key);
 
-        let refused = match req.send().await {
+        /* An observing pass makes no copies.  The four facts above are
+         * the model -- destination, directives and source all come from
+         * the axis's matrix -- and what it cannot have is what the copy
+         * reported, which is why `copy.reported-*` are outcome facts.
+         *
+         * It falls through rather than skipping the iteration:  the
+         * descriptor has to reach `copies` so the destinations the
+         * first gateway left are still read back below.  Skipping it
+         * emptied that list and silently dropped 47 facts. */
+        let refused = if crate::generate::observing() {
+            None
+        } else {
+            match req.send().await {
             Ok(r) => {
                 if let Some(cor) = r.copy_object_result() {
                     if let Some(e) = cor.e_tag() {
@@ -237,6 +265,7 @@ async fn corpus_coverage_copy() {
                 let code = svc.meta().code().unwrap_or("Unknown").to_string();
                 m.object(&dst_key, "copy.refused", &code);
                 Some(code)
+            }
             }
         };
 
