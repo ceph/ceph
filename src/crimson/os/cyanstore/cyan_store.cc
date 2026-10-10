@@ -12,6 +12,7 @@
 #include "common/safe_io.h"
 #include "include/uuid_fmt.h"
 #include "os/Transaction.h"
+#include "osd/osd_types_fmt.h"
 
 #include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"

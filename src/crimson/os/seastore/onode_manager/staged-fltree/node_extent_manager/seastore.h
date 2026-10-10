@@ -11,6 +11,8 @@
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_delta_recorder.h"
 
+#include "osd/osd_types_fmt.h"
+
 /**
  * seastore.h
  *

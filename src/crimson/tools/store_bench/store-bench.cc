@@ -50,6 +50,7 @@
 
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
+#include "osd/osd_types_fmt.h"
 
 namespace po = boost::program_options;
 
