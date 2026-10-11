@@ -973,6 +973,214 @@ TEST_F(NSFSBucketTest, ASideloadedFileIsItsBucketOwners)
   EXPECT_EQ(rgw_owner{u->get_id()}, bucket->get_info().owner);
 }
 
+/* A bucket chown changes the owner and nothing on disk.
+ *
+ * Metadata only, as NooBaa's `bucket update --owner` (DECISIONS.md
+ * 2026-10-11):  the bucket's owner and its ACL move, and an object
+ * that records no owner lists as the new owner -- which needs the
+ * listing cache dropped, since the first listing filled it with the
+ * old one.  No file's uid or gid moves. */
+TEST_F(NSFSBucketTest, AChownMovesTheOwnerAndNoFile)
+{
+  const sf::path f{bucket_path() / "nobodys.txt"};
+  {
+    int fd = ::open(f.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GE(fd, 0) << cpp_strerror(errno);
+    ASSERT_EQ(::write(fd, "x", 1), 1);
+    ::close(fd);
+  }
+  struct stat before{};
+  ASSERT_EQ(::stat(f.c_str(), &before), 0);
+
+  auto owner_listed = [&](rgw::sal::Bucket* b) {
+    rgw::sal::Bucket::ListParams params;
+    rgw::sal::Bucket::ListResults results;
+    EXPECT_EQ(b->list(env->dpp, params, 128, results, null_yield), 0);
+    for (const auto& e : results.objs) {
+      if (e.key.name == "nobodys.txt") {
+	return e.meta.owner;
+      }
+    }
+    return std::string{"<not listed>"};
+  };
+  /* the control, and it fills the cache with the old owner */
+  ASSERT_EQ(owner_listed(bucket.get()), to_string(bucket->get_info().owner));
+
+  const rgw_owner acct{rgw_account_id{"RGW22222222222222222"}};
+  ASSERT_NE(acct, bucket->get_info().owner);
+  ASSERT_EQ(bucket->chown(env->dpp, acct, "new-acct", null_yield), 0);
+
+  RGWBucketInfo info;
+  info.bucket.name = testname;
+  auto fresh = driver->get_bucket(info);
+  ASSERT_EQ(fresh->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_EQ(fresh->get_info().owner, acct) << "the owner did not persist";
+  if (auto i = fresh->get_attrs().find(RGW_ATTR_ACL);
+      i != fresh->get_attrs().end()) {
+    RGWAccessControlPolicy policy;
+    auto p = i->second.cbegin();
+    ASSERT_NO_THROW(policy.decode(p));
+    EXPECT_EQ(policy.get_owner().id, acct) << "the bucket ACL kept its owner";
+  }
+  EXPECT_EQ(owner_listed(fresh.get()), to_string(acct))
+      << "the listing still carries the old owner";
+
+  struct stat after{};
+  ASSERT_EQ(::stat(f.c_str(), &after), 0);
+  EXPECT_EQ(after.st_uid, before.st_uid) << "a metadata chown moved a uid";
+  EXPECT_EQ(after.st_gid, before.st_gid) << "a metadata chown moved a gid";
+}
+
+/* An object chown rewrites a recorded owner and nothing else.
+ *
+ * It used to fchown the file to uid 0.  An object recording no owner is
+ * already its bucket owner's, so it is left without an ACL;  that is
+ * the control, because a chown that wrote an ACL everywhere would pass
+ * the first half. */
+TEST_F(NSFSBucketTest, AnObjectChownRewritesOnlyARecordedOwner)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const std::string disk = b->xattr_strategy()->disk_name(RGW_ATTR_ACL);
+  ASSERT_FALSE(disk.empty());
+
+  auto sideload = [&](const char* name) {
+    const sf::path f{bucket_path() / name};
+    int fd = ::open(f.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    EXPECT_GE(fd, 0) << cpp_strerror(errno);
+    EXPECT_EQ(::write(fd, "x", 1), 1);
+    ::close(fd);
+    return f;
+  };
+  const sf::path recorded = sideload("recorded.txt");
+  const sf::path bare = sideload("bare.txt");
+  {
+    RGWAccessControlPolicy policy;
+    policy.create_default(rgw_user("", "old-owner"), "Old Owner");
+    bufferlist bl;
+    policy.encode(bl);
+    ASSERT_EQ(::setxattr(recorded.c_str(), disk.c_str(), bl.c_str(),
+			 bl.length(), 0), 0);
+  }
+  struct stat before{};
+  ASSERT_EQ(::stat(recorded.c_str(), &before), 0);
+
+  std::unique_ptr<rgw::sal::User> newu =
+    driver->get_user(rgw_user("", "new-owner"));
+  for (const char* name : {"recorded.txt", "bare.txt"}) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    ASSERT_EQ(obj->chown(*newu, env->dpp, null_yield), 0) << name;
+  }
+
+  char buf[4096];
+  ssize_t len = ::getxattr(recorded.c_str(), disk.c_str(), buf, sizeof(buf));
+  ASSERT_GT(len, 0);
+  bufferlist bl;
+  bl.append(buf, len);
+  RGWAccessControlPolicy policy;
+  auto it = bl.cbegin();
+  ASSERT_NO_THROW(policy.decode(it));
+  EXPECT_EQ(policy.get_owner().id, rgw_owner{rgw_user("", "new-owner")});
+
+  EXPECT_EQ(::getxattr(bare.c_str(), disk.c_str(), nullptr, 0), -1)
+      << "an object recording no owner was given an ACL";
+
+  struct stat after{};
+  ASSERT_EQ(::stat(recorded.c_str(), &after), 0);
+  EXPECT_EQ(after.st_uid, before.st_uid) << "an object chown moved a uid";
+}
+
+/* The full chown gives the new owner's POSIX identity to everything
+ * under the bucket, and not to the bucket directory, which is the
+ * gateway's (NSFS_IMPERSONATION.md 8a).
+ *
+ * A test cannot change a file's uid without privilege, so the new
+ * owner's identity is this process's uid with one of its other groups,
+ * and the gid is what moves.  Skipped when the process has no second
+ * group, because then the gid cannot move either and the assertion
+ * would pass on a no-op. */
+TEST_F(NSFSBucketTest, APosixChownGivesTheFilesTheNewOwnersIdentity)
+{
+  gid_t other = 0;
+  bool have_other = false;
+  {
+    int n = ::getgroups(0, nullptr);
+    std::vector<gid_t> g(n > 0 ? n : 0);
+    n = (n > 0) ? ::getgroups(n, g.data()) : 0;
+    for (int i = 0; i < n; ++i) {
+      if (g[i] != ::getegid()) {
+	other = g[i];
+	have_other = true;
+	break;
+      }
+    }
+  }
+  if (!have_other) {
+    GTEST_SKIP() << "the process has no group besides its primary one";
+  }
+
+  const sf::path top{bucket_path() / "top.txt"};
+  const sf::path deep{bucket_path() / "a" / "b" / "deep.txt"};
+  sf::create_directories(deep.parent_path());
+  for (const auto& f : {top, deep}) {
+    int fd = ::open(f.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GE(fd, 0) << cpp_strerror(errno);
+    ::close(fd);
+  }
+  struct stat bdir_before{};
+  ASSERT_EQ(::stat(bucket_path().c_str(), &bdir_before), 0);
+  struct stat top_before{};
+  ASSERT_EQ(::stat(top.c_str(), &top_before), 0);
+  ASSERT_NE(top_before.st_gid, other) << "nothing to prove";
+
+  const rgw_account_id acct{"RGW33333333333333333"};
+  nsfs::Identity row;
+  row.key = acct;
+  row.uid = ::getuid();
+  row.gid = other;
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->chown(env->dpp, rgw_owner{acct}, "posix-acct",
+		     rgw::sal::NSFSBucket::ChownMode::posix, null_yield), 0);
+
+  for (const auto& p : {top, deep, deep.parent_path(),
+			deep.parent_path().parent_path()}) {
+    struct stat st{};
+    ASSERT_EQ(::stat(p.c_str(), &st), 0) << p;
+    EXPECT_EQ(st.st_gid, other) << p << " did not take the new owner's gid";
+  }
+  struct stat bdir_after{};
+  ASSERT_EQ(::stat(bucket_path().c_str(), &bdir_after), 0);
+  EXPECT_EQ(bdir_after.st_gid, bdir_before.st_gid)
+      << "the bucket directory, which is the gateway's, was chowned";
+  EXPECT_EQ(b->get_info().owner, rgw_owner{acct});
+}
+
+/* The full chown refuses, before changing anything, a new owner it
+ * cannot give the files to:  none with no identity row, and none with
+ * a directory-backed one, whose ids live in a directory not consulted. */
+TEST_F(NSFSBucketTest, APosixChownRefusesWithoutAUsableIdentity)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const rgw_owner was = b->get_info().owner;
+
+  const rgw_account_id none{"RGW44444444444444444"};
+  EXPECT_EQ(b->chown(env->dpp, rgw_owner{none}, "none",
+		     rgw::sal::NSFSBucket::ChownMode::posix, null_yield),
+	    -ENOENT);
+  EXPECT_EQ(b->get_info().owner, was) << "a refused chown moved the owner";
+
+  const rgw_account_id dirbacked{"RGW55555555555555555"};
+  nsfs::Identity row;
+  row.key = dirbacked;
+  row.distinguished_name = "uid=someone,dc=example,dc=com";
+  ASSERT_EQ(driver->get_identity_db()->put_identity(env->dpp, row), 0);
+  EXPECT_EQ(b->chown(env->dpp, rgw_owner{dirbacked}, "dirbacked",
+		     rgw::sal::NSFSBucket::ChownMode::posix, null_yield),
+	    -EPERM);
+  EXPECT_EQ(b->get_info().owner, was) << "a refused chown moved the owner";
+}
+
 /* Stored state that will not decode fails the bucket closed.
  *
  * Absent and unreadable are different.  A bucket with no stored state
@@ -3318,11 +3526,17 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
   sf::path file_path{bp / "root" / testname / "dir1" / "file.txt"};
   ASSERT_TRUE(sf::is_regular_file(file_path));
 
+  struct stat before{};
+  ASSERT_EQ(::stat(file_path.c_str(), &before), 0);
   auto obj = bucket->get_object(rgw_obj_key("dir1/file.txt"));
   TestUser user(driver.get());
-  int ret = obj->chown(user, env->dpp, null_yield);
-  // chown to uid/gid 0 requires root; EPERM is expected for non-root
-  EXPECT_TRUE(ret == 0 || ret == -EPERM);
+  /* metadata only (DECISIONS.md 2026-10-11):  it rewrites the recorded
+   * owner and moves no uid -- it used to fchown to root, which only
+   * root could do */
+  EXPECT_EQ(obj->chown(user, env->dpp, null_yield), 0);
+  struct stat after{};
+  ASSERT_EQ(::stat(file_path.c_str(), &after), 0);
+  EXPECT_EQ(after.st_uid, before.st_uid);
 }
 
 /* NooBaa's multipart staging layout.

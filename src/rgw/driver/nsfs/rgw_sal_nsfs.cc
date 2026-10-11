@@ -7597,8 +7597,154 @@ int NSFSBucket::chown(const DoutPrefixProvider* dpp,
                        const rgw_owner& new_owner,
                        const std::string& new_owner_name,
                        optional_yield y) {
-  /* TODO map user to UID/GID, and change it */
+  return chown(dpp, new_owner, new_owner_name, ChownMode::metadata, y);
+}
+
+/* Give `uid` and `gid` to everything under `dirfd`, recursively,
+ * without following symlinks.  `dirfd` itself is not changed.
+ * Returns the first error, having changed what came before it. */
+static int chown_tree(const DoutPrefixProvider* dpp, int dirfd,
+		      uid_t uid, gid_t gid, size_t& changed)
+{
+  int fd = ::openat(dirfd, ".", O_RDONLY | O_DIRECTORY);
+  if (fd < 0) {
+    return -errno;
+  }
+  DIR* d = ::fdopendir(fd);
+  if (!d) {
+    int ret = -errno;
+    ::close(fd);
+    return ret;
+  }
+  auto close_d = make_scope_guard([d] { ::closedir(d); });
+
+  while (struct dirent* de = ::readdir(d)) {
+    const std::string_view name{de->d_name};
+    if ((name == ".") || (name == "..")) {
+      continue;
+    }
+    if (::fchownat(fd, de->d_name, uid, gid, AT_SYMLINK_NOFOLLOW) < 0) {
+      int ret = -errno;
+      ldpp_dout(dpp, 0) << "ERROR: chown of " << name << " to " << uid
+	<< ":" << gid << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    ++changed;
+    bool is_dir = (de->d_type == DT_DIR);
+    if (de->d_type == DT_UNKNOWN) {
+      /* not every filesystem fills d_type */
+      struct stat st;
+      is_dir = (::fstatat(fd, de->d_name, &st, AT_SYMLINK_NOFOLLOW) == 0)
+	&& S_ISDIR(st.st_mode);
+    }
+    if (is_dir) {
+      int sub = ::openat(fd, de->d_name,
+			 O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+      if (sub < 0) {
+	return -errno;
+      }
+      int ret = chown_tree(dpp, sub, uid, gid, changed);
+      ::close(sub);
+      if (ret < 0) {
+	return ret;
+      }
+    }
+  }
   return 0;
+}
+
+int NSFSBucket::chown(const DoutPrefixProvider* dpp,
+		      const rgw_owner& new_owner,
+		      const std::string& new_owner_name,
+		      ChownMode mode, optional_yield y)
+{
+  /* held off while this bucket's tree is being rewritten;  see
+   * NSFSDriver::mutation_enter() */
+  NSFSMutationGuard mg(dpp, driver, get_name());
+  if (mg.result() < 0) {
+    return mg.result();
+  }
+
+  /* The new owner's POSIX identity, resolved first so that a refusal
+   * changes nothing.  An account by its row;  a user by its own row,
+   * else its account's, as a request resolves. */
+  nsfs::Credentials cred;
+  if (mode == ChownMode::posix) {
+    auto* db = driver->get_identity_db();
+    if (!db) {
+      return -ENOENT;
+    }
+    int ret;
+    if (const auto* u = std::get_if<rgw_user>(&new_owner)) {
+      std::unique_ptr<User> user = driver->get_user(*u);
+      ret = user->load_user(dpp, y);
+      if (ret < 0) {
+	return ret;
+      }
+      ret = nsfs::resolve_credentials(dpp, *db, *u,
+				      user->get_info().account_id, cred);
+    } else {
+      ret = nsfs::resolve_credentials(dpp, *db, new_owner, cred);
+    }
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << ":  the new "
+	<< "owner " << to_string(new_owner) << " has "
+	<< ((ret == -EPERM) ? "a directory-backed identity, which is not "
+	    "consulted" : "no POSIX identity")
+	<< ";  refusing the chown" << dendl;
+      return ret;
+    }
+  }
+
+  /* The bucket ACL, as RadosBucket::chown() rewrites it:  the old
+   * owner's grant out, the new owner's FULL_CONTROL in. */
+  if (auto i = attrs.find(RGW_ATTR_ACL); i != attrs.end()) {
+    try {
+      RGWAccessControlPolicy policy;
+      auto p = i->second.cbegin();
+      decode(policy, p);
+      RGWAccessControlList& acl = policy.get_acl();
+      acl.remove_canon_user_grant(policy.get_owner().id);
+      ACLGrant grant;
+      grant.set_canon(new_owner, new_owner_name, RGW_PERM_FULL_CONTROL);
+      acl.add_grant(grant);
+      policy.set_owner(ACLOwner{new_owner, new_owner_name});
+      bufferlist bl;
+      encode(policy, bl);
+      i->second = std::move(bl);
+      acls = policy;
+    } catch (const buffer::error&) {
+      /* not fatal, as for rados */
+    }
+  }
+  info.owner = new_owner;
+  int ret = put_info(dpp, false, ceph::real_clock::now(), y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* An object recording no owner lists as the bucket's, and the cached
+   * listing entries hold the old one. */
+  default_owner.reset();
+  if (auto* bc = driver->get_bucket_cache()) {
+    bc->invalidate_bucket(dpp, get_name());
+  }
+
+  if (mode == ChownMode::metadata) {
+    return 0;
+  }
+
+  ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  size_t changed = 0;
+  ret = chown_tree(dpp, dir->get_fd(), cred.uid, cred.gid, changed);
+  ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name() << " chowned to "
+    << to_string(new_owner) << " (" << cred.uid << ":" << cred.gid
+    << "), " << changed << " entries" << (ret < 0 ? ", incomplete" : "")
+    << dendl;
+  return ret;
 }
 
 int NSFSBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
@@ -10042,26 +10188,41 @@ int NSFSObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::st
   return 0;
 }
 
+/* The recorded owner, rewritten as RadosObject::chown() rewrites it;
+ * nothing on disk changes (DECISIONS.md 2026-10-11).  This used to
+ * fchown the file to uid 0.  An object that records no owner is
+ * already its bucket's owner's, so there is nothing to write. */
 int NSFSObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
 {
-  /* TODO Get UID from user */
-  int uid = 0;
-  int gid = 0;
-
-  int ret = open(dpp, false);
+  int ret = get_obj_attrs(y, dpp);
   if (ret < 0) {
     return ret;
   }
-
-  ret = fchown(ent->get_fd(), uid, gid);
-  if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not chown object " << get_name() << ": "
-      << cpp_strerror(ret) << dendl;
-    return -ret;
+  auto i = get_attrs().find(RGW_ATTR_ACL);
+  if (i == get_attrs().end()) {
+    return 0;
   }
 
-  return 0;
+  RGWAccessControlPolicy policy;
+  try {
+    auto p = i->second.cbegin();
+    policy.decode(p);
+  } catch (const buffer::error&) {
+    ldpp_dout(dpp, 0) << "ERROR: chown of " << get_name()
+      << ":  its ACL will not decode" << dendl;
+    return -EIO;
+  }
+  RGWAccessControlList& acl = policy.get_acl();
+  acl.remove_canon_user_grant(policy.get_owner().id);
+  ACLGrant grant;
+  grant.set_canon(new_user.get_id(), new_user.get_display_name(),
+		  RGW_PERM_FULL_CONTROL);
+  acl.add_grant(grant);
+  policy.set_owner(ACLOwner{new_user.get_id(), new_user.get_display_name()});
+
+  Attrs setattrs;
+  encode(policy, setattrs[RGW_ATTR_ACL]);
+  return set_obj_attrs(dpp, &setattrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
 }
 
 int NSFSObject::get_cur_version(const DoutPrefixProvider* dpp, rgw_obj_key& key)

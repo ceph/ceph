@@ -1696,6 +1696,27 @@ public:
                     const rgw_owner& new_owner,
                     const std::string& new_owner_name,
                     optional_yield y) override;
+
+  /* What a bucket chown changes (DECISIONS.md 2026-10-11).
+   *
+   * `metadata` is the owner, the bucket ACL and the listing cache, and
+   * nothing on disk:  no file's uid, gid or mode moves.  That is what
+   * NooBaa's `bucket update --owner` does, and what every RGW path
+   * gets -- the SAL chown() above calls it.  A new owner whose POSIX
+   * identity differs is not refused;  the files are left to the
+   * operator, as NooBaa leaves them.
+   *
+   * `posix` is the same and then gives the new owner's POSIX identity
+   * every file and directory under the bucket, the bucket directory
+   * excepted, which is the gateway's (NSFS_IMPERSONATION.md 8a).  It
+   * refuses, before changing anything, a new owner with no identity
+   * row or a directory-backed one.  Nothing calls it yet:  it is the
+   * full chown with a model shift, kept where the next reader finds it
+   * beside the one in use. */
+  enum class ChownMode { metadata, posix };
+  int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
+	    const std::string& new_owner_name, ChownMode mode,
+	    optional_yield y);
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
                        ceph::real_time mtime, optional_yield y) override;
   virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
