@@ -260,6 +260,7 @@ class MockPeeringListener : public PeeringState::PeeringListener {
   void update_local_background_io_priority(
     unsigned priority) override {
     io_priority_updated = true;
+    io_reservation_priority = priority;
   }
 
   void cancel_local_background_io_reservation() override {

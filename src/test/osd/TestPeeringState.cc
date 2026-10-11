@@ -1921,6 +1921,46 @@ TEST_F(PeeringStateTest, LocalBackfillPreemptedWhileWaitingForRemote) {
   EXPECT_NE(wait_remote, get_listener(acting_primary)->last_state_entered);
 }
 
+// Forcing backfill while the primary waits for a remote reservation must
+// raise the priority of the request already queued on the backfill target,
+// otherwise it cannot preempt the reservation that it is waiting behind.
+TEST_F(PeeringStateTest, ForceBackfillWhileWaitingForRemote) {
+  dout(0) << "== ForceBackfillWhileWaitingForRemote ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  test_peering();
+  verify_all_active_clean(expected, expected_tail);
+  // Swap out OSD 1 for OSD 9 and hold OSD 9's reservation grant
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  get_listener(9)->inject_remote_reservation_stall = true;
+  test_peering();
+  ASSERT_EQ("Started/Primary/Active/WaitRemoteBackfillReserved",
+            get_listener(acting_primary)->last_state_entered);
+  ASSERT_LT(get_listener(9)->remote_recovery_reservation_priority,
+            (unsigned)OSD_BACKFILL_PRIORITY_FORCED);
+  // ceph pg force-backfill
+  auto evt = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(),
+    osdmap->get_epoch(),
+    PeeringState::SetForceBackfill());
+  get_ps(acting_primary)->handle_event(evt, get_ctx(acting_primary));
+  dispatch_all();
+  // Let any retry the primary scheduled run
+  dispatch_events(acting_primary, true);
+  dispatch_all();
+  EXPECT_EQ((unsigned)OSD_BACKFILL_PRIORITY_FORCED,
+            get_listener(acting_primary)->io_reservation_priority);
+  EXPECT_EQ((unsigned)OSD_BACKFILL_PRIORITY_FORCED,
+            get_listener(9)->remote_recovery_reservation_priority);
+}
+
 #if POOL_MIGRATION
 // Multi-OSD test of peering with pool migration all the way to active+clean
 TEST_F(PeeringStateTest, PoolMigration) {
