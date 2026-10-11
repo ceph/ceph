@@ -3379,7 +3379,6 @@ protected:
                   const std::optional<RGWBucketCompleteInfo>& old_bci,
                   const RGWObjVersionTracker& objv_tracker,
                   bool from_remote_zone) override {
-    bci.info.layout.current_index.layout.type = rgw::BucketIndexType::Indexless;
     bci.info.flags |= BUCKET_DATASYNC_DISABLED;
     return 0;
   }

@@ -26,6 +26,7 @@ from . import(
     get_config_master_cluster,
     has_backing_bucket,
     get_s3vector_backend,
+    get_s3vector_s3_bucket,
     get_s3vector_local_path
     )
 
@@ -121,6 +122,8 @@ def _backend_options(host, port, cluster):
     options = {'rgw_s3vector_backend': backend}
     if backend == 'local':
         options['rgw_s3vector_local_path'] = _configured_local_path(port, cluster)
+    else:
+        options['rgw_s3vector_data_s3_bucket'] = str(get_s3vector_s3_bucket()).lower()
     return options
 
 
@@ -365,7 +368,7 @@ def another_account_user(account_id=None, tenant=None):
 
 def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None, retries=12, delay=5):
     """
-    When using the RGW backend, create a regular S3 bucket with the same name
+    When using the RGW backend, create a S3 bucket with the same name
     as the vector bucket. Required because that backend stores LanceDB data
     directly in an S3 bucket with the vector bucket name.
     In a multisite configuration, the connection of the second zone should be
@@ -431,7 +434,7 @@ def _allow_backing_bucket_access(bucket_name, principals, s3conn=None):
 
 def _delete_s3_bucket_for_vector_bucket(bucket_name, s3conn=None):
     """
-    When using the RGW backend, delete the regular S3 bucket that was created
+    When using the RGW backend, delete the S3 bucket that was created
     for the vector bucket. The connection of the owner must be given when the
     bucket is not owned by the main user, since it is not visible to it.
     """
@@ -652,6 +655,84 @@ def test_vector_bucket_without_backend():
 
 
 @pytest.mark.vector_bucket_test
+@pytest.mark.parametrize('use_s3_bucket', [False, True])
+def test_vector_bucket_storage_mode(use_s3_bucket):
+    """Storage choice survives config changes and same-name buckets stay isolated."""
+    if get_s3vector_backend() != 'rgw' or get_config_host2():
+        pytest.skip("requires the RGW backend in a single zone")
+
+    conn = connection()
+    s3conn = connection('s3')
+    bucket_name = gen_bucket_name()
+    index_name = 'test-index'
+    vector_created = False
+    s3_created = False
+    index_created = False
+    option = 'rgw_s3vector_data_s3_bucket'
+    try:
+        if not use_s3_bucket:
+            # A failed creation must not pin a session to the discarded default.
+            set_rgw_config_option(option, 'true')
+            with pytest.raises(conn.exceptions.ClientError):
+                conn.create_vector_bucket(vectorBucketName=bucket_name)
+            assert not _vector_bucket_exists(conn, bucket_name)
+        set_rgw_config_option(option, str(use_s3_bucket).lower())
+        if use_s3_bucket:
+            _create_s3bucket(s3conn, bucket_name)
+            s3_created = True
+        conn.create_vector_bucket(vectorBucketName=bucket_name)
+        vector_created = True
+        if not use_s3_bucket:
+            with pytest.raises(s3conn.exceptions.ClientError) as exc_info:
+                s3conn.head_bucket(Bucket=bucket_name)
+            assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 404
+            _create_s3bucket(s3conn, bucket_name)
+            s3_created = True
+        s3conn.put_object(Bucket=bucket_name, Key='probe', Body=b's3 data')
+
+        conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                          dataType='float32', dimension=4, distanceMetric='euclidean')
+        index_created = True
+        # Both short-lived index sessions and cached vector sessions must continue
+        # to use the bucket attribute after the creation default changes.
+        conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                         vectors=generate_vectors(3, 4))
+        set_rgw_config_option(option, str(not use_s3_bucket).lower())
+        result = conn.list_indexes(vectorBucketName=bucket_name)
+        assert [i['indexName'] for i in result['indexes']] == [index_name]
+        conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                         vectors=generate_vectors(3, 4))
+        result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                    queryVector=generate_data(4, 0), topK=3)
+        assert len(result['vectors']) == 3
+        keys = {o['Key'] for o in s3conn.list_objects_v2(Bucket=bucket_name).get('Contents', [])}
+        if use_s3_bucket:
+            assert keys - {'probe'}
+        else:
+            assert keys == {'probe'}
+            s3conn.delete_object(Bucket=bucket_name, Key='probe')
+            s3conn.delete_bucket(Bucket=bucket_name)
+            s3_created = False
+            result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                        queryVector=generate_data(4, 0), topK=3)
+            assert len(result['vectors']) == 3
+    finally:
+        try:
+            if index_created:
+                conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+            if vector_created:
+                conn.delete_vector_bucket(vectorBucketName=bucket_name)
+            if s3_created:
+                for page in s3conn.get_paginator('list_objects_v2').paginate(Bucket=bucket_name):
+                    objects = [{'Key': obj['Key']} for obj in page.get('Contents', [])]
+                    if objects:
+                        s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+                s3conn.delete_bucket(Bucket=bucket_name)
+        finally:
+            set_rgw_config_option(option, str(get_s3vector_s3_bucket()).lower())
+
+
+@pytest.mark.vector_bucket_test
 def test_get_vector_bucket():
     conn = connection()
     bucket_name = gen_bucket_name()
@@ -711,8 +792,10 @@ def test_vector_bucket_shared_instance_namespace(delete_first):
 
         # These calls use the common bucket controller, including for the vector
         # instance. Name-only lookup must still resolve the S3 entrypoint.
+        vector_index = ('Normal' if get_s3vector_backend() == 'rgw' and
+                        not has_backing_bucket() else 'Indexless')
         for bucket_id, index_type in ((s3_id, 'Normal'),
-                                      (vector_id, 'Indexless')):
+                                      (vector_id, vector_index)):
             result = admin_json(['bucket', 'layout', '--bucket', bucket_name,
                                  '--bucket-id', bucket_id])
             layout = result['layout']['current_index']['layout']
@@ -884,7 +967,7 @@ def test_vector_buckets_not_synced():
     if not conn2:
         pytest.skip("skipping test_vector_buckets_not_synced since second connection is not configured")
 
-    # the backing buckets are regular S3 buckets, and must exist in the zone in
+    # the backing buckets are S3 buckets, and must exist in the zone in
     # which their vector bucket is used
     bucket_name1 = gen_bucket_name()
     bucket_name2 = gen_bucket_name()
@@ -4502,6 +4585,55 @@ def test_sal_error_propagation():
     _ensure_s3_bucket_for_vector_bucket(bucket_name)
     _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.vector_bucket_test
+def test_native_vector_bucket_owner():
+    """A same-name S3 bucket owned by another user grants no native vector access."""
+    if get_s3vector_backend() != 'rgw' or has_backing_bucket():
+        pytest.skip("requires native vector storage")
+    owner = connection()
+    other = another_user()
+    bucket_name = gen_bucket_name()
+    index_name = 'owner-index'
+    vector_created = False
+    index_created = False
+    s3_created = False
+    try:
+        _create_s3bucket(other.s3, bucket_name)
+        s3_created = True
+        owner.create_vector_bucket(vectorBucketName=bucket_name)
+        vector_created = True
+        owner.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                           dataType='float32', dimension=4, distanceMetric='euclidean')
+        index_created = True
+        vectors = generate_vectors(2, 4)
+        owner.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        operations = [
+            lambda: other.list_indexes(vectorBucketName=bucket_name),
+            lambda: other.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                      vectors=vectors),
+            lambda: other.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                        queryVector=vectors[0]['data'], topK=2),
+            lambda: other.delete_index(vectorBucketName=bucket_name, indexName=index_name),
+            lambda: other.delete_vector_bucket(vectorBucketName=bucket_name),
+        ]
+        for operation in operations:
+            with pytest.raises(other.exceptions.ClientError) as exc_info:
+                operation()
+            assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+        result = owner.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                     queryVector=vectors[0]['data'], topK=2)
+        assert len(result['vectors']) == 2
+    finally:
+        if index_created:
+            owner.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+        if vector_created:
+            owner.delete_vector_bucket(vectorBucketName=bucket_name)
+        if s3_created:
+            other.s3.delete_bucket(Bucket=bucket_name)
+        out, ret = admin(['user', 'rm', '--uid', other.uid])
+        assert ret == 0, out
 
 
 @pytest.mark.vector_bucket_test

@@ -98,6 +98,7 @@ namespace rgw::s3vector {
   LanceDBSession* create_rgw_session(const DoutPrefixProvider* dpp,
       rgw::sal::Driver* driver,
       const std::string& tenant,
+      bool use_vector_bucket,
       const void* options) {
 #ifdef WITH_RADOSGW_LANCEDB
     if (!driver) {
@@ -111,7 +112,7 @@ namespace rgw::s3vector {
       return nullptr;
     }
 
-    LanceDBObjectStoreProvider* provider = rgw_lancedb_store_create_provider(driver, dpp, tenant.c_str());
+    LanceDBObjectStoreProvider* provider = rgw_lancedb_store_create_provider(driver, dpp, tenant.c_str(), use_vector_bucket);
     if (!provider) {
       ldpp_dout(dpp, 1) << "ERROR: failed to create RGW LanceDB provider" << dendl;
       lancedb_registry_free(registry);
@@ -151,6 +152,29 @@ namespace rgw::s3vector {
       return fmt::format("{}://{}/", RGW_PROVIDER_SCHEME, bucket);
     }
     return fmt::format("{}://{}/{}/", RGW_PROVIDER_SCHEME, bucket, ns.account);
+  }
+
+  int get_bucket_storage_mode(const DoutPrefixProvider* dpp,
+      rgw::sal::Driver* driver, const bucket_namespace_t& ns,
+      const std::string& vector_bucket_name, StorageMode& mode, optional_yield y) {
+    std::unique_ptr<rgw::sal::VectorBucket> bucket;
+    int ret = driver->load_vector_bucket(dpp,
+        rgw_bucket(ns.name(), vector_bucket_name), &bucket, y);
+    if (ret == -ENOENT) {
+      // CreateVectorBucket checks a separate backend before writing its metadata.
+      mode = dpp->get_cct()->_conf.get_val<bool>("rgw_s3vector_data_s3_bucket")
+          ? StorageMode::S3_BUCKET : StorageMode::VECTOR_BUCKET;
+      return 0;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+    const auto& attrs = bucket->get_attrs();
+    const auto it = attrs.find(RGW_ATTR_S3VECTOR_STORAGE);
+    if (it == attrs.end()) {
+      return -EINVAL;
+    }
+    return get_storage_mode(it->second.to_str(), mode);
   }
 
   // the storage of a vector bucket is per namespace, since two accounts, or two
@@ -215,9 +239,18 @@ namespace rgw::s3vector {
     // connect() is used for vector bucket and index operations and therfore is using a short-lived session
     // for vector operations that needs a loned lived session with a cache, use: connect_with_session_handle()
     LanceDBSessionOptions opts = {1, 1};
-    // the RGW backend needs a session with the object store registry of the SAL
+    StorageMode mode = StorageMode::VECTOR_BUCKET;
+    if (is_rgw_backend(backend_type)) {
+      result = get_bucket_storage_mode(dpp, driver, ns, vector_bucket_name, mode, null_yield);
+      if (result < 0) {
+        lancedb_connect_builder_free(builder);
+        return nullptr;
+      }
+    }
+    const bool use_vector_bucket = uses_vector_bucket_storage(mode);
     LanceDBSession* session = is_rgw_backend(backend_type) ?
-        create_rgw_session(dpp, driver, ns.tenant, &opts) : lancedb_session_new(&opts);
+        create_rgw_session(dpp, driver, use_vector_bucket ? ns.name() : ns.tenant,
+                           use_vector_bucket, &opts) : lancedb_session_new(&opts);
     if (!session) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create session for: " << uri << dendl;
       lancedb_connect_builder_free(builder);
@@ -1445,11 +1478,12 @@ namespace rgw::s3vector {
     const auto& ns = *ctx->ns;
     const auto& bucket_name = ctx->configuration->vector_bucket_name;
 
-    auto conn_handle = connect_with_session_handle(dpp, driver, ns, bucket_name, ctx->result);
-    if (!conn_handle) {
+    // The metadata may not exist yet. Do not cache a session based on a
+    // creation default that could change before the bucket is created.
+    LanceDBConnection* conn = connect(dpp, driver, ns, bucket_name, ctx->result);
+    if (!conn) {
       return;
     }
-    LanceDBConnection* conn = conn_handle.conn;
     char** table_names;
     size_t name_count;
     char* error_message;

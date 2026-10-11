@@ -702,6 +702,7 @@ public:
                     const rgw_bucket& bucket,
                     const rgw_owner& owner,
                     const std::string& zonegroup_id,
+                    const RGWZonePlacementInfo* zone_placement,
                     const rgw_placement_rule& placement_rule,
                     const std::map<std::string, bufferlist>& attrs,
                     const std::optional<RGWQuotaInfo>& quota,
