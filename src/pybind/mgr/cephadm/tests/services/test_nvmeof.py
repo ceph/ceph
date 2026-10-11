@@ -1,5 +1,6 @@
 import json
 import pytest
+import errno
 from unittest.mock import MagicMock, patch
 from typing import Dict, List
 from ceph.utils import datetime_now
@@ -966,6 +967,162 @@ timeout = 1.0
         )
 
         assert step.action is utils.Action.REDEPLOY
+
+    def test_ok_to_stop_allowed(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        self.mgr.cache = MagicMock()
+        self.mgr.cache.get_daemons_by_type.return_value = [daemon]
+        self.mgr.spec_store.all_specs.get.return_value = spec
+
+        self.mgr.mon_command.side_effect = None
+        self.mgr.mon_command.return_value = (
+            0,
+            '{"result": true}',
+            '',
+        )
+
+        result = self.nvmeof_service.ok_to_stop(
+            [daemon.daemon_id]
+        )
+
+        assert result.retval == 0
+
+    def test_ok_to_stop_denied(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        self.mgr.cache = MagicMock()
+        self.mgr.cache.get_daemons_by_type.return_value = [daemon]
+        self.mgr.spec_store.all_specs.get.return_value = spec
+
+        self.mgr.mon_command.side_effect = None
+        self.mgr.mon_command.return_value = (
+            0,
+            '{"result": false}',
+            '',
+        )
+
+        result = self.nvmeof_service.ok_to_stop(
+            [daemon.daemon_id]
+        )
+
+        assert result.retval == -errno.EBUSY
+
+    def test_ok_to_stop_missing_daemon(self):
+        self.mgr.cache = MagicMock()
+        self.mgr.cache.get_daemons_by_type.return_value = []
+
+        self.mgr.mon_command.reset_mock()
+        self.mgr.mon_command.side_effect = None
+
+        result = self.nvmeof_service.ok_to_stop(
+            ['missing-daemon']
+        )
+
+        assert result.retval == -errno.EINVAL
+        self.mgr.mon_command.assert_not_called()
+
+    def test_ok_to_stop_missing_spec(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        self.mgr.cache = MagicMock()
+        self.mgr.cache.get_daemons_by_type.return_value = [daemon]
+        self.mgr.spec_store.all_specs.get.return_value = None
+
+        self.mgr.mon_command.reset_mock()
+        self.mgr.mon_command.side_effect = None
+
+        result = self.nvmeof_service.ok_to_stop(
+            [daemon.daemon_id]
+        )
+
+        assert result.retval == -errno.EINVAL
+        self.mgr.mon_command.assert_not_called()
+
+    def test_ok_to_stop_mon_error(self):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        self.mgr.cache = MagicMock()
+        self.mgr.cache.get_daemons_by_type.return_value = [daemon]
+        self.mgr.spec_store.all_specs.get.return_value = spec
+
+        self.mgr.mon_command.side_effect = None
+        self.mgr.mon_command.return_value = (
+            -errno.EBUSY,
+            '',
+            'Device or resource busy',
+        )
+
+        result = self.nvmeof_service.ok_to_stop(
+            [daemon.daemon_id]
+        )
+
+        assert result.retval == -errno.EBUSY
+        assert result.stderr == 'Device or resource busy'
+
+    @pytest.mark.parametrize(
+        'response',
+        [
+            'not-json',
+            '[]',
+            '{}',
+            '{"result": "false"}',
+            '{"result": 1}',
+        ],
+    )
+    def test_ok_to_stop_malformed_response(self, response):
+        daemon = MagicMock()
+        daemon.daemon_id = 'testpool.testgroup.host1.abc'
+        daemon.service_name.return_value = 'nvmeof.testpool.testgroup'
+
+        spec = NvmeofServiceSpec(
+            service_id='testpool.testgroup',
+            pool='testpool',
+            group='testgroup',
+        )
+
+        self.mgr.cache = MagicMock()
+        self.mgr.cache.get_daemons_by_type.return_value = [daemon]
+        self.mgr.spec_store.all_specs.get.return_value = spec
+
+        self.mgr.mon_command.side_effect = None
+        self.mgr.mon_command.return_value = (
+            0,
+            response,
+            '',
+        )
+
+        result = self.nvmeof_service.ok_to_stop(
+            [daemon.daemon_id]
+        )
+
+        assert result.retval == -errno.EIO
 
 
 class TestNvmeofTLSBundle:
