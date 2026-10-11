@@ -1166,24 +1166,17 @@ int NooBaaMPUStrategy::write_part_record(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-/* The staging directory's uid.  They record no owner with an upload --
- * create_object_upload is a dump of the request parameters and carries
- * none -- and the directory was created under the account's identity,
- * which is the same owner their object ownership gives. */
-bool NooBaaMPUStrategy::upload_owner(const DoutPrefixProvider* dpp,
-				     int root_fd, std::string_view dname,
-				     ACLOwner& out) const
+/* None recorded.  create_object_upload is a dump of the request
+ * parameters and names no initiator, and complete and abort check
+ * none, so an upload has no owner apart from its bucket's -- which is
+ * what NooBaa's ListMultipartUploads would show if it showed one;  it
+ * returns the placeholder `DEFAULT_S3_USER`.  Not the staging
+ * directory's uid, which is a POSIX identity and not an S3 owner. */
+int NooBaaMPUStrategy::upload_owner(const DoutPrefixProvider* dpp,
+				    int root_fd, std::string_view dname,
+				    ACLOwner& out) const
 {
-  struct statx stx;
-  if (statx(root_fd, std::string(dname).c_str(), AT_SYMLINK_NOFOLLOW,
-	    STATX_UID, &stx) < 0) {
-    return false;
-  }
-  if (!(stx.stx_mask & STATX_UID)) {
-    return false;
-  }
-  out.id = rgw_user(std::to_string(stx.stx_uid));
-  return true;
+  return -ENODATA;
 }
 
 /* Theirs is the content of create_object_upload, and nothing of it is

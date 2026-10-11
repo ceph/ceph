@@ -5920,6 +5920,43 @@ TEST_F(NSFSNooBaaBucketTest, ListsAnUploadTheyStarted)
   EXPECT_EQ(uploads[0]->get_key(), tree.key);
   EXPECT_EQ(uploads[0]->get_upload_id(), tree.upload_id);
   EXPECT_FALSE(truncated);
+
+  /* NooBaa's upload names no initiator, so it is the bucket's owner's
+   * (DECISIONS.md 2026-10-11) -- not the staging directory's uid,
+   * which is what this returned before. */
+  EXPECT_EQ(uploads[0]->get_owner().id, bucket->get_info().owner);
+  EXPECT_NE(to_string(uploads[0]->get_owner().id),
+	    std::to_string(::getuid()));
+}
+
+/* An nsfs upload lists the initiator its record holds.
+ *
+ * The control for ListsAnUploadTheyStarted:  the bucket's owner is
+ * only for an upload that records none, so an upload initiated by
+ * somebody else must keep that somebody, or the assertion there could
+ * pass by giving every upload the bucket's owner. */
+TEST_F(NSFSBucketTest, ListsTheInitiatorAnNsfsUploadRecords)
+{
+  std::unique_ptr<rgw::sal::MultipartUpload> upload =
+    bucket->get_multipart_upload("initiated.bin", "cafe01");
+  ACLOwner initiator;
+  initiator.id = rgw_user("", "somebody-else");
+  initiator.display_name = "Somebody Else";
+  ASSERT_NE(rgw_owner{initiator.id}, bucket->get_info().owner);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  ASSERT_EQ(upload->init(env->dpp, null_yield, initiator, placement, attrs),
+	    0);
+
+  std::vector<std::unique_ptr<rgw::sal::MultipartUpload>> uploads;
+  std::string marker;
+  bool truncated = false;
+  ASSERT_EQ(bucket->list_multiparts(env->dpp, "", marker, "", 100, uploads,
+				    nullptr, &truncated, null_yield), 0);
+  ASSERT_EQ(uploads.size(), 1u);
+  EXPECT_EQ(uploads[0]->get_owner().id, rgw_owner{initiator.id})
+      << "an upload's recorded initiator was replaced by the bucket's owner";
 }
 
 /* A bucket of theirs which has never taken an upload has no

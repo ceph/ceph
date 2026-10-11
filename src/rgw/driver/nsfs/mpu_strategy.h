@@ -147,19 +147,23 @@ public:
 			     std::string_view dname,
 			     StagedUpload& out) const = 0;
 
-  /* Who owns this upload, where the format can say.
+  /* Who owns this upload, where the format can say without the
+   * upload's own record.
+   *
+   *   0         recorded apart from that record;  `out` is it
+   *   -ENODATA  none recorded anywhere.  The upload is its bucket's
+   *             owner's, as an object recording none is (DECISIONS.md
+   *             2026-10-11).  NooBaa's format:  nothing NooBaa writes
+   *             names an initiator, and no operation on an upload
+   *             checks one.
+   *   -ENOENT   in the upload's own record, which the caller reads
+   *             through upload_info().  The nsfs format.
    *
    * Asked only for the uploads a listing returns, not for every entry
-   * examined -- it is a read, and S3 wants an owner in the response.
-   *
-   * False means the format keeps the owner with the upload's own
-   * record, and the caller reads that as it always has.  Ours does.
-   * NooBaa records no owner anywhere, so the staging directory's uid
-   * is returned, as it is for an object;  returning it here is what
-   * stops their uploads being dropped for want of a record of ours. */
-  virtual bool upload_owner(const DoutPrefixProvider* dpp, int root_fd,
-			    std::string_view dname, ACLOwner& out) const {
-    return false;
+   * examined -- S3 wants an owner in the response. */
+  virtual int upload_owner(const DoutPrefixProvider* dpp, int root_fd,
+			   std::string_view dname, ACLOwner& out) const {
+    return -ENOENT;
   }
 
   /* What CreateMultipartUpload settled, and every later operation on
@@ -199,12 +203,12 @@ public:
    * of result from one read, because RGW splits them that way and
    * not because the formats do.
    *
-   * `owner`, likewise, where the format's record carries one -- ours
-   * does, in the same blob.  upload_owner() is the same question
-   * asked by the listing path, which has read no record and must not:
-   * it returns a result for a format that can tell from the directory alone,
-   * and returns false for one that cannot, and the caller then comes
-   * here.  Two entry points because the two callers have different
+   * `owner`, likewise, where the format's record carries one -- the
+   * nsfs record does, in the same blob, and NooBaa's does not, so it
+   * is left as the caller set it.  upload_owner() is the same question asked by the
+   * listing path, which has read no record and must not:  it returns
+   * -ENOENT for a format whose owner is in the record, and the caller
+   * then comes here.  Two entry points because the two callers have different
    * things in hand, not because it is two questions. */
   virtual bool upload_info(const DoutPrefixProvider* dpp, int root_fd,
 			   std::string_view dname, const Attrs& attrs,
@@ -558,8 +562,8 @@ public:
   int write_part_record(const DoutPrefixProvider* dpp, int dir_fd,
 			std::string_view pname,
 			const PartRecord& rec) const override;
-  bool upload_owner(const DoutPrefixProvider* dpp, int root_fd,
-		    std::string_view dname, ACLOwner& out) const override;
+  int upload_owner(const DoutPrefixProvider* dpp, int root_fd,
+		   std::string_view dname, ACLOwner& out) const override;
   bool upload_info(const DoutPrefixProvider* dpp, int root_fd,
 		   std::string_view dname, const Attrs& attrs,
 		   multipart_upload_info& out,

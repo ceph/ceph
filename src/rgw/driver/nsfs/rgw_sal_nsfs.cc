@@ -6890,11 +6890,9 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       }
 
       ACLOwner mp_owner;
-      /* The bucket's owner, not theirs.  Their staging carries none --
-       * upload_owner() returns the directory's uid, which is a
-       * number and not an RGW identity -- and the upload is becoming
-       * ours, so the owner S3 will report for the finished object is
-       * the right owner to record now. */
+      /* The bucket's owner.  NooBaa's staging records none, so the
+       * upload is the bucket's owner's, and the re-staged upload needs
+       * it recorded now. */
       mp_owner.id = get_owner();
       NSFSMPObj mp(driver, su.key, su.upload_id, mp_owner);
 
@@ -7935,19 +7933,22 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
       continue;
     }
     /* S3 reports an owner, so one has to be found -- and where it
-     * lives is the format's business.  Ours keeps it with the
-     * upload's own record, which get_info() reads;  NooBaa keeps none
-     * anywhere, and returns the staging directory's uid.  This
-     * is a read per upload RETURNED, not per entry examined. */
+     * lives is the format's business.  The nsfs format keeps it with
+     * the upload's own record, which get_info() reads;  NooBaa's keeps
+     * none anywhere, and the upload is its bucket's owner's.  This is a
+     * read per upload RETURNED, not per entry examined. */
     ACLOwner owner;
-    const bool from_format =
+    const int oret =
 	ent.mpu->upload_owner(dpp, ent.src->get_fd(), ent.dname, owner);
+    if (oret == -ENODATA) {
+      owner = default_object_owner(dpp, y);
+    }
 
     auto upload = std::make_unique<NSFSMultipartUpload>(
 	driver, this, ent.key, ent.upload_id, owner,
 	from_statx_timestamp(stx.stx_mtime));
 
-    if (!from_format) {
+    if (oret == -ENOENT) {
       rgw_placement_rule* rule{nullptr};
       if (upload->get_info(dpp, y, &rule, nullptr) < 0) {
 	continue;
@@ -12608,10 +12609,15 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
       if (!root || ((ret = root->open(dpp)) < 0)) {
 	return root ? ret : -EINVAL;
       }
-      /* the owner with it:  ours is in the same record, and the
-       * listing path depends on this -- upload_owner() returns one for a
-       * format that can tell from the directory alone and ours
-       * cannot, so list_multiparts() comes here for it. */
+      /* the owner with it:  the nsfs record carries it, and the listing
+       * path depends on this -- upload_owner() returns -ENOENT for the
+       * nsfs format, so list_multiparts() comes here for it.  A record
+       * that carries none, as NooBaa's does not, leaves the bucket's
+       * owner, which is the owner of an upload nothing records one
+       * for. */
+      if (pb) {
+	mp_obj.owner = pb->default_object_owner(dpp, y);
+      }
       if (!mpu_strategy()->upload_info(dpp, root->get_fd(), get_fname(),
 				       meta_obj->get_attrs(),
 				       mp_obj.upload_info, nullptr,
