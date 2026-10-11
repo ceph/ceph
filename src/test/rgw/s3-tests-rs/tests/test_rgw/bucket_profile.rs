@@ -313,26 +313,26 @@ async fn test_reissuing_the_profile_is_a_no_op() {
         "a settled bucket was walked again");
 }
 
-/// Conversion must not lose an object's owner.
+/// Conversion records the bucket's owner on an object that records
+/// none.
 ///
-/// While a bucket is unmarked, an object with no recorded ACL answers
-/// its owner from the inode -- `NooBaaXattrStrategy::object_owner()`
-/// returns the file's uid, because NooBaa's format has nowhere to put
-/// an ACL and their own gateway stores none.  The moment the bucket is
-/// marked that reader is gone and the recorded ACL is the only source,
-/// so conversion has to write down the answer it would have given.
+/// NooBaa's format has nowhere to put an ACL, so an object written to
+/// a base bucket records no owner, and it is its bucket owner's -- what
+/// NooBaa returns for every object, and what RGW returns for an object
+/// with no ACL (DECISIONS.md 2026-10-11).  Marking the bucket makes the
+/// recorded ACL the only source, so conversion writes that owner down.
 ///
-/// The test measures both sides rather than naming a uid:  it reads the
-/// owner before conversion and again after, and requires them to be
-/// equal.  That makes it independent of which account runs the gateway.
+/// Both reads are required to be the bucket's owner, from GetBucketAcl,
+/// and not merely each other:  an earlier reading answered with the
+/// file's uid on both sides, and equality alone could not tell.
 ///
 /// **This is a control that can fail.**  A base bucket genuinely stores
 /// no ACL -- `disk_name(RGW_ATTR_ACL)` returns the empty string on that
-/// mapping -- so before the capture exists the object comes out of
-/// conversion with no owner, and the two reads differ.
+/// mapping -- so without the conversion's record the object comes out
+/// with no owner, and the second read fails.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
-async fn test_conversion_keeps_an_objects_inode_owner() {
+async fn test_conversion_records_the_bucket_owner() {
     let _guard = TestGuard::setup();
     if !nsfs_only().await {
         eprintln!("not nsfs;  nothing to check");
@@ -356,6 +356,15 @@ async fn test_conversion_keeps_an_objects_inode_owner() {
     }
 
     let key = "owner-survives-conversion";
+    let bucket_owner = client.get_bucket_acl()
+        .bucket(&bucket)
+        .send()
+        .await
+        .expect("the bucket's ACL")
+        .owner()
+        .and_then(|o| o.id())
+        .expect("the bucket has an owner")
+        .to_string();
     client.put_object()
         .bucket(&bucket)
         .key(key)
@@ -369,12 +378,13 @@ async fn test_conversion_keeps_an_objects_inode_owner() {
         .key(key)
         .send()
         .await
-        .expect("an unmarked bucket answers the owner from the inode");
+        .expect("an object with no recorded ACL still has an owner");
     let before_id = before.owner()
         .and_then(|o| o.id())
-        .expect("the uid reader should have answered with an owner")
+        .expect("GetObjectAcl returned no owner")
         .to_string();
-    assert!(!before_id.is_empty(), "an empty owner is not an answer");
+    assert_eq!(before_id, bucket_owner,
+        "before conversion the object is not its bucket owner's");
 
     nsfs_set_profile(&bucket, "shared").await
         .expect("profile should answer");
@@ -390,8 +400,8 @@ async fn test_conversion_keeps_an_objects_inode_owner() {
         .map(|s| s.to_string())
         .unwrap_or_default();
 
-    assert_eq!(after_id, before_id,
-        "conversion lost the owner the inode was answering:  before {before_id:?}, after {after_id:?}");
+    assert_eq!(after_id, bucket_owner,
+        "conversion did not record the bucket's owner:  before {before_id:?}, after {after_id:?}");
 
     /* What it writes is RGW's default policy, not a bare owner.  An
      * owner with no grants is a shape RGW never produces, and it would
