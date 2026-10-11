@@ -5767,8 +5767,15 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
      * that.  A name identifies our scaffolding only where we are the
      * only writer, and base is the profile for trees somebody else
      * wrote, so a directory called `.shadow` in one of them was put
-     * there by whoever wrote the tree. */
+     * there by whoever wrote the tree.
+     *
+     * The format still has to reach the directory.  Its strategies
+     * are what a listing reads entries with, and without this the
+     * directory keeps the driver's seed, which is ours:  every NooBaa
+     * object listed with no owner, and its names were read by our
+     * path conventions. */
     profile = driver->get_base_profile();
+    apply_format();
     ldpp_dout(dpp, 20) << "bucket " << get_name() << " profile "
       << profile->name() << dendl;
     return 0;

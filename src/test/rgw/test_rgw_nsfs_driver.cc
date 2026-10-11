@@ -4844,6 +4844,72 @@ TEST_F(NSFSNooBaaBucketTest, ConversionCapturesTheInodeOwnerAsAnAcl)
       << "the captured ACL grants nobody anything";
 }
 
+/* A base bucket loaded the way a request loads it lists in their format.
+ *
+ * The fixture reaches base through set_profile(), which applies the
+ * format.  A request reaches it through load_bucket(), which recognises
+ * the profile from the absent extensions attribute -- and recognising
+ * base returned before applying the format.  The directory kept the
+ * driver's seed, which is ours, so a listing read NooBaa's objects with
+ * our strategies:  no recorded ACL, and every owner listed as
+ * `unknown`.  Object reads were unaffected, because they ask the bucket
+ * for its format rather than the directory, which is why only the
+ * listing showed it.
+ *
+ * A sideloaded file is the case:  it carries no ACL by construction.
+ * The control is the same bucket marked shared, loaded the same way,
+ * whose directory must then carry ours -- so the strategy assertion
+ * distinguishes the two rather than passing on either. */
+TEST_F(NSFSNooBaaBucketTest, ALoadedBaseBucketListsInTheirFormat)
+{
+  const sf::path obj{bucket_path() / "sideloaded.txt"};
+  {
+    int fd = ::open(obj.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    ASSERT_GE(fd, 0) << cpp_strerror(errno);
+    ASSERT_EQ(::write(fd, "x", 1), 1);
+    ::close(fd);
+  }
+  auto load_fresh = [&] {
+    RGWBucketInfo fi;
+    fi.bucket.name = testname;
+    auto fresh = driver->get_bucket(fi);
+    EXPECT_NE(fresh.get(), nullptr);
+    EXPECT_EQ(fresh->load_bucket(env->dpp, null_yield), 0);
+    return fresh;
+  };
+
+  auto fresh = load_fresh();
+  auto* fb = static_cast<rgw::sal::NSFSBucket*>(fresh.get());
+  ASSERT_STREQ(fb->profile_name(), "base");
+  EXPECT_STREQ(fb->get_dir()->get_xattr_strategy()->name(), "noobaa")
+      << "a loaded base bucket's directory reads with our strategy";
+  EXPECT_EQ(fb->get_dir()->get_path_strategy(), fb->path_strategy())
+      << "a loaded base bucket's directory names entries by our conventions";
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(fresh->list(env->dpp, params, 128, results, null_yield), 0);
+  bool found = false;
+  for (const auto& e : results.objs) {
+    if (e.key.name != "sideloaded.txt") {
+      continue;
+    }
+    found = true;
+    EXPECT_NE(e.meta.owner, "unknown")
+	<< "the listing read their object with our strategy";
+    EXPECT_FALSE(e.meta.owner.empty());
+  }
+  EXPECT_TRUE(found) << "the sideloaded object was not listed";
+
+  /* the control:  marked, the same load gives ours */
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  auto marked = load_fresh();
+  auto* mb = static_cast<rgw::sal::NSFSBucket*>(marked.get());
+  ASSERT_STREQ(mb->profile_name(), "shared");
+  EXPECT_STREQ(mb->get_dir()->get_xattr_strategy()->name(), "rgw");
+}
+
 /* The sentinel carries the mode every object on this backend carries.
  *
  * 0600:  the publish path fchmods to S_IRUSR|S_IWUSR as the owner, so
