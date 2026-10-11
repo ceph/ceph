@@ -7538,7 +7538,12 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 		 : -ENOENT;
   }
   if (ret == -ENOENT) {
-    // TODO dang: fake info up (UID to owner conversion?)
+    /* No state anywhere:  the info the caller seeded stands, owner
+     * included.  A bucket's owner is not derived from its directory's
+     * uid -- the uid is a POSIX identity, several accounts can share
+     * one, and an owner comes only from stored state, nsfs's or
+     * NooBaa's `owner_account` as the import maps it (DECISIONS.md
+     * 2026-10-11). */
     info = bak_info;
   } else if (ret < 0) {
     return ret;
