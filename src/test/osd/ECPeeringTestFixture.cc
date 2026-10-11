@@ -532,6 +532,7 @@ PeeringState* ECPeeringTestFixture::create_child_peering_state(int shard,
   child_bl->set_store(osd_fixture->store.get(), child_ch);
   child_bl->set_event_loop(event_loop.get());
   child_bl->set_messenger(messenger.get());
+  child_bl->set_osd(this);
 
   // Create peering listener for child
   child_test_pg->peering_listener = std::make_unique<MockPeeringListener>(
@@ -655,6 +656,7 @@ void ECPeeringTestFixture::ensure_test_pg_exists(pg_shard_t pg_whoami) {
   shard_listener->set_store(osd_fixture->store.get(), test_pg->ch);
   shard_listener->set_event_loop(event_loop.get());
   shard_listener->set_messenger(messenger.get());
+  shard_listener->set_osd(this);
 
   // Create EC backend using the TestPG's collection
   auto shard_ec_switch = std::make_unique<ECSwitch>(
