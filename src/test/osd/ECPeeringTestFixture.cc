@@ -543,6 +543,9 @@ PeeringState* ECPeeringTestFixture::create_child_peering_state(int shard,
   auto& pl = child_test_pg->peering_listener;
   pl->current_epoch = osdmap->get_epoch();
   pl->inject_event_stall = stall_recovery_reservations;
+  pl->clear_object_contexts = [child_test_pg]() {
+    child_test_pg->object_contexts.clear();
+  };
   pl->set_messenger(messenger.get());
   pl->set_event_loop(event_loop.get());
   pl->backend_listener->set_messenger(messenger.get());
@@ -680,6 +683,9 @@ void ECPeeringTestFixture::ensure_test_pg_exists(pg_shard_t pg_whoami) {
   peering_listener->set_event_loop(event_loop.get());
   peering_listener->backend_listener->set_messenger(messenger.get());
   peering_listener->pg_backend = test_pg->backend.get();
+  peering_listener->clear_object_contexts = [test_pg]() {
+    test_pg->object_contexts.clear();
+  };
 
   peering_listener->queue_transaction_callback =
     [this, test_pg](ObjectStore::Transaction&& t) -> int {

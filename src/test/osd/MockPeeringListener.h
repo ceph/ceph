@@ -358,11 +358,17 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     activate_called = true;
   }
 
+  // Clears the PG's object contexts, as PrimaryLogPG::on_change() does.
+  std::function<void()> clear_object_contexts;
+
   void on_change(ObjectStore::Transaction &t) override {
     first_write_in_interval = true;
     change_called = true;
     if (pg_backend) {
       pg_backend->on_change();
+    }
+    if (clear_object_contexts) {
+      clear_object_contexts();
     }
   }
 
