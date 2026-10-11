@@ -428,7 +428,9 @@ class MockPeeringListener : public PeeringState::PeeringListener {
 
   PGLog::LogEntryHandlerRef get_log_handler(
     ObjectStore::Transaction &t) override {
-    return std::make_unique<MockPGLogEntryHandler>(backend.get(), &t);
+    // Like PrimaryLogPG, use the PG's IO backend when there is one
+    return std::make_unique<MockPGLogEntryHandler>(
+      pg_backend ? pg_backend : backend.get(), &t);
   }
 
   void rebuild_missing_set_with_deletes(PGLog &pglog) override {
