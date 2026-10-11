@@ -764,11 +764,13 @@ static void promote_version(int parent_fd, const std::string& leaf,
 
 static int ensure_versions_dir(int parent_fd)
 {
-  int ret = ::mkdirat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(), 0755);
-  if (ret < 0 && errno != EEXIST) {
-    return -errno;
+  const mode_t mode = nsfs::dir_create_mode();
+  int ret = ::mkdirat(parent_fd, HIDDEN_VERSIONS_PATH.c_str(), mode);
+  if (ret < 0) {
+    return (errno == EEXIST) ? 0 : -errno;
   }
-  return 0;
+  return nsfs::apply_create_mode_at(nullptr, parent_fd,
+				    HIDDEN_VERSIONS_PATH.c_str(), mode);
 }
 
 static int open_versions_dir(int parent_fd)
@@ -1134,8 +1136,13 @@ static int open_versions_lockfile(int parent_fd)
     return ret;
   }
   int fd = ::openat(parent_fd, VERSIONS_LOCKFILE.c_str(),
-                    O_RDWR | O_CREAT, 0600);
-  return fd < 0 ? -errno : fd;
+                    O_RDWR | O_CREAT, nsfs::file_create_mode());
+  if (fd < 0) {
+    return -errno;
+  }
+  /* in the tree like any object, so the same mode */
+  (void) nsfs::apply_create_mode(nullptr, fd, nsfs::file_create_mode());
+  return fd;
 }
 
 /* Take a directory's version lock, recovering an interrupted move out of it
@@ -1318,11 +1325,13 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 
 static int ensure_shadow_dir(int parent_fd)
 {
-  int ret = ::mkdirat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), 0755);
-  if (ret < 0 && errno != EEXIST) {
-    return -errno;
+  const mode_t mode = nsfs::dir_create_mode();
+  int ret = ::mkdirat(parent_fd, HIDDEN_SHADOW_PATH.c_str(), mode);
+  if (ret < 0) {
+    return (errno == EEXIST) ? 0 : -errno;
   }
-  return 0;
+  return nsfs::apply_create_mode_at(nullptr, parent_fd,
+				    HIDDEN_SHADOW_PATH.c_str(), mode);
 }
 
 static int open_shadow_dir(int parent_fd)
@@ -2244,28 +2253,22 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
     flags |= O_DIRECT;
   }
 
-  /* 0600, which is what an object on this backend carries.
-   *
-   * This used to create 0700 and rely on File::write() narrowing it
-   * afterwards, which left the wider mode on every path that creates
-   * a file and does not write to it:  a zero-length object, the
-   * multipart staging record, and -- through MPUStrategy::assemble()
-   * -- every completed multipart object.  Nothing wants owner-execute
-   * on a data file, so the create mode was simply wrong.  The
-   * narrowing calls stay as a backstop;  one of them is in
-   * driver/posix and shared.
+  /* NooBaa's object mode, 0666 under `rgw_nsfs_umask`, so 0660 by
+   * default (DECISIONS.md 2026-10-11).  Asked for here, and restored
+   * below where the process umask takes some of it -- every path that
+   * creates a file needs it, not only those that write, so it is not
+   * left to the write path.
    *
    * Under a personality the open goes through the ring, because
    * that is where the kernel decides access -- and under
    * impersonation it is also what gives the new file the right
    * owner.  With none, the plain syscall, unchanged. */
+  const mode_t mode = nsfs::file_create_mode();
   if (personality != 0) {
     ret = rgw::sal::posix_uring_openat2(dpp, parent->get_fd(), path.c_str(),
-					flags | O_NOFOLLOW,
-					S_IRUSR | S_IWUSR, personality);
+					flags | O_NOFOLLOW, mode, personality);
   } else {
-    ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW,
-		 S_IRUSR | S_IWUSR);
+    ret = openat(parent->get_fd(), path.c_str(), flags | O_NOFOLLOW, mode);
     if (ret < 0) {
       ret = -errno;
     }
@@ -2285,6 +2288,12 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
   fd = ret;
   need_fsync = true;
 
+  ret = nsfs::apply_create_mode(dpp, fd, mode, identity);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
+		      << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
   return 0;
 }
 
@@ -2677,8 +2686,9 @@ int Directory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_fi
    * the path above it -- so the data root's own mode, not this
    * one, decides who can reach a bucket from outside. */
   const mode_t dir_mode = nsfs::impersonation_enabled()
-      ? (S_ISVTX | 0777) : S_IRWXU;
+      ? (S_ISVTX | 0777) : nsfs::dir_create_mode();
   int ret = mkdirat(parent->get_fd(), fname.c_str(), dir_mode);
+  const bool made = (ret == 0);
   if (ret < 0) {
     ret = -errno;
   }
@@ -2703,6 +2713,15 @@ int Directory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_fi
     ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
       << ": " << cpp_strerror(errno) << dendl;
     return -errno;
+  }
+  if (!nsfs::impersonation_enabled() && made) {
+    ret = nsfs::apply_create_mode_at(dpp, parent->get_fd(), fname.c_str(),
+				     dir_mode);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
+	<< ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
   }
 
   return 0;
@@ -3303,8 +3322,9 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_
 
   /* see Directory::create on the mode */
   const mode_t dir_mode = nsfs::impersonation_enabled()
-      ? (S_ISVTX | 0777) : S_IRWXU;
+      ? (S_ISVTX | 0777) : nsfs::dir_create_mode();
   int ret = mkdirat(parent->get_fd(), path.c_str(), dir_mode);
+  const bool made = (ret == 0);
   if (ret < 0) {
     ret = -errno;
   }
@@ -3329,6 +3349,15 @@ int MPDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_
     ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
       << ": " << cpp_strerror(errno) << dendl;
     return -errno;
+  }
+  if (!nsfs::impersonation_enabled() && made) {
+    ret = nsfs::apply_create_mode_at(dpp, parent->get_fd(), path.c_str(),
+				     dir_mode);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not set the mode on " << get_name()
+	<< ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
   }
 
   return 0;
@@ -3922,6 +3951,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     }
   }
 
+  nsfs::init_create_modes(dpp, cct);
   init_strategies(dpp);
 
   /* ordered listing cache */
@@ -6614,14 +6644,12 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
     nsfs::PathStrategy::DirectoryObject dobj{};
     if (their_paths->directory_object(dpp, sub.get_fd(), dobj)) {
       const std::string sname = their_paths->folder_object_name();
-      /* 0600, which is what every object on this backend carries, and
-       * now because that is the mode every create asks for rather than
-       * because something narrows it afterwards.  Access is decided by
-       * ownership and impersonation, not by the mode, and a converted
-       * directory object must not be more permissive than an ordinary
-       * one. */
+      /* NooBaa's object mode, as every object nsfs creates carries
+       * (DECISIONS.md 2026-10-11).  Restored straight after the open,
+       * while the gateway still owns the file, because the ids are
+       * taken from the directory below. */
       int sfd = ::openat(sub.get_fd(), sname.c_str(),
-			 O_RDONLY | O_CREAT, 0600);
+			 O_RDONLY | O_CREAT, nsfs::file_create_mode());
       if (sfd < 0) {
 	ret = -errno;
 	ldpp_dout(dpp, 0) << "ERROR: creating " << sname << " under "
@@ -6630,6 +6658,10 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 	return ret;
       }
       auto close_sfd = make_scope_guard([sfd] { ::close(sfd); });
+      ret = nsfs::apply_create_mode(dpp, sfd, nsfs::file_create_mode());
+      if (ret < 0) {
+	return ret;
+      }
 
       /* The sentinel re-expresses the directory, so it takes the
        * directory's uid and gid. */
@@ -6863,7 +6895,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     {
       const std::string mname = ours->meta_name();
       int mfd = ::openat(ourdir.get_fd(), mname.c_str(),
-			 O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+			 O_RDWR | O_CREAT, nsfs::file_create_mode());
       if (mfd < 0) {
 	ret = -errno;
 	ldpp_dout(dpp, 0) << "ERROR: creating " << mname << " for "
@@ -6871,6 +6903,10 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	return ret;
       }
       auto close_mfd = make_scope_guard([mfd] { ::close(mfd); });
+      ret = nsfs::apply_create_mode(dpp, mfd, nsfs::file_create_mode());
+      if (ret < 0) {
+	return ret;
+      }
 
       /* re-expresses NooBaa's staging directory, so it takes its ids */
       struct statx tdstx{};
@@ -6989,7 +7025,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 
       const std::string ourname = ours->part_name(*num);
       int dfd = ::openat(ourdir.get_fd(), ourname.c_str(),
-			 O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+			 O_RDWR | O_CREAT | O_TRUNC, nsfs::file_create_mode());
       if (dfd < 0) {
 	ret = -errno;
 	ldpp_dout(dpp, 0) << "ERROR: creating " << ourname << " for " << meta
@@ -6997,6 +7033,10 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	return ret;
       }
       auto close_dfd = make_scope_guard([dfd] { ::close(dfd); });
+      ret = nsfs::apply_create_mode(dpp, dfd, nsfs::file_create_mode());
+      if (ret < 0) {
+	return ret;
+      }
 
       /* re-expresses NooBaa's part file, so it takes its ids */
       struct statx pstx{};
@@ -9329,7 +9369,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     /* inject-fork-race: stand in for another instance which forked first,
      * so the linkat below loses with EEXIST and joins its shadow */
     int rfd = ::openat(sdir_fd, leaf.c_str(),
-		       O_RDWR | O_CREAT | O_EXCL, 0600);
+		       O_RDWR | O_CREAT | O_EXCL, nsfs::file_create_mode());
     if (rfd >= 0) {
       static const char marker[] = "RACEWON";
       [[maybe_unused]] ssize_t nw =
@@ -9377,17 +9417,24 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     /* New object.  O_TMPFILE keeps it nameless until the link, so a
      * failure or a crash leaves nothing at all behind -- the inode is
      * reclaimed when the descriptor closes. */
-    build_fd = ::openat(sdir_fd, ".", O_TMPFILE | O_RDWR, 0600);
+    build_fd = ::openat(sdir_fd, ".", O_TMPFILE | O_RDWR,
+			nsfs::file_create_mode());
     if ((build_fd < 0) &&
 	((errno == EOPNOTSUPP) || (errno == EISDIR) || (errno == EINVAL))) {
       /* filesystem without O_TMPFILE:  fall back to a named temp */
       tmp_name = std::string(nsfs::TMP_LINK_PREFIX) + std::to_string(::getpid()) +
 	"_" + std::to_string(fsio_build_seq.fetch_add(1));
       build_fd = ::openat(sdir_fd, tmp_name.c_str(),
-			  O_RDWR | O_CREAT | O_EXCL, 0600);
+			  O_RDWR | O_CREAT | O_EXCL, nsfs::file_create_mode());
     }
     if (build_fd < 0) {
       return FSIOResult{-errno, nullptr};
+    }
+    if (int mret = nsfs::apply_create_mode(dpp, build_fd,
+					   nsfs::file_create_mode());
+	mret < 0) {
+      ::close(build_fd);
+      return FSIOResult{mret, nullptr};
     }
     /* store a default private ACL (owner with FULL_CONTROL) */
     RGWAccessControlPolicy policy;
@@ -9750,9 +9797,16 @@ int NSFSObject::NSFSFSIOObject::reclone(const DoutPrefixProvider* dpp, uint32_t 
     }
   } else {
     new_fd = ::openat(shadow_dir_fd, leaf_name.c_str(),
-		      O_RDWR | O_CREAT | O_EXCL, 0600);
+		      O_RDWR | O_CREAT | O_EXCL, nsfs::file_create_mode());
     if ((new_fd < 0) && (errno == EEXIST)) {
       joined = true;
+    } else if (new_fd >= 0) {
+      int mret = nsfs::apply_create_mode(dpp, new_fd,
+					 nsfs::file_create_mode());
+      if (mret < 0) {
+	::close(new_fd);
+	return mret;
+      }
     }
   }
 
@@ -11768,8 +11822,10 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     std::to_string(getpid()) + "_" + std::to_string(dm_counter.fetch_add(1));
 
   int dm_fd = ::openat(vfd, dm_tmp.c_str(),
-                       O_WRONLY | O_CREAT | O_EXCL, 0600);
+                       O_WRONLY | O_CREAT | O_EXCL,
+                       nsfs::file_create_mode());
   if (dm_fd >= 0) {
+    (void) nsfs::apply_create_mode(dpp, dm_fd, nsfs::file_create_mode());
     /* set delete_marker xattr */
     std::string dm_xattr = source->xattr_strategy()->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
     std::string dm_val = "true";

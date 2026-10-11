@@ -496,4 +496,28 @@ public:
   }
 };
 
+/* The modes nsfs creates files and directories with (DECISIONS.md
+ * 2026-10-11):  NooBaa's, 0666 and 0777 masked by `rgw_nsfs_umask`,
+ * NooBaa's `NSFS_UMASK`, which defaults to 0o007 -- so 0660 and 0770.
+ *
+ * The process umask is left alone, because it reaches every file
+ * radosgw creates.  It still masks what an open or a mkdir asks for,
+ * so where it takes bits nsfs asked for, apply_create_mode() puts
+ * them back on the new file;  a deployment whose umask takes none of
+ * them pays nothing.  Every file nsfs creates in a bucket takes these
+ * modes;  only the filesystem probe at startup, created and removed
+ * outside any bucket, does not. */
+void init_create_modes(const DoutPrefixProvider* dpp, CephContext* cct);
+mode_t file_create_mode();
+mode_t dir_create_mode();
+
+/* Give a file just created the mode it asked for, where the process
+ * umask took some of it.  As `id`, because a file created under a
+ * personality is the requester's and only its owner may chmod it. */
+int apply_create_mode(const DoutPrefixProvider* dpp, int fd, mode_t mode,
+		      const FSIdentity& id = {});
+/* The same, for a directory created by name. */
+int apply_create_mode_at(const DoutPrefixProvider* dpp, int dirfd,
+			 const char* name, mode_t mode);
+
 } } } // namespace rgw::sal::nsfs

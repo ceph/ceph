@@ -3539,6 +3539,53 @@ TEST_F(NSFSBucketTest, HierarchicalChown)
   EXPECT_EQ(after.st_uid, before.st_uid);
 }
 
+/* nsfs creates objects and their directories in NooBaa's modes, under
+ * `rgw_nsfs_umask` (DECISIONS.md 2026-10-11).
+ *
+ * Both polarities:  the default, 0007, gives 0660 and 0770;  0027
+ * gives 0640 and 0750.  The process umask is 022 throughout, which
+ * takes the group write bit the default asks for -- so the default
+ * case also requires the create mode to be restored on the new file
+ * and directory, rather than left to what the umask made of it. */
+TEST_F(NSFSBucketTest, CreateModesFollowRgwNsfsUmask)
+{
+  const mode_t saved = ::umask(022);
+  auto restore = make_scope_guard([&] {
+    ::umask(saved);
+    g_conf().set_val("rgw_nsfs_umask", "0007");
+    nsfs::init_create_modes(env->dpp, env->cct.get());
+  });
+
+  auto write = [&](const std::string& name) {
+    auto obj = bucket->get_object(rgw_obj_key(name));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    ASSERT_EQ(writer->prepare(null_yield), 0);
+    bufferlist bl;
+    bl.append("x");
+    ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+    ASSERT_EQ(writer->process({}, 1), 0);
+    ceph::real_time mtime;
+    Attrs attrs;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ASSERT_EQ(writer->complete(1, "", &mtime, real_time(), attrs,
+			       std::nullopt, real_time(), nullptr, nullptr,
+			       nullptr, nullptr, nullptr, rctx, 0), 0);
+  };
+
+  struct Case { const char* umask; mode_t file; mode_t dir; const char* d; };
+  for (const Case& c : {Case{"0007", 0660, 0770, "dflt"},
+			Case{"0027", 0640, 0750, "tight"}}) {
+    g_conf().set_val("rgw_nsfs_umask", c.umask);
+    nsfs::init_create_modes(env->dpp, env->cct.get());
+    write(std::string(c.d) + "/obj.bin");
+    EXPECT_EQ(file_mode(bucket_path() / c.d / "obj.bin"), c.file)
+	<< "rgw_nsfs_umask " << c.umask;
+    EXPECT_EQ(file_mode(bucket_path() / c.d), c.dir)
+	<< "rgw_nsfs_umask " << c.umask << ", the object's directory";
+  }
+}
+
 /* NooBaa's multipart staging layout.
  *
  * These assert on-disk names, offsets and sizes directly, because the
@@ -5181,19 +5228,17 @@ TEST_F(NSFSNooBaaBucketTest, ALoadedBaseBucketListsInTheirFormat)
   EXPECT_STREQ(mb->get_dir()->get_xattr_strategy()->name(), "rgw");
 }
 
-/* The sentinel carries the mode every object on this backend carries.
- *
- * 0600:  the publish path fchmods to S_IRUSR|S_IWUSR as the owner, so
- * access is decided by ownership and impersonation rather than by the
- * mode, and a converted directory object must not be more permissive
- * than an ordinary one.
+/* The sentinel carries the mode every object nsfs creates carries:
+ * NooBaa's, 0660 by default (DECISIONS.md 2026-10-11).
  *
  * umask is set for the duration, because `openat` applies it and a
- * developer's umask is not the test's to assume. */
+ * developer's umask is not the test's to assume;  022 takes the group
+ * write bit, so this also requires the create mode to be restored. */
 TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelAnObjectMode)
 {
   const mode_t saved = ::umask(022);
   auto restore = make_scope_guard([saved] { ::umask(saved); });
+  nsfs::init_create_modes(env->dpp, env->cct.get());
 
   const sf::path dir{bucket_path() / "dirobj"};
   ASSERT_TRUE(sf::create_directories(dir));
@@ -5214,9 +5259,9 @@ TEST_F(NSFSNooBaaBucketTest, ConversionGivesTheSentinelAnObjectMode)
 
   struct stat st{};
   ASSERT_EQ(::stat(sentinel.c_str(), &st), 0);
-  EXPECT_EQ(st.st_mode & 07777, 0600u)
+  EXPECT_EQ(st.st_mode & 07777, nsfs::file_create_mode())
       << "the sentinel does not carry the mode an object written through "
-	 "S3 carries;  it must not be more permissive than one";
+	 "S3 carries";
 }
 
 /* A group the process belongs to that is not its primary one.
@@ -8148,13 +8193,14 @@ TEST_F(NSFSBucketTest, AClosedGateRefusesAWriteHandle)
  * link_temp_file() links the result over the name, so the published
  * object is always an inode this gateway made, and the mode comes
  * from that create.  Asserting the inode *changed* is what
- * distinguishes the two, because the mode alone comes out 0600 either
- * way.
+ * distinguishes the two, because the mode alone comes out the same
+ * either way.
  */
 TEST_F(NSFSBucketTest, APutOverASideLoadedFileReplacesTheInode)
 {
   const mode_t saved = ::umask(022);
   auto restore = make_scope_guard([saved] { ::umask(saved); });
+  nsfs::init_create_modes(env->dpp, env->cct.get());
 
   /* a file somebody else put in the tree, with somebody else's mode */
   const sf::path p{bucket_path() / "sideloaded.bin"};
@@ -8195,7 +8241,7 @@ TEST_F(NSFSBucketTest, APutOverASideLoadedFileReplacesTheInode)
       << "the PUT wrote into the side-loaded file rather than replacing "
 	 "it;  the mode narrowing in the write path is therefore not "
 	 "redundant and must not be removed";
-  EXPECT_EQ(after.st_mode & 07777, 0600u);
+  EXPECT_EQ(after.st_mode & 07777, nsfs::file_create_mode());
 }
 
 /* An object published through FSIO carries the mode an object carries.
@@ -8208,15 +8254,16 @@ TEST_F(NSFSBucketTest, APutOverASideLoadedFileReplacesTheInode)
  * renames the shadow into place.
  *
  * umask is pinned, and that is the whole reason this test can mean
- * anything.  umask only *clears* bits, so a shadow created 0644 lands
- * at 0600 under a umask of 077 and at 0644 under 022.  A developer
- * with a restrictive umask would see this pass while the defect was
- * there -- and so would a radosgw whose umask happened to be tight.
+ * anything.  umask only *clears* bits, so a shadow created with the
+ * wrong mode could still land right under a tight umask.  022 takes
+ * the group write bit the create mode asks for, so passing also
+ * requires that bit to be restored.
  */
 TEST_F(NSFSBucketTest, AnFSIOPublishedObjectCarriesTheObjectMode)
 {
   const mode_t saved = ::umask(022);
   auto restore = make_scope_guard([saved] { ::umask(saved); });
+  nsfs::init_create_modes(env->dpp, env->cct.get());
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->resolve_profile(env->dpp), 0);
@@ -8238,9 +8285,9 @@ TEST_F(NSFSBucketTest, AnFSIOPublishedObjectCarriesTheObjectMode)
 
   const sf::path published{bucket_path() / "fsio-new.bin"};
   ASSERT_TRUE(sf::exists(published)) << "the handle published nothing";
-  EXPECT_EQ(file_mode(published), 0600u)
-      << "an object written through the NFS gateway is more permissive "
-	 "than the same object written through S3";
+  EXPECT_EQ(file_mode(published), nsfs::file_create_mode())
+      << "an object written through the NFS gateway does not carry the "
+	 "mode of the same object written through S3";
 }
 
 /* And re-opening an existing object for write, which clones it.
@@ -8254,6 +8301,7 @@ TEST_F(NSFSBucketTest, AnFSIOClonedObjectCarriesTheObjectMode)
 {
   const mode_t saved = ::umask(022);
   auto restore = make_scope_guard([saved] { ::umask(saved); });
+  nsfs::init_create_modes(env->dpp, env->cct.get());
 
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->resolve_profile(env->dpp), 0);
@@ -8276,8 +8324,8 @@ TEST_F(NSFSBucketTest, AnFSIOClonedObjectCarriesTheObjectMode)
 
   const sf::path published{bucket_path() / name};
   ASSERT_TRUE(sf::exists(published));
-  EXPECT_EQ(file_mode(published), 0600u)
-      << "the clone path left the object more permissive than an object "
+  EXPECT_EQ(file_mode(published), nsfs::file_create_mode())
+      << "the clone path left the object a different mode from an object "
 	 "written through S3";
 }
 

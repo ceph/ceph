@@ -504,7 +504,8 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
   }
 
   int dst_flags = O_WRONLY | O_CREAT | (excl ? O_EXCL : O_TRUNC);
-  int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags, 0600);
+  int dst_fd = ::openat(dst_dir_fd, dst_name.c_str(), dst_flags,
+			file_create_mode());
   if (dst_fd < 0) {
     int err = errno;
     ::close(src_fd);
@@ -517,7 +518,10 @@ int FSStrategy::clone_file_by_copy(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  ret = copy_range(dpp, src_fd, 0, dst_fd, 0, stx.stx_size);
+  ret = apply_create_mode(dpp, dst_fd, file_create_mode());
+  if (ret == 0) {
+    ret = copy_range(dpp, src_fd, 0, dst_fd, 0, stx.stx_size);
+  }
   ::close(src_fd);
   ::close(dst_fd);
 
@@ -541,12 +545,18 @@ int FSStrategy::clone_fd_by_copy(const DoutPrefixProvider* dpp,
     return -err;
   }
 
-  int tmp_fd = ::openat(dst_dir_fd, ".", O_TMPFILE | O_WRONLY, 0600);
+  int tmp_fd = ::openat(dst_dir_fd, ".", O_TMPFILE | O_WRONLY,
+			file_create_mode());
   if (tmp_fd < 0) {
     int err = errno;
     ldpp_dout(dpp, 0) << "ERROR: clone_fd: O_TMPFILE failed: "
       << cpp_strerror(err) << dendl;
     return -err;
+  }
+  if (int mret = apply_create_mode(dpp, tmp_fd, file_create_mode());
+      mret < 0) {
+    ::close(tmp_fd);
+    return mret;
   }
 
   int ret = copy_range(dpp, src_fd, 0, tmp_fd, 0, stx.stx_size);
@@ -1344,6 +1354,110 @@ std::unique_ptr<VersionLockHandle> GPFSStrategy::version_lock(
   return std::make_unique<LWELockHandle>(
     fn_lwe_release_right, fn_dm_handle_free,
     lwe_session, hanp, hlen, token, lock_fd);
+}
+
+namespace {
+std::atomic<mode_t> g_file_mode{0660};
+std::atomic<mode_t> g_dir_mode{0770};
+/* what the process umask takes;  measured at init, or on first use
+ * by a driver that was not initialized through initialize() */
+constexpr mode_t UNMEASURED = 01000;
+std::atomic<mode_t> g_process_umask{UNMEASURED};
+
+/* Read without changing it:  umask(2) can only be read by setting it,
+ * and setting it, even briefly, races every thread creating a file. */
+mode_t read_process_umask()
+{
+  FILE* f = ::fopen("/proc/self/status", "r");
+  if (!f) {
+    return 0777;
+  }
+  auto close_f = make_scope_guard([f] { ::fclose(f); });
+  char line[256];
+  while (::fgets(line, sizeof(line), f)) {
+    unsigned int m;
+    if (::sscanf(line, "Umask: %o", &m) == 1) {
+      return m & 0777;
+    }
+  }
+  return 0777;
+}
+
+mode_t process_umask()
+{
+  mode_t m = g_process_umask;
+  if (m == UNMEASURED) {
+    m = read_process_umask();
+    g_process_umask = m;
+  }
+  return m;
+}
+} // namespace
+
+void init_create_modes(const DoutPrefixProvider* dpp, CephContext* cct)
+{
+  const std::string s = cct->_conf.get_val<std::string>("rgw_nsfs_umask");
+  char* end = nullptr;
+  errno = 0;
+  unsigned long u = ::strtoul(s.c_str(), &end, 8);
+  if (errno || (end == s.c_str()) || (*end != '\0') || (u & ~0777ul)) {
+    ldpp_dout(dpp, 0) << "ERROR: rgw_nsfs_umask \"" << s << "\" is not an "
+      << "octal mode;  using 0007" << dendl;
+    u = 0007;
+  }
+  g_file_mode = 0666 & ~mode_t(u);
+  g_dir_mode = 0777 & ~mode_t(u);
+  g_process_umask = read_process_umask();
+  ldpp_dout(dpp, 1) << "nsfs: creating files " << std::oct
+    << g_file_mode.load() << " and directories " << g_dir_mode.load()
+    << " (rgw_nsfs_umask " << u << ", process umask "
+    << g_process_umask.load() << ")" << std::dec << dendl;
+}
+
+mode_t file_create_mode()
+{
+  return g_file_mode;
+}
+
+mode_t dir_create_mode()
+{
+  return g_dir_mode;
+}
+
+/* Only a file that carries exactly what the umask made of `mode` is
+ * changed.  That is how a file just created looks;  a file an open
+ * with O_CREAT found already there -- a shared part file, a sideloaded
+ * object being overwritten -- has its own mode and is left alone, and
+ * under impersonation its owner may not be the requester. */
+int apply_create_mode(const DoutPrefixProvider* dpp, int fd, mode_t mode,
+		      const FSIdentity& id)
+{
+  const mode_t masked = mode & ~process_umask();
+  if (masked == mode) {
+    return 0;
+  }
+  struct stat st;
+  if ((::fstat(fd, &st) < 0) || ((st.st_mode & 07777) != masked)) {
+    return 0;
+  }
+  return with_identity(dpp, id, [fd, mode]() -> int {
+    return (::fchmod(fd, mode) < 0) ? -errno : 0;
+  });
+}
+
+int apply_create_mode_at(const DoutPrefixProvider* dpp, int dirfd,
+			 const char* name, mode_t mode)
+{
+  const mode_t masked = mode & ~process_umask();
+  if (masked == mode) {
+    return 0;
+  }
+  struct stat st;
+  if ((::fstatat(dirfd, name, &st, AT_SYMLINK_NOFOLLOW) < 0) ||
+      ((st.st_mode & 07777) != masked)) {
+    return 0;
+  }
+  return (::fchmodat(dirfd, name, mode, 0) < 0) ? -errno : 0;
 }
 
 } } } // namespace rgw::sal::nsfs

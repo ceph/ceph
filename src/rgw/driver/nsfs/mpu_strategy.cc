@@ -278,8 +278,7 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
   }
 
   int out_fd = openat(dir_fd, output_name.c_str(),
-		      O_WRONLY | O_CREAT | O_TRUNC,
-		      S_IRUSR | S_IWUSR);
+		      O_WRONLY | O_CREAT | O_TRUNC, file_create_mode());
   if (out_fd < 0) {
     int ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not create assembly file "
@@ -287,6 +286,10 @@ int PerPartMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     return -ret;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode());
+      mret < 0) {
+    return mret;
+  }
 
   /* Each part is its own whole file, so the recorded placement says
    * nothing this layout needs:  only the part numbers are taken from
@@ -465,8 +468,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
    * from its offset there, a part in its own file from the start of
    * that file. */
   int out_fd = openat(dir_fd, output_name.c_str(),
-		      O_WRONLY | O_CREAT | O_TRUNC,
-		      S_IRUSR | S_IWUSR);
+		      O_WRONLY | O_CREAT | O_TRUNC, file_create_mode());
   if (out_fd < 0) {
     int ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not create assembly file "
@@ -474,6 +476,10 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     return -ret;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode());
+      mret < 0) {
+    return mret;
+  }
 
   int shared_fd = -1;
   auto close_shared = make_scope_guard([&shared_fd] {
@@ -683,24 +689,28 @@ NooBaaMPUStrategy::staging_root_for_write(const DoutPrefixProvider* dpp,
       return std::nullopt;
     }
     std::string name = std::string(NB_TMPDIR_PREFIX) + gen_uuid();
-    if ((::mkdirat(bucket_fd, name.c_str(), 0755) < 0) &&
+    if ((::mkdirat(bucket_fd, name.c_str(), dir_create_mode()) < 0) &&
 	(errno != EEXIST)) {
       int ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not create " << name << ": "
 			<< cpp_strerror(ret) << dendl;
       return std::nullopt;
     }
+    (void) apply_create_mode_at(dpp, bucket_fd, name.c_str(),
+				dir_create_mode());
     found = name;
   }
 
   const std::string root = *found + "/" + NB_MPU_ROOT;
-  if ((::mkdirat(bucket_fd, root.c_str(), 0755) < 0) &&
+  if ((::mkdirat(bucket_fd, root.c_str(), dir_create_mode()) < 0) &&
       (errno != EEXIST)) {
     int ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not create " << root << ": "
 		      << cpp_strerror(ret) << dendl;
     return std::nullopt;
   }
+  (void) apply_create_mode_at(dpp, bucket_fd, root.c_str(),
+			      dir_create_mode());
   return root;
 }
 
@@ -1102,7 +1112,7 @@ int NooBaaMPUStrategy::write_staged_upload(const DoutPrefixProvider* dpp,
   const std::string doc = os.str();
 
   int fd = ::openat(dir_fd, NB_CREATE_NAME.c_str(),
-		    O_WRONLY | O_CREAT | O_TRUNC, 0600);
+		    O_WRONLY | O_CREAT | O_TRUNC, file_create_mode());
   if (fd < 0) {
     int ret = -errno;
     ldpp_dout(dpp, 0) << "ERROR: creating " << NB_CREATE_NAME << ": "
@@ -1110,6 +1120,9 @@ int NooBaaMPUStrategy::write_staged_upload(const DoutPrefixProvider* dpp,
     return ret;
   }
   auto close_fd = make_scope_guard([fd] { ::close(fd); });
+  if (int mret = apply_create_mode(dpp, fd, file_create_mode()); mret < 0) {
+    return mret;
+  }
 
   ssize_t w = ::pwrite(fd, doc.data(), doc.size(), 0);
   if (w < 0) {
@@ -1337,14 +1350,18 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     out_fd = ::openat(dir_fd, output_name.c_str(), O_WRONLY);
   } else {
     out_fd = ::openat(dir_fd, output_name.c_str(),
-		      O_WRONLY | O_CREAT | O_TRUNC,
-		      S_IRUSR | S_IWUSR);
+		      O_WRONLY | O_CREAT | O_TRUNC, file_create_mode());
   }
   if (out_fd < 0) {
     int ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open " << output_name << ": "
 		      << cpp_strerror(ret) << dendl;
     return -ret;
+  }
+  if (int mret = apply_create_mode(dpp, out_fd, file_create_mode());
+      mret < 0) {
+    ::close(out_fd);
+    return mret;
   }
   auto close_out = make_scope_guard([out_fd] { ::close(out_fd); });
 

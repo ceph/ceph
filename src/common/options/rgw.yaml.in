@@ -4910,6 +4910,21 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_nsfs_umask
+  type: str
+  level: advanced
+  desc: Permission bits nsfs removes from the files and directories it creates
+  long_desc: An octal umask applied to 0666 for files and 0777 for directories,
+    as NooBaa's NSFS_UMASK is, so the default 0007 creates objects 0660 and
+    directories 0770 -- the modes a NooBaa tree already has.  It does not
+    change the process umask.  Where the process umask removes bits this
+    asks for, nsfs restores them on each file it creates, which costs a
+    chmod per create, and under impersonation a thread hop as well;  a
+    process umask that removes none of them, such as UMask=0007 in the
+    service unit, avoids that.
+  default: '0007'
+  services:
+  - rgw
 - name: rgw_nsfs_impersonate
   type: bool
   level: advanced
