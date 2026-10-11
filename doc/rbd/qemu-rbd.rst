@@ -29,7 +29,7 @@ image each time it spins up a new virtual machine.
 
 Ceph Block Devices attach to QEMU virtual machines. For details on
 QEMU, see  `QEMU Open Source Processor Emulator`_. For QEMU documentation, see
-`QEMU Manual`_. For installation details, see `Installation`_.
+`QEMU Manual`_. For installation details, see :doc:`/install/install-vm-cloud`.
 
 .. important:: To use Ceph Block Devices with QEMU, you must have access to a 
    running Ceph cluster.
@@ -215,5 +215,4 @@ are explicitly set in the Ceph configuration file).
 .. _QEMU Manual: https://wiki.qemu.org/Manual
 .. _RBD Cache: ../rbd-config-ref/
 .. _Snapshots: ../rbd-snapshot/
-.. _Installation: ../../install
 .. _User Management - User: ../../rados/operations/user-management#user

@@ -1115,7 +1115,7 @@ Additional Resources
 
 - :doc:`Network configuration settings
   </rados/configuration/network-config-ref>`
-- `Monitor data directory settings <Monitor Config Reference - Data_>`_
+- :ref:`Monitor data directory settings <mon-config-ref-data>`
 - :ref:`Setting up a Manager by hand <mgr-administrator-guide>`
 - :ref:`Adding an MDS by hand <manual-mds>`
 - `RadosGW manual deployment thread on the ceph-users mailing list
@@ -1124,5 +1124,3 @@ Additional Resources
 - :ref:`CephX configuration settings <rados-cephx-config-ref>`
 - :ref:`Health checks <health-checks>`
 - :ref:`Deploying on FreeBSD <manual-freebsd-deployment>`
-
-.. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data
