@@ -1975,6 +1975,153 @@ TEST_P(TestECFailoverWithPeering, ECRollbackPreservesOlderShardVersions) {
 }
 
 // ---------------------------------------------------------------------------
+// Partial-page writes queued behind a rollback
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::string nonzero_pattern(size_t len, unsigned seed)
+{
+  std::string s(len, '\0');
+  for (size_t i = 0; i < len; i++) {
+    s[i] = static_cast<char>(1 + (i * 131 + seed * 7919 + (i >> 12)) % 251);
+  }
+  return s;
+}
+
+using Writes = std::vector<std::pair<uint64_t, std::string>>;
+
+}  // namespace
+
+class TestECRollbackPartialWrites : public TestECFailoverWithPeering {
+public:
+  // Submit each write as its own op without draining the event loop.
+  void queue_writes(const std::string& obj, uint64_t size,
+                    const Writes& writes, std::string& expected)
+  {
+    for (const auto& [off, data] : writes) {
+      write(obj, off, data, size, false);
+      size = std::max<uint64_t>(size, off + data.size());
+      if (expected.size() < off + data.size()) {
+        expected.resize(off + data.size(), '\0');
+      }
+      expected.replace(off, data.size(), data);
+    }
+  }
+
+  void check_object(const std::string& obj, const std::string& expected)
+  {
+    bufferlist bl;
+    ASSERT_GE(read_object(obj, 0, expected.size(), bl, expected.size()), 0);
+    std::string got = bl.to_str();
+    ASSERT_EQ(expected.size(), got.size());
+    size_t first = std::string::npos, last = 0, bad = 0, zeros = 0;
+    for (size_t i = 0; i < got.size(); i++) {
+      if (got[i] != expected[i]) {
+        first = std::min(first, i);
+        last = i;
+        bad++;
+        zeros += got[i] == '\0';
+      }
+    }
+    EXPECT_EQ(0u, bad) << "bad bytes " << first << ".." << last
+                       << " (" << zeros << " of " << bad << " zero)";
+    EXPECT_FALSE(scrub_object(obj, true)) << "scrub found an inconsistency";
+  }
+};
+
+// A rollback with partial-page writes queued right behind it.
+TEST_P(TestECRollbackPartialWrites, QueuedBehindRollback) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 5 * sw + stripe_unit / 3;
+  const std::string obj = "rb_queued";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  ASSERT_EQ(0, create_snapshot(obj, size));
+  ASSERT_EQ(0, write(obj, sw + 100, nonzero_pattern(sw, 3), size));
+
+  rollback(obj, size, false);
+  queue_writes(obj, size, {{sw / 2 + 7, nonzero_pattern(1500, 5)},
+                           {size - stripe_unit / 2 - 1000, nonzero_pattern(sw + 2000, 6)}},
+               expected);
+  event_loop->run_until_idle();
+  check_object(obj, expected);
+  delete_object(obj);
+}
+
+// As above, behind another object's RMW so that the rollback invalidates the
+// cache with the writes already queued.
+TEST_P(TestECRollbackPartialWrites, QueuedBehindRollbackAndOtherRMW) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 5 * sw + stripe_unit / 3;
+  const std::string obj = "rb_queued_other", other = "rb_other";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  ASSERT_EQ(0, create_and_write(other, nonzero_pattern(sw, 2)));
+  ASSERT_EQ(0, create_snapshot(obj, size));
+  ASSERT_EQ(0, write(obj, sw + 100, nonzero_pattern(sw, 3), size));
+
+  write(other, 100, nonzero_pattern(200, 4), sw, false);
+  rollback(obj, size, false);
+  queue_writes(obj, size, {{sw / 2 + 7, nonzero_pattern(1500, 5)},
+                           {size - stripe_unit / 2 - 1000, nonzero_pattern(sw + 2000, 6)}},
+               expected);
+  event_loop->run_until_idle();
+  check_object(obj, expected);
+  delete_object(obj);
+  delete_object(other);
+}
+
+// As QueuedBehindRollback, but an op without data keeps the object in the
+// extent cache, so the rollback does not see a size change.
+TEST_P(TestECRollbackPartialWrites, QueuedBehindCachedRollback) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 5 * sw + stripe_unit / 3;
+  const std::string obj = "rb_queued_cached";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  ASSERT_EQ(0, create_snapshot(obj, size));
+  ASSERT_EQ(0, write(obj, 0, nonzero_pattern(size, 3), size));
+
+  write_attribute(obj, "c", "1", false, false);
+  rollback(obj, size, false);
+  queue_writes(obj, size, {{sw / 2 + 7, nonzero_pattern(1500, 5)},
+                           {2 * sw + 11, nonzero_pattern(900, 6)}},
+               expected);
+  event_loop->run_until_idle();
+  check_object(obj, expected);
+  delete_object(obj);
+}
+
+// A rollback to a clone larger than the head, with writes queued behind it.
+TEST_P(TestECRollbackPartialWrites, QueuedBehindGrowingRollback) {
+  const uint64_t sw = get_stripe_width();
+  const uint64_t size = 5 * sw + stripe_unit / 3;
+  const std::string obj = "rb_grow";
+  std::string expected = nonzero_pattern(size, 1);
+  ASSERT_EQ(0, create_and_write(obj, expected));
+  ASSERT_EQ(0, create_snapshot(obj, size));
+  ASSERT_EQ(0, truncate_and_write(obj, size, sw + 300, {}));
+
+  rollback(obj, size, false);
+  queue_writes(obj, size, {{2 * sw + 11, nonzero_pattern(900, 5)},
+                           {size - stripe_unit / 2 - 1000, nonzero_pattern(sw + 2000, 6)}},
+               expected);
+  event_loop->run_until_idle();
+  check_object(obj, expected);
+  delete_object(obj);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  ECConfigs,
+  TestECRollbackPartialWrites,
+  ::testing::ValuesIn(kECPeeringConfigs),
+  [](const ::testing::TestParamInfo<BackendConfig>& info) {
+    return info.param.label;
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Instantiate TestECFailoverWithPeering with EC configurations
 // ---------------------------------------------------------------------------
 

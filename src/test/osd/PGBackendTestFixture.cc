@@ -1503,12 +1503,13 @@ int PGBackendTestFixture::write_attribute(
   const std::string& obj_name,
   const std::string& attr_name,
   const std::string& attr_value,
-  bool force_all_shards)
+  bool force_all_shards,
+  bool run)
 {
   return run_primary_op(
     [this, obj_name, attr_name, attr_value, force_all_shards](std::shared_ptr<int> result) {
       do_write_attribute_impl(obj_name, attr_name, attr_value, force_all_shards, result);
-    });
+    }, run);
 }
 
 int PGBackendTestFixture::list_attributes(
