@@ -135,9 +135,9 @@ A public mirror can become an official mirror of the Ceph project, with an
 - Monitoring of the mirror.
 - HTTP access logs kept for at least 6 months, for download statistics.
 
-To apply, write to the ceph-users mailing list. Mirror maintainers should also
-join the ceph-mirrors mailing list:
-https://lists.ceph.io/postorius/lists/ceph-mirrors.ceph.io/.
+To apply, write to the ceph-users mailing list (ceph-users@ceph.io; see
+:ref:`get-involved`). Mirror maintainers should also join the ceph-mirrors
+mailing list: https://lists.ceph.io/postorius/lists/ceph-mirrors.ceph.io/.
 
 Additional Resources
 ====================

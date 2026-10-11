@@ -67,7 +67,7 @@ Troubleshooting
 Next Steps
 ==========
 
-- :ref:`build-ceph`: build Ceph from the source tree.
+- :doc:`build-ceph`: build Ceph from the source tree.
 - :ref:`install-storage-cluster-build`: install the build.
 
 Additional Resources

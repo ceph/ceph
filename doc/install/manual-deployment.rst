@@ -31,9 +31,10 @@ Prerequisites
   services) use. The steps open the Monitor ports. If the hosts run a
   firewall, also open ports 6800 to 7568 on hosts that run OSDs,
   :term:`Managers <Ceph Manager>`, or
-  :term:`Metadata Servers <Ceph Metadata Server>` (the firewalld ``ceph``
-  service), and port 7480 on gateway hosts. See :doc:`network configuration
-  settings </rados/configuration/network-config-ref>`.
+  :term:`Metadata Servers <Ceph Metadata Server>` (on Enterprise Linux 9 and
+  10, the firewalld ``ceph`` service), and port 7480 on gateway hosts. See
+  :doc:`network configuration settings
+  </rados/configuration/network-config-ref>`.
 
 The examples use the following hosts. Replace the names and addresses with
 your own.
@@ -401,7 +402,9 @@ best practice, create one with the ``fsid``, ``mon_initial_members``, and
    You should see the Monitor in :term:`quorum <Quorum>`. Until you add a
    Manager and OSDs, the cluster has no :term:`pools <Pools>` or placement
    groups, and health is ``HEALTH_WARN``. The output looks something like
-   this::
+   this:
+
+   .. code-block:: none
 
         cluster:
           id:     a7f64266-0894-4f1e-a635-d0aeaca0e993
@@ -794,7 +797,9 @@ Checking the OSDs
       sudo ceph osd tree
 
    Each new OSD is listed as ``up`` under its host. The output looks
-   something like this::
+   something like this:
+
+   .. code-block:: none
 
        ID  CLASS  WEIGHT   TYPE NAME          STATUS  REWEIGHT  PRI-AFF
        -1         3.00000  root default
@@ -1068,7 +1073,8 @@ Troubleshooting
 - **Placement groups stay "unknown" or "peering" after the OSDs are "up".**
   A firewall blocks the ports of the OSDs, the Manager, or the MDS, 6800 to
   7568 by default. Open them on every host, for example with the ``ceph``
-  service of firewalld, as you did for the Monitor ports.
+  service of firewalld on Enterprise Linux 9 and 10, as you did for the
+  Monitor ports.
 - **The OSD does not start, and its journal shows "OSD data directory ...
   does not exist; bailing out." or "is not owned by 'ceph' or 'root'".**
   The long form directory is missing or has the wrong owner. Check that

@@ -20,6 +20,8 @@ up the cluster.
    windows-basic-config
    windows-troubleshooting
 
+.. _other-methods:
+
 .. _recommended-methods:
 
 .. rubric:: Choose a Deployment Method
