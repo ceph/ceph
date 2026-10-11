@@ -177,7 +177,7 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
    *   under the probe.
    *
    * FICLONE is the same kernel path (remap_file_range) that lets
-   * copy_file_range share, it answers locally and deterministically,
+   * copy_file_range share, it returns locally and deterministically,
    * and GPFS returns EOPNOTSUPP to it exactly as it does to
    * copy_file_range at every granularity. */
   const std::string src = dir + "/.cfr-probe.src";

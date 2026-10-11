@@ -34,7 +34,7 @@
  * rather than a safeguard.
  *
  * Validation lives here.  The schema's CHECK constraints are the
- * last line and answer with an errno;  a caller deserves to be told
+ * last line and fail with an errno;  a caller deserves to be told
  * which field was wrong before the statement runs. */
 namespace rgw::sal::nsfs {
 
@@ -73,7 +73,7 @@ inline bool is_canonical_owner_key(const std::string& key)
  * an importer resuming after a failure -- and refusing that would
  * make the order of two independent operations load-bearing.  What
  * an operator actually lacks is any sign that a key matched nothing,
- * so the answer travels in the response. */
+ * so the result travels in the response. */
 inline bool owner_resolves(const DoutPrefixProvider* dpp, optional_yield y,
 			   rgw::sal::Driver* driver, const std::string& key)
 {
@@ -90,7 +90,7 @@ inline bool owner_resolves(const DoutPrefixProvider* dpp, optional_yield y,
 
 /* A record renders its optional fields by omission.
  *
- * `groups` absent and `groups` empty are different answers -- no one
+ * `groups` absent and `groups` empty are different values -- no one
  * has said, against an explicit "this identity has none" -- and the
  * response has to carry that difference or a read-modify-write
  * cannot preserve it. */
@@ -357,21 +357,21 @@ public:
  * What a request would be served as.  Without a parameter it
  * resolves the *caller*, which is the only way to exercise the key
  * an authenticated request actually produces -- a test that builds
- * an applier by hand assumes the answer it is trying to check.  With
+ * an applier by hand assumes the result it is trying to check.  With
  * `identity=` it resolves that key instead, which is what an
  * operator needs when the row in question is not their own.  That
  * form reads the one row and does not fall back from a user to its
- * account:  it answers what a row says, and the caller form answers
+ * account:  it returns what a row says, and the caller form returns
  * what a request gets.
  *
  * Reporting, not enforcing:  "no impersonation" and "asked for and
- * unavailable" are answers, not failures, and come back with a 200
+ * unavailable" are outcomes, not failures, and come back with a 200
  * and an `outcome`.  Failing the request would make the diagnostic
  * useless in exactly the situation it exists for.
  *
  * The response names the key it used.  A row that is never found is
  * almost always a key that is not the one the request produces, and
- * nothing else shows that.  When a row answers, `row` names it, which
+ * nothing else shows that.  When a row resolves, `row` names it, which
  * for the caller form is the account's when a member has none of its
  * own. */
 class RGWOp_NSFS_Credentials_Get : public RGWRESTOp {

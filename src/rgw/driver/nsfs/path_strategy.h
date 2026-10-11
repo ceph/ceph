@@ -96,7 +96,7 @@ public:
    * no entry to recognise, so the question has to be asked one level
    * up, with the parent's fd and the directory's name.
    *
-   * Ours answers false without a syscall:  we never mark a directory,
+   * Ours returns false without a syscall:  we never mark a directory,
    * the sentinel is the marker, and the walk sees it for free while
    * enumerating.  A bucket we wrote holds no foreign directory
    * objects, so paying per directory on the listing path would be
@@ -128,8 +128,8 @@ public:
   /* Stop this directory being an object in this format.
    *
    * The counterpart of directory_object(), for the upgrade:  a
-   * directory carried across to another format must stop answering in
-   * the one it came from, and which attribute says so is the format's
+   * directory carried across to another format must stop reading as
+   * one in the format it came from, and which attribute says so is the format's
    * business and not the converter's.  Ours has nothing to clear --
    * the sentinel file is the marker and removing it is a delete, not a
    * conversion -- so ours does nothing. */
@@ -189,8 +189,8 @@ public:
  * Most of it is already ours.  Object keys are stored verbatim on both
  * sides -- the rados underscore doubling went in `7f0c721ab56`, in
  * every profile -- and `.folder` and `.versions` are theirs, adopted.
- * So object_name(), key_from_name() and folder_object_name() are the
- * same answers, and this exists for three differences.
+ * So object_name(), key_from_name() and folder_object_name() return the
+ * same results, and this exists for three differences.
  *
  * reserved_names() has no `.shadow`, because they have no shadow
  * subtree, and gains `.noobaa-nsfs` so the bucket temp directory is

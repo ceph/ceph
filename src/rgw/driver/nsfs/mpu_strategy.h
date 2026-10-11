@@ -38,7 +38,7 @@ namespace rgw { namespace sal { namespace nsfs {
  * are called, and what completing it does.
  *
  * Separate from FSStrategy, which is a mechanism abstraction and owns no
- * naming.  This owns the layout:  the questions below were answered by
+ * naming.  This owns the layout:  the names below were built by
  * string concatenation at each use site, which is why the staging
  * directory name was built two different ways for the same result.
  *
@@ -51,10 +51,10 @@ namespace rgw { namespace sal { namespace nsfs {
  * Selection is DERIVED from what the filesystem can do, not recorded.
  * Assembly is a copy_file_range per part;  where extents are shared that
  * is nearly free and per-part files cost nothing, and where they are not
- * -- GPFS answers EOPNOTSUPP at every granularity, measured on Storage
+ * -- GPFS returns EOPNOTSUPP at every granularity, measured on Storage
  * Scale 6.0.0.2 -- completing an upload rewrites every byte, and writing
  * parts into their final offsets so that complete is a link is the
- * better layout.  Both answers are known and they differ, so the chooser
+ * better layout.  Both results are known and they differ, so the chooser
  * asks FSStrategy.
  *
  * Three implementations:  PerPartMPUStrategy, one file per part;
@@ -69,7 +69,7 @@ public:
    * Named for the upload's meta -- the object key and the upload id --
    * so that enumerating the bucket recovers both from the directory
    * entry.  A name carrying the upload id alone costs an open and a
-   * metadata read per upload to answer "which object is this", which
+   * metadata read per upload to learn "which object is this", which
    * is what ListMultipartUploads has to know before it can order or
    * page.
    *
@@ -94,7 +94,7 @@ public:
    * `object_type` xattr on every object -- inherited from the posix
    * driver, which still has it as POSIX-Object-Type -- and read it back
    * when enumerating a directory, to tell a staging directory from an
-   * ordinary one.  That is a cached answer to a question the name
+   * ordinary one.  That is a cached result for a question the name
    * already settles, it cost an openat and an attribute read per
    * directory entry, and it could not work on a NooBaa-format tree,
    * whose staging directories carry no attribute of ours. */
@@ -109,7 +109,7 @@ public:
    *
    * Where the key lives is the format's business and the cost
    * differs.  A layout which names the directory for the upload's
-   * meta answers from `dname` alone.  NooBaa names it for a bare uuid
+   * meta returns from `dname` alone.  NooBaa names it for a bare uuid
    * and keeps the key in a file inside, so theirs opens and reads
    * one, which is what their own listing does.
    *
@@ -152,10 +152,10 @@ public:
    * Asked only for the uploads a listing returns, not for every entry
    * examined -- it is a read, and S3 wants an owner in the response.
    *
-   * False means the format keeps the answer with the upload's own
+   * False means the format keeps the owner with the upload's own
    * record, and the caller reads that as it always has.  Ours does.
    * NooBaa records no owner anywhere, so the staging directory's uid
-   * is the answer, as it is for an object;  answering here is what
+   * is returned, as it is for an object;  returning it here is what
    * stops their uploads being dropped for want of a record of ours. */
   virtual bool upload_owner(const DoutPrefixProvider* dpp, int root_fd,
 			    std::string_view dname, ACLOwner& out) const {
@@ -166,7 +166,7 @@ public:
    * this upload must honour:  placement and storage class, the
    * object-lock family, the checksum algorithm.
    *
-   * The third of the same family.  staged_upload() answers the
+   * The third of the same family.  staged_upload() returns the
    * upload's identity and is asked of every entry a listing examines,
    * so it stays cheap;  upload_owner() and this are asked for one
    * upload and may open and read.
@@ -196,13 +196,13 @@ public:
    * and the user metadata.  Ours are already in `attrs`, because for
    * us they ARE attributes on the meta object -- so ours adds
    * nothing and theirs adds what their document holds.  Two shapes
-   * of answer from one read, because RGW splits them that way and
+   * of result from one read, because RGW splits them that way and
    * not because the formats do.
    *
    * `owner`, likewise, where the format's record carries one -- ours
    * does, in the same blob.  upload_owner() is the same question
    * asked by the listing path, which has read no record and must not:
-   * it answers for a format that can tell from the directory alone,
+   * it returns a result for a format that can tell from the directory alone,
    * and returns false for one that cannot, and the caller then comes
    * here.  Two entry points because the two callers have different
    * things in hand, not because it is two questions. */
@@ -218,7 +218,7 @@ public:
    * theirs two levels down, so a caller enumerating uploads has to ask
    * rather than assume the bucket directory.
    *
-   * Resolved against a fd because the answer can depend on what is
+   * Resolved against a fd because the path can depend on what is
    * there:  NooBaa's path contains a bucket id from their config store,
    * which this interface never reads.  Returns nullopt when the layout
    * has a root it cannot find, which is not an error -- a bucket with
@@ -256,9 +256,9 @@ public:
 
   /* Where a part's bytes go.
    *
-   * A layout which gives every part its own file answers with that file
+   * A layout which gives every part its own file returns that file
    * and offset zero.  A layout which shares one file between the parts
-   * of a size answers with that file and the part's offset within it.
+   * of a size returns that file and the part's offset within it.
    *
    * Separate from part_name(), which names the part's *record*.  The two
    * coincide in the layout nsfs writes today and do not have to:  a
@@ -268,7 +268,7 @@ public:
    * stride is the upload's established uniform part size -- part 1's
    * stored length, once part 1 has completed and established it -- and
    * std::nullopt before that, or where the upload was disqualified.  A
-   * layout which cannot place a part without a stride answers nullopt
+   * layout which cannot place a part without a stride returns nullopt
    * in turn, and the caller stages the part in its own file.
    *
    * NOT the part's own length, which nobody knows before the body has
@@ -292,8 +292,8 @@ public:
 
   /* Where a part has to move to, once its true length is known.
    *
-   * part_target() is asked before the body has been read and answers
-   * from the upload's stride, so a part which turns out to be a
+   * part_target() is asked before the body has been read and returns
+   * a target from the upload's stride, so a part which turns out to be a
    * different length is not necessarily where this layout can read it
    * from.  Ours can:  the stride's file holds every shared part at the
    * offset its record gives, and a short part simply does not fill its
@@ -303,7 +303,7 @@ public:
    * exist.
    *
    * Nothing means the part stays where it was written, which is the
-   * answer whenever `stored` equals the stride.  S3 requires every
+   * result whenever `stored` equals the stride.  S3 requires every
    * part but the last to be equal, so at most one part per upload
    * moves. */
   virtual std::optional<PartTarget> relocation_target(
@@ -394,7 +394,7 @@ public:
 
   /* make the completed object from its parts.  dir_fd is the staging
    * directory;  output_name is created within it.  fs supplies the copy,
-   * which is the whole reason the answer depends on the filesystem.
+   * which is the whole reason the result depends on the filesystem.
    *
    * parts must be in ascending part order:  the output is their
    * concatenation in that order, and a layout which places parts by
@@ -486,7 +486,7 @@ public:
  *
  * Why it exists.  Assembling by copy is nearly free where the
  * filesystem shares extents and costs the whole object where it does
- * not -- GPFS answers EOPNOTSUPP at every granularity, measured on
+ * not -- GPFS returns EOPNOTSUPP at every granularity, measured on
  * Storage Scale 6.0.0.2.  Writing each part straight to its final
  * offset makes completing the upload a link instead.
  *

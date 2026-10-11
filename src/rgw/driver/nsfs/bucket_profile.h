@@ -234,7 +234,7 @@ inline constexpr uint32_t EXTENSIONS_STRONG = EXTENSIONS_KNOWN;
  * not write.
  *
  * Callers from outside the driver name a profile and not a bitmask:  the
- * mask is how the answer is stored, and "shared" is what an operator or
+ * mask is how the profile is stored, and "shared" is what an operator or
  * a test means.  `base` is the absence of the attribute, so setting it
  * removes rather than writes. */
 inline std::optional<uint32_t> extensions_for_profile(std::string_view name)

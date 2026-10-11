@@ -80,7 +80,7 @@ public:
  *
  * The one way a bucket's profile changes from outside the gateway.
  *
- * Named, not a bitmask:  the mask is how the answer is stored, and a
+ * Named, not a bitmask:  the mask is how the profile is stored, and a
  * profile is what an operator means.  Moving a base bucket to shared or
  * strong takes a tree we did not write into our management, which is why
  * it is a declared act on a named bucket and never inferred from

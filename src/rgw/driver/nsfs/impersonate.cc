@@ -88,7 +88,7 @@ bool have_credential_capabilities(std::string* missing)
   hdr.pid = 0;				/* this task */
 
   if (::syscall(SYS_capget, &hdr, data) < 0) {
-    /* An older kernel answers by rewriting hdr.version rather than
+    /* An older kernel responds by rewriting hdr.version rather than
      * filling data.  Either way we cannot tell, and cannot tell is
      * not the same as absent -- say so rather than guess. */
     if (missing) {

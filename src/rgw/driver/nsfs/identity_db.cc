@@ -154,8 +154,8 @@ bool placement_path_is_acceptable(std::string_view path)
 
   /* Canonical:  every component non-empty, and none of them `.` or
    * `..`.  Checked lexically rather than by resolving, because
-   * resolving answers a different question -- what the path points at
-   * now -- and the answer changes under us.  What this rules out is a
+   * resolving establishes something different -- what the path points
+   * at now -- and that changes under us.  What this rules out is a
    * stored path that *means* something other than it reads. */
   size_t i = 1;
   while (i <= path.size()) {

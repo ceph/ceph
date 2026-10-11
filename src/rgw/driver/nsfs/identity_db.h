@@ -307,11 +307,11 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
  * anyone write one.  `account` empty is a user outside any account,
  * which resolves under its own key alone.
  *
- * The user's row answering -ENOENT -- absent, or carrying no ids --
+ * The user's row returning -ENOENT -- absent, or carrying no ids --
  * is what falls through;  -EPERM does not, since that row asked for an
  * identity it cannot be given.
  *
- * `row`, if given, receives the key of the row that answered, on
+ * `row`, if given, receives the key of the row that resolved, on
  * success or refusal;  it is left alone otherwise. */
 int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 			const rgw_user& user, const rgw_account_id& account,

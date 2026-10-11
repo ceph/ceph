@@ -101,7 +101,7 @@ const char* bypass_governance_policy()
 	 R"("Resource":["arn:aws:s3:::*"]}]})";
 }
 
-/* `rgw::account::create()` reports the account it made to a flusher,
+/* `rgw::account::create()` writes the account it made to a flusher,
  * as the admin command it serves does.  Nothing reads it here. */
 class DiscardFlusher : public RGWFormatterFlusher {
   JSONFormatter f;

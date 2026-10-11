@@ -41,8 +41,8 @@ using rgw::sal::NSFSDriver;
  *
  * NooBaa's format keeps the same facts differently -- three plain
  * attributes for a part, a JSON document for the upload -- which is
- * why reading either is a question MPUStrategy answers rather than
- * one the driver answers directly. */
+ * why reading either goes through MPUStrategy rather than the driver
+ * reading it directly. */
 
 /* What an upload's own record holds.
  *

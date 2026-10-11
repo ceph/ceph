@@ -198,11 +198,11 @@ struct FSIdentity {
 int with_identity(const DoutPrefixProvider* dpp, const FSIdentity& id,
 		  const ImpersonatedFn& fn);
 
-/* The same, for operations that answer with something other than an
+/* The same, for operations that return something other than an
  * errno -- the compare-and-swap link and unlink return a verdict
  * struct.  A failure to assume the identity cannot be expressed in
  * that return, so it is reported and the callable is not run,
- * leaving the caller its default-constructed answer. */
+ * leaving the caller its default-constructed result. */
 template <typename F>
 auto with_identity_r(const DoutPrefixProvider* dpp, const FSIdentity& id,
 		     F&& fn) -> decltype(fn())

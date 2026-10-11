@@ -117,8 +117,8 @@ public:
 
   /* The credentials this personality was registered with.
    *
-   * Held by the slot so that a find() hit answers the whole
-   * question.  The calls io_uring cannot express run on a helper
+   * Held by the slot so that a find() hit returns everything a
+   * caller needs.  The calls io_uring cannot express run on a helper
    * thread which must assume the identity itself, so a caller needs
    * these as well as the id -- and resolving them is a database
    * read.  Only meaningful while valid. */

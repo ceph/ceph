@@ -153,7 +153,7 @@ PerPartMPUStrategy::part_target(uint32_t part_num,
   /* one file per part, so the part's record and its data are the same
    * file, the bytes start at its beginning, and nothing bounds them.
    * The stride is not consulted:  this layout places a part without
-   * one, which is why it never answers nullopt. */
+   * one, which is why it never returns nullopt. */
   return PartTarget{part_name(part_num), 0, std::nullopt, false};
 }
 
@@ -229,9 +229,9 @@ bool PerPartMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
   if (i == attrs.end()) {
     return false;
   }
-  /* the record is the whole NSFSMPObj;  only its upload_info is this
-   * question's answer -- the identity beside it is staged_upload()'s
-   * and the owner is upload_owner()'s */
+  /* the record is the whole NSFSMPObj;  only its upload_info is
+   * returned here -- the identity beside it is staged_upload()'s and
+   * the owner is upload_owner()'s */
   ACLOwner none;
   rgw::sal::NSFSMPObj mp(nullptr, std::string(), std::nullopt, none);
   try {
@@ -550,8 +550,8 @@ bool NooBaaMPUStrategy::is_staging_dir(std::string_view name) const
   /* Their staging never sits among objects -- it is under the bucket's
    * temp directory, which is reserved whole -- so an entry of the
    * bucket directory is never one of theirs.  This is the question
-   * asked while enumerating objects, and for this format the answer is
-   * always no;  recognising an upload is staged_upload()'s job, and it
+   * asked while enumerating objects, and for this format it always
+   * returns no;  recognising an upload is staged_upload()'s job, and it
    * reads the directory rather than guessing from a uuid. */
   return false;
 }
@@ -659,8 +659,8 @@ NooBaaMPUStrategy::staging_root(const DoutPrefixProvider* dpp,
    * object writes too (`namespace_fs.js:1303`, `:1569`) and only
    * creates multipart-uploads/ beneath it at the first
    * create_object_upload, so a bucket which has been written to and
-   * never uploaded to has the one and not the other.  Answering with
-   * a path that does not exist would send an enumeration at it. */
+   * never uploaded to has the one and not the other.  Returning a
+   * path that does not exist would send an enumeration at it. */
   const std::string root = *found + "/" + NB_MPU_ROOT;
   if (::faccessat(bucket_fd, root.c_str(), F_OK, 0) != 0) {
     return std::nullopt;
@@ -676,9 +676,9 @@ NooBaaMPUStrategy::staging_root_for_write(const DoutPrefixProvider* dpp,
 {
   auto found = nb_tmpdir(dpp, bucket_fd);
   if (!found) {
-    /* nb_tmpdir() reports nothing both for "none" and for "more than
-     * one";  only the first may be created into, and it has said so
-     * by not logging */
+    /* nb_tmpdir() returns nothing both for "none" and for "more than
+     * one";  only the first may be created into, and that is the case
+     * in which it did not log */
     if (nb_tmpdir_ambiguous(dpp, bucket_fd)) {
       return std::nullopt;
     }
@@ -787,8 +787,8 @@ static std::optional<std::string> nb_scan_tmpdir(const DoutPrefixProvider* dpp,
     }
     if (holds_uploads && !found_by_content) {
       /* content beats shape:  a directory that holds uploads is the
-       * answer even if something else in the bucket is named like a
-       * temp directory */
+       * one returned even if something else in the bucket is named like
+       * a temp directory */
       found = n;
       found_by_content = true;
       continue;
@@ -956,7 +956,7 @@ NooBaaMPUStrategy::relocation_target(uint32_t part_num, uint64_t stored,
  * user.noobaa.part_etag (`namespace_fs.js:1421`, `:1424`), and
  * _get_etag() -- which their list_multiparts and their completion
  * check both use -- reads content_md5 and falls back to a string
- * derived from the stat.  So content_md5 is the answer, part_etag is
+ * derived from the stat.  So content_md5 is the result, part_etag is
  * a cross-check, and the derived form is what a part carries when no
  * digest was computed.  It is not an MD5 and a strict client will say
  * so;  that is their behaviour, and base is their format.
@@ -1169,7 +1169,7 @@ int NooBaaMPUStrategy::write_part_record(const DoutPrefixProvider* dpp,
 /* The staging directory's uid.  They record no owner with an upload --
  * create_object_upload is a dump of the request parameters and carries
  * none -- and the directory was created under the account's identity,
- * which is the same answer their object ownership gives. */
+ * which is the same owner their object ownership gives. */
 bool NooBaaMPUStrategy::upload_owner(const DoutPrefixProvider* dpp,
 				     int root_fd, std::string_view dname,
 				     ACLOwner& out) const
@@ -1242,7 +1242,7 @@ bool NooBaaMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
 	/* Their date is whatever new Date() produced, which is ISO
 	 * 8601.  A retention we cannot date is not applied:  a
 	 * retention with the epoch in it would read as expired, which
-	 * is the one wrong answer object lock must never give. */
+	 * is the one wrong result object lock must never return. */
 	if (parse_time(d->get_data().c_str(), &until) == 0) {
 	  out.obj_retention_exist = true;
 	  out.obj_retention.set_mode(m->get_data());

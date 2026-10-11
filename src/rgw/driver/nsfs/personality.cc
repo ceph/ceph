@@ -172,7 +172,7 @@ int PersonalityTable::insert(const DoutPrefixProvider* dpp,
 {
   /* A concurrent insert of the same key cannot happen -- one task
    * owns this table -- but a caller may insert twice if it did not
-   * check find() first.  Answer from what is there rather than
+   * check find() first.  Return what is there rather than
    * registering a second time. */
   if (auto it = by_key.find(key); it != by_key.end()) {
     const uint32_t slot = it->second;

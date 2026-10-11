@@ -50,10 +50,10 @@ inline constexpr std::string_view CLONE_PARENT_PREFIX = ".clone_parent.";
 inline constexpr size_t MIN_COPY_IO_SIZE = 1u << 20;
 inline constexpr size_t MAX_COPY_IO_SIZE = 4u << 20;
 
-/* Can this filesystem make a copy free?  The one question a strategy
- * cannot answer about itself.  Returns false on
+/* Can this filesystem make a copy free?  The one property a strategy
+ * cannot determine about itself.  Returns false on
  * any error, so an unwritable or odd directory reads as "does not share",
- * which is the conservative answer -- it only costs a fallback that would
+ * which is the conservative result -- it only costs a fallback that would
  * have worked.
  *
  * Asks FICLONE rather than measuring a copy.  copy_file_range returns a
@@ -65,7 +65,7 @@ bool probe_shares_extents(const DoutPrefixProvider* dpp,
 
 /* The names a layout creates which are not objects.
  *
- * Handed over as data rather than answered one name at a time, because
+ * Handed over as data rather than returned one name at a time, because
  * the listing paths ask per directory entry:  a virtual call there would
  * sit in the readdir loop, where this is a few string_view compares the
  * compiler can inline.  The caller fetches this once and matches against
@@ -160,7 +160,7 @@ public:
   /* copy a byte range between two files, by the cheapest means the
    * filesystem offers:  copy_file_range(2), which shares extents where
    * that is supported (XFS with reflink), and a buffered loop where it is
-   * not.  GPFS answers EOPNOTSUPP for copy_file_range at every
+   * not.  GPFS returns EOPNOTSUPP for copy_file_range at every
    * granularity, so there the fallback is the only path -- see
    * probes/results-cowprobe-2026-09-22.txt.
    *
@@ -176,7 +176,7 @@ public:
    * st_blksize, clamped to [MIN_COPY_IO_SIZE, MAX_COPY_IO_SIZE].
    *
    * The clamp is the measurement, not caution.  GPFS reports st_blksize
-   * 4 MiB, its block size and the right answer;  XFS and tmpfs report
+   * 4 MiB, its block size and the right value;  XFS and tmpfs report
    * 4096, and honouring that would be sixteen times worse than the 64 KiB
    * this replaced.  Above 4 MiB the cost rises again everywhere.  See
    * probes/results-copyprobe-2026-09-23.txt. */
@@ -199,7 +199,7 @@ public:
    * copy_file_range(2) actually clone rather than copy?  Established once
    * at driver startup by probe_shares_extents() and recorded here, because
    * it is not a property of the strategy:  POSIXStrategy serves XFS with
-   * reflink (yes) alongside ext4 and tmpfs (no), and GPFS answers no today
+   * reflink (yes) alongside ext4 and tmpfs (no), and GPFS returns no today
    * (probes/results-cowprobe-2026-09-22.txt) but is not promised to forever.
    * Measuring costs one small file at mount and needs no strategy to make a
    * claim it cannot check.

@@ -138,7 +138,7 @@ static const NBKeyMap NB_KEYS[] = {
   { RGW_ATTR_STORAGE_CLASS,   "user.storage_class" },
 };
 
-/* Three answers, not two.
+/* Three results, not two.
  *
  * A key they keep goes to their name.  A key of ours with no
  * counterpart -- bucket_info, rename intent -- goes under user.nsfs.,
@@ -149,7 +149,7 @@ static const NBKeyMap NB_KEYS[] = {
  * which sees one skips the attribute rather than inventing a place for
  * it.
  *
- * Returning the key unchanged would be the wrong third answer -- it
+ * Returning the key unchanged would be the wrong third result -- it
  * would write under a name neither format owns, which is how two
  * gateways come to disagree about what an object carries. */
 std::string NooBaaXattrStrategy::disk_name(const std::string& key) const
@@ -321,8 +321,8 @@ void NooBaaXattrStrategy::parse_disk_attrs(
    * (`namespace_fs.js:2890`).  A half-written pair is not a retention
    * with a missing field, it is no retention -- and a retention
    * carrying the epoch because a date would not parse reads as
-   * expired, which is the one wrong answer object lock must never
-   * give. */
+   * expired, which is the one wrong result object lock must never
+   * return. */
   bool has_hold = false, has_mode = false, has_date = false;
   for (const auto& disk : unclaimed) {
     has_hold |= (disk == NB_LEGAL_HOLD);

@@ -293,7 +293,7 @@ static bool entry_is_content(int parent_fd, std::string_view name,
  * rather than a fallback.
  *
  * A literal STANDARD used to be assigned at twelve sites.  An object
- * written with a non-default class therefore had it on disk, answered
+ * written with a non-default class therefore had it on disk, returned
  * it from HEAD (rgw_rest.cc maps the attribute to the
  * X-Amz-Storage-Class header), and listed as STANDARD:  the same shape
  * as the demoted-version, multipart and copy entries, where the row
@@ -1295,7 +1295,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 	xs->disk_name(RGW_NSFS_ATTR_NON_CURRENT_TS);
       ::fsetxattr(demoted_fd, ts_x.c_str(),
 		  now_ms.c_str(), now_ms.size(), 0);
-      /* While the fd that can answer them is open.  cur_stx was taken
+      /* While the fd that can return them is open.  cur_stx was taken
        * on the leaf before the link and safe_link moves no bytes, so
        * it describes this same inode. */
       result.etag = etag_from_fd(demoted_fd, xs);
@@ -1511,7 +1511,7 @@ static void fill_demoted_entry(const std::string& obj_name,
   bde.meta.accounted_size = d.stx.stx_size;
   bde.meta.mtime = from_statx_timestamp(d.stx.stx_mtime);
   bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-  /* its own digest where it has one;  etag_from_fd() says why the
+  /* its own digest where it has one;  see etag_from_fd() for why the
    * synthesized token must not stand in for a real one */
   bde.meta.etag = d.etag.empty() ? synthesize_etag(d.stx) : d.etag;
   /* FLAG_VER without FLAG_CURRENT is what demotion means, and clearing
@@ -2969,7 +2969,7 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
                   AT_SYMLINK_NOFOLLOW, STATX_ALL, &nstx);
   if (ret < 0) {
       ret = errno;
-      /* Absence is an answer here, not a failure.  This is the "does
+      /* Absence is a result here, not a failure.  This is the "does
        * this object exist" path -- a HEAD of something that is not
        * there, a GET before a PUT, and get_fsio_handle() statting an
        * object it is about to create, which discards the result for
@@ -2987,7 +2987,7 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
     /* A staging directory is told from an ordinary one by its name,
      * which MPUStrategy owns.  This used to open the directory and read
      * an `object_type` attribute -- an openat and a full attribute read
-     * per directory entry, to cache an answer the name already gives.
+     * per directory entry, to cache a fact the name already gives.
      * The attribute was inherited from the posix driver, could not work
      * on a NooBaa-format tree, and already fell back to DIRECTORY when
      * absent, which is what a natively created directory has. */
@@ -3582,7 +3582,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
    *
    * Assembling from per-part files is nearly free where the filesystem
    * shares extents and costs a copy of the whole object where it does
-   * not -- GPFS answers EOPNOTSUPP at every granularity, and ext4 and
+   * not -- GPFS returns EOPNOTSUPP at every granularity, and ext4 and
    * tmpfs have no reflink at all.  So writing each part straight to its
    * final offset is worth its complexity exactly where the copy is
    * real, and FSStrategy has just measured that.
@@ -4259,9 +4259,9 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
   nsfs::BucketPlacement bp;
   if (userDB->get_bucket_placement(dpp, name, tenant, bp) == 0) {
     /* An empty Path is a row recording the default location, which P4
-     * writes for every bucket it creates;  the same answer as no row,
+     * writes for every bucket it creates;  the same result as no row,
      * and it stops here rather than falling through to their record --
-     * a row is ours and is the answer. */
+     * a row is ours and is authoritative. */
     if (bp.path.empty()) {
       return nullptr;
     }
@@ -5708,7 +5708,7 @@ bool NSFSBucket::owns_storage(const DoutPrefixProvider* dpp)
  * found by the data root's readdir, and carrying nothing of ours.
  * That is the same state every directory an operator has not adopted
  * is in, so this introduces no condition the driver did not already
- * have to answer for.
+ * have to handle.
  *
  * Our whole namespace goes, not a list of names.  user.nsfs. is
  * exactly what the gateway wrote, so naming the prefix cannot leave
@@ -5778,7 +5778,7 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
 			    buf, sizeof(buf) - 1);
   if (len < 0) {
     if (errno == ENOTSUP) {
-      /* The mount cannot answer the question, so every bucket on it
+      /* The mount cannot tell us, so every bucket on it
        * would resolve to base -- including a strong one, whose shadow
        * subtree we would then expose as a key and whose attributes we
        * would write under NooBaa's names.  A filesystem without xattrs
@@ -5847,7 +5847,7 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
      * Terminal is right only while a deployment is one gateway.  Once
      * several serve one filesystem, a bucket this node cannot read may
      * be readable by the node beside it -- mid-upgrade, or after a
-     * partial rollback -- and a retryable 503 becomes the better answer,
+     * partial rollback -- and a retryable 503 becomes the better response,
      * because the retry can land somewhere that succeeds.  Revisit when
      * multi-instance works;  it cannot start today. */
     return -ERR_NOT_IMPLEMENTED;
@@ -5869,7 +5869,7 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
       } else {
 	/* A format we do not have a reader for.  The objects written in
 	 * it are unreadable whatever we do, and serving them through
-	 * the wrong parser turns that into wrong answers. */
+	 * the wrong parser turns that into wrong results. */
 	ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " is being "
 	  << "converted from \"" << from << "\", which this gateway "
 	  << "cannot read;  refusing to serve it" << dendl;
@@ -6297,7 +6297,7 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
    * because an owner-with-no-grants is a shape RGW never produces.
    *
    * Objects and versions.  A version entry is an object's earlier
-   * content and answers its owner exactly the same way, so it needs
+   * content and records its owner exactly the same way, so it needs
    * the same capture;  a delete marker included, because RGW emits an
    * <Owner> for one -- rgw_rest_s3.cc's version listing calls
    * dump_owner() outside the is_delete_marker() guard, which suppresses
@@ -6891,10 +6891,10 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 
       ACLOwner mp_owner;
       /* The bucket's owner, not theirs.  Their staging carries none --
-       * upload_owner() answers from the directory's uid, which is a
+       * upload_owner() returns the directory's uid, which is a
        * number and not an RGW identity -- and the upload is becoming
        * ours, so the owner S3 will report for the finished object is
-       * the right answer to record now. */
+       * the right owner to record now. */
       mp_owner.id = get_owner();
       NSFSMPObj mp(driver, su.key, su.upload_id, mp_owner);
 
@@ -7165,7 +7165,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
  * A bucket with an NFS client holding a write handle open therefore
  * does not drain until that handle is released, and the conversion
  * refuses to start rather than running beside it.  That is the
- * answer, not a shortcoming:  converting under an open write handle
+ * intent, not a shortcoming:  converting under an open write handle
  * is the thing being prevented.
  */
 
@@ -7446,8 +7446,8 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
     return ret;
   }
 
-  /* before the attributes, because which names are ours to read is the
-   * profile's answer */
+  /* before the attributes, because which names are ours to read is
+   * decided by the profile */
   ret = resolve_profile(dpp);
   if (ret < 0) {
     return ret;
@@ -7733,8 +7733,8 @@ struct UploadEnt {
   std::string dname;
   /* which root it was found in, and which layout reads it.  A bucket
    * mid-upgrade has staging in both, and an entry has to remember
-   * which one answered so the owner and the mtime are read from the
-   * right place. */
+   * which one it came from so the owner and the mtime are read from
+   * the right place. */
   nsfs::Directory* src{nullptr};
   nsfs::MPUStrategy* mpu{nullptr};
 
@@ -7845,7 +7845,7 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
    * are in our root and the rest are still in theirs.  Scanning one
    * would report half the uploads in flight and call the listing
    * complete, which is worse than the cost of the second scan:  a
-   * staging_root() that answers nothing, on every bucket that is not
+   * staging_root() that returns nothing, on every bucket that is not
    * converting. */
   nsfs::MPUStrategy* layouts[2] = { mpu_strategy(), mpu_fallback() };
   std::unique_ptr<nsfs::Directory> roots[2];
@@ -7875,7 +7875,7 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
     scans[i] = scan;
 
     ret = scan->for_each(dpp, [&, mpu, scan] (const char* name) {
-    /* What upload is here, if any.  Ours answers from the name;
+    /* What upload is here, if any.  Ours returns it from the name;
      * NooBaa's opens the directory's metadata, because that is where
      * they keep the key. */
     nsfs::MPUStrategy::StagedUpload su;
@@ -7937,7 +7937,7 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
     /* S3 reports an owner, so one has to be found -- and where it
      * lives is the format's business.  Ours keeps it with the
      * upload's own record, which get_info() reads;  NooBaa keeps none
-     * anywhere, and answers from the staging directory's uid.  This
+     * anywhere, and returns the staging directory's uid.  This
      * is a read per upload RETURNED, not per entry examined. */
     ACLOwner owner;
     const bool from_format =
@@ -8902,7 +8902,7 @@ int NSFSObject::stat_fsio_view(const DoutPrefixProvider* dpp,
   std::string leaf;
   std::vector<std::unique_ptr<nsfs::Directory>> resolved_dirs;
 
-  /* a probe must not create anything on the way to an answer */
+  /* a probe must not create anything on the way to a result */
   int rret = resolve_parent_dir(dpp, /*create_dirs=*/false,
 			        resolved_dirs, dir, leaf);
   if (rret < 0) {
@@ -8991,7 +8991,7 @@ static std::atomic<uint64_t> fsio_build_seq{0};
  * ends up carrying is what the caller asked for.  That ordering is
  * load-bearing for NFS exclusive create -- ganesha leaves its verifier in
  * atime and mtime (set_common_verifier()) and compares tv_sec back exactly,
- * and RGWFileHandle::stat() reports mtime from the inode whenever a handle
+ * and RGWFileHandle::stat() returns mtime from the inode whenever a handle
  * is live, so the inode is what has to hold it. */
 static int apply_create_spec(const nsfs::XattrStrategy* xs,
 			     const DoutPrefixProvider* dpp,
@@ -10487,8 +10487,8 @@ int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
    *
    * The driver's own test, not the option:  the mode is read at
    * startup into a member and the driver hint can set it, so asking
-   * configuration here would answer a different question from the one
-   * `mutation_enter()` answers.
+   * configuration here could disagree with what `mutation_enter()`
+   * decides.
    *
    * `-EROFS` rather than the gate's `-ERR_METHOD_NOT_ALLOWED`:  this
    * is not a refused operation but a write that cannot land on this
@@ -10758,8 +10758,8 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
      * and serving it as the daemon is the thing to avoid.
      *
      * The authorisation pass is the one site where it is expected,
-     * and it runs on every request, so it says so rather than
-     * filling the log with its own normal operation. */
+     * and it runs on every request, so it passes `tolerate_absent`
+     * rather than filling the log with its own normal operation. */
     if (! tolerate_absent) {
       ldpp_dout(dpp, 0) << "ERROR: impersonation is on but this operation"
 	" carries no authenticated identity" << dendl;
@@ -10768,7 +10768,7 @@ static int pin_personality_for(const DoutPrefixProvider* dpp,
   }
 
   /* Level 1 first.  A personality already registered on this ring
-   * answers the whole question -- the slot carries the credentials
+   * is all a caller needs -- the slot carries the credentials
    * it was registered with -- so a hit costs a hash lookup and a
    * pin, and skips the identity-row read below.  That read is
    * otherwise paid on every impersonated request, because nothing
@@ -11030,7 +11030,7 @@ static int check_delete_preconditions(
 /*
  * Publish the freshly-promoted current version into the listing cache.
  *
- * promote_version() reports the id and etag when it actually promoted;
+ * promote_version() returns the id and etag when it actually promoted;
  * both were free there.  When it promoted nothing -- a current version
  * already existed, so another writer won the race -- describe what is on
  * disk instead.  An empty instance would make a *distinct* cache key and
@@ -11814,7 +11814,7 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
     NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);
     std::optional<std::string> ns{mp_ns};
 
-    /* Where this format keeps its staging directories.  Ours answers
+    /* Where this format keeps its staging directories.  Ours returns
      * ".", the bucket directory.  NooBaa's is two levels down, under a
      * temp directory whose name carries a bucket id from their config
      * store -- so it is found and never invented.  Nothing gives us
@@ -12609,7 +12609,7 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
 	return root ? ret : -EINVAL;
       }
       /* the owner with it:  ours is in the same record, and the
-       * listing path depends on this -- upload_owner() answers for a
+       * listing path depends on this -- upload_owner() returns one for a
        * format that can tell from the directory alone and ours
        * cannot, so list_multiparts() comes here for it. */
       if (!mpu_strategy()->upload_info(dpp, root->get_fd(), get_fname(),
@@ -12666,7 +12666,7 @@ std::string NSFSMultipartUpload::get_fname()
  *
  * The shared file's name is the authority.  It is created by one
  * linkat whose success publishes both that a stride exists and what it
- * is, so there is no window in which the answer is half-written --
+ * is, so there is no window in which the stride is half-written --
  * which matters because parts arrive concurrently.
  *
  * Part 1's record is consulted only as an index, to learn which name
@@ -12748,7 +12748,7 @@ std::unique_ptr<Writer> NSFSMultipartUpload::get_writer(
   /* Ask the layout where the bytes go.  The stride is the upload's
    * established uniform part size, which part 1 sets at its completion
    * and which is unset until then;  a layout which cannot place the
-   * part without one answers nullopt, and we stage the part in its own
+   * part without one returns nullopt, and we stage the part in its own
    * file, which is what part_name() names. */
   const std::optional<uint64_t> stride = established_stride(dpp, y);
   auto target = mpu_strategy()->part_target(part_num, stride);
@@ -12861,7 +12861,7 @@ int NSFSMultipartWriter::divert(uint64_t written)
  * established.  A layout whose shared file is named for the size it
  * holds cannot read a part of another size out of it, so the part
  * moves;  a layout which reads a part at the offset in its record
- * answers nothing here and this does not run.  S3 requires every part
+ * returns nothing here and this does not run.  S3 requires every part
  * but the last to be equal, so at most one part per upload moves.
  */
 int NSFSMultipartWriter::relocate()
@@ -13072,7 +13072,7 @@ int NSFSMultipartWriter::complete(
       high_water == accounted_checked) {
     /* does this layout share at all, and under what name?  Asked of the
      * strategy rather than assumed, so the one-file-per-part layout
-     * answers no and nothing here fires. */
+     * returns no and nothing here fires. */
     auto tgt = mpu_strat->part_target(1, high_water);
     bool aligned = true;
     if (dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io")) {
@@ -13121,7 +13121,7 @@ int NSFSMultipartWriter::complete(
   /* seeded from `info`, not from shared_target:  part 1 is promoted
    * after its bytes are written, so the flag the writer started with
    * says unshared where the record it just wrote says shared.  Seeding
-   * from the raw flag put a stale answer in front of a correct one,
+   * from the raw flag put a stale value in front of a correct one,
    * and the cache is consulted first. */
   bool added = mc ? mc->add_part(mp_cache_key,
     {static_cast<uint32_t>(part_num), accounted_size, part_etag, set_mtime,
@@ -13240,7 +13240,7 @@ int NSFSAtomicWriter::prepare(optional_yield y)
      *
      * The sentinel does not help:  it names a key ending in '/', so
      * moving the file there would rename the object rather than
-     * re-represent it.  NooBaa has the same constraint and answers
+     * re-represent it.  NooBaa has the same constraint and returns
      * 404, which says the object is absent when the truth is that a
      * conflicting one is present.  See DESIGN.md.
      *
@@ -13365,7 +13365,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     }
   }
 
-  /* The requested storage class, stored so it can be answered.
+  /* The requested storage class, stored so it can be returned.
    *
    * nsfs accepted `x-amz-storage-class` and dropped it:  the op layer
    * assigns the header to `s->dest_placement.storage_class` without
@@ -13385,7 +13385,7 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
    * (`dbstore.cc`, on its meta write):  a plain string, when the rule
    * names one.  The generic layer does the rest -- `rgw_rest.cc` maps
    * this attribute to the `X-Amz-Storage-Class` response header, so
-   * HEAD and GET answer it without anything further here. */
+   * HEAD and GET return it without anything further here. */
   if (ptail_placement_rule && !ptail_placement_rule->storage_class.empty() &&
       (attrs.find(RGW_ATTR_STORAGE_CLASS) == attrs.end())) {
     bufferlist scbl;
@@ -13600,8 +13600,8 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    *
    *   fsio            the driver implements the FSIO interfaces -- rgw_open2
    *                   and the shadow model.  A suite written against them
-   *                   is testing nothing on a driver which answers no.
-   *                   It answers for the DRIVER;  whether a given bucket
+   *                   is testing nothing on a driver which returns no.
+   *                   It describes the DRIVER;  whether a given bucket
    *                   serves them is the next two rows.
    *   extensions      the extension set this build implements, as the
    *                   integer it writes into user.nsfs.extensions.  A
@@ -14217,7 +14217,7 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   if (hint == "inject-buffered-copy") {
     /* make FSStrategy::copy_range skip copy_file_range and take the
      * buffered path.  On XFS copy_file_range always succeeds, so the
-     * fallback -- the only path GPFS ever takes, since GPFS answers
+     * fallback -- the only path GPFS ever takes, since GPFS returns
      * EOPNOTSUPP at every granularity -- would otherwise never run
      * under test on a development filesystem */
     auto it = params.find("enable");

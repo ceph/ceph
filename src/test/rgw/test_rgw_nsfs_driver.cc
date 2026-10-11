@@ -330,7 +330,7 @@ TEST(FSEnt, DirBase)
   ret = testdir->read_attrs(env->dpp, null_yield, attrs);
   EXPECT_EQ(ret, 0);
   /* the three written here.  object_type was removed in 4cd543aa56c:
-   * it answered one question, staging directory or ordinary, which the
+   * it recorded one fact, staging directory or ordinary, which the
    * directory's name already settles. */
   EXPECT_EQ(attrs.size(), 3);
   std::string val;
@@ -774,7 +774,7 @@ class NSFSDriverTest : public ::testing::Test {
   public:
     NSFSDriverTest() {}
 
-    /* Probe the filesystem, which on a developer machine always answers
+    /* Probe the filesystem, which on a developer machine always reports
      * that extents are shared.  A fixture which means to exercise the
      * strided layout overrides this. */
     virtual std::optional<bool> shares_extents() const {
@@ -993,7 +993,7 @@ TEST_F(NSFSBucketTest, UnreadableStateFailsClosedAndAbsentDoesNot)
   ASSERT_EQ(::setxattr(bpath.c_str(), key, junk.data(), junk.size(), 0), 0);
   EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), -EBADMSG);
 
-  /* absent, which is a different answer */
+  /* absent, which is a different result */
   ASSERT_EQ(::removexattr(bpath.c_str(), key), 0);
   EXPECT_EQ(bucket->load_bucket(env->dpp, null_yield), 0)
       << "a bucket with no stored state must still serve";
@@ -1002,7 +1002,7 @@ TEST_F(NSFSBucketTest, UnreadableStateFailsClosedAndAbsentDoesNot)
 /* A bucket that fails closed is one bucket.
  *
  * ListBuckets skips it rather than denying the account every other
- * bucket, and the profile endpoint still answers -- a profile comes
+ * bucket, and the profile endpoint still responds -- a profile comes
  * from the marker, and an operator diagnosing the failure needs that
  * endpoint precisely then. */
 TEST_F(NSFSBucketTest, UnreadableStateDoesNotDenyTheListingOrTheProfile)
@@ -1339,7 +1339,7 @@ TEST_F(NSFSIdentityDBTest, ResolveAccountIdOwner)
  * reading that grants access rather than denying it.
  *
  * The control is the process's own group set:  unless it is
- * non-empty, an empty answer here is indistinguishable from having
+ * non-empty, an empty result here is indistinguishable from having
  * inherited it, and the test proves nothing. */
 TEST_F(NSFSIdentityDBTest, ResolveAbsentGroupListClears)
 {
@@ -1438,7 +1438,7 @@ TEST_F(NSFSIdentityDBTest, ResolveDirectoryBackedFailsClosed)
 
 /* The upstream behaviour this design keys on, pinned.
  *
- * Two different answers come out of one applier.  `get_aclowner()`
+ * Two different owners come out of one applier.  `get_aclowner()`
  * says who a created object belongs to, and for a member of an
  * account that is the *account*;  `load_acct_info()` -- what becomes
  * `s->user` -- says who authenticated, and that is the *member*.
@@ -3486,8 +3486,8 @@ TEST(NooBaaMPU, StagingRootIsFoundByContent)
   EXPECT_EQ(*r, ".noobaa-nsfs_abc123/multipart-uploads");
 
   /* A quiescent temp directory beside it, recognised by its shape.
-   * Content beats shape:  the one holding uploads is still the
-   * answer, because a directory that holds uploads cannot be the
+   * Content beats shape:  the one holding uploads is still the one
+   * returned, because a directory that holds uploads cannot be the
    * wrong one. */
   sf::create_directories(base_path / test /
 			 (".noobaa-nsfs_" + fake_uuid("quiescent")));
@@ -3743,7 +3743,7 @@ TEST(PrefixedXattr, OwnerIsRecordedOrNone)
       << "an unreadable ACL read as no owner recorded";
 }
 
-/* Three answers, and the third is the one worth pinning.  An ACL has
+/* Three results, and the third is the one worth pinning.  An ACL has
  * nowhere to go, so the name is empty and the write path skips it --
  * which is what their own gateway does.  Ours with no counterpart
  * lands under user.nsfs., inert to them. */
@@ -3756,7 +3756,7 @@ TEST(NooBaaXattr, WhatHasNowhereToGo)
   EXPECT_EQ(nb.disk_name("bucket_info"), "user.nsfs.bucket_info");
   EXPECT_EQ(nb.disk_name("rename_intent"), "user.nsfs.rename_intent");
 
-  /* and not the wrong third answer:  never the key unchanged, which
+  /* and not the wrong third result:  never the key unchanged, which
    * would write under a name neither format owns */
   EXPECT_NE(nb.disk_name("rename_intent"), "rename_intent");
 }
@@ -4012,7 +4012,7 @@ TEST(NooBaaMPU, StrategyReadsTheGeneratedTree)
   }
 
   /* and ours misreads nothing:  their directory is not one of ours,
-   * their record names are not ours, and asked directly it reports no
+   * their record names are not ours, and asked directly it returns no
    * upload rather than a wrong one */
   nsfs::StridedMPUStrategy ours;
   EXPECT_FALSE(ours.is_staging_dir(tree.upload_id));
@@ -4211,7 +4211,7 @@ TEST_F(NSFSBucketTest, FormatOverridesTheStagingLayout)
   EXPECT_STREQ(b->mpu_strategy()->name(), "noobaa");
   EXPECT_NE(b->mpu_strategy(), driver->get_mpu_strategy());
 
-  /* the members it does not override still answer */
+  /* the members it does not override still return the driver's */
   EXPECT_EQ(b->xattr_strategy(), driver->get_xattr_strategy());
 }
 
@@ -4221,7 +4221,7 @@ TEST_F(NSFSBucketTest, FormatOverridesTheStagingLayout)
  * would copy the whole object, which is GPFS and nothing a developer
  * machine mounts.  So the layout, the extent guard and the divert path
  * have had no test outside a Storage Scale run.  These force the
- * answer instead of measuring it.
+ * result instead of measuring it.
  *
  * What they do not test is the premise:  XFS still shares extents
  * underneath, so this exercises placement, the guard and assembly, not
@@ -4233,7 +4233,7 @@ public:
 };
 
 /* Both polarities.  Forced false must select strided and forced true
- * must not -- an override stuck at one answer would otherwise pass. */
+ * must not -- an override stuck at one value would otherwise pass. */
 TEST_F(NSFSStridedBucketTest, StridedLayoutIsSelected)
 {
   EXPECT_STREQ(driver->get_mpu_strategy()->name(), "rgw-strided");
@@ -4780,7 +4780,7 @@ TEST_F(NSFSNooBaaStateTest, ConversionKeepsTheVersioningTheirRecordSupplied)
 
   /* A fresh handle, which is what a request gets.  Re-loading the
    * handle used above would prove nothing:  load_bucket() keeps the
-   * info it already holds when nothing on disk answers
+   * info it already holds when nothing on disk is found
    * (`info = bak_info`), so the versioning read from their record the
    * first time would survive in memory whatever the conversion did. */
   RGWBucketInfo fresh_info;
@@ -5825,7 +5825,7 @@ TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
  *
  * Two controls, because without them the comparison could not fail.
  * The first asserts the files carry no extended attribute at all, so
- * no recorded ACL can be supplying the answer.  The second asserts the
+ * no recorded ACL can be supplying the owner.  The second asserts the
  * owner is the bucket's and not the file's uid, which is what this
  * listed before. */
 TEST_F(NSFSNooBaaStateTest, EveryListingRowAgreesOnASideloadedOwner)
@@ -5848,7 +5848,7 @@ TEST_F(NSFSNooBaaStateTest, EveryListingRowAgreesOnASideloadedOwner)
   write_file(vdir / vent, "an older sideloaded body");
 
   /* control one:  neither file carries a user.* attribute, so no
-   * recorded ACL can be supplying the answer.  Only user.* is tested
+   * recorded ACL can be supplying the owner.  Only user.* is tested
    * because the kernel supplies security.selinux on every file here,
    * and that is not a name any strategy reads. */
   auto no_user_xattrs = [](const sf::path& f) {
@@ -6085,7 +6085,7 @@ TEST_F(NSFSNooBaaBucketTest, GetInfoCarriesTheirCreateParams)
   EXPECT_EQ(meta->second.to_str(), "green");
 }
 
-/* Ours still answers from its own record.
+/* Ours still returns from its own record.
  *
  * The control:  without it the two above pass for a driver that reads
  * NooBaa's document everywhere, and an upload of ours would lose the
@@ -6099,8 +6099,8 @@ TEST_F(NSFSBucketTest, GetInfoOnOurOwnUpload)
   rgw_placement_rule placement;
   placement.name = "default-placement";
   /* not STANDARD:  an empty storage class IS standard --
-   * get_canonical_storage_class() says so -- so asserting it would
-   * pass against a record that carried nothing */
+   * get_canonical_storage_class() returns it for one -- so asserting
+   * it would pass against a record that carried nothing */
   placement.storage_class = "GLACIER";
   Attrs attrs;
   ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
@@ -6656,7 +6656,7 @@ TEST_F(NSFSNooBaaBucketTest, ReadsTheirObjectLock)
  *
  * Their rule, and the safe one:  a retention holding the epoch
  * because a field was missing reads as expired, which is the one
- * wrong answer object lock must never give. */
+ * wrong result object lock must never return. */
 TEST_F(NSFSNooBaaBucketTest, AHalfWrittenRetentionIsNoRetention)
 {
   const sf::path p{bucket_path() / "half.bin"};
@@ -6671,7 +6671,7 @@ TEST_F(NSFSNooBaaBucketTest, AHalfWrittenRetentionIsNoRetention)
   EXPECT_EQ(obj->get_attrs().find(RGW_ATTR_OBJECT_RETENTION),
 	    obj->get_attrs().end());
 
-  /* and a date this gateway cannot parse is the same answer */
+  /* and a date this gateway cannot parse is the same result */
   const sf::path q{bucket_path() / "bad.bin"};
   write_file(q, "bytes");
   ASSERT_EQ(::setxattr(q.c_str(), "user.noobaa.retention_mode",
@@ -7681,7 +7681,7 @@ TEST_F(NSFSUpgradeTest, AnUploadIsListedThroughoutTheConversion)
  *
  * The conversion reads an object's attributes and writes them back, so
  * a write landing between those two is lost.  Rados has the same
- * problem during a reshard and answers it the same way:  hold the
+ * problem during a reshard and handles it the same way:  hold the
  * mutation server-side for a bound, then let a retryable error reach
  * the client.
  */
@@ -8697,7 +8697,7 @@ TEST_F(NooBaaStoreTest, AnAbsentGroupListIsNotAnEmptyOne)
  * config.js, and false is a live permission fact:  with it off, a
  * directory-backed identity carrying no list runs with zero
  * supplementary groups.  So "the file did not say" and "the file said
- * false" must not arrive as the same answer -- §2.5 point 4 is that
+ * false" must not arrive as the same value -- §2.5 point 4 is that
  * the value travels with the deployment. */
 TEST_F(NooBaaStoreTest, AMissingSettingIsNotAStoredFalse)
 {
@@ -8933,7 +8933,7 @@ TEST_F(NooBaaStoreTest, ReadingTheStoreWritesNothing)
  * `standup.rs` stood up, and `NB_ACCOUNT_PLAIN` above carries the
  * ciphertext **their CLI produced** under it.  The plaintext is known
  * because the stand-up chose the secret:  so these tests decrypt real
- * NooBaa output and compare against a known answer, which is the
+ * NooBaa output and compare against a known result, which is the
  * strongest control available for this stage and the one §9 asks for.
  * ------------------------------------------------------------------ */
 
@@ -10752,7 +10752,7 @@ TEST_F(NooBaaPolicyTest, AnUnresolvedPrincipalRefusesThePolicy)
   EXPECT_EQ(unresolved[0], "ghost");
   EXPECT_EQ(unresolved[1], "phantom");
 
-  /* and a document that will not parse is a different answer */
+  /* and a document that will not parse is a different result */
   unresolved.clear();
   EXPECT_EQ(nsfs::rewrite_policy_principals(env->dpp, "{not json",
 					    mapping, out, unresolved),
@@ -11397,7 +11397,7 @@ TEST_F(NSFSPlacedBucketTest, ThePathIsBoundPerLookup)
       << "the second lookup did not follow the moved row";
 }
 
-/* A row recording the default location is the same answer as no row.
+/* A row recording the default location is the same result as no row.
  *
  * P4 writes a row for every bucket it creates, including the ones at
  * the default location, so an empty Path has to mean exactly what an
@@ -11460,7 +11460,7 @@ public:
    *
    * These tests are about `serve` mode, which refuses mutations -- so
    * probing by writing would contradict the thing under test.  The
-   * directory's own name is the answer and asking for it changes
+   * directory's own name is the result and asking for it changes
    * nothing;  intrusive inspection is the right tool here. */
   static std::string resolved_at(rgw::sal::Bucket* b) {
     auto* nb = static_cast<rgw::sal::NSFSBucket*>(b);
@@ -11551,7 +11551,7 @@ TEST_F(NSFSRecordedPathTest, ResolvingTheirPathDoesNotAdoptTheBucket)
 
 /* A row of ours wins over their record.
  *
- * Once a bucket is adopted the index is the answer, and their store is
+ * Once a bucket is adopted the index is authoritative, and their store is
  * not consulted for it again -- which is what makes adoption an
  * adoption rather than a permanent bridge. */
 TEST_F(NSFSRecordedPathTest, OurRowWinsOverTheirRecord)
@@ -11577,7 +11577,7 @@ TEST_F(NSFSRecordedPathTest, OurRowWinsOverTheirRecord)
 
 /* A row recording the default location stops there.
  *
- * It is our answer, so it must not fall through to their record --
+ * It is our record, so it must not fall through to their record --
  * otherwise adopting a bucket to the default location would be undone
  * by the record that named somewhere else. */
 TEST_F(NSFSRecordedPathTest, ARowForTheDefaultDoesNotFallThrough)

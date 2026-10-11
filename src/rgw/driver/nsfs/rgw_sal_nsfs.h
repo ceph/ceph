@@ -201,8 +201,8 @@ protected:
   bool need_fsync{false};
   bool exist{false};
   /* Zero-initialized so that get_stx() on an entry which has not been
-   * stat()ed reads as "no information":  statx reports what it filled
-   * in stx_mask, and a zero mask is what a reader tests before
+   * stat()ed reads as "no information":  statx sets in stx_mask what
+   * it filled in, and a zero mask is what a reader tests before
    * touching a field. */
   struct statx stx{};
   bool stat_done{false};
@@ -1237,7 +1237,7 @@ public:
    * identity (ACCOUNT_IMPORT.md §2.8).  Returns what
    * nsfs::resolve_credentials() returns:  0 resolved, -ENOENT no
    * impersonation asked for, -EPERM asked for and unavailable.  `row`
-   * receives the key of the row that answered. */
+   * receives the key of the row that resolved. */
   int get_credentials(const DoutPrefixProvider* dpp, const req_state* s,
 		      nsfs::Credentials& out,
 		      std::string* row = nullptr) const {
@@ -1577,7 +1577,7 @@ public:
    *
    * They fall back to the driver's, for two reasons:  a bucket whose
    * profile has not been resolved yet has no format, and only one
-   * format exists, so the answers coincide.  Call sites move onto
+   * format exists, so the results coincide.  Call sites move onto
    * these as each NooBaa strategy arrives and gives the selection
    * something to be wrong about;  migrating them while every path
    * resolves to the same objects would be a large diff nothing can
@@ -1598,7 +1598,7 @@ public:
    * primary there.  A base bucket's *state* is ours where it exists,
    * because bucket configuration is the one thing written in our form
    * while a bucket is still base -- so ours is the primary here and
-   * their store answers only for a bucket that has none. */
+   * their store is read only for a bucket that has none. */
   nsfs::BucketStateStrategy* bucket_state_fallback() const;
 
   /* The fallback strategies, or null.
