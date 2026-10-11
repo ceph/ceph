@@ -44,6 +44,7 @@
 #include "rgw_bucket_logging.h"
 #include "rgw_account.h"
 #include "driver/rados/rgw_user.h"
+#include "rgw_object_ownership.h"
 #include "driver/nsfs/personality.h"
 #include "rgw_auth.h"
 #include "common/ceph_json.h"
@@ -10905,6 +10906,31 @@ TEST_F(NooBaaBucketImportTest, TheOwnerAndLoggingReachRgw)
   conf.decode(bl);
   EXPECT_EQ(conf.target_bucket, "audit");
   EXPECT_EQ(conf.target_prefix, "logs/");
+}
+
+/* An imported bucket is BucketOwnerEnforced.
+ *
+ * NooBaa gives every object its bucket's `owner_account`, and
+ * BucketOwnerEnforced is RGW's name for that rule (DECISIONS.md
+ * 2026-10-11):  an object RGW writes afterwards is the bucket owner's,
+ * and object ACLs do not apply.  The control is the same bucket before
+ * the import, which carries RGW's default, ObjectWriter. */
+TEST_F(NooBaaBucketImportTest, AnImportedBucketIsBucketOwnerEnforced)
+{
+  write_their_record("DISABLED");
+
+  auto load = [&] {
+    RGWBucketInfo info;
+    info.bucket.name = testname;
+    auto b = driver->get_bucket(info);
+    EXPECT_EQ(b->load_bucket(env->dpp, null_yield), 0);
+    return rgw::s3::get_object_ownership(b->get_attrs());
+  };
+  ASSERT_EQ(load(), rgw::s3::ObjectOwnership::ObjectWriter)
+      << "the bucket was enforced before the import";
+
+  ASSERT_EQ(run(), 0) << why();
+  EXPECT_EQ(load(), rgw::s3::ObjectOwnership::BucketOwnerEnforced);
 }
 
 /* A bucket whose owner this import did not write is refused, not

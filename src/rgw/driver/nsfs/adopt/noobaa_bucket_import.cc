@@ -24,6 +24,7 @@
 
 #include "rgw_bucket_logging.h"
 #include "rgw_common.h"
+#include "rgw_object_ownership.h"
 
 #include "../rgw_sal_nsfs.h"
 #include "noobaa_bucket_import.h"
@@ -391,6 +392,19 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       result.deferred.push_back(
 	  rec.name + ": notifications are not translated;  each "
 	  "destination needs an RGW topic");
+    }
+
+    /* BucketOwnerEnforced (DECISIONS.md 2026-10-11).  NooBaa records no
+     * per-object owner and gives every object its bucket's
+     * `owner_account`;  this is RGW's name for that rule, so an object
+     * RGW writes into the adopted bucket is the bucket owner's too, and
+     * object ACLs stop applying, as they never applied in NooBaa. */
+    {
+      rgw::s3::OwnershipControls oc;
+      oc.object_ownership = rgw::s3::ObjectOwnership::BucketOwnerEnforced;
+      bufferlist bl;
+      encode(oc, bl);
+      attrs[RGW_ATTR_OWNERSHIP_CONTROLS] = std::move(bl);
     }
 
     /* `path` outside the data root.
