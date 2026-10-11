@@ -20,6 +20,8 @@
 #include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "include/Context.h"
+#include "include/container_ios.h"
 #include "messages/MClientRequest.h"
 #include "messages/MMDSPeerRequest.h"
 
