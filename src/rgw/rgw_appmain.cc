@@ -394,11 +394,25 @@ void rgw::AppMain::init_heap_release()
       if (interval.count()) {
         const uint64_t bytes = g_conf().get_val<Option::size_t>(
             "rgw_heap_release_bytes");
-        ldpp_dout(dpp, 20) << "releasing free tcmalloc memory" << dendl;
-        if (bytes) {
-          ceph_heap_release_to_system(bytes);
+        // memory handed back to the OS has to be faulted in again when it is
+        // reused, so only make a pass once a full pass's worth is free
+        size_t free_bytes = 0;
+        if (bytes &&
+            ceph_heap_get_numeric_property("tcmalloc.pageheap_free_bytes",
+                                           &free_bytes) &&
+            free_bytes < bytes) {
+          ldpp_dout(dpp, 20) << "not releasing tcmalloc memory: " << free_bytes
+                             << " bytes free in page heap, below "
+                             << bytes << dendl;
         } else {
-          ceph_heap_release_free_memory();
+          ldpp_dout(dpp, 20) << "releasing free tcmalloc memory, "
+                             << free_bytes << " bytes free in page heap"
+                             << dendl;
+          if (bytes) {
+            ceph_heap_release_to_system(bytes);
+          } else {
+            ceph_heap_release_free_memory();
+          }
         }
       }
       cond.wait_for(lock, stop, std::max(interval, std::chrono::seconds(1)),

@@ -137,8 +137,8 @@ supported for RGW.
 
 RGW can also return free ``TCMalloc`` memory to the OS every
 :confval:`rgw_heap_release_interval` seconds, about
-:confval:`rgw_heap_release_bytes` at a time. It is off by default. To enable
-it, run:
+:confval:`rgw_heap_release_bytes` at a time, as long as at least that much is
+free in the ``TCMalloc`` page heap. It is off by default. To enable it, run:
 
 .. prompt:: bash
 

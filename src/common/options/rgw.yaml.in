@@ -1366,7 +1366,10 @@ options:
   level: advanced
   desc: How much free TCMalloc memory RGW tries to give back to the OS each interval
   long_desc: TCMalloc gives memory back in whole free spans, so one pass can give back
-    more than this. Set to 0 to request release of as much free memory as possible.
+    more than this. A pass is skipped while TCMalloc's page heap holds less free memory
+    than this, so memory that steady traffic is about to reuse is not given back only to
+    be faulted in again. Set to 0 to request release of as much free memory as possible
+    on every pass.
   default: 64_M
   services:
   - rgw
