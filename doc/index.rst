@@ -42,7 +42,7 @@ single point of failure.
    * - Look something up
      - :doc:`Configuration <rados/configuration/index>`,
        :doc:`APIs <api/index>`,
-       :ref:`Releases <ceph-releases-general>`,
+       `Releases`_,
        :doc:`Glossary <glossary>`
    * - Contribute
      - :doc:`Developer Guide <dev/developer_guide/index>`,
@@ -52,7 +52,7 @@ single point of failure.
 Additional Resources
 ====================
 
-- :ref:`Ceph Releases <ceph-releases-general>`
+- `Ceph Releases`_
 - :doc:`Ceph Foundation <foundation>`
 
 .. toctree::
@@ -85,3 +85,8 @@ Additional Resources
    hardware-monitoring/index
    Glossary <glossary>
    Tracing <jaegertracing/index>
+
+.. Need to be external links because doc/releases/general.rst is not in
+   stable branches and we want to always use the main branch version
+.. _Releases: https://docs.ceph.com/en/latest/releases/general/
+.. _Ceph Releases: https://docs.ceph.com/en/latest/releases/general/

@@ -158,7 +158,7 @@ Additional Resources
 ====================
 
 - :ref:`hardware-recommendations`
-- :ref:`ceph-releases-general`
+- `Ceph Releases (general)`_
 - :ref:`cephadm_deploying_new_cluster`
 
 .. _CentOS: https://www.centos.org/cl-vs-cs/
@@ -166,3 +166,7 @@ Additional Resources
 .. _Debian_t: https://www.debian.org/releases/trixie/
 .. _Rocky: https://github.com/rocky-linux/wiki.rockylinux.org/blob/main/docs/rocky/version.md
 .. _Ubuntu: https://wiki.ubuntu.com/Releases
+
+.. Needs to be an external link because doc/releases/general.rst is not in
+   stable branches and we want to always use the main branch version
+.. _Ceph Releases (general): https://docs.ceph.com/en/latest/releases/general/
