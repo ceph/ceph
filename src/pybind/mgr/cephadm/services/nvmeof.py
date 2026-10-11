@@ -83,12 +83,30 @@ class NvmeofService(CephService):
             return []
 
         nvmeof_spec = cast(NvmeofServiceSpec, spec)
-        if not nvmeof_spec.encryption_key:
-            return []
-
-        return [
-            f'encryption_key:{utils.config_hash(nvmeof_spec.encryption_key)}'
-        ]
+        deps: List[str] = []
+        if nvmeof_spec.encryption_key:
+            deps.append(f'encryption_key:{utils.config_hash(nvmeof_spec.encryption_key)}')
+        # The declarations bind_addr reads. A gateway keeps the address it
+        # was deployed with, so moving one has to reach the daemon as a
+        # reconfig. `networks` is not here: the address it resolves to
+        # lands on the placement, which the scheduler already compares
+        # against the daemon it deployed.
+        #
+        # Only what is set, so a spec that declares no address at all
+        # carries the deps it carried before and upgrading to this does
+        # not reconfigure it. A map renders in insertion order, which a
+        # reload of the spec need not repeat, so sort it: deps that differ
+        # from one pass to the next reconfigure on every pass.
+        if nvmeof_spec.addr:
+            deps.append(f'addr: {nvmeof_spec.addr}')
+        if nvmeof_spec.addr_map:
+            deps.append(f'addr_map: {sorted(nvmeof_spec.addr_map.items())}')
+        if nvmeof_spec.discovery_addr:
+            deps.append(f'discovery_addr: {nvmeof_spec.discovery_addr}')
+        if nvmeof_spec.discovery_addr_map:
+            deps.append(
+                f'discovery_addr_map: {sorted(nvmeof_spec.discovery_addr_map.items())}')
+        return deps
 
     def choose_next_action(
         self,
