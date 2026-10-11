@@ -948,6 +948,15 @@ public:
 		     const bool force, // if head object missing, do a best effort
 		     const bool skip_olh_obj_update // true for all deletes (except the last one) initiated by a multi-object delete op
         );
+
+    private:
+      int delete_obj_impl(optional_yield y,
+			  const DoutPrefixProvider* dpp,
+			  bool log_op,
+			  const bool force,
+			  const bool skip_olh_obj_update,
+			  bool after_shared_manifest_race,
+			  bool *dedup_race_retry);
     }; // struct RGWRados::Object::Delete
 
     struct Stat {

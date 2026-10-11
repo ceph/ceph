@@ -6995,6 +6995,24 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
 					 const bool force,
 					 const bool skip_olh_obj_update)
 {
+  bool dedup_race_retry = false;
+  auto ret = delete_obj_impl(y, dpp, log_op, force, skip_olh_obj_update, false,
+			     &dedup_race_retry);
+  if (!dedup_race_retry) {
+    return ret;
+  }
+  return delete_obj_impl(y, dpp, log_op, force, skip_olh_obj_update, true,
+			 nullptr);
+}
+
+int RGWRados::Object::Delete::delete_obj_impl(optional_yield y,
+					      const DoutPrefixProvider* dpp,
+					      bool log_op,
+					      const bool force,
+					      const bool skip_olh_obj_update,
+					      bool after_shared_manifest_race,
+					      bool *dedup_race_retry)
+{
   RGWRados *store = target->get_store();
   const rgw_obj& src_obj = target->get_obj();
   const string& instance = src_obj.key.instance;
@@ -7238,6 +7256,14 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     return r;
   }
 
+  const bool shared_manifest_absent_guard =
+    (state->attrset.find(RGW_ATTR_SHARE_MANIFEST) == state->attrset.end());
+  if (shared_manifest_absent_guard) {
+    /* object was not a dedup target at read time; if dedup makes it one before
+     * we remove the head, restart delete so GC sees the shared manifest */
+    cls_rgw_obj_assert_no_share_manifest(op);
+  }
+
   store->remove_rgw_head_obj(op);
 
   if (params.check_objv != nullptr) {
@@ -7250,7 +7276,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
   r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, nullptr, &epoch);
 
   /* raced with another operation, object state is indeterminate */
-  const bool need_invalidate = (r == -ECANCELED);
+  const bool need_invalidate = (r == -ECANCELED || r == -EAGAIN);
 
   int64_t poolid = ioctx.get_id();
   if (r == -ETIMEDOUT) {
@@ -7282,6 +7308,11 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
   }
 
   if (r < 0) {
+    if (r == -EAGAIN && shared_manifest_absent_guard &&
+	!after_shared_manifest_race && dedup_race_retry) {
+      *dedup_race_retry = true;
+      return r;
+    }
     return r;
   }
 
