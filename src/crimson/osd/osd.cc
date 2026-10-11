@@ -14,6 +14,7 @@
 #include <seastar/coroutine/parallel_for_each.hh>
 
 #include "common/pick_address.h"
+#include "common/LogFmt.h"
 #include "include/util.h"
 #include "include/uuid_fmt.h"
 
