@@ -39,8 +39,8 @@ tools. For the recommended method, see :ref:`cephadm_deploying_new_cluster`.
 - :ref:`install-clone-source`: the source code of a branch, from GitHub or
   with Git.
 - :doc:`build-ceph`: compile Ceph from source, or build its packages.
-- :ref:`install-mirrors`: mirrors of ``download.ceph.com`` that serve the
-  same packages and tarballs.
+- :ref:`install-mirrors`: mirrors that copy the packages and tarballs of
+  ``download.ceph.com``.
 - :ref:`containers`: the container image that holds every Ceph daemon, and
   what each tag points to.
 

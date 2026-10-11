@@ -8,9 +8,9 @@
    :description: Mirrors of download.ceph.com for Ceph packages and tarballs, how to download from them, and how to run or register a mirror.
    :ceph-page-type: reference
 
-Mirrors keep a synchronized copy of ``download.ceph.com``. Companies and
-universities that support the Ceph project run them. Use the mirror nearest
-to you.
+The primary source of Ceph packages and tarballs is ``download.ceph.com``.
+Mirrors copy it. Companies and universities that support the Ceph project run
+them. Use the mirror nearest to you.
 
 .. _locations:
 
@@ -39,8 +39,8 @@ Mirror Locations
 Downloading from a Mirror
 =========================
 
-Replace ``download.ceph.com`` with the mirror in any URL. For example, these
-URLs:
+In any URL, replace ``https://download.ceph.com/`` with the URL of the
+mirror. For example, these URLs:
 
 .. code-block:: none
    :substitutions:
@@ -57,6 +57,10 @@ become these on the EU mirror:
    https://eu.ceph.com/tarballs/
    https://eu.ceph.com/debian-|stable-release|/
    https://eu.ceph.com/rpm-|stable-release|/
+
+A mirror can lag behind ``download.ceph.com`` and might not have a new release
+or release candidate yet. If a mirror does not have a path, use
+``download.ceph.com``.
 
 With :term:`cephadm`, give the mirror to ``cephadm add-repo`` with
 ``--repo-url``:

@@ -25,9 +25,9 @@ Prerequisites
 Procedure
 =========
 
-#. Download the tarball, replacing ``20.2.4`` with the version that you want,
-   and ``download.ceph.com`` with a host from :ref:`install-mirrors` to use a
-   mirror near you:
+#. Download the tarball, replacing ``20.2.4`` with the version that you want.
+   To use a mirror near you, replace ``https://download.ceph.com/`` with the
+   URL of a mirror from :ref:`install-mirrors`:
 
    .. prompt:: bash $
 
@@ -60,7 +60,9 @@ Troubleshooting
 ===============
 
 - **"ERROR 404: Not Found" or "HTTP ERROR response 404" from wget.** No
-  tarball has that name. Check the version against `Ceph Release Tarballs`_.
+  tarball has that name, or the mirror that you used does not have it yet.
+  Check the version against `Ceph Release Tarballs`_; if it is listed there,
+  download it from ``download.ceph.com``.
 - **"gzip: stdin: unexpected end of file" from tar.** The download is
   incomplete. Delete the file and download it again.
 
