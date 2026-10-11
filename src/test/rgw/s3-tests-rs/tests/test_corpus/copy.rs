@@ -329,6 +329,15 @@ async fn corpus_coverage_copy() {
         }
     }
 
+    let mut bucket_owners = std::collections::BTreeMap::new();
+    let mut ownership_problems = Vec::new();
+    for bk in [&b, &other, &versioned] {
+        let (owner, ownership) =
+            crate::generate::bucket_ownership(&client, &mut m, bk).await;
+        ownership_problems.extend(ownership);
+        bucket_owners.insert(bk.clone(), owner);
+    }
+
     let dir = out_dir();
     std::fs::create_dir_all(&dir).expect("manifest directory");
     let path = dir.join(format!("{tier}-copy.manifest"));
@@ -356,6 +365,7 @@ async fn corpus_coverage_copy() {
 
     /* Reference-free properties. */
     let mut problems = mode_problems;
+    problems.extend(ownership_problems);
     for c in &copies {
         if c.refused.is_some() {
             /* A refusal is a fact, not a failure -- self-copy without
@@ -376,9 +386,13 @@ async fn corpus_coverage_copy() {
                 c.dst_key, c.declared_size, c.src_key, size
             ));
         }
-        if owner.is_empty() || owner == "unknown" {
+        /* the bucket's owner;  see generate::bucket_ownership() */
+        let want = bucket_owners.get(&c.dst_bucket).map(String::as_str)
+            .unwrap_or("");
+        if owner.as_str() != want {
             problems.push(format!(
-                "{:?} lists owner {:?} after a copy onto a warm cache",
+                "{:?} lists owner {:?} after a copy onto a warm cache, \
+                 not the bucket's {want:?}",
                 c.dst_key,
                 if owner.is_empty() { "<none>" } else { owner }
             ));

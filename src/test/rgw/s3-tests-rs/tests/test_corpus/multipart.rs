@@ -232,6 +232,33 @@ async fn corpus_coverage_multipart() {
         .expect("list_multipart_uploads");
     let open: std::collections::BTreeSet<String> =
         mpus.uploads().iter().filter_map(|u| u.key().map(String::from)).collect();
+    /* An upload's owner and initiator are its bucket's owner's, for an
+     * upload NooBaa started -- NooBaa records no initiator -- as for an
+     * object;  see generate::bucket_ownership(). */
+    let (bucket_owner, mut ownership_problems) =
+        crate::generate::bucket_ownership(&client, &mut m, &b).await;
+    for u in mpus.uploads() {
+        let k = u.key().unwrap_or_default();
+        for (role, id) in [("owner", u.owner().and_then(|o| o.id())),
+                           ("initiator", u.initiator().and_then(|i| i.id()))] {
+            let id = id.unwrap_or("");
+            m.object(k, &format!("in-flight-{role}"),
+                     if id.is_empty() { "<none>" } else { id });
+            /* NooBaa reports every upload's owner and initiator as the
+             * placeholder `DEFAULT_S3_USER` ("123", `s3_utils.js`), at
+             * the pin and on master.  Gated rather than fixed, because
+             * it is what their implementation does;  the fact above is
+             * recorded either way. */
+            #[cfg(not(feature = "fails_on_noobaa"))]
+            if id != bucket_owner {
+                ownership_problems.push(format!(
+                    "in-flight {k:?} lists {role} {:?}, not the bucket's \
+                     {bucket_owner:?}",
+                    if id.is_empty() { "<none>" } else { id }
+                ));
+            }
+        }
+    }
     for k in &open {
         m.object(k, "listed-in-flight", "yes");
     }
@@ -315,6 +342,7 @@ async fn corpus_coverage_multipart() {
     /* Reference-free properties.  Each holds of any S3 implementation
      * and none needs a second gateway to compare against. */
     let mut problems = mode_problems;
+    problems.extend(ownership_problems);
     problems.extend(body_problems);
 
     for u in &uploads {
@@ -378,9 +406,10 @@ async fn corpus_coverage_multipart() {
                     }
 
                 }
-                if owner.is_empty() || owner == "unknown" {
+                if *owner != bucket_owner {
                     problems.push(format!(
-                        "{:?} lists owner {:?} after completing on a warm cache",
+                        "{:?} lists owner {:?} after completing on a warm \
+                         cache, not the bucket's {bucket_owner:?}",
                         u.key,
                         if owner.is_empty() { "<none>" } else { owner }
                     ));

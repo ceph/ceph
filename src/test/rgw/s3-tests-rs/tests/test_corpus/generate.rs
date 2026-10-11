@@ -57,6 +57,60 @@ pub fn observing() -> bool {
              "1" | "on" | "true" | "yes")
 }
 
+/// The bucket's owner, and what is wrong with its ownership.
+///
+/// An object that records no owner is its bucket owner's -- NooBaa
+/// gives every object its bucket's `owner_account`, and nsfs carries
+/// that rule through adoption -- and an object RGW writes into an
+/// adopted bucket is the bucket owner's too, because adoption makes the
+/// bucket BucketOwnerEnforced.  So in this corpus every listed owner
+/// is the bucket's, and the axes compare against what this returns.
+///
+/// The owner is read with GetBucketAcl;  the object-ownership control
+/// is recorded as a fact.  An observing pass describes a tree another
+/// gateway wrote and the adoption imported, so there the control has
+/// to be BucketOwnerEnforced;  a generating pass makes its own buckets
+/// and RGW's default stands.
+pub async fn bucket_ownership(
+    client: &aws_sdk_s3::Client,
+    m: &mut Manifest,
+    b: &str,
+) -> (String, Vec<String>) {
+    let mut problems = Vec::new();
+    let owner = match client.get_bucket_acl().bucket(b).send().await {
+        Ok(r) => r.owner().and_then(|o| o.id()).unwrap_or("").to_string(),
+        Err(e) => {
+            problems.push(format!("GetBucketAcl on {b:?} failed: {e:?}"));
+            String::new()
+        }
+    };
+    if owner.is_empty() && problems.is_empty() {
+        problems.push(format!("GetBucketAcl on {b:?} names no owner"));
+    }
+
+    let controls = match client.get_bucket_ownership_controls().bucket(b).send().await {
+        Ok(r) => r
+            .ownership_controls()
+            .and_then(|c| c.rules().first())
+            .map(|r| r.object_ownership().as_str().to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+        Err(e) => e
+            .into_service_error()
+            .meta()
+            .code()
+            .unwrap_or("Unknown")
+            .to_string(),
+    };
+    m.bucket(b, "ownership-controls", &controls);
+    if observing() && controls != "BucketOwnerEnforced" {
+        problems.push(format!(
+            "{b:?} is an adopted bucket and its object ownership is \
+             {controls:?}, not BucketOwnerEnforced"
+        ));
+    }
+    (owner, problems)
+}
+
 /// Create the bucket if it is not there.  Stable names are the point,
 /// so a rerun meets its own buckets;  that is tolerated rather than
 /// treated as an error, and a corpus run against a dirty root is the

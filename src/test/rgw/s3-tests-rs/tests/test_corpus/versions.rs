@@ -38,15 +38,19 @@ fn note_owner(
     key: &str,
     vid: &str,
     id: Option<&str>,
+    bucket_owner: &str,
     offenders: &mut Vec<String>,
 ) {
     let id = id.unwrap_or("");
     m.object(key, &format!("version.{vid}.owner"),
              if id.is_empty() { "<none>" } else { id });
-    if id.is_empty() || id == "unknown" {
+    /* Every owner in this corpus is the bucket's;  see
+     * generate::bucket_ownership().  `unknown` and an empty owner are
+     * the shapes the old defects took, and both fail this. */
+    if id != bucket_owner {
         offenders.push(format!(
-            "{key:?} version {vid:?} has owner {:?}",
-            if id.is_empty() { "<none>" } else { id }
+            "{key:?} version {vid:?} has owner {:?}, not the bucket's {:?}",
+            if id.is_empty() { "<none>" } else { id }, bucket_owner
         ));
     }
 }
@@ -65,6 +69,9 @@ async fn list_versions_into(
         .send()
         .await
         .expect("a corpus bucket should list its versions");
+    let (bucket_owner, ownership) =
+        crate::generate::bucket_ownership(client, m, b).await;
+    owners.extend(ownership);
 
     for v in page.versions() {
         let key = v.key().unwrap_or_default();
@@ -74,7 +81,8 @@ async fn list_versions_into(
         if let Some(sz) = v.size() {
             m.object(key, &format!("version.{vid}.size"), &sz.to_string());
         }
-        note_owner(m, key, vid, v.owner().and_then(|o| o.id()), owners);
+        note_owner(m, key, vid, v.owner().and_then(|o| o.id()),
+                   &bucket_owner, owners);
         seen.push((key.to_string(), vid.to_string()));
     }
     for d in page.delete_markers() {
@@ -83,7 +91,8 @@ async fn list_versions_into(
         m.object(key, &format!("version.{vid}.delete-marker"), "true");
         m.object(key, &format!("version.{vid}.is-latest"),
                  &d.is_latest().unwrap_or(false).to_string());
-        note_owner(m, key, vid, d.owner().and_then(|o| o.id()), owners);
+        note_owner(m, key, vid, d.owner().and_then(|o| o.id()),
+                   &bucket_owner, owners);
         seen.push((key.to_string(), vid.to_string()));
     }
     m.bucket(b, "versions.listed", &seen.len().to_string());

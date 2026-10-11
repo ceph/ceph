@@ -32,6 +32,8 @@ pub struct Inventory {
      * rendered lines so an invariant can read it without parsing the
      * inventory's own output back. */
     files: Vec<(String, u32)>,
+    /* every directory, the same way */
+    dirs: Vec<(String, u32)>,
 }
 
 impl Inventory {
@@ -107,6 +109,8 @@ impl Inventory {
 
             if ty == "f" {
                 self.files.push((rel.clone(), md.mode() & 0o7777));
+            } else if ty == "d" {
+                self.dirs.push((rel.clone(), md.mode() & 0o7777));
             }
 
             for name in list_xattr_names(&path)? {
@@ -121,33 +125,44 @@ impl Inventory {
         Ok(())
     }
 
-    /// Every object on this backend is published 0600.
+    /// Every file under a bucket is 0660, NooBaa's mode, which nsfs
+    /// creates with too:  0666 under `rgw_nsfs_umask`, default 0007.
     ///
     /// Invisible over S3, so no manifest or listing check can see it,
     /// and nsfs trees are shared with NFS and POSIX clients where the
     /// mode is what decides access.  This caught a zero-length object
-    /// at 0700:  both write paths narrow the mode themselves, an empty
-    /// body goes through neither, so the file kept the `S_IRWXU` its
-    /// `openat` was given.
+    /// at 0700, when the mode was still narrowed on the write path and
+    /// an empty body went through neither.
     ///
     /// **`CORPUS_OBJECT_MODE` says which mode, and `any` turns the
     /// check off.**  This is the one assertion in the corpus that is
     /// not a property of every S3 implementation -- it is a statement
-    /// about *this* driver -- and a capture from a foreign gateway has
-    /// to be able to say so.  NooBaa publishes its own mode, so a run
-    /// against their endpoint reports every object as an offender and
-    /// drowns the differences the capture exists to find.
+    /// about the tree -- and a run with a different `rgw_nsfs_umask`
+    /// has to be able to say so.
     ///
     /// Returns one line per offender, empty when all is well.
     pub fn check_object_modes(&self) -> Vec<String> {
         let spec = std::env::var("CORPUS_OBJECT_MODE").ok();
-        self.modes_against(&mode_policy(spec.as_deref()))
+        Self::modes_against(&self.files, &mode_policy(spec.as_deref(), 0o660),
+                            "CORPUS_OBJECT_MODE")
+    }
+
+    /// Every directory under a bucket is 0770, NooBaa's directory mode,
+    /// which nsfs creates with too:  0777 under `rgw_nsfs_umask`.
+    /// `CORPUS_DIR_MODE` says which, as `CORPUS_OBJECT_MODE` does for
+    /// files -- a run with impersonation on, where the gateway owns the
+    /// directories it makes, needs it.
+    pub fn check_directory_modes(&self) -> Vec<String> {
+        let spec = std::env::var("CORPUS_DIR_MODE").ok();
+        Self::modes_against(&self.dirs, &mode_policy(spec.as_deref(), 0o770),
+                            "CORPUS_DIR_MODE")
     }
 
     /// The same check against a policy given rather than read, so both
     /// polarities are testable without mutating the environment -- the
     /// axes run in one process and share it.
-    fn modes_against(&self, policy: &ModePolicy) -> Vec<String> {
+    fn modes_against(entries: &[(String, u32)], policy: &ModePolicy,
+                     knob: &str) -> Vec<String> {
         let want = match policy {
             ModePolicy::Any => return Vec::new(),
             /* A knob nobody can read is worse than no knob:  reported
@@ -155,12 +170,12 @@ impl Inventory {
              * than silently falling back to the default. */
             ModePolicy::Malformed(v) => {
                 return vec![format!(
-                    "CORPUS_OBJECT_MODE={v:?} is neither an octal mode nor `any`"
+                    "{knob}={v:?} is neither an octal mode nor `any`"
                 )]
             }
             ModePolicy::Exactly(m) => *m,
         };
-        self.files
+        entries
             .iter()
             .filter(|(_, m)| *m != want)
             .map(|(p, m)| format!("{p:?} is mode {m:04o}, not {want:04o}"))
@@ -179,11 +194,10 @@ enum ModePolicy {
     Malformed(String),
 }
 
-/// Read the knob.  Unset is the strict default, so nothing an existing
-/// run does changes.
-fn mode_policy(spec: Option<&str>) -> ModePolicy {
+/// Read the knob.  Unset is the strict default.
+fn mode_policy(spec: Option<&str>, default: u32) -> ModePolicy {
     let Some(raw) = spec else {
-        return ModePolicy::Exactly(0o600);
+        return ModePolicy::Exactly(default);
     };
     let v = raw.trim();
     if v.eq_ignore_ascii_case("any") {
@@ -275,15 +289,16 @@ mod tests {
     /// complaint rather than a silent default.
     #[test]
     fn the_mode_knob_defaults_strict() {
-        assert_eq!(mode_policy(None), ModePolicy::Exactly(0o600));
-        assert_eq!(mode_policy(Some("any")), ModePolicy::Any);
-        assert_eq!(mode_policy(Some("ANY")), ModePolicy::Any);
-        assert_eq!(mode_policy(Some("0644")), ModePolicy::Exactly(0o644));
-        assert_eq!(mode_policy(Some("644")), ModePolicy::Exactly(0o644));
-        assert_eq!(mode_policy(Some(" 0600 ")), ModePolicy::Exactly(0o600));
-        assert!(matches!(mode_policy(Some("rw-")), ModePolicy::Malformed(_)));
+        assert_eq!(mode_policy(None, 0o660), ModePolicy::Exactly(0o660));
+        assert_eq!(mode_policy(None, 0o770), ModePolicy::Exactly(0o770));
+        assert_eq!(mode_policy(Some("any"), 0o660), ModePolicy::Any);
+        assert_eq!(mode_policy(Some("ANY"), 0o660), ModePolicy::Any);
+        assert_eq!(mode_policy(Some("0644"), 0o660), ModePolicy::Exactly(0o644));
+        assert_eq!(mode_policy(Some("644"), 0o660), ModePolicy::Exactly(0o644));
+        assert_eq!(mode_policy(Some(" 0600 "), 0o660), ModePolicy::Exactly(0o600));
+        assert!(matches!(mode_policy(Some("rw-"), 0o660), ModePolicy::Malformed(_)));
         /* 0o10000 is not a mode */
-        assert!(matches!(mode_policy(Some("10000")), ModePolicy::Malformed(_)));
+        assert!(matches!(mode_policy(Some("10000"), 0o660), ModePolicy::Malformed(_)));
     }
 
     /// The check has to be able to fail, and the knob has to be able to
@@ -292,29 +307,52 @@ mod tests {
     /// about what a capture from their gateway suppresses.
     #[test]
     fn an_offending_mode_is_caught_by_default_and_only_by_default() {
-        let mut inv = Inventory::new();
-        inv.files.push(("sub/f".to_string(), 0o700));
+        let files = vec![("sub/f".to_string(), 0o700)];
+        let k = "CORPUS_OBJECT_MODE";
 
-        let strict = inv.modes_against(&ModePolicy::Exactly(0o600));
+        let strict = Inventory::modes_against(&files, &ModePolicy::Exactly(0o660), k);
         assert_eq!(strict.len(), 1, "0700 was not caught: {strict:?}");
         assert!(
-            strict[0].contains("0700") && strict[0].contains("0600"),
+            strict[0].contains("0700") && strict[0].contains("0660"),
             "the complaint does not say what it found or wanted: {strict:?}"
         );
 
         assert!(
-            inv.modes_against(&ModePolicy::Any).is_empty(),
+            Inventory::modes_against(&files, &ModePolicy::Any, k).is_empty(),
             "`any` still complained"
         );
         assert!(
-            inv.modes_against(&ModePolicy::Exactly(0o700)).is_empty(),
+            Inventory::modes_against(&files, &ModePolicy::Exactly(0o700), k).is_empty(),
             "0700 was wanted and still complained"
         );
-        assert_eq!(
-            inv.modes_against(&ModePolicy::Malformed("rw-".into())).len(),
-            1,
-            "a malformed knob did not report itself"
-        );
+        let bad = Inventory::modes_against(&files, &ModePolicy::Malformed("rw-".into()), k);
+        assert_eq!(bad.len(), 1, "a malformed knob did not report itself");
+        assert!(bad[0].contains(k), "the complaint does not name its knob");
+    }
+
+    /// Directories are checked apart from files, so a 0770 directory
+    /// is not an offending file and a 0660 file not an offending
+    /// directory.  Both polarities, on a real walk.
+    #[test]
+    fn directories_are_checked_against_their_own_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        std::fs::create_dir(root.join("d")).unwrap();
+        std::fs::set_permissions(root.join("d"),
+                                 std::fs::Permissions::from_mode(0o770)).unwrap();
+        std::fs::write(root.join("d/f"), b"x").unwrap();
+        std::fs::set_permissions(root.join("d/f"),
+                                 std::fs::Permissions::from_mode(0o660)).unwrap();
+
+        let mut inv = Inventory::new();
+        inv.walk(root).expect("walk");
+        assert!(Inventory::modes_against(&inv.dirs, &ModePolicy::Exactly(0o770), "d")
+                .is_empty());
+        assert!(Inventory::modes_against(&inv.files, &ModePolicy::Exactly(0o660), "f")
+                .is_empty());
+        assert_eq!(Inventory::modes_against(&inv.dirs, &ModePolicy::Exactly(0o750), "d")
+                   .len(), 1, "a 0770 directory passed a 0750 check");
     }
 
     /// Sorted bytewise and free of duplicates, so the comparison is a
@@ -368,7 +406,9 @@ pub fn capture(bucket: &str, dir: &Path, stem: &str) -> Vec<String> {
     let ipath = dir.join(format!("{stem}.inventory"));
     std::fs::write(&ipath, inv.render()).expect("write inventory");
     eprintln!("corpus {stem}: {} disk facts -> {}", inv.len(), ipath.display());
-    inv.check_object_modes()
+    let mut problems = inv.check_object_modes();
+    problems.extend(inv.check_directory_modes());
+    problems
 }
 
 /// The attribute names on a directory itself.

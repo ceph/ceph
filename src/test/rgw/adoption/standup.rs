@@ -1002,11 +1002,10 @@ fn iam_call(env: &Env, params: &[(&str, &str)]) -> Result<String, String> {
 /// step does fail on is producing no artifacts at all, because that
 /// means the corpus never reached a write.
 ///
-/// **`CORPUS_OBJECT_MODE=any`.**  The corpus checks that every object
-/// is published 0600, which is a statement about the nsfs driver and not
-/// about S3.  Left strict, every object NooBaa wrote would be
-/// reported as an offender and the differences worth reading would be
-/// buried.
+/// **The corpus's mode checks run on both sides.**  nsfs creates in
+/// NooBaa's modes, 0660 files and 0770 directories (DECISIONS.md
+/// 2026-10-11), so a tree NooBaa wrote and the same tree after RGW
+/// adopted it are held to the one expectation.
 ///
 /// Idempotent:  the artifacts are rewritten, and the buckets the
 /// corpus uses have stable names so a second run meets its own.
@@ -1216,8 +1215,6 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
          * concludes they were accepted and dropped. */
         .env("CORPUS_CONFIG_ROOT", env.config_root().display().to_string())
         .env("CORPUS_TIER", &env.tier)
-        /* NooBaa publishes its own modes.  See the doc comment. */
-        .env("CORPUS_OBJECT_MODE", "any")
         .env("CORPUS_OBSERVE", if observe { "1" } else { "0" })
         /* The tree's modality, read from the file rather than the
          * setting.  The corpus needs it to know whether an ETag is a
