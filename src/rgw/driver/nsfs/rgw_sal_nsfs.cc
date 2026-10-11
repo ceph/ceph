@@ -89,8 +89,8 @@ const int64_t READ_SIZE = 128 * 1024;
 // required alignment for O_DIRECT reads/writes (rgw_nsfs_direct_io)
 const int64_t DIRECT_IO_ALIGN = 4096;
 
-/* The on-disk spelling of an attribute, and which attributes are ours to
- * read at all, belong to XattrStrategy (xattr_strategy.h). */
+/* The on-disk spelling of an attribute, and which attributes are nsfs's
+ * to read at all, belong to XattrStrategy (xattr_strategy.h). */
 
 /* Where a bucket's own state comes from belongs to BucketStateStrategy
  * (bucket_state_strategy.h);  the attribute it is written to is the
@@ -260,7 +260,7 @@ static bool entry_is_content(int parent_fd, std::string_view name,
 			     const nsfs::ReservedNames& rn)
 {
   if (name == HIDDEN_VERSIONS_PATH) {
-    /* version entries are user data;  the lock file is ours */
+    /* version entries are user data;  the lock file is nsfs's */
     return dir_has_content(parent_fd, std::string(name).c_str(),
 			   VERSIONS_LOCK_NAME);
   }
@@ -510,14 +510,14 @@ static int statx_ids(int fd, struct statx& stx)
 /* Conversion creates nothing new.  Every file it writes re-expresses
  * something that is already there, so it takes that thing's uid and
  * gid -- the sentinel from the directory it replaces, an upload's
- * files from theirs.
+ * files from NooBaa's.
  *
  * Not the gateway's, which would leave a converted directory object
  * unreadable to the account that owns the data.  And not an
  * account's:  a sideloaded file may belong to a uid no account maps
  * to, and there would be nobody to be.
  *
- * A no-op when the source is already ours, which is every file on a
+ * A no-op when the source is already the gateway's, which is every file on a
  * tree this gateway wrote, and which needs no capability.  Otherwise
  * it needs CAP_CHOWN -- a fourth beyond the three the daemon is given
  * -- and without it conversion refuses rather than leaving behind a
@@ -624,7 +624,7 @@ static int nsfs_lmdb_cmp(const MDB_val *a, const MDB_val *b)
 /*
  * Promote the newest non-delete-marker version from .versions/ to the
  * current path.  Uses CAS (safe_link) to avoid races with concurrent
- * PUT or DELETE: if a new current appears between our scan and link
+ * PUT or DELETE: if a new current appears between the scan and the link
  * (a concurrent writer won), the link fails with EEXIST and we skip.
  * Retries on CAS mismatch (the candidate was moved by another thread).
  */
@@ -1534,9 +1534,9 @@ static inline int copy_dir_fd(int old_fd)
  * syscall, and one more string comparison for each name neither format
  * owns, which in practice is `security.selinux`.
  *
- * Ours first.  An object rewritten during the conversion carries our
- * names and must be read as ours even while the bucket still holds
- * objects that are not. */
+ * The nsfs format first.  An object rewritten during the conversion
+ * carries nsfs names and must be read as nsfs's even while the bucket
+ * still holds objects that are not. */
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display,
 		       const nsfs::XattrStrategy* xs,
@@ -1580,7 +1580,7 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
       if (!alt || !alt->parse_disk_name(xattr_name, key)) {
 	/* Neither format places this name.  Kept rather than
 	 * forgotten:  a one-to-many attribute -- object tags, which
-	 * are one per tag on their side -- cannot be placed a name at
+	 * are one per tag in NooBaa's format -- cannot be placed a name at
 	 * a time, and parse_disk_attrs() is given these to make what
 	 * they encode.  The value is not read here;  the format reads
 	 * the ones it claims. */
@@ -1619,8 +1619,8 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
     bufferlist bl;
     bl.append(vp, vallen);
     /* `owner` and not `xs`:  whether a value is a counted string is the
-     * format's, and theirs are not.  Asking the wrong one appends a NUL
-     * their value never had. */
+     * format's, and NooBaa's are not.  Asking the wrong one appends a
+     * NUL the NooBaa value never had. */
     if (owner->counted_string_value(key)) {
       /* Restore the terminator RGW writes and attr_on_disk() strips.
        *
@@ -1644,11 +1644,12 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 
   /* What the per-name pass could not place.
    *
-   * Ours first here too, and for the same reason the read asks that
-   * way round:  an attribute a converting object carries in our format is
-   * the later word.  In practice ours claims nothing at this stage --
-   * every logical attribute of ours is one attribute on disk -- so
-   * this costs a virtual call and no syscall on a tree of ours. */
+   * The nsfs format first here too, and for the same reason the read
+   * asks that way round:  an attribute a converting object carries in
+   * the nsfs format is the later word.  In practice the nsfs format
+   * claims nothing at this stage -- every nsfs logical attribute is one
+   * attribute on disk -- so this costs a virtual call and no syscall on
+   * an nsfs tree. */
   if (!unclaimed.empty()) {
     xs->parse_disk_attrs(dpp, fd, unclaimed, attrs);
     if (alt) {
@@ -1698,7 +1699,7 @@ static int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd,
   attrname = xs->disk_name(key);
   if (attrname.empty()) {
     /* nowhere to keep it in this format;  accepted and not stored, as
-     * their own gateway does with an ACL */
+     * NooBaa's own gateway does with an ACL */
     return 0;
   }
 
@@ -1723,7 +1724,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
   int ret;
 
   /* A key one format spreads over several names cannot be removed by
-   * naming one.  Object tags are one attribute per tag on their side,
+   * naming one.  Object tags are one attribute per tag in NooBaa's format,
    * so DeleteObjectTagging has to remove all of them -- asked of the
    * format the same way a write is, with nothing to write. */
   if (fs) {
@@ -1740,7 +1741,7 @@ static int remove_x_attr(const DoutPrefixProvider *dpp, optional_yield y,
       if (xs->disk_attrs(key, none, current, none_to_write, spread)) {
 	if (spread.empty()) {
 	  /* nothing of this key is on the file;  removing what is not
-	   * there is not a failure, and their own DeleteObjectTagging
+	   * there is not a failure, and NooBaa's own DeleteObjectTagging
 	   * swallows it too (`namespace_fs.js:2794`) */
 	  return 0;
 	}
@@ -1931,11 +1932,11 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
     /* The names already on the file, for the formats that need them.
      *
-     * A one-to-many attribute -- object tags, one per tag on their
-     * side -- has to remove what it supersedes, and which names those
+     * A one-to-many attribute -- object tags, one per tag in NooBaa's
+     * format -- has to remove what it supersedes, and which names those
      * are is only knowable from the disk, because the tag keys are in
      * the names.  Read once and lazily:  nothing asks for it unless a
-     * format's disk_attrs() does, so a tree of ours pays nothing. */
+     * format's disk_attrs() does, so an nsfs tree pays nothing. */
     std::vector<std::string> current;
     bool have_current = false;
     auto disk_names = [&]() -> const std::vector<std::string>& {
@@ -1953,7 +1954,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     };
 
     /* An empty disk name means this format keeps the attribute
-     * nowhere -- an S3 ACL on a NooBaa tree, where their own gateway
+     * nowhere -- an S3 ACL on a NooBaa tree, where NooBaa's own gateway
      * also accepts the request and stores nothing.  Skipped rather
      * than written under a name neither format owns. */
     auto place = [&](const std::string& key, const bufferlist& bl) {
@@ -1994,7 +1995,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
       for (auto& [disk_name, _] : old_raw) {
         /* Facts about the bucket that no attribute write owns.  Each
-         * parses as one of ours -- they are under user.nsfs. -- so
+         * parses as an nsfs name -- they are under user.nsfs. -- so
          * without this they would be pruned by the next REPLACE_ALL:
          * a bucket would lose its profile a moment after being marked,
          * or forget that its directory predates it and delete a tree
@@ -2009,8 +2010,8 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
             (disk_name == nsfs::OWNS_STORAGE_XATTR)) {
           continue;
         }
-        /* Through the fallback as well.  A superseded attribute of
-         * theirs then resolves to the key we are about to write and
+        /* Through the fallback as well.  A superseded NooBaa attribute
+         * then resolves to the key about to be written and
          * lands in to_remove, which is how a converting object stops
          * carrying both spellings of the same fact. */
         std::string logical;
@@ -2030,7 +2031,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
          * none of them:  disk_attrs() supersedes whatever is on disk
          * and is not in to_write, which with an empty value is all of
          * it.  DeleteObjectTagging arrives here, and without this it
-         * removed our one name and left their tags. */
+         * removed the one nsfs name and left NooBaa's tags. */
         bufferlist none;
         if (xattr_strategy->disk_attrs(key, none, disk_names(), to_write,
                                        to_remove)) {
@@ -2050,7 +2051,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
      * is not available here.  What is needed is narrower:  a key we
      * are writing may already be on this file under the other
      * format's name, and leaving it there gives the object two
-     * spellings of one fact.  The read would keep finding ours, so
+     * spellings of one fact.  The read would keep finding nsfs's, so
      * nothing would look wrong, and the conversion would never finish
      * because the foreign attribute never goes away.
      *
@@ -3081,7 +3082,7 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 
       /* A directory object written in the other format.
        *
-       * Their empty one has no sentinel inside it -- the fact is
+       * NooBaa's empty one has no sentinel inside it -- the fact is
        * user.noobaa.dir_content on the directory -- so nothing in the
        * walk reveals it and the directory has to be asked.  Only on a
        * bucket mid-upgrade:  path_fallback is null everywhere else,
@@ -3605,7 +3606,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   path_strategy = std::make_unique<nsfs::SentinelPathStrategy>();
   bucket_state_strategy = std::make_unique<nsfs::RgwBucketStateStrategy>();
 
-  /* Their bucket records, if we were given the address of a store.
+  /* NooBaa's bucket records, if given the address of a store.
    * Unset means do not consult one, which is every deployment that is
    * not reading a NooBaa tree. */
   {
@@ -3655,18 +3656,19 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   rgw_meta_format.bucket_state_strategy = bucket_state_strategy.get();
   rgw_meta_format.fname = "rgw-meta";
 
-  /* What base is:  NooBaa's format entire -- their attribute names,
-   * their path conventions, their staging layout.  Its MPU member is
-   * named rather than left null, because their staging layout is
-   * theirs and not a capability question;  a base bucket stages as
-   * they do whatever the filesystem can do. */
+  /* What base is:  NooBaa's format entire -- NooBaa's attribute names,
+   * path conventions and staging layout.  Its MPU member is named
+   * rather than left null, because NooBaa's staging layout is part of
+   * the format and not a capability question;  a base bucket stages as
+   * NooBaa does whatever the filesystem can do. */
   noobaa_format.xattr_strategy = nb_xattr_strategy.get();
   noobaa_format.path_strategy = nb_path_strategy.get();
-  /* Bucket state is ours in every profile:  their record is a JSON file
-   * in a store we do not read on the request path, so a base bucket's
-   * state is the attribute we write beside the data, the same one
-   * shared and strong carry.  A reader for their store is a separate
-   * piece of work and does not belong on the request path. */
+  /* Bucket state is in the nsfs format in every profile:  NooBaa's
+   * record is a JSON file in a store not read on the request path, so
+   * a base bucket's state is the attribute nsfs writes beside the data,
+   * the same one shared and strong carry.  A reader for NooBaa's store
+   * is a separate piece of work and does not belong on the request
+   * path. */
   noobaa_format.mpu_strategy = nb_mpu_strategy.get();
   noobaa_format.bucket_state_strategy = bucket_state_strategy.get();
   noobaa_format.fname = "noobaa";
@@ -3703,12 +3705,12 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
     };
     add(path_strategy->reserved_names());
     add(mpu_strategy->reserved_names());
-    /* Theirs too, and unconditionally.
+    /* NooBaa's too, and unconditionally.
      *
      * The aggregate exists so that no strategy is consulted per
      * directory entry, which means it cannot depend on the bucket --
-     * and a base bucket's scaffolding is theirs.  Without this a
-     * bucket in their format listed `.noobaa-nsfs_<id>/...` as
+     * and a base bucket's scaffolding is NooBaa's.  Without this a
+     * bucket in NooBaa's format listed `.noobaa-nsfs_<id>/...` as
      * objects, and an upgraded one would list whatever the conversion
      * left behind.  The cost is a few more comparisons per entry,
      * which is what an aggregate is for. */
@@ -3830,8 +3832,9 @@ void NSFSDriver::init_multipart_cache(const DoutPrefixProvider* dpp,
 	      continue;
 	    }
 
-	    /* and whatever the layout records for itself.  Ours is the
-	     * attribute just written;  theirs is their three. */
+	    /* and whatever the layout records for itself.  The nsfs
+	     * layout's is the attribute just written;  NooBaa's is its
+	     * three. */
 	    nsfs::MPUStrategy::PartRecord rec;
 	    rec.size = upi.size;
 	    rec.stored = upi.stored;
@@ -4229,13 +4232,13 @@ std::unique_ptr<Object> NSFSDriver::get_object(const rgw_obj_key& k)
  * no migration:  an absent row means the default location, which is
  * where every bucket this driver has ever created lives.
  *
- * There is deliberately no third arm reading their bucket record.
- * Their `path` reaches us at adopt time and is written into the index
- * with the rest of their bucket state;  consulting their config store
+ * There is deliberately no third arm reading NooBaa's bucket record.
+ * NooBaa's `path` arrives at adopt time and is written into the index
+ * with the rest of the bucket's state;  consulting NooBaa's config store
  * on the request path is drift, and this must not add a second
  * consumer of it.
  *
- * **Bound per lookup, not cached.**  Theirs is read on every lookup --
+ * **Bound per lookup, not cached.**  NooBaa's is read on every lookup --
  * `read_bucket_sdk_info()` builds the namespace resource around the
  * record each time, so changing the record changes where the next
  * request goes -- and storage is attachable to a running Scale cluster
@@ -4260,14 +4263,14 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
   if (userDB->get_bucket_placement(dpp, name, tenant, bp) == 0) {
     /* An empty Path is a row recording the default location, which P4
      * writes for every bucket it creates;  the same result as no row,
-     * and it stops here rather than falling through to their record --
-     * a row is ours and is authoritative. */
+     * and it stops here rather than falling through to NooBaa's record
+     * -- a row is nsfs's and is authoritative. */
     if (bp.path.empty()) {
       return nullptr;
     }
     path = bp.path;
   } else {
-    /* P5.  No row of ours, so ask their record.
+    /* P5.  No row in the index, so ask NooBaa's record.
      *
      * `path` is required on every NooBaa bucket record, so a real
      * deployment's buckets are scattered -- and in `serve` mode
@@ -4277,7 +4280,7 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
      *
      * The read is the one serve mode already does for a bucket's
      * configuration, through the component that owns it, so this adds
-     * no consumer of their store (§7).
+     * no consumer of NooBaa's store (§7).
      *
      * **It never adopts.**  Resolving where a bucket lives is
      * read-only;  adoption happens because the mode says so, or by
@@ -4293,9 +4296,9 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
     if (path.empty()) {
       return nullptr;
     }
-    /* Their path names the bucket's own directory, and a path we
-     * would not store is one we will not serve from either -- the
-     * record is a store we did not write (§9). */
+    /* NooBaa's path names the bucket's own directory, and a path nsfs
+     * would not store is one it will not serve from either -- the
+     * record is a store nsfs did not write (§9). */
     if (!nsfs::placement_path_is_acceptable(path)) {
       ldpp_dout(dpp, 0) << "ERROR: bucket " << name << ": their record "
 	<< "says " << path << ", which is not an absolute canonical path"
@@ -4321,7 +4324,7 @@ NSFSDriver::placed_bucket_dir(const DoutPrefixProvider* dpp,
    * concerned.
    *
    * Which format's strategies these are is the driver's default, the
-   * same as the root's.  A placed bucket in *their* format still has
+   * same as the root's.  A placed bucket in NooBaa's format still has
    * its profile recognised per bucket, which is where the per-format
    * strategies come from;  this is only the seed. */
   d->set_mpu_strategy(mpu_strategy.get());
@@ -5705,15 +5708,15 @@ bool NSFSBucket::owns_storage(const DoutPrefixProvider* dpp)
  *
  * Deleting what adoption wrote is the inverse of adopting, and it
  * leaves the directory in the state it was in beforehand:  present,
- * found by the data root's readdir, and carrying nothing of ours.
+ * found by the data root's readdir, and carrying nothing of nsfs's.
  * That is the same state every directory an operator has not adopted
  * is in, so this introduces no condition the driver did not already
  * have to handle.
  *
- * Our whole namespace goes, not a list of names.  user.nsfs. is
+ * The whole nsfs namespace goes, not a list of names.  user.nsfs. is
  * exactly what the gateway wrote, so naming the prefix cannot leave
  * behind an attribute a later version adds;  anything of NooBaa's,
- * or anyone else's, is not ours to remove. */
+ * or anyone else's, is not the gateway's to remove. */
 int NSFSBucket::unadopt(const DoutPrefixProvider* dpp)
 {
   int ret = dir->open(dpp);
@@ -5782,8 +5785,8 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
        * would resolve to base -- including a strong one, whose shadow
        * subtree we would then expose as a key and whose attributes we
        * would write under NooBaa's names.  A filesystem without xattrs
-       * cannot hold our format at all, so refusing costs nothing we
-       * could have served. */
+       * cannot hold the nsfs format at all, so refusing costs nothing
+       * that could have been served. */
       ldpp_dout(dpp, 0) << "ERROR: bucket " << get_name() << " is on a "
 	<< "filesystem which does not support " << nsfs::EXTENSIONS_XATTR
 	<< ";  refusing to serve it, because every profile would read as "
@@ -5797,18 +5800,18 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
       return ret;
     }
 
-    /* No attribute is the base profile:  a NooBaa tree, or one of ours
-     * we serve in NooBaa's format.  Nothing in the directory refines
-     * that.  A name identifies our scaffolding only where we are the
-     * only writer, and base is the profile for trees somebody else
+    /* No attribute is the base profile:  a NooBaa tree, or one nsfs
+     * wrote and serves in NooBaa's format.  Nothing in the directory
+     * refines that.  A name identifies nsfs scaffolding only where nsfs
+     * is the only writer, and base is the profile for trees somebody else
      * wrote, so a directory called `.shadow` in one of them was put
      * there by whoever wrote the tree.
      *
      * The format still has to reach the directory.  Its strategies
      * are what a listing reads entries with, and without this the
-     * directory keeps the driver's seed, which is ours:  every NooBaa
-     * object listed with no owner, and its names were read by our
-     * path conventions. */
+     * directory keeps the driver's seed, which is the nsfs format's:
+     * every NooBaa object listed with no owner, and its names were read
+     * by the nsfs path conventions. */
     profile = driver->get_base_profile();
     apply_format();
     ldpp_dout(dpp, 20) << "bucket " << get_name() << " profile "
@@ -5855,7 +5858,7 @@ int NSFSBucket::resolve_profile(const DoutPrefixProvider* dpp)
 
   /* And whether a foreign reader is still needed.  On the same fd and
    * once per resolve, so it costs nothing per object.  Only a marked
-   * bucket can be converting -- base IS their format and reads it
+   * bucket can be converting -- base IS NooBaa's format and reads it
    * directly -- so this is not asked of one. */
   converting = false;
   if (profile->extended()) {
@@ -5975,7 +5978,7 @@ int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp)
  * .shadow as scaffolding and a bucket must never end up claiming a
  * profile while holding structure the profile does not describe.
  *
- * Leaving base takes a tree we did not write into our management.  It is
+ * Leaving base takes a tree nsfs did not write into its management.  It is
  * refused in reversible mode, where the deployment means to hand the
  * tree back, and it is never inferred from access.
  */
@@ -5995,8 +5998,8 @@ nsfs::BucketStateStrategy* NSFSBucket::bucket_state_strategy() const
 
 nsfs::BucketStateStrategy* NSFSBucket::bucket_state_fallback() const
 {
-  /* only a base bucket has anything in their store to fall back to;
-   * a marked tree is one we wrote */
+  /* only a base bucket has anything in NooBaa's store to fall back to;
+   * a marked tree is one nsfs wrote */
   const auto* p = get_profile();
   if (p && (p->extensions != nsfs::EXTENSIONS_NONE)) {
     return nullptr;
@@ -6142,7 +6145,7 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   if (current != nsfs::EXTENSIONS_BASE) {
-    /* Between two of ours.  Both formats are rgw-meta, so nothing in
+    /* Between two nsfs profiles.  Both formats are rgw-meta, so nothing in
      * the tree is in the wrong one and there is nothing to convert --
      * only the mask changes, and what the dropped extensions owned was
      * removed above. */
@@ -6160,20 +6163,20 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
    *
    * A base bucket's state comes from NooBaa's record through
    * bucket_state_fallback(), and that fallback is consulted only for
-   * EXTENSIONS_NONE -- so the moment the mask goes down their record
+   * EXTENSIONS_NONE -- so the moment the mask goes down NooBaa's record
    * stops being read.  Without this write, load_bucket() then finds
-   * nothing of ours, falls back to the seeded defaults, and a
+   * no nsfs state, falls back to the seeded defaults, and a
    * versioned bucket reads as unversioned:  the next PUT overwrites in
    * place instead of demoting into .versions/, and object lock, policy
    * and the public access block all revert to permissive.
    *
    * Before the markers, not after, because the failure is then
-   * harmless:  the bucket stays base and keeps reading their record.
+   * harmless:  the bucket stays base and keeps reading NooBaa's record.
    * Writing after the mask would leave a marked bucket with no state
    * if it failed, and re-issuing set_profile() would not retry it --
    * the re-issue takes the target == current path, not this one.
    *
-   * The spelling works out either way.  bucket_info is a key of ours
+   * The spelling works out either way.  bucket_info is an nsfs key
    * with no counterpart, so NooBaaXattrStrategy::disk_name() puts it
    * under user.nsfs. as well;  the attribute set written alongside it
    * lands under base spellings and convert_attrs() below rewrites
@@ -6191,8 +6194,8 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   /* The marker goes down before the mask, and the order is the crash
-   * order.  Marked with no marker is a bucket in our format full of
-   * objects in theirs, with no reader that can see them;  the marker
+   * order.  Marked with no marker is a bucket in the nsfs format full
+   * of objects in NooBaa's, with no reader that can see them;  the marker
    * with no mask is a base bucket carrying an attribute base does not
    * consult, which is nothing.  So the harmless one is written first.
    */
@@ -6245,7 +6248,7 @@ const char* nsfs::to_string(nsfs::ConvertEvent::Phase p)
  * observe it.
  *
  * `fd` is the file carrying the attributes, which for a directory
- * object of ours is the sentinel and of theirs is the directory.
+ * object in the nsfs format is the sentinel and in NooBaa's is the directory.
  */
 static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			 int fd, const std::string& display,
@@ -6413,7 +6416,7 @@ static bool split_version_entry(const std::string& entry,
  *
  * Flat:  the entries belong to leaves in this directory, so there is
  * nothing to recurse into.  Anything that is not a regular file is
- * left alone -- the lock file is ours, and a subdirectory here is a
+ * left alone -- the lock file is nsfs's, and a subdirectory here is a
  * shape neither format produces.
  */
 static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
@@ -6524,7 +6527,7 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   /* The sentinel first, where there is one:  it carries this
-   * directory's object attributes in our format, and converting it
+   * directory's object attributes in the nsfs format, and converting it
    * before recursing keeps the whole of one object in one step. */
   std::vector<std::string> subdirs;
   std::vector<std::string> files;
@@ -6535,7 +6538,7 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       return 0;
     }
     /* Scaffolding is skipped, the sentinel included.  A directory
-     * object of theirs keeps its attributes on the directory whether
+     * object in NooBaa's format keeps its attributes on the directory whether
      * or not it has a sentinel, so the sentinel is never where the
      * conversion has to look -- the directory branch below owns the
      * whole of that case.  Treating it as an object here converted
@@ -6595,14 +6598,14 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
 
-    /* A directory object of theirs.
+    /* A directory object in NooBaa's format.
      *
-     * Their fact is user.noobaa.dir_content on the directory and ours
-     * is the sentinel file, and the attributes move with it:  theirs
-     * live on the directory, ours on `.folder`.  So converting one is
-     * a move, not a rename of an attribute -- create the sentinel if
-     * the object was empty, carry the attributes across, and drop
-     * dir_content.
+     * NooBaa's marker is user.noobaa.dir_content on the directory and
+     * nsfs's is the sentinel file, and the attributes move with it:
+     * NooBaa's live on the directory, nsfs's on `.folder`.  So
+     * converting one is a move, not a rename of an attribute -- create
+     * the sentinel if the object was empty, carry the attributes
+     * across, and drop dir_content.
      *
      * The sentinel is created before the attributes are written, so a
      * reader that arrives between the two sees an empty object rather
@@ -6642,7 +6645,7 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       if (ret < 0) {
 	/* The sentinel exists by now, and the whole point of refusing is
 	 * not to leave a file whose owner is wrong.  Take it back out --
-	 * the directory object is still theirs and still readable
+	 * the directory object is still in NooBaa's format and still readable
 	 * through the fallback, which is where a stopped conversion
 	 * leaves everything else. */
 	if (::unlinkat(sub.get_fd(), sname.c_str(), 0) < 0) {
@@ -6711,7 +6714,7 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
       }
 
       /* dir_content last:  while it is there the directory is still an
-       * object to their reader, and removing it before the sentinel
+       * object to NooBaa's reader, and removing it before the sentinel
        * exists would make the object vanish for the length of a
        * syscall. */
       std::vector<std::string> gone;
@@ -6767,12 +6770,12 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
  * fallback.  Aborting is the alternative and throws away work the
  * client already did.
  *
- * Re-staged one file per part, whatever our layout is.  The stride
+ * Re-staged one file per part, whatever the nsfs layout is.  The stride
  * exists because parts arrive one at a time and a writer can place
  * them as they come;  here every part is already on disk and there is
  * nothing to gain by reconstructing it.  A record saying the bytes are
- * in the part's own file is what our assembly reads for a diverted
- * part, so both of our layouts complete it.
+ * in the part's own file is what the nsfs assembly reads for a
+ * diverted part, so both nsfs layouts complete it.
  */
 int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 				optional_yield y,
@@ -6841,8 +6844,8 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       continue;
     }
 
-    /* ours, beside it.  Their staging is two levels down and ours is
-     * the bucket directory, so this is not a rename. */
+    /* the nsfs one, beside it.  NooBaa's staging is two levels down
+     * and nsfs's is the bucket directory, so this is not a rename. */
     const std::string meta = su.key + "." + su.upload_id;
     nsfs::Directory ourdir(ours->staging_dir_name(meta), dir.get(),
 			   driver->ctx());
@@ -6856,7 +6859,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       return ret;
     }
 
-    /* the upload's own record, in our format */
+    /* the upload's own record, in the nsfs format */
     {
       const std::string mname = ours->meta_name();
       int mfd = ::openat(ourdir.get_fd(), mname.c_str(),
@@ -6869,7 +6872,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       }
       auto close_mfd = make_scope_guard([mfd] { ::close(mfd); });
 
-      /* re-expresses their staging directory, so it takes its ids */
+      /* re-expresses NooBaa's staging directory, so it takes its ids */
       struct statx tdstx{};
       ret = statx_ids(theirdir.get_fd(), tdstx);
       if (ret < 0) {
@@ -6961,7 +6964,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	}
       }
 
-      /* where their bytes are:  the size-keyed file when the record
+      /* where NooBaa's bytes are:  the size-keyed file when the record
        * says the part shares one, the part's own file otherwise */
       std::string sname = pname;
       if (rec.shared) {
@@ -6995,7 +6998,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       }
       auto close_dfd = make_scope_guard([dfd] { ::close(dfd); });
 
-      /* re-expresses their part file, so it takes its ids */
+      /* re-expresses NooBaa's part file, so it takes its ids */
       struct statx pstx{};
       ret = statx_ids(sfd, pstx);
       if (ret < 0) {
@@ -7084,7 +7087,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       }
     }
 
-    /* Their staging goes last.  Until it does the upload exists twice,
+    /* NooBaa's staging goes last.  Until it does the upload exists twice,
      * which a listing that scans one root at a time reports once;
      * removing it first would lose the parts if anything below
      * failed. */
@@ -7113,14 +7116,14 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 
 /* Rewrite whatever in this tree is still in the other format.
  *
- * Runs with the bucket already marked -- so writes go in our format
+ * Runs with the bucket already marked -- so writes go in the nsfs format
  * and the fallback strategies are in play -- and clears the marker
  * when it gets to
  * the end.  A run that stops leaves the marker, which is what makes
- * it resumable:  the state on disk is "some of this is still theirs",
+ * it resumable:  the state on disk is "some of this is still NooBaa's",
  * and that is exactly what the marker says.
  *
- * Idempotent.  An item already converted reads through our own
+ * Idempotent.  An item already converted reads through the nsfs
  * strategy, writes back the same bytes under the same names, and
  * prunes a foreign spelling that is not there.
  */
@@ -7304,13 +7307,13 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
 
   /* The bucket's own state, before its contents.
    *
-   * Bucket configuration is the one thing written in our form while
+   * Bucket configuration is the one thing written in the nsfs form while
    * the bucket is still base, so on disk it carries the base
    * spelling -- RGW_ATTR_IAM_POLICY as user.nsfs.user.rgw.iam-policy
-   * rather than user.nsfs.rgw.iam-policy, because their mapping
-   * prefixes without stripping ours.  An attribute write merges, so
-   * leaving it would let a later write add the second name and leave
-   * the reader choosing between two spellings of one key.
+   * rather than user.nsfs.rgw.iam-policy, because NooBaa's mapping
+   * prefixes without stripping the nsfs prefix.  An attribute write
+   * merges, so leaving it would let a later write add the second name
+   * and leave the reader choosing between two spellings of one key.
    *
    * The profile markers are left alone.  They are not bucket state --
    * they are the record of which format the bucket is in, which is why
@@ -7444,7 +7447,7 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
     return ret;
   }
 
-  /* before the attributes, because which names are ours to read is
+  /* before the attributes, because which names are nsfs's to read is
    * decided by the profile */
   ret = resolve_profile(dpp);
   if (ret < 0) {
@@ -7456,7 +7459,7 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
     return ret;
   }
 
-  /* The markers live under user.nsfs. so they parse as ours and arrive
+  /* The markers live under user.nsfs. so they parse as nsfs names and arrive
    * here as ordinary attributes.  Neither is bucket metadata -- one is
    * what decided how to read this bucket, the other says the tree is
    * still being rewritten -- and surfacing either would put it in the
@@ -7485,10 +7488,10 @@ int NSFSBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   ret = bucket_state_strategy()->load(dpp, dir->get_fd(), get_name(),
 				      attrs, info);
   if (ret == -ENOENT) {
-    /* Nothing of ours.  A base bucket may still have a record in
+    /* No nsfs state.  A base bucket may still have a record in
      * NooBaa's store, and that is where its versioning lives.  When
      * the fallback is consulted is decided here and not inside either
-     * strategy, so that authoritative-with-ours-as-cache and
+     * strategy, so that authoritative-with-nsfs-as-cache and
      * recovery-only remain reachable without redesign. */
     auto* theirs = bucket_state_fallback();
     ret = theirs ? theirs->load(dpp, dir->get_fd(), get_name(), attrs, info)
@@ -7818,16 +7821,16 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
   std::map<std::string, bool> prefixes;
   /* One upload, once.
    *
-   * The re-stage writes ours before removing theirs, so for the
-   * length of one upload's conversion the same key and id are in both
-   * roots.  Ours is scanned first and wins, which is also the right
-   * preference:  it is the copy that is complete. */
+   * The re-stage writes the nsfs upload before removing NooBaa's, so
+   * for the length of one upload's conversion the same key and id are
+   * in both roots.  The nsfs root is scanned first and wins, which is
+   * also the right preference:  it is the copy that is complete. */
   std::set<std::pair<std::string, std::string>> seen;
 
   /* Where this format keeps staging directories.  None means no upload
    * has ever been started here, which is an empty listing and not an
    * error:  NooBaa creates multipart-uploads/ at the first
-   * CreateMultipartUpload, and ours is the bucket directory, which
+   * CreateMultipartUpload, and nsfs's is the bucket directory, which
    * always exists. */
   /* the fd, before anything asks the format about it:  for_each()
    * opens the directory itself, and staging_root() is now asked
@@ -7840,7 +7843,7 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
   /* Both layouts, where the bucket is mid-upgrade.
    *
    * The conversion re-stages one upload at a time, so during it some
-   * are in our root and the rest are still in theirs.  Scanning one
+   * are in the nsfs root and the rest are still in NooBaa's.  Scanning one
    * would report half the uploads in flight and call the listing
    * complete, which is worse than the cost of the second scan:  a
    * staging_root() that returns nothing, on every bucket that is not
@@ -7873,9 +7876,9 @@ int NSFSBucket::list_multiparts(const DoutPrefixProvider *dpp,
     scans[i] = scan;
 
     ret = scan->for_each(dpp, [&, mpu, scan] (const char* name) {
-    /* What upload is here, if any.  Ours returns it from the name;
-     * NooBaa's opens the directory's metadata, because that is where
-     * they keep the key. */
+    /* What upload is here, if any.  The nsfs format returns it from the
+     * name;  NooBaa's opens the directory's metadata, because that is
+     * where NooBaa keeps the key. */
     nsfs::MPUStrategy::StagedUpload su;
     if (!mpu->staged_upload(dpp, scan->get_fd(), name, su)) {
       return 0;
@@ -8188,9 +8191,9 @@ int NSFSObject::rename(const DoutPrefixProvider* dpp, optional_yield y,
   auto vlock = version_lock_recovering(dpp, driver, xattr_strategy(), sb->get_name(),
 				       src_parent_fd, &recovered);
   if (recovered < 0) {
-    /* one intent record per directory:  writing ours over a stuck one would
-     * lose the only pointer to the stranded versions.  Unlike the other
-     * mutations, this caller cannot proceed. */
+    /* one intent record per directory:  writing a new one over a stuck
+     * one would lose the only pointer to the stranded versions.
+     * Unlike the other mutations, this caller cannot proceed. */
     ldpp_dout(dpp, 0) << "ERROR: rename: refusing while an earlier move out "
       << "of this directory is unrecovered" << dendl;
     return recovered;
@@ -8652,7 +8655,7 @@ int NSFSObject::copy_object(const ACLOwner& owner,
    *
    * Only the x-amz-meta- family, and only by name.
    * AttrWriteMode::REPLACE_ALL would do this generically and is the
-   * wrong tool:  it prunes every name that parses as one of ours and
+   * wrong tool:  it prunes every name that parses as an nsfs name and
    * is absent from the write set, which on a versioned object includes
    * user.nsfs.version_id and the delete marker.  Removing a name the
    * object does not carry is a no-op -- remove_xattrs() ignores
@@ -8876,7 +8879,7 @@ int NSFSObject::check_fsio_allowed(const DoutPrefixProvider* dpp)
     return ret;
   }
   /* FSIO needs somewhere to put a shadow, so the question is EXT_SHADOW
-   * and not whether the bucket carries anything of ours.  Shared carries
+   * and not whether the bucket carries anything of nsfs's.  Shared carries
    * EXT_RGW_META and no shadow subtree. */
   if (! b->has_extension(nsfs::EXT_SHADOW)) {
     ldpp_dout(dpp, 4) << "FSIO refused on bucket " << b->get_name()
@@ -9099,7 +9102,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
   hdl->leaf_name = leaf;
   hdl->dir_chain = std::move(resolved_dirs);
 
-  /* sdir_fd stays ours until a success path hands it over.
+  /* sdir_fd stays this function's until a success path hands it over.
    *
    * It used to be assigned to hdl->shadow_dir_fd here, above every error
    * path -- and those paths close it and then return, destroying hdl, whose
@@ -9129,8 +9132,8 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
     if (hdl->shadow_fd < 0) {
       return FSIOResult{-errno, nullptr};
     }
-    /* before anything which can fail:  this shadow is not ours to remove,
-     * and the destructor decides that from resumed_existing */
+    /* before anything which can fail:  this shadow is not this call's to
+     * remove, and the destructor decides that from resumed_existing */
     hdl->resumed_existing = true;
     if (for_write && (flags & FSIOObject::OPEN_FLAG_TRUNC)) {
       /* truncate the shadow in place;  unlinking it would strand
@@ -9304,7 +9307,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
 
   if (link_rc == -EEXIST) {
     /* another instance forked the same shadow first.  Join the winner
-     * rather than clobbering it;  ours is discarded unnamed. */
+     * rather than clobbering it;  this one is discarded unnamed. */
     ::close(build_fd);
     hdl->shadow_fd = ::openat(sdir_fd, leaf.c_str(), O_RDWR);
     if (hdl->shadow_fd < 0) {
@@ -10481,7 +10484,7 @@ int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
    * Refused here as well as at `mutation_enter()`, because this is
    * reached from a *read*:  `NSFSReadOp::prepare()` treats an object
    * with no etag attribute as sideloaded and generates one, which is
-   * every object a NooBaa deployment wrote with MD5 off -- their
+   * every object a NooBaa deployment wrote with MD5 off -- NooBaa's
    * default.  So the first GET of almost any object wrote an xattr to
    * a tree we had promised not to touch, with no mutating entry point
    * involved for the gate to catch.
@@ -11815,12 +11818,12 @@ int NSFSMultipartUpload::load(const DoutPrefixProvider *dpp, bool create)
     NSFSBucket* pb = static_cast<NSFSBucket*>(bucket);
     std::optional<std::string> ns{mp_ns};
 
-    /* Where this format keeps its staging directories.  Ours returns
-     * ".", the bucket directory.  NooBaa's is two levels down, under a
-     * temp directory whose name carries a bucket id from their config
-     * store -- so it is found and never invented.  Nothing gives us
-     * that id, so a format which wants a root and has none is refused
-     * rather than served somewhere else. */
+    /* Where this format keeps its staging directories.  The nsfs
+     * format returns ".", the bucket directory.  NooBaa's is two levels
+     * down, under a temp directory whose name carries a bucket id from
+     * NooBaa's config store -- so it is found and never invented.
+     * Nothing gives nsfs that id, so a format which wants a root and
+     * has none is refused rather than served somewhere else. */
     /* Placing an upload asks where staging WOULD go, which may create
      * the intermediate directory;  reading asks where it IS, which
      * must not name one that is absent. */
@@ -11953,9 +11956,10 @@ int NSFSMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
     return ret;
   }
 
-  /* and whatever the format records for itself.  Ours is the attribute
-   * just written;  NooBaa's is the key, in the meta file's content,
-   * which is where their gateway and our own listing look for it. */
+  /* and whatever the format records for itself.  The nsfs record is
+   * the attribute just written;  NooBaa's is the key, in the meta
+   * file's content, which is where NooBaa's gateway and the nsfs
+   * listing look for it. */
   nsfs::MPUStrategy::StagedUpload su;
   su.key = mp_obj.oid;
   su.upload_id = mp_obj.upload_id;
@@ -12046,10 +12050,10 @@ int NSFSMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 	   * what makes this part's own length knowable */
 	  pi.size = pf->get_size();
 
-	  /* Ask the format what its record says.  Ours arrives decoded in
-	   * `attrs`, through the bucket's XattrStrategy;  NooBaa keeps
-	   * theirs in attributes that reader drops as foreign, so they
-	   * read the file themselves. */
+	  /* Ask the format what its record says.  The nsfs record arrives
+	   * decoded in `attrs`, through the bucket's XattrStrategy;  NooBaa
+	   * keeps its record in attributes that reader drops as foreign, so
+	   * NooBaa's strategy reads the file itself. */
 	  Attrs attrs;
 	  (void) pf->read_attrs(dpp, y, attrs);
 
@@ -12555,12 +12559,12 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
 
       /* and what the format keeps outside them.
        *
-       * On their tree the meta file has no attributes at all and the
-       * create-time metadata is in its content, so without this a
-       * completion of an upload they started produced an object with
-       * no content type and no user metadata.  Ours adds nothing:
-       * for us these already ARE attributes on the meta object, and
-       * the read above has them. */
+       * On a NooBaa tree the meta file has no attributes at all and
+       * the create-time metadata is in its content, so without this a
+       * completion of an upload NooBaa started produced an object with
+       * no content type and no user metadata.  The nsfs format adds
+       * nothing:  for it these already ARE attributes on the meta
+       * object, and the read above has them. */
       int lret = load(dpp);
       auto* pb = static_cast<NSFSBucket*>(bucket);
       nsfs::Directory* root = staging_root_dir ? staging_root_dir.get()
@@ -12593,11 +12597,11 @@ int NSFSMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
       }
 
       /* Asked of the format, which is the only thing that knows where
-       * its own record is.  Ours is the encoded attribute the read
-       * above already fetched;  NooBaa's is the content of
-       * create_object_upload, and their tree carries no attribute of
-       * ours at all -- so decoding one here returned -EIO for every
-       * upload they started, and UploadPart, ListParts and
+       * its own record is.  The nsfs record is the encoded attribute
+       * the read above already fetched;  NooBaa's is the content of
+       * create_object_upload, and a NooBaa tree carries no nsfs
+       * attribute at all -- so decoding one here returned -EIO for every
+       * upload NooBaa started, and UploadPart, ListParts and
        * CompleteMultipartUpload all failed on it. */
       ret = load(dpp);
       if (ret < 0) {
@@ -13204,7 +13208,7 @@ int NSFSAtomicWriter::prepare(optional_yield y)
    * nsfs already cannot store a path component longer than NAME_MAX,
    * so many legal S3 keys are refused already.  What this fixes is
    * that the limit was silent.  It goes away if LMDB is ever built
-   * with ceph, where MDB_MAXKEYSIZE is ours to raise. */
+   * with ceph, where MDB_MAXKEYSIZE is ceph's to raise. */
   if (auto* bc = driver->get_bucket_cache(); bc) {
     const int cap = bc->max_key_size();
     const size_t klen = obj->get_name().size();
@@ -13216,11 +13220,11 @@ int NSFSAtomicWriter::prepare(optional_yield y)
     }
   }
 
-  /* And refuse a key whose components collide with our scaffolding,
+  /* And refuse a key whose components collide with nsfs scaffolding,
    * for the same reason:  the listing skips reserved names, so such an
    * object is written, kept, and shown to nobody.
    *
-   * Their gateway has no equivalent refusal -- NooBaa reserves three
+   * NooBaa's gateway has no equivalent refusal -- NooBaa reserves three
    * names and lists everything else -- so a tree being adopted may
    * already contain such a file.  That is adoption's to report (it is
    * the one pass that walks the whole tree deliberately), not this
@@ -13250,7 +13254,7 @@ int NSFSAtomicWriter::prepare(optional_yield y)
      * 404, which says the object is absent when the truth is that a
      * conflicting one is present.  See DESIGN.md.
      *
-     * 409 and a code of our own, because the client's recourse is to
+     * 409 and an nsfs code, because the client's recourse is to
      * delete the occupying object -- a 500 invites a retry that can
      * never succeed, and a 404 invites a write that will not land. */
     ldpp_dout(dpp, 4) << "nsfs: refusing key " << obj->get_name()
@@ -13745,7 +13749,7 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
  *
  * Failures report to the log.  A phase-0 failure costs nothing, which
  * is the point of the phase;  a later one leaves RGW state behind and
- * re-running is the recovery, keyed on their `_id` (§6.2).
+ * re-running is the recovery, keyed on NooBaa's `_id` (§6.2).
  */
 int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
 			     optional_yield y,
@@ -13936,8 +13940,8 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  /* Adopting a bucket is bringing its schema *and* its objects into our
-   * profile, so the configuration above is half of it.  `set_profile`
+  /* Adopting a bucket is bringing its schema *and* its objects into an
+   * nsfs profile, so the configuration above is half of it.  `set_profile`
    * leaving base is the other half:  it marks the bucket, walks the
    * tree, re-stages the uploads and clears the converting marker when
    * it completes.
@@ -13952,7 +13956,7 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   if (!extensions_enabled()) {
     /* Reversible mode:  the operator has asked that nothing be marked,
      * and a tree is handable back to NooBaa only at base.  So the
-     * objects stay in their arrangement, deliberately, and this is the
+     * objects stay in NooBaa's arrangement, deliberately, and this is the
      * one case where a bucket is configured and not adopted. */
     say("adopted", "false");
     say("why", "rgw_nsfs_extensions is off;  the tree stays reversible");

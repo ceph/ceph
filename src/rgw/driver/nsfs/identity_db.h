@@ -76,14 +76,14 @@ struct Identity {
    * enforced** (`ACCOUNT_IMPORT.md` §6.1a).
    *
    * Three states, like `groups` above, and for the same reason:
-   * their precedence is a cascade -- bucket if defined, else account
-   * if defined, else their global -- and `false` counts as defined.
+   * NooBaa's precedence is a cascade -- bucket if defined, else account
+   * if defined, else NooBaa's global -- and `false` counts as defined.
    * So an account that turns it off is not an account that said
    * nothing, and collapsing the two would change which value a later
    * decision inherits.
    *
    * Nothing consults it at request time.  `rgw_non_md5_etag` is the
-   * single deployment-wide control and their global maps to it;  the
+   * single deployment-wide control and NooBaa's global maps to it;  the
    * option exists so a proof of concept would not read slower than
    * NooBaa, and making it per-bucket turns a deployment posture into
    * per-object luck. */
@@ -104,18 +104,18 @@ struct Identity {
  * location needs no row at all -- the same rule §7's third arm states
  * -- and an existing deployment behaves exactly as it does now.
  *
- * `owns_storage` is their `should_create_underlying_storage`, and is a
- * plain bool rather than a tri-state:  their schema makes it required,
+ * `owns_storage` is NooBaa's `should_create_underlying_storage`, and is
+ * a plain bool rather than a tri-state:  NooBaa's schema makes it required,
  * and a bucket this driver creates owns the directory it created.
  * Compare `Identity::force_md5_etag`, which needs three states because
- * their *precedence* is a cascade and `false` counts as defined.  A
+ * NooBaa's *precedence* is a cascade and `false` counts as defined.  A
  * third state nothing needs is weight, not safety. */
 struct BucketPlacement {
   std::string bucket_name;
   /* Part of the key from the start.  dbstore's own bucket table has
    * `BucketName NOT NULL UNIQUE` with the tenant outside the key, and
    * its comment has said for years that both should be the key once
-   * one handle holds several tenants;  a table of ours need not
+   * one handle holds several tenants;  an nsfs table need not
    * inherit that. */
   std::string tenant;
 
@@ -138,7 +138,7 @@ struct BucketPlacement {
  * This is the lexical half:  absolute, no `..`, no empty component,
  * no trailing slash.  Opening it safely is a different question and a
  * later stage -- `openat2` with `RESOLVE_NO_SYMLINKS` -- and so is the
- * per-account allowlist their `custom_bucket_path_allowed_list`
+ * per-account allowlist NooBaa's `custom_bucket_path_allowed_list`
  * already expresses.  Neither is attempted here, and a lexically
  * clean path is not an authorized one. */
 bool placement_path_is_acceptable(std::string_view path);
@@ -160,7 +160,7 @@ class IdentityDB : public rgw::store::POSIXUserDB {
    *
    * Provenance, kept apart from the identity table so that table holds
    * only what a request is served as.  A root account maps to its
-   * account id, an IAM user to its user, and their anonymous account to
+   * account id, an IAM user to its user, and NooBaa's anonymous account to
    * RGW_USER_ANON_ID.  Re-import recognises an identity by it, because
    * NooBaa's name is not stable across a rename (ACCOUNT_IMPORT.md
    * §3.4). */
@@ -288,7 +288,7 @@ struct Credentials {
  *            descriptive errno so a caller which forgets to map it
  *            still denies.
  *
- * Only stored columns are read.  Their branch 2 -- resolving the
+ * Only stored columns are read.  NooBaa's branch 2 -- resolving the
  * vector through getgrouplist(3) at request time -- is deliberately
  * not implemented:  the group data belongs in this database, put
  * there by the import and refreshed out of band, rather than looked

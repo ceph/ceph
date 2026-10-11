@@ -4,16 +4,16 @@
  * Reading NooBaa's configuration store.
  *
  * I1 of the account import (`ACCOUNT_IMPORT.md` §9).  **Read only.**
- * Nothing here writes, creates or removes anything in their store, and
+ * Nothing here writes, creates or removes anything in NooBaa's store, and
  * nothing here writes RGW state either -- the stages that do are I4
  * and I5.
  *
  * THE STORE IS AN IMPORT SOURCE, NOT A BACKING STORE.  It is read once,
  * at import, and what the import produces is RGW's own state.  After a
- * bucket is adopted nothing in the request path may consult their store
+ * bucket is adopted nothing in the request path may consult NooBaa's store
  * again:  the adopted bucket carries the RGW bucket-state strategy, and
  * that is what makes this an adoption rather than a permanent bridge.
- * The one place their store *is* read per request is the `serve` mode
+ * The one place NooBaa's store *is* read per request is the `serve` mode
  * of `NSFS_ADOPTION.md` §7 -- a deliberately read-only view of a tree
  * nothing has changed yet -- and that reader is
  * `NooBaaBucketStateStrategy`, not this.
@@ -43,7 +43,7 @@
  *
  * Pinned at noobaa-core `08d063f86`.  Field names and the record
  * layout below were read from that commit's schemas and verified
- * against a store their own CLI and gateway wrote.
+ * against a store NooBaa's own CLI and gateway wrote.
  */
 
 #pragma once
@@ -58,7 +58,7 @@ namespace rgw { namespace sal { namespace nsfs {
 
 /* One of an identity's access keys.
  *
- * The secret stays as their record holds it -- encrypted.  Decrypting
+ * The secret stays as NooBaa's record holds it -- encrypted.  Decrypting
  * it needs the master key, which is I2;  an access key's *id* is
  * cleartext, which is why I3's collision gate depends on I1 alone. */
 struct NooBaaAccessKey {
@@ -80,7 +80,7 @@ struct NooBaaAccessKey {
 
 /* The POSIX half of an identity.
  *
- * Their schema makes this a `oneOf`:  either uid and gid, or a
+ * NooBaa's schema makes this a `oneOf`:  either uid and gid, or a
  * `distinguished_name`, never both.  The two behave differently and
  * §2.3 is about the difference, so the reader keeps which one it was
  * rather than flattening them into an optional uid. */
@@ -112,7 +112,7 @@ struct NooBaaPosixConfig {
  * one with `owner` set -- §2.8 -- and a role is the one with
  * `role_config`. */
 struct NooBaaIdentity {
-  /* their identifier, read verbatim and never rewritten (§3) */
+  /* NooBaa's identifier, read verbatim and never rewritten (§3) */
   std::string id;
   std::string name;
   std::string email;
@@ -136,12 +136,12 @@ struct NooBaaIdentity {
   std::vector<NooBaaAccessKey> access_keys;
   NooBaaPosixConfig posix;
 
-  /* A role's trust policy, kept as the JSON text their record holds.
+  /* A role's trust policy, kept as the JSON text NooBaa's record holds.
    * Translating it into an RGW role is I4 (§6.1);  I1 only has to not
    * lose it. */
   std::string role_config;
 
-  /* The distinguished case of §6.8.  Their CLI writes it under the
+  /* The distinguished case of §6.8.  NooBaa's CLI writes it under the
    * reserved name with an empty key list, which is how it is told from
    * an ordinary account that happens to have no keys yet -- it cannot
    * be told by uid, since nothing stops a real account sharing one. */
@@ -163,9 +163,9 @@ struct NooBaaSettings {
   bool have_config_json{false};
 
   /* `NSFS_ENABLE_DYNAMIC_SUPPLEMENTAL_GROUPS`, false by default in
-   * their `config.js` at the pin.  With it off, a directory-backed
+   * NooBaa's `config.js` at the pin.  With it off, a directory-backed
    * identity carrying no explicit list gets *no* supplementary groups
-   * -- their `change_user()` issues `setgroups(0, NULL)` -- so off is
+   * -- NooBaa's `change_user()` issues `setgroups(0, NULL)` -- so off is
    * a live permission fact and not an absence. */
   bool dynamic_supplemental_groups{false};
   bool have_dynamic_supplemental_groups{false};
@@ -193,7 +193,7 @@ struct NooBaaSettings {
 struct NooBaaBucketRecord {
   std::string name;
 
-  /* X1.  Carried, not enforced.  Three states, because their
+  /* X1.  Carried, not enforced.  Three states, because NooBaa's
    * precedence is a cascade and `false` counts as defined.
    *
    * Read here as well as by the state strategy because a *deployment*
@@ -225,7 +225,7 @@ struct NooBaaStoreContents {
   size_t accounts() const;
   size_t iam_users() const;
 
-  /* The buckets whose `force_md5_etag` differs from what their owner
+  /* The buckets whose `force_md5_etag` differs from what the owning
    * account says, naming each and what it says.
    *
    * X1 carries the flag and enforces nothing, because
@@ -259,7 +259,7 @@ public:
    * directory that is not there, -ENOTDIR when it is not a directory.
    *
    * Serial, never concurrent, following the only prior art for walking
-   * one of these trees -- their own `config_dir_restructure.js`
+   * one of these trees -- NooBaa's own `config_dir_restructure.js`
    * (§6.4). */
   int read(const DoutPrefixProvider* dpp, NooBaaStoreContents& out) const;
 };

@@ -30,7 +30,7 @@
 
 namespace rgw { namespace sal { namespace nsfs {
 
-/* Their record whole, in one read.  No iostreams and no incremental
+/* NooBaa's record whole, in one read.  No iostreams and no incremental
  * parse:  a record is small, and a cap keeps a corrupt or hostile file
  * from being read into memory whole. */
 static constexpr size_t NB_RECORD_MAX = 1u << 20;
@@ -122,7 +122,7 @@ namespace {
  *
  * Sorted because an import that reports what it found should report it
  * the same way twice;  readdir order is the filesystem's.  Serial, with
- * no concurrency anywhere in this file -- their own config-directory
+ * no concurrency anywhere in this file -- NooBaa's own config-directory
  * restructure is the only prior art for walking one of these trees and
  * it is serial (ACCOUNT_IMPORT.md §6.4). */
 int list_dir(const std::string& dir, std::vector<std::string>& out)
@@ -204,7 +204,7 @@ void decode_identity(JSONObj* obj, NooBaaIdentity& id)
   if (JSONObj* nc = obj->find_obj("nsfs_account_config")) {
     NooBaaPosixConfig& p = id.posix;
 
-    /* Their schema is a `oneOf`:  uid and gid, or a distinguished
+    /* NooBaa's schema is a `oneOf`:  uid and gid, or a distinguished
      * name, never both.  The two behave differently -- a
      * directory-backed identity resolves its groups from the directory
      * and a local one does not -- so which it was is kept rather than
@@ -288,7 +288,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 					 "GROUPS: ") + e.what());
 	  }
 	}
-	/* Where the master keys live.  Absent means their defaults --
+	/* Where the master keys live.  Absent means NooBaa's defaults --
 	 * `file`, and the file beside config.json. */
 	try {
 	  JSONDecoder::decode_json("NC_MASTER_KEYS_STORE_TYPE",
@@ -304,7 +304,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
     } else if (ret != -ENOENT) {
       unreadable(path, cpp_strerror(-ret));
     }
-    /* Absent is not an error.  Their config.js supplies the defaults,
+    /* Absent is not an error.  NooBaa's config.js supplies the defaults,
      * and the one setting that matters here defaults to false --
      * which is itself a permission fact, not an absence, so the
      * caller is told the file was missing rather than being handed a
@@ -314,7 +314,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
   out.master_keys_present = path_exists(root + "/master_keys.json");
 
   /* identities/<id>/identity.json.  A directory per identity, not a
-   * file per identity:  verified against a store their CLI wrote. */
+   * file per identity:  verified against a store NooBaa's CLI wrote. */
   {
     const std::string dir = root + "/identities";
     std::vector<std::string> entries;
@@ -376,7 +376,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 	if ((name.size() <= suffix.size()) ||
 	    (name.compare(name.size() - suffix.size(), suffix.size(),
 			  suffix) != 0)) {
-	  /* `<name>.json.lock` sits beside each record;  it is their
+	  /* `<name>.json.lock` sits beside each record;  it is NooBaa's
 	   * write path's and not a record. */
 	  continue;
 	}
@@ -394,7 +394,7 @@ int NooBaaConfigStore::read(const DoutPrefixProvider* dpp,
 	}
 	NooBaaBucketRecord rec;
 	rec.name = name.substr(0, name.size() - suffix.size());
-	/* Presence, then value.  Absent is a third state their cascade
+	/* Presence, then value.  Absent is a third state NooBaa's cascade
 	 * depends on, so it cannot be read as false. */
 	if (p.find_obj("force_md5_etag")) {
 	  try {

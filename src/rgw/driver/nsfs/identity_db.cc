@@ -233,7 +233,7 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
      * `(BucketName, Tenant)` is the key from the start.  dbstore's
      * own bucket table makes BucketName unique and leaves the tenant
      * out, and its comment has said for years that both should be the
-     * key;  a table of ours need not inherit that.
+     * key;  an nsfs table need not inherit that.
      *
      * The path guard is a CHECK as well as a C++ check, for the
      * reason the group list's GLOB is one:  the schema is the only
@@ -480,7 +480,7 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 
   /* Both an explicitly empty list and an absent one give an empty
    * vector.  Absent means "no supplementary groups" today, and the
-   * caller installs that rather than skipping the call -- their
+   * caller installs that rather than skipping the call -- NooBaa's
    * ThreadScope issues setgroups(0, NULL) for exactly this case.
    * The two stay distinct in the record because the directory arm
    * will read them differently. */

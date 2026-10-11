@@ -45,12 +45,12 @@ const NooBaaIdentity* find_source(const NooBaaStoreContents& contents,
   return nullptr;
 }
 
-/* Their POSIX arm into ours.
+/* NooBaa's POSIX arm into the nsfs identity row.
  *
- * `uid`/`gid` or a distinguished name, never both -- their schema is a
- * `oneOf` and ours is a CHECK, so a record that violated it could not
- * be stored here either.  `user` takes the distinguished-name arm for
- * the anonymous account (§6.8). */
+ * `uid`/`gid` or a distinguished name, never both -- NooBaa's schema is
+ * a `oneOf` and the nsfs table's is a CHECK, so a record that violated
+ * it could not be stored here either.  `user` takes the
+ * distinguished-name arm for the anonymous account (§6.8). */
 void fill_posix(const NooBaaIdentity& src, Identity& row)
 {
   switch (src.posix.kind) {
@@ -87,9 +87,9 @@ void fill_posix(const NooBaaIdentity& src, Identity& row)
   }
 }
 
-/* The grant their `allow_bypass_governance` means.
+/* The grant NooBaa's `allow_bypass_governance` means.
  *
- * Their flag is a boolean on the account's `nsfs_account_config`;
+ * NooBaa's flag is a boolean on the account's `nsfs_account_config`;
  * RGW expresses the same permission as an IAM action, so the import
  * writes the policy rather than inventing a column
  * (`ACCOUNT_IMPORT.md` §2.2).  Named so a reader of the policy list
@@ -176,7 +176,7 @@ int check_rgw_state(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   for (const auto& e : plan.entries) {
-    /* Already imported is not a collision.  Recognised by their id,
+    /* Already imported is not a collision.  Recognised by NooBaa's id,
      * which is the whole reason the column exists -- a name-keyed
      * check would report every renamed account as a conflict with
      * itself. */
@@ -260,8 +260,8 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
 
-    /* Already imported?  Their id is the key.  Skipped rather than
-     * rewritten:  their store is the source, but an identity RGW
+    /* Already imported?  NooBaa's id is the key.  Skipped rather than
+     * rewritten:  NooBaa's store is the source, but an identity RGW
      * already holds may have been changed on the RGW side since, and
      * reconciling divergence is explicitly not attempted (§6.2). */
     std::string existing;
@@ -345,7 +345,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
 
-    /* A random UUID, as `CreateUser` mints.  Their `_id` is not usable
+    /* A random UUID, as `CreateUser` mints.  NooBaa's `_id` is not usable
      * here -- it is not an RGW id -- and the mapping back to it lives
      * in the NooBaa id table. */
     rgw_user uid;
@@ -359,14 +359,14 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     RGWUserAdminOpState op(driver);
     op.set_user_id(uid);
     /* What principal matching consults for an account user, so it
-     * carries their name and a name-form principal still resolves
+     * carries the NooBaa name and a name-form principal still resolves
      * (§6.6). */
     op.set_display_name(e.display_name);
     op.account_id = e.account_id;
     op.set_account_root(!e.iam_user);
     op.path = e.iam_user && !src->iam_path.empty() ? src->iam_path : "/";
     op.create_date = noobaa_time(src->creation_date);
-    /* Their `allow_bucket_creation`, as RGW expresses it:  a negative
+    /* NooBaa's `allow_bucket_creation`, as RGW expresses it:  a negative
      * bucket limit refuses CreateBucket to this user, whoever owns the
      * bucket (`rgw_op.cc`).  NooBaa refuses an identity whose record
      * lacks the flag, and so does this. */
@@ -399,7 +399,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
 
-    /* Their `allow_bypass_governance` as an IAM grant on an IAM user.
+    /* NooBaa's `allow_bypass_governance` as an IAM grant on an IAM user.
      * RGW expresses the permission as an action, so the import writes
      * a policy rather than a column (§2.2), the way PutUserPolicy
      * stores one.  A root needs none:  it is allowed every action on
@@ -470,9 +470,9 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
 
-    /* Their `role_config` carries a role name and an assume-role
+    /* NooBaa's `role_config` carries a role name and an assume-role
      * policy document.  The document's principals name identities by
-     * their email, which is their name -- so the mapping is what makes
+     * the NooBaa email, which is the name -- so the mapping is what makes
      * it resolvable, and that is why this is a second pass. */
     JSONParser p;
     if (!p.parse(src->role_config.data(), src->role_config.size())) {
@@ -502,7 +502,7 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     ri.path = "/";
     ri.account_id = e.account_id;
     ri.tenant = e.tenant;
-    /* The document as their record holds it.  Rewriting its
+    /* The document as NooBaa's record holds it.  Rewriting its
      * principals through the mapping is §4.4's and belongs with the
      * bucket-policy rewriting in I5, which is where that code will
      * live;  carried verbatim here so nothing is lost. */

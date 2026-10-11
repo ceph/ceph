@@ -24,12 +24,12 @@ namespace rgw { namespace sal { namespace nsfs {
 
 /* NooBaa's per-bucket `force_md5_etag`, carried and not enforced.
  *
- * Their field name, so the provenance of the value is readable on
+ * NooBaa's field name, so the provenance of the value is readable on
  * disk;  the XattrStrategy supplies the prefix, making it
- * `user.nsfs.force_md5_etag` in our format.  The value is their
+ * `user.nsfs.force_md5_etag` in the nsfs format.  The value is NooBaa's
  * literal -- `true` or `false` -- and the attribute is absent when
- * their record did not mention it, which keeps the tri-state their
- * cascade depends on.  See `ACCOUNT_IMPORT.md` §6.1a. */
+ * NooBaa's record did not mention it, which keeps the tri-state
+ * NooBaa's cascade depends on.  See `ACCOUNT_IMPORT.md` §6.1a. */
 #define RGW_NSFS_ATTR_FORCE_MD5_ETAG "force_md5_etag"
 
 
@@ -101,7 +101,7 @@ public:
   virtual const char* name() const = 0;
 };
 
-/* Our own:  one attribute on the bucket directory holding an encoded
+/* The nsfs one:  one attribute on the bucket directory holding an encoded
  * RGWBucketInfo, which is what every profile writes and what shared and
  * strong also read. */
 class RgwBucketStateStrategy : public BucketStateStrategy {
@@ -123,20 +123,20 @@ public:
  * names the *resolved* directory.  NooBaa starts at `/etc/noobaa.conf.d`,
  * which is the configuration directory itself unless it holds a
  * `config_dir_redirect` file naming another one (`config.js`,
- * `_get_config_root()`;  their `Configuration.md`).  We hold the resolved
- * address rather than repeating that lookup, because an upgrade that
- * removes their package removes the well-known path -- and in an
+ * `_get_config_root()`;  NooBaa's `Configuration.md`).  nsfs holds the
+ * resolved address rather than repeating that lookup, because an upgrade that
+ * removes NooBaa's package removes the well-known path -- and in an
  * un-redirected deployment removes the directory itself, since the RPM
  * created it.  A bucket's retention settings must not depend on a step
  * of the cutover that nobody thinks of as data.
  *
  * WE READ ONE SUBDIRECTORY OF IT.  `buckets/`, and nothing else.  Of the
  * eight entries a configuration directory holds, `system.json`,
- * `config.json` and `certificates/` are their service's own and mean
+ * `config.json` and `certificates/` are NooBaa's service's own and mean
  * nothing here;  `identities/`, `accounts_by_name/`, `access_keys/` and
  * `master_keys.json` are an account import's business and not the
- * request path's.  We are not a NooBaa, and most of what they keep
- * there describes their deployment rather than the data.
+ * request path's.  nsfs is not a NooBaa, and most of what NooBaa keeps
+ * there describes NooBaa's deployment rather than the data.
  *
  * WE NEVER WRITE IT.  Not a preference:  Madhu, 2026-09-29 -- NooBaa
  * owns the shared root entirely and nothing populates it from outside.
@@ -147,11 +147,11 @@ public:
  * instead of demoting the current version into `.versions/`.
  *
  * `owner_account` is read and not applied.  It is an account id in
- * their store, and turning one into an `rgw_owner` needs the account
+ * NooBaa's store, and turning one into an `rgw_owner` needs the account
  * import;  a base bucket's owner is already whatever load_bucket()
  * seeds.  `path` likewise -- placement is a path and the fileset is
  * observed, not stored (ACCOUNT_METADATA.md 8.1), but nothing consumes
- * it here yet.  Their optional features -- policy, lifecycle, CORS,
+ * it here yet.  NooBaa's optional features -- policy, lifecycle, CORS,
  * encryption, website, public access block, object lock, tags -- are
  * each a shape translation into the attribute map and are the step
  * after this one. */
@@ -166,7 +166,7 @@ public:
 	   const std::string& bucket_name,
 	   Attrs& attrs, RGWBucketInfo& info) const override;
 
-  /* P5.  Where their record says the bucket's storage is.
+  /* P5.  Where NooBaa's record says the bucket's storage is.
    *
    * `path` is required on every NooBaa bucket record, so a real
    * deployment's buckets are scattered and unreachable without this --
@@ -176,7 +176,7 @@ public:
    *
    * **This is the existing consumer returning one more field, not a
    * new one.**  `NSFS_BUCKET_PLACEMENT_PLAN.md` §7 withdrew a
-   * resolution arm that would read their store on the request path,
+   * resolution arm that would read NooBaa's store on the request path,
    * because the plan must not add a second consumer of it.  Serve mode
    * already reads this record on every request for a bucket's
    * configuration (`NSFS_ADOPTION.md` §7), so taking `path` from the

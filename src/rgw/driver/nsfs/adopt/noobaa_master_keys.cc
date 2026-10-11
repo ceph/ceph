@@ -30,8 +30,8 @@ namespace rgw { namespace sal { namespace nsfs {
 
 bool secret_is_plausible(std::string_view secret)
 {
-  /* A credential has some length.  Theirs are 40 characters by
-   * default and their CLI accepts others, so this is a sanity bound
+  /* A credential has some length.  NooBaa's are 40 characters by
+   * default and NooBaa's CLI accepts others, so this is a sanity bound
    * rather than a format. */
   if ((secret.size() < 8) || (secret.size() > 256)) {
     return false;
@@ -48,7 +48,7 @@ bool secret_is_plausible(std::string_view secret)
 
 namespace {
 
-/* Their store, whichever form it takes, as JSON text.
+/* NooBaa's store, whichever form it takes, as JSON text.
  *
  * The executable form is run without a shell:  the path comes out of
  * a configuration file and interpolating it into a command line would
@@ -61,7 +61,7 @@ int read_key_store(const DoutPrefixProvider* dpp,
   const bool from_program = (settings.master_keys_store_type == "executable");
 
   if (!from_program) {
-    /* `file`, their default, and the default location is beside
+    /* `file`, NooBaa's default, and the default location is beside
      * config.json rather than anywhere configured. */
     std::string path = settings.master_keys_file_location;
     if (path.empty()) {
@@ -148,7 +148,7 @@ int read_key_store(const DoutPrefixProvider* dpp,
 int from_base64(const std::string& in, std::vector<unsigned char>& out)
 {
   /* OpenSSL's decoder, so there is one base64 in this file and it is
-   * not ours.  Decoded length is bounded by the input. */
+   * not one written here.  Decoded length is bounded by the input. */
   out.assign((in.size() / 4) * 3 + 3, 0);
   int n = EVP_DecodeBlock(out.data(),
 			  reinterpret_cast<const unsigned char*>(in.data()),
@@ -208,7 +208,7 @@ int NooBaaMasterKeys::load(const DoutPrefixProvider* dpp,
 
       /* Carried and checked, not assumed.  A store naming a cipher
        * this does not implement has to say so:  decrypting it as
-       * though it had named theirs would produce garbage that
+       * though it had named NooBaa's usual one would produce garbage that
        * `secret_is_plausible()` would then be the only thing to
        * notice. */
       if (k.cipher_type != "aes-256-gcm") {
@@ -290,7 +290,7 @@ int NooBaaMasterKeys::decrypt(const DoutPrefixProvider* dpp,
 			      nullptr, nullptr)) {
     return -EIO;
   }
-  /* The IV length, explicitly.  Theirs is 16 bytes and GCM's default
+  /* The IV length, explicitly.  NooBaa's is 16 bytes and GCM's default
    * is 12, so without this the key and IV are applied to a different
    * construction and every secret decrypts to garbage. */
   if (1 != EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN,

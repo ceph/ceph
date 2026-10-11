@@ -65,16 +65,16 @@ static const std::string RGW_MP_ASSEMBLED_NAME = ".assembled";
  * NooBaa's spelling, because it is NooBaa's scheme.  We arrived at
  * keying by size independently, for the atomicity;  differing in a dot
  * and a hyphen would leave this driver carrying two size-keyed name
- * schemes once it also reads theirs, distinguishable only by looking
- * twice.  What still differs is what the key means -- theirs is the
- * size of the parts in that file, ours is the upload's stride, so a
- * part which does not fit takes its own file where theirs would open
- * a second size file. */
+ * schemes once it also reads NooBaa's, distinguishable only by looking
+ * twice.  What still differs is what the key means -- NooBaa's is the
+ * size of the parts in that file, the nsfs one is the upload's stride,
+ * so a part which does not fit takes its own file where NooBaa's would
+ * open a second size file. */
 static const std::string RGW_MP_SHARED_PREFIX = "parts-size-";
 
 /* NooBaa's names, from noobaa-core 68ca22d33.  The temp directory is
  * config.NSFS_TEMP_DIR_NAME + '_' + bucket_id, and the bucket id comes
- * from their config store, so only the prefix is knowable here. */
+ * from NooBaa's config store, so only the prefix is knowable here. */
 static const std::string NB_TMPDIR_PREFIX = ".noobaa-nsfs_";
 static const std::string NB_MPU_ROOT = "multipart-uploads";
 static const std::string NB_PART_PREFIX = "part-";
@@ -168,7 +168,7 @@ PerPartMPUStrategy::relocation_target(uint32_t part_num, uint64_t stored,
   return std::nullopt;
 }
 
-/* Our record is one ceph-encoded blob, written and read through the
+/* The nsfs record is one ceph-encoded blob, written and read through the
  * bucket's XattrStrategy, so it arrives already decoded in `attrs` and
  * the fd is not needed. */
 bool PerPartMPUStrategy::part_record(const DoutPrefixProvider* dpp,
@@ -216,7 +216,7 @@ int PerPartMPUStrategy::write_part_record(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-/* Ours is one ceph-encoded blob on the meta file, read through the
+/* The nsfs record is one ceph-encoded blob on the meta file, read through the
  * bucket's XattrStrategy, so it arrives already decoded in `attrs`
  * and the fd is not needed -- the same arrangement as part_record(). */
 bool PerPartMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
@@ -534,7 +534,7 @@ int StridedMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
 
 std::string NooBaaMPUStrategy::staging_dir_name(const std::string& meta) const
 {
-  /* Their directory is the upload id alone -- a randomUUID -- so the
+  /* NooBaa's directory is the upload id alone -- a randomUUID -- so the
    * key half of the meta is dropped.  The key is inside, in
    * create_object_upload, which is what costs them an open per upload
    * when they enumerate. */
@@ -547,24 +547,24 @@ std::string NooBaaMPUStrategy::staging_dir_name(const std::string& meta) const
 
 bool NooBaaMPUStrategy::is_staging_dir(std::string_view name) const
 {
-  /* Their staging never sits among objects -- it is under the bucket's
+  /* NooBaa's staging never sits among objects -- it is under the bucket's
    * temp directory, which is reserved whole -- so an entry of the
-   * bucket directory is never one of theirs.  This is the question
+   * bucket directory is never one of NooBaa's.  This is the question
    * asked while enumerating objects, and for this format it always
    * returns no;  recognising an upload is staged_upload()'s job, and it
    * reads the directory rather than guessing from a uuid. */
   return false;
 }
 
-/* Their directory is named for the upload id and the key is inside, in
+/* NooBaa's directory is named for the upload id and the key is inside, in
  * create_object_upload (`namespace_fs.js` create_object_upload, and
- * their own list_uploads reads it back the same way).  So this opens
- * and parses one file per upload, which is what their layout costs. */
-/* Their create_object_upload, parsed.
+ * NooBaa's own list_uploads reads it back the same way).  So this opens
+ * and parses one file per upload, which is what NooBaa's layout costs. */
+/* NooBaa's create_object_upload, parsed.
  *
  * Two questions read it -- what upload is here, and what the create
  * request settled -- so the read is in one place.  False means this
- * is not an upload of theirs:  no document, an empty one, or one that
+ * is not an upload NooBaa started:  no document, an empty one, or one that
  * is not JSON.  Skipped rather than failed, because a listing walks
  * entries that may be anything. */
 static bool nb_create_params(const DoutPrefixProvider* dpp, int root_fd,
@@ -581,9 +581,9 @@ static bool nb_create_params(const DoutPrefixProvider* dpp, int root_fd,
   }
   auto close_fd = make_scope_guard([fd] { ::close(fd); });
 
-  /* their create params are a JSON dump of the request, so bounded by
+  /* NooBaa's create params are a JSON dump of the request, so bounded by
    * what a CreateMultipartUpload carries;  a file larger than this is
-   * not one of theirs */
+   * not one of NooBaa's */
   static constexpr size_t MAX_CREATE_PARAMS = 64 * 1024;
   std::string buf(MAX_CREATE_PARAMS, '\0');
   ssize_t len = ::pread(fd, buf.data(), buf.size(), 0);
@@ -635,10 +635,10 @@ static std::optional<std::string> nb_tmpdir(const DoutPrefixProvider* dpp,
 					    int bucket_fd);
 static bool nb_tmpdir_ambiguous(const DoutPrefixProvider* dpp, int bucket_fd);
 
-/* A bucket id of our own, when the tree has none.  They use
+/* A bucket id minted here, when the tree has none.  NooBaa uses
  * crypto.randomUUID(), so this is one too -- the shape is what a
  * NooBaa gateway would expect to find, even though this particular id
- * is not in their config store. */
+ * is not in NooBaa's config store. */
 static std::string gen_uuid()
 {
   uuid_d u;
@@ -706,9 +706,9 @@ NooBaaMPUStrategy::staging_root_for_write(const DoutPrefixProvider* dpp,
 
 /* Does this name end in `_` followed by something UUID-shaped?
  *
- * Their temp directory is `config.NSFS_TEMP_DIR_NAME + '_' + bucket_id`
+ * NooBaa's temp directory is `config.NSFS_TEMP_DIR_NAME + '_' + bucket_id`
  * (`native_fs_utils.js:797`).  Only the first part is configurable;  the
- * separator and the id are structural, and the id is their bucket
+ * separator and the id are structural, and the id is NooBaa's bucket
  * record's `_id`, a crypto.randomUUID().  So this recognises the part
  * of the name they cannot change. */
 static bool nb_uuid_suffixed(std::string_view n)
@@ -734,13 +734,13 @@ static bool nb_uuid_suffixed(std::string_view n)
   return true;
 }
 
-/* Their per-bucket temp directory, found by what it is rather than by
+/* NooBaa's per-bucket temp directory, found by what it is rather than by
  * what it is called.
  *
- * `config.NSFS_TEMP_DIR_NAME` is a default in their config.js, not a
+ * `config.NSFS_TEMP_DIR_NAME` is a default in NooBaa's config.js, not a
  * constant, so a deployment can change `.noobaa-nsfs` and matching the
  * prefix would then find nothing:  every upload in flight invisible,
- * and a second temp directory created beside theirs.
+ * and a second temp directory created beside NooBaa's.
  *
  * Two tests, in this order.  A directory holding `multipart-uploads/`
  * IS the temp directory whatever it is called, and that settles every
@@ -833,7 +833,7 @@ static bool nb_tmpdir_ambiguous(const DoutPrefixProvider* dpp, int bucket_fd)
 
 std::string NooBaaMPUStrategy::part_name(uint32_t part_num) const
 {
-  /* not zero padded:  theirs is Number(name.slice('part-'.length)) */
+  /* not zero padded:  NooBaa's is Number(name.slice('part-'.length)) */
   return NB_PART_PREFIX + std::to_string(part_num);
 }
 
@@ -860,13 +860,13 @@ std::optional<MPUStrategy::PartTarget>
 NooBaaMPUStrategy::part_target(uint32_t part_num,
 			       std::optional<uint64_t> stride) const
 {
-  /* Their offset is the part's own size times (n - 1)
+  /* NooBaa's offset is the part's own size times (n - 1)
    * (`namespace_fs.js` upload_multipart).  A uniform upload makes that
    * the same arithmetic as a stride, which is the case this can serve.
    *
    * Without one, the part goes to its own file and is copied into a
    * size file afterwards -- which is what they do when the size is not
-   * known before the body is read.  Their own file is the record,
+   * known before the body is read.  NooBaa's own file is the record,
    * part-<n>, because they write the data there and copy it out. */
   if (!stride || (*stride == 0)) {
     return PartTarget{part_name(part_num), 0, std::nullopt, false};
@@ -932,7 +932,7 @@ std::string base36(uint64_t v)
 
 /* Whenever the part is not the stride.
  *
- * Their file is named for the size it holds and their reader derives
+ * NooBaa's file is named for the size it holds and NooBaa's reader derives
  * the name from the part's own record, so `parts-size-17` is where a
  * 17-byte part must be, at 17 * (num - 1) within it.  The stride's
  * file keeps the bytes it was given;  truncating it back is not safe,
@@ -948,31 +948,31 @@ NooBaaMPUStrategy::relocation_target(uint32_t part_num, uint64_t stored,
   return part_target(part_num, stored);
 }
 
-/* Their record is three plain attributes of their own, which our
+/* NooBaa's record is three plain attributes of its own, which the nsfs
  * XattrStrategy drops as foreign, so this reads them off the file.
  *
- * The etag is the one place their writer and their reader disagree.
+ * The etag is the one place NooBaa's writer and reader disagree.
  * _finish_upload() writes both user.content_md5 and
  * user.noobaa.part_etag (`namespace_fs.js:1421`, `:1424`), and
- * _get_etag() -- which their list_multiparts and their completion
+ * _get_etag() -- which NooBaa's list_multiparts and completion
  * check both use -- reads content_md5 and falls back to a string
  * derived from the stat.  So content_md5 is the result, part_etag is
  * a cross-check, and the derived form is what a part carries when no
  * digest was computed.  It is not an MD5 and a strict client will say
- * so;  that is their behaviour, and base is their format.
+ * so;  that is NooBaa's behaviour, and base is NooBaa's format.
  *
- * `stored` has no counterpart:  nothing sits between their op layer
- * and their writer to change a byte count, so the accounted size is
+ * `stored` has no counterpart:  nothing sits between NooBaa's op layer
+ * and writer to change a byte count, so the accounted size is
  * the stored size. */
 bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
 				    int dir_fd, std::string_view pname,
 				    const Attrs& attrs,
 				    PartRecord& out) const
 {
-  /* Our record first, where there is one.  A part we wrote carries
-   * both:  theirs, which their gateway reads, and ours, which is the
-   * only one of the two with a checksum in it.  Theirs alone is what a
-   * part they wrote has. */
+  /* The nsfs record first, where there is one.  A part nsfs wrote
+   * carries both:  NooBaa's, which NooBaa's gateway reads, and the nsfs
+   * one, which is the only one of the two with a checksum in it.
+   * NooBaa's alone is what a part NooBaa wrote has. */
   auto i = attrs.find(RGW_NSFS_ATTR_MPUPLOAD);
   if (i != attrs.end()) {
     NSFSUploadPartInfo upi;
@@ -988,7 +988,7 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
       out.cksum = std::move(upi.cksum);
       return true;
     } catch (buffer::error&) {
-      /* fall through to theirs */
+      /* fall through to NooBaa's */
     }
   }
 
@@ -1032,36 +1032,36 @@ bool NooBaaMPUStrategy::part_record(const DoutPrefixProvider* dpp,
   return true;
 }
 
-/* Their create_object_upload, which is where the key lives.
+/* NooBaa's create_object_upload, which is where the key lives.
  *
- * Their gateway writes a JSON dump of the CreateMultipartUpload
+ * NooBaa's gateway writes a JSON dump of the CreateMultipartUpload
  * parameters and reads back only the keys it wants, so an object with
- * `key` in it is one they can serve.  Written with the fields
- * their own readers consume:  the key, which their list_multiparts
- * compares against the request's, and what their completion path puts
- * on the finished object.  The rest of what we know about the upload
- * goes in our attribute, which they ignore.
+ * `key` in it is one NooBaa can serve.  Written with the fields
+ * NooBaa's own readers consume:  the key, which NooBaa's list_multiparts
+ * compares against the request's, and what NooBaa's completion path
+ * puts on the finished object.  The rest of what nsfs knows about the
+ * upload goes in the nsfs attribute, which NooBaa ignores.
  *
- * Their reader takes the first `key` it finds and nothing else is
- * required, so this is deliberately the smallest document that is one
- * of theirs rather than a re-encoding of ours in JSON.
+ * NooBaa's reader takes the first `key` it finds and nothing else is
+ * required, so this is deliberately the smallest document NooBaa
+ * accepts rather than a re-encoding of the nsfs record in JSON.
  */
 int NooBaaMPUStrategy::write_staged_upload(const DoutPrefixProvider* dpp,
 					   int dir_fd,
 					   const StagedUpload& su) const
 {
-  /* Their own document is JSON.stringify of the request parameters,
+  /* NooBaa's own document is JSON.stringify of the request parameters,
    * and stringify drops what is undefined, so a field the request did
    * not carry is absent rather than null.  Emitted the same way:  a
    * present-but-empty content_type would become the object's content
-   * type on their completion path. */
+   * type on NooBaa's completion path. */
   JSONFormatter f;
   f.open_object_section("create_object_upload");
   encode_json("key", su.key, &f);
   encode_json("bucket", su.bucket, &f);
-  /* their name for the upload id, and what their ListMultipartUploads
+  /* NooBaa's name for the upload id, and what NooBaa's ListMultipartUploads
    * reports as UploadId (`_get_mpu_info`, `namespace_fs.js:3028`).
-   * The directory is named for it as well, and their readers use
+   * The directory is named for it as well, and NooBaa's readers use
    * whichever is at hand. */
   encode_json("obj_id", su.upload_id, &f);
   if (!su.content_type.empty()) {
@@ -1126,17 +1126,17 @@ int NooBaaMPUStrategy::write_staged_upload(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-/* Their part attributes:  the bytes on disk and where they begin.
+/* NooBaa's part attributes:  the bytes on disk and where they begin.
  *
- * `stored` rather than `size`:  theirs describes the file, and the two
+ * `stored` rather than `size`:  NooBaa's describes the file, and the two
  * differ whenever a filter between the op layer and the writer changed
- * the byte count.  Their assembly slices the size-keyed file by these
+ * the byte count.  NooBaa's assembly slices the size-keyed file by these
  * two numbers, so a value that is not the length on disk produces a
  * wrong object rather than a wrong report.
  *
- * No etag.  Theirs is `user.content_md5`, an MD5 of the part's bytes,
+ * No etag.  NooBaa's is `user.content_md5`, an MD5 of the part's bytes,
  * and what we hold at this point is an RGW etag, which for a part is
- * the same MD5 -- but only when no filter ran.  Their reader falls
+ * the same MD5 -- but only when no filter ran.  NooBaa's reader falls
  * back to the stat-derived form when it is absent, which is right, so
  * absent is better than wrong.
  */
@@ -1179,14 +1179,14 @@ int NooBaaMPUStrategy::upload_owner(const DoutPrefixProvider* dpp,
   return -ENODATA;
 }
 
-/* Theirs is the content of create_object_upload, and nothing of it is
+/* NooBaa's is the content of create_object_upload, and nothing of it is
  * an attribute, so this reads the document rather than `attrs`.
  *
- * What comes across is what they hold:  the storage class, and the
- * object-lock family, which their own completion reads off the same
+ * What comes across is what NooBaa holds:  the storage class, and the
+ * object-lock family, which NooBaa's own completion reads off the same
  * document and puts on the finished object.  Placement stays at its
  * default because a placement rule is an RGW concept;  the checksum
- * family stays at its default because their CreateMultipartUpload
+ * family stays at its default because NooBaa's CreateMultipartUpload
  * never persisted one.
  */
 bool NooBaaMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
@@ -1232,7 +1232,7 @@ bool NooBaaMPUStrategy::upload_info(const DoutPrefixProvider* dpp,
       JSONObj* d = r->find_obj("retain_until_date");
       if (m && d) {
 	ceph::real_time until;
-	/* Their date is whatever new Date() produced, which is ISO
+	/* NooBaa's date is whatever new Date() produced, which is ISO
 	 * 8601.  A retention we cannot date is not applied:  a
 	 * retention with the epoch in it would read as expired, which
 	 * is the one wrong result object lock must never return. */
@@ -1280,8 +1280,8 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
     return -EINVAL;
   }
 
-  /* Their three cases, `complete_object_upload`.  The placements carry
-   * what their code reads from the part records, so the distinct-size
+  /* NooBaa's three cases, `complete_object_upload`.  The placements carry
+   * what NooBaa's code reads from the part records, so the distinct-size
    * count is taken from the run rather than accumulated with open file
    * descriptors.
    *
@@ -1326,7 +1326,7 @@ int NooBaaMPUStrategy::assemble(const DoutPrefixProvider* dpp, FSStrategy* fs,
   size_t first_to_copy = 0;
 
   /* a uniform body and a short final part:  link the body's file and
-   * append the tail, which is the copy their scheme cannot avoid */
+   * append the tail, which is the copy NooBaa's scheme cannot avoid */
   if (continuous && (distinct == 2) && tail_is_last) {
     int ret = link_size_file(body_size);
     if (ret < 0) {

@@ -113,7 +113,7 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
   plan = ImportPlan{};
 
   /* Root accounts first, so an IAM user can be given its owner's
-   * minted account id without a second pass.  Their `owner` names a
+   * minted account id without a second pass.  NooBaa's `owner` names a
    * root account's `_id`. */
   std::map<std::string, std::string> account_id_by_noobaa_id;
   int ret = 0;
@@ -147,7 +147,7 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
     e.name = id.name;
     e.email = id.email;
     /* The account user's display_name, which is what principal
-     * matching consults (§6.6).  Their name, so a name-form principal
+     * matching consults (§6.6).  NooBaa's name, so a name-form principal
      * in a policy still resolves. */
     e.display_name = id.name;
     e.anonymous = id.is_anonymous();
@@ -275,7 +275,7 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
       ret = -EINVAL;
     }
     /* An account user's display_name must be non-empty
-     * (`svc_user_rados.cc`), and it is their name. */
+     * (`svc_user_rados.cc`), and it is the NooBaa name. */
     if (e.display_name.empty()) {
       plan.collisions.push_back(
 	  std::string("_id ") + e.noobaa_id + " has no name, so it has no "
@@ -312,7 +312,7 @@ int build_import_plan(const DoutPrefixProvider* dpp, CephContext* cct,
   }
 
   /* Email, globally unique **across users and accounts**.  This is
-   * the one §6.3 names as the likeliest first failure, because their
+   * the one §6.3 names as the likeliest first failure, because NooBaa's
    * email is a copy of the name. */
   {
     std::map<std::string, std::string> seen;

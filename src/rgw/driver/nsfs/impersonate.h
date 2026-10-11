@@ -135,9 +135,9 @@ int find_personality(const rgw_user& key, PersonalityRef* out,
  * with three different owners -- see docs/IMPERSONATED_XATTR.md:
  *
  *   - listxattr and removexattr have no opcode.  Two opcodes in
- *     io_uring/xattr.c would close it;  that is ours to propose
- *     upstream, and a loadable module offering them through
- *     uring_cmd is ours to ship in the meantime.
+ *     io_uring/xattr.c would close it;  that is for the nsfs work
+ *     to propose upstream, and a loadable module offering them
+ *     through uring_cmd could ship in the meantime.
  *   - On GPFS the attribute path does not use the xattr syscalls at
  *     all:  GPFSStrategy builds a gpfsFcntlHeader_t and calls
  *     gpfs_fcntl(), a vendor ioctl no opcode will ever cover.  The

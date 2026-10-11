@@ -9,16 +9,16 @@
  * identity is written.
  *
  * MOST OF THE TRANSLATION ALREADY EXISTS.
- * `NooBaaBucketStateStrategy::load()` reads their record and fills an
+ * `NooBaaBucketStateStrategy::load()` reads NooBaa's record and fills an
  * `RGWBucketInfo` and an attribute map -- versioning, creation date,
  * object lock, public access block, website, encryption, tags,
  * lifecycle and CORS.  What it does **not** do is the three things
  * that need more than the record:
  *
- *   owner_account   an id in their store.  Turning one into an
+ *   owner_account   an id in NooBaa's store.  Turning one into an
  *                   `rgw_owner` needs the identity mapping, so the
  *                   strategy reads it and does not apply it
- *   s3_policy       stored verbatim, principals untouched.  Theirs
+ *   s3_policy       stored verbatim, principals untouched.  NooBaa's
  *                   name identities the way *they* name them
  *   logging         not read at all, and RGW has the feature
  *
@@ -28,12 +28,12 @@
  * REWRITING PRINCIPALS IS THE PART WITH TEETH.  A principal that
  * resolves to nothing is a grant or a denial that will not take
  * effect, and nobody notices until an access decision goes the wrong
- * way.  Their principals are bare strings -- an account's `email` is
+ * way.  NooBaa's principals are bare strings -- an account's `email` is
  * a copy of its name -- and each must be resolved against the
  * imported identity set, **id first and then name**, mirroring
  * `config_fs.js:662-678`.  A principal may name an IAM user or a
  * role, not only an account, so the mapping is
- * `their id -> (account id | user ARN)`.
+ * `NooBaa id -> (account id | user ARN)`.
  *
  * **The document is a DOM, not a template.**  RGW stores a policy as
  * its own source text -- `from_noobaa_bucket_policy` keeps `p.text`
@@ -79,19 +79,19 @@ class NSFSDriver;
 
 namespace nsfs {
 
-/* Their identifiers, to what an RGW principal should say.
+/* NooBaa's identifiers, to what an RGW principal should say.
  *
  * Built from the plan, so it is the same mapping I4 wrote by.  Not
  * durable:  the NooBaa id table (IdentityDB::get_owner_by_noobaa_id)
  * is the durable form, and a later run rebuilds this from it. */
 struct IdentityMapping {
-  /* their `_id` -> the RGW account id */
+  /* NooBaa's `_id` -> the RGW account id */
   std::map<std::string, std::string> account_by_noobaa_id;
-  /* their `_id` -> `arn:aws:iam::<account>:user/<name>`, for an IAM
+  /* NooBaa's `_id` -> `arn:aws:iam::<account>:user/<name>`, for an IAM
    * user.  RGW matches a user principal on `display_name`, which the
-   * import set to their name (§6.6) */
+   * import set to the NooBaa name (§6.6) */
   std::map<std::string, std::string> user_arn_by_noobaa_id;
-  /* their name -> their `_id`, for the second half of "id first, then
+  /* NooBaa name -> NooBaa `_id`, for the second half of "id first, then
    * name" */
   std::map<std::string, std::string> noobaa_id_by_name;
 
@@ -153,7 +153,7 @@ int import_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 /* Write every bucket's state.
  *
  * `config_root` is the store, passed rather than asked of the
- * strategy:  this reads their record a second time for the fields the
+ * strategy:  this reads NooBaa's record a second time for the fields the
  * strategy leaves alone, so it needs the directory, and a function
  * that needs something should be given it.
  *

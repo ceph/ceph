@@ -59,7 +59,7 @@ namespace rgw { namespace sal { namespace nsfs {
  *
  * Three implementations:  PerPartMPUStrategy, one file per part;
  * StridedMPUStrategy, which derives from it and adds the shared data
- * file;  and NooBaaMPUStrategy, their size-keyed layout. */
+ * file;  and NooBaaMPUStrategy, NooBaa's size-keyed layout. */
 class MPUStrategy {
 public:
   virtual ~MPUStrategy() = default;
@@ -97,7 +97,7 @@ public:
    * ordinary one.  That is a cached result for a question the name
    * already settles, it cost an openat and an attribute read per
    * directory entry, and it could not work on a NooBaa-format tree,
-   * whose staging directories carry no attribute of ours. */
+   * whose staging directories carry no nsfs attribute. */
   virtual bool is_staging_dir(std::string_view name) const = 0;
 
   /* What upload is staged in this directory.
@@ -110,8 +110,8 @@ public:
    * Where the key lives is the format's business and the cost
    * differs.  A layout which names the directory for the upload's
    * meta returns from `dname` alone.  NooBaa names it for a bare uuid
-   * and keeps the key in a file inside, so theirs opens and reads
-   * one, which is what their own listing does.
+   * and keeps the key in a file inside, so NooBaa's strategy opens and
+   * reads one, which is what NooBaa's own listing does.
    *
    * `dname` is an entry of staging_root().  False means there is no
    * upload here -- an entry which is not one, or one whose metadata
@@ -125,10 +125,10 @@ public:
      *
      * Read rather than invented:  NooBaa's completion path takes
      * content_type, content_encoding, xattr, storage_class and
-     * lock_settings out of their meta file and puts them on the
-     * finished object (`namespace_fs.js:2024`), so an upload we start
-     * and their gateway finishes loses each of these if we do not
-     * write it.  The reader half does not fill them in;  nothing asks
+     * lock_settings out of NooBaa's meta file and puts them on the
+     * finished object (`namespace_fs.js:2024`), so an upload nsfs
+     * starts and NooBaa's gateway finishes loses each of these if nsfs
+     * does not write it.  The reader half does not fill them in;  nothing asks
      * yet.
      *
      * Object lock is flat here and nested where a format writes it.
@@ -177,7 +177,7 @@ public:
    *
    * Both inputs, for the same reason part_record() takes both:
    * `attrs` are the meta object's, already read through the bucket's
-   * XattrStrategy, and ours is in there;  `root_fd` and `dname` are
+   * XattrStrategy, and the nsfs record is in there;  `root_fd` and `dname` are
    * for a format whose record that reader does not surface, and
    * NooBaa's is the content of a file rather than an attribute at
    * all.
@@ -190,16 +190,17 @@ public:
    * A format fills what it holds and leaves the rest at its default.
    * NooBaa's document carries no placement -- a placement rule is an
    * RGW concept and inert on a filesystem -- and no checksum
-   * algorithm, because their CreateMultipartUpload does not persist
-   * one;  an upload of theirs therefore completes without a composite
-   * checksum, which is what their own gateway does.
+   * algorithm, because NooBaa's CreateMultipartUpload does not persist
+   * one;  an upload NooBaa started therefore completes without a
+   * composite checksum, which is what NooBaa's own gateway does.
    *
    * `extra`, when given, takes what the create request settled that
    * RGW keeps as object attributes rather than in
    * multipart_upload_info:  the content type, the content encoding
-   * and the user metadata.  Ours are already in `attrs`, because for
-   * us they ARE attributes on the meta object -- so ours adds
-   * nothing and theirs adds what their document holds.  Two shapes
+   * and the user metadata.  The nsfs ones are already in `attrs`,
+   * because in the nsfs format they ARE attributes on the meta object
+   * -- so the nsfs strategy adds nothing and NooBaa's adds what
+   * NooBaa's document holds.  Two shapes
    * of result from one read, because RGW splits them that way and
    * not because the formats do.
    *
@@ -219,11 +220,11 @@ public:
   /* The directory holding staging directories, relative to the bucket.
    *
    * "." where uploads stage directly under the bucket.  NooBaa puts
-   * theirs two levels down, so a caller enumerating uploads has to ask
+   * its staging two levels down, so a caller enumerating uploads has to ask
    * rather than assume the bucket directory.
    *
    * Resolved against a fd because the path can depend on what is
-   * there:  NooBaa's path contains a bucket id from their config store,
+   * there:  NooBaa's path contains a bucket id from NooBaa's config store,
    * which this interface never reads.  Returns nullopt when the layout
    * has a root it cannot find, which is not an error -- a bucket with
    * no uploads has no staging root. */
@@ -240,16 +241,16 @@ public:
    * is asked when an upload is about to be placed, and may create.
    *
    * For NooBaa that means the bucket temp directory, whose name
-   * carries a bucket id from their config store.  An existing one is
-   * used, always:  the id is then theirs, and an upload we start is
-   * one their gateway can find.  One is created only where the tree
+   * carries a bucket id from NooBaa's config store.  An existing one is
+   * used, always:  the id is then NooBaa's, and an upload nsfs starts
+   * is one NooBaa's gateway can find.  One is created only where the tree
    * has none, because there is nothing to conflict with;  and more
    * than one is still refused, because which holds the uploads is not
    * decidable.
    *
    * The residual risk is narrow and named:  a tree with no temp
-   * directory which we write to and NooBaa later serves ends up with
-   * two, ours orphaned. */
+   * directory which nsfs writes to and NooBaa later serves ends up
+   * with two, the nsfs one orphaned. */
   virtual std::optional<std::string> staging_root_for_write(
       const DoutPrefixProvider* dpp, int bucket_fd) const {
     return staging_root(dpp, bucket_fd);
@@ -299,12 +300,12 @@ public:
    * part_target() is asked before the body has been read and returns
    * a target from the upload's stride, so a part which turns out to be a
    * different length is not necessarily where this layout can read it
-   * from.  Ours can:  the stride's file holds every shared part at the
-   * offset its record gives, and a short part simply does not fill its
-   * slot.  NooBaa's file IS the size -- `parts-size-N` holds N-sized
-   * parts at N * (num - 1) -- so a part which is not the stride is in
-   * the wrong file, and their reader would open one that does not
-   * exist.
+   * from.  The nsfs layout can:  the stride's file holds every shared
+   * part at the offset its record gives, and a short part simply does
+   * not fill its slot.  NooBaa's file IS the size -- `parts-size-N`
+   * holds N-sized parts at N * (num - 1) -- so a part which is not the
+   * stride is in the wrong file, and NooBaa's reader would open one
+   * that does not exist.
    *
    * Nothing means the part stays where it was written, which is the
    * result whenever `stored` equals the stride.  S3 requires every
@@ -317,23 +318,24 @@ public:
   /* What a part's record says about it.
    *
    * Read per format, because the record is the staging layout's and
-   * not the object metadata's.  Ours is one ceph-encoded blob under a
+   * not the object metadata's.  The nsfs one is one ceph-encoded blob under a
    * single attribute;  NooBaa keeps size, offset and etag as three
-   * plain attributes of their own.
+   * plain attributes of its own.
    *
    * Both inputs are offered because the formats need different ones.
    * `attrs` are the logical attributes the caller has already read
-   * through the bucket's XattrStrategy, which is where ours lives and
-   * which carries the value decoding that strategy owns.  `dir_fd`
+   * through the bucket's XattrStrategy, which is where the nsfs record
+   * lives and which carries the value decoding that strategy owns.  `dir_fd`
    * and `pname` are for a format whose record that reader does not
-   * surface at all -- our reader drops `user.noobaa.*` as foreign, so
-   * theirs opens the part itself.  A directory fd and a name rather
-   * than an open file, because the caller stats parts without opening
-   * them and a format which needs no open should not pay for one.
+   * surface at all -- the nsfs reader drops `user.noobaa.*` as foreign,
+   * so NooBaa's strategy opens the part itself.  A directory fd and a
+   * name rather than an open file, because the caller stats parts
+   * without opening them and a format which needs no open should not
+   * pay for one.
    *
    * False means this part has no readable record.  `size` may still
    * be unknown afterwards, in which case the caller falls back to the
-   * file's length, as their own listing does. */
+   * file's length, as NooBaa's own listing does. */
   struct PartRecord {
     uint64_t size{0};      /* accounted:  what the client sent */
     uint64_t stored{0};    /* bytes on disk */
@@ -351,20 +353,21 @@ public:
   /* Record an upload, and record a part:  the write halves of
    * staged_upload() and part_record().
    *
-   * Each format writes what its own reader reads.  Ours keeps both
+   * Each format writes what its own reader reads.  The nsfs format keeps both
    * records in one ceph-encoded attribute which the caller writes
    * through the bucket's XattrStrategy, so these do nothing and the
    * meta file stays empty.  NooBaa keeps the key in the meta file's
-   * content and a part's size and offset in attributes of their own,
-   * and neither is anything an XattrStrategy renders -- so theirs
-   * write directly, on the same fd and name the reader opens.
+   * content and a part's size and offset in attributes of its own,
+   * and neither is anything an XattrStrategy renders -- so NooBaa's
+   * strategy writes directly, on the same fd and name the reader opens.
    *
    * The caller writes its own attribute either way.  A base bucket
-   * therefore carries both records:  theirs, which their gateway and
-   * our listing read, and ours under `user.nsfs.`, which is inert to
-   * them and is where the checksum lives.  S3 requires a checksum
-   * agreed at CreateMultipartUpload to reach CompleteMultipartUpload,
-   * and their file has nowhere to put one.
+   * therefore carries both records:  NooBaa's, which NooBaa's gateway
+   * and the nsfs listing read, and the nsfs one under `user.nsfs.`,
+   * which is inert to NooBaa and is where the checksum lives.  S3
+   * requires a checksum agreed at CreateMultipartUpload to reach
+   * CompleteMultipartUpload,
+   * and NooBaa's file has nowhere to put one.
    *
    * `dir_fd` is the upload's staging directory. */
   virtual int write_staged_upload(const DoutPrefixProvider* dpp, int dir_fd,
@@ -435,7 +438,7 @@ public:
  *
  * The zero padding is load-bearing for nothing -- consumers construct the
  * name from a number or parse it with std::stoul, and ordering comes from
- * a flat_map keyed on the number.  It is kept because this format is ours
+ * a flat_map keyed on the number.  It is kept because this format is nsfs's
  * and changing a name here would cost the only cheap proof that moving
  * these decisions behind an interface changed nothing. */
 class PerPartMPUStrategy : public MPUStrategy {
@@ -542,11 +545,11 @@ public:
  * is why completing an upload whose last part is short copies that
  * part:  the body is linked and the tail is appended.
  *
- * `parts-size-<size>` is spelled exactly as ours.  The two readings
- * agree for every part but a short final one and disagree there, so
- * nothing may identify a layout by that name;  the staging directory's
- * location and its create_object_upload file are what distinguish
- * them. */
+ * `parts-size-<size>` is spelled exactly as the nsfs strided name.  The
+ * two readings agree for every part but a short final one and disagree
+ * there, so nothing may identify a layout by that name;  the staging
+ * directory's location and its create_object_upload file are what
+ * distinguish them. */
 class NooBaaMPUStrategy : public MPUStrategy {
 public:
   std::string staging_dir_name(const std::string& meta) const override;

@@ -38,7 +38,7 @@ IdentityMapping::resolve(const std::string& principal) const
   /* Id first.  A name and an id are both bare strings and cannot be
    * told apart syntactically -- an account may legally be *named*
    * twenty-four hex characters -- so the order is the whole of the
-   * disambiguation, and it mirrors theirs. */
+   * disambiguation, and it mirrors NooBaa's. */
   if (auto i = user_arn_by_noobaa_id.find(principal);
       i != user_arn_by_noobaa_id.end()) {
     return i->second;
@@ -69,7 +69,7 @@ IdentityMapping mapping_from(const ImportPlan& plan)
   for (const auto& e : plan.entries) {
     if (e.iam_user) {
       /* RGW matches a user principal on `display_name`, which the
-       * import set to their name. */
+       * import set to the NooBaa name. */
       m.user_arn_by_noobaa_id[e.noobaa_id] =
 	"arn:aws:iam::" + e.account_id + ":user/" + e.display_name;
     } else {
@@ -109,7 +109,7 @@ void rewrite_one(rapidjson::Value& v, rapidjson::Document& d,
 
 /* The `Principal` (or `NotPrincipal`) of one statement.
  *
- * Their shape is AWS's:  a string, an array of strings, or an object
+ * NooBaa's shape is AWS's:  a string, an array of strings, or an object
  * whose `AWS` member is either.  Only the AWS arm names an identity we
  * could have imported;  `Service` and `Federated` are AWS's own
  * namespaces and are left exactly as they are. */
@@ -205,12 +205,12 @@ int rewrite_policy_principals(const DoutPrefixProvider* dpp,
 
 namespace {
 
-/* Their `logging` into RGW's bucket-logging configuration.
+/* NooBaa's `logging` into RGW's bucket-logging configuration.
  *
- * `{log_bucket, log_prefix}` is the whole of their record, and it maps
+ * `{log_bucket, log_prefix}` is the whole of NooBaa's record, and it maps
  * onto `target_bucket` and `target_prefix` with logging enabled.  The
  * rest of RGW's configuration -- the key format, the roll time, the
- * batch size -- has no counterpart in their record, so it keeps RGW's
+ * batch size -- has no counterpart in NooBaa's record, so it keeps RGW's
  * defaults rather than being invented.
  *
  * This is one of the three fields `NOOBAA_WRITE_SURFACE.md` lists as
@@ -303,7 +303,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
      * nothing and its directory does not exist. */
     info.bucket.name = rec.name;
 
-    /* Their record, through the reader that already translates most of
+    /* NooBaa's record, through the reader that already translates most of
      * it.  `-1` for the dir_fd:  this reader finds
      * `<config_root>/buckets/<name>.json` from the name alone. */
     int ret = theirs->load(dpp, -1, rec.name, attrs, info);
@@ -324,7 +324,7 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
       continue;
     }
 
-    /* The owner.  An id in their store, which is why the strategy
+    /* The owner.  An id in NooBaa's store, which is why the strategy
      * reads it and does not apply it. */
     std::string owner_account;
     try {
@@ -398,8 +398,8 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
      * Serving it from there is done -- P2 resolves an index row and
      * P5 falls back to this very record -- so what is left is
      * *recording* it in the index, which is P6.  Reported so an
-     * operator knows the bucket is being served from their record
-     * rather than from a fact we hold. */
+     * operator knows the bucket is being served from NooBaa's record
+     * rather than from a fact nsfs holds. */
     std::string their_path;
     try {
       JSONDecoder::decode_json("path", their_path, &p);
@@ -429,8 +429,8 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
      *
      * `load_bucket()` first, because the bucket has to be open before
      * anything can be written to it -- the handle from `get_bucket()`
-     * is a name and an info, not an opened directory.  A bucket their
-     * tree holds and this cannot open is a failure worth naming
+     * is a name and an info, not an opened directory.  A bucket
+     * NooBaa's tree holds and this cannot open is a failure worth naming
      * rather than working around. */
     std::unique_ptr<Bucket> bucket = driver->get_bucket(info);
     if (!bucket) {

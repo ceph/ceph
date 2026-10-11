@@ -60,7 +60,7 @@ namespace nsfs {
  * not between two of them.  `before` is the old format, which the read
  * fallback strategy serves.  `written` is the only genuinely new state
  * -- the target format is on disk and the old spelling has not gone --
- * and it is where asking ours first stops being incidental.
+ * and it is where asking the nsfs strategy first stops being incidental.
  * `pruned` is one spelling left, and the item is native.
  *
  * A non-zero return stops the conversion with the marker still set, so
@@ -627,7 +627,7 @@ protected:
   std::unique_ptr<nsfs::MPUStrategy> mpu_strategy;
   std::unique_ptr<nsfs::XattrStrategy> xattr_strategy;
   std::unique_ptr<nsfs::PathStrategy> path_strategy;
-  /* NooBaa's three.  Held whether or not a bucket is in their format,
+  /* NooBaa's three.  Held whether or not a bucket is in NooBaa's format,
    * because which format a bucket is in is not known until it is
    * loaded, and constructing a strategy costs nothing. */
   std::unique_ptr<nsfs::BucketStateStrategy> bucket_state_strategy;
@@ -641,14 +641,14 @@ protected:
    * `serve` is the default and is deliberately the conservative one.
    * Nothing is imported, nothing is marked, and **writes are
    * refused** -- not because they are impossible, but because they
-   * would be incomplete:  their arrangement has nowhere to put an ACL,
+   * would be incomplete:  NooBaa's arrangement has nowhere to put an ACL,
    * so a write cannot record one, and an object written half into
-   * their shape is one neither gateway reads correctly afterwards.
+   * NooBaa's shape is one neither gateway reads correctly afterwards.
    * The result is a readable view of a deployment nothing has changed
    * on disk, which is what keeps the decision to adopt reversible. */
   /* Two, not three.  `convert` was a third value meaning "adopt and
    * then rewrite the objects", which is what adopt does:  adoption
-   * brings a bucket's schema and its data into our profile, so there
+   * brings a bucket's schema and its data into an nsfs profile, so there
    * was no operation for the third value to name. */
   enum class AdoptionMode { Serve, Adopt };
   AdoptionMode adoption_mode{AdoptionMode::Serve};
@@ -660,7 +660,7 @@ protected:
   std::unique_ptr<nsfs::MPUStrategy> nb_mpu_strategy;
   /* what a bucket's extensions marker resolves to;  both resolve to the
    * same strategy instances until S5 supplies the noobaa ones */
-  /* The format shared and strong both use:  NooBaa's layout with our
+  /* The format shared and strong both use:  NooBaa's layout with the nsfs
    * metadata representation, which is what EXT_RGW_META declares. */
   nsfs::Format rgw_meta_format;
   /* What base is:  NooBaa's, entire. */
@@ -1535,14 +1535,14 @@ public:
   int resolve_profile(const DoutPrefixProvider* dpp);
   const nsfs::BucketProfile* get_profile() const { return profile; }
 
-  /* Whether this bucket carries our extensions at all -- shared or
+  /* Whether this bucket carries the nsfs extensions at all -- shared or
    * strong, not base.  Unresolved reads as base, which is the safe
    * direction:  the interlocks refuse. */
   bool extended() const { return profile && profile->extended(); }
 
   /* Whether it carries one particular extension.  What an interlock
    * guarding a single structure should ask:  extended() is true for
-   * shared, which has our attribute names and none of the structures. */
+   * shared, which has the nsfs attribute names and none of the structures. */
   bool has_extension(uint32_t ext) const {
     return profile && profile->has(ext);
   }
@@ -1569,7 +1569,7 @@ public:
    * seeding the bucket's directory is what puts a whole subtree in the
    * bucket's format.  Called wherever `profile` changes.  Without it
    * the subtree keeps the driver's, which are seeded on the root at
-   * initialize() and are ours -- the wrong format for every object
+   * initialize() and are nsfs's -- the wrong format for every object
    * read and written through an FSEnt in a base bucket. */
   void apply_format();
 
@@ -1594,11 +1594,12 @@ public:
    *
    * Runs the opposite way round to the object strategies, and
    * deliberately.  A
-   * base bucket's *objects* are in NooBaa's format, so theirs is the
-   * primary there.  A base bucket's *state* is ours where it exists,
-   * because bucket configuration is the one thing written in our form
-   * while a bucket is still base -- so ours is the primary here and
-   * their store is read only for a bucket that has none. */
+   * base bucket's *objects* are in NooBaa's format, so NooBaa's is the
+   * primary there.  A base bucket's *state* is nsfs's where it exists,
+   * because bucket configuration is the one thing written in the nsfs
+   * form while a bucket is still base -- so the nsfs strategy is the
+   * primary here and NooBaa's store is read only for a bucket that has
+   * none. */
   nsfs::BucketStateStrategy* bucket_state_fallback() const;
 
   /* The fallback strategies, or null.
@@ -1812,7 +1813,7 @@ public:
 
   /* The strategies this object's bucket is in.
    *
-   * Through the bucket, not the driver:  the driver's are ours, and a
+   * Through the bucket, not the driver:  the driver's are nsfs's, and a
    * base bucket's objects are in NooBaa's format.  They fall back to
    * the driver's for an object with no bucket, which is what a few
    * internal paths construct. */
@@ -2310,7 +2311,7 @@ private:
    *
    * Asked of the layout, which is the only thing that knows whether a
    * file's identity depends on the size it holds;  see
-   * MPUStrategy::relocation_target().  A no-op for ours. */
+   * MPUStrategy::relocation_target().  A no-op for the nsfs layout. */
   int relocate();
   /* the upload this part belongs to, as the client knows it.  The
    * injection map is keyed by this rather than by the internal meta,

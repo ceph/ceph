@@ -95,7 +95,7 @@ bool SentinelPathStrategy::names_directory_object(std::string_view entry) const
   return entry == RGW_FOLDER_OBJECT_NAME;
 }
 
-/* Never, and without a syscall.  The sentinel is our marker, and the
+/* Never, and without a syscall.  The sentinel is the nsfs marker, and the
  * walk sees it while enumerating the directory anyway. */
 bool SentinelPathStrategy::directory_object(const DoutPrefixProvider* dpp,
 					    int dir_fd,
@@ -104,7 +104,7 @@ bool SentinelPathStrategy::directory_object(const DoutPrefixProvider* dpp,
   return false;
 }
 
-/* Nothing:  our marker is the sentinel file, and removing that is a
+/* Nothing:  the nsfs marker is the sentinel file, and removing that is a
  * delete of the object rather than a change of format. */
 int SentinelPathStrategy::clear_directory_object(const DoutPrefixProvider* dpp,
 						 int dir_fd) const
@@ -129,30 +129,31 @@ const ReservedNames& SentinelPathStrategy::reserved_names() const
 static const std::string NB_TMPDIR_PREFIX_PATH = ".noobaa-nsfs_";
 static const char* NB_XATTR_DIR_CONTENT = "user.noobaa.dir_content";
 
-/* Their directory-object content file.
+/* NooBaa's directory-object content file.
  *
- * Deliberately NOT the constant our own format uses, although the two
+ * Deliberately NOT the constant the nsfs format uses, although the two
  * strings are equal today.  They are equal because `61de07d3bf2` took
  * `.folder` from them -- its message says "matching the noobaa nsfs
  * specification" -- at a time when this driver was meant to implement
- * their model;  posix, which predates all of it, has no such name.  So
+ * NooBaa's model;  posix, which predates all of it, has no such name.  So
  * the agreement is an inheritance, not a convention the two formats
  * arrived at, and either side may move without the other.
  *
- * Theirs in particular is not even fixed for them:
+ * NooBaa's in particular is not even fixed for NooBaa:
  * `config.NSFS_FOLDER_OBJECT_NAME` is a default (noobaa-core
- * `config.js:848`), so a deployment can change it and ours must not
- * follow.  One symbol for both made that impossible to express, and
- * would have made a change to our name silently change what we look
- * for in their trees.
+ * `config.js:848`), so a deployment can change it and the nsfs name must
+ * not follow.  One symbol for both made that impossible to express, and
+ * would have made a change to the nsfs name silently change what nsfs
+ * looks for in NooBaa's trees.
  *
- * Reading their configuration is the way to track it properly and is
+ * Reading NooBaa's configuration is the way to track it properly and is
  * not done here;  this makes the two facts separable, which is what
  * had to happen first. */
 static const std::string NB_FOLDER_OBJECT_NAME{FOLDER_OBJECT};
 
-/* Their key-to-path rules are ours:  verbatim, with `.folder` for a
- * key ending in '/'.  Shared rather than copied by coincidence --
+/* NooBaa's key-to-path rules are the nsfs rules:  verbatim, with
+ * `.folder` for a key ending in '/'.  Shared rather than copied by
+ * coincidence --
  * `7f0c721ab56` adopted the verbatim spelling in every profile. */
 std::string NooBaaPathStrategy::object_name(const rgw_obj_key& key,
 					    bool use_version) const
@@ -160,8 +161,8 @@ std::string NooBaaPathStrategy::object_name(const rgw_obj_key& key,
   std::string fname = use_version ? key.get_oid() : key.get_index_key_name();
 
   if (key.get_ns().empty()) {
-    /* Undo the leading-underscore doubling, exactly as ours does.  It
-     * is a rados index artifact, not a format choice, and
+    /* Undo the leading-underscore doubling, exactly as the nsfs strategy
+     * does.  It is a rados index artifact, not a format choice, and
      * `7f0c721ab56` dropped it in every profile -- so a key beginning
      * with an underscore is stored under the name the user gave it,
      * which is also the name NooBaa writes. */
@@ -185,7 +186,7 @@ rgw_obj_key NooBaaPathStrategy::key_from_name(const std::string& fname) const
   return key;
 }
 
-/* No staging spelling.  Their uploads live under the bucket temp
+/* No staging spelling.  NooBaa's uploads live under the bucket temp
  * directory, which MPUStrategy::staging_root() finds;  nothing beside
  * the bucket is named for one, so a namespace has nothing to render. */
 std::string NooBaaPathStrategy::bucket_dir_name(
@@ -208,7 +209,7 @@ bool NooBaaPathStrategy::names_directory_object(std::string_view entry) const
 
 /* user.noobaa.dir_content on the directory, whose value is the content
  * length as a string.  Absent means this directory is not an object --
- * their own read path throws NoSuchKey (`namespace_fs.js:1008`) -- and
+ * NooBaa's own read path throws NoSuchKey (`namespace_fs.js:1008`) -- and
  * "0" means the object is empty, with no sentinel file to find. */
 bool NooBaaPathStrategy::directory_object(const DoutPrefixProvider* dpp,
 					  int dir_fd,

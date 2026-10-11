@@ -5,7 +5,7 @@
  *
  * I4 of the account import (`ACCOUNT_IMPORT.md` §6.1 phase 1, §9).
  * **The first stage that writes.**  It reads the NooBaa store and
- * writes RGW state;  it does not modify their store, move object
+ * writes RGW state;  it does not modify NooBaa's store, move object
  * data, or delete anything.  The data tree is adopted in place and is
  * untouched.
  *
@@ -28,7 +28,7 @@
  * IT IS SAFE TO RE-RUN, NOT ATOMIC.  There is no transaction spanning
  * account creation and there cannot be one, so a failure part-way
  * leaves RGW state behind and the operation has to tolerate meeting
- * its own output (§6.2).  Re-running is keyed on **their `_id`**,
+ * its own output (§6.2).  Re-running is keyed on **NooBaa's `_id`**,
  * recorded in the NooBaa id table:  the account name is not stable,
  * because a rename rewrites `name` and `email` and leaves `_id`
  * alone, so a name-keyed re-run would create a duplicate for every
@@ -36,9 +36,9 @@
  * imported.
  *
  * Two things it deliberately does not do.  It does not notice an
- * identity deleted from their store since the last run -- removal is
+ * identity deleted from NooBaa's store since the last run -- removal is
  * an administrative act, not an import decision.  And it does not
- * reconcile divergence where both sides changed:  their store is the
+ * reconcile divergence where both sides changed:  NooBaa's store is the
  * source and RGW the destination, in that direction only.
  *
  * THE ANONYMOUS ACCOUNT IS THE ONE EXCEPTION, AND IT IS NOT OPTIONAL.
@@ -47,7 +47,7 @@
  * built in and is not an account, so importing it as one is wrong and
  * skipping it loses the uid mapping nsfs needs.  It gets **an identity
  * row and nothing else** -- no account, no user, nothing minted --
- * because `RGW_USER_ANON_ID` already supplies the owner string our
+ * because `RGW_USER_ANON_ID` already supplies the owner string the nsfs
  * table is keyed on (§6.8).  Skip an ordinary account and one
  * tenant's credentials stop working;  skip this one and every
  * public-bucket read either breaks or runs with the wrong privilege.
@@ -71,7 +71,7 @@ namespace nsfs {
 /* What a run did. */
 struct ImportResult {
   size_t accounts_created{0};
-  /* already present, recognised by their `_id` */
+  /* already present, recognised by NooBaa's `_id` */
   size_t accounts_skipped{0};
   size_t users_created{0};
   size_t users_skipped{0};
@@ -97,7 +97,7 @@ struct ImportResult {
  * and invisible without a lookup.
  *
  * An identity already imported is **not** a collision:  it is
- * recognised by their `_id` and skipped, which is what makes a re-run
+ * recognised by NooBaa's `_id` and skipped, which is what makes a re-run
  * safe.  So this consults the NooBaa id table first and only then
  * asks whether a name or email is taken by something else.
  *

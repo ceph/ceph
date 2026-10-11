@@ -37,7 +37,7 @@ class BucketStateStrategy;
  * layout is its own -- NooBaa's size-keyed one -- names it here.
  *
  * A Format is complete or it does not exist.  A driver must not hold
- * one carrying another format's staging layout with our attribute
+ * one carrying another format's staging layout with the nsfs attribute
  * names:  that is a combination no profile represents and no tree is
  * ever in.  A test may compose one, which is how the selection is
  * given something to be wrong about while only one real format
@@ -52,13 +52,13 @@ struct Format {
   const char* name() const { return fname; }
 };
 
-/* Whether a bucket carries our extensions, and what that resolves to.
+/* Whether a bucket carries the nsfs extensions, and what that resolves to.
  *
  * THE UNMARKED CASE IS NOOBAA'S.  A bucket directory with no marker is
  * read as NooBaa would write it and we add nothing to it:  no shadow
  * subtree, no S3 ACL attribute.  Marking is a
  * declared act -- at creation, or by adopting an existing tree -- and it
- * is what buys the structure our own drivers want.
+ * is what buys the structure nsfs and posix want.
  *
  * That polarity is the point.  A NooBaa root we are asked to serve is
  * unmarked by construction, because NooBaa never wrote a marker, so the
@@ -68,7 +68,7 @@ struct Format {
  * conversion.  See project_noobaa_interchange.
  *
  * It also means every nsfs tree written before this existed reads as
- * base, although it was written with our extensions.  Those trees are
+ * base, although it was written with the nsfs extensions.  Those trees are
  * adopted or wiped;  there is no way to tell them apart from a NooBaa
  * tree by inspection, which is exactly why the marker had to exist.
  */
@@ -87,8 +87,8 @@ inline constexpr const char* EXTENSIONS_XATTR = "user.nsfs.extensions";
 /* The tree still holds structure somebody else wrote.
  *
  * Read the same way and for the same reason, and deliberately NOT a bit
- * in the extensions mask.  That mask says what structure *of ours* a
- * tree carries and every bit in it is something we added;  what remains
+ * in the extensions mask.  That mask says what structure *of nsfs's* a
+ * tree carries and every bit in it is something nsfs added;  what remains
  * of another format is the opposite fact, and a reader that finds them
  * in one word comes to treat a leftover as a feature.
  *
@@ -118,8 +118,8 @@ inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
  *
  * Nothing on disk distinguishes the two afterwards.  A directory that
  * exists says nothing about who made it, which is why NooBaa records
- * the same fact as `should_create_underlying_storage`:  their create
- * path doubles as adopt, so they have to write down which one
+ * the same fact as `should_create_underlying_storage`:  NooBaa's create
+ * path doubles as adopt, so NooBaa has to write down which one
  * happened.  Splitting the operations makes it obvious when it
  * happens and no more recoverable later, so it still has to be
  * written down.
@@ -129,7 +129,7 @@ inline constexpr const char* CONVERTING_FROM_NOOBAA = "noobaa";
  * has to be the owning one or they would all become undeletable.
  * Only adoption over a pre-existing directory writes it, with "0".
  *
- * Their value carries across on adoption, and it is not always 0:  a
+ * NooBaa's value carries across on adoption, and it is not always 0:  a
  * bucket NooBaa created has a directory that exists only because a
  * gateway made it for that bucket, and taking it over does not change
  * that.  Defaulting adopted buckets to 0 would leave every migrated
@@ -175,14 +175,14 @@ inline constexpr uint32_t EXTENSIONS_NONE = 0;
  * EXTENSIONS_KNOWN, which never contained it. */
 inline constexpr uint32_t EXT_SHADOW      = 0x1;  /* .shadow, FSIO */
 inline constexpr uint32_t EXT_ACLS        = 0x2;  /* S3 access control lists */
-/* Object metadata in RGW's representation:  our attribute names and our
+/* Object metadata in RGW's representation:  the nsfs attribute names and
  * packing, on NooBaa's layout.
  *
  * It adds no file and no directory, so without a bit of its own the
  * shared profile would be an empty set -- and an empty set is not
  * separable from a bucket carrying no attribute at all.  Anything that
  * strips xattrs turns one into the other, and we would then write
- * NooBaa's attribute names onto objects holding ours.  A profile has to
+ * NooBaa's attribute names onto objects holding nsfs's.  A profile has to
  * be a value somebody can read back. */
 inline constexpr uint32_t EXT_RGW_META    = 0x8;
 
@@ -191,8 +191,8 @@ inline constexpr uint32_t EXT_RGW_META    = 0x8;
  * Not "a feature we implemented".  The two bits above it are the
  * pattern:  EXT_SHADOW marks a STRUCTURE, a subtree that is in the
  * tree or is not, and EXT_ACLS marks a fact NooBaa has no concept of
- * -- they store no ACL, so ours is not their thing under another name,
- * it is something extra.
+ * -- NooBaa stores no ACL, so the nsfs one is not NooBaa's thing under
+ * another name, it is something extra.
  *
  * An attribute both formats keep, differing only in spelling or
  * packing, needs no bit:  EXT_RGW_META already says which spelling
@@ -212,7 +212,7 @@ inline constexpr uint32_t EXTENSIONS_KNOWN =
 /* The named profiles.
  *
  * base    -- no attribute at all.  Read and written as NooBaa does, and
- *            nothing of ours is added.  It is an absence and not a
+ *            nothing of nsfs's is added.  It is an absence and not a
  *            value, so it is the one profile with no mask.
  * shared  -- RGW's metadata representation on NooBaa's layout.  One
  *            bit, and that is the whole of it:  an attribute whose
@@ -273,7 +273,7 @@ struct BucketProfile {
 
   bool has(uint32_t ext) const { return (extensions & ext) != 0; }
 
-  /* "does this bucket carry anything of ours" -- the question the
+  /* "does this bucket carry anything of nsfs's" -- the question the
    * interlocks ask before serving an extension-only interface */
   bool extended() const { return extensions != EXTENSIONS_NONE; }
 

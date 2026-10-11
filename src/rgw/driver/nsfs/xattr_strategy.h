@@ -59,7 +59,7 @@ public:
    * both directions and the value has to be built rather than copied.
    *
    * These have to be the mechanism rather than a question like
-   * object_owner(), because the consumer is not ours.  rgw_op.cc reads
+   * object_owner(), because the consumer is not nsfs.  rgw_op.cc reads
    * and writes tags through the attribute map -- `attrs.find(
    * RGW_ATTR_TAGS)` in six places, modify_obj_attrs() for
    * PutObjectTagging, delete_obj_attrs() for the delete -- and that is
@@ -70,8 +70,8 @@ public:
    * Both take the on-disk NAMES and an fd, not a map of values.  The
    * caller has the names already -- one flistxattr it was doing
    * anyway -- and reading every value to hand over would buy an
-   * fgetxattr per object for attributes no format wants;  on our own
-   * trees the unclaimed set is `security.selinux` and nothing else.
+   * fgetxattr per object for attributes no format wants;  on trees
+   * nsfs wrote the unclaimed set is `security.selinux` and nothing else.
    * So each format reads what it claims and nothing else, and a
    * format that claims nothing issues no syscall at all.
    *
@@ -117,7 +117,7 @@ public:
    *
    * `rgw_get_request_metadata` (`rgw_op.h:2479`) and four other writers
    * append `size() + 1`.  On rados the byte is private.  On a filesystem
-   * it is on-disk format, and it makes our metadata differ from NooBaa's
+   * it is on-disk format, and it makes nsfs's metadata differ from NooBaa's
    * for the same object by a byte nobody meant to write.
    *
    * The driver strips it on the way to disk and restores it on the way
@@ -200,8 +200,8 @@ public:
  *
  * NOT MAPPED, DELIBERATELY:
  *
- * S3 ACLs.  They store none, so there is nowhere for RGW_ATTR_ACL to
- * go.  The write is accepted and not stored, which is what their own
+ * S3 ACLs.  NooBaa stores none, so there is nowhere for RGW_ATTR_ACL to
+ * go.  The write is accepted and not stored, which is what NooBaa's own
  * gateway does -- `s3_put_object_acl.js` says so:  "we only handle
  * canned acl, the rest is deprecated in favor of bucket policy.
  * however we do not fail the request because there are still clients
@@ -210,9 +210,10 @@ public:
  * in *translation* is a different matter and is the export manifest's
  * job;  a base bucket never held one.
  *
- * Object tags and the object-lock family.  Not renames:  ours is one
- * encoded blob for every tag and two encoded attributes for the lock,
- * theirs is user.noobaa.tag.<k> per tag and three plain attributes.
+ * Object tags and the object-lock family.  Not renames:  the nsfs format
+ * is one encoded blob for every tag and two encoded attributes for the
+ * lock, NooBaa's is user.noobaa.tag.<k> per tag and three plain
+ * attributes.
  * Changing the shape of a value is what disk_name() and
  * parse_disk_name() cannot express, and it is the value-format work S5
  * names separately.  Deferred, not overlooked. */
@@ -222,8 +223,8 @@ public:
   bool parse_disk_name(const std::string& disk,
 		       std::string& key) const override;
 
-  /* object tags, which are one attribute per tag in their format and
-   * one encoded RGWObjTags in ours */
+  /* object tags, which are one attribute per tag in NooBaa's format and
+   * one encoded RGWObjTags in the nsfs format */
   void parse_disk_attrs(const DoutPrefixProvider* dpp, int fd,
 			const std::vector<std::string>& unclaimed,
 			Attrs& out) const override;

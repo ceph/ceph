@@ -6,7 +6,7 @@
  * I3 of the account import (`ACCOUNT_IMPORT.md` §9).  Two things:  the
  * mapping, and the gate.  **Nothing is written.**  I4 writes.
  *
- * IT NEEDS NO SECRETS.  An access key's *id* is cleartext in their
+ * IT NEEDS NO SECRETS.  An access key's *id* is cleartext in NooBaa's
  * record, and the four constraints below are all about ids and names,
  * so this depends on I1 alone and not on I2.  A deployment whose
  * master key is missing can still be told what its import would hit.
@@ -15,15 +15,15 @@
  * plus an account user**:  `RGWAccountInfo` holds no credentials and
  * every NooBaa root account is a credential holder (§3.4).  The
  * account id is minted with RGW's own generator rather than derived
- * from theirs -- their `_id` is a 24-character hex ObjectId and RGW's
- * is `RGW` followed by 17 digits, so no transformation of one is the
- * other (§3.3).  Their id is kept because re-import needs it:  NooBaa
+ * from NooBaa's -- NooBaa's `_id` is a 24-character hex ObjectId and
+ * RGW's is `RGW` followed by 17 digits, so no transformation of one is
+ * the other (§3.3).  NooBaa's id is kept because re-import needs it:  NooBaa
  * supports renaming, and a rename rewrites `name` and `email` while
  * leaving `_id` alone, so the name is not a stable key and the id is.
  *
  * THE GATE.  RGW enforces four uniqueness constraints a NooBaa store
  * does not (§6.3), and the one most likely to stop a real import is
- * **email**:  their `email` is a copy of the account name, not an
+ * **email**:  NooBaa's `email` is a copy of the account name, not an
  * email -- `manage_nsfs.js` sets `email: String(user_input.name)` with
  * the comment "temp, keep the email internally" -- and RGW's email
  * index is shared **across users and accounts**.  So two IAM users
@@ -31,7 +31,7 @@
  * partway through an import that did not check first.
  *
  * Discarding the value is not available:  it is a matchable principal
- * in their trust policies, so dropping it changes authorization.
+ * in NooBaa's trust policies, so dropping it changes authorization.
  *
  * **Every collision is reported and the plan is refused.**  Not the
  * first one -- an operator needs the list, because fixing them one
@@ -63,7 +63,7 @@ namespace rgw { namespace sal { namespace nsfs {
 
 /* One identity, and what RGW will hold for it. */
 struct ImportEntry {
-  /* theirs, kept:  the stable key across a rename (§3.4) */
+  /* NooBaa's, kept:  the stable key across a rename (§3.4) */
   std::string noobaa_id;
   std::string noobaa_name;
 
@@ -80,7 +80,7 @@ struct ImportEntry {
   std::string tenant;
 
   std::string name;
-  /* Their `email`, carried.  See the header:  it is a copy of the
+  /* NooBaa's `email`, carried.  See the header:  it is a copy of the
    * name and it is a matchable principal, so it can be neither
    * trusted as an address nor discarded. */
   std::string email;

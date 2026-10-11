@@ -36,9 +36,9 @@ namespace rgw { namespace sal { namespace nsfs {
 inline constexpr std::string_view VERSIONS_DIR = ".versions";
 inline constexpr std::string_view SHADOW_DIR = ".shadow";
 inline constexpr std::string_view VERSIONS_LOCK = ".lock";
-/* Ours.  Borrowed from NooBaa by `61de07d3bf2` and kept as a decision
+/* The nsfs name.  Borrowed from NooBaa by `61de07d3bf2` and kept as a decision
  * rather than a default:  a sentinel inside the directory costs the
- * listing walk nothing, because it sees the entry anyway.  Their name
+ * listing walk nothing, because it sees the entry anyway.  NooBaa's name
  * for the same thing is a separate constant in path_strategy.cc, and
  * is a default they can change. */
 inline constexpr std::string_view FOLDER_OBJECT = ".folder";
@@ -96,7 +96,8 @@ public:
    * no entry to recognise, so the question has to be asked one level
    * up, with the parent's fd and the directory's name.
    *
-   * Ours returns false without a syscall:  we never mark a directory,
+   * The nsfs strategy returns false without a syscall:  nsfs never marks a
+   * directory,
    * the sentinel is the marker, and the walk sees it for free while
    * enumerating.  A bucket we wrote holds no foreign directory
    * objects, so paying per directory on the listing path would be
@@ -129,10 +130,11 @@ public:
    *
    * The counterpart of directory_object(), for the upgrade:  a
    * directory carried across to another format must stop reading as
-   * one in the format it came from, and which attribute says so is the format's
-   * business and not the converter's.  Ours has nothing to clear --
-   * the sentinel file is the marker and removing it is a delete, not a
-   * conversion -- so ours does nothing. */
+   * one in the format it came from, and which attribute says so is the
+   * format's business and not the converter's.  The nsfs format has
+   * nothing to clear -- the sentinel file is the marker and removing it
+   * is a delete, not a conversion -- so the nsfs strategy does
+   * nothing. */
   virtual int clear_directory_object(const DoutPrefixProvider* dpp,
 				     int dir_fd) const = 0;
 
@@ -186,25 +188,27 @@ public:
 
 /* NooBaa's layout, which is what the base profile is.
  *
- * Most of it is already ours.  Object keys are stored verbatim on both
- * sides -- the rados underscore doubling went in `7f0c721ab56`, in
- * every profile -- and `.folder` and `.versions` are theirs, adopted.
+ * Most of it is already the nsfs layout.  Object keys are stored
+ * verbatim in both -- the rados underscore doubling went in
+ * `7f0c721ab56`, in every profile -- and `.folder` and `.versions` are
+ * NooBaa's, adopted.
  * So object_name(), key_from_name() and folder_object_name() return the
  * same results, and this exists for three differences.
  *
- * reserved_names() has no `.shadow`, because they have no shadow
+ * reserved_names() has no `.shadow`, because NooBaa has no shadow
  * subtree, and gains `.noobaa-nsfs` so the bucket temp directory is
  * never enumerated as a key.
  *
- * bucket_dir_name() does not render our staging spelling.  Their
- * staging is under the temp directory, which MPUStrategy::
+ * bucket_dir_name() does not render the nsfs staging spelling.
+ * NooBaa's staging is under the temp directory, which MPUStrategy::
  * staging_root() finds;  nothing beside the bucket is named for an
  * upload.
  *
  * directory_object() reads user.noobaa.dir_content.  This is the one
- * that matters for interop:  a zero-length directory object of theirs
- * has no sentinel at all, so without it a trailing-slash key they
- * created is invisible to us, and one we create is invisible to them.
+ * that matters for interop:  a zero-length directory object of NooBaa's
+ * has no sentinel at all, so without it a trailing-slash key NooBaa
+ * created is invisible to nsfs, and one nsfs creates is invisible to
+ * NooBaa.
  * That is the folder case, which is how most tools make folders.
  *
  * Read from noobaa-core at 68ca22d33:  `config.NSFS_FOLDER_OBJECT_NAME`

@@ -11,7 +11,7 @@
  * work.  I1 deliberately left them encrypted;  this opens them.
  *
  * THERE IS NO INTEGRITY CHECK, AND THAT IS THE WHOLE DIFFICULTY.
- * Their cipher is AES-256-GCM and the authentication tag is never
+ * NooBaa's cipher is AES-256-GCM and the authentication tag is never
  * computed or stored -- `nc_master_key_manager.js` calls
  * `cipher.update()` and never `cipher.final()`, in both directions.
  * So a wrong key does not fail:  it returns plaintext-shaped garbage
@@ -36,7 +36,8 @@
  * context -- a reimplementation that assumed 12, or hand-rolled CTR
  * with `IV||1`, produces wrong plaintext.  And the IV is **fixed per
  * master key**, so every secret under one key shares a keystream.
- * Neither is ours to fix;  both are theirs to read correctly.
+ * Neither is for nsfs to fix;  both have to be read as NooBaa writes
+ * them.
  *
  * Pinned at noobaa-core `08d063f86`.
  */
@@ -56,9 +57,9 @@ namespace rgw { namespace sal { namespace nsfs {
 /* One master key, decoded. */
 struct NooBaaMasterKey {
   std::string id;
-  /* their `encryption_type`, carried rather than assumed:  a store
-   * naming a cipher we do not implement must say so rather than be
-   * decrypted as though it had named ours */
+  /* NooBaa's `encryption_type`, carried rather than assumed:  a store
+   * naming a cipher this does not implement must say so rather than be
+   * decrypted as though it had named the one implemented here */
   std::string cipher_type;
   std::vector<unsigned char> key;
   std::vector<unsigned char> iv;

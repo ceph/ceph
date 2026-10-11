@@ -82,7 +82,7 @@ public:
  *
  * Named, not a bitmask:  the mask is how the profile is stored, and a
  * profile is what an operator means.  Moving a base bucket to shared or
- * strong takes a tree we did not write into our management, which is why
+ * strong takes a tree nsfs did not write into its management, which is why
  * it is a declared act on a named bucket and never inferred from
  * access. */
 class RGWOp_NSFS_Profile_Put : public RGWRESTOp {

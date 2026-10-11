@@ -81,7 +81,7 @@ namespace {
  * compiles;  reading NooBaa's JSON is this driver's problem and stays
  * this driver's problem.
  *
- * Not a general mechanism.  Of the other bucket features their records
+ * Not a general mechanism.  Of the other bucket features NooBaa's records
  * carry, all but this one reach RGW types through public mutators or
  * constructors -- `RGWObjTags::add_tag()`,
  * `RGWLifecycleConfiguration::add_rule()`,
@@ -119,12 +119,12 @@ int decode_into(const DoutPrefixProvider* dpp, JSONFormatter& f, T& out)
 
 /* object_lock_configuration.
  *
- * Theirs:   { object_lock_enabled: "Enabled"|"Disabled",
+ * NooBaa's: { object_lock_enabled: "Enabled"|"Disabled",
  *             rule: { default_retention: { days|years, mode } } }
  * RGW's:    { enabled: bool, rule_exist: bool,
  *             rule: { defaultRetention: { mode, days, years } } }
  *
- * "Disabled" is their internal state for a bucket that is not locked;
+ * "Disabled" is NooBaa's internal state for a bucket that is not locked;
  * S3 only ever validates "Enabled" on the wire.  So Disabled means the
  * bucket has no lock, not a lock that is off. */
 int from_noobaa_object_lock(const DoutPrefixProvider* dpp, JSONObj* cfg,
@@ -148,7 +148,7 @@ int from_noobaa_object_lock(const DoutPrefixProvider* dpp, JSONObj* cfg,
 
   const bool has_rule = !mode.empty();
 
-  /* Neither RGW's JSON decoder nor ours would otherwise check the
+  /* Neither RGW's JSON decoder nor this one would otherwise check the
    * mode -- only RGW's XML path does -- so an arbitrary string would
    * reach info.obj_lock and be reported as the retention mode of a
    * locked bucket. */
@@ -158,7 +158,7 @@ int from_noobaa_object_lock(const DoutPrefixProvider* dpp, JSONObj* cfg,
     return -EBADMSG;
   }
 
-  /* Their schema requires exactly one of days or years, and so does
+  /* NooBaa's schema requires exactly one of days or years, and so does
    * RGW:  rgw_op.cc:9707 rejects anything else with
    * ERR_INVALID_RETENTION_PERIOD.  It matters because
    * get_lock_until_date() takes days when days > 0 and years
@@ -201,9 +201,9 @@ int from_noobaa_object_lock(const DoutPrefixProvider* dpp, JSONObj* cfg,
 /* s3_policy.
  *
  * The one feature that needs no translation:  a bucket policy is an
- * AWS policy document, RGW keeps the document, and theirs is the same
+ * AWS policy document, RGW keeps the document, and NooBaa's is the same
  * document held parsed.  `JSONObj::init()` stores
- * `json_spirit::write_string()` for a non-leaf node, so asking their
+ * `json_spirit::write_string()` for a non-leaf node, so asking NooBaa's
  * `s3_policy` object for its data hands back the whole document as
  * text.
  *
@@ -290,11 +290,11 @@ void u16_from(const char* name, JSONObj* obj, uint16_t& out)
 
 /* bucket_website.
  *
- * Their website_configuration is an anyOf of two shapes, which is S3's
+ * NooBaa's website_configuration is an anyOf of two shapes, which is S3's
  * own rule:  either redirect every request, or serve an index document
  * with an optional error document and routing rules.  The branches are
  * exclusive, so taking the redirect first and the rest otherwise
- * matches both their schema and RGW's is_redirect_all.
+ * matches both NooBaa's schema and RGW's is_redirect_all.
  *
  * Every RGW type here is a plain struct with public members, so this
  * is assignment rather than construction.  It lands on the info rather
@@ -356,11 +356,11 @@ int from_noobaa_website(const DoutPrefixProvider* dpp, JSONObj* web,
  * and whether a bucket key is in use.  RGWBucketEncryptionConfig takes
  * exactly those, so there is nothing to build.
  *
- * An empty or absent algorithm configures nothing -- their schema
+ * An empty or absent algorithm configures nothing -- NooBaa's schema
  * requires none of the three, so `{}` is a valid record that says
  * nothing.
  *
- * An algorithm that is neither of theirs is stored anyway, and that is
+ * An algorithm that is neither of NooBaa's is stored anyway, and that is
  * deliberate.  The string becomes the x-amz-server-side-encryption
  * header value on every PUT (rgw_rest_s3.cc, get_encryption_defaults),
  * so RGW already refuses writes into a bucket configured with one it
@@ -402,12 +402,12 @@ int from_noobaa_encryption(const DoutPrefixProvider* dpp, JSONObj* enc,
 /* tag -- the bucket's tag set, not an object's.
  *
  * An array of {key, value} into RGWObjTags, which has a public
- * add_tag().  Their `tagging` definition requires both fields of each
+ * add_tag().  NooBaa's `tagging` definition requires both fields of each
  * entry and constrains neither.
  *
  * Stored whatever the set looks like.  RGW's own S3 path builds an
  * RGWObjTags(50) and refuses a request breaking that or the 128/256
- * byte key and value limits, but their schema imposes none of it, so a
+ * byte key and value limits, but NooBaa's schema imposes none of it, so a
  * NooBaa bucket may legitimately carry more or longer tags than the
  * API would accept.  Refusing to serve such a bucket would deny
  * everything over metadata that gates nothing and destroys nothing --
@@ -460,7 +460,7 @@ int from_noobaa_tags(const DoutPrefixProvider* dpp, JSONObj* tagging,
   return 0;
 }
 
-/* Their dates are epoch milliseconds;  RGW's are ISO 8601 strings that
+/* NooBaa's dates are epoch milliseconds;  RGW's are ISO 8601 strings that
  * check_date() additionally requires to be exact midnight UTC.  The
  * conversion is here;  the midnight rule is not, because the parser
  * enforces it and a date that breaks it is a rule PutBucketLifecycle
@@ -480,19 +480,19 @@ bool idate_iso8601(JSONObj* parent, const char* name, std::string& out)
 
 /* lifecycle_configuration_rules.
  *
- * WHAT WE ACCEPT IS WHAT PutBucketLifecycle ACCEPTS, by construction:
- * their record is rendered as the XML that request carries and handed
+ * WHAT NSFS ACCEPTS IS WHAT PutBucketLifecycle ACCEPTS, by construction:
+ * NooBaa's record is rendered as the XML that request carries and handed
  * to the same parser, decoder and rebuild().  Matt, 2026-09-29 --
  * "accept only what our XML parser can handle."
  *
  * That is worth the render rather than reimplementing the rules,
  * because the rules are many and the cost of getting one wrong is
- * deletion.  Their schema is looser than S3's in several places at
+ * deletion.  NooBaa's schema is looser than S3's in several places at
  * once:  an expiration may carry days, a date and a delete-marker flag
  * together where LCExpiration_S3 requires exactly one;  a rule may mix
  * days and date across its expiration and transitions where
  * LCRule::valid() forbids it;  a date need not be midnight UTC where
- * check_date() insists.  Each of those is a rule of theirs that RGW
+ * check_date() insists.  Each of those is a rule of NooBaa's that RGW
  * cannot express, and none has a safe reading -- guessing which of
  * days or date wins deletes objects on the wrong day -- so the parser
  * refusing it fails the bucket closed.
@@ -520,7 +520,7 @@ int from_noobaa_lifecycle(const DoutPrefixProvider* dpp, CephContext* cct,
     encode_xml("ID", id, &f);
     encode_xml("Status", status, &f);
 
-    /* Their `and` flag records whether the original XML wrapped the
+    /* NooBaa's `and` flag records whether the original XML wrapped the
      * conditions in <And>, which is how they rebuild it themselves.
      * LCFilter_S3 looks for that element first and falls back to the
      * filter itself, so reproducing it keeps a multi-condition filter
@@ -683,7 +683,7 @@ int from_noobaa_lifecycle(const DoutPrefixProvider* dpp, CephContext* cct,
  *
  * Rendered and handed to RGW's CORS parser, for the reason lifecycle
  * is:  what we accept is what PutBucketCors accepts, rather than a
- * second copy of its rules.  Theirs requires allowed_methods and
+ * second copy of its rules.  NooBaa's requires allowed_methods and
  * allowed_origins and constrains neither, while RGWCORSRule_S3
  * rejects a method outside GET, POST, DELETE, HEAD, PUT and COPY, an
  * id over 255 characters, a rule with no origin, an origin or header
@@ -821,7 +821,7 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
   std::string doc;
   int ret = read_record_file(dpp, path, doc);
   if (ret == -ENOENT) {
-    /* no record:  this bucket has no state in their store, which is
+    /* no record:  this bucket has no state in NooBaa's store, which is
      * the absent case and not a failure */
     return -ENOENT;
   }
@@ -846,7 +846,7 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
    * and fails the bucket closed. */
   try {
 
-  /* Versioning.  Their enum is the whole of it:  DISABLED, SUSPENDED,
+  /* Versioning.  NooBaa's enum is the whole of it:  DISABLED, SUSPENDED,
    * ENABLED.  RGW keeps a suspended bucket versioned and marks it
    * suspended beside that, because it still holds versions. */
   std::string versioning;
@@ -876,7 +876,7 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
     }
   }
 
-  /* Object lock.  First of their optional features, and the one whose
+  /* Object lock.  First of NooBaa's optional features, and the one whose
    * absence is a compliance breach rather than a missing feature:  a
    * WORM bucket that reads as unlocked accepts overwrite and delete. */
   if (JSONObj* lock = p.find_obj("object_lock_configuration"); lock) {
@@ -947,22 +947,22 @@ int NooBaaBucketStateStrategy::load(const DoutPrefixProvider* dpp, int dir_fd,
   /* X1.  `force_md5_etag`, carried and **not enforced**
    * (`ACCOUNT_IMPORT.md` §6.1a).
    *
-   * Their value, in their shape:  the literal `true` or `false`, and
+   * NooBaa's value, in NooBaa's shape:  the literal `true` or `false`, and
    * no attribute at all when the record does not mention it.  The
-   * tri-state is the point -- their precedence is a cascade, bucket
-   * if defined else account if defined else their global, and `false`
+   * tri-state is the point -- NooBaa's precedence is a cascade, bucket
+   * if defined else account if defined else NooBaa's global, and `false`
    * counts as defined -- so a bucket that turns it off is not a
    * bucket that said nothing.
    *
    * Carried rather than applied because `rgw_non_md5_etag` is the
-   * single deployment-wide control and their global maps to it.  A
-   * deployment that varies this per bucket is doing something we do
+   * single deployment-wide control and NooBaa's global maps to it.  A
+   * deployment that varies this per bucket is doing something nsfs does
    * not intend to support, and carrying the value is what lets the
    * import report say so rather than leaving an operator to discover
    * it.
    *
    * Written into the attribute map so it survives conversion:  once a
-   * bucket is adopted, nothing reads their record again. */
+   * bucket is adopted, nothing reads NooBaa's record again. */
   if (p.find_obj("force_md5_etag")) {
     bool force = false;
     JSONDecoder::decode_json("force_md5_etag", force, &p);
