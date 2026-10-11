@@ -3310,6 +3310,11 @@ int RGWDataSyncStatusManager::init(const DoutPrefixProvider *dpp)
     return -EIO;
   }
 
+  if (source_zone.id == driver->svc()->zone->zone_id().id) {
+    ldpp_dout(this, 0) << "ERROR: source zone is the local zone" << dendl;
+    return -EINVAL;
+  }
+
   if (!driver->svc()->sync_modules->get_manager()->supports_data_export(zone_def->tier_type)) {
     return -ENOTSUP;
   }
