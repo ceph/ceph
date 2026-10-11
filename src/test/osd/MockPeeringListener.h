@@ -141,8 +141,10 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     ObjectStore::Transaction &t) override {
     prepare_write_called = true;
     
-    // If a callback is set, queue the transaction
-    if (queue_transaction_callback && !t.empty()) {
+    // Queue the PeeringCtx transaction. Any other transaction (e.g. a
+    // recovery push from the backend) is queued by its caller.
+    if (queue_transaction_callback && !t.empty() &&
+        (!ctx || &t == &ctx->transaction)) {
       ObjectStore::Transaction copy;
       copy.append(t);
       queue_transaction_callback(std::move(copy));
