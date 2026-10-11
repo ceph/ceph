@@ -912,6 +912,66 @@ public:
   }
 };
 
+/* A file that arrives in a marked bucket without going through RGW is
+ * its bucket owner's.
+ *
+ * An NFS or POSIX client writes no ACL, and no conversion walk will
+ * visit the file afterwards.  NooBaa returns the bucket's owner for
+ * such a file, and so does RGW core on the request path when an object
+ * has no ACL (DECISIONS.md 2026-10-11) -- so the listing entry and
+ * get_owner() return the same owner, rather than `unknown`.
+ *
+ * The control is a second sideloaded file carrying a recorded ACL for
+ * somebody else:  a recorded owner is the object's, so the two must
+ * differ, and the first assertion cannot pass by reporting the bucket
+ * owner for everything. */
+TEST_F(NSFSBucketTest, ASideloadedFileIsItsBucketOwners)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_STRNE(b->profile_name(), "base") << "the fixture is not marked";
+
+  auto sideload = [&](const char* name) {
+    const sf::path f{bucket_path() / name};
+    int fd = ::open(f.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    EXPECT_GE(fd, 0) << cpp_strerror(errno);
+    EXPECT_EQ(::write(fd, "x", 1), 1);
+    ::close(fd);
+    return f;
+  };
+  sideload("nobodys.txt");
+  const sf::path other = sideload("somebodys.txt");
+
+  const rgw_user someone{"", "somebody-else"};
+  RGWAccessControlPolicy policy;
+  policy.create_default(someone, "Somebody Else");
+  bufferlist aclbl;
+  policy.encode(aclbl);
+  const std::string disk = b->xattr_strategy()->disk_name(RGW_ATTR_ACL);
+  ASSERT_FALSE(disk.empty());
+  ASSERT_EQ(::setxattr(other.c_str(), disk.c_str(), aclbl.c_str(),
+		       aclbl.length(), 0), 0) << cpp_strerror(errno);
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 128, results, null_yield), 0);
+  std::map<std::string, std::string> owners;
+  for (const auto& e : results.objs) {
+    owners[e.key.name] = e.meta.owner;
+  }
+  EXPECT_EQ(owners["nobodys.txt"], to_string(bucket->get_info().owner))
+      << "a file recording no owner did not list as its bucket's";
+  EXPECT_EQ(owners["somebodys.txt"], to_string(rgw_owner{someone}))
+      << "a recorded owner was replaced by the bucket's";
+
+  /* and get_owner(), which HEAD uses, agrees with the listing */
+  auto obj = bucket->get_object(rgw_obj_key("nobodys.txt"));
+  ASSERT_EQ(obj->get_obj_attrs(null_yield, env->dpp), 0);
+  std::unique_ptr<rgw::sal::User> u;
+  ASSERT_EQ(static_cast<rgw::sal::NSFSObject*>(obj.get())->get_owner(
+		env->dpp, null_yield, &u), 0);
+  EXPECT_EQ(rgw_owner{u->get_id()}, bucket->get_info().owner);
+}
+
 /* Stored state that will not decode fails the bucket closed.
  *
  * Absent and unreadable are different.  A bucket with no stored state
@@ -3654,27 +3714,33 @@ TEST(NooBaaXattr, NamesRoundTrip)
   }
 }
 
-/* The contrast with OwnerComesFromTheInode below, and the reason
- * adopting a tree of unattributed files leaves the bucket base.
- *
- * PrefixedXattrStrategy -- what shared and strong both resolve to --
- * answers from the recorded ACL and never consults the statx.  A file
- * written by cp or over NFS has no ACL, so a marked profile reports no
- * owner for it however the statx is passed, while base reports the
- * uid.  See docs/NSFS_ADOPTION.md 5. */
-TEST(PrefixedXattr, OwnerDoesNotComeFromTheStatx)
+/* PrefixedXattrStrategy -- what shared and strong both resolve to --
+ * returns the owner the recorded ACL holds.  A file written by cp or
+ * over NFS has none, for which it returns -ENODATA and the caller gives
+ * it the bucket's owner;  an ACL that will not decode returns -EIO
+ * (DECISIONS.md 2026-10-11). */
+TEST(PrefixedXattr, OwnerIsRecordedOrNone)
 {
   nsfs::PrefixedXattrStrategy ours;
   const rgw::sal::Attrs none;
 
-  struct statx stx{};
-  stx.stx_mask = STATX_UID;
-  stx.stx_uid = 4242;
-
   ACLOwner owner;
-  EXPECT_EQ(ours.object_owner(none, &stx, owner), -EINVAL)
-      << "a marked profile reported an owner for a file with no ACL";
-  EXPECT_EQ(ours.object_owner(none, nullptr, owner), -EINVAL);
+  EXPECT_EQ(ours.object_owner(none, owner), -ENODATA)
+      << "a file with no ACL did not read as recording no owner";
+
+  rgw::sal::Attrs with;
+  RGWAccessControlPolicy policy;
+  policy.create_default(rgw_user("someone"), "Someone");
+  bufferlist bl;
+  policy.encode(bl);
+  with[RGW_ATTR_ACL] = bl;
+  ASSERT_EQ(ours.object_owner(with, owner), 0);
+  EXPECT_EQ(owner.id, rgw_owner(rgw_user("someone")));
+
+  rgw::sal::Attrs broken;
+  broken[RGW_ATTR_ACL].append("not an acl");
+  EXPECT_EQ(ours.object_owner(broken, owner), -EIO)
+      << "an unreadable ACL read as no owner recorded";
 }
 
 /* Three answers, and the third is the one worth pinning.  An ACL has
@@ -3713,28 +3779,16 @@ TEST(NooBaaXattr, LeavesTheirStructuredAttributesAlone)
   EXPECT_FALSE(nb.parse_disk_name("trusted.something", key));
 }
 
-/* Ownership is the inode's.  They record no owner, so a file a native
- * client created has a uid and nothing else -- which is the case that
- * currently lists as unknown/unknown. */
-TEST(NooBaaXattr, OwnerComesFromTheInode)
+/* Their format records no owner.  NooBaa returns the bucket's
+ * `owner_account` for every object, so this returns -ENODATA and the
+ * caller supplies the bucket's owner -- never the file's uid
+ * (DECISIONS.md 2026-10-11). */
+TEST(NooBaaXattr, RecordsNoOwner)
 {
   nsfs::NooBaaXattrStrategy nb;
   Attrs none;
-
-  struct statx stx{};
-  stx.stx_mask = STATX_UID;
-  stx.stx_uid = 4242;
   ACLOwner owner;
-  ASSERT_EQ(nb.object_owner(none, &stx, owner), 0);
-  EXPECT_EQ(owner.id, rgw_owner(rgw_user("4242")));
-
-  /* without a stat there is no answer, and saying so is the contract */
-  ACLOwner none_owner;
-  EXPECT_LT(nb.object_owner(none, nullptr, none_owner), 0);
-
-  struct statx no_uid{};
-  no_uid.stx_mask = STATX_MTIME;
-  EXPECT_LT(nb.object_owner(none, &no_uid, none_owner), 0);
+  EXPECT_EQ(nb.object_owner(none, owner), -ENODATA);
 }
 
 /* Never counted.  The trailing NUL is an RGW-side accident our own
@@ -4772,19 +4826,19 @@ TEST_F(NSFSNooBaaStateTest, OurStateWinsOverTheirs)
       << "their record was consulted for a bucket that has state of ours";
 }
 
-/* Conversion must write down the owner the inode was answering.
+/* Conversion records the bucket's owner on an object that records none.
  *
- * An object with no recorded ACL answers its owner from the inode
- * while the bucket is unmarked -- their format has nowhere to put an
- * ACL, so `NooBaaXattrStrategy::disk_name(RGW_ATTR_ACL)` is empty and
- * nothing is stored.  Marking the bucket retires that reader and makes
- * the recorded ACL the only source, so without a capture the object
- * comes out of conversion with no owner at all.
+ * Their format has nowhere to put an ACL, so
+ * `NooBaaXattrStrategy::disk_name(RGW_ATTR_ACL)` is empty and nothing
+ * is stored;  NooBaa returns the bucket's `owner_account` as every
+ * object's owner.  Adoption is where the tree becomes consistent with
+ * the imported accounts, so conversion writes the bucket's owner down
+ * (DECISIONS.md 2026-10-11).  Not the file's uid:  that is the POSIX
+ * identity the file was written as, and the assertion against it is
+ * what distinguishes the two owners.
  *
- * The control is the sideloaded file:  it has no ACL by construction,
- * which is the case the capture exists for.  Before the capture this
- * test fails on the first assertion after the conversion. */
-TEST_F(NSFSNooBaaBucketTest, ConversionCapturesTheInodeOwnerAsAnAcl)
+ * The sideloaded file has no ACL by construction, which is the case. */
+TEST_F(NSFSNooBaaBucketTest, ConversionRecordsTheBucketOwner)
 {
   const sf::path obj{bucket_path() / "sideloaded.txt"};
   {
@@ -4825,7 +4879,7 @@ TEST_F(NSFSNooBaaBucketTest, ConversionCapturesTheInodeOwnerAsAnAcl)
   ssize_t len = ::getxattr(obj.c_str(), disk.c_str(), buf, sizeof(buf));
   ASSERT_GT(len, 0)
       << "the converted object carries no " << disk
-      << ";  its owner was answered from the inode and is now lost";
+      << ";  it has no owner recorded and lists as unknown";
 
   bufferlist bl;
   bl.append(buf, len);
@@ -4833,9 +4887,10 @@ TEST_F(NSFSNooBaaBucketTest, ConversionCapturesTheInodeOwnerAsAnAcl)
   auto it = bl.cbegin();
   ASSERT_NO_THROW(policy.decode(it));
 
-  EXPECT_EQ(to_string(policy.get_owner().id), std::to_string(st.st_uid))
-      << "the captured owner is not the uid the unconverted reader "
-	 "would have answered";
+  EXPECT_EQ(policy.get_owner().id, bucket->get_info().owner)
+      << "the recorded owner is not the bucket's";
+  EXPECT_NE(to_string(policy.get_owner().id), std::to_string(st.st_uid))
+      << "the file's uid was recorded as its S3 owner";
 
   /* RGW's default policy, not a bare owner.  An owner with no grants
    * is more restrictive than the absence it replaced:  with no ACL,
@@ -4897,7 +4952,8 @@ TEST_F(NSFSNooBaaBucketTest, ALoadedBaseBucketListsInTheirFormat)
     found = true;
     EXPECT_NE(e.meta.owner, "unknown")
 	<< "the listing read their object with our strategy";
-    EXPECT_FALSE(e.meta.owner.empty());
+    EXPECT_EQ(e.meta.owner, to_string(fresh->get_info().owner))
+	<< "an object recording no owner did not list as its bucket's";
   }
   EXPECT_TRUE(found) << "the sideloaded object was not listed";
 
@@ -5762,18 +5818,16 @@ TEST_F(NSFSNooBaaStateTest, AnUnreadableRecordFailsClosed)
 /* Every listing row reports the same owner for an object nothing wrote
  * through RGW.
  *
- * On a base bucket ownership is answered from the file's uid
- * (NooBaaXattrStrategy::object_owner), which is the only answer an
- * object with no extended attributes has.  object_owner() takes the
- * statx that carries the uid, and the version-entry row used to pass
- * nullptr for it -- so a sideloaded object listed with its owner while
- * its own versions listed as "unknown".
+ * Such an object records no owner and is its bucket's owner's
+ * (DECISIONS.md 2026-10-11).  The version entry once listed a
+ * different owner from the object's own -- `unknown` beside an owner --
+ * so both are asserted, and asserted equal.
  *
  * Two controls, because without them the comparison could not fail.
  * The first asserts the files carry no extended attribute at all, so
  * no recorded ACL can be supplying the answer.  The second asserts the
- * expected owner is this process's uid rather than anything RGW
- * stamped. */
+ * owner is the bucket's and not the file's uid, which is what this
+ * listed before. */
 TEST_F(NSFSNooBaaStateTest, EveryListingRowAgreesOnASideloadedOwner)
 {
   remove_our_bucket_info();
@@ -5813,8 +5867,9 @@ TEST_F(NSFSNooBaaStateTest, EveryListingRowAgreesOnASideloadedOwner)
   ASSERT_EQ(no_user_xattrs(leaf), "");
   ASSERT_EQ(no_user_xattrs(vdir / vent), "");
 
-  /* control two:  the answer is the filesystem's, not RGW's */
-  const std::string expect = std::to_string(::getuid());
+  /* control two:  the owner is the bucket's, not the uid */
+  const std::string expect = to_string(bucket->get_info().owner);
+  ASSERT_NE(expect, std::to_string(::getuid()));
 
   rgw::sal::Bucket::ListParams params;
   params.list_versions = true;
@@ -7156,12 +7211,9 @@ TEST_F(NSFSUpgradeTest, ADeleteMarkerStillReadsAsOneAfterConversion)
   EXPECT_FALSE(names.contains("user.noobaa.delete_marker"));
 }
 
-/* Conversion used to make a version owner *worse*:  unconverted, the
- * bucket reads with their strategy and object_owner() answers from the
- * inode;  converted, ours demands a recorded ACL and has no fallback.
- * An entry left untouched therefore went from a correct owner to
- * unknown/unknown.  A delete marker needs this too -- RGW emits an
- * <Owner> for one. */
+/* Conversion records the bucket's owner on a version, as on any object
+ * that records none (DECISIONS.md 2026-10-11).  A delete marker needs
+ * this too -- RGW emits an <Owner> for one. */
 TEST_F(NSFSUpgradeTest, ConversionCapturesTheOwnerOfAVersion)
 {
   const std::string vid{"mtime-dlyy3p99mgtk-ino-430o4"};
@@ -7183,6 +7235,16 @@ TEST_F(NSFSUpgradeTest, ConversionCapturesTheOwnerOfAVersion)
 			version_path("doc.txt", dmid)}) {
     EXPECT_TRUE(xattr_names(p).contains("user.nsfs.rgw.acl"))
 	<< p << " has no owner after conversion, so it lists as unknown";
+    char buf[4096];
+    ssize_t len = ::getxattr(p.c_str(), "user.nsfs.rgw.acl", buf, sizeof(buf));
+    ASSERT_GT(len, 0);
+    bufferlist bl;
+    bl.append(buf, len);
+    RGWAccessControlPolicy policy;
+    auto it = bl.cbegin();
+    ASSERT_NO_THROW(policy.decode(it));
+    EXPECT_EQ(policy.get_owner().id, bucket->get_info().owner)
+	<< p << " records an owner that is not the bucket's";
   }
 }
 

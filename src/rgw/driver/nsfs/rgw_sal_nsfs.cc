@@ -419,8 +419,8 @@ static std::string etag_from_fd(int fd, const nsfs::XattrStrategy* xs)
  * encoding fails to decode, which would look like an object with no
  * owner rather than like an error.
  */
-static int owner_from_fd(int fd, const struct statx* stx,
-			 const nsfs::XattrStrategy* xs, ACLOwner& owner)
+static int owner_from_fd(int fd, const nsfs::XattrStrategy* xs,
+			 ACLOwner& owner)
 {
   Attrs attrs;
   const std::string xattr = xs->disk_name(RGW_ATTR_ACL);
@@ -436,7 +436,27 @@ static int owner_from_fd(int fd, const struct statx* stx,
       }
     }
   }
-  return xs->object_owner(attrs, stx, owner);
+  return xs->object_owner(attrs, owner);
+}
+
+/* A listing entry's owner (DECISIONS.md 2026-10-11).
+ *
+ * `ret` and `recorded` are what XattrStrategy::object_owner() returned.
+ * An owner the object records is the entry's;  an object that records
+ * none is its bucket's;  a recorded owner that cannot be read is
+ * `unknown`, the one case that still is. */
+static void set_dir_entry_owner(rgw_bucket_dir_entry& bde, int ret,
+				const ACLOwner& recorded,
+				const ACLOwner& bucket_owner)
+{
+  if ((ret < 0) && (ret != -ENODATA)) {
+    bde.meta.owner = "unknown";
+    bde.meta.owner_display_name = "unknown";
+    return;
+  }
+  const ACLOwner& o = (ret >= 0) ? recorded : bucket_owner;
+  bde.meta.owner = to_string(o.id);
+  bde.meta.owner_display_name = o.display_name;
 }
 
 /* version entry name within .versions/: <leaf>_<version_id> */
@@ -1201,8 +1221,9 @@ struct DemoteResult {
    * See fill_demoted_entry(). */
   struct statx stx{};
   std::string etag;
+  /* what object_owner() returned for the demoted version */
   ACLOwner owner;
-  bool have_owner{false};
+  int owner_ret{-ENODATA};
 };
 
 /*
@@ -1278,8 +1299,7 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
        * on the leaf before the link and safe_link moves no bytes, so
        * it describes this same inode. */
       result.etag = etag_from_fd(demoted_fd, xs);
-      result.have_owner =
-	(owner_from_fd(demoted_fd, &cur_stx, xs, result.owner) >= 0);
+      result.owner_ret = owner_from_fd(demoted_fd, xs, result.owner);
       ::close(demoted_fd);
     }
     result.stx = cur_stx;
@@ -1449,13 +1469,9 @@ template <typename F>
 }
 
 
-/* Ownership is XattrStrategy::object_owner() now -- a question about the
- * object rather than a decode of one attribute, because in the noobaa
- * format there is no owner attribute and the file's uid is the answer.
- *
- * Callers which have a statx in hand pass it;  the rest pass nullptr, and
- * a format which needs the inode fails there rather than guessing.  Those
- * call sites are where S5 has work to do. */
+/* Ownership is XattrStrategy::object_owner() -- the owner an object
+ * records, if any -- and, where none is recorded, the bucket's
+ * (set_dir_entry_owner(), NSFSBucket::default_object_owner()). */
 
 static inline ceph::real_time from_statx_timestamp(const struct statx_timestamp& xts)
 {
@@ -1482,6 +1498,7 @@ static inline ceph::real_time from_statx_timestamp(const struct statx_timestamp&
  */
 static void fill_demoted_entry(const std::string& obj_name,
 			       const DemoteResult& d,
+			       const ACLOwner& bucket_owner,
 			       rgw_bucket_dir_entry& bde)
 {
   bde.key.name = obj_name;
@@ -1500,10 +1517,7 @@ static void fill_demoted_entry(const std::string& obj_name,
   /* FLAG_VER without FLAG_CURRENT is what demotion means, and clearing
    * that flag is why the entry is rewritten at all */
   bde.flags = rgw_bucket_dir_entry::FLAG_VER;
-  if (d.have_owner) {
-    bde.meta.owner = to_string(d.owner.id);
-    bde.meta.owner_display_name = d.owner.display_name;
-  }
+  set_dir_entry_owner(bde, d.owner_ret, d.owner, bucket_owner);
 }
 
 static inline int copy_dir_fd(int old_fd)
@@ -2128,13 +2142,13 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
 		    xattr_fallback, identity);
 }
 
-int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix)
+int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix)
 {
   rgw_bucket_dir_entry bde{};
 
   rgw_obj_key key = path_strategy->key_from_name(path_prefix + get_name());
 
-  int ret = make_dir_entry(dpp, y, key, flags, bde);
+  int ret = make_dir_entry(dpp, y, key, flags, bucket_owner, bde);
   if (ret < 0) {
     return ret;
   }
@@ -2143,6 +2157,7 @@ int FSEnt::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cach
 
 int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
 			  const rgw_obj_key& in_key, uint32_t flags,
+			  const ACLOwner& bucket_owner,
 			  rgw_bucket_dir_entry& bde)
 {
   rgw_obj_key key = in_key;
@@ -2174,14 +2189,8 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
     return ret;
 
   ACLOwner acl_owner;
-  ret = xattr_strategy->object_owner(attrs, &stx, acl_owner);
-  if (ret < 0) {
-    bde.meta.owner = "unknown";
-    bde.meta.owner_display_name = "unknown";
-  } else {
-    bde.meta.owner = to_string(acl_owner.id);
-    bde.meta.owner_display_name = acl_owner.display_name;
-  }
+  ret = xattr_strategy->object_owner(attrs, acl_owner);
+  set_dir_entry_owner(bde, ret, acl_owner, bucket_owner);
   bde.meta.category = RGWObjCategory::Main;
   bde.meta.size = stx.stx_size;
   bde.meta.accounted_size = stx.stx_size;
@@ -3006,11 +3015,12 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
 
 int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                           fill_cache_cb_t &cb, uint32_t flags,
+                          const ACLOwner& bucket_owner,
                           const std::string& path_prefix)
 {
   const auto& rn = reserved_or_none(reserved_names);
   int ret = for_each(dpp, [this, &cb, &dpp, &y, &path_prefix, flags,
-			   &rn](const char *name) {
+			   &bucket_owner, &rn](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
     if (is_reserved_name(name, rn) &&
@@ -3045,14 +3055,8 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
         return ret;
 
       ACLOwner acl_owner;
-      if (xattr_strategy->object_owner(attrs, &ent->get_stx(),
-				       acl_owner) >= 0) {
-        bde.meta.owner = to_string(acl_owner.id);
-        bde.meta.owner_display_name = acl_owner.display_name;
-      } else {
-        bde.meta.owner = "unknown";
-        bde.meta.owner_display_name = "unknown";
-      }
+      ret = xattr_strategy->object_owner(attrs, acl_owner);
+      set_dir_entry_owner(bde, ret, acl_owner, bucket_owner);
       bde.meta.category = RGWObjCategory::Main;
       bde.meta.size = ent->get_stx().stx_size;
       bde.meta.accounted_size = ent->get_stx().stx_size;
@@ -3113,11 +3117,9 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 	  if (get_x_attrs(y, dpp, subdir->get_fd(), dattrs, name,
 			  xattr_strategy, xattr_fallback) == 0) {
 	    ACLOwner acl_owner;
-	    if (xattr_strategy->object_owner(dattrs, &subdir->get_stx(),
-					     acl_owner) >= 0) {
-	      bde.meta.owner = to_string(acl_owner.id);
-	      bde.meta.owner_display_name = acl_owner.display_name;
-	    }
+	    set_dir_entry_owner(bde,
+				xattr_strategy->object_owner(dattrs, acl_owner),
+				acl_owner, bucket_owner);
 	    bufferlist etag_bl;
 	    if (rgw::sal::get_attr(dattrs, RGW_ATTR_ETAG, etag_bl)) {
 	      bde.meta.etag = etag_bl.to_str();
@@ -3136,11 +3138,11 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 	}
       }
 
-      return subdir->fill_cache(dpp, y, cb, flags,
+      return subdir->fill_cache(dpp, y, cb, flags, bucket_owner,
                                 path_prefix + name + "/");
     }
 
-    ret = ent->fill_cache(dpp, y, cb, flags, path_prefix);
+    ret = ent->fill_cache(dpp, y, cb, flags, bucket_owner, path_prefix);
     if (ret < 0)
       return ret;
     return 0;
@@ -3243,10 +3245,9 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 			      xattr_fallback);
 
             ACLOwner acl_owner;
-            if (xattr_strategy->object_owner(attrs, &vstx, acl_owner) >= 0) {
-              bde.meta.owner = to_string(acl_owner.id);
-              bde.meta.owner_display_name = acl_owner.display_name;
-            }
+            set_dir_entry_owner(bde,
+                                xattr_strategy->object_owner(attrs, acl_owner),
+                                acl_owner, bucket_owner);
 
             bufferlist etag_bl;
             if (rgw::sal::get_attr(attrs, RGW_ATTR_ETAG, etag_bl)) {
@@ -3433,13 +3434,16 @@ std::unique_ptr<File> MPDirectory::get_part_file(int partnum)
 
 int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                             fill_cache_cb_t &cb, uint32_t flags,
+                            const ACLOwner& bucket_owner,
                             const std::string& path_prefix)
 {
-  int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, path_prefix);
+  int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, bucket_owner,
+			      path_prefix);
   if (ret < 0)
     return ret;
 
-  return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, path_prefix);
+  return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE, bucket_owner,
+			       path_prefix);
 }
 
 } // namespace nsfs
@@ -4760,7 +4764,9 @@ std::unique_ptr<Object> NSFSBucket::get_object(const rgw_obj_key& k)
 
 int NSFSObject::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb)
 {
-  return ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+  auto* b = static_cast<NSFSBucket*>(get_bucket());
+  return ent->fill_cache(dpp, y, cb, FSEnt::FLAG_NONE,
+			 b->default_object_owner(dpp, y));
 }
 
 int NSFSDriver::mint_listing_entry(const std::string &bname,
@@ -5413,7 +5419,7 @@ int NSFSBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
   if (get_info().versioned()) {
     flags |= nsfs::FSEnt::FLAG_LIST_VERSIONS;
   }
-  int ret = dir->fill_cache(dpp, y, cb, flags);
+  int ret = dir->fill_cache(dpp, y, cb, flags, default_object_owner(dpp, y));
   if (ret < 0) {
     return ret;
   }
@@ -5421,6 +5427,35 @@ int NSFSBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
     ret |= file::listing::FILL_CACHE_FLAG_FIXUP_CURRENT;
   }
   return ret;
+}
+
+const ACLOwner& NSFSBucket::default_object_owner(const DoutPrefixProvider* dpp,
+						 optional_yield y)
+{
+  if (default_owner) {
+    return *default_owner;
+  }
+  /* mint_listing_entry() reaches here with no prefix provider */
+  NoDoutPrefix ndp(driver->ctx(), dout_subsys);
+  const DoutPrefixProvider* p = dpp ? dpp : &ndp;
+
+  ACLOwner o;
+  o.id = get_info().owner;
+  if (const auto* a = std::get_if<rgw_account_id>(&o.id)) {
+    RGWAccountInfo info;
+    Attrs attrs;
+    RGWObjVersionTracker objv;
+    if (driver->load_account_by_id(p, y, *a, info, attrs, objv) == 0) {
+      o.display_name = info.name;
+    }
+  } else if (const auto* u = std::get_if<rgw_user>(&o.id); u && !u->empty()) {
+    std::unique_ptr<User> user = driver->get_user(*u);
+    if (user->load_user(p, y) == 0) {
+      o.display_name = user->get_display_name();
+    }
+  }
+  default_owner = std::move(o);
+  return *default_owner;
 }
 
 int NSFSBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
@@ -6217,6 +6252,7 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			 nsfs::FSStrategy* fs,
 			 const nsfs::XattrStrategy* ours,
 			 const nsfs::XattrStrategy* theirs,
+			 const ACLOwner& bucket_owner,
 			 nsfs::convert_cb_t* cb,
 			 const nsfs::ConvertEvent& base_ev,
 			 const std::vector<std::string>* leave_alone = nullptr)
@@ -6245,22 +6281,20 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
 
-  /* Capture the owner, because marking the bucket is what destroys it.
+  /* Record the owner:  the bucket's (DECISIONS.md 2026-10-11).
    *
-   * An object with no recorded ACL answers its owner from the inode
-   * while the bucket is unmarked -- NooBaaXattrStrategy::object_owner()
-   * returns the uid.  The moment the mask goes down that reader is
-   * gone and the recorded ACL is the only source, so an object
-   * converted without one has no owner at all and lists as
-   * unknown/unknown.
+   * NooBaa records no per-object owner;  `get_default_object_owner()`
+   * returns the bucket's `owner_account` for every object, and the
+   * account import has made that an RGW account.  Adoption is where the
+   * tree becomes consistent with the imported accounts, so an object
+   * that records no owner is given its bucket's here -- the owner an
+   * unconverted listing shows, and the one RGW stamps on a write into a
+   * BucketOwnerEnforced bucket.
+   * Never the file's uid, which is the POSIX identity it was written
+   * as, not an S3 owner.
    *
-   * Nothing is invented:  the unconverted reader already answers with
-   * the uid, so this writes down the same answer.  What it writes is
-   * RGW's default policy and not an owner alone, because an
-   * owner-with-no-grants is a shape RGW never produces and is *more
-   * restrictive than the absence it replaces* -- with no ACL
-   * authorization falls through to the bucket.  The display name stays
-   * empty, which is what the uid reader had.
+   * What it writes is RGW's default policy and not an owner alone,
+   * because an owner-with-no-grants is a shape RGW never produces.
    *
    * Objects and versions.  A version entry is an object's earlier
    * content and answers its owner exactly the same way, so it needs
@@ -6277,24 +6311,14 @@ static int convert_attrs(const DoutPrefixProvider* dpp, optional_yield y,
   if (((base_ev.kind == nsfs::ConvertEvent::Kind::object) ||
        (base_ev.kind == nsfs::ConvertEvent::Kind::version)) &&
       (attrs.find(RGW_ATTR_ACL) == attrs.end())) {
-    struct statx ostx{};
-    ret = statx_ids(fd, ostx);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: cannot stat " << display
-	<< " to capture its owner: " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-    ACLOwner owner;
-    if (theirs->object_owner(attrs, &ostx, owner) == 0) {
-      RGWAccessControlPolicy policy;
-      policy.create_default(owner.id, owner.display_name);
-      bufferlist aclbl;
-      policy.encode(aclbl);
-      const std::string mine = ours->disk_name(RGW_ATTR_ACL);
-      if (!mine.empty()) {
-	to_write.insert_or_assign(mine, attr_on_disk(ours, RGW_ATTR_ACL,
-						     aclbl));
-      }
+    RGWAccessControlPolicy policy;
+    policy.create_default(bucket_owner.id, bucket_owner.display_name);
+    bufferlist aclbl;
+    policy.encode(aclbl);
+    const std::string mine = ours->disk_name(RGW_ATTR_ACL);
+    if (!mine.empty()) {
+      to_write.insert_or_assign(mine, attr_on_disk(ours, RGW_ATTR_ACL,
+						   aclbl));
     }
   }
 
@@ -6384,12 +6408,8 @@ static bool split_version_entry(const std::string& entry,
  * NooBaa delete marker stops reading as a delete marker and the object
  * it deleted comes back, 200 with no bytes where S3 owes 404.
  *
- * It also went backwards on the owner.  Unconverted, the bucket reads
- * with their strategy and object_owner() answers from the inode;
- * converted, ours demands a recorded ACL and has no fallback, so an
- * entry left in their spelling lists as unknown/unknown.  The capture
- * in convert_attrs() is what closes that, which is why a version is
- * one of the kinds it captures for.
+ * A version also needs its owner recorded, like any object:  it is one
+ * of the kinds convert_attrs() records the bucket's owner for.
  *
  * Flat:  the entries belong to leaves in this directory, so there is
  * nothing to recurse into.  Anything that is not a regular file is
@@ -6402,6 +6422,7 @@ static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
 			    nsfs::FSStrategy* fs,
 			    const nsfs::XattrStrategy* ours,
 			    const nsfs::XattrStrategy* theirs,
+			    const ACLOwner& bucket_owner,
 			    nsfs::convert_cb_t* cb,
 			    nsfs::ConvertProgress& progress)
 {
@@ -6466,7 +6487,8 @@ static int convert_versions(const DoutPrefixProvider* dpp, optional_yield y,
     ev.index = progress.objects + progress.directory_objects
       + progress.versions;
 
-    ret = convert_attrs(dpp, y, fd, ev.key, fs, ours, theirs, cb, ev);
+    ret = convert_attrs(dpp, y, fd, ev.key, fs, ours, theirs, bucket_owner,
+			cb, ev);
     if (ret != 0) {
       return ret;
     }
@@ -6489,6 +6511,7 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 			     nsfs::FSStrategy* fs,
 			     const nsfs::XattrStrategy* ours,
 			     const nsfs::XattrStrategy* theirs,
+			     const ACLOwner& bucket_owner,
 			     const nsfs::PathStrategy* their_paths,
 			     const nsfs::ReservedNames& rn,
 			     nsfs::convert_cb_t* cb,
@@ -6548,7 +6571,8 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
     ev.key = prefix + name;
     ev.index = progress.objects + progress.directory_objects;
 
-    ret = convert_attrs(dpp, y, fd, ev.key, fs, ours, theirs, cb, ev);
+    ret = convert_attrs(dpp, y, fd, ev.key, fs, ours, theirs, bucket_owner,
+			cb, ev);
     if (ret != 0) {
       return ret;
     }
@@ -6557,7 +6581,8 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 
   /* Before descending, so the whole of this directory -- its objects
    * and their history -- is done in one step. */
-  ret = convert_versions(dpp, y, d, cct, prefix, fs, ours, theirs, cb,
+  ret = convert_versions(dpp, y, d, cct, prefix, fs, ours, theirs,
+			 bucket_owner, cb,
 			 progress);
   if (ret != 0) {
     return ret;
@@ -6655,22 +6680,18 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
 	  to_write.try_emplace(mine, attr_on_disk(ours, key, bl));
 	}
       }
-      /* Capture the owner, for the reason convert_attrs() gives:  the
-       * uid reader goes away with the mask.  Here the inode that
-       * answered it is the directory, and the answer lands on the
-       * sentinel along with everything else that moves. */
+      /* Record the owner, for the reason convert_attrs() gives:  the
+       * bucket's.  It lands on the sentinel along with everything else
+       * that moves. */
       if (dattrs.find(RGW_ATTR_ACL) == dattrs.end()) {
-	ACLOwner owner;
-	if (theirs->object_owner(dattrs, &dstx, owner) == 0) {
-	  RGWAccessControlPolicy policy;
-	  policy.create_default(owner.id, owner.display_name);
-	  bufferlist aclbl;
-	  policy.encode(aclbl);
-	  const std::string mine = ours->disk_name(RGW_ATTR_ACL);
-	  if (!mine.empty()) {
-	    to_write.insert_or_assign(mine, attr_on_disk(ours, RGW_ATTR_ACL,
-							 aclbl));
-	  }
+	RGWAccessControlPolicy policy;
+	policy.create_default(bucket_owner.id, bucket_owner.display_name);
+	bufferlist aclbl;
+	policy.encode(aclbl);
+	const std::string mine = ours->disk_name(RGW_ATTR_ACL);
+	if (!mine.empty()) {
+	  to_write.insert_or_assign(mine, attr_on_disk(ours, RGW_ATTR_ACL,
+						       aclbl));
 	}
       }
       if (!to_write.empty()) {
@@ -6724,8 +6745,8 @@ static int convert_directory(const DoutPrefixProvider* dpp, optional_yield y,
     }
 
     ret = convert_directory(dpp, y, &sub, cct, prefix + name + "/", fs,
-			    ours, theirs, their_paths, rn, cb, progress,
-			    no_chown);
+			    ours, theirs, bucket_owner, their_paths, rn, cb,
+			    progress, no_chown);
     if (ret != 0) {
       return ret;
     }
@@ -7318,7 +7339,7 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
 
     ret = convert_attrs(dpp, y, dir->get_fd(), get_name(),
 			driver->get_fs_strategy(), xattr_strategy(), theirs,
-			cb, ev, &markers);
+			default_object_owner(dpp, y), cb, ev, &markers);
     if (ret != 0) {
       return ret;
     }
@@ -7326,7 +7347,8 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
 
   ret = convert_directory(dpp, y, dir.get(), driver->ctx(),
 			  std::string(), driver->get_fs_strategy(),
-			  xattr_strategy(), theirs, their_paths,
+			  xattr_strategy(), theirs,
+			  default_object_owner(dpp, y), their_paths,
 			  driver->get_reserved_names(), cb, prog,
 			  driver->no_chown_injected());
   if (ret == 0) {
@@ -8686,7 +8708,8 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       bcache->remove_entry(dpp, db->get_name(), old_key);
 
       rgw_bucket_dir_entry dem_bde{};
-      fill_demoted_entry(obj_name, demote, dem_bde);
+      fill_demoted_entry(obj_name, demote, db->default_object_owner(dpp, y),
+			 dem_bde);
       bcache->add_entry(dpp, db->get_name(), dem_bde);
     }
 
@@ -8710,11 +8733,10 @@ int NSFSObject::copy_object(const ACLOwner& owner,
                     rgw_bucket_dir_entry::FLAG_CURRENT;
     {
       ACLOwner acl_owner;
-      if (xattr_strategy()->object_owner(dobj->get_attrs(), &new_stx,
-                                         acl_owner) >= 0) {
-        new_bde.meta.owner = to_string(acl_owner.id);
-        new_bde.meta.owner_display_name = acl_owner.display_name;
-      }
+      set_dir_entry_owner(new_bde,
+                          xattr_strategy()->object_owner(dobj->get_attrs(),
+                                                         acl_owner),
+                          acl_owner, db->default_object_owner(dpp, y));
     }
     bcache->add_entry(dpp, db->get_name(), new_bde);
   } else if (dobj->get_fsent()) {
@@ -8737,7 +8759,8 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       dobj->get_fsent()->stat(dpp, /*force=*/true);
       rgw_bucket_dir_entry bde{};
       int r = dobj->get_fsent()->make_dir_entry(
-	  dpp, y, dobj->get_key(), nsfs::FSEnt::FLAG_NONE, bde);
+	  dpp, y, dobj->get_key(), nsfs::FSEnt::FLAG_NONE,
+	  db->default_object_owner(dpp, y), bde);
       if (r < 0) {
 	ldpp_dout(dpp, 0) << "ERROR: could not compose the listing entry for "
 	  << dobj->get_key() << " after a copy: " << cpp_strerror(-r)
@@ -9493,11 +9516,11 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 	Attrs shadow_attrs;
 	if (fgetattrs(dpp, shadow_attrs, 0) == 0) {
 	  ACLOwner acl_owner;
-	  if (src_obj->xattr_strategy()->object_owner(shadow_attrs, &pub_stx,
-						      acl_owner) >= 0) {
-	    bde.meta.owner = to_string(acl_owner.id);
-	    bde.meta.owner_display_name = acl_owner.display_name;
-	  }
+	  set_dir_entry_owner(bde,
+			      src_obj->xattr_strategy()->object_owner(
+				  shadow_attrs, acl_owner),
+			      acl_owner,
+			      bucket->default_object_owner(dpp, null_yield));
 	  /* the digest written above, which is what HEAD returns;  the
 	   * synthesized change token is for objects that carry no etag,
 	   * i.e. sideloaded files, and reporting it here disagreed with
@@ -9529,7 +9552,8 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
 	bcache->remove_entry(dpp, bucket->get_name(), old_key);
 
 	rgw_bucket_dir_entry dem_bde{};
-	fill_demoted_entry(obj_name, demote, dem_bde);
+	fill_demoted_entry(obj_name, demote,
+			   bucket->default_object_owner(dpp, null_yield), dem_bde);
 	bcache->add_entry(dpp, bucket->get_name(), dem_bde);
       }
     }
@@ -10300,20 +10324,16 @@ int NSFSObject::make_ent(ObjectType type)
 
 int NSFSObject::get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner)
 {
-  /* The statx matters here:  a NooBaa-format bucket answers ownership
-   * from the file's uid, which is the only answer an object nothing
-   * wrote through RGW has.  Without it HEAD reports unknown where the
-   * listing row reports the owner. */
-  const struct statx* stx = nullptr;
-  if (ent) {
-    ent->stat(dpp);
-    stx = &ent->get_stx();
-  }
+  /* An object that records no owner is its bucket's owner's, the same
+   * owner its listing entry shows (DECISIONS.md 2026-10-11). */
   ACLOwner acl_owner;
-  int ret = xattr_strategy()->object_owner(get_attrs(), stx, acl_owner);
-  if (ret < 0) {
+  int ret = xattr_strategy()->object_owner(get_attrs(), acl_owner);
+  if (ret == -ENODATA) {
+    acl_owner = static_cast<NSFSBucket*>(get_bucket())->default_object_owner(
+	dpp, y);
+  } else if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__
-        << ": No " RGW_ATTR_ACL " attr" << dendl;
+        << ": unreadable " RGW_ATTR_ACL " attr" << dendl;
     return ret;
   }
 
@@ -10418,7 +10438,8 @@ int NSFSObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, 
   auto* bcache = driver->get_bucket_cache();
   if (bcache) {
     rgw_bucket_dir_entry bde{};
-    ret = ent->make_dir_entry(dpp, y, get_key(), flags, bde);
+    ret = ent->make_dir_entry(dpp, y, get_key(), flags,
+			      b->default_object_owner(dpp, y), bde);
     if (ret < 0) {
       return ret;
     }
@@ -11019,6 +11040,7 @@ static int check_delete_preconditions(
 static void cache_promoted_current(NSFSDriver* driver,
                                    const nsfs::XattrStrategy* xs,
                                    const DoutPrefixProvider* dpp,
+                                   const ACLOwner& bucket_owner,
                                    const std::string& bucket_name,
                                    const std::string& obj_name,
                                    int parent_fd, const std::string& leaf,
@@ -11080,10 +11102,8 @@ static void cache_promoted_current(NSFSDriver* driver,
     bde.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
   }
   ACLOwner acl_owner;
-  if (xs->object_owner(pattrs, &pstx, acl_owner) >= 0) {
-    bde.meta.owner = to_string(acl_owner.id);
-    bde.meta.owner_display_name = acl_owner.display_name;
-  }
+  set_dir_entry_owner(bde, xs->object_owner(pattrs, acl_owner), acl_owner,
+		      bucket_owner);
 
   driver->get_bucket_cache()->add_entry(dpp, bucket_name, bde);
 }
@@ -11276,7 +11296,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           if (statx(promote_fd, promote_leaf.c_str(),
                     AT_SYMLINK_NOFOLLOW, STATX_ALL, &pstx) == 0) {
             cache_promoted_current(source->driver, source->xattr_strategy(),
-                                   dpp, b->get_name(),
+                                   dpp, b->default_object_owner(dpp, y),
+                                   b->get_name(),
                                    source->get_key().get_index_key_name(),
                                    promote_fd, promote_leaf, promoted, pstx);
           }
@@ -11402,7 +11423,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           if (statx(parent_fd, leaf_name.c_str(),
                     AT_SYMLINK_NOFOLLOW, STATX_ALL, &pstx) == 0) {
             cache_promoted_current(source->driver, source->xattr_strategy(),
-                                   dpp, b->get_name(),
+                                   dpp, b->default_object_owner(dpp, y),
+                                   b->get_name(),
                                    source->get_key().get_index_key_name(),
                                    parent_fd, leaf_name, promoted, pstx);
           }
@@ -11676,12 +11698,10 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
     dem_bde.flags = rgw_bucket_dir_entry::FLAG_VER;
     {
       ACLOwner acl_owner;
-      if (source->xattr_strategy()->object_owner(source->get_attrs(),
-                                                 &ent->get_stx(),
-                                                 acl_owner) >= 0) {
-        dem_bde.meta.owner = to_string(acl_owner.id);
-        dem_bde.meta.owner_display_name = acl_owner.display_name;
-      }
+      set_dir_entry_owner(dem_bde,
+                          source->xattr_strategy()->object_owner(
+                              source->get_attrs(), acl_owner),
+                          acl_owner, b->default_object_owner(dpp, y));
     }
     bcache->add_entry(dpp, b->get_name(), dem_bde);
   }
@@ -11710,7 +11730,7 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
        * ACL was just written with, so the cache entry and the disk
        * agree. */
       ACLOwner acl_owner;
-      if (source->xattr_strategy()->object_owner(source->get_attrs(), nullptr,
+      if (source->xattr_strategy()->object_owner(source->get_attrs(),
 						 acl_owner) >= 0) {
         dm_bde.meta.owner = to_string(acl_owner.id);
         dm_bde.meta.owner_display_name = acl_owner.display_name;
@@ -12402,7 +12422,8 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
         bcache->remove_entry(dpp, pb->get_name(), old_key);
 
         rgw_bucket_dir_entry dem_bde{};
-        fill_demoted_entry(obj_name, demote, dem_bde);
+        fill_demoted_entry(obj_name, demote, pb->default_object_owner(dpp, y),
+                           dem_bde);
         bcache->add_entry(dpp, pb->get_name(), dem_bde);
       }
 
@@ -12440,10 +12461,9 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
         ACLOwner acl_owner;
         const Attrs& osrc = (attrs.find(RGW_ATTR_ACL) != attrs.end())
           ? attrs : target_obj->get_attrs();
-        if (xattr_strategy()->object_owner(osrc, &new_stx, acl_owner) >= 0) {
-          new_bde.meta.owner = to_string(acl_owner.id);
-          new_bde.meta.owner_display_name = acl_owner.display_name;
-        }
+        set_dir_entry_owner(new_bde,
+                            xattr_strategy()->object_owner(osrc, acl_owner),
+                            acl_owner, pb->default_object_owner(dpp, y));
       }
       bcache->add_entry(dpp, pb->get_name(), new_bde);
     }
@@ -12475,10 +12495,9 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
         ACLOwner acl_owner;
         const Attrs& osrc = (attrs.find(RGW_ATTR_ACL) != attrs.end())
           ? attrs : target_obj->get_attrs();
-        if (xattr_strategy()->object_owner(osrc, &new_stx, acl_owner) >= 0) {
-          bde.meta.owner = to_string(acl_owner.id);
-          bde.meta.owner_display_name = acl_owner.display_name;
-        }
+        set_dir_entry_owner(bde,
+                            xattr_strategy()->object_owner(osrc, acl_owner),
+                            acl_owner, pb->default_object_owner(dpp, y));
       }
       bcache->add_entry(dpp, pb->get_name(), bde);
     }
@@ -13497,7 +13516,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     bcache->remove_entry(rctx.dpp, b->get_name(), old_key);
 
     rgw_bucket_dir_entry dem_bde{};
-    fill_demoted_entry(obj_name, demote, dem_bde);
+    fill_demoted_entry(obj_name, demote,
+		       b->default_object_owner(rctx.dpp, rctx.y), dem_bde);
     bcache->add_entry(rctx.dpp, b->get_name(), dem_bde);
   }
 

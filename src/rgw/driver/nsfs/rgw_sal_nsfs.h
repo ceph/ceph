@@ -202,8 +202,8 @@ protected:
   bool exist{false};
   /* Zero-initialized so that get_stx() on an entry which has not been
    * stat()ed reads as "no information":  statx reports what it filled
-   * in stx_mask, and a zero mask is what XattrStrategy::object_owner()
-   * and its kin test before touching a field. */
+   * in stx_mask, and a zero mask is what a reader tests before
+   * touching a field. */
   struct statx stx{};
   bool stat_done{false};
   CephContext* ctx;
@@ -326,11 +326,15 @@ public:
   /* Build this entry's listing row.  Only Directory::fill_cache()
    * composes keys from a path prefix as it descends;  every other caller
    * already knows the object's key and should pass it, rather than
-   * borrowing a prefix-relative walk to produce one row. */
+   * borrowing a prefix-relative walk to produce one row.
+   *
+   * `bucket_owner` is the owner of an object that records none --
+   * NSFSBucket::default_object_owner(). */
   int make_dir_entry(const DoutPrefixProvider* dpp, optional_yield y,
 		     const rgw_obj_key& key, uint32_t flags,
+		     const ACLOwner& bucket_owner,
 		     rgw_bucket_dir_entry& bde);
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix = "");
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "");
   virtual std::string get_cur_version() { return ""; };
 };
 
@@ -404,7 +408,7 @@ public:
   }
   virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix = "") override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "") override;
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
 };
@@ -442,7 +446,7 @@ public:
   std::unique_ptr<MPDirectory> clone() {
     return std::make_unique<MPDirectory>(*this);
   }
-  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const std::string& path_prefix = "") override;
+  virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "") override;
 };
 
 
@@ -1455,6 +1459,8 @@ private:
   /* read beside it:  the format this tree is being converted from, or
    * none.  Only meaningful once profile is non-null. */
   bool converting{false};
+  /* default_object_owner(), once looked up */
+  std::optional<ACLOwner> default_owner;
 
 public:
   NSFSBucket(NSFSDriver *_dr, nsfs::Directory* _p_dir, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
@@ -1740,6 +1746,14 @@ public:
 
   /* enumerate all entries by callback, in any order */
   int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, nsfs::fill_cache_cb_t& cb);
+
+  /* The owner of an object here that records none, with the display
+   * name RGW gives it:  the bucket's owner.  NooBaa returns the
+   * bucket's owner for every object, and an adopted bucket is
+   * BucketOwnerEnforced (DECISIONS.md 2026-10-11).  Looked up once per
+   * handle;  a display name that cannot be looked up is left empty. */
+  const ACLOwner& default_object_owner(const DoutPrefixProvider* dpp,
+				       optional_yield y);
 
   static MDB_cmp_func* lmdb_cmp();
 

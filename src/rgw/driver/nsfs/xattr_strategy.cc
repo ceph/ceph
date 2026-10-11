@@ -60,15 +60,13 @@ bool PrefixedXattrStrategy::parse_disk_name(const std::string& disk,
 }
 
 int PrefixedXattrStrategy::object_owner(const Attrs& attrs,
-				   const struct statx* stx,
 				   ACLOwner& owner) const
 {
-  /* recorded, and separate from the file's uid.  Nothing keeps the two
-   * consistent, which is why a file created outside this gateway has no
-   * answer here at all. */
+  /* recorded, and separate from the file's uid.  A file created outside
+   * this gateway has none. */
   auto i = attrs.find(RGW_ATTR_ACL);
   if (i == attrs.end()) {
-    return -EINVAL;
+    return -ENODATA;
   }
   RGWAccessControlPolicy policy;
   try {
@@ -214,18 +212,13 @@ bool NooBaaXattrStrategy::parse_disk_name(const std::string& disk,
   return false;
 }
 
-/* From the inode.  They record no owner anywhere:  the write happened
- * under the account's identity, so the file's uid is the answer, and it
- * is the only answer a natively created file has. */
+/* Never recorded.  Their format has nowhere to put an owner, and
+ * `get_default_object_owner()` (`s3_utils.js`) returns the bucket's
+ * `owner_account` for every object. */
 int NooBaaXattrStrategy::object_owner(const Attrs& attrs,
-				      const struct statx* stx,
 				      ACLOwner& owner) const
 {
-  if (!stx || !(stx->stx_mask & STATX_UID)) {
-    return -EINVAL;
-  }
-  owner.id = rgw_user(std::to_string(stx->stx_uid));
-  return 0;
+  return -ENODATA;
 }
 
 /* Never.  The terminator is an RGW-side accident that our own writers

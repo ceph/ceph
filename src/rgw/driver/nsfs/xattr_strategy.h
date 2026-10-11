@@ -96,20 +96,21 @@ public:
     return false;
   }
 
-  /* Who owns this object.
+  /* The owner recorded on this object, if any.
    *
-   * A question, not "read this attribute", and that is the whole point of
-   * having this method.  nsfs records ownership in an ACL attribute and
-   * the file's uid is incidental;  NooBaa records no owner at all, and the
-   * file's uid *is* the answer, because the write happened under the
-   * account's identity.  A caller which reads a key has already assumed
-   * the first of those -- which is why a file created by a native GPFS
-   * client currently lists as unknown/unknown.
+   *   0         recorded;  `owner` is it
+   *   -ENODATA  none recorded.  The object is its bucket's owner's:
+   *             NooBaa records no per-object owner and returns the
+   *             bucket's `owner_account` for every object, and an
+   *             adopted bucket is BucketOwnerEnforced (DECISIONS.md
+   *             2026-10-11).
+   *             The caller has the bucket;  this does not.
+   *   -EIO      recorded and unreadable
    *
-   * stx may be null when the caller has attributes but no stat;  a format
-   * which needs the inode says so by failing. */
-  virtual int object_owner(const Attrs& attrs, const struct statx* stx,
-			   ACLOwner& owner) const = 0;
+   * Never the file's uid.  The uid is the POSIX identity the file was
+   * written as, which is not an S3 owner and can be shared by several
+   * accounts. */
+  virtual int object_owner(const Attrs& attrs, ACLOwner& owner) const = 0;
 
   /* Does RGW store this attribute's value as a counted string, with its
    * NUL terminator included?
@@ -171,8 +172,7 @@ public:
   bool parse_disk_name(const std::string& disk,
 		       std::string& key) const override;
 
-  int object_owner(const Attrs& attrs, const struct statx* stx,
-		   ACLOwner& owner) const override;
+  int object_owner(const Attrs& attrs, ACLOwner& owner) const override;
 
   bool counted_string_value(const std::string& key) const override;
 
@@ -193,10 +193,10 @@ public:
  * block at the head of the file, and `to_fs_xattr()` for the user
  * metadata mapping.
  *
- * Ownership comes from the inode.  They record no owner anywhere, and
- * the file's uid is the answer because the write happened under the
- * account's identity -- which is also what stops a natively created
- * file listing as unknown/unknown.
+ * Ownership is the bucket's.  They record no owner anywhere and return
+ * the bucket's `owner_account` for every object, so object_owner()
+ * returns -ENODATA and the caller supplies the bucket's owner
+ * (DECISIONS.md 2026-10-11).
  *
  * NOT MAPPED, DELIBERATELY:
  *
@@ -232,8 +232,7 @@ public:
 		  xattr_map_t& to_write,
 		  std::vector<std::string>& to_remove) const override;
 
-  int object_owner(const Attrs& attrs, const struct statx* stx,
-		   ACLOwner& owner) const override;
+  int object_owner(const Attrs& attrs, ACLOwner& owner) const override;
 
   bool counted_string_value(const std::string& key) const override;
 
