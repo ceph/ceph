@@ -25,6 +25,7 @@
 #include "../LogSegmentRef.h"
 
 
+#include "include/container_ios.h"
 #include "include/interval_set.h"
 #include "common/strescape.h"
 
