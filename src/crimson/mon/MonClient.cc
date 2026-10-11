@@ -16,6 +16,7 @@
 
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/hostname.h"
+#include "common/LogFmt.h"
 #include "include/utime_fmt.h"
 
 #include "crimson/auth/KeyRing.h"

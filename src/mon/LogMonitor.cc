@@ -58,6 +58,7 @@
 #include "msg/Messenger.h"
 #include "common/Graylog.h"
 #include "common/Journald.h"
+#include "common/LogFmt.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/strtol.h"
