@@ -101,11 +101,53 @@ struct bucket_namespace_t {
   }
 };
 
+// Where the LanceDB data of a vector bucket is stored, when the backend is "rgw".
+// The choice is made when the vector bucket is created (from the
+// rgw_s3vector_data_s3_bucket option) and then recorded on the bucket as an
+// immutable attribute; it never changes afterwards.
+enum class StorageMode {
+  VECTOR_BUCKET,  // store the data inside the vector bucket itself (default)
+  S3_BUCKET, // store the data in a same-name S3 bucket
+};
+
+// Values persisted in the bucket attribute.
+constexpr const char* storage_mode_vector = "vector_bucket";
+constexpr const char* storage_mode_s3 = "s3_bucket";
+
+inline const char* to_string(StorageMode mode) {
+  return mode == StorageMode::S3_BUCKET ? storage_mode_s3 : storage_mode_vector;
+}
+
+// Convert string to storage mode. Returns 0 on success, -EINVAL otherwise.
+inline int get_storage_mode(const std::string& str, StorageMode& mode) {
+  if (boost::iequals(str, storage_mode_vector)) {
+    mode = StorageMode::VECTOR_BUCKET;
+    return 0;
+  }
+  if (boost::iequals(str, storage_mode_s3)) {
+    mode = StorageMode::S3_BUCKET;
+    return 0;
+  }
+  return -EINVAL;
+}
+
+inline bool uses_vector_bucket_storage(StorageMode mode) {
+  return mode == StorageMode::VECTOR_BUCKET;
+}
+
+// Read the immutable storage mode. Before creation, use the configured default.
+// Metadata read errors and invalid attributes are returned to the caller.
+int get_bucket_storage_mode(const DoutPrefixProvider* dpp,
+    rgw::sal::Driver* driver, const bucket_namespace_t& ns,
+    const std::string& vector_bucket_name, StorageMode& mode, optional_yield y);
+
 // Create a LanceDB session with RGW provider. the session is per tenant, since
-// two tenants may use the same vector bucket name
+// two tenants may use the same vector bucket name. use_vector_bucket selects the
+// entrypoint namespace of the object operations (see get_bucket_storage_mode).
 LanceDBSession* create_rgw_session(const DoutPrefixProvider* dpp,
     rgw::sal::Driver* driver,
     const std::string& tenant,
+    bool use_vector_bucket,
     const void* options = nullptr);
 
 /*

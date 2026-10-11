@@ -215,7 +215,16 @@ private:
               const LanceDBSessionOptions* options = nullptr;
 
               if (is_rgw_backend(backend_type)) {
-                session = create_rgw_session(this, driver, message->ns.tenant, options);
+                StorageMode mode;
+                if (int r = get_bucket_storage_mode(this, driver, message->ns,
+                                                    session_name.second, mode, null_yield); r < 0) {
+                  ldpp_dout(this, 1) << "ERROR: failed to read vector bucket storage mode: " << r << dendl;
+                  return;
+                }
+                const bool use_vector_bucket = uses_vector_bucket_storage(mode);
+                session = create_rgw_session(this, driver,
+                    use_vector_bucket ? message->ns.name() : message->ns.tenant,
+                    use_vector_bucket, options);
               } else {
                 session = lancedb_session_new(options);
               }

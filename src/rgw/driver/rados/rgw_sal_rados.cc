@@ -708,6 +708,33 @@ int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
   }
 #endif
 
+  // Once no vector indexes remain, remove internal objects and uploads before
+  // dropping the bucket index. A separate S3 backing bucket is left intact.
+  if (info.layout.current_index.layout.type != rgw::BucketIndexType::Indexless) {
+    ListParams params;
+    params.list_versions = true;
+    params.allow_unordered = true;
+    ListResults results;
+    do {
+      results.objs.clear();
+      int r = list(dpp, params, 1000, results, y);
+      if (r < 0) {
+        return r;
+      }
+      for (const auto& obj : results.objs) {
+        rgw_obj_key key(obj.key);
+        r = rgw_remove_object(dpp, store, this, key, y);
+        if (r < 0 && r != -ENOENT) {
+          return r;
+        }
+      }
+    } while (results.is_truncated);
+    int r = abort_multiparts(dpp, store->ctx(), y);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   RGWObjVersionTracker ot;
 
   int ret = store->getRados()->delete_vector_bucket(info, ot, y, dpp);
@@ -790,7 +817,7 @@ int RadosVectorBucket::create(const DoutPrefixProvider* dpp,
   key.bucket_id = params.bucket_id;
 
   int ret = store->getRados()->create_vector_bucket(
-      dpp, y, key, params.owner, params.zonegroup_id,
+      dpp, y, key, params.owner, params.zonegroup_id, params.zone_placement,
       params.placement_rule, params.attrs,
       params.quota, params.creation_time, params.index_type,
       params.index_shards, &bucket_version, info);
@@ -905,7 +932,11 @@ int RadosBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield 
                                   RGWBucketEnt* ent)
 {
   librados::Rados& rados = *store->getRados()->get_rados_handle();
-  return store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, ent);
+  auto* ctl = info.is_vector() ? store->ctl()->vector_bucket : store->ctl()->bucket;
+  if (info.is_vector() && info.layout.current_index.layout.type == rgw::BucketIndexType::Indexless) {
+    return 0;
+  }
+  return ctl->sync_owner_stats(dpp, rados, info.owner, info, y, ent);
 }
 
 int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
@@ -1021,6 +1052,9 @@ int RadosVectorBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, c
 
 int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 {
+  if (info.is_vector() && info.layout.current_index.layout.type == rgw::BucketIndexType::Indexless) {
+    return 0;
+  }
   return store->getRados()->check_bucket_empty(dpp, info, y);
 }
 

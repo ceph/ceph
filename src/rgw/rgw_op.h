@@ -89,6 +89,11 @@ std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp,
 
 int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s);
 
+int select_bucket_placement(const DoutPrefixProvider* dpp,
+                            const RGWZoneGroup& zonegroup,
+                            const RGWUserInfo& user,
+                            rgw_placement_rule& rule);
+
 int get_owner_quota_info(const DoutPrefixProvider* dpp,
                                 optional_yield y,
                                 rgw::sal::Driver* driver,
