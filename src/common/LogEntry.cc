@@ -6,6 +6,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "LogEntry.h"
+#include "LogFmt.h"
 #include "Formatter.h"
 #include "include/encoding_list.h"
 #include "include/encoding_map.h"
