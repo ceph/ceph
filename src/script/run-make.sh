@@ -153,6 +153,7 @@ EOM
     cmake_opts+=" -DWITH_GRAFANA=ON"
     cmake_opts+=" -DWITH_SPDK=ON"
     cmake_opts+=" -DWITH_RBD_MIRROR=ON"
+    cmake_opts+=" -DWITH_FRAME_POINTERS=ON"
     if [ -z $WITHOUT_WERROR ]; then
         cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
     fi
