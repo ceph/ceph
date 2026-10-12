@@ -7,6 +7,7 @@
 #include "osd/PGTransaction.h"
 #include "osd/ECTransaction.h"
 #include "osd/ECCommonFmt.h"
+#include "osd/ECMsgTypesFmt.h"
 
 SET_SUBSYS(osd);
 
