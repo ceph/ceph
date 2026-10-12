@@ -1593,6 +1593,8 @@ void pg_pool_t::dump(Formatter *f, const CrushWrapper *crush,
   f->dump_int("type", get_type());
   f->dump_int("size", get_size());
   f->dump_int("min_size", get_min_size());
+  f->dump_int("num_zones", get_num_zones());
+  f->dump_int("replica", get_replica());
   const int rule_id = get_crush_rule();
   f->dump_int("crush_rule", rule_id);
   if (show_rule_names && crush && crush->rule_exists(rule_id)) {
