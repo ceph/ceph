@@ -39,6 +39,7 @@ using ceph::Formatter;
 using ceph::JSONFormatter;
 using ceph::to_timespan;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, mon.name, mon.rank, paxos_name, state, first_committed, last_committed)

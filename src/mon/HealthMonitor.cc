@@ -42,6 +42,7 @@
 
 #include "crush/CrushWrapper.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)

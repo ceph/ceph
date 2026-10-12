@@ -47,6 +47,8 @@
 #include <sstream>
 #include <syslog.h>
 
+#define dout_context g_ceph_context
+
 #include "LogMonitor.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
