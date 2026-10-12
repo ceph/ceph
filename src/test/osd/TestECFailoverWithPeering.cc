@@ -1588,6 +1588,20 @@ public:
         << "shard " << shard << " lost key c: " << keys;
     }
   }
+
+  // Remove an omap key from one shard's ObjectStore behind the PG's back
+  void remove_shard_omap_key(const std::string& obj, int shard, const std::string& key)
+  {
+    TestPG* test_pg = get_test_pg_by_shard(shard);
+    ASSERT_TRUE(test_pg && test_pg->ch);
+    OsdTestFixture* fixture = get_osd_fixture(test_pg->pg_whoami.osd);
+    ASSERT_TRUE(fixture && fixture->store);
+    ObjectStore::Transaction t;
+    t.omap_rmkeys(test_pg->ch->cid,
+                  ghobject_t(make_test_object(obj), ghobject_t::NO_GEN, test_pg->pg_whoami.shard),
+                  std::set<std::string>{key});
+    ASSERT_EQ(0, fixture->store->queue_transaction(test_pg->ch, std::move(t)));
+  }
 };
 
 namespace {
@@ -1655,6 +1669,26 @@ TEST_P(TestECOmapRecovery, SetKeysWhilePrimaryDownThenRecoverWhilePeered) {
     keys.erase("z");
     EXPECT_EQ((std::set<std::string>{"c", "d", "e", "x", "y"}), keys) << "shard " << shard;
   }
+}
+
+// A deep scrub must report an object whose omap differs between
+// primary-capable shards.
+TEST_P(TestECOmapRecovery, DeepScrubDetectsOmapDivergence) {
+  const std::string obj = "omap_scrub";
+  setup_object(obj);
+  ASSERT_EQ(0, write_omap(obj, {{"f", "6"}}, {}));
+  ASSERT_EQ(0, write_omap(obj, {{"g", "7"}}, {}));
+  for (int shard : omap_shards()) {
+    ASSERT_TRUE(get_shard_omap_keys(obj, shard).contains("a")) << "shard " << shard;
+  }
+  const int shard = omap_shards().back();
+  ASSERT_NE(0, shard);
+  remove_shard_omap_key(obj, shard, "a");
+  ASSERT_FALSE(get_shard_omap_keys(obj, shard).contains("a"));
+  EXPECT_TRUE(scrub_object(obj, /*skip_verify=*/true))
+    << "omap of shard " << shard << " differs but deep scrub found nothing";
+  // Teardown scrubs every object it has not seen deleted
+  delete_object(obj);
 }
 
 INSTANTIATE_TEST_SUITE_P(
