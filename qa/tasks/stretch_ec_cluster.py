@@ -130,22 +130,6 @@ class TestStretchCluster(MgrTestCase):
         if rule is not None:
             self.mgr_cluster.mon_manager.raw_cluster_cmd(
                 'osd', 'pool', 'set', pool_name, 'crush_rule', rule)
-    
-    def _set_stretch(self, pool_name, crush_rule, size, min_size, erasure=False):
-        if erasure:
-            self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                        'osd', 'erasure-code-profile', 'set',
-                        self.STRETCH_EC_PROFILE, 'plugin=jerasure',
-                        'k='+str(self.K), 'm='+str(self.M))
-            self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                        'osd', 'crush', 'rule', 'create-erasure',
-                        self.STRETCH_EC_CRUSH_RULE, self.STRETCH_EC_PROFILE, str(self.PEERING_CRUSH_BUCKET_COUNT))
-        self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                    'osd', 'pool', 'stretch', 'set',
-                    pool_name, str(self.PEERING_CRUSH_BUCKET_COUNT),
-                    str(self.PEERING_CRUSH_BUCKET_TARGET),
-                    self.PEERING_CRUSH_BUCKET_BARRIER,
-                    crush_rule, str(size), str(min_size))
 
     def _osd_count(self):
         """
@@ -948,15 +932,6 @@ class TestStretchCluster(MgrTestCase):
         self.wait_until_true_and_hold(lambda: self._pg_all_unavailable(),
                                       timeout=self.RECOVERY_PERIOD,
                                       success_hold_time=self.SUCCESS_HOLD_TIME)
-
-        # # We expect that there will be no more than BUCKET_MAX osds from DC3
-        # # in the acting set of the PGs.
-        # self.wait_until_true(
-        #     lambda: self._surviving_osds_in_acting_set_dont_exceed(
-        #                 3,
-        #                 self._get_osds_by_dc('dc3')
-        #             ),
-        #     timeout=self.RECOVERY_PERIOD)
 
         # Bring back osds in DC1 expects PGs to be 100% active
         self._bring_back_all_mons_in_dc('dc1')
