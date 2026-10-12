@@ -45,6 +45,7 @@
 #include "common/errno.h"
 #include "common/OnFinisher.h"
 #include "global/global_context.h"
+#include "include/Context.h" // for C_GatherBuilder
 #include "include/denc.h"
 #include "include/denc_contiguous.h"
 #include "include/denc_tuple.h"
