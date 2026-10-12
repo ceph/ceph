@@ -3713,7 +3713,8 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 1) << "nsfs: new buckets are "
     << (extensions_enabled() ? "marked with extension set "
 	  + std::to_string(new_bucket_extensions())
-	: std::string("unmarked (reversible mode)")) << dendl;
+	: std::string("unmarked, and no bucket is converted (rgw_nsfs_extensions "
+		      "is off)")) << dendl;
 
   /* Every strategy names some scaffolding, and the listing paths test one
    * name at a time;  assemble the union once so that no strategy is
@@ -6008,8 +6009,8 @@ int NSFSBucket::unmark_extensions(const DoutPrefixProvider* dpp)
  * profile while holding structure the profile does not describe.
  *
  * Leaving base takes a tree nsfs did not write into its management.  It is
- * refused in reversible mode, where the deployment means to hand the
- * tree back, and it is never inferred from access.
+ * refused while rgw_nsfs_extensions is off, and it is never inferred
+ * from access.
  */
 nsfs::XattrStrategy* NSFSBucket::xattr_strategy() const
 {
@@ -9052,8 +9053,8 @@ int NSFSObject::resolve_parent_dir(const DoutPrefixProvider* dpp,
  * The shadow model puts a .shadow subtree and attributes into the bucket
  * which NooBaa has no reading of.  Serving it on an unmarked bucket would
  * add exactly the structure whose absence is that bucket's whole claim,
- * and would do it silently, on a tree an operator may be keeping
- * reversible.  Refuse rather than degrade:  a caller handed a handle whose
+ * and would do it silently, on a bucket nobody has asked to convert.
+ * Refuse rather than degrade:  a caller handed a handle whose
  * semantics are missing is worse off than one told the bucket does not
  * offer them. */
 int NSFSObject::fsio_allowed(const DoutPrefixProvider* dpp)
@@ -13808,12 +13809,12 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    *                   it and the extension-only interfaces are refused
    *                   on it.
    *   extensions_default
-   *                   whether a bucket created here is marked.  False is
-   *                   reversible mode:  the tree is being kept handable
-   *                   back to NooBaa, so nothing acquires structure
-   *                   NooBaa cannot represent.
+   *                   whether a bucket created here is marked
+   *                   (rgw_nsfs_extensions).  False also means no bucket
+   *                   is converted, so none is adopted.
    *   bucket_profile  the profile a bucket created here is marked with,
-   *                   rgw_nsfs_bucket_profile;  empty in reversible mode.
+   *                   rgw_nsfs_bucket_profile;  empty when
+   *                   extensions_default is false.
    *   strategy        which FSStrategy was selected by probing at startup.
    *   can_rename      a rename moves the name.  When false, RGWLibFS::rename
    *                   emulates it by copy-and-delete, so the object does not
@@ -13851,8 +13852,8 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
  * The reason setting one at creation is not enough:  a tree that came
  * from NooBaa has buckets nobody wrote an attribute onto.  It is a
  * declared act on a named bucket rather than something inferred on
- * first access, because inference would extend a tree an operator was
- * keeping reversible without anyone deciding to. */
+ * first access, because inference would convert a bucket nobody had
+ * decided to adopt. */
 int NSFSDriver::set_bucket_profile(const DoutPrefixProvider* dpp,
 				   optional_yield y,
 				   const std::string& name, uint32_t target,
@@ -14043,11 +14044,26 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
  * that adopts bucket by bucket while serving is phase 5 (C8-C10) and
  * not built;  until then a startup that takes as long as its adoption
  * is honest about what it is doing.  A bucket that fails is reported
- * and the rest continue;  re-running adopts what is left. */
+ * and the rest continue;  re-running adopts what is left.
+ *
+ * With `rgw_nsfs_extensions` off no bucket can be adopted, so nothing
+ * is run, and one message says why rather than one failure per
+ * bucket. */
 int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
 			     optional_yield y,
 			     std::map<std::string, std::string>* report)
 {
+  if (!extensions_enabled()) {
+    if (report) {
+      (*report)["ran"] = "false";
+      (*report)["why"] = "rgw_nsfs_extensions is off, so no bucket's tree "
+			 "can be converted";
+    }
+    ldpp_dout(dpp, 0) << "ERROR: adoption cannot run:  rgw_nsfs_extensions "
+      << "is off, so no bucket's tree can be converted;  nothing was "
+      << "adopted" << dendl;
+    return -EPERM;
+  }
   int ret = adopt_identities(dpp, y, report);
   if (ret < 0) {
     return ret;
@@ -14160,9 +14176,9 @@ int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
  * call, by name, and the same thing the profile endpoint does with
  * whichever profile it is given.
  *
- * In reversible mode (`rgw_nsfs_extensions` off) nothing is marked and
- * a tree is handable back to NooBaa only at base, so only the record
- * is imported. */
+ * With `rgw_nsfs_extensions` off a bucket's tree cannot be converted,
+ * so the bucket is not adopted, and nothing is written:  adoption is
+ * the import and the conversion together, per bucket. */
 int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 const std::string& bucket_name,
@@ -14175,16 +14191,13 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   };
 
   if (!extensions_enabled()) {
-    int ret = import_noobaa_bucket(dpp, y, bucket_name, report);
     say("adopted", "false");
-    if (ret < 0) {
-      return ret;
-    }
-    say("why", "rgw_nsfs_extensions is off;  the tree stays reversible");
-    ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket_name
-      << " configured, and its tree left in NooBaa's format:  extensions "
-      << "are off, so the tree stays handable back to NooBaa" << dendl;
-    return 0;
+    say("why", "rgw_nsfs_extensions is off, so the bucket's tree cannot be "
+	       "converted");
+    ldpp_dout(dpp, 0) << "ERROR: not adopting bucket " << bucket_name
+      << ":  rgw_nsfs_extensions is off, so its tree cannot be converted"
+      << dendl;
+    return -EPERM;
   }
 
   std::unique_ptr<rgw::sal::Bucket> b;
@@ -14258,6 +14271,11 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
   if (hint == "adoption") {
     if (out) {
       (*out)["configured"] = adoption_configured() ? "true" : "false";
+      /* what this gateway serves, so a caller can tell whether it is the
+       * gateway over the tree it means before adopting through it */
+      (*out)["base_path"] = get_base_path();
+      (*out)["config_root"] =
+	g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
       (*out)["mode"] =
 	adoption_mode == AdoptionMode::Automatic ? "automatic" : "command";
     }
@@ -14278,13 +14296,19 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
       }
     }
     /* The commands (DECISIONS.md 2026-10-11).  `identities=true`
-     * imports the store's identities;  `bucket=<name>` adopts that
-     * bucket, against identities already imported;  `run=true` runs
-     * what `automatic` runs at startup -- the identities, then every
+     * imports the store's identities;  `import=<name>` imports that
+     * bucket's record and leaves its objects alone;  `bucket=<name>`
+     * adopts that bucket -- imports its record and converts its tree --
+     * against identities already imported;  `run=true` runs what
+     * `automatic` runs at startup -- the identities, then every
      * bucket. */
     auto ids = params.find("identities");
     if ((ids != params.end()) && (ids->second == "true")) {
       return adopt_identities(dpp, null_yield, out);
+    }
+    auto imp = params.find("import");
+    if (imp != params.end()) {
+      return import_noobaa_bucket(dpp, null_yield, imp->second, out);
     }
     auto one = params.find("bucket");
     if (one != params.end()) {

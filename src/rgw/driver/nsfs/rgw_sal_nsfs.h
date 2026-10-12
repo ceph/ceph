@@ -1281,13 +1281,12 @@ public:
   }
   const nsfs::BucketProfile* get_base_profile() const { return &base_profile; }
 
-  /* Whether a bucket created here is marked.
+  /* Whether nsfs marks buckets:  rgw_nsfs_extensions.
    *
-   * False is reversible mode:  the deployment intends to be able to hand
-   * the tree back to NooBaa, so nothing may acquire structure NooBaa
-   * cannot represent.  It also limits adoption to importing a bucket's
-   * NooBaa record, since rewriting the tree is the one other way to
-   * mark. */
+   * False means a bucket created here is unmarked, and no bucket is
+   * converted -- so none is adopted, since adoption converts a bucket's
+   * tree.  Importing a bucket's NooBaa record does not mark it and is
+   * allowed either way. */
   bool extensions_enabled() {
     return ctx()->_conf->rgw_nsfs_extensions;
   }

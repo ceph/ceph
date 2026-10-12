@@ -4770,12 +4770,11 @@ options:
     NooBaa wrote it, and nothing is added to it -- no shadow subtree, no
     positional layout, no S3 ACL attribute. A marked bucket carries those.
     New buckets are marked by default, with rgw_nsfs_bucket_profile.
-    Setting this false is reversible mode - the deployment intends to be
-    able to hand the tree back to NooBaa, so new buckets stay unmarked
-    and adopting an existing one imports its NooBaa record and leaves its
-    tree unmarked, since marking a bucket is what ends its ability to go
-    back. The extension-only interfaces, FSIO among them, are refused on
-    an unmarked bucket whatever this is set to.
+    Setting this false leaves new buckets unmarked and converts no bucket,
+    so no NooBaa bucket is adopted;  importing a bucket's NooBaa record is
+    still allowed, and does not mark it. The extension-only interfaces,
+    FSIO among them, are refused on an unmarked bucket whatever this is
+    set to.
   default: true
   services:
   - rgw

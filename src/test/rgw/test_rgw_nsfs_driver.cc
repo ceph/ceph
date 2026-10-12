@@ -11328,6 +11328,9 @@ TEST_F(NooBaaModeTest, CommandIsTheDefaultAndAdoptsNothing)
   auto st = ask();
   EXPECT_EQ(st["configured"], "true") << "the fixture has a store";
   EXPECT_EQ(st["mode"], "command") << "the default changed";
+  /* and it says what it serves */
+  EXPECT_EQ(st["base_path"], driver->get_base_path());
+  EXPECT_EQ(st["config_root"], conf_root().string());
 
   /* a write, through the gate every mutation takes */
   EXPECT_EQ(driver->mutation_enter(env->dpp, testname), 0);
@@ -11501,15 +11504,20 @@ TEST_F(NooBaaModeTest, ABucketIsNotAdoptedBeforeItsOwner)
       << "a bucket whose owner does not exist was converted";
 }
 
-/* In reversible mode a bucket's adoption imports its record and leaves
- * its tree in NooBaa's format, which is what keeps the tree handable
- * back. */
-TEST_F(NooBaaModeTest, ReversibleModeImportsOnlyTheRecord)
+/* With rgw_nsfs_extensions off no bucket can be adopted.
+ *
+ * Adoption is a bucket's import and the conversion of its tree, and
+ * with extensions off the tree cannot be converted, so the bucket is
+ * refused and nothing is written -- not even its record.  Both
+ * polarities on one bucket:  refused with extensions off, adopted once
+ * they are on.  And `run=true`, what `automatic` runs, is refused once
+ * up front rather than failing every bucket, before any identity is
+ * imported. */
+TEST_F(NooBaaModeTest, AdoptionIsRefusedWithExtensionsOff)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
   write_their_record("ENABLED");
-  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
 
   g_conf().set_val("rgw_nsfs_extensions", "false");
   g_conf().apply_changes(nullptr);
@@ -11518,19 +11526,76 @@ TEST_F(NooBaaModeTest, ReversibleModeImportsOnlyTheRecord)
     g_conf().apply_changes(nullptr);
   });
 
-  auto one = ask({{"bucket", testname}});
-  EXPECT_EQ(one["configured"], "true") << one["error"];
-  EXPECT_EQ(one["buckets"], "1");
-  EXPECT_EQ(one["adopted"], "false");
+  std::map<std::string, std::string> out;
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"run", "true"}}, &out), -EPERM);
+  EXPECT_EQ(out["ran"], "false");
+  EXPECT_TRUE(out.find("accounts") == out.end())
+      << "a run that cannot adopt imported identities anyway";
+
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+  out.clear();
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", testname}}, &out), -EPERM);
+  EXPECT_EQ(out["adopted"], "false");
 
   std::unique_ptr<rgw::sal::Bucket> loaded;
   ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
 				&loaded, null_yield), 0);
   EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
-		 ->profile_name(), "base")
-      << "reversible mode rewrote the tree";
-  EXPECT_TRUE(loaded->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
+		 ->profile_name(), "base");
+  EXPECT_FALSE(loaded->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
+      << "a refused adoption imported the record";
+
+  g_conf().set_val("rgw_nsfs_extensions", "true");
+  g_conf().apply_changes(nullptr);
+  auto on = ask({{"bucket", testname}});
+  EXPECT_EQ(on["adopted"], "true") << on["error"];
+  EXPECT_EQ(on["profile"], "shared");
+}
+
+/* `import=` imports a bucket's record and nothing else.
+ *
+ * The record lands as nsfs bucket state on the bucket directory --
+ * owner, versioning, BucketOwnerEnforced -- and the objects are not
+ * touched, so the bucket stays base.  The control is the same bucket
+ * read before the import, which has none of it;  and adopting it
+ * afterwards converts it, so the import left nothing in the way. */
+TEST_F(NooBaaModeTest, ImportWritesTheRecordAndNotTheObjects)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_their_record("ENABLED");
+  auto ids = ask({{"identities", "true"}});
+  ASSERT_EQ(ids["ran"], "true") << ids["error"];
+
+  auto load = [this] {
+    std::unique_ptr<rgw::sal::Bucket> b;
+    EXPECT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				  &b, null_yield), 0);
+    return b;
+  };
+  EXPECT_FALSE(load()->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
+      << "the premise is gone:  the record is there before the import";
+
+  auto imp = ask({{"import", testname}});
+  EXPECT_EQ(imp["configured"], "true") << imp["error"];
+  EXPECT_EQ(imp["buckets"], "1");
+
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  auto b = load();
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(b.get())->profile_name(),
+	       "base") << "the import converted the bucket";
+  EXPECT_TRUE(b->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
       << "the record was not imported";
+  EXPECT_EQ(to_string(b->get_owner()), user->get_info().account_id);
+  EXPECT_TRUE(b->versioned());
+
+  auto on = ask({{"bucket", testname}});
+  EXPECT_EQ(on["adopted"], "true") << on["error"];
+  EXPECT_EQ(on["profile"], "shared");
 }
 
 /* `run=true` is what `automatic` runs at startup:  the identities, then
@@ -11849,7 +11914,7 @@ TEST_F(NSFSRecordedPathTest, ABaseBucketIsServedAtTheirRecordedPath)
 /* And resolving it writes nothing.
  *
  * In `command` mode nothing changes on disk until adoption is asked
- * for, so the decision to adopt stays reversible.  Reading where a
+ * for, so the decision to adopt stays open.  Reading where a
  * bucket lives must not adopt it -- adoption happens at startup in
  * `automatic` mode, or by command. */
 TEST_F(NSFSRecordedPathTest, ResolvingTheirPathDoesNotAdoptTheBucket)
