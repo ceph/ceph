@@ -79,7 +79,7 @@ fn default_mode_of(s: &str) -> ObjectLockRetentionMode {
            ignore = "noobaa: PutObjectLockConfiguration is NotImplemented")]
 #[tokio::test]
 async fn corpus_coverage_object_lock() {
-    let tier = env_or("CORPUS_TIER", "coverage");
+    let tier = env_or(crate::env::TIER, "coverage");
     if tier != "coverage" {
         return;
     }

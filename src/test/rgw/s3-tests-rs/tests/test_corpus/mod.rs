@@ -18,35 +18,20 @@
 //! `check_listing_invariants` -- and comparisons are between two
 //! captures, never against a file in the tree.
 //!
-//! Driven by the environment, as `test_bench` is:
-//!
-//! ```text
-//! CORPUS_TIER   coverage (default) | interaction | scale
-//! CORPUS_OUT        where the captures are written;  default
-//!                   target/corpus, which is build output
-//! CORPUS_DATA_ROOT  the gateway's data root.  Set only when this run
-//!                   is local to it;  without it the disk inventory is
-//!                   not taken and the S3 half still works
-//! CORPUS_CONFIG_ROOT  a config store, for a backend that keeps a
-//!                   bucket's configuration in a record rather than in
-//!                   the bucket directory's attributes.  Read
-//!                   generically -- a name and a digest per field, no
-//!                   schema -- and unset for an nsfs or posix tree
-//! CORPUS_OBJECT_MODE  the mode every object must be published with,
-//!                   default 0600;  `any` turns the check off.  The
-//!                   one assertion here that is about *this* driver
-//!                   rather than about S3, so a capture from a foreign
-//!                   gateway sets it -- see `adoption/standup.rs`
-//! ```
+//! Driven by the environment, as `test_bench` is.  The variables are
+//! listed, with their defaults, in `s3_tests_rs::corpus::env`.  The
+//! manifest and inventory formats are `s3_tests_rs::corpus::manifest`
+//! and `::inventory`, in the library so a comparison of two captures
+//! reads them with the code that wrote them.
 
 mod names;
 mod shapes;
 mod lock;
-mod manifest;
-mod inventory;
+use s3_tests_rs::corpus::{env, inventory, manifest};
 mod buckets;
 mod copy;
 mod generate;
+mod identity;
 mod integrity;
 mod multipart;
 mod objects;

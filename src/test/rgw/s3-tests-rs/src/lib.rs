@@ -2,6 +2,7 @@ pub mod admin;
 pub mod cleanup;
 pub mod client;
 pub mod config;
+pub mod corpus;
 pub mod error;
 pub mod features;
 pub mod fixtures;

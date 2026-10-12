@@ -71,7 +71,7 @@ async fn head_into(
 
 #[tokio::test]
 async fn corpus_coverage_objects() {
-    let tier = env_or("CORPUS_TIER", "coverage");
+    let tier = env_or(crate::env::TIER, "coverage");
     if tier != "coverage" {
         eprintln!("CORPUS_TIER={tier};  not this tier");
         return;

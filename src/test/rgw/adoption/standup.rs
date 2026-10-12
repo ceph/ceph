@@ -65,11 +65,13 @@ struct Env {
     iam_port: u16,
     /// the account NooBaa serves as
     account: String,
-    /// the IAM user `member` creates in that account
-    member: String,
-    /// a credential on the adopted gateway carrying `users=*`, which
-    /// `resolve` needs to give the imported member the `nsfs` cap.
-    /// The default is the `[iam]` user `vstart.sh` creates
+    /// the IAM user `iam-user` creates in that account
+    iam_user: String,
+    /// a credential on the adopted gateway carrying `users=*` and
+    /// `nsfs=*`:  `adopt` signs its Admin Ops requests with it, and the
+    /// rgw capture conf names it as `[iam]`, which the corpus signs its
+    /// Admin Ops requests with.  The default is the `[iam]` user
+    /// `vstart.sh` creates
     rgw_admin_key: String,
     rgw_admin_secret: String,
     /// the one bucket, which both gateways will serve
@@ -166,7 +168,7 @@ impl Env {
             rgw_port: get("rgw_port", "8000").parse().unwrap_or(8000),
             iam_port: get("iam_port", "7005").parse().unwrap_or(7005),
             account: get("account", "adoption"),
-            member: get("member", "adoption-member"),
+            iam_user: get("iam_user", "adoption-iam-user"),
             rgw_admin_key: get("rgw_admin_key", "ABCDEFGHIJKLMNOPQRST"),
             rgw_admin_secret: get("rgw_admin_secret",
                                   "abcdefghijklmnopqrstuvwxyzabcdefghijklmn"),
@@ -234,9 +236,9 @@ impl Env {
         self.work.join("nsfs.log")
     }
 
-    /// The member's credential, which NooBaa generates and shows once.
-    fn member_credentials(&self) -> PathBuf {
-        self.work.join("member-credentials")
+    /// The IAM user's credential, which NooBaa generates and shows once.
+    fn iam_user_credentials(&self) -> PathBuf {
+        self.work.join("iam-user-credentials")
     }
 
     /// Where a capture's artifacts go.
@@ -283,11 +285,10 @@ const STEPS: &[(&str, &str)] = &[
     ("build",    "install the dependency tree, and build NooBaa's native addon"),
     ("config",   "write the NooBaa account and bucket records over the data root"),
     ("serve",    "start the NooBaa NSFS endpoint"),
-    ("member",   "create an IAM user in the account, through NooBaa's IAM API"),
+    ("iam-user", "create an IAM user in the account, through NooBaa's IAM API"),
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("stop",     "stop the endpoint, leaving the tree"),
     ("adopt",    "start RGW against the same tree"),
-    ("resolve",  "check the imported root and member, and what the member runs as"),
 ];
 
 fn main() {
@@ -308,11 +309,10 @@ fn main() {
         "build" => build(&env),
         "config" => config(&env),
         "serve" => serve(&env),
-        "member" => member(&env),
+        "iam-user" => iam_user(&env),
         "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
         "adopt" => adopt(&env),
-        "resolve" => resolve(&env),
         "up" => ["pin", "worktree", "patch", "build", "config"]
             .iter()
             .try_for_each(|s| match *s {
@@ -352,8 +352,8 @@ fn list() {
         ("iam_port", "the NooBaa IAM port, HTTPS"),
         ("rgw_port", "the port RGW serves on after `adopt`"),
         ("account", "the account `config` creates;  default adoption"),
-        ("member", "the IAM user `member` creates;  default adoption-member"),
-        ("rgw_admin_key", "a users=* key on RGW for `resolve`;  default vstart's [iam]"),
+        ("iam_user", "the IAM user `iam-user` creates;  default adoption-iam-user"),
+        ("rgw_admin_key", "an Admin Ops key on RGW for `adopt` and the corpus;  default vstart's [iam]"),
         ("bucket", "the bucket `config` creates;  default adoption"),
         ("suite", "the s3-tests-rs checkout;  defaults to a sibling of this driver"),
         ("tier", "which corpus tier `capture` runs"),
@@ -365,8 +365,8 @@ fn list() {
             _ => println!("  {k:12} (unset)  {note}"),
         }
     }
-    println!("\n`up` runs through `config`.  `serve`, `member`, `capture`, `stop`, `adopt`");
-    println!("and `resolve` are each run deliberately:  they start and stop gateways");
+    println!("\n`up` runs through `config`.  `serve`, `iam-user`, `capture`, `stop` and");
+    println!("`adopt` are each run deliberately:  they start and stop gateways");
     println!("over a tree that is the artifact, and chaining them past a failure is");
     println!("how a tree gets destroyed rather than handed over.");
 }
@@ -806,7 +806,7 @@ fn tree_modality(env: &Env) -> Option<String> {
 /// S3 over HTTP only.  `--https_port -1` turns its TLS off, and the
 /// corpus talks to this with the Rust SDK, for which a self-signed
 /// certificate is a problem worth not having.  IAM is the exception:
-/// it has no HTTP form, and `member` needs it.
+/// it has no HTTP form, and `iam-user` needs it.
 ///
 /// Backgrounded with its pid recorded, because the handoff is
 /// sequential:  something has to stop this before RGW opens the same
@@ -865,7 +865,7 @@ fn serve(env: &Env) -> Result<(), String> {
              * writes -- `manage_nsfs.js` cannot address one.  HTTPS is
              * its only form;  with no `certificates/` in the config
              * root they generate a self-signed certificate, which
-             * `member` accepts. */
+             * `iam-user` accepts. */
             &format!("--https_port_iam={}", env.iam_port),
         ])
         .current_dir(&wt)
@@ -909,7 +909,7 @@ fn serve(env: &Env) -> Result<(), String> {
 ///
 /// **The account's own credential, against their endpoint.**  An IAM
 /// user is a record only their IAM API writes -- `manage_nsfs.js`
-/// cannot address one -- so this is the one way to get a member that
+/// cannot address one -- so this is the one way to get an IAM user that
 /// *they* wrote, carrying the fields their code copies into it:
 /// `owner`, `iam_path`, and a copy of the account's
 /// `nsfs_account_config` (ACCOUNT_IMPORT.md §2.8).
@@ -920,11 +920,11 @@ fn serve(env: &Env) -> Result<(), String> {
 ///
 /// **The credential is shown once.**  NooBaa returns the secret from
 /// `CreateAccessKey` and never again, so it is written to
-/// `member-credentials` as it arrives.  Idempotent on that file:  a
-/// member that exists with its credential recorded is left alone;  one
+/// `iam-user-credentials` as it arrives.  Idempotent on that file:  an
+/// IAM user that exists with its credential recorded is left alone;  one
 /// that exists without it is given a new key, since the old secret is
 /// unrecoverable.
-fn member(env: &Env) -> Result<(), String> {
+fn iam_user(env: &Env) -> Result<(), String> {
     if running(env).is_none() {
         return Err("the NooBaa endpoint is not running;  run `serve` first".into());
     }
@@ -937,34 +937,49 @@ fn member(env: &Env) -> Result<(), String> {
         ));
     }
 
-    let exists = iam_call(env, &[("Action", "GetUser"), ("UserName", &env.member)]).is_ok();
-    if exists && env.member_credentials().exists() {
-        println!("member   {:?} already present, credential in {}",
-                 env.member, env.member_credentials().display());
+    let exists = iam_call(env, &[("Action", "GetUser"), ("UserName", &env.iam_user)]).is_ok();
+    if exists && env.iam_user_credentials().exists() {
+        println!("iam-user {:?} already present, credential in {}",
+                 env.iam_user, env.iam_user_credentials().display());
         return Ok(());
     }
     if !exists {
-        let body = iam_call(env, &[("Action", "CreateUser"), ("UserName", &env.member)])?;
-        println!("member   {:?} created, NooBaa id {}", env.member,
+        let body = iam_call(env, &[("Action", "CreateUser"), ("UserName", &env.iam_user)])?;
+        println!("iam-user {:?} created, NooBaa id {}", env.iam_user,
                  xml_tag(&body, "UserId").unwrap_or("?"));
     } else {
-        println!("member   {:?} present without a recorded credential;  \
-                  issuing a new one", env.member);
+        println!("iam-user {:?} present without a recorded credential;  \
+                  issuing a new one", env.iam_user);
     }
 
-    let body = iam_call(env, &[("Action", "CreateAccessKey"), ("UserName", &env.member)])?;
+    let body = iam_call(env, &[("Action", "CreateAccessKey"), ("UserName", &env.iam_user)])?;
     let (Some(ak), Some(sk)) = (xml_tag(&body, "AccessKeyId"), xml_tag(&body, "SecretAccessKey"))
     else {
         return Err(format!("CreateAccessKey answered without a key:\n{body}"));
     };
     std::fs::write(
-        env.member_credentials(),
-        format!("# written by standup.rs member\nuser={}\naccess_key={ak}\nsecret_key={sk}\n",
-                env.member),
+        env.iam_user_credentials(),
+        format!("# written by standup.rs iam-user\nuser={}\naccess_key={ak}\nsecret_key={sk}\n",
+                env.iam_user),
     )
-    .map_err(|e| format!("cannot write {}: {e}", env.member_credentials().display()))?;
-    println!("         access key {ak}, recorded in {}", env.member_credentials().display());
+    .map_err(|e| format!("cannot write {}: {e}", env.iam_user_credentials().display()))?;
+    println!("         access key {ak}, recorded in {}", env.iam_user_credentials().display());
     Ok(())
+}
+
+/// The IAM user's key and secret, as `iam-user` recorded them.  `None`
+/// when that step was not run.
+fn iam_user_key(env: &Env) -> Result<Option<(String, String)>, String> {
+    let Ok(creds) = std::fs::read_to_string(env.iam_user_credentials()) else {
+        return Ok(None);
+    };
+    let field = |k: &str| -> Option<String> {
+        creds.lines().find_map(|l| l.strip_prefix(&format!("{k}=")).map(str::to_string))
+    };
+    match (field("access_key"), field("secret_key")) {
+        (Some(ak), Some(sk)) => Ok(Some((ak, sk))),
+        _ => Err(format!("{} carries no key", env.iam_user_credentials().display())),
+    }
 }
 
 /// One IAM action against NooBaa, signed as the account.
@@ -1203,6 +1218,10 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
         .env("ADOPTION_SUITE", env.suite.display().to_string())
         .env("ADOPTION_CAPTURE_LOG", env.capture_log_for(label).display().to_string())
         .env("S3TEST_CONF", conf.display().to_string())
+        /* The CORPUS_* variables are listed, with their meanings, in
+         * ../s3-tests-rs/src/corpus/env.rs.  The tree's modality is
+         * not one of them:  it reaches the corpus as `non_md5_etag` in
+         * the capture conf. */
         .env("CORPUS_OUT", dir.display().to_string())
         /* The disk half.  Same host by construction -- the NooBaa endpoint
          * is on 127.0.0.1 -- so the inventory can be taken, and it is
@@ -1216,12 +1235,6 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
         .env("CORPUS_CONFIG_ROOT", env.config_root().display().to_string())
         .env("CORPUS_TIER", &env.tier)
         .env("CORPUS_OBSERVE", if observe { "1" } else { "0" })
-        /* The tree's modality, read from the file rather than the
-         * setting.  The corpus needs it to know whether an ETag is a
-         * digest it can validate against the body or a file-instance
-         * token it can only recognize. */
-        .env("CORPUS_MODALITY",
-             tree_modality(env).unwrap_or_else(|| "md5-off".into()))
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
@@ -1402,14 +1415,41 @@ fn write_capture_conf(env: &Env, label: &str) -> Result<PathBuf, String> {
         },
         ak = env.access_key,
         sk = env.secret_key,
-        alt = unused("s3 alt", "alt"),
+        /* For the rgw capture, the imported IAM user and an Admin Ops
+         * key:  the corpus's identity check signs as each (see
+         * test_corpus/identity.rs).  On NooBaa neither has a use. */
+        alt = match (label, iam_user_key(env)?) {
+            ("rgw", Some((ak, sk))) => format!(
+                "[s3 alt]\n\
+                 # The IAM user `iam-user` created through NooBaa's IAM API,\n\
+                 # with the key NooBaa minted for it.\n\
+                 display_name = {u}\n\
+                 user_id = {u}\n\
+                 email = {u}@adoption.invalid\n\
+                 access_key = {ak}\n\
+                 secret_key = {sk}\n",
+                u = env.iam_user),
+            _ => unused("s3 alt", "alt"),
+        },
         tenant = {
             /* `tenant` is the one extra key in that section */
             let mut t = unused("s3 tenant", "tenant");
             t.push_str("tenant = adoption-tenant\n");
             t
         },
-        iam = unused("iam", "iam"),
+        iam = if label == "rgw" {
+            format!(
+                "[iam]\n\
+                 # rgw_admin_key:  the corpus signs Admin Ops requests as this.\n\
+                 display_name = iam\n\
+                 user_id = iam\n\
+                 email = iam@adoption.invalid\n\
+                 access_key = {}\n\
+                 secret_key = {}\n",
+                env.rgw_admin_key, env.rgw_admin_secret)
+        } else {
+            unused("iam", "iam")
+        },
         iam_root = unused("iam root", "iamroot"),
         iam_alt_root = unused("iam alt root", "iamaltroot"),
     );
@@ -1593,6 +1633,28 @@ fn adopt(env: &Env) -> Result<(), String> {
              json_str(&body, "accounts").unwrap_or_default(),
              json_str(&body, "users").unwrap_or_default());
 
+    /* The corpus asks the gateway, as the imported IAM user, what that
+     * user's requests run as -- `GET /admin/nsfs/credentials`, which is
+     * capped (`nsfs=read`) and which an imported IAM user does not
+     * carry.  So it is granted here, through Admin Ops rather than
+     * `radosgw-admin`, which would open the store a second time beside
+     * the running gateway. */
+    if let Some((ak, _)) = iam_user_key(env)? {
+        let base = format!("http://127.0.0.1:{}", env.rgw_port);
+        let (status, body) = rgw_call(&admin, "GET",
+            &format!("{base}/admin/user?access-key={ak}&format=json"))?;
+        let user = json_str(&body, "user_id").filter(|u| !u.is_empty())
+            .ok_or_else(|| format!(
+                "the gateway does not know the IAM user's key ({status}):  the \
+                 import did not bring it across.\n{body}"))?;
+        let (status, body) = rgw_call(&admin, "PUT",
+            &format!("{base}/admin/user?caps&uid={user}&user-caps=nsfs%3Dread&format=json"))?;
+        if status != 200 {
+            return Err(format!("granting nsfs=read to {user} failed ({status}):\n{body}"));
+        }
+        println!("adopt    IAM user {:?} is {user};  granted nsfs=read", env.iam_user);
+    }
+
     let records = env.config_root().join("buckets");
     let mut names: Vec<String> = std::fs::read_dir(&records)
         .map_err(|e| format!("cannot read {}: {e}", records.display()))?
@@ -1627,40 +1689,12 @@ const ENDPOINT_BUCKET: &str = "corpus-coverage-copy";
 /// Adopt one bucket the way an operator changing its profile would:
 /// `PUT /admin/nsfs/profile`, base to shared.
 ///
-/// The corpus requires BucketOwnerEnforced on an adopted bucket, which
-/// only the record import writes, but it compares object owners with
-/// whatever the bucket's owner is.  So the owner is checked here:  it
-/// must be the account the import created, found from that account's own
-/// key.  Without the import it would be NooBaa's `_id` or the seeded
-/// owner.  It is read as the corpus reads it, with GetBucketAcl as that
-/// account;  this gateway registers no `/admin/bucket`.
-///
-/// Both polarities, from one run:  before the change the bucket is base
-/// and its owner is NooBaa's record unmapped, so the ACL must *not* name
-/// the account yet -- another owner, or a refusal, since the account does
-/// not own it.  A skipped import leaves exactly that state, so the check
-/// after the change can fail.
+/// What the bucket looks like afterwards -- owned by the imported
+/// account, BucketOwnerEnforced -- is the corpus's to check, in observe
+/// mode (`bucket_ownership()` in `test_corpus/generate.rs`);  this step
+/// only requires that the endpoint did the change it was asked for.
 fn adopt_by_profile(env: &Env, admin: &str, name: &str) -> Result<(), String> {
     let base = format!("http://127.0.0.1:{}", env.rgw_port);
-    let (status, body) = rgw_call(admin, "GET",
-        &format!("{base}/admin/user?access-key={}&format=json", env.access_key))?;
-    let account = json_str(&body, "account_id").filter(|a| !a.is_empty())
-        .ok_or_else(|| format!(
-            "the account's key names no account ({status}):\n{body}"))?;
-    let who = format!("{}:{}", env.access_key, env.secret_key);
-    let owner_of = || -> Result<(u16, String), String> {
-        let (status, body) = rgw_call(&who, "GET", &format!("{base}/{name}?acl"))?;
-        Ok((status, xml_tag(&body, "ID").unwrap_or("").to_string()))
-    };
-
-    let (status, before) = owner_of()?;
-    let before = if status == 200 { before } else { format!("<refused, {status}>") };
-    if before == account {
-        return Err(format!(
-            "bucket {name} is owned by the imported account {account} before it \
-             is adopted, so the check after adoption could not fail"));
-    }
-
     let (status, body) = rgw_call(admin, "PUT",
         &format!("{base}/admin/nsfs/profile?bucket={name}&profile=shared"))?;
     if status != 200 {
@@ -1671,127 +1705,7 @@ fn adopt_by_profile(env: &Env, admin: &str, name: &str) -> Result<(), String> {
         return Err(format!(
             "bucket {name} went from {had:?} to {now:?}, not base to shared:\n{body}"));
     }
-
-    let (status, after) = owner_of()?;
-    if status != 200 || after != account {
-        return Err(format!(
-            "bucket {name}, adopted through the profile endpoint, is owned by \
-             {after:?} ({status}), not the imported account {account}"));
-    }
-    println!("adopt    bucket {name}:  profile shared by the profile endpoint;  \
-              owner {before} became {account}");
-    Ok(())
-}
-
-/// Check that the imported member runs as its account, and that the
-/// account's own user is its root.
-///
-/// The import writes one identity row per account and none for its
-/// members, and a member with no row resolves to its account's
-/// (ACCOUNT_IMPORT.md §2.8).  This asks the adopted gateway, as the
-/// member and with the key NooBaa minted for it, what a request would
-/// be served as -- `GET /admin/nsfs/credentials`, whose `row` names the
-/// row that answered.
-///
-/// **`row`, not the uid, is the discrimination.**  `config` gives the
-/// account the running uid and NooBaa copies it into the member, so
-/// a member resolving under a row of its own would report the same
-/// uid.  The control is the member's own key, asked for by name, which
-/// must have no row.
-///
-/// The diagnostic is capped (`nsfs=read`), which an imported member
-/// does not carry, so it is granted first through Admin Ops by
-/// `rgw_admin_key`.  Granted through the gateway rather than with
-/// `radosgw-admin`, which would open the store a second time beside
-/// the running gateway.
-fn resolve(env: &Env) -> Result<(), String> {
-    if let Some(pid) = running(env) {
-        return Err(format!(
-            "NooBaa is still running (pid {pid});  `resolve` asks the adopted \
-             gateway.  Run `stop`, then `adopt`."));
-    }
-    if std::net::TcpStream::connect(("127.0.0.1", env.rgw_port)).is_err() {
-        return Err(format!(
-            "nothing accepts a connection on port {};  run `adopt` first",
-            env.rgw_port));
-    }
-    let creds = std::fs::read_to_string(env.member_credentials()).map_err(|e| {
-        format!("cannot read {}: {e};  run `member` while NooBaa serves",
-                env.member_credentials().display())
-    })?;
-    let field = |k: &str| -> Option<String> {
-        creds.lines().find_map(|l| l.strip_prefix(&format!("{k}=")).map(str::to_string))
-    };
-    let (Some(ak), Some(sk)) = (field("access_key"), field("secret_key")) else {
-        return Err(format!("{} carries no key", env.member_credentials().display()));
-    };
-    let admin = format!("{}:{}", env.rgw_admin_key, env.rgw_admin_secret);
-    let base = format!("http://127.0.0.1:{}", env.rgw_port);
-
-    /* who the member became */
-    let (status, body) = rgw_call(&admin, "GET",
-        &format!("{base}/admin/user?access-key={ak}&format=json"))?;
-    if status != 200 {
-        return Err(format!(
-            "the gateway does not know the member's key ({status}):  the \
-             import did not bring it across.\n{body}"));
-    }
-    let (Some(user), Some(account)) = (json_str(&body, "user_id"), json_str(&body, "account_id"))
-    else {
-        return Err(format!("no user_id and account_id in:\n{body}"));
-    };
-    if account.is_empty() {
-        return Err(format!("the member {user} was imported outside any account"));
-    }
-    println!("resolve  member {:?} is {user} in {account}", env.member);
-
-    /* The account's own user is its root.  Without that it is an
-     * ordinary member with no policy, and RGW refuses it everything the
-     * account owns.  The member, by the same lookup, is not. */
-    let (status, body) = rgw_call(&admin, "GET",
-        &format!("{base}/admin/user?access-key={}&format=json", env.access_key))?;
-    if status != 200 {
-        return Err(format!("the gateway does not know the account's key ({status}):\n{body}"));
-    }
-    let root_type = json_str(&body, "type").unwrap_or_default();
-    if root_type != "root" {
-        return Err(format!("the account's user is of type {root_type:?}, not its root"));
-    }
-    let (_, member_info) = rgw_call(&admin, "GET",
-        &format!("{base}/admin/user?access-key={ak}&format=json"))?;
-    if json_str(&member_info, "type").as_deref() == Some("root") {
-        return Err("the member was made its account's root".into());
-    }
-    println!("resolve  the account's user is its root;  the member is not");
-
-    let (status, body) = rgw_call(&admin, "PUT",
-        &format!("{base}/admin/user?caps&uid={user}&user-caps=nsfs%3Dread&format=json"))?;
-    if status != 200 {
-        return Err(format!("granting nsfs=read to {user} failed ({status}):\n{body}"));
-    }
-
-    /* the control:  no row of its own */
-    let (_, own) = rgw_call(&admin, "GET",
-        &format!("{base}/admin/nsfs/credentials?identity={user}&format=json"))?;
-    if json_str(&own, "outcome").as_deref() != Some("none") {
-        return Err(format!("the member has a row of its own:\n{own}"));
-    }
-
-    /* and what it runs as */
-    let (status, body) = rgw_call(&format!("{ak}:{sk}"), "GET",
-        &format!("{base}/admin/nsfs/credentials?format=json"))?;
-    if status != 200 {
-        return Err(format!("the member's own request failed ({status}):\n{body}"));
-    }
-    println!("         {body}");
-    let outcome = json_str(&body, "outcome").unwrap_or_default();
-    let row = json_str(&body, "row").unwrap_or_default();
-    if outcome != "resolved" || row != account {
-        return Err(format!(
-            "the member did not run as its account:  outcome {outcome:?}, \
-             row {row:?}, expected {account:?}"));
-    }
-    println!("resolve  the member runs as its account's row");
+    println!("adopt    bucket {name}:  profile shared by the profile endpoint");
     Ok(())
 }
 

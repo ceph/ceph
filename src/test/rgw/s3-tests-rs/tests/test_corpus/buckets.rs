@@ -46,7 +46,7 @@ struct Step {
 }
 
 fn data_root_bucket(b: &str) -> Option<std::path::PathBuf> {
-    std::env::var("CORPUS_DATA_ROOT")
+    std::env::var(crate::env::DATA_ROOT)
         .ok()
         .map(|r| std::path::Path::new(&r).join(b))
 }
@@ -56,7 +56,7 @@ fn data_root_bucket(b: &str) -> Option<std::path::PathBuf> {
 /// `<config_root>/buckets/<name>.json` is the layout.  A path, not a
 /// schema:  what is inside it is read generically.
 fn config_store_record(b: &str) -> Option<std::path::PathBuf> {
-    std::env::var("CORPUS_CONFIG_ROOT").ok().map(|r| {
+    std::env::var(crate::env::CONFIG_ROOT).ok().map(|r| {
         std::path::Path::new(&r)
             .join("buckets")
             .join(format!("{b}.json"))
@@ -100,7 +100,7 @@ fn bucket_state(b: &str) -> Vec<(String, u64)> {
 
 #[tokio::test]
 async fn corpus_coverage_bucket_config() {
-    let tier = env_or("CORPUS_TIER", "coverage");
+    let tier = env_or(crate::env::TIER, "coverage");
     if tier != "coverage" {
         return;
     }

@@ -235,7 +235,7 @@ async fn run(tier: &str, label: &str, status: &str) {
 #[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn corpus_coverage_versioning_enabled() {
-    let tier = env_or("CORPUS_TIER", "coverage");
+    let tier = env_or(crate::env::TIER, "coverage");
     if tier != "coverage" {
         return;
     }
@@ -250,7 +250,7 @@ async fn corpus_coverage_versioning_enabled() {
 #[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
 #[tokio::test]
 async fn corpus_coverage_versioning_suspended() {
-    let tier = env_or("CORPUS_TIER", "coverage");
+    let tier = env_or(crate::env::TIER, "coverage");
     if tier != "coverage" {
         return;
     }

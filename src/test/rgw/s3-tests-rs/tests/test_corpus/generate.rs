@@ -18,7 +18,7 @@ pub fn env_or(var: &str, default: &str) -> String {
 }
 
 pub fn out_dir() -> PathBuf {
-    PathBuf::from(env_or("CORPUS_OUT", "target/corpus"))
+    PathBuf::from(env_or(crate::env::OUT, "target/corpus"))
 }
 
 /// Note on the manifest how this capture was taken.
@@ -53,7 +53,7 @@ pub fn note_mode(m: &mut Manifest, bucket: &str) {
 /// assertion about the *tree*.  What it drops:  assertions about its
 /// own writing, which have no subject here.
 pub fn observing() -> bool {
-    matches!(env_or("CORPUS_OBSERVE", "0").as_str(),
+    matches!(env_or(crate::env::OBSERVE, "0").as_str(),
              "1" | "on" | "true" | "yes")
 }
 
@@ -67,10 +67,13 @@ pub fn observing() -> bool {
 /// is the bucket's, and the axes compare against what this returns.
 ///
 /// The owner is read with GetBucketAcl;  the object-ownership control
-/// is recorded as a fact.  An observing pass describes a tree another
-/// gateway wrote and the adoption imported, so there the control has
-/// to be BucketOwnerEnforced;  a generating pass makes its own buckets
-/// and RGW's default stands.
+/// is recorded as a fact.  In observe mode the tree was written by
+/// another gateway and adopted, and two things must hold of it:  the
+/// control is BucketOwnerEnforced, and the owner is the account the
+/// corpus runs as -- the account NooBaa's record names, imported.  A
+/// bucket whose record was not imported keeps NooBaa's raw id as its
+/// owner, so the second check can fail.  In generate mode the corpus
+/// makes its own buckets and RGW's defaults stand.
 pub async fn bucket_ownership(
     client: &aws_sdk_s3::Client,
     m: &mut Manifest,
@@ -107,6 +110,31 @@ pub async fn bucket_ownership(
             "{b:?} is an adopted bucket and its object ownership is \
              {controls:?}, not BucketOwnerEnforced"
         ));
+    }
+    if observing() && !owner.is_empty() {
+        /* The account, not the user:  ListBuckets names the caller's
+         * user, and an account's bucket is owned by the account. */
+        let cfg = s3_tests_rs::config::get_config();
+        let caller = s3_tests_rs::client::build_sts_client(
+            &cfg.main_access_key, &cfg.main_secret_key)
+            .get_caller_identity()
+            .send()
+            .await;
+        match caller {
+            Ok(r) => {
+                let account = r.account().unwrap_or("").to_string();
+                if owner != account {
+                    problems.push(format!(
+                        "{b:?} is an adopted bucket owned by {owner:?}, not by \
+                         the account the corpus runs as ({account:?})"
+                    ));
+                }
+            }
+            Err(e) => problems.push(format!(
+                "GetCallerIdentity failed, so {b:?}'s owner cannot be \
+                 checked: {:?}", e.into_service_error()
+            )),
+        }
     }
     (owner, problems)
 }
@@ -150,7 +178,7 @@ pub async fn ensure_bucket(client: &aws_sdk_s3::Client, name: &str) {
            ignore = "posix: dot-prefixed key accepted, then not listed")]
 #[tokio::test]
 async fn corpus_coverage_keys() {
-    let tier = env_or("CORPUS_TIER", "coverage");
+    let tier = env_or(crate::env::TIER, "coverage");
     if tier != "coverage" {
         eprintln!("CORPUS_TIER={tier};  not this tier");
         return;

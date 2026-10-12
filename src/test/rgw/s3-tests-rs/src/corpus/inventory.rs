@@ -23,7 +23,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
-use crate::manifest::encode;
+use super::env;
+use super::manifest::{decode, encode};
 
 #[derive(Default)]
 pub struct Inventory {
@@ -142,9 +143,9 @@ impl Inventory {
     ///
     /// Returns one line per offender, empty when all is well.
     pub fn check_object_modes(&self) -> Vec<String> {
-        let spec = std::env::var("CORPUS_OBJECT_MODE").ok();
+        let spec = std::env::var(env::OBJECT_MODE).ok();
         Self::modes_against(&self.files, &mode_policy(spec.as_deref(), 0o660),
-                            "CORPUS_OBJECT_MODE")
+                            env::OBJECT_MODE)
     }
 
     /// Every directory under a bucket is 0770, NooBaa's directory mode,
@@ -153,9 +154,9 @@ impl Inventory {
     /// files -- a run with impersonation on, where the gateway owns the
     /// directories it makes, needs it.
     pub fn check_directory_modes(&self) -> Vec<String> {
-        let spec = std::env::var("CORPUS_DIR_MODE").ok();
+        let spec = std::env::var(env::DIR_MODE).ok();
         Self::modes_against(&self.dirs, &mode_policy(spec.as_deref(), 0o770),
-                            "CORPUS_DIR_MODE")
+                            env::DIR_MODE)
     }
 
     /// The same check against a policy given rather than read, so both
@@ -181,6 +182,65 @@ impl Inventory {
             .map(|(p, m)| format!("{p:?} is mode {m:04o}, not {want:04o}"))
             .collect()
     }
+}
+
+/// One inventory line, read back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Entry {
+    /// `path  type  mode  uid  gid  size`, mode in octal;  size is 0
+    /// for anything but a regular file
+    Stat {
+        path: String,
+        kind: String,
+        mode: u32,
+        uid: u32,
+        gid: u32,
+        size: u64,
+    },
+    /// `path  xattr  name`
+    Xattr { path: String, name: String },
+}
+
+impl Entry {
+    pub fn path(&self) -> &str {
+        match self {
+            Entry::Stat { path, .. } | Entry::Xattr { path, .. } => path,
+        }
+    }
+}
+
+/// Read one line.  `None` for a line in neither shape.
+pub fn parse_line(line: &str) -> Option<Entry> {
+    let f: Vec<&str> = line.split('\t').collect();
+    match f.as_slice() {
+        [path, "xattr", name] => Some(Entry::Xattr {
+            path: decode(path),
+            name: decode(name),
+        }),
+        [path, kind, mode, uid, gid, size] => Some(Entry::Stat {
+            path: decode(path),
+            kind: kind.to_string(),
+            mode: u32::from_str_radix(mode, 8).ok()?,
+            uid: uid.parse().ok()?,
+            gid: gid.parse().ok()?,
+            size: size.parse().ok()?,
+        }),
+        _ => None,
+    }
+}
+
+/// Read a rendered inventory.  Lines that do not parse are returned
+/// apart, so a reader can report them rather than drop them.
+pub fn parse(text: &str) -> (Vec<Entry>, Vec<String>) {
+    let mut entries = Vec::new();
+    let mut bad = Vec::new();
+    for line in text.lines().filter(|l| !l.is_empty()) {
+        match parse_line(line) {
+            Some(e) => entries.push(e),
+            None => bad.push(line.to_string()),
+        }
+    }
+    (entries, bad)
 }
 
 /// What `check_object_modes` requires.
@@ -355,6 +415,25 @@ mod tests {
                    .len(), 1, "a 0770 directory passed a 0750 check");
     }
 
+    /// A walk's rendering parses back to the entries it recorded, file
+    /// and attribute lines alike.
+    #[test]
+    fn a_rendered_inventory_parses_back() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        std::fs::write(root.join("f\tx"), b"abc").unwrap();
+        let mut inv = Inventory::new();
+        inv.walk(root).expect("walk");
+        let (entries, bad) = parse(&inv.render());
+        assert!(bad.is_empty(), "lines did not parse: {bad:?}");
+        assert!(entries.iter().any(|e| matches!(e,
+            Entry::Stat { path, kind, size: 3, .. } if path == "f\tx" && kind == "f")),
+            "the file did not parse back: {entries:?}");
+        assert_eq!(parse_line("p\tf\t0660\t1\t1"), None, "a short line parsed");
+        assert_eq!(parse_line("p\txattr\tuser.a"),
+                   Some(Entry::Xattr { path: "p".into(), name: "user.a".into() }));
+    }
+
     /// Sorted bytewise and free of duplicates, so the comparison is a
     /// plain diff.  The negative case is reachable:  read_dir order is
     /// the filesystem's, not sorted.
@@ -391,7 +470,7 @@ mod tests {
 /// One function rather than a block per axis, so a new axis gets the
 /// invariants by calling this rather than by remembering to.
 pub fn capture(bucket: &str, dir: &Path, stem: &str) -> Vec<String> {
-    let Ok(data_root) = std::env::var("CORPUS_DATA_ROOT") else {
+    let Ok(data_root) = std::env::var(env::DATA_ROOT) else {
         return Vec::new();
     };
     let bucket_dir = Path::new(&data_root).join(bucket);

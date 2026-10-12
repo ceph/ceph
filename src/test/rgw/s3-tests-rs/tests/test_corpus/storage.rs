@@ -71,7 +71,7 @@ fn configured_class() -> String {
            ignore = "posix: a requested storage class is accepted and discarded")]
 #[tokio::test]
 async fn corpus_coverage_storage_class() {
-    let tier = env_or("CORPUS_TIER", "coverage");
+    let tier = env_or(crate::env::TIER, "coverage");
     if tier != "coverage" {
         return;
     }

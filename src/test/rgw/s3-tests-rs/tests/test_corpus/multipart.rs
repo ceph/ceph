@@ -177,7 +177,7 @@ async fn list_parts_into(
 
 #[tokio::test]
 async fn corpus_coverage_multipart() {
-    let tier = env_or("CORPUS_TIER", "coverage");
+    let tier = env_or(crate::env::TIER, "coverage");
     if tier != "coverage" {
         return;
     }

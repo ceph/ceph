@@ -11,9 +11,9 @@ Four steps.  **The first three run today.  The fourth is not built** —
 step 4 says what is missing.
 
 ```
-  1. stand NooBaa up        standup.rs up && standup.rs serve && standup.rs member
+  1. stand NooBaa up        standup.rs up && standup.rs serve && standup.rs iam-user
   2. generate and ingest    standup.rs capture
-  3. hand off to RGW        standup.rs stop && standup.rs adopt && standup.rs resolve
+  3. hand off to RGW        standup.rs stop && standup.rs adopt && standup.rs capture rgw
   4. verify                 not built -- C2b
 ```
 
@@ -30,7 +30,7 @@ config store, the data root and the captures.
 cd src/test/rgw/adoption
 ./standup.rs up          # pin, worktree, patch, build, config
 ./standup.rs serve       # their endpoint, HTTP, on 6001;  IAM, HTTPS, on 7005
-./standup.rs member      # an IAM user in the account, through their IAM API
+./standup.rs iam-user    # an IAM user in the account, through their IAM API
 ```
 
 `up` is the slow one — their dependency tree and their native addon,
@@ -40,9 +40,9 @@ tens of minutes on a first run.  Everything after it is seconds.
 root, with an account and a bucket their own CLI created, and an IAM
 user in that account their IAM API created — records *they* wrote,
 rather than records composed from our reading of their schema.  Their
-CLI cannot address an IAM user, which is why `member` goes through the
-API.  NooBaa shows the member's secret once;  `member` keeps it in
-`$ADOPTION_WORK/member-credentials`.
+CLI cannot address an IAM user, which is why `iam-user` goes through
+the API.  NooBaa shows the IAM user's secret once;  `iam-user` keeps it
+in `$ADOPTION_WORK/iam-user-credentials`.
 
 `README.md` beside this file owns the detail — why source and not a
 container, why a `--detach`ed worktree, why the dependency tree is
@@ -87,8 +87,8 @@ the two capture formats in §7).
 
 ```sh
 ./standup.rs stop        # leaves the tree
-./standup.rs adopt       # RGW over the same tree
-./standup.rs resolve     # the imported member runs as its account
+./standup.rs adopt       # RGW over the same tree, every bucket adopted
+./standup.rs capture rgw # the corpus in observe mode against RGW
 ```
 
 **Sequential, never concurrent.**  NooBaa writes, stops, then RGW opens
@@ -102,25 +102,32 @@ warning about it.
 |---|---|
 | `--data-root` | the tree NooBaa wrote.  Mandatory:  without it RGW serves its own build directory and the run measures nothing |
 | `--noobaa-config-root` | their config store, so RGW can read what they wrote |
-| `--adoption-mode adopt` | **the driver defaults to `serve`, which serves read-only.**  A handoff that means to write has to ask |
+| `--adoption-mode command` | the driver's default, said explicitly:  nothing is adopted until asked |
 
-That last one is the production trigger too:  a real upgrade sets
-`rgw_nsfs_adoption_mode` and restarts, and the import runs because the
-mode says so.  There is no verb and no endpoint.  `ACCOUNT_IMPORT.md`
-§6.1 owns what the import does, in order.
+Then `adopt` asks, through Admin Ops as an operator would
+(`NSFS_ADOPTION.md` §7):  the `adoption` driver hint with
+`identities=true` imports the store's accounts, users and keys;  then
+each bucket NooBaa holds a record of is adopted into the shared
+profile, by the hint with `bucket=<name>`, except
+`corpus-coverage-copy`, which goes through `PUT /admin/nsfs/profile`.
+Adopting a bucket imports its NooBaa record and rewrites its tree.
+`ACCOUNT_IMPORT.md` §6.1 owns what the import does, in order.
 
 **What this produces.**  An RGW gateway serving the tree NooBaa wrote,
 with that deployment's accounts, users, identity rows and bucket state
 imported.
 
-`resolve` then checks the identity half of that.  The import writes
-one identity row per account and none for its members, and a member
-with no row runs as its account (`ACCOUNT_IMPORT.md` §2.8).  It signs
-`GET /admin/nsfs/credentials` with the key NooBaa minted for the
-member, and requires the answer to come from the account's row.  The
-member must also have no row of its own.  The diagnostic needs the
-`nsfs` cap, which `resolve` grants first through Admin Ops, as
-vstart's `[iam]` user unless `rgw_admin_key` says otherwise.
+`adopt` also grants the imported IAM user the `nsfs=read` cap, through
+Admin Ops as vstart's `[iam]` user unless `rgw_admin_key` says
+otherwise:  the corpus needs it to ask what the IAM user's requests run
+as.
+
+`capture rgw` then runs the corpus in observe mode.  Besides the axes,
+it checks the imported identities (`test_corpus/identity.rs`):  the
+account's user is its root, and the IAM user has no identity row of
+its own and runs as its account's (`ACCOUNT_IMPORT.md` §2.8).  Its
+capture conf carries the IAM user as `[s3 alt]` and the Admin Ops key
+as `[iam]` for that.
 
 ## 4.  Verify — **not built**
 

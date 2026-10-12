@@ -155,7 +155,7 @@ async fn make_source(
            ignore = "posix: a copy is not added to the listing cache")]
 #[tokio::test]
 async fn corpus_coverage_copy() {
-    let tier = env_or("CORPUS_TIER", "coverage");
+    let tier = env_or(crate::env::TIER, "coverage");
     if tier != "coverage" {
         return;
     }
