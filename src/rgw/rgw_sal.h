@@ -933,6 +933,12 @@ class Bucket {
     virtual int set_attrs(Attrs a) = 0;
     /** Remove this bucket from the backing store */
     virtual int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) = 0;
+    /** Like remove(), but fail with -EACCES if the bucket is admin-locked.
+     * Stores that can make the removal fail when a lock lands after the
+     * check override this. */
+    virtual int remove_unless_admin_locked(const DoutPrefixProvider* dpp,
+                                           bool delete_children,
+                                           optional_yield y);
     /** Remove this bucket, bypassing garbage collection.  May be removed */
     virtual int remove_bypass_gc(int concurrent_max, bool
 				 keep_index_consistent,
