@@ -477,7 +477,7 @@ check "set-min-shards: stray between bucket and leaf" 1 bucket extra set-min-sha
 check "set-min-shards: unrecognized flag" 22 bucket set-min-shards --fakeflag
 # Unrelated flags are parsed and ignored whatever their type: the command
 # proceeds and fails for its own reason (here, no --bucket).
-XFAIL="known radosgw-admin bug" check_cluster "set-min-shards: unrelated --max-entries 5 swallowed (space form)" 22 -- bucket set-min-shards --max-entries 5
+check_cluster "set-min-shards: unrelated --max-entries 5 swallowed (space form)" 22 -- bucket set-min-shards --max-entries 5
 
 # missing option value (parse-level, exit 1)
 check "set-min-shards: --bucket missing value" 1 bucket set-min-shards --bucket
@@ -489,9 +489,9 @@ check "set-min-shards: --num-shards non-integer" 22 bucket set-min-shards --num-
 
 # handler-level (cluster): these validations run after driver init.
 # Order: bucket empty -> num-shards specified -> num-shards >= 1.
-XFAIL="known radosgw-admin bug" check_cluster "set-min-shards: missing --bucket" 22 -- bucket set-min-shards --num-shards 11
-XFAIL="known radosgw-admin bug" check_cluster "set-min-shards: --num-shards not specified" 22 -- bucket set-min-shards --bucket no-such-bucket
-XFAIL="known radosgw-admin bug" check_cluster "set-min-shards: --num-shards < 1" 22 -- bucket set-min-shards --bucket no-such-bucket --num-shards 0
+check_cluster "set-min-shards: missing --bucket" 22 -- bucket set-min-shards --num-shards 11
+check_cluster "set-min-shards: --num-shards not specified" 22 -- bucket set-min-shards --bucket no-such-bucket
+check_cluster "set-min-shards: --num-shards < 1" 22 -- bucket set-min-shards --bucket no-such-bucket --num-shards 0
 # valid args but nonexistent bucket: init_bucket fails (exit 2, no message)
 check_cluster "set-min-shards: nonexistent bucket (silent exit 2)" 2 -- bucket set-min-shards --bucket no-such-bucket --num-shards 11
 # The three unrelated-flag cases side by side (identical args, only the flag
@@ -1083,58 +1083,58 @@ check "reshard bucket (alias): --yes-i-really-mean-it banana (left as stray)" 1 
 # handler-level (cluster): these validations run after driver init.
 # Order: bucket empty -> num-shards specified -> num-shards <= max -> num-shards
 # >= 0 -> the bucket exists.
-XFAIL="known radosgw-admin bug" check_cluster "reshard: missing --bucket" 22 -- bucket reshard
-XFAIL="known radosgw-admin bug" check_cluster "reshard: missing --bucket, --num-shards given" 22 -- bucket reshard --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --num-shards not specified" 22 -- bucket reshard --bucket no-such-bucket
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --num-shards above the maximum" 22 -- bucket reshard --bucket no-such-bucket --num-shards 99999999
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --num-shards negative" 22 -- bucket reshard --bucket no-such-bucket --num-shards -1
+check_cluster "reshard: missing --bucket" 22 -- bucket reshard
+check_cluster "reshard: missing --bucket, --num-shards given" 22 -- bucket reshard --num-shards 4
+check_cluster "reshard: --num-shards not specified" 22 -- bucket reshard --bucket no-such-bucket
+check_cluster "reshard: --num-shards above the maximum" 22 -- bucket reshard --bucket no-such-bucket --num-shards 99999999
+check_cluster "reshard: --num-shards negative" 22 -- bucket reshard --bucket no-such-bucket --num-shards -1
 # valid args but nonexistent bucket: init_bucket fails
-XFAIL="known radosgw-admin bug" check_cluster "reshard: nonexistent bucket" 2 -- bucket reshard --bucket no-such-bucket --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --num-shards 0 is accepted" 2 -- bucket reshard --bucket no-such-bucket --num-shards 0
-XFAIL="known radosgw-admin bug" check_cluster "reshard bucket (alias): nonexistent bucket" 2 -- reshard bucket --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: nonexistent bucket" 2 -- bucket reshard --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: --num-shards 0 is accepted" 2 -- bucket reshard --bucket no-such-bucket --num-shards 0
+check_cluster "reshard bucket (alias): nonexistent bucket" 2 -- reshard bucket --bucket no-such-bucket --num-shards 4
 # the alias takes flags out of position and repeated flags the same way
-XFAIL="known radosgw-admin bug" check_cluster "reshard bucket (alias): --bucket between reshard and bucket" 2 -- reshard --bucket no-such-bucket bucket --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard bucket (alias): -b (short)" 2 -- reshard bucket -b no-such-bucket --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard bucket (alias): duplicate --bucket" 2 -- reshard bucket --bucket a --bucket no-such-bucket --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard bucket (alias): unrelated binary flag --fix accepted" 2 -- reshard bucket --fix --bucket no-such-bucket --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard bucket (alias): --yes-i-really-mean-it false (bool consumed)" 2 -- reshard bucket --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it false
+check_cluster "reshard bucket (alias): --bucket between reshard and bucket" 2 -- reshard --bucket no-such-bucket bucket --num-shards 4
+check_cluster "reshard bucket (alias): -b (short)" 2 -- reshard bucket -b no-such-bucket --num-shards 4
+check_cluster "reshard bucket (alias): duplicate --bucket" 2 -- reshard bucket --bucket a --bucket no-such-bucket --num-shards 4
+check_cluster "reshard bucket (alias): unrelated binary flag --fix accepted" 2 -- reshard bucket --fix --bucket no-such-bucket --num-shards 4
+check_cluster "reshard bucket (alias): --yes-i-really-mean-it false (bool consumed)" 2 -- reshard bucket --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it false
 # and gives the same errors, in the same order
-XFAIL="known radosgw-admin bug" check_cluster "reshard bucket (alias): missing --bucket" 22 -- reshard bucket
-XFAIL="known radosgw-admin bug" check_cluster "reshard bucket (alias): --num-shards not specified" 22 -- reshard bucket --bucket no-such-bucket
+check_cluster "reshard bucket (alias): missing --bucket" 22 -- reshard bucket
+check_cluster "reshard bucket (alias): --num-shards not specified" 22 -- reshard bucket --bucket no-such-bucket
 check_cluster "reshard bucket (alias): --tenant" 22 -- reshard bucket --tenant t --bucket no-such-bucket --num-shards 4
 
 # --yes-i-really-mean-it is a binary flag: it takes the next token only when that
 # token is a bool, so a bool is consumed and anything else is left as a stray
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --yes-i-really-mean-it false (bool consumed)" 2 -- bucket reshard --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it false
+check_cluster "reshard: --yes-i-really-mean-it false (bool consumed)" 2 -- bucket reshard --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it false
 check "reshard: --yes-i-really-mean-it banana (left as stray)" 1 bucket reshard --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it banana
 
 # unrelated flags alongside valid args: a binary flag, a value option in =form,
 # and the same option in space form. All three are ignored, so all three still
 # fail on the nonexistent bucket.
-XFAIL="known radosgw-admin bug" check_cluster "reshard: unrelated binary flag --fix accepted" 2 -- bucket reshard --fix --bucket no-such-bucket --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard: unrelated value flag --max-entries=5 (=form)" 2 -- bucket reshard --max-entries=5 --bucket no-such-bucket --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard: unrelated --max-entries 5 swallowed (space form)" 2 -- bucket reshard --max-entries 5 --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: unrelated binary flag --fix accepted" 2 -- bucket reshard --fix --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: unrelated value flag --max-entries=5 (=form)" 2 -- bucket reshard --max-entries=5 --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: unrelated --max-entries 5 swallowed (space form)" 2 -- bucket reshard --max-entries 5 --bucket no-such-bucket --num-shards 4
 
 # flags before the leaf subcommand. The value still reaches the command, so with
 # a valid --num-shards, a nonexistent bucket still fails.
 # --tenant trips the global "no user ID" check (exit 22).
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --bucket before subcommand" 2 -- bucket --bucket no-such-bucket reshard --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard: -b before subcommand (short)" 2 -- bucket -b no-such-bucket reshard --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --num-shards before subcommand" 2 -- bucket --num-shards 4 reshard --bucket no-such-bucket
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --bucket-id before subcommand" 2 -- bucket --bucket-id x reshard --bucket no-such-bucket --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --yes-i-really-mean-it before subcommand" 2 -- bucket --yes-i-really-mean-it reshard --bucket no-such-bucket --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --format before subcommand" 2 -- bucket --format json reshard --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: --bucket before subcommand" 2 -- bucket --bucket no-such-bucket reshard --num-shards 4
+check_cluster "reshard: -b before subcommand (short)" 2 -- bucket -b no-such-bucket reshard --num-shards 4
+check_cluster "reshard: --num-shards before subcommand" 2 -- bucket --num-shards 4 reshard --bucket no-such-bucket
+check_cluster "reshard: --bucket-id before subcommand" 2 -- bucket --bucket-id x reshard --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: --yes-i-really-mean-it before subcommand" 2 -- bucket --yes-i-really-mean-it reshard --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: --format before subcommand" 2 -- bucket --format json reshard --bucket no-such-bucket --num-shards 4
 check_cluster "reshard: --tenant before subcommand" 22 -- bucket --tenant t reshard --bucket no-such-bucket --num-shards 4
 
 # the same flag given twice
-XFAIL="known radosgw-admin bug" check_cluster "reshard: duplicate --bucket" 2 -- bucket reshard --bucket a --bucket no-such-bucket --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard: duplicate --num-shards" 2 -- bucket reshard --bucket no-such-bucket --num-shards 2 --num-shards 4
-XFAIL="known radosgw-admin bug" check_cluster "reshard: duplicate --yes-i-really-mean-it" 2 -- bucket reshard --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it --yes-i-really-mean-it
+check_cluster "reshard: duplicate --bucket" 2 -- bucket reshard --bucket a --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: duplicate --num-shards" 2 -- bucket reshard --bucket no-such-bucket --num-shards 2 --num-shards 4
+check_cluster "reshard: duplicate --yes-i-really-mean-it" 2 -- bucket reshard --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it --yes-i-really-mean-it
 check_cluster "reshard: duplicate --tenant" 22 -- bucket reshard --tenant a --tenant b --bucket no-such-bucket --num-shards 4
 
 # two or three flags at once: before the subcommand, or before and duplicated
-XFAIL="known radosgw-admin bug" check_cluster "reshard: --bucket + --num-shards before" 2 -- bucket --bucket no-such-bucket --num-shards 4 reshard
-XFAIL="known radosgw-admin bug" check_cluster "reshard: pos + duplicate --bucket" 2 -- bucket --bucket a reshard --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: --bucket + --num-shards before" 2 -- bucket --bucket no-such-bucket --num-shards 4 reshard
+check_cluster "reshard: pos + duplicate --bucket" 2 -- bucket --bucket a reshard --bucket no-such-bucket --num-shards 4
 check_cluster "reshard: --bucket + --num-shards + --tenant before" 22 -- bucket --bucket no-such-bucket --num-shards 4 --tenant t reshard
 
 
@@ -1167,7 +1167,7 @@ check_cluster "list: duplicate --tenant, both after the command" 22 -- bucket li
 check_cluster "list: duplicate --format, both after the command" 0 -- bucket list --format json --format xml
 # --uid filters bucket list by owner
 # testuser_test does not exist, so the command fails
-XFAIL="known radosgw-admin bug" check_cluster "list: --uid before bucket" 2 -- --uid testuser_test bucket list
+check_cluster "list: --uid before bucket" 2 -- --uid testuser_test bucket list
 check_cluster "list: --bucket-id before bucket" 0 -- --bucket-id nonexistent_id_test bucket list
 check_cluster "list: --object-version before bucket" 0 -- --object-version somever bucket list
 check_cluster "list: --allow-unordered before bucket" 0 -- --allow-unordered bucket list
@@ -1191,8 +1191,8 @@ check_cluster "stats: --show-restore-stats before bucket" 0 -- --show-restore-st
 check_cluster "stats: --show-restore-stats between bucket/stats" 0 -- bucket --show-restore-stats stats
 check_cluster "stats: duplicate --show-restore-stats" 0 -- bucket stats --show-restore-stats --show-restore-stats
 # there is no bucket with that id
-XFAIL="known radosgw-admin bug" check_cluster "stats: --bucket-id before bucket" 2 -- --bucket-id nonexistent_id_test bucket stats
-XFAIL="known radosgw-admin bug" check_cluster "stats: duplicate --bucket-id" 2 -- bucket stats --bucket-id id1_test --bucket-id id2_test
+check_cluster "stats: --bucket-id before bucket" 2 -- --bucket-id nonexistent_id_test bucket stats
+check_cluster "stats: duplicate --bucket-id" 2 -- bucket stats --bucket-id id1_test --bucket-id id2_test
 check_cluster "stats: --max-entries before bucket" 0 -- --max-entries 10 bucket stats
 check_cluster "stats: --marker before bucket" 0 -- --marker foo bucket stats
 check_cluster "stats: --format before bucket" 0 -- --format json bucket stats
@@ -1456,7 +1456,7 @@ check "empty-= on -i" 1 bucket list -i=
 check "empty-= on --bucket-id" 1 bucket stats --bucket-id=
 # non-empty short-flag '=': the value is split off the flag, and the user does
 # not exist
-XFAIL="known radosgw-admin bug" check_cluster "non-empty -= on -i (value split off the flag)" 2 -- bucket list -i=nosuchuser
+check_cluster "non-empty -= on -i (value split off the flag)" 2 -- bucket list -i=nosuchuser
 # mid-line: "" is the value; the next word strays (the collapsed flag must not eat it)
 check "empty-= mid-line strays next word" 1 bucket list --bucket= foo
 # unknown flag with an empty '=': rejected by name
@@ -1689,7 +1689,7 @@ echo "=== 'bucket' as an ordinary word ==="
 # 'bucket' also ends a command name: 'reshard bucket' is the alias form of 'bucket reshard'
 # --num-shards is checked after the bucket name, so this one got into the
 # handler.
-XFAIL="known radosgw-admin bug" check_cluster "reshard bucket: --num-shards not specified" 22 -- reshard bucket --bucket demo
+check_cluster "reshard bucket: --num-shards not specified" 22 -- reshard bucket --bucket demo
 
 # 'bucket' as a metadata section name. Every verb that takes a bare section
 # name reaches its handler with it. 'metadata put' is left out on purpose: it
@@ -1762,7 +1762,7 @@ check "integration: buckets check (alias)" 1 buckets check
 
 # --bucket-id without --bucket triggers rgw_find_bucket_by_id path
 # there is no bucket with that id
-XFAIL="known radosgw-admin bug" check_cluster "integration: bucket stats --bucket-id nonexistent" 2 -- bucket stats --bucket-id nonexistent_id_test
+check_cluster "integration: bucket stats --bucket-id nonexistent" 2 -- bucket stats --bucket-id nonexistent_id_test
 
 # --inconsistent-index + --yes-i-really-mean-it suppresses the warning and proceeds
 check_cluster "integration: rm --inconsistent-index --yes-i-really-mean-it (nonexistent)" 0 -- bucket rm --bucket nonexistent_test --inconsistent-index --yes-i-really-mean-it
@@ -2002,7 +2002,7 @@ check_bucket "integration: sync enable" 0 -- bucket sync enable --bucket "$_test
 # bucket reshard on a real bucket. Resharding up needs nothing extra;
 # resharding to the same or fewer shards needs --yes-i-really-mean-it.
 # The test bucket starts at the default 11 index shards.
-XFAIL="known radosgw-admin bug" check_bucket "integration: reshard down without --yes" 22 -- bucket reshard --bucket "$_test_bucket" --num-shards 1
+check_bucket "integration: reshard down without --yes" 22 -- bucket reshard --bucket "$_test_bucket" --num-shards 1
 check_bucket "integration: reshard up" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 23
 check_bucket "integration: reshard down with --yes-i-really-mean-it" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it
 check_bucket "integration: reshard bucket (alias)" 0 -- reshard bucket --bucket "$_test_bucket" --num-shards 9
@@ -2011,7 +2011,7 @@ check_bucket "integration: reshard --max-entries" 0 -- bucket reshard --bucket "
 # --format is accepted but this command reports its progress as plain text
 # either way
 check_bucket "integration: reshard --format json" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 19 --format json
-XFAIL="known radosgw-admin bug" check_bucket "integration: reshard --yes-i-really-mean-it=false (=form)" 22 -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it=false
+check_bucket "integration: reshard --yes-i-really-mean-it=false (=form)" 22 -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it=false
 
 # bucket rm: remove the test bucket (it's empty, so no --purge-objects needed)
 check_bucket "integration: bucket rm" 0 -- bucket rm --bucket "$_test_bucket"
