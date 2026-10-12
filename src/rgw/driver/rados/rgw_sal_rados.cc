@@ -3201,7 +3201,7 @@ int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, A
   const bool log_op = flags & rgw::sal::FLAG_LOG_OP;
   // make a tiny adjustment to the existing mtime so that fetch_remote_obj()
   // won't return ERR_NOT_MODIFIED when syncing the modified object
-  const auto mtime = log_op ? state.mtime + std::chrono::nanoseconds(1) : state.mtime;
+  const auto mtime = log_op ? state.mtime + ceph::timespan{std::chrono::nanoseconds{1}} : state.mtime;
   return store->getRados()->set_attrs(dpp, rados_ctx,
 			bucket->get_info(),
 			get_obj(),
