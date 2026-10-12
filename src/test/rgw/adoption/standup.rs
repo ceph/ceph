@@ -1601,6 +1601,10 @@ fn adopt(env: &Env) -> Result<(), String> {
         .collect();
     names.sort();
     for name in &names {
+        if name == ENDPOINT_BUCKET {
+            adopt_by_profile(env, &admin, name)?;
+            continue;
+        }
         let (status, body) = rgw_call(&admin, "DELETE", &format!("{hint}&bucket={name}"))?;
         if status != 200 || json_bool(&body, "adopted") != Some(true) {
             return Err(format!("adopting bucket {name} failed ({status}):\n{body}"));
@@ -1610,6 +1614,72 @@ fn adopt(env: &Env) -> Result<(), String> {
                  json_str(&body, "objects").unwrap_or_default(),
                  json_str(&body, "versions").unwrap_or_default());
     }
+    Ok(())
+}
+
+/// The bucket `adopt` takes through the profile endpoint rather than the
+/// hint.  Leaving base by the endpoint is adoption too:  it imports the
+/// bucket's NooBaa record before it rewrites the tree.  This bucket holds
+/// the copy axis's objects, so the rgw capture checks their owners
+/// against what this path produced.
+const ENDPOINT_BUCKET: &str = "corpus-coverage-copy";
+
+/// Adopt one bucket the way an operator changing its profile would:
+/// `PUT /admin/nsfs/profile`, base to shared.
+///
+/// The corpus requires BucketOwnerEnforced on an adopted bucket, which
+/// only the record import writes, but it compares object owners with
+/// whatever the bucket's owner is.  So the owner is checked here:  it
+/// must be the account the import created, found from that account's own
+/// key.  Without the import it would be NooBaa's `_id` or the seeded
+/// owner.  It is read as the corpus reads it, with GetBucketAcl as that
+/// account;  this gateway registers no `/admin/bucket`.
+///
+/// Both polarities, from one run:  before the change the bucket is base
+/// and its owner is NooBaa's record unmapped, so the ACL must *not* name
+/// the account yet -- another owner, or a refusal, since the account does
+/// not own it.  A skipped import leaves exactly that state, so the check
+/// after the change can fail.
+fn adopt_by_profile(env: &Env, admin: &str, name: &str) -> Result<(), String> {
+    let base = format!("http://127.0.0.1:{}", env.rgw_port);
+    let (status, body) = rgw_call(admin, "GET",
+        &format!("{base}/admin/user?access-key={}&format=json", env.access_key))?;
+    let account = json_str(&body, "account_id").filter(|a| !a.is_empty())
+        .ok_or_else(|| format!(
+            "the account's key names no account ({status}):\n{body}"))?;
+    let who = format!("{}:{}", env.access_key, env.secret_key);
+    let owner_of = || -> Result<(u16, String), String> {
+        let (status, body) = rgw_call(&who, "GET", &format!("{base}/{name}?acl"))?;
+        Ok((status, xml_tag(&body, "ID").unwrap_or("").to_string()))
+    };
+
+    let (status, before) = owner_of()?;
+    let before = if status == 200 { before } else { format!("<refused, {status}>") };
+    if before == account {
+        return Err(format!(
+            "bucket {name} is owned by the imported account {account} before it \
+             is adopted, so the check after adoption could not fail"));
+    }
+
+    let (status, body) = rgw_call(admin, "PUT",
+        &format!("{base}/admin/nsfs/profile?bucket={name}&profile=shared"))?;
+    if status != 200 {
+        return Err(format!("setting bucket {name} to shared failed ({status}):\n{body}"));
+    }
+    let (had, now) = (json_str(&body, "had_profile"), json_str(&body, "profile"));
+    if had.as_deref() != Some("base") || now.as_deref() != Some("shared") {
+        return Err(format!(
+            "bucket {name} went from {had:?} to {now:?}, not base to shared:\n{body}"));
+    }
+
+    let (status, after) = owner_of()?;
+    if status != 200 || after != account {
+        return Err(format!(
+            "bucket {name}, adopted through the profile endpoint, is owned by \
+             {after:?} ({status}), not the imported account {account}"));
+    }
+    println!("adopt    bucket {name}:  profile shared by the profile endpoint;  \
+              owner {before} became {account}");
     Ok(())
 }
 
