@@ -142,14 +142,27 @@ async fn corpus_coverage_storage_class() {
 
     /* HEAD says what the object carries;  the listing says what the row
      * carries.  They are different questions and this axis exists
-     * because they can disagree. */
+     * because they can disagree.
+     *
+     * An observing pass did not make the writes, so an object it derived
+     * may never have been written:  NooBaa refuses a class it does not
+     * support, and its manifest records `refused`.  Such an object is
+     * recorded absent here and not asserted on;  comparing the two
+     * manifests is the diff stage's job. */
+    let mut absent = std::collections::BTreeSet::new();
     for (_class, key, _asked) in &written {
-        if let Ok(h) = client.head_object().bucket(&b).key(key).send().await {
-            m.object(
+        match client.head_object().bucket(&b).key(key).send().await {
+            Ok(h) => m.object(
                 key,
                 "head-class",
                 h.storage_class().map(|s| s.as_str()).unwrap_or("<none>"),
-            );
+            ),
+            Err(e) if observing() && e.as_service_error()
+                .is_some_and(|s| s.is_not_found()) => {
+                m.object(key, "observed", "absent");
+                absent.insert(key.clone());
+            }
+            Err(_) => {}
         }
     }
     let listed = client
@@ -194,6 +207,9 @@ async fn corpus_coverage_storage_class() {
     };
 
     for (class, key, asked) in &written {
+        if absent.contains(key) {
+            continue;
+        }
         match asked {
             None => {
                 /* The default.  Nothing should claim otherwise, and no
