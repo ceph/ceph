@@ -1230,6 +1230,9 @@ public:
       TEST_OMAP_BYTES_LIMIT
     };
   }
+  void schedule_scrub_with_osd() final {}
+  void update_scrub_job() final {}
+  void rm_from_osd_scrubbing() final {}
   void notify_scrub_start(bool) final {}
   void notify_scrub_end(bool) final {
     ++notify_end;
