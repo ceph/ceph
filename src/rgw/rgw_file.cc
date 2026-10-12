@@ -2341,6 +2341,14 @@ namespace rgw {
           return rc;
         }
 
+        /* the driver has FSIO, but a bucket may not serve it */
+        if (! req.sal_bucket->have_fsio()) {
+          lsubdout(fs->get_context(), rgw, 4)
+            << __func__ << " " << obj_name
+            << ": bucket " << bkt_name << " does not serve FSIO" << dendl;
+          return -ENOTSUP;
+        }
+
         uint32_t hopen_flags = sal::Object::FSIOObject::OPEN_FLAG_NONE;
         if ((rgw_openflags & RGW_OPEN_FLAG_CREATE) ||
 	    (createmode >= RGW_CREATEMODE_UNCHECKED)) {
@@ -3818,6 +3826,13 @@ int rgw_open(struct rgw_fs *rgw_fs,
    * from rgw_close(), or from the idle reaper if no close arrives */
   if (! rgw_fh->is_file()) {
     return -EISDIR;
+  }
+
+  /* No positional view:  the open is bookkeeping, as it was before the
+   * FSIO path existed, and rgw_close() completes the write transaction
+   * through close(). */
+  if (! g_rgwlib->get_driver()->have_fsio()) {
+    return rgw_fh->open(flags);
   }
 
   /* v1 compatibility.  rgw_lookup(RGW_LOOKUP_FLAG_CREATE) on an object

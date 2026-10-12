@@ -266,8 +266,7 @@ struct BucketProfile {
 
   bool has(uint32_t ext) const { return (extensions & ext) != 0; }
 
-  /* "does this bucket carry anything of nsfs's" -- the question the
-   * interlocks ask before serving an extension-only interface */
+  /* whether the bucket is marked:  its extension set is not empty */
   bool extended() const { return extensions != EXTENSIONS_NONE; }
 
   const char* name() const {

@@ -9056,7 +9056,7 @@ int NSFSObject::resolve_parent_dir(const DoutPrefixProvider* dpp,
  * reversible.  Refuse rather than degrade:  a caller handed a handle whose
  * semantics are missing is worse off than one told the bucket does not
  * offer them. */
-int NSFSObject::check_fsio_allowed(const DoutPrefixProvider* dpp)
+int NSFSObject::fsio_allowed(const DoutPrefixProvider* dpp)
 {
   auto* b = static_cast<NSFSBucket*>(get_bucket());
   if (! b) {
@@ -9068,7 +9068,7 @@ int NSFSObject::check_fsio_allowed(const DoutPrefixProvider* dpp)
     return ret;
   }
   /* FSIO needs somewhere to put a shadow, so the question is EXT_SHADOW
-   * and not whether the bucket carries anything of nsfs's.  Shared carries
+   * and not whether the bucket is marked.  Shared is marked, with
    * EXT_RGW_META and no shadow subtree. */
   if (! b->has_extension(nsfs::EXT_SHADOW)) {
     ldpp_dout(dpp, 4) << "FSIO refused on bucket " << b->get_name()
@@ -9082,7 +9082,7 @@ int NSFSObject::check_fsio_allowed(const DoutPrefixProvider* dpp)
 int NSFSObject::stat_fsio_view(const DoutPrefixProvider* dpp,
 			       struct stat* st, Attrs* attrs, uint32_t flags)
 {
-  int aret = check_fsio_allowed(dpp);
+  int aret = fsio_allowed(dpp);
   if (aret < 0) {
     return aret;
   }
@@ -9228,7 +9228,7 @@ Object::FSIOResult NSFSObject::get_fsio_handle(const DoutPrefixProvider* dpp,
 						uint32_t flags,
 						const FSIOCreateSpec* spec)
 {
-  int aret = check_fsio_allowed(dpp);
+  int aret = fsio_allowed(dpp);
   if (aret < 0) {
     return FSIOResult{aret, nullptr};
   }

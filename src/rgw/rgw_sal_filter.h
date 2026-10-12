@@ -655,6 +655,7 @@ public:
   virtual void set_version(obj_version &ver) override { next->set_version(ver); }
   virtual bool versioned() override { return next->versioned(); }
   virtual bool versioning_enabled() override { return next->versioning_enabled(); }
+  virtual bool have_fsio() const override { return next->have_fsio(); }
 
   virtual std::unique_ptr<Bucket> clone() override {
     return std::make_unique<FilterBucket>(next->clone());

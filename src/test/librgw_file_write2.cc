@@ -409,7 +409,16 @@ static void load_fs_profile(const DoutPrefixProvider* dpp)
 }
 
 TEST(OPEN2, INIT) {
-  int ret = librgw_create(&rgw_h, saved_args.argc, saved_args.argv);
+  /* These tests write through FSIO, which nsfs refuses on a bucket that
+   * is not strong, and new nsfs buckets are shared by default.  The
+   * option is nsfs's and inert on other drivers.  Inserted before the
+   * last argument, which librgw_create() splits as the ceph args
+   * string. */
+  static char strong[] = "--rgw_nsfs_bucket_profile=strong";
+  static std::vector<char*> argv(saved_args.argv,
+				 saved_args.argv + saved_args.argc);
+  argv.insert((argv.size() > 1) ? (argv.end() - 1) : argv.end(), strong);
+  int ret = librgw_create(&rgw_h, argv.size(), argv.data());
   ASSERT_EQ(ret, 0);
   ASSERT_NE(rgw_h, nullptr);
 }
@@ -5517,8 +5526,8 @@ TEST(OPEN2, VER_TIMER_LONGER_IN_VERSIONED_BUCKET)
 /* FSIO is an extension, so a base bucket does not serve it.
  *
  * Both polarities, because the refusing branch is otherwise unreachable:
- * every bucket a gateway creates is strong, so there is no base bucket
- * to try until the hint moves one.  Without the second leg this would
+ * this suite creates its buckets strong, so there is no base bucket to
+ * try until the hint moves one.  Without the second leg this would
  * pass against an open2 that was broken outright.
  *
  * Base first, then strong.  Reducing a bucket's profile requires it to
@@ -5604,13 +5613,13 @@ TEST(OPEN2, EXT_FSIO_REFUSED_ON_BASE_BUCKET)
   (void) rgw_unlink(fs, fs->root_fh, bname.c_str(), RGW_UNLINK_FLAG_NONE);
 }
 
-/* The shared profile carries our metadata representation and no shadow
+/* The shared profile carries the nsfs metadata representation and no shadow
  * subtree, so it does not serve FSIO.
  *
- * Shared is the case a broad "does this bucket carry anything of ours"
- * test gets wrong:  it carries EXT_RGW_META, so such a test says yes and
- * the bucket acquires a shadow tree its profile has nowhere to put.  The
- * interlock asks for EXT_SHADOW, and this holds it to that.
+ * Shared is the case a test of whether the bucket is marked gets
+ * wrong:  shared is marked, with EXT_RGW_META, so such a test says yes
+ * and the bucket acquires a shadow tree its profile has nowhere to put.
+ * The interlock asks for EXT_SHADOW, and this holds it to that.
  *
  * Shared first, then strong, for the reason the base test gives:
  * reducing a profile requires the bucket to hold no content.

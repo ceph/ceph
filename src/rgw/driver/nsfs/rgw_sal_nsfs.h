@@ -1538,6 +1538,11 @@ public:
     return profile && profile->has(ext);
   }
 
+  /* FSIO needs the shadow subtree, so only strong serves it.  librgw
+   * asks this before an FSIO open;  fsio_allowed() is the same
+   * rule inside the driver. */
+  bool have_fsio() const override { return has_extension(nsfs::EXT_SHADOW); }
+
   const char* profile_name() const {
     return profile ? profile->name() : "unresolved";
   }
@@ -1944,7 +1949,7 @@ public:
 			     const FSIOCreateSpec* spec = nullptr) override;
 
   /* whether this object's bucket carries the extensions FSIO needs */
-  int check_fsio_allowed(const DoutPrefixProvider* dpp);
+  int fsio_allowed(const DoutPrefixProvider* dpp);
 
   int stat_fsio_view(const DoutPrefixProvider* dpp, struct stat* st,
 		     Attrs* attrs, uint32_t flags) override;
