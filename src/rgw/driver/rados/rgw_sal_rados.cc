@@ -2996,9 +2996,10 @@ std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *
 				 olh_epoch, unique_tag, obj->get_trace());
 }
 
-const std::string& RadosStore::get_compression_type(const rgw_placement_rule& rule)
+const std::string& RadosStore::get_compression_type(const rgw_placement_rule& rule,
+                                                    std::optional<uint64_t> size)
 {
-      return svc()->zone->get_zone_params().get_compression_type(rule);
+      return svc()->zone->get_zone_params().get_compression_type(rule, size);
 }
 
 bool RadosStore::valid_placement(const rgw_placement_rule& rule)

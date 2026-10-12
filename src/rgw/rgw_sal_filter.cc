@@ -740,9 +740,10 @@ std::unique_ptr<Writer> FilterDriver::get_atomic_writer(const DoutPrefixProvider
   return std::make_unique<FilterWriter>(std::move(writer), obj);
 }
 
-const std::string& FilterDriver::get_compression_type(const rgw_placement_rule& rule)
+const std::string& FilterDriver::get_compression_type(const rgw_placement_rule& rule,
+                                                      std::optional<uint64_t> size)
 {
-  return next->get_compression_type(rule);
+  return next->get_compression_type(rule, size);
 }
 
 bool FilterDriver::valid_placement(const rgw_placement_rule& rule)
