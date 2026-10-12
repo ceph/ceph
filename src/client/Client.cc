@@ -4163,12 +4163,18 @@ int Client::get_append_caps(Fh *fh, uint64_t size, int want, int *phave,
 			    int64_t *poffset, int *pextra_refs)
 {
   Inode *in = fh->inode.get();
+  // An fscrypt append reads the partial last block back first: hold Fr
+  // (and Fc, the block may still be dirty in our cache) until the write
+  // is done, as the hand-over to the next appender revokes them and that
+  // read could not get them back before our Fw is released.
+  const int rmw = in->is_fscrypt_enabled() ?
+		  (CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE) : 0;
   const int need = CEPH_CAP_FILE_EXCL | CEPH_CAP_FILE_WR |
-		   CEPH_CAP_AUTH_SHARED;
-  // Fb and Fc too, while implemented: the write holds on to Fb (see
-  // below) and buffers its data under it
+		   CEPH_CAP_AUTH_SHARED | (rmw & CEPH_CAP_FILE_RD);
+  // Fb/Fc too: all appends of this client must go through the cache,
+  // a sync one would miss a sibling's data that is still dirty there
   const int allow = CEPH_CAP_FILE_EXCL | CEPH_CAP_FILE_WR |
-		    CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_CACHE;
+		    CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_CACHE | rmw;
   int r = 0;
   bool got = false;
   *pextra_refs = 0;
@@ -4188,6 +4194,18 @@ int Client::get_append_caps(Fh *fh, uint64_t size, int want, int *phave,
 	break;
     }
 
+    if (rmw && in->append_inflight) {
+      // One fscrypt append at a time per client: two appends sharing
+      // the last block would each read-modify-write it and the later
+      // write would undo the earlier one.  Do not hold on to anything
+      // while waiting for it.
+      in->append_waiting--;
+      check_caps(in, CHECK_CAPS_NODELAY);
+      wait_on_context_list(in->waitfor_caps);
+      in->append_waiting++;
+      continue;
+    }
+
     int implemented;
     int issued = in->caps_issued(&implemented);
     int have = issued | (implemented & allow);
@@ -4205,12 +4223,24 @@ int Client::get_append_caps(Fh *fh, uint64_t size, int want, int *phave,
 	r = get_caps(fh, need, want, phave, eof + size, allow);
 	if (r < 0)
 	  break;
+	if (rmw && in->append_inflight) {
+	  // a sibling fscrypt append got in while get_caps() waited
+	  put_cap_ref(in, need);
+	  continue;
+	}
 	*poffset = in->effective_size();
 	if (in->append_inflight)
 	  *poffset = std::max<int64_t>(*poffset, in->append_end);
-	// _write() may drop client_lock before it buffers the data (e.g.
-	// clear_suid_sgid()), and must not buffer it after a revoke of Fb
-	// was acked: hold Fb too while writing
+	if (rmw) {
+	  *pextra_refs = CEPH_CAP_FILE_RD;
+	  if ((issued | implemented) & CEPH_CAP_FILE_CACHE) {
+	    get_cap_ref(in, CEPH_CAP_FILE_CACHE);  // pins the inode too
+	    *pextra_refs |= CEPH_CAP_FILE_CACHE;
+	  }
+	}
+	// _write() may drop client_lock before it buffers the data (fscrypt
+	// read-modify-write, clear_suid_sgid()), and must not buffer it
+	// after a revoke of Fb was acked: hold Fb too while writing
 	if (*phave & CEPH_CAP_FILE_BUFFER) {
 	  get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // pins the inode too
 	  *pextra_refs |= CEPH_CAP_FILE_BUFFER;
@@ -4281,6 +4311,7 @@ void Client::_append_done(Inode *in, int extra_refs)
   ceph_assert(in->append_inflight > 0);
   if (--in->append_inflight == 0)
     in->append_end = 0;
+  signal_caps_inode(in);  // a sibling fscrypt append may wait for us
   if (extra_refs)
     put_cap_ref(in, extra_refs);
   // The next appender is usually already waiting for our Fb, revoked
@@ -4509,7 +4540,8 @@ void Client::check_caps(const InodeRef& in, unsigned flags)
   // its data without Fc.
   if (in->append_waiting && (implemented & CEPH_CAP_FILE_EXCL))
     used |= implemented & (CEPH_CAP_FILE_EXCL | CEPH_CAP_FILE_WR |
-			   CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
+			   CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE |
+			   CEPH_CAP_FILE_BUFFER);
 
   int orig_used = used;
   used = adjust_caps_used_for_lazyio(used, issued, implemented);
@@ -11935,7 +11967,11 @@ retry:
   else
     want = CEPH_CAP_FILE_CACHE;
   {
-    auto r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, -1);
+    // a read for an fscrypt append (read-modify-write) uses the Fr/Fc
+    // that the append holds on to (see get_append_caps())
+    auto r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, -1,
+		      read_for_write ?
+		      (CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE) : 0);
     if (r < 0) {
       rc = r;
       goto done;
@@ -12743,7 +12779,10 @@ int Client::WriteEncMgr::init()
 
   int want = CEPH_CAP_FILE_RD;
   int have;
-  int r = clnt->get_caps(f, CEPH_CAP_FILE_RD, want, &have, endoff);
+  // an append holds on to Fr/Fc being revoked (see get_append_caps())
+  int allow = (f->flags & O_APPEND) ?
+	      (CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE) : 0;
+  int r = clnt->get_caps(f, CEPH_CAP_FILE_RD, want, &have, endoff, allow);
   if (r < 0) {
     return r;
   }
@@ -13093,9 +13132,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
   int r;
   int extra_refs = 0;
   r = -EOPNOTSUPP;
-  // fscrypt appends read-modify-write the last block and need more care,
-  // they keep the old behaviour for now
-  if (is_append && !in->is_fscrypt_enabled()) {
+  if (is_append) {
     // offset becomes the EOF that is current under Fx
     r = get_append_caps(f, size, want, &have, &offset, &extra_refs);
     if (r < 0 && r != -EOPNOTSUPP)
