@@ -2,9 +2,6 @@ overrides:
   ceph:
     log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
-    conf:
-      client:
-        osd_min_split_replica_read_size: 0
 tasks:
   - rados:
       clients: [client.0]
@@ -13,6 +10,7 @@ tasks:
       max_in_flight: 64
       objects: 1024
       balance_reads: true
+      osd_min_split_replica_read_size: 0
       no_omap: true
       op_weights:
         read: 100

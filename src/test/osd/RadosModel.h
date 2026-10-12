@@ -220,7 +220,7 @@ public:
      std::string chunk_algo,
      std::string chunk_size,
      size_t max_attr_len,
-     uint64_t min_split_size = 0,
+     uint64_t min_split_size = UINT64_MAX,
      const char *id = 0) :
     pool_obj_cont(),
     current_snap(0),
@@ -258,11 +258,11 @@ public:
     r = rados.conf_parse_env(NULL);
     if (r < 0)
       return r;
-    if (min_split_size > 0) {
+    if (min_split_size != UINT64_MAX) {
       r = rados.conf_set("osd_min_split_replica_read_size",
-  	 std::to_string(min_split_size).c_str());
+                         std::to_string(min_split_size).c_str());
       if (r < 0)
- return r;
+        return r;
     }
     r = rados.connect();
     if (r < 0)
