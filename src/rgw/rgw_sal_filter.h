@@ -497,11 +497,11 @@ public:
     return next->load_vector_bucket(dpp, b, bucket, y);
   }
   int list_vector_buckets(const DoutPrefixProvider* dpp,
-                           const rgw_owner& owner, const std::string& tenant,
+                           const rgw_owner& owner, const std::string& ns,
                            const std::string& marker, const std::string& end_marker,
                            uint64_t max, BucketList& buckets,
                            optional_yield y) override {
-    return next->list_vector_buckets(dpp, owner, tenant, marker,
+    return next->list_vector_buckets(dpp, owner, ns, marker,
                                      end_marker, max, buckets, y);
   }
 
