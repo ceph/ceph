@@ -1943,6 +1943,7 @@ void PeeringState::calc_ec_acting_stretch(
   set<pg_shard_t> *acting_backfill,
   const OSDMapRef osdmap,
   const PGPool& pool,
+  const IsPGRecoverablePredicate &is_recoverable,
   ostream &ss)
 {
   // For EC pools with stretch mode, each zone must have a complete set of k+m shards.
@@ -2001,85 +2002,101 @@ void PeeringState::calc_ec_acting_stretch(
   }
 
   // With more than one zone, each zone block is served from a single CRUSH
-  // zone that no other block uses.  Like calc_ec_acting, prefer usable up[i]
-  // and acting[i] to strays: choose the zones serving the most distinct
-  // relative shards, up to k, then those filling the most positions from
-  // up[i] or acting[i], then from up[i], then those holding the most of
-  // their blocks' shards, counting a zone only if it holds at least k of
-  // them, then the most shards, then the most acting[i].
+  // zone that no other block uses.
   const bool one_zone_per_block = pool.info.get_num_zone() > 1;
+
+  // How well a CRUSH zone can serve a zone block, counted over the block's
+  // positions that the zone holds.  Like calc_ec_acting, prefer up[i] and
+  // acting[i] to strays.  Compared member by member, in order.
+  struct zone_fit_t {
+    unsigned up_or_acting = 0; // positions held by up[i] or acting[i]
+    unsigned up = 0;           // positions held by up[i]
+    unsigned held_if_recoverable = 0; // held, if these shards can recover
+    unsigned held = 0;         // positions held
+    unsigned acting = 0;       // positions held by acting[i]
+
+    auto operator<=>(const zone_fit_t &) const = default;
+    zone_fit_t operator+(const zone_fit_t &o) const {
+      return {up_or_acting + o.up_or_acting, up + o.up,
+              held_if_recoverable + o.held_if_recoverable, held + o.held,
+              acting + o.acting};
+    }
+  };
+  struct zone_holding_t {
+    zone_fit_t fit;
+    set<pg_shard_t> shards;
+  };
+  using block_holdings_t = map<int, map<int, zone_holding_t>>; // block -> zone
+
+  // Returns the CRUSH zone serving each block that is served.
   auto choose_block_zones = [&](const vector<vector<int>> &shard_holders,
                                 const vector<int> &cur_acting) {
-    // (up[i] or acting[i], up[i], any holder if at least k, any holder,
-    //  acting[i])
-    using held_t = std::array<unsigned, 5>;
-    using block_held_t = map<int, map<int, held_t>>; // block -> zone -> held
-    block_held_t held;
-    map<int, map<int, shard_id_set>> rel_held; // block -> zone -> rel shards
+    block_holdings_t holdings;
     for (unsigned i = 0; i < size; ++i) {
-      const shard_id_t shard(i);
-      const int block_id = pool.info.get_shard_zone(shard);
-      auto &block = held[block_id];
-      set<int> zones, up_acting_zones;
+      auto &block = holdings[pool.info.get_shard_zone(shard_id_t(i))];
+      set<int> held_zones, up_acting_zones;
       for (int osd : shard_holders[i]) {
         const int zone = get_crush_zone(osd);
         auto &h = block[zone];
-        if (zones.insert(zone).second) {
-          ++h[3];
-          rel_held[block_id][zone].insert(pool.info.get_relative_shard(shard));
+        h.shards.insert(pg_shard_t(osd, shard_id_t(i)));
+        if (held_zones.insert(zone).second) {
+          ++h.fit.held;
         }
         const bool is_up = i < up.size() && osd == up[i];
         const bool is_acting = i < cur_acting.size() && osd == cur_acting[i];
         if ((is_up || is_acting) && up_acting_zones.insert(zone).second) {
-          ++h[0];
+          ++h.fit.up_or_acting;
         }
         if (is_up) {
-          ++h[1];
+          ++h.fit.up;
         }
         if (is_acting) {
-          ++h[4];
+          ++h.fit.acting;
         }
       }
     }
-    const unsigned k = pool.info.get_ec_data_shard_count();
-    for (auto &[block, zones] : held) {
+    for (auto &[block, zones] : holdings) {
       for (auto &[zone, h] : zones) {
-        if (h[3] >= k) {
-          h[2] = h[3];
+        if (is_recoverable(h.shards)) {
+          h.fit.held_if_recoverable = h.fit.held;
         }
       }
     }
 
+    // assign() tries, for each block from b on, every zone holding some of
+    // its shards that no earlier block uses, and also leaving the block
+    // unserved.  fit and served are the sums for the blocks before b.  Once
+    // every block is decided, it keeps the first best choice: one whose
+    // shards can recover the PG, then the one with the highest fit.
+    using score_t = std::pair<bool, zone_fit_t>;
+    score_t best{};
     map<int, int> block_zone, trial;
     set<int> used_zones;
-    std::pair<size_t, held_t> best{};
-    std::function<void(block_held_t::const_iterator, const held_t&,
-                       const shard_id_set&)> assign =
-      [&](block_held_t::const_iterator b, const held_t &total,
-          const shard_id_set &served) {
-        if (b == held.cend()) {
-          const std::pair score{std::min<size_t>(served.size(), k), total};
+    std::function<void(block_holdings_t::const_iterator, const zone_fit_t &,
+                       const set<pg_shard_t> &)> assign =
+      [&](block_holdings_t::const_iterator b, const zone_fit_t &fit,
+          const set<pg_shard_t> &served) {
+        if (b == holdings.cend()) {
+          const score_t score{is_recoverable(served), fit};
           if (score > best) {
             best = score;
             block_zone = trial;
           }
           return;
         }
-        assign(std::next(b), total, served);
+        assign(std::next(b), fit, served);
         for (const auto &[zone, h] : b->second) {
           if (used_zones.insert(zone).second) {
             trial[b->first] = zone;
-            held_t sum = total;
-            for (unsigned j = 0; j < sum.size(); ++j) {
-              sum[j] += h[j];
-            }
-            assign(std::next(b), sum, served | rel_held[b->first][zone]);
+            set<pg_shard_t> more = served;
+            more.insert(h.shards.begin(), h.shards.end());
+            assign(std::next(b), fit + h.fit, more);
             trial.erase(b->first);
             used_zones.erase(zone);
           }
         }
       };
-    assign(held.cbegin(), held_t{}, shard_id_set{});
+    assign(holdings.cbegin(), zone_fit_t{}, set<pg_shard_t>{});
     return block_zone;
   };
   map<int, int> block_zone;
@@ -2972,6 +2989,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
       &want_acting_backfill,
       get_osdmap(),
       pool,
+      missing_loc.get_recoverable_predicate(),
       ss);
     } else {
       psdout(20) << "calling calc_ec_acting for EC pool (non-stretch mode)" << dendl;

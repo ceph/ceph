@@ -16,12 +16,16 @@
 #include <random>
 #include <gtest/gtest.h>
 #include "test/osd/ECPeeringTestFixture.h"
+#include "test/osd/MockECRecPred.h"
 #include "osd/PeeringState.h"
 #include "common/ceph_context.h"
 #include "crush/CrushWrapper.h"
 #include "crush/crush.h"
 
 using namespace std;
+
+// Every pool of these tests is a 2+1 EC pool.
+static const MockECRecPred is_recoverable(2, 1);
 
 /**
  * TestECActingStretch - Unit tests for stretch mode EC acting set selection
@@ -179,7 +183,7 @@ protected:
     ASSERT_NE(auth_it, all_info.end());
     PeeringState::calc_ec_acting_stretch(
       auth_it, pool->size, acting, up, all_info, restrict_to_up_acting,
-      want, backfill, acting_backfill, osdmap, pgpool, ss);
+      want, backfill, acting_backfill, osdmap, pgpool, is_recoverable, ss);
     ASSERT_EQ(want->size(), pool->size);
   }
 
@@ -242,6 +246,7 @@ TEST_F(TestECActingStretch, ZoneIsolation_AllUp) {
     &acting_backfill,
     osdmap,
     pgpool,
+    is_recoverable,
     ss);
   
   // Verify want contains all 6 OSDs
@@ -328,6 +333,7 @@ TEST_F(TestECActingStretch, ZoneIsolation_SingleOSDDown) {
     &acting_backfill,
     osdmap,
     pgpool,
+    is_recoverable,
     ss);
   
   // Verify want vector
@@ -403,6 +409,7 @@ TEST_F(TestECActingStretch, CRUSH_rehash) {
     &acting_backfill,
     osdmap,
     pgpool,
+    is_recoverable,
     ss);
   
   std::cerr << ss.str();
@@ -473,6 +480,7 @@ TEST_F(TestECActingStretch, CRUSH_rehash_degraded) {
     &acting_backfill,
     osdmap,
     pgpool,
+    is_recoverable,
     ss);
   
   std::cerr << ss.str();
@@ -551,7 +559,7 @@ TEST_F(TestECActingStretch, StraySearch_CorrectZoneOnly) {
 
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
-    false, &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    false, &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ((int)want.size(), 6);
   // Position 1 must be filled by OSD 6 (dc0 stray), not OSD 7 (dc1)
@@ -634,7 +642,7 @@ TEST_F(TestECActingStretch, UpBehindLog_ActingFallbackWins) {
 
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
-    false, &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    false, &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ((int)want.size(), 6) << ss.str();
   // Acting fallback must win position 1 with OSD 1
@@ -721,7 +729,7 @@ TEST_F(TestECActingStretch, UpBehindLog_ActingAbsent_StrayWrongZone_NoFill) {
 
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
-    false, &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    false, &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ((int)want.size(), 6) << ss.str();
   // All three paths exhausted — position 1 must be CRUSH_ITEM_NONE
@@ -809,7 +817,7 @@ TEST_F(TestECActingStretch, UpNone_ActingAbsent_StrayFills) {
 
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
-    false, &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    false, &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ((int)want.size(), 6) << ss.str();
   // Stray OSD 6 (dc0) must fill position 1
@@ -888,7 +896,7 @@ TEST_F(TestECActingStretch, ZoneFromBlock_UpPositionNone) {
 
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
-    false, &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    false, &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ((int)want.size(), 6);
   // Position 0 must be filled by OSD 6 (dc0 stray), not OSD 7 (dc1)
@@ -943,7 +951,7 @@ TEST_F(TestECActingStretch, ActingSizeLess_NumZonesTransition) {
 
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
-    false, &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    false, &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ((int)want.size(), 6);
   // All positions should be filled from the up set
@@ -1022,7 +1030,7 @@ TEST_F(TestECActingStretch, ActingFallback_RelativeShardStride) {
 
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
-    false, &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    false, &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ((int)want.size(), 6);
   // Position 2: up[2]=OSD6 is behind, acting[2]=OSD2 is current → select OSD 2
@@ -1090,7 +1098,7 @@ TEST_F(TestECActingStretch, BucketMax_ZoneCapEnforced) {
 
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
-    false, &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    false, &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ((int)want.size(), 6);
   // dc0 fills its 3 positions
@@ -1166,7 +1174,7 @@ TEST_F(TestECActingStretch, Rehash_AllThreePaths) {
 
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
-    false, &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    false, &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ((int)want.size(), 6) << ss.str();
 
@@ -1356,6 +1364,7 @@ TEST_F(TestECActingStretch3Zone, AllUp_ThreeZones) {
     &acting_backfill,
     osdmap,
     pgpool,
+    is_recoverable,
     ss);
   
   std::cerr << ss.str();
@@ -1424,6 +1433,7 @@ TEST_F(TestECActingStretch3Zone, CRUSH_rehash_ThreeZones) {
     &acting_backfill,
     osdmap,
     pgpool,
+    is_recoverable,
     ss);
   
   std::cerr << ss.str();
@@ -1508,6 +1518,7 @@ TEST_F(TestECActingStretch3Zone, ZoneTransition_ThreeToTwo) {
     &acting_backfill,
     osdmap,
     pgpool,
+    is_recoverable,
     ss);
   
   std::cerr << ss.str();
@@ -1555,7 +1566,7 @@ static void calc_two_to_three(const OSDMapRef& osdmap, int64_t pool_id,
   set<pg_shard_t> acting_backfill;
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info, false,
-    want, backfill, &acting_backfill, osdmap, pgpool, ss);
+    want, backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 }
 
 TEST_F(TestECActingStretch3Zone, ZoneTransition_TwoToThree) {
@@ -1667,7 +1678,7 @@ TEST_F(TestECActingStretch, StrayFromWrongZoneRejectedWhenZoneBlockDown) {
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
     false /* restrict_to_up_acting */,
-    &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ(want.size(), 6u);
 
@@ -1728,7 +1739,7 @@ TEST_F(TestECActingStretch, NoOsdAppearsTwiceInWant) {
   PeeringState::calc_ec_acting_stretch(
     auth_log_shard, pool->size, acting, up, all_info,
     false /* restrict_to_up_acting */,
-    &want, &backfill, &acting_backfill, osdmap, pgpool, ss);
+    &want, &backfill, &acting_backfill, osdmap, pgpool, is_recoverable, ss);
 
   ASSERT_EQ(want.size(), 6u);
 

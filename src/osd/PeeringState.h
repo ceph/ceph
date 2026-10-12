@@ -1777,6 +1777,7 @@ public:
     std::set<pg_shard_t> *acting_backfill,
     const OSDMapRef osdmap,
     const PGPool& pool,
+    const IsPGRecoverablePredicate &is_recoverable,
     std::ostream &ss);
 
 private:
