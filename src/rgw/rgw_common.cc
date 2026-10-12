@@ -1888,7 +1888,7 @@ public:
   }
 
   char to_num(char c) {
-    return table[(int)c];
+    return table[static_cast<unsigned char>(c)];
   }
 };
 
