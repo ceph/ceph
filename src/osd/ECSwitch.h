@@ -226,6 +226,12 @@ public:
     return !is_optimized() || optimized.journal_ready(oid);
   }
 
+  bool ec_journal_read_ready(const hobject_t& oid, uint64_t offset,
+                             uint64_t length) override
+  {
+    return !is_optimized() || optimized.journal_read_ready(oid, offset, length);
+  }
+
   bool ec_journal_flush_in_flight(const hobject_t& oid) const override
   {
     return is_optimized() && optimized.journal_flush_in_flight(oid);

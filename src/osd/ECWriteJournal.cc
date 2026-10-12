@@ -251,6 +251,55 @@ void ReplayFetches::clear()
   unreadable = false;
 }
 
+bool Overlay::covers(uint64_t offset, uint64_t length) const
+{
+  if (!length) {
+    return false;
+  }
+  uint64_t at = offset / block_size * block_size;
+  for (auto i = blocks.find(at); at < offset + length; at += block_size, ++i) {
+    if (i == blocks.end() || i->first != at) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void Overlay::apply(uint64_t offset, uint64_t length,
+                    ceph::bufferlist& data) const
+{
+  const uint64_t end = offset + length;
+  ceph::bufferlist out;
+  // Adjacent pieces of one buffer become one again: a 4 KiB record is four
+  // blocks of the same buffer.
+  const auto take = [&out](const ceph::bufferlist& from, uint64_t off,
+                           uint64_t len) {
+    ceph::bufferlist piece;
+    piece.substr_of(from, off, len);
+    for (const auto& ptr : piece.buffers()) {
+      out.append(ptr, 0, ptr.length());
+    }
+  };
+  uint64_t pos = offset;
+  for (auto i = blocks.lower_bound(offset / block_size * block_size);
+       i != blocks.end() && i->first < end; ++i) {
+    const uint64_t from = std::max(i->first, offset);
+    const uint64_t to = std::min(i->first + block_size, end);
+    if (pos < from) {
+      take(data, pos - offset, from - pos);
+    }
+    take(i->second, from - i->first, to - from);
+    pos = to;
+  }
+  if (pos == offset) {
+    return; // no block in the range
+  }
+  if (pos < end) {
+    take(data, pos - offset, end - pos);
+  }
+  data = std::move(out);
+}
+
 bool Limits::valid() const
 {
   return stripe_width && stripe_width % 4096 == 0 &&
@@ -736,7 +785,7 @@ std::optional<Stripe> Journal::begin_flush(
     return std::nullopt;
   }
   for (const auto& key : ready) {
-    if (skip && skip(key)) {
+    if ((skip && skip(key)) || readers.contains(key)) {
       if (deferred) {
         *deferred = true;
       }
@@ -757,15 +806,14 @@ std::optional<Stripe> Journal::begin_flush(
     // point: a stripe past it is younger than everything after it. Strictly
     // oldest first, too, so a stripe still waiting for an append commit
     // holds the newer ones back (milliseconds).
-    const bool reclaim = partial_upto && sequence <= *partial_upto;
-    const bool adopted = replaying && adopted_stripe(entry);
-    if ((!every_partial && !reclaim && !adopted) || entry.undurable) {
+    if (!must_flush(entry, every_partial, partial_upto, replaying) ||
+        entry.undurable) {
       if (replaying) {
         continue;
       }
       break;
     }
-    if (skip && skip(key)) {
+    if ((skip && skip(key)) || readers.contains(key)) {
       if (deferred) {
         *deferred = true;
       }
@@ -793,13 +841,30 @@ Journal::stripes_of(const hobject_t& object, uint64_t offset,
   return {begin, stop};
 }
 
+bool Journal::must_flush(const Entry& entry, bool every_partial,
+                         std::optional<uint64_t> partial_upto,
+                         bool adopting) const
+{
+  return every_partial || (partial_upto && entry.oldest <= *partial_upto) ||
+    (adopting && adopted_stripe(entry));
+}
+
+bool Journal::must_flush(const StripeKey& key, bool every_partial,
+                         std::optional<uint64_t> partial_upto) const
+{
+  const auto i = index.find(key);
+  return i != index.end() &&
+    must_flush(i->second, every_partial, partial_upto, adopting());
+}
+
 std::optional<Stripe> Journal::begin_flush_object(const hobject_t& object,
-  const Skip& skip, bool* deferred, uint64_t offset, uint64_t length)
+  const Skip& skip, bool* deferred, uint64_t offset, uint64_t length,
+  bool adopted_only)
 {
   if (deferred) {
     *deferred = false;
   }
-  if (failed) {
+  if (failed || (adopted_only && !adopting())) {
     return std::nullopt;
   }
   const auto [begin, end] = stripes_of(object, offset, length);
@@ -808,7 +873,10 @@ std::optional<Stripe> Journal::begin_flush_object(const hobject_t& object,
     if (entry.flushing || entry.undurable) {
       continue; // wait for the flush or the append commit
     }
-    if (skip && skip(i->first)) {
+    if (adopted_only && !adopted_stripe(entry)) {
+      continue;
+    }
+    if ((skip && skip(i->first)) || readers.contains(i->first)) {
       if (deferred) {
         *deferred = true;
       }
@@ -862,6 +930,8 @@ void Journal::on_reset()
   live = 0;
   failed = 0;
   holds.clear();
+  // The reads in flight are dropped with the interval and never end.
+  readers.clear();
   free_slots.clear();
   for (uint64_t slot = 0; slot < limits.max_segments; ++slot) {
     free_slots.insert(slot);
@@ -922,6 +992,71 @@ bool Journal::object_ready(const hobject_t& object, uint64_t offset,
     }
   }
   return false;
+}
+
+ReadState Journal::read_state(const hobject_t& object, uint64_t offset,
+                              uint64_t length) const
+{
+  ReadState state = ReadState::clean;
+  if (!length) {
+    return state;
+  }
+  const bool replayed = adopting();
+  const auto [begin, end] = stripes_of(object, offset, length);
+  for (auto i = begin; i != end; ++i) {
+    const auto& entry = i->second;
+    state = std::max(state,
+      replayed && adopted_stripe(entry) ? ReadState::adopted :
+      entry.flushing ? ReadState::flushing :
+      entry.undurable ? ReadState::in_flight : ReadState::ready);
+  }
+  return state;
+}
+
+void Journal::read_overlay(const hobject_t& object, uint64_t offset,
+                           uint64_t length, Overlay* overlay) const
+{
+  if (!length) {
+    return;
+  }
+  const uint64_t first = offset / block_size * block_size;
+  const auto [begin, end] = stripes_of(object, offset, length);
+  for (auto i = begin; i != end; ++i) {
+    const uint64_t stripe = i->first.second;
+    const auto& blocks = i->second.blocks;
+    for (auto b = blocks.lower_bound(first > stripe ? first - stripe : 0);
+         b != blocks.end() && stripe + b->first < offset + length; ++b) {
+      overlay->blocks.try_emplace(stripe + b->first, b->second.data);
+    }
+  }
+}
+
+void Journal::read_begin(const hobject_t& object, uint64_t offset,
+                         uint64_t length)
+{
+  if (!length) {
+    return;
+  }
+  for (uint64_t stripe = offset / limits.stripe_width * limits.stripe_width;
+       stripe < offset + length; stripe += limits.stripe_width) {
+    ++readers[StripeKey{object, stripe}];
+  }
+}
+
+void Journal::read_end(const hobject_t& object, uint64_t offset,
+                       uint64_t length)
+{
+  if (!length) {
+    return;
+  }
+  for (uint64_t stripe = offset / limits.stripe_width * limits.stripe_width;
+       stripe < offset + length; stripe += limits.stripe_width) {
+    const auto i = readers.find(StripeKey{object, stripe});
+    ceph_assert(i != readers.end());
+    if (--i->second == 0) {
+      readers.erase(i);
+    }
+  }
 }
 
 bool Journal::partial_ready() const

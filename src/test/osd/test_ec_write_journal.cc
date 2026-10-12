@@ -1460,8 +1460,418 @@ TEST_P(JournalTest, ObjectFlushCanBeLimitedToAByteRange)
   EXPECT_FALSE(j.dirty(object("b"), 0, width()));
 }
 
+TEST_P(JournalTest, ReadStateFollowsTheStripesARangeOverlaps)
+{
+  // A client read is served from the journal unless a stripe it overlaps
+  // has a record in flight or is being flushed; other stripes do not matter.
+  auto j = journal();
+  const auto a = object("a");
+  EXPECT_EQ(ReadState::clean, j.read_state(a, 0, 16 * width()));
+  append(j, 1024, 1024, 'x', a);
+  EXPECT_EQ(ReadState::ready, j.read_state(a, 0, 1));
+  EXPECT_EQ(ReadState::ready, j.read_state(a, width() - 1, 1));
+  EXPECT_EQ(ReadState::clean, j.read_state(a, width(), width()));
+  EXPECT_EQ(ReadState::clean, j.read_state(a, 100, 0)); // reads nothing
+  EXPECT_EQ(ReadState::clean, j.read_state(object("b"), 0, width()));
+
+  auto pending = append(j, width() + 4096, 4096, 'y', a, false);
+  EXPECT_EQ(ReadState::in_flight, j.read_state(a, width(), 1));
+  EXPECT_EQ(ReadState::in_flight, j.read_state(a, width() - 1, 2));
+  EXPECT_EQ(ReadState::ready, j.read_state(a, 0, width()));
+  // A durable record on top of one in flight: the block has its newest
+  // version, and the rest of the older record still has to commit.
+  append(j, width() + 4096, 1024, 'z', a);
+  EXPECT_EQ(ReadState::in_flight, j.read_state(a, width(), width()));
+  EXPECT_EQ(0, j.committed(pending, 0));
+  EXPECT_EQ(ReadState::ready, j.read_state(a, 0, 2 * width()));
+
+  auto flushing = j.begin_flush_object(a, {}, nullptr, 0, width());
+  ASSERT_TRUE(flushing);
+  EXPECT_EQ(ReadState::flushing, j.read_state(a, 0, 1));
+  EXPECT_EQ(ReadState::flushing, j.read_state(a, 0, 2 * width()));
+  EXPECT_EQ(ReadState::ready, j.read_state(a, width(), width()));
+  // A write of the stripe meanwhile is journaled and outlives the flush.
+  append(j, 0, 1024, 'w', a);
+  EXPECT_EQ(ReadState::flushing, j.read_state(a, 0, width()));
+  EXPECT_EQ(0, j.finish_flush(*flushing, 0));
+  EXPECT_EQ(ReadState::ready, j.read_state(a, 0, width()));
+  Overlay overlay;
+  j.read_overlay(a, 0, width(), &overlay);
+  ASSERT_EQ(1u, overlay.blocks.size());
+  EXPECT_EQ(std::string(1024, 'w'), overlay.blocks.at(0).to_str());
+}
+
+TEST_P(JournalTest, ReadOverlayHoldsTheNewestBlocksOfTheRange)
+{
+  auto j = journal();
+  const auto a = object("a");
+  append(j, 4096, 4096, 'a', a);
+  append(j, 5120, 1024, 'b', a); // supersedes one block of the record above
+  append(j, width() + 1024, 1024, 'c', a);
+  append(j, 4096, 1024, 'o', object("other"));
+
+  Overlay overlay;
+  j.read_overlay(a, 4096, 4096, &overlay);
+  ASSERT_EQ(4u, overlay.blocks.size());
+  EXPECT_EQ(std::string(1024, 'a'), overlay.blocks.at(4096).to_str());
+  EXPECT_EQ(std::string(1024, 'b'), overlay.blocks.at(5120).to_str());
+  EXPECT_EQ(std::string(1024, 'a'), overlay.blocks.at(6144).to_str());
+  EXPECT_EQ(std::string(1024, 'a'), overlay.blocks.at(7168).to_str());
+  EXPECT_TRUE(overlay.covers(4096, 4096));
+
+  // Only the blocks a range touches, whatever its alignment.
+  Overlay part;
+  j.read_overlay(a, 5000, 200, &part);
+  ASSERT_EQ(2u, part.blocks.size());
+  EXPECT_TRUE(part.blocks.contains(4096));
+  EXPECT_TRUE(part.blocks.contains(5120));
+  Overlay none;
+  j.read_overlay(a, 0, 4096, &none);
+  j.read_overlay(a, 8192, width() - 8192 + 1024, &none);
+  j.read_overlay(a, 100, 0, &none);
+  EXPECT_TRUE(none.empty());
+  // Several stripes, and several ranges into one overlay.
+  Overlay all;
+  j.read_overlay(a, 0, width(), &all);
+  j.read_overlay(a, width(), width(), &all);
+  j.read_overlay(a, 4096, 1024, &all);
+  EXPECT_EQ(5u, all.blocks.size());
+  EXPECT_EQ(std::string(1024, 'c'), all.blocks.at(width() + 1024).to_str());
+
+  // The overlay is a snapshot: a later write and the flush that releases
+  // the blocks leave it as it was.
+  append(j, 4096, 1024, 'd', a);
+  auto stripe = j.begin_flush_object(a, {}, nullptr, 0, width());
+  ASSERT_TRUE(stripe);
+  // The flush's blocks stay in the index until it commits.
+  Overlay during;
+  j.read_overlay(a, 4096, 4096, &during);
+  EXPECT_EQ(4u, during.blocks.size());
+  EXPECT_EQ(std::string(1024, 'd'), during.blocks.at(4096).to_str());
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  Overlay after;
+  j.read_overlay(a, 4096, 4096, &after);
+  EXPECT_TRUE(after.empty());
+  EXPECT_EQ(std::string(1024, 'a'), overlay.blocks.at(4096).to_str());
+  ceph::bufferlist read = bytes(4096, 'z');
+  overlay.apply(4096, 4096, read);
+  EXPECT_EQ(std::string(1024, 'a') + std::string(1024, 'b') +
+            std::string(2048, 'a'), read.to_str());
+}
+
+TEST_P(JournalTest, MustFlushSeparatesTheFlushesThatHaveToRun)
+{
+  // A stripe that is merely complete can wait for the object's readers; one
+  // that reclaim, a drain or replay asks for cannot.
+  auto j = journal();
+  const auto a = object("a");
+  const auto first = append(j, 0, width(), 'x', a); // complete
+  const auto second = append(j, width(), 1024, 'y', a);
+  const Journal::StripeKey complete{a, 0};
+  const Journal::StripeKey partial{a, width()};
+  EXPECT_TRUE(j.flush_ready());
+  EXPECT_FALSE(j.must_flush(complete, false, std::nullopt));
+  EXPECT_FALSE(j.must_flush(partial, false, std::nullopt));
+  EXPECT_TRUE(j.must_flush(complete, true, std::nullopt));
+  EXPECT_TRUE(j.must_flush(partial, true, std::nullopt));
+  EXPECT_TRUE(j.must_flush(complete, false, first.sequence));
+  EXPECT_FALSE(j.must_flush(partial, false, first.sequence));
+  EXPECT_TRUE(j.must_flush(partial, false, second.sequence));
+  EXPECT_FALSE(j.must_flush({a, 2 * width()}, true, std::nullopt)); // no records
+  EXPECT_FALSE(j.must_flush({object("b"), 0}, true, std::nullopt));
+}
+
+TEST_P(JournalTest, RandomReadsThroughTheOverlayMatchTheObject)
+{
+  // The reference for serving reads from the journal: at any moment, for any
+  // byte range whose stripes have no record in flight and no flush in
+  // flight, the overlay taken then, laid over the shards' bytes as they are
+  // at any time until the read ends, is the object as its acknowledged
+  // writes had left it when the read was issued. Random 1 KiB and 4 KiB
+  // writes with out-of-order commits, flushes in flight, reads in flight
+  // (which no flush of their stripes may overtake), an object tail that
+  // ends inside a block, and reads at any offset and length.
+  auto j = journal();
+  std::mt19937 rng(20261003);
+  const uint64_t size = 3 * width() + 2560;
+  const std::vector<hobject_t> objects{object("one"), object("two")};
+  std::map<hobject_t, std::string> expected, physical;
+  for (const auto& oid : objects) {
+    std::string base(size, '\0');
+    for (auto& c : base) {
+      c = 'A' + rng() % 26;
+    }
+    expected.emplace(oid, base);
+    physical.emplace(oid, base);
+  }
+  std::vector<Ticket> uncommitted;
+  std::vector<Stripe> flushing;
+  struct Read {
+    hobject_t oid;
+    uint64_t off, len;
+    Overlay overlay;  // taken when the read was issued
+    std::string want; // the object's bytes then
+  };
+  std::vector<Read> reading;
+  uint64_t version = 1;
+  unsigned checked = 0, overlaid = 0, from_journal = 0, waited = 0;
+  for (unsigned n = 0; n < 4000; ++n) {
+    const auto& oid = objects[rng() % objects.size()];
+    switch (rng() % 8) {
+    case 0:
+    case 1:
+    case 2: { // a write; some stay in flight for a while
+      const uint64_t len = rng() % 2 ? 1024 : 4096;
+      const uint64_t off = (rng() % ((size - len) / 1024 + 1)) * 1024;
+      if (off % width() + len > width()) {
+        break; // spans stripes: not a journal write
+      }
+      const char value = 'a' + rng() % 26;
+      Transaction t;
+      Ticket ticket;
+      ASSERT_EQ(0, append_copy(j, oid, eversion_t(1, version++), size, off,
+                               bytes(len, value), t, &ticket));
+      expected.at(oid).replace(off, len, std::string(len, value));
+      if (rng() % 3 || uncommitted.size() > 2) {
+        ASSERT_EQ(0, j.committed(ticket, 0));
+      } else {
+        uncommitted.push_back(ticket);
+      }
+      break;
+    }
+    case 3: // a commit, in any order
+      if (!uncommitted.empty()) {
+        const auto i = uncommitted.begin() + rng() % uncommitted.size();
+        ASSERT_EQ(0, j.committed(*i, 0));
+        uncommitted.erase(i);
+      }
+      break;
+    case 4: // a flush starts, complete stripes or the oldest one ...
+      if (flushing.size() < 2 && rng() % 4 == 0) {
+        if (auto stripe = j.begin_flush(rng() % 2)) {
+          flushing.push_back(std::move(*stripe));
+        }
+      }
+      break;
+    case 5: // ... and one commits: its blocks are on the shards
+      if (!flushing.empty()) {
+        const auto i = flushing.begin() + rng() % flushing.size();
+        for (const auto& [off, block] : i->blocks) {
+          physical.at(i->object).replace(i->offset + off, block.length(),
+                                         block.to_str());
+        }
+        ASSERT_EQ(0, j.finish_flush(*i, 0));
+        flushing.erase(i);
+      }
+      break;
+    case 6: { // a read is issued: its overlay now, its shard reads later
+      if (reading.size() > 3) {
+        break;
+      }
+      const uint64_t off = rng() % size;
+      const uint64_t len = 1 + rng() % std::min<uint64_t>(size - off,
+        rng() % 4 ? 6000 : 2 * width());
+      const auto state = j.read_state(oid, off, len);
+      if (state != ReadState::clean && state != ReadState::ready) {
+        ++waited;
+        break;
+      }
+      Read read{oid, off, len, {}, expected.at(oid).substr(off, len)};
+      j.read_overlay(oid, off, len, &read.overlay);
+      if (state == ReadState::clean) {
+        EXPECT_TRUE(read.overlay.empty());
+      }
+      j.read_begin(oid, off, len);
+      reading.push_back(std::move(read));
+      break;
+    }
+    default: { // a read completes, whenever its shard reads ran meanwhile
+      if (reading.empty()) {
+        break;
+      }
+      const auto i = reading.begin() + rng() % reading.size();
+      ceph::bufferlist data;
+      data.append(physical.at(i->oid).substr(i->off, i->len));
+      i->overlay.apply(i->off, i->len, data);
+      ASSERT_EQ(i->want, data.to_str())
+        << "read " << i->off << "~" << i->len << " ended at step " << n;
+      ++checked;
+      overlaid += !i->overlay.empty();
+      if (i->overlay.covers(i->off, i->len)) {
+        ceph::bufferlist alone;
+        i->overlay.apply(i->off, i->len, alone);
+        ASSERT_EQ(i->want, alone.to_str());
+        ++from_journal;
+      }
+      j.read_end(i->oid, i->off, i->len);
+      reading.erase(i);
+      break;
+    }
+    }
+  }
+  // The run must have exercised every case.
+  EXPECT_GT(checked, 150u);
+  EXPECT_GT(overlaid, 50u);
+  EXPECT_GT(from_journal, 10u);
+  EXPECT_GT(waited, 50u);
+}
+
+TEST_P(JournalTest, AStripeBeingReadIsNotHandedOutForFlushing)
+{
+  // A flush must not write a stripe while a client read's shard reads of
+  // it are in flight; other stripes and objects are not held up.
+  auto j = journal();
+  const auto a = object("a");
+  append(j, 0, width(), 'x', a);    // complete
+  append(j, width(), 1024, 'y', a); // incomplete
+  j.read_begin(a, 100, 10);
+  EXPECT_TRUE(j.reading({a, 0}));
+  EXPECT_FALSE(j.reading({a, width()}));
+  bool deferred = false;
+  EXPECT_FALSE(j.begin_flush(false, {}, &deferred));
+  EXPECT_TRUE(deferred);
+  EXPECT_FALSE(j.begin_flush_object(a, {}, &deferred, 0, width()));
+  EXPECT_TRUE(deferred);
+  // A drain takes the other stripe and passes over the one being read.
+  auto other = j.begin_flush(any(), {}, &deferred);
+  ASSERT_TRUE(other);
+  EXPECT_EQ(width(), other->offset);
+  EXPECT_TRUE(deferred);
+  EXPECT_FALSE(j.begin_flush(any()));
+  // Every reader of the stripe has to end first.
+  j.read_begin(a, 0, 1);
+  j.read_end(a, 100, 10);
+  EXPECT_TRUE(j.reading({a, 0}));
+  EXPECT_FALSE(j.begin_flush(false));
+  j.read_end(a, 0, 1);
+  EXPECT_FALSE(j.reading({a, 0}));
+  EXPECT_EQ(0u, j.stripes_being_read());
+  auto stripe = j.begin_flush(false, {}, &deferred);
+  ASSERT_TRUE(stripe);
+  EXPECT_EQ(0u, stripe->offset);
+  EXPECT_FALSE(deferred);
+  // And a read does not start on a stripe that is being flushed.
+  EXPECT_EQ(ReadState::flushing, j.read_state(a, 0, 1));
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  EXPECT_EQ(0, j.finish_flush(*other, 0));
+
+  // A read counts on every stripe its range overlaps, records or not.
+  j.read_begin(a, width() - 1, width() + 2);
+  EXPECT_EQ(3u, j.stripes_being_read());
+  EXPECT_TRUE(j.reading({a, 2 * width()}));
+  EXPECT_FALSE(j.reading({a, 3 * width()}));
+  EXPECT_FALSE(j.reading({object("b"), 0}));
+  j.read_begin(a, 5, 0); // reads nothing
+  EXPECT_EQ(3u, j.stripes_being_read());
+  j.read_end(a, 5, 0);
+  j.read_end(a, width() - 1, width() + 2);
+  EXPECT_EQ(0u, j.stripes_being_read());
+  // An interval change drops the reads in flight: they never end.
+  j.read_begin(a, 0, 1);
+  j.on_reset();
+  EXPECT_EQ(0u, j.stripes_being_read());
+}
+
 INSTANTIATE_TEST_SUITE_P(EC4plus3And8plus3And12plus3, JournalTest,
                         testing::Values(4, 8, 12));
+
+TEST(ECWriteJournal, OverlayLaysBlocksOverShardDataAtAnyAlignment)
+{
+  Overlay overlay;
+  overlay.blocks.emplace(1024, bytes(1024, 'a'));
+  overlay.blocks.emplace(2048, bytes(1024, 'b'));
+  overlay.blocks.emplace(5120, bytes(1024, 'c'));
+  auto read = [&overlay](uint64_t offset, uint64_t length) {
+    auto data = bytes(length, 'z');
+    overlay.apply(offset, length, data);
+    EXPECT_EQ(length, data.length());
+    return data.to_str();
+  };
+  EXPECT_EQ(std::string(1024, 'z') + std::string(1024, 'a') +
+            std::string(1024, 'b') + std::string(2048, 'z') +
+            std::string(1024, 'c') + std::string(2048, 'z'), read(0, 8192));
+  // Partial blocks at both ends, and a range inside one block.
+  EXPECT_EQ(std::string(548, 'a') + std::string(452, 'b'), read(1500, 1000));
+  EXPECT_EQ(std::string(100, 'a'), read(1100, 100));
+  EXPECT_EQ(std::string(24, 'z') + std::string(1, 'a'), read(1000, 25));
+  EXPECT_EQ(std::string(1, 'b') + std::string(9, 'z'), read(3071, 10));
+  EXPECT_EQ(std::string(120, 'z') + std::string(1024, 'c') +
+            std::string(1, 'z'), read(5000, 1145));
+  // No block in the range: the data is left alone.
+  EXPECT_EQ(std::string(1024, 'z'), read(0, 1024));
+  EXPECT_EQ(std::string(2048, 'z'), read(3072, 2048));
+  EXPECT_EQ(std::string(500, 'z'), read(6144, 500));
+
+  EXPECT_TRUE(overlay.covers(1024, 1024));
+  EXPECT_TRUE(overlay.covers(1024, 2048));
+  EXPECT_TRUE(overlay.covers(1500, 1000));
+  EXPECT_TRUE(overlay.covers(5120 + 100, 200));
+  EXPECT_FALSE(overlay.covers(1024, 2049));
+  EXPECT_FALSE(overlay.covers(1000, 100));
+  EXPECT_FALSE(overlay.covers(2048, 4096)); // a hole between two blocks
+  EXPECT_FALSE(overlay.covers(0, 1));
+  EXPECT_FALSE(overlay.covers(1024, 0));
+  EXPECT_FALSE(Overlay().covers(0, 1024));
+  // A covered range needs nothing from the shards.
+  ceph::bufferlist alone;
+  overlay.apply(1500, 1000, alone);
+  EXPECT_EQ(std::string(548, 'a') + std::string(452, 'b'), alone.to_str());
+}
+
+TEST(ECWriteJournal, OverlayJoinsTheBlocksOfOneRecord)
+{
+  // A 4 KiB record is four blocks of one buffer: a read of it gets that
+  // buffer back in one piece, not four.
+  Limits limits;
+  Journal j(prefix(), limits);
+  Transaction t;
+  Ticket ticket;
+  ASSERT_EQ(0, append_copy(j, object(), eversion_t(1, 1), limits.stripe_width,
+                           4096, bytes(4096, 'r'), t, &ticket));
+  ASSERT_EQ(0, j.committed(ticket, 0));
+  Overlay overlay;
+  j.read_overlay(object(), 4096, 4096, &overlay);
+  ASSERT_EQ(4u, overlay.blocks.size());
+  ceph::bufferlist data;
+  overlay.apply(4096, 4096, data);
+  EXPECT_EQ(std::string(4096, 'r'), data.to_str());
+  EXPECT_EQ(1u, data.get_num_buffers());
+}
+
+TEST(ECWriteJournal, AReadWaitsForTheFlushOfAdoptedStripesOnly)
+{
+  // A record replay adopted may be on fewer holders than one acknowledged
+  // in this interval, so a read does not see it before its stripe has
+  // flushed; begin_flush_object takes those stripes alone for the read.
+  Limits limits;
+  const uint64_t width = limits.stripe_width;
+  Journal j(prefix(), limits);
+  const Record replayed{object(), eversion_t(4, 9), 4 * width, 1024,
+                        bytes(1024, 'r'), utime_t(), 0};
+  EXPECT_FALSE(j.begin_flush_object(object(), {}, nullptr, 0, 4 * width, true));
+  ASSERT_EQ(0, j.adopt(replayed));
+  Transaction t;
+  Ticket ticket;
+  ASSERT_EQ(0, append_copy(j, object(), eversion_t(5, j.next_append_sequence()),
+                           4 * width, width, bytes(1024, 'n'), t, &ticket));
+  ASSERT_EQ(0, j.committed(ticket, 0));
+  EXPECT_EQ(ReadState::adopted, j.read_state(object(), 0, width));
+  EXPECT_EQ(ReadState::adopted, j.read_state(object(), 0, 2 * width));
+  EXPECT_EQ(ReadState::ready, j.read_state(object(), width, width));
+  EXPECT_TRUE(j.must_flush({object(), 0}, false, std::nullopt));
+  EXPECT_FALSE(j.must_flush({object(), width}, false, std::nullopt));
+
+  auto stripe = j.begin_flush_object(object(), {}, nullptr, 0, 4 * width, true);
+  ASSERT_TRUE(stripe);
+  EXPECT_EQ(0u, stripe->offset);
+  // The fresh stripe is left to gather records.
+  EXPECT_FALSE(j.begin_flush_object(object(), {}, nullptr, 0, 4 * width, true));
+  EXPECT_EQ(ReadState::adopted, j.read_state(object(), 0, width));
+  EXPECT_EQ(0, j.finish_flush(*stripe, 0));
+  EXPECT_EQ(ReadState::clean, j.read_state(object(), 0, width));
+  EXPECT_EQ(ReadState::ready, j.read_state(object(), 0, 2 * width));
+  EXPECT_FALSE(j.adopting());
+}
 
 TEST(ECWriteJournal, RejectInvalidGeometryAndLimits)
 {

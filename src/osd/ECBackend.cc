@@ -162,21 +162,78 @@ struct ECBackend::JournalState final : md_config_obs_t {
   };
   std::map<ceph_tid_t, Inflight> inflight;
   std::map<hobject_t, std::deque<ceph_tid_t>> inflight_by_object;
-  // The journal does not serve reads, and until a stripe flushes its shards
-  // still hold the bytes from before the journaled writes. A client read that
-  // overlaps journaled stripes therefore waits here while those stripes
-  // flush (ahead of anything else), and is then reissued unchanged.
-  // PrimaryLogPG completes a PG's async reads strictly in the order it
-  // issued them (in_progress_async_reads), so once one read waits, every
-  // later read queues behind it, and reads leave only from the front.
-  struct ReadWait {
-    hobject_t object;
+  // Client reads are served from the journal. Until a stripe flushes, its
+  // shards hold the bytes from before the journaled writes, so a read lays
+  // the stripe's live blocks over what the shards return, or answers from
+  // the blocks alone when they cover it (objects_read_async); nothing is
+  // flushed for it. PrimaryLogPG asks journal_read_ready() just before it
+  // issues a read, and parks one that has to wait in do_op with the
+  // object's other ops, not here. Such a read waits for
+  //  - a record of the stripes it reads that is still in flight: shown
+  //    before every holder has it, it could be gone again after a failover;
+  //  - the object's records that replay has yet to list, fetch or judge,
+  //    and the flush of stripes replay adopted records of (ahead of
+  //    anything else): an adopted record may be on fewer holders than one
+  //    acknowledged in this interval;
+  //  - a flush of a stripe it reads: one in flight, or one that has to run
+  //    and waits for the reads of that stripe to end (flush_wanted).
+  // read_barriers: the objects such reads wait for and the range they read,
+  // until the kick that requeues them (journal_ready).
+  struct ReadBarrier {
     uint64_t offset = 0;
-    uint64_t length = 0;
-    std::function<void()> retry;  // reissues the read
-    std::function<void()> cancel; // frees the caller's contexts on a PG reset
+    uint64_t end = 0;
+    bool flush = false; // waits for adopted stripes to flush
   };
-  std::list<ReadWait> read_waits;
+  std::map<hobject_t, ReadBarrier> read_barriers;
+  // A flush and a client read of the same stripe never overlap in time: a
+  // read that rebuilds a chunk from parity would combine chunks from before
+  // and after the flush. The journal counts the reads in flight per stripe
+  // (read_begin/read_end around the shard reads) and hands out no stripe
+  // that is being read; a read of a stripe that is being flushed waits
+  // (ReadState::flushing). Other stripes of the object are not involved.
+  // flush_waits: stripes a flush was passed over for because of such reads;
+  // the end of the last one wakes the driver. flush_wanted: those whose
+  // flush has to run (reclaim, a drain, replay, a waiting op); new reads of
+  // them wait until it has run, or a stream of reads would starve it. Both
+  // are rebuilt by every pump.
+  std::set<ECWriteJournal::Journal::StripeKey> flush_waits;
+  std::set<ECWriteJournal::Journal::StripeKey> flush_wanted;
+  // A flush that has to run waits for reads of a stripe this range overlaps.
+  bool flush_wanted_in(const hobject_t& object, uint64_t offset,
+                       uint64_t length) const {
+    const uint64_t width = backend->sinfo.get_stripe_width();
+    const auto i = flush_wanted.lower_bound({object, offset / width * width});
+    return i != flush_wanted.end() && i->first == object &&
+      i->second < offset + length;
+  }
+  enum class ReadWait { none, commit, replay, flush };
+  // What a client read of this range has to wait for now; *adopted: for the
+  // flush of stripes replay adopted.
+  ReadWait read_wait(const hobject_t& object, uint64_t offset, uint64_t length,
+                     bool* adopted = nullptr) const {
+    using state_t = ECWriteJournal::ReadState;
+    if (replay_blocked(object)) {
+      return ReadWait::replay;
+    }
+    if (length && flush_wanted_in(object, offset, length)) {
+      return ReadWait::flush;
+    }
+    switch (journal.read_state(object, offset, length)) {
+    case state_t::clean:
+    case state_t::ready:
+      break;
+    case state_t::in_flight:
+      return ReadWait::commit;
+    case state_t::flushing:
+      return ReadWait::flush;
+    case state_t::adopted:
+      if (adopted) {
+        *adopted = true;
+      }
+      return ReadWait::replay;
+    }
+    return ReadWait::none;
+  }
   // The PG's slot objects may exist on the holders: every append writes one,
   // and an earlier run may have left them. A drain that has flushed
   // everything removes them (remove_journal_slots), so a drained pool holds
@@ -198,7 +255,13 @@ struct ECBackend::JournalState final : md_config_obs_t {
   uint64_t barrier_flushes = 0;  // ... ahead of an unsupported mutation
   uint64_t barrier_events = 0;   // unsupported writes that had to wait
   uint64_t read_barrier_events = 0; // client reads that had to wait
+  uint64_t read_waits_commit = 0;   // ... for a record in flight
+  uint64_t read_waits_replay = 0;   // ... for replay, or an adopted stripe's flush
+  uint64_t read_waits_flush = 0;    // ... for a flush that has to run
+  uint64_t read_overlays = 0;       // reads with journal blocks over shard data
+  uint64_t reads_from_journal = 0;  // reads answered without reading a shard
   uint64_t deferred_flushes = 0; // candidates passed over (scrub, degraded)
+  uint64_t flush_read_skips = 0; // ... for client reads of the stripe in flight
   uint64_t flushed_bytes = 0;
   uint64_t pressure_events = 0;  // journal writes that waited for room
 
@@ -209,6 +272,7 @@ struct ECBackend::JournalState final : md_config_obs_t {
   uint64_t admit_new = 0;     // journaled: the stripe had none
   uint64_t bypass_full = 0;   // direct EC write: whole stripe, nothing to read
   uint64_t bypass_room = 0;   // ... log full, stripe clean: no wait
+  uint64_t bypass_digest = 0; // ... the object carried a data digest
 
   // A flush that must wait for the flusher, or a drain, is woken by the
   // append commit that makes it possible; everything else by the timer.
@@ -225,8 +289,9 @@ struct ECBackend::JournalState final : md_config_obs_t {
       (draining() ? journal.partial_ready() : journal.reclaim_ready());
   }
   bool reads_ready() const {
-    for (const auto& wait : read_waits) {
-      if (journal.object_ready(wait.object, wait.offset, wait.length)) {
+    for (const auto& [object, barrier] : read_barriers) {
+      if (barrier.flush && journal.object_ready(object, barrier.offset,
+            barrier.end - barrier.offset)) {
         return true;
       }
     }
@@ -1478,10 +1543,9 @@ void ECBackend::init_journal()
     std::max<unsigned>(1,
       cct->_conf.get_val<uint64_t>("osd_ec_journal_max_flushes")),
     std::move(holders));
-  dout(0) << "UNSAFE write-only EC journal POC enabled for " << pgid
+  dout(0) << "EC write journal POC enabled for " << pgid
           << "; " << journal_state->holders.size()
-          << " copies of each record, no replay/recovery or dirty reads"
-          << dendl;
+          << " copies of each record" << dendl;
 }
 
 void ECBackend::schedule_journal(std::chrono::milliseconds delay)
@@ -1533,12 +1597,11 @@ void ECBackend::reset_journal()
   s.removing_slots.reset();
   s.open_segment = 0;
   s.barrier_objects.clear();
-  // Like reads in flight (ReadPipeline::on_change), a waiting read is dropped;
-  // the caller requeues its op after the interval change.
-  for (auto& wait : s.read_waits) {
-    wait.cancel();
-  }
-  s.read_waits.clear();
+  // The reads and writes that waited are parked in do_op; PrimaryLogPG
+  // requeues them after the interval change.
+  s.read_barriers.clear();
+  s.flush_waits.clear();
+  s.flush_wanted.clear();
   s.shutdown_drain.finish(-ECANCELED);
   // Records in flight never get all their commits in this interval, and a
   // client resends a write only when the primary changes, so the writes go
@@ -1605,14 +1668,22 @@ void ECBackend::dump_journal(Formatter* f) const
   f->dump_unsigned("barrier_events", s.barrier_events);
   f->dump_unsigned("barrier_objects", s.barrier_objects.size());
   f->dump_unsigned("read_barrier_events", s.read_barrier_events);
-  f->dump_unsigned("reads_waiting", s.read_waits.size());
+  f->dump_unsigned("read_waits_commit", s.read_waits_commit);
+  f->dump_unsigned("read_waits_replay", s.read_waits_replay);
+  f->dump_unsigned("read_waits_flush", s.read_waits_flush);
+  f->dump_unsigned("reads_waiting", s.read_barriers.size());
+  f->dump_unsigned("read_overlays", s.read_overlays);
+  f->dump_unsigned("reads_from_journal", s.reads_from_journal);
   f->dump_unsigned("deferred_flushes", s.deferred_flushes);
+  f->dump_unsigned("flush_read_skips", s.flush_read_skips);
+  f->dump_unsigned("stripes_being_read", s.journal.stripes_being_read());
   f->dump_unsigned("flushed_logical_bytes", s.flushed_bytes);
   f->dump_unsigned("pressure_events", s.pressure_events);
   f->dump_unsigned("admit_live", s.admit_live);
   f->dump_unsigned("admit_new", s.admit_new);
   f->dump_unsigned("bypass_full", s.bypass_full);
   f->dump_unsigned("bypass_room", s.bypass_room);
+  f->dump_unsigned("bypass_digest", s.bypass_digest);
   f->dump_bool("replaying", s.replaying);
   f->dump_bool("replay_pending", s.replay_pending);
   f->dump_unsigned("adopted_segments", s.journal.adopted_segments());
@@ -1661,19 +1732,6 @@ void ECBackend::pump_journal()
     s.journal.seal();
   }
 
-  // Waiting reads leave in order, from the front, once nothing journaled
-  // overlaps them. Reissued past the barrier: a later read must not jump
-  // ahead of one still queued.
-  while (!s.read_waits.empty()) {
-    auto& front = s.read_waits.front();
-    if (s.journal.dirty(front.object, front.offset, front.length) ||
-      s.replay_blocked(front.object)) {
-      break;
-    }
-    auto retry = std::move(front.retry);
-    s.read_waits.pop_front();
-    retry();
-  }
   // Writes waiting in do_op for an object's stripes: once they are all
   // flushed the object needs no more isolation (ec_journal_kick below).
   std::erase_if(s.barrier_objects, [this](const hobject_t& object) {
@@ -1681,11 +1739,13 @@ void ECBackend::pump_journal()
   });
 
   // Complete stripes flush whenever the flusher has capacity, without reads.
-  // Incomplete ones only when a read or a write waits for the objects it
-  // touches (their stripes, first) or a drain for a clean journal (all of
+  // Incomplete ones only when a write the journal cannot take waits for the
+  // object (its stripes, first) or a drain for a clean journal (all of
   // them), when the log has to reclaim its oldest segment (only the stripes
-  // pinning it), or when replay adopted their records: every extra record
-  // they gather before that is a read and a rewrite saved.
+  // pinning it), or when replay adopted their records (first those a read
+  // waits for): every extra record they gather before that is a read and a
+  // rewrite saved. Client reads flush nothing else: they are served from
+  // the journal.
   //
   // Each flush is an ordinary logged write of the object, submitted through
   // the PG (ec_journal_flush) like any other op, so torn flushes roll back,
@@ -1697,8 +1757,12 @@ void ECBackend::pump_journal()
   // fetch or the recovery wakes the driver, and a failed fetch keeps the
   // object blocked until the next interval.
   bool retry = false;
-  const auto skip = [this, &retry](const ECWriteJournal::Journal::StripeKey& key) {
-    if (journal_state->replay_blocked(key.first)) {
+  bool isolating = false; // ahead of a read or write of the stripe's object
+  std::optional<uint64_t> reclaim_upto;
+  s.flush_waits.clear();
+  s.flush_wanted.clear();
+  const auto skip = [&](const ECWriteJournal::Journal::StripeKey& key) {
+    if (s.replay_blocked(key.first)) {
       return true;
     }
     // Same gating as a client write in do_op: never rewrite a stripe the
@@ -1707,23 +1771,37 @@ void ECBackend::pump_journal()
       retry = true;
       return true;
     }
+    // Nor a stripe that a client read is reading (see flush_waits): the
+    // end of that read wakes the driver. A flush that has to run holds new
+    // reads of the stripe back meanwhile.
+    if (s.journal.reading(key)) {
+      ++s.flush_read_skips;
+      s.flush_waits.insert(key);
+      if (isolating || s.journal.must_flush(key, clean, reclaim_upto)) {
+        s.flush_wanted.insert(key);
+      }
+      return true;
+    }
     return false;
   };
   while (writeable && s.flushes_in_flight < s.max_flushes) {
-    const auto reclaim_upto =
-      clean ? std::optional<uint64_t>{} : s.journal.reclaim_bound();
+    reclaim_upto = clean ? std::optional<uint64_t>{} : s.journal.reclaim_bound();
     bool deferred = false;
-    bool isolating = false; // ahead of a read or write of the stripe's object
     std::optional<ECWriteJournal::Stripe> stripe;
-    for (const auto& wait : s.read_waits) {
-      bool passed = false;
-      stripe = s.journal.begin_flush_object(wait.object, skip, &passed,
-                                            wait.offset, wait.length);
-      deferred |= passed;
+    isolating = true;
+    for (const auto& [object, barrier] : s.read_barriers) {
       if (stripe) {
-        isolating = true;
         break;
       }
+      if (!barrier.flush) {
+        continue;
+      }
+      // Only the stripes replay adopted: the rest of the range is read
+      // through the journal.
+      bool passed = false;
+      stripe = s.journal.begin_flush_object(object, skip, &passed,
+        barrier.offset, barrier.end - barrier.offset, true);
+      deferred |= passed;
     }
     for (const auto& object : s.barrier_objects) {
       if (stripe) {
@@ -1732,11 +1810,9 @@ void ECBackend::pump_journal()
       bool passed = false;
       stripe = s.journal.begin_flush_object(object, skip, &passed);
       deferred |= passed;
-      if (stripe) {
-        isolating = true;
-      }
     }
     if (!stripe) {
+      isolating = false;
       bool passed = false;
       stripe = s.journal.begin_flush(clean, skip, &passed, reclaim_upto);
       deferred |= passed;
@@ -1788,7 +1864,10 @@ void ECBackend::pump_journal()
         }
         (full ? s.full_stripes : s.partial_stripes)++;
         s.flushed_bytes += flushed.width;
-        schedule_journal(); // released segments, waiting writes and reads
+        // A read that waited for this flush (journal_read_ready) goes at
+        // once; the pump sees to released segments and waiting writes.
+        journal_kick_reads(flushed.object);
+        schedule_journal();
         get_parent()->ec_journal_flush_committed(flushed.object);
       });
   }
@@ -1845,9 +1924,15 @@ void ECBackend::pump_journal()
       s.slots_on_disk) {
     remove_journal_slots();
   }
-  // Writes parked in do_op (journal_admit) whose object is clean again or
-  // that may find room now are requeued there, in order.
+  // Ops parked in do_op are requeued there, in order: writes (journal_admit)
+  // whose object is clean again or that may find room now, and reads
+  // (journal_read_ready) with nothing left to wait for.
   get_parent()->ec_journal_kick();
+  std::erase_if(s.read_barriers, [&s](const auto& barrier) {
+    return s.read_wait(barrier.first, barrier.second.offset,
+                       barrier.second.end - barrier.second.offset) ==
+      JournalState::ReadWait::none;
+  });
 }
 
 void ECBackend::remove_journal_slots()
@@ -1935,9 +2020,21 @@ PGBackend::ec_journal_admission_t ECBackend::journal_admit(
     return admission::none;
   }
   if (!may_write) {
-    return admission::classic; // reads of journaled ranges wait in objects_read_async
+    // A read is served from the journal; what it may have to wait for is
+    // decided where it is issued (journal_read_ready).
+    return admission::classic;
   }
   auto& s = *journal_state;
+  if (obs.oi.is_data_digest() && journal_admission_open()) {
+    // candidate_write refuses an object that carries a data digest; count
+    // the writes that go direct for that alone.
+    ObjectState plain = obs;
+    plain.oi.clear_data_digest();
+    if (ECWriteJournal::candidate_write(oid, ops, plain, snapset, snap_seq,
+                                        sinfo.get_stripe_width())) {
+      ++s.bypass_digest;
+    }
+  }
   if (journal_admission_open() && ECWriteJournal::candidate_write(oid, ops,
         obs, snapset, snap_seq, sinfo.get_stripe_width())) {
     // Every eligible write is journaled, with two exceptions. A whole
@@ -2027,12 +2124,85 @@ bool ECBackend::journal_ready(const hobject_t& oid) const
   }
   const auto& s = *journal_state;
   // A write held back for the object's stripes goes once they are flushed;
-  // one held back for room once a segment has been released.
+  // a read once nothing it has to wait for is left; a write held back for
+  // room once a segment has been released.
   if (std::find(s.barrier_objects.begin(), s.barrier_objects.end(), oid) !=
       s.barrier_objects.end()) {
     return !journal_blocked(oid);
   }
+  if (const auto barrier = s.read_barriers.find(oid);
+      barrier != s.read_barriers.end()) {
+    return s.read_wait(oid, barrier->second.offset,
+                       barrier->second.end - barrier->second.offset) ==
+      JournalState::ReadWait::none;
+  }
   return !s.journal.pressure();
+}
+
+bool ECBackend::journal_read_ready(const hobject_t& oid, uint64_t offset,
+                                   uint64_t length)
+{
+  if (!journal_state || !get_parent()->pgb_is_primary()) {
+    return true;
+  }
+  auto& s = *journal_state;
+  using wait_t = JournalState::ReadWait;
+  bool adopted = false;
+  const auto wait = s.read_wait(oid, offset, length, &adopted);
+  if (wait == wait_t::none) {
+    return true;
+  }
+  ++s.read_barrier_events;
+  ++(wait == wait_t::commit ? s.read_waits_commit :
+     wait == wait_t::replay ? s.read_waits_replay : s.read_waits_flush);
+  auto [barrier, fresh] = s.read_barriers.try_emplace(oid,
+    JournalState::ReadBarrier{offset, offset + length, adopted});
+  if (!fresh) {
+    barrier->second.offset = std::min(barrier->second.offset, offset);
+    barrier->second.end = std::max(barrier->second.end, offset + length);
+    barrier->second.flush |= adopted;
+  }
+  if (adopted) {
+    schedule_journal(); // the adopted stripes it reads flush first
+  }
+  return false;
+}
+
+void ECBackend::journal_kick_reads(const hobject_t& oid)
+{
+  auto& s = *journal_state;
+  const auto barrier = s.read_barriers.find(oid);
+  if (barrier != s.read_barriers.end() &&
+      s.read_wait(oid, barrier->second.offset,
+                  barrier->second.end - barrier->second.offset) ==
+        JournalState::ReadWait::none) {
+    get_parent()->ec_journal_kick();
+    s.read_barriers.erase(barrier);
+  }
+}
+
+void ECBackend::journal_read_done(const hobject_t& oid,
+  const std::list<std::pair<ec_align_t,
+                            std::pair<ceph::buffer::list*, Context*>>>& read)
+{
+  auto& s = *journal_state;
+  for (const auto& [extent, out] : read) {
+    s.journal.read_end(oid, extent.offset, extent.size);
+  }
+  // A flush that was passed over for these reads can start.
+  bool wake = false;
+  for (auto i = s.flush_waits.lower_bound({oid, 0});
+       i != s.flush_waits.end() && i->first == oid;) {
+    if (s.journal.reading(*i)) {
+      ++i;
+    } else {
+      i = s.flush_waits.erase(i);
+      wake = true;
+    }
+  }
+  if (wake) {
+    schedule_journal();
+  }
 }
 
 void ECBackend::journal_write(OpRequestRef op, ObjectContextRef obc)
@@ -2145,9 +2315,10 @@ void ECBackend::journal_record_committed(pg_shard_t from, ceph_tid_t tid)
   const int committed = s.journal.committed(flight.ticket, 0);
   ceph_assert(committed == 0);
   flight.done = true;
+  const hobject_t object = flight.object; // the acks below erase flight
   // Acknowledge in order per object: a client's writes of one object
   // complete in the order they were admitted, as they would if logged.
-  auto q = s.inflight_by_object.find(flight.object);
+  auto q = s.inflight_by_object.find(object);
   ceph_assert(q != s.inflight_by_object.end());
   auto& queue = q->second;
   while (!queue.empty()) {
@@ -2165,6 +2336,9 @@ void ECBackend::journal_record_committed(pg_shard_t from, ceph_tid_t tid)
   if (queue.empty()) {
     s.inflight_by_object.erase(q);
   }
+  // A read that waited for this record (journal_read_ready) goes at once
+  // if nothing else of its stripes is in flight.
+  journal_kick_reads(object);
   // A commit can release a dead segment: writes waiting in do_op for room
   // are requeued by the pump (ec_journal_kick).
   if ((!was_flushable && s.flushes_in_flight < s.max_flushes &&
@@ -2452,9 +2626,9 @@ void ECBackend::journal_replay_listed()
     dout(1) << "EC journal replay: fetching " << s.fetches.pending().size()
             << " records from other holders" << dendl;
     journal_fetch_next();
-  } else {
-    schedule_journal();
   }
+  // Ops of the objects no fetch holds back may run from here on.
+  schedule_journal();
 }
 
 bool ECBackend::journal_blocked(const hobject_t& oid) const
@@ -2806,36 +2980,46 @@ void ECBackend::objects_read_async(
                     pair<bufferlist*, Context*>>> &to_read,
     Context *on_complete,
     bool fast_read) {
-  if (journal_state) {
+  // The journal's live blocks over the ranges read, as they are now. The
+  // read was let through under this hold of the PG lock (journal_read_ready),
+  // so every record there is durable. It holds the object's read lock until
+  // it completes, which keeps flushes and direct writes off the shards
+  // meanwhile; writes journaled meanwhile do not change this snapshot. So
+  // the shards' bytes with these blocks laid over them are the object as of
+  // now. Blocks that cover every range are the whole answer.
+  ECWriteJournal::Overlay overlay;
+  bool journal_only = false;
+  bool counted = false; // on the journal's readers, until the read completes
+  if (journal_state && get_parent()->pgb_is_primary()) {
     auto& s = *journal_state;
-    uint64_t first = std::numeric_limits<uint64_t>::max();
-    uint64_t end = 0;
+    bool covered = !to_read.empty();
     for (const auto& [read, ctx] : to_read) {
-      first = std::min(first, read.offset);
-      end = std::max(end, read.offset + read.size);
-    }
-    const bool dirty = (first < end && s.journal.dirty(hoid, first, end - first)) ||
-      s.replay_blocked(hoid);
-    if (dirty || !s.read_waits.empty()) {
-      if (dirty) {
-        ++s.read_barrier_events;
+      if (!read.size) {
+        covered = false; // reads nothing, waits for nothing
+        continue;
       }
-      s.read_waits.push_back(JournalState::ReadWait{hoid,
-        first < end ? first : 0, first < end ? end - first : 0,
-        [this, hoid, object_size, to_read, on_complete, fast_read] {
-          issue_read_async(hoid, object_size, to_read, on_complete, fast_read);
-        },
-        [to_read, on_complete] {
-          for (const auto& [read, ctx] : to_read) {
-            delete ctx.second;
-          }
-          delete on_complete;
-        }});
-      schedule_journal();
-      return;
+      ceph_assertf(
+        s.read_wait(hoid, read.offset, read.size) ==
+          JournalState::ReadWait::none,
+        "EC journal POC: a read was issued past records it has to wait for");
+      s.journal.read_overlay(hoid, read.offset, read.size, &overlay);
+      covered = covered && overlay.covers(read.offset, read.size);
+    }
+    if (!overlay.empty()) {
+      journal_only = covered;
+      ++(journal_only ? s.reads_from_journal : s.read_overlays);
+    }
+    if (!journal_only) {
+      // Shard reads follow: no flush of these stripes until they are done
+      // (journal_read_done).
+      counted = true;
+      for (const auto& [read, ctx] : to_read) {
+        s.journal.read_begin(hoid, read.offset, read.size);
+      }
     }
   }
-  issue_read_async(hoid, object_size, to_read, on_complete, fast_read);
+  issue_read_async(hoid, object_size, to_read, on_complete, fast_read,
+                   std::move(overlay), journal_only, counted);
 }
 
 void ECBackend::issue_read_async(
@@ -2844,12 +3028,21 @@ void ECBackend::issue_read_async(
     const list<pair<ec_align_t,
                     pair<bufferlist*, Context*>>> &to_read,
     Context *on_complete,
-    bool fast_read) {
+    bool fast_read,
+    ECWriteJournal::Overlay overlay,
+    bool journal_only,
+    bool counted) {
   map<hobject_t, std::list<ec_align_t>> reads;
 
   uint32_t flags = 0;
   extent_set es;
   for (const auto &[read, ctx]: to_read) {
+    if (journal_only) {
+      // Nothing to read from the shards. The read still goes through the
+      // pipeline, empty, which completes client reads in the order they
+      // were issued.
+      break;
+    }
     pair<uint64_t, uint64_t> tmp;
     if (!cct->_conf->osd_ec_partial_reads) {
       tmp = sinfo.ro_offset_len_to_stripe_ro_offset_len(read.offset, read.size);
@@ -2875,6 +3068,14 @@ void ECBackend::issue_read_async(
               pair<bufferlist*, Context*>>> to_read;
     unique_ptr<Context> on_complete;
     CephContext *cct;
+    // EC journal POC: the journal's blocks over the ranges read, laid over
+    // what the shards return; journal_only: they cover every range, and
+    // no shard was read; counted: the journal counts this read on its
+    // stripes until it completes (not if the interval changes first: the
+    // journal forgets its readers then).
+    ECWriteJournal::Overlay overlay;
+    bool journal_only;
+    bool counted;
     cb(const cb &) = delete;
     cb(cb &&) = default;
 
@@ -2883,23 +3084,38 @@ void ECBackend::issue_read_async(
        const list<pair<ec_align_t,
                        pair<bufferlist*, Context*>>> &to_read,
        Context *on_complete,
-       CephContext *cct)
+       CephContext *cct,
+       ECWriteJournal::Overlay overlay,
+       bool journal_only,
+       bool counted)
       : ec(ec),
         hoid(hoid),
         to_read(to_read),
         on_complete(on_complete),
-        cct(cct) {}
+        cct(cct),
+        overlay(std::move(overlay)),
+        journal_only(journal_only),
+        counted(counted) {}
 
     void operator()(ECCommon::ec_extents_t &&results) {
       auto dpp = ec->get_parent()->get_dpp();
       ldpp_dout(dpp, 20) << "objects_read_async_cb: got: " << results
 			 << dendl;
 
-      auto &got = results.at(hoid);
-
       int r = 0;
       for (auto &&[read, result]: to_read) {
         auto &&[bufs, ctx] = result;
+        if (journal_only) {
+          ceph_assert(bufs);
+          bufs->clear();
+          overlay.apply(read.offset, read.size, *bufs);
+          if (ctx) {
+            ctx->complete(read.size);
+            ctx = nullptr;
+          }
+          continue;
+        }
+        auto &got = results.at(hoid);
         if (got.err < 0) {
           // error handling
           if (ctx) {
@@ -2929,11 +3145,17 @@ void ECBackend::issue_read_async(
             range.first.get_val(),
             offset - range_offset,
             length);
+          if (!overlay.empty()) {
+            overlay.apply(offset, length, *bufs);
+          }
           if (ctx) {
             ctx->complete(length);
             ctx = nullptr;
           }
         }
+      }
+      if (counted) {
+        ec->journal_read_done(hoid, to_read);
       }
       to_read.clear();
       if (on_complete) {
@@ -2958,7 +3180,10 @@ void ECBackend::issue_read_async(
          hoid,
          to_read,
          on_complete,
-         cct)));
+         cct,
+         std::move(overlay),
+         journal_only,
+         counted)));
 }
 
 bool ECBackend::ec_can_decode(const shard_id_set &available_shards) const {

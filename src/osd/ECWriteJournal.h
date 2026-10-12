@@ -29,7 +29,8 @@ namespace ECWriteJournal {
 // append wins; a superseded block is dead immediately). Flushing is decided
 // per stripe, not per segment: a complete stripe can be materialized without
 // reads at any time, an incomplete one when the log must reclaim its oldest
-// segment, when a read or a write waits for its object, or on a drain.
+// segment, when a write the journal cannot take waits for its object, or on
+// a drain. Client reads are served from the index (Overlay), not by a flush.
 //
 // Each segment occupies one of max_segments fixed slot objects. A record is
 // placed once (slot, offset) and the caller writes the same bytes into every
@@ -210,6 +211,40 @@ struct Stripe {
   // assembly. The logical reference model lives with the unit tests.
 };
 
+// What a client read of an object range meets in the journal
+// (Journal::read_state). The shards hold a stripe's bytes from before its
+// records, so a read of journaled data reads the shards and lays the
+// stripe's live blocks over the result (Overlay), without a flush. It has
+// to wait first when the range is
+//   in_flight: a record there is not yet durable on every holder. Shown
+//     now, it could be gone again after a failover;
+//   flushing: the stripe is being written to the shards, which a read that
+//     reconstructs a chunk from parity must not meet half done;
+//   adopted: replay adopted a record there. It may be on fewer holders
+//     than a record acknowledged in this interval, so the read waits for
+//     the stripe's flush, which replay starts at once.
+// clean: no stripe of the range holds a record. ready: every record there
+// is durable and none of the above applies. Of several stripes, the last
+// of these that applies to any.
+enum class ReadState { clean, ready, in_flight, flushing, adopted };
+
+// The live blocks over an object range, taken when a client read is issued
+// (Journal::read_overlay). The bufferlists share the records' immutable
+// data, so the snapshot stays what it was while later writes supersede its
+// blocks and flushes release them.
+struct Overlay {
+  std::map<uint64_t, ceph::bufferlist> blocks; // object offset -> one block
+
+  bool empty() const { return blocks.empty(); }
+  // Every byte of [offset, offset + length) is in a block: the read needs
+  // nothing from the shards.
+  bool covers(uint64_t offset, uint64_t length) const;
+  // Lay the blocks over data, the object's bytes [offset, offset + length)
+  // as the shards returned them. A range the blocks cover needs no data
+  // (pass it empty).
+  void apply(uint64_t offset, uint64_t length, ceph::bufferlist& data) const;
+};
+
 struct Limits {
   // The defaults are the unit tests' small geometry; the OSD splits
   // osd_ec_journal_max_bytes over 16 slots (read_limits): 4 MiB
@@ -300,7 +335,8 @@ class Journal {
   // that frees the oldest segment), if every_partial is set (a drain) or its
   // oldest live record has a sequence at or below partial_upto.
   // Candidates for which skip() returns true (scrub, degraded object) are
-  // passed over; *deferred reports that at least one was. Only records whose
+  // passed over, and so are stripes a client read is reading (read_begin);
+  // *deferred reports that at least one was. Only records whose
   // append committed are ever exposed; a later append to a flushing stripe
   // stays journaled.
   std::optional<Stripe> begin_flush(
@@ -310,10 +346,17 @@ class Journal {
   // Every durable stripe of one object, complete or not:
   // an unsupported mutation of the object waits for its buffered data only,
   // and other objects' stripes keep gathering records meanwhile. With a byte
-  // range, only the stripes overlapping it (a read waits for those).
+  // range, only the stripes overlapping it; with adopted_only, only those
+  // replay adopted a record of (a read waits for those, see ReadState).
   std::optional<Stripe> begin_flush_object(const hobject_t& object,
     const Skip& skip = {}, bool* deferred = nullptr,
-    uint64_t offset = 0, uint64_t length = whole_object);
+    uint64_t offset = 0, uint64_t length = whole_object,
+    bool adopted_only = false);
+  // begin_flush(every_partial, ..., partial_upto) has to take this stripe:
+  // a drain, the reclaim bound or replay asks for it. Otherwise it is taken
+  // only once it is complete, which can wait.
+  bool must_flush(const StripeKey& key, bool every_partial,
+                  std::optional<uint64_t> partial_upto) const;
   // Call only after ALL EC writes covering this snapshot have durably
   // completed. Blocks the snapshot covered become dead; newer ones stay. On
   // error the stripe returns to the resident set for a retry.
@@ -378,6 +421,25 @@ class Journal {
   // begin_flush_object().
   bool object_ready(const hobject_t& object, uint64_t offset = 0,
                     uint64_t length = whole_object) const;
+  // What a client read of [offset, offset + length) of this object meets
+  // (ReadState).
+  ReadState read_state(const hobject_t& object, uint64_t offset,
+                       uint64_t length) const;
+  // Add the live blocks that overlap the range to *overlay, newest version
+  // per block. For a range that is ready; a clean one adds nothing.
+  void read_overlay(const hobject_t& object, uint64_t offset, uint64_t length,
+                    Overlay* overlay) const;
+  // Client reads whose shard reads are in flight. A flush writes a stripe's
+  // shards, and a read that rebuilds a chunk from parity must not combine
+  // chunks from before and after it, so the two never overlap in time:
+  // begin_flush() and begin_flush_object() pass over a stripe that is being
+  // read, like a skipped candidate, and read_state() says flushing for one
+  // that is being flushed. A read counts on every stripe its range overlaps,
+  // with or without records, from read_begin() to read_end() of that range.
+  void read_begin(const hobject_t& object, uint64_t offset, uint64_t length);
+  void read_end(const hobject_t& object, uint64_t offset, uint64_t length);
+  bool reading(const StripeKey& key) const { return readers.contains(key); }
+  uint64_t stripes_being_read() const { return readers.size(); }
   // True once every record has been written to the EC shards and only append
   // commits keep a segment resident. Nothing is lost if the PG resets in
   // this state.
@@ -457,6 +519,9 @@ class Journal {
   Segment* find_segment(uint64_t id);
   bool adopted_segment(uint64_t id) const;
   bool adopted_stripe(const Entry& entry) const;
+  // adopting is adopting(), which the caller of a loop evaluates once.
+  bool must_flush(const Entry& entry, bool every_partial,
+                  std::optional<uint64_t> partial_upto, bool adopting) const;
   // The index entries of `object` whose stripe overlaps [offset, offset+length).
   std::pair<std::map<StripeKey, Entry>::const_iterator,
             std::map<StripeKey, Entry>::const_iterator>
@@ -477,6 +542,7 @@ class Journal {
   std::map<StripeKey, Entry> index;
   std::map<uint64_t, StripeKey> by_age; // oldest live sequence -> resident stripe
   std::set<StripeKey> ready;            // complete, durable, resident
+  std::map<StripeKey, unsigned> readers; // client reads in flight per stripe
   uint64_t next_segment = 1;
   uint64_t next_sequence = 1;
   uint64_t used_bytes = 0;

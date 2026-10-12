@@ -258,7 +258,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
                                    uint64_t bytes_written) {
        ceph_abort_msg("EC journal ack without a listener implementation");
      }
-     // EC journal POC: ops parked by ec_journal_admit() may proceed now.
+     // EC journal POC: ops parked by ec_journal_admit() or for
+     // ec_journal_read_ready() may proceed now.
      virtual void ec_journal_kick() {}
      // EC journal POC: journaled writes whose record was still in flight at
      // an interval change, oldest first. A client resends a write only when
@@ -522,6 +523,16 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
     return false;
   }
   virtual bool ec_journal_ready(const hobject_t& oid) const {
+     return true;
+   }
+   // EC journal POC: a client read of [offset, offset + length) of oid may
+   // be issued now, in this PG-lock critical section: objects_read_async
+   // lays the journal's live blocks over what the shards return. False: it
+   // has to wait (a record there is in flight, replay is not done with the
+   // object, or a flush has to run first); park the op until
+   // ec_journal_ready(oid).
+   virtual bool ec_journal_read_ready(const hobject_t& oid, uint64_t offset,
+                                      uint64_t length) {
      return true;
    }
    // Primary, once every replica has activated and before any client op

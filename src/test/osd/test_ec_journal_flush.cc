@@ -188,6 +188,13 @@ TEST(JournalAdmission, CandidateWriteOnlyForPlainInStripeOverwrites)
   ObjectState whiteout = obs;
   whiteout.oi.set_flag(object_info_t::FLAG_WHITEOUT);
   EXPECT_FALSE(candidate_write(head, write(0, 4096), whiteout, snapset, 0, width));
+  // A data digest: a record would leave it in place over changed data. The
+  // ordinary write clears it, and the next write is a candidate again.
+  ObjectState digested = obs;
+  digested.oi.set_data_digest(0x1234);
+  EXPECT_FALSE(candidate_write(head, write(0, 4096), digested, snapset, 0, width));
+  digested.oi.clear_data_digest();
+  EXPECT_TRUE(candidate_write(head, write(0, 4096), digested, snapset, 0, width));
 }
 
 TEST(JournalAdmission, MaterializedAttrCoversStripesAndBase)

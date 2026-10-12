@@ -43,10 +43,11 @@ bool eligible_overwrite(const hobject_t& object,
 
 // Admission in do_op, before the op is given a version: a single plain
 // WRITE of whole 1 KiB blocks inside one stripe of an existing head object
-// with no snapshot state, leaving its size unchanged. It predicts what
-// eligible_overwrite() accepts at submission, so an admitted op is appended
-// at once and never waits with a version assigned (a flush, which is a
-// logged write, would otherwise take a later version and log ahead of it).
+// with no snapshot state and no data digest, leaving its size unchanged. It
+// predicts what eligible_overwrite() accepts at submission, so an admitted
+// op is appended at once and never waits with a version assigned (a flush,
+// which is a logged write, would otherwise take a later version and log
+// ahead of it).
 bool candidate_write(const hobject_t& object, const std::vector<OSDOp>& ops,
   const ObjectState& obs, const SnapSet& snapset, snapid_t snap_seq,
   uint64_t stripe_width);

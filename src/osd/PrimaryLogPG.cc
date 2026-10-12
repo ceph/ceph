@@ -736,6 +736,43 @@ bool PrimaryLogPG::pg_ec_journal_flush_blocked(const hobject_t& oid)
   return false;
 }
 
+bool PrimaryLogPG::ec_journal_read_ready(OpContext *ctx)
+{
+  ceph_assert(is_locked());
+  // EC journal POC: client reads are served from the journal. The backend
+  // lays the journal's live blocks over what the shards return, as of the
+  // moment the read is issued (ECBackend::objects_read_async), so every
+  // record in the ranges read must be durable by then and no flush of
+  // their stripes in flight; until the read completes the backend starts
+  // none, and the op's read lock keeps direct writes off the object. A
+  // read that has to wait is parked like a write the journal
+  // holds back: its context is closed, which drops the lock, and the op
+  // runs again from do_op after the kick, behind nothing of its object.
+  uint64_t first = std::numeric_limits<uint64_t>::max();
+  uint64_t end = 0;
+  for (const auto& [extent, out] : ctx->pending_async_reads) {
+    first = std::min<uint64_t>(first, extent.get<0>());
+    end = std::max<uint64_t>(end, extent.get<0>() + extent.get<1>());
+  }
+  const hobject_t& soid = ctx->obc->obs.oi.soid;
+  if (first >= end ||
+      pgbackend->ec_journal_read_ready(soid, first, end - first)) {
+    return true;
+  }
+  // An op that also writes holds the object exclusively when it reads data
+  // (get_rw_locks), started when the object had no record
+  // (ec_journal_admit), and the journal takes none while it runs (do_op):
+  // only a pure read gets here, and closing its context loses nothing.
+  OpRequestRef op = ctx->op;
+  ceph_assert(op && !op->may_write() && !op->may_cache());
+  dout(20) << __func__ << " " << soid << " " << first << "~" << end - first
+           << " waits for the EC journal" << dendl;
+  waiting_for_ec_journal[soid].push_back(op);
+  op->mark_delayed("waiting for EC journal");
+  close_op_ctx(ctx);
+  return false;
+}
+
 void PrimaryLogPG::ec_journal_flush(const hobject_t& oid,
                                     std::map<uint64_t, ceph::bufferlist> runs,
                                     uint64_t stripe_offset, eversion_t covered,
@@ -750,9 +787,11 @@ void PrimaryLogPG::ec_journal_flush(const hobject_t& oid,
   ObjectContextRef obc = get_object_context(oid, false);
   ceph_assert(obc && obc->obs.exists);
   OpContextUPtr ctx = simple_opc_create(obc);
-  // No object lock: client writes of this object are in flight, and reads
-  // waiting for this flush hold its read lock. The op is built and
-  // submitted under the PG lock in one go, against the projected state.
+  // No object lock: client writes of this object are in flight, and a read
+  // of another stripe of it may be too. The journal keeps a flush and the
+  // client reads of its stripe apart itself (ECBackend::pump_journal). The
+  // op is built and submitted under the PG lock in one go, against the
+  // projected state.
   ctx->op_t->ec_journal_flush = true;
   // The data is the clients': their newest mtime among the stripe's records
   // (journaled writes leave the object's own mtime alone until here).
@@ -2555,7 +2594,10 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   }
 
   if (!is_primary()) {
-    if (!recovery_state.can_serve_read(oid)) {
+    // EC journal POC: only the primary knows which of the object's bytes
+    // are still in the journal, so no other shard serves a read.
+    if (!recovery_state.can_serve_read(oid) ||
+        pgbackend->ec_journal_enrolled()) {
       std::string_view storage_object = "replica";
       if (pool.info.is_erasure()) {
         storage_object = "shard";
@@ -2697,7 +2739,9 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   // object's reads and other writes. One the journal cannot take while the
   // object has journaled data waits here for that data to flush (as does a
   // journal write while the log is full). Later ops of the object queue
-  // behind a waiting one, so the object's ops keep their order.
+  // behind a waiting one, so the object's ops keep their order. A read is
+  // served from the journal and waits here only for what it must not miss
+  // or see too early (ec_journal_read_ready, where its reads are issued).
   {
     const auto admission = pgbackend->ec_journal_admit(obc->obs.oi.soid,
       obc->obs, obc->ssc ? obc->ssc->snapset : SnapSet(),
@@ -2713,7 +2757,12 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
         op->mark_delayed("waiting for EC journal");
         return;
       }
-      if (admission == PGBackend::ec_journal_admission_t::journal) {
+      // An op that reads and writes holds the object exclusively across its
+      // async reads (get_rw_locks). A journaled write takes no lock, but it
+      // must not slip in between that op's read and its write: it waits
+      // for the lock below, like any write, and is admitted again after.
+      if (admission == PGBackend::ec_journal_admission_t::journal &&
+          obc->rwstate.state != RWState::RWEXCL) {
         op->mark_started();
         pgbackend->ec_journal_write(op, obc);
         utime_t prepare_latency = ceph_clock_now();
@@ -4606,6 +4655,9 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     // come back later.
     if (pending_async_reads) {
       ceph_assert(pool.info.is_erasure());
+      if (!ec_journal_read_ready(ctx)) {
+        return; // parked for the EC journal, ctx closed
+      }
       in_progress_async_reads.push_back(make_pair(op, ctx));
       ctx->start_async_reads(this);
     }

@@ -1985,6 +1985,9 @@ public:
     pgbackend->drain_ec_journal_for_shutdown(std::move(done));
   }
   bool pg_ec_journal_flush_blocked(const hobject_t& oid) override;
+  // The async reads ctx is about to issue may go; otherwise its op has been
+  // parked in waiting_for_ec_journal and ctx closed.
+  bool ec_journal_read_ready(OpContext *ctx);
   void ec_journal_flush(const hobject_t& oid,
                         std::map<uint64_t, ceph::bufferlist> runs,
                         uint64_t stripe_offset, eversion_t covered,

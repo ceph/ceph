@@ -42,6 +42,14 @@ bool candidate_write(const hobject_t& object, const std::vector<OSDOp>& ops,
       snapset.seq != 0 || !snapset.clones.empty() || snap_seq != 0) {
     return false;
   }
+  // A record leaves the object's info alone until the flush. A data digest
+  // in it (the object was last written whole) would then describe bytes the
+  // object no longer has: a whole-object read verifies its data against it.
+  // The ordinary write this becomes instead clears the digest, and the
+  // object's later writes are journaled.
+  if (obs.oi.is_data_digest()) {
+    return false;
+  }
   const auto& op = ops.front();
   if (op.op.op != CEPH_OSD_OP_WRITE || op.op.extent.truncate_seq != 0) {
     return false;

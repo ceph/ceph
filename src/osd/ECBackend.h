@@ -130,6 +130,10 @@ class ECBackend : public ECCommon {
   std::optional<eversion_t> journal_oldest_live(const hobject_t& oid,
     std::optional<uint64_t> skip_stripe) const;
   bool journal_ready(const hobject_t& oid) const;
+  // A client read of this range of oid may be issued now
+  // (PGBackend::ec_journal_read_ready); if not, it is counted as waiting.
+  bool journal_read_ready(const hobject_t& oid, uint64_t offset,
+                          uint64_t length);
   bool journal_flush_in_flight(const hobject_t& oid) const;
   void journal_on_activate();
   void journal_split(spg_t child, ObjectStore::Transaction& t);
@@ -249,7 +253,9 @@ class ECBackend : public ECCommon {
     uint32_t op_flags,
     ceph::buffer::list *bl
   );
-  // objects_read_async past the journal's read barrier.
+  // objects_read_async with the journal's blocks over the ranges read
+  // (none without a journal); journal_only: they are the whole answer;
+  // counted: the journal counts the read on its stripes (journal_read_done).
   void issue_read_async(
       const hobject_t &hoid,
       uint64_t object_size,
@@ -257,7 +263,19 @@ class ECBackend : public ECCommon {
                                 std::pair<ceph::buffer::list*, Context*>>> &
       to_read,
       Context *on_complete,
-      bool fast_read);
+      bool fast_read,
+      ECWriteJournal::Overlay overlay,
+      bool journal_only,
+      bool counted);
+  // Requeue the reads parked for oid if nothing holds them back any more.
+  void journal_kick_reads(const hobject_t& oid);
+  // The shard reads of a client read of oid that the journal counted on
+  // their stripes (Journal::read_begin) are done.
+  void journal_read_done(
+      const hobject_t& oid,
+      const std::list<std::pair<ec_align_t,
+                                std::pair<ceph::buffer::list*, Context*>>> &
+      read);
   struct JournalState;
   std::unique_ptr<JournalState> journal_state;
   void init_journal();
