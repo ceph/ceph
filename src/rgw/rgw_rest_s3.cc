@@ -790,7 +790,12 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
   }
 
   static constexpr bool copy_source = false;
-  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, &crypt_http_responses, copy_source);
+  // Only use part_num for actual multipart objects (parts_count is set)
+  uint32_t part_num = (multipart_part_num && multipart_parts_count)
+                        ? static_cast<uint32_t>(*multipart_part_num)
+                        : 0;
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, &crypt_http_responses, copy_source,
+                              part_num, encrypted_obj_size);
 }
 
 int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) 
@@ -2849,6 +2854,10 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
       ldpp_dout(s, 10) << "bad part number: " << multipart_part_str << ": " << err << dendl;
       return -EINVAL;
     }
+    if (multipart_part_num < 1 || multipart_part_num > 10000) {
+      ldpp_dout(s, 10) << "part number out of range: " << multipart_part_num << dendl;
+      return -EINVAL;
+    }
   } else if (!multipart_upload_id.empty()) {
     ldpp_dout(s, 10) << "part number with no multipart upload id" << dendl;
     return -EINVAL;
@@ -2981,7 +2990,10 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     bufferlist* manifest_bl)
 {
   static constexpr bool copy_source = true;
-  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source);
+  rgw_crypt_src_identity src_identity{copy_source_bucket_info.bucket.marker, copy_source_bucket_name, copy_source_object_name};
+  // part_num=0 for copy source (full object read)
+  return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source,
+                              0, 0, &src_identity);
 }
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(
@@ -3001,18 +3013,40 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
       /* We are adding to existing object.
        * We use crypto mode that configured as if we were decrypting. */
       static constexpr bool copy_source = false;
+      // Pass part_number for AEAD IV derivation - ensures unique IVs across parts
       res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
-                                   &block_crypt, &crypt_http_responses, copy_source);
-      if (res == 0 && block_crypt != nullptr)
+                                   &block_crypt, &crypt_http_responses, copy_source,
+                                   multipart_part_num);
+      if (res == 0 && block_crypt != nullptr) {
+        /*
+         * AEAD UploadPart: fold fresh per-UploadPart entropy into the part key so
+         * re-uploading the same part can't reuse (key, IV). Refuse the upload if
+         * the backend can't persist per-part salts rather than silently falling
+         * back to a deterministic part key.
+         */
+        if (is_aead_mode(get_str_attribute(obj->get_attrs(), RGW_ATTR_CRYPT_MODE))) {
+          if (!upload->supports_crypt_part_salts()) {
+            ldpp_dout(this, 0) << "ERROR: AEAD multipart upload requires a supported backend" << dendl;
+            return -ERR_NOT_IMPLEMENTED;
+          }
+          std::string part_salt(AES_256_GCM_PART_SALT_SIZE, '\0');
+          s->cct->random()->get_bytes(part_salt.data(), part_salt.size());
+          block_crypt->set_part_number(multipart_part_num, part_salt);
+          // string_view selects the raw-bytes set_attr overload, not the local
+          // length-prefixing one; the writer reads it back via to_str().
+          set_attr(this->attrs, RGW_ATTR_CRYPT_PART_SALT, std::string_view(part_salt));
+        }
         filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
+      }
     }
     /* it is ok, to not have encryption at all */
   }
   else
   {
     std::unique_ptr<BlockCrypt> block_crypt;
+    // Pass part_number for AEAD IV derivation - ensures unique IVs across parts
     res = rgw_s3_prepare_encrypt(s, s->yield, attrs, &block_crypt,
-                                 crypt_http_responses);
+                                 crypt_http_responses, multipart_part_num);
     if (res == 0 && block_crypt != nullptr) {
       filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }

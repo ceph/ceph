@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt sse algorithm: aes-256-gcm
