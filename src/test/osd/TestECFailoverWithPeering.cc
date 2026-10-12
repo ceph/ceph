@@ -1550,6 +1550,9 @@ INSTANTIATE_TEST_SUITE_P(
 
 class TestECOmapRecovery : public TestECFailoverWithPeering {
 public:
+  // Writes advance pg_committed_to, so later writes roll earlier ones forward
+  TestECOmapRecovery() { enable_log_trimming = true; }
+
   const std::string data = std::string(4096, 'o');
 
   // Primary-capable shards, the only ones that store omap
