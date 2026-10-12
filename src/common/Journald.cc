@@ -3,7 +3,6 @@
 
 #include "Journald.h"
 
-#include <endian.h>
 #include <fcntl.h>
 #include <iterator>
 #include <memory>
@@ -17,6 +16,7 @@
 
 #include <iostream> // for std::cerr
 
+#include <boost/endian/conversion.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
@@ -127,7 +127,7 @@ MESSAGE
       e.m_prio,
       e.m_thread);
 
-    uint64_t msg_len = htole64(e.size());
+    uint64_t msg_len = boost::endian::native_to_little<uint64_t>(e.size());
     meta_buf.resize(meta_buf.size() + sizeof(msg_len));
     memcpy(meta_buf.end() - sizeof(msg_len), &msg_len, sizeof(msg_len));
 
@@ -160,9 +160,9 @@ MESSAGE
       le.seq,
       le.channel);
 
-    uint64_t msg_len = htole64(le.msg.size());
+    uint64_t msg_len = boost::endian::native_to_little<uint64_t>(le.msg.size());
     meta_buf.resize(meta_buf.size() + sizeof(msg_len));
-    *(reinterpret_cast<uint64_t*>(meta_buf.end()) - 1) = htole64(le.msg.size());
+    *(reinterpret_cast<uint64_t*>(meta_buf.end()) - 1) = msg_len;
 
     meta_vec().iov_base = meta_buf.data();
     meta_vec().iov_len = meta_buf.size();
