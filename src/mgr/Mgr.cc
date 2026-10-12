@@ -45,7 +45,9 @@
 #include "Mgr.h"
 #include "DaemonHealthMetric.h" // for accessing DaemonState::daemon_health_metrics
 
+#include <chrono>
 #include <sstream>
+#include <thread>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -421,6 +423,25 @@ void Mgr::init()
     }
   }
   
+  // (Testing purposes only): Simulate a laggy init that happens before the python
+  // modules are started, i.e. while PyModuleRegistry::active_modules is still null.
+  // Combined with a short mgr_module_load_expiration, this lets the expiration expire
+  // while PyModuleRegistry::active_modules is still null so tests can reproduce the
+  // beacon path calling PyModuleRegistry::get_services() too early.
+  // `mgr_init_delay` should always be set to 0 outside of testing scenarios.
+  // See "Test 5" in qa/workunits/mgr/test_mgr_module_loading_time.sh.
+  //
+  // The lock is dropped while sleeping, like the other waits in this function,
+  // so MgrStandby::send_beacon() (which takes Mgr::lock) can run in the background.
+  auto init_delay = g_conf().get_val<std::chrono::milliseconds>("mgr_init_delay");
+  if (init_delay > std::chrono::milliseconds{0}) {
+    dout(4) << "Delaying mgr init by " << init_delay
+            << " before starting python modules (testing only)..." << dendl;
+    lock.unlock();
+    std::this_thread::sleep_for(init_delay);
+    lock.lock();
+  }
+
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
   py_module_registry->active_start(
