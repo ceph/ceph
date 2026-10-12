@@ -254,13 +254,6 @@ inline bool is_named_profile(uint32_t ext)
 	 (ext == EXTENSIONS_STRONG);
 }
 
-/* What a newly created bucket is marked with, when the deployment marks
- * at all.  See rgw_nsfs_extensions.
- *
- * The mark states what the tree may contain, so it must not claim an
- * extension this build cannot write. */
-inline constexpr uint32_t EXTENSIONS_DEFAULT = EXTENSIONS_STRONG;
-
 /* What a bucket's marker resolves to.
  *
  * The strategy pointers are the reason this is a struct rather than a

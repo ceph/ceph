@@ -1292,6 +1292,16 @@ public:
     return ctx()->_conf->rgw_nsfs_extensions;
   }
 
+  /* What a bucket created here is marked with, when extensions are
+   * enabled:  rgw_nsfs_bucket_profile.  Read per call, so a test can
+   * select strong for a bucket it is about to create. */
+  uint32_t new_bucket_extensions() {
+    auto ext = nsfs::extensions_for_profile(
+      ctx()->_conf.get_val<std::string>("rgw_nsfs_bucket_profile"));
+    return (ext && (*ext != nsfs::EXTENSIONS_BASE)) ? *ext
+						      : nsfs::EXTENSIONS_SHARED;
+  }
+
   /* Write the marker onto an existing bucket directory.  Idempotent for a
    * bucket already at this version. */
   /* Set a named bucket's profile, and report what it was so a caller

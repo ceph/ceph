@@ -3712,7 +3712,7 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
   extended_profile.format = &rgw_meta_format;
   ldpp_dout(dpp, 1) << "nsfs: new buckets are "
     << (extensions_enabled() ? "marked with extension set "
-	  + std::to_string(nsfs::EXTENSIONS_DEFAULT)
+	  + std::to_string(new_bucket_extensions())
 	: std::string("unmarked (reversible mode)")) << dendl;
 
   /* Every strategy names some scaffolding, and the listing paths test one
@@ -8170,7 +8170,7 @@ int NSFSBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* ex
    * must not mark it by a side effect, since marking is what ends its
    * ability to go back. */
   if ((!existed || !*existed) && driver->extensions_enabled()) {
-    ret = mark_extensions(dpp, nsfs::EXTENSIONS_DEFAULT);
+    ret = mark_extensions(dpp, driver->new_bucket_extensions());
     if (ret < 0) {
       return ret;
     }
@@ -13812,6 +13812,8 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
    *                   reversible mode:  the tree is being kept handable
    *                   back to NooBaa, so nothing acquires structure
    *                   NooBaa cannot represent.
+   *   bucket_profile  the profile a bucket created here is marked with,
+   *                   rgw_nsfs_bucket_profile;  empty in reversible mode.
    *   strategy        which FSStrategy was selected by probing at startup.
    *   can_rename      a rename moves the name.  When false, RGWLibFS::rename
    *                   emulates it by copy-and-delete, so the object does not
@@ -13831,6 +13833,11 @@ void NSFSDriver::get_features(std::map<std::string, std::string>& features)
     ctx()->_conf->rgw_nsfs_enable_rename ? "true" : "false";
   features["extensions"] = std::to_string(nsfs::EXTENSIONS_KNOWN);
   features["extensions_default"] = extensions_enabled() ? "true" : "false";
+  {
+    nsfs::BucketProfile p;
+    p.extensions = new_bucket_extensions();
+    features["bucket_profile"] = extensions_enabled() ? p.name() : "";
+  }
   /* Whether requests are served as their own POSIX identity.  A test
    * needs to know this from the gateway rather than infer it:  the
    * credential endpoint resolves a record whether or not the switch

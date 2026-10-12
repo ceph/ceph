@@ -913,6 +913,24 @@ public:
   }
 };
 
+/* A bucket created strong, for the tests that exercise FSIO.
+ *
+ * New buckets are shared by default (rgw_nsfs_bucket_profile), and FSIO
+ * is refused on a bucket without the shadow subtree.  The option is
+ * read when the bucket is created and marked, so it is restored as soon
+ * as the fixture's bucket exists. */
+class NSFSStrongBucketTest : public NSFSBucketTest {
+public:
+  void SetUp() override {
+    g_conf().set_val("rgw_nsfs_bucket_profile", "strong");
+    NSFSBucketTest::SetUp();
+    g_conf().set_val("rgw_nsfs_bucket_profile", "shared");
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+    ASSERT_EQ(b->resolve_profile(env->dpp), 0);
+    ASSERT_STREQ(b->profile_name(), "strong");
+  }
+};
+
 /* A file that arrives in a marked bucket without going through RGW is
  * its bucket owner's.
  *
@@ -6618,7 +6636,7 @@ public:
     NSFSBucketTest::SetUp();
     auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
     ASSERT_EQ(b->resolve_profile(env->dpp), 0);
-    ASSERT_STREQ(b->profile_name(), "strong");
+    ASSERT_STREQ(b->profile_name(), "shared");
     ASSERT_EQ(b->mark_converting(env->dpp), 0);
     ASSERT_TRUE(b->is_converting());
   }
@@ -8060,7 +8078,7 @@ TEST_F(NSFSUpgradeTest, RefusesASecondConversion)
  * which base does not have and an upgrade to strong only acquires at
  * its end.
  */
-TEST_F(NSFSBucketTest, AWriteHandleHoldsTheGateOpen)
+TEST_F(NSFSStrongBucketTest, AWriteHandleHoldsTheGateOpen)
 {
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->resolve_profile(env->dpp), 0);
@@ -8090,7 +8108,7 @@ TEST_F(NSFSBucketTest, AWriteHandleHoldsTheGateOpen)
 
 /* And a closed gate refuses a new write handle while serving a read
  * one. */
-TEST_F(NSFSBucketTest, AClosedGateRefusesAWriteHandle)
+TEST_F(NSFSStrongBucketTest, AClosedGateRefusesAWriteHandle)
 {
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
   ASSERT_EQ(b->resolve_profile(env->dpp), 0);
@@ -8215,7 +8233,7 @@ TEST_F(NSFSBucketTest, APutOverASideLoadedFileReplacesTheInode)
  * the group write bit the create mode asks for, so passing also
  * requires that bit to be restored.
  */
-TEST_F(NSFSBucketTest, AnFSIOPublishedObjectCarriesTheObjectMode)
+TEST_F(NSFSStrongBucketTest, AnFSIOPublishedObjectCarriesTheObjectMode)
 {
   const mode_t saved = ::umask(022);
   auto restore = make_scope_guard([saved] { ::umask(saved); });
@@ -8253,7 +8271,7 @@ TEST_F(NSFSBucketTest, AnFSIOPublishedObjectCarriesTheObjectMode)
  * shadow comes from a different create with its own mode.  Same
  * question, different line.
  */
-TEST_F(NSFSBucketTest, AnFSIOClonedObjectCarriesTheObjectMode)
+TEST_F(NSFSStrongBucketTest, AnFSIOClonedObjectCarriesTheObjectMode)
 {
   const mode_t saved = ::umask(022);
   auto restore = make_scope_guard([saved] { ::umask(saved); });

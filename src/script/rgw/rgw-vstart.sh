@@ -45,6 +45,9 @@
 #                       Admin Ops (the adoption driver hint, or a profile
 #                       change out of base);  automatic adopts the whole
 #                       store at startup.
+#   --bucket-profile P  shared | strong:  the profile new nsfs buckets are
+#                       marked with.  The driver defaults to shared;  FSIO
+#                       (librgw, the librgw_file tests) needs strong.
 #   --data-root DIR     Serve objects from DIR/root instead of the build
 #                       directory (e.g. --data-root /mnt/nvme for fast
 #                       storage, or a tree another gateway wrote).
@@ -80,6 +83,7 @@ RAMDISK=false
 DATA_ROOT=""
 NOOBAA_CONFIG_ROOT=""
 ADOPTION_MODE=""
+BUCKET_PROFILE=""
 PERF=false
 PROFILE=false
 GPFS_ROOT=/mnt/rgw/nsfs
@@ -104,6 +108,7 @@ while [[ $# -gt 0 ]]; do
 		--data-root) DATA_ROOT="$2"; shift 2 ;;
 		--noobaa-config-root) NOOBAA_CONFIG_ROOT="$2"; shift 2 ;;
 		--adoption-mode) ADOPTION_MODE="$2"; shift 2 ;;
+		--bucket-profile) BUCKET_PROFILE="$2"; shift 2 ;;
 		--perf) PERF=true; shift ;;
 		--profile) PROFILE=true; shift ;;
 		--gpfs-root)  GPFS_ROOT="$2"; shift 2 ;;
@@ -275,6 +280,15 @@ fi
 
 if $IMPERSONATE; then
 	VSTART_OPTS+=(-o 'rgw_nsfs_impersonate=true')
+fi
+
+if [[ -n "$BUCKET_PROFILE" ]]; then
+	case "$BUCKET_PROFILE" in
+		shared|strong) ;;
+		*) echo "error: --bucket-profile must be shared or strong" >&2
+		   exit 1 ;;
+	esac
+	VSTART_OPTS+=(-o "rgw_nsfs_bucket_profile=$BUCKET_PROFILE")
 fi
 
 if $INOTIFY; then
