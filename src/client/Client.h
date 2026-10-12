@@ -856,6 +856,10 @@ public:
   void early_kick_flushing_caps(MetaSession *session);
   int get_caps(Fh *fh, int need, int want, int *have, loff_t endoff,
                int allow_implemented = 0);
+  bool append_excl_unsupported(Inode *in);
+  int get_append_caps(Fh *fh, uint64_t size, int want, int *have,
+                      int64_t *offset, int *extra_refs);
+  void _append_done(Inode *in, int extra_refs);
   int get_caps_used(Inode *in);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater,
@@ -1073,6 +1077,7 @@ protected:
   /* Flags for check_caps() */
   static const unsigned CHECK_CAPS_NODELAY = 0x1;
   static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x2;
+  static const unsigned CHECK_CAPS_APPEND = 0x4;  // ask for the append turn
 
   void check_caps(const InodeRef& in, unsigned flags);
 
@@ -1909,6 +1914,17 @@ private:
       size = _size;
     }
 
+    // an O_APPEND write: end its reservation when the write completes
+    void set_append(int extra_refs) {
+      append = true;
+      append_extra_refs = extra_refs;
+    }
+
+    ~C_Write_Finisher() override {
+      if (append)  // never completed, e.g. _write() failed
+        clnt->_append_done(in, append_extra_refs);
+    }
+
   private:
     Client *clnt;
     Context *onfinish;
@@ -1929,6 +1945,8 @@ private:
     bool iofinished;
     bool onuninlinefinished;
     bool fsync_finished;
+    bool append = false;
+    int append_extra_refs = 0;
     bool try_complete();
   };
 
