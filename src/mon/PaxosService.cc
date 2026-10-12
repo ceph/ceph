@@ -29,6 +29,7 @@ using std::string;
 
 using ceph::bufferlist;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, paxos, service_name, get_first_committed(), get_last_committed())
