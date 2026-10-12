@@ -43,10 +43,11 @@ async fn test_extensions_are_reported() {
         "whether new buckets are marked is not reported");
 }
 
-/// Both polarities.  A bucket the gateway created is already `strong`,
-/// so setting it there is a no-op;  moving it to `base` is the only way
-/// a suite reaches that profile, and only then does setting `strong`
-/// have anything to do.  Without the base leg this would pass against a
+/// Both polarities.  A bucket the gateway created is in the profile the
+/// gateway reports as `bucket_profile` (`rgw_nsfs_bucket_profile`,
+/// default `shared`);  moving it to `base` is the only way a suite
+/// reaches that profile, and only then does setting `strong` have
+/// anything to do.  Without the base leg this would pass against a
 /// setter that did nothing at all.
 ///
 /// Reducing a profile requires the bucket to hold no content, so the
@@ -65,20 +66,23 @@ async fn test_profile_moves_between_base_and_strong() {
         return;
     }
 
+    let created = f.get_str("bucket_profile")
+        .expect("the profile a new bucket is marked with is not reported");
+
     let client = get_client();
     let bucket = get_new_bucket(Some(&client)).await;
 
-    /* created here, so already strong */
+    /* created here, so in the reported profile */
     let Some(first) = nsfs_get_profile(&bucket).await else {
         eprintln!("profile endpoint unavailable;  nothing to check");
         return;
     };
-    assert_eq!(first.get("profile").map(String::as_str), Some("strong"),
-        "a bucket this gateway created should be in the strong profile");
+    assert_eq!(first.get("profile").map(String::as_str), Some(created),
+        "a bucket this gateway created is not in the profile it reports");
 
     let down = nsfs_set_profile(&bucket, "base").await
         .expect("the profile endpoint answered once and should answer again");
-    assert_eq!(down.get("had_profile").map(String::as_str), Some("strong"));
+    assert_eq!(down.get("had_profile").map(String::as_str), Some(created));
 
     let now = nsfs_get_profile(&bucket).await.expect("profile should answer");
     assert_eq!(now.get("profile").map(String::as_str), Some("base"),
@@ -97,8 +101,8 @@ async fn test_profile_moves_between_base_and_strong() {
 }
 
 /// Shared sits between the two and is a profile in its own right, not an
-/// absent marker.  A suite cannot otherwise reach it:  the gateway
-/// creates every bucket strong.
+/// absent marker.  Set explicitly, so the test does not depend on the
+/// profile the gateway marks new buckets with.
 #[cfg_attr(not(feature = "rgw_admin"), ignore = "requires rgw_admin feature")]
 #[tokio::test]
 async fn test_profile_shared_is_distinct_from_base() {
