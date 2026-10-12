@@ -1335,6 +1335,7 @@ protected:
   int multipart_part_num = 0;
   rgw::cksum::Type multipart_cksum_type{rgw::cksum::Type::none};
   uint16_t multipart_cksum_flags{rgw::cksum::Cksum::FLAG_CKSUM_NONE};
+  std::optional<std::string> multipart_compression_type;
   jspan_ptr multipart_trace;
 
   boost::optional<ceph::real_time> delete_at;
