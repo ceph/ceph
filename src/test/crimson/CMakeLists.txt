@@ -156,4 +156,12 @@ target_compile_options(unittest-crimson-watch-notify PRIVATE -UNDEBUG)
 add_ceph_unittest(unittest-crimson-watch-notify
   --memory 256M --smp 1)
 
+add_executable(ceph_test_crimson_scrub_scheduling
+  test_crimson_scrub_scheduling.cc
+)
+target_link_libraries(ceph_test_crimson_scrub_scheduling
+  librados
+)
+install(TARGETS ceph_test_crimson_scrub_scheduling DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 add_subdirectory(cbt)
