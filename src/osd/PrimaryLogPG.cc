@@ -2283,6 +2283,19 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   if (m->get_flags() & CEPH_OSD_FLAG_EC_DIRECT_READ) {
     // This means "is in acting set"
     if (is_primary() || is_nonprimary()) {
+      if (pgbackend->ec_journal_enrolled()) {
+        // EC journal POC: a journaled write leaves the shards' chunks stale
+        // until its stripe is flushed, and only the primary's journal knows
+        // which bytes those are. A direct read serves a shard's chunk from
+        // its store, on the primary too, so none is served on an enrolled
+        // pool: the client clears the flag and sends the read again to the
+        // primary's ordinary path, which lays the journal's blocks over
+        // what the shards return.
+        dout(20) << __func__ << ": direct read on an EC journal pool, "
+                 << "bouncing to the primary's ordinary read " << *m << dendl;
+        osd->reply_op_error(op, -EAGAIN);
+        return;
+      }
       op->set_ec_direct_read();
     } else {
       osd->handle_misdirected_op(this, op);
