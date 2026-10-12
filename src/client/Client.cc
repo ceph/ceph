@@ -4148,6 +4148,11 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff,
  * our write completed, and the release carries our new size.
  */
 /*
+ * With append == false, *poffset is the given offset of a write that is
+ * serialized the same way, see the fscrypt read-modify-write in
+ * _write().
+ */
+/*
  * Whether the auth MDS is known not to serialize appends.  Only once we
  * know it: the session to the MDS our caps were just exported to may
  * still be opening, its features not known yet.
@@ -4160,7 +4165,7 @@ bool Client::append_excl_unsupported(Inode *in)
 }
 
 int Client::get_append_caps(Fh *fh, uint64_t size, int want, int *phave,
-			    int64_t *poffset, int *pextra_refs)
+			    int64_t *poffset, int *pextra_refs, bool append)
 {
   Inode *in = fh->inode.get();
   // An fscrypt append reads the partial last block back first: hold Fr
@@ -4210,8 +4215,8 @@ int Client::get_append_caps(Fh *fh, uint64_t size, int want, int *phave,
     int issued = in->caps_issued(&implemented);
     int have = issued | (implemented & allow);
     if ((have & need) == need) {
-      uint64_t eof = in->effective_size();
-      if (in->append_inflight)
+      uint64_t eof = append ? in->effective_size() : *poffset;
+      if (append && in->append_inflight)
 	eof = std::max(eof, in->append_end);
       uint64_t end = write_extent_end(in, eof + size);
       bool snap_busy = false;
@@ -4228,9 +4233,11 @@ int Client::get_append_caps(Fh *fh, uint64_t size, int want, int *phave,
 	  put_cap_ref(in, need);
 	  continue;
 	}
-	*poffset = in->effective_size();
-	if (in->append_inflight)
-	  *poffset = std::max<int64_t>(*poffset, in->append_end);
+	if (append) {
+	  *poffset = in->effective_size();
+	  if (in->append_inflight)
+	    *poffset = std::max<int64_t>(*poffset, in->append_end);
+	}
 	if (rmw) {
 	  *pextra_refs = CEPH_CAP_FILE_RD;
 	  if ((issued | implemented) & CEPH_CAP_FILE_CACHE) {
@@ -4246,7 +4253,8 @@ int Client::get_append_caps(Fh *fh, uint64_t size, int want, int *phave,
 	  *pextra_refs |= CEPH_CAP_FILE_BUFFER;
 	}
 	in->append_inflight++;
-	in->append_end = *poffset + size;
+	if (append)
+	  in->append_end = *poffset + size;
 	got = true;
 	break;
       }
@@ -13130,11 +13138,22 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
     }
   } append_guard;
   int r;
+  // An fscrypt write that does not cover whole fscrypt blocks reads the
+  // edge blocks back and rewrites them: another client doing the same
+  // to a shared block, between our read and our write, would be undone.
+  // Serialize such writes on Fx like the appends.
+  bool fscrypt_rmw = false;
+#if defined(__linux__)
+  fscrypt_rmw = !is_append && in->is_fscrypt_enabled() &&
+		((offset % FSCRYPT_BLOCK_SIZE) ||
+		 ((offset + size) % FSCRYPT_BLOCK_SIZE));
+#endif
   int extra_refs = 0;
   r = -EOPNOTSUPP;
-  if (is_append) {
-    // offset becomes the EOF that is current under Fx
-    r = get_append_caps(f, size, want, &have, &offset, &extra_refs);
+  if (is_append || fscrypt_rmw) {
+    // for an append, offset becomes the EOF that is current under Fx
+    r = get_append_caps(f, size, want, &have, &offset, &extra_refs,
+			is_append);
     if (r < 0 && r != -EOPNOTSUPP)
       return r;
   }
@@ -13142,7 +13161,8 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
     append_guard.client = this;
     append_guard.in = in;
     append_guard.refs = extra_refs;
-    fpos = offset + size;
+    if (is_append)
+      fpos = offset + size;
     endoff = offset + size;
   } else {
     // the auth MDS does not serialize appends (see get_append_caps())

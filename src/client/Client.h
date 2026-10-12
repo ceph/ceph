@@ -858,7 +858,7 @@ public:
                int allow_implemented = 0);
   bool append_excl_unsupported(Inode *in);
   int get_append_caps(Fh *fh, uint64_t size, int want, int *have,
-                      int64_t *offset, int *extra_refs);
+                      int64_t *offset, int *extra_refs, bool append = true);
   void _append_done(Inode *in, int extra_refs);
   int get_caps_used(Inode *in);
 
