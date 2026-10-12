@@ -635,8 +635,7 @@ public:
       while (collect(&ret, NULL)) {
         if (ret < 0) {
           tn->log(0, SSTR("ERROR: failed to read remote data log shards"));
-          drain_all();
-          return set_cr_error(ret);
+          return set_state(RGWCoroutine_Error);
         }
         yield;
       }
@@ -658,8 +657,7 @@ public:
       while (collect(&ret, NULL)) {
         if (ret < 0) {
           tn->log(0, SSTR("ERROR: failed to write data sync status markers"));
-          drain_all();
-          return set_cr_error(ret);
+          return set_state(RGWCoroutine_Error);
         }
         yield;
       }
