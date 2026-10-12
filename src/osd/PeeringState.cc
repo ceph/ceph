@@ -1045,6 +1045,7 @@ void PeeringState::clear_recovery_state()
   async_recovery_targets.clear();
   backfill_targets.clear();
   backfill_target_shard_id_set.clear();
+  usable_backfill_targets.clear();
 }
 
 void PeeringState::clear_primary_state()
@@ -3030,6 +3031,15 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
         backfill_target_shard_id_set.insert(i.shard);
       }
     }
+    if (pool.info.is_erasure() && pool.info.get_num_zones() > 1) {
+      for (const auto &t : want_backfill) {
+        const auto ti = all_info.find(t);
+        if (ti != all_info.end() && !ti->second.is_incomplete() &&
+            ti->second.last_update >= auth_log_shard->second.log_tail) {
+          usable_backfill_targets.insert(t);
+        }
+      }
+    }
   }
   // Adding !needs_recovery() to let the async_recovery_targets reset after recovery is complete
   ceph_assert(
@@ -3401,13 +3411,16 @@ void PeeringState::activate(
       } else if (
 	pg_log.get_tail() > pi.last_update ||
 	pi.last_backfill == hobject_t() ||
-	(backfill_targets.count(*i) && pi.last_backfill.is_max())) {
+        (backfill_targets.count(*i) && pi.last_backfill.is_max() &&
+         !usable_backfill_targets.count(*i))) {
 	/* ^ This last case covers a situation where a replica is not contiguous
 	 * with the auth_log, but is contiguous with this replica.  Reshuffling
 	 * the active set to handle this would be tricky, so instead we just go
 	 * ahead and backfill it anyway.  This is probably preferrable in any
 	 * case since the replica in question would have to be significantly
 	 * behind.
+         * A usable backfill target waits for its zone block to move to it, and
+         * is caught up from the log.
 	 */
 	// backfill
 	pl->get_clog_debug() << info.pgid << " starting backfill to osd." << peer
@@ -4525,8 +4538,10 @@ void PeeringState::update_calc_stats()
       int64_t peer_num_objects =
         std::max((int64_t)0, peer.second.stats.stats.sum.num_objects);
       // Backfill targets always track num_objects accurately
-      // all other peers track missing accurately.
-      if (is_backfill_target(peer.first)) {
+      // all other peers track missing accurately, as do usable backfill
+      // targets, which are caught up from the log.
+      if (is_backfill_target(peer.first) &&
+          !usable_backfill_targets.count(peer.first)) {
         missing = std::max((int64_t)0, num_objects - peer_num_objects);
       } else {
 	auto pm_it = peer_missing.find(peer.first);
