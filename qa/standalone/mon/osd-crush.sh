@@ -135,6 +135,9 @@ function TEST_erasure_pool_crush_rule_rm() {
     ceph osd crush rule ls | grep $pool_name || return 1
     ceph osd pool delete $pool_name $pool_name --yes-i-really-really-mean-it || return 1
     ! ceph osd crush rule ls | grep $pool_name || return 1
+    # the profile goes with the last pool that uses it
+    ! ceph osd erasure-code-profile ls | grep -qx profile_name || return 1
+    ceph osd erasure-code-profile set profile_name plugin=jerasure technique=reed_sol_van k=2 m=2 crush-failure-domain=osd || return 1
 
     # create few pools that using the same rule
     # make sure the rule is not deleted when the pool is deleted

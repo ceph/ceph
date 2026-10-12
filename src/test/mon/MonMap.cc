@@ -14,6 +14,7 @@
  */
 #include "mon/MonMap.h"
 #include "common/ceph_context.h"
+#include "include/ceph_features.h"
 #include "common/dns_resolve.h"
 #include "test/common/dns_messages.h"
 
@@ -239,4 +240,28 @@ TEST(MonMapBuildInitial, build_initial_mon_host_from_dns_fail) {
   MonMap monmap;
   int r = monmap.build_initial(cct.get(), false, std::cerr);
   ASSERT_EQ(r, -EINVAL);
+}
+
+static MonMap umbrella_round_trip(bool global_stretch_mode)
+{
+  MonMap in;
+  in.stretch_mode_enabled = true;
+  in.global_stretch_mode_enabled = global_stretch_mode;
+  ceph::buffer::list bl;
+  in.encode(bl, CEPH_FEATURES_ALL);
+  MonMap out;
+  out.decode(bl);
+  return out;
+}
+
+TEST(MonMapEncode, umbrella_stretch_mode_without_global) {
+  MonMap m = umbrella_round_trip(false);
+  ASSERT_TRUE(m.stretch_mode_enabled);
+  ASSERT_FALSE(m.global_stretch_mode_enabled);
+}
+
+TEST(MonMapEncode, umbrella_global_stretch_mode) {
+  MonMap m = umbrella_round_trip(true);
+  ASSERT_TRUE(m.stretch_mode_enabled);
+  ASSERT_TRUE(m.global_stretch_mode_enabled);
 }

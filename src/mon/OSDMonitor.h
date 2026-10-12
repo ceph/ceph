@@ -491,6 +491,7 @@ private:
       int64_t base_pool_id, const pg_pool_t *base_pool, const pg_pool_t *tier_pool,
       int *err, std::ostream *ss) const;
 
+  bool is_last_stretch_pool(int64_t pool);
   int _prepare_remove_pool(int64_t pool, std::ostream *ss, bool no_fake);
   int _prepare_rename_pool(int64_t pool, std::string newname);
 
@@ -505,11 +506,26 @@ private:
 			  std::ostream *ss);
   void check_legacy_ec_plugin(const std::string& plugin, 
 			      const std::string& profile) const;
-  int normalize_profile(const std::string& profilename, 
+  int normalize_profile(const std::string& profilename,
 			ceph::ErasureCodeProfile &profile,
 			bool force,
 			std::ostream *ss);
+  int crush_rule_create_replica(const std::string &name,
+				const std::string &root,
+        int64_t num_zones,
+        int num_replica_per_zone,
+        const std::string &zone_failure_domain,
+        const std::string &osd_failure_domain,
+        const std::string &device_class,
+        bool force,
+        int *rule,
+				std::ostream *ss);
   int crush_rule_create_erasure(const std::string &name,
+        int64_t num_zones,
+        const std::string &root,
+        const std::string &zone_failure_domain,
+        const std::string &osd_failure_domain,
+        const std::string &device_class,
 				const std::string &profile,
 				int *rule,
 				std::ostream *ss);
@@ -520,20 +536,33 @@ private:
 		       ceph::ErasureCodeInterfaceRef *erasure_code,
 		       std::ostream *ss) const;
   int prepare_pool_crush_rule(const unsigned pool_type,
-			      const std::string &erasure_code_profile,
-			      const std::string &rule_name,
-			      int *crush_rule,
-			      std::ostream *ss);
+            const std::string &pool_name,
+            const std::string &erasure_code_profile,
+            const std::string &rule_name,
+            int64_t num_zones,
+            const std::string &root,
+            int num_replica_per_zone,
+            const std::string &zone_failure_domain,
+            const std::string &osd_failure_domain,
+            const std::string &device_class,
+            int *crush_rule,
+            std::ostream *ss);
   bool erasure_code_profile_in_use(
     const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
     const std::string &profile,
     std::ostream *ss);
+  bool should_remove_ec_profile(const int64_t pool,
+                                const std::string &profile,
+                                std::ostream *ss);
   int parse_erasure_code_profile(const std::vector<std::string> &erasure_code_profile,
 				 std::map<std::string,std::string> *erasure_code_profile_map,
 				 std::ostream *ss);
+  void maybe_remove_unused_crush_rule(int64_t skip_pool, int old_rule_id);
   int prepare_pool_size(const unsigned pool_type,
 			const std::string &erasure_code_profile,
                         uint8_t repl_size,
+			int &replica,
+			int64_t &num_zones,
 			unsigned *size, unsigned *min_size,
 			std::ostream *ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
@@ -551,10 +580,18 @@ private:
                        uint64_t repl_size,
 		       const uint64_t target_size_bytes,
 		       const float target_size_ratio,
+           int64_t min_size,
 		       const std::string &erasure_code_profile,
-                       const unsigned pool_type,
-                       const uint64_t expected_num_objects,
-                       FastReadType fast_read,
+		       const std::string &root,
+           int64_t num_zones,
+		       int replica,
+		       int num_replica_per_zone,
+		       const std::string &zone_failure_domain,
+		       const std::string &osd_failure_domain,
+		       const std::string &device_class,
+           const unsigned pool_type,
+           const uint64_t expected_num_objects,
+           FastReadType fast_read,
 		       std::string pg_autoscale_mode,
 		       bool bulk,
 		       bool crimson,
@@ -737,6 +774,9 @@ public:
 		     int32_t* new_id);
   int prepare_command_osd_purge(MonOpRequestRef op, int32_t id, std::stringstream& ss);
   int prepare_command_osd_destroy(MonOpRequestRef op, int32_t id, std::stringstream& ss);
+
+  int handle_crush_rule_creation_result(int err, const std::string& rule_name);
+
   int _prepare_command_osd_crush_remove(
       CrushWrapper &newcrush,
       int32_t id,
@@ -764,6 +804,21 @@ public:
   void maybe_enable_pool_split_ops(pg_pool_t &p);
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                std::stringstream& ss);
+  int prepare_command_pool_set_num_zones(const cmdmap_t& cmdmap,
+                                         int64_t pool,
+                                         const std::string& poolstr,
+                                         int64_t n,
+                                         const std::string& val,
+                                         const std::string& interr,
+                                         pg_pool_t& p,
+                                         std::stringstream& ss);
+  int prepare_command_pool_set_replica(int64_t pool,
+                                       const std::string& poolstr,
+                                       int64_t n,
+                                       const std::string& val,
+                                       const std::string& interr,
+                                       pg_pool_t& p,
+                                       std::stringstream& ss);
 
   int prepare_command_pool_application(const std::string &prefix,
                                        const cmdmap_t& cmdmap,
@@ -843,6 +898,26 @@ public:
 				     int *errcode,
 				     std::set<pg_pool_t*>* pools,
 				     const std::string& new_crush_rule);
+
+  /**
+   * Static helper for validating pools for stretch mode.
+   * Extracted for testability - can be called from unit tests.
+   * @param crush: CrushWrapper to validate rule against
+   * @param pool_names: Map of pool IDs to names (for error messages)
+   * @param pools: Map of pool IDs to pool objects to validate
+   * @param ss: stringstream for error messages
+   * @param okay: Set to true if validation passes
+   * @param errcode: Set to error code if validation fails
+   * @param new_crush_rule: Name of the CRUSH rule to validate
+   */
+  static void validate_stretch_mode_pools(
+      const CrushWrapper& crush,
+      const mempool::osdmap::map<int64_t, std::string>& pool_names,
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      std::stringstream& ss,
+      bool *okay,
+      int *errcode,
+      const std::string& new_crush_rule);
   /**
    * Check validity of inputs and OSD/CRUSH state to
    * engage stretch mode. Designed to be used with
@@ -865,7 +940,22 @@ public:
 			       uint32_t bucket_count,
 			       const std::set<pg_pool_t*>& pools,
 			       const std::string& new_crush_rule,
-			       CrushWrapper& crush);
+			       CrushWrapper& crush,
+             bool set_global_stretch_mode);
+
+  static void extract_sites_from_crush_rule(CrushWrapper& crush, std::set<int> &rule_sites, const std::set<int> &rule_roots, int dividing_id);
+
+  /**
+   * Validate that a CRUSH rule is compatible with stretch mode.
+   * Checks that the rule's take roots map to the expected 2 sites.
+   * @param crush_rule The CRUSH rule ID to validate
+   * @param zone_failure_domain Failure domain that the pools stretch across
+   * @param ss Output stream for error messages
+   * @return 0 on success, negative error code on failure
+   */
+  static int validate_stretch_mode_new_pool(CrushWrapper& crush, int crush_rule, int stretch_bucket_count, int stretch_mode_bucket, 
+    const mempool::osdmap::map<int64_t, pg_pool_t>& pools, const std::string& zone_failure_domain, std::ostream *ss);
+
   /**
   *
   * Set all stretch mode values of all pools back to pre-stretch mode values.
@@ -925,6 +1015,17 @@ public:
    * Sets the osdmap and pg_pool_t values back to healthy stretch mode status.
    */
   void trigger_healthy_stretch_mode();
+  /**
+   * Update each pool that is stretched once inc is applied, including
+   * pools that inc creates or changes, for a stretch mode transition:
+   * force an op resend and, if bucket_count is non-zero, set the peering
+   * bucket count and mandatory member.
+   */
+  static void apply_stretch_transition_to_pools(
+      const mempool::osdmap::map<int64_t, pg_pool_t>& pools,
+      OSDMap::Incremental& inc,
+      uint32_t bucket_count = 0,
+      int mandatory_member = CRUSH_ITEM_NONE);
   /**
    * Obtain the crush rule being used for stretch pools.
    * Note that right now this is heuristic and simply selects the

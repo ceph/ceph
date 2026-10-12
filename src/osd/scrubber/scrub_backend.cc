@@ -818,44 +818,16 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
   if (auth_selection.auth_oi.version != eversion_t() &&
       !m_is_replicated && m_pg.get_ec_supports_crc_encode_decode() &&
       m_depth == scrub_level_t::deep) {
-    uint64_t auth_length = this_chunk->received_maps[auth_selection.auth_shard]
-                               .objects.at(ho)
-                               .size;
-
     shard_id_set available_shards;
 
-    for (const auto& [srd, smap] : this_chunk->received_maps) {
-      if (smap.objects.contains(ho)) {
-        uint64_t shard_length = smap.objects.at(ho).size;
-
-        available_shards.insert(srd.shard);
-
-        uint32_t digest = smap.objects.at(ho).digest;
-
-        // Auth shard should be an ec primary and therefore always equal or
-        // larger. We pad all other shards to the same length before adding
-        // their digest into the ec_digest_map as the parity calculations
-        // require them to be the same length.
-        ceph_assert(auth_length >= shard_length);
-        int padding = auth_length - shard_length;
-        if (padding != 0) {
-          digest = ceph_crc32c_zeros(digest, padding);
+    // find_corrupt_zone_copies() compares the copies of a relative shard in
+    // different zones; keep the first one.
+    for (const auto& digests : collect_ec_zone_digests(ho, auth_selection)) {
+      for (const auto& [rel_shard, bl] : digests) {
+        if (!this_chunk->m_ec_digest_map.contains(rel_shard)) {
+          available_shards.insert(rel_shard);
+          this_chunk->m_ec_digest_map[rel_shard] = bl;
         }
-
-        constexpr std::size_t digest_length = sizeof(digest);
-        char crc_bytes[digest_length];
-        for (std::size_t i = 0; i < digest_length; i++) {
-          crc_bytes[i] = retrieve_byte(digest, i);
-        }
-
-        // Buffers are created as chunk size rather than digest_length to ensure
-        // any ec algorithms can decode them
-        ceph::bufferptr b = ceph::buffer::create_page_aligned(
-            m_pg.get_ec_sinfo().get_chunk_size());
-        b.copy_in(0, digest_length, crc_bytes);
-
-        this_chunk->m_ec_digest_map[srd.shard] = bufferlist{};
-        this_chunk->m_ec_digest_map.at(srd.shard).append(b);
       }
     }
 
@@ -1231,15 +1203,13 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
 {
   std::list<pg_shard_t> auth_list;     // out "param" to
   std::set<pg_shard_t> object_errors;  // be returned
-  std::size_t digest_size = 0;
+  std::vector<shard_id_map<bufferlist>> zone_digests;
+  std::map<shard_id_t, shard_id_t> corrupt_copies;
   if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode() &&
       m_depth == scrub_level_t::deep) {
-    digest_size = m_pg.get_ec_sinfo().get_k_plus_m();
+    zone_digests = collect_ec_zone_digests(ho, auth_sel);
+    corrupt_copies = find_corrupt_zone_copies(ho, auth_sel, zone_digests);
   }
-  shard_id_map<bufferlist> digests{digest_size};
-
-  uint64_t auth_length =
-      this_chunk->received_maps[auth_sel.auth_shard].objects.at(ho).size;
 
   for (const auto& [srd, smap] : this_chunk->received_maps) {
 
@@ -1265,33 +1235,12 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
                                                      ho.has_snapset(),
                                                      srd);
 
-      if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode()
-          && m_depth == scrub_level_t::deep) {
-        // Create map containing all data shards except current shard and all
-        // parity shards Decode the current data shard Add to set<shard_id>
-        // incorrectly_decoded_shards if the shard did not decode
-
-        uint32_t digest = smap.objects.at(ho).digest;
-
-        uint64_t shard_length = smap.objects.at(ho).size;
-
-        ceph_assert(auth_length >= shard_length);
-        int padding = auth_length - shard_length;
-        if (padding != 0) {
-          digest = ceph_crc32c_zeros(digest, padding);
-        }
-
-        constexpr std::size_t length = sizeof(digest);
-        char crc_bytes[length];
-        for (std::size_t i = 0; i < length; i++) {
-          crc_bytes[i] = retrieve_byte(digest, i);
-        }
-        ceph::bufferptr b = ceph::buffer::create_page_aligned(
-            m_pg.get_ec_sinfo().get_chunk_size());
-        b.copy_in(0, length, crc_bytes);
-
-        digests[srd.shard] = bufferlist{};
-        digests[srd.shard].append(b);
+      if (auto c = corrupt_copies.find(srd.shard); c != corrupt_copies.end()) {
+        obj_result.set_data_digest_mismatch();
+        auth_sel.shard_map[srd].set_ec_hash_mismatch();
+        errstream << fmt::format(
+            "{} shard {} soid {} : data digest differs from shard {}\n",
+            m_pg_id, srd, ho, c->second);
       }
 
       dout(20) << fmt::format(
@@ -1378,102 +1327,9 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
              << dendl;
   }
 
-  if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode()
-      && m_depth == scrub_level_t::deep) {
-    set<shard_id_t> incorrectly_decoded_shards;
-
-    shard_id_set shards;
-    digests.populate_bitset_set(shards);
-
-    if (!m_pg.ec_can_decode(shards)) {
-      dout(10) << fmt::format(
-                      "{}: {} - Cannot decode from available shards ({})",
-                      __func__, ho, shards)
-               << dendl;
-    } else if (std::any_of(
-                   digests.begin(), digests.end(),
-                   [](const std::pair<const shard_id_t, ceph::bufferlist&>&
-                          digest) { return digest.second.length() > 0; })) {
-      // Unseed all buffers in chunks
-      for (auto& [srd, bl] : digests) {
-        uint32_t zero_data_crc = ceph_crc32c_zeros(
-            -1, logical_to_ondisk_size(auth_sel.auth_oi.size,
-                                       auth_sel.auth_shard.shard));
-
-        for (uint32_t i = 0; i < sizeof(zero_data_crc); i++) {
-          bl.c_str()[i] ^= retrieve_byte(zero_data_crc, i);
-        }
-      }
-
-      // For each digest, we will remove it from our map and then redecode it
-      // using the erasure coding plugin for this pool.
-      // When we find it does not decode back correctly, we know we have found
-      // a data consistency issue that should be reported.
-      for (auto& [srd, bl] : digests) {
-        if (m_pg.get_ec_sinfo().get_data_shards().contains(srd)) {
-          bufferlist removed_shard = std::move(bl);
-          digests.erase(srd);
-
-          shard_id_map<bufferlist> decoded_map = m_pg.ec_decode_acting_set(
-              digests, m_pg.get_ec_sinfo().get_chunk_size());
-
-          if (!std::equal(removed_shard.begin(),
-                          std::next(removed_shard.begin(), sizeof(int32_t)),
-                          decoded_map[srd].begin())) {
-            incorrectly_decoded_shards.insert(srd);
-
-            dout(10) << fmt::format(
-                            "{}: {}, shard {} - Decoding failed. Expected {}. "
-                            "Got {}. All crcs after decoding: {}",
-                            __func__, ho, srd,
-                            extract_crc_from_bufferlist(removed_shard),
-                            extract_crc_from_bufferlist(decoded_map[srd]),
-                            extract_crcs_from_map(digests))
-                     << dendl;
-          }
-
-          digests.insert(srd, std::move(removed_shard));
-        }
-      }
-    }
-
-    const size_t num_incorrectly_decoded_shards =
-        incorrectly_decoded_shards.size();
-    ceph_assert(num_incorrectly_decoded_shards <= m_pg.get_ec_sinfo().get_k());
-    if (num_incorrectly_decoded_shards == 1) {
-      obj_result.set_data_digest_mismatch();
-      this_chunk->m_error_counts.deep_errors++;
-      errstream << fmt::format("{} {}: data digest inconsistent on shard {}\n",
-                               m_pg_id, ho,
-                               *incorrectly_decoded_shards.begin());
-      dout(10) << fmt::format(
-                      "{}: {} - data digests are inconsistent on shard {}: {}",
-                      __func__, ho, *incorrectly_decoded_shards.begin(),
-                      extract_crcs_from_map(digests))
-               << dendl;
-    } else if (num_incorrectly_decoded_shards > 0 &&
-               num_incorrectly_decoded_shards < m_pg.get_ec_sinfo().get_k()) {
-      for (shard_id_t incorrectly_decoded_shard : incorrectly_decoded_shards) {
-        obj_result.set_data_digest_mismatch();
-        this_chunk->m_error_counts.deep_errors++;
-        errstream << fmt::format(
-            "{} {}: data digest inconsistent on shard {}\n", m_pg_id, ho,
-            incorrectly_decoded_shard);
-      }
-      dout(10) << fmt::format(
-                      "{}: {} - data digests are inconsistent on shards {}: {}",
-                      __func__, ho, incorrectly_decoded_shards,
-                      extract_crcs_from_map(digests))
-               << dendl;
-    } else if (num_incorrectly_decoded_shards == m_pg.get_ec_sinfo().get_k()) {
-      obj_result.set_data_digest_mismatch();
-      this_chunk->m_error_counts.deep_errors++;
-      errstream << fmt::format("{} {}: data digests are inconsistent\n",
-                               m_pg_id, ho);
-      dout(10) << fmt::format("{}: {} - data digests are inconsistent: {}",
-                              __func__, ho, extract_crcs_from_map(digests))
-               << dendl;
-    }
+  for (int zone = 0; std::cmp_less(zone, zone_digests.size()); ++zone) {
+    check_ec_stripe_digests(ho, auth_sel, zone, zone_digests[zone],
+                            obj_result, errstream);
   }
 
   dout(15) << fmt::format("{}: auth_list: {} #: {}; obj-errs#: {}",
@@ -1483,6 +1339,236 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
                           object_errors.size())
            << dendl;
   return {auth_list, object_errors};
+}
+
+std::vector<shard_id_map<bufferlist>> ScrubBackend::collect_ec_zone_digests(
+    const hobject_t& ho,
+    const auth_selection_t& auth_sel)
+{
+  const ECUtil::stripe_info_t sinfo = m_pg.get_ec_sinfo();
+  std::vector<shard_id_map<bufferlist>> zone_digests(
+      sinfo.get_num_zones(), shard_id_map<bufferlist>{sinfo.get_k_plus_m()});
+
+  uint64_t auth_length =
+      this_chunk->received_maps[auth_sel.auth_shard].objects.at(ho).size;
+
+  for (const auto& [srd, smap] : this_chunk->received_maps) {
+    if (!smap.objects.contains(ho)) {
+      continue;
+    }
+    uint32_t digest = smap.objects.at(ho).digest;
+
+    uint64_t shard_length = smap.objects.at(ho).size;
+
+    ceph_assert(auth_length >= shard_length);
+    int padding = auth_length - shard_length;
+    if (padding != 0) {
+      digest = ceph_crc32c_zeros(digest, padding);
+    }
+
+    constexpr std::size_t length = sizeof(digest);
+    char crc_bytes[length];
+    for (std::size_t i = 0; i < length; i++) {
+      crc_bytes[i] = retrieve_byte(digest, i);
+    }
+    ceph::bufferptr b =
+        ceph::buffer::create_page_aligned(sinfo.get_chunk_size());
+    b.copy_in(0, length, crc_bytes);
+
+    auto [rel_shard, zone] = sinfo.get_rel_shard_and_zone(srd.shard);
+    zone_digests.at(zone)[rel_shard].append(b);
+  }
+  return zone_digests;
+}
+
+std::map<shard_id_t, shard_id_t> ScrubBackend::find_corrupt_zone_copies(
+    const hobject_t& ho,
+    const auth_selection_t& auth_sel,
+    std::vector<shard_id_map<bufferlist>>& zone_digests)
+{
+  std::map<shard_id_t, shard_id_t> corrupt;
+  if (zone_digests.size() < 2) {
+    return corrupt;
+  }
+
+  // ec_stripe_mismatches() unseeds the CRCs in place, so no two maps may
+  // share a buffer.
+  auto copy_of = [](const bufferlist& bl) {
+    ceph::bufferptr b = ceph::buffer::create_page_aligned(bl.length());
+    bl.begin().copy(bl.length(), b.c_str());
+    bufferlist copy;
+    copy.append(std::move(b));
+    return copy;
+  };
+
+  std::vector<bool> consistent;
+  for (const auto& digests : zone_digests) {
+    shard_id_map<bufferlist> copy{digests.max_size()};
+    for (const auto& [shard, bl] : digests) {
+      copy[shard] = copy_of(bl);
+    }
+    auto mismatches = ec_stripe_mismatches(ho, auth_sel, copy);
+    consistent.push_back(mismatches && mismatches->empty());
+  }
+
+  auto same_crc = [](const bufferlist& a, const bufferlist& b) {
+    return std::equal(a.begin(), std::next(a.begin(), sizeof(uint32_t)),
+                      b.begin());
+  };
+
+  const ECUtil::stripe_info_t sinfo = m_pg.get_ec_sinfo();
+  for (shard_id_t rel_shard : sinfo.get_all_shards()) {
+    // Prefer a copy from a zone whose stripe decodes consistently, then the
+    // CRC held by the most zones.
+    auto rank = [&](int zone) {
+      int holders = 0;
+      for (const auto& digests : zone_digests) {
+        if (digests.contains(rel_shard) &&
+            same_crc(digests.at(rel_shard), zone_digests[zone].at(rel_shard))) {
+          ++holders;
+        }
+      }
+      return std::pair<bool, int>(consistent[zone], holders);
+    };
+    std::optional<int> ref;
+    for (int zone = 0; std::cmp_less(zone, zone_digests.size()); ++zone) {
+      if (zone_digests[zone].contains(rel_shard) &&
+          (!ref || rank(zone) > rank(*ref))) {
+        ref = zone;
+      }
+    }
+    if (!ref) {
+      continue;
+    }
+    const bufferlist& ref_bl = zone_digests[*ref].at(rel_shard);
+    for (int zone = 0; std::cmp_less(zone, zone_digests.size()); ++zone) {
+      if (zone == *ref || !zone_digests[zone].contains(rel_shard)) {
+        continue;
+      }
+      bufferlist& bl = zone_digests[zone].at(rel_shard);
+      if (!same_crc(bl, ref_bl)) {
+        corrupt.emplace(sinfo.get_abs_shard(rel_shard, zone),
+                        sinfo.get_abs_shard(rel_shard, *ref));
+        bl = copy_of(ref_bl);
+      }
+    }
+  }
+  return corrupt;
+}
+
+std::optional<std::set<shard_id_t>> ScrubBackend::ec_stripe_mismatches(
+    const hobject_t& ho,
+    const auth_selection_t& auth_sel,
+    shard_id_map<bufferlist>& digests)
+{
+  set<shard_id_t> incorrectly_decoded_shards;
+
+  shard_id_set shards;
+  digests.populate_bitset_set(shards);
+
+  if (!m_pg.ec_can_decode(shards)) {
+    dout(10) << fmt::format(
+                    "{}: {} - Cannot decode from available shards ({})",
+                    __func__, ho, shards)
+             << dendl;
+    return std::nullopt;
+  } else if (std::any_of(
+                 digests.begin(), digests.end(),
+                 [](const std::pair<const shard_id_t, ceph::bufferlist&>&
+                        digest) { return digest.second.length() > 0; })) {
+    // Unseed all buffers in chunks
+    for (auto& [srd, bl] : digests) {
+      uint32_t zero_data_crc = ceph_crc32c_zeros(
+          -1, logical_to_ondisk_size(auth_sel.auth_oi.size,
+                                     auth_sel.auth_shard.shard));
+
+      for (uint32_t i = 0; i < sizeof(zero_data_crc); i++) {
+        bl.c_str()[i] ^= retrieve_byte(zero_data_crc, i);
+      }
+    }
+
+    // For each digest, we will remove it from our map and then redecode it
+    // using the erasure coding plugin for this pool.
+    // When we find it does not decode back correctly, we know we have found
+    // a data consistency issue that should be reported.
+    for (auto& [srd, bl] : digests) {
+      if (m_pg.get_ec_sinfo().get_data_shards().contains(srd)) {
+        bufferlist removed_shard = std::move(bl);
+        digests.erase(srd);
+
+        shard_id_map<bufferlist> decoded_map = m_pg.ec_decode_acting_set(
+            digests, m_pg.get_ec_sinfo().get_chunk_size());
+
+        if (!std::equal(removed_shard.begin(),
+                        std::next(removed_shard.begin(), sizeof(int32_t)),
+                        decoded_map[srd].begin())) {
+          incorrectly_decoded_shards.insert(srd);
+
+          dout(10) << fmt::format(
+                          "{}: {}, shard {} - Decoding failed. Expected {}. "
+                          "Got {}. All crcs after decoding: {}",
+                          __func__, ho, srd,
+                          extract_crc_from_bufferlist(removed_shard),
+                          extract_crc_from_bufferlist(decoded_map[srd]),
+                          extract_crcs_from_map(digests))
+                   << dendl;
+        }
+
+        digests.insert(srd, std::move(removed_shard));
+      }
+    }
+  }
+  return incorrectly_decoded_shards;
+}
+
+void ScrubBackend::check_ec_stripe_digests(const hobject_t& ho,
+                                           const auth_selection_t& auth_sel,
+                                           int zone,
+                                           shard_id_map<bufferlist>& digests,
+                                           inconsistent_obj_wrapper& obj_result,
+                                           stringstream& errstream)
+{
+  const set<shard_id_t> incorrectly_decoded_shards =
+      ec_stripe_mismatches(ho, auth_sel, digests).value_or(set<shard_id_t>{});
+
+  const size_t num_incorrectly_decoded_shards =
+      incorrectly_decoded_shards.size();
+  ceph_assert(num_incorrectly_decoded_shards <= m_pg.get_ec_sinfo().get_k());
+  if (num_incorrectly_decoded_shards == 1) {
+    obj_result.set_data_digest_mismatch();
+    this_chunk->m_error_counts.deep_errors++;
+    errstream << fmt::format("{} {}: data digest inconsistent on shard {}\n",
+                             m_pg_id, ho,
+                             m_pg.get_ec_sinfo().get_abs_shard(
+                                 *incorrectly_decoded_shards.begin(), zone));
+    dout(10) << fmt::format(
+                    "{}: {} - data digests are inconsistent on shard {}: {}",
+                    __func__, ho, *incorrectly_decoded_shards.begin(),
+                    extract_crcs_from_map(digests))
+             << dendl;
+  } else if (num_incorrectly_decoded_shards > 0 &&
+             num_incorrectly_decoded_shards < m_pg.get_ec_sinfo().get_k()) {
+    for (shard_id_t incorrectly_decoded_shard : incorrectly_decoded_shards) {
+      obj_result.set_data_digest_mismatch();
+      this_chunk->m_error_counts.deep_errors++;
+      errstream << fmt::format(
+          "{} {}: data digest inconsistent on shard {}\n", m_pg_id, ho,
+          m_pg.get_ec_sinfo().get_abs_shard(incorrectly_decoded_shard, zone));
+    }
+    dout(10) << fmt::format(
+                    "{}: {} - data digests are inconsistent on shards {}: {}",
+                    __func__, ho, incorrectly_decoded_shards,
+                    extract_crcs_from_map(digests))
+             << dendl;
+  } else if (num_incorrectly_decoded_shards == m_pg.get_ec_sinfo().get_k()) {
+    obj_result.set_data_digest_mismatch();
+    this_chunk->m_error_counts.deep_errors++;
+    errstream << fmt::format("{} {}: data digests are inconsistent\n",
+                             m_pg_id, ho);
+    dout(10) << fmt::format("{}: {} - data digests are inconsistent: {}",
+                            __func__, ho, extract_crcs_from_map(digests))
+             << dendl;
+  }
 }
 
 // == PGBackend::be_compare_scrub_objects()
@@ -1567,7 +1653,11 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
     ceph_assert(can_attr != candidate.attrs.end());
     const bufferlist& can_bl = can_attr->second;
 
-    if (auth_oi.get_version_for_shard(shard.shard) == auth_oi.version) {
+    shard_id_t rel_shard = m_is_optimized_ec
+                               ? m_pg.get_ec_sinfo().get_rel_shard(shard.shard)
+                               : shard.shard;
+
+    if (auth_oi.get_version_for_shard(rel_shard) == auth_oi.version) {
       // The expected version of the shard and the authoritative shard are the
       // same, so we can do a simple memcmp of the OI attr.
       auto auth_attr = auth.attrs.find(OI_ATTR);
@@ -1588,7 +1678,7 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
       // also check the size, as that is the only other piece of data that the
       // nonprimary OIs require.
       object_info_t oi(can_bl);
-      if (oi.version != auth_oi.get_version_for_shard(shard.shard) ||
+      if (oi.version != auth_oi.get_version_for_shard(rel_shard) ||
             oi.size != auth_oi.size) {
         fmt::format_to(std::back_inserter(out),
                        "{}object info version incorrect auth_oi={} candidate_oi={}",

@@ -1668,6 +1668,7 @@ void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *s
         op->complete(make_error_code(osdc_errc::pool_dne), rc, service.get_executor());
       }
 
+      _op_cancel_map_check(op);
       OSDSession *s = op->session;
       if (s) {
 	ceph_assert(s != NULL);
@@ -2623,8 +2624,9 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   bool check_for_latest_map = false;
   int r = 0;
   // Avoid duplicating _calc_target for direct reads, where _calc_target has
-  // already been called.
-  if ((op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) == 0) {
+  // already been called with this map.
+  if ((op->target.flags & CEPH_OSD_FLAG_EC_DIRECT_READ) == 0 ||
+      op->target.epoch != osdmap->get_epoch()) {
     r = _calc_target(&op->target);
     switch(r) {
     case RECALC_OP_TARGET_POOL_DNE:
@@ -3223,7 +3225,10 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
   bool recovery_deletes = osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
   pg_t prev_pgid(prev_seed, pgid.pool());
-  if (any_change && PastIntervals::is_new_interval(
+  // A forced OSD can leave the acting set without the primary changing, and
+  // drops ops sent to it in an earlier interval.
+  if ((any_change || (t->flags & CEPH_OSD_FLAG_FORCE_OSD)) &&
+      PastIntervals::is_new_interval(
 	t->acting_primary,
 	acting_primary,
 	t->acting,
@@ -3295,30 +3300,25 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
     if (t->flags & CEPH_OSD_FLAG_FORCE_OSD) {
-      // In some redrive scenarios, the acting set can change. If the forced
-      // OSD doesn't exist in the right location, then fail the op.
-      int shard_id = t->actual_pgid.shard.id;
-      if (shard_id < 0 || std::cmp_greater_equal(shard_id, t->acting.size()) ||
-        t->acting[shard_id] != t->osd) {
-        // If FAIL_ON_EAGAIN is set, we must not failover - the caller expects
-        // -EAGAIN to be returned. Otherwise, clear the direct read flags and
-        // redrive to the primary OSD (similar to what happens when we get -EAGAIN).
-        if (t->flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) {
-          ldout(cct, 10) << __func__ << " forced osd." << t->osd
-                         << " not in acting set " << t->acting
-                         << ", FAIL_ON_EAGAIN set, returning POOL_DNE to trigger -EAGAIN"
-                         << dendl;
-          t->osd = -1;
-          return RECALC_OP_TARGET_POOL_DNE;
-        } else {
-          ldout(cct, 10) << __func__ << " forced osd." << t->osd
-                         << " not in acting set " << t->acting
-                         << ", clearing direct read flags and redriving to primary"
-                         << dendl;
-          // Clear all direct read flags (EC_DIRECT_READ, BALANCE_READS, LOCALIZE_READS)
-          t->flags &= ~CEPH_OSD_FLAGS_DIRECT_READ;
-          t->flags &= ~CEPH_OSD_FLAG_FORCE_OSD;
-        }
+      // A direct read gets one attempt, so fail it back once its PG changes.
+      // If FAIL_ON_EAGAIN is set, we must not failover - the caller expects
+      // -EAGAIN to be returned. Otherwise, clear the direct read flags and
+      // redrive to the primary OSD (similar to what happens when we get -EAGAIN).
+      if (t->flags & CEPH_OSD_FLAG_FAIL_ON_EAGAIN) {
+        ldout(cct, 10) << __func__ << " forced osd." << t->osd
+                       << " pg changed, acting " << t->acting
+                       << ", FAIL_ON_EAGAIN set, returning POOL_DNE to trigger -EAGAIN"
+                       << dendl;
+        t->osd = -1;
+        return RECALC_OP_TARGET_POOL_DNE;
+      } else {
+        ldout(cct, 10) << __func__ << " forced osd." << t->osd
+                       << " pg changed, acting " << t->acting
+                       << ", clearing direct read flags and redriving to primary"
+                       << dendl;
+        // Clear all direct read flags (EC_DIRECT_READ, BALANCE_READS, LOCALIZE_READS)
+        t->flags &= ~CEPH_OSD_FLAGS_DIRECT_READ;
+        t->flags &= ~CEPH_OSD_FLAG_FORCE_OSD;
       }
     }
     if (pi->is_erasure()) {

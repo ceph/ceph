@@ -2126,6 +2126,8 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(shard_mapping, bl);
     encode(ec_data_shard_count, bl);
     encode(ec_coding_shard_count, bl);
+    encode(replica, bl);
+    encode(num_zones, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -2329,14 +2331,31 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     nonprimary_shards.clear();
   }
 
+
   if (struct_v >= 33) {
     decode(shard_mapping, bl);
     decode(ec_data_shard_count, bl);
     decode(ec_coding_shard_count, bl);
+    decode(replica, bl);
+    decode(num_zones, bl);
   } else {
     shard_mapping.clear();
     ec_data_shard_count.reset();
     ec_coding_shard_count.reset();
+    // Old pools that don't have num_zones and replica
+    if (is_stretch_pool()) {
+      // Stretch pool: infer num_zones from peering_crush_bucket_target
+      // we don't use peering_crush_bucket_count because there are some clusters
+      // that set peering_crush_bucket_count to less than the actual number of 
+      // zones in order to survive more failures without degraded stretch mode.
+      num_zones = peering_crush_bucket_target;
+      replica = size / num_zones;
+    } else {
+      // Non-stretch pool: single-zone, replica = size
+      num_zones = 1;
+      replica = size;
+    }
+    min_size = min_size / num_zones;
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -2352,9 +2371,12 @@ bool pg_pool_t::stretch_set_can_peer(const set<int>& want, const OSDMap& osdmap,
   set<int> ancestors;
   const shared_ptr<CrushWrapper>& crush = osdmap.crush;
   for (int osdid : want) {
+    if (osdid == CRUSH_ITEM_NONE) {
+      continue;
+    }
     int ancestor = crush->get_parent_of_type(osdid, barrier_id,
 					     crush_rule);
-    ancestors.insert(ancestor);
+    ancestors.insert(crush->get_non_shadow_id(ancestor));
   }
   if (ancestors.size() < barrier_count) {
     if (out) {

@@ -15,6 +15,13 @@
   ``lockers`` field rather than the truth value of the returned object
   to determine whether any clients hold the lock.
 
+* RADOS: In degraded stretch mode, the PGs of a stretch pool whose CRUSH rule
+  takes its zones with a device class (``step take <zone> class <class>``)
+  can now go active; before, they stayed peered until stretch mode recovered.
+  An OSD of an older release does not treat such an interval as one that may
+  have accepted writes, so complete the OSD upgrade while stretch mode is
+  healthy. A rule that takes one zone with two device classes now counts it
+  as one zone.
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed

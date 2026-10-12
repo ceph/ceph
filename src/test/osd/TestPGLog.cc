@@ -135,12 +135,25 @@ struct PGLogTestBase {
     const hobject_t &hoid, eversion_t v) {
     return mk_ple_err(hoid, v, osd_reqid_t());
   }
+  static pg_pool_t mk_stretch_pool(int k_plus_m, int64_t num_zones) {
+    pg_pool_t pool;
+    pool.type = pg_pool_t::TYPE_ERASURE;
+    pool.size = k_plus_m * num_zones;
+    pool.num_zones = num_zones;
+    pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+    return pool;
+  }
 }; // PGLogTestBase
 
 
 class PGLogTest : virtual public ::testing::Test, protected PGLog, public PGLogTestBase  {
 public:
-  PGLogTest() : PGLog(g_ceph_context) {}
+  pg_pool_t test_pool;
+
+  PGLogTest() : PGLog(g_ceph_context) {
+    test_pool.type = pg_pool_t::TYPE_REPLICATED;
+    test_pool.size = 3;
+  }
   void SetUp() override {
     missing.may_include_deletes = true;
   }
@@ -329,7 +342,7 @@ public:
 
     proc_replica_log(
       oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)),
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     ceph_assert(oinfo.last_update >= log.tail);
 
@@ -454,7 +467,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     TestHandler h(remove_snap);
     rewind_divergent_log(newhead, info, &h,
-			 dirty_info, dirty_big_info, false, pg_shard_t());
+			 dirty_info, dirty_big_info, false, pg_shard_t(), test_pool);
 
     EXPECT_TRUE(log.objects.count(divergent));
     EXPECT_TRUE(missing.is_missing(divergent_object));
@@ -519,7 +532,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     TestHandler h(remove_snap);
     rewind_divergent_log(newhead, info, &h,
-			 dirty_info, dirty_big_info, false, pg_shard_t());
+			 dirty_info, dirty_big_info, false, pg_shard_t(), test_pool);
 
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(0U, log.objects.count(divergent_object));
@@ -558,7 +571,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     TestHandler h(remove_snap);
     roll_forward_to(eversion_t(1, 6), &info, &h);
     rewind_divergent_log(eversion_t(1, 5), info, &h,
-			 dirty_info, dirty_big_info, false, pg_shard_t());
+			 dirty_info, dirty_big_info, false, pg_shard_t(), test_pool);
     pg_log_t log;
     reset_backfill_claim_log(log, &info, &h);
   }
@@ -1438,7 +1451,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_FALSE(omissing.have_missing());
     EXPECT_EQ(last_update, oinfo.last_update);
@@ -1513,7 +1526,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_FALSE(omissing.have_missing());
   }
@@ -1616,7 +1629,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1704,7 +1717,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1795,7 +1808,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1890,7 +1903,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     missing.may_include_deletes = false;
     proc_replica_log(oinfo, olog, omissing, from,
-      pg_shard_t(0, shard_id_t(1)), false);
+      pg_shard_t(0, shard_id_t(1)), false, test_pool);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.get_items().begin()->second.need == eversion_t(1, 1));
@@ -3966,4 +3979,249 @@ TEST_F(PGLogTest, merge_log_epoch_change_basic) {
   // Revers missing should be same length as missing!
   ASSERT_EQ(2, missing.num_missing());
   ASSERT_EQ(2, missing.get_rmissing().size());
+}
+
+// merge_log extending the head: a divergent partial write that the local
+// shard took part in must be undone for a zone-1 shard as for its zone-0 twin.
+TEST_F(PGLogTest, merge_log_divergent_partial_write_zone1_shard) {
+  const pg_pool_t pool = mk_stretch_pool(3, 2);
+  for (shard_id_t shard : {shard_id_t(1), shard_id_t(4)}) {
+    clear();
+    hobject_t a = mk_obj(1);
+    hobject_t b = mk_obj(2);
+    pg_info_t info;
+    info.last_backfill = hobject_t::get_max();
+    log.tail = eversion_t(1, 0);
+    log.add(mk_ple_mod(a, eversion_t(1, 1), eversion_t(1, 0)));
+    pg_log_entry_t partial = mk_ple_mod(a, eversion_t(1, 2), eversion_t(1, 1));
+    partial.written_shards.insert(shard_id_t(0));
+    partial.written_shards.insert(shard_id_t(1));
+    log.add(partial);
+    info.last_update = info.last_complete = log.head;
+
+    pg_log_t olog;
+    olog.tail = eversion_t(1, 0);
+    olog.log.push_back(mk_ple_mod(a, eversion_t(1, 1), eversion_t(1, 0)));
+    olog.log.push_back(mk_ple_mod(b, eversion_t(2, 3), eversion_t(1, 0)));
+    olog.head = eversion_t(2, 3);
+    pg_info_t oinfo;
+    oinfo.last_update = olog.head;
+    oinfo.last_backfill = hobject_t::get_max();
+
+    LogHandler h;
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+    merge_log(oinfo, std::move(olog), pg_shard_t(1, shard_id_t(0)), info,
+              pool, pg_shard_t(0, shard), &h, dirty_info, dirty_big_info,
+              true);
+
+    EXPECT_EQ(eversion_t(2, 3), info.last_update) << "shard " << shard;
+    EXPECT_TRUE(h.removed.contains(a)) << "shard " << shard;
+    ASSERT_TRUE(missing.is_missing(a)) << "shard " << shard;
+    EXPECT_EQ(eversion_t(1, 1), missing.get_items().at(a).need)
+      << "shard " << shard;
+    EXPECT_TRUE(missing.is_missing(b)) << "shard " << shard;
+  }
+}
+
+// rewind_divergent_log on a zone-1 shard matches written_shards by relative id.
+TEST_F(PGLogTest, rewind_divergent_log_partial_write_zone1_shard) {
+  const pg_pool_t pool = mk_stretch_pool(3, 2);
+  for (shard_id_t shard : {shard_id_t(1), shard_id_t(4)}) {
+    clear();
+    hobject_t a = mk_obj(1);
+    hobject_t b = mk_obj(2);
+    pg_info_t info;
+    info.last_backfill = hobject_t::get_max();
+    log.tail = eversion_t(1, 0);
+    log.add(mk_ple_mod(a, eversion_t(1, 1), eversion_t(1, 0)));
+    log.add(mk_ple_mod(b, eversion_t(1, 2), eversion_t(1, 0)));
+    pg_log_entry_t wrote_a = mk_ple_mod(a, eversion_t(1, 3), eversion_t(1, 1));
+    wrote_a.written_shards.insert(shard_id_t(0));
+    wrote_a.written_shards.insert(shard_id_t(1));
+    log.add(wrote_a);
+    pg_log_entry_t skipped_b = mk_ple_mod(b, eversion_t(1, 4), eversion_t(1, 2));
+    skipped_b.written_shards.insert(shard_id_t(0));
+    skipped_b.written_shards.insert(shard_id_t(2));
+    log.add(skipped_b);
+    info.last_update = info.last_complete = log.head;
+
+    LogHandler h;
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+    rewind_divergent_log(eversion_t(1, 2), info, &h, dirty_info,
+                         dirty_big_info, true, pg_shard_t(0, shard), pool);
+
+    EXPECT_EQ(eversion_t(1, 2), info.last_update) << "shard " << shard;
+    EXPECT_TRUE(h.removed.contains(a)) << "shard " << shard;
+    ASSERT_TRUE(missing.is_missing(a)) << "shard " << shard;
+    EXPECT_EQ(eversion_t(1, 1), missing.get_items().at(a).need)
+      << "shard " << shard;
+    EXPECT_FALSE(h.removed.contains(b)) << "shard " << shard;
+    EXPECT_FALSE(missing.is_missing(b)) << "shard " << shard;
+  }
+}
+
+// proc_replica_log for a peer in zone 1 matches written_shards by relative id.
+TEST_F(PGLogTest, proc_replica_log_partial_write_zone1_peer) {
+  const pg_pool_t pool = mk_stretch_pool(3, 2);
+  for (shard_id_t from_shard : {shard_id_t(2), shard_id_t(5)}) {
+    clear();
+    hobject_t a = mk_obj(1);
+    hobject_t b = mk_obj(2);
+    log.tail = eversion_t(1, 0);
+    log.add(mk_ple_mod(a, eversion_t(1, 1), eversion_t(1, 0)));
+    log.add(mk_ple_mod(b, eversion_t(1, 2), eversion_t(1, 0)));
+
+    pg_log_t olog;
+    olog.tail = eversion_t(1, 0);
+    olog.log.push_back(mk_ple_mod(a, eversion_t(1, 1), eversion_t(1, 0)));
+    olog.log.push_back(mk_ple_mod(b, eversion_t(1, 2), eversion_t(1, 0)));
+    pg_log_entry_t wrote_a = mk_ple_mod(a, eversion_t(1, 3), eversion_t(1, 1));
+    wrote_a.written_shards.insert(shard_id_t(0));
+    wrote_a.written_shards.insert(shard_id_t(2));
+    olog.log.push_back(wrote_a);
+    pg_log_entry_t skipped_b = mk_ple_mod(b, eversion_t(1, 4), eversion_t(1, 2));
+    skipped_b.written_shards.insert(shard_id_t(0));
+    skipped_b.written_shards.insert(shard_id_t(1));
+    olog.log.push_back(skipped_b);
+    olog.head = eversion_t(1, 4);
+
+    pg_info_t oinfo;
+    oinfo.last_update = oinfo.last_complete = olog.head;
+    oinfo.log_tail = olog.tail;
+    oinfo.last_backfill = hobject_t::get_max();
+    pg_missing_t omissing;
+    proc_replica_log(oinfo, olog, omissing, pg_shard_t(2, from_shard),
+                     pg_shard_t(0, shard_id_t(0)), true, pool);
+
+    EXPECT_EQ(eversion_t(1, 2), oinfo.last_update) << "from " << from_shard;
+    ASSERT_TRUE(omissing.is_missing(a)) << "from " << from_shard;
+    EXPECT_EQ(eversion_t(1, 1), omissing.get_items().at(a).need)
+      << "from " << from_shard;
+    EXPECT_FALSE(omissing.is_missing(b)) << "from " << from_shard;
+  }
+}
+
+// _merge_object_divergent_entries expects a relative shard: an absolute
+// zone-1 id does not match the relative ids in written_shards.
+TEST_F(PGLogTest, merge_object_divergent_entries_needs_relative_shard) {
+  for (auto [shard, participated] : {std::pair{shard_id_t(1), true},
+                                     std::pair{shard_id_t(4), false}}) {
+    clear();
+    hobject_t hoid = mk_obj(1);
+    mempool::osd_pglog::list<pg_log_entry_t> orig_entries;
+    pg_log_entry_t entry = mk_ple_mod(hoid, eversion_t(10, 100),
+                                      eversion_t(10, 99));
+    entry.written_shards.insert(shard_id_t(0));
+    entry.written_shards.insert(shard_id_t(1));
+    orig_entries.push_back(entry);
+    log.add(mk_ple_mod(hoid, eversion_t(11, 110), eversion_t(10, 99)));
+
+    pg_info_t oinfo;
+    oinfo.last_backfill = hobject_t::get_max();
+    LogHandler rollbacker;
+    _merge_object_divergent_entries(log, hoid, orig_entries, oinfo,
+                                    log.get_can_rollback_to(), missing,
+                                    &rollbacker, true, shard, this);
+    EXPECT_EQ(participated, rollbacker.removed.contains(hoid))
+      << "shard " << shard;
+    EXPECT_EQ(participated, missing.is_missing(hoid)) << "shard " << shard;
+  }
+}
+
+// reset_complete_to with an empty log, and with an oldest need beyond the
+// log head.
+TEST_F(PGLogTest, reset_complete_to_empty_log_and_need_beyond_head) {
+  hobject_t a = mk_obj(1);
+  {
+    clear();
+    log.tail = log.head = eversion_t(5, 12);
+    missing.add(a, eversion_t(5, 10), eversion_t(), false);
+    pg_info_t info;
+    info.last_update = info.last_complete = eversion_t(5, 12);
+    reset_complete_to(&info, true);
+    EXPECT_TRUE(log.complete_to == log.log.end());
+    EXPECT_EQ(eversion_t(5, 9), info.last_complete);
+    EXPECT_TRUE(info.has_missing());
+  }
+  {
+    clear();
+    log.tail = log.head = eversion_t(5, 12);
+    missing.add(a, eversion_t(5, 10), eversion_t(), false);
+    pg_info_t info;
+    info.last_update = info.last_complete = eversion_t(5, 12);
+    reset_complete_to(&info, false);
+    EXPECT_TRUE(log.complete_to == log.log.end());
+    EXPECT_EQ(eversion_t(), info.last_complete);
+  }
+  {
+    clear();
+    log.tail = log.head = eversion_t(5, 12);
+    pg_info_t info;
+    info.last_update = info.last_complete = eversion_t(5, 12);
+    reset_complete_to(&info, true);
+    EXPECT_TRUE(log.complete_to == log.log.end());
+    EXPECT_EQ(eversion_t(5, 12), info.last_complete);
+    reset_complete_to(nullptr, true);
+    EXPECT_TRUE(log.complete_to == log.log.end());
+  }
+  {
+    clear();
+    log.tail = eversion_t(1, 0);
+    log.add(mk_ple_mod(mk_obj(2), eversion_t(1, 1), eversion_t(1, 0)));
+    log.add(mk_ple_mod(mk_obj(3), eversion_t(1, 2), eversion_t(1, 0)));
+    log.add(mk_ple_mod(mk_obj(4), eversion_t(1, 3), eversion_t(1, 0)));
+    missing.add(a, eversion_t(1, 7), eversion_t(), false);
+    pg_info_t info;
+    info.last_update = info.last_complete = eversion_t(1, 3);
+    reset_complete_to(&info, true);
+    ASSERT_TRUE(log.complete_to != log.log.end());
+    EXPECT_EQ(eversion_t(1, 3), log.complete_to->version);
+    EXPECT_EQ(eversion_t(1, 2), info.last_complete);
+  }
+}
+
+// Rebuilding the missing set of a zone-1 shard with the pool matches
+// written_shards by relative id.
+TEST_F(PGLogTestRebuildMissing, read_log_and_missing_rebuild_zone1_shard) {
+  const pg_pool_t pool = mk_stretch_pool(3, 2);
+  hobject_t written = mk_obj(20);
+  hobject_t skipped = mk_obj(21);
+  log.tail = eversion_t(6, 2);
+  pg_log_entry_t wrote = mk_ple_mod(written, eversion_t(6, 3), eversion_t(6, 1));
+  wrote.written_shards.insert(shard_id_t(0));
+  wrote.written_shards.insert(shard_id_t(1));
+  log.add(wrote);
+  pg_log_entry_t skip = mk_ple_mod(skipped, eversion_t(6, 4), eversion_t(6, 1));
+  skip.written_shards.insert(shard_id_t(0));
+  skip.written_shards.insert(shard_id_t(2));
+  log.add(skip);
+  info.pgid = spg_t(pg_t(1, 1), shard_id_t(4));
+  info.log_tail = log.tail;
+  info.last_update = log.head;
+  info.last_complete = eversion_t(6, 2);
+
+  hobject_t log_hoid;
+  log_hoid.pool = 1;
+  log_hoid.oid = "log";
+  ghobject_t log_oid(log_hoid);
+  ObjectStore::Transaction t;
+  map<string, bufferlist> km;
+  mark_log_for_rewrite();
+  write_log_and_missing(t, &km, test_coll, log_oid, true);
+  bufferlist priors;
+  encode(map<eversion_t, hobject_t>(), priors);
+  km["divergent_priors"] = priors;
+  t.omap_setkeys(test_coll, log_oid, km);
+  ASSERT_EQ(0, store->queue_transaction(ch, std::move(t)));
+
+  clear();
+  ostringstream err;
+  read_log_and_missing(store.get(), ch, log_oid, info, err, false, true,
+                       false, &pool);
+  ASSERT_EQ(2u, log.log.size());
+  ASSERT_TRUE(missing.is_missing(written));
+  EXPECT_EQ(eversion_t(6, 3), missing.get_items().at(written).need);
+  EXPECT_FALSE(missing.is_missing(skipped));
 }

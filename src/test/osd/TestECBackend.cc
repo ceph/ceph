@@ -19,6 +19,8 @@
 #include <signal.h>
 #include "osd/ECCommon.h"
 #include "osd/ECBackend.h"
+#include "osd/ECMsgTypes.h"
+#include "messages/MOSDECSubOpWrite.h"
 #include "gtest/gtest.h"
 #include "osd/osd_types.h"
 #include "common/ceph_argparse.h"
@@ -33,21 +35,38 @@ class ECListenerStub : public ECListener {
 private:
   OSDMapRef osd_map_ref;
   pg_info_t pg_info;
-  set<pg_shard_t> backfill_shards;
   shard_id_set backfill_shard_id_set;
-  map<hobject_t, set<pg_shard_t>> missing_loc_shards;
-  map<pg_shard_t, pg_missing_t> shard_missing;
   pg_missing_set<false> shard_not_missing_const;
-  pg_pool_t pg_pool;
-  set<pg_shard_t> acting_recovery_backfill_shards;
-  shard_id_set acting_recovery_backfill_shard_id_set;
-  map<pg_shard_t, pg_info_t> shard_info;
   PGLog pg_log;
   pg_info_t shard_pg_info;
   std::string dbg_prefix = "stub";
 
 public:
   set<pg_shard_t> acting_shards;
+  set<pg_shard_t> backfill_shards;
+  // Peers absent from shard_missing are treated as not missing anything.
+  map<pg_shard_t, pg_missing_t> shard_missing;
+  map<pg_shard_t, pg_info_t> shard_info;
+  set<pg_shard_t> should_not_send_peers;
+  vector<std::pair<int, MessageRef>> sent_messages;
+  shard_id_set acting_recovery_backfill_shard_id_set;
+  // Settable candidate-location map used by get_missing_loc_shards();
+  // tests can populate this directly to simulate an object whose
+  // pg_missing_loc lists more than one candidate pg_shard for the same
+  // hoid (e.g. several historical owners of the same EC shard slot).
+  map<hobject_t, set<pg_shard_t>> missing_loc_shards;
+  // Settable pg_shard_t set backing get_acting_recovery_backfill_shards();
+  // tests that drive RMWPipeline::cache_ready() directly need this (the
+  // full pg_shard_t set), not just the shard_id_set below.
+  set<pg_shard_t> acting_recovery_backfill_shards;
+  // Settable pool used by get_pool(); tests can set flags (e.g. FLAG_OMAP)
+  // and nonprimary_shards on it directly.
+  pg_pool_t pg_pool;
+  // Settable "self" shard used by whoami_shard(); defaults to the old
+  // hard-coded pg_shard_t() (relative shard NO_SHARD, zone 0) so existing
+  // tests are unaffected. Tests that need to simulate a primary living in
+  // a non-zero zone can set this before constructing/using a ReadPipeline.
+  pg_shard_t whoami = pg_shard_t();
 
   ECListenerStub()
     : pg_log(NULL) {}
@@ -172,6 +191,10 @@ public:
   }
 
   const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const override {
+    auto it = shard_missing.find(peer);
+    if (it != shard_missing.end()) {
+      return it->second;
+    }
     return shard_not_missing_const;
   }
 
@@ -188,11 +211,13 @@ public:
   }
 
   pg_shard_t whoami_shard() const override {
-    return pg_shard_t();
+    return whoami;
   }
 
   void send_message_osd_cluster(vector<std::pair<int, Message *>> &messages, epoch_t from_epoch) override {
-
+    for (auto &[osd, msg] : messages) {
+      sent_messages.emplace_back(osd, MessageRef(msg, false));
+    }
   }
 
   void send_message_osd_cluster(int osd, MOSDPGPush* msg, epoch_t from_epoch) override {
@@ -216,8 +241,12 @@ public:
     return acting_recovery_backfill_shard_id_set;
   }
 
+  // Settable result for should_send_op(); defaults to false to preserve
+  // the stub's original hard-coded behaviour for existing tests.
+  bool should_send_op_result = false;
+
   bool should_send_op(pg_shard_t peer, const hobject_t &hoid) override {
-    return false;
+    return should_send_op_result && !should_not_send_peers.contains(peer);
   }
 
   const map<pg_shard_t, pg_info_t> &get_shard_info() const override {
@@ -263,6 +292,210 @@ public:
     return 0;
   }
 };
+
+namespace {
+
+struct TestDpp : public DoutPrefixProvider {
+  std::ostream &gen_prefix(std::ostream &out) const override {
+    return out << "TestRMWPipeline";
+  }
+  CephContext *get_cct() const override { return g_ceph_context; }
+  unsigned get_subsys() const override { return ceph_subsys_osd; }
+};
+
+// Minimal concrete ECCommon so a test can directly construct a real
+// ECCommon::RMWPipeline (which needs an ECCommon& to hand write completions
+// to). Only handle_sub_write() is exercised by the tests below (a write
+// routed to "ourself" via ECListenerStub::whoami); the read paths are never
+// reached because the tests call RMWPipeline::cache_ready() directly instead
+// of going through start_rmw()/the extent cache, so ADD_FAILURE() there is
+// a trip-wire, not a real implementation.
+struct FakeECBackendForRMW : public ECCommon {
+  explicit FakeECBackendForRMW(const DoutPrefixProvider &dpp) : ECCommon(dpp) {}
+
+  // Captured from the sub-write, for inspection once cache_ready() returns.
+  int sub_writes_seen = 0;
+  ObjectStore::Transaction last_sub_write_t;
+
+  void handle_sub_write(pg_shard_t from, OpRequestRef msg, ECSubWrite &op,
+                         const ZTracer::Trace &trace,
+                         ECListener &eclistener) override {
+    ++sub_writes_seen;
+    last_sub_write_t = op.t;
+  }
+
+  void objects_read_and_reconstruct(
+      const std::map<hobject_t, std::list<ec_align_t>> &reads,
+      bool fast_read, uint64_t object_size,
+      GenContextURef<ec_extents_t &&> &&func) override {
+    ADD_FAILURE() << "not used by this test";
+  }
+
+  void objects_read_and_reconstruct_for_rmw(
+      std::map<hobject_t, read_request_t> &&to_read,
+      GenContextURef<ec_extents_t &&> &&func) override {
+    ADD_FAILURE() << "not used by this test";
+  }
+
+#ifdef WITH_CRIMSON
+  void handle_sub_read_n_reply(pg_shard_t from, ECSubRead &op,
+                                const ZTracer::Trace &trace) override {
+    ADD_FAILURE() << "not used by this test";
+  }
+#endif
+};
+
+// An Op whose generate_transactions() populates relative shard 0's
+// Transaction with real content (touch + setattr, so Transaction's
+// coll_index/object_index std::map members are non-empty and an extra copy
+// of them is actually observable), mirroring the existing ECDummyOp defined
+// in ECCommon.cc but with a non-trivial transaction instead of a no-op.
+struct ECShard0WriteTestOp final : ECCommon::RMWPipeline::Op {
+  explicit ECShard0WriteTestOp(ECCommon::RMWPipeline &rmw_pipeline)
+    : Op(rmw_pipeline) {
+  }
+
+  void generate_transactions(
+      ceph::ErasureCodeInterfaceRef &ec_impl,
+      pg_t pgid,
+      const ECUtil::stripe_info_t &sinfo,
+      map<hobject_t, ECUtil::shard_extent_map_t> *written,
+      shard_id_map<ObjectStore::Transaction> *transactions,
+      DoutPrefixProvider *dpp,
+      const OSDMapRef &osdmap,
+      bool &first_write_in_interval,
+      ECOmapJournal &ec_omap_journal) override {
+    const shard_id_t rel_shard(0);
+    ObjectStore::Transaction &t = transactions->at(rel_shard);
+    coll_t coll(spg_t(pgid, rel_shard));
+    ghobject_t obj(hoid, ghobject_t::NO_GEN, rel_shard);
+    t.touch(coll, obj);
+    bufferlist bl;
+    bl.append("x");
+    t.setattr(coll, obj, "_test", bl);
+  }
+
+  // When set, skip empty transactions and record roll-forwards as
+  // ECClassicalOp does.
+  bool track_roll_forward = false;
+
+  bool skip_transaction(
+      std::set<shard_id_t> &pending_roll_forward,
+      shard_id_t shard,
+      ObjectStore::Transaction &transaction) override {
+    if (!track_roll_forward) {
+      return false;
+    }
+    if (transaction.empty()) {
+      return true;
+    }
+    pending_roll_forward.insert(shard);
+    return false;
+  }
+};
+
+// Mirrors ECDummyOp in ECCommon.cc: writes nothing and sends only to the
+// shards that are pending a roll-forward.
+struct ECRollForwardTestOp final : ECCommon::RMWPipeline::Op {
+  explicit ECRollForwardTestOp(ECCommon::RMWPipeline &rmw_pipeline)
+    : Op(rmw_pipeline) {
+  }
+
+  void generate_transactions(
+      ceph::ErasureCodeInterfaceRef &ec_impl,
+      pg_t pgid,
+      const ECUtil::stripe_info_t &sinfo,
+      map<hobject_t, ECUtil::shard_extent_map_t> *written,
+      shard_id_map<ObjectStore::Transaction> *transactions,
+      DoutPrefixProvider *dpp,
+      const OSDMapRef &osdmap,
+      bool &first_write_in_interval,
+      ECOmapJournal &ec_omap_journal) override {
+  }
+
+  bool skip_transaction(
+      std::set<shard_id_t> &pending_roll_forward,
+      shard_id_t shard,
+      ObjectStore::Transaction &transaction) override {
+    return !pending_roll_forward.erase(shard);
+  }
+};
+
+} // namespace
+
+// For a multi-zone pool, RMWPipeline::cache_ready() has to get a non-zone-0
+// shard's Transaction into its sub-write remapped from the shard's relative
+// id to its absolute one. It does that by handing ECSubWrite's constructor an
+// empty transaction and swapping the remapped content in immediately after,
+// which avoids a redundant second deep copy of the transaction. This test
+// pins down the observable half of that: the sub-write must still come out
+// carrying the shard's real content, addressed to the absolute shard. If the
+// swap were dropped the sub-write would go out empty; if the remap were
+// dropped it would be addressed to the wrong shard. Either would be silent
+// data loss, so it is worth a test even though the copy count itself is not
+// observable from here.
+TEST(ECCommon, cache_ready_remaps_transaction_into_sub_write_for_remapped_shard)
+{
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t swidth = EC_ALIGN_SIZE * k;
+
+  pg_pool_t pool;
+  pool.size = 2 * (k + m); // 2 zones, k+m shards each
+  pool.num_zones = 2;
+  ECUtil::stripe_info_t sinfo(k, m, swidth, &pool);
+
+  // Relative shard 0 of zone 1: absolute id k+m, which get_rel_shard() maps
+  // back down to relative id 0 -- this is exactly the abs_shard != rel_shard
+  // case the defect is in.
+  const shard_id_t abs_shard(k + m);
+  const pg_shard_t pg_shard(101, abs_shard);
+
+  ECListenerStub listenerStub;
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(abs_shard);
+  listenerStub.acting_recovery_backfill_shards.insert(pg_shard);
+  // Route the write through the "local write" branch (handle_sub_write)
+  // rather than the "send an OSD message" branch: the redundant copy under
+  // test happens before that split, and the local branch avoids needing to
+  // construct/send a real MOSDECSubOpWrite message.
+  listenerStub.whoami = pg_shard;
+  listenerStub.should_send_op_result = true;
+
+  MockErasureCode *ecode = new MockErasureCode(k, k + m);
+  ErasureCodeInterfaceRef ec_impl(ecode);
+
+  TestDpp dpp;
+  FakeECBackendForRMW ec_backend(dpp);
+  ECExtentCache::LRU lru(0);
+  ECCommon::RMWPipeline pipeline(
+    g_ceph_context, ec_impl, sinfo, &listenerStub, ec_backend, lru);
+
+  auto op = std::make_shared<ECShard0WriteTestOp>(pipeline);
+  op->hoid = hobject_t(sobject_t("double-transaction-copy-test", CEPH_NOSNAP));
+
+  // Call cache_ready() directly (rather than going through start_rmw() and
+  // the extent cache) since this write needs no reads: it exercises exactly
+  // the code path under test with no further scaffolding required.
+  pipeline.cache_ready(*op);
+
+  ASSERT_EQ(ec_backend.sub_writes_seen, 1);
+  EXPECT_FALSE(ec_backend.last_sub_write_t.empty())
+    << "the remapped shard's sub-write went out with an empty transaction";
+
+  // generate_transactions() above put a touch and a setattr on relative
+  // shard 0; both must now be addressed to the absolute shard.
+  size_t ops_seen = 0;
+  auto i = ec_backend.last_sub_write_t.begin();
+  while (i.have_op()) {
+    const ObjectStore::Transaction::Op *t_op = i.decode_op();
+    ++ops_seen;
+    spg_t pgid;
+    ASSERT_TRUE(i.get_cid(t_op->cid).is_pg(&pgid));
+    EXPECT_EQ(pgid.shard, abs_shard);
+    EXPECT_EQ(i.get_oid(t_op->oid).shard_id, abs_shard);
+  }
+  EXPECT_EQ(ops_seen, 2u);
+}
 
 TEST(ECCommon, get_min_want_to_read_shards)
 {
@@ -575,7 +808,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     );
     for (shard_id_t shard_id; shard_id < k; ++shard_id) {
       ref.shard_reads[shard_id].extents = to_read_list[shard_id];
-      ref.shard_reads[shard_id].subchunk = ecode->default_sub_chunk;
       ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(shard_id));
       ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(shard_id), shard_id);
     }
@@ -604,7 +836,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     for (shard_id_t i; i<k; ++i) {
       shard_id_t shard_id(i);
       ref.shard_reads[shard_id].extents = to_read_list[i];
-      ref.shard_reads[shard_id].subchunk = ecode->default_sub_chunk;
       ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(i), shard_id);
     }
 
@@ -631,7 +862,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     for (int i=0; i < (int)k; i++) {
       shard_id_t shard_id(i);
       ECCommon::shard_read_t &ref_shard_read = ref.shard_reads[shard_id];
-      ref_shard_read.subchunk = ecode->default_sub_chunk;
       ref_shard_read.extents.insert(i*2*align_size, align_size);
       ref_shard_read.pg_shard = pg_shard_t(i, shard_id_t(i));
     }
@@ -668,12 +898,10 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       if (i != missing_shard) {
         shard_id_t shard_id(i);
 	to_read_list[i].union_of(to_read_list[missing_shard]);
-        ref.shard_reads[shard_id].subchunk = ecode->default_sub_chunk;
 	ref.shard_reads[shard_id].extents = to_read_list[i];
         ref.shard_reads[shard_id].pg_shard = pg_shard_t(int(i), shard_id);
       } else {
 	ECCommon::shard_read_t parity_shard_read;
-	parity_shard_read.subchunk = ecode->default_sub_chunk;
 	parity_shard_read.extents.union_of(to_read_list[i]);
 	ref.shard_reads[shard_id_t(parity_shard)] = parity_shard_read;
         ref.shard_reads[shard_id_t(parity_shard)].pg_shard = pg_shard_t(parity_shard, shard_id_t(parity_shard));
@@ -719,7 +947,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
       if (i==missing_shard) {
 	continue;
       }
-      ref.shard_reads[shard_id_t(i)].subchunk = ecode->default_sub_chunk;
     }
 
     listenerStub.acting_shards.erase(pg_shard_t(missing_shard, shard_id_t(missing_shard)));
@@ -754,7 +981,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     );
     for (unsigned int i=0; i<k+2; i++) {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents = extents_to_read;
       shard_read.pg_shard = pg_shard_t(i, shard_id_t(i));
       ref.shard_reads[shard_id_t(i)] = shard_read;
@@ -791,14 +1017,12 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
     std::vector<ECCommon::shard_read_t> want_to_read(empty_shard_vector);
     for (shard_id_t i; i<k; ++i) {
       if (i != missing_shard) {
-        want_to_read[int(i)].subchunk = ecode->default_sub_chunk;
         want_to_read[int(i)].extents.union_of(to_read_list[missing_shard]);
         want_to_read[int(i)].extents.union_of(to_read_list[i]);
         want_to_read[int(i)].pg_shard = pg_shard_t(int(i), shard_id_t(i));
         ref.shard_reads[shard_id_t(i)] = want_to_read[int(i)];
       } else {
         ECCommon::shard_read_t parity_shard_read;
-        parity_shard_read.subchunk = ecode->default_sub_chunk;
         parity_shard_read.extents.union_of(to_read_list[missing_shard]);
         parity_shard_read.pg_shard = pg_shard_t(parity_shard, shard_id_t(parity_shard));
         ref.shard_reads[shard_id_t(parity_shard)] = parity_shard_read;
@@ -853,14 +1077,12 @@ TEST(ECCommon, shard_read_combo_tests)
     );
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(20*1024, 4*1024);
       shard_read.pg_shard = pg_shard_t(0, shard_id_t(0));
       ref.shard_reads[shard_id_t(0)] = shard_read;
     }
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(16*1024, 8*1024);
       shard_read.pg_shard = pg_shard_t(1, shard_id_t(1));
       ref.shard_reads[shard_id_t(1)] = shard_read;
@@ -886,14 +1108,12 @@ TEST(ECCommon, shard_read_combo_tests)
     );
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(8*1024, 4*1024);
       shard_read.pg_shard = pg_shard_t(0, shard_id_t(0));
       ref.shard_reads[shard_id_t(0)] = shard_read;
     }
     {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(4*1024, 8*1024);
       shard_read.pg_shard = pg_shard_t(1, shard_id_t(1));
       ref.shard_reads[shard_id_t(1)] = shard_read;
@@ -999,7 +1219,6 @@ TEST(ECCommon, get_remaining_shards)
     int parity_shard = 4;
     for (unsigned int i=0; i<k; i++) {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       shard_read.extents.insert(0,4096);
       unsigned int shard_id = std::cmp_equal(i, missing_shard) ? parity_shard : i;
       shard_read.pg_shard = pg_shard_t(shard_id, shard_id_t(shard_id));
@@ -1040,7 +1259,6 @@ TEST(ECCommon, get_remaining_shards)
     int parity_shard = 4;
     for (unsigned int i=0; i<k; i++) {
       ECCommon::shard_read_t shard_read;
-      shard_read.subchunk = ecode->default_sub_chunk;
       unsigned int shard_id = i==missing_shard?parity_shard:i;
       ref.shard_reads[shard_id_t(shard_id)] = shard_read;
     }
@@ -1310,4 +1528,1138 @@ TEST(ECCommon, decode8) {
   acting_set.insert_range(shard_id_t(2), 2);
 
   test_decode(k, m, chunk_size, object_size, want, acting_set);
+}
+
+// Zone support tests for get_min_avail_to_read_shards
+TEST(ECCommon, get_min_avail_to_read_shards_zones_local_zone_available) {
+  // Test that when all shards are available in local zone, they are preferred
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const int nshards = 6;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones with k+m shards each
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Set up shards in both zones (0-5 in zone 0, 6-11 in zone 1)
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  // Request reads from data shards in zone 0
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Verify that only local zone shards (0-5) are used
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_LT(int(shard_id), nshards) << "Should only use local zone shards";
+    ASSERT_EQ(shard_read.pg_shard.shard, shard_id);
+  }
+}
+
+// Every other get_min_avail_to_read_shards_zones_* test above leaves
+// ECListenerStub::whoami at its default (a zone-0 shard), so "local" has
+// only ever meant zone 0 in this suite. select_shards_for_read() picks its
+// local zone purely from get_parent()->whoami_shard() (see
+// ECCommon.cc select_shards_for_read: `sinfo.get_shard_zone(whoami_shard().shard)`),
+// so a primary actually living in zone 1 -- exactly the configuration in
+// which the zone-1 parity bug and the handle_sub_write relative-shard bug
+// lived -- was never exercised through this path. Set whoami to a zone-1
+// shard and confirm "local" correctly shifts to zone 1.
+TEST(ECCommon, get_min_avail_to_read_shards_zones_primary_in_zone1) {
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones with k+m shards each
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  // The primary (whoami) is osd 6, absolute shard 6 -- relative shard 0 of
+  // zone 1 -- not the zone-0 default every other test in this file uses.
+  listenerStub.whoami = pg_shard_t(6, shard_id_t(6));
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Both zones fully available: 0-5 in zone 0, 6-11 in zone 1.
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // With a zone-1 primary, "local" is zone 1: every shard picked should be
+  // the zone-1 absolute copy (id >= k+m == 6), not the zone-0 one, even
+  // though both are fully available.
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_GE(int(shard_read.pg_shard.shard), k + m)
+      << "relative shard " << shard_id << ": primary is in zone 1, so the "
+      << "zone-1 copy should be preferred, not the zone-0 one";
+  }
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_fallback_to_remote) {
+  // Test that when local zone shards are missing, remote zone shards are used
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Only add shards from remote zone (6-11) and one from local zone
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0))); // Local zone
+  for (int i = 6; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i))); // Remote zone
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  // Request reads from all data shards
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Verify that remote zone shards are used (should have shards >= 6)
+  bool has_remote_shard = false;
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (int(shard_read.pg_shard.shard) >= 6) {
+      has_remote_shard = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(has_remote_shard) << "Should use remote zone shards when local unavailable";
+
+  // Relative shards 1-3 have no local-zone copy at all, so the check above
+  // is trivially satisfied by them alone. Relative shard 0, however, DOES
+  // have a local copy (pg_shard_t(0, shard_id_t(0))) as well as a same-
+  // relative-shard remote duplicate (pg_shard_t(6, shard_id_t(6))): this is
+  // exactly the collision get_all_avail_shards() must resolve in favour of
+  // the local copy. Assert that specifically, so a regression that lets the
+  // remote duplicate win the collision is actually caught here.
+  ASSERT_EQ(read_request.shard_reads.at(shard_id_t(0)).pg_shard,
+            pg_shard_t(0, shard_id_t(0)))
+    << "Relative shard 0 has a local copy available and must not fall back "
+    << "to its remote-zone duplicate";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_missing_shard_local) {
+  // Test handling of missing shard in local zone with zones enabled
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add all local zone shards except shard 1
+  for (int i = 0; i < 6; i++) {
+    if (i != 1) {
+      listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+    }
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Should use parity shard to recover missing data shard
+  bool has_parity = false;
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (std::cmp_greater_equal(int(shard_id), k)) {
+      has_parity = true;
+    }
+  }
+  ASSERT_TRUE(has_parity) << "Should use parity shard when data shard missing";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_error_shards) {
+  // Test that error_shards parameter works correctly with zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add all shards from both zones
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  // Mark shard 1 as having an error
+  std::set<pg_shard_t> error_shards;
+  error_shards.emplace(1, shard_id_t(1));
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request, error_shards);
+
+  ASSERT_EQ(r, 0);
+
+  // Verify shard 1 is not in the read request
+  ASSERT_EQ(read_request.shard_reads.count(shard_id_t(1)), 0u)
+    << "Error shard should not be in read request";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_three_zones) {
+  // Test with 3 zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 18; // 3 zones
+  pool.num_zones = 3;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add shards from all three zones
+  for (int i = 0; i < 18; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Should prefer local zone (0-5)
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_LT(int(shard_id), 6) << "Should prefer local zone shards";
+  }
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_insufficient_shards) {
+  // Test error case when not enough shards available even with zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Only add 2 shards - not enough to decode
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(1, shard_id_t(1)));
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_NE(r, 0) << "Should fail when insufficient shards available";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_redundant_reads) {
+  // Test redundant reads with zones enabled
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add all local zone shards
+  for (int i = 0; i < 6; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  // Enable redundant reads
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, true, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // With redundant reads, should read from all available shards
+  ASSERT_EQ(read_request.shard_reads.size(), 6u)
+    << "Redundant reads should use all available shards";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_recovery_mode) {
+  // Test recovery mode with zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add shards from both zones
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  // Enable recovery mode (for_recovery = true)
+  int r = pipeline.get_min_avail_to_read_shards(hoid, true, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // In recovery mode, should still prefer local zone
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    ASSERT_LT(int(shard_id), 6) << "Recovery should prefer local zone";
+  }
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_mixed_availability) {
+  // Test with mixed shard availability across zones
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12;
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Add some shards from local zone (0, 2, 4) and some from remote (7, 9, 11)
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(2)));
+  listenerStub.acting_shards.insert(pg_shard_t(4, shard_id_t(4)));
+  listenerStub.acting_shards.insert(pg_shard_t(7, shard_id_t(7)));
+  listenerStub.acting_shards.insert(pg_shard_t(9, shard_id_t(9)));
+  listenerStub.acting_shards.insert(pg_shard_t(11, shard_id_t(11)));
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Should use a mix, but prefer local when possible
+  int remote_count = 0;
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (int(shard_read.pg_shard.shard) >= 6) {
+      remote_count++;
+    }
+  }
+
+  // Should have used some remote shards since local doesn't have enough
+  ASSERT_GT(remote_count, 0) << "Should use remote shards when local insufficient";
+
+  // The above only proves that relative shards 1 and 3 (which have NO
+  // local-zone copy at all) went remote -- that is trivially true and
+  // would hold even if local preference were completely broken. Pin down
+  // the shards that DO have a local copy (relative shards 0 and 2, from
+  // pg_shard_t(0,0) and pg_shard_t(2,2)) and assert those specific local
+  // copies were the ones actually selected, not merely "a mix" of shards.
+  ASSERT_EQ(read_request.shard_reads.at(shard_id_t(0)).pg_shard,
+            pg_shard_t(0, shard_id_t(0)))
+    << "Relative shard 0 has a local copy and should use it";
+  ASSERT_EQ(read_request.shard_reads.at(shard_id_t(2)).pg_shard,
+            pg_shard_t(2, shard_id_t(2)))
+    << "Relative shard 2 has a local copy and should use it";
+}
+
+TEST(ECCommon, get_min_avail_to_read_shards_zones_prefers_local_over_low_osd_remote) {
+  // get_all_avail_shards() walks get_parent()->get_acting_shards(), which is a
+  // plain std::set<pg_shard_t> ordered by OSD id (pg_shard_t's operator<=>
+  // compares osd before shard) - it has no notion of zone. In the
+  // allow_remote_zone fallback path, whichever physical copy of a relative
+  // shard is visited FIRST wins, regardless of which zone it is in. If a
+  // remote-zone OSD happens to have a lower id than the local-zone OSD
+  // holding the same relative shard, the remote copy wins even though the
+  // local copy was fully available - breaking "prefer local zone".
+  //
+  // Here the local zone (zone 0) only has relative shards 0 and 1, on
+  // deliberately HIGH osd ids (100, 101). The remote zone (zone 1) has
+  // relative shards 0-3, on deliberately LOW osd ids (1-4). Reading data
+  // shards 0-3 forces the local-only pass to fail (only 2 of 4 needed
+  // shards are local), triggering the allow_remote_zone fallback. Since
+  // relative shards 0 and 1 are available locally, the fallback must still
+  // prefer those local copies over the lower-osd-id remote ones.
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64*align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones with k+m shards each
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+
+  MockErasureCode *ecode = new MockErasureCode();
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Local zone (zone 0): only relative shards 0 and 1, on high osd ids.
+  listenerStub.acting_shards.insert(pg_shard_t(100, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(101, shard_id_t(1)));
+  // Remote zone (zone 1): relative shards 0-3, on low osd ids.
+  listenerStub.acting_shards.insert(pg_shard_t(1, shard_id_t(6)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(7)));
+  listenerStub.acting_shards.insert(pg_shard_t(3, shard_id_t(8)));
+  listenerStub.acting_shards.insert(pg_shard_t(4, shard_id_t(9)));
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+
+  // Request reads from all k data shards.
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  int r = pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request);
+
+  ASSERT_EQ(r, 0);
+
+  // Relative shards 0 and 1 are available locally (zone 0) and must resolve
+  // to their local pg_shard (absolute shard id < 6), not to the remote copy
+  // that merely happens to have a lower osd id.
+  for (auto &[shard_id, shard_read] : read_request.shard_reads) {
+    if (int(shard_id) == 0 || int(shard_id) == 1) {
+      ASSERT_LT(int(shard_read.pg_shard.shard), 6)
+        << "relative shard " << shard_id
+        << " has a local copy available and should not fall back to the "
+        << "remote zone just because a remote osd id is lower; got pg_shard "
+        << shard_read.pg_shard;
+    }
+  }
+}
+
+// Test for the fix in 9a9c55e: get_readable_writable_shard_id_sets() must return
+// relative shard IDs (zone-local), not absolute IDs, so that downstream consumers
+// such as WritePlanObj::intersect with get_parity_shards() produce correct results
+// for zone-1 PGs in stretch mode.
+TEST(ECCommon, get_readable_writable_shard_id_sets_returns_relative_shards) {
+  // Use k=2, m=1 so k+m=3.  Zone-0 absolute shards: {0,1,2}.
+  // Zone-1 absolute shards: {3,4,5}.  Relative shards are always {0,1,2}.
+  const unsigned int k = 2;
+  const unsigned int m = 1;
+  const uint64_t swidth = 4096 * k;
+
+  pg_pool_t pool;
+  pool.size = 6; // 2 zones * (k+m)
+  pool.num_zones = 2;
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Simulate a zone-1 PG: acting shards carry absolute IDs 3, 4, 5
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(3)));
+  listenerStub.acting_shards.insert(pg_shard_t(1, shard_id_t(4)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(5)));
+
+  // acting_recovery_backfill also uses absolute shard IDs for zone-1
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(3));
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(4));
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(5));
+
+  auto [readable, writable] = pipeline.get_readable_writable_shard_id_sets();
+
+  // Both sets must contain only relative shard IDs {0, 1, 2}, not {3, 4, 5}.
+  shard_id_set expected;
+  expected.insert(shard_id_t(0));
+  expected.insert(shard_id_t(1));
+  expected.insert(shard_id_t(2));
+
+  EXPECT_EQ(readable, expected)
+    << "readable set must use relative shard IDs, not absolute zone-1 IDs";
+  EXPECT_EQ(writable, expected)
+    << "writable set must use relative shard IDs, not absolute zone-1 IDs";
+
+  // Sanity check: the relative set does not contain the absolute zone-1 IDs
+  EXPECT_FALSE(readable.contains(shard_id_t(3)));
+  EXPECT_FALSE(readable.contains(shard_id_t(4)));
+  EXPECT_FALSE(readable.contains(shard_id_t(5)));
+}
+
+// Reproduces a bug in ECCommon::ReadPipeline::ensure_primary_shard_for_omap():
+// it looks for a primary-capable shard to satisfy an omap read by calling
+// get_all_avail_shards() with a hard-coded local_zone of 0 and a literal 0
+// (rather than a bool) for allow_remote_zone, and never retries with a
+// remote-zone fallback the way get_min_avail_to_read_shards()/
+// select_shards_for_read() do a few lines earlier. If the primary itself
+// lives in a non-zero zone and zone 0 is entirely down, the hard-coded scan
+// of zone 0 finds nothing, even though the primary's own zone has a
+// perfectly good primary-capable shard.
+TEST(ECCommon, ensure_primary_shard_for_omap_zone1_primary_zone0_down) {
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64 * align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 12; // 2 zones of k+m=6 shards each
+  pool.num_zones = 2;
+  // Only relative shard 0 is primary-capable in each zone; relative
+  // shards 1-5 cannot become primary.
+  pool.nonprimary_shards.insert(shard_id_t(1));
+  pool.nonprimary_shards.insert(shard_id_t(2));
+  pool.nonprimary_shards.insert(shard_id_t(3));
+  pool.nonprimary_shards.insert(shard_id_t(4));
+  pool.nonprimary_shards.insert(shard_id_t(5));
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  // get_parent()->get_pool() must independently report supports_omap();
+  // set the same nonprimary_shards on it as get_pool() is a separate
+  // pg_pool_t instance from the one stripe_info_t was built from.
+  listenerStub.pg_pool.size = 12;
+  listenerStub.pg_pool.set_flag(pg_pool_t::FLAG_OMAP);
+
+  MockErasureCode *ecode = new MockErasureCode(k, k + m);
+  ErasureCodeInterfaceRef ec_impl(ecode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // The primary is relative shard 0 of zone 1, i.e. absolute shard 6.
+  listenerStub.whoami = pg_shard_t(6, shard_id_t(6));
+
+  // Zone 1 (absolute shards 6-11) is fully up. Zone 0 (absolute shards
+  // 0-5) is entirely down - none of its shards appear in acting_shards.
+  for (int i = 6; i < 12; i++) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t want_to_read(s.get_k_plus_m());
+  // Want only non-primary-capable data shards, so nothing in shard_reads
+  // will already be able to serve the omap read.
+  want_to_read[shard_id_t(1)].insert(0, align_size);
+  want_to_read[shard_id_t(2)].insert(0, align_size);
+  want_to_read[shard_id_t(3)].insert(0, align_size);
+
+  ECCommon::read_request_t read_request(
+      want_to_read, ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::Yes,
+      ECCommon::WantOmapKeys::Yes, "", 0, object_size);
+  ECCommon::read_result_t read_result(&s);
+
+  int r = pipeline.get_remaining_shards(
+      hoid, read_result, read_request, /*for_recovery=*/false,
+      /*want_attrs=*/false, /*want_omap_header=*/true,
+      /*want_omap_keys=*/true);
+
+  ASSERT_EQ(r, 0)
+      << "omap read should succeed using the primary's own (zone 1) "
+         "primary-capable shard, even though zone 0 is entirely down";
+
+  // shard_reads should contain relative shard 0 (primary-capable),
+  // mapped to the zone-1 primary's own pg_shard (absolute shard 6).
+  ASSERT_TRUE(read_request.shard_reads.contains(shard_id_t(0)))
+      << "expected a primary-capable shard to have been added for the "
+         "omap read";
+  EXPECT_EQ(read_request.shard_reads[shard_id_t(0)].pg_shard,
+            pg_shard_t(6, shard_id_t(6)));
+}
+// get_all_avail_shards()'s acting/backfill passes guard have.insert(rel_shard)
+// with "if (have.contains(rel_shard)) { ceph_assert(allow_remote_zone); ... }"
+// because, for THOSE two containers, a collision on the same relative shard
+// can only legitimately happen by crossing zones (within one zone,
+// get_rel_shard_and_zone() is a bijection over the container's distinct
+// shard ids). The missing_loc pass looks almost identical and also guards
+// have.insert() with an "already have this shard" skip - but it must NOT
+// carry that same ceph_assert(allow_remote_zone), because
+// get_missing_loc_shards() has a different invariant: PG peering/recovery
+// routinely lists more than one historical candidate OSD for the very same
+// EC shard slot (e.g. an old and a new owner of the same shard id) for a
+// single hoid, entirely within one zone. This is normal, single-zone,
+// zone-unaware behaviour that predates zones altogether.
+//
+// This regression test locks in that the current code tolerates such a
+// same-zone, same-relative-shard collision in missing_loc without
+// asserting. It exists because the "obvious" consistency fix - making the
+// missing_loc pass assert allow_remote_zone just like the acting/backfill
+// passes above it - is actually wrong and crashes on exactly this scenario;
+// see this commit's message for how that was demonstrated (ceph_assert
+// added, test run, seen to abort, then reverted) before writing this test
+// against the unmodified code.
+TEST(ECCommon, get_all_avail_shards_missing_loc_same_zone_duplicate_shard) {
+  const unsigned int k = 2;
+  const unsigned int m = 1;
+  const uint64_t swidth = 4096 * k;
+
+  pg_pool_t pool;
+  pool.size = k + m; // single zone (NUM_ZONES defaults to 1)
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Shards 0 and 2 are acting and available; shard 1 is deliberately left
+  // out of acting_shards, as if it were currently missing/down.
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(2)));
+
+  hobject_t hoid;
+  // Two different, still-in-zone-0 OSDs (5 and 9) are both listed as
+  // candidate locations for shard 1 of this object - a routine situation
+  // when an EC shard slot has changed owning OSD across intervals and the
+  // old owner has not yet been ruled out.
+  listenerStub.missing_loc_shards[hoid].insert(pg_shard_t(5, shard_id_t(1)));
+  listenerStub.missing_loc_shards[hoid].insert(pg_shard_t(9, shard_id_t(1)));
+
+  shard_id_set have;
+  shard_id_map<pg_shard_t> shards(s.get_k_plus_m());
+
+  // for_recovery=true is required to reach the missing_loc pass;
+  // local_zone=0, allow_remote_zone=false: a single-zone pool has no
+  // remote zone to fall back to, so this must not depend on it.
+  pipeline.get_all_avail_shards(hoid, have, shards, /*for_recovery=*/true,
+                                 /*local_zone=*/0, /*allow_remote_zone=*/false);
+
+  ASSERT_TRUE(have.contains(shard_id_t(1)))
+      << "shard 1 has two candidate locations in missing_loc; one of them "
+         "should have been picked up";
+  // Whichever candidate is picked, exactly one must win - the duplicate
+  // must be silently skipped rather than overwriting or asserting.
+  EXPECT_TRUE(shards[shard_id_t(1)] == pg_shard_t(5, shard_id_t(1)) ||
+              shards[shard_id_t(1)] == pg_shard_t(9, shard_id_t(1)));
+}
+
+// error_shards hold absolute pg_shards: an error on a zone-0 copy must not
+// hide the zone-1 copy of the same relative shard, and vice versa.
+TEST(ECCommon, get_min_avail_to_read_shards_zones_error_shards_force_remote) {
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64 * align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 2 * (k + m);
+  pool.num_zones = 2;
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode());
+
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+  hobject_t hoid;
+  auto ps = [](int i) { return pg_shard_t(i, shard_id_t(i)); };
+
+  struct Case {
+    int whoami;
+    std::set<pg_shard_t> errors;
+    std::map<int, pg_shard_t> expected;
+  };
+  std::vector<Case> cases = {
+    {0, {ps(1), ps(4), ps(5)},
+     {{0, ps(0)}, {1, ps(7)}, {2, ps(2)}, {3, ps(3)}}},
+    {0, {ps(1), ps(4), ps(5), ps(7)},
+     {{0, ps(0)}, {2, ps(2)}, {3, ps(3)}, {4, ps(10)}}},
+    {6, {ps(7), ps(10), ps(11)},
+     {{0, ps(6)}, {1, ps(1)}, {2, ps(8)}, {3, ps(9)}}},
+  };
+  for (auto &c : cases) {
+    ECListenerStub listenerStub;
+    listenerStub.whoami = ps(c.whoami);
+    for (int i = 0; i < 12; i++) {
+      listenerStub.acting_shards.insert(ps(i));
+    }
+    ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+    ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No,
+      ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+    ASSERT_EQ(pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request, c.errors), 0);
+
+    std::map<int, pg_shard_t> actual;
+    for (auto &[shard, shard_read] : read_request.shard_reads) {
+      actual[int(shard)] = shard_read.pg_shard;
+    }
+    EXPECT_EQ(actual, c.expected) << "whoami " << c.whoami << " errors " << c.errors;
+  }
+}
+
+// missing_loc candidates: a remote copy is used only with allow_remote_zone,
+// is subject to error_shards, and a local candidate wins over it.
+TEST(ECCommon, get_all_avail_shards_zones_missing_loc_remote_candidate) {
+  const unsigned int k = 2;
+  const unsigned int m = 1;
+  const uint64_t swidth = 4096 * k;
+
+  pg_pool_t pool;
+  pool.size = 2 * (k + m);
+  pool.num_zones = 2;
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  listenerStub.whoami = pg_shard_t(0, shard_id_t(0));
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode(k, k + m));
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(0)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(2)));
+  hobject_t hoid;
+  const pg_shard_t remote(4, shard_id_t(4));
+  const pg_shard_t local(5, shard_id_t(1));
+  listenerStub.missing_loc_shards[hoid].insert(remote);
+
+  {
+    shard_id_set have;
+    shard_id_map<pg_shard_t> shards(s.get_k_plus_m());
+    pipeline.get_all_avail_shards(hoid, have, shards, true, 0, false);
+    EXPECT_FALSE(have.contains(shard_id_t(1)));
+  }
+  {
+    shard_id_set have;
+    shard_id_map<pg_shard_t> shards(s.get_k_plus_m());
+    pipeline.get_all_avail_shards(hoid, have, shards, true, 0, true);
+    ASSERT_TRUE(have.contains(shard_id_t(1)));
+    EXPECT_EQ(shards[shard_id_t(1)], remote);
+  }
+  {
+    shard_id_set have;
+    shard_id_map<pg_shard_t> shards(s.get_k_plus_m());
+    pipeline.get_all_avail_shards(hoid, have, shards, true, 0, true,
+                                  std::set<pg_shard_t>{remote});
+    EXPECT_FALSE(have.contains(shard_id_t(1)));
+  }
+  listenerStub.missing_loc_shards[hoid].insert(local);
+  {
+    shard_id_set have;
+    shard_id_map<pg_shard_t> shards(s.get_k_plus_m());
+    pipeline.get_all_avail_shards(hoid, have, shards, true, 0, true);
+    ASSERT_TRUE(have.contains(shard_id_t(1)));
+    EXPECT_EQ(shards[shard_id_t(1)], local);
+  }
+}
+
+// A local acting shard that is missing the object falls back to the
+// zone-1 copy of that relative shard; if that copy is missing too, the
+// read decodes from parity instead.
+TEST(ECCommon, get_min_avail_to_read_shards_zones_local_copy_missing_object) {
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64 * align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 2 * (k + m);
+  pool.num_zones = 2;
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  listenerStub.whoami = pg_shard_t(0, shard_id_t(0));
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode());
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  auto ps = [](int i) { return pg_shard_t(i, shard_id_t(i)); };
+  for (int i = 0; i < 12; i++) {
+    listenerStub.acting_shards.insert(ps(i));
+  }
+  hobject_t hoid;
+  for (int i : {1, 4, 5}) {
+    listenerStub.shard_missing[ps(i)].add(hoid, eversion_t(1, 2), eversion_t(1, 1), false);
+  }
+
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+
+  auto read_shards = [&]() {
+    ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No,
+      ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+    EXPECT_EQ(pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request), 0);
+    std::map<int, pg_shard_t> actual;
+    for (auto &[shard, shard_read] : read_request.shard_reads) {
+      actual[int(shard)] = shard_read.pg_shard;
+    }
+    return actual;
+  };
+
+  std::map<int, pg_shard_t> expected = {{0, ps(0)}, {1, ps(7)}, {2, ps(2)}, {3, ps(3)}};
+  EXPECT_EQ(read_shards(), expected);
+
+  listenerStub.shard_missing[ps(7)].add(hoid, eversion_t(1, 2), eversion_t(1, 1), false);
+  expected = {{0, ps(0)}, {2, ps(2)}, {3, ps(3)}, {4, ps(10)}};
+  EXPECT_EQ(read_shards(), expected);
+}
+
+// Zone-2 primary in a three-zone pool: a parity-only recovery want that
+// needs a remote copy, and redundant reads that mix local and remote.
+TEST(ECCommon, get_min_avail_to_read_shards_three_zones_zone2_primary) {
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64 * align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 3 * (k + m);
+  pool.num_zones = 3;
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  listenerStub.whoami = pg_shard_t(12, shard_id_t(12));
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode());
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  for (auto [osd, shard] : std::vector<std::pair<int, int>>{
+         {12, 12}, {13, 13}, {50, 2}, {52, 4}, {1, 8}, {2, 9}, {3, 11}}) {
+    listenerStub.acting_shards.insert(pg_shard_t(osd, shard_id_t(shard)));
+  }
+  hobject_t hoid;
+
+  {
+    ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+    to_read_list[shard_id_t(4)].insert(0, align_size);
+    ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No,
+      ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+    ASSERT_EQ(pipeline.get_min_avail_to_read_shards(hoid, true, false, read_request), 0);
+    ASSERT_EQ(read_request.shard_reads.size(), 1u);
+    EXPECT_EQ(read_request.shard_reads.at(shard_id_t(4)).pg_shard,
+              pg_shard_t(52, shard_id_t(4)));
+  }
+  {
+    ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+    for (shard_id_t i; i < k; ++i) {
+      to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+    }
+    ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No,
+      ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+    ASSERT_EQ(pipeline.get_min_avail_to_read_shards(hoid, false, true, read_request), 0);
+    ASSERT_EQ(read_request.shard_reads.size(), size_t(k + m));
+    EXPECT_EQ(read_request.shard_reads.at(shard_id_t(0)).pg_shard,
+              pg_shard_t(12, shard_id_t(12)));
+    EXPECT_EQ(read_request.shard_reads.at(shard_id_t(1)).pg_shard,
+              pg_shard_t(13, shard_id_t(13)));
+    for (auto &[rel, shard_read] : read_request.shard_reads) {
+      EXPECT_EQ(s.get_rel_shard(shard_read.pg_shard.shard), rel);
+      if (rel >= shard_id_t(2)) {
+        EXPECT_NE(s.get_shard_zone(shard_read.pg_shard.shard), 2);
+      }
+    }
+  }
+}
+
+// Both zone copies of a written relative shard get their own remapped
+// sub-write even when the zone-1 copy is visited first, and roll-forward is
+// tracked and sent by absolute shard.
+TEST(ECCommon, cache_ready_writes_both_zone_copies_and_rolls_forward)
+{
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t swidth = EC_ALIGN_SIZE * k;
+
+  pg_pool_t pool;
+  pool.size = 2 * (k + m);
+  pool.num_zones = 2;
+  ECUtil::stripe_info_t sinfo(k, m, swidth, &pool);
+
+  ECListenerStub listenerStub;
+  for (int abs = 0; abs < int(2 * (k + m)); abs++) {
+    int osd = abs == 6 ? 1 : abs == 0 ? 50 : 100 + abs;
+    listenerStub.acting_recovery_backfill_shards.insert(pg_shard_t(osd, shard_id_t(abs)));
+    listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(abs));
+  }
+  listenerStub.whoami = pg_shard_t(99, shard_id_t(3));
+  listenerStub.should_send_op_result = true;
+
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode(k, k + m));
+  TestDpp dpp;
+  FakeECBackendForRMW ec_backend(dpp);
+  ECExtentCache::LRU lru(0);
+  ECCommon::RMWPipeline pipeline(
+    g_ceph_context, ec_impl, sinfo, &listenerStub, ec_backend, lru);
+
+  auto op = std::make_shared<ECShard0WriteTestOp>(pipeline);
+  op->hoid = hobject_t(sobject_t("both-zones", CEPH_NOSNAP));
+  op->track_roll_forward = true;
+  pipeline.cache_ready(*op);
+
+  EXPECT_EQ(ec_backend.sub_writes_seen, 0);
+  EXPECT_EQ(op->pending_commits, 2u);
+  std::map<int, int> ops_per_shard;
+  for (auto &[osd, msg] : listenerStub.sent_messages) {
+    auto *w = static_cast<MOSDECSubOpWrite*>(msg.get());
+    const shard_id_t abs = w->pgid.shard;
+    EXPECT_EQ(osd, abs == shard_id_t(6) ? 1 : 50);
+    for (auto i = w->op.t.begin(); i.have_op(); ) {
+      auto *t_op = i.decode_op();
+      spg_t pgid;
+      ASSERT_TRUE(i.get_cid(t_op->cid).is_pg(&pgid));
+      EXPECT_EQ(pgid.shard, abs);
+      EXPECT_EQ(i.get_oid(t_op->oid).shard_id, abs);
+      ops_per_shard[int(abs)]++;
+    }
+  }
+  std::map<int, int> expected_ops = {{0, 2}, {6, 2}};
+  EXPECT_EQ(ops_per_shard, expected_ops);
+  std::set<shard_id_t> expected_rf = {shard_id_t(0), shard_id_t(6)};
+  EXPECT_EQ(pipeline.pending_roll_forward, expected_rf);
+
+  listenerStub.sent_messages.clear();
+  auto rf_op = std::make_shared<ECRollForwardTestOp>(pipeline);
+  rf_op->hoid = op->hoid;
+  pipeline.cache_ready(*rf_op);
+
+  std::set<int> rf_shards;
+  for (auto &[osd, msg] : listenerStub.sent_messages) {
+    auto *w = static_cast<MOSDECSubOpWrite*>(msg.get());
+    EXPECT_TRUE(w->op.t.empty());
+    rf_shards.insert(int(w->pgid.shard));
+  }
+  std::set<int> expected_rf_shards = {0, 6};
+  EXPECT_EQ(rf_shards, expected_rf_shards);
+  EXPECT_TRUE(pipeline.pending_roll_forward.empty());
+}
+
+// A zone-1 backfill target that should not be sent the op still gets an
+// empty, log-only sub-write carrying its own stats, while the zone-0 copy
+// of the written shard keeps the real content.
+TEST(ECCommon, cache_ready_remote_zone_backfill_target_not_sent_op)
+{
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t swidth = EC_ALIGN_SIZE * k;
+
+  pg_pool_t pool;
+  pool.size = 2 * (k + m);
+  pool.num_zones = 2;
+  ECUtil::stripe_info_t sinfo(k, m, swidth, &pool);
+
+  ECListenerStub listenerStub;
+  for (int abs = 0; abs < int(k + m); abs++) {
+    listenerStub.acting_recovery_backfill_shards.insert(pg_shard_t(abs, shard_id_t(abs)));
+    listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(abs));
+  }
+  const pg_shard_t backfill(30, shard_id_t(6));
+  listenerStub.acting_recovery_backfill_shards.insert(backfill);
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(backfill.shard);
+  listenerStub.backfill_shards.insert(backfill);
+  listenerStub.shard_info[backfill].stats.stats.sum.num_objects = 123;
+  listenerStub.whoami = pg_shard_t(0, shard_id_t(0));
+  listenerStub.should_send_op_result = true;
+  listenerStub.should_not_send_peers.insert(backfill);
+
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode(k, k + m));
+  TestDpp dpp;
+  FakeECBackendForRMW ec_backend(dpp);
+  ECExtentCache::LRU lru(0);
+  ECCommon::RMWPipeline pipeline(
+    g_ceph_context, ec_impl, sinfo, &listenerStub, ec_backend, lru);
+
+  auto op = std::make_shared<ECShard0WriteTestOp>(pipeline);
+  op->hoid = hobject_t(sobject_t("remote-backfill", CEPH_NOSNAP));
+  pipeline.cache_ready(*op);
+
+  ASSERT_EQ(ec_backend.sub_writes_seen, 1);
+  size_t local_ops = 0;
+  for (auto i = ec_backend.last_sub_write_t.begin(); i.have_op(); ) {
+    auto *t_op = i.decode_op();
+    EXPECT_EQ(i.get_oid(t_op->oid).shard_id, shard_id_t(0));
+    local_ops++;
+  }
+  EXPECT_EQ(local_ops, 2u);
+
+  EXPECT_EQ(op->pending_commits, 7u);
+  MOSDECSubOpWrite *to_backfill = nullptr;
+  for (auto &[osd, msg] : listenerStub.sent_messages) {
+    if (osd == backfill.osd) {
+      to_backfill = static_cast<MOSDECSubOpWrite*>(msg.get());
+    }
+  }
+  ASSERT_NE(to_backfill, nullptr);
+  EXPECT_EQ(to_backfill->pgid.shard, backfill.shard);
+  EXPECT_TRUE(to_backfill->op.t.empty());
+  EXPECT_TRUE(to_backfill->op.backfill_or_async_recovery);
+  EXPECT_EQ(to_backfill->op.stats.stats.sum.num_objects, 123);
+}
+
+// Recovery read with a zone-0 backfill copy of relative shard 1 and too few
+// local shards to decode: the remote fallback must keep the local backfill
+// copy of shard 1 rather than read its zone-1 acting copy.
+TEST(ECCommon, get_min_avail_to_read_shards_zones_local_backfill_not_displaced_by_remote_acting) {
+  const uint64_t align_size = EC_ALIGN_SIZE;
+  const uint64_t swidth = 64 * align_size;
+  const unsigned int k = 4;
+  const unsigned int m = 2;
+  const uint64_t object_size = swidth * 1024;
+
+  pg_pool_t pool;
+  pool.size = 2 * (k + m);
+  pool.num_zones = 2;
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  listenerStub.whoami = pg_shard_t(0, shard_id_t(0));
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode());
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  for (int i : {0, 2, 6, 7, 8, 9, 10, 11}) {
+    listenerStub.acting_shards.insert(pg_shard_t(i, shard_id_t(i)));
+  }
+  const pg_shard_t local_backfill(20, shard_id_t(1));
+  listenerStub.backfill_shards.insert(local_backfill);
+
+  hobject_t hoid;
+  ECUtil::shard_extent_set_t to_read_list(s.get_k_plus_m());
+  for (shard_id_t i; i < k; ++i) {
+    to_read_list[i].insert(int(i) * 2 * align_size, align_size);
+  }
+  ECCommon::read_request_t read_request(to_read_list, ECCommon::WantAttrs::No,
+    ECCommon::WantOmapHeader::No, ECCommon::WantOmapKeys::No, "", 0, object_size);
+  ASSERT_EQ(pipeline.get_min_avail_to_read_shards(hoid, true, false, read_request), 0);
+
+  ASSERT_TRUE(read_request.shard_reads.contains(shard_id_t(1)));
+  EXPECT_EQ(read_request.shard_reads.at(shard_id_t(1)).pg_shard, local_backfill);
 }

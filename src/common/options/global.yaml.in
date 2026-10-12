@@ -2624,6 +2624,16 @@ options:
   max: 10
   flags:
   - runtime
+- name: osd_pool_stretch_default_replica
+  type: uint
+  level: advanced
+  desc: Default number of replicas per zone for new stretch pools
+  default: 2
+  services:
+  - mon
+  min: 1
+  flags:
+  - runtime
 - name: osd_pool_default_min_size
   type: uint
   level: advanced
@@ -2866,6 +2876,37 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: osd_pool_default_num_zones
+  type: int
+  level: advanced
+  desc: Default number of zones for new pools
+  long_desc: Sets the default number of zones used when creating a new pool. A value
+    of 1 (the default) means no zone-based stretch layout. A value of 2 enables a
+    two-zone stretch pool, requiring a matching stretch-mode CRUSH rule and a stretch-mode
+    enabled cluster. This value can be overridden at pool creation time by passing
+    the ``num_zones`` argument explicitly.
+  default: 1
+  services:
+  - mon
+  see_also:
+  - default_crush_zone_failure_domain
+  min: 1
+  flags:
+  - runtime
+- name: default_crush_zone_failure_domain
+  type: str
+  level: advanced
+  desc: Default CRUSH zone failure domain for stretch pools
+  long_desc: Sets the default CRUSH failure domain type (such as datacenter) used to separate
+    zones when creating a new stretch pool. This value is used when a pool is created with
+    multiple zones (num_zones > 1) and no explicit zone failure domain is provided.
+  default: datacenter
+  services:
+  - mon
+  see_also:
+  - osd_pool_default_num_zones
+  flags:
+  - runtime
 # min target size for a HitSet
 - name: osd_hit_set_min_size
   type: int

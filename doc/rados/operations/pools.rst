@@ -185,13 +185,15 @@ following:
 
    :Type: String
    :Required: No.
-   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist.  For ``erasure`` pools, it is the ``erasure-code`` rule if the ``default`` :ref:`erasure code profile <erasure-code-profiles>` is used or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
+   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist.  For ``erasure`` pools, it is the ``erasure-code`` rule if the ``default`` :ref:`erasure code profile <erasure-code-profiles>` is used and ``num_zones`` is 1, or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
 
 .. describe:: [erasure-code-profile=profile]
 
    For ``erasure`` pools only. Instructs Ceph to use the specified :ref:`erasure
    code profile <erasure-code-profiles>`. This profile must be an existing profile as defined via
-   the dashboard or invoking ``osd erasure-code-profile set``.  Note that
+   the dashboard or invoking ``osd erasure-code-profile set``. Alternatively,
+   pass ``--k`` and ``--m`` instead of a profile to have a profile created for
+   the pool (see :ref:`erasure-code-profile-lifecycle`).  Note that
    changes to the EC profile of a pool after creation do *not* take effect.
    To change the EC profile of an existing pool one must modify the pool to
    use a different CRUSH rule defined with the desired profile.
@@ -274,6 +276,11 @@ in central configuration, otherwise the Ceph  monitors will refuse to remove
 pools.
 
 For more information, see :ref:`Monitor Configuration <monitor-config-reference>`.
+
+Deleting the last erasure-coded pool that uses an erasure code profile also
+deletes that profile (unless it is the ``default`` profile), and deletes the
+pool's CRUSH rule if no other pool uses it. See
+:ref:`erasure-code-profile-lifecycle`.
 
 If there are custom CRUSH rules that are no longer in use or needed, consider
 deleting those rules.
@@ -778,12 +785,21 @@ See :ref:`managing_bulk_flagged_pools`.
 .. _setting_values_for_a_stretch_pool:
 
 Setting values for a stretch pool
-=================================
+==================================
 To set values for a stretch pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool stretch set {pool-name} {peering_crush_bucket_count} {peering_crush_bucket_target} {peering_crush_bucket_barrier} {crush_rule} {size} {min_size} [--yes-i-really-mean-it]
+
+This command configures an individual stretch pool, which is an alternative to
+stretch mode. It fails while stretch mode is enabled. See :ref:`stretch_mode`.
+
+.. note::
+
+   This command is only supported for replicated pools. For EC (erasure-coded)
+   pools, use ``ceph osd pool set {pool-name} num_zones {N}`` instead.
+   ``num_zones`` works for both replicated and EC pools.
 
 Here are the breakdowns of the arguments:
 
@@ -859,6 +875,8 @@ To move the pool back to non-stretch, run a command of the following form:
 .. prompt:: bash $
 
    ceph osd pool stretch unset {pool-name} {crush_rule} {size} {min_size}
+
+This command fails while stretch mode is enabled.
 
 Here are the breakdowns of the arguments:
 

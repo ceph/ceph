@@ -2193,12 +2193,22 @@ class CephManager:
             args = cmd_erasure_code_profile(profile_name, profile)
             self.raw_cluster_cmd(*args)
 
-    def create_erasure_code_crush_rule(self, rule_name, profile):
+    def create_erasure_code_crush_rule(self, rule_name, profile,
+                                       num_zones=None,
+                                       erasure_code_profile_name=None):
         """
         Create an erasure code crush rule that can be used as a parameter
         when creating an erasure coded pool.
+        :param num_zones: if > 1, build a stretch rule that places the k+m
+                          shards of erasure_code_profile_name in each zone,
+                          as a multi-zone pool needs
         """
         with self.lock:
+            if num_zones is not None and int(num_zones) > 1:
+                self.raw_cluster_cmd(
+                    'osd', 'crush', 'rule', 'create-erasure', rule_name,
+                    erasure_code_profile_name, '--num_zones', str(num_zones))
+                return
             args = cmd_ec_crush_profile(rule_name, profile)
             self.raw_cluster_cmd(*args)
 
@@ -2206,7 +2216,9 @@ class CephManager:
                                      erasure_code_profile_name=None,
                                      erasure_code_crush_rule_name=None,
                                      min_size=None,
-                                     erasure_code_use_overwrites=False):
+                                     erasure_code_use_overwrites=False,
+                                     num_zones=None,
+                                     osd_failure_domain=None):
         """
         Create a pool named unique_pool_X where X is unique.
         """
@@ -2220,12 +2232,14 @@ class CephManager:
                 erasure_code_profile_name=erasure_code_profile_name,
                 erasure_code_crush_rule_name=erasure_code_crush_rule_name,
                 min_size=min_size,
-                erasure_code_use_overwrites=erasure_code_use_overwrites)
+                erasure_code_use_overwrites=erasure_code_use_overwrites,
+                num_zones=num_zones,
+                osd_failure_domain=osd_failure_domain)
         return name
 
     @contextlib.contextmanager
-    def pool(self, pool_name, pg_num=16, erasure_code_profile_name=None):
-        self.create_pool(pool_name, pg_num, erasure_code_profile_name)
+    def pool(self, pool_name, pg_num=16, erasure_code_profile_name=None, num_zones=None):
+        self.create_pool(pool_name, pg_num, erasure_code_profile_name, num_zones)
         yield
         self.remove_pool(pool_name)
 
@@ -2233,7 +2247,9 @@ class CephManager:
                     erasure_code_profile_name=None,
                     erasure_code_crush_rule_name=None,
                     min_size=None,
-                    erasure_code_use_overwrites=False):
+                    erasure_code_use_overwrites=False,
+                    num_zones=None,
+                    osd_failure_domain=None):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
@@ -2243,6 +2259,10 @@ class CephManager:
         :param erasure_code_crush_rule_name: if set and !None create an
                                              erasure coded pool using the crush rule
         :param erasure_code_use_overwrites: if true, allow overwrites
+        :param num_zones: if set, configure the number of zones for pool
+        :param osd_failure_domain: if set, pass --osd_failure_domain to pool create;
+                                   required when num_zones > 1 and the CRUSH topology
+                                   uses a non-default failure domain (e.g. 'osd')
         """
         with self.lock:
             assert isinstance(pool_name, str)
@@ -2250,17 +2270,25 @@ class CephManager:
             assert pool_name not in self.pools
             self.log("creating pool_name %s" % (pool_name,))
             if erasure_code_profile_name:
-                cmd_args = ['osd', 'pool', 'create', 
-                            pool_name, str(pg_num), 
-                            str(pg_num), 'erasure', 
+                cmd_args = ['osd', 'pool', 'create',
+                            pool_name, str(pg_num),
+                            str(pg_num), 'erasure',
                             erasure_code_profile_name]
 
                 if erasure_code_crush_rule_name:
                     cmd_args.extend([erasure_code_crush_rule_name])
+
+                if num_zones is not None:
+                    cmd_args.extend(['--num_zones', str(num_zones)])
                 self.raw_cluster_cmd(*cmd_args)
             else:
-                self.raw_cluster_cmd('osd', 'pool', 'create',
-                                     pool_name, str(pg_num))
+                cmd_args = ['osd', 'pool', 'create',
+                            pool_name, str(pg_num)]
+                if num_zones is not None:
+                    cmd_args.extend(['--num_zones', str(num_zones)])
+                    if osd_failure_domain is not None:
+                        cmd_args.extend(['--osd_failure_domain', osd_failure_domain])
+                self.raw_cluster_cmd(*cmd_args)
             if min_size is not None:
                 self.raw_cluster_cmd(
                     'osd', 'pool', 'set', pool_name,
@@ -3499,9 +3527,59 @@ class CephManager:
             self.log("is_degraded_stretch_mode: {0}".format(degraded_stretch_mode))
             return degraded_stretch_mode == 1
         except (TypeError, AttributeError) as e:
-            # Log the error or handle it as needed
             self.log("Error accessing degraded_stretch_mode: {0}".format(e))
             return False
+
+    def is_recovering_stretch_mode(self):
+        """
+        Return whether the cluster is in the transient recovering stretch mode
+        (degraded_stretch_mode cleared but PGs still recovering).
+        """
+        try:
+            osdmap = self.get_osd_dump_json()
+            stretch_mode = osdmap.get('stretch_mode', {})
+            recovering = stretch_mode.get('recovering_stretch_mode', 0)
+            self.log("is_recovering_stretch_mode: {0}".format(recovering))
+            return recovering == 1
+        except (TypeError, AttributeError) as e:
+            self.log("Error accessing recovering_stretch_mode: {0}".format(e))
+            return False
+
+    def wait_for_degraded_stretch_mode(self, timeout=300):
+        """
+        Block until the cluster reports degraded stretch mode.
+        Raises AssertionError if the timeout expires first.
+        """
+        self.log("waiting for degraded stretch mode")
+        start = time.time()
+        while not self.is_degraded_stretch_mode():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired waiting for degraded stretch mode'
+            time.sleep(5)
+        self.log("cluster is in degraded stretch mode")
+
+    def wait_for_healthy_stretch_mode(self, timeout=600):
+        """
+        Block until degraded_stretch_mode == 0 AND recovering_stretch_mode == 0.
+
+        The monitor sets degraded_stretch_mode=0 / recovering_stretch_mode=1 as
+        soon as the second site rejoins, then waits for PGs to finish recovering
+        before clearing recovering_stretch_mode.  Checking only
+        is_degraded_stretch_mode() would exit too early, leaving PGs inactive.
+        Raises AssertionError if the timeout expires first.
+        """
+        self.log("waiting for healthy stretch mode")
+        start = time.time()
+        while True:
+            if not self.is_degraded_stretch_mode() and \
+                    not self.is_recovering_stretch_mode():
+                break
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired waiting for healthy stretch mode'
+            time.sleep(10)
+        self.log("cluster has returned to healthy stretch mode")
 
 
 def utility_task(name):

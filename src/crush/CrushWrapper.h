@@ -466,6 +466,12 @@ public:
     }
   }
   int split_id_class(int i, int *idout, int *classout) const;
+  /// the bucket that device class shadow bucket @p i stands for, else @p i
+  int get_non_shadow_id(int i) const {
+    int class_id;
+    split_id_class(i, &i, &class_id);
+    return i;
+  }
 
   bool class_exists(const std::string& name) const {
     return class_rname.count(name);
@@ -1128,6 +1134,7 @@ private:
   float _get_take_weight_osd_map(int root, std::map<int,float> *pmap) const;
   void _normalize_weight_map(float sum, const std::map<int,float>& m,
 			     std::map<int,float> *pmap) const;
+  int _find_free_rule_id(const std::string& name, int rno, std::ostream *err) const;
 
 public:
   /**
@@ -1235,6 +1242,14 @@ public:
       device_class, mode, rule_type, err);
   }
 
+
+  int add_simple_stretch_rule(
+    std::string name, std::string root_name, std::string zone_failure_domain_type,
+    std::string osd_failure_domain_type,
+    int num_failure_domains, int num_replica_per_zone,
+    std::string device_class, std::string mode, int rule_type, bool force,
+    std::ostream *err = 0);
+
   int add_indep_multi_osd_per_failure_domain_rule(
     std::string name, std::string root_name, std::string failure_domain_type,
     int osds_per_failure_domain,
@@ -1260,6 +1275,14 @@ public:
       name, root_name, failure_domain_type, -1,
       device_class, mode, rule_type, rno, err);
   }
+
+  int add_simple_stretch_rule_at(
+    std::string name, std::string root_name,
+    std::string zone_failure_domain_type,
+    std::string osd_failure_domain_type,
+    int num_failure_domains, int num_replica_per_zone,
+    std::string device_class, std::string mode,
+    int rule_type, bool force, int rno, std::ostream *err = 0);
 
   int add_multi_osd_per_failure_domain_rule_at(
     std::string name, std::string root_name, std::string failure_domain_type,
@@ -1307,6 +1330,10 @@ private:
   int detach_bucket(CephContext *cct, int item);
 
   int get_new_bucket_id();
+
+  int _resolve_root_to_class(int &root, const std::string &root_name,
+                             const std::string &device_class,
+                             std::ostream *err);
 
 public:
   int get_max_buckets() const {

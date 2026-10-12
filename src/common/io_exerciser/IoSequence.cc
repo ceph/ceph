@@ -837,6 +837,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq15::_next() {
       break;
     case Stage::COPY_FROM_SECONDARY:
       r = CopyOp::generate();
+      barrier = true;
       next_stage();
       break;
     case Stage::READ_SECONDARY:
@@ -850,6 +851,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq15::_next() {
     case Stage::TRUNCATE_PRIMARY:
       obj_size = obj_size + 2;
       r = TruncateOp::generate(obj_size);
+      barrier = true;
       next_stage();
       break;
     case Stage::READ_PRIMARY:
@@ -924,7 +926,6 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq16::_next() {
   // Perform Consistency check
   if (!consistency_done) {
     consistency_done = true;
-    barrier = true;
     
     // Move to next operation
     operation_count++;
@@ -932,7 +933,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq16::_next() {
       setup_next_operation();
     }
     
-    return ConsistencyOp::generate();
+    consistency = check_consistency;
+    return BarrierOp::generate();
   }
   
   // Should not reach here
