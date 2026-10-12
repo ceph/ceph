@@ -49,11 +49,9 @@ tasks:
       - \(TOO_FEW_PGS\)
       - slow request
       - \(POOL_APP_NOT_ENABLED\)
-      - overall HEALTH_
       - \(MGR_DOWN\)
       - \(MON_DOWN\)
       - \(PG_AVAILABILITY\)
-      - \(SLOW_OPS\)
 - workunit:
     clients:
       client.0:
