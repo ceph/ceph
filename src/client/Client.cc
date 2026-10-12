@@ -4128,6 +4128,11 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff,
   }
 }
 
+// see ll_append()
+static constexpr double APPEND_HOLD_SECS = 0.1;
+static constexpr double APPEND_HOLD_MAX_SECS = 1.0;
+static constexpr uint64_t APPEND_MAX_SIZE_AHEAD = 64 << 20;
+
 /*
  * Get the caps for an O_APPEND write, and the offset to write it at.
  *
@@ -4184,6 +4189,18 @@ int Client::get_append_caps(Fh *fh, uint64_t size, int want, int *phave,
   bool got = false;
   *pextra_refs = 0;
 
+  /*
+   * A FUSE append through another Fh than the one the hold is kept for
+   * starts a new write(2): the kernel sends one write(2) of a file at a
+   * time and all its pieces through one Fh, so the held one is done.  Do
+   * not start it on an Fx that is being taken back already: its later
+   * pieces could not be written in that turn (e.g. one that needs more
+   * max_size), and another client would append in between.  End the
+   * hold and wait for a turn of its own.  Only until that revoke is
+   * over: an Fx revoked after it was granted to us still counts.
+   */
+  bool new_write = append && fh->append_more && in->append_hold != fh;
+
   in->append_waiting++;
   while (true) {
     // An MDS without CEPHFS_FEATURE_APPEND_EXCL ignores FLAG_APPEND, so
@@ -4191,6 +4208,23 @@ int Client::get_append_caps(Fh *fh, uint64_t size, int want, int *phave,
     if (append_excl_unsupported(in)) {
       r = -EOPNOTSUPP;
       break;
+    }
+
+    if (new_write) {
+      int implemented;
+      int issued = in->caps_issued(&implemented);
+      if ((implemented & ~issued) & CEPH_CAP_FILE_EXCL) {
+	ldout(cct, 10) << __func__ << " new write(2) through " << fh
+		       << ", not starting it on a revoked Fx on " << *in
+		       << dendl;
+	_append_hold_release(in);
+	in->append_waiting--;
+	check_caps(in, CHECK_CAPS_NODELAY);
+	wait_on_context_list(in->waitfor_caps);
+	in->append_waiting++;
+	continue;
+      }
+      new_write = false;
     }
 
     if (in->flags & I_CAP_DROPPED) {
@@ -4296,7 +4330,49 @@ int Client::get_append_caps(Fh *fh, uint64_t size, int want, int *phave,
     check_caps(in, CHECK_CAPS_NODELAY | CHECK_CAPS_APPEND);
     wait_on_context_list(in->waitfor_caps);
   }
-  in->append_waiting--;
+  bool keep = got && append && fh->append_more;
+  if (keep) {
+    // Another client waits for its turn: keep ours for at most
+    // APPEND_HOLD_MAX_SECS more, see ll_append()
+    if (in->caps_issued() & CEPH_CAP_FILE_EXCL) {
+      in->append_hold_revoked = utime_t();
+    } else {
+      utime_t now = ceph_clock_now();
+      if (in->append_hold_revoked.is_zero())
+	in->append_hold_revoked = now;
+      else if (now - in->append_hold_revoked > APPEND_HOLD_MAX_SECS)
+	keep = false;
+    }
+  }
+  if (keep) {
+    // Keep the turn for the next piece of this write(2): our
+    // append_waiting count becomes the hold's before we drop the Fx
+    // ref below, or the check_caps() that does would release an Fx
+    // that is being revoked already.
+    if (in->append_hold)
+      in->append_waiting--;
+    in->append_hold = fh;
+    in->append_hold_gen++;  // a pending expiry is for an older piece
+    // The next piece may need more max_size, which the MDS cannot grant
+    // while it takes Fx back for the next appender: as long as Fx is
+    // still ours, ask for it ahead of time
+    uint64_t ahead = *poffset + size + APPEND_MAX_SIZE_AHEAD;
+    if ((in->caps_issued() & CEPH_CAP_FILE_EXCL) && ahead > in->max_size) {
+      if (ahead > in->wanted_max_size)
+	in->wanted_max_size = ahead;
+      if (in->wanted_max_size > in->requested_max_size)
+	check_caps(in, CHECK_CAPS_NODELAY);
+    }
+  } else {
+    in->append_waiting--;
+    if (in->append_hold) {
+      // end the hold before our Fx ref goes, see above
+      in->append_hold = nullptr;
+      in->append_hold_gen++;
+      in->append_hold_revoked = utime_t();
+      in->append_waiting--;
+    }
+  }
 
   if (got) {
     ldout(cct, 10) << __func__ << " offset " << *poffset << " on " << *in
@@ -4328,6 +4404,22 @@ void Client::_append_done(Inode *in, int extra_refs)
   if (!(in->caps_issued() & CEPH_CAP_FILE_BUFFER) &&
       in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0)
     _flush(in, new C_Client_FlushComplete(this, in));
+}
+
+/*
+ * End the append turn that ll_append() kept for the rest of a write(2).
+ */
+void Client::_append_hold_release(Inode *in)
+{
+  if (!in->append_hold)
+    return;
+  ldout(cct, 10) << __func__ << " on " << *in << dendl;
+  in->append_hold = nullptr;
+  in->append_hold_gen++;
+  in->append_hold_revoked = utime_t();
+  ceph_assert(in->append_waiting > 0);
+  in->append_waiting--;
+  check_caps(in, CHECK_CAPS_NODELAY);
 }
 
 int Client::get_caps_used(Inode *in)
@@ -11290,6 +11382,10 @@ int Client::_release_fh(Fh *f)
   ldout(cct, 8) << __func__ << " " << f << " mode " << f->mode << " on " << *in << dendl;
 
   in->unset_deleg(f);
+  // only the turn kept for a write(2) through this Fh: another Fh of
+  // the inode may be closed between the pieces of one
+  if (in->append_hold == f)
+    _append_hold_release(in);
 
   if (in->snapid == CEPH_NOSNAP) {
 #if defined(__linux__)
@@ -11977,9 +12073,18 @@ retry:
   {
     // a read for an fscrypt append (read-modify-write) uses the Fr/Fc
     // that the append holds on to (see get_append_caps())
-    auto r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, -1,
-		      read_for_write ?
-		      (CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE) : 0);
+    int allow = read_for_write ?
+		(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE) : 0;
+    // So does any read while an O_APPEND turn defers their revocation
+    // (see check_caps()): it would wait for the turn to end otherwise,
+    // and the kernel FUSE code does not send the rest of the write(2)
+    // that keeps the turn before this read is done.  Until we released
+    // them nobody else can have written the file.
+    int implemented;
+    in->caps_issued(&implemented);
+    if (in->append_waiting && (implemented & CEPH_CAP_FILE_EXCL))
+      allow |= CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE;
+    auto r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, -1, allow);
     if (r < 0) {
       rc = r;
       goto done;
@@ -13085,13 +13190,19 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
      * The EOF from _lseek() is only a hint: we may block for caps after
      * this point while another client extends the file.  With an MDS
      * that supports append_excl, get_append_caps() takes the offset
-     * from in->size under Fx instead.
+     * from in->size under Fx instead, so do not ask the MDS for the
+     * size first: that could take the turn back that ll_append() keeps
+     * for the next piece of a write(2).
      */
     if (f->flags & O_APPEND) {
-      auto r = _lseek(f, 0, SEEK_END);
-      if (r < 0) {
-        unlock_fh_pos(f);
-        return r;
+      if (append_excl_unsupported(in)) {
+	auto r = _lseek(f, 0, SEEK_END);
+	if (r < 0) {
+	  unlock_fh_pos(f);
+	  return r;
+	}
+      } else {
+	f->pos = in->effective_size();
       }
       is_append = true;
     }
@@ -13166,6 +13277,18 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
     endoff = offset + size;
   } else {
     // the auth MDS does not serialize appends (see get_append_caps())
+    if (is_append) {
+      lock_fh_pos(f);
+      auto r = _lseek(f, 0, SEEK_END);
+      if (r < 0) {
+	unlock_fh_pos(f);
+	return r;
+      }
+      offset = f->pos;
+      fpos = offset + size;
+      endoff = offset + size;
+      unlock_fh_pos(f);
+    }
     r = get_caps(f, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have, endoff);
     if (r < 0)
       return r;
@@ -17771,6 +17894,73 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   int r = _write(fh, off, len, std::move(bl));
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
+  return r;
+}
+
+/*
+ * An O_APPEND write from the kernel FUSE code, which splits a write(2)
+ * into several requests: up to max_write bytes each, and shorter ones
+ * where it could not copy the user's buffer without faulting it in.
+ * Each of them is appended at the EOF current when it is written, so
+ * another client appending in between would split the write(2).  We
+ * cannot tell the last piece of a write(2): keep the append turn, the
+ * Fx that the write got, from the moment it got it until the next write
+ * to the file is done, or for APPEND_HOLD_SECS after this one at most.
+ * The kernel sends one write(2) of a file at a time, so the next write
+ * to it is the next piece if there is one.  Another client that waits
+ * for its turn gets it once the next write to the file found Fx revoked
+ * for APPEND_HOLD_MAX_SECS, see get_append_caps().
+ */
+int Client::ll_append(Fh *fh, loff_t len, const char *data)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied()) {
+    return -ENOTCONN;
+  }
+
+  std::scoped_lock lock(client_lock);
+  if (fh == NULL || !_ll_fh_exists(fh)) {
+    ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    return -EBADF;
+  }
+
+  Inode *in = fh->inode.get();
+  // see ll_write()
+#if defined(__linux__)
+  if (in->is_fscrypt_enabled())
+    len = std::min(len, (loff_t)FSCRYPT_MAXIO_SIZE);
+#endif
+  len = std::min(len, (loff_t)INT_MAX);
+  ldout(cct, 3) << __func__ << " " << fh << " " << in->ino << " " << len
+		<< dendl;
+
+  bufferlist bl;
+  bl.append(data, len);
+  fh->append_more = true;
+  int r = _write(fh, -1, len, std::move(bl));
+  fh->append_more = false;
+
+  if (r <= 0) {
+    // the write(2) failed: end the turn kept for it
+    if (in->append_hold == fh)
+      _append_hold_release(in);
+  } else if (in->append_hold == fh) {
+    // get_append_caps() started (or extended) the hold with the turn
+    uint64_t gen = in->append_hold_gen;
+    vinodeno_t vino = in->vino();
+    std::scoped_lock tl(timer_lock);
+    timer.add_event_after(APPEND_HOLD_SECS,
+      new LambdaContext([this, vino, gen](int) {
+	// we hold timer_lock here, which nests inside client_lock
+	objecter_finisher.queue(new LambdaContext([this, vino, gen](int) {
+	  std::scoped_lock cl(client_lock);
+	  auto it = inode_map.find(vino);
+	  if (it != inode_map.end() && it->second->append_hold_gen == gen)
+	    _append_hold_release(it->second);
+	}));
+      }));
+  }
+  ldout(cct, 3) << __func__ << " " << fh << " " << len << " = " << r << dendl;
   return r;
 }
 

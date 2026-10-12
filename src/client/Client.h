@@ -738,6 +738,7 @@ public:
 
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
+  int ll_append(Fh *fh, loff_t len, const char *data);
   int64_t ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off);
   int64_t ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off);
   int64_t ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov, int iovcnt,
@@ -860,6 +861,7 @@ public:
   int get_append_caps(Fh *fh, uint64_t size, int want, int *have,
                       int64_t *offset, int *extra_refs, bool append = true);
   void _append_done(Inode *in, int extra_refs);
+  void _append_hold_release(Inode *in);
   int get_caps_used(Inode *in);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater,

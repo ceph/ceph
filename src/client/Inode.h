@@ -269,6 +269,13 @@ struct Inode : RefCountedObject {
   // not at size.
   int append_inflight = 0;
   uint64_t append_end = 0;
+  // The append turn is kept between the pieces of one write(2) that
+  // the kernel FUSE code splits, see Client::ll_append(): the Fh the
+  // write(2) came through
+  Fh *append_hold = nullptr;
+  uint64_t append_hold_gen = 0;
+  // when a revoke of the Fx kept for the hold was first seen
+  utime_t append_hold_revoked;
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 

@@ -915,7 +915,15 @@ static void fuse_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   Fh *fh = reinterpret_cast<Fh*>(fi->fh);
-  int r = cfuse->client->ll_write(fh, off, size, buf);
+  int r;
+  if (fi->flags & O_APPEND) {
+    // The kernel places an O_APPEND write at the EOF it has cached,
+    // which another client may have moved already.  Let the client
+    // place it, at the EOF that is current once it may write.
+    r = cfuse->client->ll_append(fh, size, buf);
+  } else {
+    r = cfuse->client->ll_write(fh, off, size, buf);
+  }
   if (r >= 0)
     fuse_reply_write(req, r);
   else
