@@ -31,6 +31,9 @@ private:
   static constexpr unsigned FLAG_SYNC		= (1<<0);
   static constexpr unsigned FLAG_NO_CAPSNAP		= (1<<1); // unused
   static constexpr unsigned FLAG_PENDING_CAPSNAP	= (1<<2);
+  // an O_APPEND writer asks to be made the filelock loner (Fx), so that
+  // it learns the true EOF and no other client writes concurrently
+  static constexpr unsigned FLAG_APPEND		= (1<<3);
 
   struct ceph_mds_caps_head head;
 

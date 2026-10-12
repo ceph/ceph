@@ -3520,6 +3520,10 @@ void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,
     decode(mds_wanted, blp);
     mds_wanted.erase(mds->get_nodeid());
     in->set_mds_caps_wanted(mds_wanted);
+    // only an O_APPEND writer's turn keeps the loner while other MDSs
+    // want caps, see CInode::choose_ideal_loner()
+    if (in->get_loner() >= 0 && !mds_wanted.empty())
+      in->set_append_excl_loner();
   }
   if (!cap_map.empty() ||
       (auth_cap && (in->get_caps_wanted() & ~CEPH_CAP_PIN))) {
