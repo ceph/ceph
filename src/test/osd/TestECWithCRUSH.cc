@@ -13,8 +13,10 @@
  *
  */
 
+#include <optional>
 #include <gtest/gtest.h>
-
+#include "crush/crush.h"   // CRUSH_ITEM_NONE
+#include "osdc/SplitOp.h"
 #include "test/osd/ECCrushTestFixture.h"
 #include "test/osd/TestCommon.h"
 
@@ -127,3 +129,44 @@ TEST_P(TestECWithCRUSH, BasicWriteVerify)
   create_and_write_verify(obj_name, data);
 }
 
+
+// ===========================================================================
+// Peering on a real stretch EC pool (2 zones, 2+1, per-zone min_size k+m).
+// ===========================================================================
+
+class TestECStretchPeering : public ECCrushTestFixture {
+public:
+  TestECStretchPeering() : ECCrushTestFixture() {
+    k = 2;
+    m = 1;
+    num_zones = 2;
+    ec_plugin = "isa";
+  }
+
+protected:
+  void pre_peering_hook() override {
+    ECCrushTestFixture::pre_peering_hook();
+    pg_pool_t updated = *osdmap->get_pg_pool(pool_id);
+    updated.min_size = k + 1;
+    updated.peering_crush_bucket_barrier =
+      osdmap->crush->get_type_id("datacenter");
+    updated.peering_crush_bucket_target = num_zones;
+    updated.peering_crush_bucket_count = num_zones;
+    updated.peering_crush_mandatory_member = CRUSH_ITEM_NONE;
+    OSDMap::Incremental inc(osdmap->get_epoch() + 1);
+    inc.fsid = osdmap->get_fsid();
+    inc.new_pools[pool_id] = updated;
+    osdmap->apply_incremental(inc);
+  }
+};
+
+// Losing a whole zone leaves the PG peered until degraded stretch mode names the surviving zone as mandatory.
+
+// A pg-upmap swapping the two zone blocks while a pg_temp still pins the old
+// acting set, with a trimmed log so the up OSDs need backfill for their new
+// shards.  The old acting set keeps serving and the up OSDs are backfilled.
+
+// Zone 1 loses two OSDs, then a pg-upmap moves zone block 1 onto the zone 0
+// OSDs serving block 0 while a pg_temp keeps block 0 there with a lone
+// shard 3 in zone 1.  Once the up OSDs are backfilled, Recovered must ask to
+// drop the pg_temp rather than abort in choose_acting.
