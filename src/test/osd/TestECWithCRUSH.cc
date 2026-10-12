@@ -732,3 +732,78 @@ TEST_F(TestECStretchPeering, ZoneBlockSwap_RestartedUpShardKeptCurrent)
     verify_object(name);
   }
 }
+
+// x, a complete up shard waiting for its zone block, misses an overwrite
+// while its OSD restarts.  It is caught up from the log, and its missing
+// object is counted until it is recovered.
+TEST_F(TestECStretchPeering, ZoneBlockSwap_RestartedUpShardMissingCounted)
+{
+  ASSERT_TRUE(all_shards_active());
+  vector<int> a;
+  ASSERT_NO_FATAL_FAILURE(swap_zone_blocks_but(4, &a));
+  const pg_shard_t x(a[2], shard_id_t(5));
+
+  const std::string data(stripe_unit * k, 'B');
+  const std::string overwrite(stripe_unit * k, 'C');
+  create_and_write_verify("obj", data);
+  mark_osd_down(x.osd);
+  write_verify("obj", 0, overwrite, data.size());
+  mark_osd_up(x.osd);
+
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  ASSERT_TRUE(ps->is_backfill_target(x));
+  ASSERT_TRUE(ps->get_peer_info(x).last_backfill.is_max());
+  ps->prepare_stats_for_publish(std::nullopt, object_stat_collection_t());
+  EXPECT_EQ(1, ps->get_peer_info(x).stats.stats.sum.num_objects_missing);
+
+  run_recovery("obj", false, overwrite);
+  ps = get_primary_test_pg()->get_peering_state();
+  ps->prepare_stats_for_publish(std::nullopt, object_stat_collection_t());
+  EXPECT_EQ(0, ps->get_peer_info(x).stats.stats.sum.num_objects_missing);
+}
+
+// x, a complete up shard waiting for its zone block, falls off the log of
+// every other shard while its OSD is down, but not off the log of the
+// primary, whose OSD was down too.  Both OSDs return in the same map.  x is
+// not contiguous with the auth log, so it is backfilled again from scratch.
+TEST_F(TestECStretchPeering, ZoneBlockSwap_UpShardBehindAuthLogRestarted)
+{
+  ASSERT_TRUE(all_shards_active());
+  vector<int> a;
+  // The shard the primary takes the log from (the lowest OSD with the newest
+  // log) is one that can be primary, so GetLog does not repeat.
+  ASSERT_NO_FATAL_FAILURE(swap_zone_blocks_but(0, &a));
+  const pg_shard_t x(a[4], shard_id_t(1));
+  const pg_shard_t p(a[0], shard_id_t(0));
+  const pg_shard_t other(a[1], shard_id_t(1));
+
+  const std::string data(stripe_unit * k, 'B');
+  int n = 0;
+  mark_osd_down(x.osd);
+  for (int i = 0; i < 3; ++i) {
+    create_and_write_verify("obj" + std::to_string(n++), data);
+  }
+  mark_osd_down(p.osd);
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active());
+  enable_log_trimming = true;
+  set_target_pg_log_entries(3);
+  for (int i = 0; i < 2; ++i) {
+    create_and_write_verify("obj" + std::to_string(n++), data);
+  }
+  enable_log_trimming = false;
+
+  const pg_info_t &xi = get_test_pg(x)->get_peering_state()->get_info();
+  const pg_info_t &pi = get_test_pg(p)->get_peering_state()->get_info();
+  const pg_info_t &oi = get_test_pg(other)->get_peering_state()->get_info();
+  ASSERT_LE(pi.log_tail, xi.last_update);
+  ASSERT_LT(xi.last_update, oi.log_tail);
+  ASSERT_LE(oi.log_tail, pi.last_update);
+
+  remap({a[3], a[4], a[5], a[0], a[1], a[2]}, a, {p.osd, x.osd});
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_primary(), p);
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  ASSERT_TRUE(ps->is_backfill_target(x));
+  EXPECT_EQ(ps->get_peer_info(x).last_backfill, hobject_t());
+}
