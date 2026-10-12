@@ -132,6 +132,7 @@ using ceph::make_timespan;
 using ceph::timespan_str;
 using namespace std::literals;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
 static const string OSD_METADATA_PREFIX("osd_metadata");
