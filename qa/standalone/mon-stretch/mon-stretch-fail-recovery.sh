@@ -189,56 +189,78 @@ TEST_EC_stretched_cluster_failover_add_three_osds(){
     done
 
 
-    ceph osd crush add-bucket node-2 host
-    ceph osd crush add-bucket node-3 host
-    ceph osd crush add-bucket node-4 host
-    ceph osd crush add-bucket node-5 host
+    # Three hosts per zone so num-zones=2 k=2 m=1 has a full stripe per zone.
+    for node in 2 3 4 5 6 7
+    do
+      ceph osd crush add-bucket node-$node host || return 1
+    done
 
-    ceph osd crush move node-2 zone=iris
-    ceph osd crush move node-3 zone=iris
-    ceph osd crush move node-4 zone=pze
-    ceph osd crush move node-5 zone=pze
+    ceph osd crush move node-2 zone=iris || return 1
+    ceph osd crush move node-3 zone=iris || return 1
+    ceph osd crush move node-4 zone=iris || return 1
+    ceph osd crush move node-5 zone=pze || return 1
+    ceph osd crush move node-6 zone=pze || return 1
+    ceph osd crush move node-7 zone=pze || return 1
 
-    ceph osd crush move osd.0 host=node-2
-    ceph osd crush move osd.1 host=node-3
-    ceph osd crush move osd.2 host=node-4
-    ceph osd crush move osd.3 host=node-5
-    ceph osd crush move osd.4 host=node-6
-    ceph osd crush move osd.5 host=node-7
-    
-    ceph mon set_location a zone=iris host=node-2
-    ceph mon set_location b zone=iris host=node-3
-    ceph mon set_location c zone=pze host=node-4
-    ceph mon set_location d zone=pze  host=node-5
+    ceph osd crush move osd.0 host=node-2 || return 1
+    ceph osd crush move osd.1 host=node-3 || return 1
+    ceph osd crush move osd.2 host=node-4 || return 1
+    ceph osd crush move osd.3 host=node-5 || return 1
+    ceph osd crush move osd.4 host=node-6 || return 1
+    ceph osd crush move osd.5 host=node-7 || return 1
 
-    ceph mon set_location e zone=arbiter host=node-1
+    ceph mon set_location a zone=iris host=node-2 || return 1
+    ceph mon set_location b zone=iris host=node-3 || return 1
+    ceph mon set_location c zone=pze host=node-5 || return 1
+    ceph mon set_location d zone=pze host=node-6 || return 1
+    ceph mon set_location e zone=arbiter host=node-1 || return 1
 
     hostname=$(hostname -s)
     ceph osd crush remove $hostname || return 1
-    
+
     local stretched_poolname=stretched_rbdpool
-    ceph osd pool create $stretched_poolname 32 32 erasure --num-zones 2 --k 2 --m 1 || return 1
+    ceph osd pool create $stretched_poolname 32 32 erasure --num-zones 2 --zone-failure-domain zone --k 2 --m 1 || return 1
+    ceph osd pool application enable $stretched_poolname rbd || return 1
 
-    sleep 3
+    # A full stripe lives in each zone, so the pool reaches active+clean.
+    wait_for_clean || return 1
 
+    # Seed an object and confirm it reads back before the site failure.
+    echo "ec-stretch-failover-payload" > $dir/testobj.dat || return 1
+    rados -p $stretched_poolname put testobj $dir/testobj.dat || return 1
+    rados -p $stretched_poolname get testobj $dir/testobj.before || return 1
+    diff $dir/testobj.dat $dir/testobj.before || return 1
+
+    # Fail the pze site: its two data mons and all three of its OSDs.
     kill_daemons $dir KILL mon.c || return 1
     kill_daemons $dir KILL mon.d || return 1
-
     kill_daemons $dir KILL osd.3 || return 1
     kill_daemons $dir KILL osd.4 || return 1
     kill_daemons $dir KILL osd.5 || return 1
 
     ceph -s
 
-    sleep 3
+    # The surviving iris site still holds a complete stripe, so the pool must
+    # stay readable while degraded.
+    rados -p $stretched_poolname get testobj $dir/testobj.degraded || return 1
+    diff $dir/testobj.dat $dir/testobj.degraded || return 1
 
+    # Add three replacement OSDs into the failed site and retire the dead ones
+    # so the pze stripe can backfill onto healthy OSDs.
     run_osd $dir 6 || return 1
     run_osd $dir 7 || return 1
     run_osd $dir 8 || return 1
+    ceph osd crush move osd.6 host=node-5 || return 1
+    ceph osd crush move osd.7 host=node-6 || return 1
+    ceph osd crush move osd.8 host=node-7 || return 1
+    ceph osd out 3 4 5 || return 1
 
     ceph -s
 
-    sleep 3
+    # Recovery completes and the data is intact.
+    wait_for_clean || return 1
+    rados -p $stretched_poolname get testobj $dir/testobj.after || return 1
+    diff $dir/testobj.dat $dir/testobj.after || return 1
 
     teardown $dir || return 1
 }
