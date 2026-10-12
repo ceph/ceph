@@ -6,6 +6,7 @@
 
 #include "osd/PGTransaction.h"
 #include "osd/ECTransaction.h"
+#include "osd/ECCommonFmt.h"
 
 SET_SUBSYS(osd);
 
