@@ -2766,3 +2766,73 @@ async fn test_account_usage() {
     let body = resp.body;
     assert!(body.contains("QuotaMaxBytes") || body.contains("Usage"));
 }
+
+/// HEAD and GET report `x-amz-storage-class` for every class except
+/// STANDARD, even when the client asked for STANDARD explicitly.
+///
+/// The control is an object of a configured non-default class, whose
+/// class must be reported:  without it the first half would pass
+/// against a gateway that never sends the header.  A deployment with no
+/// non-default class configured, which refuses one, skips the control.
+#[tokio::test]
+async fn test_object_standard_storage_class_not_reported() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key("standard")
+        .storage_class(aws_sdk_s3::types::StorageClass::Standard)
+        .body(ByteStream::from_static(b"foo"))
+        .send()
+        .await
+        .unwrap();
+    let head = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key("standard")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(head.storage_class(), None,
+        "HEAD reported a storage class for an explicitly STANDARD object");
+    let get = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key("standard")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(get.storage_class(), None,
+        "GET reported a storage class for an explicitly STANDARD object");
+
+    let classes = s3_tests_rs::config::configured_storage_classes();
+    let other = classes
+        .iter()
+        .find(|c| !c.eq_ignore_ascii_case("STANDARD"))
+        .cloned()
+        .unwrap_or_else(|| "GLACIER".to_string());
+    let put = client
+        .put_object()
+        .bucket(&bucket_name)
+        .key("other")
+        .storage_class(aws_sdk_s3::types::StorageClass::from(other.as_str()))
+        .body(ByteStream::from_static(b"foo"))
+        .send()
+        .await;
+    if put.is_err() {
+        eprintln!("storage class {other} refused;  the control is skipped");
+        return;
+    }
+    let head = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key("other")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(head.storage_class().map(|c| c.as_str()), Some(other.as_str()),
+        "HEAD did not report the non-default storage class {other}");
+}
