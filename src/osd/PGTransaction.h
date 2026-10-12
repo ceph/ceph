@@ -44,6 +44,15 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 class PGTransaction {
 public:
   std::map<hobject_t, ObjectContextRef> obc_map;
+  // EC journal POC: do_op admitted this write into the journal
+  // (PGBackend::ec_journal_admit); or it is a journal flush, which must not
+  // be journaled again and keeps the object's materialized attr itself.
+  bool ec_journal = false;
+  bool ec_journal_flush = false;
+  // A direct write of an object that still has journal records on other
+  // stripes: its materialized attr update names only the stripes it writes,
+  // and is merged with the object's current attr like a flush's.
+  bool ec_journal_marker_delta = false;
 
   class ObjectOperation {
   public:
