@@ -387,9 +387,10 @@ protected:
   /* Submit the ops of each object so that they reach every shard except
    * blocked_shard, then take down the OSD of failing_shard so that peering
    * rolls back those still in flight. An op that does not write to
-   * blocked_shard can complete first, and must then survive. Each object
-   * must be left as it was after its last completed op, and each surviving
-   * shard of an object with no completed op must be restored exactly.
+   * blocked_shard can complete first, and must then survive, but at least
+   * one op must be left to roll back. Each object must be left as it was
+   * after its last completed op, and each surviving shard of an object with
+   * no completed op must be restored exactly.
    */
   void run_rollback(const std::string& name,
                     const std::vector<ObjectScenario>& objects,
@@ -428,10 +429,9 @@ protected:
         in_flight[op.object] = true;
       }
     }
-    if (!std::ranges::any_of(in_flight, std::identity{})) {
-      std::cout << "No op writes to shard " << blocked_shard
-                << ", so none is left to roll back" << std::endl;
-    }
+    EXPECT_TRUE(std::ranges::any_of(in_flight, std::identity{}))
+      << "No op writes to shard " << blocked_shard
+      << ", so none is left to roll back";
 
     mark_osd_down(failing_shard);
     event_loop->unsuspend_from_to_osd(primary, blocked_shard);
@@ -457,6 +457,57 @@ protected:
           << "contents of shard " << shard << " of " << object_name(name, i);
       }
     }
+  }
+
+  /* Whether any op under test of the objects writes shard, a data shard
+   * that cannot be primary. An op writes such a shard if it changes the
+   * size of its object, or changes bytes that the shard holds. */
+  bool ops_write_shard(const std::vector<ObjectScenario>& objects,
+                       int shard) {
+    const ECUtil::stripe_info_t sinfo = get_sinfo();
+    for (const auto& object : objects) {
+      uint64_t size = object.size;
+      auto changed_range = [&size](const ObjOp& op) {
+        std::pair<uint64_t, uint64_t> range;
+        switch (op.type) {
+        case ObjOp::TRUNCATE:
+          range = std::minmax(size, op.off);
+          size = op.off;
+          break;
+        case ObjOp::WRITE:
+          range = {std::min(size, op.off), op.off + op.len};
+          size = std::max(size, op.off + op.len);
+          break;
+        case ObjOp::ZERO:
+          range = {op.off, op.off + op.len};
+          break;
+        }
+        return range;
+      };
+      for (const auto& ops : object.committed) {
+        for (const auto& op : ops) {
+          changed_range(op);
+        }
+      }
+      for (const auto& ops : object.ops) {
+        const uint64_t old_size = size;
+        for (const auto& op : ops) {
+          const auto [start, end] = changed_range(op);
+          if (start == end) {
+            continue;
+          }
+          ECUtil::shard_extent_set_t extents(k + m);
+          sinfo.ro_range_to_shard_extent_set(start, end - start, extents);
+          if (extents.contains(shard_id_t(shard))) {
+            return true;
+          }
+        }
+        if (size != old_size) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 };
 
@@ -2093,7 +2144,8 @@ INSTANTIATE_TEST_SUITE_P(
 namespace {
 
 /* Rollback modes block the op to shard 1, which it may not write, or to the
- * first parity shard, which it always writes, and fail the named shard. */
+ * first parity shard, which it always writes, and fail the named shard. A
+ * mode that blocks shard 1 is skipped for a case that does not write it. */
 enum class TruncateMode {
   Forward,
   RollbackParity,
@@ -2447,6 +2499,12 @@ TEST_P(TestECTruncateMatrix, Run) {
   const auto objects = truncate_case.make(k, stripe_unit);
   if (!objects) {
     GTEST_SKIP() << truncate_case.name << " does not apply to this geometry";
+  }
+  const bool blocks_shard_1 = mode == TruncateMode::RollbackParity ||
+                              mode == TruncateMode::RollbackData ||
+                              mode == TruncateMode::RollbackPrimary;
+  if (blocks_shard_1 && !ops_write_shard(*objects, 1)) {
+    GTEST_SKIP() << truncate_case.name << " does not write shard 1";
   }
   SCOPED_TRACE(config.label + " " + truncate_case.name);
 
