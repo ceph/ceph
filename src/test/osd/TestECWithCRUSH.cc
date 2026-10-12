@@ -400,6 +400,110 @@ protected:
     inc.new_pools[pool_id] = updated;
     osdmap->apply_incremental(inc);
   }
+
+  // Trims the log, so that the up OSDs of a later remap need backfill.
+  // Deleting the object leaves that backfill nothing to copy.
+  void trim_log(bool delete_obj = false) {
+    trim_min.emplace("osd_pg_log_trim_min", "1");
+    trim_max.emplace("osd_pg_log_trim_max", "1000");
+    osdmap->set_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT);
+    const std::string data(stripe_unit * k, 'A');
+    create_and_write_verify("obj", data);
+    enable_log_trimming = true;
+    set_target_pg_log_entries(1);
+    for (int i = 0; i < 5; ++i) {
+      write_verify("obj", 0, data, data.size());
+    }
+    if (delete_obj) {
+      ASSERT_EQ(0, delete_object("obj"));
+    }
+    enable_log_trimming = false;
+    ASSERT_GT(get_primary_test_pg()->get_peering_state()->get_info().log_tail,
+              eversion_t());
+  }
+
+  // An empty upmap or pg_temp removes it.
+  void remap(const vector<int> &upmap, const vector<int> &pg_temp,
+             const vector<int> &osds_up = {}) {
+    auto next = std::make_shared<OSDMap>();
+    next->deepish_copy_from(*osdmap);
+    OSDMap::Incremental inc(next->get_epoch() + 1);
+    inc.fsid = next->get_fsid();
+    if (upmap.empty()) {
+      inc.old_pg_upmap.insert(pgid);
+    } else {
+      inc.new_pg_upmap[pgid] =
+        mempool::osdmap::vector<int32_t>(upmap.begin(), upmap.end());
+    }
+    vector<int> temp;
+    if (!pg_temp.empty()) {
+      temp = next->pgtemp_primaryfirst(*next->get_pg_pool(pool_id), pg_temp);
+    }
+    inc.new_pg_temp[pgid] =
+      mempool::osdmap::vector<int32_t>(temp.begin(), temp.end());
+    next->apply_incremental(inc);
+    for (int osd : osds_up) {
+      OSDMapTestHelpers::mark_osd_up(next, osd);
+    }
+    update_osdmap_with_peering(next);
+    event_loop->run_until_idle();
+  }
+
+  void set_backfill_progress(const pg_shard_t &t, const hobject_t &progress) {
+    get_primary_test_pg()->get_peering_state()->update_peer_last_backfill(
+      t, progress);
+    ObjectStore::Transaction tx;
+    get_test_pg(t)->get_peering_state()->update_backfill_progress(
+      progress, pg_stat_t(), false, tx);
+  }
+
+  void complete_backfill(const pg_shard_t &t) {
+    set_backfill_progress(t, hobject_t::get_max());
+    get_test_pg(t)->get_peering_state()->handle_event(
+      std::make_shared<PGPeeringEvent>(
+        osdmap->get_epoch(), osdmap->get_epoch(), RecoveryDone()),
+      get_test_pg(t)->get_peering_ctx());
+  }
+
+  void finish_backfill() {
+    get_primary_test_pg()->get_peering_state()->handle_event(
+      std::make_shared<PGPeeringEvent>(
+        osdmap->get_epoch(), osdmap->get_epoch(), PeeringState::Backfilled()),
+      get_primary_test_pg()->get_peering_ctx());
+    new_epoch_loop();
+  }
+
+  // Swaps the zone blocks with a pg-upmap while a pg_temp keeps acting set
+  // *a, then completes the backfill of every new up shard but the one of
+  // position y_pos.  That one is past every object the tests write (they
+  // have hash 0), so it gets their writes as a real backfill target would,
+  // but is not complete.
+  void swap_zone_blocks_but(unsigned y_pos, vector<int> *a) {
+    // The monitor's min_size for a 2+1 stretch pool.
+    set_pool_min_size(k);
+    trim_log(true);
+
+    int acting_primary;
+    osdmap->pg_to_acting_osds(pgid, a, &acting_primary);
+    const vector<int> up = {(*a)[3], (*a)[4], (*a)[5],
+                            (*a)[0], (*a)[1], (*a)[2]};
+    remap(up, *a);
+    PeeringState *ps = get_primary_test_pg()->get_peering_state();
+    ASSERT_EQ(ps->get_acting(), *a);
+    ASSERT_EQ(ps->get_backfill_targets().size(), up.size());
+
+    const pg_shard_t y(up[y_pos], shard_id_t(y_pos));
+    for (const auto &t : ps->get_backfill_targets()) {
+      if (t != y) {
+        complete_backfill(t);
+      }
+    }
+    set_backfill_progress(y, hobject_t(object_t("progress"), "", CEPH_NOSNAP,
+                                       0xffffffff, pool_id, ""));
+  }
+
+  std::optional<ScopedConfig> trim_min;
+  std::optional<ScopedConfig> trim_max;
 };
 
 // Losing a whole zone leaves the PG peered until degraded stretch mode names the surviving zone as mandatory.
@@ -446,10 +550,263 @@ TEST_F(TestECStretchPeering, ZoneLoss_PeeredUntilDegradedStretchMode)
 // A pg-upmap swapping the two zone blocks while a pg_temp still pins the old
 // acting set, with a trimmed log so the up OSDs need backfill for their new
 // shards.  The old acting set keeps serving and the up OSDs are backfilled.
+TEST_F(TestECStretchPeering, ZoneBlockSwapWithPgTemp_NoChooseActingAbort)
+{
+  ASSERT_TRUE(osdmap->get_pg_pool(pool_id)->is_stretch_pool());
+  ASSERT_TRUE(all_shards_active());
+  trim_log();
+
+  vector<int> up, acting;
+  int up_primary, acting_primary;
+  osdmap->pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &acting_primary);
+  const int zone_size = k + m;
+  vector<int> swapped(acting.begin() + zone_size, acting.end());
+  swapped.insert(swapped.end(), acting.begin(), acting.begin() + zone_size);
+  remap(swapped, acting);
+
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  EXPECT_TRUE(ps->is_active()) << get_state_name(0);
+  EXPECT_EQ(ps->get_acting(), acting);
+  set<pg_shard_t> expected_backfill;
+  for (unsigned i = 0; i < swapped.size(); ++i) {
+    expected_backfill.insert(pg_shard_t(swapped[i], shard_id_t(i)));
+  }
+  EXPECT_EQ(ps->get_backfill_targets(), expected_backfill);
+}
 
 // A pg-upmap swaps the two zone blocks while a pg_temp keeps the old acting
 // set.  Once every up OSD is backfilled, Recovered must ask to drop the
 // pg_temp rather than abort in choose_acting.
+TEST_F(TestECStretchPeering, BackfilledZoneBlockSwap_RecoveredDropsPgTemp)
+{
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  ASSERT_TRUE(all_shards_active());
+  trim_log();
+
+  vector<int> a;
+  int acting_primary;
+  osdmap->pg_to_acting_osds(pgid, &a, &acting_primary);
+  const vector<int> up = {a[3], a[4], a[5], a[0], a[1], a[2]};
+  remap(up, a);
+
+  TestPG *primary = get_primary_test_pg();
+  PeeringState *ps = primary->get_peering_state();
+  ASSERT_EQ(ps->get_up(), up);
+  ASSERT_EQ(ps->get_acting(), a);
+  ASSERT_STREQ(ps->get_current_state(), "Started/Primary/Active/Backfilling");
+  set<pg_shard_t> targets;
+  for (unsigned i = 0; i < up.size(); ++i) {
+    targets.insert(pg_shard_t(up[i], shard_id_t(i)));
+  }
+  ASSERT_EQ(ps->get_backfill_targets(), targets);
+  for (const auto &t : targets) {
+    complete_backfill(t);
+  }
+
+  ASSERT_FALSE(primary->get_peering_listener()->pg_temp_wanted);
+  EXPECT_EXIT({
+      finish_backfill();
+      _exit(get_primary_test_pg()->get_peering_state()->get_acting() == up ?
+            0 : 1);
+    }, ::testing::ExitedWithCode(0), "");
+}
+
+// The k up shards of one zone block take every write while the other zone
+// is down.  When that zone returns, with the pg-upmap giving the full up set
+// again, those writes must stay recoverable.
+TEST_F(TestECStretchPeering, ReturningZone_NewestWritesNotUnfound)
+{
+  ASSERT_TRUE(all_shards_active());
+  // The monitor's min_size for a 2+1 stretch pool, so k shards take writes.
+  set_pool_min_size(k);
+  trim_log(true);
+
+  const int N = CRUSH_ITEM_NONE;
+  vector<int> a;
+  int acting_primary;
+  osdmap->pg_to_acting_osds(pgid, &a, &acting_primary);
+  const vector<int> upmapped = {a[3], a[4], a[5], a[0], a[1], a[2]};
+  remap(upmapped, a);
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_acting(), a);
+  ASSERT_EQ(ps->get_backfill_targets().size(), upmapped.size());
+
+  mark_osds_down({a[3], a[4], a[5]});
+  enter_degraded_stretch_mode(a[0] / (k + m));
+  ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_acting(), (vector<int>{a[0], a[1], a[2], N, N, N}));
+  ASSERT_STREQ(ps->get_current_state(), "Started/Primary/Active/Backfilling");
+  const set<pg_shard_t> zone_a_targets = {pg_shard_t(a[0], shard_id_t(3)),
+                                          pg_shard_t(a[1], shard_id_t(4)),
+                                          pg_shard_t(a[2], shard_id_t(5))};
+  ASSERT_EQ(ps->get_backfill_targets(), zone_a_targets);
+  for (const auto &t : zone_a_targets) {
+    complete_backfill(t);
+  }
+  finish_backfill();
+  ASSERT_EQ(get_primary_test_pg()->get_peering_state()->get_acting(),
+            (vector<int>{N, N, N, a[0], a[1], a[2]}));
+
+  mark_osd_down(a[2]);
+  ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_acting(), (vector<int>{N, N, N, a[0], a[1], N}));
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  const std::string data(stripe_unit * k, 'B');
+  const vector<std::string> newest = {"newest0", "newest1", "newest2"};
+  for (const auto &name : newest) {
+    create_and_write_verify(name, data);
+  }
+
+  // Without the upmap the newest shards are strays while the PG writes on.
+  remap({}, {});
+  ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  ASSERT_EQ(0u, ps->get_num_unfound());
+  create_and_write_verify("later", data);
+
+  remap(upmapped, {}, {a[2], a[3], a[4], a[5]});
+  ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  for (const auto &name : newest) {
+    EXPECT_FALSE(ps->get_missing_loc().is_unfound(make_test_object(name)))
+      << name;
+  }
+  EXPECT_EQ(0u, ps->get_num_unfound());
+}
+
+// A pg-upmap swaps the zone blocks while a pg_temp keeps the old acting
+// set.  Before the last new up shard of block 1 (y) is backfilled, the OSD
+// of another, complete one (x) restarts and misses a few writes, and the
+// writes that follow outrun the PG log.  x must be caught up from the log,
+// not backfilled again from scratch, and keep getting writes, so that the
+// PG moves to up when y's backfill finishes.
+TEST_F(TestECStretchPeering, ZoneBlockSwap_RestartedUpShardKeptCurrent)
+{
+  ASSERT_TRUE(all_shards_active());
+  vector<int> a;
+  ASSERT_NO_FATAL_FAILURE(swap_zone_blocks_but(4, &a));
+  const vector<int> up = {a[3], a[4], a[5], a[0], a[1], a[2]};
+  const pg_shard_t x(a[2], shard_id_t(5));
+  const pg_shard_t y(a[1], shard_id_t(4));
+
+  const std::string data(stripe_unit * k, 'B');
+  const vector<std::string> missed = {"missed0", "missed1"};
+  mark_osd_down(x.osd);
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active());
+  for (const auto &name : missed) {
+    create_and_write_verify(name, data);
+  }
+  mark_osd_up(x.osd);
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_acting(), a);
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  ASSERT_TRUE(ps->is_backfill_target(x));
+  ASSERT_TRUE(ps->get_peer_info(x).last_backfill.is_max());
+  for (const auto &name : missed) {
+    run_recovery(name, false, data);
+  }
+  ASSERT_FALSE(get_primary_test_pg()->get_peering_state()->needs_recovery());
+
+  // More writes than the PG log keeps.
+  enable_log_trimming = true;
+  set_target_pg_log_entries(2);
+  vector<std::string> later;
+  for (int i = 0; i < 6; ++i) {
+    later.push_back("later" + std::to_string(i));
+    create_and_write_verify(later.back(), data);
+  }
+  enable_log_trimming = false;
+
+  complete_backfill(y);
+  ASSERT_STREQ(get_primary_test_pg()->get_peering_state()->get_current_state(),
+               "Started/Primary/Active/Backfilling");
+  finish_backfill();
+
+  ps = get_primary_test_pg()->get_peering_state();
+  EXPECT_EQ(ps->get_acting(), up) << ps->get_current_state();
+  EXPECT_EQ(0u, ps->get_num_unfound());
+  for (const auto &name : missed) {
+    verify_object(name);
+  }
+  for (const auto &name : later) {
+    verify_object(name);
+  }
+}
+
+// x, a complete up shard waiting for its zone block, misses an overwrite
+// while its OSD restarts.  It is caught up from the log, and its missing
+// object is counted until it is recovered.
+TEST_F(TestECStretchPeering, ZoneBlockSwap_RestartedUpShardMissingCounted)
+{
+  ASSERT_TRUE(all_shards_active());
+  vector<int> a;
+  ASSERT_NO_FATAL_FAILURE(swap_zone_blocks_but(4, &a));
+  const pg_shard_t x(a[2], shard_id_t(5));
+
+  const std::string data(stripe_unit * k, 'B');
+  const std::string overwrite(stripe_unit * k, 'C');
+  create_and_write_verify("obj", data);
+  mark_osd_down(x.osd);
+  write_verify("obj", 0, overwrite, data.size());
+  mark_osd_up(x.osd);
+
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  ASSERT_TRUE(ps->is_backfill_target(x));
+  ASSERT_TRUE(ps->get_peer_info(x).last_backfill.is_max());
+  ps->prepare_stats_for_publish(std::nullopt, object_stat_collection_t());
+  EXPECT_EQ(1, ps->get_peer_info(x).stats.stats.sum.num_objects_missing);
+
+  run_recovery("obj", false, overwrite);
+  ps = get_primary_test_pg()->get_peering_state();
+  ps->prepare_stats_for_publish(std::nullopt, object_stat_collection_t());
+  EXPECT_EQ(0, ps->get_peer_info(x).stats.stats.sum.num_objects_missing);
+}
+
+// x, a complete up shard waiting for its zone block, falls off the log of
+// every other shard while its OSD is down, but not off the log of the
+// primary, whose OSD was down too.  Both OSDs return in the same map.  x is
+// not contiguous with the auth log, so it is backfilled again from scratch.
+TEST_F(TestECStretchPeering, ZoneBlockSwap_UpShardBehindAuthLogRestarted)
+{
+  ASSERT_TRUE(all_shards_active());
+  vector<int> a;
+  // The shard the primary takes the log from (the lowest OSD with the newest
+  // log) is one that can be primary, so GetLog does not repeat.
+  ASSERT_NO_FATAL_FAILURE(swap_zone_blocks_but(0, &a));
+  const pg_shard_t x(a[4], shard_id_t(1));
+  const pg_shard_t p(a[0], shard_id_t(0));
+  const pg_shard_t other(a[1], shard_id_t(1));
+
+  const std::string data(stripe_unit * k, 'B');
+  int n = 0;
+  mark_osd_down(x.osd);
+  for (int i = 0; i < 3; ++i) {
+    create_and_write_verify("obj" + std::to_string(n++), data);
+  }
+  mark_osd_down(p.osd);
+  ASSERT_TRUE(get_primary_test_pg()->get_peering_state()->is_active());
+  enable_log_trimming = true;
+  set_target_pg_log_entries(3);
+  for (int i = 0; i < 2; ++i) {
+    create_and_write_verify("obj" + std::to_string(n++), data);
+  }
+  enable_log_trimming = false;
+
+  const pg_info_t &xi = get_test_pg(x)->get_peering_state()->get_info();
+  const pg_info_t &pi = get_test_pg(p)->get_peering_state()->get_info();
+  const pg_info_t &oi = get_test_pg(other)->get_peering_state()->get_info();
+  ASSERT_LE(pi.log_tail, xi.last_update);
+  ASSERT_LT(xi.last_update, oi.log_tail);
+  ASSERT_LE(oi.log_tail, pi.last_update);
+
+  remap({a[3], a[4], a[5], a[0], a[1], a[2]}, a, {p.osd, x.osd});
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
+  ASSERT_EQ(ps->get_primary(), p);
+  ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
+  ASSERT_TRUE(ps->is_backfill_target(x));
+  EXPECT_EQ(ps->get_peer_info(x).last_backfill, hobject_t());
+}
 
 // An older release's 'osd pool stretch set' gave this 2+1 pool stretch values
 // over two datacenters and left its size at 3, so the pool has one zone.
