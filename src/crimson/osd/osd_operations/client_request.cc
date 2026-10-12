@@ -141,6 +141,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 
   DEBUGDPP("{} start", *pgref, *this);
   PG &pg = *pgref;
+  write_timer.mark(client_write_stage_t::DISPATCH);
 
   DEBUGDPP("{}.{}: entering wait_pg_ready stage",
 	   *pgref, *this, this_instance_id);
@@ -171,6 +172,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       *this,
       pg.wait_for_active_blocker,
       &decltype(pg.wait_for_active_blocker)::wait));
+  write_timer.mark(client_write_stage_t::PG_READY);
 
   int cost  = std::max<int>(m->get_cost(), 1);
   unsigned prio  = m->get_priority();
@@ -181,11 +183,13 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   auto throttle = co_await interruptor::make_interruptible(
     shard_services->get_throttle(
       scheduler::params_t{cost, prio, owner, SchedulerClass::client}));
+  write_timer.mark(client_write_stage_t::THROTTLE);
 
   DEBUGDPP("{}.{}: waited for active, entering get_obc stage ",
            pg, *this, this_instance_id);
 
   co_await ihref.enter_stage<interruptor>(client_pp(pg).get_obc, *this);
+  write_timer.mark(client_write_stage_t::PG_ORDER);
 
   DEBUGDPP("{}.{}: entered get_obc stage", pg, *this, this_instance_id);
 
@@ -358,6 +362,7 @@ ClientRequest::process_op(
     m->get_hobj());
   co_await ihref.enter_stage<interruptor>(
     ihref.obc_orderer->obc_pp().process, *this);
+  write_timer.mark(client_write_stage_t::OBJ_ORDER);
 
   if (!pg->is_primary()) {
     DEBUGDPP(
@@ -502,6 +507,7 @@ ClientRequest::do_process(
     co_return;
   }
 
+  write_timer.mark(client_write_stage_t::PREPARE);
   OpsExecuter ox(pg, obc, op_info, *m, get_remote_connection(), snapc);
   auto ret = co_await pg->run_executer(
     ox, obc, op_info, m->ops
@@ -512,6 +518,7 @@ ClientRequest::do_process(
       return e;
     })
   );
+  write_timer.mark(client_write_stage_t::EXECUTE);
 
   auto should_log_error = [](std::error_code e) -> bool {
     switch (e.value()) {
@@ -550,10 +557,12 @@ ClientRequest::do_process(
 	std::move(ox), m->ops);
       co_await std::move(submitted);
     }
+    write_timer.mark(client_write_stage_t::SUBMIT);
     co_await ihref.enter_stage<interruptor>(
       ihref.obc_orderer->obc_pp().wait_repop, *this);
 
     co_await std::move(all_completed);
+    write_timer.mark(client_write_stage_t::WAIT_REPOP);
   }
 
   co_await ihref.enter_stage<interruptor>(
@@ -633,6 +642,10 @@ ClientRequest::do_process(
     co_await interruptor::make_interruptible(
       get_foreign_connection().send_with_throttling(std::move(reply))
     );
+  }
+  if (op_info.may_write()) {
+    write_timer.mark(client_write_stage_t::REPLY);
+    pg->shard_services.get_op_stage_stats().add(write_timer);
   }
 }
 

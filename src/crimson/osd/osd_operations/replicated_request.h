@@ -5,6 +5,7 @@
 
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osdmap_gate.h"
+#include "crimson/osd/op_stage_stats.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/osd_operations/client_request.h"
@@ -71,6 +72,7 @@ private:
 
   PipelineHandle handle;
   Ref<MOSDRepOp> req;
+  op_stage_stats_t::timer_t<rep_op_stage_t> timer;
 };
 
 }

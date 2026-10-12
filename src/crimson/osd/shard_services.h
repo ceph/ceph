@@ -24,6 +24,7 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/op_stage_stats.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/state.h"
 #include "common/AsyncReserver.h"
@@ -418,6 +419,7 @@ class ShardServices : public OSDMapService,
   std::array<uint64_t,
     static_cast<size_t>(OperationTypeCode::last_op)> pg_op_shard_executed{};
   int64_t client_ops_in_flight = 0;
+  op_stage_stats_t op_stage_stats;
   seastar::metrics::metric_groups metrics;
   void register_metrics();
 
@@ -537,6 +539,7 @@ public:
       pg_to_shard_mapping(pg_to_shard_mapping),
       store_shard_nums(store_shard_nums) {
     register_metrics();
+    op_stage_stats.register_metrics();
   }
 
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
@@ -546,6 +549,10 @@ public:
   }
   void client_op_finished() {
     --client_ops_in_flight;
+  }
+
+  op_stage_stats_t &get_op_stage_stats() {
+    return op_stage_stats;
   }
 
   crimson::os::BackendStore get_store(store_index_t store_index) {
