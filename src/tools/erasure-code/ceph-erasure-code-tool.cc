@@ -6,6 +6,7 @@
 #include "common/ceph_argparse.h"
 #include "common/config_proxy.h"
 #include "common/errno.h"
+#include "common/strtol.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -92,11 +93,13 @@ int ec_init(const std::string &profile_str,
     return 1;
   }
 
-  uint64_t stripe_unit = atoi(stripe_unit_str.c_str());
-  if (stripe_unit <= 0) {
+  std::string err;
+  long long stripe_unit_arg = strict_strtoll(stripe_unit_str, 10, &err);
+  if (!err.empty() || stripe_unit_arg <= 0) {
     usage("invalid stripe unit", std::cerr);
     return 1;
   }
+  uint64_t stripe_unit = stripe_unit_arg;
 
   uint64_t stripe_size = (*ec_impl)->get_data_chunk_count();
   uint64_t stripe_width = stripe_size * stripe_unit;
@@ -270,15 +273,21 @@ int do_decode(const std::vector<const char*> &args) {
   const auto chunk_mapping = ec_impl->get_chunk_mapping();
   uint64_t shard_size = 0;
   for (auto &shard_str : shards) {
-    std::string name = fname + "." + shard_str;
     std::string error;
+    int shard_num = strict_strtol(shard_str, 10, &error);
+    if (!error.empty() || shard_num < 0 ||
+        shard_num >= (int)sinfo->get_k_plus_m()) {
+      usage("invalid shard " + shard_str, std::cerr);
+      return 1;
+    }
+    std::string name = fname + "." + shard_str;
     bufferlist bl;
     r = bl.read_file(name.c_str(), &error);
     if (r < 0) {
       std::cerr << "failed to read " << name << ": " << error << std::endl;
       return 1;
     }
-    shard_id_t shard(atoi(shard_str.c_str()));
+    shard_id_t shard(shard_num);
     encoded_data.insert_in_shard(shard, 0, bl);
     shard_size = std::max<uint64_t>(shard_size, bl.length());
   }

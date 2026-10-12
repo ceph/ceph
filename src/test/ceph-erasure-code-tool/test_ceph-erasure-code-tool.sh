@@ -88,6 +88,21 @@ ceph-erasure-code-tool decode \
                        $TMPDIR/small
 cmp $TMPDIR/small.orig $TMPDIR/small
 
+cp $TMPDIR/small.3 $TMPDIR/small.4
+ceph-erasure-code-tool decode \
+                       plugin=isa,technique=reed_sol_van,k=2,m=2 \
+                       4096 \
+                       2,4 \
+                       $TMPDIR/small 2>&1 |
+    grep -q 'invalid shard 4'
+
+ceph-erasure-code-tool decode \
+                       plugin=isa,technique=reed_sol_van,k=2,m=2 \
+                       -4096 \
+                       2,3 \
+                       $TMPDIR/small 2>&1 |
+    grep -q 'invalid stripe unit'
+
 # lrc maps data chunks to shards other than 0..k-1
 rm $TMPDIR/data.*[0-9]
 ceph-erasure-code-tool encode \
