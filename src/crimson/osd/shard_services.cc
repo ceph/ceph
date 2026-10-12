@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <sys/resource.h>
+
 #include <boost/smart_ptr/make_local_shared.hpp>
 
 #include "crimson/osd/shard_services.h"
@@ -120,8 +122,49 @@ void ShardServices::register_metrics()
         sm::description(
           "PG ops that needed a cross-shard hop to reach the pg's owning shard"),
         {label}),
+      sm::make_counter("op_executed", pg_op_shard_executed[i],
+        sm::description(
+          "PG ops run on this shard, i.e. counted on the pg's owning shard"),
+        {label}),
     });
   }
+
+  auto num_primary_pgs = [this] {
+    int64_t n = 0;
+    for (auto &[pgid, pg] : local_state.pg_map.get_pgs()) {
+      if (pg->is_primary()) {
+        ++n;
+      }
+    }
+    return n;
+  };
+  // getrusage() on a reactor thread splits its CPU time into user and
+  // kernel; seastar's cpu_used_time_ms only reports the sum.
+  auto thread_cpu_ms = [](bool sys) {
+    struct rusage ru;
+    if (::getrusage(RUSAGE_THREAD, &ru) != 0) {
+      return int64_t(0);
+    }
+    const auto &tv = sys ? ru.ru_stime : ru.ru_utime;
+    return int64_t(tv.tv_sec) * 1000 + tv.tv_usec / 1000;
+  };
+  metrics.add_group("osd_shard", {
+    sm::make_gauge("pgs", [num_primary_pgs] { return num_primary_pgs(); },
+      sm::description("PGs on this shard by role on this OSD"),
+      {sm::label("role")("primary")}),
+    sm::make_gauge("pgs",
+      [this, num_primary_pgs] {
+        return int64_t(get_num_local_pgs()) - num_primary_pgs();
+      },
+      sm::description("PGs on this shard by role on this OSD"),
+      {sm::label("role")("replica")}),
+    sm::make_gauge("client_ops_in_flight", client_ops_in_flight,
+      sm::description("client ops being processed by PGs on this shard")),
+    sm::make_counter("cpu_user_ms", [thread_cpu_ms] { return thread_cpu_ms(false); },
+      sm::description("user CPU time of this reactor thread")),
+    sm::make_counter("cpu_sys_ms", [thread_cpu_ms] { return thread_cpu_ms(true); },
+      sm::description("kernel CPU time of this reactor thread")),
+  });
 }
 
 seastar::future<Ref<PG>> ShardServices::extract_pg(spg_t pgid) {
