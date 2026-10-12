@@ -1658,7 +1658,9 @@ public:
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
 			     << oc.bucket << ":" << o.key 
 			     << " -> " << transition.storage_class 
-			     << " " << cpp_strerror(r) << dendl;
+			     << " " << cpp_strerror(r)
+			     << (r == -ECANCELED ? " (object changed concurrently)" : "")
+			     << dendl;
         return r;
       }
     }
