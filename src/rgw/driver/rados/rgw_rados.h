@@ -883,7 +883,7 @@ public:
         bool keep_tail;
         bool completeMultipart;
         bool appendable;
-        // set by copy_obj() only: arms cls_rgw_obj_assert_no_share_manifest
+        // set by copy_obj() only: arms cls_obj_check_prefix_exist(RGW_ATTR_SHARE_MANIFEST);
         // in _do_write_meta() when the destination had no shared_manifest at
         // get_state() time, to catch a dedup commit racing the copy's head
         // write. Left false for PUT/multipart so their behavior is unchanged.

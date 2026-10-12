@@ -1930,7 +1930,6 @@ constexpr auto bucket_refresh_instance = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_
 constexpr auto obj_remove = ClsMethod<RdWrTag, ClassId>(RGW_OBJ_REMOVE);
 constexpr auto obj_store_pg_ver = ClsMethod<WrTag, ClassId>(RGW_OBJ_STORE_PG_VER);
 constexpr auto obj_check_attrs_prefix = ClsMethod<RdTag, ClassId>(RGW_OBJ_CHECK_ATTRS_PREFIX);
-constexpr auto obj_assert_no_share_manifest = ClsMethod<RdTag, ClassId>(RGW_OBJ_ASSERT_NO_SHARE_MANIFEST);
 constexpr auto obj_check_mtime = ClsMethod<RdTag, ClassId>(RGW_OBJ_CHECK_MTIME);
 
 // Bucket Index (BI) / Resharding

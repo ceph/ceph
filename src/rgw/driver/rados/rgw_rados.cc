@@ -3530,7 +3530,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
        * (sets shared_manifest + its own manifest) before we overwrite the
        * manifest here, restart the copy so it replans against the
        * post-dedup state instead of clobbering it with a stale manifest */
-      cls_rgw_obj_assert_no_share_manifest(op);
+
+      /* fail if RGW_ATTR_SHARE_MANIFEST exists */
+      store->cls_obj_check_prefix_exist(op, RGW_ATTR_SHARE_MANIFEST, true);
     }
 
     /* remove existing manifest attr */
@@ -3743,6 +3745,15 @@ done_cancel:
     meta.canceled = true;
   }
 
+  if (r == -ECANCELED && shared_manifest_absent_guard) {
+    // dest attrs changed (dedup set shared_manifest) between our get_state()
+    // and this operate(); invalidate so a retry's get_state() re-reads them.
+    target->invalidate_state();
+    if (!after_shared_manifest_race && dedup_race_retry) {
+      *dedup_race_retry = true;
+    }
+  }
+
   /* we lost in a race. There are a few options:
    * - existing object was rewritten (ECANCELED)
    * - nonexistent object was created (EEXIST)
@@ -3777,15 +3788,6 @@ done_cancel:
           r = 0;
         }
       }
-    }
-  }
-
-  if (r == -EAGAIN && shared_manifest_absent_guard) {
-    // dest attrs changed (dedup set shared_manifest) between our get_state()
-    // and this operate(); invalidate so a retry's get_state() re-reads them.
-    target->invalidate_state();
-    if (!after_shared_manifest_race && dedup_race_retry) {
-      *dedup_race_retry = true;
     }
   }
 
@@ -7347,7 +7349,9 @@ int RGWRados::Object::Delete::delete_obj_impl(optional_yield y,
   if (shared_manifest_absent_guard) {
     /* object was not a dedup target at read time; if dedup makes it one before
      * we remove the head, restart delete so GC sees the shared manifest */
-    cls_rgw_obj_assert_no_share_manifest(op);
+
+    /* fail if RGW_ATTR_SHARE_MANIFEST exists */
+    store->cls_obj_check_prefix_exist(op, RGW_ATTR_SHARE_MANIFEST, true);
   }
 
   store->remove_rgw_head_obj(op);
@@ -7362,7 +7366,7 @@ int RGWRados::Object::Delete::delete_obj_impl(optional_yield y,
   r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, std::move(op), y, 0, nullptr, &epoch);
 
   /* raced with another operation, object state is indeterminate */
-  const bool need_invalidate = (r == -ECANCELED || r == -EAGAIN);
+  const bool need_invalidate = (r == -ECANCELED);
 
   int64_t poolid = ioctx.get_id();
   if (r == -ETIMEDOUT) {
@@ -7394,7 +7398,7 @@ int RGWRados::Object::Delete::delete_obj_impl(optional_yield y,
   }
 
   if (r < 0) {
-    if (r == -EAGAIN && shared_manifest_absent_guard &&
+    if (r == -ECANCELED && shared_manifest_absent_guard &&
 	!after_shared_manifest_race && dedup_race_retry) {
       *dedup_race_retry = true;
       return r;

@@ -209,12 +209,6 @@ void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const string& 
   o.exec(method::obj_check_attrs_prefix, in);
 }
 
-void cls_rgw_obj_assert_no_share_manifest(librados::ObjectOperation& o)
-{
-  bufferlist in;
-  o.exec(method::obj_assert_no_share_manifest, in);
-}
-
 void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const real_time& mtime, bool high_precision_time, RGWCheckMTimeType type)
 {
   bufferlist in;

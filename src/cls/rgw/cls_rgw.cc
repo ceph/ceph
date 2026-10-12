@@ -2884,31 +2884,6 @@ static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
-/* user.rgw.shared_manifest — must match RGW_ATTR_SHARE_MANIFEST in rgw */
-static constexpr char rgw_attr_share_manifest[] = "user.rgw.shared_manifest";
-
-/*
- * Used by delete_obj dedup race guard. Returns -EAGAIN (not -ECANCELED) if the
- * attr is present so callers can retry without conflating mtime/version checks.
- */
-static int rgw_obj_assert_no_share_manifest(cls_method_context_t hctx,
-					    bufferlist *in,
-					    bufferlist *out)
-{
-  CLS_LOG(10, "entered %s", __func__);
-  bufferlist bl;
-  int ret = cls_cxx_getxattr(hctx, rgw_attr_share_manifest, &bl);
-  if (ret >= 0) {
-    return -EAGAIN;
-  }
-  if (ret == -ENODATA || ret == -ENOENT) {
-    return 0;
-  }
-  CLS_LOG(0, "ERROR: %s: cls_cxx_getxattr(%s) returned %d", __func__,
-	  rgw_attr_share_manifest, ret);
-  return ret;
-}
-
 static int rgw_obj_check_mtime(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -5415,7 +5390,6 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_obj_remove;
   cls_method_handle_t h_rgw_obj_store_pg_ver;
   cls_method_handle_t h_rgw_obj_check_attrs_prefix;
-  cls_method_handle_t h_rgw_obj_assert_no_share_manifest;
   cls_method_handle_t h_rgw_obj_check_mtime;
   cls_method_handle_t h_rgw_bi_get_op;
   cls_method_handle_t h_rgw_bi_put_op;
@@ -5482,8 +5456,6 @@ CLS_INIT(rgw)
   cls.register_cxx_method(obj_remove, rgw_obj_remove, &h_rgw_obj_remove);
   cls.register_cxx_method(obj_store_pg_ver, rgw_obj_store_pg_ver, &h_rgw_obj_store_pg_ver);
   cls.register_cxx_method(obj_check_attrs_prefix, rgw_obj_check_attrs_prefix, &h_rgw_obj_check_attrs_prefix);
-  cls.register_cxx_method(obj_assert_no_share_manifest, rgw_obj_assert_no_share_manifest,
-			  &h_rgw_obj_assert_no_share_manifest);
   cls.register_cxx_method(obj_check_mtime, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
 
   // Bucket Index (BI) / Resharding
