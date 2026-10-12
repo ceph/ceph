@@ -2246,11 +2246,11 @@ class CephManager:
     def create_pool(self, pool_name, pg_num=16,
                     erasure_code_profile_name=None,
                     erasure_code_crush_rule_name=None,
-                    pool_type='replicated',
-                    num_zones=None,
                     min_size=None,
                     erasure_code_use_overwrites=False,
-                    osd_failure_domain=None):
+                    num_zones=None,
+                    osd_failure_domain=None,
+                    pool_type='replicated'):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
@@ -2271,9 +2271,9 @@ class CephManager:
             assert pool_name not in self.pools
             self.log("creating pool_name %s" % (pool_name,))
             if erasure_code_profile_name:
-                cmd_args = ['osd', 'pool', 'create', 
-                            pool_name, str(pg_num), 
-                            str(pg_num), 'erasure', 
+                cmd_args = ['osd', 'pool', 'create',
+                            pool_name, str(pg_num),
+                            str(pg_num), 'erasure',
                             erasure_code_profile_name]
                 if erasure_code_crush_rule_name:
                     cmd_args.extend([erasure_code_crush_rule_name])
