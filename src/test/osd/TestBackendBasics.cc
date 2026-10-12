@@ -88,52 +88,6 @@ public:
    * This is similar to TestECFailover::simulate_osd_failure but handles
    * multiple failures at once.
    */
-  void simulate_multiple_osd_failures(const std::set<int>& failed_osds) {
-    auto new_osdmap = std::make_shared<OSDMap>();
-    new_osdmap->deepish_copy_from(*osdmap);
-
-    // Build new acting set with failed OSDs replaced by CRUSH_ITEM_NONE
-    std::vector<int> new_acting;
-    int total_osds = num_zones * (k + m);
-
-    for (int i = 0; i < total_osds; i++) {
-      bool is_failed = failed_osds.contains(i);
-      new_acting.push_back(is_failed ? CRUSH_ITEM_NONE : i);
-    }
-    
-    // Get the pool to use pgtemp_primaryfirst transformation
-    const pg_pool_t* pool = new_osdmap->get_pg_pool(pgid.pool());
-    ceph_assert(pool != nullptr);
-    
-    // For EC pools with optimizations, pgtemp_primaryfirst reorders the acting set
-    std::vector<int> transformed_acting = new_osdmap->pgtemp_primaryfirst(*pool, new_acting);
-    
-    // Use OSDMap::Incremental to set pg_temp and mark OSDs as down
-    OSDMap::Incremental inc(new_osdmap->get_epoch() + 1);
-    inc.fsid = new_osdmap->get_fsid();
-    
-    for (int failed_osd : failed_osds) {
-      ceph_assert(new_osdmap->is_up(failed_osd));
-      inc.new_state[failed_osd] = CEPH_OSD_UP;  // toggles UP: marks it down
-    }
-    
-    // Convert to mempool vector for pg_temp
-    mempool::osdmap::vector<int> pg_temp_vec(transformed_acting.begin(), transformed_acting.end());
-    inc.new_pg_temp[pgid] = pg_temp_vec;
-
-    new_osdmap->apply_incremental(inc);
-    
-    // Finalize the CRUSH map
-    new_osdmap->crush->finalize();
-
-    // Update listener shardsets to remove failed shards
-    for (int failed_osd : failed_osds) {
-      remove_shard_from_all_listeners(pg_shard_t(failed_osd, shard_id_t(failed_osd)));
-    }
-
-    // update_osdmap will query the OSDMap to determine the primary
-    update_osdmap(new_osdmap);
-  }
 };
 
 // ---------------------------------------------------------------------------
