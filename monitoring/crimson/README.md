@@ -22,6 +22,13 @@ Also, the `vstart` cluster running with crimson OSDs, must have configured the `
 ceph config set osd crimson_prometheus_port_base 9400
 ```
 
+The "Seastar cross-core messages" panel also needs the following, set before
+the OSDs start:
+
+```
+ceph config set osd crimson_smp_metrics true
+```
+
 
 ## Running the script 
 

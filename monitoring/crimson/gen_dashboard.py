@@ -54,7 +54,8 @@ def pad_shard(expr):
 
 
 def matrix(title, expr, row_field, col_field, unit, w=24, h=8, desc="",
-           lo=0, hi=None, decimals=0):
+           lo=0, hi=None, decimals=0, corner_name="OSD \\ shard",
+           colors="continuous-GrYlRd"):
     """Table with one row per row_field value and one column per col_field value.
 
     With hi=None, the color scale goes up to the largest cell in the table
@@ -72,21 +73,21 @@ def matrix(title, expr, row_field, col_field, unit, w=24, h=8, desc="",
         "fieldConfig": {
             "defaults": {
                 "unit": unit, "decimals": decimals, **limits,
-                "color": {"mode": "continuous-GrYlRd"},
+                "color": {"mode": colors},
                 "custom": {"align": "center",
                            "cellOptions": {"type": "color-background", "mode": "basic"}},
             },
             "overrides": [{
                 "matcher": {"id": "byName", "options": corner},
                 "properties": [
-                    {"id": "displayName", "value": "OSD \\ shard"},
+                    {"id": "displayName", "value": corner_name},
                     {"id": "custom.cellOptions", "value": {"type": "auto"}},
                     {"id": "custom.align", "value": "left"},
                     {"id": "custom.width", "value": 110},
                 ]}],
         },
         "options": {"showHeader": True, "cellHeight": "sm",
-                    "sortBy": [{"displayName": "OSD \\ shard", "desc": False}]},
+                    "sortBy": [{"displayName": corner_name, "desc": False}]},
     }, w, h)
 
 
@@ -212,6 +213,198 @@ matrix("Client throttled ops per shard (avg over time range)",
        "ceph_daemon", "shard", "ops", w=12,
        desc="Rows: OSDs. Columns: reactor shards. Cell: average rate of client "
             "ops that waited in mClock, over the dashboard time range.")
+end_row()
+
+# ---------------- Summary ----------------
+# Values over the dashboard time range, to compare a baseline run with a
+# fixed one.
+row("Summary: cluster funnel and client locality")
+RG = "$__range"
+CMF = '{ceph_daemon=~"$osd", msgr="cluster"}'
+# A messenger's metrics appear on a shard only once the shard uses it, so
+# shards that never touched the cluster messenger are filled in as 0.
+all_shards = f"0 * sum by (ceph_daemon, shard) (osd_reactor_utilization{F})"
+
+
+def cluster_share(direction, desc):
+    msgs = f"sum by (ceph_daemon, shard) (increase(osd_msgr_msgs_{direction}{CMF}[{RG}]))"
+    matrix(f"Cluster messenger (OSD <> OSD): share of messages {direction} per shard",
+           pad_shard(f"(100 * {msgs} / on (ceph_daemon) group_left "
+                     f"sum by (ceph_daemon) ({msgs})) or {all_shards}"),
+           "ceph_daemon", "shard", "percent", w=8, hi=100, desc=desc)
+
+
+cluster_share("sent",
+              "Each shard's share of the messages the OSD's cluster messenger "
+              "sent (repops on a primary, repop replies on a replica); a row "
+              "adds up to 100%. Today shard 0 sends nearly all of them. After "
+              "a fix, each shard's share should follow the PGs it owns.")
+cluster_share("received",
+              "Each shard's share of the messages the OSD's cluster messenger "
+              "received (repops on a replica, repop replies on a primary); a "
+              "row adds up to 100%. Shows which shards read the peers' "
+              "connections. After a fix, each shard's share should follow the "
+              "PGs it owns.")
+CRF = '{ceph_daemon=~"$osd", op_type="client_request"}'
+cr_local = f"sum by (ceph_daemon, shard) (increase(osd_osd_pg_shard_op_local{CRF}[{RG}]))"
+cr_all = (f"({cr_local} + "
+          f"sum by (ceph_daemon, shard) (increase(osd_osd_pg_shard_op_remote{CRF}[{RG}])))")
+matrix("Client messenger (Client <> OSD): client ops that arrived on their PG's shard",
+       pad_shard(f"100 * {cr_local} / {cr_all} and {cr_all} > 0"),
+       "ceph_daemon", "shard", "percent", w=8, hi=100,
+       colors="continuous-RdYlGr",
+       desc="op_local / (op_local + op_remote) of client requests, by the shard "
+            "they arrived on. Today about 100/N% on every shard: an op lands "
+            "on its PG's shard only by chance. Routing ops to their PG's "
+            "shard should bring it to 100%.")
+end_row()
+
+# ---------------- PG placement and cross-core hops ----------------
+# ShardServices::register_metrics() (shard_services.cc). op_local/op_remote
+# are counted on the shard an op arrives on, op_executed on the PG's shard.
+row("PG placement and cross-core hops")
+PGS = "osd_osd_pg_shard"
+SH = "osd_osd_shard"
+BYSH = "sum by (shard)"
+
+
+def per_shard(title, targets, unit, desc=""):
+    """One graph per selected OSD, one line per shard."""
+    ts(f"{title}: $osd", [(pad_shard(e), l) for e, l in targets], unit,
+       w=24, h=9, repeat="osd", max_per_row=3, desc=desc)
+
+
+for op_type in ["client_request", "replicated_request"]:
+    OF = f'{{ceph_daemon=~"$osd", op_type="{op_type}"}}'
+    per_shard(f"{op_type} ops executed per shard",
+              [(f"{BYSH} (rate({PGS}_op_executed{OF}[{R}]))", "shard {{shard}}")],
+              "ops", desc="Counted on the PG's shard, after any cross-core hop: "
+                          "the real work per shard.")
+BYT = "sum by (ceph_daemon, op_type)"
+OT = '{ceph_daemon=~"$osd", op_type=~"client_request|replicated_request|replicated_request_reply"}'
+ts("Share of ops that needed a cross-core hop",
+   [(f"{BYT} (rate({PGS}_op_remote{OT}[{R}])) / "
+     f"({BYT} (rate({PGS}_op_remote{OT}[{R}])) + {BYT} (rate({PGS}_op_local{OT}[{R}])))",
+     "{{ceph_daemon}} {{op_type}}")],
+   "percentunit", w=24, desc="op_remote / (op_local + op_remote): 1 means every op "
+                             "arrived on a shard other than its PG's.")
+for role in ["primary", "replica"]:
+    matrix(f"{role.capitalize()} PGs per shard (current)",
+           pad_shard(f'sum by (ceph_daemon, shard) ({SH}_pgs{{ceph_daemon=~"$osd", role="{role}"}})'),
+           "ceph_daemon", "shard", "short", w=12,
+           desc="Rows: OSDs. Columns: reactor shards. Cell: current number of "
+                "PGs. Placement balances PG counts, not roles, so a shard with "
+                "more primaries does more client work.")
+per_shard("Client ops in flight per shard",
+          [(f"{BYSH} ({SH}_client_ops_in_flight{F})", "shard {{shard}}")],
+          "short", desc="Client ops being processed by PGs on the shard. Divide by "
+                        "primaries for the average concurrency per PG.")
+per_shard("Reactor kernel CPU share per shard",
+          [(f"{BYSH} (rate({SH}_cpu_sys_ms{F}[{R}])) / "
+            f"({BYSH} (rate({SH}_cpu_sys_ms{F}[{R}])) + {BYSH} (rate({SH}_cpu_user_ms{F}[{R}])))",
+            "shard {{shard}}")],
+          "percentunit", desc="Kernel time / total CPU time of the reactor thread. "
+                              "High on a busy shard: it is in the kernel, e.g. "
+                              "doing network work.")
+# smp counters are per (sender, receiver) queue, labelled shard="<from>-<to>".
+SMP = f"rate(osd_smp_total_sent_messages{F}[{R}])"
+
+
+def smp_by(side, regex):
+    # Sum into a new label first: rewriting "shard" in place would give
+    # several series the same labels, which Prometheus rejects.
+    return (f'label_replace(sum by ({side}) (label_replace({SMP}, "{side}", "$1", '
+            f'"shard", "{regex}")), "shard", "$1", "{side}", "(.*)")')
+
+
+per_shard("seastar::submit_to between reactors, per shard (sent / received)",
+          [(smp_by("from", "^([0-9]+)-[0-9]+$"), "shard {{shard}} sent"),
+           (smp_by("to", "^[0-9]+-([0-9]+)$"), "shard {{shard}} received")],
+          "ops", desc="Needs crimson_smp_metrics. Seastar messages each reactor "
+                      "sent to and received from the other reactors: every "
+                      "cross-core hop, including ones no OSD counter tracks.")
+end_row()
+
+# ---------------- Messengers ----------------
+# crimson/net/msgr_stats.cc, labelled by messenger. The heartbeat messengers
+# (hb_front, hb_back) carry little traffic and are left out.
+MS = "osd_msgr"
+
+
+def msgr_row(title, msgr, xcore_desc):
+    MF = f'{{ceph_daemon=~"$osd", msgr="{msgr}"}}'
+    SUM = "sum by (ceph_daemon)"
+    row(title)
+    per_shard("Messages sent and received per shard",
+              [(f"{BYSH} (rate({MS}_msgs_sent{MF}[{R}]))", "shard {{shard}} sent"),
+               (f"{BYSH} (rate({MS}_msgs_received{MF}[{R}]))", "shard {{shard}} received")],
+              "ops", desc="Messages encoded and written, or read and decoded, on "
+                          "each shard: which reactors do this messenger's socket work.")
+    per_shard("Sends handed to another shard's connection",
+              [(f"{BYSH} (rate({MS}_send_cross_core{MF}[{R}]))", "shard {{shard}}")],
+              "ops", desc="send() called on a shard other than the one the "
+                          "connection's IO runs on, counted on the caller. " + xcore_desc)
+    per_shard("p99 send queue wait per shard",
+              [(f"histogram_quantile(0.99, sum by (le, shard) "
+                f"(rate({MS}_send_queue_wait_ms_bucket{MF}[{R}])))", "shard {{shard}}")],
+              "ms", desc="From send() until the message is encoded, including any "
+                         "cross-core hop. A shard that funnels traffic shows up here "
+                         "as queueing.")
+    ts("Bytes / s",
+       [(f"{SUM} (rate({MS}_bytes_sent{MF}[{R}]))", "{{ceph_daemon}} sent"),
+        (f"{SUM} (rate({MS}_bytes_received{MF}[{R}]))", "{{ceph_daemon}} received")],
+       "Bps")
+    ts("Messages per flush (batching)",
+       [(f"{SUM} (rate({MS}_msgs_sent{MF}[{R}])) / {SUM} (rate({MS}_out_flushes{MF}[{R}]))",
+         "{{ceph_daemon}}")],
+       "short", desc="msgs_sent / out_flushes. Lower means smaller socket writes "
+                     "and more syscalls per message.")
+    ts("Avg send queue wait",
+       [(f"{SUM} (rate({MS}_send_queue_wait_ms_sum{MF}[{R}])) / "
+         f"{SUM} (rate({MS}_send_queue_wait_ms_count{MF}[{R}]))", "{{ceph_daemon}}")],
+       "ms", desc="From send() until the message is encoded, including any "
+                  "cross-core hop. Sends are not throttled, so queueing shows here.")
+    ts("Open connections",
+       [(f"{SUM} ({MS}_connections_open{MF})", "{{ceph_daemon}}")])
+    end_row()
+
+
+msgr_row("Cluster messenger (OSD <> OSD)", "cluster",
+         "Stays near 0 on main: replication sends are forwarded to shard 0 "
+         "before reaching the messenger, and the connection's IO also runs on "
+         "shard 0. That funnel shows in the cross-core messages graph instead.")
+msgr_row("Client messenger (Client <> OSD)", "client",
+         "Op replies leave the PG's shard for the shard holding the client's "
+         "connection, so this is the client-side cross-core hop.")
+
+# ---------------- Write latency breakdown ----------------
+# crimson/osd/op_stage_stats.cc. lowres_clock histograms in ms with tiers:
+# tail="all", "slow" (total >= 10 ms) and "very_slow" (>= 50 ms).
+row("Write latency breakdown (client and replication)")
+OP = "osd_osd_op"
+BYS = "sum by (ceph_daemon, stage)"
+for name, title in [("client_write_stage_lat_ms", "Client write (primary)"),
+                    ("rep_op_stage_lat_ms", "Repop (replica)")]:
+    ts(f"{title}: avg latency by stage",
+       [(f"{BYS} (rate({OP}_{name}_sum{FT}[{R}])) / {BYS} (rate({OP}_{name}_count{FT}[{R}]))",
+         "{{ceph_daemon}} {{stage}}")],
+       "ms", desc="tail=\"all\". total is arrival to reply; the stages add up to it.")
+    ts(f"{title}: avg latency by stage, slow ops (total >= 10 ms)",
+       [(f"{BYS} (rate({OP}_{name}_sum{{ceph_daemon=~\"$osd\", tail=\"slow\"}}[{R}])) / "
+         f"{BYS} (rate({OP}_{name}_count{{ceph_daemon=~\"$osd\", tail=\"slow\"}}[{R}]))",
+         "{{ceph_daemon}} {{stage}}")],
+       "ms", desc="Which stages the tail spends its time in.")
+BYW = "sum by (ceph_daemon, what)"
+ts("Replication latency on the primary (avg)",
+   [(f"{BYW} (rate({OP}_replication_lat_ms_sum{F}[{R}])) / "
+     f"{BYW} (rate({OP}_replication_lat_ms_count{F}[{R}]))", "{{ceph_daemon}} {{what}}")],
+   "ms", desc="repop_rtt: repop sent until each replica's reply. local_commit: "
+              "repops sent until the primary's own commit. wait_peers: own "
+              "commit until all replicas acked.")
+ts("Replication latency on the primary (p99)",
+   [(f"histogram_quantile(0.99, sum by (le, ceph_daemon, what) "
+     f"(rate({OP}_replication_lat_ms_bucket{F}[{R}])))", "{{ceph_daemon}} {{what}}")],
+   "ms")
 end_row()
 
 # ---------------- SeaStore ----------------
