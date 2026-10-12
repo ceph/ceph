@@ -13103,10 +13103,10 @@ bool Client::WriteEncMgr::do_try_finish(int r)
 }
 #endif
 
-void Client::WriteEncMgr_Buffered::update_write_params()
+void Client::WriteEncMgr::update_write_params()
 {
-  if (iofinish) {
-    static_cast<CWF_iofinish *>(iofinish)->CWF->update_write_params(offset, size);
+  if (cwf) {
+    cwf->update_write_params(offset, size);
   }
 }
 
@@ -13315,6 +13315,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
     cwf_iofinish->CWF = cwf.get();
       logger->inc(l_c_aio_ops);
       inc_aio_in_flight();
+    enc_mgr->set_write_finisher(cwf.get());
   }
 
   if (cct->_conf->client_oc &&

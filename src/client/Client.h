@@ -1851,6 +1851,7 @@ private:
   };
 
   struct CWF_iofinish;
+  class C_Write_Finisher;
 
   class WriteEncMgr : public RefCountedObject {
   protected:
@@ -1867,6 +1868,8 @@ private:
     Inode *in;
 
     Context *iofinish{nullptr};
+    // an async write's finisher, told the range that was really written
+    C_Write_Finisher *cwf{nullptr};
 
     int64_t offset;
     uint64_t size;
@@ -1923,7 +1926,7 @@ private:
 
   protected:
     virtual int do_write() = 0;
-    virtual void update_write_params() = 0;
+    void update_write_params();
 
   public:
     WriteEncMgr(Client *clnt,
@@ -1933,6 +1936,10 @@ private:
     virtual ~WriteEncMgr();
 
     int init();
+
+    void set_write_finisher(C_Write_Finisher *_cwf) {
+      cwf = _cwf;
+    }
 
     void get_write_params(int64_t *poffset, uint64_t *psize, bufferlist **ppbl) const {
       *poffset = offset;
@@ -1974,7 +1981,6 @@ private:
                          bufferlist& bl,
                          bool async) : WriteEncMgr(clnt, f, offset, size, bl, async) {}
 
-    void update_write_params() override;
     int do_write() override;
   };
 
@@ -1985,7 +1991,6 @@ private:
                          bufferlist& bl,
                          bool async) : WriteEncMgr(clnt, f, offset, size, bl, async) {}
 
-    void update_write_params() override {}
     int do_write() override;
   };
 
