@@ -288,7 +288,8 @@ const STEPS: &[(&str, &str)] = &[
     ("iam-user", "create an IAM user in the account, through NooBaa's IAM API"),
     ("capture",  "run the corpus against the NooBaa endpoint"),
     ("stop",     "stop the endpoint, leaving the tree"),
-    ("adopt",    "start RGW against the same tree"),
+    ("import",   "RGW over the same tree;  import the identities and each bucket's record"),
+    ("adopt",    "adopt every bucket:  import its record and convert its tree"),
 ];
 
 fn main() {
@@ -312,7 +313,8 @@ fn main() {
         "iam-user" => iam_user(&env),
         "capture" => capture(&env, args.get(1).map(String::as_str).unwrap_or("noobaa")),
         "stop" => stop(&env),
-        "adopt" => adopt(&env),
+        "import" => adopt(&env, "import"),
+        "adopt" => adopt(&env, "adopt"),
         "up" => ["pin", "worktree", "patch", "build", "config"]
             .iter()
             .try_for_each(|s| match *s {
@@ -1065,17 +1067,20 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
      * artifacts go in and what the run is allowed to do.
      *
      * `noobaa` generates:  it creates the objects and records them, and
-     * the tree it leaves is the artifact the handoff is about.  `rgw`
-     * observes:  the objects are already there, so it records without
+     * the tree it leaves is the artifact the handoff is about.  The rgw
+     * sides observe:  the objects are already there, so it records without
      * creating -- and must, because creating would describe its own
      * work rather than NooBaa's, and over a tree served read-only it
      * would be refused outright. */
     let (observe, label) = match side {
         "noobaa" => (false, "noobaa"),
-        "rgw" => (true, "rgw"),
+        "rgw-unconverted" => (true, "rgw-unconverted"),
+        "rgw-converted" => (true, "rgw-converted"),
         other => {
             return Err(format!(
-                "capture takes `noobaa` or `rgw`, not {other:?}.\n                   noobaa generates the tree;  rgw observes it after adopt."));
+                "capture takes `noobaa`, `rgw-unconverted` or `rgw-converted`, \
+                 not {other:?}.\n  noobaa generates the tree;  the rgw sides \
+                 observe it after `import` and after `adopt`."));
         }
     };
 
@@ -1089,7 +1094,7 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
             return Err("the NooBaa endpoint is not running;  run `serve` \
                         first".into());
         }
-        ("rgw", Some(pid)) => {
+        (l, Some(pid)) if l != "noobaa" => {
             return Err(format!(
                 "NooBaa is still running (pid {pid}).  The rgw side \
                  describes the tree after the handoff:  run `stop`, then \
@@ -1100,9 +1105,9 @@ fn capture(env: &Env, side: &str) -> Result<(), String> {
     /* Whether the side's endpoint answers, not whether a pid exists.
      * The corpus will ask the same question and a clearer error here
      * is cheaper than an SDK timeout there. */
-    let port = if label == "rgw" { env.rgw_port } else { env.port };
+    let port = if label == "noobaa" { env.port } else { env.rgw_port };
     if std::net::TcpStream::connect(("127.0.0.1", port)).is_err() {
-        return Err(if label == "rgw" {
+        return Err(if label != "noobaa" {
             format!(
                 "nothing accepts a connection on port {port}, where RGW \
                  should be serving the adopted tree;  run `adopt` first")
@@ -1406,7 +1411,7 @@ fn write_capture_conf(env: &Env, label: &str) -> Result<PathBuf, String> {
          * tree are owned by NooBaa's accounts, and adoption imports
          * those accounts *with their keys* -- so the corpus reaching
          * RGW with the key NooBaa used is the import working. */
-        port = if label == "rgw" { env.rgw_port } else { env.port },
+        port = if label == "noobaa" { env.port } else { env.rgw_port },
         account = env.account,
         non_md5 = if tree_modality(env).as_deref() == Some("md5-on") {
             "False"
@@ -1419,7 +1424,7 @@ fn write_capture_conf(env: &Env, label: &str) -> Result<PathBuf, String> {
          * key:  the corpus's identity check signs as each (see
          * test_corpus/identity.rs).  On NooBaa neither has a use. */
         alt = match (label, iam_user_key(env)?) {
-            ("rgw", Some((ak, sk))) => format!(
+            (l, Some((ak, sk))) if l != "noobaa" => format!(
                 "[s3 alt]\n\
                  # The IAM user `iam-user` created through NooBaa's IAM API,\n\
                  # with the key NooBaa minted for it.\n\
@@ -1437,7 +1442,7 @@ fn write_capture_conf(env: &Env, label: &str) -> Result<PathBuf, String> {
             t.push_str("tenant = adoption-tenant\n");
             t
         },
-        iam = if label == "rgw" {
+        iam = if label != "noobaa" {
             format!(
                 "[iam]\n\
                  # rgw_admin_key:  the corpus signs Admin Ops requests as this.\n\
@@ -1524,7 +1529,18 @@ fn rgw_etag_opts(env: &Env) -> Vec<String> {
     }
 }
 
-fn adopt(env: &Env) -> Result<(), String> {
+/// `import` and `adopt`, which share everything but the command sent for
+/// each bucket.
+///
+/// `import` imports the identities and each bucket's NooBaa record:
+/// RGW's bucket state is written onto the bucket directory and the
+/// objects are left as NooBaa wrote them.  `adopt` imports and converts
+/// each bucket.  Run after `import`, `adopt` reuses that gateway, so the
+/// identities it imported -- and their ids -- are the ones both captures
+/// see;  a restart would re-import them, because rgw-vstart.sh empties
+/// the userdb.
+fn adopt(env: &Env, step: &str) -> Result<(), String> {
+    let tag = format!("{step:8}");
     if let Some(pid) = running(env) {
         return Err(format!(
             "NooBaa is still running (pid {pid}).  The handoff is sequential:  \
@@ -1562,14 +1578,31 @@ fn adopt(env: &Env) -> Result<(), String> {
     let buckets = std::fs::read_dir(&tree)
         .map(|d| d.filter_map(|e| e.ok()).count())
         .unwrap_or(0);
-    println!("adopt    tree {} ({buckets} entries)", tree.display());
+    println!("{tag} tree {} ({buckets} entries)", tree.display());
+    println!("         modality {}",
+             tree_modality(env).unwrap_or_else(|| "unwritten".into()));
+
+    let conf = build.join("ceph.conf");
+    let want = format!("rgw nsfs base path = {}", tree.display());
+    /* Whether a gateway already serves this tree, asked of the gateway:
+     * the `adoption` hint reports the base path it serves.  No answer,
+     * or another tree, and `converted` starts one. */
+    let admin = format!("{}:{}", env.rgw_admin_key, env.rgw_admin_secret);
+    let hint = format!("http://127.0.0.1:{}/admin/driver/hint?hint=adoption",
+                       env.rgw_port);
+    let serving = match rgw_call(&admin, "DELETE", &hint) {
+        Ok((200, body)) => json_str(&body, "base_path")
+            .map(|p| PathBuf::from(p.trim_end_matches('/')) == tree)
+            .unwrap_or(false),
+        _ => false,
+    };
+    if serving && step == "adopt" {
+        println!("{tag} RGW already serves this tree;  adopting in place");
+    } else {
     println!("         rgw-vstart.sh --store nsfs --data-root {} \
               --noobaa-config-root {} --adoption-mode command --with-lifecycle {}",
              env.data.display(), env.config_root().display(),
              rgw_etag_opts(env).join(" "));
-    println!("         modality {}",
-             tree_modality(env).unwrap_or_else(|| "unwritten".into()));
-
     let st = Command::new("bash")
         .arg(script.display().to_string())
         .args([
@@ -1599,24 +1632,20 @@ fn adopt(env: &Env) -> Result<(), String> {
     /* Confirm what it actually points at rather than trusting the exit
      * code:  a redirect that silently did not take effect is the
      * defect this step exists downstream of. */
-    let conf = build.join("ceph.conf");
     let text = std::fs::read_to_string(&conf)
         .map_err(|e| format!("cannot read {}: {e}", conf.display()))?;
-    let want = format!("rgw nsfs base path = {}", tree.display());
     if !text.contains(&want) {
         return Err(format!(
             "{} does not say {want:?} -- RGW is not serving the tree",
             conf.display()
         ));
     }
-    println!("adopt    ceph.conf confirms the base path");
+    println!("{tag} ceph.conf confirms the base path");
+    }
 
     /* The commands.  Identities first, because every bucket's owner and
      * every policy principal resolves through them;  then each bucket
      * the store holds a record of. */
-    let admin = format!("{}:{}", env.rgw_admin_key, env.rgw_admin_secret);
-    let hint = format!("http://127.0.0.1:{}/admin/driver/hint?hint=adoption",
-                       env.rgw_port);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     while std::net::TcpStream::connect(("127.0.0.1", env.rgw_port)).is_err() {
         if std::time::Instant::now() > deadline {
@@ -1629,7 +1658,7 @@ fn adopt(env: &Env) -> Result<(), String> {
     if status != 200 || json_bool(&body, "ran") != Some(true) {
         return Err(format!("importing the identities failed ({status}):\n{body}"));
     }
-    println!("adopt    identities imported:  {} accounts, {} users",
+    println!("{tag} identities imported:  {} accounts, {} users",
              json_str(&body, "accounts").unwrap_or_default(),
              json_str(&body, "users").unwrap_or_default());
 
@@ -1652,7 +1681,7 @@ fn adopt(env: &Env) -> Result<(), String> {
         if status != 200 {
             return Err(format!("granting nsfs=read to {user} failed ({status}):\n{body}"));
         }
-        println!("adopt    IAM user {:?} is {user};  granted nsfs=read", env.iam_user);
+        println!("{tag} IAM user {:?} is {user};  granted nsfs=read", env.iam_user);
     }
 
     let records = env.config_root().join("buckets");
@@ -1663,6 +1692,15 @@ fn adopt(env: &Env) -> Result<(), String> {
         .collect();
     names.sort();
     for name in &names {
+        if step == "import" {
+            let (status, body) = rgw_call(&admin, "DELETE", &format!("{hint}&import={name}"))?;
+            if status != 200 || json_bool(&body, "configured") != Some(true) {
+                return Err(format!(
+                    "importing bucket {name}'s record failed ({status}):\n{body}"));
+            }
+            println!("import   bucket {name}:  record imported;  objects untouched");
+            continue;
+        }
         if name == ENDPOINT_BUCKET {
             adopt_by_profile(env, &admin, name)?;
             continue;
@@ -1671,7 +1709,7 @@ fn adopt(env: &Env) -> Result<(), String> {
         if status != 200 || json_bool(&body, "adopted") != Some(true) {
             return Err(format!("adopting bucket {name} failed ({status}):\n{body}"));
         }
-        println!("adopt    bucket {name}:  profile {}, {} objects, {} versions",
+        println!("{tag} bucket {name}:  profile {}, {} objects, {} versions",
                  json_str(&body, "profile").unwrap_or_default(),
                  json_str(&body, "objects").unwrap_or_default(),
                  json_str(&body, "versions").unwrap_or_default());

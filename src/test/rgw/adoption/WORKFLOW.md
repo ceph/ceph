@@ -13,7 +13,7 @@ step 4 says what is missing.
 ```
   1. stand NooBaa up        standup.rs up && standup.rs serve && standup.rs iam-user
   2. generate and ingest    standup.rs capture
-  3. hand off to RGW        standup.rs stop && standup.rs adopt && standup.rs capture rgw
+  3. hand off to RGW        standup.rs stop, then adopt and capture twice (§3)
   4. verify                 not built -- C2b
 ```
 
@@ -86,9 +86,11 @@ the two capture formats in §7).
 ## 3.  Hand off to RGW
 
 ```sh
-./standup.rs stop        # leaves the tree
-./standup.rs adopt       # RGW over the same tree, every bucket adopted
-./standup.rs capture rgw # the corpus in observe mode against RGW
+./standup.rs stop                      # leaves the tree
+./standup.rs import                    # RGW over the tree;  identities and bucket records imported
+./standup.rs capture rgw-unconverted   # the corpus in observe mode
+./standup.rs adopt                     # the same gateway;  every bucket adopted
+./standup.rs capture rgw-converted     # the corpus in observe mode again
 ```
 
 **Sequential, never concurrent.**  NooBaa writes, stops, then RGW opens
@@ -122,7 +124,19 @@ Admin Ops as vstart's `[iam]` user unless `rgw_admin_key` says
 otherwise:  the corpus needs it to ask what the IAM user's requests run
 as.
 
-`capture rgw` then runs the corpus in observe mode.  Besides the axes,
+`import` and `adopt` produce the two RGW runs C2b compares
+(`docs/NSFS_ADOPTION_WORK_PLAN.md`).  `import` imports the identities
+and then each bucket's NooBaa record, with the `adoption` hint's
+`import=<bucket>`:  RGW's bucket state is written onto the bucket
+directory and the objects are left as NooBaa wrote them.  `adopt`
+adopts every bucket, which imports its record again and converts its
+tree;  `corpus-coverage-copy` goes through the profile endpoint.  When
+the `adoption` hint reports that a gateway already serves this tree,
+`adopt` uses it rather than restarting:  a restart empties the userdb
+and would re-import the identities under new ids, so the two captures
+would see different owners.
+
+Each capture runs the corpus in observe mode.  Besides the axes,
 it checks the imported identities (`test_corpus/identity.rs`):  the
 account's user is its root, and the IAM user has no identity row of
 its own and runs as its account's (`ACCOUNT_IMPORT.md` §2.8).  Its
