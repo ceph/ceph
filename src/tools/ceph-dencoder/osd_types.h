@@ -136,9 +136,10 @@ TYPE(PGMapDigest::pg_count)
 TYPE_FEATUREFUL_NONDETERMINISTIC(PGMap)
 //TYPE(PGMap::Incremental)
 
-#include "mon/MonitorDBStore.h"
-TYPE(MonitorDBStore::Transaction)
-TYPE(MonitorDBStore::Op)
+#include "mon/MonitorDBStoreTransaction.h"
+#include "mon/MonitorDBStoreOp.h"
+TYPE(MonitorDBStoreTransaction)
+TYPE(MonitorDBStoreOp)
 
 #include "mon/MonMap.h"
 TYPE_FEATUREFUL(MonMap)

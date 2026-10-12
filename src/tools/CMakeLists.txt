@@ -44,6 +44,8 @@ endif(WITH_TESTS)
 
 add_executable(ceph-monstore-tool
   ceph_monstore_tool.cc
+  ../mon/MonitorDBStoreOp.cc
+  ../mon/MonitorDBStoreTransaction.cc
   ../mon/MonitorDBStore.cc
   ../mgr/mgr_commands.cc)
 target_link_libraries(ceph-monstore-tool kv os global Boost::program_options)
@@ -53,6 +55,8 @@ add_executable(ceph-objectstore-tool
   ceph_objectstore_tool.cc
   rebuild_mondb.cc
   RadosDump.cc
+  ../mon/MonitorDBStoreOp.cc
+  ../mon/MonitorDBStoreTransaction.cc
   ../mon/MonitorDBStore.cc)
 target_link_libraries(ceph-objectstore-tool osd kv os global Boost::program_options ${CMAKE_DL_LIBS})
 if(WITH_FUSE)

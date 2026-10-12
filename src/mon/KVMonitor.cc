@@ -78,7 +78,7 @@ void KVMonitor::create_pending()
   pending.clear();
 }
 
-void KVMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void KVMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   dout(10) << " " << (version+1) << dendl;
   put_last_committed(t, version+1);
