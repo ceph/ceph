@@ -408,7 +408,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
     mon.set_ver(keys_ver);
 
     if (keys_ver == 1 && mon.is_keyring_required()) {
-      auto t(std::make_shared<MonitorDBStore::Transaction>());
+      auto t(std::make_shared<MonitorDBStoreTransaction>());
       t->erase("mkfs", "keyring");
       mon.store->apply_transaction(t);
     }
@@ -463,7 +463,7 @@ void AuthMonitor::create_pending()
   dout(10) << "create_pending v " << (get_last_committed() + 1) << dendl;
 }
 
-void AuthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void AuthMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   dout(10) << __func__ << " v " << (get_last_committed() + 1) << dendl;
 
@@ -653,7 +653,7 @@ bool AuthMonitor::check_health()
   return next != get_health_checks(); /* should propose */
 }
 
-void AuthMonitor::encode_full(MonitorDBStore::TransactionRef t)
+void AuthMonitor::encode_full(MonitorDBStoreTransactionRef t)
 {
   version_t version = mon.get_ver();
   // do not stash full version 0 as it will never be removed nor read

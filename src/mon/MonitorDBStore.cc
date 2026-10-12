@@ -42,196 +42,7 @@ std::string MonitorDBStore::get_store_path(const std::string& path) {
   return (std::filesystem::path(path) / "store.db").string();
 }
 
-void MonitorDBStore::Op::encode(ceph::buffer::list& encode_bl) const {
-  ENCODE_START(2, 1, encode_bl);
-  encode(type, encode_bl);
-  encode(prefix, encode_bl);
-  encode(key, encode_bl);
-  encode(bl, encode_bl);
-  encode(endkey, encode_bl);
-  ENCODE_FINISH(encode_bl);
-}
-
-void MonitorDBStore::Op::decode(ceph::buffer::list::const_iterator& decode_bl) {
-  DECODE_START(2, decode_bl);
-  decode(type, decode_bl);
-  decode(prefix, decode_bl);
-  decode(key, decode_bl);
-  decode(bl, decode_bl);
-  if (struct_v >= 2)
-    decode(endkey, decode_bl);
-  DECODE_FINISH(decode_bl);
-}
-
-void MonitorDBStore::Op::dump(ceph::Formatter *f) const {
-  f->dump_int("type", type);
-  f->dump_string("prefix", prefix);
-  f->dump_string("key", key);
-  if (endkey.length()) {
-    f->dump_string("endkey", endkey);
-  }
-}
-
-std::list<MonitorDBStore::Op> MonitorDBStore::Op::generate_test_instances() {
-  std::list<Op> ls;
-  ls.emplace_back();
-  // we get coverage here from the Transaction instances
-  return ls;
-}
-
-void MonitorDBStore::Transaction::put(const std::string& prefix, const std::string& key, const ceph::buffer::list& bl) {
-  ops.push_back(Op(OP_PUT, prefix, key, bl));
-  ++keys;
-  bytes += ops.back().approx_size();
-}
-
-void MonitorDBStore::Transaction::put(const std::string& prefix, version_t ver, const ceph::buffer::list& bl) {
-  std::ostringstream os;
-  os << ver;
-  put(prefix, os.str(), bl);
-}
-
-void MonitorDBStore::Transaction::put(const std::string& prefix, const std::string& key, version_t ver) {
-  using ceph::encode;
-  ceph::buffer::list bl;
-  encode(ver, bl);
-  put(prefix, key, bl);
-}
-
-void MonitorDBStore::Transaction::erase(const std::string& prefix, const std::string& key) {
-  ops.push_back(Op(OP_ERASE, prefix, key));
-  ++keys;
-  bytes += ops.back().approx_size();
-}
-
-void MonitorDBStore::Transaction::erase(const std::string& prefix, version_t ver) {
-  std::ostringstream os;
-  os << ver;
-  erase(prefix, os.str());
-}
-
-void MonitorDBStore::Transaction::erase_range(const std::string& prefix, const std::string& begin,
-                                              const std::string& end) {
-  ops.push_back(Op(OP_ERASE_RANGE, prefix, begin, end));
-  ++keys;
-  bytes += ops.back().approx_size();
-}
-
-void MonitorDBStore::Transaction::compact_prefix(const std::string& prefix) {
-  ops.push_back(Op(OP_COMPACT, prefix, {}));
-}
-
-void MonitorDBStore::Transaction::compact_range(const std::string& prefix, const std::string& start,
-                                                const std::string& end) {
-  ops.push_back(Op(OP_COMPACT, prefix, start, end));
-}
-
-void MonitorDBStore::Transaction::encode(ceph::buffer::list& bl) const {
-  ENCODE_START(2, 1, bl);
-  encode(ops, bl);
-  encode(bytes, bl);
-  encode(keys, bl);
-  ENCODE_FINISH(bl);
-}
-
-void MonitorDBStore::Transaction::decode(ceph::buffer::list::const_iterator& bl) {
-  DECODE_START(2, bl);
-  decode(ops, bl);
-  if (struct_v >= 2) {
-    decode(bytes, bl);
-    decode(keys, bl);
-  }
-  DECODE_FINISH(bl);
-}
-
-std::list<MonitorDBStore::Transaction> MonitorDBStore::Transaction::generate_test_instances() {
-  std::list<Transaction> ls;
-  ls.emplace_back();
-  ls.emplace_back();
-  ceph::buffer::list bl;
-  bl.append("value");
-  ls.back().put("prefix", "key", bl);
-  ls.back().erase("prefix2", "key2");
-  ls.back().erase_range("prefix3", "key3", "key4");
-  ls.back().compact_prefix("prefix3");
-  ls.back().compact_range("prefix4", "from", "to");
-  return ls;
-}
-
-void MonitorDBStore::Transaction::append(TransactionRef other) {
-  ops.splice(ops.end(), other->ops);
-  keys += other->keys;
-  bytes += other->bytes;
-}
-
-void MonitorDBStore::Transaction::append_from_encoded(ceph::buffer::list& bl) {
-  auto other(std::make_shared<Transaction>());
-  auto it = bl.cbegin();
-  other->decode(it);
-  append(other);
-}
-
-void MonitorDBStore::Transaction::dump(ceph::Formatter *f, bool dump_val) const {
-  f->open_object_section("transaction");
-  f->open_array_section("ops");
-  int op_num = 0;
-  for (auto it = ops.begin(); it != ops.end(); ++it) {
-    const Op& op = *it;
-    f->open_object_section("op");
-    f->dump_int("op_num", op_num++);
-    switch (op.type) {
-    case OP_PUT:
-    {
-      f->dump_string("type", "PUT");
-      f->dump_string("prefix", op.prefix);
-      f->dump_string("key", op.key);
-      f->dump_unsigned("length", op.bl.length());
-      if (dump_val) {
-        std::ostringstream os;
-        op.bl.hexdump(os);
-        f->dump_string("bl", os.str());
-      }
-    }
-    break;
-    case OP_ERASE:
-    {
-      f->dump_string("type", "ERASE");
-      f->dump_string("prefix", op.prefix);
-      f->dump_string("key", op.key);
-    }
-    break;
-    case OP_ERASE_RANGE:
-    {
-      f->dump_string("type", "ERASE_RANGE");
-      f->dump_string("prefix", op.prefix);
-      f->dump_string("start", op.key);
-      f->dump_string("end", op.endkey);
-    }
-    break;
-    case OP_COMPACT:
-    {
-      f->dump_string("type", "COMPACT");
-      f->dump_string("prefix", op.prefix);
-      f->dump_string("start", op.key);
-      f->dump_string("end", op.endkey);
-    }
-    break;
-    default:
-    {
-      f->dump_string("type", "unknown");
-      f->dump_unsigned("op_code", op.type);
-      break;
-    }
-    }
-    f->close_section();
-  }
-  f->close_section();
-  f->dump_unsigned("num_keys", keys);
-  f->dump_unsigned("num_bytes", bytes);
-  f->close_section();
-}
-
-int MonitorDBStore::apply_transaction(MonitorDBStore::TransactionRef t) {
+int MonitorDBStore::apply_transaction(MonitorDBStoreTransactionRef t) {
   KeyValueDB::Transaction dbt = db->get_transaction();
 
   if (do_dump) {
@@ -248,18 +59,18 @@ int MonitorDBStore::apply_transaction(MonitorDBStore::TransactionRef t) {
 
   std::list<std::pair<std::string, std::pair<std::string,std::string>>> compact;
   for (auto it = t->ops.begin(); it != t->ops.end(); ++it) {
-    const Op& op = *it;
+    const MonitorDBStoreOp& op = *it;
     switch (op.type) {
-    case Transaction::OP_PUT:
+    case MonitorDBStoreTransaction::OP_PUT:
       dbt->set(op.prefix, op.key, op.bl);
       break;
-    case Transaction::OP_ERASE:
+    case MonitorDBStoreTransaction::OP_ERASE:
       dbt->rmkey(op.prefix, op.key);
       break;
-    case Transaction::OP_ERASE_RANGE:
+    case MonitorDBStoreTransaction::OP_ERASE_RANGE:
       dbt->rm_range_keys(op.prefix, op.key, op.endkey);
       break;
-    case Transaction::OP_COMPACT:
+    case MonitorDBStoreTransaction::OP_COMPACT:
       compact.push_back(make_pair(op.prefix, make_pair(op.key, op.endkey)));
       break;
     default:
@@ -286,9 +97,9 @@ int MonitorDBStore::apply_transaction(MonitorDBStore::TransactionRef t) {
 
 struct MonitorDBStore::C_DoTransaction : public Context {
   MonitorDBStore *store;
-  MonitorDBStore::TransactionRef t;
+  MonitorDBStoreTransactionRef t;
   Context *oncommit;
-  C_DoTransaction(MonitorDBStore *s, MonitorDBStore::TransactionRef t,
+  C_DoTransaction(MonitorDBStore *s, MonitorDBStoreTransactionRef t,
                   Context *f)
     : store(s), t(t), oncommit(f)
     {}
@@ -316,7 +127,7 @@ struct MonitorDBStore::C_DoTransaction : public Context {
   }
 };
 
-void MonitorDBStore::queue_transaction(MonitorDBStore::TransactionRef t,
+void MonitorDBStore::queue_transaction(MonitorDBStoreTransactionRef t,
                                        Context *oncommit) {
   io_work.queue(new C_DoTransaction(this, t, oncommit));
 }
@@ -327,7 +138,7 @@ __u32 MonitorDBStore::StoreIteratorImpl::crc() {
   return 0;
 }
 
-void MonitorDBStore::WholeStoreIteratorImpl::get_chunk_tx(TransactionRef tx, uint64_t max_bytes,
+void MonitorDBStore::WholeStoreIteratorImpl::get_chunk_tx(MonitorDBStoreTransactionRef tx, uint64_t max_bytes,
                                                           uint64_t max_keys) {
   using ceph::encode;
   ceph_assert(done == false);
@@ -344,7 +155,7 @@ void MonitorDBStore::WholeStoreIteratorImpl::get_chunk_tx(TransactionRef tx, uin
            tx->get_keys() < max_keys)) {
         // NOTE: putting every key in a separate transaction is
         // questionable as far as efficiency goes
-        auto tmp(std::make_shared<Transaction>());
+        auto tmp(std::make_shared<MonitorDBStoreTransaction>());
         tmp->put(prefix, key, value);
         tx->append(tmp);
         if (g_conf()->mon_sync_debug) {

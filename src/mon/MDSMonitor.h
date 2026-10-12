@@ -48,9 +48,9 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   void update_from_paxos(bool *need_bootstrap) override;
   void init() override;
   void create_pending() override;
-  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void encode_pending(MonitorDBStoreTransactionRef t) override;
   // we don't require full versions; don't encode any.
-  void encode_full(MonitorDBStore::TransactionRef t) override { }
+  void encode_full(MonitorDBStoreTransactionRef t) override { }
   version_t get_trim_to() const override;
 
   bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
@@ -135,7 +135,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
 		    std::ostream& err);
 
   void update_metadata(mds_gid_t gid, const Metadata& metadata);
-  void remove_from_metadata(const FSMap &fsmap, MonitorDBStore::TransactionRef t);
+  void remove_from_metadata(const FSMap &fsmap, MonitorDBStoreTransactionRef t);
   int load_metadata(std::map<mds_gid_t, Metadata>& m);
   void count_metadata(const std::string& field, ceph::Formatter *f);
 

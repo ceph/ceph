@@ -337,7 +337,7 @@ void MgrMonitor::post_paxos_update()
   }
 }
 
-void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void MgrMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   dout(10) << __func__ << " " << pending_map << dendl;
   bufferlist bl;

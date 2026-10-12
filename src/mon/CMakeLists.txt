@@ -14,6 +14,8 @@ set(lib_mon_srcs
   Monitor.cc
   MonitorBackup.cc
   MonitorDBStore.cc
+  MonitorDBStoreOp.cc
+  MonitorDBStoreTransaction.cc
   MonmapMonitor.cc
   MonOpRequest.cc
   LogMonitor.cc
