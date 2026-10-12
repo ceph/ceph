@@ -4014,12 +4014,14 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
       if (mtime > pi->rstat.rctime)
 	pi->rstat.rctime = mtime;
     }
+    bool size_grew = false;
     if (in->is_file() &&   // ONLY if regular file
 	size > pi->size) {
       dout(7) << "  size " << pi->size << " -> " << size
 	      << " for " << *in << dendl;
       pi->size = size;
       pi->rstat.rbytes = size;
+      size_grew = true;
     }
     if (in->is_file() &&
         (dirty & CEPH_CAP_FILE_WR) &&
@@ -4041,8 +4043,24 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 	      << " for " << *in << dendl;
       pi->time_warp_seq = m->get_time_warp_seq();
     }
-    if (m->fscrypt_file.size())
-      pi->fscrypt_file.assign(m->fscrypt_file.begin(), m->fscrypt_file.end());
+    if (m->fscrypt_file.size()) {
+      // Like the size, the fscrypt (logical) size only grows with a cap
+      // flush: a flush that is processed after a newer one, from another
+      // writer, must not take it back.  With both in the same fscrypt
+      // block the (physical) size does not change, so compare the
+      // logical sizes too.
+      bool grows = size_grew;
+      if (!grows) {
+	if (m->fscrypt_file.size() >= sizeof(ceph_le64) &&
+	    pi->fscrypt_file.size() >= sizeof(ceph_le64))
+	  grows = *(ceph_le64 *)m->fscrypt_file.data() >
+		  *(ceph_le64 *)pi->fscrypt_file.data();
+	else
+	  grows = true;
+      }
+      if (grows)
+	pi->fscrypt_file.assign(m->fscrypt_file.begin(), m->fscrypt_file.end());
+    }
   }
   // auth
   if (dirty & CEPH_CAP_AUTH_EXCL) {
