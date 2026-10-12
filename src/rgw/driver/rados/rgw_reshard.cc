@@ -1735,7 +1735,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
       reshard_reduction_wait_hours = reshard_reduction_wait_hours * debug_interval / secs_per_day;
     }
 
-    auto timespan = std::chrono::seconds(int(60 * 60 * reshard_reduction_wait_hours));
+    const ceph::timespan timespan = std::chrono::seconds(int(60 * 60 * reshard_reduction_wait_hours));
     if (now < when_queued + timespan) {
       // too early to reshard; log and skip
       ldpp_dout(dpp, 20) <<  __func__ <<
