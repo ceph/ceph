@@ -191,6 +191,7 @@ set(crimson_net_srcs
   net/Errors.cc
   net/FrameAssemblerV2.cc
   net/io_handler.cc
+  net/msgr_stats.cc
   net/Messenger.cc
   net/SocketConnection.cc
   net/SocketMessenger.cc
