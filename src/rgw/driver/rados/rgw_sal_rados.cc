@@ -62,6 +62,7 @@
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #ifdef WITH_RADOSGW_LANCEDB
+#include "rgw_rest_vector_bucket.h"
 #include "rgw_s3vector.h"
 #include "rgw_s3vector_background.h"
 #endif
@@ -2856,6 +2857,9 @@ void RadosStore::register_admin_apis(RGWRESTMgr* mgr)
 {
   mgr->register_resource("user", new RGWRESTMgr_User);
   mgr->register_resource("bucket", new RGWRESTMgr_Bucket);
+#ifdef WITH_RADOSGW_LANCEDB
+  mgr->register_resource("vectorbucket", new RGWRESTMgr_VectorBucket);
+#endif
   /*Registering resource for /admin/metadata */
   mgr->register_resource("metadata", new RGWRESTMgr_Metadata);
   mgr->register_resource("log", new RGWRESTMgr_Log);

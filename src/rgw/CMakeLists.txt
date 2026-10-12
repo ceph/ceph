@@ -168,6 +168,7 @@ if(WITH_RADOSGW_LANCEDB)
   list(APPEND librgw_common_srcs
     rgw_sal_wrapper.cc
     rgw_rest_s3vector.cc
+    rgw_rest_vector_bucket.cc
     rgw_s3vector.cc
     rgw_s3vector_filter.cc
     rgw_s3vector_background.cc)

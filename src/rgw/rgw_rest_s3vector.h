@@ -4,6 +4,7 @@
 #pragma once
 
 #include "rgw_rest.h"
+#include "rgw_rest_s3.h"
 
 class RGWHandler_REST_s3Vector : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
