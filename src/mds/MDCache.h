@@ -22,7 +22,6 @@
 #include <unordered_map>
 
 #include "common/DecayCounter.h"
-#include "common/MemoryModel.h"
 #include "common/admin_finisher.h"
 #include "include/common_fwd.h"
 #include "include/types.h"
@@ -42,6 +41,8 @@
 #include "LogSegmentRef.h"
 
 #include <boost/intrusive_ptr.hpp>
+
+class MemoryModel;
 
 class EMetaBlob;
 class MCacheExpire;
@@ -842,7 +843,7 @@ private:
   bool expire_recursive(CInode *in, expiremap& expiremap);
 
   void trim_client_leases();
-  void check_memory_usage();
+  void check_memory_usage(MemoryModel *upkeep_memory_stats, long baseline_heap);
 
   void shutdown_start();
   void shutdown_check();
@@ -1638,8 +1639,6 @@ private:
   time upkeep_last_trim = clock::zero();
   time upkeep_last_release = clock::zero();
   std::atomic<bool> upkeep_trim_shutdown{false};
-  std::optional<MemoryModel> upkeep_memory_stats;
-  MemoryModel::mem_snap_t upkeep_mem_baseline;
 
   uint64_t kill_shutdown_at = 0;
 
