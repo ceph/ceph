@@ -5501,7 +5501,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                uint64_t src_accounted_size,
-               bool log_op)
+               bool log_op,
+               bool *pcanceled)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
@@ -5602,7 +5603,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   const req_context rctx{dpp, y, nullptr};
   return aoproc.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    rgw::cksum::no_cksum, delete_at,
-                            nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
+                            nullptr, nullptr, nullptr, nullptr, pcanceled, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
@@ -5852,6 +5853,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
         << dendl;
   }
 
+  bool canceled = false;
   ret = copy_obj_data(obj_ctx,
                       owner,
                       bucket_info,
@@ -5869,9 +5871,14 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       dpp,
                       y,
                       0, /* src_accounted_size: unknown here, keep ofs-based size */
-                      log_op);
+                      log_op,
+                      &canceled);
   if (ret < 0) {
     return ret;
+  }
+  if (canceled) {
+    // the object was overwritten or removed while it was transitioning
+    return -ECANCELED;
   }
 
   return 0;
