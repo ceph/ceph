@@ -202,7 +202,7 @@ bool health_monitor_detail::health_checks_are_current(
   return rebuilt_health == current_health;
 }
 
-void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void HealthMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   ++version;
   dout(10) << " " << version << dendl;

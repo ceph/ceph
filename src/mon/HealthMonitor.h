@@ -69,10 +69,10 @@ public:
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;
-  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void encode_pending(MonitorDBStoreTransactionRef t) override;
   version_t get_trim_to() const override;
 
-  void encode_full(MonitorDBStore::TransactionRef t) override { }
+  void encode_full(MonitorDBStoreTransactionRef t) override { }
 
   void tick() override;
 

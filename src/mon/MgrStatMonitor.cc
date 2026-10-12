@@ -320,7 +320,7 @@ void MgrStatMonitor::create_pending()
   encode(service_map, pending_service_map_bl, mon.get_quorum_con_features());
 }
 
-void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void MgrStatMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   ++version;
   dout(10) << " " << version << dendl;

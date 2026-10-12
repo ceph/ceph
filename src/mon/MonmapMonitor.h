@@ -28,7 +28,7 @@
 
 #include "PaxosService.h"
 #include "MonMap.h"
-#include "MonitorDBStore.h"
+#include "MonitorDBStoreTransaction.h"
 
 struct Subscription;
 class CrushWrapper;
@@ -49,9 +49,9 @@ class MonmapMonitor : public PaxosService {
 
   void create_pending() override;
 
-  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void encode_pending(MonitorDBStoreTransactionRef t) override;
   // we always encode the full map; we have no use for full versions
-  void encode_full(MonitorDBStore::TransactionRef t) override { }
+  void encode_full(MonitorDBStoreTransactionRef t) override { }
 
   void on_active() override;
   void apply_mon_features(const mon_feature_t& features,

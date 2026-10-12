@@ -118,11 +118,12 @@ e 12v
 #include "common/perf_counters.h"
 #include <errno.h>
 
-#include "MonitorDBStore.h"
+#include "MonitorDBStoreTransaction.h"
 #include "mon/MonOpRequest.h"
 
 class Monitor;
 class MMonPaxos;
+class MonitorDBStore;
 
 enum {
   l_paxos_first = 45800,
@@ -581,7 +582,7 @@ private:
    * proposal.  We will add operations to it until we decide it is
    * time to start a paxos round.
    */
-  MonitorDBStore::TransactionRef pending_proposal;
+  MonitorDBStoreTransactionRef pending_proposal;
 
   /**
    * Finishers for pending transaction
@@ -1076,7 +1077,7 @@ public:
 
   void dispatch(MonOpRequestRef op);
 
-  void read_and_prepare_transactions(MonitorDBStore::TransactionRef tx,
+  void read_and_prepare_transactions(MonitorDBStoreTransactionRef tx,
 				     version_t from, version_t last);
 
   void init();
@@ -1160,9 +1161,9 @@ public:
    * @param t The transaction to which we will append the operations
    * @param bl A ceph::buffer::list containing an encoded transaction
    */
-  static void decode_append_transaction(MonitorDBStore::TransactionRef t,
+  static void decode_append_transaction(MonitorDBStoreTransactionRef t,
 					ceph::buffer::list& bl) {
-    auto vt(std::make_shared<MonitorDBStore::Transaction>());
+    auto vt(std::make_shared<MonitorDBStoreTransaction>());
     auto it = bl.cbegin();
     vt->decode(it);
     t->append(vt);
@@ -1338,7 +1339,7 @@ public:
    * Apply operations to this transaction.  It will eventually be proposed
    * to paxos.
    */
-  MonitorDBStore::TransactionRef get_pending_transaction();
+  MonitorDBStoreTransactionRef get_pending_transaction();
 
   /**
    * Queue a completion for the pending proposal
@@ -1373,7 +1374,7 @@ inline std::ostream& operator<<(std::ostream& out, Paxos::C_Proposal& p)
   out << " " << proposed
       << " queued " << (ceph_clock_now() - p.proposal_time)
       << " tx dump:\n";
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   auto p_it = p.bl.cbegin();
   t->decode(p_it);
   ceph::JSONFormatter f(true);
