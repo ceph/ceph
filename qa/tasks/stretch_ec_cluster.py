@@ -52,11 +52,15 @@ class TestStretchCluster(MgrTestCase):
     PEERING_CRUSH_BUCKET_BARRIER = 'datacenter'
     CRUSH_RULE = 'replicated_rule_custom'
     DEFAULT_CRUSH_RULE = 'replicated_rule'
+    # EC pools fall back to the default EC rule (not the replicated rule) once
+    # stretch mode is unset; matches stretch_ec_mode_disable_enable.py.
+    DEFAULT_EC_CRUSH_RULE = 'erasure-code'
     STRETCH_EC_CRUSH_RULE = 'stretch_ec_rule'
     STRETCH_EC_PROFILE = 'stretch_ec_profile'
     K = 2
     M = 1
     SIZE = PEERING_CRUSH_BUCKET_COUNT * (K + M)
+    # NOTE: min_size == k is a deliberate design question for the owner.
     MIN_SIZE = K
     BUCKET_MAX = SIZE // PEERING_CRUSH_BUCKET_TARGET
     if (BUCKET_MAX * PEERING_CRUSH_BUCKET_TARGET) < SIZE:
@@ -626,7 +630,7 @@ class TestStretchCluster(MgrTestCase):
             )
             # expects pool size to match SIZE (PEERING_CRUSH_BUCKET_COUNT * (K + M))
             self.assertEqual(
-                self.SIZE / 2,
+                self.SIZE,
                 pool['size']
             )
             # expects pool min_size to match MIN_SIZE (K)
@@ -714,7 +718,7 @@ class TestStretchCluster(MgrTestCase):
         for pool in osdmap['pools']:
             # expects pool size to remain normal EC pool size (K + M)
             self.assertEqual(
-                self.SIZE,
+                self.K + self.M,
                 pool['size']
             )
             # expects pool min_size to revert to MIN_SIZE (unchanged by unset)
