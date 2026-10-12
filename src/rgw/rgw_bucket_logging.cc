@@ -509,7 +509,6 @@ int log_record(rgw::sal::Driver* driver,
   }
   input.http_ret = s->err.http_ret;
   input.err_code = s->err.err_code;
-  input.content_length = s->content_length;
   input.granted_by_acl = s->granted_by_acl;
   input.src_object = s->src_object.get();
   input.src_bucket_name = s->src_bucket_name;
@@ -649,7 +648,7 @@ int log_record(rgw::sal::Driver* driver,
         input.request_params,
         dash_if_zero(input.http_ret),
         dash_if_empty(input.err_code),
-        dash_if_zero(input.content_length),
+        "-", // not supported - bytes sent as response.
         dash_if_zero(size),
         "-", // no total time when logging record
         input.time_elapsed,
