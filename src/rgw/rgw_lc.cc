@@ -1565,6 +1565,7 @@ public:
 			     << oc.bucket << ":" << o.key 
 			     << " -> " << transition.storage_class 
 			     << " " << cpp_strerror(r)
+			     << (r == -ECANCELED ? " (object changed concurrently)" : "")
 			     << " " << oc.wq->thr_name() << dendl;
         return r;
       }
