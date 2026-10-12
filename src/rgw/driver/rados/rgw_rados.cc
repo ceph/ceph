@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <string_view>
 
 #include <boost/container/flat_set.hpp>
@@ -5579,6 +5580,23 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   if (dp_factory) {
     accounted_size = dp_factory->get_accounted_size(accounted_size);
+  }
+
+  // for testing: hold the copy after reading the source and before writing
+  // the head, to reproduce a race with a concurrent overwrite
+  if (cct->_conf->rgw_inject_delay_sec > 0 &&
+      std::string_view(cct->_conf->rgw_inject_delay_pattern) == "delay_copy_obj_data_complete") {
+    ldpp_dout(dpp, 0) << __func__ << ": injecting delay of " << cct->_conf->rgw_inject_delay_sec
+                      << "s for " << dest_obj << dendl;
+    const auto delay = ceph::make_timespan(cct->_conf->rgw_inject_delay_sec);
+    if (y) {
+      auto yield = y.get_yield_context();
+      boost::asio::steady_timer timer{yield.get_executor(), delay};
+      boost::system::error_code ec;
+      timer.async_wait(yield[ec]);
+    } else {
+      std::this_thread::sleep_for(delay);
+    }
   }
 
   const req_context rctx{dpp, y, nullptr};
