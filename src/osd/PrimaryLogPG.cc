@@ -58,6 +58,7 @@
 #include "osd/scrubber/ScrubStore.h"
 #include "osd/scrubber/pg_scrubber.h"
 #include "ECInject.h"
+#include "ECWriteJournal.h"
 
 #include "OSD.h"
 #include "OpRequest.h"
@@ -468,6 +469,9 @@ void PrimaryLogPG::on_local_recover(
       ceph_assert(recovering.count(obc->obs.oi.soid));
       recovering[obc->obs.oi.soid] = obc;
       obc->obs.oi = recovery_info.oi;  // may have been updated above
+      // EC journal POC: replay judges the records it deferred for this
+      // object against the recovered version and materialized attr.
+      pgbackend->ec_journal_object_recovered(hoid);
     }
 
     t->register_on_applied(new C_OSD_AppliedRecoveredObject(this, obc));
@@ -687,6 +691,179 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
       return true;
   }
   return false;
+}
+
+bool PrimaryLogPG::ec_journal_recovery_blocked(const hobject_t& oid)
+{
+  // A journal flush takes no object lock (see ec_journal_flush), so
+  // get_recovery_read() does not wait for one. A push started while a flush
+  // of the object is in flight carries the flushed version, and can reach a
+  // backfill target ahead of the flush's log entry: recover_got then moves
+  // that shard's can_rollback_to past its log head (which later asserts in
+  // PGLog). Treat the flush like a held write lock and retry once it commits.
+  if (!pgbackend->ec_journal_flush_in_flight(oid)) {
+    return false;
+  }
+  dout(20) << __func__ << " " << oid << ": journal flush in flight" << dendl;
+  ec_journal_recovery_deferred = true;
+  return true;
+}
+
+void PrimaryLogPG::ec_journal_flush_committed(const hobject_t& oid)
+{
+  ceph_assert(is_locked());
+  if (ec_journal_recovery_deferred) {
+    ec_journal_recovery_deferred = false;
+    queue_recovery();
+  }
+}
+
+bool PrimaryLogPG::pg_ec_journal_flush_blocked(const hobject_t& oid)
+{
+  ceph_assert(is_locked());
+  // The flush is an internal write that skips do_op's gates, so it applies
+  // them here: never write a stripe the scrubber is comparing, or an object
+  // that recovery has to bring up to date first.
+  if (m_scrubber->is_scrub_active() && m_scrubber->write_blocked_by_scrub(oid)) {
+    dout(20) << __func__ << " " << oid << " blocked by scrub" << dendl;
+    return true;
+  }
+  if (is_unreadable_object(oid) || is_degraded_or_backfilling_object(oid) ||
+      is_degraded_on_async_recovery_target(oid)) {
+    dout(20) << __func__ << " " << oid << " degraded" << dendl;
+    return true;
+  }
+  return false;
+}
+
+void PrimaryLogPG::ec_journal_flush(const hobject_t& oid,
+                                    std::map<uint64_t, ceph::bufferlist> runs,
+                                    uint64_t stripe_offset, eversion_t covered,
+                                    utime_t mtime,
+                                    std::function<void()> on_commit)
+{
+  ceph_assert(is_locked());
+  // The object holds live journal records, so do_op kept every write that
+  // could change its size or existence (and any delete) waiting; only plain
+  // overwrites of stripes without records run beside them. It exists at the
+  // journaled size.
+  ObjectContextRef obc = get_object_context(oid, false);
+  ceph_assert(obc && obc->obs.exists);
+  OpContextUPtr ctx = simple_opc_create(obc);
+  // No object lock: client writes of this object are in flight, and reads
+  // waiting for this flush hold its read lock. The op is built and
+  // submitted under the PG lock in one go, against the projected state.
+  ctx->op_t->ec_journal_flush = true;
+  // The data is the clients': their newest mtime among the stripe's records
+  // (journaled writes leave the object's own mtime alone until here).
+  ctx->mtime = std::max(mtime, obc->obs.oi.mtime);
+  ctx->user_at_version = obc->obs.oi.user_version;
+  for (auto& [off, bl] : runs) {
+    ceph_assert(off + bl.length() <= obc->obs.oi.size);
+    ctx->clean_regions.mark_data_region_dirty(off, bl.length());
+    ctx->op_t->write(oid, off, bl.length(), bl);
+  }
+  ctx->new_obs.oi.clear_data_digest();
+  ctx->at_version = get_next_version();
+  // Once this commits, every record of the object older than its oldest live
+  // one on another stripe is materialized (this stripe's live records are
+  // the flushed snapshot): base goes just below it, or to the snapshot's
+  // newest record when nothing else is live, and the generator's merge
+  // drops the entries base covers. Without that the attr gains an entry per
+  // stripe ever flushed. Versions here are journal versions (Record).
+  ECWriteJournal::Materialized materialized;
+  materialized.stripes[stripe_offset] = covered;
+  const auto oldest = pgbackend->ec_journal_oldest_live(oid, stripe_offset);
+  materialized.base = oldest ? ECWriteJournal::just_below(*oldest) : covered;
+  bufferlist bm;
+  encode(materialized, bm);
+  ctx->op_t->setattr(oid, std::string(ECWriteJournal::materialized_attr), bm);
+  ctx->register_on_commit(std::move(on_commit));
+  finish_ctx(ctx.get(), pg_log_entry_t::MODIFY);
+  dout(20) << __func__ << " " << oid << " stripe " << stripe_offset
+           << " covered " << covered << " at " << ctx->at_version << dendl;
+  simple_opc_submit(std::move(ctx));
+}
+
+PGBackend::Listener::ec_journal_record_state_t
+PrimaryLogPG::ec_journal_record_state(const hobject_t& oid, eversion_t version,
+                                      uint64_t stripe_offset)
+{
+  ceph_assert(is_locked());
+  using state_t = ec_journal_record_state_t;
+  if (recovery_state.get_pg_log().get_missing().is_missing(oid)) {
+    return state_t::missing; // judged once this shard has recovered it
+  }
+  ObjectContextRef obc;
+  if (auto r = recovering.find(oid); r != recovering.end() && r->second) {
+    obc = r->second; // just recovered, not yet in the cache
+  } else {
+    obc = get_object_context(oid, false);
+  }
+  if (!obc || !obc->obs.exists) {
+    return state_t::dead; // deleted since: nothing to write back
+  }
+  // Records are not PG-logged, so peering never rolls one back: a record
+  // of a write that was never acknowledged is applied like any other unless
+  // a flush or a later direct write covered it (the attr below). Its data
+  // is what the client's resend writes again, newest journal version wins.
+  bufferlist bl;
+  if (getattr_maybe_cache(obc, std::string(ECWriteJournal::materialized_attr),
+                          &bl) == 0) {
+    ECWriteJournal::Materialized materialized;
+    auto p = bl.cbegin();
+    decode(materialized, p);
+    if (materialized.covers(stripe_offset, version)) {
+      return state_t::dead;
+    }
+  }
+  return state_t::live;
+}
+
+void PrimaryLogPG::ec_journal_acked(OpRequestRef op, ObjectContextRef obc,
+                                    uint64_t bytes_written)
+{
+  ceph_assert(is_locked());
+  auto m = op->get_req<MOSDOp>();
+  // Every holder has the record. The object's own versions do not move
+  // until the flush writes the data: the reply carries the current ones.
+  MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap_epoch(), 0, false);
+  reply->set_reply_versions(obc->obs.oi.version, obc->obs.oi.user_version);
+  reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+  dout(10) << __func__ << " sending reply on " << *m << " " << reply << dendl;
+  osd->send_message_osd_client(reply, m->get_connection());
+  op->mark_commit_sent();
+  log_op_stats(*op, bytes_written, 0);
+}
+
+void PrimaryLogPG::ec_journal_kick()
+{
+  ceph_assert(is_locked());
+  for (auto p = waiting_for_ec_journal.begin();
+       p != waiting_for_ec_journal.end();) {
+    if (pgbackend->ec_journal_ready(p->first)) {
+      dout(20) << __func__ << " requeue " << p->second.size() << " ops of "
+               << p->first << dendl;
+      requeue_ops(p->second);
+      p = waiting_for_ec_journal.erase(p);
+    } else {
+      ++p;
+    }
+  }
+}
+
+void PrimaryLogPG::ec_journal_requeue(std::list<OpRequestRef>&& ops)
+{
+  ceph_assert(is_locked());
+  if (!ec_journal_requeue_allowed) {
+    dout(10) << __func__ << " dropping " << ops.size()
+             << " journaled writes in flight (not primary, or shutting down)" << dendl;
+    return;
+  }
+  dout(10) << __func__ << " " << ops.size()
+           << " journaled writes in flight at the interval change" << dendl;
+  std::list<OpRequestRef> requeue = std::move(ops);
+  requeue_ops(requeue);
 }
 
 bool PrimaryLogPG::is_degraded_on_async_recovery_target(const hobject_t& soid)
@@ -2134,6 +2311,12 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     osd->reply_op_error(op, -EINVAL);
     return;
   }
+  if (m->get_hobj().is_internal_pg_local()) {
+    dout(4) << "do_op namespace " << hobject_t::INTERNAL_PG_LOCAL_NS
+	    << " is reserved for PG-local objects" << dendl;
+    osd->reply_op_error(op, -EINVAL);
+    return;
+  }
 
   if (int r = osd->store->validate_hobject_key(head)) {
     dout(4) << "do_op object " << head << " invalid for backing store: "
@@ -2505,6 +2688,41 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       !m->has_flag(CEPH_OSD_FLAG_FLUSH)) {
     wait_for_blocked_object(obc->obs.oi.soid, op);
     return;
+  }
+
+  // EC journal POC: decided before the op has a version. A write the
+  // journal takes becomes a record on every holder right here, with no
+  // version, log entry or object lock: the object's state is unchanged
+  // until the flush, and the journal's own barriers order it against the
+  // object's reads and other writes. One the journal cannot take while the
+  // object has journaled data waits here for that data to flush (as does a
+  // journal write while the log is full). Later ops of the object queue
+  // behind a waiting one, so the object's ops keep their order.
+  {
+    const auto admission = pgbackend->ec_journal_admit(obc->obs.oi.soid,
+      obc->obs, obc->ssc ? obc->ssc->snapset : SnapSet(),
+      pool.info.is_pool_snaps_mode() ? pool.snapc.seq : m->get_snap_seq(),
+      m->ops, op->may_write());
+    if (admission != PGBackend::ec_journal_admission_t::none) {
+      auto waiting = waiting_for_ec_journal.find(obc->obs.oi.soid);
+      if (admission == PGBackend::ec_journal_admission_t::wait ||
+          waiting != waiting_for_ec_journal.end()) {
+        dout(20) << __func__ << " waiting for EC journal on "
+                 << obc->obs.oi.soid << dendl;
+        waiting_for_ec_journal[obc->obs.oi.soid].push_back(op);
+        op->mark_delayed("waiting for EC journal");
+        return;
+      }
+      if (admission == PGBackend::ec_journal_admission_t::journal) {
+        op->mark_started();
+        pgbackend->ec_journal_write(op, obc);
+        utime_t prepare_latency = ceph_clock_now();
+        prepare_latency -= op->get_dequeued_time();
+        osd->logger->tinc(l_osd_op_prepare_lat, prepare_latency);
+        osd->logger->tinc(l_osd_op_w_prepare_lat, prepare_latency);
+        return;
+      }
+    }
   }
 
   dout(25) << __func__ << " oi " << obc->obs.oi << dendl;
@@ -4322,6 +4540,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   // this method must be idempotent since we may call it several times
   // before we finally apply the resulting transaction.
   ctx->op_t.reset(new PGTransaction);
+  ctx->op_t->ec_journal = ctx->ec_journal;
 
   if (op->may_write() || op->may_cache()) {
     // snap
@@ -9295,6 +9514,57 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
     } else {
       dout(10) << " no snapset (this is a clone)" << dendl;
     }
+    // EC journal POC: every data write of an enrolled pool that bypasses
+    // the journal marks the journal records of this object before it as
+    // materialized. Ops that change no data (watch timeouts come from inside
+    // the OSD, not through do_op) leave it alone. A flush keeps base and
+    // records its stripe itself.
+    //
+    // do_op (ec_journal_admit) lets a bypassing write run beside live
+    // records of the object only when it is a plain overwrite of stripes
+    // that hold none (a whole stripe, or the log was full). Such a write
+    // marks just the stripes it writes and keeps base: raising base would
+    // let replay take the other stripes' records for materialized. Any
+    // other bypassing write waited until the object had no live record, so
+    // it marks everything before it.
+    auto data_update = [&] {
+      auto i = ctx->op_t->op_map.find(soid);
+      return i != ctx->op_t->op_map.end() &&
+        (!i->second.buffer_updates.empty() || i->second.truncate ||
+         !i->second.is_none() || i->second.delete_first);
+    };
+    if (soid.snap == CEPH_NOSNAP && !ctx->op_t->ec_journal &&
+        !ctx->op_t->ec_journal_flush && pgbackend->ec_journal_enrolled() &&
+        data_update()) {
+      // The marker's versions are journal versions: "now" covers every
+      // record appended before this write was admitted, and any record of
+      // the object appended later sorts above it.
+      const eversion_t now = pgbackend->ec_journal_version_now();
+      ECWriteJournal::Materialized materialized{now, {}};
+      if (pgbackend->ec_journal_object_dirty(soid)) {
+        const auto& update = ctx->op_t->op_map.at(soid);
+        ceph_assert(update.is_none() && !update.truncate &&
+                    !update.delete_first && !update.buffer_updates.empty());
+        const uint64_t width = pool.info.get_stripe_width();
+        ceph_assert(width);
+        // Base may still rise to just below the object's oldest live record
+        // (none of its records below that is live), so the merge can drop
+        // the entries it covers.
+        const auto oldest = pgbackend->ec_journal_oldest_live(soid, std::nullopt);
+        materialized.base = oldest ? ECWriteJournal::just_below(*oldest) : eversion_t();
+        for (auto i = update.buffer_updates.begin();
+             i != update.buffer_updates.end(); ++i) {
+          for (uint64_t stripe = i.get_off() / width * width;
+               stripe < i.get_off() + i.get_len(); stripe += width) {
+            materialized.stripes[stripe] = now;
+          }
+        }
+        ctx->op_t->ec_journal_marker_delta = true;
+      }
+      bufferlist bm;
+      encode(materialized, bm);
+      attrs[std::string(ECWriteJournal::materialized_attr)] = std::move(bm);
+    }
     ctx->op_t->setattrs(soid, attrs);
   } else {
     // reset cached oi
@@ -13288,6 +13558,10 @@ void PrimaryLogPG::on_shutdown()
 void PrimaryLogPG::on_activate_complete()
 {
   check_local();
+  // EC journal POC: rebuild the journal from this shard's slots before any
+  // op waiting for the PG to activate runs (they are requeued below and run
+  // after this returns).
+  pgbackend->ec_journal_on_activate();
   // waiters
   if (!recovery_state.needs_flush()) {
     requeue_ops(waiting_for_peered);
@@ -13434,6 +13708,14 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     else
       p->second.clear();
   }
+  for (auto p = waiting_for_ec_journal.begin();
+       p != waiting_for_ec_journal.end();
+       waiting_for_ec_journal.erase(p++)) {
+    if (is_primary())
+      requeue_ops(p->second);
+    else
+      p->second.clear();
+  }
   for (auto i = callbacks_for_degraded_object.begin();
        i != callbacks_for_degraded_object.end();
     ) {
@@ -13468,7 +13750,9 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
 
   pgbackend->on_change_cleanup(&t);
   m_scrubber->cleanup_store(&t);
+  ec_journal_requeue_allowed = is_primary();
   pgbackend->on_change();
+  ec_journal_requeue_allowed = false;
 
   // clear snap_trimmer state
   snap_trimmer_machine.process_event(Reset());
@@ -13925,7 +14209,7 @@ int PrimaryLogPG::prep_object_replica_deletes(
 
   ObjectContextRef obc = get_object_context(soid, false);
   if (obc) {
-    if (!obc->get_recovery_read()) {
+    if (ec_journal_recovery_blocked(soid) || !obc->get_recovery_read()) {
       dout(20) << "replica delete delayed on " << soid
 	       << "; could not get rw_manager lock" << dendl;
       *work_started = true;
@@ -13980,7 +14264,7 @@ int PrimaryLogPG::prep_object_replica_pushes(
     return 0;
   }
 
-  if (!obc->get_recovery_read()) {
+  if (ec_journal_recovery_blocked(soid) || !obc->get_recovery_read()) {
     dout(20) << "recovery delayed on " << soid
 	     << "; could not get rw_manager lock" << dendl;
     *work_started = true;
@@ -14378,7 +14662,8 @@ uint64_t PrimaryLogPG::recover_backfill(
       if (!need_ver_targs.empty() || !missing_targs.empty()) {
 	ObjectContextRef obc = get_object_context(backfill_info.begin, false);
 	ceph_assert(obc);
-	if (obc->get_recovery_read()) {
+	if (!ec_journal_recovery_blocked(backfill_info.begin) &&
+	    obc->get_recovery_read()) {
 	  if (!need_ver_targs.empty()) {
 	    dout(20) << " BACKFILL replacing " << check
 		   << " with ver " << obj_v

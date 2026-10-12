@@ -234,6 +234,54 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual bool pg_is_undersized() const = 0;
      virtual bool pg_is_repair() const = 0;
+     // EC journal POC: a background stripe flush of oid must wait, for the
+     // same reasons a client write would in do_op (scrub range, degraded or
+     // backfilling object). Called with the PG lock held.
+     virtual bool pg_ec_journal_flush_blocked(const hobject_t& oid) {
+       return false;
+     }
+     // EC journal POC: materialize one stripe of journaled blocks with an
+     // ordinary logged write of oid (runs keyed by absolute offset), which
+     // also records `covered` for the stripe in the object's materialized
+     // attr. on_commit runs with the PG lock held once every shard committed.
+     // Called from the journal's timer, never inside another op's submission.
+     virtual void ec_journal_flush(const hobject_t& oid,
+                                   std::map<uint64_t, ceph::bufferlist> runs,
+                                   uint64_t stripe_offset, eversion_t covered,
+                                   utime_t mtime,
+                                   std::function<void()> on_commit) {
+       ceph_abort_msg("EC journal flush without a listener implementation");
+     }
+     // EC journal POC: every holder committed the record of this client
+     // write (ec_journal_write), so it is durable: reply to the client.
+     virtual void ec_journal_acked(OpRequestRef op, ObjectContextRef obc,
+                                   uint64_t bytes_written) {
+       ceph_abort_msg("EC journal ack without a listener implementation");
+     }
+     // EC journal POC: ops parked by ec_journal_admit() may proceed now.
+     virtual void ec_journal_kick() {}
+     // EC journal POC: journaled writes whose record was still in flight at
+     // an interval change, oldest first. A client resends a write only when
+     // the PG's primary changes (Objecter), so a primary that stays runs
+     // them again in the new interval, like the ops of an aborted repop.
+     virtual void ec_journal_requeue(std::list<OpRequestRef>&& ops) {}
+     // EC journal POC: a flush of oid committed on every shard, so
+     // recovery that waited for it (ec_journal_flush_in_flight) may start.
+     virtual void ec_journal_flush_committed(const hobject_t& oid) {}
+     // EC journal POC: the PG may write (active, not merely peered). A
+     // peered PG's interval cannot go read-write, so peering later treats
+     // anything written in it as divergent.
+     virtual bool pg_ec_journal_writeable() const { return true; }
+     // EC journal POC replay: judge a record of oid with this version for
+     // the stripe at stripe_offset against the object on this (primary)
+     // shard. dead: the object is gone, the version was rolled back by
+     // peering, or a flush or a later write materialized it (the object's
+     // materialized attr). missing: this shard must recover the object first.
+     enum class ec_journal_record_state_t { live, dead, missing };
+     virtual ec_journal_record_state_t ec_journal_record_state(
+         const hobject_t& oid, eversion_t version, uint64_t stripe_offset) {
+       ceph_abort_msg("EC journal replay without a listener implementation");
+     }
 
      virtual void log_operation(
        std::vector<pg_log_entry_t>&& logv,
@@ -427,6 +475,62 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
     * won't be called after on_change()
     */
    virtual void on_change() = 0;
+   virtual void drain_ec_journal_for_shutdown(std::function<void(int)> done) {
+     done(0);
+   }
+   // EC journal POC admission, decided in do_op before the op is versioned.
+   // journal: the write goes into the journal (flag its PGTransaction);
+   // wait: park the op until ec_journal_ready(); classic: the normal path;
+   // none: no journal on this PG.
+   enum class ec_journal_admission_t { none, classic, journal, wait };
+   virtual ec_journal_admission_t ec_journal_admit(
+       const hobject_t& oid, const ObjectState& obs, const SnapSet& snapset,
+       snapid_t snap_seq, const std::vector<OSDOp>& ops, bool may_write) {
+     return ec_journal_admission_t::none;
+   }
+   // EC journal POC: journal a write ec_journal_admit() admitted, in the same
+   // PG-lock critical section. The record goes to every holder; the write
+   // is acknowledged through Listener::ec_journal_acked once they all hold
+   // it. It takes no version and no log entry.
+   virtual void ec_journal_write(OpRequestRef op, ObjectContextRef obc) {
+     ceph_abort_msg("EC journal write without a journal");
+   }
+   // The journal version current now (ECWriteJournal::Record): every record
+   // appended so far sorts at or below it. Writes that bypass the journal
+   // record it in the object's materialized attr.
+   virtual eversion_t ec_journal_version_now() const {
+     return eversion_t();
+   }
+   // Writes of this PG maintain the materialized attr (not journaled ones).
+   virtual bool ec_journal_enrolled() const {
+     return false;
+   }
+   // Some stripe of oid still has journal records, live or flushing.
+   virtual bool ec_journal_object_dirty(const hobject_t& oid) const {
+     return false;
+   }
+   // The oldest version among oid's live journal records, other than those
+   // of the stripe at skip_stripe (Journal::oldest_version).
+   virtual std::optional<eversion_t> ec_journal_oldest_live(const hobject_t& oid,
+       std::optional<uint64_t> skip_stripe) const {
+     return std::nullopt;
+   }
+   // A parked op of oid may be worth admitting again.
+   // EC journal POC: a flush of oid is in flight. A flush takes no object
+  // lock, so recovery must not push oid until the flush commits.
+  virtual bool ec_journal_flush_in_flight(const hobject_t& oid) const {
+    return false;
+  }
+  virtual bool ec_journal_ready(const hobject_t& oid) const {
+     return true;
+   }
+   // Primary, once every replica has activated and before any client op
+   // runs: rebuild the journal from this shard's slots (replay).
+   virtual void ec_journal_on_activate() {}
+  virtual void ec_journal_split(spg_t child, ObjectStore::Transaction& t) {}
+   // Primary: recovery brought this shard's copy of oid up to date, so
+   // replay can judge the records it deferred for it.
+   virtual void ec_journal_object_recovered(const hobject_t& oid) {}
    virtual void clear_recovery_state() = 0;
 
    virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() const = 0;

@@ -1154,6 +1154,23 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
   tid_to_op_map.erase(op->tid);
 }
 
+bool ECCommon::RMWPipeline::submit_unlogged(OpRef op) {
+  if (!extent_cache.idle()) {
+    return false;
+  }
+  const auto tid = get_parent()->get_tid();
+  op->tid = tid;
+  op->pg_committed_to = committed_to;
+  op->pending_cache_ops = 1;
+  op->pipeline = this;
+  tid_to_op_map[tid] = op;
+  waiting_commit.push_back(op);
+  dout(10) << __func__ << " " << *op << dendl;
+  // Like the rollforward kick: no reads, so skip the extent cache.
+  op->cache_ready(op->hoid, ECUtil::shard_extent_map_t(&sinfo));
+  return true;
+}
+
 void ECCommon::RMWPipeline::on_change() {
   dout(10) << __func__ << dendl;
 
@@ -1887,14 +1904,17 @@ ECTransaction::WritePlan ECCommon::get_write_plan(
   PGTransaction &t,
   ECCommon::ReadPipeline &read_pipeline,
   ECCommon::RMWPipeline &rmw_pipeline,
-  DoutPrefixProvider *dpp) {
-  ECTransaction::WritePlan plans;
+  DoutPrefixProvider *dpp,
+  const std::map<hobject_t, object_info_t>* submitted_oi) {
+  ECTransaction::WritePlan plans{};
   auto obc_map = t.obc_map;
   t.safe_create_traverse(
     [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
       const auto &[oid, inner_op] = i;
       auto &obc = obc_map.at(oid);
-      object_info_t oi = obc->obs.oi;
+      // A journal admission barrier may defer this op after submit. obs is
+      // projected by newer client ops even while those ops are still queued.
+      object_info_t oi = submitted_oi ? submitted_oi->at(oid) : obc->obs.oi;
       std::optional<object_info_t> soi;
 
       hobject_t source;

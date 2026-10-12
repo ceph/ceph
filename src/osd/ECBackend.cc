@@ -28,6 +28,9 @@
 #include "ECMsgTypes.h"
 #include "ECTypes.h"
 #include "ECSwitch.h"
+#include "ECJournalFlush.h"
+#include "ECJournalQueue.h"
+#include "common/config_obs.h"
 
 #include "PrimaryLogPG.h"
 
@@ -68,6 +71,209 @@ struct ECBackend::ECRecoveryBackend::ECRecoveryHandle : public PGBackend::Recove
   list<ECCommon::RecoveryBackend::RecoveryOp> ops;
 };
 
+// Flushes may only be deferred by a scrub range or a degraded object for a
+// short while; the PG lock is dropped between retries.
+static constexpr std::chrono::milliseconds journal_flush_retry_ms{50};
+// While segments exist the driver also wakes at this rate: a drain requested
+// through the config observer (no PG lock there) or a deferred stripe must
+// not wait for the next client write.
+static constexpr std::chrono::milliseconds journal_housekeeping_ms{1000};
+// An idle PG whose slot objects may be on disk still looks now and then: a
+// drain requested meanwhile has to remove them (remove_journal_slots).
+static constexpr std::chrono::milliseconds journal_idle_check_ms{10000};
+
+struct ECBackend::JournalState final : md_config_obs_t {
+  ECBackend* backend;
+  ECWriteJournal::Journal journal;
+  // osd_ec_journal_drain is a runtime option; a config observer keeps
+  // it off the per-op path (no ConfigProxy lock or key lookup per pump).
+  std::atomic<bool> drain_conf{false};
+  ECWriteJournal::DrainWaiters shutdown_drain;
+  // Stripes are independent: each flush is its own EC write of one stripe,
+  // and the journal hands out a different stripe per begin_flush. Reclaiming
+  // a sealed segment means flushing every live stripe in it, so doing that
+  // one round trip at a time bounds the whole PG's write rate at 1/latency
+  // and keeps client writes waiting for room in do_op meanwhile.
+  unsigned flushes_in_flight = 0;
+  // Objects with flushes in flight. A flush takes no object lock, so
+  // recovery checks this before pushing (journal_flush_in_flight).
+  std::map<hobject_t, unsigned> flushing;
+  unsigned max_flushes; // osd_ec_journal_max_flushes
+  // Shards that store every record: this (primary) shard first, then shard 0
+  // and the parity shards, m + 1 of them. Under ec_optimizations these are
+  // the shards that can become primary, and the ones every journaled write
+  // already sends its log entry and OI to.
+  std::vector<shard_id_t> holders;
+  bool pumping = false;
+  // A write the journal cannot take waits in do_op, before it has a version,
+  // while the object it touches has journaled stripes: those flush first,
+  // complete or not, while other objects' stripes keep gathering records.
+  // (A drain or an unhealthy acting set flushes every stripe.)
+  //
+  // A PG-wide barrier for every unsupported write collapsed the logs: librbd
+  // merges adjacent 4 KiB writes to one object (rbd_io_scheduler=simple), and
+  // on a saturated cluster each PG saw an 8 KiB write every minute or so.
+  std::vector<hobject_t> barrier_objects;
+  // Replay after an interval change (journal_on_activate): records read
+  // back from this shard's slots and judged live are adopted into their
+  // slots and flushed first. Nothing new is admitted until the other
+  // holders' listings and the fetches are in (replaying); from then on new
+  // writes take the free slots while the backlog drains (replay_pending).
+  // Records of objects this shard has to recover first wait here until it
+  // has (journal_object_recovered); their slots are held meanwhile.
+  bool replaying = false;
+  bool replay_pending = false;
+  ceph::mono_clock::time_point activated_at;
+  std::optional<double> replay_listed_ms; // activation to admission open
+  std::optional<double> replay_admit_ms;  // activation to the first record
+  std::map<hobject_t, std::vector<ECWriteJournal::Record>> deferred;
+  uint64_t replay_scanned = 0;  // records the slots' headers list
+  uint64_t replay_adopted = 0;  // ... judged live and flushed again
+  uint64_t replay_dead = 0;     // ... already materialized or rolled back
+  uint64_t replay_deferred = 0; // ... waiting for the object's recovery
+  uint64_t replay_unreadable = 0; // ... whose payload this shard cannot read
+  uint64_t replay_absent = 0;   // live per the log, but no holder had it
+  uint64_t requeued_records = 0; // writes in flight at an interval change, run again
+  uint64_t replay_fetched = 0;  // ... read from another holder instead
+  // Live entries of the authoritative log whose record is not in this
+  // shard's slots: read from the other holders in turn. Their objects count
+  // as dirty meanwhile, so no op of them runs before the record is adopted.
+  ECWriteJournal::ReplayFetches fetches;
+  std::vector<pg_shard_t> fetch_sources;
+  std::vector<ECWriteJournal::Record> fetched;
+  // Replay: slot listings requested from the other holders and not in yet.
+  // A record only another holder has (this shard missed its commit) is not
+  // known until then, so meanwhile no op of the PG runs and nothing
+  // flushes: a direct write or a flush would bury it (replay_blocked).
+  unsigned header_reads = 0;
+  std::set<eversion_t> replay_indexed;  // versions this shard's slots hold
+  std::set<eversion_t> replay_fetching; // ... being fetched from a holder
+  // Journaled writes in flight: a record sent to every holder, keyed by its
+  // sub-write tid, until all of them committed it. Acknowledged in order per
+  // object once durable (journal_record_committed).
+  struct Inflight {
+    OpRequestRef op;
+    ObjectContextRef obc;
+    hobject_t object;
+    ECWriteJournal::Ticket ticket;
+    unsigned pending = 0; // holders yet to commit
+    uint64_t bytes = 0;
+    bool done = false;
+  };
+  std::map<ceph_tid_t, Inflight> inflight;
+  std::map<hobject_t, std::deque<ceph_tid_t>> inflight_by_object;
+  // The journal does not serve reads, and until a stripe flushes its shards
+  // still hold the bytes from before the journaled writes. A client read that
+  // overlaps journaled stripes therefore waits here while those stripes
+  // flush (ahead of anything else), and is then reissued unchanged.
+  // PrimaryLogPG completes a PG's async reads strictly in the order it
+  // issued them (in_progress_async_reads), so once one read waits, every
+  // later read queues behind it, and reads leave only from the front.
+  struct ReadWait {
+    hobject_t object;
+    uint64_t offset = 0;
+    uint64_t length = 0;
+    std::function<void()> retry;  // reissues the read
+    std::function<void()> cancel; // frees the caller's contexts on a PG reset
+  };
+  std::list<ReadWait> read_waits;
+  // The PG's slot objects may exist on the holders: every append writes one,
+  // and an earlier run may have left them. A drain that has flushed
+  // everything removes them (remove_journal_slots), so a drained pool holds
+  // nothing a release without the journal would not know: its scrub lists
+  // them and flags every such PG inconsistent. removing_slots holds the
+  // interval (same_interval_since) of a removal in flight.
+  bool slots_on_disk = true;
+  std::optional<epoch_t> removing_slots;
+  uint64_t slot_removals = 0;
+  uint64_t open_segment = 0;
+  ceph::mono_clock::time_point wake_at{};
+  uint64_t admitted = 0;
+  uint64_t acked = 0;
+  uint64_t full_stripes = 0;
+  uint64_t partial_stripes = 0;
+  uint64_t pressure_flushes = 0; // incomplete stripes flushed to reclaim a segment
+  uint64_t adopted_flushes = 0;  // ... because replay adopted their records
+  uint64_t drain_flushes = 0;    // ... on drain
+  uint64_t barrier_flushes = 0;  // ... ahead of an unsupported mutation
+  uint64_t barrier_events = 0;   // unsupported writes that had to wait
+  uint64_t read_barrier_events = 0; // client reads that had to wait
+  uint64_t deferred_flushes = 0; // candidates passed over (scrub, degraded)
+  uint64_t flushed_bytes = 0;
+  uint64_t pressure_events = 0;  // journal writes that waited for room
+
+  // Admission (journal_admit): every eligible write is journaled, except a
+  // whole aligned stripe that has no records and a write to a stripe that
+  // has none while the log is full.
+  uint64_t admit_live = 0;    // journaled: the stripe already had records
+  uint64_t admit_new = 0;     // journaled: the stripe had none
+  uint64_t bypass_full = 0;   // direct EC write: whole stripe, nothing to read
+  uint64_t bypass_room = 0;   // ... log full, stripe clean: no wait
+
+  // A flush that must wait for the flusher, or a drain, is woken by the
+  // append commit that makes it possible; everything else by the timer.
+  bool draining() const {
+    return replaying || drain_conf.load() || shutdown_drain.requested();
+  }
+  bool replay_blocked(const hobject_t& object) const {
+    return header_reads > 0 || fetches.blocked(object) ||
+      deferred.contains(object);
+  }
+  bool flushable() const {
+    return journal.flush_ready() || barrier_ready() || reads_ready() ||
+      journal.adopted_ready() ||
+      (draining() ? journal.partial_ready() : journal.reclaim_ready());
+  }
+  bool reads_ready() const {
+    for (const auto& wait : read_waits) {
+      if (journal.object_ready(wait.object, wait.offset, wait.length)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  bool barrier_ready() const {
+    for (const auto& object : barrier_objects) {
+      if (journal.object_ready(object)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  struct Timer final : common::intrusive_timer::callback_t {
+    JournalState* state;
+    explicit Timer(JournalState* state) : state(state) {}
+    void lock() override { state->backend->parent->pg_lock(); }
+    void unlock() override { state->backend->parent->pg_unlock(); }
+    void add_ref() override { state->backend->parent->pg_add_ref(); }
+    void dec_ref() override { state->backend->parent->pg_dec_ref(); }
+    void invoke() override { state->backend->pump_journal(); }
+  } timer{this};
+
+  JournalState(ECBackend* backend, ghobject_t prefix,
+               ECWriteJournal::Limits limits,
+               unsigned max_flushes, std::vector<shard_id_t> holders)
+    : backend(backend), journal(std::move(prefix), limits),
+      max_flushes(max_flushes), holders(std::move(holders)) {
+    drain_conf = backend->cct->_conf.get_val<bool>("osd_ec_journal_drain");
+    backend->cct->_conf.add_observer(this);
+  }
+  ~JournalState() override {
+    // Blocks until an in-flight handle_conf_change (atomic store only) ends.
+    backend->cct->_conf.remove_observer(this);
+  }
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {"osd_ec_journal_drain"};
+  }
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set<std::string>&) override {
+    // Config thread, no PG lock: only the atomic. pump_journal picks it up
+    // on the next submit, commit or timer wake.
+    drain_conf = conf.get_val<bool>("osd_ec_journal_drain");
+  }
+};
+
 ECBackend::ECBackend(
   PGBackend::Listener *pg,
   CephContext *cct,
@@ -95,6 +301,8 @@ ECBackend::ECBackend(
    */
   ceph_assert((ec_impl->get_data_chunk_count() *
     ec_impl->get_chunk_size(stripe_width)) == stripe_width);
+  // All enrollment settings are startup-only; no lookups on disabled writes.
+  init_journal();
 }
 
 PGBackend::RecoveryHandle *ECBackend::open_recovery_op() {
@@ -399,6 +607,28 @@ void ECBackend::handle_sub_write(
     ECInject::test_write_error3(op.soid)) {
     ceph_abort_msg("Error inject - OSD down");
   }
+  if (op.unlogged) {
+    // An EC journal record (ECBackend::journal_write): slot data and
+    // header, and on a rotation the slot reset. Nothing of the PG log, info,
+    // stats or object state; the commit reply tells the primary this copy
+    // is durable.
+    ObjectStore::Transaction localt;
+    localt.register_on_commit(
+      get_parent()->bless_context(
+        new SubWriteCommitted(
+          this, msg, op.tid, eversion_t(),
+          get_parent()->get_info().last_complete, trace)));
+    if (!get_parent()->pg_is_undersized() &&
+        get_parent()->whoami_shard().shard >= sinfo.get_k()) {
+      op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    }
+    vector<ObjectStore::Transaction> tls;
+    tls.reserve(2);
+    tls.push_back(std::move(op.t));
+    tls.push_back(std::move(localt));
+    get_parent()->queue_transactions(tls, msg);
+    return;
+  }
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction localt;
@@ -566,11 +796,30 @@ void ECBackend::handle_sub_read(
 	     << *i << dendl;
     if (reply->errors.contains(*i))
       continue;
-    int r = switcher->store->getattrs(
-      switcher->ch,
-      ghobject_t(
-        *i, ghobject_t::NO_GEN, shard),
-      reply->attrs_read[*i]);
+    int r;
+    if (ECWriteJournal::is_slot_object(*i)) {
+      // EC journal replay: a slot's record headers live in its OMAP, which
+      // the read pipeline does not carry. The replaying primary lists the
+      // other holders' slots through this request and gets the headers back
+      // as the slot's attributes (journal_on_activate).
+      ceph::bufferlist omap_header;
+      std::map<std::string, ceph::bufferlist> headers;
+      r = switcher->store->omap_get(
+        switcher->ch, ghobject_t(*i, ghobject_t::NO_GEN, shard),
+        &omap_header, &headers);
+      if (r >= 0) {
+        auto& attrs = reply->attrs_read[*i];
+        for (auto& [key, value] : headers) {
+          attrs[key] = std::move(value);
+        }
+      }
+    } else {
+      r = switcher->store->getattrs(
+        switcher->ch,
+        ghobject_t(
+          *i, ghobject_t::NO_GEN, shard),
+        reply->attrs_read[*i]);
+    }
     if (r < 0) {
       // If we read error, we should not return the attrs too.
       reply->attrs_read.erase(*i);
@@ -722,6 +971,14 @@ void ECBackend::handle_sub_write_reply(
   pg_shard_t from,
   const ECSubWriteReply &ec_write_reply_op,
   const ZTracer::Trace &trace) {
+  if (journal_state && journal_state->inflight.contains(ec_write_reply_op.tid)) {
+    // A copy of a journal record committed on a holder (journal_write).
+    if (ec_write_reply_op.committed) {
+      trace.event("journal record committed");
+      journal_record_committed(from, ec_write_reply_op.tid);
+    }
+    return;
+  }
   RMWPipeline::OpRef &op = rmw_pipeline.tid_to_op_map.at(ec_write_reply_op.tid);
   if (ec_write_reply_op.committed) {
     trace.event("sub write committed");
@@ -1049,6 +1306,7 @@ void ECBackend::check_recovery_sources(const OSDMapRef &osdmap) {
 
 void ECBackend::on_change() {
   ec_omap_journal.clear_all();
+  reset_journal();
   rmw_pipeline.on_change();
   read_pipeline.on_change();
   rmw_pipeline.on_change2();
@@ -1060,6 +1318,7 @@ void ECBackend::clear_recovery_state() {
 }
 
 void ECBackend::dump_recovery_info(Formatter *f) const {
+  dump_journal(f);
   f->open_array_section("recovery_ops");
   for (map<hobject_t, RecoveryBackend::RecoveryOp>::const_iterator i =
          recovery_backend.recovery_ops.begin();
@@ -1127,6 +1386,1231 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
   }
 };
 
+// Removes the journal's slot objects from the holders once a drain has
+// flushed everything (ECBackend::remove_journal_slots): an unlogged op, no
+// log entry or version, and only the holders get a (non-empty) transaction.
+struct ECJournalSlotRemoval final : ECCommon::RMWPipeline::Op {
+  std::map<shard_id_t, std::vector<ghobject_t>> slots; // per holder
+
+  void generate_transactions(
+    ceph::ErasureCodeInterfaceRef &ec_impl,
+    pg_t pgid,
+    const ECUtil::stripe_info_t &sinfo,
+    map<hobject_t, ECUtil::shard_extent_map_t> *written,
+    shard_id_map<ObjectStore::Transaction> *transactions,
+    DoutPrefixProvider *dpp,
+    const OSDMapRef &osdmap,
+    bool& first_write_in_interval,
+    ECOmapJournal &ec_omap_journal) final {
+    for (const auto& [holder, objects] : slots) {
+      if (!transactions->contains(holder)) {
+        continue; // not in the acting set now: keeps its slots until next time
+      }
+      auto& t = transactions->at(holder);
+      for (const auto& object : objects) {
+        t.remove(coll_t(spg_t(pgid, holder)), object);
+      }
+    }
+  }
+
+  bool skip_transaction(
+      std::set<shard_id_t> &pending_roll_forward,
+      shard_id_t shard,
+      ceph::os::Transaction &transaction) final {
+    return transaction.empty();
+  }
+};
+
+ECBackend::~ECBackend() = default;
+
+void ECBackend::init_journal()
+{
+  if (journal_state ||
+      !cct->_conf.get_val<bool>("osd_ec_journal_enable") ||
+      cct->_conf.get_val<int64_t>("osd_ec_journal_pool") !=
+        get_parent()->get_info().pgid.pgid.pool()) {
+    return;
+  }
+  const auto limits = ECWriteJournal::read_limits(cct->_conf,
+    sinfo.get_stripe_width());
+  if (!get_parent()->get_pool().allows_ecoptimizations() ||
+      !ECWriteJournal::supported_geometry(sinfo.get_k(), sinfo.get_m(),
+                                          sinfo.get_chunk_size()) ||
+      !limits.valid()) {
+    // Every PG instance of the pool (primary or not) gets here; one error
+    // line per OSD process is enough.
+    static std::atomic<bool> refused_once{false};
+    if (!refused_once.exchange(true)) {
+      derr << "EC journal POC enrollment refused for pool "
+           << get_parent()->get_info().pgid.pgid.pool()
+           << ": requires optimized 4+3/8+3/12+3 with 4096-byte chunks and "
+           << "a valid osd_ec_journal_max_bytes" << dendl;
+    } else {
+      dout(10) << "EC journal POC enrollment refused (see earlier error)" << dendl;
+    }
+    return;
+  }
+  const auto pgid = get_parent()->get_info().pgid.pgid;
+  const auto whoami = get_parent()->whoami_shard().shard;
+  // Slot objects ecj.<n> live in the PG-local internal namespace, which
+  // clients cannot address and listing (scrub, backfill, pgls) skips. They
+  // are not temp objects: an interval change or restart leaves them, and the
+  // next segment in a slot removes the old contents first.
+  const hobject_t anchor(object_t("ecj"), "", CEPH_NOSNAP, pgid.ps(),
+                         pgid.pool(), std::string(hobject_t::INTERNAL_PG_LOCAL_NS));
+  ghobject_t prefix(anchor, ghobject_t::NO_GEN, whoami);
+  // Holders: this shard (a primary is always shard 0 or parity), then shard
+  // 0 and the parity shards in order: m + 1 in all.
+  const size_t copies = sinfo.get_m() + 1;
+  std::vector<shard_id_t> holders;
+  auto add_holder = [&](shard_id_t shard) {
+    if (holders.size() < copies &&
+        std::find(holders.begin(), holders.end(), shard) == holders.end()) {
+      holders.push_back(shard);
+    }
+  };
+  add_holder(whoami);
+  add_holder(shard_id_t(0));
+  for (const auto shard : sinfo.get_parity_shards()) {
+    add_holder(shard);
+  }
+  journal_state = std::make_unique<JournalState>(this, std::move(prefix), limits,
+    std::max<unsigned>(1,
+      cct->_conf.get_val<uint64_t>("osd_ec_journal_max_flushes")),
+    std::move(holders));
+  dout(0) << "UNSAFE write-only EC journal POC enabled for " << pgid
+          << "; " << journal_state->holders.size()
+          << " copies of each record, no replay/recovery or dirty reads"
+          << dendl;
+}
+
+void ECBackend::schedule_journal(std::chrono::milliseconds delay)
+{
+  auto& state = *journal_state;
+  const auto when = ceph::mono_clock::now() + delay;
+  if (state.timer.is_scheduled()) {
+    if (state.wake_at <= when) {
+      return;
+    }
+    get_parent()->get_pg_timer().cancel(state.timer);
+  }
+  // Timer invocation acquires the PG lock, so even zero delay cannot reenter
+  // RMWPipeline::finish_rmw recursively. Commit callbacks preempt the timeout.
+  state.wake_at = when;
+  get_parent()->get_pg_timer().schedule_after(state.timer, delay);
+}
+
+void ECBackend::reset_journal()
+{
+  if (!journal_state) {
+    return;
+  }
+  auto& s = *journal_state;
+  if (s.timer.is_scheduled()) {
+    get_parent()->get_pg_timer().cancel(s.timer);
+  }
+  // Commits and flushes registered before the change never run. Every
+  // acknowledged record is on the slots of every holder, so the journal
+  // drops its memory; the next primary replays from the slots.
+  if (s.journal.dirty()) {
+    dout(10) << __func__ << " dropping " << s.journal.live_blocks()
+             << " live blocks; the next primary replays them" << dendl;
+  }
+  s.journal.on_reset();
+  s.replaying = false;
+  s.replay_pending = false;
+  s.replay_listed_ms.reset();
+  s.replay_admit_ms.reset();
+  s.deferred.clear();
+  s.fetches.clear();
+  s.fetch_sources.clear();
+  s.fetched.clear();
+  // Blessed callbacks registered before the change never run, so the
+  // in-flight flushes they would have completed are dropped with them.
+  s.flushes_in_flight = 0;
+  s.flushing.clear();
+  // Its op is dropped with the pipeline's; the slots may still be there.
+  s.removing_slots.reset();
+  s.open_segment = 0;
+  s.barrier_objects.clear();
+  // Like reads in flight (ReadPipeline::on_change), a waiting read is dropped;
+  // the caller requeues its op after the interval change.
+  for (auto& wait : s.read_waits) {
+    wait.cancel();
+  }
+  s.read_waits.clear();
+  s.shutdown_drain.finish(-ECANCELED);
+  // Records in flight never get all their commits in this interval, and a
+  // client resends a write only when the primary changes, so the writes go
+  // back to the PG to run again in the next interval if this shard stays
+  // primary (ec_journal_requeue), oldest first; a copy a holder did commit
+  // is replayed and superseded by the write's new record. Otherwise the
+  // next primary replays whatever copies committed and the client resends.
+  if (!s.inflight.empty()) {
+    std::list<OpRequestRef> requeue;
+    for (auto& [tid, flight] : s.inflight) {
+      if (flight.op) {
+        requeue.push_back(flight.op);
+      }
+    }
+    s.requeued_records += requeue.size();
+    dout(10) << __func__ << " " << requeue.size()
+             << " journaled writes in flight at the interval change" << dendl;
+    s.inflight.clear();
+    s.inflight_by_object.clear();
+    get_parent()->ec_journal_requeue(std::move(requeue));
+  }
+  s.header_reads = 0;
+  s.replay_indexed.clear();
+  s.replay_fetching.clear();
+  // Do not destroy the timer here: its thread may be releasing a reference
+  // after cancellation. Its lifetime is the backend's lifetime.
+}
+
+void ECBackend::dump_journal(Formatter* f) const
+{
+  if (!journal_state) {
+    return;
+  }
+  const auto& s = *journal_state;
+  f->open_object_section("ec_write_journal_poc");
+  f->dump_unsigned("copies", s.holders.size());
+  f->open_array_section("holders");
+  for (const auto holder : s.holders) {
+    f->dump_int("shard", int(holder));
+  }
+  f->close_section();
+  f->dump_unsigned("bytes", s.journal.bytes());
+  f->dump_unsigned("payload_bytes", s.journal.payload_bytes());
+  f->dump_unsigned("header_bytes", s.journal.bytes() - s.journal.payload_bytes());
+  f->dump_unsigned("records", s.journal.records());
+  f->dump_unsigned("segments", s.journal.segment_count());
+  f->dump_unsigned("live_blocks", s.journal.live_blocks());
+  f->dump_unsigned("live_bytes", s.journal.live_bytes());
+  f->dump_unsigned("superseded_blocks", s.journal.superseded_blocks());
+  f->dump_bool("pressure", s.journal.pressure());
+  f->dump_bool("reclaiming", s.journal.reclaim_bound().has_value());
+  f->dump_unsigned("flushes_in_flight", s.flushes_in_flight);
+  f->dump_unsigned("max_flushes", s.max_flushes);
+  f->dump_unsigned("records_in_flight", s.inflight.size());
+  f->dump_unsigned("header_reads", s.header_reads);
+  f->dump_unsigned("admitted", s.admitted);
+  f->dump_unsigned("acked", s.acked);
+  f->dump_unsigned("full_stripes", s.full_stripes);
+  f->dump_unsigned("partial_stripes", s.partial_stripes);
+  f->dump_unsigned("pressure_flushes", s.pressure_flushes);
+  f->dump_unsigned("adopted_flushes", s.adopted_flushes);
+  f->dump_unsigned("drain_flushes", s.drain_flushes);
+  f->dump_unsigned("barrier_flushes", s.barrier_flushes);
+  f->dump_unsigned("barrier_events", s.barrier_events);
+  f->dump_unsigned("barrier_objects", s.barrier_objects.size());
+  f->dump_unsigned("read_barrier_events", s.read_barrier_events);
+  f->dump_unsigned("reads_waiting", s.read_waits.size());
+  f->dump_unsigned("deferred_flushes", s.deferred_flushes);
+  f->dump_unsigned("flushed_logical_bytes", s.flushed_bytes);
+  f->dump_unsigned("pressure_events", s.pressure_events);
+  f->dump_unsigned("admit_live", s.admit_live);
+  f->dump_unsigned("admit_new", s.admit_new);
+  f->dump_unsigned("bypass_full", s.bypass_full);
+  f->dump_unsigned("bypass_room", s.bypass_room);
+  f->dump_bool("replaying", s.replaying);
+  f->dump_bool("replay_pending", s.replay_pending);
+  f->dump_unsigned("adopted_segments", s.journal.adopted_segments());
+  f->dump_unsigned("held_slots", s.journal.held_slots());
+  f->dump_float("replay_listed_ms", s.replay_listed_ms.value_or(-1));
+  f->dump_float("replay_admit_ms", s.replay_admit_ms.value_or(-1));
+  f->dump_unsigned("replay_scanned", s.replay_scanned);
+  f->dump_unsigned("replay_adopted", s.replay_adopted);
+  f->dump_unsigned("replay_dead", s.replay_dead);
+  f->dump_unsigned("replay_deferred", s.replay_deferred);
+  f->dump_unsigned("replay_unreadable", s.replay_unreadable);
+  f->dump_unsigned("replay_absent", s.replay_absent);
+  f->dump_unsigned("requeued_records", s.requeued_records);
+  f->dump_unsigned("replay_fetched", s.replay_fetched);
+  f->dump_int("replay_error", s.fetches.error());
+  f->dump_unsigned("fetches_pending", s.fetches.pending().size());
+  f->dump_unsigned("deferred_objects", s.deferred.size());
+  f->dump_bool("slots_on_disk", s.slots_on_disk);
+  f->dump_bool("removing_slots", s.removing_slots.has_value());
+  f->dump_unsigned("slot_removals", s.slot_removals);
+  f->close_section();
+}
+
+void ECBackend::pump_journal()
+{
+  auto& s = *journal_state;
+  ceph_assert(!s.pumping);
+  s.pumping = true;
+  const bool healthy = !get_parent()->pg_is_undersized() &&
+    get_parent()->get_acting_shards().size() == sinfo.get_k_plus_m() &&
+    get_parent()->get_backfill_shards().empty();
+  const bool drain = s.draining();
+  // A drain, or an acting set that can no longer hold every copy, flushes
+  // every stripe; nothing more is appended (journal_admit refuses).
+  const bool clean = drain || !healthy;
+  // A PG that is only peered (acting set below min_size) must not write at
+  // all: its interval cannot go read-write, so the next peering treats every
+  // entry written in it as divergent (a later primary picks an older log and
+  // shards holding those entries cannot merge it). Records stay in their
+  // slots; the activation of a writeable interval replays and flushes them.
+  // Nor while replay still lists the other holders' slots: a flush would
+  // bury a record not known yet.
+  const bool writeable = get_parent()->pg_ec_journal_writeable() &&
+    s.header_reads == 0;
+  if (clean) {
+    s.journal.seal();
+  }
+
+  // Waiting reads leave in order, from the front, once nothing journaled
+  // overlaps them. Reissued past the barrier: a later read must not jump
+  // ahead of one still queued.
+  while (!s.read_waits.empty()) {
+    auto& front = s.read_waits.front();
+    if (s.journal.dirty(front.object, front.offset, front.length) ||
+      s.replay_blocked(front.object)) {
+      break;
+    }
+    auto retry = std::move(front.retry);
+    s.read_waits.pop_front();
+    retry();
+  }
+  // Writes waiting in do_op for an object's stripes: once they are all
+  // flushed the object needs no more isolation (ec_journal_kick below).
+  std::erase_if(s.barrier_objects, [this](const hobject_t& object) {
+    return !journal_blocked(object);
+  });
+
+  // Complete stripes flush whenever the flusher has capacity, without reads.
+  // Incomplete ones only when a read or a write waits for the objects it
+  // touches (their stripes, first) or a drain for a clean journal (all of
+  // them), when the log has to reclaim its oldest segment (only the stripes
+  // pinning it), or when replay adopted their records: every extra record
+  // they gather before that is a read and a rewrite saved.
+  //
+  // Each flush is an ordinary logged write of the object, submitted through
+  // the PG (ec_journal_flush) like any other op, so torn flushes roll back,
+  // lagging shards are recovered and the object's materialized attr records
+  // what it covered. This runs from the journal timer only, never inside
+  // another op's submission.
+  // A stripe passed over for a scrub or a degraded object is retried soon.
+  // One whose object waits for a replay fetch or for recovery is not: the
+  // fetch or the recovery wakes the driver, and a failed fetch keeps the
+  // object blocked until the next interval.
+  bool retry = false;
+  const auto skip = [this, &retry](const ECWriteJournal::Journal::StripeKey& key) {
+    if (journal_state->replay_blocked(key.first)) {
+      return true;
+    }
+    // Same gating as a client write in do_op: never rewrite a stripe the
+    // scrubber is comparing, or an object that is degraded/backfilling.
+    if (get_parent()->pg_ec_journal_flush_blocked(key.first)) {
+      retry = true;
+      return true;
+    }
+    return false;
+  };
+  while (writeable && s.flushes_in_flight < s.max_flushes) {
+    const auto reclaim_upto =
+      clean ? std::optional<uint64_t>{} : s.journal.reclaim_bound();
+    bool deferred = false;
+    bool isolating = false; // ahead of a read or write of the stripe's object
+    std::optional<ECWriteJournal::Stripe> stripe;
+    for (const auto& wait : s.read_waits) {
+      bool passed = false;
+      stripe = s.journal.begin_flush_object(wait.object, skip, &passed,
+                                            wait.offset, wait.length);
+      deferred |= passed;
+      if (stripe) {
+        isolating = true;
+        break;
+      }
+    }
+    for (const auto& object : s.barrier_objects) {
+      if (stripe) {
+        break;
+      }
+      bool passed = false;
+      stripe = s.journal.begin_flush_object(object, skip, &passed);
+      deferred |= passed;
+      if (stripe) {
+        isolating = true;
+      }
+    }
+    if (!stripe) {
+      bool passed = false;
+      stripe = s.journal.begin_flush(clean, skip, &passed, reclaim_upto);
+      deferred |= passed;
+    }
+    if (deferred && retry) {
+      ++s.deferred_flushes;
+      schedule_journal(journal_flush_retry_ms);
+    }
+    retry = false;
+    if (!stripe) {
+      break;
+    }
+    const bool full = stripe->full();
+    if (!full) {
+      (clean ? s.drain_flushes :
+       isolating ? s.barrier_flushes :
+       reclaim_upto ? s.pressure_flushes : s.adopted_flushes)++;
+    }
+    // Contiguous runs of the stripe's live blocks, at object offsets.
+    std::map<uint64_t, ceph::bufferlist> runs;
+    uint64_t run_end = 0;
+    for (const auto& [off, data] : stripe->blocks) {
+      const uint64_t at = stripe->offset + off;
+      if (!runs.empty() && run_end == at) {
+        runs.rbegin()->second.append(data);
+      } else {
+        runs.emplace(at, data);
+      }
+      run_end = at + data.length();
+    }
+    ++s.flushes_in_flight;
+    const auto object = stripe->object;
+    ++s.flushing[object];
+    const auto offset = stripe->offset;
+    const auto covered = stripe->newest_version;
+    const auto mtime = stripe->newest_mtime;
+    // Runs from eval_repop with the PG lock held.
+    get_parent()->ec_journal_flush(object, std::move(runs), offset, covered,
+      mtime, [this, flushed = std::move(*stripe), full] {
+        auto& s = *journal_state;
+        const int finished = s.journal.finish_flush(flushed, 0);
+        ceph_assert(finished == 0);
+        ceph_assert(s.flushes_in_flight > 0);
+        --s.flushes_in_flight;
+        auto flushing = s.flushing.find(flushed.object);
+        ceph_assert(flushing != s.flushing.end());
+        if (--flushing->second == 0) {
+          s.flushing.erase(flushing);
+        }
+        (full ? s.full_stripes : s.partial_stripes)++;
+        s.flushed_bytes += flushed.width;
+        schedule_journal(); // released segments, waiting writes and reads
+        get_parent()->ec_journal_flush_committed(flushed.object);
+      });
+  }
+  s.pumping = false;
+  // Commits wake the driver for complete stripes and reclaim; the timer
+  // does the housekeeping described above.
+  std::optional<std::chrono::milliseconds> wake;
+  if (!s.journal.empty() || !s.barrier_objects.empty()) {
+    wake = journal_housekeeping_ms;
+  }
+  if (!wake && s.slots_on_disk && get_parent()->pgb_is_primary()) {
+    wake = journal_idle_check_ms;
+  }
+  if ((!writeable || s.fetches.error()) && wake) {
+    wake = std::max(*wake, journal_housekeeping_ms); // nothing can flush yet
+  }
+  if (wake) {
+    schedule_journal(*wake);
+  }
+  if (s.replaying && !s.fetches.error() && s.fetches.empty() &&
+      s.header_reads == 0) {
+    // Every record of the slots is adopted, dead or deferred for recovery,
+    // and the slots of the deferred ones are held: new writes may be
+    // journaled into the free slots while the adopted records flush first.
+    s.replaying = false;
+    s.replay_listed_ms = std::chrono::duration<double, std::milli>(
+      ceph::mono_clock::now() - s.activated_at).count();
+    dout(1) << "EC journal replay: " << s.replay_adopted << " records adopted into "
+            << s.journal.adopted_segments() << " slots, " << s.replay_deferred
+            << " deferred for recovery, " << s.journal.held_slots()
+            << " slots held, " << *s.replay_listed_ms << " ms after activation;"
+            << " admitting" << dendl;
+  }
+  if (s.replay_pending && !s.replaying && !s.journal.adopting() &&
+      s.deferred.empty() && s.fetches.empty()) {
+    s.replay_pending = false;
+    dout(1) << "EC journal replay complete: " << s.replay_adopted
+            << " records flushed again, " << s.replay_dead << " already materialized"
+            << dendl;
+  }
+  // A PG that cannot write cannot drain; its records are durable in the
+  // slots and replay after the next writeable activation.
+  if (s.fetches.error()) {
+    s.shutdown_drain.finish(s.fetches.error());
+  } else {
+    s.shutdown_drain.maybe_finish(
+      (s.journal.empty() && !s.replay_pending) || !writeable, true);
+  }
+  // A configured drain that has flushed everything also removes the slots,
+  // with every holder in the acting set (healthy) so none keeps them.
+  const bool primary = get_parent()->pgb_is_primary();
+  if (primary && s.drain_conf.load() && writeable && healthy &&
+      !s.replay_pending && s.journal.empty() && s.flushes_in_flight == 0 &&
+      s.slots_on_disk) {
+    remove_journal_slots();
+  }
+  // Writes parked in do_op (journal_admit) whose object is clean again or
+  // that may find room now are requeued there, in order.
+  get_parent()->ec_journal_kick();
+}
+
+void ECBackend::remove_journal_slots()
+{
+  auto& s = *journal_state;
+  const epoch_t interval = get_parent()->get_info().history.same_interval_since;
+  if (s.removing_slots) {
+    if (*s.removing_slots == interval) {
+      return; // in flight
+    }
+    s.removing_slots.reset(); // dropped by an interval change
+  }
+  // An unlogged op of the RMW pipeline, like the rollforward kick: slot
+  // objects are PG-local and unversioned, as their appends' resets are.
+  // Removing an absent slot is fine (the store ignores ENOENT on remove).
+  auto op = std::make_shared<ECJournalSlotRemoval>();
+  op->hoid = s.journal.slot_object(0, get_parent()->whoami_shard().shard).hobj;
+  for (const auto holder : s.holders) {
+    auto& objects = op->slots[holder];
+    for (uint64_t slot = 0; slot < s.journal.slot_count(); ++slot) {
+      objects.push_back(s.journal.slot_object(slot, holder));
+    }
+  }
+  const uint64_t admitted = s.admitted;
+  op->on_all_commit = make_lambda_context(
+    [this, admitted, interval](int result) {
+      auto& s = *journal_state;
+      if (s.removing_slots != interval) {
+        return;
+      }
+      s.removing_slots.reset();
+      // An append since (drain turned off meanwhile) wrote a slot again.
+      if (result == 0 && s.admitted == admitted) {
+        s.slots_on_disk = false;
+        ++s.slot_removals;
+        dout(1) << "EC journal drained: slot objects removed from the holders"
+                << dendl;
+      }
+      schedule_journal();
+    });
+  s.removing_slots = interval;
+  if (!rmw_pipeline.submit_unlogged(op)) {
+    s.removing_slots.reset(); // writes are queued: try again once they pass
+    schedule_journal(journal_flush_retry_ms);
+  }
+}
+
+void ECBackend::call_write_ordered(std::function<void()> &&cb)
+{
+  // No write waits inside the backend once it has a version (do_op admits
+  // journal writes), so ordered callbacks go straight to the pipeline.
+  rmw_pipeline.call_write_ordered(std::move(cb));
+}
+
+void ECBackend::drain_journal_for_shutdown(std::function<void(int)> on_finish)
+{
+  if (!journal_state) {
+    on_finish(0);
+    return;
+  }
+  journal_state->shutdown_drain.request(std::move(on_finish));
+  if (!journal_state->pumping) {
+    pump_journal();
+  }
+}
+
+bool ECBackend::journal_admission_open() const
+{
+  const auto& s = *journal_state;
+  // Not while degraded either: writes then list every shard in their log
+  // entries (RMWPipeline::cache_ready), and a journaled record would give
+  // the data shards a new object version without its data.
+  return !s.draining() && !s.journal.error() &&
+    !parent->get_eclistener()->pg_is_degraded_or_undersized() &&
+    parent->get_acting_shards().size() == sinfo.get_k_plus_m() &&
+    parent->get_backfill_shards().empty();
+}
+
+PGBackend::ec_journal_admission_t ECBackend::journal_admit(
+  const hobject_t& oid, const ObjectState& obs, const SnapSet& snapset,
+  snapid_t snap_seq, const std::vector<OSDOp>& ops, bool may_write)
+{
+  using admission = PGBackend::ec_journal_admission_t;
+  if (!journal_state || !get_parent()->pgb_is_primary()) {
+    return admission::none;
+  }
+  if (!may_write) {
+    return admission::classic; // reads of journaled ranges wait in objects_read_async
+  }
+  auto& s = *journal_state;
+  if (journal_admission_open() && ECWriteJournal::candidate_write(oid, ops,
+        obs, snapset, snap_seq, sinfo.get_stripe_width())) {
+    // Every eligible write is journaled, with two exceptions. A whole
+    // aligned stripe that has no records goes straight to the EC write path,
+    // which needs no read for it either; and so does a write that finds the
+    // log full while its stripe has no records. A stripe that already has
+    // records takes every later write: nothing may overtake journaled data.
+    const uint64_t width = sinfo.get_stripe_width();
+    const auto& extent = ops.front().op.extent;
+    const uint64_t stripe = extent.offset / width * width;
+    const bool live = s.journal.dirty(oid, stripe, width);
+    const bool whole = extent.offset == stripe && extent.length == width;
+    if (live || !whole) {
+      const int r = s.journal.check_append(oid, extent.length);
+      if (r == 0) {
+        ++(live ? s.admit_live : s.admit_new);
+        if (!s.replay_admit_ms &&
+            s.activated_at != ceph::mono_clock::time_point{}) {
+          s.replay_admit_ms = std::chrono::duration<double, std::milli>(
+            ceph::mono_clock::now() - s.activated_at).count();
+        }
+        return admission::journal;
+      }
+      if (r == -EAGAIN && !live && !s.replay_blocked(oid)) {
+        // The log is full, but none of this stripe is in it: the direct
+        // write costs less than waiting for room.
+        ++s.bypass_room;
+        return admission::classic;
+      }
+      if (r == -EAGAIN) {
+        // The log is full. Close the open segment, so that it is released
+        // once its live stripes have flushed (oldest first), and wake the
+        // flusher. The write waits in do_op, without a version, under the
+        // OSD's admission limits.
+        s.journal.seal();
+        ++s.pressure_events;
+        schedule_journal();
+        return admission::wait;
+      }
+      // -E2BIG (a long name in a tiny segment) or a latched error: the
+      // ordinary write path, behind this object's journaled stripes.
+    } else if (!s.replay_blocked(oid)) {
+      // The direct EC write. Its stripe holds no record, so it overtakes
+      // nothing; the object's other stripes keep theirs, and the write marks
+      // only its own stripe materialized (PrimaryLogPG::finish_ctx).
+      ++s.bypass_full;
+      return admission::classic;
+    }
+  }
+  if (journal_blocked(oid)) {
+    // Neither journaled nor free to overtake the object's journaled data:
+    // wait for its stripes, complete or not, to flush first.
+    if (std::find(s.barrier_objects.begin(), s.barrier_objects.end(), oid) ==
+        s.barrier_objects.end()) {
+      s.barrier_objects.push_back(oid);
+    }
+    ++s.barrier_events;
+    schedule_journal();
+    return admission::wait;
+  }
+  return admission::classic;
+}
+
+bool ECBackend::journal_object_dirty(const hobject_t& oid) const
+{
+  return journal_state && journal_state->journal.dirty(oid);
+}
+
+std::optional<eversion_t> ECBackend::journal_oldest_live(const hobject_t& oid,
+  std::optional<uint64_t> skip_stripe) const
+{
+  if (!journal_state) {
+    return std::nullopt;
+  }
+  return journal_state->journal.oldest_version(oid, skip_stripe);
+}
+
+bool ECBackend::journal_flush_in_flight(const hobject_t& oid) const
+{
+  return journal_state && journal_state->flushing.contains(oid);
+}
+
+bool ECBackend::journal_ready(const hobject_t& oid) const
+{
+  if (!journal_state) {
+    return true;
+  }
+  const auto& s = *journal_state;
+  // A write held back for the object's stripes goes once they are flushed;
+  // one held back for room once a segment has been released.
+  if (std::find(s.barrier_objects.begin(), s.barrier_objects.end(), oid) !=
+      s.barrier_objects.end()) {
+    return !journal_blocked(oid);
+  }
+  return !s.journal.pressure();
+}
+
+void ECBackend::journal_write(OpRequestRef op, ObjectContextRef obc)
+{
+  // do_op admitted this write (journal_admit) in the same PG-lock critical
+  // section, so the room it found is still there and the object's size is
+  // the one it saw: the append cannot fail. The write is not PG-logged: it
+  // takes no version, and the object's state is unchanged until the flush.
+  auto& s = *journal_state;
+  const auto m = op->get_req<MOSDOp>();
+  const hobject_t hoid = obc->obs.oi.soid;
+  ceph_assert(m->ops.size() == 1);
+  const auto& osd_op = m->ops.front();
+  const uint64_t offset = osd_op.op.extent.offset;
+  const uint64_t length = osd_op.op.extent.length;
+  ceph_assert(osd_op.indata.length() == length);
+  // The record's journal version: the interval's start epoch and the
+  // sequence this append takes, so versions and sequences order alike.
+  const eversion_t version(get_parent()->get_interval_start_epoch(),
+                           s.journal.next_append_sequence());
+  ECWriteJournal::Placement placement;
+  ECWriteJournal::Ticket ticket;
+  const int r = s.journal.append(hoid, version, obc->obs.oi.size, offset,
+    osd_op.indata, &placement, &ticket, m->get_mtime());
+  ceph_assertf(r == 0, "EC journal POC: admitted write did not append: %d", r);
+  ceph_assert(ticket.sequence == version.version);
+  s.open_segment = ticket.segment;
+
+  const ceph_tid_t tid = get_parent()->get_tid();
+  auto& flight = s.inflight[tid];
+  flight.op = op;
+  flight.obc = obc;
+  flight.object = hoid;
+  flight.ticket = ticket;
+  flight.bytes = length;
+  flight.pending = s.holders.size();
+  s.inflight_by_object[hoid].push_back(tid);
+  {
+    object_stat_sum_t delta;
+    delta.num_wr++;
+    delta.num_wr_kb += shift_round_up(length, 10);
+    get_parent()->apply_stats(hoid, delta);
+  }
+
+  // One unlogged sub-write per holder with that holder's copy of the
+  // record; the holder commits it and replies (handle_sub_write,
+  // handle_sub_write_reply). Admission requires every holder acting.
+  const auto pgid = get_parent()->get_info().pgid.pgid;
+  std::vector<std::pair<int, Message*>> messages;
+  ECSubWrite local_write_op;
+  bool should_write_local = false;
+  unsigned sent = 0;
+  for (const auto& pg_shard : get_parent()->get_acting_shards()) {
+    if (std::find(s.holders.begin(), s.holders.end(), pg_shard.shard) ==
+        s.holders.end()) {
+      continue;
+    }
+    ObjectStore::Transaction t;
+    s.journal.emit(placement, coll_t(spg_t(pgid, pg_shard.shard)),
+                   pg_shard.shard, t);
+    ECSubWrite sop(get_parent()->whoami_shard(), tid, m->get_reqid(), hoid,
+                   pg_stat_t(), t, eversion_t(), eversion_t(), eversion_t(),
+                   {}, std::nullopt, {}, {}, false);
+    sop.unlogged = true;
+    ++sent;
+    if (pg_shard == get_parent()->whoami_shard()) {
+      should_write_local = true;
+      local_write_op.claim(sop);
+    } else {
+      auto *msg = new MOSDECSubOpWrite(sop);
+      msg->pgid = spg_t(get_parent()->primary_spg_t().pgid, pg_shard.shard);
+      msg->map_epoch = switcher->get_osdmap_epoch();
+      msg->min_epoch = get_parent()->get_interval_start_epoch();
+      msg->trace = op->pg_trace;
+      messages.emplace_back(pg_shard.osd, msg);
+    }
+  }
+  ceph_assertf(sent == s.holders.size(),
+               "EC journal POC: %u of %zu holders acting", sent, s.holders.size());
+  ++s.admitted;
+  s.slots_on_disk = true;
+  // While records are resident the driver wakes at least once a second
+  // (pump_journal re-arms it). The first record after an idle spell must
+  // arm it: a drain set through the config observer only flips an atomic,
+  // and neither incomplete stripes nor their commits wake the driver, so
+  // an idle PG would otherwise keep its records until its next write.
+  schedule_journal(journal_housekeeping_ms);
+  if (!messages.empty()) {
+    get_parent()->send_message_osd_cluster(messages, switcher->get_osdmap_epoch());
+  }
+  if (should_write_local) {
+    handle_sub_write(get_parent()->whoami_shard(), op, local_write_op,
+                     op->pg_trace, *parent->get_eclistener());
+  }
+}
+
+void ECBackend::journal_record_committed(pg_shard_t from, ceph_tid_t tid)
+{
+  auto& s = *journal_state;
+  auto i = s.inflight.find(tid);
+  ceph_assert(i != s.inflight.end());
+  auto& flight = i->second;
+  ceph_assert(flight.pending > 0);
+  if (--flight.pending) {
+    return;
+  }
+  // Every holder has the record: it is durable.
+  const bool was_flushable = s.flushable();
+  const bool was_full = s.journal.pressure();
+  const int committed = s.journal.committed(flight.ticket, 0);
+  ceph_assert(committed == 0);
+  flight.done = true;
+  // Acknowledge in order per object: a client's writes of one object
+  // complete in the order they were admitted, as they would if logged.
+  auto q = s.inflight_by_object.find(flight.object);
+  ceph_assert(q != s.inflight_by_object.end());
+  auto& queue = q->second;
+  while (!queue.empty()) {
+    auto j = s.inflight.find(queue.front());
+    ceph_assert(j != s.inflight.end());
+    if (!j->second.done) {
+      break;
+    }
+    ++s.acked;
+    get_parent()->ec_journal_acked(std::move(j->second.op),
+                                   std::move(j->second.obc), j->second.bytes);
+    s.inflight.erase(j);
+    queue.pop_front();
+  }
+  if (queue.empty()) {
+    s.inflight_by_object.erase(q);
+  }
+  // A commit can release a dead segment: writes waiting in do_op for room
+  // are requeued by the pump (ec_journal_kick).
+  if ((!was_flushable && s.flushes_in_flight < s.max_flushes &&
+       s.flushable()) || (was_full && !s.journal.pressure())) {
+    schedule_journal();
+  }
+}
+
+eversion_t ECBackend::journal_version_now() const
+{
+  if (!journal_state) {
+    return eversion_t();
+  }
+  return journal_state->journal.version_now(parent->get_interval_start_epoch());
+}
+
+void ECBackend::journal_split(spg_t child, ObjectStore::Transaction& t)
+{
+  if (!journal_state) {
+    return;
+  }
+  switcher->ch->flush();
+  const int result = journal_state->journal.copy_slots_for_split(child,
+    [this](const ghobject_t& slot, ceph::bufferlist& data,
+         ECWriteJournal::SlotHeaders& headers) {
+      const int read = switcher->store->read(switcher->ch, slot, 0, 0, data);
+       ceph::bufferlist omap_header;
+       return read < 0 ? read :
+         switcher->store->omap_get(switcher->ch, slot, &omap_header, &headers);
+    }, t);
+  ceph_assertf(result == 0, "EC journal split: cannot copy slots to %s: %d",
+               stringify(child).c_str(), result);
+}
+
+namespace {
+// Lists one holder's slots for replay (journal_on_activate): the headers
+// come back as each slot's attributes.
+struct JournalHeaderCompleter final : ECCommon::ReadCompleter {
+  ECBackend& backend;
+  shard_id_t shard;
+  JournalHeaderCompleter(ECBackend& backend, shard_id_t shard)
+    : backend(backend), shard(shard) {}
+  void finish_single_request(const hobject_t& slot,
+                             ECCommon::read_result_t&& res,
+                             ECCommon::read_request_t&) override {
+    if (res.r == 0 && res.errors.empty() && res.attrs) {
+      backend.journal_headers_result(shard, slot, *res.attrs);
+    }
+  }
+  void finish(int) && override {
+    backend.journal_headers_finished();
+  }
+};
+
+// Reads the slot ranges replay is missing from one holder (fetch_next).
+struct JournalFetchCompleter final : ECCommon::ReadCompleter {
+  ECBackend& backend;
+  shard_id_t shard;
+  JournalFetchCompleter(ECBackend& backend, shard_id_t shard)
+    : backend(backend), shard(shard) {}
+  void finish_single_request(const hobject_t& slot,
+                             ECCommon::read_result_t&& res,
+                             ECCommon::read_request_t&) override {
+    if (res.r == 0 && res.errors.empty() &&
+        res.buffers_read.contains_shard(shard)) {
+      backend.journal_fetch_result(slot, res.buffers_read, shard);
+    }
+  }
+  void finish(int) && override {
+    backend.journal_fetch_finished();
+  }
+};
+} // namespace
+
+void ECBackend::journal_on_activate()
+{
+  if (!journal_state || !get_parent()->pgb_is_primary()) {
+    return;
+  }
+  auto& s = *journal_state;
+  // Nothing is admitted until the listings below and the fetches are in
+  // (draining); the records read back are adopted into their slots and
+  // flush first, while new writes take the free slots.
+  s.replaying = true;
+  s.replay_pending = true;
+  s.activated_at = ceph::mono_clock::now();
+  s.replay_listed_ms.reset();
+  s.replay_admit_ms.reset();
+  const auto whoami = get_parent()->whoami_shard().shard;
+  const auto pgid = get_parent()->get_info().pgid.pgid;
+  const auto split_bits = pgid.get_split_bits(get_parent()->get_pool().get_pg_num());
+  const uint64_t width = sinfo.get_stripe_width();
+  using state_t = PGBackend::Listener::ec_journal_record_state_t;
+  // Every record is judged by its OMAP header first. Only the payloads of
+  // records that are still live (or wait for their object's recovery) are
+  // read, so a bad block under a dead record costs nothing. A payload this
+  // shard cannot read back intact is fetched from the other holders, whose
+  // copies of the slot are identical, and only its object waits meanwhile.
+  std::vector<ECWriteJournal::Record> records;
+  std::set<eversion_t> indexed; // versions this shard's slots hold
+  uint64_t unreadable = 0;
+  for (uint64_t slot = 0; slot < s.journal.slot_count(); ++slot) {
+    const auto object = s.journal.slot_object(slot, whoami);
+    struct stat st;
+    int result = switcher->store->stat(switcher->ch, object, &st);
+    if (result == -ENOENT) {
+      continue;
+    }
+    ECWriteJournal::SlotHeaders headers;
+    ceph::bufferlist omap_header;
+    if (result >= 0) {
+      result = switcher->store->omap_get(switcher->ch, object, &omap_header, &headers);
+    }
+    std::vector<ECWriteJournal::SlotEntry> entries;
+    std::string why;
+    if (result >= 0) {
+      try {
+        entries = ECWriteJournal::decode_slot_headers(slot, st.st_size, headers,
+                                                      pgid, split_bits);
+      } catch (const ceph::buffer::error& error) {
+        result = -EIO;
+        why = error.what();
+      }
+    }
+    if (result < 0) {
+      // Without the slot's headers nothing names the objects its records
+      // belong to (log tags cover only the newest entries): every op of the
+      // PG waits, and the next interval reads the slot again.
+      s.fetches.fail(result, true);
+      get_parent()->clog_error() << "EC journal replay: "
+        << get_parent()->get_info().pgid << " cannot index slot " << slot << ": "
+        << (why.empty() ? cpp_strerror(result) : why) << "; blocking the PG";
+      continue;
+    }
+    for (auto& entry : entries) {
+      ++s.replay_scanned;
+      const auto& header = entry.header;
+      indexed.insert(header.version);
+      if (get_parent()->ec_journal_record_state(header.object, header.version,
+            header.offset / width * width) == state_t::dead) {
+        ++s.replay_dead;
+        continue;
+      }
+      // Its slot stays out of use until the record is adopted into it or
+      // judged dead (judge_replayed), through a fetch or a recovery too.
+      s.journal.hold_slot(slot);
+      ceph::bufferlist payload;
+      const int read = switcher->store->read(switcher->ch, object,
+        entry.locator.slot_offset, entry.locator.length, payload);
+      if (read >= 0) {
+        try {
+          records.push_back(entry.locator.decode_record(payload));
+          continue;
+        } catch (const ceph::buffer::error& error) {
+          why = error.what();
+        }
+      } else {
+        why = cpp_strerror(read);
+      }
+      ++s.replay_unreadable;
+      if (++unreadable <= 16) {
+        derr << "EC journal replay: " << header.object << " " << header.version
+             << " in slot " << slot << " at " << entry.locator.slot_offset
+             << ": " << why << "; fetching it from another holder" << dendl;
+      }
+      s.fetches.add(header.object, header.version, std::move(entry.locator));
+    }
+  }
+  std::sort(records.begin(), records.end(),
+    [](const auto& a, const auto& b) { return a.version < b.version; });
+  for (auto& record : records) {
+    judge_replayed(std::move(record));
+  }
+  s.replay_indexed = std::move(indexed);
+  // Records this shard's slots lack: a record whose commit this shard
+  // missed (it crashed or was away while the write was in flight, and came
+  // back as primary before its replacement flushed it) is on the other
+  // holders, whose slots are laid out identically. Nothing is PG-logged
+  // about it, so their slot listings are read through the read pipeline, as
+  // the slots' attributes (handle_sub_read), and whatever they list that is
+  // missing here is fetched (journal_headers_result). Until every listing
+  // is in, no op of the PG runs and nothing flushes (replay_blocked).
+  for (const auto& shard : get_parent()->get_acting_shards()) {
+    if (shard != get_parent()->whoami_shard() &&
+        std::find(s.holders.begin(), s.holders.end(), shard.shard) !=
+          s.holders.end()) {
+      s.fetch_sources.push_back(shard);
+    }
+  }
+  s.header_reads = s.fetch_sources.size();
+  for (const auto& source : s.fetch_sources) {
+    std::map<hobject_t, ECCommon::read_request_t> to_read;
+    for (uint64_t slot = 0; slot < s.journal.slot_count(); ++slot) {
+      const hobject_t object = s.journal.slot_object(slot, source.shard).hobj;
+      auto [i, fresh] = to_read.try_emplace(object,
+        ECUtil::shard_extent_set_t(sinfo.get_k_plus_m()), WantAttrs::Yes,
+        WantOmapHeader::No, WantOmapKeys::No, std::string(), 0,
+        uint64_t(ECWriteJournal::record_alignment));
+      auto& req = i->second;
+      req.shard_want_to_read.map[source.shard].union_insert(
+        0, ECWriteJournal::record_alignment);
+      auto& read = req.shard_reads[source.shard];
+      read.extents.union_insert(0, ECWriteJournal::record_alignment);
+      read.pg_shard = source;
+    }
+    read_pipeline.start_read_op(CEPH_MSG_PRIO_DEFAULT, to_read, false, false,
+      std::make_unique<JournalHeaderCompleter>(*this, source.shard));
+  }
+  if (unreadable) {
+    derr << "EC journal replay: " << unreadable << " payloads unreadable here,"
+         << " fetching them from other holders" << dendl;
+  }
+  dout(1) << "EC journal replay: " << s.replay_indexed.size()
+          << " records indexed, " << records.size() << " payloads read, "
+          << s.replay_adopted << " live, " << s.replay_dead << " materialized, "
+          << s.replay_deferred << " deferred for recovery; listing "
+          << s.header_reads << " other holders" << dendl;
+  if (s.header_reads == 0) {
+    journal_replay_listed();
+  }
+  schedule_journal();
+}
+
+void ECBackend::journal_headers_result(
+  shard_id_t shard, const hobject_t& slot,
+  const std::map<std::string, ceph::bufferlist, std::less<>>& attrs)
+{
+  auto& s = *journal_state;
+  uint64_t number = 0;
+  try {
+    number = std::stoull(slot.oid.name.substr(
+      ECWriteJournal::slot_name_prefix.size()));
+  } catch (const std::exception&) {
+    return;
+  }
+  const auto pgid = get_parent()->get_info().pgid.pgid;
+  const auto split_bits = pgid.get_split_bits(get_parent()->get_pool().get_pg_num());
+  const uint64_t width = sinfo.get_stripe_width();
+  const ECWriteJournal::SlotHeaders headers(attrs.begin(), attrs.end());
+  std::vector<ECWriteJournal::SlotEntry> entries;
+  try {
+    entries = ECWriteJournal::decode_slot_headers(number, std::nullopt, headers,
+                                                  pgid, split_bits);
+  } catch (const ceph::buffer::error& error) {
+    // This holder's copy of the slot cannot be read as a whole; the
+    // records this shard lacks may still be on another holder.
+    derr << "EC journal replay: slot " << number << " listing from shard "
+         << shard << " unusable: " << error.what() << dendl;
+    return;
+  }
+  for (auto& entry : entries) {
+    const auto& header = entry.header;
+    if (s.replay_indexed.contains(header.version) ||
+        s.replay_fetching.contains(header.version)) {
+      continue;
+    }
+    ++s.replay_scanned;
+    if (get_parent()->ec_journal_record_state(header.object, header.version,
+          header.offset / width * width) ==
+        PGBackend::Listener::ec_journal_record_state_t::dead) {
+      ++s.replay_dead;
+      continue;
+    }
+    dout(10) << __func__ << " " << header.object << " " << header.version
+             << " only on other holders; fetching" << dendl;
+    s.journal.hold_slot(number);
+    s.replay_fetching.insert(header.version);
+    s.fetches.add(header.object, header.version, std::move(entry.locator));
+  }
+}
+
+void ECBackend::journal_headers_finished()
+{
+  auto& s = *journal_state;
+  ceph_assert(s.header_reads > 0);
+  if (--s.header_reads == 0) {
+    journal_replay_listed();
+  }
+}
+
+void ECBackend::journal_replay_listed()
+{
+  auto& s = *journal_state;
+  if (!s.fetches.empty()) {
+    dout(1) << "EC journal replay: fetching " << s.fetches.pending().size()
+            << " records from other holders" << dendl;
+    journal_fetch_next();
+  } else {
+    schedule_journal();
+  }
+}
+
+bool ECBackend::journal_blocked(const hobject_t& oid) const
+{
+  const auto& s = *journal_state;
+  return s.journal.dirty(oid) || s.replay_blocked(oid);
+}
+
+
+void ECBackend::journal_fetch_next()
+{
+  auto& s = *journal_state;
+  if (s.fetches.error()) {
+    return;
+  }
+  if (s.fetches.empty()) {
+    schedule_journal();
+    return;
+  }
+  if (s.fetch_sources.empty()) {
+    s.fetches.fail(-EIO);
+    for (const auto& pending : s.fetches.pending()) {
+      ++s.replay_absent;
+      derr << "EC journal replay: " << pending.object << " " << pending.version
+           << " is live but no holder returned its record; keeping the object blocked"
+           << dendl;
+    }
+    const auto& first = s.fetches.pending().front();
+    get_parent()->clog_error() << "EC journal replay: "
+      << get_parent()->get_info().pgid << ": no holder returned "
+      << s.fetches.pending().size() << " live records (" << first.object << " "
+      << first.version << " first); keeping their objects blocked";
+    schedule_journal();
+    return;
+  }
+  const pg_shard_t source = s.fetch_sources.back();
+  s.fetch_sources.pop_back();
+  // The slot object and the record's place in it are the same on every
+  // holder: read those ranges of this holder's copy, verbatim.
+  std::map<hobject_t, ECCommon::read_request_t> to_read;
+  for (const auto& f : s.fetches.pending()) {
+    const hobject_t slot =
+      s.journal.slot_object(f.locator.slot, source.shard).hobj;
+    auto [i, fresh] = to_read.try_emplace(slot,
+      ECUtil::shard_extent_set_t(sinfo.get_k_plus_m()), WantAttrs::No,
+      WantOmapHeader::No, WantOmapKeys::No, std::string(), 0,
+      f.locator.slot_offset + f.locator.length);
+    auto& req = i->second;
+    req.object_size = std::max(req.object_size,
+                               f.locator.slot_offset + f.locator.length);
+    req.shard_want_to_read.map[source.shard].union_insert(f.locator.slot_offset,
+                                                          f.locator.length);
+    auto& read = req.shard_reads[source.shard];
+    read.extents.union_insert(f.locator.slot_offset, f.locator.length);
+    read.pg_shard = source;
+  }
+  dout(10) << __func__ << " " << s.fetches.pending().size() << " records from "
+           << source << dendl;
+  read_pipeline.start_read_op(CEPH_MSG_PRIO_DEFAULT, to_read, false, false,
+    std::make_unique<JournalFetchCompleter>(*this, source.shard));
+}
+
+void ECBackend::journal_fetch_result(const hobject_t& slot,
+                                     const ECUtil::shard_extent_map_t& data,
+                                     shard_id_t shard)
+{
+  auto& s = *journal_state;
+  for (const auto& f : s.fetches.pending()) {
+    if (s.journal.slot_object(f.locator.slot, shard).hobj != slot) {
+      continue;
+    }
+    ceph::bufferlist bl;
+    data.get_buffer(shard, f.locator.slot_offset, f.locator.length, bl);
+    if (bl.length() != f.locator.length) {
+      continue; // this holder's copy is short: try the next one
+    }
+    ECWriteJournal::Record record;
+    try {
+      record = f.locator.decode_record(bl);
+    } catch (const ceph::buffer::error&) {
+      continue;
+    }
+    if (record.object == f.object && record.version == f.version) {
+      s.fetched.push_back(std::move(record));
+    }
+  }
+}
+
+void ECBackend::journal_fetch_finished()
+{
+  auto& s = *journal_state;
+  auto fetched = std::move(s.fetched);
+  s.fetched.clear();
+  std::sort(fetched.begin(), fetched.end(),
+    [](const auto& a, const auto& b) { return a.version < b.version; });
+  for (auto& record : fetched) {
+    if (!s.fetches.complete(record.object, record.version)) {
+      continue;
+    }
+    ++s.replay_fetched;
+    judge_replayed(std::move(record));
+  }
+  journal_fetch_next();
+}
+
+void ECBackend::judge_replayed(ECWriteJournal::Record record)
+{
+  auto& s = *journal_state;
+  const uint64_t width = sinfo.get_stripe_width();
+  using state_t = PGBackend::Listener::ec_journal_record_state_t;
+  switch (get_parent()->ec_journal_record_state(record.object, record.version,
+            record.offset / width * width)) {
+  case state_t::live: {
+    const int r = s.journal.adopt(record);
+    ceph_assertf(r == 0, "EC journal replay: cannot adopt %d", r);
+    ++s.replay_adopted;
+    break;
+  }
+  case state_t::dead:
+    ++s.replay_dead;
+    s.journal.release_hold(record.slot);
+    break;
+  case state_t::missing:
+    ++s.replay_deferred;
+    s.deferred[record.object].push_back(std::move(record));
+    break;
+  }
+}
+
+void ECBackend::journal_object_recovered(const hobject_t& oid)
+{
+  if (!journal_state) {
+    return;
+  }
+  auto& s = *journal_state;
+  auto i = s.deferred.find(oid);
+  if (i == s.deferred.end()) {
+    return;
+  }
+  auto records = std::move(i->second);
+  s.deferred.erase(i);
+  for (auto& record : records) {
+    judge_replayed(std::move(record));
+  }
+  schedule_journal();
+}
+
+void ECBackend::start_transaction(std::shared_ptr<ECClassicalOp> op)
+{
+  op->plan = get_write_plan(sinfo, *op->t, read_pipeline, rmw_pipeline,
+    get_parent()->get_dpp());
+  ldpp_dout(get_parent()->get_dpp(), 20) << __func__
+    << " plans=" << op->plan << dendl;
+  rmw_pipeline.start_rmw(std::move(op));
+}
+
 std::tuple<
   int,
   map<string, bufferlist, less<>>,
@@ -1185,19 +2669,7 @@ void ECBackend::submit_transaction(
   if (client_op) {
     op->trace = client_op->pg_trace;
   }
-  ECTransaction::WritePlan &plans = op->plan;
-
-  ceph_assert(op->plan.plans.empty());
-  op->plan = get_write_plan(
-    sinfo,
-    *op->t,
-    read_pipeline,
-    rmw_pipeline,
-    get_parent()->get_dpp());
-  ldpp_dout(get_parent()->get_dpp(), 20) << __func__
-             << " plans=" << plans
-             << dendl;
-  rmw_pipeline.start_rmw(std::move(op));
+  start_transaction(std::move(op));
 }
 
 int ECBackend::objects_read_sync(
@@ -1328,6 +2800,45 @@ int ECBackend::objects_readv_sync(const hobject_t &hoid,
 }
 
 void ECBackend::objects_read_async(
+    const hobject_t &hoid,
+    uint64_t object_size,
+    const list<pair<ec_align_t,
+                    pair<bufferlist*, Context*>>> &to_read,
+    Context *on_complete,
+    bool fast_read) {
+  if (journal_state) {
+    auto& s = *journal_state;
+    uint64_t first = std::numeric_limits<uint64_t>::max();
+    uint64_t end = 0;
+    for (const auto& [read, ctx] : to_read) {
+      first = std::min(first, read.offset);
+      end = std::max(end, read.offset + read.size);
+    }
+    const bool dirty = (first < end && s.journal.dirty(hoid, first, end - first)) ||
+      s.replay_blocked(hoid);
+    if (dirty || !s.read_waits.empty()) {
+      if (dirty) {
+        ++s.read_barrier_events;
+      }
+      s.read_waits.push_back(JournalState::ReadWait{hoid,
+        first < end ? first : 0, first < end ? end - first : 0,
+        [this, hoid, object_size, to_read, on_complete, fast_read] {
+          issue_read_async(hoid, object_size, to_read, on_complete, fast_read);
+        },
+        [to_read, on_complete] {
+          for (const auto& [read, ctx] : to_read) {
+            delete ctx.second;
+          }
+          delete on_complete;
+        }});
+      schedule_journal();
+      return;
+    }
+  }
+  issue_read_async(hoid, object_size, to_read, on_complete, fast_read);
+}
+
+void ECBackend::issue_read_async(
     const hobject_t &hoid,
     uint64_t object_size,
     const list<pair<ec_align_t,

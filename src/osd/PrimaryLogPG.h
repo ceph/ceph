@@ -702,6 +702,7 @@ public:
     bool ignore_log_op_stats;  // don't log op stats
     bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
     bool use_replace_op = false;  ///< use REPLACE op type instead of MODIFY/DELETE (set by finish_copyfrom)
+    bool ec_journal = false; ///< admitted into the EC journal POC by do_op
     ObjectCleanRegions clean_regions;
 
     // side effects
@@ -1633,6 +1634,7 @@ public:
       split_bits,
       seed,
       target);
+    pgbackend->ec_journal_split(child, t);
     init_pg_ondisk(t, child, pool);
   }
 private:
@@ -1979,6 +1981,33 @@ public:
   void on_flushed() override;
   void on_removal(ObjectStore::Transaction &t) override;
   void on_shutdown() override;
+  void drain_ec_journal_for_shutdown(std::function<void(int)> done) override {
+    pgbackend->drain_ec_journal_for_shutdown(std::move(done));
+  }
+  bool pg_ec_journal_flush_blocked(const hobject_t& oid) override;
+  void ec_journal_flush(const hobject_t& oid,
+                        std::map<uint64_t, ceph::bufferlist> runs,
+                        uint64_t stripe_offset, eversion_t covered,
+                        utime_t mtime,
+                        std::function<void()> on_commit) override;
+  void ec_journal_acked(OpRequestRef op, ObjectContextRef obc,
+                        uint64_t bytes_written) override;
+  void ec_journal_kick() override;
+  void ec_journal_requeue(std::list<OpRequestRef>&& ops) override;
+  void ec_journal_flush_committed(const hobject_t& oid) override;
+  bool pg_ec_journal_writeable() const override { return is_active(); }
+  // Recovery of an object waits while a journal flush of it is in flight;
+  // set when that happened, so the flush's commit requeues recovery.
+  bool ec_journal_recovery_deferred = false;
+  bool ec_journal_recovery_blocked(const hobject_t& oid);
+  ec_journal_record_state_t ec_journal_record_state(
+    const hobject_t& oid, eversion_t version, uint64_t stripe_offset) override;
+  // Ops that PGBackend::ec_journal_admit() held back, per object, in
+  // arrival order. Later ops of the same object queue behind them.
+  std::map<hobject_t, std::list<OpRequestRef>> waiting_for_ec_journal;
+  // on_change() lets the backend requeue journaled writes in flight while
+  // the PG stays primary; on_shutdown() does not.
+  bool ec_journal_requeue_allowed = false;
   bool check_failsafe_full() override;
   bool maybe_preempt_replica_scrub(const hobject_t& oid) override;
   struct ECListener *get_eclistener() override;
