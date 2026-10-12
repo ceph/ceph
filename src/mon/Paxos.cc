@@ -68,7 +68,7 @@ MonitorDBStore *Paxos::get_store()
   return mon.store;
 }
 
-void Paxos::read_and_prepare_transactions(MonitorDBStore::TransactionRef tx,
+void Paxos::read_and_prepare_transactions(MonitorDBStoreTransactionRef tx,
 					  version_t first, version_t last)
 {
   dout(10) << __func__ << " first " << first << " last " << last << dendl;
@@ -270,7 +270,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
     dout(10) << "accepting pn " << accepted_pn << " from " 
 	     << accepted_pn_from << dendl;
   
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
+    auto t(std::make_shared<MonitorDBStoreTransaction>());
     t->put(get_name(), "accepted_pn", accepted_pn);
 
     dout(30) << __func__ << " transaction dump:\n";
@@ -384,7 +384,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
  */
 bool Paxos::store_state(MMonPaxos *m)
 {
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   auto start = m->values.begin();
   bool changed = false;
 
@@ -640,7 +640,7 @@ void Paxos::begin(bufferlist& v)
   new_value = v;
 
   if (last_committed == 0) {
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
+    auto t(std::make_shared<MonitorDBStoreTransaction>());
     // initial base case; set first_committed too
     t->put(get_name(), "first_committed", 1);
     decode_append_transaction(t, new_value);
@@ -653,7 +653,7 @@ void Paxos::begin(bufferlist& v)
 
   // store the proposed value in the store. IF it is accepted, we will then
   // have to decode it into a transaction and apply it.
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   t->put(get_name(), last_committed+1, new_value);
 
   // note which pn this pending value is for.
@@ -664,7 +664,7 @@ void Paxos::begin(bufferlist& v)
   JSONFormatter f(true);
   t->dump(&f);
   f.flush(*_dout);
-  auto debug_tx(std::make_shared<MonitorDBStore::Transaction>());
+  auto debug_tx(std::make_shared<MonitorDBStoreTransaction>());
   auto new_value_it = new_value.cbegin();
   debug_tx->decode(new_value_it);
   debug_tx->dump(&f);
@@ -745,7 +745,7 @@ void Paxos::handle_begin(MonOpRequestRef op)
   dout(10) << "accepting value for " << v << " pn " << accepted_pn << dendl;
   // store the accepted value onto our store. We will have to decode it and
   // apply its transaction once we receive permission to commit.
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   t->put(get_name(), v, begin->values[v]);
 
   // note which pn this pending value is for.
@@ -858,7 +858,7 @@ void Paxos::commit_start()
 
   ceph_assert(g_conf()->paxos_kill_at != 7);
 
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
 
   // commit locally
   t->put(get_name(), "last_committed", last_committed + 1);
@@ -1250,7 +1250,7 @@ void Paxos::trim()
 
   dout(10) << "trim to " << end << " (was " << first_committed << ")" << dendl;
 
-  MonitorDBStore::TransactionRef t = get_pending_transaction();
+  MonitorDBStoreTransactionRef t = get_pending_transaction();
 
   for (version_t v = first_committed; v < end; ++v) {
     dout(10) << "trim " << v << dendl;
@@ -1281,7 +1281,7 @@ version_t Paxos::get_new_proposal_number(version_t gt)
   last_pn += (version_t)mon.rank;
 
   // write
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   t->put(get_name(), "last_pn", last_pn);
 
   dout(30) << __func__ << " transaction dump:\n";
@@ -1567,11 +1567,11 @@ void Paxos::queue_pending_finisher(Context *onfinished)
   pending_finishers.push_back(onfinished);
 }
 
-MonitorDBStore::TransactionRef Paxos::get_pending_transaction()
+MonitorDBStoreTransactionRef Paxos::get_pending_transaction()
 {
   ceph_assert(mon.is_leader());
   if (!pending_proposal) {
-    pending_proposal.reset(new MonitorDBStore::Transaction);
+    pending_proposal.reset(new MonitorDBStoreTransaction);
     ceph_assert(pending_finishers.empty());
   }
   return pending_proposal;

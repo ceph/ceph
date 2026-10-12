@@ -22,13 +22,17 @@
 #include <fstream>
 #include "kv/KeyValueDB.h"
 
+#include "mon/MonitorDBStoreOp.h"
+#include "mon/MonitorDBStoreTransaction.h"
+
 #include "include/buffer.h"
-#include "include/encoding.h"
 #include "include/types.h" // for version_t
 #include "common/JSONFormatter.h"
 #include "common/Finisher.h"
 #include "common/strtol.h"
 #include "common/PriorityCache.h"
+
+#define dout_context g_ceph_context
 
 class Context;
 
@@ -61,92 +65,7 @@ class MonitorDBStore
     return db->get_priority_cache();
   }
 
-  struct Op {
-    uint8_t type;
-    std::string prefix;
-    std::string key, endkey;
-    ceph::buffer::list bl;
-
-    Op()
-      : type(0) { }
-    Op(int t, const std::string& p, const std::string& k)
-      : type(t), prefix(p), key(k) { }
-    Op(int t, const std::string& p, const std::string& k, const ceph::buffer::list& b)
-      : type(t), prefix(p), key(k), bl(b) { }
-    Op(int t, const std::string& p, const std::string& start, const std::string& end)
-      : type(t), prefix(p), key(start), endkey(end) { }
-
-    void encode(ceph::buffer::list& encode_bl) const;
-    void decode(ceph::buffer::list::const_iterator& decode_bl);
-
-    void dump(ceph::Formatter *f) const;
-
-    int approx_size() const {
-      return 6 + 1 +
-	4 + prefix.size() +
-	4 + key.size() +
-	4 + endkey.size() +
-	4 + bl.length();
-    }
-
-    static std::list<Op> generate_test_instances();
-  };
-
-  struct Transaction;
-  typedef std::shared_ptr<Transaction> TransactionRef;
-  struct Transaction {
-    std::list<Op> ops;
-    uint64_t bytes, keys;
-
-    Transaction() : bytes(6 + 4 + 8*2), keys(0) {}
-
-    enum {
-      OP_PUT	= 1,
-      OP_ERASE	= 2,
-      OP_COMPACT = 3,
-      OP_ERASE_RANGE = 4,
-    };
-
-    void put(const std::string& prefix, const std::string& key, const ceph::buffer::list& bl);
-    void put(const std::string& prefix, version_t ver, const ceph::buffer::list& bl);
-    void put(const std::string& prefix, const std::string& key, version_t ver);
-
-    void erase(const std::string& prefix, const std::string& key);
-    void erase(const std::string& prefix, version_t ver);
-
-    void erase_range(const std::string& prefix, const std::string& begin,
-		     const std::string& end);
-
-    void compact_prefix(const std::string& prefix);
-    void compact_range(const std::string& prefix, const std::string& start,
-		       const std::string& end);
-
-    void encode(ceph::buffer::list& bl) const;
-    void decode(ceph::buffer::list::const_iterator& bl);
-
-    static std::list<Transaction> generate_test_instances();
-
-    void append(TransactionRef other);
-    void append_from_encoded(ceph::buffer::list& bl);
-
-    bool empty() {
-      return (size() == 0);
-    }
-
-    size_t size() const {
-      return ops.size();
-    }
-    uint64_t get_keys() const {
-      return keys;
-    }
-    uint64_t get_bytes() const {
-      return bytes;
-    }
-
-    void dump(ceph::Formatter *f, bool dump_val=false) const;
-  };
-
-  int apply_transaction(MonitorDBStore::TransactionRef t);
+  int apply_transaction(MonitorDBStoreTransactionRef t);
 
   struct C_DoTransaction;
 
@@ -156,7 +75,7 @@ class MonitorDBStore
    * Queue a transaction to commit asynchronously.  Trigger a context
    * on completion (without any locks held).
    */
-  void queue_transaction(MonitorDBStore::TransactionRef t,
+  void queue_transaction(MonitorDBStoreTransactionRef t,
 			 Context *oncommit);
 
   /**
@@ -185,7 +104,7 @@ class MonitorDBStore
     virtual bool has_next_chunk() {
       return !done && _is_valid();
     }
-    virtual void get_chunk_tx(TransactionRef tx, uint64_t max_bytes,
+    virtual void get_chunk_tx(MonitorDBStoreTransactionRef tx, uint64_t max_bytes,
 			      uint64_t max_keys) = 0;
     virtual std::pair<std::string,std::string> get_next_key() = 0;
   };
@@ -214,7 +133,7 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    void get_chunk_tx(TransactionRef tx, uint64_t max_bytes,
+    void get_chunk_tx(MonitorDBStoreTransactionRef tx, uint64_t max_bytes,
 		      uint64_t max_keys) override;
 
     std::pair<std::string,std::string> get_next_key() override;
@@ -344,8 +263,5 @@ class MonitorDBStore
   explicit MonitorDBStore(const std::string& path);
   ~MonitorDBStore();
 };
-
-WRITE_CLASS_ENCODER(MonitorDBStore::Op)
-WRITE_CLASS_ENCODER(MonitorDBStore::Transaction)
 
 #endif /* CEPH_MONITOR_DB_STORE_H */
