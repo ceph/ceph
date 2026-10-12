@@ -4711,20 +4711,22 @@ options:
 - name: rgw_nsfs_adoption_mode
   type: str
   level: advanced
-  desc: What this gateway is doing with the tree it has been pointed at
-  long_desc: Governs adoption of a NooBaa deployment, and has meaning only
-    when rgw_nsfs_noobaa_config_root names a configuration store;  with no
-    store there is nothing to adopt and this is inert.  "serve" (default)
-    imports nothing and marks nothing, and serves the trees read-only as
-    NooBaa arranged them -- a readable view of a deployment nothing has
-    changed on disk, so the decision to adopt stays reversible.  "adopt"
-    imports the accounts and bucket state, brings each bucket's objects
-    into RGW's arrangement, and lets an adopted bucket serve reads and
-    writes.  Read at startup;  failures are reported to the log.
-  default: serve
+  desc: Whether a NooBaa tree is adopted automatically or by command
+  long_desc: Meaningful only when rgw_nsfs_noobaa_config_root names a NooBaa
+    configuration store;  with no store there is nothing to adopt and this
+    is inert.  "command" (default) adopts nothing unless asked;  the
+    store's identities and each bucket are adopted by command, through
+    Admin Ops -- the adoption driver hint, or changing a bucket's profile
+    out of base.
+    Nothing on disk changes until then, which is the state for
+    inspection and validation.  "automatic" imports the store's
+    identities and adopts every bucket at startup.  Adopting a bucket
+    imports its NooBaa record and rewrites its tree into the nsfs
+    format.
+  default: command
   enum_values:
-  - serve
-  - adopt
+  - command
+  - automatic
   services:
   - rgw
   with_legacy: true

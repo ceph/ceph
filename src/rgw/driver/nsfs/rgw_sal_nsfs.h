@@ -631,27 +631,19 @@ protected:
    * because which format a bucket is in is not known until it is
    * loaded, and constructing a strategy costs nothing. */
   std::unique_ptr<nsfs::BucketStateStrategy> bucket_state_strategy;
-  /* What this gateway is doing with the tree it was pointed at.
+  /* When a NooBaa tree is adopted (DECISIONS.md 2026-10-11).
    *
-   * `NSFS_ADOPTION.md` §7.  Meaningful only when a NooBaa
-   * configuration store is configured:  with no store there is
-   * nothing to adopt, so the mode is inert and an ordinary nsfs
-   * deployment behaves as it always has.
+   * Meaningful only when a NooBaa configuration store is configured:
+   * with no store there is nothing to adopt, so the mode is inert and
+   * an ordinary nsfs deployment behaves as it always has.
    *
-   * `serve` is the default and is deliberately the conservative one.
-   * Nothing is imported, nothing is marked, and **writes are
-   * refused** -- not because they are impossible, but because they
-   * would be incomplete:  NooBaa's arrangement has nowhere to put an ACL,
-   * so a write cannot record one, and an object written half into
-   * NooBaa's shape is one neither gateway reads correctly afterwards.
-   * The result is a readable view of a deployment nothing has changed
-   * on disk, which is what keeps the decision to adopt reversible. */
-  /* Two, not three.  `convert` was a third value meaning "adopt and
-   * then rewrite the objects", which is what adopt does:  adoption
-   * brings a bucket's schema and its data into an nsfs profile, so there
-   * was no operation for the third value to name. */
-  enum class AdoptionMode { Serve, Adopt };
-  AdoptionMode adoption_mode{AdoptionMode::Serve};
+   * `Command`, the default, adopts nothing unless asked through Admin
+   * Ops:  the `adoption` driver hint imports the store's identities or
+   * adopts a bucket, and so does changing a bucket's profile out of
+   * base.  Nothing on disk changes until then.  `Automatic` imports
+   * the identities and adopts every bucket at startup. */
+  enum class AdoptionMode { Command, Automatic };
+  AdoptionMode adoption_mode{AdoptionMode::Command};
 
   /* null unless rgw_nsfs_noobaa_config_root names a store */
   std::unique_ptr<nsfs::BucketStateStrategy> nb_bucket_state_strategy;
@@ -678,11 +670,6 @@ protected:
   /* driver hint state (test only)--see driver_hint() */
   bool inject_fork_race{false};
 
-  /* Lets a test run the serve-mode attribute refusal in both
-   * polarities;  see the `serve-write-refusal` driver hint.  A control
-   * asserted only one way proves nothing, and reverting the refusal in
-   * source to show it would prove something about a different build. */
-  bool refuse_serve_writes{true};
   /* Added to the accounted size before the multipart writer compares it
    * against the bytes it actually stored.
    *
@@ -1157,38 +1144,31 @@ public:
     return nb_bucket_state_strategy != nullptr;
   }
 
-  /* Writes are refused in `serve` mode, and in that mode only.
-   *
-   * Nothing is ever marked in `serve`, so every bucket is unadopted
-   * by definition and the refusal needs no per-bucket question.  In
-   * `adopt` it becomes one, which is the per-bucket marker's and not
-   * this. */
-  bool serving_read_only() const {
-    return adoption_configured() && (adoption_mode == AdoptionMode::Serve);
-  }
-
-  /* Whether an attribute write must be refused.
-   *
-   * Serve mode, and the refusal not disabled -- which only the
-   * `serve-write-refusal` hint can do, so that a test can assert both
-   * polarities from one build.  One predicate rather than two tests at
-   * the call site. */
-  bool refusing_attribute_writes() const {
-    return serving_read_only() && refuse_serve_writes;
-  }
-
-
-  /* Run the import, if the mode says to.  Called once at startup, and
-   * by the `adoption` driver hint so the suite can drive it. */
+  /* Adopt the whole store:  its identities, then every bucket.  What
+   * `automatic` runs at startup, until the background sweep exists. */
   int run_adoption(const DoutPrefixProvider* dpp, optional_yield y,
 		   std::map<std::string, std::string>* report = nullptr);
 
-  /* Adopt one bucket now:  the bucket half of an import, against
-   * identities already imported.  For validation, and the granularity
-   * the background sweep will need. */
+  /* Import the store's identities, and nothing else.  Store-wide and
+   * first, because every bucket's owner and every policy principal
+   * resolves through them. */
+  int adopt_identities(const DoutPrefixProvider* dpp, optional_yield y,
+		       std::map<std::string, std::string>* report = nullptr);
+
+  /* Adopt one bucket now, against identities already imported:  its
+   * profile out of base, which imports its NooBaa record and rewrites
+   * its tree.  With extensions off a tree stays base, so only the
+   * record is imported. */
   int adopt_one_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 		       const std::string& bucket_name,
 		       std::map<std::string, std::string>* report = nullptr);
+
+  /* Import one bucket's NooBaa record:  the half of a bucket's adoption
+   * that set_profile() runs before it rewrites the tree.  -ENOENT when
+   * the store holds no record for it. */
+  int import_noobaa_bucket(const DoutPrefixProvider* dpp, optional_yield y,
+			   const std::string& bucket_name,
+			   std::map<std::string, std::string>* report = nullptr);
 
   int driver_hint(const DoutPrefixProvider* dpp,
 		  const std::string& hint,
@@ -1305,8 +1285,9 @@ public:
    *
    * False is reversible mode:  the deployment intends to be able to hand
    * the tree back to NooBaa, so nothing may acquire structure NooBaa
-   * cannot represent.  It also refuses adoption, since adopting is the
-   * one other way to mark. */
+   * cannot represent.  It also limits adoption to importing a bucket's
+   * NooBaa record, since rewriting the tree is the one other way to
+   * mark. */
   bool extensions_enabled() {
     return ctx()->_conf->rgw_nsfs_extensions;
   }

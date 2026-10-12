@@ -3651,23 +3651,22 @@ void NSFSDriver::init_strategies(const DoutPrefixProvider* dpp,
        * not earlier because it means nothing without one. */
       const auto& m =
 	g_conf().get_val<std::string>("rgw_nsfs_adoption_mode");
-      if (m == "adopt") {
-	adoption_mode = AdoptionMode::Adopt;
+      if (m == "automatic") {
+	adoption_mode = AdoptionMode::Automatic;
       } else {
-	adoption_mode = AdoptionMode::Serve;
-	if (!m.empty() && (m != "serve")) {
+	adoption_mode = AdoptionMode::Command;
+	if (!m.empty() && (m != "command")) {
 	  /* The option is an enum, so this is a deployment that got
 	   * past validation somehow;  the safe reading is the one that
 	   * changes nothing on disk. */
 	  ldpp_dout(dpp, 0) << "ERROR: rgw_nsfs_adoption_mode is \"" << m
-	    << "\", which is neither serve nor adopt;  serving read-only"
-	    << dendl;
+	    << "\", which is neither command nor automatic;  adopting "
+	    << "by command" << dendl;
 	}
       }
       ldpp_dout(dpp, 1) << "nsfs: adoption mode " << m
-	<< (adoption_mode == AdoptionMode::Serve
-	      ? ";  this deployment is served read-only until it is adopted"
-	      : "")
+	<< (adoption_mode == AdoptionMode::Command
+	      ? ";  nothing is adopted until a command asks" : "")
 	<< dendl;
     }
   }
@@ -4040,8 +4039,8 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 1) << "WARNING: failed to init notification endpoints" << dendl;
   }
 
-  /* I6.  The import runs because the mode says so, and nothing else
-   * invokes it (`ACCOUNT_IMPORT.md` §9).  Last, so everything it needs
+  /* I6.  `automatic` adopts the store at startup;  `command` waits to
+   * be asked (DECISIONS.md 2026-10-11).  Last, so everything it needs
    * -- the strategies, the root, the database -- is up.
    *
    * **A failed import does not fail startup.**  It reports to the log
@@ -4049,7 +4048,7 @@ int NSFSDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
    * refusing to start would take away the one thing an operator can
    * use to see what went wrong.  Re-running is the recovery, and the
    * mode still says to, so a restart retries it. */
-  if (adoption_configured() && (adoption_mode != AdoptionMode::Serve)) {
+  if (adoption_configured() && (adoption_mode == AdoptionMode::Automatic)) {
     if (int r = run_adoption(dpp, null_yield); r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: adoption did not finish: "
 	<< cpp_strerror(-r) << ";  the deployment is readable and a "
@@ -6133,14 +6132,32 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
       return -EPERM;
     }
     if (current == nsfs::EXTENSIONS_BASE) {
-      /* A tree we did not write.  Its bucket state lives in NooBaa's
-       * config store and not in the directory, so what we have here is
-       * whatever load_bucket() could reconstruct;  owner, creation time,
-       * versioning and placement arrive with the configuration import.
-       * Recorded rather than refused, because nothing else takes a
-       * NooBaa tree today. */
+      /* Leaving base is adopting the bucket (DECISIONS.md 2026-10-11),
+       * so its NooBaa record is imported first:  owner, versioning,
+       * policy and the rest arrive as nsfs bucket state, and the
+       * conversion below records that owner on the objects.  A bucket
+       * NooBaa holds no record of has nothing to import and converts
+       * with what load_bucket() reconstructed.
+       *
+       * The import writes through its own handle, so this one is
+       * reloaded to carry what it wrote;  write_attrs() below would
+       * otherwise put the pre-import state back. */
       ldpp_dout(dpp, 1) << "nsfs: bucket " << get_name()
 	<< " leaves the base profile for extension set " << target << dendl;
+      ret = driver->import_noobaa_bucket(dpp, y, get_name(), nullptr);
+      if ((ret < 0) && (ret != -ENOENT)) {
+	ldpp_dout(dpp, 0) << "ERROR: refusing to convert bucket "
+	  << get_name() << ":  its NooBaa record could not be imported: "
+	  << cpp_strerror(-ret) << dendl;
+	return ret;
+      }
+      if (ret == 0) {
+	ret = load_bucket(dpp, y);
+	if (ret < 0) {
+	  return ret;
+	}
+	default_owner.reset();
+      }
     }
   }
 
@@ -7213,25 +7230,6 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 int NSFSDriver::mutation_enter(const DoutPrefixProvider* dpp,
 			       const std::string& bucket)
 {
-  /* `serve` mode refuses every mutation, and this is the only place it
-   * has to say so.
-   *
-   * The enumeration above is why:  the gate is already taken at every
-   * mutating SAL entry point and in `get_fsio_handle()`, so a refusal
-   * here reaches the request path and the FSIO path alike without a
-   * second list to keep in step.  Serve mode is the same mechanism as
-   * the conversion gate with a different reason and no reopening.
-   *
-   * MethodNotAllowed rather than AccessDenied:  nothing about the
-   * caller's identity is wrong, and the gateway is not going to
-   * perform this operation on this tree in this mode. */
-  if (serving_read_only()) {
-    ldpp_dout(dpp, 4) << "nsfs: refusing a write to " << bucket
-      << ": rgw_nsfs_adoption_mode is serve, so this deployment is "
-      << "served read-only until it is adopted" << dendl;
-    return -ERR_METHOD_NOT_ALLOWED;
-  }
-
   std::unique_lock l{gate_lock};
   auto& g = bucket_gates[bucket];
   if (g.closed) {
@@ -10698,37 +10696,6 @@ int NSFSObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp
 int NSFSObject::write_attrs(const DoutPrefixProvider* dpp, optional_yield y,
 			    const std::vector<std::string>* rmattrs)
 {
-  /* Serve mode changes nothing on disk, and that promise is what makes
-   * the decision to adopt reversible (`NSFS_ADOPTION.md` §10).
-   *
-   * Refused here as well as at `mutation_enter()`, because this is
-   * reached from a *read*:  `NSFSReadOp::prepare()` treats an object
-   * with no etag attribute as sideloaded and generates one, which is
-   * every object a NooBaa deployment wrote with MD5 off -- NooBaa's
-   * default.  So the first GET of almost any object wrote an xattr to
-   * a tree we had promised not to touch, with no mutating entry point
-   * involved for the gate to catch.
-   *
-   * The driver's own test, not the option:  the mode is read at
-   * startup into a member and the driver hint can set it, so asking
-   * configuration here could disagree with what `mutation_enter()`
-   * decides.
-   *
-   * `-EROFS` rather than the gate's `-ERR_METHOD_NOT_ALLOWED`:  this
-   * is not a refused operation but a write that cannot land on this
-   * tree.
-   *
-   * No read path reaches it today.  The one that did --
-   * `generate_etag()`, inherited from posix -- was removed once
-   * `get_obj_attrs()`'s synthesis was found to have superseded it, so
-   * this stands as policy rather than as a fix for a live caller. */
-  if (driver->refusing_attribute_writes()) {
-    ldpp_dout(dpp, 10) << "nsfs: not writing attributes on " << get_name()
-      << ": rgw_nsfs_adoption_mode is serve, so nothing is written to "
-      << "this tree" << dendl;
-    return -EROFS;
-  }
-
   return ent->write_attrs(dpp, y, state.attrset, nullptr,
 			  AttrWriteMode::MERGE, rmattrs);
 }
@@ -13954,28 +13921,18 @@ void NSFSDriver::register_admin_apis(RGWRESTMgr* mgr)
   mgr->register_resource("nsfs", nsfs_mgr);
 }
 
-/* The import, phases 0 to 2, in the order ACCOUNT_IMPORT.md §6.1 sets.
- *
- * Nothing invokes this but the mode:  there is no operator verb and no
- * endpoint, so there is no capability question about a backend-specific
- * way to create accounts (§9, I6).  The suite reaches it through the
- * `adoption` driver hint, which is how an intrusive trigger stays out
- * of a production surface.
- *
- * **Synchronously at startup, for now.**  §7 describes the background
- * machinery acting on the mode, and that machinery is phase 5 (C8-C10)
- * and not built.  A store large enough for this to matter will want it;
- * until then a startup that takes as long as its import is honest about
- * what it is doing, and the alternative -- serving requests against a
- * half-imported state -- is worse.
+/* Import the store's identities:  phases 0 and 1 of
+ * ACCOUNT_IMPORT.md §6.1, store-wide and first, because every bucket's
+ * owner and every policy principal resolves through them.  A command in
+ * `command` mode (the `adoption` driver hint), and the first step of
+ * run_adoption().
  *
  * Failures report to the log.  A phase-0 failure costs nothing, which
  * is the point of the phase;  a later one leaves RGW state behind and
- * re-running is the recovery, keyed on NooBaa's `_id` (§6.2).
- */
-int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
-			     optional_yield y,
-			     std::map<std::string, std::string>* report)
+ * re-running is the recovery, keyed on NooBaa's `_id` (§6.2). */
+int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
+				 optional_yield y,
+				 std::map<std::string, std::string>* report)
 {
   auto say = [report](const char* k, const std::string& v) {
     if (report) {
@@ -13986,12 +13943,7 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
   if (!adoption_configured()) {
     say("ran", "false");
     say("why", "no NooBaa configuration store is configured");
-    return 0;
-  }
-  if (adoption_mode == AdoptionMode::Serve) {
-    say("ran", "false");
-    say("why", "the mode is serve");
-    return 0;
+    return -ENOENT;
   }
 
   const auto& root =
@@ -14073,43 +14025,74 @@ int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  /* ---- phase 2:  buckets ---- */
-
-  const auto mapping = nsfs::mapping_from(plan);
-  nsfs::BucketImportResult br;
-  ret = nsfs::import_bucket_state(dpp, y, this, root, contents, mapping, br);
-  say("buckets", std::to_string(br.buckets_written));
-  say("policies", std::to_string(br.policies_rewritten));
-  say("policies_refused", std::to_string(br.policies_refused.size()));
-  say("logging", std::to_string(br.logging_carried));
-  say("deferred", std::to_string(br.deferred.size()));
-  if (ret < 0) {
-    say("ran", "partial");
-    return ret;
-  }
-
-  /* ---- phase 3:  the report ---- */
-
   say("ran", "true");
-  ldpp_dout(dpp, 1) << "nsfs: adopted " << root << ": "
-    << ir.accounts_created << " accounts, " << ir.users_created
-    << " users, " << br.buckets_written << " buckets" << dendl;
   return 0;
 }
 
-/* Adopt one bucket, now.
+/* Adopt the whole store:  its identities, then every bucket, each the
+ * way a command adopts one.  What `automatic` runs at startup.
  *
- * For validation, and for the sweep once it exists.  The import is
- * one operation over the whole store, so this is the *bucket* half of
- * one run against identities that are already imported -- which is
- * what a per-bucket sweep does (C9).  Identities are not re-imported:
- * the mapping is rebuilt from the plan, and a plan whose identities
- * are already present is what makes a re-run a no-op.
- */
-int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
-				 optional_yield y,
-				 const std::string& bucket_name,
-				 std::map<std::string, std::string>* report)
+ * **Synchronously at startup, for now.**  The background machinery
+ * that adopts bucket by bucket while serving is phase 5 (C8-C10) and
+ * not built;  until then a startup that takes as long as its adoption
+ * is honest about what it is doing.  A bucket that fails is reported
+ * and the rest continue;  re-running adopts what is left. */
+int NSFSDriver::run_adoption(const DoutPrefixProvider* dpp,
+			     optional_yield y,
+			     std::map<std::string, std::string>* report)
+{
+  int ret = adopt_identities(dpp, y, report);
+  if (ret < 0) {
+    return ret;
+  }
+
+  const auto& root =
+    g_conf().get_val<std::string>("rgw_nsfs_noobaa_config_root");
+  nsfs::NooBaaConfigStore store(root);
+  nsfs::NooBaaStoreContents contents;
+  ret = store.read(dpp, contents);
+  if (ret < 0) {
+    return ret;
+  }
+  size_t adopted = 0, failed = 0;
+  for (const auto& b : contents.buckets) {
+    std::map<std::string, std::string> one;
+    if (adopt_one_bucket(dpp, y, b.name, &one) < 0) {
+      ++failed;
+      ldpp_dout(dpp, 0) << "ERROR: adoption: bucket " << b.name << ": "
+	<< (one.count("error") ? one["error"] : one["why"]) << dendl;
+    } else {
+      ++adopted;
+    }
+  }
+  if (report) {
+    (*report)["buckets_adopted"] = std::to_string(adopted);
+    (*report)["buckets_failed"] = std::to_string(failed);
+  }
+  ldpp_dout(dpp, 1) << "nsfs: adopted " << root << ": " << adopted
+    << " buckets, " << failed << " failed" << dendl;
+  return failed ? -EIO : 0;
+}
+
+/* Import one bucket's NooBaa record:  its owner, versioning, policy,
+ * logging and the rest of its configuration, written as nsfs bucket
+ * state.  The tree is not touched;  set_profile() leaving base calls
+ * this and then rewrites the tree, which is what adopting a bucket is.
+ *
+ * The bucket half of the import (§6.1), against identities already
+ * imported.  A principal may name any identity, so the mapping is
+ * built over the whole store -- but only from identities that are
+ * imported:  a plan mints an id for one that is not, and a bucket
+ * written with that id would name an account that does not exist.  An
+ * owner or principal not yet imported is a failure of this bucket,
+ * reported by the import, and `identities=true` is the remedy.
+ *
+ * Returns -ENOENT when the store holds no record of the bucket, or no
+ * store is configured. */
+int NSFSDriver::import_noobaa_bucket(const DoutPrefixProvider* dpp,
+				     optional_yield y,
+				     const std::string& bucket_name,
+				     std::map<std::string, std::string>* report)
 {
   auto say = [report](const char* k, const std::string& v) {
     if (report) {
@@ -14118,7 +14101,7 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   };
 
   if (!adoption_configured()) {
-    say("adopted", "false");
+    say("configured", "false");
     say("why", "no NooBaa configuration store is configured");
     return -ENOENT;
   }
@@ -14130,22 +14113,24 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   nsfs::NooBaaStoreContents contents;
   int ret = store.read(dpp, contents);
   if (ret < 0) {
-    say("adopted", "false");
+    say("configured", "false");
     say("error", cpp_strerror(-ret));
     return ret;
   }
 
-  /* The mapping, from a plan over the whole store.  A principal may
-   * name any identity, so the mapping has to cover all of them even
-   * when one bucket is being adopted. */
   nsfs::ImportPlan plan;
   ret = nsfs::build_import_plan(dpp, ctx(), contents, plan,
 				  get_identity_db());
   if (ret < 0) {
-    say("adopted", "false");
+    say("configured", "false");
     say("collisions", std::to_string(plan.collisions.size()));
     return ret;
   }
+  std::erase_if(plan.entries, [this, dpp](const nsfs::ImportEntry& e) {
+    std::string owner;
+    return get_identity_db()->get_owner_by_noobaa_id(dpp, e.noobaa_id,
+						     owner) < 0;
+  });
   const auto mapping = nsfs::mapping_from(plan);
 
   nsfs::BucketImportResult br;
@@ -14157,41 +14142,48 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
   say("policies_refused", std::to_string(br.policies_refused.size()));
   say("logging", std::to_string(br.logging_carried));
   if (ret < 0) {
-    say("adopted", "false");
     say("error", cpp_strerror(-ret));
-    return ret;
   }
+  return ret;
+}
 
-  /* Adopting a bucket is bringing its schema *and* its objects into an
-   * nsfs profile, so the configuration above is half of it.  `set_profile`
-   * leaving base is the other half:  it marks the bucket, walks the
-   * tree, re-stages the uploads and clears the converting marker when
-   * it completes.
-   *
-   * The target is EXTENSIONS_DEFAULT, which is what a bucket this
-   * gateway creates is marked with -- so an adopted deployment ends up
-   * in one profile rather than two.
-   *
-   * Reported separately from the configuration, because the two fail
-   * for different reasons and an operator needs to know which half
-   * stopped. */
+/* Adopt one bucket:  import its NooBaa record and bring its tree into
+ * the shared profile, the target for a NooBaa migration (DECISIONS.md
+ * 2026-10-11).  set_profile() leaving base does both;  this is that
+ * call, by name, and the same thing the profile endpoint does with
+ * whichever profile it is given.
+ *
+ * In reversible mode (`rgw_nsfs_extensions` off) nothing is marked and
+ * a tree is handable back to NooBaa only at base, so only the record
+ * is imported. */
+int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
+				 optional_yield y,
+				 const std::string& bucket_name,
+				 std::map<std::string, std::string>* report)
+{
+  auto say = [report](const char* k, const std::string& v) {
+    if (report) {
+      (*report)[k] = v;
+    }
+  };
+
   if (!extensions_enabled()) {
-    /* Reversible mode:  the operator has asked that nothing be marked,
-     * and a tree is handable back to NooBaa only at base.  So the
-     * objects stay in NooBaa's arrangement, deliberately, and this is the
-     * one case where a bucket is configured and not adopted. */
+    int ret = import_noobaa_bucket(dpp, y, bucket_name, report);
     say("adopted", "false");
+    if (ret < 0) {
+      return ret;
+    }
     say("why", "rgw_nsfs_extensions is off;  the tree stays reversible");
     ldpp_dout(dpp, 1) << "nsfs: bucket " << bucket_name
-      << " configured, and not converted:  extensions are off, so the "
-      << "tree stays handable back to NooBaa" << dendl;
+      << " configured, and its tree left in NooBaa's format:  extensions "
+      << "are off, so the tree stays handable back to NooBaa" << dendl;
     return 0;
   }
 
   std::unique_ptr<rgw::sal::Bucket> b;
   rgw_bucket rb;
   rb.name = bucket_name;
-  ret = load_bucket(dpp, rb, &b, y);
+  int ret = load_bucket(dpp, rb, &b, y);
   if (ret < 0) {
     say("adopted", "false");
     say("error", cpp_strerror(-ret));
@@ -14200,7 +14192,7 @@ int NSFSDriver::adopt_one_bucket(const DoutPrefixProvider* dpp,
 
   nsfs::ConvertProgress prog;
   ret = static_cast<NSFSBucket*>(b.get())->set_profile(
-    dpp, y, nsfs::EXTENSIONS_DEFAULT, nullptr, &prog);
+    dpp, y, nsfs::EXTENSIONS_SHARED, nullptr, &prog);
   /* Reported as the struct counts them, which is deliberately not one
    * number:  a resumed run has only these and its marker to report
    * from, and a half-finished walk otherwise reads the same as a bucket
@@ -14236,22 +14228,6 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
 {
   ldpp_dout(dpp, 10) << "NSFSDriver::driver_hint: " << hint << dendl;
 
-  if (hint == "serve-write-refusal") {
-    /* Turn the serve-mode attribute refusal off, so a test can assert
-     * what happens without it.  There is no other way to reach the
-     * un-refused behaviour, and a test that cannot reach it cannot
-     * show that the refusal is what produces the refused one. */
-    auto it = params.find("enable");
-    if (it == params.end()) {
-      return -EINVAL;
-    }
-    refuse_serve_writes = (it->second == "true");
-    if (out) {
-      (*out)["enabled"] = refuse_serve_writes ? "true" : "false";
-    }
-    return 0;
-  }
-
   if (hint == "inject-fork-race") {
     /* stand in for another instance which forks a shadow first, so that
      * the exclusive fork and the join which follows it can be exercised
@@ -14276,34 +14252,37 @@ int NSFSDriver::driver_hint(const DoutPrefixProvider* dpp,
     if (out) {
       (*out)["configured"] = adoption_configured() ? "true" : "false";
       (*out)["mode"] =
-	adoption_mode == AdoptionMode::Adopt ? "adopt" : "serve";
-      (*out)["read_only"] = serving_read_only() ? "true" : "false";
+	adoption_mode == AdoptionMode::Automatic ? "automatic" : "command";
     }
     auto it = params.find("mode");
     if (it != params.end()) {
       /* Set the mode, for a test that cannot restart the gateway.  A
        * deployment sets it in configuration and this is the same
        * assignment, reachable only through a hint. */
-      if (it->second == "adopt") {
-	adoption_mode = AdoptionMode::Adopt;
-      } else if (it->second == "serve") {
-	adoption_mode = AdoptionMode::Serve;
+      if (it->second == "automatic") {
+	adoption_mode = AdoptionMode::Automatic;
+      } else if (it->second == "command") {
+	adoption_mode = AdoptionMode::Command;
       } else {
 	return -EINVAL;
       }
       if (out) {
 	(*out)["mode"] = it->second;
-	(*out)["read_only"] = serving_read_only() ? "true" : "false";
       }
     }
-    /* `bucket=<name>` adopts that one now, which is the granularity
-     * validation wants and the one the sweep will need.  Identities
-     * must already be imported;  this is the bucket half. */
+    /* The commands (DECISIONS.md 2026-10-11).  `identities=true`
+     * imports the store's identities;  `bucket=<name>` adopts that
+     * bucket, against identities already imported;  `run=true` runs
+     * what `automatic` runs at startup -- the identities, then every
+     * bucket. */
+    auto ids = params.find("identities");
+    if ((ids != params.end()) && (ids->second == "true")) {
+      return adopt_identities(dpp, null_yield, out);
+    }
     auto one = params.find("bucket");
     if (one != params.end()) {
       return adopt_one_bucket(dpp, null_yield, one->second, out);
     }
-
     auto run = params.find("run");
     if ((run != params.end()) && (run->second == "true")) {
       return run_adoption(dpp, null_yield, out);

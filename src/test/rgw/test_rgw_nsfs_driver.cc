@@ -5014,50 +5014,6 @@ TEST_F(NSFSNooBaaStateTest, VersioningComesFromTheirRecord)
   EXPECT_TRUE(info.versioning_enabled());
 }
 
-/* Converting a base bucket must not drop the state NooBaa's record was
- * supplying.
- *
- * bucket_state_fallback() returns null the moment the bucket carries
- * an extension bit, so after the conversion NooBaa's record is no longer
- * read.  set_profile() therefore has to leave the nsfs bucket_info
- * behind -- or the bucket loads from seeded defaults and a versioned
- * bucket comes back unversioned, after which the next PUT overwrites
- * in place instead of demoting into .versions/.
- *
- * The control is the assertion before the conversion:  the bucket is
- * versioned there, and only from NooBaa's record, so the assertion after
- * it is able to fail. */
-TEST_F(NSFSNooBaaStateTest, ConversionKeepsTheVersioningTheirRecordSupplied)
-{
-  remove_our_bucket_info();
-  write_their_record("ENABLED");
-
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  ASSERT_TRUE(bucket->get_info().versioned())
-      << "not versioned before the conversion;  the premise is gone";
-
-  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
-  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
-  ASSERT_STREQ(b->profile_name(), "shared");
-
-  /* A fresh handle, which is what a request gets.  Re-loading the
-   * handle used above would prove nothing:  load_bucket() keeps the
-   * info it already holds when nothing on disk is found
-   * (`info = bak_info`), so the versioning read from NooBaa's record the
-   * first time would survive in memory whatever the conversion did. */
-  RGWBucketInfo fresh_info;
-  fresh_info.bucket.name = testname;
-  auto fresh = driver->get_bucket(fresh_info);
-  ASSERT_NE(fresh.get(), nullptr);
-  ASSERT_EQ(fresh->load_bucket(env->dpp, null_yield), 0);
-
-  EXPECT_TRUE(fresh->get_info().versioned())
-      << "the conversion dropped the versioning their record supplied;  "
-	 "the next PUT overwrites in place instead of demoting";
-  EXPECT_TRUE(fresh->get_info().versioning_enabled())
-      << "versioned but not enabled after the conversion";
-}
-
 /* Suspended is versioned and suspended, not unversioned:  the bucket
  * still holds versions. */
 TEST_F(NSFSNooBaaStateTest, SuspendedIsVersionedAndSuspended)
@@ -11094,16 +11050,6 @@ public:
   void SetUp() override {
     NSFSNooBaaStateTest::SetUp();
 
-    /* The mode has to be `adopt`, because writing a bucket's state is
-     * a mutation and `serve` refuses mutations -- correctly:  a
-     * read-only view of a deployment is exactly what serve is for.
-     * These tests exercise the import, which is what `adopt` runs, so
-     * they say so.  Found by the full-suite run after they passed on
-     * their own, which is the mode gate working. */
-    std::map<std::string, std::string> out;
-    EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
-				  {{"mode", "adopt"}}, &out), 0);
-
     mapping.account_by_noobaa_id["6560e1f1c0ffee0000000002"] =
       "RGW11111111111111111";
     mapping.noobaa_id_by_name["their-acct"] = "6560e1f1c0ffee0000000002";
@@ -11350,33 +11296,32 @@ public:
   }
 };
 
-/* The default is serve, and serve serves read-only.
+/* The default is `command`, and it adopts nothing.
  *
- * Writes are refused because they would be incomplete, not because
- * they are impossible:  NooBaa's arrangement has nowhere to put an ACL,
- * so a write cannot record one, and an object written half into NooBaa's
- * shape is one neither gateway reads correctly afterwards.  What is
- * left is a readable view of a deployment nothing has changed on
- * disk, which is what keeps the decision reversible.
- */
-TEST_F(NooBaaModeTest, ServeIsTheDefaultAndRefusesWrites)
+ * A deployment pointed at a NooBaa store is served as it is found:
+ * writes go through, and nothing is imported or rewritten until an
+ * operator asks.  That is the state for inspection and validation. */
+TEST_F(NooBaaModeTest, CommandIsTheDefaultAndAdoptsNothing)
 {
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_their_record("ENABLED");
+
   auto st = ask();
   EXPECT_EQ(st["configured"], "true") << "the fixture has a store";
-  EXPECT_EQ(st["mode"], "serve") << "the default changed";
-  EXPECT_EQ(st["read_only"], "true");
+  EXPECT_EQ(st["mode"], "command") << "the default changed";
 
-  /* A write, through the gate every mutation takes. */
-  EXPECT_EQ(driver->mutation_enter(env->dpp, testname),
-	    -ERR_METHOD_NOT_ALLOWED);
-
-  /* adopt lifts it, which is the other polarity -- a refusal that
-   * cannot be lifted would say nothing about the mode */
-  st = ask({{"mode", "adopt"}});
-  EXPECT_EQ(st["mode"], "adopt");
-  EXPECT_EQ(st["read_only"], "false");
+  /* a write, through the gate every mutation takes */
   EXPECT_EQ(driver->mutation_enter(env->dpp, testname), 0);
   driver->mutation_leave(testname);
+
+  /* nothing imported:  the credential NooBaa's record carries does not
+   * authenticate, and the bucket is still in NooBaa's format */
+  std::unique_ptr<rgw::sal::User> user;
+  EXPECT_LT(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(bucket.get())
+		 ->profile_name(), "base");
 }
 
 /* The mode is inert without a store.
@@ -11389,42 +11334,31 @@ TEST_F(NSFSBucketTest, TheAdoptionModeIsInertWithoutAStore)
   std::map<std::string, std::string> out;
   ASSERT_EQ(driver->driver_hint(env->dpp, "adoption", {}, &out), 0);
   EXPECT_EQ(out["configured"], "false");
-  EXPECT_EQ(out["read_only"], "false")
-      << "a deployment with nothing to adopt was made read-only";
+
+  /* a command has nothing to act on */
+  out.clear();
+  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				{{"identities", "true"}}, &out), -ENOENT);
+  EXPECT_EQ(out["ran"], "false");
 
   /* and writes work, which is the whole point */
   EXPECT_EQ(driver->mutation_enter(env->dpp, testname), 0);
   driver->mutation_leave(testname);
 }
 
-/* serve runs no import, and says why.
+/* `identities=true` imports the store's identities, and nothing else.
  *
- * Asking it to run in serve mode is not an error -- it is the mode
- * doing what it says -- so the hint reports rather than failing. */
-TEST_F(NooBaaModeTest, ServeImportsNothing)
+ * Phases 0 and 1, reported back through the hint so a test can see
+ * what each did.  No bucket is touched:  buckets are adopted one at a
+ * time, by their own command. */
+TEST_F(NooBaaModeTest, IdentitiesAreImportedByCommand)
 {
-  auto st = ask({{"run", "true"}});
-  EXPECT_EQ(st["ran"], "false");
-  EXPECT_EQ(st["why"], "the mode is serve");
-  EXPECT_TRUE(st.find("accounts") == st.end())
-      << "serve got as far as importing";
-}
-
-/* adopt runs the import, over the store the fixture points at.
- *
- * End to end through the one entry point a deployment has:  phases 0
- * to 2, reported back through the hint so a test can see what each
- * phase did. */
-TEST_F(NooBaaModeTest, AdoptRunsTheImport)
-{
-  /* a NooBaa identity and bucket record */
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
   write_their_record("ENABLED");
 
-  auto st = ask({{"mode", "adopt"}, {"run", "true"}});
-  EXPECT_EQ(st["ran"], "true") << "mode=" << st["mode"]
-			       << " error=" << st["error"];
+  auto st = ask({{"identities", "true"}});
+  EXPECT_EQ(st["ran"], "true") << " error=" << st["error"];
   EXPECT_EQ(st["accounts"], "1");
   EXPECT_EQ(st["users"], "1");
   EXPECT_EQ(st["identity_rows"], "1");
@@ -11434,8 +11368,15 @@ TEST_F(NooBaaModeTest, AdoptRunsTheImport)
   EXPECT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
 					   null_yield, &user), 0);
 
+  /* the bucket is not adopted */
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base");
+
   /* and a second run is a no-op, because re-running is the recovery */
-  auto again = ask({{"run", "true"}});
+  auto again = ask({{"identities", "true"}});
   EXPECT_EQ(again["ran"], "true");
   EXPECT_EQ(again["accounts"], "0");
   EXPECT_EQ(again["accounts_present"], "1");
@@ -11451,7 +11392,7 @@ TEST_F(NooBaaModeTest, APreflightFailureWritesNothing)
 
   std::map<std::string, std::string> out;
   const int ret = driver->driver_hint(
-      env->dpp, "adoption", {{"mode", "adopt"}, {"run", "true"}}, &out);
+      env->dpp, "adoption", {{"identities", "true"}}, &out);
   EXPECT_LT(ret, 0);
   EXPECT_EQ(out["ran"], "false");
   EXPECT_EQ(out["unreadable"], "1");
@@ -11459,138 +11400,201 @@ TEST_F(NooBaaModeTest, APreflightFailureWritesNothing)
       << "a preflight failure got as far as writing";
 }
 
-/* Serve mode refuses an attribute write.
+/* One bucket, adopted by command.
  *
- * `mutation_enter()` guards the mutating SAL entry points, which is
- * the right layer for a mutation and the wrong one for a write that
- * happens inside some other operation.  So the refusal is also taken
- * where the attribute is written.
- *
- * Both polarities, from one build:  the `serve-write-refusal` hint
- * turns the refusal off, and the same call then succeeds.  Without
- * that the assertion would only show that the write did not happen,
- * not that the refusal is what stopped it. */
-TEST_F(NooBaaModeTest, ServeModeRefusesAnAttributeWrite)
-{
-  /* A real object, with an entry behind it:  `write_attrs()` writes
-   * through the FSEnt, and one that was never opened has none. */
-  ASSERT_EQ(ask({{"mode", "adopt"}})["mode"], "adopt");
-  std::ofstream{(bp / "root" / testname / testname).string()} << "x";
-
-  auto object = bucket->get_object(rgw_obj_key(testname));
-  ASSERT_NE(object.get(), nullptr);
-  auto* nsfs_obj = static_cast<rgw::sal::NSFSObject*>(object.get());
-  ASSERT_EQ(nsfs_obj->load_obj_state(env->dpp, null_yield), 0)
-      << "the object has no entry, so write_attrs would fault";
-
-  bufferlist bl;
-  bl.append("x");
-  nsfs_obj->get_attrs()[ATTR1] = bl;
-
-  ASSERT_EQ(ask({{"mode", "serve"}})["read_only"], "true");
-  EXPECT_EQ(nsfs_obj->write_attrs(env->dpp, null_yield, nullptr), -EROFS)
-      << "serve mode let an attribute write through";
-
-  std::map<std::string, std::string> h;
-  ASSERT_EQ(driver->driver_hint(env->dpp, "serve-write-refusal",
-				{{"enable", "false"}}, &h), 0);
-  EXPECT_EQ(h["enabled"], "false");
-  EXPECT_EQ(nsfs_obj->write_attrs(env->dpp, null_yield, nullptr), 0)
-      << "with the refusal off the write failed for some other reason, "
-      << "so the assertion above is not about the refusal";
-  ASSERT_EQ(driver->driver_hint(env->dpp, "serve-write-refusal",
-				{{"enable", "true"}}, &h), 0);
-}
-
-/* `convert` was a mode and is not one.
- *
- * It meant "adopt and then rewrite the objects", which is what adopt
- * does -- adoption brings a bucket's schema and its data into the nsfs
- * profile -- so there was no operation for a third value to name.  A
- * deployment whose configuration still says `convert` is served
- * read-only, which is the reading that changes nothing on disk. */
-TEST_F(NooBaaModeTest, ConvertIsNoLongerAMode)
-{
-  add_the_owning_account();
-  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
-  write_their_record("DISABLED");
-
-  std::map<std::string, std::string> out;
-  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
-				{{"mode", "convert"}}, &out),
-	    -EINVAL)
-      << "convert was accepted as a mode";
-
-  /* and the mode it was asked to leave is untouched */
-  auto st = ask({});
-  EXPECT_EQ(st["mode"], "serve");
-  EXPECT_EQ(st["read_only"], "true");
-}
-
-/* One bucket, adopted now.
- *
- * The increment the background sweep will drive, and the granularity
- * validation wants.  Identities are store-wide because a principal
- * resolves against the complete mapping;  buckets are the unit that
- * can be done one at a time. */
-TEST_F(NooBaaModeTest, OneBucketCanBeAdoptedOnTheSpot)
+ * Identities are store-wide because a principal resolves against the
+ * complete mapping;  buckets are the unit that can be done one at a
+ * time.  Adopting one imports its NooBaa record and rewrites its tree,
+ * which is the profile change out of base -- the same call the
+ * profile endpoint makes. */
+TEST_F(NooBaaModeTest, OneBucketIsAdoptedByCommand)
 {
   add_the_owning_account();
   write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
   write_their_record("ENABLED");
 
   /* identities first, which is the store-wide half */
-  auto st = ask({{"mode", "adopt"}, {"run", "true"}});
+  auto st = ask({{"identities", "true"}});
   ASSERT_EQ(st["ran"], "true") << st["error"];
 
   /* then the one bucket, which is the increment */
   auto one = ask({{"bucket", testname}});
-  EXPECT_EQ(one["configured"], "true") << one["error"];
-  EXPECT_EQ(one["buckets"], "1");
 
   /* Adopted means the objects are nsfs's too, not just the record.
    *
    * Asserted because the report used to say "adopted" after writing
    * bucket configuration alone, while every object kept NooBaa's
-   * arrangement -- so the startup path and this hint both reported a
-   * state the tree was not in.  `profile` is what makes the claim
-   * checkable:  a bucket that was only configured still reads base. */
+   * arrangement.  `profile` is what makes the claim checkable:  a
+   * bucket that was only configured still reads base. */
   EXPECT_EQ(one["adopted"], "true") << one["error"];
   EXPECT_EQ(one["profile_set"], "true");
-  /* Equality, not "not base":  the old report had no `profile` key at
-   * all, and an absent key is not base either -- so a negative
-   * assertion would have passed against the defect it is here to
-   * catch.  `strong` is EXTENSIONS_DEFAULT, which is what a bucket
-   * this gateway creates is marked with. */
-  EXPECT_EQ(one["profile"], "strong")
-      << "the bucket claims adoption and is not in our profile";
+  /* Equality, not "not base":  an absent key is not base either, so a
+   * negative assertion would pass against a report that omitted it.
+   * `shared` is the target for a NooBaa migration. */
+  EXPECT_EQ(one["profile"], "shared")
+      << "the bucket claims adoption and is not in the nsfs profile";
 
-  /* and the state is on the bucket */
-  RGWBucketInfo info;
-  info.bucket.name = testname;
-  auto bucket = driver->get_bucket(info);
-  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
-  EXPECT_TRUE(bucket->versioned())
-      << "their versioning did not reach the adopted bucket";
+  /* and the record's state is on the bucket:  its versioning, its
+   * owner as the imported account, and BucketOwnerEnforced */
+  std::unique_ptr<rgw::sal::User> user;
+  ASSERT_EQ(driver->get_user_by_access_key(env->dpp, "INTERCHANGEACCESSKEY",
+					   null_yield, &user), 0);
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_TRUE(loaded->versioned())
+      << "NooBaa's versioning did not reach the adopted bucket";
+  EXPECT_EQ(to_string(loaded->get_owner()), user->get_info().account_id)
+      << "the adopted bucket is not owned by the imported account";
+  EXPECT_TRUE(loaded->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
+      << "the adopted bucket is not BucketOwnerEnforced";
 
-  /* a name the store has no record of is -ENOENT, not a silent
-   * success -- an operator adopting a bucket by name needs to know
-   * they named one that exists */
+  /* a name nothing holds is an error, not a silent success -- an
+   * operator adopting a bucket by name needs to know they named one
+   * that exists */
   std::map<std::string, std::string> out;
-  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
-				{{"bucket", "no-such-bucket"}}, &out),
-	    -ENOENT);
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", "no-such-bucket"}}, &out), 0);
   EXPECT_EQ(out["adopted"], "false");
 }
 
-/* An unknown mode is refused rather than guessed. */
+/* A bucket whose owner is not imported is not adopted.
+ *
+ * A plan mints an account id for an identity not yet imported, and a
+ * bucket written with it names an account that does not exist.  The
+ * other polarity is OneBucketIsAdoptedByCommand:  the same bucket, with
+ * the identities imported first, is adopted. */
+TEST_F(NooBaaModeTest, ABucketIsNotAdoptedBeforeItsOwner)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_their_record("ENABLED");
+
+  std::map<std::string, std::string> out;
+  EXPECT_LT(driver->driver_hint(env->dpp, "adoption",
+				{{"bucket", testname}}, &out), 0);
+  EXPECT_EQ(out["adopted"], "false");
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base")
+      << "a bucket whose owner does not exist was converted";
+}
+
+/* In reversible mode a bucket's adoption imports its record and leaves
+ * its tree in NooBaa's format, which is what keeps the tree handable
+ * back. */
+TEST_F(NooBaaModeTest, ReversibleModeImportsOnlyTheRecord)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_their_record("ENABLED");
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+
+  g_conf().set_val("rgw_nsfs_extensions", "false");
+  g_conf().apply_changes(nullptr);
+  auto restore = make_scope_guard([] {
+    g_conf().set_val("rgw_nsfs_extensions", "true");
+    g_conf().apply_changes(nullptr);
+  });
+
+  auto one = ask({{"bucket", testname}});
+  EXPECT_EQ(one["configured"], "true") << one["error"];
+  EXPECT_EQ(one["buckets"], "1");
+  EXPECT_EQ(one["adopted"], "false");
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "base")
+      << "reversible mode rewrote the tree";
+  EXPECT_TRUE(loaded->get_attrs().count(RGW_ATTR_OWNERSHIP_CONTROLS))
+      << "the record was not imported";
+}
+
+/* `run=true` is what `automatic` runs at startup:  the identities, then
+ * every bucket the store holds a record of. */
+TEST_F(NooBaaModeTest, ARunAdoptsTheWholeStore)
+{
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  write_their_record("ENABLED");
+
+  auto st = ask({{"run", "true"}});
+  EXPECT_EQ(st["ran"], "true") << st["error"];
+  EXPECT_EQ(st["accounts"], "1");
+  EXPECT_EQ(st["buckets_adopted"], "1");
+  EXPECT_EQ(st["buckets_failed"], "0");
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp, rgw_bucket{"", testname},
+				&loaded, null_yield), 0);
+  EXPECT_STREQ(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		 ->profile_name(), "shared");
+}
+
+/* Converting a base bucket must not drop the state NooBaa's record was
+ * supplying.
+ *
+ * bucket_state_fallback() returns null the moment the bucket carries
+ * an extension bit, so after the conversion NooBaa's record is no longer
+ * read.  set_profile() therefore has to leave the nsfs bucket_info
+ * behind -- or the bucket loads from seeded defaults and a versioned
+ * bucket comes back unversioned, after which the next PUT overwrites
+ * in place instead of demoting into .versions/.
+ *
+ * The control is the assertion before the conversion:  the bucket is
+ * versioned there, and only from NooBaa's record, so the assertion after
+ * it is able to fail. */
+TEST_F(NooBaaModeTest, ConversionKeepsTheVersioningTheirRecordSupplied)
+{
+  remove_our_bucket_info();
+  write_their_record("ENABLED");
+  /* Leaving base imports the record, which needs its owner imported */
+  add_the_owning_account();
+  write_file(conf_root() / "master_keys.json", NB_MASTER_KEYS);
+  ASSERT_EQ(ask({{"identities", "true"}})["ran"], "true");
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  ASSERT_TRUE(bucket->get_info().versioned())
+      << "not versioned before the conversion;  the premise is gone";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  ASSERT_STREQ(b->profile_name(), "shared");
+
+  /* A fresh handle, which is what a request gets.  Re-loading the
+   * handle used above would prove nothing:  load_bucket() keeps the
+   * info it already holds when nothing on disk is found
+   * (`info = bak_info`), so the versioning read from NooBaa's record the
+   * first time would survive in memory whatever the conversion did. */
+  RGWBucketInfo fresh_info;
+  fresh_info.bucket.name = testname;
+  auto fresh = driver->get_bucket(fresh_info);
+  ASSERT_NE(fresh.get(), nullptr);
+  ASSERT_EQ(fresh->load_bucket(env->dpp, null_yield), 0);
+
+  EXPECT_TRUE(fresh->get_info().versioned())
+      << "the conversion dropped the versioning their record supplied;  "
+	 "the next PUT overwrites in place instead of demoting";
+  EXPECT_TRUE(fresh->get_info().versioning_enabled())
+      << "versioned but not enabled after the conversion";
+}
+
+/* An unknown mode is refused rather than guessed -- including the
+ * three this option once took. */
 TEST_F(NooBaaModeTest, AnUnknownModeIsRefused)
 {
-  std::map<std::string, std::string> out;
-  EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
-				{{"mode", "sideways"}}, &out), -EINVAL);
+  for (const char* m : {"sideways", "serve", "adopt", "convert"}) {
+    std::map<std::string, std::string> out;
+    EXPECT_EQ(driver->driver_hint(env->dpp, "adoption",
+				  {{"mode", m}}, &out), -EINVAL) << m;
+  }
   /* and the mode it had is unchanged */
-  EXPECT_EQ(ask()["mode"], "serve");
+  EXPECT_EQ(ask()["mode"], "command");
 }
 
 /* ------------------------------------------------------------------ *
@@ -11826,10 +11830,10 @@ TEST_F(NSFSRecordedPathTest, ABaseBucketIsServedAtTheirRecordedPath)
 
 /* And resolving it writes nothing.
  *
- * Serve mode's whole value is that nothing changes on disk, so the
- * decision to adopt stays reversible.  Reading where a bucket lives
- * must not adopt it -- adoption happens because the mode says so, or
- * by explicit command. */
+ * In `command` mode nothing changes on disk until adoption is asked
+ * for, so the decision to adopt stays reversible.  Reading where a
+ * bucket lives must not adopt it -- adoption happens at startup in
+ * `automatic` mode, or by command. */
 TEST_F(NSFSRecordedPathTest, ResolvingTheirPathDoesNotAdoptTheBucket)
 {
   const sf::path at = their_storage() / "untouched";

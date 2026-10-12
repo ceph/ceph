@@ -40,10 +40,11 @@
 #                       Read NooBaa's configuration store from DIR.  Needed
 #                       to adopt a NooBaa deployment;  without it the
 #                       adoption mode is inert.
-#   --adoption-mode M   serve | adopt | convert.  The driver defaults to
-#                       serve, which serves the trees READ-ONLY -- so a
-#                       run that means to write to an adopted tree has to
-#                       say --adoption-mode adopt.
+#   --adoption-mode M   command | automatic.  The driver defaults to
+#                       command, which adopts nothing until asked through
+#                       Admin Ops (the adoption driver hint, or a profile
+#                       change out of base);  automatic adopts the whole
+#                       store at startup.
 #   --data-root DIR     Serve objects from DIR/root instead of the build
 #                       directory (e.g. --data-root /mnt/nvme for fast
 #                       storage, or a tree another gateway wrote).
@@ -467,12 +468,10 @@ fi
 
 if [[ -n "$ADOPTION_MODE" ]]; then
 	case "$ADOPTION_MODE" in
-		serve|adopt|convert) ;;
-		*) echo "error: --adoption-mode must be serve, adopt or convert" >&2
+		command|automatic) ;;
+		*) echo "error: --adoption-mode must be command or automatic" >&2
 		   exit 1 ;;
 	esac
-	# The driver's default is serve, which refuses writes.  A run that
-	# means to write to an adopted tree has to say so.
 	patch_conf_bool "rgw nsfs adoption mode" "$ADOPTION_MODE"
 	if [[ -z "$NOOBAA_CONFIG_ROOT" ]]; then
 		echo "    note: the mode is inert without --noobaa-config-root"
