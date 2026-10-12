@@ -160,10 +160,8 @@ set(bench_log_srcs
 add_executable(ceph_bench_log
   ${bench_log_srcs}
   )
-target_link_libraries(ceph_bench_log global pthread ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-if(NOT WIN32)
-  target_link_libraries(ceph_bench_log rt)
-endif()
+target_link_libraries(ceph_bench_log global pthread ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}
+  ${RT_LIBRARY})
 
 if(WITH_SYSTEMD)
   add_executable(ceph_bench_journald_logger

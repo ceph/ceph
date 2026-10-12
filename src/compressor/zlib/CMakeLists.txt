@@ -1,6 +1,7 @@
 # zlib
 
 if(HAVE_INTEL_SSE4_1 AND HAVE_NASM_X64_AVX2 AND (NOT APPLE))
+  set(have_isal ON)
   set(CMAKE_ASM_FLAGS "-i ${PROJECT_SOURCE_DIR}/src/isa-l/igzip/ -i ${PROJECT_SOURCE_DIR}/src/isa-l/include/ ${CMAKE_ASM_FLAGS}")
   set(zlib_sources
     CompressionPluginZlib.cc
@@ -43,6 +44,7 @@ if(HAVE_INTEL_SSE4_1 AND HAVE_NASM_X64_AVX2 AND (NOT APPLE))
     ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/igzip_set_long_icf_fg_06.asm
   )
 elseif(HAVE_ARMV8_SIMD)
+  set(have_isal ON)
   set(zlib_asm_sources
     ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/aarch64/igzip_inflate_multibinary_arm64.S
     ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/aarch64/igzip_multibinary_arm64.S
@@ -83,6 +85,7 @@ elseif(HAVE_ARMV8_SIMD)
     INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}/src/isa-l/igzip;${PROJECT_SOURCE_DIR}/src/isa-l/igzip/aarch64"
   )
 elseif(HAVE_RISCV_RVV)
+  set(have_isal ON)
   set(zlib_asm_sources
     ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/riscv64/igzip_multibinary_riscv64.S
     ${CMAKE_SOURCE_DIR}/src/isa-l/igzip/riscv64/igzip_isal_adler32_rvv.S
@@ -120,6 +123,11 @@ else()
 endif()
 
 add_library(ceph_zlib SHARED ${zlib_sources})
+if(have_isal)
+  # Only the branches above compile the ISA-L sources, so this is what
+  # decides whether the isal_* entry points exist.
+  target_compile_definitions(ceph_zlib PRIVATE HAVE_ISAL)
+endif()
 target_link_libraries(ceph_zlib ZLIB::ZLIB compressor $<$<PLATFORM_ID:Windows>:ceph-common>)
 if(HAVE_QATZIP AND HAVE_QAT)
   target_link_libraries(ceph_zlib qat_compressor)
