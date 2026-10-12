@@ -374,7 +374,7 @@ def run_failure_test_canceled_transition():
         out = read_lc_log()
 
     assert b'TRANSITIONED:' not in out, 'canceled transition was reported as transitioned'
-    assert b'Operation canceled' in out, 'canceled transition was not logged'
+    assert b'object changed concurrently' in out, 'canceled transition was not logged'
     stat = object_stat(BUCKET_NAME, object_key)
     assert get_storage_class(stat) == 'STANDARD'
     assert bucket.Object(object_key).get()['Body'].read() == new_body
