@@ -19,6 +19,7 @@ std::vector<Option> get_mds_options();
 std::vector<Option> get_mds_client_options();
 std::vector<Option> get_cephfs_mirror_options();
 std::vector<Option> get_ceph_exporter_options();
+std::vector<Option> get_nvmeof_options();
 
 std::vector<Option> build_options()
 {
@@ -48,6 +49,7 @@ std::vector<Option> build_options()
   ingest(get_mds_client_options(), "mds_client");
   ingest(get_cephfs_mirror_options(), "cephfs-mirror");
   ingest(get_ceph_exporter_options(), "ceph-exporter");
+  ingest(get_nvmeof_options(), "client");
 
   return result;
 }
