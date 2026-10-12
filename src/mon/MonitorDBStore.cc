@@ -29,6 +29,8 @@
 #include "include/encoding_string.h"
 #include "global/global_context.h" // for g_conf()
 
+#define dout_context g_ceph_context
+
 std::string MonitorDBStore::get_devname() {
   char devname[4096] = {0}, partition[4096];
   get_device_by_path(path.c_str(), partition, devname,

@@ -30,8 +30,6 @@
 #include "common/strtol.h"
 #include "common/PriorityCache.h"
 
-#define dout_context g_ceph_context
-
 class Context;
 
 class MonitorDBStore

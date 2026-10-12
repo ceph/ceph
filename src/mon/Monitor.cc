@@ -90,7 +90,6 @@
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
 #include "MonmapMonitor.h"
-#include "LogMonitor.h"
 #include "AuthMonitor.h"
 #include "MgrMonitor.h"
 #include "MgrStatMonitor.h"
@@ -114,6 +113,9 @@
 #endif
 
 #define dout_subsys ceph_subsys_mon
+
+#include "LogMonitor.h"
+
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 using namespace TOPNSPC::common;
