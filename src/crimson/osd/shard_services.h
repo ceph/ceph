@@ -415,6 +415,9 @@ class ShardServices : public OSDMapService,
     static_cast<size_t>(OperationTypeCode::last_op)> pg_op_shard_local{};
   std::array<uint64_t,
     static_cast<size_t>(OperationTypeCode::last_op)> pg_op_shard_remote{};
+  std::array<uint64_t,
+    static_cast<size_t>(OperationTypeCode::last_op)> pg_op_shard_executed{};
+  int64_t client_ops_in_flight = 0;
   seastar::metrics::metric_groups metrics;
   void register_metrics();
 
@@ -537,6 +540,13 @@ public:
   }
 
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
+
+  void client_op_started() {
+    ++client_ops_in_flight;
+  }
+  void client_op_finished() {
+    --client_ops_in_flight;
+  }
 
   crimson::os::BackendStore get_store(store_index_t store_index) {
     auto store = local_state.b_store;

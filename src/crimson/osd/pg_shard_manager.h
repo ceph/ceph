@@ -190,6 +190,8 @@ public:
     if (seastar::this_shard_id() == core) {
       ++shard_services.local().pg_op_shard_local[
         static_cast<size_t>(T::type)];
+      ++shard_services.local().pg_op_shard_executed[
+        static_cast<size_t>(T::type)];
       auto f_conn = op->prepare_remote_submission();
       op->finish_remote_submission(std::move(f_conn));
       auto &target_shard_services = shard_services.local();
@@ -220,6 +222,8 @@ public:
         ](auto &target_shard_services) mutable {
         op->finish_remote_submission(std::move(f_conn));
         target_shard_services.local_state.registry.add_to_registry(*op);
+        ++target_shard_services.pg_op_shard_executed[
+          static_cast<size_t>(T::type)];
         return this->template process_ordered_op_remotely<T>(
             cc_seq, target_shard_services, std::move(op), std::move(f));
       });
