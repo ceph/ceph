@@ -157,13 +157,13 @@ LogManager::omap_set_keys(
 	CachedExtentRef node = co_await resync_log_node(cur);
 	cur = node->template cast<LogNode>();
       }
-      for (auto &p : kvs_for_ow) {
-	const bool ends_with_ow_key = is_log_key(p.first) &&
+      for (auto &[key, val] : kvs_for_ow) {
+	const bool ends_with_ow_key = is_log_key(key) &&
 	  cur->get_size() + cur->get_reserved_size() > 0 && cur->can_ow();
 	const bool multi_block =
-	  cur->get_max_val_length(p.first.size()) < p.second.length();
+	  cur->get_max_val_length(key.size()) < val.length();
 	const bool can_reuse_ow_slot = ends_with_ow_key && !multi_block &&
-	  !cur->expect_overflow(p.first, p.second.length(), true);
+	  !cur->expect_overflow(key, val.length(), true);
 	if (ends_with_ow_key && !can_reuse_ow_slot) {
 	  if (!cur->is_initial_pending()) {
 	    cur = tm.get_mutable_extent(t, cur)->template cast<LogNode>();
@@ -171,13 +171,13 @@ LogManager::omap_set_keys(
 	  cur->remove_last_entry();
 	}
 	if (multi_block) {
-	  co_await _log_set_multi_block_key(log_root, t, cur, p.first, p.second);
+	  co_await _log_set_multi_block_key(log_root, t, cur, key, val);
 	  cur = co_await log_load_extent<LogNode>(
 	    t, log_root.addr, BEGIN_KEY, END_KEY);
 	  continue;
 	}
 	if (!can_reuse_ow_slot &&
-	    cur->expect_overflow(p.first, p.second.length(), false)) {
+	    cur->expect_overflow(key, val.length(), false)) {
 	  laddr_t dup_addr = cur->get_dup_tail_addr();
 	  cur = co_await alloc_log_node(cur->get_laddr());
 	  cur->set_dup_tail_addr(dup_addr);
@@ -188,9 +188,9 @@ LogManager::omap_set_keys(
 	  cur = tm.get_mutable_extent(t, cur)->template cast<LogNode>();
 	}
 	if (can_reuse_ow_slot) {
-	  cur->overwrite_kv(t, p.first, p.second);
+	  cur->overwrite_kv(t, key, val);
 	} else {
-	  cur->append_kv(t, p.first, p.second);
+	  cur->append_kv(t, key, val);
 	}
       }
       co_return;
@@ -237,17 +237,17 @@ LogManager::omap_set_keys(
     LogNodeRef e = ext;
     LogNodeRef dup_e;
     laddr_t dup_tail = co_await get_dup_addr_from_root(t, ext->get_laddr());
-    for (auto &p : kvs) {
+    for (auto &[key, val] : kvs) {
       LogNodeRef cur = e;
-      if (is_dup_log_key(p.first)) {
+      if (is_dup_log_key(key)) {
 	if (!dup_e) {
 	  dup_e = co_await alloc_log_node(dup_tail);
 	}
 	cur = dup_e;
       }
-      if (e->get_max_val_length(p.first.size()) < p.second.length()) {
-	co_await _log_set_multi_block_key(log_root, t, cur, p.first, p.second);
-	if (!is_dup_log_key(p.first)) {
+      if (e->get_max_val_length(key.size()) < val.length()) {
+	co_await _log_set_multi_block_key(log_root, t, cur, key, val);
+	if (!is_dup_log_key(key)) {
 	  e = co_await log_load_extent<LogNode>(
 	    t, log_root.addr, BEGIN_KEY, END_KEY);
 	} else {
@@ -257,9 +257,9 @@ LogManager::omap_set_keys(
 	}
 	continue;
       }
-      if (cur->expect_overflow(p.first.size(), p.second.length())) {
+      if (cur->expect_overflow(key.size(), val.length())) {
 	cur = co_await alloc_log_node(cur->get_laddr());
-	if (!is_dup_log_key(p.first)) {
+	if (!is_dup_log_key(key)) {
 	  e = cur;
 	  log_root.update(e->get_laddr(), log_root.depth,
 	    log_root.hint, log_root.type);
@@ -268,11 +268,11 @@ LogManager::omap_set_keys(
 	}
       }
       if (cur->is_initial_pending()) {
-	cur->append_kv(t, p.first, p.second);
+	cur->append_kv(t, key, val);
       } else {
-	assert(!is_dup_log_key(p.first));
+	assert(!is_dup_log_key(key));
 	auto mut = tm.get_mutable_extent(t, cur)->cast<LogNode>();
-	mut->append_kv(t, p.first, p.second);
+	mut->append_kv(t, key, val);
 	e = mut;
       }
     }
@@ -287,13 +287,13 @@ LogManager::omap_set_keys(
     co_return;
   }
 
-  for (auto &p : kvs) {
-    if (is_dup_log_key(p.first)) {
-      dup_kvs[p.first] = p.second;
+  for (auto &[key, val] : kvs) {
+    if (is_dup_log_key(key)) {
+      dup_kvs[key] = val;
       continue;
     }
     laddr_t last_addr = log_root.addr;
-    co_await set_log_node_entry(p.first, p.second);
+    co_await set_log_node_entry(key, val);
     if (last_addr != log_root.addr) {
       ext = co_await log_load_extent<LogNode>(
 	t, log_root.addr, BEGIN_KEY, END_KEY);
@@ -304,9 +304,9 @@ LogManager::omap_set_keys(
   if (!dup_kvs.empty()) {
     laddr_t last_addr = ext->get_dup_tail_addr();
     ext = co_await log_load_extent<LogNode>(t, last_addr, BEGIN_KEY, END_KEY);
-    for (auto &p: dup_kvs) {
-      co_await set_log_node_entry(p.first, p.second);
-      if (&p != &*dup_kvs.rbegin()) {
+    for (auto &[key, val]: dup_kvs) {
+      co_await set_log_node_entry(key, val);
+      if (&key != &dup_kvs.rbegin()->first) {
 	laddr_t current_addr = co_await get_dup_addr_from_root(t, log_root.addr);
 	if (last_addr != current_addr) {
 	  ext = co_await log_load_extent<LogNode>(t, current_addr, BEGIN_KEY, END_KEY);
@@ -999,9 +999,9 @@ LogManager::omap_iterate(
   }
 
   ObjectStore::omap_iter_ret_t ret;
-  for (auto &p : kvs) {
-    std::string result(p.second.c_str(), p.second.length());
-    ret = callback(p.first, result);
+  for (auto &[key, val] : kvs) {
+    std::string result(val.c_str(), val.length());
+    ret = callback(key, result);
     if (ret == ObjectStore::omap_iter_ret_t::STOP) {
       break;
     }
