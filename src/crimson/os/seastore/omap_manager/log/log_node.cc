@@ -241,6 +241,15 @@ bool LogNode::remove_entry(std::string_view key)
   return removed;
 }
 
+void LogNode::remove_last_entry()
+{
+  // appends journaled in this transaction are counted in reserved_size,
+  // not in get_size(), until the delta is applied
+  const uint32_t size = get_size() + get_reserved_size();
+  assert(size > 0);
+  set_cur_bitmap(size - 1, size - 1);
+}
+
 bool LogNode::log_less_than(std::string_view str) const
 {
   std::string last_key = get_last_key();
