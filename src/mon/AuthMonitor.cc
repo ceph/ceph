@@ -48,6 +48,7 @@
 using namespace std::literals::string_view_literals;
 using namespace std::literals::string_literals;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_last_committed())
