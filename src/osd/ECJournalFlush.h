@@ -32,33 +32,32 @@ Limits read_limits(const Config& conf, uint64_t stripe_width)
   return limits;
 }
 
-// Structural admission check at submission: a head object, exactly the two
-// attrs finish_ctx writes, no snapshot state, a single write of whole 1 KiB
-// blocks inside one stripe. new_oi/snapset are the OBC projections finish_ctx
-// already encoded into the attrs, so nothing is decoded on the write path.
-// The size half of the check is overwrite_fits(), evaluated at admission.
-bool eligible_overwrite(const hobject_t& object,
-  const PGTransaction::ObjectOperation& update, const object_info_t& new_oi,
-  const SnapSet& snapset, uint64_t stripe_width);
-
 // Admission in do_op, before the op is given a version: a single plain
-// WRITE of whole 1 KiB blocks inside one stripe of an existing head object
+// WRITE of whole 1 KiB blocks inside one stripe (or across one stripe
+// boundary, see max_cross) of an existing head object
 // with no snapshot state and no data digest, leaving its size unchanged. It
-// predicts what eligible_overwrite() accepts at submission, so an admitted
-// op is appended at once and never waits with a version assigned (a flush,
-// which is a logged write, would otherwise take a later version and log
-// ahead of it).
+// is the journal's only test of a write: an admitted op becomes a record
+// right there and never waits with a version assigned (a flush, which is a
+// logged write, would otherwise take a later version and log ahead of it).
+// max_cross: a write that crosses a stripe boundary is a candidate too if it
+// is no longer than this and than a stripe, so it lies in two stripes
+// (osd_ec_journal_max_write_bytes; 0: none). It is journaled as one
+// record per stripe (stripe_fragments).
 bool candidate_write(const hobject_t& object, const std::vector<OSDOp>& ops,
   const ObjectState& obs, const SnapSet& snapset, snapid_t snap_seq,
-  uint64_t stripe_width);
+  uint64_t stripe_width, uint64_t max_cross = 0);
 
-// A journaled record never changes the object size and must sit inside the
-// object as projected by every earlier write. old_size must come from the
-// same source the write planner uses once all earlier ops have entered the
-// pipeline (extent cache projection, else attr cache), not from an OBC that
-// a still-queued size change has not reached yet.
-bool overwrite_fits(uint64_t offset, uint64_t length, uint64_t new_size,
-  uint64_t old_size);
+// A write the journal does not take that still runs at once, as an ordinary
+// EC write beside the object's journaled stripes (ECBackend::journal_admit):
+// one or more plain WRITEs inside an existing head object with no snapshot
+// state, leaving its size unchanged, at any alignment and over any number of
+// stripes. It takes the journaled stripes it overlaps with it
+// (Journal::take_range, absorb_runs). Anything else (a truncate, a delete,
+// a size change, an op that also reads, snapshot state) waits until the
+// object has no journaled data. *offset, *length: the range its writes span.
+bool plain_overwrite(const hobject_t& object, const std::vector<OSDOp>& ops,
+  const ObjectState& obs, const SnapSet& snapset, snapid_t snap_seq,
+  uint64_t* offset, uint64_t* length);
 
 // Plan a flush with the classic write planner, so a flush costs what a
 // classic write of the same blocks would: a complete stripe is written whole

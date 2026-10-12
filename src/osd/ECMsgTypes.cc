@@ -35,7 +35,11 @@ void ECSubWrite::encode(bufferlist &bl) const
 
 void ECSubWrite::encode(bufferlist &p_bl, bufferlist &d_bl, uint64_t features) const
 {
-  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 6 : 4;
+  // Version 6 adds `unlogged`, and only an EC journal record is sent with
+  // it: every other sub-write is encoded exactly as before (version 5), so
+  // pools without the journal put the same bytes on the wire as a build
+  // without this code.
+  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? (unlogged ? 6 : 5) : 4;
   ENCODE_START(ver, 1, p_bl);
   encode(from, p_bl);
   encode(tid, p_bl);

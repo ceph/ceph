@@ -60,41 +60,6 @@ TEST(JournalAdmission, UnsupportedProfilesRefuseEnrollment)
   EXPECT_FALSE(ECWriteJournal::supported_geometry(12, 3, 8192));
 }
 
-TEST(JournalAdmission, ErrorLogBarrierCannotPassBlockedWrite)
-{
-  ECWriteJournal::AdmissionQueue<int> pending;
-  std::vector<int> submitted;
-  pending.push(1);
-  pending.ordered([&] { submitted.push_back(2); });
-  pending.push(3);
-  auto forward = [](std::function<void()> cb) { cb(); };
-  // Repeated pressure/deadline wakes leave version 1 blocked, not version 2
-  // appended to the PG log ahead of it, even with an idle extent cache.
-  for (unsigned i = 0; i < 4; ++i) {
-    EXPECT_EQ(1, pending.next(forward));
-    EXPECT_TRUE(submitted.empty());
-  }
-  submitted.push_back(1);
-  pending.pop();
-  EXPECT_EQ(3, pending.next(forward));
-  EXPECT_EQ((std::vector<int>{1, 2}), submitted);
-  submitted.push_back(3);
-  pending.pop();
-  EXPECT_FALSE(pending.next(forward));
-}
-
-TEST(JournalAdmission, OrderedCallbackMayEnqueueAndResetCancels)
-{
-  ECWriteJournal::AdmissionQueue<int> pending;
-  pending.ordered([&] { pending.push(4); });
-  EXPECT_EQ(4, pending.next([](std::function<void()> cb) { cb(); }));
-  bool called = false;
-  pending.ordered([&] { called = true; });
-  pending.clear();
-  EXPECT_FALSE(pending.next([](std::function<void()> cb) { cb(); }));
-  EXPECT_FALSE(called);
-}
-
 TEST(JournalAdmission, ShutdownWaitsForTrimAndPendingAdmission)
 {
   ECWriteJournal::DrainWaiters drain;
@@ -125,8 +90,8 @@ TEST(JournalAdmission, ShutdownRetryAndCancellationCompleteOnce)
   EXPECT_TRUE(drain.requested());
 }
 
-// do_op's admission: only what eligible_overwrite() will accept once the op
-// is versioned, so an admitted write never waits after that.
+// do_op's admission, the journal's only test of a write: what it admits
+// becomes a record at once and never waits with a version assigned.
 TEST(JournalAdmission, CandidateWriteOnlyForPlainInStripeOverwrites)
 {
   constexpr uint64_t width = 8 * 4096;
@@ -147,6 +112,13 @@ TEST(JournalAdmission, CandidateWriteOnlyForPlainInStripeOverwrites)
   EXPECT_TRUE(candidate_write(head, write(4096, 4096), obs, snapset, 0, width));
   EXPECT_TRUE(candidate_write(head, write(1024, 1024), obs, snapset, 0, width));
   EXPECT_TRUE(candidate_write(head, write(width, width), obs, snapset, 0, width));
+  // What librbd's scheduler makes of adjacent writes, while it stays inside
+  // one stripe: no limit applies there.
+  EXPECT_TRUE(candidate_write(head, write(4096, 8192), obs, snapset, 0, width));
+  EXPECT_TRUE(candidate_write(head, write(width - 8192, 8192), obs, snapset, 0, width));
+  EXPECT_TRUE(candidate_write(head, write(1024, 3072), obs, snapset, 0, width));
+  // Up to the object's last block.
+  EXPECT_TRUE(candidate_write(head, write(4 * width - 1024, 1024), obs, snapset, 0, width));
   // A write of a whole (one-stripe) object sets a data digest.
   ObjectState small = obs;
   small.oi.size = 8192;
@@ -157,13 +129,23 @@ TEST(JournalAdmission, CandidateWriteOnlyForPlainInStripeOverwrites)
   EXPECT_FALSE(candidate_write(head, write(1024, 1536), obs, snapset, 0, width));
   EXPECT_FALSE(candidate_write(head, write(width - 1024, 2048), obs, snapset, 0, width));
   EXPECT_FALSE(candidate_write(head, write(4 * width - 1024, 2048), obs, snapset, 0, width));
+  EXPECT_FALSE(candidate_write(head, write(4 * width, 4096), obs, snapset, 0, width));
   EXPECT_FALSE(candidate_write(head, write(0, 0), obs, snapset, 0, width));
+  // More than a stripe, with no limit for writes across a boundary.
+  EXPECT_FALSE(candidate_write(head, write(0, 2 * width), obs, snapset, 0, width));
   // Other ops, or more than one.
   EXPECT_FALSE(candidate_write(head, write(0, 4096, CEPH_OSD_OP_WRITEFULL),
                                obs, snapset, 0, width));
   auto two = write(0, 4096);
   two.push_back(write(8192, 4096).front());
   EXPECT_FALSE(candidate_write(head, two, obs, snapset, 0, width));
+  // A write with another attr or an allocation hint is two ops.
+  auto with_attr = write(0, 4096);
+  with_attr.push_back(write(0, 0, CEPH_OSD_OP_SETXATTR).front());
+  EXPECT_FALSE(candidate_write(head, with_attr, obs, snapset, 0, width));
+  auto hinted = write(0, 4096, CEPH_OSD_OP_SETALLOCHINT);
+  hinted.push_back(write(0, 4096).front());
+  EXPECT_FALSE(candidate_write(head, hinted, obs, snapset, 0, width));
   auto truncating = write(0, 4096);
   truncating[0].op.extent.truncate_seq = 1;
   EXPECT_FALSE(candidate_write(head, truncating, obs, snapset, 0, width));
@@ -181,6 +163,31 @@ TEST(JournalAdmission, CandidateWriteOnlyForPlainInStripeOverwrites)
   hobject_t clone = head;
   clone.snap = snapid_t(2);
   EXPECT_FALSE(candidate_write(clone, write(0, 4096), obs, snapset, 0, width));
+  // Across one stripe boundary, up to max_cross and never more than a
+  // stripe (osd_ec_journal_max_write_bytes): one record per stripe.
+  EXPECT_TRUE(candidate_write(head, write(width - 1024, 2048), obs, snapset, 0,
+                              width, 8192));
+  EXPECT_TRUE(candidate_write(head, write(width - 4096, 8192), obs, snapset, 0,
+                              width, 8192));
+  EXPECT_FALSE(candidate_write(head, write(width - 4096, 12288), obs, snapset,
+                               0, width, 8192));
+  EXPECT_FALSE(candidate_write(head, write(width - 4096, 8192), obs, snapset,
+                               0, width, 4096));
+  EXPECT_TRUE(candidate_write(head, write(width - 4096, width), obs, snapset, 0,
+                              width, 16 * width));
+  EXPECT_TRUE(candidate_write(head, write(width - 1024, width), obs, snapset, 0,
+                              width, 4 * width));
+  EXPECT_FALSE(candidate_write(head, write(width - 1024, width + 1024), obs,
+                               snapset, 0, width, 4 * width));
+  EXPECT_FALSE(candidate_write(head, write(width - 4096, width + 4096), obs,
+                               snapset, 0, width, 16 * width));
+  // The other rules hold for it as well: block alignment, inside the object.
+  EXPECT_FALSE(candidate_write(head, write(width - 512, 1024), obs, snapset, 0,
+                               width, 8192));
+  EXPECT_FALSE(candidate_write(head, write(4 * width - 4096, 8192), obs,
+                               snapset, 0, width, 8192));
+  EXPECT_FALSE(candidate_write(head, write(width - 4096, 8192), obs, snapset, 5,
+                               width, 8192));
   // Missing, whiteout.
   ObjectState missing(object_info_t(head), false);
   missing.oi.size = obs.oi.size;
@@ -195,6 +202,94 @@ TEST(JournalAdmission, CandidateWriteOnlyForPlainInStripeOverwrites)
   EXPECT_FALSE(candidate_write(head, write(0, 4096), digested, snapset, 0, width));
   digested.oi.clear_data_digest();
   EXPECT_TRUE(candidate_write(head, write(0, 4096), digested, snapset, 0, width));
+}
+
+// A write the journal does not take still runs at once, beside the object's
+// journaled stripes, when it is a plain overwrite: it takes the stripes it
+// overlaps with it. Anything else waits until the object has no records.
+TEST(JournalAdmission, PlainOverwriteAtAnyAlignmentAcrossStripes)
+{
+  constexpr uint64_t width = 8 * 4096;
+  const hobject_t head(object_t("rbd_data.7f1cb2a3d4e5.0000000000000001"), "",
+                       CEPH_NOSNAP, 0, 1, "");
+  ObjectState obs(object_info_t(head), true);
+  obs.oi.size = 4 * width;
+  SnapSet snapset;
+  auto write = [](uint64_t off, uint64_t len, int op = CEPH_OSD_OP_WRITE) {
+    std::vector<OSDOp> ops(1);
+    ops[0].op.op = op;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
+    ops[0].indata.append(std::string(len, 'x'));
+    return ops;
+  };
+  uint64_t off = 0, len = 0;
+  auto plain = [&](const std::vector<OSDOp>& ops, const ObjectState& state,
+                   const SnapSet& ss = SnapSet{}, snapid_t seq = 0,
+                   const hobject_t* object = nullptr) {
+    return ECWriteJournal::plain_overwrite(object ? *object : state.oi.soid,
+                                           ops, state, ss, seq, &off, &len);
+  };
+  // Across a stripe boundary, larger than a stripe, not block aligned, the
+  // whole object, its last byte.
+  EXPECT_TRUE(plain(write(width - 4096, 8192), obs));
+  EXPECT_EQ(width - 4096, off);
+  EXPECT_EQ(8192u, len);
+  EXPECT_TRUE(plain(write(4096, 3 * width), obs));
+  EXPECT_TRUE(plain(write(513, 1000), obs));
+  EXPECT_TRUE(plain(write(0, 4 * width), obs));
+  EXPECT_TRUE(plain(write(4 * width - 1, 1), obs));
+  // What the journal takes is one as well (a candidate it cannot place).
+  EXPECT_TRUE(plain(write(4096, 4096), obs));
+  // Several writes: the range they span.
+  auto two = write(3 * width, 100);
+  two.push_back(write(8192, 4096).front());
+  EXPECT_TRUE(plain(two, obs));
+  EXPECT_EQ(8192u, off);
+  EXPECT_EQ(3 * width + 100 - 8192, len);
+  // A data digest does not matter: the ordinary write clears or renews it.
+  ObjectState digested = obs;
+  digested.oi.set_data_digest(0x1234);
+  EXPECT_TRUE(plain(write(width - 4096, 8192), digested));
+  // A size change, an empty write, short data, a truncate.
+  EXPECT_FALSE(plain(write(4 * width - 1024, 2048), obs));
+  EXPECT_FALSE(plain(write(4 * width, 1024), obs));
+  EXPECT_FALSE(plain(write(5 * width, 1024), obs));
+  EXPECT_FALSE(plain(write(0, 0), obs));
+  auto short_data = write(0, 8192);
+  short_data[0].indata.clear();
+  EXPECT_FALSE(plain(short_data, obs));
+  auto truncating = write(0, 8192);
+  truncating[0].op.extent.truncate_seq = 1;
+  EXPECT_FALSE(plain(truncating, obs));
+  // Other ops, alone or beside a write; no op at all.
+  EXPECT_FALSE(plain(write(0, 8192, CEPH_OSD_OP_WRITEFULL), obs));
+  EXPECT_FALSE(plain(write(0, 8192, CEPH_OSD_OP_ZERO), obs));
+  auto hinted = write(0, 8192, CEPH_OSD_OP_SETALLOCHINT);
+  hinted.push_back(write(0, 8192).front());
+  EXPECT_FALSE(plain(hinted, obs));
+  auto reading = write(0, 8192);
+  reading.push_back(write(0, 8192, CEPH_OSD_OP_READ).front());
+  EXPECT_FALSE(plain(reading, obs));
+  EXPECT_FALSE(plain({}, obs));
+  // Snapshot state: a snap context, a snapset, clones, a clone object.
+  EXPECT_FALSE(plain(write(0, 8192), obs, snapset, 5));
+  SnapSet with_seq;
+  with_seq.seq = 3;
+  EXPECT_FALSE(plain(write(0, 8192), obs, with_seq));
+  SnapSet with_clone;
+  with_clone.clones.push_back(snapid_t(2));
+  EXPECT_FALSE(plain(write(0, 8192), obs, with_clone));
+  hobject_t clone = head;
+  clone.snap = snapid_t(2);
+  EXPECT_FALSE(plain(write(0, 8192), obs, snapset, 0, &clone));
+  // Missing, whiteout.
+  ObjectState missing(object_info_t(head), false);
+  missing.oi.size = obs.oi.size;
+  EXPECT_FALSE(plain(write(0, 8192), missing));
+  ObjectState whiteout = obs;
+  whiteout.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+  EXPECT_FALSE(plain(write(0, 8192), whiteout));
 }
 
 TEST(JournalAdmission, MaterializedAttrCoversStripesAndBase)
@@ -226,17 +321,6 @@ struct FlushTestDpp : public DoutPrefixProvider {
 class JournalFlushTest : public testing::TestWithParam<unsigned> {
  protected:
   uint64_t width() const { return GetParam() * 4096; }
-  static object_info_t projected_oi(uint64_t size) {
-    object_info_t oi;
-    oi.size = size;
-    return oi;
-  }
-  bool eligible(const hobject_t& object,
-                const PGTransaction::ObjectOperation& update, uint64_t new_size,
-                const SnapSet& ss = SnapSet{}) {
-    return ECWriteJournal::eligible_overwrite(object, update, projected_oi(new_size),
-                                              ss, width());
-  }
   PGTransaction::ObjectOperation head_write(uint64_t size, uint64_t len = 1024) {
     PGTransaction::ObjectOperation update;
     object_info_t oi;
@@ -374,8 +458,6 @@ TEST_P(JournalFlushTest, MetadataOnlyPlanNeedsNoReadsOrDataWrites)
   object_info_t oi;
   oi.size = s.object_size;
   auto update = head_write(oi.size);
-  ASSERT_TRUE(eligible(s.object, update, oi.size));
-  ASSERT_TRUE(ECWriteJournal::overwrite_fits(0, 1024, oi.size, oi.size));
   // The real foreground hook keeps BOTH finish_ctx attrs and removes the data.
   update.buffer_updates.clear();
   ECTransaction::WritePlanObj plan(s.object, update, sinfo, shards, shards,
@@ -384,35 +466,6 @@ TEST_P(JournalFlushTest, MetadataOnlyPlanNeedsNoReadsOrDataWrites)
   EXPECT_TRUE(plan.will_write.empty());
   EXPECT_EQ(oi.size, plan.orig_size);
   EXPECT_EQ(oi.size, plan.projected_size);
-}
-
-TEST_P(JournalFlushTest, RealHeadAttrsEnrollButCompoundAndSnapshotWritesDoNot)
-{
-  const auto object = stripe().object;
-  for (auto size : {1024u, 4096u}) {
-    auto update = head_write(width(), size);
-    EXPECT_TRUE(eligible(object, update, width()));
-    // Structural only: the size relation is checked at admission time.
-    EXPECT_TRUE(eligible(object, update, width() + 4096));
-    EXPECT_FALSE(eligible(object, update, size - 1)); // write past new EOF
-    update.attr_updates.erase(SS_ATTR);
-    EXPECT_FALSE(eligible(object, update, width()));
-    update = head_write(width(), size);
-    update.attr_updates["user-attr"] = ceph::bufferlist{};
-    EXPECT_FALSE(eligible(object, update, width()));
-    update = head_write(width(), size);
-    update.truncate = std::make_pair(uint64_t{0}, uint64_t{0});
-    EXPECT_FALSE(eligible(object, update, width()));
-    update = head_write(width(), size);
-    SnapSet ss;
-    ss.seq = 1;
-    EXPECT_FALSE(eligible(object, update, width(), ss));
-    // A whole-object digest would be compared by scrub before the flush.
-    auto digest = projected_oi(width());
-    digest.set_data_digest(0x1234);
-    EXPECT_FALSE(ECWriteJournal::eligible_overwrite(object, update, digest,
-                                                    SnapSet{}, width()));
-  }
 }
 
 TEST_P(JournalFlushTest, LoneBlockFlushIsAParityDeltaWriteOnWideStripes)
@@ -454,61 +507,15 @@ TEST_P(JournalFlushTest, CompleteStripeFlushNeedsNoReadsAndWritesEveryShard)
   EXPECT_EQ(GetParam() + 3, plan.will_write.shard_count());
 }
 
-TEST_P(JournalFlushTest, MergedWritesEnrollOnlyWithinOneStripe)
-{
-  // librbd's default scheduler merges adjacent 4 KiB writes to one object.
-  const auto object = stripe().object;
-  const uint64_t size = 2 * width();
-  auto at = [&](uint64_t off, uint64_t len) {
-    auto update = head_write(size, len);
-    update.buffer_updates.clear();
-    ceph::bufferlist data;
-    data.append(std::string(len, 'x'));
-    update.buffer_updates.insert(off, len,
-      PGTransaction::ObjectOperation::BufferUpdate::Write{data, 0});
-    return eligible(object, update, size);
-  };
-  EXPECT_TRUE(at(4096, 8192));
-  EXPECT_TRUE(at(width() - 8192, 8192));
-  EXPECT_TRUE(at(1024, 3072));
-  EXPECT_TRUE(at(width(), width())); // a whole stripe in one record
-  EXPECT_FALSE(at(width() - 4096, 8192)); // spans two stripes
-  EXPECT_FALSE(at(0, 1536));              // not whole blocks
-  EXPECT_FALSE(at(0, 2 * width()));
-}
-
-TEST_P(JournalFlushTest, AdmissionSizeCheckUsesPlannerViewOfOldSize)
-{
-  // Submission saw size S in the OBC. By admission a started truncate to S2
-  // (or an extension) has changed the planner's projected size.
-  const uint64_t S = 2 * width();
-  const uint64_t S2 = width();
-  EXPECT_TRUE(ECWriteJournal::overwrite_fits(S - 4096, 4096, S, S));
-  EXPECT_TRUE(ECWriteJournal::overwrite_fits(S - 1024, 1024, S, S));
-  // Same write with the object truncated underneath: now an extension.
-  EXPECT_FALSE(ECWriteJournal::overwrite_fits(S - 4096, 4096, S, S2));
-  // Any mismatch between this write's projected size and the planner's old
-  // size means a size change this write did not account for: not a record.
-  EXPECT_FALSE(ECWriteJournal::overwrite_fits(0, 4096, S, S2));
-  // Extension by this write itself.
-  EXPECT_FALSE(ECWriteJournal::overwrite_fits(S, 4096, S + 4096, S));
-  // Write ending exactly at EOF is fine; one byte past is not.
-  EXPECT_TRUE(ECWriteJournal::overwrite_fits(S - 1024, 1024, S, S));
-  EXPECT_FALSE(ECWriteJournal::overwrite_fits(S - 1023, 1024, S, S));
-}
-
 TEST_P(JournalFlushTest, DeferredWriteAndTruncateKeepSubmittedSizes)
 {
   const auto object = stripe().object;
-  PGTransaction t;
-  auto obc = std::make_shared<ObjectContext>();
-  t.obc_map[object] = obc;
-  obc->obs.oi.size = 2 * width();
-  const auto write_oi = ECTransaction::snapshot_object_info(t);
-  obc->obs.oi.size = 1024;
-  const auto truncate_oi = ECTransaction::snapshot_object_info(t);
-  // A newer client reextends the live OBC while both older ops are queued.
-  obc->obs.oi.size = 4 * width();
+  // Each op is planned with the object info it was submitted with: a
+  // metadata-only write of a two-stripe object, then its truncate to 1 KiB.
+  object_info_t write_oi;
+  write_oi.size = 2 * width();
+  object_info_t truncate_oi;
+  truncate_oi.size = 1024;
   auto update = head_write(2 * width());
   update.buffer_updates.clear(); // a metadata-only op
   pg_pool_t pool;
@@ -517,13 +524,13 @@ TEST_P(JournalFlushTest, DeferredWriteAndTruncateKeepSubmittedSizes)
   shard_id_set shards;
   shards.insert_range(shard_id_t(0), GetParam() + 3);
   ECTransaction::WritePlanObj write_plan(object, update, sinfo, shards, shards,
-    false, 2 * width(), write_oi.at(object), std::nullopt, 1);
+    false, 2 * width(), write_oi, std::nullopt, 1);
   EXPECT_EQ(2 * width(), write_plan.projected_size);
   EXPECT_EQ(0u, reads(write_plan));
   EXPECT_TRUE(write_plan.will_write.empty());
   update.truncate = std::make_pair(uint64_t{1024}, uint64_t{1024});
   ECTransaction::WritePlanObj truncate_plan(object, update, sinfo, shards, shards,
-    false, write_plan.projected_size, truncate_oi.at(object), std::nullopt, 1);
+    false, write_plan.projected_size, truncate_oi, std::nullopt, 1);
   EXPECT_EQ(2 * width(), truncate_plan.orig_size);
   EXPECT_EQ(1024u, truncate_plan.projected_size);
   EXPECT_TRUE(truncate_plan.invalidates_cache);
@@ -915,6 +922,160 @@ TEST_P(JournalFlushTest, DirectWriteBesideLiveRecordsMarksOnlyItsStripe)
   EXPECT_FALSE(materialized.covers(width(), eversion_t(1, 22))); // journaled later
   EXPECT_TRUE(materialized.covers(2 * width(), eversion_t(1, 9)));
   EXPECT_FALSE(materialized.covers(0, eversion_t(1, 6))); // still live
+}
+
+TEST_P(JournalFlushTest, DirectWriteCarriesTheJournaledBlocksOfItsStripe)
+{
+  // A plain overwrite the journal does not take runs as an ordinary EC
+  // write and takes the journaled stripes it overlaps. The live blocks it
+  // does not cover go into its own transaction, so one logged write
+  // materializes them with its data; its marker covers their records and
+  // leaves the object's other stripes uncovered.
+  const hobject_t object(object_t("rbd_data.7f1cb2a3d4e5.0000000000000003"), "",
+                         CEPH_NOSNAP, 0, 1, "");
+  const uint64_t size = 4 * width();
+  ECWriteJournal::Limits limits;
+  limits.stripe_width = width();
+  ECWriteJournal::Journal journal(ghobject_t(object), limits);
+  auto record = [&](uint64_t off, char c) {
+    ceph::bufferlist bytes;
+    bytes.append(std::string(4096, c));
+    ECWriteJournal::Placement placement;
+    ECWriteJournal::Ticket ticket;
+    const eversion_t version(1, journal.next_append_sequence());
+    EXPECT_EQ(0, journal.append(object, version, size, off, bytes, &placement,
+                                &ticket));
+    EXPECT_EQ(0, journal.committed(ticket, 0));
+    return version;
+  };
+  // Stripe 1: a block the write overwrites and one, two chunks on, that it
+  // does not. Stripe 3: a record that stays journaled.
+  const auto covered = record(width(), 'o');
+  const auto carried = record(width() + 8192, 'j');
+  const auto other = record(3 * width(), 'k');
+
+  pg_pool_t pool;
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  pool.nonprimary_shards.insert_range(shard_id_t(1), GetParam() - 1);
+  ECUtil::stripe_info_t sinfo(GetParam(), 3, width(), &pool);
+  shard_id_set shards;
+  shards.insert_range(shard_id_t(0), GetParam() + 3);
+  auto osdmap = std::make_shared<OSDMap>();
+  ErasureCodeInterfaceRef zero_parity =
+    std::make_shared<ZeroParityCode>(GetParam(), 3);
+  auto obc = std::make_shared<ObjectContext>();
+  obc->obs.exists = true;
+  obc->obs.oi.soid = object;
+  obc->obs.oi.size = size;
+  obc->obs.oi.version = eversion_t(1, 20);
+  bufferlist cached;
+  obc->obs.oi.encode(cached, 0);
+  obc->attr_cache[OI_ATTR] = cached;
+  const std::string marker(ECWriteJournal::materialized_attr);
+
+  // What PrimaryLogPG::finish_ctx does for a 4 KiB write at the start of
+  // stripe 1 (ECBackend::journal_take_for_write).
+  ceph::bufferlist data;
+  data.append(std::string(4096, 'x'));
+  interval_set<uint64_t> written_bytes;
+  written_bytes.insert(width(), 4096);
+  std::vector<ECWriteJournal::Stripe> taken;
+  ASSERT_EQ(0, journal.take_range(object, width(), 4096, &taken));
+  ASSERT_EQ(1u, taken.size());
+  uint64_t dropped = 0;
+  auto runs = ECWriteJournal::absorb_runs(taken, written_bytes, &dropped);
+  EXPECT_EQ(0u, dropped);
+  ASSERT_EQ(1u, runs.size());
+  EXPECT_EQ(std::string(4096, 'j'), runs.at(width() + 8192).to_str());
+  const eversion_t now = journal.version_now(1);
+  const auto oldest_other = journal.oldest_version_outside(object, width(), 4096);
+  ASSERT_TRUE(oldest_other);
+  EXPECT_EQ(other, *oldest_other);
+
+  PGTransaction transaction;
+  transaction.ec_journal_marker_delta = true;
+  transaction.obc_map[object] = obc;
+  auto& update = transaction.op_map[object];
+  update = head_write(size, 4096);
+  update.buffer_updates.clear();
+  update.buffer_updates.insert(width(), 4096,
+    PGTransaction::ObjectOperation::BufferUpdate::Write{data, 0});
+  for (auto& [off, bl] : runs) {
+    update.buffer_updates.insert(off, bl.length(),
+      PGTransaction::ObjectOperation::BufferUpdate::Write{bl, 0});
+  }
+  object_info_t next = obc->obs.oi;
+  next.version = eversion_t(1, 21);
+  next.prior_version = eversion_t(1, 20);
+  bufferlist encoded;
+  next.encode(encoded, 0);
+  update.attr_updates[OI_ATTR] = encoded;
+  ECWriteJournal::Materialized delta;
+  delta.base = ECWriteJournal::just_below(*oldest_other);
+  delta.stripes[width()] = now;
+  bufferlist encoded_delta;
+  encode(delta, encoded_delta);
+  transaction.setattr(object, marker, encoded_delta);
+
+  ECTransaction::WritePlan plans;
+  plans.plans.emplace_back(object, update, sinfo, shards, shards, false,
+    size, obc->obs.oi, std::nullopt, 1);
+  const auto& plan = plans.plans.back();
+  // Two data chunks of stripe 1 and parity, after a read of its other data
+  // chunks (conventional, as pdw mode 1 forces): one RMW for both.
+  ASSERT_TRUE(plan.to_read);
+  EXPECT_EQ(GetParam() - 2, plan.to_read->shard_count());
+  EXPECT_EQ(5u, plan.will_write.shard_count());
+  plans.want_read = true;
+  ECUtil::shard_extent_map_t other_chunks(&sinfo);
+  for (const auto& [shard, extents] : *plan.to_read) {
+    for (const auto& [off, len] : extents) {
+      ceph::bufferlist bytes;
+      bytes.append(std::string(len, 'z'));
+      other_chunks.insert_in_shard(shard, off, bytes);
+    }
+  }
+  const std::map<hobject_t, ECUtil::shard_extent_map_t> partial_extents{
+    {object, other_chunks}};
+  std::vector<pg_log_entry_t> entries;
+  entries.emplace_back(pg_log_entry_t::MODIFY, object, eversion_t(1, 21),
+    eversion_t(1, 20), 0, osd_reqid_t(), utime_t(), 0);
+  shard_id_map<ceph::os::Transaction> transactions(GetParam() + 3);
+  for (auto shard : shards) {
+    transactions[shard];
+  }
+  std::map<hobject_t, ECUtil::shard_extent_map_t> written;
+  std::set<hobject_t> temp_added, temp_removed;
+  bool first_in_interval = false;
+  ECOmapJournal ec_omap_journal(flush_test_dpp);
+  PGLog pg_log(g_ceph_context);
+  ECTransaction::generate_transactions(&transaction, plans, zero_parity,
+    pg_t(1, 9), sinfo, partial_extents, entries, &written, &transactions,
+    &temp_added, &temp_removed, &flush_test_dpp, osdmap, first_in_interval,
+    ec_omap_journal, pg_log);
+  // The client's bytes in stripe 1's first chunk, the journal's in its third.
+  ceph::bufferlist chunk;
+  written.at(object).get_buffer(sinfo.get_shard(raw_shard_id_t(0)),
+                                width() / GetParam(), 4096, chunk);
+  EXPECT_EQ(std::string(4096, 'x'), chunk.to_str());
+  chunk.clear();
+  written.at(object).get_buffer(sinfo.get_shard(raw_shard_id_t(2)),
+                                width() / GetParam(), 4096, chunk);
+  EXPECT_EQ(std::string(4096, 'j'), chunk.to_str());
+
+  ECWriteJournal::Materialized materialized;
+  auto cursor = obc->attr_cache.at(marker).cbegin();
+  decode(materialized, cursor);
+  EXPECT_TRUE(materialized.covers(width(), covered));
+  EXPECT_TRUE(materialized.covers(width(), carried));
+  EXPECT_FALSE(materialized.covers(3 * width(), other)); // still journaled
+  // A record journaled on stripe 1 after the write was built.
+  EXPECT_FALSE(materialized.covers(width(), eversion_t(1, now.version + 1)));
+
+  // The write commits: its stripe is clean, the other one is not.
+  ASSERT_EQ(0, journal.finish_flush(taken[0], 0));
+  EXPECT_FALSE(journal.dirty(object, width(), width()));
+  EXPECT_TRUE(journal.dirty(object, 3 * width(), width()));
 }
 
 TEST_P(JournalFlushTest, JournalGenerationsUseProductionShardAssembly)

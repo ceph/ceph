@@ -130,6 +130,10 @@ class ECBackend : public ECCommon {
   std::optional<eversion_t> journal_oldest_live(const hobject_t& oid,
     std::optional<uint64_t> skip_stripe) const;
   bool journal_ready(const hobject_t& oid) const;
+  // A direct write of these bytes of oid is being built: take the journaled
+  // stripes it overlaps (PGBackend::ec_journal_take_for_write).
+  PGBackend::ec_journal_take_t journal_take_for_write(
+    const hobject_t& oid, const interval_set<uint64_t>& written);
   // A client read of this range of oid may be issued now
   // (PGBackend::ec_journal_read_ready); if not, it is counted as waiting.
   bool journal_read_ready(const hobject_t& oid, uint64_t offset,
@@ -267,7 +271,8 @@ class ECBackend : public ECCommon {
       ECWriteJournal::Overlay overlay,
       bool journal_only,
       bool counted);
-  // Requeue the reads parked for oid if nothing holds them back any more.
+  // Requeue the reads and direct writes parked for oid if nothing holds
+  // them back any more.
   void journal_kick_reads(const hobject_t& oid);
   // The shard reads of a client read of oid that the journal counted on
   // their stripes (Journal::read_begin) are done.
@@ -285,7 +290,6 @@ class ECBackend : public ECCommon {
   void reset_journal();
   void dump_journal(ceph::Formatter* f) const;
   bool journal_admission_open() const;
-  void start_transaction(std::shared_ptr<ECClassicalOp> op);
   // A copy of a journaled write's record committed on a holder.
   void journal_record_committed(pg_shard_t from, ceph_tid_t tid);
   // Replay: every other holder's listing is in.

@@ -29,8 +29,10 @@ namespace ECWriteJournal {
 // append wins; a superseded block is dead immediately). Flushing is decided
 // per stripe, not per segment: a complete stripe can be materialized without
 // reads at any time, an incomplete one when the log must reclaim its oldest
-// segment, when a write the journal cannot take waits for its object, or on
-// a drain. Client reads are served from the index (Overlay), not by a flush.
+// segment, when a mutation that cannot run beside journaled data waits for
+// its object, or on a drain. Client reads are served from the index
+// (Overlay), not by a flush, and a plain overwrite the journal does not take
+// takes the stripes it overlaps with it (take_range), not by a flush either.
 //
 // Each segment occupies one of max_segments fixed slot objects. A record is
 // placed once (slot, offset) and the caller writes the same bytes into every
@@ -96,9 +98,9 @@ struct Record {
 // journal while the object had no records (such a write waits until they
 // are all flushed); stripes[s] the newest record version the last flush of
 // s wrote, or the journal version current at a plain overwrite of s that
-// went past the journal (a whole stripe, or the log was full) while other
-// stripes of the object had records (those keep base and name only the
-// stripes they write).
+// went past the journal while the object had records (those take the
+// records of the stripes they write with them, keep base below the other
+// stripes' records and name only the stripes they write).
 // It lives with the object's other attributes, so recovery and backfill carry
 // it and a replaying primary can judge records against it.
 inline constexpr std::string_view materialized_attr = "ec_journal";
@@ -151,6 +153,17 @@ struct Materialized {
   // now covers: they decide nothing, and the attr is rewritten with the
   // object's onode on every later write of it.
   void merge(const Materialized& previous);
+  // The attr is set on shard 0 and the parity shards, and its previous value
+  // goes into the log entry's rollback data on every shard, with each flush
+  // and each direct write of an object that has live records. Under a mixed
+  // load such an object keeps an entry for nearly every stripe (base rises
+  // only to its oldest live record, and direct writes keep marking stripes),
+  // so the map is delta coded (version 2): stripe offsets as differences in
+  // units of their common divisor, versions as differences from base, four
+  // or five bytes an entry instead of twenty. An empty map is still written
+  // in the first form: that is what every object has once its journaled
+  // data is gone, so a drained pool can be read by a build that knows only
+  // that form.
   void encode(ceph::bufferlist& out) const;
   void decode(ceph::bufferlist::const_iterator& in);
 };
@@ -210,6 +223,24 @@ struct Stripe {
   // The OSD materializes a Stripe through ECJournalFlush's shard planner and
   // assembly. The logical reference model lives with the unit tests.
 };
+
+// The pieces of [offset, offset + length), one per stripe it overlaps, as
+// (offset, length). A write that crosses a stripe boundary is journaled as
+// one record per stripe, placed and committed together: the index, the
+// flushes and replay are per stripe, so each piece is judged and
+// materialized on its own.
+std::vector<std::pair<uint64_t, uint64_t>> stripe_fragments(
+  uint64_t offset, uint64_t length, uint64_t stripe_width);
+
+// What a direct write that took these stripes (Journal::take_range, in
+// offset order) has to write for them besides its own bytes: their live
+// blocks outside `written`, the bytes the write itself writes, joined into
+// runs at object offsets. The write supersedes the blocks it covers, at any
+// alignment. *dropped counts the stripes that add nothing: the write covers
+// every live block of theirs, and their records die unwritten.
+std::map<uint64_t, ceph::bufferlist> absorb_runs(
+  const std::vector<Stripe>& stripes, const interval_set<uint64_t>& written,
+  uint64_t* dropped = nullptr);
 
 // What a client read of an object range meets in the journal
 // (Journal::read_state). The shards hold a stripe's bytes from before its
@@ -288,7 +319,8 @@ class Journal {
 
   // Place an append. Writes of whole 1 KiB blocks, aligned to 1 KiB, within
   // a prefilled object and one stripe are supported (librbd merges adjacent
-  // 4 KiB writes to one object). On success the caller MUST emit the
+  // 4 KiB writes to one object); the caller appends a write that crosses a
+  // stripe boundary piece by piece (stripe_fragments). On success the caller MUST emit the
   // placement into the transaction of every holder and submit them.
   // Append does NOT mean durable/ACKable. -EAGAIN means the log is full;
   // no state change on error. The version is the record's journal version;
@@ -309,6 +341,11 @@ class Journal {
   // no state change: 0, -EAGAIN (no room until something is released),
   // -E2BIG (never fits a segment), -EINVAL or a latched error.
   int check_append(const hobject_t& object, uint64_t length) const;
+  // The same for several records appended one after the other (the pieces
+  // of a write that crosses a stripe boundary): 0 only if all of them fit,
+  // the segment a later one has to open included.
+  int check_append(const hobject_t& object,
+                   const std::vector<uint64_t>& lengths) const;
   // Write one holder's copy of a placed record into t.
   void emit(const Placement& placement, const coll_t& collection,
             shard_id_t shard, ceph::os::Transaction& t) const;
@@ -357,6 +394,19 @@ class Journal {
   // only once it is complete, which can wait.
   bool must_flush(const StripeKey& key, bool every_partial,
                   std::optional<uint64_t> partial_upto) const;
+  // A direct write of [offset, offset + length) of this object takes every
+  // journaled stripe the range overlaps with it, as a flush takes one: the
+  // stripes leave the resident set and their snapshots are appended to
+  // *taken, in offset order. The write materializes them itself: it
+  // overwrites their blocks or carries them in its own transaction
+  // (ECJournalFlush's absorb_runs), and finish_flush() of each snapshot at
+  // its commit kills them. Until then they keep their segments resident, so
+  // no slot is reused under a record whose replacement can still roll back.
+  // A record appended to a taken stripe meanwhile is newer than the write
+  // and stays journaled. -EBUSY, with nothing taken, if write_state() says
+  // the write has to wait.
+  int take_range(const hobject_t& object, uint64_t offset, uint64_t length,
+                 std::vector<Stripe>* taken);
   // Call only after ALL EC writes covering this snapshot have durably
   // completed. Blocks the snapshot covered become dead; newer ones stay. On
   // error the stripe returns to the resident set for a retry.
@@ -412,11 +462,19 @@ class Journal {
   // A stripe of this object (overlapping the range) is resident or flushing.
   bool dirty(const hobject_t& object, uint64_t offset = 0,
              uint64_t length = whole_object) const;
-  // The oldest version among this object's live blocks, resident or
-  // flushing, other than those of the stripe at skip_stripe. Every record of
-  // the object below it is materialized, or superseded by a live one.
+  // The oldest version among this object's live blocks that no flush or
+  // direct write in flight holds (the snapshot of a taken stripe), other
+  // than those of the stripe at skip_stripe. Every record of the object
+  // below it is materialized, superseded by a live one, or held by a write
+  // that is in the PG log ahead of whatever is built now: a marker built
+  // now can only become durable with those writes, so its base may cover
+  // their records.
   std::optional<eversion_t> oldest_version(const hobject_t& object,
     std::optional<uint64_t> skip_stripe = std::nullopt) const;
+  // The same, other than the stripes [offset, offset + length) overlaps:
+  // what a direct write that took that range (take_range) leaves live.
+  std::optional<eversion_t> oldest_version_outside(const hobject_t& object,
+    uint64_t offset, uint64_t length) const;
   // A durable stripe of this object (overlapping the range) is waiting for
   // begin_flush_object().
   bool object_ready(const hobject_t& object, uint64_t offset = 0,
@@ -425,6 +483,15 @@ class Journal {
   // (ReadState).
   ReadState read_state(const hobject_t& object, uint64_t offset,
                        uint64_t length) const;
+  // What a direct write of [offset, offset + length) of this object meets:
+  // clean (no stripe of the range holds a record), ready (take_range() takes
+  // them all), or what it has to wait for: in_flight (a record of the range
+  // is not durable on every holder yet; taken now, the write could be
+  // acknowledged ahead of it) or flushing (a flush or another direct write
+  // holds a stripe of the range). Never adopted: such a stripe is taken
+  // like any other.
+  ReadState write_state(const hobject_t& object, uint64_t offset,
+                        uint64_t length) const;
   // Add the live blocks that overlap the range to *overlay, newest version
   // per block. For a range that is ready; a clean one adds nothing.
   void read_overlay(const hobject_t& object, uint64_t offset, uint64_t length,
@@ -508,10 +575,14 @@ class Journal {
     std::map<uint64_t, Block> blocks; // relative 1 KiB offsets
     uint32_t undurable = 0;
     bool flushing = false;
+    // While flushing: the newest sequence of the snapshot the flush or the
+    // direct write holds. Blocks above it were appended since.
+    uint64_t taken = 0;
     uint64_t oldest = 0; // sequence of the oldest live block
-    // Lowest version among the live blocks (adopted records need not
-    // arrive in version order), kept by reindex() for oldest_version().
-    eversion_t oldest_version;
+    // Lowest version among the live blocks that no snapshot in flight holds
+    // (adopted records need not arrive in version order), kept by reindex()
+    // for oldest_version(). Unset: a flush or direct write holds them all.
+    std::optional<eversion_t> oldest_version;
 
     bool full() const { return blocks.size() * block_size == valid_bytes; }
   };

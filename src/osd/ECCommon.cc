@@ -1904,17 +1904,14 @@ ECTransaction::WritePlan ECCommon::get_write_plan(
   PGTransaction &t,
   ECCommon::ReadPipeline &read_pipeline,
   ECCommon::RMWPipeline &rmw_pipeline,
-  DoutPrefixProvider *dpp,
-  const std::map<hobject_t, object_info_t>* submitted_oi) {
-  ECTransaction::WritePlan plans{};
+  DoutPrefixProvider *dpp) {
+  ECTransaction::WritePlan plans;
   auto obc_map = t.obc_map;
   t.safe_create_traverse(
     [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
       const auto &[oid, inner_op] = i;
       auto &obc = obc_map.at(oid);
-      // A journal admission barrier may defer this op after submit. obs is
-      // projected by newer client ops even while those ops are still queued.
-      object_info_t oi = submitted_oi ? submitted_oi->at(oid) : obc->obs.oi;
+      object_info_t oi = obc->obs.oi;
       std::optional<object_info_t> soi;
 
       hobject_t source;

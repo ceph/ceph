@@ -221,6 +221,15 @@ public:
     return optimized.journal_oldest_live(oid, skip_stripe);
   }
 
+  ec_journal_take_t ec_journal_take_for_write(
+      const hobject_t& oid, const interval_set<uint64_t>& written) override
+  {
+    if (!is_optimized()) {
+      return {};
+    }
+    return optimized.journal_take_for_write(oid, written);
+  }
+
   bool ec_journal_ready(const hobject_t& oid) const override
   {
     return !is_optimized() || optimized.journal_ready(oid);

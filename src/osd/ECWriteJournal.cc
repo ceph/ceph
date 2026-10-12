@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <limits>
+#include <numeric>
 #include <stdexcept>
 #include <utility>
 
@@ -196,19 +197,88 @@ eversion_t just_below(eversion_t v)
   return eversion_t(v.epoch, v.version - 1);
 }
 
+namespace {
+// LEB128, and zigzag for the signed differences.
+void put_varint(uint64_t v, ceph::bufferlist& out)
+{
+  while (v >= 0x80) {
+    out.append(char(v | 0x80));
+    v >>= 7;
+  }
+  out.append(char(v));
+}
+
+uint64_t get_varint(ceph::bufferlist::const_iterator& in)
+{
+  uint64_t v = 0;
+  for (unsigned shift = 0; shift < 64; shift += 7) {
+    uint8_t byte;
+    in.copy(1, reinterpret_cast<char*>(&byte));
+    v |= uint64_t(byte & 0x7f) << shift;
+    if (!(byte & 0x80)) {
+      return v;
+    }
+  }
+  throw ceph::buffer::malformed_input("EC journal marker: varint too long");
+}
+
+uint64_t zigzag(int64_t v)
+{
+  return (uint64_t(v) << 1) ^ uint64_t(v >> 63);
+}
+
+int64_t unzigzag(uint64_t v)
+{
+  return int64_t(v >> 1) ^ -int64_t(v & 1);
+}
+} // namespace
+
 void Materialized::encode(ceph::bufferlist& out) const
 {
-  ENCODE_START(1, 1, out);
+  if (stripes.empty()) {
+    ENCODE_START(1, 1, out);
+    encode(base, out);
+    encode(stripes, out);
+    ENCODE_FINISH(out);
+    return;
+  }
+  ENCODE_START(2, 2, out);
   encode(base, out);
-  encode(stripes, out);
+  uint64_t unit = 0;
+  for (const auto& [offset, version] : stripes) {
+    unit = std::gcd(unit, offset);
+  }
+  unit = std::max<uint64_t>(unit, 1);
+  put_varint(unit, out);
+  put_varint(stripes.size(), out);
+  uint64_t previous = 0;
+  for (const auto& [offset, version] : stripes) {
+    put_varint((offset - previous) / unit, out);
+    previous = offset;
+    put_varint(zigzag(int64_t(version.epoch) - int64_t(base.epoch)), out);
+    put_varint(zigzag(int64_t(version.version - base.version)), out);
+  }
   ENCODE_FINISH(out);
 }
 
 void Materialized::decode(ceph::bufferlist::const_iterator& in)
 {
-  DECODE_START(1, in);
+  DECODE_START(2, in);
   decode(base, in);
-  decode(stripes, in);
+  if (struct_v < 2) {
+    decode(stripes, in);
+  } else {
+    stripes.clear();
+    const uint64_t unit = get_varint(in);
+    uint64_t offset = 0;
+    for (uint64_t count = get_varint(in); count; --count) {
+      offset += get_varint(in) * unit;
+      eversion_t version;
+      version.epoch = epoch_t(int64_t(base.epoch) + unzigzag(get_varint(in)));
+      version.version = base.version + uint64_t(unzigzag(get_varint(in)));
+      stripes.emplace_hint(stripes.end(), offset, version);
+    }
+  }
   DECODE_FINISH(in);
 }
 
@@ -249,6 +319,57 @@ void ReplayFetches::clear()
   objects.clear();
   failed = 0;
   unreadable = false;
+}
+
+std::vector<std::pair<uint64_t, uint64_t>> stripe_fragments(
+  uint64_t offset, uint64_t length, uint64_t stripe_width)
+{
+  std::vector<std::pair<uint64_t, uint64_t>> pieces;
+  while (length) {
+    const uint64_t piece = std::min(length,
+                                    stripe_width - offset % stripe_width);
+    pieces.emplace_back(offset, piece);
+    offset += piece;
+    length -= piece;
+  }
+  return pieces;
+}
+
+std::map<uint64_t, ceph::bufferlist> absorb_runs(
+  const std::vector<Stripe>& stripes, const interval_set<uint64_t>& written,
+  uint64_t* dropped)
+{
+  std::map<uint64_t, ceph::bufferlist> runs;
+  auto last = runs.end();
+  uint64_t run_end = 0;
+  for (const auto& stripe : stripes) {
+    bool added = false;
+    // A stripe the write covers up to its last byte adds nothing.
+    if (!written.contains(stripe.offset, stripe.valid_bytes)) {
+      for (const auto& [off, data] : stripe.blocks) {
+        const uint64_t at = stripe.offset + off;
+        interval_set<uint64_t> keep, covered;
+        keep.insert(at, data.length());
+        covered.intersection_of(keep, written);
+        keep.subtract(covered);
+        for (auto i = keep.begin(); i != keep.end(); ++i) {
+          ceph::bufferlist piece;
+          piece.substr_of(data, i.get_start() - at, i.get_len());
+          if (last != runs.end() && run_end == i.get_start()) {
+            last->second.claim_append(piece);
+          } else {
+            last = runs.emplace(i.get_start(), std::move(piece)).first;
+          }
+          run_end = i.get_start() + i.get_len();
+          added = true;
+        }
+      }
+    }
+    if (!added && dropped) {
+      ++*dropped;
+    }
+  }
+  return runs;
 }
 
 bool Overlay::covers(uint64_t offset, uint64_t length) const
@@ -372,12 +493,16 @@ void Journal::reindex(const StripeKey& key, Entry& entry)
     return; // the caller drops the entry
   }
   auto oldest = entry.blocks.begin();
-  entry.oldest_version = oldest->second.version;
-  for (auto b = std::next(oldest); b != entry.blocks.end(); ++b) {
+  entry.oldest_version.reset();
+  for (auto b = entry.blocks.begin(); b != entry.blocks.end(); ++b) {
     if (b->second.sequence < oldest->second.sequence) {
       oldest = b;
     }
-    entry.oldest_version = std::min(entry.oldest_version, b->second.version);
+    // A snapshot in flight holds the blocks up to entry.taken.
+    if ((!entry.flushing || b->second.sequence > entry.taken) &&
+        (!entry.oldest_version || b->second.version < *entry.oldest_version)) {
+      entry.oldest_version = b->second.version;
+    }
   }
   entry.oldest = oldest->second.sequence;
   if (entry.flushing) {
@@ -470,6 +595,48 @@ int Journal::check_append(const hobject_t& object, uint64_t length) const
     return -EINVAL;
   }
   return room_for(record_bytes(object, length));
+}
+
+int Journal::check_append(const hobject_t& object,
+                          const std::vector<uint64_t>& lengths) const
+{
+  if (failed) {
+    return failed;
+  }
+  // As append would place them, one after the other: a record that does
+  // not fit the open segment opens the next one, which takes a free slot.
+  // (append can only find more room than this: sealing a segment and
+  // superseding blocks may release dead segments on the way.)
+  bool open = !segments.empty() && segments.back().state == State::open;
+  uint64_t open_bytes = open ? segments.back().bytes : 0;
+  uint64_t used = used_bytes;
+  uint64_t count = segments.size();
+  uint64_t slots = free_slots.size();
+  for (const uint64_t length : lengths) {
+    if (!length || length % block_size || length > limits.stripe_width) {
+      return -EINVAL;
+    }
+    const uint64_t bytes = record_bytes(object, length);
+    if (bytes > limits.segment_bytes) {
+      return -E2BIG;
+    }
+    const bool next = !open || bytes > limits.segment_bytes - open_bytes;
+    if (bytes > limits.max_bytes - used) {
+      return -EAGAIN;
+    }
+    if (next) {
+      if (count == limits.max_segments || slots == 0) {
+        return -EAGAIN;
+      }
+      ++count;
+      --slots;
+      open = true;
+      open_bytes = 0;
+    }
+    open_bytes += bytes;
+    used += bytes;
+  }
+  return 0;
 }
 
 int Journal::append(const hobject_t& object, eversion_t version,
@@ -756,6 +923,10 @@ Stripe Journal::take(StripeKey key)
 {
   auto& entry = index.at(key);
   entry.flushing = true;
+  entry.taken = 0;
+  for (const auto& [off, block] : entry.blocks) {
+    entry.taken = std::max(entry.taken, block.sequence);
+  }
   reindex(key, entry); // leaves the resident structures
   Stripe stripe;
   stripe.object = key.first;
@@ -887,6 +1058,27 @@ std::optional<Stripe> Journal::begin_flush_object(const hobject_t& object,
   return std::nullopt;
 }
 
+int Journal::take_range(const hobject_t& object, uint64_t offset,
+                        uint64_t length, std::vector<Stripe>* taken)
+{
+  if (failed) {
+    return failed;
+  }
+  if (!taken) {
+    return -EINVAL;
+  }
+  const auto state = write_state(object, offset, length);
+  if (state == ReadState::in_flight || state == ReadState::flushing) {
+    return -EBUSY;
+  }
+  // take() moves the stripes out of the resident structures, not the index.
+  const auto [begin, end] = stripes_of(object, offset, length);
+  for (auto i = begin; i != end; ++i) {
+    taken->push_back(take(i->first));
+  }
+  return 0;
+}
+
 int Journal::finish_flush(const Stripe& flushed, int result)
 {
   auto i = index.find(StripeKey{flushed.object, flushed.offset});
@@ -972,7 +1164,29 @@ std::optional<eversion_t> Journal::oldest_version(const hobject_t& object,
     if (skip_stripe && i->first.second == *skip_stripe) {
       continue;
     }
-    if (!oldest || i->second.oldest_version < *oldest) {
+    if (i->second.oldest_version &&
+        (!oldest || *i->second.oldest_version < *oldest)) {
+      oldest = i->second.oldest_version;
+    }
+  }
+  return oldest;
+}
+
+std::optional<eversion_t> Journal::oldest_version_outside(
+  const hobject_t& object, uint64_t offset, uint64_t length) const
+{
+  const uint64_t first = offset / limits.stripe_width * limits.stripe_width;
+  const uint64_t stop = length > whole_object - offset ? whole_object
+                                                       : offset + length;
+  std::optional<eversion_t> oldest;
+  const auto [begin, end] = stripes_of(object, 0, whole_object);
+  for (auto i = begin; i != end; ++i) {
+    const uint64_t stripe = i->first.second;
+    if (length && stripe >= first && stripe < stop) {
+      continue;
+    }
+    if (i->second.oldest_version &&
+        (!oldest || *i->second.oldest_version < *oldest)) {
       oldest = i->second.oldest_version;
     }
   }
@@ -1007,6 +1221,23 @@ ReadState Journal::read_state(const hobject_t& object, uint64_t offset,
     const auto& entry = i->second;
     state = std::max(state,
       replayed && adopted_stripe(entry) ? ReadState::adopted :
+      entry.flushing ? ReadState::flushing :
+      entry.undurable ? ReadState::in_flight : ReadState::ready);
+  }
+  return state;
+}
+
+ReadState Journal::write_state(const hobject_t& object, uint64_t offset,
+                               uint64_t length) const
+{
+  ReadState state = ReadState::clean;
+  if (!length) {
+    return state;
+  }
+  const auto [begin, end] = stripes_of(object, offset, length);
+  for (auto i = begin; i != end; ++i) {
+    const auto& entry = i->second;
+    state = std::max(state,
       entry.flushing ? ReadState::flushing :
       entry.undurable ? ReadState::in_flight : ReadState::ready);
   }

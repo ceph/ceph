@@ -76,6 +76,22 @@ options:
   default: false
   flags:
   - runtime
+- name: osd_ec_journal_max_write_bytes
+  type: size
+  level: dev
+  desc: Largest write across a stripe boundary that the EC write journal takes
+  long_desc: A write of whole 1 KiB blocks that crosses one stripe boundary is
+    journaled as one record per stripe, placed and committed together, if it
+    is no larger than this and than a stripe. Larger ones, and all of them at
+    0, run as ordinary EC writes and take the journaled stripes they overlap
+    with them. Every record is stored on each holder, so large records cost
+    device writes.
+  default: 32_K
+  flags:
+  - runtime
+  see_also:
+  - osd_ec_journal_enable
+  with_legacy: false
 - name: osd_numa_prefer_iface
   type: bool
   level: advanced

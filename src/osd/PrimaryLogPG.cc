@@ -739,6 +739,9 @@ bool PrimaryLogPG::pg_ec_journal_flush_blocked(const hobject_t& oid)
 bool PrimaryLogPG::ec_journal_read_ready(OpContext *ctx)
 {
   ceph_assert(is_locked());
+  if (!pgbackend->ec_journal_enrolled()) {
+    return true;
+  }
   // EC journal POC: client reads are served from the journal. The backend
   // lays the journal's live blocks over what the shards return, as of the
   // moment the read is issued (ECBackend::objects_read_async), so every
@@ -782,8 +785,8 @@ void PrimaryLogPG::ec_journal_flush(const hobject_t& oid,
   ceph_assert(is_locked());
   // The object holds live journal records, so do_op kept every write that
   // could change its size or existence (and any delete) waiting; only plain
-  // overwrites of stripes without records run beside them. It exists at the
-  // journaled size.
+  // overwrites run beside them, and one that overlaps this stripe waits for
+  // this flush or took the stripe itself. It exists at the journaled size.
   ObjectContextRef obc = get_object_context(oid, false);
   ceph_assert(obc && obc->obs.exists);
   OpContextUPtr ctx = simple_opc_create(obc);
@@ -806,14 +809,18 @@ void PrimaryLogPG::ec_journal_flush(const hobject_t& oid,
   ctx->at_version = get_next_version();
   // Once this commits, every record of the object older than its oldest live
   // one on another stripe is materialized (this stripe's live records are
-  // the flushed snapshot): base goes just below it, or to the snapshot's
-  // newest record when nothing else is live, and the generator's merge
-  // drops the entries base covers. Without that the attr gains an entry per
-  // stripe ever flushed. Versions here are journal versions (Record).
+  // the flushed snapshot, and the snapshots that flushes and direct writes
+  // in flight hold belong to writes ahead of this one in the log): base
+  // goes just below it, or to the journal version current now when nothing
+  // else is live, and the generator's merge drops the entries base covers.
+  // So the map is empty again once the object's journaled data is gone.
+  // Without that the attr gains an entry per stripe ever flushed. Versions
+  // here are journal versions (Record).
   ECWriteJournal::Materialized materialized;
   materialized.stripes[stripe_offset] = covered;
   const auto oldest = pgbackend->ec_journal_oldest_live(oid, stripe_offset);
-  materialized.base = oldest ? ECWriteJournal::just_below(*oldest) : covered;
+  materialized.base = oldest ? ECWriteJournal::just_below(*oldest)
+                             : pgbackend->ec_journal_version_now();
   bufferlist bm;
   encode(materialized, bm);
   ctx->op_t->setattr(oid, std::string(ECWriteJournal::materialized_attr), bm);
@@ -2350,7 +2357,10 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     osd->reply_op_error(op, -EINVAL);
     return;
   }
-  if (m->get_hobj().is_internal_pg_local()) {
+  if (pgbackend->ec_journal_enrolled() &&
+      m->get_hobj().is_internal_pg_local()) {
+    // Only on a pool enrolled in the EC journal, whose slot objects live
+    // there; other pools take such an op as before.
     dout(4) << "do_op namespace " << hobject_t::INTERNAL_PG_LOCAL_NS
 	    << " is reserved for PG-local objects" << dendl;
     osd->reply_op_error(op, -EINVAL);
@@ -2736,13 +2746,18 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
   // journal takes becomes a record on every holder right here, with no
   // version, log entry or object lock: the object's state is unchanged
   // until the flush, and the journal's own barriers order it against the
-  // object's reads and other writes. One the journal cannot take while the
-  // object has journaled data waits here for that data to flush (as does a
-  // journal write while the log is full). Later ops of the object queue
+  // object's reads and other writes. A plain overwrite the journal does
+  // not take runs the ordinary way at once and takes the journaled stripes
+  // it overlaps with it (finish_ctx); it waits here only for a record or a
+  // flush of those stripes in flight. Any other mutation of an object with
+  // journaled data waits here for that data to flush (as does a journal
+  // write while the log is full). Later ops of the object queue
   // behind a waiting one, so the object's ops keep their order. A read is
   // served from the journal and waits here only for what it must not miss
   // or see too early (ec_journal_read_ready, where its reads are issued).
-  {
+  // Nothing of this runs on a pool that is not enrolled, not even the
+  // snapset copy the call below makes.
+  if (pgbackend->ec_journal_enrolled()) {
     const auto admission = pgbackend->ec_journal_admit(obc->obs.oi.soid,
       obc->obs, obc->ssc ? obc->ssc->snapset : SnapSet(),
       pool.info.is_pool_snaps_mode() ? pool.snapc.seq : m->get_snap_seq(),
@@ -9573,10 +9588,14 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
     // records its stripe itself.
     //
     // do_op (ec_journal_admit) lets a bypassing write run beside live
-    // records of the object only when it is a plain overwrite of stripes
-    // that hold none (a whole stripe, or the log was full). Such a write
-    // marks just the stripes it writes and keeps base: raising base would
-    // let replay take the other stripes' records for materialized. Any
+    // records of the object only when it is a plain overwrite. Such a write
+    // takes the journaled stripes it overlaps with it: the records of the
+    // bytes it overwrites die with it, and the other live blocks of those
+    // stripes are added to this transaction, so they are materialized by
+    // the same logged write (ec_journal_take_for_write; the journal keeps
+    // them until it has committed). It marks just the stripes it writes and
+    // keeps base below the records the object's other stripes still hold:
+    // raising it further would let replay take those for materialized. Any
     // other bypassing write waited until the object had no live record, so
     // it marks everything before it.
     auto data_update = [&] {
@@ -9599,11 +9618,26 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
                     !update.delete_first && !update.buffer_updates.empty());
         const uint64_t width = pool.info.get_stripe_width();
         ceph_assert(width);
-        // Base may still rise to just below the object's oldest live record
-        // (none of its records below that is live), so the merge can drop
-        // the entries it covers.
-        const auto oldest = pgbackend->ec_journal_oldest_live(soid, std::nullopt);
-        materialized.base = oldest ? ECWriteJournal::just_below(*oldest) : eversion_t();
+        interval_set<uint64_t> written;
+        for (auto i = update.buffer_updates.begin();
+             i != update.buffer_updates.end(); ++i) {
+          written.union_insert(i.get_off(), i.get_len());
+        }
+        auto take = pgbackend->ec_journal_take_for_write(soid, written);
+        for (auto& [off, bl] : take.runs) {
+          ceph_assert(off + bl.length() <= ctx->new_obs.oi.size);
+          ctx->clean_regions.mark_data_region_dirty(off, bl.length());
+          ctx->op_t->write(soid, off, bl.length(), bl);
+        }
+        if (take.on_commit) {
+          ctx->register_on_commit(std::move(take.on_commit));
+        }
+        // Base rises to just below the oldest live record of the stripes
+        // this write leaves alone (none of the object's records below that
+        // is live), or to now when it took all there was, so the merge can
+        // drop the entries base covers.
+        materialized.base = take.oldest_other ?
+          ECWriteJournal::just_below(*take.oldest_other) : now;
         for (auto i = update.buffer_updates.begin();
              i != update.buffer_updates.end(); ++i) {
           for (uint64_t stripe = i.get_off() / width * width;

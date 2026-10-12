@@ -516,6 +516,23 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        std::optional<uint64_t> skip_stripe) const {
      return std::nullopt;
    }
+   // EC journal POC: a direct write of these bytes of oid, built under this
+   // hold of the PG lock (ec_journal_admit let it run), takes the journaled
+   // stripes its range overlaps with it. runs: their live blocks outside
+   // the written bytes, at object offsets, which the write has to carry in
+   // its own transaction (records of bytes it overwrites die with it);
+   // oldest_other: the oldest live record of the object's other stripes,
+   // for the marker's base (unset: none is live); on_commit: to run once
+   // the write has committed on every shard (unset: nothing was taken).
+   struct ec_journal_take_t {
+     std::map<uint64_t, ceph::buffer::list> runs;
+     std::optional<eversion_t> oldest_other;
+     std::function<void()> on_commit;
+   };
+   virtual ec_journal_take_t ec_journal_take_for_write(
+       const hobject_t& oid, const interval_set<uint64_t>& written) {
+     return {};
+   }
    // A parked op of oid may be worth admitting again.
    // EC journal POC: a flush of oid is in flight. A flush takes no object
   // lock, so recovery must not push oid until the flush commits.

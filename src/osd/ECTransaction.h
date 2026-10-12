@@ -27,10 +27,6 @@
 class PGLog;
 
 namespace ECTransaction {
-// Post-operation OBC state is projected by PrimaryLogPG before submission.
-// Delayed admission must retain that version, not a subsequent client's OBC.
-std::map<hobject_t, object_info_t> snapshot_object_info(const PGTransaction& t);
-
 class WritePlanObj {
  public:
   const hobject_t hoid;

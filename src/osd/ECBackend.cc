@@ -88,6 +88,14 @@ struct ECBackend::JournalState final : md_config_obs_t {
   // osd_ec_journal_drain is a runtime option; a config observer keeps
   // it off the per-op path (no ConfigProxy lock or key lookup per pump).
   std::atomic<bool> drain_conf{false};
+  // osd_ec_journal_max_write_bytes, kept the same way: the largest
+  // write across a stripe boundary that the journal takes, as one record
+  // per stripe (journal_write). 0: only writes inside one stripe.
+  std::atomic<uint64_t> max_cross_conf{0};
+  uint64_t max_cross() const {
+    return std::min<uint64_t>(max_cross_conf.load(),
+                              backend->sinfo.get_stripe_width());
+  }
   ECWriteJournal::DrainWaiters shutdown_drain;
   // Stripes are independent: each flush is its own EC write of one stripe,
   // and the journal hands out a different stripe per begin_flush. Reclaiming
@@ -155,7 +163,8 @@ struct ECBackend::JournalState final : md_config_obs_t {
     OpRequestRef op;
     ObjectContextRef obc;
     hobject_t object;
-    ECWriteJournal::Ticket ticket;
+    // One per record: a write that crosses a stripe boundary has two.
+    std::vector<ECWriteJournal::Ticket> tickets;
     unsigned pending = 0; // holders yet to commit
     uint64_t bytes = 0;
     bool done = false;
@@ -234,6 +243,33 @@ struct ECBackend::JournalState final : md_config_obs_t {
     }
     return ReadWait::none;
   }
+  // A plain overwrite the journal does not take runs at once as an ordinary
+  // EC write and takes the journaled stripes it overlaps with it
+  // (journal_take_for_write): a stripe it overwrites whole loses its records
+  // unwritten, and the live blocks of a stripe it writes partly ride in its
+  // own transaction. It forces no flush. It waits in do_op only for what it
+  // cannot take: a record of its range still in flight (taken then, the
+  // write could be acknowledged ahead of it), a flush or another direct
+  // write that holds one of its stripes, and the object's records that
+  // replay has yet to list, fetch or judge.
+  // write_barriers: the objects such writes wait for and the range they
+  // write (offset, end), until the kick that requeues them (journal_ready).
+  std::map<hobject_t, std::pair<uint64_t, uint64_t>> write_barriers;
+  ReadWait write_wait(const hobject_t& object, uint64_t offset,
+                      uint64_t length) const {
+    using state_t = ECWriteJournal::ReadState;
+    if (replay_blocked(object)) {
+      return ReadWait::replay;
+    }
+    switch (journal.write_state(object, offset, length)) {
+    case state_t::in_flight:
+      return ReadWait::commit;
+    case state_t::flushing:
+      return ReadWait::flush;
+    default:
+      return ReadWait::none;
+    }
+  }
   // The PG's slot objects may exist on the holders: every append writes one,
   // and an earlier run may have left them. A drain that has flushed
   // everything removes them (remove_journal_slots), so a drained pool holds
@@ -270,9 +306,17 @@ struct ECBackend::JournalState final : md_config_obs_t {
   // has none while the log is full.
   uint64_t admit_live = 0;    // journaled: the stripe already had records
   uint64_t admit_new = 0;     // journaled: the stripe had none
+  uint64_t admit_cross = 0;   // ... of both: across a stripe boundary, two records
   uint64_t bypass_full = 0;   // direct EC write: whole stripe, nothing to read
   uint64_t bypass_room = 0;   // ... log full, stripe clean: no wait
   uint64_t bypass_digest = 0; // ... the object carried a data digest
+  // Direct writes beside journaled stripes (journal_take_for_write).
+  uint64_t direct_takes = 0;    // direct writes that took journaled stripes
+  uint64_t taken_stripes = 0;   // ... the stripes they took
+  uint64_t dropped_stripes = 0; // ... of them covered whole: nothing written
+  uint64_t write_waits_commit = 0; // direct writes that waited for a record in flight
+  uint64_t write_waits_flush = 0;  // ... for a flush or direct write of a stripe
+  uint64_t write_waits_replay = 0; // ... for replay's records of the object
 
   // A flush that must wait for the flusher, or a drain, is woken by the
   // append commit that makes it possible; everything else by the timer.
@@ -322,6 +366,8 @@ struct ECBackend::JournalState final : md_config_obs_t {
     : backend(backend), journal(std::move(prefix), limits),
       max_flushes(max_flushes), holders(std::move(holders)) {
     drain_conf = backend->cct->_conf.get_val<bool>("osd_ec_journal_drain");
+    max_cross_conf = uint64_t(backend->cct->_conf.get_val<Option::size_t>(
+      "osd_ec_journal_max_write_bytes"));
     backend->cct->_conf.add_observer(this);
   }
   ~JournalState() override {
@@ -329,13 +375,15 @@ struct ECBackend::JournalState final : md_config_obs_t {
     backend->cct->_conf.remove_observer(this);
   }
   std::vector<std::string> get_tracked_keys() const noexcept override {
-    return {"osd_ec_journal_drain"};
+    return {"osd_ec_journal_drain", "osd_ec_journal_max_write_bytes"};
   }
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string>&) override {
     // Config thread, no PG lock: only the atomic. pump_journal picks it up
     // on the next submit, commit or timer wake.
     drain_conf = conf.get_val<bool>("osd_ec_journal_drain");
+    max_cross_conf = uint64_t(conf.get_val<Option::size_t>(
+      "osd_ec_journal_max_write_bytes"));
   }
 };
 
@@ -1600,6 +1648,7 @@ void ECBackend::reset_journal()
   // The reads and writes that waited are parked in do_op; PrimaryLogPG
   // requeues them after the interval change.
   s.read_barriers.clear();
+  s.write_barriers.clear();
   s.flush_waits.clear();
   s.flush_wanted.clear();
   s.shutdown_drain.finish(-ECANCELED);
@@ -1681,9 +1730,18 @@ void ECBackend::dump_journal(Formatter* f) const
   f->dump_unsigned("pressure_events", s.pressure_events);
   f->dump_unsigned("admit_live", s.admit_live);
   f->dump_unsigned("admit_new", s.admit_new);
+  f->dump_unsigned("admit_cross", s.admit_cross);
+  f->dump_unsigned("max_write_bytes", s.max_cross());
   f->dump_unsigned("bypass_full", s.bypass_full);
   f->dump_unsigned("bypass_room", s.bypass_room);
   f->dump_unsigned("bypass_digest", s.bypass_digest);
+  f->dump_unsigned("direct_takes", s.direct_takes);
+  f->dump_unsigned("taken_stripes", s.taken_stripes);
+  f->dump_unsigned("dropped_stripes", s.dropped_stripes);
+  f->dump_unsigned("write_waits_commit", s.write_waits_commit);
+  f->dump_unsigned("write_waits_flush", s.write_waits_flush);
+  f->dump_unsigned("write_waits_replay", s.write_waits_replay);
+  f->dump_unsigned("writes_waiting", s.write_barriers.size());
   f->dump_bool("replaying", s.replaying);
   f->dump_bool("replay_pending", s.replay_pending);
   f->dump_unsigned("adopted_segments", s.journal.adopted_segments());
@@ -1933,6 +1991,11 @@ void ECBackend::pump_journal()
                        barrier.second.end - barrier.second.offset) ==
       JournalState::ReadWait::none;
   });
+  std::erase_if(s.write_barriers, [&s](const auto& barrier) {
+    return s.write_wait(barrier.first, barrier.second.first,
+                        barrier.second.second - barrier.second.first) ==
+      JournalState::ReadWait::none;
+  });
 }
 
 void ECBackend::remove_journal_slots()
@@ -2031,26 +2094,48 @@ PGBackend::ec_journal_admission_t ECBackend::journal_admit(
     ObjectState plain = obs;
     plain.oi.clear_data_digest();
     if (ECWriteJournal::candidate_write(oid, ops, plain, snapset, snap_seq,
-                                        sinfo.get_stripe_width())) {
+                                        sinfo.get_stripe_width(),
+                                        s.max_cross())) {
       ++s.bypass_digest;
     }
   }
   if (journal_admission_open() && ECWriteJournal::candidate_write(oid, ops,
-        obs, snapset, snap_seq, sinfo.get_stripe_width())) {
+        obs, snapset, snap_seq, sinfo.get_stripe_width(), s.max_cross())) {
     // Every eligible write is journaled, with two exceptions. A whole
-    // aligned stripe that has no records goes straight to the EC write path,
-    // which needs no read for it either; and so does a write that finds the
-    // log full while its stripe has no records. A stripe that already has
-    // records takes every later write: nothing may overtake journaled data.
+    // aligned stripe goes straight to the EC write path, which needs no
+    // read for it: it takes the stripe's records with it, if any, and they
+    // die unwritten (journal_take_for_write). And so does a write that
+    // finds the log full while its stripe has no records. Otherwise a
+    // stripe that has records takes every later write: nothing may overtake
+    // journaled data.
     const uint64_t width = sinfo.get_stripe_width();
     const auto& extent = ops.front().op.extent;
     const uint64_t stripe = extent.offset / width * width;
-    const bool live = s.journal.dirty(oid, stripe, width);
+    // A write across a stripe boundary (up to max_cross) lies in two
+    // stripes and becomes one record in each (journal_write).
+    const bool crossing = extent.length > width - extent.offset % width;
+    const bool live = s.journal.dirty(oid, extent.offset, extent.length);
     const bool whole = extent.offset == stripe && extent.length == width;
-    if (live || !whole) {
-      const int r = s.journal.check_append(oid, extent.length);
+    // The whole stripe goes direct unless that would have to wait for a
+    // record in flight, a flush of the stripe or replay; then it is
+    // journaled on top of the stripe's records like any other write.
+    const bool direct = whole && !s.journal.error() &&
+      s.write_wait(oid, stripe, width) == JournalState::ReadWait::none;
+    if (!direct && (live || !whole)) {
+      int r;
+      if (crossing) {
+        std::vector<uint64_t> lengths;
+        for (const auto& [at, len] : ECWriteJournal::stripe_fragments(
+               extent.offset, extent.length, width)) {
+          lengths.push_back(len);
+        }
+        r = s.journal.check_append(oid, lengths);
+      } else {
+        r = s.journal.check_append(oid, extent.length);
+      }
       if (r == 0) {
         ++(live ? s.admit_live : s.admit_new);
+        s.admit_cross += crossing;
         if (!s.replay_admit_ms &&
             s.activated_at != ceph::mono_clock::time_point{}) {
           s.replay_admit_ms = std::chrono::duration<double, std::milli>(
@@ -2074,15 +2159,42 @@ PGBackend::ec_journal_admission_t ECBackend::journal_admit(
         schedule_journal();
         return admission::wait;
       }
-      // -E2BIG (a long name in a tiny segment) or a latched error: the
-      // ordinary write path, behind this object's journaled stripes.
-    } else if (!s.replay_blocked(oid)) {
-      // The direct EC write. Its stripe holds no record, so it overtakes
-      // nothing; the object's other stripes keep theirs, and the write marks
-      // only its own stripe materialized (PrimaryLogPG::finish_ctx).
+      // -E2BIG (a long name in a tiny segment): the ordinary write path,
+      // which takes the stripe's records with it (below). A latched error:
+      // the same path, behind this object's journaled stripes.
+    } else if (direct) {
+      // The direct EC write. It overtakes nothing: records its stripe holds
+      // go with it. The object's other stripes keep theirs, and the write
+      // marks only its own stripe materialized (PrimaryLogPG::finish_ctx).
       ++s.bypass_full;
       return admission::classic;
     }
+  }
+  uint64_t offset = 0;
+  uint64_t length = 0;
+  if (!s.journal.error() && ECWriteJournal::plain_overwrite(oid, ops, obs,
+        snapset, snap_seq, &offset, &length)) {
+    // A plain overwrite the journal does not take (it crosses a stripe
+    // boundary, is larger than a stripe, is not block aligned, or the
+    // journal is closed to new records) runs as an ordinary EC write beside
+    // the object's journaled stripes and takes those it overlaps with it
+    // (journal_take_for_write, from PrimaryLogPG::finish_ctx in this same
+    // PG-lock section). It waits only for what it cannot take.
+    using wait_t = JournalState::ReadWait;
+    const auto wait = s.write_wait(oid, offset, length);
+    if (wait == wait_t::none) {
+      return admission::classic;
+    }
+    ++(wait == wait_t::commit ? s.write_waits_commit :
+       wait == wait_t::flush ? s.write_waits_flush : s.write_waits_replay);
+    auto [barrier, fresh] = s.write_barriers.try_emplace(oid, offset,
+                                                         offset + length);
+    if (!fresh) {
+      barrier->second.first = std::min(barrier->second.first, offset);
+      barrier->second.second = std::max(barrier->second.second,
+                                        offset + length);
+    }
+    return admission::wait;
   }
   if (journal_blocked(oid)) {
     // Neither journaled nor free to overtake the object's journaled data:
@@ -2124,19 +2236,84 @@ bool ECBackend::journal_ready(const hobject_t& oid) const
   }
   const auto& s = *journal_state;
   // A write held back for the object's stripes goes once they are flushed;
-  // a read once nothing it has to wait for is left; a write held back for
-  // room once a segment has been released.
+  // a direct write or a read once nothing it has to wait for is left; a
+  // write held back for room once a segment has been released. An object
+  // can have several of these parked (its ops queue behind the first):
+  // they go once none of them has to wait.
+  bool held = false;
   if (std::find(s.barrier_objects.begin(), s.barrier_objects.end(), oid) !=
       s.barrier_objects.end()) {
-    return !journal_blocked(oid);
+    if (journal_blocked(oid)) {
+      return false;
+    }
+    held = true;
+  }
+  if (const auto barrier = s.write_barriers.find(oid);
+      barrier != s.write_barriers.end()) {
+    if (s.write_wait(oid, barrier->second.first,
+                     barrier->second.second - barrier->second.first) !=
+        JournalState::ReadWait::none) {
+      return false;
+    }
+    held = true;
   }
   if (const auto barrier = s.read_barriers.find(oid);
       barrier != s.read_barriers.end()) {
-    return s.read_wait(oid, barrier->second.offset,
-                       barrier->second.end - barrier->second.offset) ==
-      JournalState::ReadWait::none;
+    if (s.read_wait(oid, barrier->second.offset,
+                    barrier->second.end - barrier->second.offset) !=
+        JournalState::ReadWait::none) {
+      return false;
+    }
+    held = true;
   }
-  return !s.journal.pressure();
+  return held || !s.journal.pressure();
+}
+
+PGBackend::ec_journal_take_t ECBackend::journal_take_for_write(
+  const hobject_t& oid, const interval_set<uint64_t>& written)
+{
+  PGBackend::ec_journal_take_t take;
+  if (!journal_state || written.empty()) {
+    return take;
+  }
+  auto& s = *journal_state;
+  // do_op let this write run (journal_admit) under this hold of the PG
+  // lock, so every stripe its range overlaps is clean or holds durable
+  // records only, and none is being flushed. The write takes them as a
+  // flush would: their blocks are dead once it commits, and until then they
+  // keep their segments, so a write that peering rolls back finds its
+  // records still in the slots.
+  const uint64_t offset = written.range_start();
+  const uint64_t length = written.range_end() - offset;
+  std::vector<ECWriteJournal::Stripe> taken;
+  const int r = s.journal.take_range(oid, offset, length, &taken);
+  ceph_assertf(r == 0, "EC journal POC: a direct write met journaled "
+               "stripes it cannot take: %d", r);
+  take.oldest_other = s.journal.oldest_version_outside(oid, offset, length);
+  if (taken.empty()) {
+    return take;
+  }
+  uint64_t dropped = 0;
+  take.runs = ECWriteJournal::absorb_runs(taken, written, &dropped);
+  ++s.direct_takes;
+  s.taken_stripes += taken.size();
+  s.dropped_stripes += dropped;
+  dout(20) << __func__ << " " << oid << " " << offset << "~" << length
+           << " takes " << taken.size() << " journaled stripes, " << dropped
+           << " covered whole, " << take.runs.size() << " runs added" << dendl;
+  // Runs from eval_repop with the PG lock held.
+  take.on_commit = [this, oid, taken = std::move(taken)] {
+    auto& s = *journal_state;
+    for (const auto& stripe : taken) {
+      const int finished = s.journal.finish_flush(stripe, 0);
+      ceph_assert(finished == 0);
+    }
+    // Ops of the object parked for these stripes go at once; the pump sees
+    // to released segments and to writes waiting for room.
+    journal_kick_reads(oid);
+    schedule_journal();
+  };
+  return take;
 }
 
 bool ECBackend::journal_read_ready(const hobject_t& oid, uint64_t offset,
@@ -2171,14 +2348,28 @@ bool ECBackend::journal_read_ready(const hobject_t& oid, uint64_t offset,
 void ECBackend::journal_kick_reads(const hobject_t& oid)
 {
   auto& s = *journal_state;
+  // The object's parked ops go again once neither a read nor a direct
+  // write among them has anything left to wait for (journal_ready).
   const auto barrier = s.read_barriers.find(oid);
+  const auto writer = s.write_barriers.find(oid);
+  if (barrier == s.read_barriers.end() && writer == s.write_barriers.end()) {
+    return;
+  }
   if (barrier != s.read_barriers.end() &&
       s.read_wait(oid, barrier->second.offset,
-                  barrier->second.end - barrier->second.offset) ==
+                  barrier->second.end - barrier->second.offset) !=
         JournalState::ReadWait::none) {
-    get_parent()->ec_journal_kick();
-    s.read_barriers.erase(barrier);
+    return;
   }
+  if (writer != s.write_barriers.end() &&
+      s.write_wait(oid, writer->second.first,
+                   writer->second.second - writer->second.first) !=
+        JournalState::ReadWait::none) {
+    return;
+  }
+  get_parent()->ec_journal_kick();
+  s.read_barriers.erase(oid);
+  s.write_barriers.erase(oid);
 }
 
 void ECBackend::journal_read_done(const hobject_t& oid,
@@ -2219,25 +2410,34 @@ void ECBackend::journal_write(OpRequestRef op, ObjectContextRef obc)
   const uint64_t offset = osd_op.op.extent.offset;
   const uint64_t length = osd_op.op.extent.length;
   ceph_assert(osd_op.indata.length() == length);
-  // The record's journal version: the interval's start epoch and the
-  // sequence this append takes, so versions and sequences order alike.
-  const eversion_t version(get_parent()->get_interval_start_epoch(),
-                           s.journal.next_append_sequence());
-  ECWriteJournal::Placement placement;
-  ECWriteJournal::Ticket ticket;
-  const int r = s.journal.append(hoid, version, obc->obs.oi.size, offset,
-    osd_op.indata, &placement, &ticket, m->get_mtime());
-  ceph_assertf(r == 0, "EC journal POC: admitted write did not append: %d", r);
-  ceph_assert(ticket.sequence == version.version);
-  s.open_segment = ticket.segment;
-
   const ceph_tid_t tid = get_parent()->get_tid();
   auto& flight = s.inflight[tid];
   flight.op = op;
   flight.obc = obc;
   flight.object = hoid;
-  flight.ticket = ticket;
   flight.bytes = length;
+  // One record per stripe the write lies in: the index, the flushes and
+  // replay are per stripe, so a write across a stripe boundary is two
+  // records, each judged and materialized on its own. They take consecutive
+  // journal versions and go to every holder in one transaction, so a holder
+  // has both or neither, and they become durable together.
+  // A record's journal version: the interval's start epoch and the
+  // sequence its append takes, so versions and sequences order alike.
+  std::vector<ECWriteJournal::Placement> placements;
+  for (const auto& [at, len] : ECWriteJournal::stripe_fragments(
+         offset, length, sinfo.get_stripe_width())) {
+    const eversion_t version(get_parent()->get_interval_start_epoch(),
+                             s.journal.next_append_sequence());
+    ceph::bufferlist piece;
+    piece.substr_of(osd_op.indata, at - offset, len);
+    ECWriteJournal::Ticket ticket;
+    const int r = s.journal.append(hoid, version, obc->obs.oi.size, at, piece,
+      &placements.emplace_back(), &ticket, m->get_mtime());
+    ceph_assertf(r == 0, "EC journal POC: admitted write did not append: %d", r);
+    ceph_assert(ticket.sequence == version.version);
+    s.open_segment = ticket.segment;
+    flight.tickets.push_back(ticket);
+  }
   flight.pending = s.holders.size();
   s.inflight_by_object[hoid].push_back(tid);
   {
@@ -2261,8 +2461,10 @@ void ECBackend::journal_write(OpRequestRef op, ObjectContextRef obc)
       continue;
     }
     ObjectStore::Transaction t;
-    s.journal.emit(placement, coll_t(spg_t(pgid, pg_shard.shard)),
-                   pg_shard.shard, t);
+    for (const auto& placement : placements) {
+      s.journal.emit(placement, coll_t(spg_t(pgid, pg_shard.shard)),
+                     pg_shard.shard, t);
+    }
     ECSubWrite sop(get_parent()->whoami_shard(), tid, m->get_reqid(), hoid,
                    pg_stat_t(), t, eversion_t(), eversion_t(), eversion_t(),
                    {}, std::nullopt, {}, {}, false);
@@ -2312,8 +2514,10 @@ void ECBackend::journal_record_committed(pg_shard_t from, ceph_tid_t tid)
   // Every holder has the record: it is durable.
   const bool was_flushable = s.flushable();
   const bool was_full = s.journal.pressure();
-  const int committed = s.journal.committed(flight.ticket, 0);
-  ceph_assert(committed == 0);
+  for (const auto& ticket : flight.tickets) {
+    const int committed = s.journal.committed(ticket, 0);
+    ceph_assert(committed == 0);
+  }
   flight.done = true;
   const hobject_t object = flight.object; // the acks below erase flight
   // Acknowledge in order per object: a client's writes of one object
@@ -2776,15 +2980,6 @@ void ECBackend::journal_object_recovered(const hobject_t& oid)
   schedule_journal();
 }
 
-void ECBackend::start_transaction(std::shared_ptr<ECClassicalOp> op)
-{
-  op->plan = get_write_plan(sinfo, *op->t, read_pipeline, rmw_pipeline,
-    get_parent()->get_dpp());
-  ldpp_dout(get_parent()->get_dpp(), 20) << __func__
-    << " plans=" << op->plan << dendl;
-  rmw_pipeline.start_rmw(std::move(op));
-}
-
 std::tuple<
   int,
   map<string, bufferlist, less<>>,
@@ -2843,7 +3038,19 @@ void ECBackend::submit_transaction(
   if (client_op) {
     op->trace = client_op->pg_trace;
   }
-  start_transaction(std::move(op));
+  ECTransaction::WritePlan &plans = op->plan;
+
+  ceph_assert(op->plan.plans.empty());
+  op->plan = get_write_plan(
+    sinfo,
+    *op->t,
+    read_pipeline,
+    rmw_pipeline,
+    get_parent()->get_dpp());
+  ldpp_dout(get_parent()->get_dpp(), 20) << __func__
+             << " plans=" << plans
+             << dendl;
+  rmw_pipeline.start_rmw(std::move(op));
 }
 
 int ECBackend::objects_read_sync(

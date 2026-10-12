@@ -126,16 +126,6 @@ void ECTransaction::Generate::encode_and_write() {
   }
 }
 
-std::map<hobject_t, object_info_t> ECTransaction::snapshot_object_info(
-    const PGTransaction& t)
-{
-  std::map<hobject_t, object_info_t> result;
-  for (const auto& [object, obc] : t.obc_map) {
-    result.emplace(object, obc->obs.oi);
-  }
-  return result;
-}
-
 ECTransaction::WritePlanObj::WritePlanObj(
     const hobject_t &hoid,
     const PGTransaction::ObjectOperation &op,

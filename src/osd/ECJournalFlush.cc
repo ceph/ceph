@@ -4,38 +4,9 @@
 
 namespace ECWriteJournal {
 
-bool eligible_overwrite(const hobject_t& object,
-  const PGTransaction::ObjectOperation& update, const object_info_t& new_oi,
-  const SnapSet& snapset, uint64_t stripe_width)
-{
-  // finish_ctx always sets both attrs on head writes. Other attrs and real
-  // snapshot state remain outside this experiment. A write that records a
-  // whole-object data digest is excluded too: a scrub between ACK and flush
-  // would compare that digest against the not yet materialized shards.
-  if (object.snap != CEPH_NOSNAP || !update.is_none() || update.truncate ||
-      update.updated_snaps || update.alloc_hint || update.clear_omap ||
-      update.omap_header || !update.omap_updates.empty() ||
-      update.attr_updates.size() != 2 ||
-      !update.attr_updates.contains(OI_ATTR) || !update.attr_updates.at(OI_ATTR) ||
-      !update.attr_updates.contains(SS_ATTR) || !update.attr_updates.at(SS_ATTR) ||
-      update.buffer_updates.empty() || !stripe_width ||
-      new_oi.is_data_digest() || snapset.seq != 0 || !snapset.clones.empty()) {
-    return false;
-  }
-  auto i = update.buffer_updates.begin();
-  const auto* write = std::get_if<PGTransaction::ObjectOperation::BufferUpdate::Write>(
-    &i.get_val());
-  const auto off = i.get_off();
-  const auto len = i.get_len();
-  return ++i == update.buffer_updates.end() && write &&
-    len && len % block_size == 0 && write->buffer.length() == len &&
-    off % block_size == 0 && len <= stripe_width - off % stripe_width &&
-    off <= new_oi.size && len <= new_oi.size - off;
-}
-
 bool candidate_write(const hobject_t& object, const std::vector<OSDOp>& ops,
   const ObjectState& obs, const SnapSet& snapset, snapid_t snap_seq,
-  uint64_t stripe_width)
+  uint64_t stripe_width, uint64_t max_cross)
 {
   if (object.snap != CEPH_NOSNAP || ops.size() != 1 || !stripe_width ||
       !obs.exists || obs.oi.is_whiteout() || obs.oi.has_manifest() ||
@@ -57,18 +28,43 @@ bool candidate_write(const hobject_t& object, const std::vector<OSDOp>& ops,
   const uint64_t off = op.op.extent.offset;
   const uint64_t len = op.op.extent.length;
   // A write of the whole object records a data digest, which the journal
-  // cannot keep true until the flush (eligible_overwrite refuses it).
+  // cannot keep true until the flush: a scrub between the acknowledgement
+  // and the flush would compare it against shards not yet written.
+  // Inside one stripe, or across one stripe boundary if no longer than
+  // max_cross and than a stripe.
   return len && len % block_size == 0 && off % block_size == 0 &&
-    op.indata.length() == len && len <= stripe_width - off % stripe_width &&
+    op.indata.length() == len &&
+    (len <= stripe_width - off % stripe_width ||
+     len <= std::min(max_cross, stripe_width)) &&
     off <= obs.oi.size && len <= obs.oi.size - off &&
     !(off == 0 && len == obs.oi.size);
 }
 
-bool overwrite_fits(uint64_t offset, uint64_t length, uint64_t new_size,
-  uint64_t old_size)
+bool plain_overwrite(const hobject_t& object, const std::vector<OSDOp>& ops,
+  const ObjectState& obs, const SnapSet& snapset, snapid_t snap_seq,
+  uint64_t* offset, uint64_t* length)
 {
-  return new_size == old_size && offset <= old_size &&
-    length <= old_size - offset;
+  if (object.snap != CEPH_NOSNAP || ops.empty() ||
+      !obs.exists || obs.oi.is_whiteout() || obs.oi.has_manifest() ||
+      snapset.seq != 0 || !snapset.clones.empty() || snap_seq != 0) {
+    return false;
+  }
+  uint64_t first = std::numeric_limits<uint64_t>::max();
+  uint64_t end = 0;
+  for (const auto& op : ops) {
+    const uint64_t off = op.op.extent.offset;
+    const uint64_t len = op.op.extent.length;
+    if (op.op.op != CEPH_OSD_OP_WRITE || op.op.extent.truncate_seq != 0 ||
+        !len || op.indata.length() != len || off > obs.oi.size ||
+        len > obs.oi.size - off) {
+      return false;
+    }
+    first = std::min(first, off);
+    end = std::max(end, off + len);
+  }
+  *offset = first;
+  *length = end - first;
+  return true;
 }
 
 ECTransaction::WritePlanObj plan_flush(
