@@ -1720,6 +1720,13 @@ public:
                        ? rgw::sal::FLAG_LOG_OP : 0;
       int r = oc.obj->transition(oc.bucket, target_placement, o.meta.mtime,
                                  o.versioned_epoch, oc.dpp, y, flags);
+      if (r == -ECANCELED) {
+        ldpp_dout(oc.dpp, 2) << "transition of " << oc.bucket << ":" << o.key
+                             << " -> " << transition.storage_class
+                             << " was canceled (object changed concurrently);"
+                             << " not transitioned" << dendl;
+        return 0;
+      }
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
 			     << oc.bucket << ":" << o.key 
