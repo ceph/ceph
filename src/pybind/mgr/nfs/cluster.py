@@ -5,6 +5,15 @@ import re
 import socket
 from typing import cast, Dict, List, Any, Optional, TYPE_CHECKING, Union
 
+from ceph.deployment.utils import wrap_ipv6
+
+try:
+    import grpc  # type: ignore
+    from .nfs_grpc_stub import NfsUpgradeStub, OkToUpgradeRequest, get_grpc_port
+    GRPC_AVAILABLE = True
+except ImportError:
+    GRPC_AVAILABLE = False
+
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
 from object_format import ErrorResponse
@@ -1005,3 +1014,89 @@ class NFSCluster:
         except Exception as e:
             log.exception("Failed to update cluster-level QoS config for cluster %s", cluster_id)
             raise ErrorResponse.wrap(e)
+
+    def _get_grpc_channel(self, host_ip: str, port: int,
+                          cluster_id: str = '',
+                          ca_cert: Optional[bytes] = None,
+                          client_cert: Optional[bytes] = None,
+                          client_key: Optional[bytes] = None) -> Any:
+        """Open a TLS gRPC channel to NFS-Ganesha.
+
+        Requires valid TLS certs — raises NFSInvalidOperation if not provided.
+        """
+        if ca_cert and client_cert and client_key:
+            credentials = grpc.ssl_channel_credentials(
+                root_certificates=ca_cert,
+                private_key=client_key,
+                certificate_chain=client_cert,
+            )
+            log.debug(f'gRPC: TLS channel to {wrap_ipv6(host_ip)}:{port}')
+            return grpc.secure_channel(f'{wrap_ipv6(host_ip)}:{port}', credentials)
+
+        raise NFSInvalidOperation('gRPC TLS certs required but not provided')
+
+    def ok_to_stop(self,
+                        cluster_id: str,
+                        daemon_name: str,
+                        ca_cert: Optional[bytes] = None,
+                        client_cert: Optional[bytes] = None,
+                        client_key: Optional[bytes] = None) -> Dict[str, Any]:
+        """Call ok_to_stop gRPC API on NFS-Ganesha.
+
+        Sends ganesha_id (integer rank extracted from daemon name).
+        No already_upgraded needed — NFS-Ganesha handles state internally.
+        """
+        # Find the specific daemon to connect to its host
+        all_daemons = orchestrator.raise_if_exception(
+            self.mgr.list_daemons(daemon_type='nfs'))
+        target = next((d for d in all_daemons if d.name() == daemon_name), None)
+        if target is None or target.rank is None:
+            raise NFSInvalidOperation(f'Daemon {daemon_name} not found or has no rank')
+        if target.service_name() != f'nfs.{cluster_id}':
+            raise NFSInvalidOperation(
+                f'Daemon {daemon_name} does not belong to cluster {cluster_id}'
+            )
+        ganesha_id = target.rank
+
+        # Resolve host IP from the target daemon
+        host_ip = target.hostname
+        try:
+            hosts = orchestrator.raise_if_exception(self.mgr.get_hosts())
+            for h in hosts:
+                if h.hostname == target.hostname and h.addr:
+                    host_ip = h.addr
+                    break
+        except Exception:
+            pass
+
+        grpc_port = get_grpc_port()
+
+        channel = self._get_grpc_channel(
+            host_ip, grpc_port, cluster_id=cluster_id,
+            ca_cert=ca_cert, client_cert=client_cert, client_key=client_key,
+        )
+
+        result = {
+            'cluster_id': cluster_id,
+            'daemon': daemon_name,
+            'ok_to_stop': False,
+            'response': '',
+        }
+        try:
+            stub = NfsUpgradeStub(channel)
+            request = OkToUpgradeRequest(ganesha_id=ganesha_id)
+            response = stub.OkToUpgrade(request)
+            log.info(f'ok_to_stop for {daemon_name} (ganesha_id={ganesha_id}): ok={response.ok_to_upgrade}')
+            result['ok_to_stop'] = response.ok_to_upgrade
+            result['response'] = 'safe to stop' if response.ok_to_upgrade else 'not safe to stop'
+            return result
+        except Exception as e:
+            if isinstance(e, grpc.RpcError):
+                code_name = e.code().name
+                details = e.details()
+                result['response'] = f'{code_name}: {details}' if details else code_name
+            else:
+                result['response'] = str(e)
+            return result
+        finally:
+            channel.close()

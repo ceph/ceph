@@ -1166,6 +1166,45 @@ If the NFS service is running on a non-standard port number:
    supports mouting an NFSv4.x export natively.
 
 
+Rolling Upgrade
+===============
+
+When Transparent State Migration (TSM) is enabled, NFS daemons can be
+upgraded one at a time without disrupting client access. Before stopping
+each daemon, cephadm checks with NFS-Ganesha (via gRPC) whether it is
+safe to proceed. If the gRPC check fails after 2 retries, the daemon
+is upgraded using the traditional method.
+
+Check if a Daemon is Safe to Stop
+------------------------------------
+
+To manually check whether a specific NFS daemon can be safely stopped:
+
+.. prompt:: bash #
+
+   ceph nfs ok-to-stop <cluster_id> <daemon_name>
+
+For example:
+
+.. prompt:: bash #
+
+   ceph nfs ok-to-stop mynfs nfs.mynfs.0.0.ceph-node-0.utofch
+
+The response includes:
+
+- ``ok_to_stop``: whether the daemon is safe to stop
+- ``response``: details or gRPC error code if the check failed
+
+Example output::
+
+    {
+        "cluster_id": "mynfs",
+        "daemon": "nfs.mynfs.0.0.ceph-node-0.utofch",
+        "ok_to_stop": true,
+        "response": "safe to stop"
+    }
+
+
 Troubleshooting
 ===============
 

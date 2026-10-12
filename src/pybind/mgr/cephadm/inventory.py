@@ -1478,11 +1478,12 @@ class HostCache():
         # type: () -> List[orchestrator.DaemonDescription]
         return list(self._get_daemons())
 
-    def get_error_daemons(self) -> List[orchestrator.DaemonDescription]:
+    def get_error_daemons(self, daemon_type: Optional[str] = None) -> List[orchestrator.DaemonDescription]:
         r = []
         for dd in self._get_daemons():
             if dd.status is not None and dd.status == orchestrator.DaemonDescriptionStatus.error:
-                r.append(dd)
+                if daemon_type is None or dd.daemon_type == daemon_type:
+                    r.append(dd)
         return r
 
     def get_daemons_by_host(self, host: str) -> List[orchestrator.DaemonDescription]:

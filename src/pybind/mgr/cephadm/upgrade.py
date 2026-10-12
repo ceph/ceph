@@ -4,6 +4,7 @@ import logging
 import time
 import datetime
 import uuid
+from asyncio import gather
 from dataclasses import dataclass, field, asdict
 from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast, Set, Union
 from cephadm.services.service_registry import service_registry
@@ -1083,6 +1084,53 @@ class CephadmUpgrade:
             time.sleep(15)
             tries -= 1
         return False
+
+
+    def _upgrade_nfs_parallel(self, nfs_service: Any, need_upgrade: list) -> list:
+        """Check NFS ok_to_upgrade across clusters concurrently.
+
+        Groups daemons by cluster, picks one daemon per cluster, checks all
+        simultaneously via asyncio.gather and to_thread.
+        Returns the list of daemons safe to upgrade.
+        """
+        clusters: Dict[str, list] = {}
+        for d_entry in need_upgrade:
+            cluster = d_entry[0].service_name()
+            if cluster not in clusters:
+                clusters[cluster] = []
+            clusters[cluster].append(d_entry)
+
+        logger.debug(
+            f'Upgrade: NFS parallel upgrade — {len(clusters)} cluster(s): '
+            f'{list(clusters.keys())}'
+        )
+
+        async def check_all() -> list:
+            tasks = [
+                nfs_service._async_check_cluster(name, daemons[0])
+                for name, daemons in clusters.items()
+            ]
+            return list(await gather(*tasks, return_exceptions=True))
+
+        try:
+            with self.mgr.async_timeout_handler(None, 'nfs ok-to-upgrade', timeout=200):
+                results = self.mgr.wait_async(check_all(), timeout=200)
+        except Exception as e:
+            logger.error(f'Upgrade: NFS parallel ok-to-upgrade failed: {e}')
+            return []
+
+        to_upgrade = []
+        for r in results:
+            if isinstance(r, Exception):
+                logger.error(f'Upgrade: NFS cluster check failed: {r}')
+                continue
+            if r['ok']:
+                to_upgrade.append(r['d_entry'])
+                logger.debug(f'Upgrade: {r["cluster_name"]} — {r["d_entry"][0].name()} safe')
+            else:
+                logger.debug(f'Upgrade: {r["cluster_name"]} — not ready')
+
+        return to_upgrade
 
     def _upgrade_uses_ok_to_upgrade_for_osds(self) -> bool:
         """
@@ -2424,6 +2472,27 @@ class CephadmUpgrade:
 
             if need_upgrade:
                 self.upgrade_info_str = 'Currently upgrading %s daemons' % (daemon_type)
+
+            # NFS with TSM enabled: use parallel rolling upgrade.
+            # TSM-enabled clusters → gRPC ok_to_upgrade, one async check per cluster.
+            # Non-TSM clusters → fall through to normal upgrade path below.
+            if daemon_type == 'nfs' and need_upgrade:
+                nfs_service = service_registry.get_service('nfs')
+                error_clusters = {d.service_name() for d in self.mgr.cache.get_error_daemons('nfs')}
+                tsm_daemons = []
+                nfs_daemons_to_upgrade = []
+                for d in need_upgrade:
+                    svc = d[0].service_name()
+                    if nfs_service._is_tsm_enabled(svc) \
+                            and svc not in nfs_service._skip_grpc_clusters \
+                            and svc not in error_clusters:
+                        tsm_daemons.append(d)
+                    else:
+                        nfs_daemons_to_upgrade.append(d)
+                if tsm_daemons:
+                    tsm_to_upgrade = self._upgrade_nfs_parallel(nfs_service, tsm_daemons)
+                    nfs_daemons_to_upgrade.extend(tsm_to_upgrade)
+                need_upgrade = nfs_daemons_to_upgrade
 
             _continue, to_upgrade = self._to_upgrade(need_upgrade, target_image)
             if not _continue:

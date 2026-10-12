@@ -465,3 +465,32 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_cluster_qos_ops_disable(self, cluster_id: str) -> None:
         """Disable NFS cluster QOS IOPS control"""
         return self.nfs.disable_cluster_qos_ops(cluster_id)
+
+    def _load_nfs_grpc_certs(self, cluster_id: str) -> Tuple[Optional[bytes], Optional[bytes], Optional[bytes]]:
+        """Fetch NFS gRPC client certs from cephadm cert_mgr via remote()."""
+        try:
+            certs = self.remote('cephadm', 'get_nfs_grpc_certs', cluster_id)
+            ca = certs['ca_cert'].encode() if isinstance(certs['ca_cert'], str) else certs['ca_cert']
+            cert = certs['client_cert'].encode() if isinstance(certs['client_cert'], str) else certs['client_cert']
+            key = certs['client_key'].encode() if isinstance(certs['client_key'], str) else certs['client_key']
+            return ca, cert, key
+        except Exception as e:
+            raise Exception(f'Failed to load NFS gRPC certs for cluster {cluster_id}: {e}')
+
+    @CLICommand('nfs ok-to-stop', perm='r')
+    @object_format.Responder()
+    def _cmd_nfs_ok_to_stop(self,
+                            cluster_id: str,
+                            daemon_name: str) -> Dict[str, Any]:
+        """Ask NFS-Ganesha if a daemon is safe to stop via gRPC.
+
+        Automatically reads certs from cert_mgr. No manual cert passing needed.
+
+        Usage: ceph nfs ok-to-stop <cluster_id> <daemon_name>
+        Example: ceph nfs ok-to-stop mynfs nfs.mynfs.0.0.ceph-node-0.xxx
+        """
+        ca, cert, key = self._load_nfs_grpc_certs(cluster_id)
+        return self.nfs.ok_to_stop(
+            cluster_id, daemon_name,
+            ca_cert=ca, client_cert=cert, client_key=key
+        )

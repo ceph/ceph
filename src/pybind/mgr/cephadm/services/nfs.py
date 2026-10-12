@@ -4,13 +4,23 @@ import logging
 import os
 import subprocess
 import tempfile
+import time
+from asyncio import to_thread
 from threading import Lock
 from typing import Dict, Tuple, Any, List, Set, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
 from io import StringIO
+from ceph.deployment.utils import wrap_ipv6
 from cephadm import utils
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
+
+try:
+    import grpc  # type: ignore
+    from nfs.nfs_grpc_stub import NfsUpgradeStub, OkToUpgradeRequest, get_grpc_port
+    GRPC_AVAILABLE = True
+except Exception:
+    GRPC_AVAILABLE = False
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 from ceph.utils import with_units_to_int
@@ -34,6 +44,7 @@ class NFSService(CephService):
     def __init__(self, mgr: "CephadmOrchestrator"):
         super().__init__(mgr)
         self._fencing_store_lock = Lock()
+        self._skip_grpc_clusters: Set[str] = set()
 
     def allow_colo(self) -> bool:
         return True
@@ -684,6 +695,141 @@ class NFSService(CephService):
         # Provide warning
         warn_message = "WARNING: Removing NFS daemons can cause clients to lose connectivity. "
         return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+    def ok_to_upgrade(self,
+                      to_upgrade: str,
+                      known: Optional[List[str]] = None) -> HandleCommandResult:
+        """Check via gRPC if the NFS daemon is safe to upgrade.
+
+        Args:
+            to_upgrade: daemon name e.g. "nfs.mynfs.0.0.ceph-node-0.xxx"
+            known:      output list — daemon name appended if safe
+        """
+
+        try:
+            daemon = self.mgr.cache.get_daemon(to_upgrade)
+        except Exception:
+            return HandleCommandResult(
+                -errno.EINVAL, '',
+                f'Upgrade: cannot find daemon {to_upgrade}'
+            )
+        if daemon.daemon_type != 'nfs':
+            return HandleCommandResult(
+                -errno.EINVAL, '',
+                f'Upgrade: {to_upgrade} is not an NFS daemon'
+            )
+
+        grpc_port = self._get_grpc_port(daemon)
+
+        if daemon.rank is None:
+            return HandleCommandResult(
+                -errno.EINVAL, '',
+                f'Upgrade: daemon {to_upgrade} has no rank assigned'
+            )
+        ganesha_id = daemon.rank
+
+        try:
+            svc_name = daemon.service_name()
+            ca_cert = self.mgr.cert_mgr.get_root_ca()
+            client_cert = self.mgr.cert_mgr.get_cert(NFS_GRPC_CLIENT_CERT, service_name=svc_name)
+            client_key = self.mgr.cert_mgr.get_key(NFS_GRPC_CLIENT_KEY, service_name=svc_name)
+
+            if not (ca_cert and client_cert and client_key):
+                return HandleCommandResult(
+                    -errno.EINVAL, '',
+                    f'TLS certs not found for {svc_name}'
+                )
+
+            credentials = grpc.ssl_channel_credentials(
+                root_certificates=ca_cert.encode(),
+                private_key=client_key.encode(),
+                certificate_chain=client_cert.encode(),
+            )
+            assert daemon.hostname is not None
+            host_ip = self.mgr.inventory.get_addr(daemon.hostname)
+            with grpc.secure_channel(f'{wrap_ipv6(host_ip)}:{grpc_port}', credentials) as channel:
+                stub = NfsUpgradeStub(channel)
+                request = OkToUpgradeRequest(ganesha_id=ganesha_id)
+                response = stub.OkToUpgrade(request)
+
+        except Exception as e:
+            err_msg = e.code().name if isinstance(e, grpc.RpcError) else str(e)
+            return HandleCommandResult(-errno.EBUSY, '', err_msg)
+
+        if not response.ok_to_upgrade:
+            return HandleCommandResult(
+                -errno.EBUSY, '',
+                f'Upgrade: NFS-Ganesha says {to_upgrade} is not safe to upgrade yet'
+            )
+
+        if known is not None:
+            known.append(to_upgrade)
+
+        logger.info(f'Upgrade: {to_upgrade} is safe to upgrade')
+        return HandleCommandResult(0, '', '')
+
+    def _get_grpc_port(self, daemon: 'DaemonDescription') -> int:
+        """Return the gRPC server port for this NFS daemon."""
+        return get_grpc_port()
+
+    def _is_tsm_enabled(self, service_name: str) -> bool:
+        """Return True if TSM is enabled for the given NFS service."""
+        try:
+            spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
+            return bool(getattr(spec, 'enable_tsm', False))
+        except Exception:
+            return False
+
+    def _wait_for_ok_to_upgrade(self, d: 'DaemonDescription') -> bool:
+        """Retry ok_to_upgrade up to 2 times, then fall back to traditional.
+
+        Currently the NFS gRPC API does not return differentiated errors,
+        so we retry twice to handle transient server unavailability.
+        This will need to be updated once NFS-Ganesha starts returning
+        multiple error types that require different handling.
+        """
+        tries = 2
+        while tries > 0:
+            us = self.mgr.upgrade.upgrade_state
+            if not us or us.paused:
+                return False
+
+            r = self.ok_to_upgrade(to_upgrade=d.name())
+
+            if not r.retval:
+                logger.info(f'Upgrade: {d.name()} is safe to upgrade')
+                return True
+
+            logger.info(
+                f'Upgrade: ok-to-upgrade not ready for {d.name()} '
+                f'(attempt {3 - tries}/2): {r.stderr}'
+            )
+            time.sleep(2)
+            tries -= 1
+
+        logger.warning(
+            f'Upgrade: ok-to-upgrade failed for {d.name()} after 2 attempts, '
+            f'proceeding with traditional upgrade'
+        )
+        self._skip_grpc_clusters.add(d.service_name())
+        return True
+
+    async def _async_check_cluster(
+            self,
+            cluster_name: str,
+            d_entry: tuple,
+    ) -> Dict[str, Any]:
+        """Check ok_to_upgrade for one daemon in one cluster.
+        Runs as one task inside asyncio.gather().
+        Uses _wait_for_ok_to_upgrade for retry/pause logic (4 retries, then fallback).
+        Uses to_thread so the blocking call doesn't freeze the event loop."""
+        d = d_entry[0]
+        ok = await to_thread(self._wait_for_ok_to_upgrade, d)
+        return {
+            'cluster_name': cluster_name,
+            'd_entry': d_entry,
+            'ok': ok,
+        }
 
     def _clear_legacy_nfs_store_markers(self, service_name: str) -> None:
         # Keep these markers until daemon post_remove has finished so
