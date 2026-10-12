@@ -76,6 +76,9 @@ set_target_properties(gf-complete_objs PROPERTIES
   COMPILE_FLAGS "${SIMD_COMPILE_FLAGS}")
 set_target_properties(gf-complete_objs PROPERTIES
   COMPILE_DEFINITIONS "${GF_COMPILE_FLAGS}")
+# skip -Wconditional-uninitialized for vendored gf-complete sources
+target_compile_options(gf-complete_objs PRIVATE
+  $<$<C_COMPILER_ID:AppleClang,Clang>:-Wno-conditional-uninitialized>)
 
 set(jerasure_srcs
   jerasure/src/cauchy.c
