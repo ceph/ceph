@@ -762,7 +762,7 @@ int main(int argc, const char **argv)
     encode(v, final);
     encode(mapbl, final);
 
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
+    auto t(std::make_shared<MonitorDBStoreTransaction>());
     // save it
     t->put("monmap", v, mapbl);
     t->put("monmap", "latest", final);

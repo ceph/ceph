@@ -694,7 +694,7 @@ void Monitor::read_features_off_disk(MonitorDBStore *store, CompatSet *features)
     *features = get_legacy_features();
 
     features->encode(featuresbl);
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
+    auto t(std::make_shared<MonitorDBStoreTransaction>());
     t->put(MONITOR_NAME, COMPAT_SET_LOC, featuresbl);
     store->apply_transaction(t);
   } else {
@@ -712,7 +712,7 @@ void Monitor::read_features()
   dout(10) << "required_features " << required_features << dendl;
 }
 
-void Monitor::write_features(MonitorDBStore::TransactionRef t)
+void Monitor::write_features(MonitorDBStoreTransactionRef t)
 {
   bufferlist bl;
   features.encode(bl);
@@ -1405,7 +1405,7 @@ void Monitor::bootstrap()
 	   << " for next startup" << dendl;
       bufferlist bl;
       monmap->encode(bl, -1);
-      auto t(std::make_shared<MonitorDBStore::Transaction>());
+      auto t(std::make_shared<MonitorDBStoreTransaction>());
       t->put("mon_sync", "temp_newer_monmap", bl);
       store->apply_transaction(t);
     }
@@ -1666,7 +1666,7 @@ void Monitor::sync_start(entity_addrvec_t &addrs, bool full)
 
   if (sync_full) {
     // stash key state, and mark that we are syncing
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
+    auto t(std::make_shared<MonitorDBStoreTransaction>());
     sync_stash_critical_state(t);
     t->put("mon_sync", "in_sync", 1);
 
@@ -1704,7 +1704,7 @@ void Monitor::sync_start(entity_addrvec_t &addrs, bool full)
   messenger->send_to_mon(m, sync_provider);
 }
 
-void Monitor::sync_stash_critical_state(MonitorDBStore::TransactionRef t)
+void Monitor::sync_stash_critical_state(MonitorDBStoreTransactionRef t)
 {
   dout(10) << __func__ << dendl;
   bufferlist backup_monmap;
@@ -1733,7 +1733,7 @@ void Monitor::sync_finish(version_t last_committed)
 
   if (sync_full) {
     // finalize the paxos commits
-    auto tx(std::make_shared<MonitorDBStore::Transaction>());
+    auto tx(std::make_shared<MonitorDBStoreTransaction>());
     paxos->read_and_prepare_transactions(tx, sync_start_version,
 					 last_committed);
     tx->put(paxos->get_name(), "last_committed", last_committed);
@@ -1749,7 +1749,7 @@ void Monitor::sync_finish(version_t last_committed)
 
   ceph_assert(g_conf()->mon_sync_requester_kill_at != 8);
 
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   t->erase("mon_sync", "in_sync");
   t->erase("mon_sync", "force_sync");
   t->erase("mon_sync", "last_committed_floor");
@@ -1888,7 +1888,7 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
   }
 
   MMonSync *reply = new MMonSync(MMonSync::OP_CHUNK, sp.cookie);
-  auto tx(std::make_shared<MonitorDBStore::Transaction>());
+  auto tx(std::make_shared<MonitorDBStoreTransaction>());
 
   int bytes_left = g_conf()->mon_sync_max_payload_size;
   int keys_left = g_conf()->mon_sync_max_payload_keys;
@@ -1988,7 +1988,7 @@ void Monitor::handle_sync_chunk(MonOpRequestRef op)
   ceph_assert(state == STATE_SYNCHRONIZING);
   ceph_assert(g_conf()->mon_sync_requester_kill_at != 5);
 
-  auto tx(std::make_shared<MonitorDBStore::Transaction>());
+  auto tx(std::make_shared<MonitorDBStoreTransaction>());
   tx->append_from_encoded(m->chunk_bl);
 
   dout(30) << __func__ << " tx dump:\n";
@@ -2003,7 +2003,7 @@ void Monitor::handle_sync_chunk(MonOpRequestRef op)
 
   if (!sync_full) {
     dout(10) << __func__ << " applying recent paxos transactions as we go" << dendl;
-    auto tx(std::make_shared<MonitorDBStore::Transaction>());
+    auto tx(std::make_shared<MonitorDBStoreTransaction>());
     paxos->read_and_prepare_transactions(tx, paxos->get_version() + 1,
 					 m->last_committed);
     tx->put(paxos->get_name(), "last_committed", m->last_committed);
@@ -2498,7 +2498,7 @@ void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t featu
     // FIXME: This is a bit sloppy because we aren't guaranteed to submit
     // a new transaction immediately after the election finishes.  We should
     // do that anyway for other reasons, though.
-    MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+    MonitorDBStoreTransactionRef t = paxos->get_pending_transaction();
     bufferlist bl;
     ::encode(m, bl);
     t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
@@ -2650,7 +2650,7 @@ void Monitor::_apply_compatset_features(CompatSet &new_features)
     dout(1) << __func__ << " enabling new quorum features: " << diff << dendl;
     features = new_features;
 
-    auto t = std::make_shared<MonitorDBStore::Transaction>();
+    auto t = std::make_shared<MonitorDBStoreTransaction>();
     write_features(t);
     store->apply_transaction(t);
 
@@ -2869,7 +2869,7 @@ void Monitor::get_combined_feature_map(FeatureMap *fm)
 
 void Monitor::sync_force(Formatter *f)
 {
-  auto tx(std::make_shared<MonitorDBStore::Transaction>());
+  auto tx(std::make_shared<MonitorDBStoreTransaction>());
   sync_stash_critical_state(tx);
   tx->put("mon_sync", "force_sync", 1);
   store->apply_transaction(tx);
@@ -3173,7 +3173,7 @@ void Monitor::do_health_to_clog(bool force)
 void Monitor::log_health(
   const health_check_map_t& updated,
   const health_check_map_t& previous,
-  MonitorDBStore::TransactionRef t)
+  MonitorDBStoreTransactionRef t)
 {
   if (!g_conf()->mon_health_to_clog) {
     return;
@@ -6287,7 +6287,7 @@ void Monitor::tick()
 
   if (is_leader() && paxos->is_active() && fingerprint.is_zero()) {
     // this is only necessary on upgraded clusters.
-    MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+    MonitorDBStoreTransactionRef t = paxos->get_pending_transaction();
     prepare_new_fingerprint(t);
     paxos->trigger_propose();
   }
@@ -6344,7 +6344,7 @@ bool Monitor::is_mon_down() const {
   return actual < max && now > monmap->created.to_real_time();
 }
 
-void Monitor::prepare_new_fingerprint(MonitorDBStore::TransactionRef t)
+void Monitor::prepare_new_fingerprint(MonitorDBStoreTransactionRef t)
 {
   uuid_d nf;
   nf.generate_random();
@@ -6388,13 +6388,13 @@ int Monitor::check_fsid()
 
 int Monitor::write_fsid()
 {
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
   write_fsid(t);
   int r = store->apply_transaction(t);
   return r;
 }
 
-int Monitor::write_fsid(MonitorDBStore::TransactionRef t)
+int Monitor::write_fsid(MonitorDBStoreTransactionRef t)
 {
   ostringstream ss;
   ss << monmap->get_fsid() << "\n";
@@ -6413,7 +6413,7 @@ int Monitor::write_fsid(MonitorDBStore::TransactionRef t)
  */
 int Monitor::mkfs(bufferlist& osdmapbl)
 {
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  auto t(std::make_shared<MonitorDBStoreTransaction>());
 
   // verify cluster fsid
   int r = check_fsid();

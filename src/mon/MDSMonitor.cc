@@ -239,7 +239,7 @@ void MDSMonitor::assign_quiesce_db_leader(FSMap &fsmap) {
   }
 }
 
-void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void MDSMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   auto &pending = get_pending_fsmap_writeable();
   auto epoch = pending.get_epoch();
@@ -2007,13 +2007,13 @@ void MDSMonitor::update_metadata(mds_gid_t gid,
   }
   pending_metadata[gid] = metadata;
 
-  MonitorDBStore::TransactionRef t = paxos.get_pending_transaction();
+  MonitorDBStoreTransactionRef t = paxos.get_pending_transaction();
   bufferlist bl;
   encode(pending_metadata, bl);
   t->put(MDS_METADATA_PREFIX, "last_metadata", bl);
 }
 
-void MDSMonitor::remove_from_metadata(const FSMap &fsmap, MonitorDBStore::TransactionRef t)
+void MDSMonitor::remove_from_metadata(const FSMap &fsmap, MonitorDBStoreTransactionRef t)
 {
   bool update = false;
   for (auto it = pending_metadata.begin(); it != pending_metadata.end(); ) {

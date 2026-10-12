@@ -258,7 +258,7 @@ void NVMeofGwMon::recreate_gw_epoch() {
   }
 }
 
-void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t)
+void NVMeofGwMon::encode_pending(MonitorDBStoreTransactionRef t)
 {
   dout(10) << dendl;
   ceph_assert(get_last_committed() + 1 == pending_map.epoch);
