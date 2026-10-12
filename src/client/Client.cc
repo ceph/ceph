@@ -3985,7 +3985,8 @@ void Client::put_cap_ref(Inode *in, int cap)
 // issued by the mds and @want caps not revoked (or not under revocation).
 // this routine blocks till the cap requirement is satisfied. also account
 // (track) for capability hit when required (when cap requirement succeedes).
-int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
+int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff,
+                     int allow_implemented)
 {
   Inode *in = fh->inode.get();
 
@@ -4010,6 +4011,11 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 
     int implemented;
     int have = in->caps_issued(&implemented);
+    // Caps that are being revoked but still implemented, and that the
+    // caller is allowed to use: its cap refs defer their release, which
+    // the MDS waits for before the revocation completes.
+    if (allow_implemented)
+      have |= implemented & allow_implemented;
 
     bool waitfor_caps = false;
     bool waitfor_commit = false;
