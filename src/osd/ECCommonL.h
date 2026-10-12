@@ -17,10 +17,6 @@
 
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
-#include <fmt/format.h>
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
 
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
@@ -695,9 +691,3 @@ void ECCommonL::ReadPipeline::filter_read_op(
   }
 }
 }// namespace ECLegacy
-
-template <> struct fmt::formatter<ECLegacy::ECCommonL::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECLegacy::ECCommonL::read_request_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECLegacy::ECCommonL::read_result_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECLegacy::ECCommonL::ReadOp> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ECLegacy::ECCommonL::RMWPipeline::Op> : fmt::ostream_formatter {};
