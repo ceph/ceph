@@ -559,8 +559,12 @@ async fn corpus_coverage_bucket_config() {
          *
          * "Nowhere" means neither location -- not the bucket
          * directory's attributes and not a record field.  Asserting it
-         * of one location was this axis's own defect. */
-        if have_disk && s.gained.is_empty() {
+         * of one location was this axis's own defect.
+         *
+         * A generating pass only:  an observing pass applies nothing,
+         * so `gained` is empty by construction and the read-back is the
+         * fact it has. */
+        if !observing() && have_disk && s.gained.is_empty() {
             problems.push(format!(
                 "{:?} was accepted and changed nothing that persists, \
                  in neither the bucket's attributes nor its record",
