@@ -1454,10 +1454,11 @@ fn stop(env: &Env) -> Result<(), String> {
 ///     the default location cannot be used anyway, because
 ///     `vstart.sh` removes `$dev/rgw/$STORE/root` outright on every
 ///     start, which would delete the tree we came to read.
-/// ///   * **The adoption mode, explicitly.**  `serve` is the driver's
-///     default and serves the tree read-only, which is right for a
-///     customer deciding whether to adopt and wrong for a handoff that
-///     means to write.  `--adoption-mode adopt` runs the import.
+///   * **Adoption by command.**  `command` is the driver's default:
+///     nothing is adopted until asked.  Said explicitly, and then asked,
+///     through Admin Ops with `rgw_admin_key`:  the store's identities
+///     first, then each bucket NooBaa holds a record of -- the same
+///     commands an operator issues.
 ///   * **`--with-lifecycle`**, because conversion carries bucket
 ///     configuration and lifecycle is part of it.  NooBaa keeps a
 ///     bucket's rules in `lifecycle_configuration_rules` in its
@@ -1523,7 +1524,7 @@ fn adopt(env: &Env) -> Result<(), String> {
         .unwrap_or(0);
     println!("adopt    tree {} ({buckets} entries)", tree.display());
     println!("         rgw-vstart.sh --store nsfs --data-root {} \
-              --noobaa-config-root {} --adoption-mode adopt --with-lifecycle {}",
+              --noobaa-config-root {} --adoption-mode command --with-lifecycle {}",
              env.data.display(), env.config_root().display(),
              rgw_etag_opts(env).join(" "));
     println!("         modality {}",
@@ -1539,13 +1540,10 @@ fn adopt(env: &Env) -> Result<(), String> {
             /* Their store, so RGW can read what NooBaa wrote. */
             "--noobaa-config-root",
             &env.config_root().display().to_string(),
-            /* **`adopt`, said explicitly.**  The driver defaults to
-             * `serve`, which serves the tree *read-only* -- that is
-             * the conservative default a customer should get, since it
-             * changes nothing on disk and keeps the decision
-             * reversible.  A handoff that means to write has to ask. */
+            /* The driver's default, said explicitly:  nothing is
+             * adopted until the commands below ask. */
             "--adoption-mode",
-            "adopt",
+            "command",
             "--with-lifecycle",
         ])
         .args(rgw_etag_opts(env))
@@ -1572,6 +1570,46 @@ fn adopt(env: &Env) -> Result<(), String> {
         ));
     }
     println!("adopt    ceph.conf confirms the base path");
+
+    /* The commands.  Identities first, because every bucket's owner and
+     * every policy principal resolves through them;  then each bucket
+     * the store holds a record of. */
+    let admin = format!("{}:{}", env.rgw_admin_key, env.rgw_admin_secret);
+    let hint = format!("http://127.0.0.1:{}/admin/driver/hint?hint=adoption",
+                       env.rgw_port);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while std::net::TcpStream::connect(("127.0.0.1", env.rgw_port)).is_err() {
+        if std::time::Instant::now() > deadline {
+            return Err(format!("nothing accepts a connection on port {}",
+                               env.rgw_port));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    let (status, body) = rgw_call(&admin, "DELETE", &format!("{hint}&identities=true"))?;
+    if status != 200 || json_bool(&body, "ran") != Some(true) {
+        return Err(format!("importing the identities failed ({status}):\n{body}"));
+    }
+    println!("adopt    identities imported:  {} accounts, {} users",
+             json_str(&body, "accounts").unwrap_or_default(),
+             json_str(&body, "users").unwrap_or_default());
+
+    let records = env.config_root().join("buckets");
+    let mut names: Vec<String> = std::fs::read_dir(&records)
+        .map_err(|e| format!("cannot read {}: {e}", records.display()))?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().to_str()?.strip_suffix(".json").map(str::to_string))
+        .collect();
+    names.sort();
+    for name in &names {
+        let (status, body) = rgw_call(&admin, "DELETE", &format!("{hint}&bucket={name}"))?;
+        if status != 200 || json_bool(&body, "adopted") != Some(true) {
+            return Err(format!("adopting bucket {name} failed ({status}):\n{body}"));
+        }
+        println!("adopt    bucket {name}:  profile {}, {} objects, {} versions",
+                 json_str(&body, "profile").unwrap_or_default(),
+                 json_str(&body, "objects").unwrap_or_default(),
+                 json_str(&body, "versions").unwrap_or_default());
+    }
     Ok(())
 }
 
@@ -1714,6 +1752,20 @@ fn xml_tag<'a>(body: &'a str, tag: &str) -> Option<&'a str> {
     let start = body.find(&open)? + open.len();
     let len = body[start..].find(&format!("</{tag}>"))?;
     Some(&body[start..start + len])
+}
+
+/// A top-level boolean field of a flat JSON reply;  the driver hint
+/// renders `true` and `false` unquoted.
+fn json_bool(body: &str, key: &str) -> Option<bool> {
+    let pat = format!("\"{key}\":");
+    let rest = body[body.find(&pat)? + pat.len()..].trim_start();
+    if rest.starts_with("true") {
+        Some(true)
+    } else if rest.starts_with("false") {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 /// A top-level string field of a flat JSON answer.  Enough for the
