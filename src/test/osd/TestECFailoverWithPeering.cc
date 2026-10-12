@@ -1624,6 +1624,36 @@ TEST_P(TestECOmapRecovery, RemoveKeysWhilePrimaryDownThenRecover) {
   check_removed(obj);
 }
 
+// Keys are set and removed while the primary is down. The primary returns to
+// a PG that can only peer (too few shards for min_size), recovers itself
+// there, and the PG later goes active.
+TEST_P(TestECOmapRecovery, SetKeysWhilePrimaryDownThenRecoverWhilePeered) {
+  if (m < 2) {
+    GTEST_SKIP() << "needs m >= 2";
+  }
+  const std::string obj = "omap_peered";
+  const unsigned min_size = get_min_size();
+  setup_object(obj);
+  mark_osd_down(0);
+  ASSERT_EQ(0, write_omap(obj, {{"x", "1"}, {"y", "2"}}, {"a", "b"}));
+  set_pool_min_size(k + m);
+  mark_osd_down(k);
+  mark_osd_up(0);
+  ASSERT_EQ(0, get_primary_shard_from_osdmap());
+  run_recovery(obj, true, data);
+  set_pool_min_size(min_size);
+  ASSERT_EQ(0, write_omap(obj, {{"z", "3"}}, {}));
+  ASSERT_EQ(0, write_omap(obj, {{"z", "4"}}, {}));
+  for (int shard : omap_shards()) {
+    if (shard == k) {
+      continue;
+    }
+    auto keys = get_shard_omap_keys(obj, shard);
+    keys.erase("z");
+    EXPECT_EQ((std::set<std::string>{"c", "d", "e", "x", "y"}), keys) << "shard " << shard;
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   ECConfigs,
   TestECOmapRecovery,
