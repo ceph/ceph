@@ -12,6 +12,14 @@ from cephadm import utils
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 
+try:
+    import grpc
+    from .proto import nfs_ganesha_pb2
+    from .proto import nfs_ganesha_pb2_grpc
+    GRPC_AVAILABLE = True
+except ImportError:
+    GRPC_AVAILABLE = False
+
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 from ceph.utils import with_units_to_int
 from .service_registry import register_cephadm_service
@@ -684,6 +692,159 @@ class NFSService(CephService):
         # Provide warning
         warn_message = "WARNING: Removing NFS daemons can cause clients to lose connectivity. "
         return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+    def ok_to_upgrade(self,
+                      to_upgrade: str,
+                      known: Optional[List[str]] = None) -> HandleCommandResult:
+        """Check via gRPC if the NFS daemon is safe to upgrade.
+
+        Args:
+            to_upgrade: daemon name e.g. "nfs.mynfs.0.0.ceph-node-0.xxx"
+            known:      output list — daemon name appended if safe
+        """
+        if not GRPC_AVAILABLE:
+            return HandleCommandResult(
+                -errno.ENOTSUP, '',
+                'grpc library not available; cannot perform NFS rolling upgrade'
+            )
+
+        daemon = self._get_daemon_by_name(to_upgrade)
+        if daemon is None:
+            return HandleCommandResult(
+                -errno.EINVAL, '',
+                f'Upgrade: cannot find daemon {to_upgrade}'
+            )
+
+        tsm_port = self._get_tsm_port(daemon)
+        if tsm_port is None:
+            return HandleCommandResult(
+                -errno.EINVAL, '',
+                f'Upgrade: TSM port not configured for {to_upgrade}'
+            )
+
+        # Extract integer rank from daemon name: nfs.<cluster>.<rank>.<ver>.<host>.<suffix>
+        try:
+            ganesha_id = int(to_upgrade.split('.')[2])
+        except (IndexError, ValueError):
+            return HandleCommandResult(
+                -errno.EINVAL, '',
+                f'Upgrade: cannot extract ganesha_id from daemon name {to_upgrade}'
+            )
+
+        logger.info(
+            f'Upgrade: NFS gRPC ok_to_upgrade called for {to_upgrade} '
+            f'(ganesha_id={ganesha_id}) on port {tsm_port} — reading certs from cert_mgr'
+        )
+
+        try:
+            svc_name    = daemon.service_name()
+            ca_cert     = self.mgr.cert_mgr.get_root_ca()
+            client_cert = self.mgr.cert_mgr.get_cert(NFS_GRPC_CLIENT_CERT, service_name=svc_name)
+            client_key  = self.mgr.cert_mgr.get_key(NFS_GRPC_CLIENT_KEY, service_name=svc_name)
+
+            if not (ca_cert and client_cert and client_key):
+                return HandleCommandResult(
+                    -errno.EINVAL, '',
+                    f'Upgrade: TLS certs not found for {svc_name}'
+                )
+
+            credentials = grpc.ssl_channel_credentials(
+                root_certificates=ca_cert.encode(),
+                private_key=client_key.encode(),
+                certificate_chain=client_cert.encode(),
+            )
+            host_ip = self.mgr.inventory.get_addr(daemon.hostname)
+            channel = grpc.secure_channel(f'{host_ip}:{tsm_port}', credentials)
+
+            stub = nfs_ganesha_pb2_grpc.NfsUpgradeStub(channel)
+            request = nfs_ganesha_pb2.OkToUpgradeRequest(ganesha_id=ganesha_id)
+            response = stub.OkToUpgrade(request)
+
+        except Exception as e:
+            return self._handle_grpc_error(e, to_upgrade)
+
+        if not response.ok_to_upgrade:
+            return HandleCommandResult(
+                -errno.EBUSY, '',
+                f'Upgrade: NFS-Ganesha says {to_upgrade} is not safe to upgrade yet'
+            )
+
+        if known is not None:
+            known.append(to_upgrade)
+
+        logger.info(f'Upgrade: {to_upgrade} is safe to upgrade')
+        return HandleCommandResult(0, '', '')
+
+    def _handle_grpc_error(self, e: Exception, daemon_name: str) -> HandleCommandResult:
+        """Map gRPC error to errno: EBUSY (retry), EINVAL (pause), ENOTSUP (fallback)."""
+        if not GRPC_AVAILABLE:
+            return HandleCommandResult(-errno.ENOTSUP, '', str(e))
+
+        try:
+            import grpc as grpc_module
+            if isinstance(e, grpc_module.RpcError):
+                code = e.code()
+                details = e.details() or str(e)
+
+                # Group 3: API not implemented → fall back to traditional upgrade
+                if code == grpc_module.StatusCode.UNIMPLEMENTED:
+                    logger.info(
+                        f'Upgrade: NFS-Ganesha ok_to_upgrade not implemented for '
+                        f'{daemon_name}, falling back to traditional upgrade'
+                    )
+                    return HandleCommandResult(-errno.ENOTSUP, '', details)
+
+                # Group 1: temporary errors → caller will retry
+                if code in (
+                    grpc_module.StatusCode.FAILED_PRECONDITION,
+                    grpc_module.StatusCode.UNAVAILABLE,
+                    grpc_module.StatusCode.DEADLINE_EXCEEDED,
+                    grpc_module.StatusCode.ABORTED,
+                    grpc_module.StatusCode.CANCELLED,
+                    grpc_module.StatusCode.RESOURCE_EXHAUSTED,
+                ):
+                    logger.info(
+                        f'Upgrade: NFS gRPC transient error for {daemon_name} '
+                        f'({code.name}): {details}'
+                    )
+                    return HandleCommandResult(-errno.EBUSY, '', details)
+
+                # Group 2: hard errors → caller pauses upgrade immediately
+                logger.error(
+                    f'Upgrade: NFS gRPC hard error for {daemon_name} '
+                    f'({code.name}): {details}'
+                )
+                return HandleCommandResult(-errno.EINVAL, '', details)
+
+        except Exception:
+            pass
+
+        # Non-gRPC exception (socket error etc.) → treat as retryable
+        logger.info(f'Upgrade: NFS gRPC connection error for {daemon_name}: {e}')
+        return HandleCommandResult(-errno.EBUSY, '', str(e))
+
+    def _get_daemon_by_name(self, daemon_name: str) -> Optional['DaemonDescription']:
+        """Return DaemonDescription for a daemon given its full name e.g. nfs.mynfs.0"""
+        for d in self.mgr.cache.get_daemons_by_type('nfs'):
+            if d.name() == daemon_name:
+                return d
+        return None
+
+    def _get_tsm_port(self, daemon: 'DaemonDescription') -> Optional[int]:
+        """Return the TSM gRPC port configured for this NFS daemon's service."""
+        try:
+            spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon.service_name()].spec)
+            return spec.tsm_port
+        except Exception:
+            return None
+
+    def _is_tsm_enabled(self, service_name: str) -> bool:
+        """Return True if TSM is enabled for the given NFS service."""
+        try:
+            spec = cast(NFSServiceSpec, self.mgr.spec_store[service_name].spec)
+            return bool(spec.enable_tsm)
+        except Exception:
+            return False
 
     def _clear_legacy_nfs_store_markers(self, service_name: str) -> None:
         # Keep these markers until daemon post_remove has finished so
