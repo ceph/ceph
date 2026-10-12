@@ -2960,6 +2960,11 @@ const std::string& RadosStore::get_compression_type(const rgw_placement_rule& ru
       return svc()->zone->get_zone_params().get_compression_type(rule);
 }
 
+uint64_t RadosStore::get_compression_min_size(const rgw_placement_rule& rule)
+{
+  return svc()->zone->get_zone_params().get_compression_min_size(rule);
+}
+
 bool RadosStore::valid_placement(const rgw_placement_rule& rule)
 {
   return svc()->zone->get_zone_params().valid_placement(rule);

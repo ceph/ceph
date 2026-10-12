@@ -894,6 +894,12 @@ Options
 
     Placement target compression algorithm (lz4|snappy|zlib|zstd).
 
+.. option:: --compression-min-size=<size>
+
+    Placement target minimum object size to compress, e.g. 64K. Smaller
+    objects are stored uncompressed. The default of 0 compresses objects of
+    any size.
+
 .. option:: --yes-i-really-mean-it
 
     Required as a guardrail for certain destructive operations.

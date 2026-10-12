@@ -727,6 +727,8 @@ class Driver {
 
     /** Get the compression type of a placement rule */
     virtual const std::string& get_compression_type(const rgw_placement_rule& rule) = 0;
+    /** Get the minimum object size to compress for a placement rule */
+    virtual uint64_t get_compression_min_size(const rgw_placement_rule& rule) = 0;
     /** Check to see if this placement rule is valid */
     virtual bool valid_placement(const rgw_placement_rule& rule) = 0;
 

@@ -742,6 +742,11 @@ const std::string& FilterDriver::get_compression_type(const rgw_placement_rule& 
   return next->get_compression_type(rule);
 }
 
+uint64_t FilterDriver::get_compression_min_size(const rgw_placement_rule& rule)
+{
+  return next->get_compression_min_size(rule);
+}
+
 bool FilterDriver::valid_placement(const rgw_placement_rule& rule)
 {
   return next->valid_placement(rule);

@@ -314,6 +314,15 @@ const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& plac
   return !type.empty() ? type : NONE;
 }
 
+uint64_t RGWZoneParams::get_compression_min_size(const rgw_placement_rule& placement_rule) const
+{
+  auto p = placement_pools.find(placement_rule.name);
+  if (p == placement_pools.end()) {
+    return 0;
+  }
+  return p->second.get_compression_min_size(placement_rule.get_storage_class());
+}
+
 // run an MD5 hash on the zone_id and return the first 32 bits
 static uint32_t gen_short_zone_id(const std::string zone_id)
 {
@@ -740,6 +749,9 @@ void RGWZoneStorageClass::dump(Formatter *f) const
   if (compression_type) {
     encode_json("compression_type", compression_type.get(), f);
   }
+  if (compression_min_size) {
+    encode_json("compression_min_size", compression_min_size.get(), f);
+  }
 }
 
 list<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
@@ -749,6 +761,7 @@ list<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
   o.emplace_back();
   o.back().data_pool = rgw_pool("pool1");
   o.back().compression_type = "zlib";
+  o.back().compression_min_size = 4096;
   return o;
 }
 
@@ -756,6 +769,7 @@ void RGWZoneStorageClass::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("data_pool", data_pool, obj);
   JSONDecoder::decode_json("compression_type", compression_type, obj);
+  JSONDecoder::decode_json("compression_min_size", compression_min_size, obj);
 }
 
 void RGWTierACLMapping::decode_json(JSONObj *obj)

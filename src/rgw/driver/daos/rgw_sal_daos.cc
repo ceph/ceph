@@ -2199,6 +2199,10 @@ const std::string& DaosStore::get_compression_type(
   return zone.zone_params->get_compression_type(rule);
 }
 
+uint64_t DaosStore::get_compression_min_size(const rgw_placement_rule& rule) {
+  return zone.zone_params->get_compression_min_size(rule);
+}
+
 bool DaosStore::valid_placement(const rgw_placement_rule& rule) {
   return zone.zone_params->valid_placement(rule);
 }

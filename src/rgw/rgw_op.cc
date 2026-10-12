@@ -5061,13 +5061,32 @@ void RGWPutObj::execute(optional_yield y)
 
   // multipart parts use the compression type frozen at upload init, if any,
   // so a placement config change mid-upload doesn't change it for later parts
-  const std::string compression_type = multipart_compression_type ?
+  std::string compression_type = multipart_compression_type ?
       *multipart_compression_type :
       driver->get_compression_type(*pdest_placement);
   if (multipart) {
     ldpp_dout(this, 20) << "compression type for part=" << compression_type
         << (multipart_compression_type ? " (from upload)" : " (from placement)")
         << dendl;
+  } else if (!append && compression_type != "none") {
+    // objects below the placement's minimum size are stored uncompressed.
+    // multipart parts keep one type per upload and appends are never
+    // compressed, so both are excluded; the min size doesn't apply to an
+    // upload of unknown size
+    std::optional<uint64_t> size;
+    if (!copy_source.empty()) {
+      // the request body is empty; the data comes from the copy source range.
+      // unsigned arithmetic, so a hostile range can't overflow
+      size = lst >= fst ? static_cast<uint64_t>(lst) - static_cast<uint64_t>(fst) + 1 : 0;
+    } else if (!chunked_upload) {
+      size = s->content_length;
+    }
+    const uint64_t min_size = driver->get_compression_min_size(*pdest_placement);
+    if (rgw_compression_below_min_size(min_size, size)) {
+      ldpp_dout(this, 20) << "not compressing object of size " << *size
+          << " below compression min size " << min_size << dendl;
+      compression_type = "none";
+    }
   }
   CompressorRef plugin;
   std::optional<RGWPutObj_Compress> compressor;
@@ -6740,6 +6759,17 @@ void RGWCopyObj::execute(optional_yield y)
       !s->penv.site->get_zonegroup().supports(
           rgw::zone_features::compress_encrypted)) {
     dest_compression = "none";
+  }
+  // objects smaller than the destination's minimum size are stored
+  // uncompressed. compare the logical size, not the stored size
+  {
+    const uint64_t min_size = driver->get_compression_min_size(s->dest_placement);
+    const uint64_t size = s->src_object->get_accounted_size();
+    if (dest_compression != "none" && rgw_compression_below_min_size(min_size, size)) {
+      ldpp_dout(this, 20) << "not compressing copy of size " << size
+          << " below compression min size " << min_size << dendl;
+      dest_compression = "none";
+    }
   }
 
   RGWCopyObjDPF copy_obj_dpf(s, obj_size, s->src_object->get_attrs(),
