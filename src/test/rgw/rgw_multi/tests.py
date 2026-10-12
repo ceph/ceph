@@ -4559,6 +4559,36 @@ def test_account_metadata_sync():
             check_groups_eq(source_conn, target_conn)
             check_oidc_providers_eq(source_conn, target_conn)
 
+def test_user_rename():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+    iam = primary.iam_conn
+
+    u1 = None
+    u2 = None
+    try:
+        iam.create_user(UserName='name1')
+        u1 = 'name1'
+        iam.create_user(UserName='name2')
+        u2 = 'name2'
+        realm_meta_checkpoint(realm)
+
+        iam.update_user(UserName='name1', NewUserName='name3')
+        u1 = 'name3'
+        iam.update_user(UserName='name2', NewUserName='name1')
+        u2 = 'name1'
+        iam.update_user(UserName='name3', NewUserName='name2')
+        u1 = 'name2'
+        realm_meta_checkpoint(realm)
+    finally:
+        if u1:
+            iam.delete_user(UserName=u1)
+        if u2:
+            iam.delete_user(UserName=u2)
+        realm_meta_checkpoint(realm)
+
 def get_bucket_read_tracker(zone_conn, bucket_name):
     """ radosgw-admin runs as its own process"""
     cmd = ['bucket', 'stats', '--bucket', bucket_name] + zone_conn.zone.zone_args()
