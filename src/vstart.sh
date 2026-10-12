@@ -666,7 +666,6 @@ case $1 in
         ;;
     --crimson-poll-mode)
         crimson_poll_mode=true
-        shift
         ;;
     --crimson-prometheus-port)
         [ -z "$2" ] && usage_exit
