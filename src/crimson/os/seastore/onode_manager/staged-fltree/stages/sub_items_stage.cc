@@ -284,7 +284,7 @@ char* leaf_sub_items_t::Appender<KT>::wrap()
     std::visit(overloaded {
       [&] (const range_items_t& arg) {
         int compensate = (last_offset - op_src->get_offset_to_end(arg.from));
-        node_offset_t offset;
+        node_offset_t offset = last_offset; // set in the loop; append() skips empty ranges
         for (auto i = arg.from; i < arg.from + arg.items; ++i) {
           offset = op_src->get_offset(i).value + compensate;
           p_cur -= sizeof(node_offset_t);
