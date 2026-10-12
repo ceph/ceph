@@ -4442,13 +4442,18 @@ void CInode::encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap)
  
   const mempool_inode *oi = get_inode().get();
   const mempool_inode *pi = get_projected_inode().get();
-  const mempool_inode *i = (pfile|pauth|plink|pxattr) ? pi : oi;
+  // A client that holds or wants WR caps should see the projected size,
+  // which may include the previous writer's size flush that is not
+  // committed yet.
+  bool wr = (cap->issued() | cap->pending() | cap->wanted()) &
+	    CEPH_CAP_FILE_WR;
+  const mempool_inode *i = (pfile|pauth|plink|pxattr|wr) ? pi : oi;
 
   dout(20) << __func__ << " pfile " << pfile
 	   << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
 	   << " mtime " << i->mtime << " ctime " << i->ctime << " change_attr " << i->change_attr << dendl;
 
-  i = pfile ? pi:oi;
+  i = (pfile || wr) ? pi : oi;
   m->set_layout(i->layout);
   m->size = i->size;
   m->truncate_seq = i->truncate_seq;
