@@ -154,7 +154,7 @@ void HealthMonitor::create_pending()
   pending_mutes = mutes;
 }
 
-void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
+void HealthMonitor::encode_pending(MonitorDBStoreTransactionRef t)
 {
   ++version;
   dout(10) << " " << version << dendl;
