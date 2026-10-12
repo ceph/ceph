@@ -2195,8 +2195,8 @@ std::unique_ptr<Writer> DaosStore::get_atomic_writer(
 }
 
 const std::string& DaosStore::get_compression_type(
-    const rgw_placement_rule& rule) {
-  return zone.zone_params->get_compression_type(rule);
+    const rgw_placement_rule& rule, std::optional<uint64_t> size) {
+  return zone.zone_params->get_compression_type(rule, size);
 }
 
 bool DaosStore::valid_placement(const rgw_placement_rule& rule) {

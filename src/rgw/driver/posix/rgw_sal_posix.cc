@@ -2346,8 +2346,9 @@ std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider 
   return std::make_unique<POSIXAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag);
 }
 
-const std::string& POSIXDriver::get_compression_type(const rgw_placement_rule& rule) {
-  return zone.get_rgw_params().get_compression_type(rule);
+const std::string& POSIXDriver::get_compression_type(const rgw_placement_rule& rule,
+                                                     std::optional<uint64_t> size) {
+  return zone.get_rgw_params().get_compression_type(rule, size);
 }
 
 std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* obj,
