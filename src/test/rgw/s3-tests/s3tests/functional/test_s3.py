@@ -8463,6 +8463,68 @@ def test_versioning_multi_object_delete_with_marker():
     assert not 'Versions' in response
     assert not 'DeleteMarkers' in response
 
+@pytest.mark.versioning
+def test_versioning_multi_object_delete_last_missing():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+
+    key = 'key'
+    num_versions = 2
+
+    (version_ids, contents) = create_multiple_versions(client, bucket_name, key, num_versions)
+    assert len(version_ids) == num_versions
+
+    # delete the current version, then a version that does not exist
+    objects = [{'Key': key, 'VersionId': version_ids[1]},
+               {'Key': key, 'VersionId': 'doesnotexist'}]
+    client.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+
+    # check the deleted version before any read of the current version
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key, VersionId=version_ids[1])
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert [v['VersionId'] for v in response['Versions']] == [version_ids[0]]
+
+    response = client.get_object(Bucket=bucket_name, Key=key)
+    assert _get_body(response) == contents[0]
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+def test_versioning_multi_object_delete_last_precondition_failed():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+
+    key = 'key'
+    num_versions = 2
+
+    (version_ids, contents) = create_multiple_versions(client, bucket_name, key, num_versions)
+    assert len(version_ids) == num_versions
+
+    # delete the current version, then fail the older one on its etag
+    objects = [{'Key': key, 'VersionId': version_ids[1]},
+               {'Key': key, 'VersionId': version_ids[0], 'ETag': 'badetag'}]
+    response = client.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    # check the deleted version before any read of the current version
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key, VersionId=version_ids[1])
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert [v['VersionId'] for v in response['Versions']] == [version_ids[0]]
+
+    response = client.get_object(Bucket=bucket_name, Key=key)
+    assert _get_body(response) == contents[0]
+
 @pytest.mark.fails_on_dbstore
 @pytest.mark.versioning
 def test_versioning_multi_object_delete_with_marker_create():

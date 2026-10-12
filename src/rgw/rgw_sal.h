@@ -1305,6 +1305,8 @@ class Object {
 
     /** Load the object state for this object. */
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;
+    /** Apply pending olh log entries left by deletes with FLAG_SKIP_UPDATE_OLH */
+    virtual int update_olh(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
      * deleted.  @note the attribute APIs may be revisited in the future. */
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;
