@@ -19,6 +19,7 @@
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
 #include "rgw_s3_filter.h"
+#include "rgw_s3vector.h"
 #include <cstdint>
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
@@ -494,7 +495,10 @@ int POSIXDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
 /* S3Vectors - load_vector_bucket */
 int POSIXDriver::load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<VectorBucket>* bucket, optional_yield y)
 {
-  *bucket = std::make_unique<POSIXVectorBucket>(this, root_dir.get(), b);
+  // Use "s3vector" namespace to separate vector buckets from regular S3 buckets
+  // This ensures they can coexist with the same name
+  std::optional<std::string> vector_ns{"s3vector"};
+  *bucket = std::make_unique<POSIXVectorBucket>(this, root_dir.get(), b, vector_ns);
   return (*bucket)->load_bucket(dpp, y);
 }
 /* S3Vectors - load_vector_bucket */
@@ -770,13 +774,23 @@ int POSIXDriver::list_vector_buckets(const DoutPrefixProvider* dpp, const rgw_ow
       errno = 0;
       continue;
     }
-    if (entry->d_name[0] == '.') {
-      /* Skip dotfiles */
+    // Vector buckets use .s3vector_ prefix, skip other dotfiles
+    const std::string_view s3vector_prefix = ".s3vector_";
+    std::string_view dname(entry->d_name);
+    if (entry->d_name[0] == '.' && !dname.starts_with(s3vector_prefix)) {
+      /* Skip non-vector dotfiles */
       errno = 0;
       continue;
     }
+    // Skip regular buckets (those without the .s3vector_ prefix)
+    if (!dname.starts_with(s3vector_prefix)) {
+      errno = 0;
+      continue;
+    }
+    // Extract the actual bucket name from .s3vector_<encoded_name>
+    std::string bucket_name = url_decode(entry->d_name + s3vector_prefix.length());
     std::unique_ptr<VectorBucket> bucket;
-    ret = load_vector_bucket(dpp, rgw_bucket("", entry->d_name), &bucket, null_yield);
+    ret = load_vector_bucket(dpp, rgw_bucket("", bucket_name), &bucket, null_yield);
     if (ret < 0) {
       if (ret == -ENOENT) {
         errno = 0;
@@ -788,7 +802,7 @@ int POSIXDriver::list_vector_buckets(const DoutPrefixProvider* dpp, const rgw_ow
       continue;
     }
     RGWBucketEnt ent;
-    ent.bucket.name = url_decode(entry->d_name);
+    ent.bucket.name = bucket_name;  // Already decoded above
     ent.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
     // TODO: ent.size and ent.count
 
@@ -1955,49 +1969,32 @@ int POSIXVectorBucket::remove(const DoutPrefixProvider* dpp,
                         bool delete_children,
                         optional_yield y)
 {
-  // Vector buckets can share directories with backing S3 buckets (RGW backend mode).
-  // If the vector bucket was created over an existing S3 bucket with different owner,
-  // we should NOT delete the directory - only remove vector bucket metadata.
-  // Check if ownership was preserved (indicating shared directory with S3 bucket).
+  // Vector buckets are stored in .s3vector_<name> directories (due to namespace),
+  // which are separate from backing S3 buckets stored in <name> directories.
+  // When delete_children=true, also delete all indexes from the backing bucket.
 
-  bool shared_with_s3_bucket = false;
-
-  // Read current bucket info from xattrs to check ownership
-  Attrs current_attrs;
-  int ret = dir->open(dpp);
-  if (ret == 0) {
-    ret = dir->read_attrs(dpp, y, current_attrs);
-    if (ret == 0) {
-      RGWBucketInfo current_info;
-      ret = posix::decode_attr(current_attrs, RGW_POSIX_ATTR_BUCKET_INFO, current_info);
-      if (ret == 0) {
-        // Check if this is a vector bucket sharing space with regular S3 bucket:
-        // - But owner might be from the original S3 bucket if we preserved it
-        // Actually, simpler: just don't delete directory for vector buckets - let the
-        // S3 bucket deletion handle it if needed
-        shared_with_s3_bucket = true; // For now, always preserve directory for vector buckets
-      }
+  int ret = 0;
+  if (delete_children) {
+    // Delete all indexes stored in the backing bucket via LanceDB
+    ret = rgw::s3vector::remove_indexes(dpp, driver, &info.bucket.tenant, get_name(), true, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to remove indexes for vector bucket "
+                        << get_name() << ": " << cpp_strerror(ret) << dendl;
+      return ret;
     }
   }
 
-  if (shared_with_s3_bucket) {
-    // Don't delete the directory - it may be shared with an S3 bucket
-    // Just invalidate cache
-    ldpp_dout(dpp, 10) << "Vector bucket " << get_name()
-                       << " removal: preserving directory (may be shared with S3 bucket)" << dendl;
-    driver->get_bucket_cache()->invalidate_bucket(dpp, get_name());
-    return 0;
-  }
-
-  // No sharing detected - safe to delete directory
   ret = dir->remove(dpp, y, delete_children, nullptr);
   if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to remove vector bucket directory "
+                      << get_name() << ": " << cpp_strerror(ret) << dendl;
     return ret;
   }
 
   driver->get_bucket_cache()->invalidate_bucket(dpp, get_name());
 
-  return ret;
+  ldpp_dout(dpp, 10) << "Successfully removed vector bucket " << get_name() << dendl;
+  return 0;
 }
 /* S3Vectors - remove */
 
@@ -2076,13 +2073,13 @@ int POSIXVectorBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield
   }
 
   RGWBucketInfo bak_info = info;;
-  ret = posix::decode_attr(attrs, RGW_POSIX_ATTR_BUCKET_INFO, info);
+  ret = posix::decode_attr(attrs, RGW_POSIX_ATTR_VECTOR_BUCKET_INFO, info);
   if (ret < 0) {
     // TODO dang: fake info up (UID to owner conversion?)
     info = bak_info;
   } else {
     // Don't leave info visible in attributes
-    attrs.erase(RGW_POSIX_ATTR_BUCKET_INFO);
+    attrs.erase(RGW_POSIX_ATTR_VECTOR_BUCKET_INFO);
   }
 
   return 0;
@@ -2238,39 +2235,13 @@ int POSIXVectorBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield
     return ret;
   }
 
-  // Vector buckets can share physical directories with backing S3 buckets (RGW backend).
-  // Both use RGW_POSIX_ATTR_BUCKET_INFO xattr. When writing vector bucket metadata,
-  // preserve the ownership of an existing S3 bucket to prevent it from being deleted
-  // when the vector bucket owner is deleted.
-  Attrs existing_attrs;
-  ret = dir->read_attrs(dpp, y, existing_attrs);
-  if (ret == 0) {
-    // Successfully read existing attributes
-    RGWBucketInfo existing_info;
-    ret = posix::decode_attr(existing_attrs, RGW_POSIX_ATTR_BUCKET_INFO, existing_info);
-    if (ret == 0) {
-      // Existing bucket metadata found
-      // Check if it's a different bucket type (Normal vs Indexless) with different owner
-      bool is_existing_regular = (existing_info.layout.current_index.layout.type != rgw::BucketIndexType::Indexless);
-      bool is_new_vector = (info.layout.current_index.layout.type == rgw::BucketIndexType::Indexless);
-
-      if (is_existing_regular && is_new_vector && existing_info.owner != info.owner) {
-        // Existing regular S3 bucket with different owner - preserve its ownership
-        ldpp_dout(dpp, 10) << "Vector bucket " << info.bucket.name
-                           << " preserving existing S3 bucket ownership: " << existing_info.owner
-                           << " (vector bucket owner: " << info.owner << ")" << dendl;
-        info.owner = existing_info.owner;
-        info.creation_time = existing_info.creation_time;
-        info.bucket.marker = existing_info.bucket.marker;
-        info.bucket.bucket_id = existing_info.bucket.bucket_id;
-      }
-    }
-  }
-
+  // Vector buckets use a separate xattr (RGW_POSIX_ATTR_VECTOR_BUCKET_INFO) from
+  // regular S3 buckets (RGW_POSIX_ATTR_BUCKET_INFO). This allows them to share
+  // physical directories in RGW backend mode without metadata conflicts.
   bufferlist bl;
   encode(info, bl);
   Attrs extra_attrs;
-  extra_attrs[RGW_POSIX_ATTR_BUCKET_INFO] = bl;
+  extra_attrs[RGW_POSIX_ATTR_VECTOR_BUCKET_INFO] = bl;
 
   return dir->write_attrs(dpp, y, attrs, &extra_attrs);
 }
