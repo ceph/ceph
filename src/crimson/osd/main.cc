@@ -11,7 +11,9 @@
 
 #include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
+#include <seastar/core/metrics_api.hh>
 #include <seastar/core/prometheus.hh>
+#include <seastar/core/relabel_config.hh>
 #include <seastar/core/thread.hh>
 #include <seastar/http/httpd.hh>
 #include <seastar/net/inet_address.hh>
@@ -292,6 +294,18 @@ int main(int argc, const char* argv[])
                   "Could not start Prometheus API server on {}:{}: {}\n",
                   prom_addr, prom_port, ep);
                 return seastar::make_exception_future(ep);
+              }).get();
+            }
+
+            if (local_conf().get_val<bool>("crimson_smp_metrics")) {
+              INFO("enabling seastar smp cross-core message metrics");
+              seastar::smp::invoke_on_all([] {
+                namespace sm = seastar::metrics;
+                sm::relabel_config keep_smp;
+                keep_smp.source_labels = {"__name__"};
+                keep_smp.expr = "smp_total_.*";
+                keep_smp.action = sm::relabel_config::relabel_action::keep;
+                return sm::set_relabel_configs({keep_smp}).discard_result();
               }).get();
             }
 
