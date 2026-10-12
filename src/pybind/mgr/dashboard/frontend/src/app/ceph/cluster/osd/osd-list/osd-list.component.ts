@@ -468,7 +468,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
           required: true
         }
       ],
-      submitButtonText: $localize`Edit OSD`,
+      submitButtonText: this.actionLabels.SAVE_CHANGES,
       onSubmit: (values: any) => {
         this.osdService.update(selectedOsd.id, values.deviceClass).subscribe(() => {
           this.notificationService.show(
