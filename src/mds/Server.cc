@@ -22,6 +22,7 @@
 #include "include/ceph_assert.h"  // lexical_cast includes system assert.h
 #include "include/cephfs/metrics/Types.h"
 #include "include/cephfs/keys_and_values.h"
+#include "include/Context.h" // for C_GatherBase
 #include "include/random.h" // for ceph::util::generate_random_number()
 
 #include <boost/config/warning_disable.hpp>
