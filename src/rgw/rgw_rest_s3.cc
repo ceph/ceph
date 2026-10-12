@@ -694,6 +694,13 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
             if (!encoding.empty()) {
               response_attrs[aiter->second] = std::move(encoding);
             }
+          } else if (aiter->first == RGW_ATTR_STORAGE_CLASS) {
+            // "Amazon S3 returns this header for all objects except for S3
+            // Standard storage class objects." (GetObject and HeadObject,
+            // x-amz-storage-class)
+            if (!s.empty() && s != RGW_STORAGE_CLASS_STANDARD) {
+              response_attrs[aiter->second] = std::move(s);
+            }
           } else {
             response_attrs[aiter->second] = std::move(s);
           }
