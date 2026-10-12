@@ -20,6 +20,7 @@
 #include "profile.h"
 #endif
 
+#include <iomanip>  // for std::setw, std::setprecision
 
 namespace dmc = crimson::dmclock;
 namespace test = crimson::test_dmc;
