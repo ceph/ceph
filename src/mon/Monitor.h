@@ -58,6 +58,7 @@
 #include <boost/smart_ptr/shared_ptr.hpp>
 
 #include "mon/MonOpRequest.h"
+#include "mon/MonitorDBStoreTransaction.h"
 #include "common/WorkQueue.h"
 
 struct health_check_map_t;
@@ -252,7 +253,7 @@ public:
 
   const utime_t &get_leader_since() const;
 
-  void prepare_new_fingerprint(MonitorDBStore::TransactionRef t);
+  void prepare_new_fingerprint(MonitorDBStoreTransactionRef t);
 
   std::vector<DaemonHealthMetric> get_health_metrics();
 
@@ -516,7 +517,7 @@ private:
    * We store a few things on the side that we don't want to get clobbered by sync.  This
    * includes the latest monmap and a lower bound on last_committed.
    */
-  void sync_stash_critical_state(MonitorDBStore::TransactionRef tx);
+  void sync_stash_critical_state(MonitorDBStoreTransactionRef tx);
 
   /**
    * reset the sync timeout
@@ -839,7 +840,7 @@ public:
   void log_health(
     const health_check_map_t& updated,
     const health_check_map_t& previous,
-    MonitorDBStore::TransactionRef t);
+    MonitorDBStoreTransactionRef t);
 
   void update_pending_metadata();
 
@@ -1031,7 +1032,7 @@ private:
   /// read the ondisk features into the CompatSet pointed to by read_features
   static void read_features_off_disk(MonitorDBStore *store, CompatSet *read_features);
   void read_features();
-  void write_features(MonitorDBStore::TransactionRef t);
+  void write_features(MonitorDBStoreTransactionRef t);
 
   OpTracker op_tracker;
 
@@ -1075,7 +1076,7 @@ private:
    * @return 0 on success, or negative error code
    */
   int write_fsid();
-  int write_fsid(MonitorDBStore::TransactionRef t);
+  int write_fsid(MonitorDBStoreTransactionRef t);
 
   int do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
 		       ceph::Formatter *f,

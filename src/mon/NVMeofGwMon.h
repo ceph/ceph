@@ -61,7 +61,7 @@ public:
   // 3 pure virtual methods of the paxosService
   void create_initial() override {};
   void create_pending() override;
-  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void encode_pending(MonitorDBStoreTransactionRef t) override;
 
   void init() override;
   void on_shutdown() override;
@@ -79,7 +79,7 @@ public:
        const std::string &group);
   bool prepare_command(MonOpRequestRef op);
 
-  void encode_full(MonitorDBStore::TransactionRef t) override {}
+  void encode_full(MonitorDBStoreTransactionRef t) override {}
 
   bool preprocess_beacon(MonOpRequestRef op);
   bool prepare_beacon(MonOpRequestRef op);
