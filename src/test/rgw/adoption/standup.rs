@@ -32,6 +32,7 @@ edition = "2021"
 //! one, `standup.rs up` to run every step through serving.
 
 use std::collections::BTreeMap;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -1034,6 +1035,11 @@ fn iam_call(env: &Env, params: &[(&str, &str)]) -> Result<String, String> {
 /// found that way -- the versioning state, the copy sources and a
 /// cache-warming sentinel -- and none of the three by reading the 33
 /// mutating call sites in the axes.
+///
+/// **ctime as well as mtime.**  Setting an attribute -- a bucket policy
+/// is one, on the bucket directory -- changes a file's ctime and not its
+/// mtime or size, so a fingerprint without it missed the corpus putting
+/// a policy on the log-target bucket.
 fn tree_fingerprint(root: &PathBuf) -> Vec<String> {
     fn walk(d: &PathBuf, out: &mut Vec<String>) {
         let Ok(rd) = std::fs::read_dir(d) else {
@@ -1050,7 +1056,8 @@ fn tree_fingerprint(root: &PathBuf) -> Vec<String> {
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
-            out.push(format!("{}\t{}\t{}", p.display(), m.len(), mtime));
+            out.push(format!("{}\t{}\t{}\t{}.{:09}", p.display(), m.len(), mtime,
+                             m.ctime(), m.ctime_nsec()));
             if m.is_dir() {
                 walk(&p, out);
             }

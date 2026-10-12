@@ -449,7 +449,10 @@ async fn corpus_coverage_bucket_config() {
      * captures however the fields were named. */
     let log_target = bucket(&tier, "bconf-log-target");
     ensure_bucket(&client, &log_target).await;
-    {
+    /* Applying the policy is a write, so observe mode does not:  the
+     * policy, if any, is the first gateway's, and the outcome facts
+     * below belong to the run that applied it. */
+    if !observing() {
         let policy = format!(
             r#"{{"Version":"2012-10-17","Statement":[{{"Sid":"S3ServerAccessLogsPolicy","Effect":"Allow","Principal":{{"Service":"logging.s3.amazonaws.com"}},"Action":["s3:PutObject"],"Resource":"arn:aws:s3:::{log_target}/log/*","Condition":{{"ArnLike":{{"aws:SourceArn":"arn:aws:s3:::{b}"}},"StringEquals":{{"aws:SourceAccount":"testid"}}}}}}]}}"#
         );
