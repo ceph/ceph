@@ -269,7 +269,7 @@ done
 
         self.assertTrue(success, "open operation failed")
 
-class TestEphemeralPins(CephFSTestCase):
+class TestEphemeralDistributed(CephFSTestCase):
     MDSS_REQUIRED = 3
     CLIENTS_REQUIRED = 1
 
@@ -450,44 +450,6 @@ done
         self.assertGreaterEqual(len(rank1)/nsubtrees, 0.15)
         self.assertGreaterEqual(len(rank2)/nsubtrees, 0.15)
 
-
-    def test_ephemeral_random(self):
-        """
-        That 100% randomness causes all children to be pinned.
-        """
-        self._setup_tree(random=1.0)
-        self._wait_random_subtrees(100, status=self.status, rank="all")
-
-    def test_ephemeral_random_max(self):
-        """
-        That the config mds_export_ephemeral_random_max is not exceeded.
-        """
-
-        r = 0.5
-        count = 1000
-        self._setup_tree(count=count, random=r)
-        subtrees = self._wait_random_subtrees(int(r*count*.75), status=self.status, rank="all")
-        self.config_set('mds', 'mds_export_ephemeral_random_max', 0.01)
-        self._setup_tree(path="tree/new", count=count)
-        time.sleep(30) # for something not to happen...
-        subtrees = self._get_subtrees(status=self.status, rank="all", path="tree/new/")
-        self.assertLessEqual(len(subtrees), int(.01*count*1.25))
-
-    def test_ephemeral_random_max_config(self):
-        """
-        That the config mds_export_ephemeral_random_max config rejects new OOB policies.
-        """
-
-        self.config_set('mds', 'mds_export_ephemeral_random_max', 0.01)
-        try:
-            p = self._setup_tree(count=1, random=0.02, wait=False)
-            p.wait()
-        except CommandFailedError as e:
-            log.info(f"{e}")
-            self.assertIn("Invalid", p.stderr.getvalue())
-        else:
-            raise RuntimeError("mds_export_ephemeral_random_max ignored!")
-
     def test_ephemeral_random_dist(self):
         """
         That ephemeral distributed pin overrides ephemeral random pin
@@ -502,135 +464,6 @@ done
             path = s['dir']['path']
             if path.startswith('/tree'):
                 self.assertFalse(s['random_ephemeral_pin'])
-
-    def test_ephemeral_random_pin_override_before(self):
-        """
-        That a conventional export pin overrides the random policy before creating new directories.
-        """
-
-        self._setup_tree(count=0, random=1.0)
-        self._setup_tree(path="tree/pin", count=10, export=1)
-        self._wait_subtrees([("/tree/pin", 1)], status=self.status, rank=1, path="/tree/pin")
-
-    def test_ephemeral_random_pin_override_after(self):
-        """
-        That a conventional export pin overrides the random policy after creating new directories.
-        """
-
-        count = 10
-        self._setup_tree(count=0, random=1.0)
-        self._setup_tree(path="tree/pin", count=count)
-        self._wait_random_subtrees(count+1, status=self.status, rank="all")
-        self.mount_a.setfattr("tree/pin", "ceph.dir.pin", "1")
-        self._wait_subtrees([("/tree/pin", 1)], status=self.status, rank=1, path="/tree/pin")
-
-    def test_ephemeral_randomness(self):
-        """
-        That the randomness is reasonable.
-        """
-
-        r = random.uniform(0.25, 0.75) # ratios don't work for small r!
-        count = 1000
-        self._setup_tree(count=count, random=r)
-        subtrees = self._wait_random_subtrees(int(r*count*.50), status=self.status, rank="all")
-        time.sleep(30) # for max to not be exceeded
-        subtrees = self._wait_random_subtrees(int(r*count*.50), status=self.status, rank="all")
-        self.assertLessEqual(len(subtrees), int(r*count*1.50))
-
-    def test_ephemeral_random_cache_drop(self):
-        """
-        That the random ephemeral pin does not prevent empty (nothing in cache) subtree merging.
-        """
-
-        count = 100
-        self._setup_tree(count=count, random=1.0)
-        self._wait_random_subtrees(count, status=self.status, rank="all")
-        self.mount_a.umount_wait() # release all caps
-        def _drop():
-            self.fs.ranks_tell(["cache", "drop"], status=self.status)
-        self._wait_subtrees([], status=self.status, action=_drop)
-
-    def test_ephemeral_random_failover(self):
-        """
-        That the random ephemeral pins stay pinned across MDS failover.
-        """
-
-        count = 100
-        r = 0.5
-        self._setup_tree(count=count, random=r)
-        # wait for all random subtrees to be created, not a specific count
-        time.sleep(30)
-        subtrees = self._wait_random_subtrees(1, status=self.status, rank=1)
-        before = [(s['dir']['path'], s['auth_first']) for s in subtrees]
-        before.sort();
-
-        self.fs.rank_fail(rank=1)
-        self.status = self.fs.wait_for_daemons()
-
-        time.sleep(30) # waiting for something to not happen
-        subtrees = self._wait_random_subtrees(1, status=self.status, rank=1)
-        after = [(s['dir']['path'], s['auth_first']) for s in subtrees]
-        after.sort();
-        log.info(f"subtrees before: {before}")
-        log.info(f"subtrees after: {after}")
-
-        self.assertEqual(before, after)
-
-    def test_ephemeral_pin_grow_mds(self):
-        """
-        That consistent hashing works to reduce the number of migrations.
-        """
-
-        self.fs.set_max_mds(2)
-        self.status = self.fs.wait_for_daemons()
-
-        self._setup_tree(random=1.0)
-        subtrees_old = self._wait_random_subtrees(100, status=self.status, rank="all")
-
-        self.fs.set_max_mds(3)
-        self.status = self.fs.wait_for_daemons()
-        
-        # Sleeping for a while to allow the ephemeral pin migrations to complete
-        time.sleep(30)
-        
-        subtrees_new = self._wait_random_subtrees(100, status=self.status, rank="all")
-        count = 0
-        for old_subtree in subtrees_old:
-            for new_subtree in subtrees_new:
-                if (old_subtree['dir']['path'] == new_subtree['dir']['path']) and (old_subtree['auth_first'] != new_subtree['auth_first']):
-                    count = count + 1
-                    break
-
-        log.info("{0} migrations have occured due to the cluster resizing".format(count))
-        # ~50% of subtrees from the two rank will migrate to another rank
-        self.assertLessEqual((count/len(subtrees_old)), (0.5)*1.25) # with 25% overbudget
-
-    def test_ephemeral_pin_shrink_mds(self):
-        """
-        That consistent hashing works to reduce the number of migrations.
-        """
-
-        self.fs.set_max_mds(3)
-        self.status = self.fs.wait_for_daemons()
-
-        self._setup_tree(random=1.0)
-        subtrees_old = self._wait_random_subtrees(100, status=self.status, rank="all")
-
-        self.fs.set_max_mds(2)
-        self.status = self.fs.wait_for_daemons()
-        time.sleep(30)
-
-        subtrees_new = self._wait_random_subtrees(100, status=self.status, rank="all")
-        count = 0
-        for old_subtree in subtrees_old:
-            for new_subtree in subtrees_new:
-                if (old_subtree['dir']['path'] == new_subtree['dir']['path']) and (old_subtree['auth_first'] != new_subtree['auth_first']):
-                    count = count + 1
-                    break
-
-        log.info("{0} migrations have occured due to the cluster resizing".format(count))
-        # rebalancing from 3 -> 2 may cause half of rank 0/1 to move and all of rank 2
-        self.assertLessEqual((count/len(subtrees_old)), (1.0/3.0/2.0 + 1.0/3.0/2.0 + 1.0/3.0)*1.25) # aka .66 with 25% overbudget
 
 class TestDumpExportStates(CephFSTestCase):
     MDSS_REQUIRED = 2
@@ -814,3 +647,412 @@ class TestKillExports(CephFSTestCase):
 
             # failed if buggy
             self.mount_a.ls()
+
+# Model of how the MDS places the dirfrags of a randomly pinned directory.
+# It mirrors rjhash64() (src/include/hash.h), CInode::should_random_pin_frag()
+# and MDCache::hash_into_rank_bucket(), so that tests can assert the exact
+# placement of every dirfrag rather than rely on statistical bounds.
+_U64 = (1 << 64) - 1
+_FRAG_VALUE_BITS = 24
+
+def _rjhash64(key):
+    key = ((~key) + (key << 21)) & _U64
+    key ^= key >> 24
+    key = (key + (key << 3) + (key << 8)) & _U64
+    key ^= key >> 14
+    key = (key + (key << 2) + (key << 4)) & _U64
+    key ^= key >> 28
+    key = (key + (key << 31)) & _U64
+    return key
+
+def _frag_hash(ino, frag_value):
+    return _rjhash64((_rjhash64(ino) + _rjhash64(frag_value)) & _U64)
+
+def _should_random_pin_frag(ino, frag_value, prob):
+    if prob <= 0.0:
+        return False
+    if prob >= 1.0:
+        return True
+    h = _frag_hash(ino, frag_value)
+    return (h >> 11) * (1.0 / 9007199254740992.0) < prob
+
+def _hash_into_rank_bucket(ino, frag_value, max_mds):
+    h = _frag_hash(ino, frag_value)
+    b, j = -1, 0
+    while j < max_mds:
+        b = j
+        h = (h * 2862933555777941757 + 1) & _U64
+        j = int((b + 1) * (float(1 << 31) / float((h >> 33) + 1)))
+    return b
+
+def _ephemeral_frag_bits(factor, max_mds):
+    want = int(factor * max_mds)
+    n = 0
+    while (1 << n) < want:
+        n += 1
+    return n
+
+def _frag_name(frag_value, bits):
+    """
+    The frag as printed in a subtree's dirfrag, e.g. "101*".
+    """
+    return f"{frag_value >> (_FRAG_VALUE_BITS - bits):0{bits}b}*"
+
+class TestEphemeralRandom(CephFSTestCase):
+    MDSS_REQUIRED = 3
+    CLIENTS_REQUIRED = 1
+
+    # A split of the root dirfrag is never shallower than mds_bal_split_bits
+    # (default 3). Keep the ephemeral split depth at or above it so that a
+    # directory is split exactly to that depth and never merged below it.
+    MIN_FRAG_BITS = 3
+
+    def setUp(self):
+        super().setUp()
+        self.config_set('mds', 'mds_export_ephemeral_random', True)
+        self.config_set('mds', 'mds_export_ephemeral_random_max', 1.0)
+        self.fs.set_max_mds(3)
+        self.status = self.fs.wait_for_daemons()
+
+    def _wait_mds_config(self, key, value, timeout=30):
+        """
+        Wait until every active rank has picked up a config change.
+        """
+        def _applied():
+            for _, out in self.fs.ranks_tell(["config", "get", key], status=self.status):
+                if float(out[key]) != float(value):
+                    return False
+            return True
+        self.wait_until_true(_applied, timeout=timeout)
+
+    def _setup_random_dir(self, path, prob, factor=2, max_mds=3, files_per_frag=16):
+        """
+        Create a flat directory holding enough files for every dirfrag to be
+        non-empty (empty dirfrags are neither exported nor kept as subtrees)
+        and set its random ephemeral pin. The directory is split to 2^bits
+        dirfrags, bits being derived from mds_export_ephemeral_frag_factor
+        and max_mds. Returns bits.
+        """
+        bits = _ephemeral_frag_bits(factor, max_mds)
+        self.assertGreaterEqual(bits, self.MIN_FRAG_BITS)
+        self.config_set('mds', 'mds_export_ephemeral_frag_factor', factor)
+        self._wait_mds_config('mds_export_ephemeral_frag_factor', factor)
+        nfiles = files_per_frag * (1 << bits)
+        self.mount_a.run_shell_payload(f"""
+set -e
+mkdir -p {path}
+cd {path}
+seq -f 'file_%g' 1 {nfiles} | xargs touch
+""")
+        self.mount_a.setfattr(path, "ceph.dir.pin.random", str(prob))
+        return bits
+
+    def _expected_random_placement(self, path, prob, bits, max_mds=3):
+        """
+        Return {frag: rank} for the dirfrags of path that should be randomly
+        pinned, path being split uniformly to bits.
+        """
+        ino = self.mount_a.path_to_ino(path)
+        placement = {}
+        for v in range(1 << bits):
+            value = v << (_FRAG_VALUE_BITS - bits)
+            if _should_random_pin_frag(ino, value, prob):
+                placement[_frag_name(value, bits)] = _hash_into_rank_bucket(ino, value, max_mds)
+        log.info(f"expected placement of {path} (prob={prob}, max_mds={max_mds}): "
+                 f"{len(placement)}/{1 << bits} dirfrags pinned: {placement}")
+        return placement
+
+    def _get_random_placement(self, path):
+        """
+        Return {frag: auth rank} for the dirfrags of path that are subtree
+        roots. Dirfrags that are not randomly pinned are merged into their
+        parent subtree and so are not listed.
+        """
+        subtrees = self._get_subtrees(status=self.status, rank="all", path=f"/{path}")
+        placement = {}
+        for s in subtrees:
+            if s['dir']['path'] != f"/{path}":
+                continue
+            self.assertTrue(s['random_ephemeral_pin'])
+            self.assertFalse(s['distributed_ephemeral_pin'])
+            frag = s['dir']['dirfrag'].split('.')[-1]
+            placement[frag] = s['auth_first']
+        return placement
+
+    def _wait_random_placement(self, path, expected, timeout=300, sleep=5):
+        actual = None
+        try:
+            with safe_while(sleep=sleep, tries=timeout//sleep) as proceed:
+                while proceed():
+                    actual = self._get_random_placement(path)
+                    if actual == expected:
+                        return actual
+                    missing = {f: r for f, r in expected.items() if actual.get(f) != r}
+                    unexpected = {f: r for f, r in actual.items() if expected.get(f) != r}
+                    log.info(f"placement of {path}: {len(missing)} dirfrags not yet "
+                             f"placed {missing}, {len(unexpected)} misplaced {unexpected}")
+        except MaxWhileTries as e:
+            raise RuntimeError(f"dirfrags of {path} did not reach the expected placement "
+                               f"{expected}, got {actual}") from e
+
+    def _get_dirfrags(self, path, rank=0):
+        frags = self.fs.rank_asok(["dirfrag", "ls", f"/{path}"], rank=rank, status=self.status)
+        return sorted(_frag_name(f['value'], f['bits']) for f in frags)
+
+    def _setfattr_fails(self, path, key, val, error):
+        p = self.mount_a.setfattr(path, key, val, wait=False)
+        with self.assertRaises(CommandFailedError):
+            p.wait()
+        self.assertIn(error, p.stderr.getvalue())
+
+    def test_ephemeral_random_dirfrag_100_percent(self):
+        """
+        That with ceph.dir.pin.random=1.0, every dirfrag of the directory is
+        pinned and placed across the active ranks by consistent hashing.
+        """
+        bits = self._setup_random_dir("rand_100", 1.0, factor=8)  # 32 dirfrags
+        expected = self._expected_random_placement("rand_100", 1.0, bits)
+        self.assertEqual(len(expected), 1 << bits)
+        self._wait_random_placement("rand_100", expected)
+        self.assertEqual(set(expected.values()), {0, 1, 2})
+
+    def test_ephemeral_random_dirfrag_partial(self):
+        """
+        That with 0 < ceph.dir.pin.random < 1.0, only the selected dirfrags are
+        pinned while the rest stay with the directory's authority.
+        """
+        bits = self._setup_random_dir("rand_50", 0.5, factor=16)  # 64 dirfrags
+        expected = self._expected_random_placement("rand_50", 0.5, bits)
+        self.assertGreater(len(expected), 0)
+        self.assertLess(len(expected), 1 << bits)
+        self._wait_random_placement("rand_50", expected)
+
+    def test_ephemeral_randomness(self):
+        """
+        That an arbitrary ceph.dir.pin.random value pins about that fraction
+        of the dirfrags.
+        """
+        r = round(random.uniform(0.3, 0.7), 2)
+        bits = self._setup_random_dir("rand_dist_tree", r, factor=16)  # 64 dirfrags
+        expected = self._expected_random_placement("rand_dist_tree", r, bits)
+        nfrags = 1 << bits
+        sd = (nfrags * r * (1 - r)) ** 0.5
+        self.assertLessEqual(abs(len(expected) - nfrags * r), 4 * sd)
+        self._wait_random_placement("rand_dist_tree", expected)
+
+    def test_ephemeral_random_max(self):
+        """
+        That lowering mds_export_ephemeral_random_max below a directory's
+        ceph.dir.pin.random value caps the fraction of pinned dirfrags, and
+        that the change applies to an already pinned directory.
+        """
+        bits = self._setup_random_dir("rand_max_dir", 1.0, factor=16)  # 64 dirfrags
+        self._wait_random_placement("rand_max_dir",
+                                    self._expected_random_placement("rand_max_dir", 1.0, bits))
+
+        self.config_set('mds', 'mds_export_ephemeral_random_max', 0.25)
+        expected = self._expected_random_placement("rand_max_dir", 0.25, bits)
+        self.assertLess(len(expected), 1 << bits)
+        self._wait_random_placement("rand_max_dir", expected)
+
+        # the policy itself is left alone
+        self.assertEqual(float(self.mount_a.getfattr("rand_max_dir", "ceph.dir.pin.random")), 1.0)
+
+    def test_ephemeral_random_max_config(self):
+        """
+        That ceph.dir.pin.random is rejected with EINVAL when it exceeds
+        mds_export_ephemeral_random_max and with EDOM when outside [0.0, 1.0].
+        """
+        self.mount_a.run_shell(["mkdir", "test_max_config"])
+
+        self.mount_a.setfattr("test_max_config", "ceph.dir.pin.random", "0.5")
+        self.mount_a.setfattr("test_max_config", "ceph.dir.pin.random", "1.0")
+
+        self.config_set('mds', 'mds_export_ephemeral_random_max', 0.4)
+        self._wait_mds_config('mds_export_ephemeral_random_max', 0.4)
+
+        self.mount_a.setfattr("test_max_config", "ceph.dir.pin.random", "0.3")
+        self._setfattr_fails("test_max_config", "ceph.dir.pin.random", "0.5",
+                             "Invalid argument")
+        self._setfattr_fails("test_max_config", "ceph.dir.pin.random", "1.5",
+                             "Numerical argument out of domain")
+        self._setfattr_fails("test_max_config", "ceph.dir.pin.random", "-0.1",
+                             "Numerical argument out of domain")
+
+    def test_ephemeral_random_dirfrag_merge_floor(self):
+        """
+        That the dirfrags of a randomly pinned directory are not merged below
+        the ephemeral split depth once they become small.
+        """
+        bits = self._setup_random_dir("rand_merge", 0.5, factor=4)  # 16 dirfrags
+        expected = self._expected_random_placement("rand_merge", 0.5, bits)
+        self._wait_random_placement("rand_merge", expected)
+        frags = self._get_dirfrags("rand_merge")
+        self.assertEqual(len(frags), 1 << bits)
+
+        # Every dirfrag is now well below mds_bal_merge_size. Unlinking
+        # entries makes the MDS consider merging them.
+        self.mount_a.run_shell_payload("find rand_merge -name 'file_*' | tail -n +65 | xargs rm -f")
+        time.sleep(30) # for merges to not happen...
+
+        # N.B. the placement is not checked here: a pinned dirfrag that became
+        # empty is sent back to the directory's authority.
+        self.assertEqual(self._get_dirfrags("rand_merge"), frags)
+
+    def test_ephemeral_random_dirfrag_failover_stability(self):
+        """
+        That MDS failover neither changes the dirfrag placement nor causes
+        unnecessary migrations.
+        """
+        bits = self._setup_random_dir("rand_failover", 0.5, factor=8)  # 32 dirfrags
+        expected = self._expected_random_placement("rand_failover", 0.5, bits)
+        self._wait_random_placement("rand_failover", expected)
+
+        before = self.fs.ranks_perf(lambda p: p['mds']['exported'], status=self.status)
+        log.info(f"export stats: {before}")
+        self.fs.rank_fail(rank=1)
+        self.status = self.fs.wait_for_daemons()
+        time.sleep(15) # waiting for something to not happen
+        after = self.fs.ranks_perf(lambda p: p['mds']['exported'], status=self.status)
+        log.info(f"export stats: {after}")
+
+        self.assertEqual(self._get_random_placement("rand_failover"), expected)
+        self.assertEqual(before, after)
+
+    def test_ephemeral_random_dirfrag_under_export_pin(self):
+        """
+        That a randomly pinned directory places its dirfrags across the ranks
+        even when an ancestor is export pinned.
+        """
+        self.mount_a.run_shell(["mkdir", "-p", "parent_pin/rand_child"])
+        self.mount_a.setfattr("parent_pin", "ceph.dir.pin", "1")
+        self._wait_subtrees([('/parent_pin', 1)], status=self.status, rank=1, path="/parent_pin")
+
+        bits = self._setup_random_dir("parent_pin/rand_child", 1.0)
+        expected = self._expected_random_placement("parent_pin/rand_child", 1.0, bits)
+        self._wait_random_placement("parent_pin/rand_child", expected)
+
+    def test_ephemeral_random_dirfrag_under_distributed_pin(self):
+        """
+        That a randomly pinned directory places its dirfrags by its own policy
+        under a directory with ephemeral distributed pinning.
+        """
+        self.config_set('mds', 'mds_export_ephemeral_distributed', True)
+        self.mount_a.run_shell(["mkdir", "-p", "dist_parent/rand_child"])
+        self.mount_a.setfattr("dist_parent", "ceph.dir.pin.distributed", "1")
+
+        bits = self._setup_random_dir("dist_parent/rand_child", 1.0)
+        expected = self._expected_random_placement("dist_parent/rand_child", 1.0, bits)
+        self._wait_random_placement("dist_parent/rand_child", expected)
+
+    def test_ephemeral_random_pin_override_before(self):
+        """
+        That an export pin on a child directory set before it is populated
+        overrides the parent's random ephemeral pin.
+        """
+        self.mount_a.run_shell(["mkdir", "-p", "rand_parent/pinned_child"])
+        self.mount_a.setfattr("rand_parent", "ceph.dir.pin.random", "1.0")
+        self.mount_a.setfattr("rand_parent/pinned_child", "ceph.dir.pin", "1")
+        self.mount_a.run_shell_payload("cd rand_parent/pinned_child && seq -f 'file_%g' 1 50 | xargs touch")
+
+        subtrees = self._wait_subtrees([("/rand_parent/pinned_child", 1)], status=self.status,
+                                       rank=1, path="/rand_parent/pinned_child")
+        for s in subtrees:
+            self.assertEqual(s['export_pin'], 1)
+            self.assertFalse(s['random_ephemeral_pin'])
+
+    def test_ephemeral_random_pin_override_after(self):
+        """
+        That an export pin set on an existing child directory overrides the
+        parent's random ephemeral pin and migrates the child, leaving the
+        parent's dirfrags in place.
+        """
+        self.mount_a.run_shell_payload("""
+set -e
+mkdir -p rand_tree/pin_dir
+cd rand_tree/pin_dir
+seq -f 'file_%g' 1 50 | xargs touch
+""")
+        bits = self._setup_random_dir("rand_tree", 1.0)
+        expected = self._expected_random_placement("rand_tree", 1.0, bits)
+        self._wait_random_placement("rand_tree", expected)
+
+        self.mount_a.setfattr("rand_tree/pin_dir", "ceph.dir.pin", "1")
+        subtrees = self._wait_subtrees([("/rand_tree/pin_dir", 1)], status=self.status,
+                                       rank=1, path="/rand_tree/pin_dir")
+        for s in subtrees:
+            self.assertEqual(s['export_pin'], 1)
+            self.assertFalse(s['random_ephemeral_pin'])
+            self.assertFalse(s['distributed_ephemeral_pin'])
+
+        self.assertEqual(self._get_random_placement("rand_tree"), expected)
+
+    # With this factor, both 2 and 3 active ranks split a directory into 64
+    # dirfrags, so that the placement of the same dirfrags can be compared.
+    RESIZE_FRAG_FACTOR = 20
+
+    def test_ephemeral_pin_grow_mds(self):
+        """
+        That growing the number of active ranks only migrates dirfrags to the
+        new rank.
+        """
+        self.fs.set_max_mds(2)
+        self.status = self.fs.wait_for_daemons()
+
+        factor = self.RESIZE_FRAG_FACTOR
+        bits = self._setup_random_dir("grow_dir", 1.0, factor=factor, max_mds=2)
+        self.assertEqual(bits, _ephemeral_frag_bits(factor, 3))
+        old = self._expected_random_placement("grow_dir", 1.0, bits, max_mds=2)
+        self._wait_random_placement("grow_dir", old)
+        exported_before = sum(n for _, n in self.fs.ranks_perf(lambda p: p['mds']['exported'],
+                                                               status=self.status))
+
+        self.fs.set_max_mds(3)
+        self.status = self.fs.wait_for_daemons()
+
+        new = self._expected_random_placement("grow_dir", 1.0, bits, max_mds=3)
+        moved = [f for f in old if old[f] != new[f]]
+        log.info(f"{len(moved)}/{len(old)} dirfrags to migrate: {moved}")
+        self.assertGreater(len(moved), 0)
+        self.assertTrue(all(new[f] == 2 for f in moved))
+        self._wait_random_placement("grow_dir", new)
+
+        exported_after = sum(n for _, n in self.fs.ranks_perf(lambda p: p['mds']['exported'],
+                                                              status=self.status))
+        self.assertEqual(exported_after - exported_before, len(moved))
+
+    def test_ephemeral_pin_shrink_mds(self):
+        """
+        That shrinking the number of active ranks only migrates the dirfrags
+        of the stopped rank.
+        """
+        factor = self.RESIZE_FRAG_FACTOR
+        bits = self._setup_random_dir("shrink_dir", 1.0, factor=factor, max_mds=3)
+        self.assertEqual(bits, _ephemeral_frag_bits(factor, 2))
+        old = self._expected_random_placement("shrink_dir", 1.0, bits, max_mds=3)
+        self._wait_random_placement("shrink_dir", old)
+
+        self.fs.set_max_mds(2)
+        self.status = self.fs.wait_for_daemons()
+
+        new = self._expected_random_placement("shrink_dir", 1.0, bits, max_mds=2)
+        moved = [f for f in old if old[f] != new[f]]
+        log.info(f"{len(moved)}/{len(old)} dirfrags to migrate: {moved}")
+        self.assertEqual(sorted(moved), sorted(f for f in old if old[f] == 2))
+        self.assertGreater(len(moved), 0)
+        self._wait_random_placement("shrink_dir", new)
+
+    def test_ephemeral_random_cache_drop(self):
+        """
+        That randomly pinned dirfrag subtrees are dropped once nothing is
+        left in cache.
+        """
+        bits = self._setup_random_dir("rand_drop_dir", 1.0)
+        expected = self._expected_random_placement("rand_drop_dir", 1.0, bits)
+        self._wait_random_placement("rand_drop_dir", expected)
+
+        self.mount_a.umount_wait() # release all caps
+        def _drop():
+            self.fs.ranks_tell(["cache", "drop"], status=self.status)
+        self._wait_subtrees([], status=self.status, rank="all", path="/rand_drop_dir",
+                            action=_drop, timeout=120)
