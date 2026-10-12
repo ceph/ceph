@@ -49,6 +49,7 @@ enum class Sequence {
   SEQUENCE_SEQ14,
   SEQUENCE_SEQ15,
   SEQUENCE_SEQ16,
+  SEQUENCE_SEQ17,
 
   SEQUENCE_END,
   SEQUENCE_BEGIN = SEQUENCE_SEQ0
@@ -353,6 +354,24 @@ class Seq16 : public IoSequence {
  public:
   Seq16(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
   
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq17 : public IoSequence {
+ private:
+  uint64_t truncate_size = 0;
+  std::vector<std::pair<uint64_t, uint64_t>> writes;
+  size_t write_index = 0;
+  bool donewrite = false;
+  bool doneread = false;
+
+  void setup_writes();
+
+ public:
+  Seq17(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
+
   Sequence get_id() const override;
   std::string get_name() const override;
   std::unique_ptr<IoOp> _next() override;
