@@ -889,6 +889,26 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.debug('_kick_serve_loop')
         self.event.set()
 
+    def get_nfs_grpc_certs(self, cluster_id: str) -> dict:
+        """Return NFS gRPC client cert bundle for a cluster from cert_mgr.
+
+        Called via self.mgr.remote('cephadm', 'get_nfs_grpc_certs', cluster_id)
+        from the NFS module. Works for all grpc_certificate_source values since
+        get_certificates_generic() saves all cert types to cert_mgr.
+
+        CA cert: tries per-service key (inline/reference) first,
+                 falls back to shared root CA (cephadm-signed).
+        """
+        from cephadm.services.nfs import NFS_GRPC_CLIENT_CERT, NFS_GRPC_CLIENT_KEY, NFS_GRPC_CA_CERT
+        svc_name    = f'nfs.{cluster_id}'
+        client_cert = self.cert_mgr.get_cert(NFS_GRPC_CLIENT_CERT, service_name=svc_name)
+        client_key  = self.cert_mgr.get_key(NFS_GRPC_CLIENT_KEY,  service_name=svc_name)
+        ca_cert     = (self.cert_mgr.get_cert(NFS_GRPC_CA_CERT, service_name=svc_name)
+                       or self.cert_mgr.get_root_ca())
+        if not (ca_cert and client_cert and client_key):
+            raise RuntimeError(f'NFS gRPC certs not found for cluster {cluster_id}')
+        return {'ca_cert': ca_cert, 'client_cert': client_cert, 'client_key': client_key}
+
     def serve(self) -> None:
         """
         The main loop of cephadm.

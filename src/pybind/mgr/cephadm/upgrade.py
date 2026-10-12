@@ -4,6 +4,7 @@ import logging
 import time
 import datetime
 import uuid
+import threading
 from dataclasses import dataclass, field, asdict
 from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast, Set
 from cephadm.services.service_registry import service_registry
@@ -235,7 +236,8 @@ class UpgradeState:
                  rotated_mgr_mon_auth_key_daemons: Optional[List[str]] = None,
                  has_set_cephx_allowed_ciphers: Optional[bool] = False,
                  health_warnings_muted: Optional[bool] = False,
-                 rotated_osd_mds_keyrings: Optional[bool] = False
+                 rotated_osd_mds_keyrings: Optional[bool] = False,
+                 nfs_already_upgraded: Optional[Dict[str, List[str]]] = None
                  ):
 
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
@@ -262,6 +264,11 @@ class UpgradeState:
         self.has_set_cephx_allowed_ciphers = has_set_cephx_allowed_ciphers
         self.rotated_osd_mds_keyrings = rotated_osd_mds_keyrings
         self.health_warnings_muted = health_warnings_muted
+        # NFS rolling upgrade: tracks daemons confirmed upgraded each round.
+        # Passed as already_upgraded param to each ok-to-upgrade gRPC call.
+        # Dict keyed by cluster name so each cluster tracks its own upgraded daemons.
+        # Passed as already_upgraded to each ok-to-upgrade gRPC call per cluster.
+        self.nfs_already_upgraded: Dict[str, List[str]] = nfs_already_upgraded or {}
 
     def to_json(self) -> dict:
         return {
@@ -287,7 +294,8 @@ class UpgradeState:
             'rotated_mgr_mon_auth_key_daemons': self.rotated_mgr_mon_auth_key_daemons,
             'has_set_cephx_allowed_ciphers': self.has_set_cephx_allowed_ciphers,
             'health_warnings_muted': self.health_warnings_muted,
-            'rotated_osd_mds_keyrings': self.rotated_osd_mds_keyrings
+            'rotated_osd_mds_keyrings': self.rotated_osd_mds_keyrings,
+            'nfs_already_upgraded': self.nfs_already_upgraded,
         }
 
     @classmethod
@@ -922,6 +930,209 @@ class CephadmUpgrade:
             time.sleep(15)
             tries -= 1
         return False
+
+    def _wait_for_ok_to_upgrade(
+            self,
+            s: DaemonDescription,
+            known: Optional[List[str]] = None,  # NOTE: output argument!
+    ) -> bool:
+        """Ask the service if daemon s is safe to upgrade.
+
+        Calls service.ok_to_upgrade() which each service implements in its own
+        way. Default base class returns safe immediately. NFS overrides with
+        a gRPC call to NFS-Ganesha.
+
+        Error handling based on errno returned by ok_to_upgrade():
+          retval == 0       → safe, proceed
+          retval == ENOTSUP → API not implemented, fall back to traditional upgrade
+          retval == EBUSY   → temporary, retry up to 4 times then pause upgrade
+          retval == EINVAL  → hard error, pause upgrade immediately
+        """
+        assert s.daemon_type is not None
+        assert s.daemon_id is not None
+        assert self.upgrade_state is not None
+
+        # For NFS: read only this cluster's already_upgraded list so each
+        # parallel cluster thread passes only its own daemons to NFS-Ganesha.
+        cluster = s.service_name()
+        already_upgraded = self.upgrade_state.nfs_already_upgraded.get(cluster, [])
+
+        service = service_registry.get_service(daemon_type_to_service(s.daemon_type))
+
+        tries = 4
+        while tries > 0:
+            if not self.upgrade_state or self.upgrade_state.paused:
+                return False
+
+            r = service.ok_to_upgrade(
+                to_upgrade=s.name(),
+                already_upgraded=already_upgraded,
+                known=known,
+            )
+
+            # Success
+            if not r.retval:
+                logger.info(f'Upgrade: {s.name()} is safe to upgrade')
+                return True
+
+            # ENOTSUP: API not implemented on NFS-Ganesha side yet.
+            # Fall back silently to traditional upgrade (no gRPC check).
+            if r.retval == -errno.ENOTSUP:
+                logger.info(
+                    f'Upgrade: ok_to_upgrade not supported for {s.name()}, '
+                    f'proceeding with traditional upgrade'
+                )
+                if known is not None:
+                    known.append(s.name())
+                return True
+
+            # EINVAL: hard error (wrong daemon name, auth failure, server crash).
+            # Pause upgrade immediately — user must investigate.
+            if r.retval == -errno.EINVAL:
+                self._fail_upgrade('UPGRADE_NFS_ERROR', {
+                    'severity': 'error',
+                    'summary': f'Upgrade: NFS ok-to-upgrade hard error for {s.name()}',
+                    'count': 1,
+                    'detail': [r.stderr],
+                })
+                return False
+
+            # EBUSY: temporary (TSM migrating, NFS-Ganesha unavailable).
+            # Retry up to 4 times then pause upgrade with health warning.
+            logger.info(
+                f'Upgrade: ok-to-upgrade not ready for {s.name()} '
+                f'(attempt {5 - tries}/4): {r.stderr}'
+            )
+            time.sleep(15)
+            tries -= 1
+
+        # All 4 retries exhausted — pause upgrade so user can investigate.
+        self._fail_upgrade('UPGRADE_NFS_NOT_READY', {
+            'severity': 'warning',
+            'summary': (
+                f'Upgrade: NFS daemon {s.name()} not ready to upgrade after '
+                f'4 attempts. TSM migration may be stuck.'
+            ),
+            'count': 1,
+            'detail': [
+                f'ok-to-upgrade returned EBUSY 4 times for {s.name()}. '
+                f'Check NFS-Ganesha TSM state and run '
+                f'"ceph orch upgrade resume" once resolved.'
+            ],
+        })
+        return False
+
+    def _upgrade_nfs_cluster(
+            self,
+            cluster_name: str,
+            need_upgrade: List[Tuple[DaemonDescription, bool]],
+            target_image: str,
+            target_digests: Optional[List[str]],
+            errors: List[str],
+            lock: threading.Lock,
+    ) -> None:
+        """Serial upgrade loop for ONE NFS cluster — runs inside its own thread.
+
+        Upgrades daemons one at a time:
+          ask ok_to_upgrade → YES → upgrade daemon → ask again for next one.
+        If ok_to_upgrade fails (hard error or retries exhausted) → stops this
+        cluster and records the error so the main thread can report it.
+        """
+        logger.info(f'Upgrade: starting serial upgrade for NFS cluster {cluster_name}')
+        for d_entry in need_upgrade:
+            d = d_entry[0]
+            known: List[str] = []
+
+            if not self._wait_for_ok_to_upgrade(d, known):
+                with lock:
+                    errors.append(
+                        f'Upgrade: NFS cluster {cluster_name} stopped at {d.name()}'
+                    )
+                return
+
+            self._upgrade_daemons([d_entry], target_image, target_digests)
+            logger.info(f'Upgrade: {cluster_name} — upgraded {d.name()}')
+
+        logger.info(f'Upgrade: {cluster_name} — all daemons upgraded')
+
+    def _upgrade_nfs_parallel(
+            self,
+            need_upgrade: List[Tuple[DaemonDescription, bool]],
+            target_image: str,
+            target_digests: Optional[List[str]],
+    ) -> bool:
+        """Upgrade all NFS clusters in parallel, each cluster serially.
+
+        Groups need_upgrade by cluster (service_name), spawns one thread per
+        cluster. Each thread runs _upgrade_nfs_cluster() — one daemon at a time
+        within that cluster. All cluster threads run simultaneously.
+
+        Returns True if all clusters succeeded, False if any failed.
+        """
+        # Group daemons by cluster e.g. "nfs.cluster-1" → [daemon-1a, daemon-1b]
+        clusters: Dict[str, List[Tuple[DaemonDescription, bool]]] = {}
+        for d_entry in need_upgrade:
+            cluster = d_entry[0].service_name()
+            if cluster not in clusters:
+                clusters[cluster] = []
+            clusters[cluster].append(d_entry)
+
+        logger.info(
+            f'Upgrade: NFS parallel upgrade — {len(clusters)} cluster(s): '
+            f'{list(clusters.keys())}'
+        )
+
+        errors: List[str] = []
+        lock = threading.Lock()
+        threads: List[threading.Thread] = []
+
+        for cluster_name, cluster_daemons in clusters.items():
+            t = threading.Thread(
+                target=self._upgrade_nfs_cluster,
+                args=(cluster_name, cluster_daemons, target_image,
+                      target_digests, errors, lock),
+                name=f'nfs-upgrade-{cluster_name}',
+                daemon=True,
+            )
+            threads.append(t)
+            t.start()
+            logger.info(f'Upgrade: spawned thread for NFS cluster {cluster_name}')
+
+        # Wait for ALL cluster threads to finish before moving on
+        for t in threads:
+            t.join()
+
+        if errors:
+            for err in errors:
+                logger.error(err)
+            return False
+
+        logger.info('Upgrade: all NFS clusters upgraded successfully')
+        return True
+
+    def _complete_nfs_upgrade(self) -> None:
+        """Notify NFS-Ganesha that all NFS daemons are upgraded.
+
+        Called once after all NFS daemons finish upgrading. Sends the
+        UpgradeComplete gRPC message so NFS-Ganesha can exit upgrade mode.
+        """
+        assert self.upgrade_state is not None
+        already_upgraded = self.upgrade_state.nfs_already_upgraded
+        if not already_upgraded:
+            return
+
+        # Pick any running NFS daemon to send the final message to
+        nfs_daemons = self.mgr.cache.get_daemons_by_type('nfs')
+        if not nfs_daemons:
+            return
+
+        from cephadm.services.nfs import NFSService
+        nfs_service = service_registry.get_service('nfs')
+        nfs_service.notify_upgrade_complete(
+            already_upgraded=already_upgraded,
+            daemon_name=nfs_daemons[0].name(),
+        )
+        logger.info('Upgrade: sent NFS upgrade-complete notification')
 
     def _upgrade_uses_ok_to_upgrade_for_osds(self) -> bool:
         """
@@ -1583,6 +1794,9 @@ class CephadmUpgrade:
                     if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                         return False, to_upgrade
 
+            if not self._wait_for_ok_to_upgrade(d, known_ok_to_upgrade):
+                return False, to_upgrade
+
             if d.daemon_type == 'mon' and self._enough_mons_for_ok_to_stop():
                 if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                     return False, to_upgrade
@@ -1914,6 +2128,15 @@ class CephadmUpgrade:
             if self.upgrade_state.remaining_count is not None and not d_entry[1]:
                 self.upgrade_state.remaining_count -= 1
                 self._save_upgrade_state()
+            # Track NFS daemons per cluster so each cluster's thread passes
+            # only its own already_upgraded list to its NFS-Ganesha gRPC call.
+            if daemon_spec.daemon_type == 'nfs':
+                cluster = daemon_spec.service_name()
+                if cluster not in self.upgrade_state.nfs_already_upgraded:
+                    self.upgrade_state.nfs_already_upgraded[cluster] = []
+                if daemon_spec.name() not in self.upgrade_state.nfs_already_upgraded[cluster]:
+                    self.upgrade_state.nfs_already_upgraded[cluster].append(daemon_spec.name())
+                    self._save_upgrade_state()
 
     def _handle_need_upgrade_self(self, need_upgrade_self: bool, upgrading_mgrs: bool) -> None:
         if need_upgrade_self:
@@ -2317,6 +2540,23 @@ class CephadmUpgrade:
             if need_upgrade:
                 self.upgrade_info_str = 'Currently upgrading %s daemons' % (daemon_type)
 
+            # NFS with TSM enabled: use parallel upgrade (one thread per cluster,
+            # serial within each cluster). Falls through to normal path if no
+            # NFS daemons need upgrade.
+            if daemon_type == 'nfs' and need_upgrade:
+                nfs_service = service_registry.get_service('nfs')
+                # Check if ANY NFS cluster has TSM enabled.
+                # If none do, fall through to normal upgrade path below.
+                tsm_clusters = [
+                    d_entry[0] for d_entry in need_upgrade
+                    if nfs_service._is_tsm_enabled(d_entry[0].service_name())
+                ]
+                if tsm_clusters:
+                    if not self._upgrade_nfs_parallel(need_upgrade, target_image, target_digests):
+                        return
+                    # All NFS daemons upgraded via parallel path — skip normal path
+                    need_upgrade = []
+
             _continue, to_upgrade = self._to_upgrade(need_upgrade, target_image)
             if not _continue:
                 return
@@ -2363,6 +2603,10 @@ class CephadmUpgrade:
             # complete mds upgrade?
             if daemon_type == 'mds':
                 self._complete_mds_upgrade()
+
+            # complete nfs upgrade?
+            if daemon_type == 'nfs':
+                self._complete_nfs_upgrade()
 
             # Make sure all metadata is up to date before saying we are done upgrading this daemon type
             if self.mgr.use_agent and not self.mgr.cache.all_host_metadata_up_to_date():
