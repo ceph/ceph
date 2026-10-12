@@ -98,8 +98,7 @@ int ec_init(const std::string &profile_str,
     return 1;
   }
 
-  uint64_t stripe_size = atoi(profile["k"].c_str());
-  ceph_assert(stripe_size > 0);
+  uint64_t stripe_size = (*ec_impl)->get_data_chunk_count();
   uint64_t stripe_width = stripe_size * stripe_unit;
   uint64_t chunk_size = (*ec_impl)->get_chunk_size(stripe_width);
   if (chunk_size != stripe_unit) {
