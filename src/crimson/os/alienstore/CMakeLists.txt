@@ -7,7 +7,6 @@ set(crimson_alien_common_srcs
   ${PROJECT_SOURCE_DIR}/src/common/blkdev.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
-  ${PROJECT_SOURCE_DIR}/src/common/debug_level_guard.cc
   ${PROJECT_SOURCE_DIR}/src/common/Finisher.cc
   ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
@@ -86,6 +85,9 @@ target_link_libraries(crimson-alienstore
     ${BLKID_LIBRARIES}
     ${UDEV_LIBRARIES}
     blk)
+target_link_libraries(crimson-alienstore
+  INTERFACE
+    $<LINK_ONLY:crimson-common>)
 
 # Mold duplicate-symbol handling is done at the crimson-osd link step
 # (see src/crimson/osd/CMakeLists.txt) by ordering crimson-alienstore
