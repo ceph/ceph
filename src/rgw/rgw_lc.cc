@@ -737,7 +737,8 @@ static void send_log_record(const DoutPrefixProvider* dpp,
       logging_type,
       obj, input, op_name, etag, size, dpp, y,
       /*async_completion=*/true,
-      /*log_source_bucket=*/false);
+      /*log_source_bucket=*/false,
+      /*bucket_deleted=*/ false);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "WARNING: bucket logging failed for lc object: "
                       << obj->get_name() << " op: " << op_name
