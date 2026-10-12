@@ -1592,6 +1592,9 @@ public:
 
   std::set<pg_shard_t> backfill_targets;       ///< osds to be backfilled
   shard_id_set backfill_target_shard_id_set;
+  /// multi-zone EC: backfill targets complete and contiguous with the auth
+  /// log, waiting for their zone block to move to them
+  std::set<pg_shard_t> usable_backfill_targets;
   std::set<pg_shard_t> async_recovery_targets; ///< osds to be async recovered
 
   /// osds which might have objects on them which are unfound on the primary
