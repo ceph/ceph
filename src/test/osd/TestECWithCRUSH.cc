@@ -473,6 +473,35 @@ protected:
     new_epoch_loop();
   }
 
+  // Swaps the zone blocks with a pg-upmap while a pg_temp keeps acting set
+  // *a, then completes the backfill of every new up shard but the one of
+  // position y_pos.  That one is past every object the tests write (they
+  // have hash 0), so it gets their writes as a real backfill target would,
+  // but is not complete.
+  void swap_zone_blocks_but(unsigned y_pos, vector<int> *a) {
+    // The monitor's min_size for a 2+1 stretch pool.
+    set_pool_min_size(k);
+    trim_log(true);
+
+    int acting_primary;
+    osdmap->pg_to_acting_osds(pgid, a, &acting_primary);
+    const vector<int> up = {(*a)[3], (*a)[4], (*a)[5],
+                            (*a)[0], (*a)[1], (*a)[2]};
+    remap(up, *a);
+    PeeringState *ps = get_primary_test_pg()->get_peering_state();
+    ASSERT_EQ(ps->get_acting(), *a);
+    ASSERT_EQ(ps->get_backfill_targets().size(), up.size());
+
+    const pg_shard_t y(up[y_pos], shard_id_t(y_pos));
+    for (const auto &t : ps->get_backfill_targets()) {
+      if (t != y) {
+        complete_backfill(t);
+      }
+    }
+    set_backfill_progress(y, hobject_t(object_t("progress"), "", CEPH_NOSNAP,
+                                       0xffffffff, pool_id, ""));
+  }
+
   std::optional<ScopedConfig> trim_min;
   std::optional<ScopedConfig> trim_max;
 };
@@ -654,30 +683,11 @@ TEST_F(TestECStretchPeering, ReturningZone_NewestWritesNotUnfound)
 TEST_F(TestECStretchPeering, ZoneBlockSwap_RestartedUpShardKeptCurrent)
 {
   ASSERT_TRUE(all_shards_active());
-  // The monitor's min_size for a 2+1 stretch pool.
-  set_pool_min_size(k);
-  trim_log(true);
-
   vector<int> a;
-  int acting_primary;
-  osdmap->pg_to_acting_osds(pgid, &a, &acting_primary);
+  ASSERT_NO_FATAL_FAILURE(swap_zone_blocks_but(4, &a));
   const vector<int> up = {a[3], a[4], a[5], a[0], a[1], a[2]};
-  remap(up, a);
-  PeeringState *ps = get_primary_test_pg()->get_peering_state();
-  ASSERT_EQ(ps->get_acting(), a);
-  ASSERT_EQ(ps->get_backfill_targets().size(), up.size());
-
   const pg_shard_t x(a[2], shard_id_t(5));
   const pg_shard_t y(a[1], shard_id_t(4));
-  for (const auto &t : ps->get_backfill_targets()) {
-    if (t != y) {
-      complete_backfill(t);
-    }
-  }
-  // y is past every object this test writes (they have hash 0), so it gets
-  // their writes as a real backfill target would, but is not complete.
-  set_backfill_progress(y, hobject_t(object_t("progress"), "", CEPH_NOSNAP,
-                                     0xffffffff, pool_id, ""));
 
   const std::string data(stripe_unit * k, 'B');
   const vector<std::string> missed = {"missed0", "missed1"};
@@ -687,7 +697,7 @@ TEST_F(TestECStretchPeering, ZoneBlockSwap_RestartedUpShardKeptCurrent)
     create_and_write_verify(name, data);
   }
   mark_osd_up(x.osd);
-  ps = get_primary_test_pg()->get_peering_state();
+  PeeringState *ps = get_primary_test_pg()->get_peering_state();
   ASSERT_EQ(ps->get_acting(), a);
   ASSERT_TRUE(ps->is_active()) << ps->get_current_state();
   ASSERT_TRUE(ps->is_backfill_target(x));
