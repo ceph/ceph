@@ -574,6 +574,7 @@ set(libcommon_files
   mon/ProgressEvent.cc
   mon/ScrubResult.cc
   mgr/DaemonHealthMetric.cc
+  mgr/MetricTypes.cc
   mgr/MgrClient.cc
   mon/MgrMap.cc
   mon/PGMap.cc
