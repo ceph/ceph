@@ -6630,6 +6630,34 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     mdr->no_early_reply = true;
     pip = pi.inode.get();
     adjust_realm = true;
+  } else if (name == "ceph.dir.subvolume.prevpath"sv) {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    SnapRealm *realm = cur->find_snaprealm();
+    if (!xlock_policylock(mdr, cur, false, true))
+      return;
+
+    const auto srnode = cur->get_projected_srnode();
+    auto pi = cur->project_inode(mdr, false, true);
+    // TODO raise error if this not set on/inside a dir marked as subvolume
+    if (!srnode) {
+      pi.snapnode->created = pi.snapnode->seq = realm->get_newest_seq();
+    }
+
+    if (is_rmxattr) {
+      // TODO raise error if this not set on/inside a dir marked as subvolume
+      pi.snapnode->subvol_prev_path.clear();
+    } else {
+      // TODO raise error if this not set on/inside a dir marked as subvolume
+      pi.snapnode->subvol_prev_path = std::move(value);
+    }
+
+    mdr->no_early_reply = false;
+    pip = pi.inode.get();
+    adjust_realm = true;
   } else if (name == "ceph.dir.subvolume.snaps.visible"sv) {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -EINVAL);
@@ -7492,6 +7520,17 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
   } else if (xattr_name == "ceph.dir.subvolume"sv) {
     const auto* srnode = cur->get_projected_srnode();
     *css << (srnode && srnode->is_subvolume() ? "1"sv : "0"sv);
+  } else if (xattr_name == "ceph.dir.subvolume.prevpath"sv) {
+    if (!cur->is_dir()) {
+      r = -ENOTDIR;
+    }
+
+    const auto* srnode = cur->get_projected_srnode();
+    //if (srnode && srnode->is_subvolume()) {
+    if (srnode) {
+      // TODO raise error if this not set on/inside a dir marked as subvolume
+      *css << srnode->subvol_prev_path;
+    }
   } else if (xattr_name == "ceph.dir.subvolume.snaps.visible"sv) {
     if (!cur->is_dir()) {
       r = -ENOTDIR;

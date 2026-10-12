@@ -483,7 +483,7 @@ def cstr(val, name, encoding="utf-8", opt=False) -> bytes:
         try:
             v = val.encode(encoding)
         except:
-            raise TypeError('%s must be encodeable as a bytearray' % name)
+            raise TypeError(f'"{name}" must be encodeable as a bytearray')
         assert isinstance(v, bytes)
         return v
 
@@ -2022,7 +2022,7 @@ cdef class LibCephFS(object):
 
         return self.getxattr(path, name, size=size, follow_symlink=False)
 
-    def setxattr(self, path, name, value, flags, follow_symlink=True):
+    def setxattr(self, path, name, value, flags=0, follow_symlink=True):
         """
         Set an extended attribute on a file.
 
@@ -2036,8 +2036,13 @@ cdef class LibCephFS(object):
         path = cstr(path, 'path')
         if not isinstance(flags, int):
             raise TypeError('flags must be a int')
-        if not isinstance(value, bytes):
-            raise TypeError('value must be a bytes')
+        if isinstance(value, bytes):
+            pass
+        elif isinstance(value, str):
+            value = value.encode('utf-8')
+        else:
+            raise TypeError(f'value must be a bytes. value = {value} '
+                            f'type(value) = {type(value)}')
 
         cdef:
             char *_path = path
@@ -2056,7 +2061,8 @@ cdef class LibCephFS(object):
                                     _value, _value_len, _flags)
 
         if ret < 0:
-            raise make_ex(ret, "error in setxattr")
+            raise make_ex(ret, f"error in setxattr(). path={path}, name="
+                               f"{name}, value={value}, flags={flags}")
 
     def fsetxattr(self, fd, name, value, flags):
         """
@@ -2590,7 +2596,7 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in link")    
     
-    def readlink(self, path, size) -> bytes:
+    def readlink(self, path, size=4096) -> bytes:
         """
         Read a symbolic link.
       
