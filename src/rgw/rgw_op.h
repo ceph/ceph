@@ -1418,7 +1418,6 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
-  bool always_do_bucket_logging() const override { return false; }
 };
 
 class RGWPostObj : public RGWOp {
@@ -2143,7 +2142,6 @@ public:
   std::string canonical_name() const override { return fmt::format("REST.{}.UPLOAD", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_COMPLETE_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  bool always_do_bucket_logging() const override { return false; }
 };
 
 class RGWAbortMultipart : public RGWOp {
