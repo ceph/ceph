@@ -790,13 +790,7 @@ public:
     return has_snap;
   }
 
-  /**
- * Send a mon command to fetch the pg_num value for the specified pool and return it.
- *
- * @param poolname string Name of the pool to get the pg_num value of
- * @returns int pg_num
- */
-  int get_pool_pg_num(const std::string& poolname) {
+  messaging::osd::OSDPoolGetReply get_pool_all(const std::string& poolname) {
     auto const formatter = std::make_shared<JSONFormatter>(false);
     messaging::osd::OSDPoolGetRequest osd_pool_get_request{poolname, "all"};
     encode_json("OSDPoolGetRequest", osd_pool_get_request, formatter.get());
@@ -807,7 +801,7 @@ public:
     bufferlist outbl;
     std::string outstr;
     if (rados.mon_command(oss.str(), {}, &outbl, &outstr) != 0) {
-      std::cerr << "Error: could not start pool migration: " << outstr << std::endl;
+      std::cerr << "Error: could not get pool " << poolname << ": " << outstr << std::endl;
       ceph_abort();
     }
 
@@ -819,8 +813,23 @@ public:
 
     messaging::osd::OSDPoolGetReply osd_pool_get_reply;
     osd_pool_get_reply.decode_json(&p);
+    return osd_pool_get_reply;
+  }
 
-    return osd_pool_get_reply.pg_num.value_or(-1);
+  /**
+ * Send a mon command to fetch the pg_num value for the specified pool and return it.
+ *
+ * @param poolname string Name of the pool to get the pg_num value of
+ * @returns int pg_num
+ */
+  int get_pool_pg_num(const std::string& poolname) {
+    return get_pool_all(poolname).pg_num.value_or(-1);
+  }
+
+  bool is_pool_erasure(const std::string& poolname) {
+    // "osd pool get <pool> all" only reports erasure_code_profile for EC
+    // pools, so its presence identifies the pool type.
+    return get_pool_all(poolname).erasure_code_profile.has_value();
   }
 
   bool is_pool_migration_in_progress() {
@@ -835,8 +844,9 @@ public:
     return (outbl.to_str().contains("Pool migration"));
   }
 
-  int start_pool_migration(const std::string &source_name, const int pg_num,
-                           bool enable_ec_optimizations) {
+  int start_pool_migration(const std::string &source_name,
+                           std::optional<int> pg_num,
+                           std::optional<bool> enable_ec_optimizations) {
     auto const formatter = std::make_shared<JSONFormatter>(false);
     std::ostringstream oss;
     messaging::osd::OSDPoolMigrateRequest pool_mig_request{source_name, pg_num,
@@ -861,8 +871,8 @@ public:
   void manage_pool_migrations() {
     int migration_counter = 0;
     int initial_pg_num = get_pool_pg_num(pool_name);
-    int pg_num = initial_pg_num;
     bool needs_wait = false;
+    const bool source_is_erasure = is_pool_erasure(pool_name);
 
     if (initial_migration_delay > 0) {
       cout_prefix() << __func__ << " delaying for " << std::to_string(initial_migration_delay)
@@ -875,16 +885,38 @@ public:
       if (is_pool_migration_in_progress()) {
         cout_prefix() << __func__ << " migration in progress" << std::endl;
       } else if (!needs_wait) {
-        pg_num = migration_pg_num.has_value() && pg_num != migration_pg_num.value() ?
-          migration_pg_num.value() : initial_pg_num;
+        // Only set pg_num when the test explicitly requests a specific count;
+        // otherwise leave it unset so the mon inherits the source pool's value.
+        std::optional<int> req_pg_num;
+        if (migration_pg_num.has_value()) {
+          // Alternate between the requested pg_num and the pool's initial
+          // pg_num across successive migration cycles.
+          int last_pg_num = get_pool_pg_num(pool_name);
+          req_pg_num = (last_pg_num != migration_pg_num.value())
+                         ? migration_pg_num.value()
+                         : initial_pg_num;
+        }
+        // Only set enable_ec_optimizations when the test explicitly requests
+        // it; otherwise leave it unset so migrate_no_params stays true and
+        // the mon inherits the source pool's EC type/profile.
+        std::optional<bool> req_ec_opts =
+          migration_ec_opts ? std::optional<bool>{true} : std::nullopt;
         cout_prefix() << __func__ << " starting new pool migration on "
                       << pool_name << std::endl;
-        if (start_pool_migration(pool_name, pg_num, migration_ec_opts) == -EBUSY) {
+        if (start_pool_migration(pool_name, req_pg_num, req_ec_opts) == -EBUSY) {
           // not started yet; leave needs_wait unset to retry next iteration
         } else {
           needs_wait = true;
         }
       } else {
+        // A migration that silently changes the pool type (e.g. EC ->
+        // replicated) invalidates what this workload is meant to exercise.
+        if (is_pool_erasure(pool_name) != source_is_erasure) {
+          std::cerr << "Error: pool " << pool_name << " type changed by migration: "
+                    << (source_is_erasure ? "erasure" : "replicated") << " -> "
+                    << (source_is_erasure ? "replicated" : "erasure") << std::endl;
+          ceph_abort();
+        }
         sleep_duration = migration_interval;
         migration_counter++;
         needs_wait = false;
