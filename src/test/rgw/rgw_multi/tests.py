@@ -16,7 +16,7 @@ from itertools import zip_longest
 from io import StringIO
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from nose.tools import eq_ as eq
 from nose.tools import assert_not_equal, assert_equal, assert_true, assert_false
@@ -1930,6 +1930,158 @@ def test_multipart_object_sync():
 
     zonegroup_meta_checkpoint(zonegroup)
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def get_default_placement(zone):
+    cmd = ['zonegroup', 'get'] + zone.zonegroup.zonegroup_args()
+    out, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(out).get('default_placement') or 'default-placement'
+
+def get_zone_standard_class(zone, placement_id):
+    out, _ = zone.cluster.admin(['zone', 'get'] + zone.zone_args(), read_only=True)
+    for p in json.loads(out)['placement_pools']:
+        if p['key'] == placement_id:
+            return p['val']['storage_classes'].get('STANDARD', {})
+    return {}
+
+def get_zone_compression(zone, placement_id):
+    return get_zone_standard_class(zone, placement_id).get('compression_type', '')
+
+def get_zone_compression_min_size(zone, placement_id):
+    return get_zone_standard_class(zone, placement_id).get('compression_min_size', 0)
+
+def get_obj_compression_type(zone, bucket_name, key):
+    cmd = ['object', 'stat', '--bucket', bucket_name, '--object', key] + zone.zone_args()
+    cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
+    out, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(out).get('compression', {}).get('compression_type', 'none')
+
+def wait_for_compression(zone_conn, bucket_name, compression, min_size=0):
+    """ write a canary object until it is stored with the given compression
+    type, which shows that the gateway has reloaded the placement config """
+    key = 'compression-canary'
+    # at least min_size, so the canary is compressed when compression is on
+    pattern = b'compression canary '
+    body = pattern * max(4096, min_size // len(pattern) + 1)
+    timeout = max(60, config.reconfigure_delay)
+    deadline = time.time() + timeout
+    actual = None
+    error = None
+    while True:
+        try:
+            zone_conn.s3_client.put_object(Bucket=bucket_name, Key=key, Body=body)
+            actual = get_obj_compression_type(zone_conn.zone, bucket_name, key)
+            error = None
+            if actual == compression:
+                return
+            log.debug('canary compression=%s, waiting for %s', actual, compression)
+        except (ClientError, BotoCoreError) as e:
+            # requests may fail while the gateway reloads
+            error = e
+            log.debug('canary write failed: %s', e)
+        assert time.time() < deadline, \
+            'compression=%s not applied within %ds (last canary compression=%s, ' \
+            'last error=%s)' % (compression, timeout, actual, error)
+        time.sleep(1)
+
+def set_zone_compression(zone_conn, bucket_name, compression, placement_id,
+                         min_size=None, all_gateways=False):
+    """ set the compression of the placement's STANDARD storage class, which
+    the canary in wait_for_compression() is written to. with all_gateways,
+    also give the zone's other gateways time to reload the config """
+    zone = zone_conn.zone
+    compression = compression or 'none'
+    current = get_zone_standard_class(zone, placement_id)
+    previous = current.get('compression_type') or 'none'
+    if previous == compression and \
+            (min_size is None or current.get('compression_min_size', 0) == min_size):
+        return
+    cmd = ['zone', 'placement', 'modify', '--placement-id', placement_id,
+           '--storage-class', 'STANDARD', '--compression', compression]
+    if min_size is not None:
+        cmd += ['--compression-min-size', str(min_size)]
+    zone.cluster.admin(cmd + zone.zone_args())
+    zone.zonegroup.period.update(zone, commit=True)
+    log.info('Set compression=%s min_size=%s on zone %s', compression, min_size, zone.name)
+    if compression == 'random' or previous == 'random':
+        # each write under 'random' picks its own algorithm, so a canary
+        # can't tell a stale 'random' config from the new one
+        time.sleep(config.reconfigure_delay)
+    else:
+        wait_for_compression(zone_conn, bucket_name, compression, min_size or 0)
+        if all_gateways:
+            # the canary only shows that the gateway it was written to has
+            # reloaded, and e.g. sync can run on any of the zone's gateways
+            time.sleep(config.reconfigure_delay)
+
+def test_compression_min_size_sync():
+    """ a replicated object follows the destination zone's compression min
+    size, whether or not the source zone stored it compressed """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    if len(zonegroup_conns.rw_zones) < 2:
+        raise SkipTest("test_compression_min_size_sync skipped. Requires 2 or more zones in master zonegroup.")
+
+    source = zonegroup_conns.master_zone
+    dest = next(z for z in zonegroup_conns.rw_zones if z.zone != source.zone)
+    source_placement = get_default_placement(source.zone)
+    dest_placement = get_default_placement(dest.zone)
+    source_original = get_zone_compression(source.zone, source_placement)
+    dest_original = get_zone_compression(dest.zone, dest_placement)
+    dest_original_min_size = get_zone_compression_min_size(dest.zone, dest_placement)
+
+    bucket_name = gen_bucket_name()
+    source.s3_client.create_bucket(Bucket=bucket_name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    pattern = b'The quick brown fox jumps over the lazy dog. '
+
+    try:
+        # start from 'none', so the canary written after the change below
+        # shows that the destination loaded the new placement config
+        set_zone_compression(dest, bucket_name, 'none', dest_placement)
+        # sync can run on any of the destination's gateways
+        set_zone_compression(dest, bucket_name, 'zstd', dest_placement, min_size=64 * 1024,
+                             all_gateways=True)
+
+        for source_compression in ['none', 'zstd']:
+            set_zone_compression(source, bucket_name, source_compression, source_placement)
+            objects = {}
+            for name, size, expected in [('small', 4 * 1024, 'none'),
+                                         ('large', 256 * 1024, 'zstd')]:
+                key = f'{source_compression}-{name}'
+                data = (pattern * (size // len(pattern) + 1))[:size]
+                source.s3_client.put_object(Bucket=bucket_name, Key=key, Body=data)
+                eq(get_obj_compression_type(source.zone, bucket_name, key), source_compression)
+                objects[key] = (data, expected)
+
+            # sync applies the min size to the whole object, so even a small
+            # object uploaded in parts is stored uncompressed in the
+            # destination zone
+            key = f'{source_compression}-small-multipart'
+            data = (pattern * (4 * 1024 // len(pattern) + 1))[:4 * 1024]
+            upload_id = source.s3_client.create_multipart_upload(
+                Bucket=bucket_name, Key=key)['UploadId']
+            etag = source.s3_client.upload_part(Bucket=bucket_name, Key=key, PartNumber=1,
+                                                UploadId=upload_id, Body=data)['ETag']
+            source.s3_client.complete_multipart_upload(
+                Bucket=bucket_name, Key=key, UploadId=upload_id,
+                MultipartUpload={'Parts': [{'PartNumber': 1, 'ETag': etag}]})
+            eq(get_obj_compression_type(source.zone, bucket_name, key), source_compression)
+            objects[key] = (data, 'none')
+
+            zone_bucket_checkpoint(dest.zone, source.zone, bucket_name)
+
+            for key, (data, expected) in objects.items():
+                eq(get_obj_compression_type(dest.zone, bucket_name, key), expected)
+                response = dest.s3_client.get_object(Bucket=bucket_name, Key=key)
+                assert response['Body'].read() == data
+    finally:
+        try:
+            set_zone_compression(source, bucket_name, source_original, source_placement)
+        finally:
+            # later tests can sync through any of the destination's gateways
+            set_zone_compression(dest, bucket_name, dest_original, dest_placement,
+                                 min_size=dest_original_min_size, all_gateways=True)
 
 def test_encrypted_object_sync():
     zonegroup = realm.master_zonegroup()
