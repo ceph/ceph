@@ -3325,40 +3325,16 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
     ent->stat(dpp);
 
     if (path_strategy->names_directory_object(name)) {
-      // directory object sentinel: emit with key = path_prefix
-      // path_prefix is already "photos/" when inside photos/
+      /* The directory's object, emitted with key = path_prefix, which is
+       * already "photos/" inside photos/.  Built by make_dir_entry(), as
+       * every other object's row is:  a row built here by hand left out
+       * the version identity, so in a versioned bucket a directory object
+       * listed as no version at all. */
       rgw_bucket_dir_entry bde{};
-      rgw_obj_key key = path_strategy->key_from_name(path_prefix);
-      key.get_index_key(&bde.key);
-      bde.ver.pool = 1;
-      bde.ver.epoch = 1;
-      bde.exists = true;
-
-      ret = ent->open(dpp);
+      ret = ent->make_dir_entry(dpp, y, path_strategy->key_from_name(path_prefix),
+				flags, bucket_owner, bde);
       if (ret < 0)
         return ret;
-
-      Attrs attrs;
-      ret = get_x_attrs(y, dpp, ent->get_fd(), attrs, ent->get_name(),
-			xattr_strategy, xattr_fallback);
-      if (ret < 0)
-        return ret;
-
-      ACLOwner acl_owner;
-      ret = xattr_strategy->object_owner(attrs, acl_owner);
-      set_dir_entry_owner(bde, ret, acl_owner, bucket_owner);
-      bde.meta.category = RGWObjCategory::Main;
-      bde.meta.size = ent->get_stx().stx_size;
-      bde.meta.accounted_size = ent->get_stx().stx_size;
-      bde.meta.mtime = from_statx_timestamp(ent->get_stx().stx_mtime);
-      bde.meta.storage_class = listed_storage_class(attrs);
-
-      bufferlist etag_bl;
-      if (rgw::sal::get_attr(attrs, RGW_ATTR_ETAG, etag_bl)) {
-        bde.meta.etag = etag_bl.to_str();
-      } else {
-        bde.meta.etag = synthesize_etag(ent->get_stx());
-      }
 
       return cb(dpp, bde);
     }
@@ -7275,6 +7251,7 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     if (ret < 0) {
       return ret;
     }
+
 
     /* the upload's own record, in the nsfs format */
     {

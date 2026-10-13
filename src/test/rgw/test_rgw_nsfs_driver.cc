@@ -8573,6 +8573,91 @@ TEST_F(NSFSUpgradeTest, ReStagesAnUploadInFlight)
   EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload);
 }
 
+/* Every row a listing gives, as one comparable string each:  what a
+ * client sees of it. */
+static std::vector<std::string> listing_rows(rgw::sal::Bucket* bucket,
+					     const DoutPrefixProvider* dpp,
+					     bool versions)
+{
+  rgw::sal::Bucket::ListParams params;
+  params.list_versions = versions;
+  rgw::sal::Bucket::ListResults results;
+  EXPECT_EQ(bucket->list(dpp, params, 1000, results, null_yield), 0);
+  std::vector<std::string> rows;
+  for (auto& e : results.objs) {
+    rows.push_back(fmt::format(
+	"{} [{}] size={} etag={} mtime={} owner={} class={} flags={} exists={}",
+	e.key.name, e.key.instance, e.meta.size, e.meta.etag,
+	e.meta.mtime.time_since_epoch().count(), e.meta.owner,
+	e.meta.storage_class, e.flags, e.exists));
+  }
+  return rows;
+}
+
+/* The listing cache needs no invalidation when a bucket is converted
+ * (DECISIONS.md 2026-10-13).
+ *
+ * A row holds only facts conversion is required to keep, because a
+ * bucket being converted must look to a client like the bucket it
+ * becomes.  So rows cached before the upgrade, and served after it, must
+ * equal rows built afresh.  This lists a base bucket to fill the cache,
+ * upgrades it, lists again through that cache, then empties the cache and
+ * lists a third time.  If conversion ever changes a listed fact, the
+ * warm and cold listings disagree here, and that is the knowledge that
+ * an invalidation, or a fix to conversion, is needed. */
+TEST_F(NSFSUpgradeTest, AListingCachedBeforeTheUpgradeEqualsOneBuiltAfterIt)
+{
+  bucket->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+
+  their_object("plain.bin", "text/plain");
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+
+  /* a versioned object:  its current version and one earlier one, each
+   * with the id NooBaa recorded */
+  their_object("v.bin", "text/plain");
+  const std::string cur_vid = "mtime-abc123-ino-10";
+  ASSERT_EQ(::setxattr((bucket_path() / "v.bin").c_str(),
+		       "user.noobaa.version_id", cur_vid.data(),
+		       cur_vid.size(), 0), 0);
+  const std::string old_vid = "mtime-abc000-ino-11";
+  sf::create_directories(bucket_path() / ".versions");
+  const sf::path old_ver = bucket_path() / ".versions" / ("v.bin_" + old_vid);
+  write_file(old_ver, "older");
+  ASSERT_EQ(::setxattr(old_ver.c_str(), "user.noobaa.version_id",
+		       old_vid.data(), old_vid.size(), 0), 0);
+
+  const auto before = listing_rows(bucket.get(), env->dpp, false);
+  const auto before_v = listing_rows(bucket.get(), env->dpp, true);
+  ASSERT_FALSE(before.empty());
+  ASSERT_GT(before_v.size(), before.size())
+      << "the version listing shows no earlier version";
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  ASSERT_TRUE(prog.complete);
+
+  /* served from the cache filled before the upgrade */
+  const auto warm = listing_rows(bucket.get(), env->dpp, false);
+  const auto warm_v = listing_rows(bucket.get(), env->dpp, true);
+
+  /* and built afresh */
+  ASSERT_EQ(driver->get_bucket_cache()->invalidate_bucket(env->dpp,
+							  bucket->get_name()), 0);
+  const auto cold = listing_rows(bucket.get(), env->dpp, false);
+  const auto cold_v = listing_rows(bucket.get(), env->dpp, true);
+
+  EXPECT_EQ(warm, cold)
+      << "the listing cache served rows the upgrade had changed";
+  EXPECT_EQ(warm_v, cold_v)
+      << "the listing cache served version rows the upgrade had changed";
+
+  /* and, the requirement behind it, nothing a listing shows changed */
+  EXPECT_EQ(cold, before) << "conversion changed a listed fact";
+  EXPECT_EQ(cold_v, before_v) << "conversion changed a listed version fact";
+}
+
 /* Every part is reported, and a stop inside one leaves the rest. */
 TEST_F(NSFSUpgradeTest, ReportsPartsAndStopsInsideAnUpload)
 {
