@@ -96,6 +96,12 @@ add_executable(unittest_monmap_monitor
   )
 add_ceph_unittest(unittest_monmap_monitor)
 target_link_libraries(unittest_monmap_monitor mon global)
+# unittest_osd_monitor
+add_executable(unittest_osd_monitor
+  test_osd_monitor.cc
+  )
+add_ceph_unittest(unittest_osd_monitor)
+target_link_libraries(unittest_osd_monitor mon global)
 
 # unittest_mon_health_monitor
 add_executable(unittest_mon_health_monitor
