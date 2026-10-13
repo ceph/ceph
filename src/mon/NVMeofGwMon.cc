@@ -622,6 +622,26 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
     getline(sstrm, rs);
     mon.reply_command(op, err, rs, rdata, get_last_committed());
     return true;
+  } else if (prefix == "nvme-gw ok-to-stop") {
+    std::string  pool, group;
+    if (!f) {
+      f.reset(Formatter::create(format, "json-pretty", "json-pretty"));
+    }
+    cmd_getval(cmdmap, "pool", pool);
+    cmd_getval(cmdmap, "group", group);
+    auto group_key = std::make_pair(pool, group);
+    dout(10) << prefix << " pool " << pool << " group " << group << dendl;
+    f->open_object_section("common");
+    err = map.is_ok_to_stop(group_key);
+    f->dump_bool("result", err == 0);
+    f->close_section();
+    f->flush(rdata);
+    getline(sstrm, rs);
+    if (err < 0 && rs.empty()) {
+      rs = cpp_strerror(err);
+    }
+    mon.reply_command(op, err, rs, rdata, get_last_committed());
+    return true;
   }
   return false;
 }
