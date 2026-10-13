@@ -267,10 +267,16 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     std::string existing;
     if (db->get_owner_by_noobaa_id(dpp, e.noobaa_id, existing) == 0) {
       owner_by_noobaa_id[e.noobaa_id] = existing;
-      if (e.iam_user) {
+      /* Counted as what it is, so a re-run reports what the first run
+       * created:  the anonymous row is neither an account nor a user,
+       * and an account brings its root user with it. */
+      if (e.anonymous) {
+	result.anonymous_present = true;
+      } else if (e.iam_user) {
 	++result.users_skipped;
       } else {
 	++result.accounts_skipped;
+	++result.users_skipped;
       }
       continue;
     }
@@ -528,7 +534,8 @@ int import_identities(const DoutPrefixProvider* dpp, optional_yield y,
     << " already present), " << result.identity_rows << " identity rows, "
     << result.roles_created << " roles, " << result.grants_written
     << " grants, anonymous "
-    << (result.anonymous_imported ? "imported" : "not in this store")
+    << (result.anonymous_imported ? "imported"
+	: result.anonymous_present ? "already present" : "not in this store")
     << ", " << result.failures.size() << " failures" << dendl;
   for (const auto& f : result.failures) {
     ldpp_dout(dpp, 0) << "ERROR: import: " << f << dendl;

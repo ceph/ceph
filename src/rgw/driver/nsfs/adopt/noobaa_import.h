@@ -74,6 +74,9 @@ struct ImportResult {
   /* already present, recognised by NooBaa's `_id` */
   size_t accounts_skipped{0};
   size_t users_created{0};
+  /* already present:  an IAM user, or the root user of an account
+   * already present, so a re-run reports the users the first one
+   * created */
   size_t users_skipped{0};
   size_t identity_rows{0};
   size_t roles_created{0};
@@ -81,6 +84,8 @@ struct ImportResult {
   /* accounts created with a limit above RGW's default */
   size_t limits_raised{0};
   bool anonymous_imported{false};
+  /* the store has an anonymous account, and an earlier run imported it */
+  bool anonymous_present{false};
 
   /* Every identity that could not be written, named.  Non-empty means
    * the import did not finish, and re-running it is the recovery. */

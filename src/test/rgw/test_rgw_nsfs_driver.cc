@@ -10823,6 +10823,8 @@ TEST_F(NooBaaImportTest, ASecondRunRecognisesWhatTheFirstWrote)
   EXPECT_EQ(result.users_created, 0u);
   EXPECT_EQ(result.identity_rows, 0u);
   EXPECT_EQ(result.accounts_skipped, 2u);
+  EXPECT_EQ(result.users_skipped, 2u)
+      << "the accounts' root users were not reported as present";
 
   /* and the account it already had is still the one it had:  the
    * second run minted a new id in its plan, and must not have used
@@ -10879,9 +10881,22 @@ TEST_F(NooBaaImportTest, AnonymousGetsARowAndNothingElse)
 
   ASSERT_EQ(run(), 0) << why();
   EXPECT_TRUE(result.anonymous_imported);
+  EXPECT_FALSE(result.anonymous_present);
   EXPECT_EQ(result.identity_rows, 1u);
   EXPECT_EQ(result.accounts_created, 0u) << "anonymous became an account";
   EXPECT_EQ(result.users_created, 0u) << "anonymous got a user";
+
+  /* A second run finds the row, and says so as the anonymous row rather
+   * than as an account */
+  {
+    ASSERT_EQ(run(), 0) << why();
+    EXPECT_FALSE(result.anonymous_imported);
+    EXPECT_TRUE(result.anonymous_present)
+	<< "an imported anonymous account was reported as absent";
+    EXPECT_EQ(result.accounts_skipped, 0u)
+	<< "the anonymous row was counted as an account";
+    EXPECT_EQ(result.users_skipped, 0u);
+  }
 
   nsfs::Identity row;
   ASSERT_EQ(driver->get_identity_db()->get_identity(

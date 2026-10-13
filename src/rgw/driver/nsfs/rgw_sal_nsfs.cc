@@ -14468,9 +14468,11 @@ int NSFSDriver::adopt_identities(const DoutPrefixProvider* dpp,
   say("accounts", std::to_string(ir.accounts_created));
   say("accounts_present", std::to_string(ir.accounts_skipped));
   say("users", std::to_string(ir.users_created));
+  say("users_present", std::to_string(ir.users_skipped));
   say("identity_rows", std::to_string(ir.identity_rows));
   say("limits_raised", std::to_string(ir.limits_raised));
   say("anonymous", ir.anonymous_imported ? "true" : "false");
+  say("anonymous_present", ir.anonymous_present ? "true" : "false");
   if (ret < 0) {
     say("ran", "partial");
     return ret;
