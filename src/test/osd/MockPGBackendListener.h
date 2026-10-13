@@ -719,6 +719,10 @@ public:
     return perf_logger;
   }
 
+  PerfCounters &get_perf_logger() override {
+    return *perf_logger;
+  }
+
   ceph_tid_t get_tid() override;
 
   OstreamTemp clog_error() override {
