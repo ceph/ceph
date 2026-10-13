@@ -38,8 +38,8 @@ cd src/test/rgw/adoption
 tens of minutes on a first run.  Everything after it is seconds.
 
 **What this produces.**  A pinned NooBaa NSFS gateway serving a data
-root, with an account and a bucket their own CLI created, and an IAM
-user in that account their IAM API created — records *they* wrote,
+root, with an account, an anonymous account and a bucket their own CLI
+created, and an IAM user in that account their IAM API created — records *they* wrote,
 rather than records composed from our reading of their schema.  Their
 CLI cannot address an IAM user, which is why `iam-user` goes through
 the API.  NooBaa shows the IAM user's secret once;  `iam-user` keeps it

@@ -724,6 +724,27 @@ fn config(env: &Env) -> Result<(), String> {
         println!("         account {:?} created", env.account);
     }
 
+    /* The anonymous account, which NooBaa creates only when asked:  the
+     * POSIX identity an unauthenticated request runs as.  A deployment
+     * that serves public buckets has one, and the import writes it as an
+     * identity row and nothing else (ACCOUNT_IMPORT.md §6.8) -- a record
+     * shape and a branch no other record reaches.  Without it here only
+     * synthetic fixtures would cover either.  This process's ids, so the
+     * identity it names exists. */
+    if nsfs_cli(env, &["account", "status", "--anonymous"]).is_ok() {
+        println!("         anonymous account already present");
+    } else {
+        nsfs_cli(
+            env,
+            &[
+                "account", "add", "--anonymous",
+                "--uid", &uid.to_string(),
+                "--gid", &gid.to_string(),
+            ],
+        )?;
+        println!("         anonymous account created (uid {uid}, gid {gid})");
+    }
+
     let bucket_path = env.tree().join(&env.bucket);
     if nsfs_cli(env, &["bucket", "status", "--name", &env.bucket]).is_ok() {
         println!("         bucket {:?} already present", env.bucket);
