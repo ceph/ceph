@@ -497,6 +497,7 @@ class TestStretchMode(MgrTestCase):
                 'osd',
                 'pool',
                 'set',
+                self.POOL,
                 'num_zones',
                 '1'
             ))
@@ -517,6 +518,7 @@ class TestStretchMode(MgrTestCase):
                 'osd',
                 'pool',
                 'set',
+                self.POOL,
                 'num_zones',
                 '2'
             ))
@@ -545,6 +547,7 @@ class TestStretchMode(MgrTestCase):
                 'osd',
                 'pool',
                 'set',
+                self.POOL,
                 'num_zones',
                 '1'
             ))
