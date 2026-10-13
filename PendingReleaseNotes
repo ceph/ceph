@@ -32,6 +32,62 @@
   for reshard on or off while not affecting resharding itself until the
   next realm reload. Now changes to ``rgw_dynamic_resharding`` require a
   restart. Running RGWs will ignore the change.
+* RADOS: Replicated and erasure-coded (FastEC) pools can be stretched over two
+  zones, one pool at a time, with ``ceph osd pool create <pool> --num_zones 2``
+  or ``ceph osd pool set <pool> num_zones 2``. Each zone holds a full copy of
+  the pool; an erasure-coded pool keeps a complete ``k+m`` stripe in each zone.
+  Every parameter of ``ceph osd pool create`` now has a configurable default,
+  managed with ``ceph osd pool default set`` and ``get``. See the stretch mode
+  and pools documentation for details.
+* RADOS: Upgrade and behavior changes for the above:
+  - Until ``require_osd_release`` is raised to this release,
+    ``ceph osd pool create`` is refused and ``num_zones`` cannot be changed.
+    librados clients such as RGW can still create single-zone pools, except
+    in stretch mode.
+  - Global stretch mode now works through the per-pool ``num_zones``
+    setting. ``ceph mon enable_stretch_mode`` stretches every pool, FastEC
+    erasure-coded pools included, and sets the pool creation defaults so
+    that new pools are stretched. It fails if a non-FastEC erasure-coded pool
+    or an individual stretch pool exists. ``ceph mon disable_stretch_mode``
+    returns every stretched pool to one zone. Stretch mode is also entered
+    when any pool gets ``num_zones`` 2, and left when the last such pool
+    goes, even if ``ceph mon enable_stretch_mode`` entered it; leaving it
+    clears the tiebreaker Monitor and the disallowed leaders. When the
+    upgrade is committed, a cluster already in stretch mode
+    gets stretched pool creation defaults, taken from ``mon_stretch_pool_size``
+    and its zone type, after which ``mon_stretch_pool_size`` and
+    ``mon_stretch_pool_min_size`` are no longer used.
+  - A pool in stretch mode reports its ``min_size`` per zone: a pool with 2
+    copies in each zone and ``min_size`` 2 now shows ``min_size`` 1.
+  - Individual stretch pools (``ceph osd pool stretch set``) do not change.
+    They keep their earlier behavior, including ``min_size`` counted over all
+    zones, and are still the way to stretch a pool over three or more zones.
+    They still cannot be combined with stretch mode.
+  - An erasure code profile is deleted with the last pool that uses it, and a
+    pool created without a named profile gets a profile of its own (for
+    example ``mypool-k2-m2``) instead of ``default``. Scripts that reuse a
+    profile after deleting its pools must set it again.
+  - ``ceph osd erasure-code-profile set`` changes a profile that no pool
+    uses without ``--force``. Changing a profile that a pool uses needs
+    ``--yes-i-really-mean-it``, and ``--force`` is needed only for a
+    ``stripe_unit`` that is not a multiple of 4096 bytes.
+  - ``ceph osd pool create`` refuses an erasure code profile whose
+    ``stripe_unit`` is not a multiple of 4096 bytes unless
+    ``--yes-i-really-mean-it`` is given, and always for a pool over zones.
+  - A CRUSH rule is removed when the last pool that uses it is deleted or
+    moved to another rule, including a rule created by hand, unless it is
+    the default replicated rule. Scripts that reuse such a rule must create
+    it again. A rule that no pool has used yet is kept.
+  - ``osd_pool_default_size`` is now the legacy name of
+    ``osd_pool_default_replica``; a non-zero ``osd_pool_default_replica``
+    takes precedence.
+* RADOS: In degraded stretch mode, the PGs of a stretch pool whose CRUSH rule
+  takes its zones with a device class (``step take <zone> class <class>``)
+  can now go active; before, they stayed peered until stretch mode recovered.
+  An OSD of an older release does not treat such an interval as one that may
+  have accepted writes, so complete the OSD upgrade while stretch mode is
+  healthy. A rule that takes one zone with two device classes now counts it
+  as one zone.
 * RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
   from ``false`` to ``true``.
 * RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed

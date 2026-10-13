@@ -41,6 +41,53 @@ same time.
 	erasure-code-shec
 	erasure-code-clay
 
+.. _erasure-code-profile-lifecycle:
+
+Profile lifecycle
+=================
+
+An erasure code profile is deleted with the last pool that uses it.
+
+A profile is created in one of two ways:
+
+* explicitly, with ``ceph osd erasure-code-profile set`` (see below), before
+  creating the pool that uses it, or
+* automatically, when an erasure-coded pool is created without a profile name
+  (or with ``default``). The pool gets a profile of its own, named
+  ``{pool-name}-k{k}-m{m}``: a copy of the ``default`` profile with the
+  ``k``, ``m`` and CRUSH options given on the command line. For example, the
+  following command creates a profile named ``ecpool-k4-m2`` and a pool that
+  uses it:
+
+  .. prompt:: bash $
+
+     ceph osd pool create ecpool erasure --k 4 --m 2
+
+  If a profile of that name already exists with the same contents, it is used.
+  If it exists with other contents, the command fails: remove that profile, or
+  name it with ``--erasure_code_profile``.
+
+The ``default`` profile is a template that no pool uses. It holds what a pool
+gets when it names no profile. ``ceph osd pool default set --k {k} --m {m}``
+changes its ``k`` and ``m``, and ``ceph osd erasure-code-profile set default
+...`` changes its other keys. Pools created
+before the change keep their own copies. When a cluster is upgraded to this
+release, each pool that used ``default`` gets a copy of its own.
+
+When the last pool that uses a profile is deleted, the profile is deleted as
+well, however it was created. The ``default`` profile is never deleted in this
+way. The CRUSH rule of an erasure-coded pool is likewise deleted when the last
+pool that uses it is deleted.
+
+To create another pool with a profile whose last pool has been deleted, set the
+profile again first.
+
+.. note:: In earlier releases, a profile created with ``ceph osd
+   erasure-code-profile set`` remained until it was removed with ``ceph osd
+   erasure-code-profile rm``, and could be used for any number of pools over
+   time. Scripts that create a profile once and reuse it after deleting the
+   pools that use it must now set the profile again before each reuse.
+
 osd erasure-code-profile set
 ============================
 
@@ -51,7 +98,8 @@ To create a new erasure code profile::
              [{plugin=plugin}] \
              [{stripe_unit=stripe_unit}] \
              [{key=value} ...] \
-             [--force]
+             [--force] \
+             [--yes-i-really-mean-it]
 
 Where:
 
@@ -86,7 +134,10 @@ Where:
               created.  The stripe_width of a pool using this profile
               will be the number of data chunks multiplied by this
               stripe_unit. See :ref:`rados_ops_erasure_coding_optimizations`
-              for more information.
+              for more information. ``ceph osd pool create`` refuses a
+              profile whose stripe_unit is not a multiple of 4K unless
+              ``--yes-i-really-mean-it`` is given, and always for a pool
+              over zones.
 
 
 :Type: String
@@ -102,10 +153,18 @@ Where:
 
 ``--force``
 
-:Description: Override an existing profile by the same name, and allow
-              setting a non-4K-aligned stripe_unit. Overriding an existing
-              profile can be dangerous, and thus ``--yes-i-really-mean-it``
-              must be used as well.
+:Description: Allow setting a non-4K-aligned stripe_unit.
+
+:Type: String
+:Required: No.
+
+``--yes-i-really-mean-it``
+
+:Description: Override a profile that a pool uses. OSDs read a pool's
+              profile whenever they load its PGs, so changing the ``k``,
+              ``m`` or plugin of a profile that a pool uses corrupts the
+              pool's data. A profile that no pool uses, such as
+              ``default``, can be changed without it.
 
 :Type: String
 :Required: No.
@@ -118,6 +177,11 @@ To remove an erasure code profile::
 	ceph osd erasure-code-profile rm {name}
 
 If the profile is referenced by a pool, the deletion will fail.
+
+It is rarely necessary to remove a profile, because a profile is deleted
+automatically with the last pool that uses it (see
+:ref:`erasure-code-profile-lifecycle`). Removing a profile that does not exist
+succeeds and reports that the profile does not exist.
 
 .. warning:: Removing an erasure code profile using ``osd erasure-code-profile rm`` does not automatically delete the associated CRUSH rule associated with the erasure code profile. It is recommended to manually remove the associated CRUSH rule using ``ceph osd crush rule remove {rule-name}`` to avoid unexpected behavior.
 
