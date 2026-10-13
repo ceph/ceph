@@ -59,7 +59,7 @@ class RGWGC : public DoutPrefixProvider {
   void admit_entry(ceph::async::spawn_throttle& workpool, std::vector<bool>& failed,
                    pool_ctx_map& pool_ctxs, const cls_rgw_gc_obj_info& info);
 
-  int list_shard(int index, std::string& marker, uint32_t max, bool expired_only,
+  int list_shard(int index, std::string& marker, uint32_t max,
                  std::list<cls_rgw_gc_obj_info>& entries, bool& truncated,
                  boost::asio::yield_context y);
   int trim_shard(int index, librados::ObjectWriteOperation&& op, size_t count,

@@ -267,13 +267,14 @@ static void throw_if_op_cancelled(int r, const boost::asio::yield_context& y)
   }
 }
 
-int RGWGC::list_shard(int index, std::string& marker, uint32_t max, bool expired_only,
+int RGWGC::list_shard(int index, std::string& marker, uint32_t max,
                       std::list<cls_rgw_gc_obj_info>& entries, bool& truncated,
                       boost::asio::yield_context y)
 {
   librados::ObjectReadOperation op;
   bufferlist bl;
-  cls_rgw_gc_queue_list_entries(op, marker, max, expired_only, bl);
+  // removal counts unexpired entries too, so list them all
+  cls_rgw_gc_queue_list_entries(op, marker, max, false, bl);
   int ret = store->gc_operate(this, obj_names[index], std::move(op), nullptr, y);
   throw_if_op_cancelled(ret, y);
   std::string next_marker;
@@ -528,31 +529,36 @@ void RGWGC::process_queue(int index, Clock::time_point deadline, bool expired_on
   with_workpool(cct, yield, [&] (ceph::async::spawn_throttle& workpool) {
       std::string marker;
       bool truncated = true;
-      while (truncated) {
+      bool stop = false;
+      while (!stop && truncated) {
+        const auto now_real = ceph::real_clock::now();
         std::list<cls_rgw_gc_obj_info> entries;
-        if (list_shard(index, marker, list_max, expired_only, entries, truncated,
-                       yield) < 0 || entries.empty()) {
+        if (list_shard(index, marker, list_max, entries, truncated, yield) < 0 ||
+            entries.empty()) {
           break;
         }
         failed.clear();
-        bool stop = false;
         for (const auto& info : entries) {
-          // past the deadline or after a failed delete, stop without a trim
-          if (Clock::now() >= deadline || first_failed(failed) < failed.size()) {
+          // stop admitting at the deadline, a failed delete or the first unexpired entry
+          if (Clock::now() >= deadline || first_failed(failed) < failed.size() ||
+              (expired_only && info.time > now_real)) {
             stop = true;
             break;
           }
           admit_entry(workpool, failed, pool_ctxs, info);
         }
-        // trim the batch only once all of it finished
         workpool.wait();
-        if (stop || first_failed(failed) < failed.size()) {
-          break;
+        // trim the finished prefix; stop after a failed delete or removal
+        const size_t count = first_failed(failed);
+        if (count > 0) {
+          librados::ObjectWriteOperation op;
+          l.assert_locked_exclusive(&op);
+          cls_rgw_gc_queue_remove_entries(op, count);
+          if (trim_shard(index, std::move(op), count, yield) < 0) {
+            break;
+          }
         }
-        librados::ObjectWriteOperation op;
-        l.assert_locked_exclusive(&op);
-        cls_rgw_gc_queue_remove_entries(op, failed.size());
-        if (trim_shard(index, std::move(op), failed.size(), yield) < 0) {
+        if (count < failed.size()) {
           break;
         }
       }
