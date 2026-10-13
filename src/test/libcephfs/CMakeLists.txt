@@ -39,9 +39,7 @@ if(WITH_LIBCEPHFS)
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
-  if(NOT WIN32 AND NOT APPLE)
-    target_link_options(ceph_test_libcephfs PRIVATE -Wl,--copy-dt-needed-entries)
-  endif()
+  target_link_options(ceph_test_libcephfs PRIVATE ${LINK_COPY_DT_NEEDED_ENTRIES})
   install(TARGETS ceph_test_libcephfs
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -56,9 +54,7 @@ if(WITH_LIBCEPHFS)
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
-  if(NOT WIN32 AND NOT APPLE)
-    target_link_options(ceph_test_libcephfs_snapdiff PRIVATE -Wl,--copy-dt-needed-entries)
-  endif()
+  target_link_options(ceph_test_libcephfs_snapdiff PRIVATE ${LINK_COPY_DT_NEEDED_ENTRIES})
   install(TARGETS ceph_test_libcephfs_snapdiff
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -73,9 +69,7 @@ if(WITH_LIBCEPHFS)
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
-  if(NOT WIN32 AND NOT APPLE)
-    target_link_options(ceph_test_libcephfs_suidsgid PRIVATE -Wl,--copy-dt-needed-entries)
-  endif()
+  target_link_options(ceph_test_libcephfs_suidsgid PRIVATE ${LINK_COPY_DT_NEEDED_ENTRIES})
   install(TARGETS ceph_test_libcephfs_suidsgid
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -90,9 +84,7 @@ if(WITH_LIBCEPHFS)
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
-  if(NOT WIN32 AND NOT APPLE)
-    target_link_options(ceph_test_libcephfs_vxattr PRIVATE -Wl,--copy-dt-needed-entries)
-  endif()
+  target_link_options(ceph_test_libcephfs_vxattr PRIVATE ${LINK_COPY_DT_NEEDED_ENTRIES})
   install(TARGETS ceph_test_libcephfs_vxattr
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -107,9 +99,7 @@ if(WITH_LIBCEPHFS)
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
-  if(NOT WIN32 AND NOT APPLE)
-    target_link_options(ceph_test_libcephfs_newops PRIVATE -Wl,--copy-dt-needed-entries)
-  endif()
+  target_link_options(ceph_test_libcephfs_newops PRIVATE ${LINK_COPY_DT_NEEDED_ENTRIES})
   install(TARGETS ceph_test_libcephfs_newops
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -125,9 +115,7 @@ if(WITH_LIBCEPHFS)
       ${EXTRALIBS}
       ${CMAKE_DL_LIBS}
     )
-    if(NOT WIN32 AND NOT APPLE)
-      target_link_options(ceph_test_libcephfs_reclaim PRIVATE -Wl,--copy-dt-needed-entries)
-    endif()
+    target_link_options(ceph_test_libcephfs_reclaim PRIVATE ${LINK_COPY_DT_NEEDED_ENTRIES})
     install(TARGETS ceph_test_libcephfs_reclaim
       DESTINATION ${CMAKE_INSTALL_BINDIR})
   endif(NOT WIN32)
@@ -142,9 +130,7 @@ if(WITH_LIBCEPHFS)
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
   )
-  if(NOT WIN32 AND NOT APPLE)
-    target_link_options(ceph_test_libcephfs_lazyio PRIVATE -Wl,--copy-dt-needed-entries)
-  endif()
+  target_link_options(ceph_test_libcephfs_lazyio PRIVATE ${LINK_COPY_DT_NEEDED_ENTRIES})
   install(TARGETS ceph_test_libcephfs_lazyio
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -159,9 +145,7 @@ if(WITH_LIBCEPHFS)
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
   )
-  if(NOT WIN32 AND NOT APPLE)
-    target_link_options(ceph_test_libcephfs_access PRIVATE -Wl,--copy-dt-needed-entries)
-  endif()
+  target_link_options(ceph_test_libcephfs_access PRIVATE ${LINK_COPY_DT_NEEDED_ENTRIES})
   install(TARGETS ceph_test_libcephfs_access
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
