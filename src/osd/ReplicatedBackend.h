@@ -216,6 +216,12 @@ public:
       const shard_id_map<bufferlist> &shard_map, int chunk_size) const override;
 
  private:
+
+  // whether peer is in another zone, worked out once per osdmap epoch
+  bool is_cross_zone(pg_shard_t peer) const;
+  mutable epoch_t cross_zone_epoch = 0;
+  mutable std::map<int, bool> cross_zone_osds;
+
   // push
   struct push_info_t {
     ObjectRecoveryProgress recovery_progress;
@@ -223,6 +229,7 @@ public:
     ObjectContextRef obc;
     object_stat_sum_t stat;
     ObcLockManager lock_manager;
+    utime_t cross_zone_recovery_push_dispatch_time;
 
     void dump(ceph::Formatter *f) const {
       {
@@ -250,6 +257,7 @@ public:
     object_stat_sum_t stat;
     bool cache_dont_need;
     ObcLockManager lock_manager;
+    utime_t cross_zone_pull_dispatch_time;
 
     void dump(ceph::Formatter *f) const {
       {
@@ -392,6 +400,7 @@ public:
     Context *on_commit;
     OpRequestRef op;
     eversion_t v;
+    std::map<pg_shard_t, utime_t> cross_zone_write_dispatch_time;
     bool done() const {
       return waiting_for_commit.empty();
     }
