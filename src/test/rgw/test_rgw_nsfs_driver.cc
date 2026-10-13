@@ -5442,6 +5442,38 @@ TEST_F(NSFSNooBaaBucketTest, AVersionKeepsTheIdItWasRecordedWith)
   EXPECT_EQ(after, second) << "conversion changed the current version's id";
 }
 
+/* NooBaa's temp directory is content only while it holds something.
+ *
+ * `.noobaa-nsfs_<bucket id>` outlives every upload:  NooBaa makes it,
+ * and `multipart-uploads/` inside it, and leaves both behind when the
+ * last upload completes.  Matched by name alone it counted as an upload
+ * in flight forever, and a bucket that listed empty answered
+ * BucketNotEmpty.  An upload that is still open is content, as S3 has
+ * it, and must still refuse the delete. */
+TEST_F(NSFSNooBaaBucketTest, AnEmptyTempDirectoryDoesNotKeepABucket)
+{
+  sf::create_directories(bucket_path() / ".noobaa-nsfs_6ace0000aaaabbbbccccdddd"
+			 / "multipart-uploads");
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
+      << "an empty temp directory counted as an upload in flight";
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_FALSE(sf::exists(bucket_path()));
+}
+
+TEST_F(NSFSNooBaaBucketTest, ATempDirectoryHoldingAnUploadKeepsItsBucket)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  ASSERT_TRUE(sf::is_directory(tree.staging));
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), -ENOTEMPTY)
+      << "an upload in flight did not count as content";
+  EXPECT_LT(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_TRUE(sf::is_directory(tree.staging)) << "the upload was destroyed";
+}
+
 /* A base bucket whose state is where NooBaa keeps it.
  *
  * The config root is set before the driver is built, because that is

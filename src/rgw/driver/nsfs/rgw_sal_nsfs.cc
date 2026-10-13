@@ -235,6 +235,33 @@ static bool dir_has_content(int parent_fd, const char* dname,
   return found;
 }
 
+/* Does anything other than a directory lie beneath `dname`?  An entry
+ * that is not a directory is itself such a thing.  Directories alone,
+ * however deep, are a tree with nothing in it. */
+static bool tree_holds_file(int parent_fd, const char* dname)
+{
+  int fd = ::openat(parent_fd, dname, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (fd < 0) {
+    return errno != ENOENT;
+  }
+  DIR* d = ::fdopendir(fd);
+  if (!d) {
+    ::close(fd);
+    return true;
+  }
+  bool found = false;
+  struct dirent* de;
+  while (!found && ((de = ::readdir(d)) != nullptr)) {
+    std::string_view n = de->d_name;
+    if ((n == ".") || (n == "..")) {
+      continue;
+    }
+    found = tree_holds_file(::dirfd(d), de->d_name);
+  }
+  ::closedir(d);
+  return found;
+}
+
 static bool key_hits_reserved_name(std::string_view key,
 				   const nsfs::ReservedNames& rn)
 {
@@ -274,7 +301,11 @@ static bool entry_is_content(int parent_fd, std::string_view name,
   }
   for (const auto& p : rn.staging_prefixes) {
     if (name.starts_with(p)) {
-      return true; /* an incomplete upload, as S3 has it */
+      /* An incomplete upload, as S3 has it -- while one is there.  nsfs's
+       * own staging always holds its `.meta`, but NooBaa's temp directory
+       * outlives every upload, left with an empty `multipart-uploads/`
+       * when the last one ends, and an empty one is scaffolding. */
+      return tree_holds_file(parent_fd, std::string(name).c_str());
     }
   }
   /* remaining reserved names are scaffolding */
