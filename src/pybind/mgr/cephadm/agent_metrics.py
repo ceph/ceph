@@ -1,9 +1,9 @@
+import contextlib
 import datetime
-import enum
 import threading
 import time
 from collections import OrderedDict
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set
 
 _SLOW_REQUEST_DEBUG_THRESHOLD_S = 1.0
 _SLOW_REQUEST_INFO_THRESHOLD_S = 5.0
@@ -20,21 +20,18 @@ _LATENCY_BUCKETS_MS = (
 )
 
 
-class DeltaReason(str, enum.Enum):
-    """Why an agent sent or skipped ls, as counted in its ls_delta_stats.
-
-    The values are the ls_delta_stats keys on the wire and must match
-    DeltaReason in src/cephadm/cephadmlib/agent_delta.py.
-    """
-    FULL_SYNC = 'full_sync'
-    UNCHANGED = 'unchanged'
-    STRUCTURAL = 'structural'
-    MEMORY = 'memory_usage'
-    CPU = 'cpu_percentage'
-
-
 _STORE_CATEGORIES = ('host', 'devices', 'agent')
 _STORE_SCOPES = ('agent_request', 'background')
+# Phases of agent metadata processing timed by AgentMetadataStats.phase().
+# 'other' is not timed directly: it is the request time not attributed to
+# these phases or to persistence.
+_PHASES = ('ls', 'devices', 'scans')
+_PHASE_LABELS = (
+    ('ls', 'ls processing'),
+    ('devices', 'devices'),
+    ('scans', 'daemon scans'),
+    ('other', 'other'),
+)
 _REPORT_RATE_WINDOW_S = 60
 _AGENT_TO_WORKER_DELAY_BUCKETS_S = (
     (1.0, '<1s'),
@@ -140,10 +137,6 @@ class AgentMetadataStats:
         self._lock = threading.Lock()
         self._local = threading.local()
         self._logger = logger
-        # Per-host cumulative ls_delta_stats last seen from each agent. These are
-        # baselines, not measurements, so reset() keeps them: the next report
-        # after a reset then counts only what happened since.
-        self._ls_delta_last_by_host: Dict[str, Dict[DeltaReason, int]] = {}
         self.reset()
 
     def reset(self) -> None:
@@ -172,7 +165,6 @@ class AgentMetadataStats:
             }
             self._bad_metadata = 0
             self._handler_errors = 0
-            self._ls_delta_reasons: Dict[DeltaReason, int] = {reason: 0 for reason in DeltaReason}
             self._reports_with_nonempty_ls = 0
             self._reports_with_devices = 0
             self._first_contact_reports = 0
@@ -199,6 +191,21 @@ class AgentMetadataStats:
             self._max_increment_ack_hosts = 0
             self._config_pushes = 0
             self._config_push_hosts = 0
+            # Delta metadata effectiveness, counted for processed reports only.
+            self._full_reports = 0
+            self._delta_reports = 0
+            self._ls_skipped = 0
+            self._devices_skipped = 0
+            self._processed_writes = 0
+            self._save_host_avoided = 0
+            self._save_host_events = 0
+            self._save_host_device_writes = 0
+            self._full_body_bytes = 0
+            self._delta_body_bytes = 0
+            # name -> [calls, wall seconds, thread CPU seconds]
+            self._phases: Dict[str, List[float]] = {
+                name: [0, 0.0, 0.0] for name in _PHASES + ('other',)
+            }
 
     def begin_agent_request(self) -> None:
         # The request hook runs at on_start_resource, before json_in parses the
@@ -207,9 +214,14 @@ class AgentMetadataStats:
         self._local.in_agent_request = True
         self._local.agent_request_start = time.monotonic()
         self._local.agent_request_start_wall = time.time()
+        self._local.agent_request_cpu_start = time.thread_time()
         self._local.agent_request_host = None
         self._local.agent_store_time_s = {category: 0.0 for category in _STORE_CATEGORIES}
         self._local.agent_store_calls = {category: 0 for category in _STORE_CATEGORIES}
+        self._local.agent_store_cpu_s = 0.0
+        self._local.agent_body_bytes = 0
+        self._local.agent_phases = {}
+        self._local.agent_delta_outcome = None
         self._local.agent_pool_idle_start = None
         self._local.agent_pool_queue_start = None
         with self._lock:
@@ -226,8 +238,11 @@ class AgentMetadataStats:
         if start is None:
             return
         duration = time.monotonic() - start
+        cpu_start = getattr(self._local, 'agent_request_cpu_start', None)
+        cpu = time.thread_time() - cpu_start if cpu_start is not None else 0.0
         with self._lock:
             _record_latency(self._requests, duration)
+            self._record_processed_request(duration, cpu)
 
         if duration >= _SLOW_REQUEST_DEBUG_THRESHOLD_S and self._logger is not None:
             store_time = getattr(self._local, 'agent_store_time_s', {})
@@ -262,6 +277,117 @@ class AgentMetadataStats:
         self._local.agent_store_calls = {}
         self._local.agent_pool_idle_start = None
         self._local.agent_pool_queue_start = None
+        self._local.agent_request_cpu_start = None
+        self._local.agent_store_cpu_s = 0.0
+        self._local.agent_body_bytes = 0
+        self._local.agent_phases = {}
+        self._local.agent_delta_outcome = None
+
+    def _record_processed_request(self, duration_s: float, cpu_s: float) -> None:
+        """Aggregate the delta and phase measurements of one processed report.
+
+        Called with the lock held, from finish_agent_request(), so the
+        request's persistence calls (including save_agent()) are complete.
+        Reports that were not processed (bad metadata, first contact, handler
+        errors) record no outcome and are left out entirely.
+        """
+        outcome = getattr(self._local, 'agent_delta_outcome', None)
+        if outcome is None:
+            return
+        store_calls = getattr(self._local, 'agent_store_calls', {}) or {}
+        store_time = getattr(self._local, 'agent_store_time_s', {}) or {}
+        store_wall = sum(store_time.values())
+        store_cpu = getattr(self._local, 'agent_store_cpu_s', 0.0)
+        body_bytes = getattr(self._local, 'agent_body_bytes', 0)
+
+        if outcome['delta']:
+            self._delta_reports += 1
+            self._delta_body_bytes += body_bytes
+        else:
+            self._full_reports += 1
+            self._full_body_bytes += body_bytes
+        if outcome['ls_skipped']:
+            self._ls_skipped += 1
+        if outcome['devices_skipped']:
+            self._devices_skipped += 1
+
+        # Host and device writes only happen through save_host(), at most once
+        # per report. The pre-delta path calls save_host() whenever ls is
+        # present, so a report avoided it if ls was present (sent or accepted
+        # as unchanged) and save_host() did not run.
+        self._processed_writes += sum(store_calls.values())
+        saved_host = store_calls.get('host', 0) > 0
+        if saved_host:
+            self._save_host_events += 1
+            self._save_host_device_writes += store_calls.get('devices', 0)
+        elif outcome['baseline_save_host']:
+            self._save_host_avoided += 1
+
+        phases = getattr(self._local, 'agent_phases', {}) or {}
+        phase_wall = 0.0
+        phase_cpu = 0.0
+        for name, (wall, cpu) in phases.items():
+            item = self._phases[name]
+            item[0] += 1
+            item[1] += wall
+            item[2] += cpu
+            phase_wall += wall
+            phase_cpu += cpu
+        other = self._phases['other']
+        other[0] += 1
+        other[1] += max(0.0, duration_s - phase_wall - store_wall)
+        other[2] += max(0.0, cpu_s - phase_cpu - store_cpu)
+
+    def record_body_size(self, nbytes: int) -> None:
+        if getattr(self._local, 'in_agent_request', False):
+            self._local.agent_body_bytes = nbytes
+
+    def record_delta_outcome(self, delta: bool, ls_skipped: bool,
+                             devices_skipped: bool, baseline_save_host: bool) -> None:
+        """Mark the current report as processed and describe what it skipped.
+
+        delta: the report listed sections as unchanged.
+        ls_skipped/devices_skipped: the mgr accepted ls/volume as unchanged.
+        baseline_save_host: the pre-delta path would have called save_host().
+        """
+        if not getattr(self._local, 'in_agent_request', False):
+            return
+        self._local.agent_delta_outcome = {
+            'delta': delta,
+            'ls_skipped': ls_skipped,
+            'devices_skipped': devices_skipped,
+            'baseline_save_host': baseline_save_host,
+        }
+
+    @contextlib.contextmanager
+    def phase(self, name: str) -> Iterator[None]:
+        """Time one processing phase of the current agent request.
+
+        Wall and thread CPU time spent in persistence (set_store) during the
+        phase are subtracted, so phase times never overlap the persistence
+        statistics. Other work done by save_host(), such as serializing the
+        host cache, stays in the phase.
+        """
+        if name not in _PHASES or not getattr(self._local, 'in_agent_request', False):
+            yield
+            return
+        store_time = getattr(self._local, 'agent_store_time_s', {}) or {}
+        store_wall_start = sum(store_time.values())
+        store_cpu_start = self._local.agent_store_cpu_s
+        wall_start = time.monotonic()
+        cpu_start = time.thread_time()
+        try:
+            yield
+        finally:
+            wall = time.monotonic() - wall_start
+            cpu = time.thread_time() - cpu_start
+            store_time = getattr(self._local, 'agent_store_time_s', {}) or {}
+            wall -= sum(store_time.values()) - store_wall_start
+            cpu -= getattr(self._local, 'agent_store_cpu_s', 0.0) - store_cpu_start
+            phases = self._local.agent_phases
+            item = phases.setdefault(name, [0.0, 0.0])
+            item[0] += max(0.0, wall)
+            item[1] += max(0.0, cpu)
 
     @staticmethod
     def _record_rate_bucket(buckets: Dict[int, int], timestamp: float) -> None:
@@ -331,33 +457,8 @@ class AgentMetadataStats:
         with self._lock:
             self._handler_errors += 1
 
-    def record_ls_delta_stats(self, host: str, counters: Any) -> None:
-        if not isinstance(counters, dict):
-            return
-        try:
-            current = {reason: max(0, int(counters.get(reason.value, 0))) for reason in DeltaReason}
-        except (TypeError, ValueError):
-            return
-        with self._lock:
-            previous = self._ls_delta_last_by_host.get(host)
-            if previous is None:
-                # The first observation establishes a baseline. Counting the whole
-                # vector here would import the agent's pre-mgr/pre-reset history.
-                self._ls_delta_last_by_host[host] = current
-                return
-            # Cumulative counters form one vector. If any component moved backwards,
-            # the agent restarted/reset and the whole current vector is post-reset.
-            reset = any(current[reason] < previous[reason] for reason in DeltaReason)
-            for reason in DeltaReason:
-                delta = current[reason] if reset else current[reason] - previous[reason]
-                self._ls_delta_reasons[reason] += delta
-            self._ls_delta_last_by_host[host] = current
-
-    def forget_ls_delta_host(self, host: str) -> None:
-        with self._lock:
-            self._ls_delta_last_by_host.pop(host, None)
-
-    def record_store(self, category: str, duration_s: float, error: bool = False) -> None:
+    def record_store(self, category: str, duration_s: float, error: bool = False,
+                     cpu_s: float = 0.0) -> None:
         if category not in _STORE_CATEGORIES:
             return
         in_agent_request = getattr(self._local, 'in_agent_request', False)
@@ -376,6 +477,7 @@ class AgentMetadataStats:
             if store_time is not None and store_calls is not None:
                 store_time[category] += duration_s
                 store_calls[category] += 1
+            self._local.agent_store_cpu_s = getattr(self._local, 'agent_store_cpu_s', 0.0) + cpu_s
 
     def record_pool(self, idle: int, queued: int) -> None:
         with self._lock:
@@ -470,6 +572,21 @@ class AgentMetadataStats:
             agent_store_ms = sum(stores['agent_request'][c]['total_ms'] for c in _STORE_CATEGORIES)
             request_total_ms = requests['total_ms']
             return {
+                'delta': self._delta_snapshot(),
+                'processing': {
+                    name: {
+                        'calls': int(calls),
+                        'avg_wall_ms': round(wall * 1000.0 / calls, 3) if calls else 0.0,
+                        'avg_cpu_ms': round(cpu * 1000.0 / calls, 3) if calls else 0.0,
+                    }
+                    for name, (calls, wall, cpu) in self._phases.items()
+                },
+                'payload': {
+                    'full_avg_bytes': (self._full_body_bytes // self._full_reports
+                                       if self._full_reports else 0),
+                    'delta_avg_bytes': (self._delta_body_bytes // self._delta_reports
+                                        if self._delta_reports else 0),
+                },
                 'mgr': mgr_name,
                 'since': self._since.isoformat(),
                 'reports': {
@@ -482,7 +599,6 @@ class AgentMetadataStats:
                     'with_devices': self._reports_with_devices,
                     'first_contact': self._first_contact_reports,
                     'stale_ack': self._stale_ack_reports,
-                    'ls_delta': {reason.value: count for reason, count in self._ls_delta_reasons.items()},
                     'recent_processed_rate': processed_rate,
                     'sent_timestamped': self._agent_sent_timestamp_reports,
                     'send_interval': agent_send_intervals,
@@ -529,6 +645,33 @@ class AgentMetadataStats:
                 },
             }
 
+    def _delta_snapshot(self) -> Dict[str, Any]:
+        processed = self._full_reports + self._delta_reports
+
+        def pct(count: float, total: float) -> float:
+            return round(count * 100.0 / total, 2) if total else 0.0
+
+        # Each avoided save_host() avoids the host write plus the device-shard
+        # writes save_host() performs, estimated from the save_host() calls
+        # observed on agent requests. Without any, count the host write only.
+        if self._save_host_events:
+            writes_per_save_host = 1.0 + self._save_host_device_writes / self._save_host_events
+        else:
+            writes_per_save_host = 1.0
+        avoided = int(round(self._save_host_avoided * writes_per_save_host))
+        return {
+            'full_reports': self._full_reports,
+            'delta_reports': self._delta_reports,
+            'ls_skipped': self._ls_skipped,
+            'ls_skipped_pct': pct(self._ls_skipped, processed),
+            'devices_skipped': self._devices_skipped,
+            'devices_skipped_pct': pct(self._devices_skipped, processed),
+            'actual_writes': self._processed_writes,
+            'save_host_avoided': self._save_host_avoided,
+            'est_writes_avoided': avoided,
+            'est_writes_avoided_pct': pct(avoided, self._processed_writes + avoided),
+        }
+
     def format_plain(self, mgr_name: str) -> str:
         stats = self.snapshot(mgr_name)
         reports = stats['reports']
@@ -537,6 +680,9 @@ class AgentMetadataStats:
         persistence = stats['persistence']
         pool = stats['http_pool']
         fanout = stats['ack_fanout']
+        delta = stats['delta']
+        processing = stats['processing']
+        payload = stats['payload']
 
         lines = [
             'Agent metadata statistics',
@@ -556,11 +702,6 @@ class AgentMetadataStats:
             f"  with devices:       {reports['with_devices']}",
             f"  first contact:      {reports['first_contact']}",
             f"  stale ack:          {reports['stale_ack']}",
-            f"  ls delta full sync: {reports['ls_delta'][DeltaReason.FULL_SYNC.value]}",
-            f"  ls structural:      {reports['ls_delta'][DeltaReason.STRUCTURAL.value]}",
-            f"  ls memory:          {reports['ls_delta'][DeltaReason.MEMORY.value]}",
-            f"  ls cpu:             {reports['ls_delta'][DeltaReason.CPU.value]}",
-            f"  ls unchanged:       {reports['ls_delta'][DeltaReason.UNCHANGED.value]}",
             '',
             'Mgr pacing policy:',
             f"  host count:         {pacing['host_count']}",
@@ -650,5 +791,26 @@ class AgentMetadataStats:
             f"  max increment hosts:{fanout['max_increment_hosts']:>7}",
             f"  config push events: {fanout['config_push_events']}",
             f"  config push hosts:  {fanout['config_push_hosts_total']}",
+            '',
+            'Delta metadata:',
+            f"  full reports:       {delta['full_reports']}",
+            f"  delta reports:      {delta['delta_reports']}",
+            f"  ls skipped:         {delta['ls_skipped']} ({delta['ls_skipped_pct']:.2f}%)",
+            f"  devices skipped:    {delta['devices_skipped']} ({delta['devices_skipped_pct']:.2f}%)",
+            f"  est. writes avoided:{delta['est_writes_avoided']:>7} ({delta['est_writes_avoided_pct']:.2f}%)",
+            '',
+            'Metadata processing:',
+            '  phase              calls  avg wall ms   avg cpu ms',
+        ])
+        for name, label in _PHASE_LABELS:
+            item = processing[name]
+            lines.append(
+                f"  {label:<14} {item['calls']:>9} {item['avg_wall_ms']:>12.3f} {item['avg_cpu_ms']:>12.3f}"
+            )
+        lines.extend([
+            '',
+            'Payload:',
+            f"  full avg bytes:     {payload['full_avg_bytes']}",
+            f"  delta avg bytes:    {payload['delta_avg_bytes']}",
         ])
         return '\n'.join(lines) + '\n'

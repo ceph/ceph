@@ -56,6 +56,7 @@ def _timed_set_store(mgr: 'CephadmOrchestrator', key: str, value: Optional[str],
         return
 
     start = time.monotonic()
+    cpu_start = time.thread_time()
     error = False
     try:
         mgr.set_store(key, value)
@@ -63,7 +64,8 @@ def _timed_set_store(mgr: 'CephadmOrchestrator', key: str, value: Optional[str],
         error = True
         raise
     finally:
-        stats.record_store(category, time.monotonic() - start, error=error)
+        stats.record_store(category, time.monotonic() - start, error=error,
+                           cpu_s=time.thread_time() - cpu_start)
 
 
 class HostCacheStatus(enum.Enum):

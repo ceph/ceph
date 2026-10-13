@@ -10,7 +10,7 @@ from cephadm.agent import (
     _agent_stats_request_end,
     _agent_stats_request_start,
 )
-from cephadm.agent_metrics import AgentMetadataStats, DeltaReason
+from cephadm.agent_metrics import AgentMetadataStats
 from cephadm.http_server import CephadmHttpServer
 
 
@@ -372,83 +372,181 @@ def test_empty_ack_fanout_is_not_recorded() -> None:
     assert result['ack_fanout']['events'] == 0
 
 
-def test_ls_delta_stats_are_aggregated_and_handle_agent_reset():
+class _FakeClock:
+    """Controls agent_metrics' wall and thread CPU clocks."""
+
+    def __init__(self) -> None:
+        self.wall = 100.0
+        self.cpu = 5.0
+
+    def advance(self, wall: float, cpu: float) -> None:
+        self.wall += wall
+        self.cpu += cpu
+
+    def monotonic(self) -> float:
+        return self.wall
+
+    def thread_time(self) -> float:
+        return self.cpu
+
+    def time(self) -> float:
+        return self.wall
+
+
+def _processed_report(stats: AgentMetadataStats, body: int, delta: bool,
+                      ls_skipped: bool, devices_skipped: bool,
+                      baseline_save_host: bool, stores: list) -> None:
+    stats.begin_agent_request()
+    stats.record_body_size(body)
+    for category in stores:
+        stats.record_store(category, 0.010)
+    stats.record_delta_outcome(delta=delta, ls_skipped=ls_skipped,
+                               devices_skipped=devices_skipped,
+                               baseline_save_host=baseline_save_host)
+    stats.finish_agent_request()
+
+
+def test_delta_effectiveness_counts_writes_and_payload() -> None:
     stats = AgentMetadataStats()
-    # First observation establishes the baseline only.
-    stats.record_ls_delta_stats('host1', {
-        'full_sync': 1, 'structural': 2, 'memory_usage': 3,
-        'cpu_percentage': 4, 'unchanged': 5,
-    })
-    assert stats.snapshot('mgr.a')['reports']['ls_delta'] == {
-        'full_sync': 0, 'structural': 0, 'memory_usage': 0,
-        'cpu_percentage': 0, 'unchanged': 0,
-    }
+    # Full report: ls sent, so save_host() wrote host + one device shard.
+    _processed_report(stats, 1000, delta=False, ls_skipped=False,
+                      devices_skipped=False, baseline_save_host=True,
+                      stores=['devices', 'host', 'agent'])
+    # Delta report: ls and volume accepted as unchanged, only save_agent().
+    _processed_report(stats, 200, delta=True, ls_skipped=True,
+                      devices_skipped=True, baseline_save_host=True,
+                      stores=['agent'])
 
-    stats.record_ls_delta_stats('host1', {
-        'full_sync': 1, 'structural': 3, 'memory_usage': 5,
-        'cpu_percentage': 4, 'unchanged': 8,
-    })
-    # Simulate an agent restart. Any component moving backwards resets the whole
-    # cumulative vector, including counters whose values happen to be unchanged.
-    stats.record_ls_delta_stats('host1', {
-        'full_sync': 1, 'structural': 0, 'memory_usage': 1,
-        'cpu_percentage': 0, 'unchanged': 2,
-    })
-    delta = stats.snapshot('mgr.a')['reports']['ls_delta']
-    assert delta == {
-        'full_sync': 1,
-        'structural': 1,
-        'memory_usage': 3,
-        'cpu_percentage': 0,
-        'unchanged': 5,
-    }
+    result = stats.snapshot('mgr.a')
+    delta = result['delta']
+    assert delta['full_reports'] == 1
+    assert delta['delta_reports'] == 1
+    assert delta['ls_skipped'] == 1
+    assert delta['ls_skipped_pct'] == 50.0
+    assert delta['devices_skipped'] == 1
+    assert delta['actual_writes'] == 4
+    assert delta['save_host_avoided'] == 1
+    # One avoided save_host() = host write + 1 device shard (observed average).
+    assert delta['est_writes_avoided'] == 2
+    assert delta['est_writes_avoided_pct'] == round(2 * 100.0 / 6, 2)
+    assert result['payload'] == {'full_avg_bytes': 1000, 'delta_avg_bytes': 200}
 
 
-def test_ls_delta_stats_reset_keeps_host_baseline():
+def test_skipped_volume_alone_avoids_no_write() -> None:
+    """volume skipped while ls was sent: save_host() still ran, nothing avoided."""
     stats = AgentMetadataStats()
-    stats.record_ls_delta_stats('host1', {
-        'full_sync': 1, 'structural': 2, 'memory_usage': 3000,
-        'cpu_percentage': 4, 'unchanged': 900,
-    })
+    _processed_report(stats, 500, delta=True, ls_skipped=False,
+                      devices_skipped=True, baseline_save_host=True,
+                      stores=['devices', 'host', 'agent'])
+    delta = stats.snapshot('mgr.a')['delta']
+    assert delta['devices_skipped'] == 1
+    assert delta['save_host_avoided'] == 0
+    assert delta['est_writes_avoided'] == 0
+
+
+def test_no_baseline_save_host_avoids_no_write() -> None:
+    """Stale-ack or resynced ls: the old path would not have written either."""
+    stats = AgentMetadataStats()
+    _processed_report(stats, 300, delta=True, ls_skipped=False,
+                      devices_skipped=False, baseline_save_host=False,
+                      stores=['agent'])
+    delta = stats.snapshot('mgr.a')['delta']
+    assert delta['save_host_avoided'] == 0
+    assert delta['est_writes_avoided'] == 0
+
+
+def test_avoided_writes_without_observed_save_host_count_host_only() -> None:
+    stats = AgentMetadataStats()
+    _processed_report(stats, 300, delta=True, ls_skipped=True,
+                      devices_skipped=True, baseline_save_host=True,
+                      stores=['agent'])
+    assert stats.snapshot('mgr.a')['delta']['est_writes_avoided'] == 1
+
+
+def test_unprocessed_reports_are_not_counted() -> None:
+    stats = AgentMetadataStats()
+    stats.begin_agent_request()
+    stats.record_body_size(100)
+    with stats.phase('ls'):
+        pass
+    stats.finish_agent_request()
+
+    result = stats.snapshot('mgr.a')
+    assert result['delta']['full_reports'] == 0
+    assert result['delta']['delta_reports'] == 0
+    assert result['payload'] == {'full_avg_bytes': 0, 'delta_avg_bytes': 0}
+    assert all(item['calls'] == 0 for item in result['processing'].values())
+
+
+def test_phase_times_exclude_persistence_and_other_is_the_remainder() -> None:
+    stats = AgentMetadataStats()
+    clock = _FakeClock()
+    with patch('cephadm.agent_metrics.time', clock):
+        stats.begin_agent_request()
+        clock.advance(0.100, 0.020)          # decode/parse -> other
+        with stats.phase('ls'):
+            clock.advance(0.150, 0.030)      # ls processing
+            clock.advance(0.300, 0.010)      # save_host() set_store
+            stats.record_store('host', 0.300, cpu_s=0.010)
+            clock.advance(0.050, 0.010)      # more ls processing
+        with stats.phase('scans'):
+            clock.advance(0.200, 0.100)
+        with stats.phase('scans'):
+            clock.advance(0.100, 0.050)
+        clock.advance(0.050, 0.005)          # save_agent() set_store
+        stats.record_store('agent', 0.050, cpu_s=0.005)
+        clock.advance(0.040, 0.004)          # response -> other
+        stats.record_delta_outcome(delta=False, ls_skipped=False,
+                                   devices_skipped=False, baseline_save_host=True)
+        stats.finish_agent_request()
+
+    processing = stats.snapshot('mgr.a')['processing']
+    assert processing['ls'] == {'calls': 1, 'avg_wall_ms': 200.0, 'avg_cpu_ms': 40.0}
+    # Two scan blocks in one report are one phase execution.
+    assert processing['scans'] == {'calls': 1, 'avg_wall_ms': 300.0, 'avg_cpu_ms': 150.0}
+    assert processing['devices'] == {'calls': 0, 'avg_wall_ms': 0.0, 'avg_cpu_ms': 0.0}
+    # Total 0.990 s wall / 0.229 s CPU, minus phases and persistence.
+    assert processing['other'] == {'calls': 1, 'avg_wall_ms': 140.0, 'avg_cpu_ms': 24.0}
+
+
+def test_phase_outside_agent_request_is_a_noop() -> None:
+    stats = AgentMetadataStats()
+    with stats.phase('ls'):
+        stats.record_store('host', 0.010)
+    stats.begin_agent_request()
+    with stats.phase('not-a-phase'):
+        pass
+    stats.record_delta_outcome(delta=False, ls_skipped=False,
+                               devices_skipped=False, baseline_save_host=False)
+    stats.finish_agent_request()
+    processing = stats.snapshot('mgr.a')['processing']
+    assert processing['ls']['calls'] == 0
+    assert processing['other']['calls'] == 1
+
+
+def test_reset_clears_delta_statistics() -> None:
+    stats = AgentMetadataStats()
+    _processed_report(stats, 200, delta=True, ls_skipped=True,
+                      devices_skipped=True, baseline_save_host=True,
+                      stores=['agent'])
     stats.reset()
-
-    # Reset clears the measurement window, not the per-host cumulative baseline.
-    stats.record_ls_delta_stats('host1', {
-        'full_sync': 1, 'structural': 2, 'memory_usage': 3000,
-        'cpu_percentage': 4, 'unchanged': 901,
-    })
-    delta = stats.snapshot('mgr.a')['reports']['ls_delta']
-    assert delta == {
-        'full_sync': 0, 'structural': 0, 'memory_usage': 0,
-        'cpu_percentage': 0, 'unchanged': 1,
-    }
+    result = stats.snapshot('mgr.a')
+    assert result['delta']['delta_reports'] == 0
+    assert result['delta']['est_writes_avoided'] == 0
+    assert result['processing']['other']['calls'] == 0
 
 
-def test_ls_delta_stats_forget_host_reestablishes_baseline():
+def test_plain_output_includes_delta_sections() -> None:
     stats = AgentMetadataStats()
-    counters = {
-        'full_sync': 1, 'structural': 2, 'memory_usage': 3,
-        'cpu_percentage': 4, 'unchanged': 5,
-    }
-    stats.record_ls_delta_stats('host1', counters)
-    stats.forget_ls_delta_host('host1')
-    stats.record_ls_delta_stats('host1', counters)
-    assert stats.snapshot('mgr.a')['reports']['ls_delta'] == {
-        'full_sync': 0, 'structural': 0, 'memory_usage': 0,
-        'cpu_percentage': 0, 'unchanged': 0,
-    }
-
-
-def test_delta_reason_wire_values():
-    """DeltaReason values are the ls_delta_stats keys agents send."""
-    assert {reason.value for reason in DeltaReason} == {
-        'full_sync', 'unchanged', 'structural', 'memory_usage', 'cpu_percentage',
-    }
-
-
-def test_ls_delta_snapshot_is_keyed_by_plain_strings():
-    """The ls_delta snapshot uses the wire values as plain string keys."""
-    stats = AgentMetadataStats()
-    ls_delta = stats.snapshot('mgr.a')['reports']['ls_delta']
-    assert all(type(key) is str for key in ls_delta)
-    assert set(ls_delta) == {reason.value for reason in DeltaReason}
+    _processed_report(stats, 1000, delta=False, ls_skipped=False,
+                      devices_skipped=False, baseline_save_host=True,
+                      stores=['devices', 'host', 'agent'])
+    out = stats.format_plain('mgr.a')
+    assert 'Delta metadata:' in out
+    assert '  full reports:       1' in out
+    assert 'est. writes avoided:' in out
+    assert 'Metadata processing:' in out
+    for label in ('ls processing', 'devices', 'daemon scans', 'other'):
+        assert f'  {label}' in out
+    assert '  full avg bytes:     1000' in out
+    assert 'ls delta' not in out

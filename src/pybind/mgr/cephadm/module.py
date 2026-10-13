@@ -2569,7 +2569,6 @@ Then run the following:
 
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
-        self.agent_metadata_stats.forget_ls_delta_host(host)
         self.agent_helpers.delta_baselines.forget(host)
         self.ssh.reset_con(host)
         # if host was in offline host list, we should remove it now.

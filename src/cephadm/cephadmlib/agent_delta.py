@@ -39,10 +39,9 @@ METADATA_SECTIONS = ('ls', 'networks', 'facts', 'volume')
 class DeltaReason(str, enum.Enum):
     """Why a section was, or was not, included in a report.
 
-    MEMORY and CPU only apply to ls. The ls reasons of delivered reports are
-    counted and sent to the mgr as 'ls_delta_stats', keyed by value; the mgr's
-    DeltaReason in src/pybind/mgr/cephadm/agent_metrics.py must use the same
-    values. Use .value when formatting a member as text.
+    MEMORY and CPU only apply to ls. The reason is local to the agent: it
+    decides whether a section is sent and whether commit() moves its
+    baseline. It is not sent to the mgr.
     """
 
     FULL_SYNC = 'full_sync'
@@ -227,10 +226,6 @@ class MetadataDeltaTracker:
         self.synced_ack: Dict[str, int] = {}
         # Last delivered value per section, see section_baseline().
         self.baselines: Dict[str, Any] = {}
-        # Cumulative count of ls reasons for delivered reports.
-        self.ls_reason_counts: Dict[DeltaReason, int] = {
-            reason: 0 for reason in DeltaReason
-        }
 
     def change_reason(
         self, name: str, baseline: Any, ack: int
@@ -270,12 +265,6 @@ class MetadataDeltaTracker:
             pending[name] = PendingSection(ack, baseline, reason)
         if unchanged:
             fields['unchanged'] = unchanged
-        # Cumulative counters: a lost report loses no information, and they
-        # only move in commit(), so retries are not counted.
-        fields['ls_delta_stats'] = {
-            reason.value: count
-            for reason, count in self.ls_reason_counts.items()
-        }
         return fields, pending
 
     def commit(self, pending: Dict[str, PendingSection]) -> None:
@@ -286,8 +275,6 @@ class MetadataDeltaTracker:
                 # in memory or CPU accumulates until it exceeds the tolerance.
                 self.synced_ack[name] = section.ack
                 self.baselines[name] = section.baseline
-            if name == 'ls':
-                self.ls_reason_counts[section.reason] += 1
 
     def resync(self, sections: Iterable[str]) -> None:
         """Send the given sections in full on the next report."""

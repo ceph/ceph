@@ -1,4 +1,5 @@
 import cherrypy
+import contextlib
 import cephadm.cherrypy_compression_in  # noqa: F401
 import json
 import socket
@@ -21,7 +22,7 @@ from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
 
 from urllib.error import HTTPError, URLError
-from typing import Any, Dict, Iterable, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple, NamedTuple
+from typing import Any, ContextManager, Dict, Iterable, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple, NamedTuple
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -74,6 +75,14 @@ class AgentDeltaBaselines:
     def clear(self) -> None:
         with self._lock:
             self._received.clear()
+
+
+def _stats_phase(mgr: "CephadmOrchestrator", name: str) -> ContextManager[None]:
+    """Time a metadata processing phase if agent diagnostics are enabled."""
+    stats = getattr(mgr, 'agent_metadata_stats', None)
+    if stats is None:
+        return contextlib.nullcontext()
+    return stats.phase(name)
 
 
 def _agent_stats_request_start(mgr: "CephadmOrchestrator", endpoint: str) -> None:
@@ -855,6 +864,9 @@ class HostData:
             remote_ip = cherrypy.request.remote.ip
             content_encoding = cherrypy.request.headers.get('Content-Encoding', 'identity')
             raw_body = cherrypy.request.body.read()
+            stats = getattr(self.mgr, 'agent_metadata_stats', None)
+            if stats:
+                stats.record_body_size(len(raw_body))
             self.mgr.log.debug(f">>> Received payload from {remote_ip}, Content-Encoding: {content_encoding}")
             return json.loads(raw_body.decode('utf-8'))
         except Exception as e:
@@ -901,10 +913,6 @@ class HostData:
             # host agent is reporting on is marked offline, it shouldn't be any more
             self.mgr.offline_hosts_remove(host)
             metadata_result = self.handle_metadata(data)
-            if metadata_result.processed:
-                stats = getattr(self.mgr, 'agent_metadata_stats', None)
-                if stats is not None:
-                    stats.record_ls_delta_stats(host, data.get('ls_delta_stats'))
             results['result'] = metadata_result.message
             results['success'] = metadata_result.processed
             if metadata_result.resync:
@@ -979,8 +987,9 @@ class HostData:
             # update timestamp of most recent agent update
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
 
-            error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
-            daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
+            with _stats_phase(self.mgr, 'scans'):
+                error_daemons_old = set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+                daemon_count_old = len(self.mgr.cache.get_daemons_by_host(host))
 
             up_to_date = False
 
@@ -998,10 +1007,12 @@ class HostData:
             self._process_sections(host, data)
             self._touch_unchanged(host, unchanged)
 
-            if (
-                error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
-                or daemon_count_old != len(self.mgr.cache.get_daemons_by_host(host))
-            ):
+            with _stats_phase(self.mgr, 'scans'):
+                daemons_changed = (
+                    error_daemons_old != set([dd.name() for dd in self.mgr.cache.get_error_daemons()])
+                    or daemon_count_old != len(self.mgr.cache.get_daemons_by_host(host))
+                )
+            if daemons_changed:
                 self.mgr.log.debug(
                     f'Change detected in state of daemons from {host} agent metadata. Kicking serve loop')
                 self.mgr._kick_serve_loop()
@@ -1017,6 +1028,14 @@ class HostData:
                     f'Received up-to-date metadata from agent on host {host}.')
 
             self.mgr.agent_cache.save_agent(host)
+            stats = getattr(self.mgr, 'agent_metadata_stats', None)
+            if stats:
+                stats.record_delta_outcome(
+                    delta=bool(data.get('unchanged')),
+                    ls_skipped='ls' in unchanged,
+                    devices_skipped='volume' in unchanged,
+                    baseline_save_host=bool(data.get('ls')) or 'ls' in unchanged,
+                )
             return MetadataResult(True, 'Successfully processed metadata.', resync)
 
         except Exception as e:
@@ -1045,17 +1064,20 @@ class HostData:
         host_cache_changed = False
         host_cache_saved = False
         if data.get('ls'):
-            self.mgr._process_ls_output(host, data['ls'])
+            with _stats_phase(self.mgr, 'ls'):
+                self.mgr._process_ls_output(host, data['ls'])
             host_cache_saved = True  # _process_ls_output() calls save_host().
-            self.mgr.update_failed_daemon_health_check()
+            with _stats_phase(self.mgr, 'scans'):
+                self.mgr.update_failed_daemon_health_check()
         if data.get('networks'):
             self.mgr.cache.update_host_networks(host, data['networks'])
             host_cache_changed = True
         if data.get('facts'):
             self.mgr.cache.update_host_facts(host, json.loads(data['facts']))
         if data.get('volume'):
-            ret = Devices.from_json(json.loads(data['volume']))
-            self.mgr.cache.update_host_devices(host, ret.devices)
+            with _stats_phase(self.mgr, 'devices'):
+                ret = Devices.from_json(json.loads(data['volume']))
+                self.mgr.cache.update_host_devices(host, ret.devices)
             host_cache_changed = True
 
         # A changed device/network section can arrive while ls is unchanged.

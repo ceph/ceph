@@ -169,3 +169,92 @@ def test_http_response_carries_success_and_resync():
         assert results['result'].startswith('Bad metadata')
     finally:
         ctx.__exit__(None, None, None)
+
+
+def _run_report(mgr, endpoint, data):
+    """Process one report inside an agent request, as the HTTP hooks do."""
+    stats = mgr.agent_metadata_stats
+    stats.begin_agent_request()
+    try:
+        return endpoint.handle_metadata(data)
+    finally:
+        stats.finish_agent_request()
+
+
+def test_stats_count_accepted_skips_and_avoided_save_host():
+    ctx, mgr, host = _setup_mgr()
+    try:
+        stats = mgr.agent_metadata_stats
+        stats.reset()
+        endpoint = HostData(mgr)
+        mgr.agent_helpers.delta_baselines.record_received(host, ['ls', 'volume'])
+        data = _base(host)
+        data['unchanged'] = ['ls', 'volume']
+        assert _run_report(mgr, endpoint, data).processed is True
+
+        delta = stats.snapshot('mgr.a')['delta']
+        assert delta['delta_reports'] == 1
+        assert delta['full_reports'] == 0
+        assert delta['ls_skipped'] == 1
+        assert delta['devices_skipped'] == 1
+        assert delta['save_host_avoided'] == 1
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_stats_do_not_count_resynced_sections_as_skips():
+    ctx, mgr, host = _setup_mgr()
+    try:
+        stats = mgr.agent_metadata_stats
+        stats.reset()
+        endpoint = HostData(mgr)
+        data = _base(host)
+        data['unchanged'] = ['ls', 'volume']   # no baseline: resync requested
+        result = _run_report(mgr, endpoint, data)
+        assert set(result.resync) == {'ls', 'volume'}
+
+        delta = stats.snapshot('mgr.a')['delta']
+        assert delta['delta_reports'] == 1
+        assert delta['ls_skipped'] == 0
+        assert delta['devices_skipped'] == 0
+        assert delta['save_host_avoided'] == 0
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_stats_time_phases_of_a_full_report():
+    ctx, mgr, host = _setup_mgr()
+    try:
+        stats = mgr.agent_metadata_stats
+        stats.reset()
+        endpoint = HostData(mgr)
+        data = _base(host)
+        data['ls'] = [{'name': 'mon.a', 'style': 'cephadm:v1', 'fsid': mgr._cluster_fsid}]
+        data['volume'] = '[]'
+        assert _run_report(mgr, endpoint, data).processed is True
+
+        result = stats.snapshot('mgr.a')
+        assert result['delta']['full_reports'] == 1
+        assert result['delta']['save_host_avoided'] == 0
+        processing = result['processing']
+        assert processing['ls']['calls'] == 1
+        assert processing['scans']['calls'] == 1
+        assert processing['other']['calls'] == 1
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_first_contact_report_is_not_counted():
+    ctx, mgr, host = _setup_mgr()
+    try:
+        stats = mgr.agent_metadata_stats
+        stats.reset()
+        del mgr.agent_cache.agent_counter[host]
+        with patch.object(mgr.agent_helpers, '_request_agent_acks'):
+            result = _run_report(mgr, HostData(mgr), _base(host))
+        assert result.processed is False
+        delta = stats.snapshot('mgr.a')['delta']
+        assert delta['full_reports'] == 0
+        assert delta['delta_reports'] == 0
+    finally:
+        ctx.__exit__(None, None, None)
