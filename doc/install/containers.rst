@@ -22,7 +22,7 @@ Release Images and Tags
 
 .. list-table::
    :header-rows: 1
-   :widths: 28 52 20
+   :widths: 28 40 32
 
    * - Tag
      - Points to
@@ -73,7 +73,7 @@ CI system builds from, including ``main`` and the release branches.
 
 .. list-table::
    :header-rows: 1
-   :widths: 28 52 20
+   :widths: 28 40 32
 
    * - Tag
      - Points to
@@ -86,7 +86,7 @@ CI system builds from, including ``main`` and the release branches.
      - ``main-rockylinux-10-x86_64-devel``
    * - ``SHA1``
      - The build of one commit, named by its full commit ID
-     -
+     - A 40-character commit ID
    * - ``BRANCH-BASEOS``, ``SHA1-BASEOS``
      - A build on a base image that is not the default for the branch (the
        default is ``centos-stream9`` for reef, squid and tentacle, and

@@ -26,6 +26,12 @@ Prerequisites
 - For the cephadm route, ``cephadm`` installed as described in
   :ref:`get-cephadm`.
 
+.. _configure-repositories-manually:
+
+.. _add-keys:
+
+.. _ceph-release-packages:
+
 Procedure
 =========
 
@@ -98,11 +104,9 @@ Using Cephadm
    ``/var/log/ceph/cephadm.log``. If the package manager fails, cephadm
    prints ``Non-zero exit code``, the command that failed, and its output.
 
-.. _configure-repositories-manually:
-
-.. _ceph-release-packages:
-
 .. _debian-packages:
+
+.. _apt:
 
 Debian and Ubuntu
 -----------------
@@ -145,6 +149,8 @@ APT finds Ceph in ``https://download.ceph.com/debian-{release-name}/``.
 .. _rpm-packages:
 
 .. _get-packages-rhel:
+
+.. _rpm:
 
 RHEL
 ----
@@ -235,8 +241,9 @@ still works as an alias of ``dnf``.
 
    For an earlier release, replace the release name in each ``baseurl``. To
    pin a specific release, use ``rpm-{version}`` instead, for example
-   ``rpm-20.2.4``. ``https://download.ceph.com/rpm-{release-name}/`` lists the
-   distributions that a release is built for.
+   ``rpm-20.2.4``. A release is built for a distribution only if
+   ``https://download.ceph.com/rpm-{release-name}/{distro}/`` is not empty;
+   see also :ref:`start-platforms`.
 
    Instead of creating the file, you can install the ``ceph-release``
    package, which writes ``ceph.repo`` for one release and distribution.
@@ -427,8 +434,9 @@ Troubleshooting
 - **"failed to fetch repository metadata. please check the provided
   parameters are correct and try again" from cephadm.** On EL, cephadm found
   no repository for this release or version and your distribution. Check the
-  name or the version, and browse ``https://download.ceph.com/rpm-{version}/``
-  for the distributions that it is built for.
+  name or the version, and check that the directory of your distribution
+  under ``https://download.ceph.com/rpm-{version}/`` is not empty; see also
+  :ref:`start-platforms`.
 - **"Unable to find a match: epel-release" from cephadm.** On RHEL itself,
   ``cephadm add-repo`` writes ``ceph.repo`` and then fails to install the
   ``epel-release`` package, which RHEL does not ship. Install EPEL as in

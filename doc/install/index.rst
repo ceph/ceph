@@ -20,6 +20,8 @@ up the cluster.
    windows-basic-config
    windows-troubleshooting
 
+.. _other-methods:
+
 .. _recommended-methods:
 
 .. rubric:: Choose a Deployment Method
@@ -96,7 +98,7 @@ a Rook cluster. Use the Rook operator for that.
   each tag points to.
 - :ref:`install-mirrors`: mirrors of ``download.ceph.com`` for packages and
   tarballs, and how to run your own.
-- :ref:`ceph-releases-index`: the releases that are maintained now, and the
+- `Ceph Releases (index)`_: the releases that are maintained now, and the
   release notes of every release.
 
 .. rubric:: Next Steps
@@ -114,3 +116,7 @@ a Rook cluster. Use the Rook operator for that.
   when a cephadm command fails or a service stops running.
 - :ref:`start-here`: what Ceph is, and a single-host test cluster to learn
   on.
+
+.. Needs to be an external link because doc/releases/index.rst is not in
+   stable branches and we want to always use the main branch version
+.. _Ceph Releases (index): https://docs.ceph.com/en/latest/releases/

@@ -18,7 +18,7 @@ Prerequisites
 
 - For APT or DNF, the Ceph repository, added as described in
   :ref:`packages`.
-- For a build, a Ceph build; see :ref:`build-ceph`.
+- For a build, a Ceph build; see :doc:`build-ceph`.
 - Root access, or a user with ``sudo``.
 
 Procedure
@@ -54,7 +54,8 @@ Installing with DNF
    The command prints ``priority=2`` once for each section. If it prints
    nothing, the file came from ``cephadm add-repo`` or from the
    ``ceph-release`` package, which set no priority; add ``priority=2`` to each
-   section, as shown in :ref:`get-packages-rhel`.
+   section, as shown in :ref:`the RHEL section of Getting Ceph Packages
+   <get-packages-rhel>`.
 
 #. Install the packages:
 
@@ -122,10 +123,11 @@ Troubleshooting
   the Verification section of :ref:`packages`, then install again.
 - **"nothing provides luarocks" or "nothing provides
   libtcmalloc.so.4()(64bit)".** EPEL is not enabled. See step 2 of
-  :ref:`get-packages-rhel`.
+  :ref:`the RHEL section of Getting Ceph Packages <get-packages-rhel>`.
 - **"nothing provides lua-devel" or "nothing provides
   liblttng-ust.so.1()(64bit)".** The CRB repository is not enabled. See
-  steps 3 and 4 of :ref:`get-packages-rhel`.
+  steps 3 and 4 of :ref:`the RHEL section of Getting Ceph Packages
+  <get-packages-rhel>`.
 - **"No match for argument: yum-plugin-priorities".** Older guides install
   this plugin. It does not exist on EL 9 or EL 10, and DNF reads the
   ``priority`` setting of a repository without it, so skip that step.

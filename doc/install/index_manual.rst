@@ -39,8 +39,8 @@ tools. For the recommended method, see :ref:`cephadm_deploying_new_cluster`.
 - :ref:`install-clone-source`: the source code of a branch, from GitHub or
   with Git.
 - :doc:`build-ceph`: compile Ceph from source, or build its packages.
-- :ref:`install-mirrors`: mirrors of ``download.ceph.com`` that serve the
-  same packages and tarballs.
+- :ref:`install-mirrors`: mirrors that copy the packages and tarballs of
+  ``download.ceph.com``.
 - :ref:`containers`: the container image that holds every Ceph daemon, and
   what each tag points to.
 
@@ -72,9 +72,9 @@ tools. For the recommended method, see :ref:`cephadm_deploying_new_cluster`.
 Read the release notes of the new version before you upgrade: they give the
 required upgrade sequence and any release-specific steps.
 
-- :ref:`ceph-releases-index`: the release notes of each version, with its
+- `Ceph Releases (index)`_: the release notes of each version, with its
   new features, bug fixes, and performance and security improvements.
-- :ref:`ceph-releases-general`: the release cycle, and the releases from
+- `Ceph Releases (general)`_: the release cycle, and the releases from
   which an online, rolling upgrade is supported and tested.
 - :doc:`/cephadm/upgrade`: upgrade a cluster that cephadm manages.
 
@@ -91,3 +91,8 @@ required upgrade sequence and any release-specific steps.
   converted to cephadm management, and convert it.
 - :ref:`os-recommendations`: the distributions and kernels that each Ceph
   release is built and tested on.
+
+.. Need to be external links because the doc/releases pages are not in
+   stable branches and we want to always use the main branch version
+.. _Ceph Releases (index): https://docs.ceph.com/en/latest/releases/
+.. _Ceph Releases (general): https://docs.ceph.com/en/latest/releases/general/
