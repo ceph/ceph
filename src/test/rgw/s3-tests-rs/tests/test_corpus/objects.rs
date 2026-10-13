@@ -13,7 +13,7 @@ use s3_tests_rs::error::extract_s3_error;
 use crate::generate::{ensure_bucket, env_or, note_mode, observing, out_dir};
 use crate::manifest::Manifest;
 use crate::names::bucket;
-use crate::shapes::{MetaClass, SizeClass, TagClass};
+use crate::shapes::{DirectoryObjectClass, MetaClass, SizeClass, TagClass};
 
 /// Record what S3 says about one object:  the facts a listing omits.
 async fn head_into(
@@ -143,6 +143,28 @@ async fn corpus_coverage_objects() {
         record(&mut m, &mut written, &mut refused, &key, r, |m| {
             m.object(&key, "class", &format!("{tc:?}"));
             m.object(&key, "declared-tags", &tc.count().to_string());
+        });
+    }
+
+    /* directory objects, the root object among them:  their content
+     * type and metadata live on the directory in NooBaa's layout, so
+     * they are what an adopted tree has to carry across */
+    for dc in DirectoryObjectClass::COVERAGE {
+        let key = dc.key();
+        let mut req = client
+            .put_object()
+            .bucket(&b)
+            .key(&key)
+            .content_type(dc.content_type())
+            .body(ByteStream::from(dc.body()));
+        for (k, v) in dc.headers() {
+            req = req.metadata(k, v);
+        }
+        let r = if observing() { None } else { Some(req.send().await) };
+        record(&mut m, &mut written, &mut refused, &key, r, |m| {
+            m.object(&key, "class", &format!("{dc:?}"));
+            m.object(&key, "rationale", dc.rationale());
+            m.object(&key, "declared-len", &dc.body().len().to_string());
         });
     }
 

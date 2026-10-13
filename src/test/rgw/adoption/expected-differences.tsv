@@ -155,6 +155,7 @@ noobaa:unconverted		manifest		part.*.size	absent	same:  the per-part facts come 
 # These rows are the definition of conversion being complete:  nothing
 # on the left may survive on the right.
 
+unconverted:converted		inventory	*.folder	*	appears	an empty directory object has no sentinel in NooBaa's layout, only user.noobaa.dir_content on the directory;  conversion creates the nsfs sentinel for it, empty, with the directory's mtime (convert_directory_object())
 unconverted:converted		inventory	.noobaa-nsfs_*/multipart-uploads/*	*	vanishes	conversion re-stages an upload still in flight out of NooBaa's temp directory (NSFSBucket::convert_uploads);  its record, parts and directory go
 unconverted:converted		inventory	.multipart_*	*	appears	and into nsfs's staging directory, `.multipart_<key>.<upload id>`, one file per part with a `.meta` record
 unconverted:converted		inventory		xattr:user.nsfs.*	appears	conversion writes each object's attributes in the nsfs spelling and marks the bucket (`user.nsfs.extensions`).  Appears, not absent:  an nsfs name that vanished would be a loss, since a bucket's own state is in the nsfs spelling before conversion too (DECISIONS.md 2026-10-13)

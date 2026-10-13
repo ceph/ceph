@@ -519,3 +519,74 @@ pub const STORAGE_COVERAGE: &[StorageClass] = &[
     StorageClass::Configured,
     StorageClass::TheirUnmigrated,
 ];
+
+/// Directory objects, the root object among them.
+///
+/// NooBaa marks a directory object on the directory itself:
+/// `user.noobaa.dir_content` holds its size, its attributes are the
+/// directory's, and its bytes are in `.folder` only when there are any.
+/// The root object is the same thing with the bucket's own directory as
+/// the directory, under every key made only of slashes.  So the content
+/// type and metadata of each are what moves at adoption, and what an
+/// unconverted reader has to find on the directory
+/// (`docs/RGW_NSFS_VADE_MECUM.md` §14, key semantics).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DirectoryObjectClass {
+    /// no bytes:  NooBaa writes no `.folder` at all
+    Empty,
+    /// bytes in `.folder`, attributes on the directory
+    WithContent,
+    /// the bucket's own directory, under the key `/`
+    Root,
+}
+
+impl DirectoryObjectClass {
+    pub const COVERAGE: &'static [DirectoryObjectClass] = &[
+        DirectoryObjectClass::Empty,
+        DirectoryObjectClass::WithContent,
+        DirectoryObjectClass::Root,
+    ];
+
+    pub fn key(self) -> String {
+        match self {
+            DirectoryObjectClass::Empty => "m-dir-empty/".into(),
+            DirectoryObjectClass::WithContent => "m-dir-content/".into(),
+            DirectoryObjectClass::Root => "/".into(),
+        }
+    }
+
+    pub fn body(self) -> Vec<u8> {
+        match self {
+            DirectoryObjectClass::Empty => Vec::new(),
+            DirectoryObjectClass::WithContent => b"directory bytes".to_vec(),
+            DirectoryObjectClass::Root => b"root bytes".to_vec(),
+        }
+    }
+
+    pub fn content_type(self) -> &'static str {
+        match self {
+            DirectoryObjectClass::Empty => "text/x-dir-empty",
+            DirectoryObjectClass::WithContent => "text/x-dir-content",
+            DirectoryObjectClass::Root => "text/x-root",
+        }
+    }
+
+    /// One header, so a lost attribute shows as a missing `meta.` fact.
+    pub fn headers(self) -> Vec<(String, String)> {
+        vec![("probe".into(), format!("{self:?}"))]
+    }
+
+    pub fn rationale(self) -> &'static str {
+        match self {
+            DirectoryObjectClass::Empty => {
+                "an empty directory object:  no sentinel, the directory is the object"
+            }
+            DirectoryObjectClass::WithContent => {
+                "a directory object with content:  bytes in .folder, attributes on the directory"
+            }
+            DirectoryObjectClass::Root => {
+                "the root object:  the bucket's directory is the directory object"
+            }
+        }
+    }
+}
