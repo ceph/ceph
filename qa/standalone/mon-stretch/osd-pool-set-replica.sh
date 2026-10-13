@@ -125,6 +125,13 @@ function TEST_pool_replica_crush_rule_name() {
     # This gives min_size 1 for replica 2 and 2 for replica 3.
     assert_pool_rule "$poolname" "$poolname" 2 1 || return 1
 
+    # min_size counts the copies in each zone
+    ! ceph osd pool set "$poolname" min_size 3 > "$dir/error.txt" 2>&1 || return 1
+    grep 'must be between 1 and replica, which is set to 2' "$dir/error.txt" || return 1
+    ceph osd pool set "$poolname" min_size 2 || return 1
+    assert_pool_rule "$poolname" "$poolname" 2 2 || return 1
+    ceph osd pool set "$poolname" min_size 1 || return 1
+
     ceph osd pool set "$poolname" num_zones 2 || return 1
     assert_pool_rule "$poolname" "$poolname" 2 1 || return 1
     ! ceph osd pool set "$poolname" num_zones 3 \
@@ -184,6 +191,27 @@ function TEST_pool_replica_crush_rule_name() {
     jq -e '[.steps[] | select(.op == "choose_firstn" or .op == "choose_indep")] |
         length == 0' \
         "$dir/ec-rule.json" || return 1
+}
+
+function TEST_pool_replica_limits() {
+    local dir=$1
+
+    # one monitor: the other tests leave CEPH_ARGS with three
+    CEPH_ARGS="$BASE_CEPH_ARGS --mon-host=$CEPH_MON_A"
+    run_mon $dir a --public-addr "$CEPH_MON_A" || return 1
+    wait_for_quorum 300 1 || return 1
+
+    ceph osd pool create single 8 8 replicated || return 1
+    # replica of a single-zone pool is its size: the same limits apply
+    ! ceph osd pool set single replica 11 > "$dir/error.txt" 2>&1 || return 1
+    grep 'must be between 1 and 10' "$dir/error.txt" || return 1
+    # run_mon allows pools of one copy: one still needs --yes-i-really-mean-it
+    ! ceph osd pool set single replica 1 > "$dir/error.txt" 2>&1 || return 1
+    grep 'yes-i-really-mean-it' "$dir/error.txt" || return 1
+    ceph osd pool set single replica 1 --yes-i-really-mean-it || return 1
+    test "$(ceph osd pool get single size | awk '{print $2}')" = 1 || return 1
+    # as with size, a min_size above the new size is reset
+    test "$(ceph osd pool get single min_size | awk '{print $2}')" = 1 || return 1
 }
 
 main osd-pool-set-replica "$@"
