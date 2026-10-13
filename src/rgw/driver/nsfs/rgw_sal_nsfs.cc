@@ -7251,7 +7251,9 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
     if (ret < 0) {
       return ret;
     }
-
+    /* whether any part now sits elsewhere than its record said;  see
+     * the multipart cache below */
+    bool placement_changed = false;
 
     /* the upload's own record, in the nsfs format */
     {
@@ -7464,6 +7466,9 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       nsfs::MPUStrategy::PartRecord outrec = rec;
       outrec.shared = false;
       outrec.offset = 0;
+      if ((outrec.shared != rec.shared) || (outrec.offset != rec.offset)) {
+	placement_changed = true;
+      }
       ret = ours->write_part_record(dpp, ourdir.get_fd(), ourname, outrec);
       if (ret < 0) {
 	return ret;
@@ -7500,6 +7505,18 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "ERROR: removing their staging for " << meta
 			<< ": " << cpp_strerror(-ret) << dendl;
       return ret;
+    }
+
+    /* The multipart cache is keyed by the upload, not by where it is
+     * staged, so its part records survive the move.  A record carries
+     * the part's placement, and re-staging gives every part its own
+     * file:  where NooBaa had several parts share one, the cached
+     * placement is now wrong.  Dropped exactly then, and kept when every
+     * part was already in its own file (DECISIONS.md 2026-10-13). */
+    if (placement_changed) {
+      if (auto* mc = driver->get_multipart_cache()) {
+	mc->remove({get_name(), meta});
+      }
     }
 
     if (cb) {

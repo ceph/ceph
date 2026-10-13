@@ -8573,6 +8573,61 @@ TEST_F(NSFSUpgradeTest, ReStagesAnUploadInFlight)
   EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload);
 }
 
+/* An upload whose parts were listed before the upgrade still lists and
+ * completes after it.
+ *
+ * The test above starts from a cold multipart cache.  A client does
+ * not:  it lists the parts, the upgrade re-stages the upload into the
+ * nsfs layout, and the client then lists again or completes with the
+ * part ETags it already has.  If the cache kept what it read from
+ * NooBaa's staging, which conversion has removed, that is where it would
+ * show.  A bucket being converted must look to a client like the bucket
+ * it becomes (DECISIONS.md 2026-10-13), so the ETags must not change
+ * either. */
+TEST_F(NSFSUpgradeTest, AnUploadListedBeforeTheUpgradeCompletesAfterIt)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+
+  /* the client's view before:  warms the multipart cache */
+  std::map<int, std::string> before;
+  {
+    auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+    int next = 0;
+    bool truncated = false;
+    ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+				 &truncated, null_yield), 0);
+    for (auto& [num, part] : upload->get_parts()) {
+      before[num] = part->get_etag();
+    }
+    ASSERT_EQ(before.size(), tree.parts);
+  }
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  ASSERT_EQ(prog.uploads, 1u);
+  ASSERT_FALSE(sf::exists(tree.staging)) << "the upload was not re-staged";
+
+  /* the same listing after:  the same parts, the same ETags */
+  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0)
+      << "the parts no longer list after the upgrade";
+  std::map<int, std::string> after;
+  for (auto& [num, part] : upload->get_parts()) {
+    after[num] = part->get_etag();
+    EXPECT_EQ(part->get_size(), tree.part_size) << num;
+  }
+  EXPECT_EQ(after, before) << "the upgrade changed the parts' ETags";
+
+  /* and it completes with the ETags the client had before */
+  ASSERT_EQ(complete_mp(bucket.get(), upload.get(), owner, tree.key,
+			before), 0);
+  EXPECT_EQ(read_all(bucket_path() / tree.key), tree.payload);
+}
+
 /* Every row a listing gives, as one comparable string each:  what a
  * client sees of it. */
 static std::vector<std::string> listing_rows(rgw::sal::Bucket* bucket,
@@ -8656,6 +8711,57 @@ TEST_F(NSFSUpgradeTest, AListingCachedBeforeTheUpgradeEqualsOneBuiltAfterIt)
   /* and, the requirement behind it, nothing a listing shows changed */
   EXPECT_EQ(cold, before) << "conversion changed a listed fact";
   EXPECT_EQ(cold_v, before_v) << "conversion changed a listed version fact";
+}
+
+/* Re-staging an upload drops its cached part records when a part's
+ * placement changed, and only then (DECISIONS.md 2026-10-13).
+ *
+ * The multipart cache is keyed by the upload, not by where it is
+ * staged, so a record cached before the upgrade survives it.  NooBaa
+ * puts parts of one size in a shared file at an offset;  re-staging
+ * gives each part its own file at offset 0.  A cached "shared, at offset
+ * N" would then describe bytes that are no longer there. */
+TEST_F(NSFSUpgradeTest, ReStagingDropsCachedPartsWhosePlacementChanged)
+{
+  TestTree tree;
+  make_noobaa_tree(bucket_path(), TreeShape::with_upload, tree);
+  ASSERT_GE(tree.parts, 2u);
+  auto* mc = driver->get_multipart_cache();
+  ASSERT_NE(mc, nullptr);
+  const file::listing::MultipartCacheKey ck{bucket->get_name(),
+					    tree.key + "." + tree.upload_id};
+
+  {
+    auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+    int next = 0;
+    bool truncated = false;
+    ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+				 &truncated, null_yield), 0);
+  }
+
+  /* the control:  the cache holds NooBaa's placement, which re-staging
+   * will change, or nothing below could fail */
+  file::listing::MultipartPartInfo pi;
+  ASSERT_TRUE(mc->peek_part(ck, 2, pi)) << "listing cached no part record";
+  ASSERT_TRUE(pi.shared) << "the fixture's part 2 is not in a shared file";
+  ASSERT_EQ(pi.offset, tree.part_size);
+
+  nsfs::ConvertProgress prog;
+  ASSERT_EQ(upgrade(nullptr, &prog), 0);
+  ASSERT_EQ(prog.uploads, 1u);
+
+  EXPECT_FALSE(mc->peek_part(ck, 2, pi))
+      << "a record of where NooBaa kept part 2 survived its re-staging";
+
+  /* and listing again records where the part is now */
+  auto upload = bucket->get_multipart_upload(tree.key, tree.upload_id);
+  int next = 0;
+  bool truncated = false;
+  ASSERT_EQ(upload->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+			       &truncated, null_yield), 0);
+  ASSERT_TRUE(mc->peek_part(ck, 2, pi));
+  EXPECT_FALSE(pi.shared);
+  EXPECT_EQ(pi.offset, 0u);
 }
 
 /* Every part is reported, and a stop inside one leaves the rest. */
