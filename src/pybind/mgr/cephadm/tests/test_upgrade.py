@@ -2004,3 +2004,89 @@ def test_do_upgrade_persists_skipped_health_warning_mutes(
     cephadm_module.upgrade._do_upgrade()
 
     _mute_upgrade_related_health_warnings.assert_called_once_with()
+
+
+def test_daemon_type_in_upgrade_scope_daemon_types_filter(
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        daemon_types=['mgr'],
+    )
+    assert cephadm_module.upgrade._daemon_type_in_upgrade_scope('mgr')
+    assert not cephadm_module.upgrade._daemon_type_in_upgrade_scope('grafana')
+    assert not cephadm_module.upgrade._daemon_type_in_upgrade_scope('mon')
+
+
+@mock.patch("cephadm.module.HostCache._get_daemons")
+def test_mark_upgrade_complete_scoped_skips_cluster_daemon_check(
+    _get_daemons: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    target_digest = 'new_image@repo_digest'
+    _get_daemons.return_value = [
+        DaemonDescription(
+            daemon_type='mon',
+            daemon_id='a',
+            hostname='host1',
+            container_image_digests=['old_image@repo_digest'],
+        ),
+    ]
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_digests=[target_digest],
+        target_version='19.3.0-0',
+        daemon_types=['mgr'],
+        health_warnings_muted=True,
+    )
+
+    with mock.patch.object(
+        cephadm_module, 'check_mon_command',
+    ) as check_mon_command:
+        with mock.patch.object(
+            cephadm_module.upgrade, '_unmute_upgrade_related_health_warnings',
+        ):
+            cephadm_module.upgrade._mark_upgrade_complete(
+                [target_digest], 'target_image')
+
+    # a scoped upgrade must not touch the cluster-wide service cipher: the
+    # version tracker may issue unrelated mon commands (e.g. 'config dump')
+    for args, _ in check_mon_command.call_args_list:
+        assert args[0].get('name') != 'auth_service_cipher'
+    # and completion must not wait for the out-of-scope mon
+    assert cephadm_module.upgrade.upgrade_state is None
+
+
+@mock.patch("cephadm.module.HostCache._get_daemons")
+def test_mark_upgrade_complete_unscoped_requires_cluster_up_to_date(
+    _get_daemons: mock.MagicMock,
+    cephadm_module: CephadmOrchestrator,
+) -> None:
+    target_digest = 'new_image@repo_digest'
+    _get_daemons.return_value = [
+        DaemonDescription(
+            daemon_type='mon',
+            daemon_id='a',
+            hostname='host1',
+            container_image_digests=['old_image@repo_digest'],
+        ),
+    ]
+
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image',
+        '0',
+        target_digests=[target_digest],
+        target_version='19.3.0-0',
+    )
+
+    with mock.patch.object(
+        cephadm_module, 'check_mon_command',
+    ) as check_mon_command:
+        cephadm_module.upgrade._mark_upgrade_complete(
+            [target_digest], 'target_image')
+
+    check_mon_command.assert_not_called()
+    assert cephadm_module.upgrade.upgrade_state is not None

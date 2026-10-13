@@ -2332,30 +2332,75 @@ class CephadmUpgrade:
             return False
         return True
 
+    def _upgrade_filters_active(self) -> bool:
+        """True when upgrade is limited by CLI filters (--daemon-types, etc.)."""
+        assert self.upgrade_state is not None
+        st = self.upgrade_state
+        return (
+            st.daemon_types is not None
+            or st.services is not None
+            or st.hosts is not None
+            or st.crush_bucket_name is not None
+            or st.remaining_count is not None
+        )
+
+    def _daemon_type_in_upgrade_scope(self, daemon_type: str) -> bool:
+        """Whether _do_upgrade should act on this daemon type for the current filters."""
+        assert self.upgrade_state is not None
+        st = self.upgrade_state
+        dtype = (daemon_type or '').strip().lower()
+        if st.daemon_types is not None:
+            dtypes = {(dt or '').strip().lower() for dt in st.daemon_types}
+            return dtype in dtypes
+        if (
+            st.services is not None
+            or st.hosts is not None
+            or st.crush_bucket_name
+        ):
+            return any(
+                (d.daemon_type or '').strip().lower() == dtype
+                for d in self._get_filtered_daemons()
+            )
+        return True
+
     def _mark_upgrade_complete(self, target_digests: Optional[List[str]], target_image: str) -> None:
         if not self.upgrade_state:
             logger.debug('_mark_upgrade_complete upgrade already marked complete, exiting')
             return
 
-        logger.info('Upgrade: checking if all mon, mgr, OSD, mds daemons upgraded before changing service cipher')
-        daemons_to_check = (
-            self.mgr.cache.get_daemons_by_service('mon')
-            + self.mgr.cache.get_daemons_by_service('mgr')
-            + self.mgr.cache.get_daemons_by_type('osd')
-            + self.mgr.cache.get_daemons_by_type('mds')
-        )
         assert target_digests is not None
-        _, still_needing_upgrade, __, ___ = self._detect_need_upgrade(daemons_to_check, target_digests, target_image)
-        if not still_needing_upgrade:
-            # set the default service cipher to whatever
-            # the preference is this release
-            ret, image, err = self.mgr.check_mon_command({
-                'prefix': 'mon set',
-                'name': 'auth_service_cipher',
-                'value': SERVICE_CIPHER,
-            })
+        if not self._upgrade_filters_active():
+            logger.info(
+                'Upgrade: checking if all mon, mgr, OSD, mds daemons upgraded '
+                'before changing service cipher')
+            daemons_to_check = (
+                self.mgr.cache.get_daemons_by_service('mon')
+                + self.mgr.cache.get_daemons_by_service('mgr')
+                + self.mgr.cache.get_daemons_by_type('osd')
+                + self.mgr.cache.get_daemons_by_type('mds')
+            )
+            _, still_needing_upgrade, __, ___ = self._detect_need_upgrade(
+                daemons_to_check, target_digests, target_image)
+            if not still_needing_upgrade:
+                # set the default service cipher to whatever
+                # the preference is this release
+                ret, image, err = self.mgr.check_mon_command({
+                    'prefix': 'mon set',
+                    'name': 'auth_service_cipher',
+                    'value': SERVICE_CIPHER,
+                })
+            else:
+                logger.info(
+                    'Found mon/mgr/OSD/mds daemons still needing upgrade. '
+                    'Service cipher not set')
+                logger.info(
+                    'Upgrade: Cannot mark complete, daemons still need upgrade: %s',
+                    still_needing_upgrade)
+                return
         else:
-            logger.info('Found mon/mgr/OSD/mds daemons still needing upgrade. Service cipher not set')
+            logger.info(
+                'Upgrade: scoped upgrade finished; deferring cluster-wide '
+                'service cipher until an upgrade without filters')
 
         # TODO: remove me when we're sure the entry this removes can't be
         # present. I think that's N+2 for the latest version we did an initial
@@ -2498,6 +2543,8 @@ class CephadmUpgrade:
                     self._mark_upgrade_complete(target_digests, target_image)
                     return
             logger.debug('Upgrade: Checking %s daemons' % daemon_type)
+            if not self._daemon_type_in_upgrade_scope(daemon_type):
+                continue
             daemons_of_type = [d for d in daemons if d.daemon_type == daemon_type]
 
             # need_upgrade_self: True if the daemon is active mgr itself and needs to be upgraded
@@ -2514,7 +2561,9 @@ class CephadmUpgrade:
             # The idea here is to upgrade the mointoring daemons after the mgr is done upgrading as
             # that means cephadm and the dashboard modules themselves have been upgraded
             if daemon_type == 'mgr' or daemon_type in MONITORING_STACK_TYPES:
-                if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
+                if not self._daemon_type_in_upgrade_scope(daemon_type):
+                    need_upgrade_deployer = []
+                elif any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
                     need_upgrade_names = [d[0].name() for d in need_upgrade] + \
                         [d[0].name() for d in need_upgrade_deployer]
                     dds = [d for d in self.mgr.cache.get_daemons_by_type(
@@ -2532,7 +2581,9 @@ class CephadmUpgrade:
                 # This needs to be handled differently than the monitoring daemons as the nvmeof daemon,
                 # which falls in this category, relies on the mons being upgraded as well. This block
                 # sets these daemon types to be upgraded only when all ceph image daemons have been upgraded
-                if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
+                if not self._daemon_type_in_upgrade_scope(daemon_type):
+                    need_upgrade_deployer = []
+                elif any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
                     ceph_daemons = [d for d in self.mgr.cache.get_daemons() if d.daemon_type in CEPH_IMAGE_TYPES]
                     _, n1, n2, __ = self._detect_need_upgrade(ceph_daemons, target_digests, target_image)
                     if not n1 and not n2:
@@ -2575,8 +2626,12 @@ class CephadmUpgrade:
             # following bits of _do_upgrade are for completing upgrade for given
             # types. If we haven't actually finished upgrading all the daemons
             # of this type, we should exit the loop here
+            if self._upgrade_filters_active():
+                completion_daemons = daemons_of_type
+            else:
+                completion_daemons = self.mgr.cache.get_daemons_by_daemon_type(daemon_type)
             _, n1, n2, _ = self._detect_need_upgrade(
-                self.mgr.cache.get_daemons_by_daemon_type(daemon_type), target_digests, target_image)
+                completion_daemons, target_digests, target_image)
             if n1 or n2:
                 continue
 
