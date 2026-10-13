@@ -4,6 +4,7 @@
 #include "mon/PoolCreateParams.h"
 
 #include <limits>
+#include <vector>
 #include <sstream>
 
 #include "common/config.h"
@@ -242,6 +243,47 @@ string effective_zone_failure_domain(const PoolCreateParams& p)
     }
   }
   return p.zone_failure_domain;
+}
+
+string rule_from_defaults(const PoolCreateParams& p)
+{
+  // a pool of one zone gets the default rule or a rule of earlier releases
+  if (p.num_zones < 2) {
+    return "";
+  }
+  const bool erasure = p.pool_type == pg_pool_t::TYPE_ERASURE;
+  const bool named_profile = erasure && !p.erasure_code_profile.empty();
+  const bool generated = !p.is_given("rule") || p.rule == "none";
+  std::vector<string> params = {"num_zones"};
+  if (!erasure && !p.is_given("size")) {
+    params.push_back("replica");
+  }
+  if (!named_profile) {
+    params.push_back("zone_failure_domain");
+  }
+  if (generated && !named_profile) {
+    params.insert(params.end(), {"osd_failure_domain", "root"});
+    if (!p.device_class.empty()) {
+      params.push_back("class");
+    }
+  }
+  std::vector<string> options;
+  for (const auto& param : params) {
+    if (!p.is_given(param)) {
+      options.push_back(pool_default_options().at(param));
+    }
+  }
+  if (erasure && generated && !named_profile && !p.ec_params_given()) {
+    options.push_back("erasure code profile 'default'");
+  }
+  if (options.empty()) {
+    return "";
+  }
+  string out = " (";
+  for (const auto& option : options) {
+    out += (out.size() > 2 ? ", " : "") + option;
+  }
+  return out + ")";
 }
 
 int check_pool_params(const PoolCreateParams& p,
