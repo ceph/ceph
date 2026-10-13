@@ -465,6 +465,29 @@ int import_bucket_state(const DoutPrefixProvider* dpp, optional_yield y,
 	  rec.name + ": merge_and_store_attrs: " + cpp_strerror(-ret));
       continue;
     }
+
+    /* Whether deleting the bucket deletes its directory.  NooBaa records
+     * it as should_create_underlying_storage:  false for a bucket put
+     * over a directory that was already there, which a delete must leave
+     * in place (`bucketspace_fs.js` delete_bucket).  Required on every
+     * NooBaa record.  A record that lacks it is read as NooBaa's delete
+     * reads it, as false, which leaves the directory:  the safe way to be
+     * wrong, since the other deletes a tree the bucket may not own. */
+    bool should_create = false;
+    try {
+      JSONDecoder::decode_json("should_create_underlying_storage",
+			       should_create, &p);
+    } catch (const JSONDecoder::err&) {
+      should_create = false;
+    }
+    ret = static_cast<NSFSBucket*>(bucket.get())
+	    ->set_owns_storage(dpp, should_create);
+    if (ret < 0) {
+      result.failures.push_back(
+	  rec.name + ": recording its storage ownership: " +
+	  cpp_strerror(-ret));
+      continue;
+    }
     ++result.buckets_written;
   }
 

@@ -5977,6 +5977,28 @@ bool NSFSBucket::owns_storage(const DoutPrefixProvider* dpp)
   return std::string_view(buf, len) != "0";
 }
 
+int NSFSBucket::set_owns_storage(const DoutPrefixProvider* dpp, bool owns)
+{
+  int ret = dir->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  if (owns) {
+    if ((::fremovexattr(dir->get_fd(), nsfs::OWNS_STORAGE_XATTR) < 0) &&
+	(errno != ENODATA)) {
+      ret = -errno;
+    }
+  } else if (::fsetxattr(dir->get_fd(), nsfs::OWNS_STORAGE_XATTR, "0", 1,
+			 0) < 0) {
+    ret = -errno;
+  }
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: recording whether bucket " << get_name()
+      << " owns its storage: " << cpp_strerror(-ret) << dendl;
+  }
+  return ret;
+}
+
 /* Remove the bucket without removing the directory it was adopted
  * over.
  *

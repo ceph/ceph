@@ -5478,13 +5478,15 @@ public:
   void write_their_record(const char* versioning,
 		    const std::string& extra = std::string{},
 		    const char* created = "2026-01-02T03:04:05.000Z",
-		    const std::string& at = std::string{}) {
+		    const std::string& at = std::string{},
+		    bool should_create = true) {
     std::string doc = std::string(
       "{\"_id\":\"6560e1f1c0ffee0000000001\",\"name\":\"") + testname +
       "\",\"owner_account\":\"6560e1f1c0ffee0000000002\""
       ",\"versioning\":\"" + versioning + "\""
       ",\"path\":\"" + (at.empty() ? bucket_path().string() : at) + "\""
-      ",\"should_create_underlying_storage\":true"
+      ",\"should_create_underlying_storage\":" +
+      (should_create ? "true" : "false") +
       ",\"creation_date\":\"" + created + "\"" +
       extra + "}";
     write_file(conf_root() / "buckets" / (testname + ".json"), doc);
@@ -12207,6 +12209,33 @@ TEST_F(NooBaaBucketImportTest, AnImportedBucketIsBucketOwnerEnforced)
 
 /* A bucket whose owner this import did not write is refused, not
  * guessed.  There is no correct account to invent. */
+/* Whether deleting the bucket deletes its directory comes across from
+ * NooBaa's should_create_underlying_storage, onto the directory, which is
+ * the one place it is kept (DECISIONS.md 2026-10-13).  Both values, so
+ * the import has to read the field rather than leave the default. */
+TEST_F(NooBaaBucketImportTest, ItRecordsWhetherTheBucketOwnsItsStorage)
+{
+  for (bool should_create : {false, true}) {
+    SCOPED_TRACE(should_create ? "NooBaa made the directory"
+			       : "the directory was supplied");
+    write_their_record("DISABLED", "", "2026-01-02T03:04:05.000Z", "",
+		       should_create);
+    ASSERT_EQ(run(), 0) << why();
+
+    RGWBucketInfo info;
+    info.bucket.name = testname;
+    auto b = driver->get_bucket(info);
+    ASSERT_EQ(b->load_bucket(env->dpp, null_yield), 0);
+    EXPECT_EQ(static_cast<rgw::sal::NSFSBucket*>(b.get())
+		->owns_storage(env->dpp), should_create);
+
+    const bool marked = ::getxattr(bucket_path().c_str(),
+				   nsfs::OWNS_STORAGE_XATTR, nullptr, 0) > 0;
+    EXPECT_EQ(marked, !should_create)
+	<< "an owned bucket is the absence of the attribute";
+  }
+}
+
 TEST_F(NooBaaBucketImportTest, AnUnknownOwnerRefusesTheBucket)
 {
   write_their_record("DISABLED");

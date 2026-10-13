@@ -1832,6 +1832,10 @@ public:
   /* whether this bucket's directory exists for it or predates it, and
    * what remove() does when it predates it -- see OWNS_STORAGE_XATTR */
   bool owns_storage(const DoutPrefixProvider* dpp);
+  /* Record it:  absent for a bucket that owns its directory, "0" for one
+   * whose directory predates it.  The one place this fact is kept
+   * (DECISIONS.md 2026-10-13). */
+  int set_owns_storage(const DoutPrefixProvider* dpp, bool owns);
   int unadopt(const DoutPrefixProvider* dpp);
   virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
   virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) override;
