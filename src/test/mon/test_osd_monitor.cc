@@ -1045,9 +1045,10 @@ protected:
   }
 
   bool suits(int64_t rule, int pool_type, int64_t num_zones,
-             const string& zone = "zone") {
+             const string& zone = "zone", unsigned zone_size = 0) {
     return OSDMonitor::default_rule_suits_pool(crush, rule, pool_type,
-                                               num_zones, zone, pools);
+                                               num_zones, zone, pools,
+                                               zone_size);
   }
 };
 
@@ -1079,6 +1080,36 @@ TEST_F(OSDMonitorDefaultRuleTest, OtherType) {
 TEST_F(OSDMonitorDefaultRuleTest, TwoZonesStretchRule) {
   EXPECT_TRUE(suits(stretch_replica_rule, pg_pool_t::TYPE_REPLICATED, 2));
   EXPECT_TRUE(suits(stretch_ec_rule, pg_pool_t::TYPE_ERASURE, 2));
+}
+
+// Test a two-zone pool takes a rule only if it places the pool's share of
+// items in each zone
+TEST_F(OSDMonitorDefaultRuleTest, TwoZonesZoneSize) {
+  const int zone = crush.get_type_id("zone");
+  EXPECT_EQ(2, OSDMonitor::rule_items_per_zone(crush, stretch_replica_rule,
+                                               zone, 4));
+  EXPECT_EQ(6, OSDMonitor::rule_items_per_zone(crush, stretch_ec_rule, zone,
+                                               12));
+  EXPECT_EQ(-1, OSDMonitor::rule_items_per_zone(crush, local_rule, zone, 3));
+  EXPECT_TRUE(suits(stretch_ec_rule, pg_pool_t::TYPE_ERASURE, 2, "zone", 6));
+  EXPECT_FALSE(suits(stretch_ec_rule, pg_pool_t::TYPE_ERASURE, 2, "zone", 3));
+  EXPECT_TRUE(suits(stretch_replica_rule, pg_pool_t::TYPE_REPLICATED, 2,
+                    "zone", 2));
+  EXPECT_FALSE(suits(stretch_replica_rule, pg_pool_t::TYPE_REPLICATED, 2,
+                     "zone", 3));
+
+  // choosing 0 hosts in each zone takes the pool's size from each
+  const int root = crush.get_item_id("default");
+  const int host = crush.get_type_id("host");
+  int rule = crush.add_rule(-1, 4, pg_pool_t::TYPE_REPLICATED);
+  ASSERT_GE(rule, 0);
+  crush.set_rule_step_take(rule, 0, root);
+  crush.set_rule_step_choose_firstn(rule, 1, 0, zone);
+  crush.set_rule_step_choose_leaf_firstn(rule, 2, 0, host);
+  crush.set_rule_step_emit(rule, 3);
+  crush.set_rule_name(rule, "all_hosts_per_zone");
+  EXPECT_EQ(4, OSDMonitor::rule_items_per_zone(crush, rule, zone, 4));
+  EXPECT_FALSE(suits(rule, pg_pool_t::TYPE_REPLICATED, 2, "zone", 2));
 }
 
 // Test a two-zone pool does not take a rule that keeps to one zone
@@ -1122,6 +1153,30 @@ TEST_F(OSDMonitorDefaultRuleTest, TwoZonesTakeOneZone) {
   crush.set_rule_step_emit(rule, 2);
   crush.set_rule_name(rule, "take_one_zone");
   EXPECT_FALSE(suits(rule, pg_pool_t::TYPE_REPLICATED, 2));
+}
+
+// Test a two-zone pool takes a rule that chooses as many zones as it needs,
+// but not one that chooses hosts anywhere under the root
+TEST_F(OSDMonitorDefaultRuleTest, TwoZonesChooseZones) {
+  const int root = crush.get_item_id("default");
+  const int zone = crush.get_type_id("zone");
+  const int host = crush.get_type_id("host");
+  int rule = crush.add_rule(-1, 4, pg_pool_t::TYPE_REPLICATED);
+  ASSERT_GE(rule, 0);
+  crush.set_rule_step_take(rule, 0, root);
+  crush.set_rule_step_choose_firstn(rule, 1, 0, zone);
+  crush.set_rule_step_choose_leaf_firstn(rule, 2, 2, host);
+  crush.set_rule_step_emit(rule, 3);
+  crush.set_rule_name(rule, "choose_zones");
+  EXPECT_TRUE(suits(rule, pg_pool_t::TYPE_REPLICATED, 2));
+
+  int hosts_rule = crush.add_rule(-1, 3, pg_pool_t::TYPE_REPLICATED);
+  ASSERT_GE(hosts_rule, 0);
+  crush.set_rule_step_take(hosts_rule, 0, root);
+  crush.set_rule_step_choose_leaf_firstn(hosts_rule, 1, 0, host);
+  crush.set_rule_step_emit(hosts_rule, 2);
+  crush.set_rule_name(hosts_rule, "any_hosts");
+  EXPECT_FALSE(suits(hosts_rule, pg_pool_t::TYPE_REPLICATED, 2));
 }
 
 // Test a three-zone pool does not take a rule across two zones

@@ -181,11 +181,14 @@ following:
 .. describe:: [crush-rule-name]
 
    The name of the CRUSH rule to use for this pool. The specified rule must
-   already exist, otherwise the command will fail.
+   already exist, otherwise the command will fail. For a pool with
+   ``num_zones`` greater than 1, the rule must place the pool in that many
+   buckets of the zone failure domain type, with the pool's replicas per zone,
+   or its K+M shards, in each bucket, otherwise the command will fail.
 
    :Type: String
    :Required: No.
-   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist.  For ``erasure`` pools, it is the ``erasure-code`` rule if the ``default`` :ref:`erasure code profile <erasure-code-profiles>` is used and ``num_zones`` is 1, or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
+   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist. A replicated pool with ``num_zones`` greater than 1 uses this rule only if it places the pool in its zones as described above, and otherwise the ``{pool-name}`` rule.  For ``erasure`` pools, it is the ``erasure-code`` rule if the ``default`` :ref:`erasure code profile <erasure-code-profiles>` is used and ``num_zones`` is 1, or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
 
 .. describe:: [erasure-code-profile=profile]
 
