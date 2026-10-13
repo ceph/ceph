@@ -104,12 +104,9 @@ struct Identity {
  * location needs no row at all -- the same rule §7's third arm states
  * -- and an existing deployment behaves exactly as it does now.
  *
- * `owns_storage` is NooBaa's `should_create_underlying_storage`, and is
- * a plain bool rather than a tri-state:  NooBaa's schema makes it required,
- * and a bucket this driver creates owns the directory it created.
- * Compare `Identity::force_md5_etag`, which needs three states because
- * NooBaa's *precedence* is a cascade and `false` counts as defined.  A
- * third state nothing needs is weight, not safety. */
+ * Whether the bucket owns its directory is not here:  it is kept on the
+ * directory itself, as user.nsfs.owns_storage, and nowhere else
+ * (DECISIONS.md 2026-10-13). */
 struct BucketPlacement {
   std::string bucket_name;
   /* Part of the key from the start.  dbstore's own bucket table has
@@ -121,7 +118,6 @@ struct BucketPlacement {
 
   /* absolute, canonical, no `..`.  Empty is the default location. */
   std::string path;
-  bool owns_storage{true};
 };
 
 /* Whether a path may be stored.

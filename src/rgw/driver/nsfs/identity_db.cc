@@ -245,9 +245,7 @@ int IdentityDB::Initialize(std::string logfile, int loglevel)
     "  BucketName TEXT NOT NULL,"
     "  Tenant TEXT NOT NULL DEFAULT '',"
     "  Path TEXT,"
-    "  OwnsStorage INTEGER NOT NULL DEFAULT 1,"
     "  PRIMARY KEY (BucketName, Tenant),"
-    "  CHECK (OwnsStorage IN (0, 1)),"
     "  CHECK (Path IS NULL OR Path = '' OR ("
     "           Path GLOB '/*'"
     "           AND Path NOT GLOB '*/../*'"
@@ -526,7 +524,7 @@ int resolve_credentials(const DoutPrefixProvider* dpp, const IdentityDB& db,
 namespace {
 
 constexpr const char* PLACEMENT_COLUMNS =
-  "BucketName, Tenant, Path, OwnsStorage";
+  "BucketName, Tenant, Path";
 
 } // namespace
 
@@ -549,7 +547,7 @@ int IdentityDB::put_bucket_placement(const DoutPrefixProvider* dpp,
 
   const std::string sql =
     "INSERT OR REPLACE INTO '" + placement_table + "' ("
-    + PLACEMENT_COLUMNS + ") VALUES (?,?,?,?);";
+    + PLACEMENT_COLUMNS + ") VALUES (?,?,?);";
 
   sqlite3_stmt* st = nullptr;
   if (sqlite3_prepare_v2(handle(), sql.c_str(), -1, &st, nullptr)
@@ -566,7 +564,6 @@ int IdentityDB::put_bucket_placement(const DoutPrefixProvider* dpp,
    * CHECK accepts either, because a row written by hand is a thing
    * this table will see. */
   sqlite3_bind_text(st, 3, bp.path.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_int64(st, 4, bp.owns_storage ? 1 : 0);
 
   if (sqlite3_step(st) != SQLITE_DONE) {
     ldpp_dout(dpp, 4) << "bucket placement " << bp.bucket_name
@@ -611,7 +608,6 @@ int IdentityDB::get_bucket_placement(const DoutPrefixProvider* dpp,
   out.bucket_name = column_text(st, 0);
   out.tenant = column_text(st, 1);
   out.path = column_text(st, 2);
-  out.owns_storage = (sqlite3_column_int64(st, 3) != 0);
   return 0;
 }
 

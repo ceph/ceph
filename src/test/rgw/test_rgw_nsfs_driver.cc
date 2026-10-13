@@ -10802,14 +10802,12 @@ TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
   nsfs::BucketPlacement bp;
   bp.bucket_name = "elsewhere";
   bp.path = "/ibm/gpfs/fs1/elsewhere";
-  bp.owns_storage = false;
   ASSERT_EQ(db->put_bucket_placement(env->dpp, bp), 0);
 
   ASSERT_EQ(db->get_bucket_placement(env->dpp, "elsewhere", "", got), 0);
   EXPECT_EQ(got.bucket_name, "elsewhere");
   EXPECT_EQ(got.tenant, "");
   EXPECT_EQ(got.path, "/ibm/gpfs/fs1/elsewhere");
-  EXPECT_FALSE(got.owns_storage);
 
   /* the default location, stored explicitly:  empty is accepted and
    * means what a missing row means */
@@ -10818,7 +10816,6 @@ TEST_F(NSFSIdentityDBTest, BucketPlacementRoundTrips)
   ASSERT_EQ(db->put_bucket_placement(env->dpp, deflt), 0);
   ASSERT_EQ(db->get_bucket_placement(env->dpp, "ordinary", "", got), 0);
   EXPECT_TRUE(got.path.empty());
-  EXPECT_TRUE(got.owns_storage) << "the default for owns_storage changed";
 
   /* rewritten in place rather than duplicated */
   bp.path = "/ibm/gpfs/fs2/elsewhere";
@@ -10911,8 +10908,8 @@ TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRefusedWhereItIsStored)
   for (const char* bad : {"relative/path", "/a/../b", "/double//slash",
 			  "/a/.."}) {
     const std::string sql =
-      "INSERT INTO '" + table + "' (BucketName, Tenant, Path, OwnsStorage)"
-      " VALUES ('direct', '', '" + bad + "', 1);";
+      "INSERT INTO '" + table + "' (BucketName, Tenant, Path)"
+      " VALUES ('direct', '', '" + bad + "');";
     char* err = nullptr;
     EXPECT_NE(sqlite3_exec(raw, sql.c_str(), nullptr, nullptr, &err),
 	      SQLITE_OK)
@@ -10922,19 +10919,12 @@ TEST_F(NSFSIdentityDBTest, AnUnacceptablePathIsRefusedWhereItIsStored)
 
   /* the comparison can succeed:  an acceptable path goes in this way */
   const std::string good =
-    "INSERT INTO '" + table + "' (BucketName, Tenant, Path, OwnsStorage)"
-    " VALUES ('direct', '', '/ibm/gpfs/fs1/direct', 1);";
+    "INSERT INTO '" + table + "' (BucketName, Tenant, Path)"
+    " VALUES ('direct', '', '/ibm/gpfs/fs1/direct');";
   char* err = nullptr;
   EXPECT_EQ(sqlite3_exec(raw, good.c_str(), nullptr, nullptr, &err),
 	    SQLITE_OK) << (err ? err : "");
   sqlite3_free(err);
-
-  /* and an out-of-range OwnsStorage is refused too */
-  const std::string two =
-    "INSERT INTO '" + table + "' (BucketName, Tenant, Path, OwnsStorage)"
-    " VALUES ('two', '', '', 2);";
-  EXPECT_NE(sqlite3_exec(raw, two.c_str(), nullptr, nullptr, nullptr),
-	    SQLITE_OK) << "the schema accepted OwnsStorage=2";
 }
 
 /* ------------------------------------------------------------------ *
