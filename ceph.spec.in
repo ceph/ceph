@@ -22,6 +22,7 @@
 #################################################################################
 %bcond_with make_check
 %bcond_with cmake_verbose_logging
+%bcond_with cuobj
 %bcond_without ceph_test_package
 %ifarch s390
 %bcond_with tcmalloc
@@ -308,6 +309,9 @@ BuildRequires:	pkgconfig(openssl)
 BuildRequires:	pkgconfig(ldap)
 BuildRequires:	pkgconfig(libibverbs)
 BuildRequires:	pkgconfig(librdmacm)
+%if %{with cuobj}
+BuildRequires:  libcuobjserver-devel >= 2.0.0
+%endif
 BuildRequires:	pkgconfig(liblz4) >= 1.7
 BuildRequires:	pkgconfig(libnl-3.0)
 BuildRequires:	pkgconfig(liboath)
@@ -1836,6 +1840,11 @@ cmake .. \
     -DWITH_RADOSGW_LANCEDB:BOOL=ON \
 %else
     -DWITH_RADOSGW_LANCEDB:BOOL=OFF \
+%endif
+%if %{with cuobj}
+    -DWITH_RADOSGW_CUOBJ:BOOL=ON \
+%else
+    -DWITH_RADOSGW_CUOBJ:BOOL=OFF \
 %endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
