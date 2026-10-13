@@ -385,6 +385,59 @@ TEST_P(TestBackendBasics, DirectRead) {
   }
 }
 
+/**
+ * DirectReadOfOtherShardsChunk - a direct read sent to a data shard returns
+ * only that shard's data, so a read within another shard's chunk returns
+ * nothing.
+ */
+TEST_P(TestBackendBasics, DirectReadOfOtherShardsChunk) {
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC ||
+      !(backend_config.pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS)) {
+    GTEST_SKIP() << "Direct reads need optimized EC";
+  }
+
+  const std::string obj_name = "test_direct_read_other_" +
+    backend_config.label + "_" + GetParam().write_read.label;
+  const int num_chunks = 2 * k;
+  const uint64_t read_len = stripe_unit / 2;
+
+  std::string data;
+  for (int c = 0; c < num_chunks; c++) {
+    data.append(stripe_unit, 'A' + c);
+  }
+  ASSERT_EQ(0, create_and_write(obj_name, data));
+  hobject_t hoid = make_test_object(obj_name);
+
+  for (auto& [shard_id, osd_fixture] : osd_fixtures) {
+    if (shard_id >= k) {
+      continue;
+    }
+    for (auto& [spgid, test_pg] : osd_fixture->pgs) {
+      if (!test_pg || !test_pg->has_backend()) {
+        continue;
+      }
+      ECSwitch* ec_switch = dynamic_cast<ECSwitch*>(test_pg->backend.get());
+      ASSERT_NE(nullptr, ec_switch);
+
+      for (int c = 0; c < num_chunks; c++) {
+        bufferlist bl;
+        ASSERT_GE(ec_switch->objects_read_local(
+                    hoid, c * stripe_unit, read_len, 0, &bl), 0);
+        if (c % k == shard_id) {
+          EXPECT_EQ(std::string(read_len, 'A' + c), bl.to_str())
+            << "shard " << shard_id << " chunk " << c;
+        } else {
+          EXPECT_EQ(0u, bl.length())
+            << "shard " << shard_id << " read chunk " << c << " and got "
+            << bl.length() << " bytes";
+        }
+      }
+    }
+  }
+}
+
 TEST_P(TestBackendBasics, TruncateGrowWithSuspendedReads)
 {
   const auto& backend_config = GetParam().backend;
