@@ -168,7 +168,7 @@ EOF
     _run_stretch_uneven_weight_checks $dir || return 1
 }
 
-TEST_EC_stretch_cluster_uneven_crush_weights() {
+TEST_ec_stretch_cluster_uneven_crush_weights() {
     local dir=$1
     _setup_stretch_uneven_cluster $dir 6 || return 1
 

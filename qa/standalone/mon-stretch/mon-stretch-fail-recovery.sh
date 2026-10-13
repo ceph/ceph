@@ -146,7 +146,7 @@ EOF
     teardown $dir || return 1
 }
 
-TEST_EC_stretched_cluster_failover_add_three_osds(){
+TEST_ec_stretched_cluster_failover_add_three_osds(){
     local dir=$1
     local OSDS=6
     setup $dir || return 1
