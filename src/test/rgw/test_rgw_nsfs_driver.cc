@@ -8764,6 +8764,91 @@ TEST_F(NSFSUpgradeTest, ReStagingDropsCachedPartsWhosePlacementChanged)
   EXPECT_EQ(pi.offset, 0u);
 }
 
+/* Under the writeback policy a part's record is written to disk only
+ * when its cache entry is evicted, so until then the cache holds the only
+ * copy.  Conversion read part records from disk alone and skipped a part
+ * with none:  a part uploaded through RGW into an upload NooBaa's layout
+ * stages, before the upgrade, was dropped from the upload. */
+class NSFSUpgradeWritebackTest : public NSFSUpgradeTest {
+public:
+  file::listing::MultipartCachePolicy mp_cache_policy() const override {
+    return file::listing::MultipartCachePolicy::writeback;
+  }
+
+  /* upload two parts through RGW, upgrade, and complete */
+  void a_part_whose_record_is_only_cached_survives_the_upgrade() {
+    TestTree tree;
+    make_noobaa_tree(bucket_path(), TreeShape::quiescent, tree);
+
+    const std::string objname = "uploaded.bin";
+    const std::string upload_id = "33333333-4444-4555-8666-777777777777";
+    auto upload = bucket->get_multipart_upload(objname, upload_id);
+    ASSERT_NE(upload.get(), nullptr);
+    rgw_placement_rule placement;
+    Attrs attrs;
+    ASSERT_EQ(upload->init(env->dpp, null_yield, acl_owner, placement, attrs), 0);
+
+    std::string expected;
+    std::map<int, std::string> part_etags;
+    for (int i = 1; i <= 2; ++i) {
+      std::string payload(64, static_cast<char>('a' + i));
+      part_etags[i] = write_mp_part(upload.get(), acl_owner, &placement, i,
+  				  payload);
+      expected += payload;
+    }
+
+    /* the control:  the parts' records are in the cache only, or this
+     * would pass without the cache being consulted */
+    sf::path staging;
+    for (auto& e : sf::directory_iterator(bucket_path())) {
+      if (e.path().filename().string().starts_with(".noobaa-nsfs_")) {
+        staging = e.path() / "multipart-uploads" / upload_id;
+      }
+    }
+    ASSERT_TRUE(sf::is_directory(staging)) << staging;
+    for (int i = 1; i <= 2; ++i) {
+      const sf::path rec{staging / ("part-" + std::to_string(i))};
+      EXPECT_LT(::getxattr(rec.c_str(), "user.noobaa.part_size", nullptr, 0), 0)
+  	<< rec << " already carries its record on disk";
+    }
+
+    nsfs::ConvertProgress prog;
+    ASSERT_EQ(upgrade(nullptr, &prog), 0);
+    ASSERT_EQ(prog.uploads, 1u);
+    EXPECT_EQ(prog.parts, 2u) << "a part was skipped by the re-staging";
+
+    auto after = bucket->get_multipart_upload(objname, upload_id);
+    int next = 0;
+    bool truncated = false;
+    ASSERT_EQ(after->list_parts(env->dpp, env->cct.get(), 100, 0, &next,
+  			      &truncated, null_yield), 0);
+    EXPECT_EQ(after->get_parts().size(), 2u) << "a part was lost in the upgrade";
+
+    ASSERT_EQ(complete_mp(bucket.get(), after.get(), owner, objname,
+  			part_etags), 0);
+    EXPECT_EQ(read_all(bucket_path() / objname), expected);
+  }
+};
+
+TEST_F(NSFSUpgradeWritebackTest, APartWhoseRecordIsOnlyCachedSurvivesTheUpgrade)
+{
+  a_part_whose_record_is_only_cached_survives_the_upgrade();
+}
+
+/* The volatile policy defers the record the same way, and never writes
+ * it at all if the entry is evicted first. */
+class NSFSUpgradeVolatileTest : public NSFSUpgradeWritebackTest {
+public:
+  file::listing::MultipartCachePolicy mp_cache_policy() const override {
+    return file::listing::MultipartCachePolicy::volatile_;
+  }
+};
+
+TEST_F(NSFSUpgradeVolatileTest, APartWhoseRecordIsOnlyCachedSurvivesTheUpgrade)
+{
+  a_part_whose_record_is_only_cached_survives_the_upgrade();
+}
+
 /* Every part is reported, and a stop inside one leaves the rest. */
 TEST_F(NSFSUpgradeTest, ReportsPartsAndStopsInsideAnUpload)
 {

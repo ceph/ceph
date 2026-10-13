@@ -7342,8 +7342,27 @@ int NSFSBucket::convert_uploads(const DoutPrefixProvider* dpp,
 	::close(pfd);
       }
 
+      /* The cache first, as every reader of a part record takes it:
+       * under the writeback and volatile policies a part's record may
+       * be in the cache and not yet on disk, and a part read from disk
+       * alone was skipped -- and its bytes deleted with NooBaa's
+       * staging below.  Re-staging writes every record to disk, so the
+       * cache entry is not needed afterwards. */
       nsfs::MPUStrategy::PartRecord rec{};
-      if (!theirs->part_record(dpp, theirdir.get_fd(), pname, pattrs, rec)) {
+      file::listing::MultipartPartInfo cached;
+      auto* mc = driver->get_multipart_cache();
+      if (mc && mc->peek_part({get_name(), meta}, *num, cached)) {
+	rec.size = cached.size;
+	/* a part in a file of its own leaves `stored` at 0 in the cache;
+	 * its bytes are then the part's accounted size */
+	rec.stored = cached.stored ? cached.stored : cached.size;
+	rec.offset = cached.offset;
+	rec.shared = cached.shared;
+	rec.etag = cached.etag;
+	rec.mtime = cached.mtime;
+	rec.cksum = cached.cksum;
+      } else if (!theirs->part_record(dpp, theirdir.get_fd(), pname, pattrs,
+				      rec)) {
 	ldpp_dout(dpp, 4) << "no record for " << pname << " of " << meta
 			  << ";  skipping it" << dendl;
 	continue;
