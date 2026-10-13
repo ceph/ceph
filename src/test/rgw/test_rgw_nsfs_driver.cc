@@ -9186,8 +9186,8 @@ INSTANTIATE_TEST_SUITE_P(
  * I1 -- reading NooBaa's configuration store.
  *
  * The records below are **verbatim what NooBaa's CLI and gateway wrote**,
- * copied out of a store stood up at noobaa-core 08d063f86 by
- * `src/test/rgw/interchange/standup.rs`.  That matters:  every earlier
+ * copied out of a store stood up at noobaa-core 08d063f86 by the
+ * stand-up driver, now `src/test/rgw/adoption/standup.rs`.  That matters:  every earlier
  * control in the import work was composed from a reading of NooBaa's
  * schema, so it demonstrated that we read what we *believe* they
  * write.  These are NooBaa's bytes.  The directory is the test's, the
@@ -9595,7 +9595,8 @@ TEST_F(NooBaaStoreTest, AStoreWithNoIdentitiesSaysSo)
  * this reads it.  Skipped when unset, the way the suite's other
  * tests that need something stood up behave -- so it is a no-op
  * everywhere except on a machine where
- * `src/test/rgw/interchange/standup.rs` has run.
+ * `src/test/rgw/adoption/standup.rs` has run;  its `store-tests`
+ * step runs these four against its own store.
  *
  * The fixtures above are NooBaa's bytes but the test's layout.  This is
  * the other way round, and it is what catches an assumption about the
@@ -9607,7 +9608,7 @@ TEST_F(NooBaaStoreTest, AStoreOnDiskReadsWithoutComplaint)
   const char* dir = ::getenv("NSFS_NOOBAA_STORE");
   if (!dir || !*dir) {
     GTEST_SKIP() << "NSFS_NOOBAA_STORE is unset;  see "
-		 << "src/test/rgw/interchange/standup.rs";
+		 << "src/test/rgw/adoption/standup.rs";
   }
 
   nsfs::NooBaaConfigStore cs(dir);
@@ -11339,9 +11340,14 @@ TEST_F(NooBaaImportTest, AStoreOnDiskImports)
   ASSERT_EQ(ret, 0) << s;
   EXPECT_GT(r.accounts_created, 0u);
   EXPECT_GT(r.identity_rows, 0u);
-  /* NooBaa's store has an anonymous account, and it must have become a
-   * row rather than an account */
-  EXPECT_TRUE(r.anonymous_imported);
+  /* An anonymous account, where the store has one, becomes a row rather
+   * than an account.  A store need not have one:  NooBaa creates it
+   * only when asked, for a deployment that serves unauthenticated
+   * requests. */
+  const bool has_anonymous =
+    std::any_of(c.identities.begin(), c.identities.end(),
+		[](const auto& i) { return i.is_anonymous(); });
+  EXPECT_EQ(r.anonymous_imported, has_anonymous);
 
   /* every imported credential authenticates */
   size_t checked = 0;
