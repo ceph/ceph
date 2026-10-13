@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #include <gtest/gtest-spi.h>
 #include "test/osd/ECPeeringTestFixture.h"
+#include "osd/osd_perf_counters.h"
 #include "test/osd/TestCommon.h"
 
 using namespace std;
@@ -351,6 +352,27 @@ TEST_P(TestECFailoverWithPeering, WriteWithPeering) {
   auto* primary_ps = get_primary_test_pg()->get_peering_state();
   ASSERT_GT(primary_ps->get_pg_log().get_log().log.size(), 0)
     << "Primary should have log entries after write";
+}
+
+// A write sends every shard of the other zone a sub-write that carries
+// data, so cross_zone_write_bytes counts at least the bytes written.
+TEST_P(TestECFailoverWithPeering, CrossZoneWriteBytesCounted) {
+  if (num_zones != 2) {
+    GTEST_SKIP() << "requires num_zones == 2";
+  }
+  PerfCounters *logger = get_primary_listener()->get_logger();
+  const uint64_t ops_before = logger->get(l_osd_stretch_cross_zone_write_ops);
+  const uint64_t bytes_before = logger->get(l_osd_stretch_cross_zone_write_bytes);
+
+  const std::string test_data(8192, 'x');
+  create_and_write_verify("test_cross_zone_write_bytes", test_data);
+
+  // every write of the object sends a sub-write to each shard of zone 1
+  const uint64_t ops = logger->get(l_osd_stretch_cross_zone_write_ops) - ops_before;
+  ASSERT_GE(ops, static_cast<uint64_t>(k + m));
+  EXPECT_EQ(0u, ops % (k + m));
+  EXPECT_GE(logger->get(l_osd_stretch_cross_zone_write_bytes) - bytes_before,
+            test_data.size());
 }
 
 // Async recovery keeps each zone of a stretched pool at its min_size: OSDs

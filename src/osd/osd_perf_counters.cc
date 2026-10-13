@@ -498,6 +498,58 @@ PerfCounters *build_osd_logger(CephContext *cct) {
       l_osd_scrub_ec_reserv_secondaries_num, "scrub_ec_replicas_in_reservation",
       "number of replicas to reserve EC");
 
+  // ----   write fan-out - stretch clusters
+  osd_plb.add_u64_counter(l_osd_stretch_cross_zone_write_ops,
+      "cross_zone_write_ops",
+      "EC sub-write operations sent to a remote zone during EC write fan-out");
+  osd_plb.add_u64_counter(l_osd_stretch_cross_zone_write_bytes,
+      "cross_zone_write_bytes",
+      "Bytes sent cross-zone during EC write fan-out",
+      nullptr, 0, unit_t(UNIT_BYTES));
+  osd_plb.add_time_avg(l_osd_stretch_cross_zone_write_lat,
+      "cross_zone_write_latency",
+      "Round-trip latency of EC sub-writes to a remote zone");
+  osd_plb.add_u64_counter_histogram(l_osd_stretch_cross_zone_write_lat_hist,
+      "cross_zone_write_latency_bytes_histogram",
+      op_hist_x_axis_config, op_hist_y_axis_config,
+      "Histogram of cross-zone EC sub-write latency + bytes sent");
+
+  // ---- recovery pushed - stretch clusters
+  osd_plb.add_u64_counter(l_osd_stretch_cross_zone_recovery_push_ops,
+    "cross_zone_recovery_push_ops",
+    "EC recovery push operations sent to a remote zone");
+  osd_plb.add_u64_counter(l_osd_stretch_cross_zone_recovery_push_bytes,
+    "cross_zone_recovery_push_bytes",
+    "Bytes pushed cross-zone during EC recovery",
+    nullptr, 0, unit_t(UNIT_BYTES));
+  osd_plb.add_time_avg(l_osd_stretch_cross_zone_recovery_push_lat,
+    "cross_zone_recovery_push_latency",
+    "Round-trip latency of EC recovery pushes to a remote zone");
+  osd_plb.add_u64_counter_histogram(l_osd_stretch_cross_zone_recovery_push_lat_hist,
+    "cross_zone_recovery_push_latency_bytes_histogram",
+    op_hist_x_axis_config, op_hist_y_axis_config,
+    "Histogram of cross-zone EC recovery push latency + bytes sent");
+
+  // --- remote-zone reads - stretch clusters
+  osd_plb.add_u64_counter(l_osd_stretch_cross_zone_read_ops,
+    "cross_zone_subread_ops",
+    "EC sub-read operations sent to a remote zone");
+  osd_plb.add_u64_counter(l_osd_stretch_cross_zone_read_sent_bytes,
+      "cross_zone_subread_sent_bytes",
+      "Bytes requested from remote-zone shards",
+      nullptr, 0, unit_t(UNIT_BYTES));
+  osd_plb.add_u64_counter(l_osd_stretch_cross_zone_read_recv_bytes,
+      "cross_zone_subread_recv_bytes",
+      "Bytes received from remote-zone shards",
+      nullptr, 0, unit_t(UNIT_BYTES));
+  osd_plb.add_time_avg(l_osd_stretch_cross_zone_read_lat,
+      "cross_zone_subread_latency",
+      "Round-trip latency of EC sub-reads to a remote zone");
+  osd_plb.add_u64_counter_histogram(l_osd_stretch_cross_zone_read_lat_hist,
+      "cross_zone_subread_latency_bytes_histogram",
+      op_hist_x_axis_config, op_hist_y_axis_config,
+      "Histogram of cross-zone EC sub-read latency + bytes received");
+
   return osd_plb.create_perf_counters();
 }
 
