@@ -3142,7 +3142,12 @@ int NooBaaDirectoryObject::stat(const DoutPrefixProvider* dpp, bool force)
     return 0;
   }
 
-  int ret = content ? content->stat(dpp, force) : parent->stat(dpp, force);
+  /* The directory's stat afresh:  for the root object the directory is
+   * the bucket's own, a long-lived entry whose stat was taken when the
+   * bucket was loaded and is stale once anything at the top level has
+   * changed. */
+  int ret = content ? content->stat(dpp, force)
+		    : parent->stat(dpp, /*force=*/true);
   if (ret < 0) {
     exist = false;
     return ret;
