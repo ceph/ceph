@@ -896,11 +896,13 @@ class RgwBucket(RgwRESTController):
     @allow_empty_body
     @EndpointDoc("Update the bucket rate limit")
     def set_rate_limit(self, enabled: bool, uid: str, max_read_ops: int,
-                       max_write_ops: int, max_read_bytes: int, max_write_bytes: int):
+                       max_write_ops: int, max_read_bytes: int, max_write_bytes: int,
+                       max_list_ops: int = 0, max_delete_ops: int = 0):
         rgwBucketRateLimit_instance = RgwRateLimit()
         return rgwBucketRateLimit_instance.set_rateLimit('bucket', enabled, uid,
                                                          max_read_ops, max_write_ops,
-                                                         max_read_bytes, max_write_bytes)
+                                                         max_read_bytes, max_write_bytes,
+                                                         max_list_ops, max_delete_ops)
 
 
 @UIRouter('/rgw/bucket', Scope.RGW)
@@ -1257,11 +1259,13 @@ class RgwUser(RgwRESTController):
     @allow_empty_body
     @EndpointDoc("Update the user rate limit")
     def set_rate_limit(self, uid: str, enabled: bool = False, max_read_ops: int = 0,
-                       max_write_ops: int = 0, max_read_bytes: int = 0, max_write_bytes: int = 0):
+                       max_write_ops: int = 0, max_read_bytes: int = 0, max_write_bytes: int = 0,
+                       max_list_ops: int = 0, max_delete_ops: int = 0):
         rgwUserRateLimit_instance = RgwRateLimit()
         return rgwUserRateLimit_instance.set_rateLimit('user', enabled,
                                                        uid, max_read_ops, max_write_ops,
-                                                       max_read_bytes, max_write_bytes)
+                                                       max_read_bytes, max_write_bytes,
+                                                       max_list_ops, max_delete_ops)
 
 
 class RGWRoleEndpoints:
