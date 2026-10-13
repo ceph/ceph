@@ -1,3 +1,9 @@
+ceph (21.1.2-1) rc; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.io>  Thu, 08 Oct 2026 00:13:15 +0000
+
 ceph (21.1.1-1) rc; urgency=medium
 
   * New upstream release
