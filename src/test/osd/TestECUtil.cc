@@ -1630,3 +1630,282 @@ TEST(ECUtil, erase_after_ro_offset_single_byte)
   // Shard 1 should be empty
   ASSERT_FALSE(semap.contains_shard(shard_id_t(1)));
 }
+
+/* Two extents of a shard in the same page, with a gap between them, must
+ * both survive padding to whole pages, with zeros in the gap. Extents in
+ * different pages are padded separately.
+ */
+TEST(ECUtil, pad_and_rebuild_to_ec_align_extents_in_same_page)
+{
+  stripe_info_t sinfo(2, 1, 2*4096);
+  shard_extent_map_t sem(&sinfo);
+
+  buffer::list a, b, c;
+  a.append(std::string(1, 'a'));
+  b.append(std::string(50, 'b'));
+  c.append(std::string(10, 'c'));
+
+  sem.insert_in_shard(shard_id_t(0), 0, a);
+  sem.insert_in_shard(shard_id_t(0), 8, b);
+  sem.insert_in_shard(shard_id_t(1), 100, c);
+  sem.insert_in_shard(shard_id_t(1), 2*4096 + 100, c);
+
+  sem.pad_and_rebuild_to_ec_align();
+
+  extent_set ref0;
+  ref0.insert(0, 4096);
+  ASSERT_EQ(ref0, sem.get_extent_set(shard_id_t(0)));
+
+  buffer::list expected, got;
+  expected.append(a);
+  expected.append_zero(7);
+  expected.append(b);
+  expected.append_zero(4096 - 58);
+  sem.get_buffer(shard_id_t(0), 0, 4096, got);
+  ASSERT_TRUE(expected.contents_equal(got));
+
+  extent_set ref1;
+  ref1.insert(0, 4096);
+  ref1.insert(2*4096, 4096);
+  ASSERT_EQ(ref1, sem.get_extent_set(shard_id_t(1)));
+
+  verify_offset_cache(sem);
+}
+
+/* ---------------------------------------------------------------------------
+ * pad_and_rebuild_to_ec_align() unit tests.
+ *
+ * Contract:
+ *  - Every extent in every shard is widened to EC_ALIGN_SIZE boundaries; any
+ *    newly-covered bytes are zero.
+ *  - Existing data is never altered or lost, including when two extents are
+ *    widened into the same (or overlapping) aligned range.
+ *  - Every resulting buffer is a single EC_ALIGN_SIZE-aligned, contiguous
+ *    region (what the EC plugins require).
+ *  - The cached ro/shard offsets stay consistent with the extent maps.
+ * ------------------------------------------------------------------------- */
+namespace {
+
+// A buffer of `len` bytes, each byte = (seed + i) with 0 avoided so zero
+// padding can be told apart from data.
+bufferlist pattern_bl(uint64_t len, uint8_t seed)
+{
+  bufferlist bl;
+  bufferptr p = buffer::create(len);
+  for (uint64_t i = 0; i < len; ++i) {
+    uint8_t v = uint8_t(seed + i);
+    p.c_str()[i] = v ? v : 1;
+  }
+  bl.append(p);
+  return bl;
+}
+
+// Same content as pattern_bl, but deliberately split into several nodes with
+// a misaligned start address.
+bufferlist fragmented_pattern_bl(uint64_t len, uint8_t seed)
+{
+  bufferlist src = pattern_bl(len, seed);
+  bufferlist out;
+  uint64_t off = 0;
+  uint64_t piece = 100;
+  while (off < len) {
+    uint64_t n = std::min(piece, len - off);
+    bufferptr raw = buffer::create_aligned(n + 1, EC_ALIGN_SIZE);
+    bufferptr p(raw, 1, n);  // force a misaligned address
+    src.begin(off).copy(n, p.c_str());
+    out.append(p);
+    off += n;
+    piece = piece * 3 + 7;
+  }
+  return out;
+}
+
+bool is_single_aligned_buffer(const bufferlist &bl)
+{
+  return bl.get_num_buffers() == 1 &&
+    ((uintptr_t)bl.front().c_str() & (EC_ALIGN_SIZE - 1)) == 0 &&
+    (bl.length() % EC_ALIGN_SIZE) == 0;
+}
+
+// Flatten one shard's map into (off -> byte) so results can be compared
+// independently of how the extents are split.
+std::map<uint64_t, char> shard_bytes(const shard_extent_map_t &sem,
+                                     shard_id_t shard)
+{
+  std::map<uint64_t, char> out;
+  if (!sem.contains_shard(shard)) {
+    return out;
+  }
+  for (auto &&i : sem.get_extent_map(shard)) {
+    bufferlist bl = i.get_val();
+    const char *c = bl.c_str();
+    for (uint64_t j = 0; j < i.get_len(); ++j) {
+      out[i.get_off() + j] = c[j];
+    }
+  }
+  return out;
+}
+
+// Check the contract for one shard: every original byte is preserved, every
+// other covered byte is zero, and coverage is exactly the aligned union.
+void check_shard_after_pad(const shard_extent_map_t &before,
+                           const shard_extent_map_t &after,
+                           shard_id_t shard)
+{
+  if (!before.contains_shard(shard)) {
+    ASSERT_FALSE(after.contains_shard(shard));
+    return;
+  }
+  auto orig = shard_bytes(before, shard);
+
+  extent_set expected_cover;
+  for (auto &&i : before.get_extent_map(shard)) {
+    uint64_t s = align_prev(i.get_off());
+    uint64_t e = align_next(i.get_off() + i.get_len());
+    expected_cover.union_insert(s, e - s);
+  }
+  extent_set actual_cover;
+  after.get_extent_map(shard).to_interval_set(actual_cover);
+  ASSERT_EQ(expected_cover, actual_cover);
+
+  for (auto &&i : after.get_extent_map(shard)) {
+    ASSERT_TRUE(is_single_aligned_buffer(i.get_val()))
+      << "shard " << shard << " extent " << i.get_off() << "~" << i.get_len();
+  }
+
+  auto now = shard_bytes(after, shard);
+  for (auto &&[off, c] : now) {
+    auto it = orig.find(off);
+    if (it != orig.end()) {
+      ASSERT_EQ(it->second, c) << "data changed at shard " << shard
+                               << " offset " << off;
+    } else {
+      ASSERT_EQ(0, c) << "padding not zero at shard " << shard
+                      << " offset " << off;
+    }
+  }
+}
+
+void pad_and_check(shard_extent_map_t &sem)
+{
+  shard_extent_map_t before(sem.sinfo);
+  before.deep_copy(sem);
+
+  sem.pad_and_rebuild_to_ec_align();
+
+  for (auto &&shard : sem.sinfo->get_all_shards()) {
+    check_shard_after_pad(before, sem, shard);
+  }
+  verify_offset_cache(sem);
+}
+
+} // anonymous namespace
+
+TEST(ECUtil, pad_and_rebuild_empty)
+{
+  stripe_info_t sinfo(2, 1, 2 * 4096);
+  shard_extent_map_t sem(&sinfo);
+  sem.pad_and_rebuild_to_ec_align();
+  ASSERT_TRUE(sem.empty());
+}
+
+TEST(ECUtil, pad_and_rebuild_already_aligned_is_noop)
+{
+  stripe_info_t sinfo(2, 1, 2 * 4096);
+  shard_extent_map_t sem(&sinfo);
+  bufferlist bl;
+  bl.push_back(buffer::create_aligned(2 * 4096, EC_ALIGN_SIZE));
+  bl.begin().copy_in(2 * 4096, pattern_bl(2 * 4096, 7).c_str());
+  sem.insert_in_shard(shard_id_t(0), 4096, bl);
+  const char *before_ptr = sem.get_extent_map(shard_id_t(0)).begin().get_val().front().c_str();
+
+  shard_extent_map_t copy = sem;
+  pad_and_check(sem);
+  ASSERT_EQ(copy, sem);
+  // No reallocation should occur for an already-aligned buffer.
+  ASSERT_EQ(before_ptr,
+            sem.get_extent_map(shard_id_t(0)).begin().get_val().front().c_str());
+}
+
+TEST(ECUtil, pad_and_rebuild_aligned_offsets_unaligned_memory)
+{
+  stripe_info_t sinfo(2, 1, 2 * 4096);
+  shard_extent_map_t sem(&sinfo);
+  sem.insert_in_shard(shard_id_t(1), 4096, fragmented_pattern_bl(3 * 4096, 3));
+  ASSERT_FALSE(is_single_aligned_buffer(
+    sem.get_extent_map(shard_id_t(1)).begin().get_val()));
+  pad_and_check(sem);
+}
+
+TEST(ECUtil, pad_and_rebuild_unaligned_start)
+{
+  stripe_info_t sinfo(2, 1, 2 * 4096);
+  shard_extent_map_t sem(&sinfo);
+  sem.insert_in_shard(shard_id_t(0), 100, pattern_bl(4096 - 100, 11));
+  pad_and_check(sem);
+  ASSERT_EQ(0u, sem.get_ro_start());
+}
+
+TEST(ECUtil, pad_and_rebuild_unaligned_end)
+{
+  stripe_info_t sinfo(2, 1, 2 * 4096);
+  shard_extent_map_t sem(&sinfo);
+  sem.insert_in_shard(shard_id_t(0), 0, pattern_bl(100, 13));
+  pad_and_check(sem);
+  ASSERT_EQ(4096u, sem.get_ro_end());
+}
+
+TEST(ECUtil, pad_and_rebuild_unaligned_both_ends_multi_page)
+{
+  stripe_info_t sinfo(2, 1, 2 * 4096);
+  shard_extent_map_t sem(&sinfo);
+  sem.insert_in_shard(shard_id_t(1), 4096 + 100, fragmented_pattern_bl(8000, 17));
+  pad_and_check(sem);
+}
+
+TEST(ECUtil, pad_and_rebuild_two_extents_same_page)
+{
+  // Both extents widen to the same 4K page: neither may be lost.
+  stripe_info_t sinfo(2, 1, 2 * 4096);
+  shard_extent_map_t sem(&sinfo);
+  sem.insert_in_shard(shard_id_t(0), 100, pattern_bl(100, 21));
+  sem.insert_in_shard(shard_id_t(0), 1000, pattern_bl(100, 23));
+  ASSERT_EQ(2u, sem.get_extent_map(shard_id_t(0)).ext_count());
+  pad_and_check(sem);
+}
+
+TEST(ECUtil, pad_and_rebuild_overlapping_padding_across_pages)
+{
+  // First extent's tail padding and second extent's head padding cover the
+  // same page (4096~4096); the first extent's data in that page must survive.
+  stripe_info_t sinfo(2, 1, 2 * 4096);
+  shard_extent_map_t sem(&sinfo);
+  sem.insert_in_shard(shard_id_t(0), 100, pattern_bl(4000, 31));   // 100..4100
+  sem.insert_in_shard(shard_id_t(0), 6000, pattern_bl(100, 37));   // 6000..6100
+  pad_and_check(sem);
+}
+
+TEST(ECUtil, pad_and_rebuild_mixed_shards_and_parity)
+{
+  stripe_info_t sinfo(2, 1, 2 * 4096);
+  shard_extent_map_t sem(&sinfo);
+  bufferlist aligned;
+  aligned.push_back(buffer::create_aligned(4096, EC_ALIGN_SIZE));
+  aligned.begin().copy_in(4096, pattern_bl(4096, 41).c_str());
+  sem.insert_in_shard(shard_id_t(0), 0, aligned);
+  sem.insert_in_shard(shard_id_t(1), 200, pattern_bl(300, 43));
+  sem.insert_in_shard(shard_id_t(2), 8192 + 5, pattern_bl(10, 47));  // parity
+  pad_and_check(sem);
+}
+
+TEST(ECUtil, pad_and_rebuild_is_idempotent)
+{
+  stripe_info_t sinfo(2, 1, 2 * 4096);
+  shard_extent_map_t sem(&sinfo);
+  sem.insert_in_shard(shard_id_t(0), 100, fragmented_pattern_bl(5000, 51));
+  sem.insert_in_shard(shard_id_t(1), 9000, pattern_bl(3, 53));
+  sem.pad_and_rebuild_to_ec_align();
+  shard_extent_map_t once = sem;
+  pad_and_check(sem);
+  ASSERT_EQ(once, sem);
+}
