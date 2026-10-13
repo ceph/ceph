@@ -2641,14 +2641,16 @@ options:
     order to acknowledge an I/O operation to the client. If minimum is not met, Ceph
     will not acknowledge the I/O to the client, which may result in data loss. This
     setting ensures a minimum number of replicas when operating in degraded mode. The
-    default value is 0 which means no particular minimum. If 0, minimum is size - (size
-    / 2).
+    default value is 0 which means no particular minimum. If 0, minimum is replica -
+    (replica / 2), where replica is the number of copies in each zone (the size of a
+    pool in one zone).
   fmt_desc: Sets the minimum number of written replicas for objects in the pool in
     order to acknowledge an I/O operation to the client.  If minimum is not met, Ceph
     will not acknowledge the I/O to the client, **which may result in data loss**.
     This setting ensures a minimum number of replicas when operating in ``degraded``
     mode. The default value is ``0`` which means no particular minimum. If ``0``, minimum
-    is ``size - (size / 2)``.
+    is ``replica - (replica / 2)``, where ``replica`` is the number of copies in each
+    zone (the ``size`` of a pool in one zone).
   default: 0
   services:
   - mon

@@ -50,7 +50,9 @@ Fewer OSDs than Replicas
 
 If a number of OSDs are in an ``up`` and ``in`` state, but the placement groups are not
 in an ``active+clean`` state, you may have an :confval:`osd_pool_default_size` set
-to greater than the number of ``up`` and ``in`` state OSDs.
+to greater than the number of ``up`` and ``in`` state OSDs. The size of a new
+pool is :confval:`osd_pool_default_num_zones` times
+:confval:`osd_pool_default_size`, which counts the replicas in each zone.
 
 There are a few ways to address this situation. For example, if you want to operate your
 cluster with :confval:`osd_pool_default_size` set to ``3`` in an ``active+degraded`` state with two replicas, you can set the
