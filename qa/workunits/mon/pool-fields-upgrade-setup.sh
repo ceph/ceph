@@ -24,7 +24,10 @@ fi
 
 ceph config set osd osd_crush_update_on_start false
 
-for zone in dc1 dc2 dc3; do
+# stretch mode counts every datacenter bucket: the 2az tiebreaker has none
+zones="dc1 dc2"
+[[ "$scenario" == 3az ]] && zones="$zones dc3"
+for zone in $zones; do
     ceph osd crush add-bucket "$zone" datacenter
     ceph osd crush move "$zone" root=default
 done
