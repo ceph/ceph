@@ -1,0 +1,8 @@
+overrides:
+  ceph:
+    subvols:
+      version: 2
+      create: 1
+      create_options: "--namespace-isolated --size 25000000000"
+      mount_type: fuse
+      mount_client_id: testclient1

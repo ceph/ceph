@@ -1,0 +1,9 @@
+With the introduction of subvolume v3, existing subvolumes of previous versions
+(v2, v1 and v0 (legacy)) are auto-upgraded to v3 as soon as they are discovered
+by the volumes plugin. Discovery of subvolume happens when "ceph fs subvolume"
+command is executed for it.
+
+This test suite tests runs the helper code to create a subvolume of previous
+version, starts a workload, starts Ceph cluster upgrade and then executes a
+"ceph fs subvolume" command which initiates the subvolume auto-upgrade while the
+workload is stil on.

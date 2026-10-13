@@ -1,7 +1,7 @@
 overrides:
   ceph:
     subvols:
-      create: 2
+      create_num: 2
   ceph-fuse:
     client.0:
       mount_subvol_num: 0
