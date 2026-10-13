@@ -7,6 +7,7 @@ import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
 import { NfsClusterResourceBreadcrumbResolver } from './nfs-cluster-resource-page/nfs-cluster-resource-breadcrumb.resolver';
 import { NfsClusterResourcePageComponent } from './nfs-cluster-resource-page/nfs-cluster-resource-page.component';
 import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sidebar/nfs-cluster-resource-sidebar.component';
+import { NfsClusterFormComponent } from './nfs-cluster-form/nfs-cluster-form.component';
 import { NfsFormComponent } from './nfs-form/nfs-form.component';
 import { NFS_PAGE_HEADER } from './nfs.constants';
 
@@ -42,6 +43,11 @@ export function nfsParentRoute(isRgw: boolean, breadcrumbs: string): Route {
       path: 'cluster',
       data: { breadcrumbs: 'Service clusters' },
       children: nfsClusterChildRoutes
+    },
+    {
+      path: `${URLVerbs.EDIT}/:cluster_id`,
+      component: NfsClusterFormComponent,
+      data: { breadcrumbs: ActionLabels.EDIT }
     },
     ...(!isRgw
       ? [

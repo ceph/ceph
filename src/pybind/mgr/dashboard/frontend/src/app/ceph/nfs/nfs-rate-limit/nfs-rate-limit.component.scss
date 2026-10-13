@@ -1,0 +1,18 @@
+:host .form-item-append {
+  align-items: flex-end;
+  gap: var(--cds-spacing-05);
+}
+
+:host .form-col {
+  flex: 2 1 0;
+  min-width: 0;
+}
+
+:host .form-col-unit {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+:host .form-item-append cds-number {
+  margin-bottom: 0;
+}

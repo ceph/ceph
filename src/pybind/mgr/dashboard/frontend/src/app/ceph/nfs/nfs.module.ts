@@ -27,6 +27,8 @@ import {
 import Close from '@carbon/icons/es/close/32';
 import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
 import { ClusterModule } from '../cluster/cluster.module';
+import { NfsClusterFormComponent } from './nfs-cluster-form/nfs-cluster-form.component';
+import { NfsRateLimitComponent } from './nfs-rate-limit/nfs-rate-limit.component';
 import { NfsClusterResourcePageComponent } from './nfs-cluster-resource-page/nfs-cluster-resource-page.component';
 import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sidebar/nfs-cluster-resource-sidebar.component';
 
@@ -49,13 +51,18 @@ import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sideb
     ButtonModule,
     IconModule,
     TabsModule,
-    ClusterModule
+    ClusterModule,
+    NfsClusterFormComponent,
+    NfsRateLimitComponent
   ],
   exports: [
     NfsListComponent,
     NfsFormComponent,
     NfsDetailsComponent,
     NfsClusterComponent,
+    NfsFormClientComponent,
+    NfsClusterFormComponent,
+    NfsRateLimitComponent,
     NfsClusterResourcePageComponent,
     NfsClusterResourceSidebarComponent
   ],

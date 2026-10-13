@@ -2,10 +2,29 @@ import { beforeEach, describe, expect, it } from '@jest/globals';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { Component, NO_ERRORS_SCHEMA } from '@angular/core';
 
 import { OverviewComponent } from './resource-overview-card.component';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
+
+@Component({
+  template: `
+    <cd-resource-overview-card
+      title="Test Card"
+      [fields]="[]"
+      [showFooter]="true"
+    >
+      <div
+        footer
+        class="test-footer"
+      >
+        Footer Content
+      </div>
+    </cd-resource-overview-card>
+  `,
+  standalone: false
+})
+class TestHostComponent {}
 
 describe('OverviewComponent', () => {
   let component: OverviewComponent;
@@ -13,7 +32,7 @@ describe('OverviewComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [OverviewComponent],
+      declarations: [OverviewComponent, TestHostComponent],
       imports: [PipesModule, RouterTestingModule],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
@@ -129,6 +148,32 @@ describe('OverviewComponent', () => {
         By.css('.cd-overview-status .cd-status-text--info')
       );
       expect(statusText).toBeTruthy();
+    });
+
+    it('should render tooltip definition when tooltip is provided on a field', () => {
+      component.fields = [
+        {
+          label: 'IOPS Limit',
+          value: 'On',
+          tooltip: 'Shares max. IOPs: 5400\nClients max. IOPs: 8000'
+        }
+      ];
+      fixture.detectChanges();
+
+      const tooltipDef = fixture.debugElement.query(By.css('cds-tooltip-definition'));
+      expect(tooltipDef).toBeTruthy();
+      expect(tooltipDef.properties['description']).toBe(
+        'Shares max. IOPs: 5400\nClients max. IOPs: 8000'
+      );
+      expect(tooltipDef.nativeElement.textContent.trim()).toBe('On');
+    });
+
+    it('should project footer content', () => {
+      const hostFixture = TestBed.createComponent(TestHostComponent);
+      hostFixture.detectChanges();
+      const footerEl = hostFixture.debugElement.query(By.css('.test-footer'));
+      expect(footerEl).toBeTruthy();
+      expect(footerEl.nativeElement.textContent.trim()).toBe('Footer Content');
     });
   });
 

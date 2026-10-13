@@ -26,6 +26,8 @@ export interface OverviewField {
   emptyText?: string;
   /* Router link target used when type is 'link'. */
   routerLink?: string | unknown[];
+  /* Optional tooltip description rendered on the value using cds-tooltip-definition. */
+  tooltip?: string;
 }
 
 @Component({
@@ -43,6 +45,8 @@ export class OverviewComponent implements OnChanges {
   @Input() fields: OverviewField[] = [];
   /* Number of columns used to layout the fields. */
   @Input() columns = 3;
+  /* When true, renders the footer slot with a top divider. */
+  @Input() showFooter = false;
 
   loadingPlaceholders: number[] = Array.from({ length: this.columns }, (_, index) => index);
 
