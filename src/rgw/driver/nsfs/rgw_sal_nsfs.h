@@ -222,6 +222,12 @@ protected:
    * others.  See NSFSBucket::xattr_fallback(). */
   XattrStrategy* xattr_fallback{nullptr};
   PathStrategy* path_fallback{nullptr};
+  /* The names for this entry's own attributes, when they are not the
+   * format's:  a bucket's directory carries the bucket's state, which is
+   * RGW's in every format (DECISIONS.md 2026-10-13).  Not inherited --
+   * the entries beneath are in the bucket's format -- and with no
+   * fallback, since nothing else writes bucket state there. */
+  XattrStrategy* own_xattr_strategy{nullptr};
   /* the union of what every strategy calls its own scaffolding, assembled
    * once by the driver.  Carried rather than asked for, because the
    * listing paths test it per directory entry. */
@@ -247,6 +253,7 @@ public:
     path_strategy(_ent.path_strategy),
     xattr_fallback(_ent.xattr_fallback),
     path_fallback(_ent.path_fallback),
+    own_xattr_strategy(_ent.own_xattr_strategy),
     reserved_names(_ent.reserved_names)
   { }
 
@@ -265,6 +272,7 @@ public:
   XattrStrategy* get_xattr_fallback() const { return xattr_fallback; }
   void set_path_fallback(PathStrategy* s) { path_fallback = s; }
   PathStrategy* get_path_fallback() const { return path_fallback; }
+  void set_own_xattr_strategy(XattrStrategy* s) { own_xattr_strategy = s; }
   void set_reserved_names(const ReservedNames* r) { reserved_names = r; }
   const ReservedNames* get_reserved_names() const { return reserved_names; }
   void set_sync_on_close(bool sync) { need_fsync = sync; }

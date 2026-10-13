@@ -1963,6 +1963,11 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
 
   need_fsync = true;
 
+  /* this entry's own names, where it has them;  see own_xattr_strategy */
+  const XattrStrategy* xs = own_xattr_strategy ? own_xattr_strategy
+					       : xattr_strategy;
+  const XattrStrategy* xf = own_xattr_strategy ? nullptr : xattr_fallback;
+
   /* An empty value means "leave this attr alone", matching
    * RGWRados::set_attrs().  MERGE only:  under REPLACE_ALL a name absent
    * from the write set is pruned, so skipping it here would delete the
@@ -2005,16 +2010,16 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
        * several names cannot be placed by disk_name(), which returns
        * one.  False means this format does not spread this key, which
        * is every key for us today. */
-      if (xattr_strategy->disk_attrs(key, bl, disk_names(), to_write,
+      if (xs->disk_attrs(key, bl, disk_names(), to_write,
 				     to_remove)) {
 	return;
       }
-      std::string dname = xattr_strategy->disk_name(key);
+      std::string dname = xs->disk_name(key);
       if (dname.empty()) {
 	return;
       }
       to_write.try_emplace(std::move(dname),
-			   attr_on_disk(xattr_strategy, key, bl));
+			   attr_on_disk(xs, key, bl));
     };
 
     if (extra_attrs) {
@@ -2058,9 +2063,9 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
          * lands in to_remove, which is how a converting object stops
          * carrying both spellings of the same fact. */
         std::string logical;
-        if (!xattr_strategy->parse_disk_name(disk_name, logical) &&
-            (!xattr_fallback ||
-             !xattr_fallback->parse_disk_name(disk_name, logical))) {
+        if (!xs->parse_disk_name(disk_name, logical) &&
+            (!xf ||
+             !xf->parse_disk_name(disk_name, logical))) {
           continue;
         }
         if (to_write.find(disk_name) == to_write.end()) {
@@ -2076,11 +2081,11 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
          * it.  DeleteObjectTagging arrives here, and without this it
          * removed the one nsfs name and left NooBaa's tags. */
         bufferlist none;
-        if (xattr_strategy->disk_attrs(key, none, disk_names(), to_write,
+        if (xs->disk_attrs(key, none, disk_names(), to_write,
                                        to_remove)) {
           continue;
         }
-        std::string disk_name{xattr_strategy->disk_name(key)};
+        std::string disk_name{xs->disk_name(key)};
         if (to_write.find(disk_name) == to_write.end()) {
           to_remove.push_back(std::move(disk_name));
         }
@@ -2102,13 +2107,13 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
      * design record had this landing in the REPLACE_ALL prune with no
      * new logic;  that was wrong, because objects do not write that
      * way. */
-    if (xattr_fallback) {
+    if (xf) {
       for (auto& [disk_name, _] : to_write) {
         std::string logical;
-        if (!xattr_strategy->parse_disk_name(disk_name, logical)) {
+        if (!xs->parse_disk_name(disk_name, logical)) {
           continue;
         }
-        std::string foreign = xattr_fallback->disk_name(logical);
+        std::string foreign = xf->disk_name(logical);
         if (!foreign.empty() && (foreign != disk_name) &&
             (to_write.find(foreign) == to_write.end())) {
           to_remove.push_back(std::move(foreign));
@@ -2129,13 +2134,13 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
   /* per-attr syscalls */
   if (mode == AttrWriteMode::REPLACE_ALL) {
     Attrs old_attrs;
-    ret = get_x_attrs(y, dpp, fd, old_attrs, get_name(), xattr_strategy,
-		    xattr_fallback, identity);
+    ret = get_x_attrs(y, dpp, fd, old_attrs, get_name(), xs,
+		    xf, identity);
     if (ret >= 0) {
       for (auto& it : old_attrs) {
         if (attrs.find(it.first) == attrs.end() &&
             (!extra_attrs || extra_attrs->find(it.first) == extra_attrs->end())) {
-          remove_x_attr(dpp, y, fd, it.first, get_name(), xattr_strategy);
+          remove_x_attr(dpp, y, fd, it.first, get_name(), xs);
         }
       }
     }
@@ -2143,7 +2148,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
     for (auto& key : *rmattrs) {
       if (attrs.find(key) == attrs.end() &&
           (!extra_attrs || extra_attrs->find(key) == extra_attrs->end())) {
-        remove_x_attr(dpp, y, fd, key, get_name(), xattr_strategy);
+        remove_x_attr(dpp, y, fd, key, get_name(), xs);
       }
     }
   }
@@ -2154,7 +2159,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
         continue;
       }
       ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name(),
-			 xattr_strategy);
+			 xs);
       if (ret < 0) {
         return ret;
       }
@@ -2166,7 +2171,7 @@ int FSEnt::write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& a
       continue;
     }
     ret = write_x_attr(dpp, y, fd, it.first, it.second, get_name(),
-		       xattr_strategy);
+		       xs);
     if (ret < 0) {
       return ret;
     }
@@ -2182,6 +2187,11 @@ int FSEnt::read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& at
     return ret;
   }
 
+  /* this entry's own names, where it has them;  see own_xattr_strategy */
+  if (own_xattr_strategy) {
+    return get_x_attrs(y, dpp, get_fd(), attrs, get_name(),
+		       own_xattr_strategy, nullptr, identity);
+  }
   return get_x_attrs(y, dpp, get_fd(), attrs, get_name(), xattr_strategy,
 		    xattr_fallback, identity);
 }
@@ -6301,6 +6311,8 @@ void NSFSBucket::apply_format()
   dir->set_mpu_strategy(mpu_strategy());
   dir->set_xattr_fallback(xattr_fallback());
   dir->set_path_fallback(path_fallback());
+  /* the bucket's own state, in the nsfs spelling whatever the format */
+  dir->set_own_xattr_strategy(driver->get_xattr_strategy());
 }
 
 /* The fallback strategy.  Null unless the bucket is mid-upgrade, so
@@ -6457,12 +6469,9 @@ int NSFSBucket::set_profile(const DoutPrefixProvider* dpp, optional_yield y,
    * if it failed, and re-issuing set_profile() would not retry it --
    * the re-issue takes the target == current path, not this one.
    *
-   * The spelling works out either way.  bucket_info is an nsfs key
-   * with no counterpart, so NooBaaXattrStrategy::disk_name() puts it
-   * under user.nsfs. as well;  the attribute set written alongside it
-   * lands under base spellings and convert_attrs() below rewrites
-   * those, which NSFSUpgradeTest.ConvertsTheBucketsOwnAttributes
-   * covers. */
+   * The bucket's state is written in the nsfs spelling whatever the
+   * format (DECISIONS.md 2026-10-13), so it needs no rewriting
+   * afterwards. */
   if (current == nsfs::EXTENSIONS_BASE) {
     ret = write_attrs(dpp, y);
     if (ret < 0) {
@@ -7677,44 +7686,29 @@ int NSFSBucket::convert_tree(const DoutPrefixProvider* dpp, optional_yield y,
   auto reopen = make_scope_guard(
       [this] { driver->gate_open(get_name()); });
 
-  /* The bucket's own state, before its contents.
+  /* The bucket's own state needs nothing:  it is named in the nsfs
+   * spelling in every format (DECISIONS.md 2026-10-13).
    *
-   * Bucket configuration is the one thing written in the nsfs form while
-   * the bucket is still base, so on disk it carries the base
-   * spelling -- RGW_ATTR_IAM_POLICY as user.nsfs.user.rgw.iam-policy
-   * rather than user.nsfs.rgw.iam-policy, because NooBaa's mapping
-   * prefixes without stripping the nsfs prefix.  An attribute write
-   * merges, so leaving it would let a later write add the second name
-   * and leave the reader choosing between two spellings of one key.
-   *
-   * The profile markers are left alone.  They are not bucket state --
-   * they are the record of which format the bucket is in, which is why
-   * load_bucket erases the mask rather than surfacing it. */
-  std::vector<std::string> markers;
-  {
-    std::string k;
-    if (xattr_strategy()->parse_disk_name(nsfs::EXTENSIONS_XATTR, k)) {
-      markers.push_back(k);
-    }
-    if (xattr_strategy()->parse_disk_name(nsfs::CONVERTING_XATTR, k)) {
-      markers.push_back(k);
-    }
-  }
-
+   * The root object does.  NooBaa stores it as any directory object,
+   * with the bucket's own directory as the directory, so it is
+   * converted as one, before the walk -- which reaches only the
+   * directories beneath.  convert_directory_object() takes nothing under
+   * `user.nsfs.`, which on this directory is the bucket's state. */
   ret = dir->open(dpp);
   if (ret < 0) {
     return ret;
   }
   {
-    nsfs::ConvertEvent ev{};
-    ev.kind = nsfs::ConvertEvent::Kind::bucket;
-    ev.key = get_name();
-
-    ret = convert_attrs(dpp, y, dir->get_fd(), get_name(),
-			driver->get_fs_strategy(), xattr_strategy(), theirs,
-			default_object_owner(dpp, y), cb, ev, &markers);
-    if (ret != 0) {
-      return ret;
+    nsfs::PathStrategy::DirectoryObject dobj{};
+    if (their_paths->directory_object(dpp, dir->get_fd(), dobj)) {
+      ret = convert_directory_object(dpp, y, dir->get_fd(), "/",
+				     driver->get_fs_strategy(), xattr_strategy(),
+				     theirs, default_object_owner(dpp, y),
+				     their_paths, cb, prog,
+				     driver->no_chown_injected());
+      if (ret != 0) {
+	return ret;
+      }
     }
   }
 

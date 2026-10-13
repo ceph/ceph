@@ -5156,6 +5156,89 @@ TEST_F(NSFSNooBaaBucketTest, ADirectoryObjectReadsTheSameBeforeAndAfterConversio
   EXPECT_EQ(c1.listed_mtime, c0.listed_mtime);
 }
 
+/* The root object is converted as the directory object it is:  its
+ * bytes and attributes move to the root's `.folder`, and none of them
+ * become the bucket's (DECISIONS.md 2026-10-13).  Before, the bucket
+ * step took them as bucket attributes and the root object lost its
+ * content type and metadata.  With content and empty, and with bucket
+ * state beside it that must survive as the bucket's. */
+TEST_F(NSFSNooBaaBucketTest, TheRootObjectReadsTheSameBeforeAndAfterConversion)
+{
+  for (const std::string body : {"root bytes", ""}) {
+    SCOPED_TRACE(body.empty() ? "empty" : "with content");
+    /* a fresh bucket each time:  the second case must not see the first */
+    if (sf::exists(bucket_path() / ".folder")) {
+      sf::remove(bucket_path() / ".folder");
+    }
+
+    auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+    if (body.empty()) {
+      /* back to base for the second case;  the bucket is empty but for
+       * the root object, which does not keep a bucket from changing */
+      ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_BASE), 0);
+    }
+
+    bufferlist tag;
+    tag.append("bucket-tag");
+    rgw::sal::Attrs add;
+    add[RGW_ATTR_TAGS] = tag;
+    ASSERT_EQ(bucket->merge_and_store_attrs(env->dpp, add, null_yield), 0);
+    lay_noobaa_directory_object(bucket_path(), body, "text/x-root", "root");
+
+    const ClientView r0 = client_view(bucket.get(), env->dpp, "/");
+    ASSERT_TRUE(r0.exists);
+    EXPECT_EQ(r0.content_type, "text/x-root");
+    EXPECT_EQ(r0.probe, "root");
+
+    ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+
+    const ClientView r1 = client_view(bucket.get(), env->dpp, "/");
+    EXPECT_EQ(r1.exists, r0.exists);
+    EXPECT_EQ(r1.size, r0.size);
+    EXPECT_EQ(r1.content_type, r0.content_type);
+    EXPECT_EQ(r1.probe, r0.probe);
+    EXPECT_EQ(r1.body, r0.body);
+    EXPECT_EQ(r1.etag, r0.etag);
+    EXPECT_EQ(r1.mtime, r0.mtime);
+    EXPECT_FALSE(r1.listed);
+
+    ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+    const auto& battrs = bucket->get_attrs();
+    EXPECT_EQ(battrs.count(RGW_ATTR_CONTENT_TYPE), 0u)
+	<< "the root object's content type became the bucket's";
+    EXPECT_EQ(battrs.count(RGW_ATTR_META_PREFIX "probe"), 0u)
+	<< "the root object's metadata became the bucket's";
+    auto t = battrs.find(RGW_ATTR_TAGS);
+    ASSERT_NE(t, battrs.end()) << "the bucket's own state was lost";
+    EXPECT_EQ(t->second.to_str(), "bucket-tag");
+    EXPECT_LT(::getxattr(bucket_path().c_str(), "user.noobaa.dir_content",
+			 nullptr, 0), 0)
+	<< "the root's marker survived its conversion";
+  }
+}
+
+/* Only what RGW wrote under `user.nsfs.` is the bucket's state.  Any
+ * other name on a bucket directory with no root object marker is
+ * neither bucket state nor an object, and is left as it is. */
+TEST_F(NSFSNooBaaBucketTest, AStrayAttributeOnTheBucketDirectoryIsNotBucketState)
+{
+  const std::string v{"stray"};
+  ASSERT_EQ(::setxattr(bucket_path().c_str(), "user.stray", v.data(),
+		       v.size(), 0), 0);
+
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_EQ(bucket->get_attrs().count(RGW_ATTR_META_PREFIX "stray"), 0u)
+      << "a stray attribute was read as bucket state";
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  EXPECT_EQ(bucket->get_attrs().count(RGW_ATTR_META_PREFIX "stray"), 0u)
+      << "conversion made a stray attribute bucket state";
+  EXPECT_EQ(str_xattr(bucket_path(), "user.stray"), "stray")
+      << "conversion removed a name that was not its to remove";
+}
+
 /* With MD5 on, NooBaa stores the ETag, and conversion carries it across:
  * the ETag recorded for an empty object must not replace it. */
 TEST_F(NSFSNooBaaBucketTest, ConversionKeepsAnEmptyDirectoryObjectsStoredMD5)
@@ -7864,14 +7947,14 @@ public:
   }
 };
 
-/* The bucket's own attributes are converted with its tree.
+/* A bucket's own state is named in the nsfs spelling whatever its format
+ * (DECISIONS.md 2026-10-13), so a base bucket writes it there and the
+ * upgrade has nothing to rewrite.
  *
- * Bucket configuration is the one thing written in the nsfs form while the
- * bucket is still base, so it lands under the base spelling.  An
- * attribute write merges rather than replaces, so a base spelling left
- * behind would be joined by nsfs's on the next write and the reader
- * would have two names for one key. */
-TEST_F(NSFSUpgradeTest, ConvertsTheBucketsOwnAttributes)
+ * Before, a base bucket named it through NooBaa's strategy, which put
+ * RGW_ATTR_IAM_POLICY under `user.nsfs.user.rgw.iam-policy`, and the
+ * upgrade carried a step to respell it. */
+TEST_F(NSFSUpgradeTest, ABaseBucketWritesItsStateInTheNsfsSpelling)
 {
   static constexpr const char* base_name = "user.nsfs.user.rgw.iam-policy";
   static constexpr const char* our_name = "user.nsfs.rgw.iam-policy";
@@ -7883,22 +7966,24 @@ TEST_F(NSFSUpgradeTest, ConvertsTheBucketsOwnAttributes)
   add[RGW_ATTR_IAM_POLICY] = bl;
   ASSERT_EQ(bucket->merge_and_store_attrs(env->dpp, add, null_yield), 0);
 
-  /* the control:  base has to have written the base spelling, or the
-   * assertion after the upgrade cannot fail */
   auto before = xattr_names(bucket_path());
-  ASSERT_TRUE(before.contains(base_name))
-      << "base did not write the base spelling, so this test proves nothing";
-  ASSERT_FALSE(before.contains(our_name));
+  EXPECT_TRUE(before.contains(our_name))
+      << "a base bucket did not write its state in the nsfs spelling";
+  EXPECT_FALSE(before.contains(base_name));
+
+  /* and reads it back, as the bucket it is */
+  ASSERT_EQ(bucket->load_bucket(env->dpp, null_yield), 0);
+  auto p = bucket->get_attrs().find(RGW_ATTR_IAM_POLICY);
+  ASSERT_NE(p, bucket->get_attrs().end()) << "the policy was not read back";
+  EXPECT_EQ(p->second.to_str(), policy);
 
   nsfs::ConvertProgress prog;
   ASSERT_EQ(upgrade(nullptr, &prog), 0);
   ASSERT_TRUE(prog.complete);
 
   auto after = xattr_names(bucket_path());
-  EXPECT_FALSE(after.contains(base_name))
-      << "the base spelling survived the upgrade;  a later write would "
-      << "add ours beside it";
   EXPECT_TRUE(after.contains(our_name));
+  EXPECT_FALSE(after.contains(base_name));
   EXPECT_EQ(str_xattr(bucket_path(), our_name), policy);
 
   /* the profile markers are not bucket state and the pass leaves them
@@ -8096,8 +8181,9 @@ TEST_F(NSFSUpgradeTest, ReportsEachPhase)
 
   nsfs::ConvertProgress prog;
   ASSERT_EQ(upgrade(&cb, &prog), 0);
-  ASSERT_EQ(seen.size(), 9u)
-      << "three phases for the bucket and for each of two objects";
+  /* No bucket phases:  the bucket's own state is in the nsfs spelling
+   * in every format, so there is nothing of it to convert */
+  ASSERT_EQ(seen.size(), 6u) << "three phases for each of two objects";
 
   /* readdir order is the filesystem's, so what is asserted is that
    * each object's three phases arrive together and in order */
