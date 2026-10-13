@@ -5000,6 +5000,32 @@ public:
   sf::path bucket_path() const { return bp / "root" / testname; }
 };
 
+/* Write `body` to `key` with a content type, as a client's PUT does. */
+static void put_object(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
+		       const DoutPrefixProvider* dpp, const ACLOwner& owner,
+		       const std::string& key, const std::string& body,
+		       const std::string& content_type, int expect = 0)
+{
+  auto obj = bucket->get_object(rgw_obj_key(key));
+  auto writer = driver->get_atomic_writer(dpp, null_yield, obj.get(), owner,
+					  nullptr, 0, "put");
+  ASSERT_EQ(writer->prepare(null_yield), 0) << key;
+  bufferlist bl;
+  bl.append(body);
+  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+  ASSERT_EQ(writer->process({}, body.size()), 0);
+  Attrs attrs;
+  bufferlist ct;
+  ct.append(content_type);
+  attrs[RGW_ATTR_CONTENT_TYPE] = ct;
+  ceph::real_time mtime;
+  std::string etag;
+  req_context rctx{dpp, null_yield, nullptr};
+  EXPECT_EQ(writer->complete(body.size(), etag, &mtime, real_time(), attrs,
+			     std::nullopt, real_time(), nullptr, nullptr,
+			     nullptr, nullptr, nullptr, rctx, 0), expect) << key;
+}
+
 /* A directory object as NooBaa lays it down:  the marker and the
  * object's attributes on the directory, and the bytes in `.folder` only
  * when there are any (`namespace_fs.js`, _create_empty_dir_content). */
@@ -5313,6 +5339,103 @@ TEST_F(NSFSNooBaaBucketTest, AWriteToADirectoryObjectIsRefused)
   EXPECT_TRUE(client_view(bucket.get(), env->dpp, "e/").exists);
   EXPECT_FALSE(sf::exists(bucket_path() / "e" / ".folder"))
       << "a sentinel was written into a base bucket";
+}
+
+/* GET a key, optionally a version of it;  "<absent>" when there is none. */
+static std::string read_version(rgw::sal::Bucket* bucket,
+				const DoutPrefixProvider* dpp,
+				const std::string& key, const std::string& vid,
+				std::string* reported = nullptr)
+{
+  auto obj = bucket->get_object(rgw_obj_key(key, vid));
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop(obj->get_read_op());
+  if (rop->prepare(null_yield, dpp) < 0) {
+    return "<absent>";
+  }
+  if (reported) {
+    *reported = obj->get_instance();
+  }
+  bufferlist bl;
+  Read_CB cb(&bl);
+  if (obj->get_size() > 0) {
+    EXPECT_EQ(rop->iterate(dpp, 0, obj->get_size() - 1, &cb, null_yield), 0);
+  }
+  return bl.to_str();
+}
+
+/* The version rows a listing gives for one key, instance -> latest. */
+static std::map<std::string, bool> listed_versions(rgw::sal::Bucket* bucket,
+						   const DoutPrefixProvider* dpp,
+						   const std::string& key)
+{
+  rgw::sal::Bucket::ListParams params;
+  params.list_versions = true;
+  rgw::sal::Bucket::ListResults results;
+  EXPECT_EQ(bucket->list(dpp, params, 1000, results, null_yield), 0);
+  std::map<std::string, bool> out;
+  for (auto& e : results.objs) {
+    if (e.key.name == key) {
+      out[e.key.instance] = e.is_current();
+    }
+  }
+  return out;
+}
+
+/* A version keeps the id it was recorded with (DECISIONS.md 2026-10-13).
+ *
+ * NooBaa records each version's id when it writes it, and the id it
+ * records drops the low bits of the mtime, so one recomputed from the
+ * stat differs.  The recorded id below is deliberately not what the stat
+ * would give.  A client that was handed it must find the version by it
+ * after import, after the next PUT demotes it, and after conversion. */
+TEST_F(NSFSNooBaaBucketTest, AVersionKeepsTheIdItWasRecordedWith)
+{
+  bucket->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+
+  const sf::path cur = bucket_path() / "v";
+  write_file(cur, "first");
+  struct stat st{};
+  ASSERT_EQ(::stat(cur.c_str(), &st), 0);
+  auto b36 = [](uint64_t n) {
+    std::string r;
+    do { r.insert(r.begin(), "0123456789abcdefghijklmnopqrstuvwxyz"[n % 36]); n /= 36; } while (n);
+    return r;
+  };
+  const std::string recorded = "mtime-" + b36(1700000000000000000ull) +
+			       "-ino-" + b36(st.st_ino);
+  ASSERT_EQ(::setxattr(cur.c_str(), "user.noobaa.version_id",
+		       recorded.data(), recorded.size(), 0), 0);
+
+  std::string reported;
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", "", &reported), "first");
+  EXPECT_EQ(reported, recorded) << "HEAD reported an id derived from the stat";
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", recorded), "first")
+      << "the recorded id does not find the current version";
+  auto rows = listed_versions(bucket.get(), env->dpp, "v");
+  EXPECT_TRUE(rows.count(recorded)) << "the listing shows another id";
+
+  /* a new version demotes this one, under the id it was recorded with */
+  put_object(driver.get(), bucket.get(), env->dpp, acl_owner, "v", "second",
+	     "text/plain");
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", recorded), "first")
+      << "the demoted version lost the id the client holds";
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", ""), "second");
+  rows = listed_versions(bucket.get(), env->dpp, "v");
+  ASSERT_TRUE(rows.count(recorded));
+  EXPECT_FALSE(rows[recorded]);
+  EXPECT_EQ(rows.size(), 2u);
+
+  std::string second;
+  read_version(bucket.get(), env->dpp, "v", "", &second);
+
+  /* and conversion keeps both */
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", recorded), "first");
+  std::string after;
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "v", "", &after), "second");
+  EXPECT_EQ(after, second) << "conversion changed the current version's id";
 }
 
 /* A base bucket whose state is where NooBaa keeps it.
@@ -7195,32 +7318,6 @@ TEST_F(NSFSConvertingBucketTest, ReadsTheirDirectoryObjects)
   EXPECT_EQ(c.listed_size, 9u);
 }
 
-/* Write `body` to `key` with a content type, as a client's PUT does. */
-static void put_object(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
-		       const DoutPrefixProvider* dpp, const ACLOwner& owner,
-		       const std::string& key, const std::string& body,
-		       const std::string& content_type, int expect = 0)
-{
-  auto obj = bucket->get_object(rgw_obj_key(key));
-  auto writer = driver->get_atomic_writer(dpp, null_yield, obj.get(), owner,
-					  nullptr, 0, "put");
-  ASSERT_EQ(writer->prepare(null_yield), 0) << key;
-  bufferlist bl;
-  bl.append(body);
-  ASSERT_EQ(writer->process(std::move(bl), 0), 0);
-  ASSERT_EQ(writer->process({}, body.size()), 0);
-  Attrs attrs;
-  bufferlist ct;
-  ct.append(content_type);
-  attrs[RGW_ATTR_CONTENT_TYPE] = ct;
-  ceph::real_time mtime;
-  std::string etag;
-  req_context rctx{dpp, null_yield, nullptr};
-  EXPECT_EQ(writer->complete(body.size(), etag, &mtime, real_time(), attrs,
-			     std::nullopt, real_time(), nullptr, nullptr,
-			     nullptr, nullptr, nullptr, rctx, 0), expect) << key;
-}
-
 /* A write to a directory object the sweep has not reached converts that
  * object first, so its effect is the effect after adoption
  * (DECISIONS.md 2026-10-13).  Each case is read once the write is done
@@ -7305,6 +7402,45 @@ TEST_F(NSFSConvertingBucketTest, AnAttributeWrittenBeforeTheSweepSurvivesIt)
   EXPECT_EQ(v1.etag, v0.etag);
   EXPECT_EQ(v1.mtime, v0.mtime);
   EXPECT_EQ(v1.listed, v0.listed);
+}
+
+/* A file with no recorded id is the null version:  it was placed
+ * outside S3, or written while versioning was disabled (DECISIONS.md
+ * 2026-10-13).  Before, HEAD and the listing reported an id derived from
+ * its stat, while demotion treated it as null. */
+TEST_F(NSFSBucketTest, AFileWithNoRecordedIdIsTheNullVersion)
+{
+  bucket->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  write_file(bp / "root" / testname / "sideloaded", "outside S3");
+
+  std::string reported;
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "sideloaded", "", &reported),
+	    "outside S3");
+  EXPECT_EQ(reported, "null");
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "sideloaded", "null"),
+	    "outside S3");
+  auto rows = listed_versions(bucket.get(), env->dpp, "sideloaded");
+  EXPECT_EQ(rows.size(), 1u);
+  EXPECT_TRUE(rows.count("null")) << "the listing gave it a non-null id";
+}
+
+/* Mid-conversion, an object the sweep has not reached is read under
+ * NooBaa's name for the record. */
+TEST_F(NSFSConvertingBucketTest, AnUnreachedVersionKeepsItsRecordedId)
+{
+  bucket->get_info().flags |= BUCKET_VERSIONED;
+  ASSERT_EQ(bucket->put_info(env->dpp, false, real_time(), null_yield), 0);
+  write_their_object("w");
+  const std::string recorded = "mtime-abc123-ino-def456";
+  ASSERT_EQ(::setxattr((bucket_path() / "w").c_str(), "user.noobaa.version_id",
+		       recorded.data(), recorded.size(), 0), 0);
+
+  std::string reported;
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "w", "", &reported),
+	    "their bytes");
+  EXPECT_EQ(reported, recorded);
+  EXPECT_EQ(read_version(bucket.get(), env->dpp, "w", recorded), "their bytes");
 }
 
 TEST_F(NSFSBucketTest, DoesNotListTheirDirectoryObjectWithoutTheMarker)

@@ -1948,6 +1948,8 @@ public:
    * the driver's for an object with no bucket, which is what a few
    * internal paths construct. */
   nsfs::XattrStrategy* xattr_strategy() const;
+  /* the bucket's fallback, null unless it is mid-conversion */
+  nsfs::XattrStrategy* xattr_fallback() const;
   nsfs::PathStrategy* path_strategy() const;
 
   struct NSFSReadOp : ReadOp {
@@ -2334,6 +2336,8 @@ private:
    * completes into is written in the bucket's format, not the
    * driver's */
   nsfs::XattrStrategy* xattr_strategy() const;
+  /* the bucket's fallback, null unless it is mid-conversion */
+  nsfs::XattrStrategy* xattr_fallback() const;
   nsfs::PathStrategy* path_strategy() const;
 
   /* The directory holding staging directories, where the format keeps

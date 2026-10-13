@@ -379,15 +379,42 @@ static bool nsfs_parse_version_id(const std::string& version_id,
          from_base36(ino_str, info.ino);
 }
 
-static bool is_null_version_fd(int fd, const nsfs::XattrStrategy* xs)
+/* A version's id is the one recorded on it when it was written.
+ *
+ * Both gateways compute an id once, at write, from the new file's stat,
+ * and record it;  NooBaa reports the record (`namespace_fs.js`,
+ * _get_version_id_by_xattr), and so does this.  Reading it rather than
+ * recomputing it keeps the id a client was given:  NooBaa's loses the
+ * low bits of the mtime, so a recomputed one differs, and any id
+ * derived from a stat changes when the mtime or the inode does.
+ *
+ * No record means the null version, in both gateways:  the object was
+ * written while versioning was disabled, or placed outside S3
+ * (DECISIONS.md 2026-10-13).
+ *
+ * `alt` is the fallback strategy, so an object the conversion has not
+ * reached is read under NooBaa's name. */
+static std::string recorded_version_id(int fd, const nsfs::XattrStrategy* xs,
+				       const nsfs::XattrStrategy* alt = nullptr)
 {
-  char buf[256];
-  std::string vid_xattr = xs->disk_name(RGW_NSFS_ATTR_VERSION_ID);
-  ssize_t len = ::fgetxattr(fd, vid_xattr.c_str(), buf, sizeof(buf));
-  if (len <= 0) {
-    return true;
+  for (const nsfs::XattrStrategy* s : {xs, alt}) {
+    if (!s) {
+      continue;
+    }
+    char buf[256];
+    const std::string name = s->disk_name(RGW_NSFS_ATTR_VERSION_ID);
+    const ssize_t len = ::fgetxattr(fd, name.c_str(), buf, sizeof(buf));
+    if (len > 0) {
+      return std::string(buf, len);
+    }
   }
-  return std::string_view(buf, len) == NULL_VERSION_ID;
+  return NULL_VERSION_ID;
+}
+
+static bool is_null_version_fd(int fd, const nsfs::XattrStrategy* xs,
+			       const nsfs::XattrStrategy* alt = nullptr)
+{
+  return recorded_version_id(fd, xs, alt) == NULL_VERSION_ID;
 }
 
 /* The object's own digest, from its etag xattr, or empty if it carries
@@ -1250,7 +1277,8 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
 				  int parent_fd,
 				  const std::string& leaf,
 				  bool ver_enabled,
-				  DemoteResult& result)
+				  DemoteResult& result,
+				  const nsfs::XattrStrategy* alt = nullptr)
 {
   int vfd = open_versions_dir(parent_fd);
   if (vfd < 0) {
@@ -1269,22 +1297,24 @@ static int demote_current_version(const DoutPrefixProvider* dpp,
     return 0;
   }
 
-  bool cur_is_null = false;
+  /* Demoted under the id it was recorded with, so a client holding it
+   * still finds it.  An unreadable file keeps the derived id, which is
+   * what it would be given if it could be read and had none recorded
+   * as a version. */
+  std::string cur_ver_id = nsfs_version_id_from_statx(cur_stx);
   {
     int chk_fd = ::openat(parent_fd, leaf.c_str(), O_RDONLY);
     if (chk_fd >= 0) {
-      cur_is_null = is_null_version_fd(chk_fd, xs);
+      cur_ver_id = recorded_version_id(chk_fd, xs, alt);
       ::close(chk_fd);
     }
   }
+  const bool cur_is_null = (cur_ver_id == NULL_VERSION_ID);
 
   if (!ver_enabled && cur_is_null) {
     return 0;
   }
 
-  std::string cur_ver_id = cur_is_null
-    ? NULL_VERSION_ID
-    : nsfs_version_id_from_statx(cur_stx);
   std::string ver_name = nsfs_ver_entry(leaf, cur_ver_id);
 
   SafeResult sr = fs_strategy->safe_link(
@@ -2260,13 +2290,8 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   if (flags & FLAG_LIST_VERSIONS) {
-    std::string ver_id;
-    if (is_null_version_fd(get_fd(), xattr_strategy)) {
-      ver_id = NULL_VERSION_ID;
-    } else {
-      ver_id = nsfs_version_id_from_statx(stx);
-    }
-    bde.key.instance = ver_id;
+    bde.key.instance = recorded_version_id(get_fd(), xattr_strategy,
+					   xattr_fallback);
     bde.flags = rgw_bucket_dir_entry::FLAG_VER |
                 rgw_bucket_dir_entry::FLAG_CURRENT;
     std::string dm_xattr = xattr_strategy->disk_name(RGW_NSFS_ATTR_DELETE_MARKER);
@@ -9075,7 +9100,9 @@ int NSFSObject::copy_object(const ACLOwner& owner,
       int dret2 = demote_current_version(dpp, driver->get_fs_strategy(),
 			   xattr_strategy(),
 					 dest_parent_fd, dest_leaf,
-					 dest_ver_enabled, demote);
+					 dest_ver_enabled, demote,
+					 static_cast<NSFSBucket*>(dest_bucket)
+					   ->xattr_fallback());
       if (dret2 < 0) {
         return dret2;
       }
@@ -9996,7 +10023,8 @@ int NSFSObject::NSFSFSIOObject::publish(const DoutPrefixProvider* dpp, uint32_t 
     demote_current_version(dpp, driver->get_fs_strategy(),
 			   src_obj->xattr_strategy(),
 			   parent_fd, leaf_name,
-			   binfo.versioning_enabled(), demote);
+			   binfo.versioning_enabled(), demote,
+			   src_obj->xattr_fallback());
   }
   {
 
@@ -10710,10 +10738,18 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
             ent->open(dpp);
             chk_fd = ent->get_fd();
           }
-          cur_matches = (chk_fd >= 0 && is_null_version_fd(chk_fd, xattr_strategy()));
+          cur_matches = (chk_fd >= 0 &&
+			 is_null_version_fd(chk_fd, xattr_strategy(),
+					    xattr_fallback()));
         } else {
-          std::string cur_ver = nsfs_version_id_from_statx(ent->get_stx());
-          cur_matches = (cur_ver == req_ver);
+          int chk_fd = ent->get_fd();
+          if (chk_fd < 0) {
+            ent->open(dpp);
+            chk_fd = ent->get_fd();
+          }
+          cur_matches = (chk_fd >= 0) &&
+			(recorded_version_id(chk_fd, xattr_strategy(),
+					     xattr_fallback()) == req_ver);
         }
       }
 
@@ -11176,8 +11212,16 @@ int NSFSObject::NSFSReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   if (sb && sb->get_info().versioned() &&
       source->get_instance().empty() &&
       source->get_fsent() && source->get_fsent()->exists()) {
+    auto* fe = source->get_fsent();
+    int vfd = fe->get_fd();
+    if (vfd < 0) {
+      fe->open(dpp);
+      vfd = fe->get_fd();
+    }
     source->set_instance(
-      nsfs_version_id_from_statx(source->get_fsent()->get_stx()));
+      (vfd >= 0) ? recorded_version_id(vfd, source->xattr_strategy(),
+				       source->xattr_fallback())
+		 : nsfs_version_id_from_statx(fe->get_stx()));
   }
 
   ret = source->get_obj_attrs(y, dpp);
@@ -11311,6 +11355,12 @@ nsfs::XattrStrategy* NSFSObject::xattr_strategy() const
 {
   auto* b = static_cast<NSFSBucket*>(get_bucket());
   return b ? b->xattr_strategy() : driver->get_xattr_strategy();
+}
+
+nsfs::XattrStrategy* NSFSObject::xattr_fallback() const
+{
+  auto* b = static_cast<NSFSBucket*>(get_bucket());
+  return b ? b->xattr_fallback() : nullptr;
 }
 
 nsfs::PathStrategy* NSFSObject::path_strategy() const
@@ -11697,8 +11747,8 @@ static void cache_promoted_current(NSFSDriver* driver,
      * is_null_version_fd(xs)'s len <= 0 case */
     bool is_null = (vit == pattrs.end()) || (vit->second.length() == 0) ||
                    (vit->second.to_str() == NULL_VERSION_ID);
-    promoted_ver = is_null ? NULL_VERSION_ID
-                           : nsfs_version_id_from_statx(pstx);
+    /* the record, as everywhere an id is reported */
+    promoted_ver = is_null ? NULL_VERSION_ID : vit->second.to_str();
   }
   if (promoted.etag.empty()) {
     auto eit = pattrs.find(RGW_ATTR_ETAG);
@@ -11867,11 +11917,21 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
           ent->open(dpp);
           chk_fd = ent->get_fd();
         }
-        cur_match = (chk_fd >= 0 && is_null_version_fd(chk_fd, source->xattr_strategy()));
+        cur_match = (chk_fd >= 0 &&
+		     is_null_version_fd(chk_fd, source->xattr_strategy(),
+					source->xattr_fallback()));
         ldpp_dout(dpp, 20) << "delete_obj: null version check is_null="
           << cur_match << dendl;
       } else {
-        std::string cur_ver_id = nsfs_version_id_from_statx(ent->get_stx());
+        int chk_fd = ent->get_fd();
+        if (chk_fd < 0) {
+          ent->open(dpp);
+          chk_fd = ent->get_fd();
+        }
+        const std::string cur_ver_id = (chk_fd >= 0)
+          ? recorded_version_id(chk_fd, source->xattr_strategy(),
+				source->xattr_fallback())
+          : nsfs_version_id_from_statx(ent->get_stx());
         cur_match = (req_version_id == cur_ver_id);
         ldpp_dout(dpp, 10) << "delete_obj: cur_ver_id=" << cur_ver_id
           << " cur_match=" << cur_match << dendl;
@@ -12161,7 +12221,8 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
       chk_fd = ent->get_fd();
     }
     if (chk_fd >= 0) {
-      cur_is_null = is_null_version_fd(chk_fd, source->xattr_strategy());
+      cur_is_null = is_null_version_fd(chk_fd, source->xattr_strategy(),
+				       source->xattr_fallback());
     }
   }
 
@@ -12184,9 +12245,19 @@ int NSFSObject::NSFSDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
                 STATX_ALL, &cur_stx) < 0) {
         break;
       }
+      /* the record, read again on each attempt:  a retry follows a
+       * concurrent writer, whose file it may now be */
       std::string cur_ver_id = cur_is_null
         ? NULL_VERSION_ID
         : nsfs_version_id_from_statx(cur_stx);
+      if (!cur_is_null) {
+        int rfd = ::openat(parent_fd, dm_leaf.c_str(), O_RDONLY);
+        if (rfd >= 0) {
+          cur_ver_id = recorded_version_id(rfd, source->xattr_strategy(),
+					   source->xattr_fallback());
+          ::close(rfd);
+        }
+      }
       std::string ver_name = nsfs_ver_entry(dm_leaf, cur_ver_id);
       uint64_t cur_mtime = statx_mtime_ns(cur_stx);
       uint64_t cur_ino = cur_stx.stx_ino;
@@ -13024,7 +13095,7 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     int dret = demote_current_version(dpp, driver->get_fs_strategy(),
 			   xattr_strategy(),
 				      leaf_fd, leaf_name,
-				      ver_enabled, demote);
+				      ver_enabled, demote, xattr_fallback());
     if (dret < 0) {
       return dret;
     }
@@ -13301,6 +13372,12 @@ nsfs::XattrStrategy* NSFSMultipartUpload::xattr_strategy() const
 {
   auto* b = static_cast<NSFSBucket*>(bucket);
   return b ? b->xattr_strategy() : driver->get_xattr_strategy();
+}
+
+nsfs::XattrStrategy* NSFSMultipartUpload::xattr_fallback() const
+{
+  auto* b = static_cast<NSFSBucket*>(bucket);
+  return b ? b->xattr_fallback() : nullptr;
 }
 
 nsfs::PathStrategy* NSFSMultipartUpload::path_strategy() const
@@ -14114,7 +14191,8 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 					obj->xattr_strategy(),
 					parent_fd,
 					obj->get_fsent()->get_name(),
-					ver_enabled, demote);
+					ver_enabled, demote,
+					obj->xattr_fallback());
       if (dret < 0) {
         return dret;
       }
