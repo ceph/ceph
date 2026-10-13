@@ -46,7 +46,7 @@ int ErasureCodeLrc::create_rule(const string &name,
                                 const string &root,
                                 const string &zone_failure_domain,
                                 const string &osd_failure_domain,
-                                const string &device_class,
+                                const std::optional<string> &device_class,
                                 CrushWrapper &crush,
                                 ostream *ss) const
 {

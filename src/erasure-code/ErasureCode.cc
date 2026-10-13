@@ -87,10 +87,13 @@ int ErasureCode::create_rule(
   const std::string &root,
   const std::string &zone_failure_domain,
   const std::string &osd_failure_domain,
-  const std::string &device_class,
+  const std::optional<std::string> &device_class,
   CrushWrapper &crush,
   std::ostream *ss) const
 {
+  // std::nullopt inherits the profile's crush-device-class; an explicit value
+  // (including an empty string, meaning no device class) is used verbatim.
+  const std::string rule_class = device_class.value_or(rule_device_class);
   if (num_zones > 1) {
     // the Monitor resolves the zone type of a pool over zones
     if (zone_failure_domain.empty()) {
@@ -107,7 +110,7 @@ int ErasureCode::create_rule(
       osd_failure_domain.empty() ? rule_osd_failure_domain : osd_failure_domain,
       num_zones,
       k + m,
-      device_class.empty() ? rule_device_class : device_class,
+      rule_class,
       "indep",
       pg_pool_t::TYPE_ERASURE,
       false,
@@ -116,10 +119,10 @@ int ErasureCode::create_rule(
   if (rule_osds_per_failure_domain <= 1) {
     return crush.add_simple_rule(
       name,
-      rule_root,
-      rule_osd_failure_domain,
+      root.empty() ? rule_root : root,
+      osd_failure_domain.empty() ? rule_osd_failure_domain : osd_failure_domain,
       rule_num_osd_failure_domains,
-      rule_device_class,
+      rule_class,
       "indep",
       pg_pool_t::TYPE_ERASURE,
       ss);
@@ -133,11 +136,11 @@ int ErasureCode::create_rule(
     }
     return crush.add_indep_multi_osd_per_failure_domain_rule(
       name,
-      rule_root,
-      rule_osd_failure_domain,
+      root.empty() ? rule_root : root,
+      osd_failure_domain.empty() ? rule_osd_failure_domain : osd_failure_domain,
       rule_num_osd_failure_domains,
       rule_osds_per_failure_domain,
-      rule_device_class,
+      rule_class,
       ss);
   }
 }

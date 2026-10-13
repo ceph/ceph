@@ -53,7 +53,7 @@ public:
                   const std::string &root,
                   const std::string &zone_failure_domain,
                   const std::string &osd_failure_domain,
-                  const std::string &device_class,
+                  const std::optional<std::string> &device_class,
                   CrushWrapper &crush,
                   std::ostream *ss) const override {
     return 0;
