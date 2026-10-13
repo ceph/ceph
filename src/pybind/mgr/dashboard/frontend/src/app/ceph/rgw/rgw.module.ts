@@ -56,7 +56,11 @@ import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-pr
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
 import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
+import { NfsModule } from '../nfs/nfs.module';
 import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
+import { NfsClusterResourcePageComponent } from '../nfs/nfs-cluster-resource-page/nfs-cluster-resource-page.component';
+import { NfsClusterResourceSidebarComponent } from '../nfs/nfs-cluster-resource-sidebar/nfs-cluster-resource-sidebar.component';
+import { NfsClusterResourceBreadcrumbResolver } from '../nfs/nfs-cluster-resource-page/nfs-cluster-resource-breadcrumb.resolver';
 import { RgwMultisiteSyncPolicyComponent } from './rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 import { RgwMultisiteSyncPolicyFormComponent } from './rgw-multisite-sync-policy-form/rgw-multisite-sync-policy-form.component';
 import { RgwConfigurationPageComponent } from './rgw-configuration-page/rgw-configuration-page.component';
@@ -144,6 +148,7 @@ import { RgwBucketResourceSidebarComponent } from './rgw-bucket-resource-sidebar
 import { RgwBucketResourcePageComponent } from './rgw-bucket-resource-page/rgw-bucket-resource-page.component';
 import { RgwBucketResourceBreadcrumbResolver } from './rgw-bucket-resource-page/rgw-bucket-resource-breadcrumb.resolver';
 import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-tags-table.component';
+import { NfsClusterFormComponent } from '../nfs/nfs-cluster-form/nfs-cluster-form.component';
 
 @NgModule({
   imports: [
@@ -189,7 +194,8 @@ import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-
     TimePickerComponent,
     AreaChartComponent,
     ComponentsModule,
-    ContentSwitcherModule
+    ContentSwitcherModule,
+    NfsModule
   ],
   exports: [
     RgwDaemonResourcePageComponent,
@@ -568,9 +574,37 @@ const routes: Routes = [
       breadcrumbs: 'NFS'
     },
     children: [
-      { path: '', component: NfsClusterComponent },
+      { path: '', redirectTo: 'cluster', pathMatch: 'full' },
       {
-        path: URLVerbs.CREATE,
+        path: 'cluster',
+        data: { breadcrumbs: 'Service clusters' },
+        children: [
+          { path: '', component: NfsClusterComponent },
+          {
+            path: ':cluster_id',
+            component: NfsClusterResourceSidebarComponent,
+            data: {
+              breadcrumbs: NfsClusterResourceBreadcrumbResolver,
+              showBreadcrumbsLayout: false
+            },
+            children: [
+              { path: '', redirectTo: 'overview', pathMatch: 'full' },
+              {
+                path: 'overview',
+                component: NfsClusterResourcePageComponent,
+                data: { breadcrumbs: 'Overview', section: 'overview' }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        path: `${URLVerbs.EDIT}/:cluster_id`,
+        component: NfsClusterFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: `${URLVerbs.CREATE}/:cluster_id`,
         component: NfsFormComponent,
         data: { breadcrumbs: ActionLabels.CREATE }
       },
