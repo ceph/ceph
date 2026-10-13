@@ -23,6 +23,7 @@
 #include "CInode.h"
 #include "Mutation.h"
 
+#include "MDSContext.h"
 #include "MDSMap.h"
 #include "MDSRank.h"
 #include "MDCache.h"
@@ -32,6 +33,8 @@
 #include "MDBalancer.h"
 #include "SnapClient.h"
 #include "SnapRealm.h"
+#include "cephfs_features.h" // for CEPHFS_FEATURE_REPLY_ENCODING
+
 #include "events/EMetaBlob.h"
 
 #include "common/bloom_filter.hpp"

@@ -2089,7 +2089,7 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   }
 
   ldpp_dout(dpp, 20) << "root_fd: " << root_dir->get_fd() << dendl;
-  quota_handler = RGWQuotaHandler::generate_handler(dpp, this, true);
+  quota_handler = RGWQuotaHandler::generate_handler(this, true);
 
   ldpp_dout(dpp, 20) << "SUCCESS" << dendl;
   return 0;

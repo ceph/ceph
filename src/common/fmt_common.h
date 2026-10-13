@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <fmt/base.h>
 #include <optional>
 #include <type_traits>
 
@@ -11,6 +10,7 @@
  * \file default fmtlib formatters for specifically-tagged types
  */
 #include <fmt/compile.h>
+#include <fmt/core.h>
 #include <fmt/format.h>
 
 /**
@@ -24,7 +24,7 @@
 // TODO: drop me once fmt v11 is required
 namespace fmt {
   template <typename T, typename Char = char>
-  concept formattable = is_formattable<std::remove_reference_t<T>, Char>::value>;
+  concept formattable = is_formattable<std::remove_reference_t<T>, Char>::value;
 }
 #endif
 

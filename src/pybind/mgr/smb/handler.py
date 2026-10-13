@@ -63,7 +63,7 @@ from .proto import (
     Simplified,
 )
 from .resources import SMBResource
-from .results import ErrorResult, Result, ResultGroup
+from .results import ErrorResult, ResourceResult, Result, ResultGroup
 from .rgw_auth import RGWAuthorizer
 from .staging import (
     Staging,
@@ -403,6 +403,7 @@ class ClusterConfigHandler:
             with _store_transaction(staging.destination_store):
                 results = staging.save()
                 staging.prune_linked_entries()
+            _reconcile_store(staging.destination_store)
             with _store_transaction(staging.destination_store):
                 self._sync_modified(results)
         return results
@@ -486,9 +487,8 @@ class ClusterConfigHandler:
         log.debug('staging resource: %r', resource)
         if create_only:
             if not staging.is_new(resource):
-                return Result(
+                return ErrorResult(
                     resource,
-                    success=False,
                     msg='a resource with the same ID already exists',
                 )
         try:
@@ -506,7 +506,7 @@ class ClusterConfigHandler:
             log.debug('rejected resource: %r', resource)
             return err
         log.debug('checked resource: %r', resource)
-        result = Result(resource, success=True, status={'checked': True})
+        result = ResourceResult.checked(resource)
         return result
 
     def _choose_path_resolver(
@@ -629,7 +629,7 @@ class ClusterConfigHandler:
         chg_tls_ids: Set[str] = set()
         chg_rgw_cred_ids: Set[str] = set()
         chg_extc_ids: Set[str] = set()
-        for result in updated:
+        for result in updated.resources():
             state = (result.status or {}).get('state', None)
             if state in (State.PRESENT, State.NOT_PRESENT):
                 # these are the no-change states. we can ignore them
@@ -985,7 +985,8 @@ def _generate_rgw_share(
         # smb.conf options
         'options': {
             'path': '/',
-            'vfs objects': 'ceph_rgw',
+            'vfs objects': 'acl_xattr ceph_rgw',
+            'acl_xattr:security_acl_name': 'user.NTACL',
             'ceph_rgw:bucket': rgw.bucket,
             'ceph_rgw:user_id': user_id,
             # Credential values are left empty here; they are injected at
@@ -1588,7 +1589,9 @@ def _save_pending_rgw_config(
     """
     cluster_id = cluster_conf.resource.cluster_id
     rgw_shares = [s for s in cluster_conf.shares if s.resource.rgw]
-    if not rgw_shares:
+    centry = store[external.rgw_config_key(cluster_id)]
+    if not rgw_shares and not centry.exists():
+        # cluster never had RGW shares, so no stub needed
         return
     cred_map = {
         c.rgw_credential_id: c
@@ -1619,7 +1622,6 @@ def _save_pending_rgw_config(
         'samba-container-config': 'v0',
         'config:merge': {'shares': merge_shares},
     }
-    centry = store[external.rgw_config_key(cluster_id)]
     centry.set(stub)
     cluster_conf.change_group.cache_updated_entry(centry)
 
@@ -1660,6 +1662,21 @@ def _store_transaction(store: ConfigStore) -> Iterator[None]:
     log.debug("Using store transaction")
     with transaction():
         yield None
+
+
+def _reconcile_store(store: ConfigStore) -> None:
+    """Fix any mismatches between the store and its mirror copy, if the
+    store supports it.
+    """
+    reconcile = getattr(store, 'reconcile', None)
+    if not reconcile:
+        log.debug("No reconcile support for store")
+        return
+    log.debug("Reconciling store")
+    try:
+        reconcile()
+    except Exception:
+        log.exception("reconcile() failed; continuing")
 
 
 def _has_proxied_vfs(change_group: ClusterChangeGroup) -> bool:

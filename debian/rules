@@ -5,6 +5,14 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 include /usr/share/dpkg/default.mk
 
+# gcc 15's fat LTO objects leave std::_Sp_counted_base::_M_release_last_use_cold
+# unresolved when linking our static convenience libraries (first seen on
+# Ubuntu 26.04, whose dpkg enables -flto=auto -ffat-lto-objects by default),
+# so opt deb builds out of LTO on gcc >= 15.
+ifeq ($(shell expr $(shell gcc -dumpversion | cut -d. -f1) \>= 15),1)
+  export DEB_BUILD_MAINT_OPTIONS += optimize=-lto
+endif
+
 ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # dh_auto_build sets LDFLAGS with `dpkg-buildflags --get LDFLAGS` on ubuntu,
   # which makes the application aborts when the shared library throws
@@ -39,6 +47,8 @@ else
   extraopts += -DWITH_RBD_RWL=OFF
 endif
 extraopts += -DWITH_RBD_SSD_CACHE=ON
+# Debian still targets the x86-64 baseline, so give up the hardware CRC32C.
+extraopts += -DROCKSDB_PORTABLE=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/libexec

@@ -6,7 +6,7 @@ Feature: Testing Rook orchestrator commands
           """
           ceph health | grep HEALTH
           """
-      Then I get
+      Then I get something like
           """
           HEALTH_OK
           """

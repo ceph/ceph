@@ -87,9 +87,10 @@ export class NfsService extends ApiClient {
     });
   }
 
-  listClusters() {
-    return this.http.get(`${this.apiPath}/cluster`, {
-      headers: { Accept: this.getVersionHeaderValue(0, 1) }
+  listClusters(info = true): Observable<NFSCluster[]> {
+    return this.http.get<NFSCluster[]>(`${this.apiPath}/cluster`, {
+      headers: { Accept: this.getVersionHeaderValue(0, 1) },
+      params: { info: String(info) }
     });
   }
 
@@ -106,12 +107,5 @@ export class NfsService extends ApiClient {
 
   filesystems() {
     return this.http.get(`${this.uiApiPath}/cephfs/filesystems`);
-  }
-
-  nfsClusterList(): Observable<NFSCluster[]> {
-    return this.http.get<NFSCluster[]>(`${this.apiPath}/cluster`, {
-      headers: { Accept: this.getVersionHeaderValue(0, 1) },
-      params: { info: true }
-    });
   }
 }

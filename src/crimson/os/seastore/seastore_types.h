@@ -137,6 +137,12 @@ struct device_id_printer_t {
 
 std::ostream &operator<<(std::ostream &out, const device_id_printer_t &id);
 
+std::optional<device_id_t> parse_device_id(
+  const seastar::sstring &name,
+  device_id_t base);
+
+constexpr std::string CACHE_DEV_PREFIX = "block_cache";
+
 // 1 bit in paddr_t to identify the absolute physical address type
 enum class paddr_types_t {
   SEGMENT = 0,
@@ -964,9 +970,6 @@ enum class device_type_t : uint8_t {
   ZBD,            // ZNS SSD or SMR HDD
   EPHEMERAL_COLD,
   EPHEMERAL_MAIN,
-  RANDOM_BLOCK_SSD,
-  RANDOM_BLOCK_EPHEMERAL,
-  RANDOM_BLOCK_HDD,
   NUM_TYPES
 };
 
@@ -977,8 +980,8 @@ device_type_t string_to_device_type(std::string type);
 
 enum class backend_type_t : uint8_t {
   NONE,
-  SEGMENTED,    // SegmentManager: SSD, ZBD, HDD
-  RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
+  SEGMENTED,    // SegmentManager: BlockSegmentManager, ZBDSegmentManager
+  RANDOM_BLOCK  // RBMDevice:      NVMeBlockDevice, RotationalDevice
 };
 
 std::ostream& operator<<(std::ostream& out, backend_type_t);
@@ -2547,11 +2550,11 @@ using backref_root_t = phy_tree_root_t;
  * TODO: generalize this to permit more than one lba_manager implementation
  */
 struct __attribute__((packed)) root_t {
-  backref_root_t backref_root;
-  lba_root_t lba_root;
-  laddr_le_t onode_root;
-  coll_root_le_t collection_root;
-  laddr_le_t meta;
+  backref_root_t backref_root;          // Backref tree root
+  lba_root_t lba_root;                  // LBA tree root
+  laddr_le_t meta_onode_root;           // Meta Collection root
+  coll_root_le_t collection_root;       // Collection map extent
+  laddr_le_t meta;                      // RootMetaBlock root
 
   root_t() = default;
 

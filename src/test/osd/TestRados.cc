@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "test/osd/RadosModel.h"
+#include "test/osd/RadosTestHelpers.h"
 
 using namespace std;
 
@@ -566,6 +567,7 @@ int main(int argc, char **argv)
   bool no_sparse = false;
   bool balance_reads = false;
   bool localize_reads = false;
+  uint64_t min_split_size = UINT64_MAX;
   uint8_t offlen_randomization_ratio = 50;
   bool set_redirect = false;
   bool set_chunk = false;
@@ -602,6 +604,8 @@ int main(int argc, char **argv)
       no_sparse = true;
     else if (strcmp(argv[i], "--balance-reads") == 0)
       balance_reads = true;
+    else if (strcmp(argv[i], "--min-split-size") == 0)
+      min_split_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--localize-reads") == 0)
       localize_reads = true;
     else if (strcmp(argv[i], "--offlen_randomization_ratio") == 0)
@@ -618,7 +622,6 @@ int main(int argc, char **argv)
 	exit(1);
       }
       ec_pool = true;
-      no_omap = true;
       no_sparse = true;
     } else if (strcmp(argv[i], "--op") == 0) {
       i++;
@@ -763,6 +766,7 @@ int main(int argc, char **argv)
     chunk_algo,
     chunk_size,
     max_attr_len,
+    min_split_size,
     id);
 
   TestOpStat stats;
@@ -778,6 +782,20 @@ int main(int argc, char **argv)
 	 << cpp_strerror(r) << std::endl;
     exit(1);
   }
+
+  // Query pool's supports_omap flag if user didn't explicitly set --no-omap
+  if (!no_omap) {
+    auto result = query_pool_flag(pool_name, "supports_omap", context.rados);
+    if (!result) {
+      cerr << "Warning: failed to query supports_omap for pool " << pool_name
+           << ": " << cpp_strerror(result.error()) << std::endl;
+    } else if (!result.value()) {
+      cout << "Pool " << pool_name << " does not support omap, setting no_omap=true" << std::endl;
+      no_omap = true;
+      context.set_no_omap(true);
+    }
+  }
+
   context.loop(&gen);
   if (enable_dedup) {
     if (!context.check_chunks_refcount(context.low_tier_io_ctx, context.io_ctx)) {

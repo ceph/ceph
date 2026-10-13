@@ -21,16 +21,17 @@
       >
         Maximum Read Ops
       </td>
-      <td *ngIf="!rateLimitConfig.enabled">-</td>
-      <td
-        *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_read_ops <= 0"
-        i18n
-      >
-        Unlimited
-      </td>
-      <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_read_ops > 0">
-        {{ rateLimitConfig.max_read_ops }}
-      </td>
+      @if (!rateLimitConfig.enabled) {
+        <td>-</td>
+      }
+      @if (rateLimitConfig.enabled && rateLimitConfig.max_read_ops <= 0) {
+        <td i18n>Unlimited</td>
+      }
+      @if (rateLimitConfig.enabled && rateLimitConfig.max_read_ops > 0) {
+        <td>
+          {{ rateLimitConfig.max_read_ops }}
+        </td>
+      }
     </tr>
     <tr>
       <td
@@ -39,16 +40,17 @@
       >
         Maximum Write Ops
       </td>
-      <td *ngIf="!rateLimitConfig.enabled">-</td>
-      <td
-        *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_write_ops <= 0"
-        i18n
-      >
-        Unlimited
-      </td>
-      <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_write_ops > 0">
-        {{ rateLimitConfig.max_write_ops }}
-      </td>
+      @if (!rateLimitConfig.enabled) {
+        <td>-</td>
+      }
+      @if (rateLimitConfig.enabled && rateLimitConfig.max_write_ops <= 0) {
+        <td i18n>Unlimited</td>
+      }
+      @if (rateLimitConfig.enabled && rateLimitConfig.max_write_ops > 0) {
+        <td>
+          {{ rateLimitConfig.max_write_ops }}
+        </td>
+      }
     </tr>
     <tr>
       <td
@@ -57,16 +59,17 @@
       >
         Maximum Read Bytes
       </td>
-      <td *ngIf="!rateLimitConfig.enabled">-</td>
-      <td
-        *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_read_bytes <= 0"
-        i18n
-      >
-        Unlimited
-      </td>
-      <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_read_bytes > 0">
-        {{ rateLimitConfig.max_read_bytes | dimlessBinaryPerMinute }}
-      </td>
+      @if (!rateLimitConfig.enabled) {
+        <td>-</td>
+      }
+      @if (rateLimitConfig.enabled && rateLimitConfig.max_read_bytes <= 0) {
+        <td i18n>Unlimited</td>
+      }
+      @if (rateLimitConfig.enabled && rateLimitConfig.max_read_bytes > 0) {
+        <td>
+          {{ rateLimitConfig.max_read_bytes | dimlessBinaryPerMinute }}
+        </td>
+      }
     </tr>
     <tr>
       <td
@@ -75,16 +78,17 @@
       >
         Maximum Write Bytes
       </td>
-      <td *ngIf="!rateLimitConfig.enabled">-</td>
-      <td
-        *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_write_bytes <= 0"
-        i18n
-      >
-        Unlimited
-      </td>
-      <td *ngIf="rateLimitConfig.enabled && rateLimitConfig.max_write_bytes > 0">
-        {{ rateLimitConfig.max_write_bytes | dimlessBinaryPerMinute }}
-      </td>
+      @if (!rateLimitConfig.enabled) {
+        <td>-</td>
+      }
+      @if (rateLimitConfig.enabled && rateLimitConfig.max_write_bytes <= 0) {
+        <td i18n>Unlimited</td>
+      }
+      @if (rateLimitConfig.enabled && rateLimitConfig.max_write_bytes > 0) {
+        <td>
+          {{ rateLimitConfig.max_write_bytes | dimlessBinaryPerMinute }}
+        </td>
+      }
     </tr>
   </tbody>
 </table>

@@ -387,6 +387,48 @@ values to their defaults or to a level suitable for normal operations.
 | ``trace``                |     1     |      5       |
 +--------------------------+-----------+--------------+
 
+.. _high-debug-level-guard:
+
+Guarding Against High Debug Levels
+----------------------------------
+
+A subsystem left at a high log level (for example, ``debug_osd 20``) after a
+debugging session can generate enough log output to saturate the log device
+and slow the daemon down. Ceph OSDs and Ceph Monitors can detect such levels,
+raise a health warning, and revert them automatically. The guard is disabled
+by default. To enable it, set :confval:`high_debug_level_threshold` to a
+non-zero log level:
+
+.. prompt:: bash $
+
+   ceph config set global high_debug_level_threshold 10
+
+When any subsystem's log level is at or above the threshold, the
+``HIGH_DEBUG_LEVEL`` health check is raised (see :ref:`health-checks`). Only
+the log level is checked; the memory level is not, because in-memory logs are
+not written to the output log during normal operation.
+
+After a subsystem has stayed at or above the threshold for
+:confval:`high_debug_level_reset_timeout` (300 seconds by default), the daemon
+reverts it to the last log and memory levels it had below the threshold, and
+logs a message similar to the following::
+
+   Auto-reverted debug_osd from 20 to 1/5 after 300s (high_debug_level_threshold=10)
+
+If the daemon started with the subsystem already above the threshold, it
+reverts to the subsystem's default levels. Lowering the level manually before
+the timeout expires cancels the pending revert. To raise the health warning
+without reverting, set :confval:`high_debug_level_reset_timeout` to ``0``.
+
+The revert changes only the running value in the daemon, in the same way as
+``ceph tell <daemon> config set``. If the high level was set in the central
+configuration database (for example, with ``ceph config set osd debug_osd
+20``), remove it with ``ceph config rm`` so that it is not applied again when
+the daemon restarts.
+
+.. confval:: high_debug_level_threshold
+.. confval:: high_debug_level_reset_timeout
+
 
 Logging and Debugging Settings
 ------------------------------

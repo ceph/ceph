@@ -85,7 +85,9 @@ class NodeProxy(ContainerDaemonForm):
             {
                 os.path.join(
                     data_dir, 'node-proxy.json'
-                ): '/usr/share/ceph/node-proxy.json:z'
+                ): '/usr/share/ceph/node-proxy.json:z',
+                # FCM stats open /dev/nvme* after hotplug.
+                '/dev': '/dev',
             }
         )
 

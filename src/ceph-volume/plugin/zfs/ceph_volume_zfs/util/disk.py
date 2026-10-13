@@ -39,10 +39,10 @@ def geom_disk_parser(block):
         except ValueError:
             continue
         # fixup
-        column = re.sub("\s+", "", column)
-        column= re.sub("^[0-9]+\.", "", column)
+        column = re.sub(r"\s+", "", column)
+        column = re.sub(r"^[0-9]+\.", "", column)
         value = value.strip()
-        value = re.sub('\([0-9A-Z]+\)', '', value)
+        value = re.sub(r"\([0-9A-Z]+\)", '', value)
         parsed[column.lower()] = value
     return parsed
 

@@ -41,9 +41,11 @@
 #include "msg/msg_types.h"
 #include "include/common_fwd.h" // for CephContext
 #include "include/compat.h"
-#include "include/types.h"
+#include "include/container_ios.h"
+#include "include/errorcode32.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
+#include "common/bitset_set.h"
 #include "common/dout.h"
 #include "common/histogram.h" // for pow2_hist_t
 #include "include/interval_set.h"
@@ -57,6 +59,8 @@
 #include "librados/ListObjectImpl.h"
 #include "pg_features.h"
 #include "ECTypes.h"
+
+class CrushWrapper;
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -379,6 +383,7 @@ enum {
   CEPH_OSD_RMW_FLAG_EC_DIRECT_READ  = (1 << 13),
   CEPH_OSD_RMW_FLAG_EC_SYNC_READ    = (1 << 14),
   CEPH_OSD_RMW_FLAG_CLASS_READ_DATA = (1 << 15),
+  CEPH_OSD_RMW_FLAG_PRIMARY_ONLY    = (1 << 16),
 };
 
 
@@ -1782,7 +1787,20 @@ public:
 
   pg_pool_t() = default;
 
-  void dump(ceph::Formatter *f) const;
+  // When `crush` is non-null, `show_rule_names` is true, and the
+  // pool's crush rule still exists, an extra `crush_rule_name`
+  // string is emitted alongside the (always-int) `crush_rule`
+  // field. Defaults preserve the existing JSON schema.
+  void dump(ceph::Formatter *f,
+            const CrushWrapper *crush = nullptr,
+            bool show_rule_names = false) const;
+
+  // Renders the pool fields used by `pg_pool_t`'s stream operator
+  // (which delegates here with `crush == nullptr`). When `crush`
+  // is non-null and the pool's rule still exists, `crush_rule` is
+  // rendered as the rule name instead of the numeric id; otherwise
+  // the numeric id is used so the output is never misleading.
+  void print(std::ostream& out, const CrushWrapper *crush = nullptr) const;
 
   const utime_t &get_create_time() const { return create_time; }
   uint64_t get_flags() const { return flags; }
@@ -1847,6 +1865,10 @@ public:
 
   bool allows_ecoptimizations() const {
     return has_flag(FLAG_EC_OPTIMIZATIONS);
+  }
+
+  bool allows_nonprimary_reads() const {
+    return !is_tier() && !has_tiers() && (get_dedup_tier() <= 0);
   }
 
   bool is_crimson() const {

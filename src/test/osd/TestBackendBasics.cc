@@ -71,6 +71,7 @@ public:
       ec_plugin = config.ec_plugin;
       ec_technique = config.ec_technique;
       pool_flags = config.pool_flags;
+      num_zones = config.num_zones;
     } else {
       num_replicas = 3;
       min_size = 2;
@@ -87,16 +88,16 @@ public:
    * This is similar to TestECFailover::simulate_osd_failure but handles
    * multiple failures at once.
    */
-  void simulate_multiple_osd_failures(const std::vector<int>& failed_osds) {
+  void simulate_multiple_osd_failures(const std::set<int>& failed_osds) {
     auto new_osdmap = std::make_shared<OSDMap>();
     new_osdmap->deepish_copy_from(*osdmap);
 
     // Build new acting set with failed OSDs replaced by CRUSH_ITEM_NONE
     std::vector<int> new_acting;
-    int total_osds = k + m;
-    
+    int total_osds = num_zones * (k + m);
+
     for (int i = 0; i < total_osds; i++) {
-      bool is_failed = std::find(failed_osds.begin(), failed_osds.end(), i) != failed_osds.end();
+      bool is_failed = failed_osds.contains(i);
       new_acting.push_back(is_failed ? CRUSH_ITEM_NONE : i);
     }
     
@@ -126,11 +127,7 @@ public:
 
     // Update listener shardsets to remove failed shards
     for (int failed_osd : failed_osds) {
-      pg_shard_t failed_shard(failed_osd, shard_id_t(failed_osd));
-      for (auto& [instance_id, list] : listeners) {
-        list->shardset.erase(failed_shard);
-        list->acting_recovery_backfill_shard_id_set.erase(shard_id_t(failed_osd));
-      }
+      remove_shard_from_all_listeners(pg_shard_t(failed_osd, shard_id_t(failed_osd)));
     }
 
     // update_osdmap will query the OSDMap to determine the primary
@@ -182,7 +179,7 @@ TEST_P(TestBackendBasics, WriteThenRead) {
   primary_listener->sent_messages_with_dest.clear();
 
   // Verify object can be read back correctly
-  verify_object(obj_name, test_data, 0, test_data.size());
+  verify_object(obj_name);
 
   // For EC backends: verify read messages were sent to shards
   if (backend_config.pool_type == EC) {
@@ -330,50 +327,53 @@ TEST_P(TestBackendBasics, DirectRead) {
   hobject_t hoid = make_test_object(obj_name);
 
   // Perform direct reads to each data shard (skip coding shards)
-  for (auto& [shard_id, backend] : backends) {
+  for (auto& [shard_id, osd_fixture] : osd_fixtures) {
     // Skip coding shards - only test data shards
     if (shard_id >= k) {
       continue;
     }
 
-    ASSERT_TRUE(backend != nullptr) << "Backend for shard " << shard_id << " should not be null";
-    
-    ECSwitch* ec_switch = dynamic_cast<ECSwitch*>(backend.get());
-    ASSERT_TRUE(ec_switch != nullptr) << "Backend should be ECSwitch for EC pools";
-
-    bufferlist shard_data;
-    
-    // Perform sync read with EC_DIRECT_READ flag
-    // Read the entire stripe - we expect only this shard's data back
-    int read_result = ec_switch->objects_read_local(
-      hoid,
-      0,                                    // offset
-      stripe_width,                         // length (full stripe)
-      CEPH_OSD_RMW_FLAG_EC_DIRECT_READ,    // op_flags with direct read flag
-      &shard_data
-    );
-
-    EXPECT_GE(read_result, 0)
-      << param.label << " direct read to shard " << shard_id << " should complete successfully";
-
-    if (obj_name == "test_direct_read_EC_ISA_Opt_k4m2_su4k_4k")
+    for (auto& [spgid, test_pg] : osd_fixture->pgs)
     {
-      std::cout << obj_name << " is the test of interest" << std::endl;
-    }
+      if (test_pg && test_pg->has_backend())
+      {
+        PGBackend* backend = test_pg->backend.get();
+        ASSERT_TRUE(backend != nullptr) << "Backend for shard " << shard_id << " should not be null";
 
-    // For direct reads, we expect to get back only the data for this shard
-    // which is one stripe_unit
-    ASSERT_EQ(shard_data.length(), stripe_unit)
-      << param.label << " shard " << shard_id << " should return " << stripe_unit << " bytes";
+        ECSwitch* ec_switch = dynamic_cast<ECSwitch*>(backend);
+        ASSERT_TRUE(ec_switch != nullptr) << "Backend should be ECSwitch for EC pools";
 
-    // Verify data integrity: this shard should contain the expected pattern
-    const char* buf = shard_data.c_str();
-    char expected_char = 'A' + (shard_id % 26);
-    
-    for (size_t i = 0; i < stripe_unit; i++) {
-      ASSERT_EQ(buf[i], expected_char)
-        << param.label << " shard " << shard_id << " byte " << i
-        << " should be '" << expected_char << "'";
+        bufferlist shard_data;
+
+        // Perform sync read with EC_DIRECT_READ flag
+        // Read the entire stripe - we expect only this shard's data back
+        int read_result = ec_switch->objects_read_local(
+          hoid,
+          0, // offset
+          stripe_width, // length (full stripe)
+          CEPH_OSD_RMW_FLAG_EC_DIRECT_READ, // op_flags with direct read flag
+          &shard_data
+        );
+
+        EXPECT_GE(read_result, 0)
+          << param.label << " direct read to shard " << shard_id << " should complete successfully";
+
+        // For direct reads, we expect to get back only the data for this shard
+        // which is one stripe_unit
+        ASSERT_EQ(shard_data.length(), stripe_unit)
+          << param.label << " shard " << shard_id << " should return " << stripe_unit << " bytes";
+
+        // Verify data integrity: this shard should contain the expected pattern
+        const char* buf = shard_data.c_str();
+        char expected_char = 'A' + (shard_id % 26);
+
+        for (size_t i = 0; i < stripe_unit; i++)
+        {
+          ASSERT_EQ(buf[i], expected_char)
+            << param.label << " shard " << shard_id << " byte " << i
+            << " should be '" << expected_char << "'";
+        }
+      }
     }
   }
 
@@ -382,6 +382,105 @@ TEST_P(TestBackendBasics, DirectRead) {
   if (primary_listener) {
     primary_listener->sent_messages.clear();
   }
+}
+
+TEST_P(TestBackendBasics, TruncateGrowWithSuspendedReads)
+{
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "TruncateGrowWithSuspendedReads test only applies to EC backends";
+  }
+
+  const uint64_t chunk_size = stripe_unit;
+  const uint64_t stripe_width = get_stripe_width();
+
+  std::string obj = "delayed_x_" + backend_config.label;
+
+  uint64_t object_size = stripe_width * 2;
+  {
+    std::string data(object_size, 'A');
+    ASSERT_EQ(0, create_and_write(obj, data));
+  }
+
+  {
+    auto new_osdmap = std::make_shared<OSDMap>();
+    new_osdmap->deepish_copy_from(*osdmap);
+    new_osdmap->inc_epoch();
+    update_osdmap(new_osdmap);
+  }
+
+  event_loop->suspend_to_osd(0);
+
+  {
+    std::string data(chunk_size, 'B');
+    ASSERT_EQ(-EINPROGRESS, write(obj, stripe_width - chunk_size, data, object_size));
+  }
+
+  {
+    ASSERT_EQ(-EINPROGRESS, truncate_and_write(obj, object_size, stripe_width,
+      {{stripe_width * 3 - chunk_size, std::string(chunk_size, 'C')}}));
+    object_size = stripe_width * 3;
+  }
+
+  {
+    std::string data(chunk_size, 'D');
+    ASSERT_EQ(-EINPROGRESS, write(obj, stripe_width * 3 - chunk_size, data, object_size));
+  }
+
+  event_loop->unsuspend_to_osd(0);
+  event_loop->run_until_idle();
+
+  // Delete object so teardown scrub doesn't verify against stale ObjectTracker state
+  delete_object(obj);
+}
+
+// Emulate a rollback operation. We use multiple objects here in an attempt
+// to provoke rollback invalidation issues with suspended operations.
+TEST_P(TestBackendBasics, RollbackInvalidateRealistic)
+{
+  const auto& backend_config = GetParam().backend;
+
+  if (backend_config.pool_type != EC) {
+    GTEST_SKIP() << "Test only applies to EC backends";
+  }
+
+  const uint64_t stripe_width = get_stripe_width();
+  const uint64_t chunk_size = stripe_unit;
+
+  std::string obj_a = "rollback_a_" + backend_config.label;
+  std::string obj_b = "rollback_b_" + backend_config.label;
+
+  ASSERT_EQ(0, create_and_write(obj_a, std::string(stripe_width, 'A')));
+  ASSERT_EQ(0, create_and_write(obj_b, std::string(stripe_width, 'B')));
+  
+  // Create snap=1 for obj_a so rollback() has a source object to clone from.
+  ASSERT_EQ(0, create_snapshot(obj_a, stripe_width));
+
+  // Flush extent cache.
+  {
+    auto new_osdmap = std::make_shared<OSDMap>();
+    new_osdmap->deepish_copy_from(*osdmap);
+    new_osdmap->inc_epoch();
+    update_osdmap(new_osdmap);
+  }
+
+  // obj_b write first — its reads block waiting_ops.
+  write(obj_b, 0, std::string(chunk_size, 'W'), stripe_width, false);
+
+  // Rollback obj_a — queued behind obj_b, can't be processed yet.
+  rollback(obj_a, stripe_width, false);
+
+  // Partial write on obj_a — queued behind the rollback.
+  write(obj_a, 0, std::string(chunk_size, 'R'), stripe_width, false);
+
+  // Drain: obj_b completes → rollback invalidation fires (bug: growth
+  // hole lost) → obj_a's write reads survive → send_reads(0) → assert.
+  event_loop->run_until_idle();
+
+  // Delete objects so teardown scrub doesn't verify against stale ObjectTracker state
+  delete_object(obj_a);
+  delete_object(obj_b);
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +527,7 @@ TEST_P(TestBackendBasics, TruncateAndWrite) {
   uint64_t second_write_offset = stripe_unit * (k + 1);
   uint64_t final_size = second_write_offset + stripe_unit;
   
-  result = write(
+  result = truncate_and_write(
     obj_name,
     initial_size,
     0,  // truncate to 0
@@ -507,7 +606,7 @@ TEST_P(TestBackendBasics, TruncateExpandAndWrite) {
   const uint64_t write_offset = stripe_unit / 2;  // 2k
   const uint64_t write_size = stripe_unit / 2;    // 2k
   
-  result = write(
+  result = truncate_and_write(
     obj_name,
     initial_size,
     truncate_size,  // truncate to 22k (expand from 8k)
@@ -594,7 +693,7 @@ TEST_P(TestBackendBasics, TruncateToChunkSizeAndWrite) {
   uint64_t second_write_offset = stripe_unit * (k + 1);
   uint64_t final_size = second_write_offset + stripe_unit;
   
-  result = write(
+  result = truncate_and_write(
     obj_name,
     initial_size,
     stripe_unit,  // truncate to chunk_size (4k)
@@ -678,7 +777,7 @@ TEST_P(TestBackendBasics, TruncateToChunkSizeAndWriteToSameSize) {
   uint64_t second_write_offset = stripe_unit * (k + 1);
   uint64_t final_size = second_write_offset + stripe_unit;
   
-  result = write(
+  result = truncate_and_write(
     obj_name,
     initial_size,
     stripe_unit,  // truncate to chunk_size (4k)
@@ -724,25 +823,33 @@ TEST_P(TestBackendBasics, TruncateToChunkSizeAndWriteToSameSize) {
 // ---------------------------------------------------------------------------
 // Backend configurations and size parameters
 // ---------------------------------------------------------------------------
+//
+// NOTE: there used to be MultiZoneWriteThenRead and MultiZoneFailover tests
+// here. Every kBackendConfigs entry below has num_zones == 1, so both were
+// dead weight: MultiZoneFailover's num_zones > 1 guard meant it never ran,
+// and MultiZoneWriteThenRead's num_zones == 0 guard meant it always ran but
+// was never actually exercising a multi-zone configuration (identical to
+// WriteThenRead). Real multi-zone coverage belongs with the PR that
+// implements multi-zone EC support.
 
 namespace {
 
 const std::vector<BackendConfig> kBackendConfigs = {
-  {PGBackendTestFixture::REPLICATED, "", "", 0, 4096, 4, 2, "Replicated"},
+  {PGBackendTestFixture::REPLICATED, "", "", 0, 4096, 4, 2, 0, "Replicated"},
 #ifdef WITH_EC_ISA_PLUGIN
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, "EC_ISA_Opt_k4m2_su4k"},
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, "EC_ISA_Opt_k4m2_su8k"},
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, "EC_ISA_Opt_k4m2_su16k"},
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, "EC_ISA_Opt_k2m1_su4k"},
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, "EC_ISA_Opt_k8m3_su4k"},
-  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES, 4096,  4, 2, "EC_ISA_NonOpt_k4m2_su4k"},
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 1, "EC_ISA_Opt_k4m2_su4k"},
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, 1, "EC_ISA_Opt_k4m2_su8k"},
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, 1, "EC_ISA_Opt_k4m2_su16k"},
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, 1, "EC_ISA_Opt_k2m1_su4k"},
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, 1, "EC_ISA_Opt_k8m3_su4k"},
+  {PGBackendTestFixture::EC, "isa", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES, 4096,  4, 2, 1, "EC_ISA_NonOpt_k4m2_su4k"},
 #endif
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, "EC_Jerasure_Opt_k4m2_su4k"},
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, "EC_Jerasure_Opt_k4m2_su8k"},
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, "EC_Jerasure_Opt_k4m2_su16k"},
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, "EC_Jerasure_Opt_k2m1_su4k"},
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, "EC_Jerasure_Opt_k8m3_su4k"},
-  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES, 4096,  4, 2, "EC_Jerasure_NonOpt_k4m2_su4k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  4, 2, 1, "EC_Jerasure_Opt_k4m2_su4k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  8192,  4, 2, 1, "EC_Jerasure_Opt_k4m2_su8k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  16384, 4, 2, 1, "EC_Jerasure_Opt_k4m2_su16k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  2, 1, 1, "EC_Jerasure_Opt_k2m1_su4k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES | pg_pool_t::FLAG_EC_OPTIMIZATIONS,  4096,  8, 3, 1, "EC_Jerasure_Opt_k8m3_su4k"},
+  {PGBackendTestFixture::EC, "jerasure", "reed_sol_van", pg_pool_t::FLAG_EC_OVERWRITES, 4096,  4, 2, 1, "EC_Jerasure_NonOpt_k4m2_su4k"},
 };
 
 const std::vector<WriteReadParam> kSizeParams = {
@@ -849,11 +956,7 @@ public:
     // Finalize the CRUSH map to ensure working_size is calculated
     new_osdmap->crush->finalize();
 
-    pg_shard_t failed_shard(failed_osd, shard_id_t(failed_osd));
-    for (auto& [instance_id, list] : listeners) {
-      list->shardset.erase(failed_shard);
-      list->acting_recovery_backfill_shard_id_set.erase(shard_id_t(failed_osd));
-    }
+    remove_shard_from_all_listeners(pg_shard_t(failed_osd, shard_id_t(failed_osd)));
 
     // update_osdmap will query the OSDMap to determine the primary
     update_osdmap(new_osdmap);
@@ -879,7 +982,7 @@ TEST_P(TestECFailover, BasicOSDMapUpdate) {
   EXPECT_EQ(primary_listener->osdmap, new_osdmap) << "Listener OSDMap should be updated";
 
   // Verify data can still be read after OSDMap update
-  verify_object(obj_name, test_data, 0, test_data.size());
+  verify_object(obj_name);
 }
 
 TEST_P(TestECFailover, PrimaryFailover) {
@@ -889,9 +992,14 @@ TEST_P(TestECFailover, PrimaryFailover) {
   // Write and verify initial data
   create_and_write_verify(obj_name, test_data);
 
-  EXPECT_TRUE(listeners[0]->pgb_is_primary())
+  TestPG* test_pg_0 = get_test_pg_by_shard(0);
+  TestPG* test_pg_k = get_test_pg_by_shard(k);
+  ASSERT_TRUE(test_pg_0 != nullptr && test_pg_0->has_backend());
+  ASSERT_TRUE(test_pg_k != nullptr && test_pg_k->has_backend());
+
+  EXPECT_TRUE(test_pg_0->backend_listener->pgb_is_primary())
     << "Instance 0 should be primary before failover";
-  EXPECT_FALSE(listeners[k]->pgb_is_primary())
+  EXPECT_FALSE(test_pg_k->backend_listener->pgb_is_primary())
     << "Instance " << k << " should not be primary before failover";
 
   // Determine expected new primary based on pool optimization
@@ -903,21 +1011,32 @@ TEST_P(TestECFailover, PrimaryFailover) {
   
   simulate_osd_failure(0, expected_new_primary);
 
-  EXPECT_FALSE(listeners[0]->pgb_is_primary())
+  // After failover, OSD 0 is no longer in the acting set, so we must use
+  // get_first_test_pg_for_osd() to access it directly (bypassing the acting set)
+  TestPG* test_pg_0_after = get_first_test_pg_for_osd(0);
+  TestPG* test_pg_new_primary = get_primary_test_pg();
+  ASSERT_TRUE(test_pg_0_after != nullptr);
+  ASSERT_TRUE(test_pg_new_primary != nullptr && test_pg_new_primary->has_backend());
+
+  // OSD 0's TestPG/backend are never torn down by simulate_osd_failure() --
+  // only removed from the acting set -- so the backend still exists here;
+  // verify it's no longer primary.
+  ASSERT_TRUE(test_pg_0_after->has_backend());
+  EXPECT_FALSE(test_pg_0_after->backend_listener->pgb_is_primary())
     << "Instance 0 should not be primary after failover";
-  EXPECT_TRUE(listeners[expected_new_primary]->pgb_is_primary())
+  EXPECT_TRUE(test_pg_new_primary->backend_listener->pgb_is_primary())
     << "Instance " << expected_new_primary << " should be primary after failover";
 
   // Verify the query functions return the correct primary
   auto* new_primary_listener = get_primary_listener();
   auto* new_primary_backend = get_primary_backend();
-  EXPECT_EQ(new_primary_listener, listeners[expected_new_primary].get())
+  EXPECT_EQ(new_primary_listener, test_pg_new_primary->backend_listener.get())
     << "get_primary_listener() should return the new primary";
-  EXPECT_EQ(new_primary_backend, backends[expected_new_primary].get())
+  EXPECT_EQ(new_primary_backend, test_pg_new_primary->backend.get())
     << "get_primary_backend() should return the new primary";
 
   // Verify degraded read works after failover with EC reconstruction
-  verify_object(obj_name, test_data, 0, test_data.size());
+  verify_object(obj_name);
 
   EXPECT_TRUE(new_primary_listener != nullptr) << "Primary listener should exist after failover";
   EXPECT_GT(new_primary_listener->osdmap->get_epoch(), 1)

@@ -48,6 +48,11 @@ Description
 **ceph-bluestore-tool** is a utility to perform low-level administrative
 operations on a BlueStore instance.
 
+On an encrypted OSD, the LUKS mapping must be open before this tool can
+use the BlueStore device. Stopping an OSD with cephadm closes that
+mapping. See
+https://docs.ceph.com/en/latest/cephadm/troubleshooting/#cephadm-encrypted-osd-store-tools
+
 Commands
 ========
 

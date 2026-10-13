@@ -4,6 +4,7 @@
 #include <boost/variant.hpp>
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
+#include "include/container_ios.h"
 
 #include <iomanip>
 

@@ -1,0 +1,23 @@
+[DEFAULT]
+port = 8000
+host = localhost
+zonegroup = default
+cluster = noname
+# s3vector_backend: Storage backend for s3vector data. Options: local or rgw (default)
+# When set to 'rgw', tests will create a regular S3 bucket with the same name
+# as the vector bucket before vector operations.
+# s3vector_backend = loca
+#
+# backend options.
+# when not set, a value that fits the tested zone is used:
+# - s3vector_local_path: /tmp/rgw-s3vector-<cluster>-<port>
+# in s3vector_local_path, "<cluster>" and "<port>" are replaced with the values of
+# the tested zone, so that the RGWs of different zones do not share a directory
+# s3vector_local_path = /tmp/rgw-s3vector-<cluster>-<port>
+
+[s3 main]
+access_key = 0555b35654ad1656d804
+secret_key = h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==
+display_name = M. Tester
+user_id = testid
+email = tester@ceph.com

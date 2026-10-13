@@ -617,8 +617,15 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
 	      pftsubchunks[i1] = temp_buf;
 	      pftsubchunks[i2].substr_of(U_buf[node_xy], z*sub_chunksize, sub_chunksize);
 	      pftsubchunks[i3] = known_subchunks[i3];
-	      for (int i=0; i<3; i++) {
-		pftsubchunks[i].rebuild_aligned(SIMD_ALIGN);
+	      for (auto& [idx, bl] : pftsubchunks) {
+		if (pft_erasures.count(idx)) {
+		  // written in place, see decode_uncoupled()
+		  ceph_assert(bl.is_contiguous());
+		} else {
+		  // helper data comes straight from the read reply and may be
+		  // misaligned; inputs can safely be copied
+		  bl.rebuild_aligned(SIMD_ALIGN);
+		}
 	      }
 	      pft.erasure_code->decode_chunks(pft_erasures, known_subchunks, &pftsubchunks);
 	    } else {
@@ -633,8 +640,15 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
 		pftsubchunks[i1] = known_subchunks[i1];
 		pftsubchunks[i2].substr_of(U_buf[node_xy], z*sub_chunksize, sub_chunksize);
 		pftsubchunks[i3].substr_of(temp_buf, 0, sub_chunksize);
-		for (int i=0; i<3; i++) {
-		  pftsubchunks[i].rebuild_aligned(SIMD_ALIGN);
+		for (auto& [idx, bl] : pftsubchunks) {
+		  if (pft_erasures.count(idx)) {
+		    // written in place, see decode_uncoupled()
+		    ceph_assert(bl.is_contiguous());
+		  } else {
+		    // helper data comes straight from the read reply and may be
+		    // misaligned; inputs can safely be copied
+		    bl.rebuild_aligned(SIMD_ALIGN);
+		  }
 		}
 		pft.erasure_code->decode_chunks(pft_erasures, known_subchunks, &pftsubchunks);
 	      } else {
@@ -686,8 +700,15 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
 	    pftsubchunks[i1].substr_of(recovered_data[node_sw], z_sw*sub_chunksize, sub_chunksize);
 	    pftsubchunks[i2] = known_subchunks[i2];
 	    pftsubchunks[i3] = temp_buf;
-	    for (int i=0; i<3; i++) {
-	      pftsubchunks[i].rebuild_aligned(SIMD_ALIGN);
+	    for (auto& [idx, bl] : pftsubchunks) {
+	      if (pft_erasures.count(idx)) {
+	        // written in place, see decode_uncoupled()
+	        ceph_assert(bl.is_contiguous());
+	      } else {
+	        // helper data comes straight from the read reply and may be
+	        // misaligned; inputs can safely be copied
+	        bl.rebuild_aligned(SIMD_ALIGN);
+	      }
 	    }
 	    pft.erasure_code->decode_chunks(pft_erasures, known_subchunks, &pftsubchunks);
 	  }
@@ -808,8 +829,14 @@ int ErasureCodeClay::decode_uncoupled(const set<int>& erased_chunks, int z, int 
     } else {
       all_subchunks[i].substr_of(U_buf[i], z*sc_size, sc_size);
     }
-    all_subchunks[i].rebuild_aligned_size_and_memory(sc_size, SIMD_ALIGN);
-    assert(all_subchunks[i].is_contiguous());
+  }
+  // The erased sub-chunks are views into U_buf that the scalar MDS decode
+  // writes in place, so they must not be moved. A sub-chunk is only aligned
+  // to sc_size, which can be smaller than SIMD_ALIGN (32 bytes for k=12 m=4
+  // d=15); realigning such a view silently copies it and the decoded data is
+  // lost.
+  for (auto e : erased_chunks) {
+    ceph_assert(all_subchunks[e].is_contiguous());
   }
 
   mds.erasure_code->decode_chunks(erased_chunks, known_subchunks, &all_subchunks);
@@ -860,8 +887,9 @@ void ErasureCodeClay::recover_type1_erasure(map<int, bufferlist>* chunks,
   pftsubchunks[i2] = known_subchunks[i2];
   pftsubchunks[i3].push_back(ptr);
 
-  for (int i=0; i<3; i++) {
-    pftsubchunks[i].rebuild_aligned_size_and_memory(sc_size, SIMD_ALIGN);
+  for (auto e : erased_chunks) {
+    // written in place, see decode_uncoupled()
+    ceph_assert(pftsubchunks[e].is_contiguous());
   }
 
   pft.erasure_code->decode_chunks(erased_chunks, known_subchunks, &pftsubchunks);
@@ -888,8 +916,9 @@ void ErasureCodeClay::get_coupled_from_uncoupled(map<int, bufferlist>* chunks,
   pftsubchunks[2] = uncoupled_subchunks[2];
   pftsubchunks[3] = uncoupled_subchunks[3];
 
-  for (int i=0; i<3; i++) {
-    pftsubchunks[i].rebuild_aligned_size_and_memory(sc_size, SIMD_ALIGN);
+  for (auto e : erased_chunks) {
+    // written in place, see decode_uncoupled()
+    ceph_assert(pftsubchunks[e].is_contiguous());
   }
   pft.erasure_code->decode_chunks(erased_chunks, uncoupled_subchunks, &pftsubchunks);
 }
@@ -920,8 +949,9 @@ void ErasureCodeClay::get_uncoupled_from_coupled(map<int, bufferlist>* chunks,
   pftsubchunks[1] = coupled_subchunks[1];
   pftsubchunks[i2].substr_of(U_buf[node_xy], z * sc_size, sc_size);
   pftsubchunks[i3].substr_of(U_buf[node_sw], z_sw * sc_size, sc_size);
-  for (int i=0; i<3; i++) {
-    pftsubchunks[i].rebuild_aligned_size_and_memory(sc_size, SIMD_ALIGN);
+  for (auto e : erased_chunks) {
+    // written in place, see decode_uncoupled()
+    ceph_assert(pftsubchunks[e].is_contiguous());
   }
   pft.erasure_code->decode_chunks(erased_chunks, coupled_subchunks, &pftsubchunks);
 }

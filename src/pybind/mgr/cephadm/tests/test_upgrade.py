@@ -247,6 +247,99 @@ def test_upgrade_state_crush_roundtrip():
     assert restored.crush_bucket_name == 'rack1'
 
 
+def _test_osd_dd(osd_id: int, digests: List[str]) -> DaemonDescription:
+    return DaemonDescription(
+        daemon_type='osd',
+        daemon_id=str(osd_id),
+        hostname=f'host{osd_id}',
+        container_image_digests=digests,
+    )
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_cache_empty_bucket_from_ok_to_upgrade_report(
+        cephadm_module: CephadmOrchestrator):
+    # Empty osds_in_crush_bucket is cached as set(), not None.
+    cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket = None
+    report = OkToUpgradeMonReport(
+        ok_to_upgrade=True,
+        all_osds_upgraded=False,
+        osds_ok_to_upgrade=[],
+        osds_in_crush_bucket=[],
+        osds_upgraded=[],
+        bad_no_version=[],
+    )
+    cephadm_module.upgrade._cache_osds_in_crush_bucket_from_ok_to_upgrade_report(
+        report)
+    assert cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket == set()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_get_upgrade_info_bucket_scope_progress(cephadm_module: CephadmOrchestrator):
+    # Upgrade progress denominator uses bucket OSD count, not cluster-wide total.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target', 'pid',
+        target_digests=['digest1'],
+        target_version='19.2.3',
+        daemon_types=['osd'],
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    cephadm_module.upgrade._ok_to_upgrade_osds_in_crush_bucket = {
+        'osd.0', 'osd.1', 'osd.2',
+    }
+    all_osds = [
+        _test_osd_dd(0, ['digest1']),
+        _test_osd_dd(1, ['digest1']),
+        _test_osd_dd(2, ['old-digest']),
+        _test_osd_dd(3, ['digest1']),
+        _test_osd_dd(4, ['digest1']),
+    ]
+    with mock.patch.object(
+            cephadm_module.cache, 'get_daemons', return_value=all_osds):
+        progress, _ = cephadm_module.upgrade._get_upgrade_info()
+    assert progress == '2/3 daemons upgraded'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_get_upgrade_info_refreshes_bucket_osds_for_upgrade_status(
+        cephadm_module: CephadmOrchestrator):
+    # Status path refreshes cold bucket cache via max_osds=0 before computing progress.
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target', 'pid',
+        target_digests=['digest1'],
+        target_version='19.2.3',
+        daemon_types=['osd'],
+        crush_bucket_type='rack',
+        crush_bucket_name='rack1',
+    )
+    bucket_rep = OkToUpgradeMonReport(
+        ok_to_upgrade=True,
+        all_osds_upgraded=False,
+        osds_ok_to_upgrade=[],
+        osds_in_crush_bucket=[0, 1, 2],
+        osds_upgraded=[0, 1],
+        bad_no_version=[],
+    )
+    all_osds = [
+        _test_osd_dd(0, ['digest1']),
+        _test_osd_dd(1, ['digest1']),
+        _test_osd_dd(2, ['old-digest']),
+        _test_osd_dd(3, ['digest1']),
+        _test_osd_dd(4, ['digest1']),
+    ]
+    with mock.patch(
+            'cephadm.upgrade.request_osd_ok_to_upgrade_report',
+            return_value=bucket_rep,
+    ) as mock_request:
+        with mock.patch.object(
+                cephadm_module.cache, 'get_daemons', return_value=all_osds):
+            progress, _ = cephadm_module.upgrade._get_upgrade_info()
+    mock_request.assert_called_once()
+    assert mock_request.call_args.kwargs['max_osds'] == 0
+    assert progress == '2/3 daemons upgraded'
+
+
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 def test_upgrade_status_which_crush_osd_only(cephadm_module: CephadmOrchestrator):
     cephadm_module.upgrade.upgrade_state = UpgradeState(
@@ -1209,3 +1302,75 @@ def test_do_upgrade_limit_exhausted_marks_complete_without_scope_check(
 
     mark_complete.assert_called_once()
     filtered_scope.assert_not_called()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_check_host_cpu_isa_level(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            cephadm_module.cache.update_host_facts('test', {
+                'arch': 'x86_64',
+                'cpu_model': 'Intel(R) Xeon(R) CPU E5-2650 v2 @ 2.60GHz',
+                'cpu_isa_level': 'x86-64-v2',
+            })
+            cephadm_module.cache.update_host_facts('test2', {
+                'arch': 'x86_64',
+                'cpu_model': 'Intel(R) Xeon(R) Gold 6130 CPU @ 2.10GHz',
+                'cpu_isa_level': 'x86-64-v3',
+            })
+
+            # tentacle (20.x) has no ISA requirement
+            assert cephadm_module.upgrade.check_host_cpu_isa_level('20.2.0') == []
+
+            # umbrella (21.x) requires x86-64-v3; only 'test' is flagged
+            errs = cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0')
+            assert len(errs) == 1
+            assert 'test' in errs[0]
+            assert 'x86-64-v2' in errs[0]
+            assert 'x86-64-v3' in errs[0]
+
+            # staggered upgrade restricted to a compatible host passes
+            assert cephadm_module.upgrade.check_host_cpu_isa_level(
+                '21.2.0', hosts=['test2']) == []
+
+            # hosts with unknown ISA level (no facts / non-x86 / older
+            # cephadm) are skipped
+            cephadm_module.cache.update_host_facts('test', {'arch': 'aarch64'})
+            assert cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0') == []
+
+            # disabling the check via config skips it entirely
+            cephadm_module.cache.update_host_facts('test', {
+                'arch': 'x86_64',
+                'cpu_isa_level': 'x86-64-v1',
+            })
+            assert cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0') != []
+            cephadm_module.upgrade_cpu_isa_check = False
+            try:
+                assert cephadm_module.upgrade.check_host_cpu_isa_level('21.2.0') == []
+            finally:
+                cephadm_module.upgrade_cpu_isa_check = True
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_blocks_on_insufficient_cpu_isa_level(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                cephadm_module.cache.update_host_facts('test', {
+                    'arch': 'x86_64',
+                    'cpu_model': 'Intel(R) Xeon(R) CPU E5-2650 v2 @ 2.60GHz',
+                    'cpu_isa_level': 'x86-64-v2',
+                })
+                with mock.patch.object(CephadmUpgrade, '_check_target_version', return_value=None):
+                    with pytest.raises(OrchestratorError) as err:
+                        cephadm_module.upgrade_start('', '21.2.0')
+                    assert 'x86-64-v3' in str(err.value)
+                    assert 'host test' in str(err.value)
+
+                    # excluding the incompatible host allows the upgrade
+                    with mock.patch("cephadm.serve.CephadmServe._get_container_image_info",
+                                    side_effect=async_side_effect(
+                                        ContainerInspectInfo('image_id', '21.2.0', 'digest'))):
+                        assert wait(cephadm_module, cephadm_module.upgrade_start(
+                            '', '21.2.0', host_placement='test2')
+                        ).startswith('Initiating upgrade')

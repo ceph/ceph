@@ -1753,6 +1753,11 @@ struct CryptAttributes {
       return std::string_view();
     }
   }
+
+  bool exists(crypt_option_e option)
+  {
+    return x_meta_map.count(crypt_options[option].post_part_name) > 0;
+  }
 };
 
 std::string fetch_bucket_key_id(req_state *s)
@@ -2013,6 +2018,32 @@ static void maybe_write_prefetch_align(
   }
 }
 
+/*
+ * a bucket can block sse-c writes through its encryption configuration.
+ * reads of objects already encrypted with sse-c are still allowed.
+ */
+int rgw_s3_check_sse_c_blocked(req_state* s)
+{
+  auto aiter = s->bucket_attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
+  if (aiter == s->bucket_attrs.end()) {
+    return 0;
+  }
+
+  RGWBucketEncryptionConfig conf;
+  if (decode_bl(aiter->second, conf) < 0) {
+    s->err.message = "Server side error - can't decode bucket_encryption_conf";
+    return -EINVAL;
+  }
+
+  if (conf.sse_c_blocked()) {
+    ldpp_dout(s, 5) << "ERROR: sse-c is blocked on bucket " << s->bucket_name << dendl;
+    s->err.message = "Server side encryption with customer provided keys is "
+                     "blocked for this bucket.";
+    return -EACCES;
+  }
+  return 0;
+}
+
 int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
@@ -2028,6 +2059,10 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
     std::string_view req_sse_ca =
         crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM);
     if (! req_sse_ca.empty()) {
+      res = rgw_s3_check_sse_c_blocked(s);
+      if (res < 0) {
+        return res;
+      }
       if (req_sse_ca != "AES256") {
         ldpp_dout(s, 5) << "ERROR: Invalid value for header "
                          << "x-amz-server-side-encryption-customer-algorithm"
@@ -2177,7 +2212,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
     /* AMAZON server side encryption with KMS (key management service) */
     std::string_view req_sse =
         crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION);
-    if (! req_sse.empty()) {
+    if (crypt_attributes.exists(X_AMZ_SERVER_SIDE_ENCRYPTION)) {
 
       if (req_sse == "aws:kms") {
         if (s->cct->_conf->rgw_crypt_require_ssl &&

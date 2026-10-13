@@ -485,6 +485,8 @@ Error Codes
 ===========
 "Mount failed with '(11) Resource temporarily unavailable'" - This might mean that you have attempted to run **ceph-objectstore-tool** on a running OSD.
 
+"Mount failed with '(1) Operation not permitted'" - On an encrypted OSD this often means the LUKS mapping is closed. Stopping an OSD with cephadm runs ``ceph-volume lvm deactivate``, which closes that mapping. **ceph-objectstore-tool** does not unlock LUKS. Reopen the mapping without starting ``ceph-osd``, then run the tool. See https://docs.ceph.com/en/latest/cephadm/troubleshooting/#cephadm-encrypted-osd-store-tools
+
 Availability
 ============
 

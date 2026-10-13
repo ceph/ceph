@@ -982,12 +982,6 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
   messages.reserve(get_parent()->get_acting_recovery_backfill_shards().size());
   set<pg_shard_t> backfill_shards = get_parent()->get_backfill_shards();
 
-  if (op.version.version != 0) {
-    if (oid_to_version.contains(op.hoid)) {
-      ceph_assert(oid_to_version.at(op.hoid) <= op.version);
-    }
-    oid_to_version[op.hoid] = op.version;
-  }
   for (auto &&pg_shard: get_parent()->get_acting_recovery_backfill_shards()) {
     ObjectStore::Transaction &transaction = trans.at(pg_shard.shard);
     shard_id_t shard = pg_shard.shard;
@@ -1189,7 +1183,6 @@ void ECCommon::RMWPipeline::on_change() {
   committed_to = eversion_t();
   extent_cache.on_change();
   tid_to_op_map.clear();
-  oid_to_version.clear();
   waiting_commit.clear();
   next_write_all_shards = false;
   first_write_in_interval = true;

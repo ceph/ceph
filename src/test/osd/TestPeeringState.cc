@@ -1003,7 +1003,7 @@ protected:
   // identical - if identical is true, all logs should be identical
   //            if identical is false, all logs should be equivalent
   //            with differences only because of partial writes
-  void verify_logs(bool identical = false)
+  void verify_logs(bool identical = false, bool tails_different = false)
   {
     auto logp = get_ps(acting_primary)->get_pg_log();
     int shard = 0;
@@ -1016,12 +1016,24 @@ protected:
       auto log = get_ps(osd)->get_pg_log();
       // Head and tail should match
       EXPECT_EQ(log.get_head(), logp.get_head());
-      EXPECT_EQ(log.get_tail(), logp.get_tail());
+      if (!tails_different) {
+	EXPECT_EQ(log.get_tail(), logp.get_tail());
+      }
       auto pi = logp.get_log().log.begin();
       auto pe = logp.get_log().log.end();
       auto i = log.get_log().log.begin();
       auto e = log.get_log().log.end();
       while (pi != pe && i != e) {
+	if (tails_different && pi->version <= log.get_tail()) {
+	  // Primary log has older tail
+	  ++pi;
+	  continue;
+	}
+	if (tails_different && i->version <= logp.get_tail()) {
+	  // Log has older tail
+	  ++i;
+	  continue;
+	}
         if (pi->version < i->version && !pi->is_written_shard(shard_id_t(shard))) {
           // Primary may have partial write log entries that this
           // shard does not have because it was not written to
@@ -2018,6 +2030,119 @@ TEST_F(PeeringStateTest, PoolMigrationPrempt) {
 }
 #endif
 
+// Test that BackfillTooFull event won't crash the OSD when received
+// in RepNotRecovering state.
+// This is to test the fix for https://tracker.ceph.com/issues/76751
+TEST_F(PeeringStateTest, BackfillTooFullInRepNotRecovering) {
+  dout(0) << "== BackfillTooFullInRepNotRecovering ==" << dendl;
+  // Init
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Append 3 log entries to all shards - trim the log so that
+  // backfill occurs later on
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  // Full peering cycle
+  test_peering();
+  // Verify that we got to active+clean and that log entries were kept
+  verify_all_active_clean(expected, expected_tail);
+
+  // Swap out OSD 1 for OSD 9
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  // Full peering cycle
+  test_peering();
+
+  // Verify OSD 9 is in RepNotRecovering
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered,
+            "Started/ReplicaActive/RepNotRecovering");
+
+  // Inject BackfillTooFull event on OSD 9 while in RepNotRecovering
+  // This should NOT crash
+  auto evt = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(),
+    osdmap->get_epoch(),
+    PeeringState::BackfillTooFull());
+  get_ps(acting[1])->handle_event(evt, get_ctx(acting[1]));
+  dispatch_all();
+
+  // Verify the OSD state machine didn't enter Crashed
+  // If the bug is present, the process_event above would have aborted
+  EXPECT_NE(get_listener(acting[1])->last_state_entered,
+            "Crashed");
+  // The event should have been discarded, replica stays in RepNotRecovering
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered,
+            "Started/ReplicaActive/RepNotRecovering");
+}
+
+// Test that BackfillTooFull event in RepWaitBackfillReserved state causes
+// the replica to reject the reservation and transition to RepNotRecovering
+TEST_F(PeeringStateTest, BackfillTooFullInRepWaitBackfillReserved) {
+  dout(0) << "== BackfillTooFullInRepWaitBackfillReserved ==" << dendl;
+  // Init
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Append 3 log entries to all shards - trim the log so that
+  // backfill occurs later on
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  // Full peering cycle
+  test_peering();
+  // Verify that we got to active+clean and that log entries were kept
+  verify_all_active_clean(expected, expected_tail);
+
+  // Swap out OSD 1 for OSD 9
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  // Verify OSD 9 is in RepNotRecovering
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered,
+            "Started/ReplicaActive/RepNotRecovering");
+
+  // Inject event RequestBackfillPrio to move the state to RepWaitBackfillReserved
+  // Don't dispatch_all() so the RemoteBackfillReserved stays unprocessed
+  // and the replica remains in RepWaitBackfillReserved
+  auto evt1 = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(),
+    osdmap->get_epoch(),
+    RequestBackfillPrio(OSD_BACKFILL_PRIORITY_BASE, 0, 0));
+  get_ps(acting[1])->handle_event(evt1, get_ctx(acting[1]));
+
+  // Verify OSD 9 is in RepWaitBackfillReserved
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered,
+            "Started/ReplicaActive/RepWaitBackfillReserved");
+
+  // Inject BackfillTooFull event on OSD 9 while in RepWaitBackfillReserved
+  // This should NOT crash
+  auto evt2 = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(),
+    osdmap->get_epoch(),
+    PeeringState::BackfillTooFull());
+  get_ps(acting[1])->handle_event(evt2, get_ctx(acting[1]));
+  dispatch_all();
+
+  // Verify the OSD state machine didn't enter Crashed
+  // If the bug is present, the process_event above would have aborted
+  EXPECT_NE(get_listener(acting[1])->last_state_entered,
+            "Crashed");
+
+  // The reservation should have been rejected and the state goes to RepNotRecovering
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered,
+            "Started/ReplicaActive/RepNotRecovering");
+  // Verify reservation was rejected (unreserve called)
+  EXPECT_TRUE(get_listener(acting[1])->recovery_space_unreserved);
+}
+
+
 // ============================================================================
 // Tests for bug fixes
 // ============================================================================
@@ -2191,6 +2316,150 @@ TEST_F(PeeringStateTest, Issue74218) {
   verify_log_state(acting[3], expected2, expected2, expected2, eversion_t());
   verify_logs();
 }
+
+
+// Tests for the fix for https://tracker.ceph.com/issues/79706
+//
+// Code path 1:
+//
+// const eversion_t olast = olog.log.back().version;
+// if (olast == p->version ||
+//    (olast < p->version && p->version <= olog.head)) {
+//   // Normal case - both logs have entry p->version, or olog has
+//   // no entries between p->version and olog.head
+//   consider_adjusting_pwlc(p->version);
+//   ++p;
+// } ...
+TEST_F(PeeringStateTest, Issue79706_test1) {
+  dout(0) << "== Issue79706_test1 ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+
+  // Note: This scenario is cheating a bit with the trim that is
+  // skipping OSD 1 followed by a full write without catching up
+  // with the trim. This is just an easier way to force
+  // the primary to request all the log from OSD 1.
+
+  // v1: full write to all shards (also clears first_write_in_interval)
+  (void)test_append_log_entry();
+  // v2: partial write to shards 0,2,3 only. Trim write v1
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}),
+			      /*update_only=*/false, /*do_trim=*/true);
+  // v3: full write to all shards
+  (void)test_append_log_entry();
+  // v4: partial write to shards 0,2,3 only; update_only so no PWLC is
+  // created yet
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}),
+			      /*update_only=*/true);
+
+  // To provoke the code path we need a backfilling/recovering shard
+  // This inconjuction with the trim makes PeeringState::GetLog::GetLog on
+  // the primary request more log entries. Swap out OSD 3 for OSD 9
+  modify_up_acting(3, 9);
+  test_create_peering_state(9, 3);
+  test_init(9);
+  test_event_initialize(9);
+
+  // Run peering
+  test_peering();
+
+  EXPECT_TRUE(get_ps(acting_primary)->is_active());
+  EXPECT_TRUE(get_ps(acting_primary)->is_peered());
+  verify_logs(false, true);
+}
+
+// Tests for the fix for https://tracker.ceph.com/issues/79706
+//
+// Code path 2:
+//
+// } else if (olast < p->version) {
+//   // Divergence is before the oldest entry both logs share
+//   consider_adjusting_pwlc(pg_log.get_tail());
+// } ...
+TEST_F(PeeringStateTest, Issue79706_test2) {
+  dout(0) << "== Issue79706_test2 ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+
+  // v1: full write to all shards (also clears first_write_in_interval)
+  (void)test_append_log_entry();
+  // v2: partial write to shards 0,2,3 only; update_only so no PWLC is
+  // created yet. Trim the log.
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}),
+			      /*update_only=*/true, /*do_trim=*/true);
+
+  // To provoke the code path we need a backfilling/recovering shard
+  // This makes PeeringState::GetLog::GetLog on the primary request more log entries.
+  // Swap out OSD 3 for OSD 9
+  modify_up_acting(3, 9);
+  test_create_peering_state(9, 3);
+  test_init(9);
+  test_event_initialize(9);
+
+  // Run peering
+  test_peering();
+
+  EXPECT_TRUE(get_ps(acting_primary)->is_active());
+  EXPECT_TRUE(get_ps(acting_primary)->is_peered());
+  verify_logs(false, true);
+}
+
+// Tests for the fix for https://tracker.ceph.com/issues/79706
+//
+// Code path 3:
+//
+// } else {
+//   // Other log is ahead of the primary log - give up
+//   p = pg_log.get_log().log.end();
+// }
+TEST_F(PeeringStateTest, Issue79706_test3) {
+  dout(0) << "== Issue79706_test3 ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+
+  // v1: full write to all shards (also clears first_write_in_interval)
+  (void)test_append_log_entry();
+  // v2: partial write to shards 0,2,3 only. Trim write v1
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}),
+			      /*update_only=*/true, true);
+
+  // vx.3: full write to OSD 1 only — write interrupted before applied
+  // to any other shards - becomes a divergent write
+  (void)test_append_log_entry(shard_id_set(), ss({1}),
+			      /*update_only=*/true);
+  --reqid.tid;
+  new_epoch(true);
+
+  // vy.3: partial write to shards 0,2,3; update_only (no commit, no PWLC),
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}),
+                              /*update_only=*/true);
+
+  // To provoke the code path we need a backfilling/recovering shard
+  // This inconjuction with the trim makes PeeringState::GetLog::GetLog on
+  // the primary request more log entries. Swap out OSD 3 for OSD 9
+  modify_up_acting(3, 9);
+  test_create_peering_state(9, 3);
+  test_init(9);
+  test_event_initialize(9);
+
+  // Run peering
+  test_peering();
+
+  // After merge_log rolls back v2 on OSD 1, OSD 1 needs recovery for v3.
+  // verify_logs() is not called here because OSD 1's local pg_log still
+  // contains the divergent v2 entry until data recovery completes; the
+  // primary has correctly identified it as divergent and set OSD 1 to
+  // recover.  We only verify that the PG reached a valid active+peered state.
+  EXPECT_TRUE(get_ps(acting_primary)->is_active());
+  EXPECT_TRUE(get_ps(acting_primary)->is_peered());
+}
+
 
 // ============================================================================
 // Rebuild Stats Perf Counter Tests
@@ -2446,14 +2715,15 @@ TEST_F(PeeringStateTest, RebuildStatsCountAccumulates) {
 
 // ============================================================================
 // Test 5: Latch is discarded when the OSD loses its primary role mid-rebuild.
+// But the departing primary's own in-progress segment is now recorded rather
+// than silently discarded.
 //
-// If a new interval begins while rebuild_start_time is set and the OSD
-// transitions from primary to stray, clear_primary_state() must discard the
-// stale latch so no spurious rebuild event is emitted for a recovery that the
-// OSD no longer owns.
+// The original interim design discarded the stale latch during the
+// primary -> stray transition with no recording. This discarded real rebuild
+// episodes whenever the failed OSD was held primary for the affected PG.
 // ============================================================================
-TEST_F(PeeringStateTest, RebuildStatsLatchClearedOnRoleChange) {
-  dout(0) << "== RebuildStatsLatchClearedOnRoleChange ==" << dendl;
+TEST_F(PeeringStateTest, RebuildStatsRecordsSegmentOnRoleChange) {
+  dout(0) << "== RebuildStatsRecordsSegmentOnRoleChange ==" << dendl;
   test_create_peering_state();
   test_init();
   test_event_initialize();
@@ -2481,6 +2751,11 @@ TEST_F(PeeringStateTest, RebuildStatsLatchClearedOnRoleChange) {
   ASSERT_NE(get_ps(0)->get_rebuild_start_time(), utime_t())
       << "latch must be set before role change";
 
+  // Sleep so the departing primary's segment has a real, nonzero duration
+  // to record -- mirrors the sleep pattern used by the other RebuildStats*
+  // tests for the same reason.
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
   // --- Phase 2: change the primary before recovery completes. ---
   // Swap acting[0] from OSD 0 to OSD 7. OSD 0 leaves the acting set
   // entirely and becomes a stray; OSD 7 takes over as primary.
@@ -2491,22 +2766,25 @@ TEST_F(PeeringStateTest, RebuildStatsLatchClearedOnRoleChange) {
   test_init(7);
   test_event_initialize(7);
 
-  // advance_map on OSD 0: the new acting set excludes OSD 0, so
-  // should_restart_peering()->start_peering_interval() resets the
-  // three latch variables since the role of OSD 0 is now changed.
+  // should_restart_peering()->start_peering_interval() now closes out and
+  // records OSD 0's own segment before resetting the three latch variables.
   test_event_advance_map();
 
-  // --- Phase 3: verify latch is cleared on the old primary. ---
+  // --- Phase 3: latch fields still reset on the departing primary. ---
+  // This part of the behavior is unchanged from before: a stale
+  // start time/baseline must never be reused across a role change.
   EXPECT_EQ(get_ps(0)->get_rebuild_start_time(), utime_t());
   EXPECT_EQ(get_ps(0)->get_rebuild_base_recovered(), 0);
   EXPECT_FALSE(get_ps(0)->get_rebuild_had_redundancy_loss());
 
-  // No rebuild record must have been emitted: the latch was discarded, not
-  // fired. A spurious emission here would record a duration spanning a
-  // recovery that OSD 0 did not complete.
+  // --- Phase 4: the segment IS now recorded, not silently dropped. ---
+  // OSD 0 had real degraded objects at latch time (rebuild_had_redundancy_
+  // loss == true), so the genuine-event filter passes even though no
+  // recovery I/O had completed yet (delta_recovered == 0 at handover time).
   auto [sum_ns, count] = perf_osd0->get_tavg_ns(rs_pg_rebuild_duration);
-  EXPECT_EQ(count, 0u);
-  EXPECT_EQ(sum_ns,  0u);
+  EXPECT_EQ(count, 1u)
+    << "the departing primary's segment must be recorded, not discarded";
+  EXPECT_GT(sum_ns,  0u);
 }
 
 // ============================================================================
@@ -2568,6 +2846,128 @@ TEST_F(PeeringStateTest, RebuildStatsLatchSurvivesSamePrimaryIntervalRestart) {
   PerfCounters *perf_osd0 = get_listener(0)->recoverystate_perf;
   auto [sum_ns, count] = perf_osd0->get_tavg_ns(rs_pg_rebuild_duration);
   EXPECT_EQ(count, 0u);
+}
+
+// ============================================================================
+// Test 7: A PG that changes primary TWICE while continuously vulnerable
+// records a SEPARATE partial segment on each departing primary, instead of
+// losing the whole episode, and demonstrates its accepted trade-off concretely:
+// one true, continuous vulnerability episode is recorded as THREE separate
+// avgcount samples, not one.
+//
+// The test chains two primary handovers back to back (0 -> 7 -> 8) while
+// up_acting keeps accumulating every historical OSD (modify_up_acting() only
+// ever pushes; see osd_down() for the only helper that erases).
+// test_event_advance_map() with no target therefore re-processes
+// already-departed OSDs on the second handover too; this is expected to be
+// harmless because try_record_rebuild_segment() is only invoked when
+// rebuild_start_time != utime_t(), and the departing OSD's latch is
+// unconditionally reset to utime_t() immediately after its segment is recorded
+// on the first handover -- so a redundant advance_map on an already-departed
+// OSD cannot re-fire or double-record.
+// ============================================================================
+TEST_F(PeeringStateTest, RebuildStatsMultiHopHandoverRecordsEachSegment) {
+  dout(0) << "== RebuildStatsMultiHopHandoverRecordsEachSegment ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  eversion_t v = test_append_log_entry();
+  test_peering();
+  verify_all_active_clean(v, eversion_t());
+
+  // Stamp last_clean so the new_failure guard is satisfied for OSD 0.
+  call_prepare_stats(acting_primary);        // acting_primary = OSD 0
+
+  // --- Degrade the PG while OSD 0 is primary. ---
+  // Replace acting[1] (OSD 1) with OSD 9; OSD 9 needs recovery. This keeps
+  // the PG degraded (rebuild_had_redundancy_loss latches true at every
+  // hop) all the way through both handovers below, without needing to
+  // actually complete the recovery until the very end.
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+  // PG is now active+recovering+degraded; OSD 0 remains primary.
+
+  PerfCounters *perf_osd0 = get_listener(0)->recoverystate_perf;
+
+  // Latch fires on OSD 0.
+  call_prepare_stats(acting_primary);
+  ASSERT_NE(get_ps(0)->get_rebuild_start_time(), utime_t())
+      << "latch must be set before the first handover";
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // --- Hop 1: OSD 0 -> OSD 7. OSD 0 leaves the acting set entirely. ---
+  modify_up_acting(0, 7);
+  acting_primary = 7;
+  up_primary = 7;
+  test_create_peering_state(7, 0);
+  test_init(7);
+  test_event_initialize(7);
+  test_event_advance_map();   // closes out and records OSD 0's segment
+  test_peering();
+
+  // OSD 0's segment must be recorded now, not silently discarded.
+  {
+    auto [sum_ns, count] = perf_osd0->get_tavg_ns(rs_pg_rebuild_duration);
+    EXPECT_EQ(count, 1u)
+        << "OSD 0's segment must be recorded on the first handover";
+    EXPECT_GT(sum_ns, 0u);
+  }
+  EXPECT_EQ(get_ps(0)->get_rebuild_start_time(), utime_t())
+      << "OSD 0's latch fields must still reset after recording";
+
+  PerfCounters *perf_osd7 = get_listener(7)->recoverystate_perf;
+
+  // OSD 7 must reliably re-arm its own fresh latch: the PG is still
+  // degraded (OSD 9 still needs recovery), and last_change was just
+  // bumped by this interval restart while last_clean is still the old,
+  // pre-failure value -- confirmed reliable in the pg-state-machine skill.
+  call_prepare_stats(acting_primary);
+  ASSERT_NE(get_ps(7)->get_rebuild_start_time(), utime_t())
+      << "a fresh primary must reliably re-arm mid-vulnerability";
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // --- Hop 2: OSD 7 -> OSD 8. OSD 7 leaves the acting set entirely. ---
+  modify_up_acting(0, 8);
+  acting_primary = 8;
+  up_primary = 8;
+  test_create_peering_state(8, 0);
+  test_init(8);
+  test_event_initialize(8);
+  test_event_advance_map();   // closes out and records OSD 7's segment
+  test_peering();
+
+  // OSD 7's segment must ALSO be recorded, independently of OSD 0's.
+  {
+    auto [sum_ns, count] = perf_osd7->get_tavg_ns(rs_pg_rebuild_duration);
+    EXPECT_EQ(count, 1u)
+        << "OSD 7's segment must be recorded on the second handover";
+    EXPECT_GT(sum_ns, 0u);
+  }
+
+  PerfCounters *perf_osd8 = get_listener(8)->recoverystate_perf;
+
+  // OSD 8 arms its own fresh latch the same way OSD 7 did.
+  call_prepare_stats(acting_primary);
+  ASSERT_NE(get_ps(8)->get_rebuild_start_time(), utime_t());
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // --- Finally: drive the recovery to completion under OSD 8. ---
+  test_recover_got(8, v);
+  test_begin_peer_recover(9, 1);
+  test_on_peer_recover(9, 1, v);
+  test_recover_got(9, v);
+  test_object_recovered();
+  test_event_all_replicas_recovered();
+  verify_all_active_clean(v, eversion_t());
+  call_prepare_stats(acting_primary);   // "reached-clean" record fires on OSD 8
+
+  auto [sum_ns, count] = perf_osd8->get_tavg_ns(rs_pg_rebuild_duration);
+  EXPECT_EQ(count, 1u)
+      << "OSD 8's own segment must be recorded once it reaches clean";
+  EXPECT_GT(sum_ns, 0u);
 }
 
 // ============================================================================

@@ -6,7 +6,17 @@
   [selectionType]="selectionType"
   columnMode="flex"
   (fetchData)="getDevices()"
-  [searchField]="false"
+  [searchField]="searchField"
+  searchPlaceholder="Search physical disks"
+  i18n-searchPlaceholder
+  searchLabel="Search physical disks"
+  i18n-searchLabel
+  searchAriaLabel="Search physical disks"
+  i18n-searchAriaLabel
+  searchEmptyStateTitle="No matching physical disks"
+  i18n-searchEmptyStateTitle
+  searchEmptyStateMessage="No physical disks match the current search criteria."
+  i18n-searchEmptyStateMessage
   (updateSelection)="updateSelection($event)"
   (columnFiltersChanged)="onColumnFiltersChanged($event)"
 >

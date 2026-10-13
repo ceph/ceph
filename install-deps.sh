@@ -119,6 +119,17 @@ ENDOFKEY
     fi
 }
 
+function install_recent_cargo_on_ubuntu {
+    local new=$1
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y cargo-$new
+    $SUDO update-alternatives --remove-all cargo || true
+    # later on, Build-Depends: cargo in debian/control will install the cargo package
+    # for /usr/bin/cargo. use update-alternatives to create a symlink at /usr/local/bin/cargo
+    # so that it a) doesn't conflict and b) takes precedence over the default version
+    $SUDO update-alternatives --install /usr/local/bin/cargo cargo /usr/bin/cargo-$new 1
+    $SUDO update-alternatives --auto cargo
+}
+
 function ensure_python3_sphinx_on_ubuntu {
     ci_debug "Running ensure_python3_sphinx_on_ubuntu() in install-deps.sh"
     local sphinx_command=/usr/bin/sphinx-build
@@ -460,6 +471,11 @@ else
                 $SUDO apt-get install -y gcc
 		ensure_decent_gcc_on_ubuntu 12 jammy
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
+                install_recent_cargo_on_ubuntu 1.91
+                ;;
+            *Noble*)
+                $SUDO apt-get install -y gcc
+                install_recent_cargo_on_ubuntu 1.91
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -508,12 +524,15 @@ else
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
         if [ "$control" != "debian/control" ] ; then rm $control; fi
         ;;
-    almalinux|rocky|centos|fedora|rhel|ol|virtuozzo)
+    almalinux|rocky|centos|fedora|rhel|ol|virtuozzo|openruyi)
         builddepcmd="dnf -y builddep --allowerasing"
         echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
                 $SUDO dnf install -y dnf-utils
+                ;;
+            openruyi)
+                rpm --quiet --query dnf5-plugins || $SUDO dnf install -y dnf5-plugins
                 ;;
             almalinux|rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"

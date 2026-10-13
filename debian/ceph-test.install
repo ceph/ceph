@@ -18,4 +18,5 @@ usr/bin/ceph_test_*
 usr/bin/ceph-dedup-tool
 usr/bin/ceph-dedup-daemon
 usr/lib/ceph/ceph-monstore-update-crush.sh
+usr/lib/libceph_rgw_sal_test_env.so
 usr/share/java/libcephfs-test.jar

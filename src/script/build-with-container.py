@@ -104,9 +104,8 @@ class DistroKind(StrEnum):
     CENTOS10 = "centos10"
     CENTOS8 = "centos8"
     CENTOS9 = "centos9"
-    FEDORA41 = "fedora41"
-    FEDORA42 = "fedora42"
     FEDORA43 = "fedora43"
+    FEDORA44 = "fedora44"
     ROCKY9 = "rocky9"
     ROCKY10 = "rocky10"
     UBUNTU2004 = "ubuntu20.04"
@@ -115,6 +114,7 @@ class DistroKind(StrEnum):
     UBUNTU2604 = "ubuntu26.04"
     DEBIAN12 = "debian12"
     DEBIAN13 = "debian13"
+    OPENRUYI = "openruyi"
 
     @classmethod
     def uses_dnf(cls):
@@ -122,9 +122,11 @@ class DistroKind(StrEnum):
             cls.CENTOS10,
             cls.CENTOS8,
             cls.CENTOS9,
-            cls.FEDORA41,
+            cls.FEDORA43,
+            cls.FEDORA44,
             cls.ROCKY9,
             cls.ROCKY10,
+            cls.OPENRUYI,
         }
 
     @classmethod
@@ -147,12 +149,10 @@ class DistroKind(StrEnum):
             str(cls.ROCKY10): cls.ROCKY10,
             'rockylinux10': cls.ROCKY10,
             # fedora
-            str(cls.FEDORA41): cls.FEDORA41,
-            "fc41": cls.FEDORA41,
-            str(cls.FEDORA42): cls.FEDORA42,
-            "fc42": cls.FEDORA42,
             str(cls.FEDORA43): cls.FEDORA43,
             "fc43": cls.FEDORA43,
+            str(cls.FEDORA44): cls.FEDORA44,
+            "fc44": cls.FEDORA44,
             # ubuntu
             str(cls.UBUNTU2004): cls.UBUNTU2004,
             "ubuntu-focal": cls.UBUNTU2004,
@@ -173,6 +173,9 @@ class DistroKind(StrEnum):
             str(cls.DEBIAN13): cls.DEBIAN13,
             "debian-trixie": cls.DEBIAN13,
             "trixie": cls.DEBIAN13,
+            # openruyi
+            str(cls.OPENRUYI): cls.OPENRUYI,
+            "openruyi-creek": cls.OPENRUYI,
         }
 
     @classmethod
@@ -193,9 +196,8 @@ class DefaultImage(StrEnum):
     ROCKY9 = "docker.io/rockylinux/rockylinux:9"
     ROCKY10 = "docker.io/rockylinux/rockylinux:10"
     # fedora
-    FEDORA41 = "registry.fedoraproject.org/fedora:41"
-    FEDORA42 = "registry.fedoraproject.org/fedora:42"
     FEDORA43 = "registry.fedoraproject.org/fedora:43"
+    FEDORA44 = "registry.fedoraproject.org/fedora:44"
     # ubuntu
     UBUNTU2004 = "docker.io/ubuntu:20.04"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
@@ -204,6 +206,8 @@ class DefaultImage(StrEnum):
     # debian
     DEBIAN12 = "docker.io/debian:bookworm"
     DEBIAN13 = "docker.io/debian:trixie"
+    # openruyi
+    OPENRUYI = "community-ci.openruyi.cn/openruyi-oci:riscv64"
 
 
 class CommandFailed(Exception):
@@ -230,6 +234,52 @@ def _cmdstr(cmd):
     return " ".join(shlex.quote(c) for c in cmd)
 
 
+def _podman_requires_system_migrate(output):
+    text = output.lower()
+    return (
+        "invalid internal status" in text
+        and "podman system migrate" in text
+    )
+
+
+def _podman_preflight(ctx):
+    """Detect and self-heal a known podman failure mode where an
+    interrupted or version-skewed store reports an invalid internal
+    status until `podman system migrate` is run.
+    """
+    if ctx._podman_preflight_done:
+        return
+    if "podman" not in ctx.container_engine:
+        ctx._podman_preflight_done = True
+        return
+
+    ctx._podman_preflight_done = True
+    info_cmd = [ctx.container_engine, "info"]
+    res = subprocess.run(info_cmd, capture_output=True, text=True)
+    if res.returncode == 0:
+        return
+
+    output = f"{res.stdout}\n{res.stderr}"
+    if not _podman_requires_system_migrate(output):
+        log.warning("podman runtime preflight failed: %s", res.stderr.strip())
+        return
+
+    log.warning(
+        "podman reported invalid internal status; attempting self-heal with 'podman system migrate'"
+    )
+    migrate_cmd = [ctx.container_engine, "system", "migrate"]
+    mig = subprocess.run(migrate_cmd, capture_output=True, text=True)
+    if mig.returncode != 0:
+        log.warning("podman system migrate failed: %s", mig.stderr.strip())
+        return
+
+    res2 = subprocess.run(info_cmd, capture_output=True, text=True)
+    if res2.returncode == 0:
+        log.info("podman runtime preflight recovered after system migrate")
+    else:
+        log.warning("podman info still failing after migrate: %s", res2.stderr.strip())
+
+
 def _run(cmd, *args, **kwargs):
     ctx = kwargs.pop("ctx", None)
     if ctx and ctx.dry_run:
@@ -237,6 +287,10 @@ def _run(cmd, *args, **kwargs):
         # because we can not return a result (as we did nothing)
         # raise a specific exception to be caught by higher layer
         raise DidNotExecute(cmd)
+
+    cmd0 = str(cmd[0]) if cmd else ""
+    if ctx and "podman" in cmd0:
+        _podman_preflight(ctx)
 
     log.info("Executing command: %s", _cmdstr(cmd))
     return subprocess.run(cmd, *args, **kwargs)
@@ -284,6 +338,36 @@ def _container_cmd(
         )
         cmd.append(f"-eCCACHE_DIR={ccdir}")
         cmd.append(f"-eCCACHE_BASEDIR={ctx.cli.homedir}")
+    token_handling = ctx.github_token_handling()
+    if token_handling is not GitHubTokenHandling.DISABLED:
+        if token_handling is GitHubTokenHandling.ENABLED_IN_ENVIRON:
+            # Forward GITHUB_TOKEN from this script's own environment
+            # into the container. A bare `-e NAME` (no `=value`) is
+            # resolved by the container engine from its own calling
+            # environment, so the secret value never appears as a
+            # command line argument, in _cmdstr() output, or in logs.
+            # If the token instead only came from --env-file, the
+            # engine's existing --env-file handling above already
+            # supplies it and nothing further is needed here.
+            cmd.append("-eGITHUB_TOKEN")
+        # Configure Git (inside the container) to authenticate
+        # HTTPS requests to github.com using GITHUB_TOKEN, via a
+        # credential helper that reads the token from the container's
+        # own environment only when Git asks for credentials. This
+        # only affects Git-over-HTTPS to github.com (e.g. CMake
+        # FetchContent/ExternalProject_Add dependency fetches); it
+        # does not authenticate curl, the GitHub API, or container
+        # registries. None of the values below contain the token
+        # itself, only a reference to the GITHUB_TOKEN variable name.
+        cmd.append("-eGIT_CONFIG_COUNT=1")
+        cmd.append(
+            "-eGIT_CONFIG_KEY_0=credential.https://github.com.helper"
+        )
+        cmd.append(
+            "-eGIT_CONFIG_VALUE_0="
+            '!f() { echo "username=x-access-token"; '
+            'echo "password=$GITHUB_TOKEN"; }; f'
+        )
     cmd.extend(extra_args or [])
     cmd.extend(ctx.cli.extra or [])
     if ctx.npm_cache_dir:
@@ -394,6 +478,22 @@ class ImageSource(StrEnum):
         return ", ".join(s.value for s in cls)
 
 
+class GitHubTokenHandling(enum.Enum):
+    # No GITHUB_TOKEN is available (from either the environment or an
+    # --env-file); nothing should be forwarded into the container.
+    DISABLED = enum.auto()
+    # A GITHUB_TOKEN is available, but only via --env-file. The
+    # container engine's own --env-file handling already supplies it;
+    # no extra `-e` argument is needed.
+    ENABLED = enum.auto()
+    # A GITHUB_TOKEN is available in this process's own environment
+    # (regardless of whether it's also in the --env-file). It must be
+    # forwarded explicitly with a bare `-e GITHUB_TOKEN` so the
+    # container engine copies the value from its own calling
+    # environment rather than the command line.
+    ENABLED_IN_ENVIRON = enum.auto()
+
+
 class ImageVariant(StrEnum):
     DEFAULT = 'default'  # build everything + make check
     # test dependencies will not be instaled, other parameters
@@ -411,6 +511,7 @@ class Context:
     def __init__(self, cli):
         self.cli = cli
         self._engine = None
+        self._podman_preflight_done = False
         self.distro_cache_name = ""
         self.current_srpm = None
 
@@ -468,6 +569,35 @@ class Context:
         if len(values) != 1:
             raise ValueError(f"unexpected value in env file: {found!r}")
         return values[0]
+
+    @ftcache
+    def github_token_handling(self):
+        """Return a GitHubTokenHandling value describing whether and how
+        a GITHUB_TOKEN should be forwarded into the container. The
+        secret value itself is only held transiently (for this presence
+        check and, if sourced from the environment, for the container
+        engine's own env-passthrough) and is never written into any
+        generated command, exception, or log message.
+        """
+        from_env = os.environ.get('GITHUB_TOKEN')
+        from_file = self.lookup_env_file('GITHUB_TOKEN')
+        log.debug("Environment GITHUB_TOKEN present=%r", from_env is not None)
+        log.debug(
+            "Env file GITHUB_TOKEN present=%r", from_file is not None
+        )
+        if (
+            from_env != from_file
+            and from_env is not None
+            and from_file is not None
+        ):
+            raise ValueError(
+                'conflicting GITHUB_TOKEN values in env and env file'
+            )
+        if from_env is not None:
+            return GitHubTokenHandling.ENABLED_IN_ENVIRON
+        if from_file is not None:
+            return GitHubTokenHandling.ENABLED
+        return GitHubTokenHandling.DISABLED
 
     def packages_build(self):
         """Return true if only packages will be build (not make check)."""

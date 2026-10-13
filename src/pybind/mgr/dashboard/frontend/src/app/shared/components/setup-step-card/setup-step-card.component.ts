@@ -1,11 +1,11 @@
 import { Component, Input } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { ComponentsModule } from '../components.module';
 
 @Component({
   selector: 'cd-setup-step-card',
   standalone: true,
-  imports: [CommonModule, ComponentsModule],
+  imports: [ComponentsModule],
   templateUrl: './setup-step-card.component.html',
   styleUrls: ['./setup-step-card.component.scss']
 })

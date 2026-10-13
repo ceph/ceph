@@ -1522,21 +1522,21 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
     return -ERR_PERMANENT_REDIRECT;
   }
 
-  if (bypass_gc)
-    ret = bucket->remove_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
-  else
-    ret = bucket->remove(dpp, op_state.will_delete_children(), y);
-  if (ret < 0)
-    return ret;
-
-  // forward to master zonegroup
+  // forward to master first
   const std::string delpath = "/admin/bucket";
   RGWEnv env;
   env.set("REQUEST_METHOD", "DELETE");
   env.set("SCRIPT_URI", delpath);
   env.set("REQUEST_URI", delpath);
-  env.set("QUERY_STRING", fmt::format("bucket={}&tenant={}", bucket->get_name(), bucket->get_tenant()));
   req_info req(dpp->get_cct(), &env);
+  req.args.append("bucket", bucket->get_name());
+  req.args.append("tenant", bucket->get_tenant());
+  if (op_state.will_delete_children()) {
+    req.args.append("purge-objects", "true");
+  }
+  if (bypass_gc) {
+    req.args.append("bypass-gc", "true");
+  }
   rgw_err err; // unused
 
   ret = rgw_forward_request_to_master(dpp, site, bucket->get_owner(), nullptr, nullptr, req, err, y);
@@ -1545,6 +1545,11 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
                       << ret << dendl;
     return ret;
   }
+
+  if (bypass_gc)
+    ret = bucket->remove_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
+  else
+    ret = bucket->remove(dpp, op_state.will_delete_children(), y);
 
   return ret;
 }
@@ -2940,6 +2945,17 @@ class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
   }
 };
 
+class RGWVectorBucketMetadataHandler : public RGWBucketMetadataHandler {
+ public:
+  using RGWBucketMetadataHandler::RGWBucketMetadataHandler;
+
+  string get_type() override { return "vectorbucket"; }
+
+  // the vector data is not synced between the zones, and neither are the vector
+  // buckets holding it. each zone has its own vector buckets
+  bool is_synced() const override { return false; }
+};
+
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   rgw::sal::Driver* driver;
   RGWSI_Zone* svc_zone{nullptr};
@@ -2947,12 +2963,13 @@ class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   RGWSI_BucketIndex* svc_bi{nullptr};
   RGWDataChangesLog *svc_datalog{nullptr};
 
-  int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
+protected:
+  virtual int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
                   const std::string& entry, RGWBucketCompleteInfo& bci,
                   const std::optional<RGWBucketCompleteInfo>& old_bci,
                   const RGWObjVersionTracker& objv_tracker,
                   bool from_remote_zone);
-  int put_post(const DoutPrefixProvider* dpp, optional_yield y,
+  virtual int put_post(const DoutPrefixProvider* dpp, optional_yield y,
                const RGWBucketCompleteInfo& bci,
                const std::optional<RGWBucketCompleteInfo>& old_bci,
                RGWObjVersionTracker& objv_tracker);
@@ -3058,6 +3075,7 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
 				const RGWZone& zone,
 				std::optional<rgw::BucketIndexType> type,
 				std::optional<uint32_t> shards) {
+
   layout.current_index.gen = 0;
   layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
 
@@ -3076,7 +3094,13 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
   }
 
   if (layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
-    layout.logs.push_back(log_layout_from_index(0, layout.current_index));
+    const bool use_fifo =
+      (cct->_conf.get_val<std::string>("rgw_default_bucket_bilog_type") == "fifo");
+    if (use_fifo) {
+      layout.logs.push_back(fifo_log_layout_from_index(0, layout.current_index));
+    } else {
+      layout.logs.push_back(log_layout_from_index(0, layout.current_index));
+    }
   }
 }
 
@@ -3132,7 +3156,7 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     const auto& log = bci.info.layout.logs.back();
     if (bci.info.bucket_deleted() && log.layout.type != rgw::BucketLogType::Deleted) {
       const auto index_log = bci.info.layout.logs.back();
-      const int shards_num = rgw::num_shards(index_log.layout.in_index);
+      const int shards_num = rgw::num_shards(index_log);
       bci.info.layout.logs.push_back({log.gen+1, {rgw::BucketLogType::Deleted}});
       ldpp_dout(dpp, 10) << "store log layout type: " <<  bci.info.layout.logs.back().layout.type << dendl;
       for (int i = 0; i < shards_num; ++i) {
@@ -3296,6 +3320,32 @@ class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadata
     return 0;
   }
 };
+
+class RGWVectorBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
+protected:
+  int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
+                  const std::string& entry, RGWBucketCompleteInfo& bci,
+                  const std::optional<RGWBucketCompleteInfo>& old_bci,
+                  const RGWObjVersionTracker& objv_tracker,
+                  bool from_remote_zone) override {
+    bci.info.layout.current_index.layout.type = rgw::BucketIndexType::Indexless;
+    return 0;
+  }
+  int put_post(const DoutPrefixProvider* dpp, optional_yield y,
+               const RGWBucketCompleteInfo& bci,
+               const std::optional<RGWBucketCompleteInfo>& old_bci,
+               RGWObjVersionTracker& objv_tracker) override {return 0;}
+ public:
+   RGWVectorBucketInstanceMetadataHandler(rgw::sal::Driver* driver,
+                                   RGWSI_Zone* svc_zone,
+                                   RGWSI_Bucket* svc_bucket) :
+     RGWBucketInstanceMetadataHandler(driver, svc_zone, svc_bucket, nullptr,  nullptr) {}
+
+  string get_type() override { return "vectorbucket.instance"; }
+
+  // see RGWVectorBucketMetadataHandler::is_synced()
+  bool is_synced() const override { return false; }
+};
 #endif
 
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
@@ -3303,8 +3353,10 @@ RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket_Sync *bucket_sync_svc,
                            RGWSI_BucketIndex *bi_svc,
                            RGWSI_User* user_svc,
-                           RGWDataChangesLog *datalog_svc)
-  : cct(zone_svc->ctx())
+                           RGWDataChangesLog *datalog_svc,
+                           BucketsObjGetter obj_getter_func,
+                           UserBucketsObjGetter user_obj_getter_func)
+  : cct(zone_svc->ctx()), get_buckets_obj(obj_getter_func), get_user_buckets_obj(user_obj_getter_func)
 {
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
@@ -3584,17 +3636,17 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                                                .set_orig_info(&bucket_info));
 }
 
-static rgw_raw_obj get_owner_buckets_obj(RGWSI_User* svc_user,
+rgw_raw_obj RGWBucketCtl::get_owner_buckets_obj(RGWSI_User* svc_user,
                                          RGWSI_Zone* svc_zone,
                                          const rgw_owner& owner)
 {
   return std::visit(fu2::overload(
       [&] (const rgw_user& uid) {
-        return svc_user->get_buckets_obj(uid);
+        return (svc_user->*get_user_buckets_obj)(uid);
       },
       [&] (const rgw_account_id& account_id) {
         const RGWZoneParams& zone = svc_zone->get_zone_params();
-        return rgwrados::account::get_buckets_obj(zone, account_id);
+        return get_buckets_obj(zone, account_id);
       }), owner);
 }
 #endif
@@ -3743,11 +3795,11 @@ int RGWBucketCtl::sync_owner_stats(const DoutPrefixProvider *dpp,
   // flush stats to the user/account owner object
   const rgw_raw_obj& obj = std::visit(fu2::overload(
       [&] (const rgw_user& user) {
-        return svc.user->get_buckets_obj(user);
+        return (svc.user->*get_user_buckets_obj)(user);
       },
       [&] (const rgw_account_id& id) {
         const RGWZoneParams& zone = svc.zone->get_zone_params();
-        return rgwrados::account::get_buckets_obj(zone, id);
+        return get_buckets_obj(zone, id);
       }), owner);
   return rgwrados::buckets::write_stats(dpp, y, rados, obj, *pent);
 }
@@ -3837,6 +3889,24 @@ auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
   return std::make_unique<RGWArchiveBucketInstanceMetadataHandler>(driver, svc_zone,
                                                                    svc_bucket, svc_bi,
                                                                    svc_datalog);
+}
+
+auto create_vector_bucket_metadata_handler(librados::Rados& rados,
+                                    RGWSI_Bucket* svc_bucket,
+                                    RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<RGWVectorBucketMetadataHandler>(
+      rados, svc_bucket, ctl_bucket);
+}
+
+auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
+                                             RGWSI_Zone* svc_zone,
+                                             RGWSI_Bucket* svc_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<RGWVectorBucketInstanceMetadataHandler>(driver, svc_zone,
+                                                            svc_bucket);
 }
 #endif
 

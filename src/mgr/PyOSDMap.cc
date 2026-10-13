@@ -4,6 +4,7 @@
 #include "Mgr.h"
 
 #include "osd/OSDMap.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/version.h"
 #include "crush/CrushWrapper.h"

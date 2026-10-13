@@ -4415,8 +4415,10 @@ string OSDMap::get_flag_string() const
   return get_flag_string(flags);
 }
 
-void OSDMap::print_pools(CephContext *cct, ostream& out) const
+void OSDMap::print_pools(CephContext *cct, ostream& out,
+                         bool show_rule_names) const
 {
+  const CrushWrapper *crush_for_names = show_rule_names ? crush.get() : nullptr;
   for (const auto &[pid, pdata] : pools) {
     std::string name("<unknown>");
     const auto &pni = pool_name.find(pid);
@@ -4432,10 +4434,9 @@ void OSDMap::print_pools(CephContext *cct, ostream& out) const
 		  " read_balance_score %.2f", rb_info.acting_adj_score);
     }
 
-    out << "pool " << pid
-	<< " '" << name
-	<< "' " << pdata
-	<< rb_score_str << "\n";
+    out << "pool " << pid << " '" << name << "' ";
+    pdata.print(out, crush_for_names);
+    out << rb_score_str << "\n";
     if (rb_info.err_msg.length() > 0) {
       out << (rc < 0 ? " ERROR: " : " Warning: ") << rb_info.err_msg << "\n";
     }
@@ -5526,15 +5527,40 @@ int OSDMap::calc_desired_primary_distribution_simple(
     }
 
     // Then, stretch the value (necessary when primary affinity is smaller than 1)
-    float factor = (float)pool->get_pg_num() / (float)distribution_sum;
-    float distribution_sum_desired = 0.0;
+    double factor = (double)pool->get_pg_num() / distribution_sum;
+    double distribution_sum_desired = 0.0;
 
-    ceph_assert(factor >= 1.0);
-    for (const auto & [osd, osd_primary_count] : desired_primary_distribution) {
-      desired_primary_distribution[osd] *= factor;
-      distribution_sum_desired += desired_primary_distribution[osd];
+    // factor is mathematically >= 1.0 (distribution_sum <= pg_num), but
+    // float rounding of the per-OSD terms can push distribution_sum a
+    // fraction above pg_num. Tolerate that noise and clamp to 1.0; anything
+    // further below 1.0 means the distribution is inconsistent with the
+    // pool, so log it and skip the pool rather than abort the caller.
+    if (factor < 1.0 - 1e-6) {
+      ldout(cct, 10) << __func__ << " pool " << get_pool_name(pid)
+                     << " desired primary distribution sum " << distribution_sum
+                     << " exceeds pg_num " << pool->get_pg_num()
+                     << " (factor " << factor << ") - skipping" << dendl;
+      return -EINVAL;
     }
-    ceph_assert(fabs(distribution_sum_desired - pool->get_pg_num()) < 0.01);
+    factor = std::max(factor, 1.0);
+    for (auto & [osd, osd_primary_count] : desired_primary_distribution) {
+      double scaled = (double)osd_primary_count * factor;
+      osd_primary_count = (float)scaled;
+      distribution_sum_desired += scaled;
+    }
+    // the stretched distribution sums back to pg_num by construction; verify
+    // with a double accumulator and a tolerance that scales with pg_num, so
+    // per-element float rounding cannot fail the check on large pools. If it
+    // still fails, skip the pool instead of aborting.
+    double tolerance = std::max(0.01, (double)pool->get_pg_num() * 1e-4);
+    if (fabs(distribution_sum_desired - pool->get_pg_num()) >= tolerance) {
+      ldout(cct, 10) << __func__ << " pool " << get_pool_name(pid)
+                     << " stretched primary distribution sums to "
+                     << distribution_sum_desired << ", expected pg_num "
+                     << pool->get_pg_num() << " (tolerance " << tolerance
+                     << ") - skipping" << dendl;
+      return -EINVAL;
+    }
   } else {
     ldout(cct, 10) << __func__ <<" skipping erasure pool "
                    << get_pool_name(pid) << dendl;
@@ -5809,13 +5835,13 @@ int OSDMap::calc_pg_upmaps(
   ldout(cct, 10) << " osd_weight_total " << osd_weight_total << dendl;
   ldout(cct, 10) << " pgs_per_weight " << pgs_per_weight << dendl;
 
-  float stddev = 0;
+  double bal_score = 0; // how balanced the pgs are. 0 is perfect.
   map<int,float> osd_deviation;       // osd, deviation(pgs)
   multimap<float,int> deviation_osd;  // deviation(pgs), osd
   float cur_max_deviation = calc_deviations(cct, pgs_by_osd, osd_weight, pgs_per_weight,
-				      	    osd_deviation, deviation_osd, stddev);
+				      	    osd_deviation, deviation_osd, bal_score);
 
-  ldout(cct, 20) << " stdev " << stddev << " max_deviation " << cur_max_deviation << dendl;
+  ldout(cct, 10) << " bal_score " << bal_score << " max_deviation " << cur_max_deviation << dendl;
   if (cur_max_deviation <= max_deviation) {
     ldout(cct, 10) << __func__ << " distribution is almost perfect"
                    << dendl;
@@ -6044,16 +6070,20 @@ int OSDMap::calc_pg_upmaps(
 
     // test change, apply if change is good
     ceph_assert(to_unmap.size() || to_upmap.size());
-    float new_stddev = 0;
+    double new_bal_score = 0;
     map<int,float> temp_osd_deviation;
     multimap<float,int> temp_deviation_osd;
     float cur_max_deviation = calc_deviations(cct, temp_pgs_by_osd, osd_weight,
     					      pgs_per_weight, temp_osd_deviation,
-					      temp_deviation_osd, new_stddev);
-    ldout(cct, 10) << " stddev " << stddev << " -> " << new_stddev << dendl;
-    if (new_stddev >= stddev) {
+					      temp_deviation_osd, new_bal_score);
+    // log the delta too: the totals are printed with the stream's default
+    // precision, so a small but real improvement is invisible in them
+    ldout(cct, 10) << " bal_score " << bal_score << " -> " << new_bal_score
+                   << " (delta " << new_bal_score - bal_score << ")" << dendl;
+    // reject the change if it makes things worse
+    if (new_bal_score > bal_score) {
       if (!aggressive) {
-        ldout(cct, 10) << " break because stddev is not decreasing"
+        ldout(cct, 10) << " break because bal_score is not decreasing"
                        << " and aggressive mode is not enabled"
                        << dendl;
         break;
@@ -6080,8 +6110,8 @@ int OSDMap::calc_pg_upmaps(
     }
 
     // ready to go
-    ceph_assert(new_stddev < stddev);
-    stddev = new_stddev;
+    ceph_assert(new_bal_score <= bal_score);
+    bal_score = new_bal_score;
     pgs_by_osd = temp_pgs_by_osd;
     osd_deviation = temp_osd_deviation;
     deviation_osd = temp_deviation_osd;
@@ -6090,7 +6120,7 @@ int OSDMap::calc_pg_upmaps(
 
     num_changed += pack_upmap_results(cct, to_unmap, to_upmap, tmp_osd_map, pending_inc);
 
-    ldout(cct, 20) << " stdev " << stddev << " max_deviation " << cur_max_deviation << dendl;
+    ldout(cct, 10) << " bal_score " << bal_score << " max_deviation " << cur_max_deviation << dendl;
     if (cur_max_deviation <= max_deviation) {
       ldout(cct, 10) << __func__ << " Optimization plan is almost perfect"
                      << dendl;
@@ -6232,32 +6262,42 @@ float OSDMap::calc_deviations (
   float pgs_per_weight,
   map<int,float>& osd_deviation,
   multimap<float,int>& deviation_osd,
-  float& stddev)  // return current max deviation
+  double& bal_score)  // return current max deviation
 {
   //
-  // This function calculates the 2 maps osd_deviation and deviation_osd which 
-  // hold the deviation between the current number of PGs which map to an OSD 
-  // and the optimal number. Ot also calculates the stddev of the deviations and
-  // returns the current max deviation. 
-  // NOTE - the calculation is not exactly stddev it is actually sttdev^2 but as
-  //        long as it is monotonic with stddev (and it is), it is sufficient for
-  //        the balancer code.
+  // This function calculates the map's osd_deviation and deviation_osd, which
+  // hold the deviation between the current number of PGs which map to an OSD
+  // and the optimal number. It also calculates a bal_score of the deviations and
+  // returns the current max deviation.
+  //
+  // NOTE - bal_score is accumulated in double. A single PG moving between two
+  //        OSDs changes one term of a sum taken over every OSD in the crush
+  //        tree; in float that delta can fall below the ULP of the total, so
+  //        two genuinely different mappings compare equal and the balancer
+  //        stalls.
   //
   float cur_max_deviation = 0.0;
-  stddev = 0.0;
+  bal_score = 0.0;
   for (auto& [oid, opgs] : pgs_by_osd) {
     // make sure osd is still there (belongs to this crush-tree)
     ceph_assert(osd_weight.count(oid));
-    float target = osd_weight.at(oid) * pgs_per_weight;
-    float deviation = (float)opgs.size() - target;
+    float weight = osd_weight.at(oid);
+    float pgs = (float)opgs.size();
+    float target = weight * pgs_per_weight;
+    float deviation = pgs - target;
+    ceph_assert(target > 0);
     ldout(cct, 20) << " osd." << oid
-                   << "\tpgs " << opgs.size()
+                   << "\tweight " << weight
+                   << "\tpgs " << pgs
                    << "\ttarget " << target
                    << "\tdeviation " << deviation
                    << dendl;
     osd_deviation[oid] = deviation;
     deviation_osd.insert(make_pair(deviation, oid));
-    stddev += deviation * deviation;
+    // (pgs / target - 1) is the relative deviation, computed from the already
+    // known absolute deviation to avoid cancellation when pgs is close to target
+    double rel_deviation = (double)deviation / target;
+    bal_score += rel_deviation * rel_deviation * weight;
     if (fabsf(deviation) > cur_max_deviation)
       cur_max_deviation = fabsf(deviation);
   }

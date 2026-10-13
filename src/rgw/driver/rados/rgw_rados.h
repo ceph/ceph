@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <functional>
+#include <type_traits>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
@@ -29,12 +30,14 @@
 #include "rgw_obj_manifest.h"
 #include "rgw_sync_module.h"
 #include "rgw_trim_bilog.h"
+#include "rgw_bilog.h"
 #include "rgw_service.h"
 #include "rgw_sal_store.h"
 #include "rgw_aio.h"
 #include "rgw_d3n_cacherequest.h"
 
 #include "services/svc_bi_rados.h"
+#include "services/svc_zone.h"
 #include "common/Throttle.h"
 #include "common/ceph_mutex.h"
 #include "rgw_cache.h"
@@ -320,6 +323,25 @@ using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
 
 class RGWIndexCompletionManager;
 
+// no-op bilog handler
+// used when bilog recording is disabled or handled in-index (InIndex layout).
+struct BILogNopHandler {
+  void add_maybe_flush(uint64_t olh_epoch,
+                       ceph::real_time mtime,
+                       const cls_rgw_bi_log_related_op& op_info) {}
+  void add_maybe_flush(uint64_t olh_epoch,
+                       const cls_rgw_obj_key& key,
+                       const std::string& op_tag,
+                       bool delete_marker,
+                       ceph::real_time mtime,
+                       const rgw_zone_set& zones_trace) {}
+  void add_maybe_flush(RGWModifyOp op,
+                       const rgw_bucket_dir_entry& list_state,
+                       rgw_zone_set zones_trace) {}
+  int flush(optional_yield) { return 0; }
+  int flush() { return 0; }
+};
+
 class RGWRados
 {
   friend class RGWGC;
@@ -346,6 +368,7 @@ class RGWRados
   int open_reshard_pool_ctx(const DoutPrefixProvider *dpp);
   int open_notif_pool_ctx(const DoutPrefixProvider *dpp);
   int open_logging_pool_ctx(const DoutPrefixProvider *dpp);
+  int open_vector_pool_ctx(const DoutPrefixProvider *dpp);
 
   int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx&  io_ctx,
 		    bool mostly_omap, bool bulk);
@@ -386,7 +409,15 @@ class RGWRados
 
   ceph::mutex bucket_id_lock{ceph::make_mutex("rados_bucket_id")};
 
-  // This field represents the number of bucket index object shards
+  // write-path FIFO bilog cache
+  // shared_ptr<RGWBILogFIFO> is reused across all operations for the same
+  // (bucket_id, gen) so that LazyFIFO::lazy_init()/FIFO::create() runs at
+  // most once per shard per generation.
+  mutable ceph::shared_mutex fifo_bilog_cache_lock_ =
+      ceph::make_shared_mutex("RGWRados::fifo_bilog_cache");
+  std::map<std::pair<std::string, uint64_t>,
+           std::shared_ptr<RGWBILogFIFO>> fifo_bilog_cache_;
+
   uint32_t bucket_index_max_shards{0};
 
   std::string get_cluster_fsid(const DoutPrefixProvider *dpp, optional_yield y);
@@ -443,6 +474,7 @@ protected:
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
   librados::IoCtx logging_pool_ctx;     // .rgw.logging
+  librados::IoCtx vector_pool_ctx;     // .rgw.meta:vector
 
   bool pools_initialized{false};
 
@@ -658,6 +690,20 @@ public:
                     const std::map<std::string, bufferlist>& attrs,
                     bool obj_lock_enabled,
                     const std::optional<std::string>& swift_ver_location,
+                    const std::optional<RGWQuotaInfo>& quota,
+                    std::optional<ceph::real_time> creation_time,
+                    std::optional<rgw::BucketIndexType> index_type,
+                    std::optional<uint32_t> index_shards,
+                    obj_version* pep_objv,
+                    RGWBucketInfo& info);
+
+  int create_vector_bucket(const DoutPrefixProvider* dpp,
+                    optional_yield y,
+                    const rgw_bucket& bucket,
+                    const rgw_owner& owner,
+                    const std::string& zonegroup_id,
+                    const rgw_placement_rule& placement_rule,
+                    const std::map<std::string, bufferlist>& attrs,
                     const std::optional<RGWQuotaInfo>& quota,
                     std::optional<ceph::real_time> creation_time,
                     std::optional<rgw::BucketIndexType> index_type,
@@ -1307,6 +1353,8 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
    */
   int delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool check_empty = true);
 
+  int delete_vector_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp);
+
   void wakeup_meta_sync_shards(std::set<int>& shard_ids);
 
   void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >& entries);
@@ -1512,7 +1560,7 @@ public:
       std::map<RGWObjCategory, RGWStorageStats>& stats, std::string *max_marker, bool* syncstopped = NULL);
   int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb);
 
-  int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, const std::map<std::string, bufferlist> *pattrs, const DoutPrefixProvider *dpp, optional_yield y);
+  int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, const std::map<std::string, bufferlist> *pattrs, const DoutPrefixProvider *dpp, optional_yield y, RGWBucketCtl* bucket_ctl);
   /* xxx dang obj_ctx -> svc */
   int get_bucket_instance_info(const std::string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp);
   int get_bucket_instance_info(const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp);
@@ -1523,7 +1571,7 @@ public:
 		      const std::string& tenant_name, const std::string& bucket_name,
 		      RGWBucketInfo& info,
 		      ceph::real_time *pmtime, optional_yield y,
-                      const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *pattrs = NULL);
+                      const DoutPrefixProvider *dpp, RGWBucketCtl* bucket_ctl, std::map<std::string, bufferlist> *pattrs = NULL);
 
   RGWChainedCacheImpl_bucket_topics_entry *get_topic_cache() { return topic_cache; }
 
@@ -1534,26 +1582,117 @@ public:
   int try_refresh_bucket_info(RGWBucketInfo& info,
 			      ceph::real_time *pmtime,
                               const DoutPrefixProvider *dpp, optional_yield y,
-			      std::map<std::string, bufferlist> *pattrs = nullptr);
+			      std::map<std::string, bufferlist> *pattrs, RGWBucketCtl* bucket_ctl);
 
   int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, obj_version *pep_objv,
 			     const std::map<std::string, bufferlist> *pattrs, bool create_entry_point,
-                             const DoutPrefixProvider *dpp, optional_yield y);
+                             const DoutPrefixProvider *dpp, optional_yield y, RGWBucketCtl* bucket_ctl);
 
   int cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, std::string& tag, rgw_obj& obj,
                          optional_yield y);
-  int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, std::string& tag, int64_t pool, uint64_t epoch,
-                          rgw_bucket_dir_entry& ent, RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs,
-                          uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
-                           RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
-                           rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int cls_obj_complete_del(BucketShard& bs, std::string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
-                           ceph::real_time& removed_mtime, std::list<rgw_obj_index_key> *remove_objs,
-                           uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int cls_obj_complete_cancel(BucketShard& bs, std::string& tag, rgw_obj& obj,
-                              std::list<rgw_obj_index_key> *remove_objs,
-                              uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
+  template <class CLSRGWBucketModifyOpT>
+  int cls_obj_complete_op(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+                          BucketShard& bs, const rgw_obj& obj, std::string& tag,
+                          int64_t pool, uint64_t epoch,
+                          rgw_bucket_dir_entry& ent, RGWObjCategory category,
+                          std::list<rgw_obj_index_key>* remove_objs,
+                          uint16_t bilog_flags, optional_yield y,
+                          rgw_zone_set* zones_trace = nullptr, bool log_op = true);
+  int cls_obj_complete_add(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+                           BucketShard& bs, const rgw_obj& obj, std::string& tag,
+                           int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
+                           RGWObjCategory category, std::list<rgw_obj_index_key>* remove_objs,
+                           uint16_t bilog_flags, optional_yield y,
+                           rgw_zone_set* zones_trace = nullptr, bool log_op = true);
+  int cls_obj_complete_del(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+                           BucketShard& bs, std::string& tag,
+                           int64_t pool, uint64_t epoch, rgw_obj& obj,
+                           ceph::real_time& removed_mtime,
+                           std::list<rgw_obj_index_key>* remove_objs,
+                           uint16_t bilog_flags, optional_yield y,
+                           rgw_zone_set* zones_trace = nullptr, bool log_op = true);
+  int cls_obj_complete_cancel(const DoutPrefixProvider* dpp, const RGWBucketInfo& bucket_info,
+                              BucketShard& bs, std::string& tag, rgw_obj& obj,
+                              std::list<rgw_obj_index_key>* remove_objs,
+                              uint16_t bilog_flags, optional_yield y,
+                              rgw_zone_set* zones_trace = nullptr, bool log_op = true);
+
+  // create a FIFO bilog batch writer for the active log generation of
+  // bucket_info.  The shard OIDs are derived from the current FIFO log
+  // layout stored in bucket_info.layout.logs.
+  RGWBILogUpdateBatch get_or_create_fifo_bilog_batch(
+      const DoutPrefixProvider* dpp,
+      const RGWBucketInfo& bucket_info);
+
+  // dispatch bilog recording + optional bucket-index op for a single request.
+  //
+  // CLSRGWBucketModifyOpT == void:
+  //   is called as func(bilog_handler)
+  //   — used when only a bilog entry needs to be written without a CLS op
+  //     (e.g. apply_olh_log replay, check_disk_state reconciliation).
+  //
+  // CLSRGWBucketModifyOpT != void:
+  //   is called as func(op_issuer, bilog_handler)
+  //   — used for normal bucket-index write operations; args are forwarded
+  //     to the OpIssuer constructor.
+  //
+  // backend selection:
+  //   InIndex log (or no log) + log_data=true  → OpIssuer(log_data=true)  + BILogNopHandler
+  //   FIFO log               + log_data=true  → OpIssuer(log_data=false) + RGWBILogUpdateBatch
+  //   any                    + log_data=false → OpIssuer(log_data=false) + BILogNopHandler
+  template <class CLSRGWBucketModifyOpT, class F, class... Args>
+  int with_bilog(const DoutPrefixProvider* dpp,
+                 F&& func,
+                 const RGWBucketInfo& bucket_info,
+                 bool log_op,
+                 Args&&... args)
+  {
+    ldpp_dout(dpp, 20) << __func__
+                       << ": log_op=" << log_op
+                       << " need_to_log_data=" << svc.zone->need_to_log_data()
+                       << dendl;
+
+    const bool log_data = log_op && svc.zone->need_to_log_data();
+    const bool is_inindex =
+      bucket_info.layout.logs.empty() ||
+      bucket_info.layout.logs.back().layout.type != rgw::BucketLogType::FIFO;
+    // suppress fifo bilog entries when sync is disabled.
+    // datasync_flag_enabled() reflects the bucket-info flag set by
+    // "bucket sync disable".
+    const bool fifo_sync_enabled = bucket_info.datasync_flag_enabled();
+
+    if constexpr (std::is_same_v<CLSRGWBucketModifyOpT, void>) {
+      // bilog-only variant: lambda receives only a bilog handler.
+      if (log_data && !is_inindex && fifo_sync_enabled) {
+        auto batch = get_or_create_fifo_bilog_batch(dpp, bucket_info);
+        std::forward<F>(func)(batch);
+      } else {
+        BILogNopHandler nop;
+        std::forward<F>(func)(nop);
+      }
+      return 0;
+    } else {
+      // full variant: lambda receives (op_issuer, bilog_handler).
+      if (is_inindex) {
+        // InIndex or no-log: OpIssuer writes its own bilog. FIFO is NOP.
+        CLSRGWBucketModifyOpT op_issuer{log_data, std::forward<Args>(args)...};
+        BILogNopHandler nop;
+        return std::forward<F>(func)(op_issuer, nop);
+      } else if (log_data && fifo_sync_enabled) {
+        // fifo log, sync enabled. OpIssuer must not write in-index bilog.
+        CLSRGWBucketModifyOpT op_issuer{false, std::forward<Args>(args)...};
+        auto batch = get_or_create_fifo_bilog_batch(dpp, bucket_info);
+        return std::forward<F>(func)(op_issuer, batch);
+      } else {
+        // fifo log with logging disabled, or sync disabled: CLS op proceeds
+        // normally but no fifo entry is written.  op_issuer always gets
+        // log_op=false for fifo so the OSD never writes omap bilog entries.
+        CLSRGWBucketModifyOpT op_issuer{false, std::forward<Args>(args)...};
+        BILogNopHandler nop;
+        return std::forward<F>(func)(op_issuer, nop);
+      }
+    }
+  }
 
   using ent_map_t =
     boost::container::flat_map<std::string, rgw_bucket_dir_entry>;
@@ -1715,7 +1854,8 @@ public:
                        rgw_bucket_dir_entry& list_state,
                        rgw_bucket_dir_entry& object,
                        bufferlist& suggested_updates,
-                       optional_yield y);
+                       optional_yield y,
+                       bool log_op = true);
 
   /**
    * Init pool iteration

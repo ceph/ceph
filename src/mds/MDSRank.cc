@@ -21,6 +21,7 @@
 #include <iterator>
 #include <vector>
 #include <cstdlib>
+#include "common/Cond.h"
 #include "common/DecayCounter.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -32,6 +33,7 @@
 #include "common/cmdparse.h"
 #include "log/Log.h"
 
+#include "msg/Messenger.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSLoadTargets.h"
@@ -510,7 +512,6 @@ MDSRank::MDSRank(
   purge_queue.update_op_limit(*mdsmap);
 
   objecter->unset_honor_pool_full();
-  objecter->set_balanced_budget();
 
   finisher = new Finisher(cct, "MDSRank", "mds-rank-fin");
 
@@ -3132,6 +3133,12 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "qos get") {
     std::lock_guard l(mds_lock);
     mds_dmclock_scheduler->process_asok_qos_get(cmdmap, *css, f);
+  } else if (command == "quarantine enable") {
+    command_quarantine_dir(cmdmap, std::move(on_finish), QUARANTINE_ADD);
+    return;
+  } else if (command == "quarantine disable") {
+    command_quarantine_dir(cmdmap, std::move(on_finish), QUARANTINE_DEL);
+    return;
   } else {
     r = -ENOSYS;
   }

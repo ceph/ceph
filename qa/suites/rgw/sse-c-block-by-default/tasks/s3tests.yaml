@@ -1,0 +1,6 @@
+tasks:
+- s3tests:
+    client.0:
+      rgw_server: client.0
+      sse-c-block-by-default: true
+      extra_attrs: [sse_c_block_by_default]

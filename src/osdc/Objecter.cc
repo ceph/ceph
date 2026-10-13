@@ -254,6 +254,8 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("osd_min_split_replica_read_size")) {
     min_split_replica_read_size
       = conf.get_val<uint64_t>("osd_min_split_replica_read_size");
+    ceph_assert(min_split_replica_read_size >= SplitOp::REPLICA_MIN_SPLIT_SIZE ||
+                min_split_replica_read_size == 0);
   }
   if (changed.count("rados_replica_read_policy")) {
     auto read_policy = conf.get_val<std::string>("rados_replica_read_policy");
@@ -882,7 +884,10 @@ auto Objecter::linger_register(const object_t& oid,
   info->target.base_oloc = oloc;
   if (info->target.base_oloc.key == oid)
     info->target.base_oloc.key.clear();
-  info->target.flags = flags;
+  // linger ops (watch, notify, notify_ack) must be handled by the primary;
+  // strip any replica-read flags so Objecter does not route them to a replica.
+  info->target.flags = flags &
+                       ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
   info->watch_valid_thru = ceph::coarse_mono_clock::now();
   ldout(cct, 10) << __func__ << " info " << info
 		 << " linger_id " << info->linger_id
@@ -2400,7 +2405,7 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
   op->get();  // Keep alive during async operation
 
   boost::asio::post(service, [this, op, ec, rc]() {
-    shunique_lock rl(rwlock, ceph::acquire_shared);
+    shunique_lock sul(rwlock, ceph::acquire_shared);
 
     bool freed = op->get_nref() == 1;
     op->put();
@@ -2413,6 +2418,7 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
     unique_lock sl(op->session->lock);
 
     if (rc != -EAGAIN) {
+      sul.unlock();
       op->trace.event("post op complete");
       // This removes from session and unlocks sl.
       complete_op_reply(op, ec, op->session, sl, rc);
@@ -2421,7 +2427,7 @@ void Objecter::op_post_split_op_complete(Op* op, bs::error_code ec, int rc) {
       sl.unlock();
       op->split_op_tids.reset();
       ceph_tid_t tid = 0;
-      _op_submit(op, rl, &tid);
+      _op_submit(op, sul, &tid);
     }
   });
 }
@@ -2437,12 +2443,30 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
   _op_submit_with_budget(op, rl, ptid, ctx_budget);
 }
 
+// Register the op timeout noted by _op_submit_with_budget().  Must be called
+// with the op's session lock held and op->tid assigned: op_cancel() finds the
+// op by tid through the session, and the session lock keeps the reply handler
+// from retiring the op while we are still touching it.  An op that is
+// resubmitted (redirect, -EAGAIN) keeps the event armed on its first pass.
+void Objecter::_maybe_arm_op_timeout(Op *op)
+{
+  if (!op->timeout_deadline || op->ontimeout != 0)
+    return;
+
+  const auto tid = op->tid;
+  ceph_assert(tid != 0);
+  op->ontimeout = timer.add_event(*op->timeout_deadline,
+				  [this, tid]() {
+				    op_cancel(tid, -ETIMEDOUT); });
+}
+
 void Objecter::add_op_to_splitop_session(Op *op) {
   unique_lock sl(splitop_session->lock);
   if (op->tid == 0) {
     op->tid = ++last_tid;
   }
   _session_op_assign(splitop_session, op);
+  _maybe_arm_op_timeout(op);
   inflight_ops++;
   sl.unlock();
 }
@@ -2469,13 +2493,15 @@ void Objecter::_op_submit_with_budget(Op *op,
     }
   }
 
+  // Note the deadline here, but leave the timer event to be registered by
+  // _maybe_arm_op_timeout() once op->tid has been assigned under the session
+  // lock.  Assigning a tid out here would let a thread that drew a later tid
+  // reach _send_op() first, and tid order has to match the order ops are sent
+  // (_kick_requests() resends in tid order).  As before, the clock starts
+  // after _take_op_budget(): that wait is not interruptible, so there is
+  // nothing there for a deadline to bound.
   if (osd_timeout > timespan(0)) {
-    if (op->tid == 0)
-      op->tid = ++last_tid;
-    auto tid = op->tid;
-    op->ontimeout = timer.add_event(osd_timeout,
-				    [this, tid]() {
-				      op_cancel(tid, -ETIMEDOUT); });
+    op->timeout_deadline = ceph::coarse_mono_clock::now() + osd_timeout;
   }
 
 
@@ -2673,6 +2699,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
 
   _session_op_assign(s, op);
 
+  _maybe_arm_op_timeout(op);
 
   auto compptr = std::get_if<Op::OpComp>(&op->onfinish);
   if (compptr) {
@@ -3146,6 +3173,13 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       t->osd = -1;
       return RECALC_OP_TARGET_POOL_DNE;
     }
+  }
+
+  // Strip balanced and localized read flags if the target pool does not support non-primary reads.
+  // This ensures that even when flags are added via global configuration (e.g. rados_replica_read_policy),
+  // ops targeting a tiered or deduped pool will not attempt replica/balanced reads.
+  if (!pi->allows_nonprimary_reads()) {
+    t->flags &= ~(CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS);
   }
 
   pg_t pgid;
@@ -5484,6 +5518,8 @@ Objecter::Objecter(CephContext *cct,
   osd_timeout = cct->_conf.get_val<std::chrono::seconds>("rados_osd_op_timeout");
   min_split_replica_read_size
     = cct->_conf.get_val<uint64_t>("osd_min_split_replica_read_size");
+  ceph_assert(min_split_replica_read_size >= SplitOp::REPLICA_MIN_SPLIT_SIZE ||
+              min_split_replica_read_size == 0);
 
   auto read_policy = cct->_conf.get_val<std::string>("rados_replica_read_policy");
   if (read_policy == "localize") {
@@ -5886,7 +5922,6 @@ namespace {
 		   int* rval)
   {
     OSDOp& osd_op = op->add_op(CEPH_OSD_OP_SCRUBLS);
-    op->flags |= CEPH_OSD_FLAG_PGOP;
     ceph_assert(interval);
     arg.encode(osd_op.indata);
     unsigned p = op->ops.size() - 1;

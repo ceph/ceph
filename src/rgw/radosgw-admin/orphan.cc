@@ -1063,7 +1063,7 @@ int RGWRadosList::pop_and_handle_stat_op(
   int ret = front_op.wait(dpp);
   // note: even if we get an error, front_op.result.obj will still be
   // populated with correct data
-  const std::string bucket_name = front_op.result.obj.bucket.name;
+  const std::string bucket_name = front_op.result.obj.bucket.get_namespaced_name();
   const rgw_obj_key obj_key = front_op.result.obj.key;
 
   if (ret == -ENOENT) {
@@ -1309,6 +1309,10 @@ int RGWRadosList::process_bucket(
 	}
       }
 
+      if (entry.is_delete_marker()) {
+	continue;
+      }
+
       ret = do_stat_key(entry.key);
       if (ret < 0) {
 	return ret;
@@ -1465,10 +1469,6 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
     }
   } // while (! bucket_process_map.empty())
 
-  if (include_rgw_obj_name) {
-    return 0;
-  }
-
   // now handle incomplete multipart uploads by going back to the
   // initial bucket
 
@@ -1508,6 +1508,7 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
   // use empty strings for params.{prefix,delim}
 
   do {
+    uploads.clear();
     ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated, null_yield);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
@@ -1551,7 +1552,14 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 		 ++obj_it) {
 	      const rgw_raw_obj& loc =
 		obj_it.get_location().get_raw_obj(store->getRados());
-	      std::cout << loc.oid << std::endl;
+	      if (include_rgw_obj_name) {
+		std::cout << loc.oid <<
+		  field_separator << bucket->get_key().get_namespaced_name() <<
+		  field_separator << manifest.get_prefix() << "." <<
+		  part->get_num() << std::endl;
+	      } else {
+		std::cout << loc.oid << std::endl;
+	      }
 	    } // for (auto obj_it
 	  } // for (auto& p
 	} while (is_parts_truncated);

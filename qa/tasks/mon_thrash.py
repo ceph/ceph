@@ -186,14 +186,22 @@ class MonitorThrasher(Thrasher):
         self.stop()
         return self.join()
 
-    def should_thrash_store(self):
+    def should_thrash_store(self, mon):
         """
         If allowed, indicate that we should thrash a certain percentage of
         the time as determined by the store_thrash_probability value.
+        Also verify the target monitor is currently in quorum so that sync_force
+        can be sent safely.
         """
-        if not self.store_thrash:
+        if not self.store_thrash or \
+                self.rng.randrange(0, 101) >= self.store_thrash_probability:
             return False
-        return self.rng.randrange(0, 101) < self.store_thrash_probability
+        s = self.manager.get_mon_status(mon)  # remote call to ceph tell mon.<x> mon_status
+        if s['state'] not in ('leader', 'peon'):
+            self.log('skipping store thrash on mon.{m}: state is {s}'.format(
+                m=mon, s=s['state']))
+            return False
+        return True
 
     def thrash_store(self, mon):
         """
@@ -356,7 +364,7 @@ class MonitorThrasher(Thrasher):
                 self.log('thrashing mon.{m}'.format(m=mon))
 
                 """ we only thrash stores if we are maintaining quorum """
-                if self.should_thrash_store() and self.maintain_quorum:
+                if self.should_thrash_store(mon) and self.maintain_quorum:
                     self.thrash_store(mon)
 
                 self.kill_mon(mon)

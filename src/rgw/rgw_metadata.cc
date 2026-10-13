@@ -323,7 +323,6 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
 
   try {
     JSONDecoder::decode_json("key", metadata_key, &parser);
-    JSONDecoder::decode_json("ver", *objv, &parser);
     JSONDecoder::decode_json("mtime", mtime, &parser);
   } catch (JSONDecoder::err& e) {
     return -EINVAL;
@@ -484,6 +483,11 @@ void RGWMetadataManager::dump_log_entry(cls::log::entry& entry, Formatter *f)
 void RGWMetadataManager::get_sections(list<string>& sections)
 {
   for (map<string, RGWMetadataHandler *>::iterator iter = handlers.begin(); iter != handlers.end(); ++iter) {
+    // sections that are not synced are not listed. this is the list that the
+    // metadata sync of the other zones is fetching to know what to sync
+    if (!iter->second->is_synced()) {
+      continue;
+    }
     sections.push_back(iter->first);
   }
 }

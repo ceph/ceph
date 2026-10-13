@@ -59,6 +59,9 @@
 #define FSCRYPT_MAXIO_SIZE (INT_MAX & ~4095)
 #endif
 
+// we test deprecated functions
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 using namespace std;
 
 static std::string generate_random_string(int length = 20) {

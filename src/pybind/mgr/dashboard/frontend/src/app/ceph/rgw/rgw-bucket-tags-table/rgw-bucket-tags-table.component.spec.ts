@@ -4,7 +4,7 @@ describe('RgwBucketTagsTableComponent', () => {
   let component: RgwBucketTagsTableComponent;
 
   beforeEach(() => {
-    component = new RgwBucketTagsTableComponent({} as any, {} as any, {} as any);
+    component = new RgwBucketTagsTableComponent({} as any, {} as any, {} as any, {} as any);
   });
 
   it('should escape xml special characters in tags payload', () => {

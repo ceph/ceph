@@ -1478,3 +1478,58 @@ TEST(ecbackend_remove_keys_in_ranges, removes_contiguous_block)
   k05_bl.append("k05");
   EXPECT_TRUE(out["k05"].contents_equal(k05_bl));
 }
+
+TEST(ecomapjournal, replace_ordering_delete_before_add_preserves_header)
+{
+  // Simulate the corrected primary path for a copy-from / replace op:
+  // delete_first() calls append_delete, then add_entry records the new header.
+  // The header from the new incarnation must be returned by get_updated_header.
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("test_replace_order", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  const std::string header_str = "replace header content";
+  ceph::buffer::list header_bl;
+  header_bl.append(header_str);
+
+  // Step 1: append_delete (as delete_first() calls on the acting primary)
+  journal.append_delete(hoid, 5, false);
+
+  // Step 2: add_entry with the new omap header at the same version
+  ECOmapJournalEntry entry(eversion_t(1, 5), false, header_bl, {});
+  journal.add_entry(hoid, entry);
+
+  // The header from the new incarnation must be returned
+  std::optional<ceph::buffer::list> result = journal.get_updated_header(hoid);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(header_bl.length(), result->length());
+}
+
+TEST(ecomapjournal, replace_preserves_header_after_stale_prior_header)
+{
+  // Prior incarnation had a header at version 3. A replace at version 5
+  // issues append_delete (wiping version 3), then add_entry for the new header.
+  // Only the new 73-byte header must be visible.
+  MockDoutPrefixProvider dpp;
+  ECOmapJournal journal(dpp);
+  const hobject_t hoid("test_replace_stale", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  ceph::buffer::list old_header_bl;
+  old_header_bl.append("old header");
+  ECOmapJournalEntry old_entry(eversion_t(1, 3), false, old_header_bl, {});
+  journal.add_entry(hoid, old_entry);
+
+  // Replace: append_delete wipes the prior state, add_entry records the new header
+  ceph::buffer::list new_header_bl;
+  new_header_bl.append("new header 73 bytes long padded to fill the buffer here!!!!!!!!!!!!!!!!!!");
+  ASSERT_EQ(73u, new_header_bl.length());
+
+  journal.append_delete(hoid, 5, false);
+  ECOmapJournalEntry new_entry(eversion_t(1, 5), false, new_header_bl, {});
+  journal.add_entry(hoid, new_entry);
+
+  std::optional<ceph::buffer::list> result = journal.get_updated_header(hoid);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(73u, result->length());
+  ASSERT_TRUE(result->contents_equal(new_header_bl));
+}

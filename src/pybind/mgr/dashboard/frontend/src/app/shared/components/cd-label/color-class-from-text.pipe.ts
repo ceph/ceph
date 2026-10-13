@@ -16,10 +16,9 @@ export class ColorClassFromTextPipe implements PipeTransform {
 
   transform(text: string): string {
     let hash = 0;
-    let charCode = 0;
     if (text) {
       for (let i = 0; i < text.length; i++) {
-        charCode = text.charCodeAt(i);
+        const charCode = text.charCodeAt(i);
         // eslint-disable-next-line no-bitwise
         hash = Math.abs((hash << 5) - hash + charCode);
       }

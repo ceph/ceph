@@ -15,6 +15,7 @@
 
 #include "common/pick_address.h"
 #include "include/util.h"
+#include "include/uuid_fmt.h"
 
 #include "messages/MCommand.h"
 #include "messages/MOSDBeacon.h"
@@ -53,8 +54,10 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/heartbeat.h"
+#include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/watch.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/osd_operations/client_request.h"
@@ -134,6 +137,7 @@ OSD::OSD(int id, uint32_t nonce,
       std::ignore = update_heartbeat_peers(
       ).then([this] {
 	update_stats();
+	check_debug_levels();
         mgrc->update_daemon_health(get_health_metrics());
 	if (++trim_queue_length_countdown >= TRIM_QLENGTHS_UPDATE_PERIOD) {
 	  trim_queue_length_countdown = 0;
@@ -718,6 +722,14 @@ seastar::future<> OSD::_send_boot()
   if (ret == 0) {
     m->metadata["osd_objectstore"] = type;
   }
+  auto data_backend = co_await store.get_data_backend_type_name();
+  if (!data_backend.empty()) {
+    m->metadata["seastore_data_backend"] = data_backend;
+  }
+  auto cache_backend = co_await store.get_cache_backend_type_name();
+  if (!cache_backend.empty()) {
+    m->metadata["seastore_cache_backend"] = cache_backend;
+  }
   co_await monc->send_message(std::move(m));
 }
 
@@ -1040,9 +1052,24 @@ OSD::do_ms_dispatch(
 
 void OSD::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
 {
-  // TODO: cleanup the session attached to this connection
+  // Runs on the connection's home core. Disconnect every watch reachable over
+  // this connection so notifies buffer (and are replayed on reconnect) and the
+  // watch timeout can eventually reap it -- mirrors classic
+  // WatchConState::reset() driven from OSD::ms_handle_reset(). Fire-and-forget:
+  // the reset() fans out one cross-core hop per watch; keep `conn` alive until
+  // it finishes.
   LOG_PREFIX(OSD::ms_handle_reset);
   WARN("{}", *conn);
+  if (!conn->has_user_private()) {
+    INFO("{} has no user private - nothing to reset", *conn);
+    return;
+  }
+  auto& priv = get_osd_priv(&*conn);
+  if (!priv.watch_conn_state) {
+    INFO("{} has no watch connection state - nothing to reset", *conn);
+    return;
+  }
+  std::ignore = priv.watch_conn_state->reset(&*conn).finally([conn] {});
 }
 
 void OSD::ms_handle_remote_reset(crimson::net::ConnectionRef conn)
@@ -1090,6 +1117,32 @@ void OSD::handle_conf_change(
   if (changed.contains("osd_beacon_report_interval")) {
     beacon_timer.rearm_periodic(
       std::chrono::seconds(conf->osd_beacon_report_interval));
+  }
+}
+
+void OSD::check_debug_levels()
+{
+  auto threshold = local_conf().get_val<int64_t>(
+    "high_debug_level_threshold");
+  if (threshold <= 0) {
+    return;
+  }
+  auto timeout = local_conf().get_val<std::chrono::seconds>(
+    "high_debug_level_reset_timeout");
+  auto actions = debug_level_guard.check(
+    local_conf()->subsys, threshold, timeout);
+  for (auto& a : actions) {
+    auto val = std::to_string(a.to_log) + "/" + std::to_string(a.to_gather);
+    LOG_PREFIX(OSD::check_debug_levels);
+    ERROR("Auto-reverted {} from {} to {} after {}s",
+	  a.name, a.from_level, val, timeout.count());
+    gate.dispatch_in_background(
+      "debug_level_revert", *this, [name=a.name, val, FNAME] {
+	return local_conf().set_val(name, val).handle_exception(
+	  [name, val, FNAME](auto ep) {
+	    ERROR("failed to revert {} to {}: {}", name, val, ep);
+	  });
+      });
   }
 }
 
@@ -1535,6 +1588,13 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
     }
     oldest_secs = now - oldest_op->get_started();
     metrics.emplace_back(daemon_metric::SLOW_OPS, slow, oldest_secs);
+  }
+
+  {
+    auto threshold = local_conf().get_val<int64_t>("high_debug_level_threshold");
+    auto [count, max_level] = DebugLevelGuard::count_elevated(
+      local_conf()->subsys, threshold);
+    metrics.emplace_back(daemon_metric::HIGH_DEBUG_LEVEL, count, max_level);
   }
 
   return metrics;

@@ -1,4 +1,4 @@
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, fakeAsync, flush, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { asyncScheduler, defer, of, throwError } from 'rxjs';
@@ -54,7 +54,7 @@ describe('CephfsAddMirroringPathComponent', () => {
           useValue: {
             navigate: routerNavigateSpy,
             navigateByUrl: routerNavigateByUrlSpy,
-            lastSuccessfulNavigation: null
+            lastSuccessfulNavigation: signal(null)
           }
         },
         { provide: CephfsService, useValue: cephfsServiceMock },
@@ -239,11 +239,11 @@ describe('CephfsAddMirroringPathComponent', () => {
 
   it('should return to returnUrl when closing tearsheet after opening from mirror paths', () => {
     const router = TestBed.inject(Router) as any;
-    router.lastSuccessfulNavigation = {
+    router.lastSuccessfulNavigation = () => ({
       extras: {
         state: { returnUrl: '/cephfs/mirroring/testfs/mirror-paths' }
       }
-    };
+    });
 
     component.ngOnInit();
     component.onCancel();
@@ -272,7 +272,7 @@ describe('CephfsAddMirroringPathComponent', () => {
           useValue: {
             navigate: routerNavigateSpy,
             navigateByUrl: routerNavigateByUrlSpy,
-            lastSuccessfulNavigation: null
+            lastSuccessfulNavigation: signal(null)
           }
         },
         { provide: CephfsService, useValue: cephfsServiceMock },

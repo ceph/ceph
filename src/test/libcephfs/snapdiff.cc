@@ -38,9 +38,11 @@
 #include <dirent.h>
 #include <optional>
 #include <random>
+#include <sstream>
 #include <string.h>
 
 using namespace std;
+
 class TestMount {
   ceph_mount_info* cmount = nullptr;
   char dir_path[64];
@@ -74,7 +76,9 @@ public:
     return ceph_conf_get(cmount, option, buf, len);
   }
 
-  json_spirit::mValue tell_rank0(const std::string& prefix, cmdmap_t&& cmdmap = {}) {
+  json_spirit::mValue tell_rank(const std::string& rank,
+                               const std::string& prefix,
+                               cmdmap_t&& cmdmap = {}) {
     cmdmap["prefix"] = prefix;
     cmdmap["format"] = std::string("json");
 
@@ -88,23 +92,54 @@ public:
 
     const char *cmdv[] = {oss.begin()};
 
-    char *outb, *outs;
-    size_t outb_len, outs_len;
-    int status = ceph_mds_command(cmount, "0", cmdv, sizeof(cmdv)/sizeof(cmdv[0]), nullptr, 0, &outb, &outb_len, &outs, &outs_len);
+    char *outb = nullptr, *outs = nullptr;
+    size_t outb_len = 0, outs_len = 0;
+    int status = ceph_mds_command(cmount, rank.c_str(), cmdv,
+                                  sizeof(cmdv)/sizeof(cmdv[0]), nullptr, 0,
+                                  &outb, &outb_len, &outs, &outs_len);
+    std::string output(outb ? outb : "", outb ? outb_len : 0);
+    std::string error(outs ? outs : "", outs ? outs_len : 0);
+    if (outb) {
+      ceph_buffer_free(outb);
+    }
+    if (outs) {
+      ceph_buffer_free(outs);
+    }
     if (status < 0)
     {
-      outs[outs_len] = 0;
-      std::cout << "couldn't tell rank 0 '" << oss.begin() << "'\n" << strerror(-status) << ": " << outs << std::endl;
+      std::cout << "couldn't tell rank " << rank << " '" << oss.begin()
+                << "'\n" << strerror(-status) << ": " << error << std::endl;
       return json_spirit::mValue::null;
     }
 
     json_spirit::mValue dump;
-    if (!json_spirit::read(outb, dump))
+    if (!json_spirit::read(output, dump))
     {
       std::cout << "couldn't parse '" << prefix << "'response json" << std::endl;
       return json_spirit::mValue::null;
     }
     return dump;
+  }
+
+  json_spirit::mValue tell_rank0(const std::string& prefix,
+                                cmdmap_t&& cmdmap = {}) {
+    return tell_rank("0", prefix, std::move(cmdmap));
+  }
+
+  bool wait_for_subtree_on_rank(const char* relpath, const char* rank) {
+    const auto path = make_file_path(relpath);
+    for (unsigned attempt = 0; attempt < 30; ++attempt) {
+      auto subtrees = tell_rank(rank, "get subtrees");
+      if (!subtrees.is_null()) {
+        std::ostringstream oss;
+        json_spirit::write(subtrees, oss);
+        if (oss.str().find(path) != std::string::npos) {
+          return true;
+        }
+      }
+      sleep(1);
+    }
+    return false;
   }
 
   bool tell_rank0_config(const std::string &var, const std::optional<const std::string> val = {}) {
@@ -245,6 +280,17 @@ public:
     auto target_path = make_file_path(target);
     return ceph_symlink(cmount, target_path.c_str(), src_path.c_str());
   }
+  int link(const char* existing, const char* newname)
+  {
+    auto existing_path = make_file_path(existing);
+    auto new_path = make_file_path(newname);
+    return ceph_link(cmount, existing_path.c_str(), new_path.c_str());
+  }
+  int setxattr(const char* relpath, const char* name, const char* value)
+  {
+    auto path = make_file_path(relpath);
+    return ceph_setxattr(cmount, path.c_str(), name, value, strlen(value), 0);
+  }
   int chmod(const char* relpath, int mode)
   {
     auto file_path = make_file_path(relpath);
@@ -358,7 +404,6 @@ public:
                                relpath,
                                s1.c_str(),
                                s2.c_str(),
-                               diff_mask,
                                &info);
     if (r != 0) {
       std::cerr << " Failed to open snapdiff, ret:" << r << std::endl;
@@ -383,6 +428,45 @@ public:
     }
     return r;
   }
+  int for_each_readdir_snapdiff2(const char* relpath,
+    const char* snap1,
+    const char* snap2,
+    std::function<bool(const dirent*, uint64_t)> fn)
+  {
+    auto s1 = make_snap_name(snap1);
+    auto s2 = make_snap_name(snap2);
+    ceph_snapdiff_info2 *info;
+    ceph_snapdiff_entry_t res_entry;
+    int r = ceph_open_snapdiff2(cmount,
+                                dir_path,
+                                relpath,
+                                s1.c_str(),
+                                s2.c_str(),
+                                diff_mask,
+                                &info);
+    if (r != 0) {
+      std::cerr << " Failed to open snapdiff, ret:" << r << std::endl;
+      return r;
+    }
+    while (0 < (r = ceph_readdir_snapdiff2(info,
+                                           &res_entry))) {
+      if (strcmp(res_entry.dir_entry.d_name, ".") == 0 ||
+        strcmp(res_entry.dir_entry.d_name, "..") == 0) {
+        continue;
+      }
+      if (!fn(&res_entry.dir_entry, res_entry.snapid)) {
+        r = -EINTR;
+        break;
+      }
+    }
+    ceph_assert(0 == ceph_close_snapdiff2(info));
+    if (r != 0) {
+      std::cerr << " Failed to readdir snapdiff, ret:" << r
+                << " " << relpath << ", " << snap1 << " vs. " << snap2
+                << std::endl;
+    }
+    return r;
+  }
   int readdir_snapdiff_and_compare(const char* relpath,
     const char* snap1,
     const char* snap2,
@@ -390,19 +474,23 @@ public:
   {
     vector<pair<string, uint64_t>> expected(expected0);
     auto end = expected.end();
-    int r = for_each_readdir_snapdiff(relpath, snap1, snap2,
-      [&](const dirent* dire, uint64_t snapid) {
-
-        pair<string, uint64_t> p = std::make_pair(dire->d_name, snapid);
-        auto it = std::find(expected.begin(), end, p);
-        if (it == end) {
-          std::cerr << "readdir_snapdiff_and_compare error: unexpected name:"
-            << dire->d_name << "/" << snapid << std::endl;
-          return false;
-        }
-        expected.erase(it);
-        return true;
-      });
+    auto check_fn = [&](const dirent* dire, uint64_t snapid) {
+      pair<string, uint64_t> p = std::make_pair(dire->d_name, snapid);
+      auto it = std::find(expected.begin(), end, p);
+      if (it == end) {
+        std::cerr << "readdir_snapdiff_and_compare error: unexpected name:"
+                  << dire->d_name << "/" << snapid << std::endl;
+        return false;
+      }
+      expected.erase(it);
+      return true;
+    };
+    int r;
+    if (diff_mask == 0) {
+      r = for_each_readdir_snapdiff(relpath, snap1, snap2, check_fn);
+    } else {
+      r = for_each_readdir_snapdiff2(relpath, snap1, snap2, check_fn);
+    }
     if (r == 0 && !expected.empty()) {
       std::cerr << __func__ << " error: left entries:" << std::endl;
       for (auto& e : expected) {
@@ -2072,6 +2160,72 @@ TEST(LibCephFS, HugeSnapDiffLargeDelta)
   }
 
   std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffHardlinkReplicaInode)
+{
+  TestMount test_mount("snapdiff_hardlink_replica", CEPH_SNAPDIFF_MODE);
+
+  if (test_mount.tell_rank("1", "status").is_null()) {
+    GTEST_SKIP() << "requires two active MDS ranks";
+  }
+
+  ASSERT_EQ(0, test_mount.mkdir("primary"));
+  ASSERT_EQ(0, test_mount.mkdir("replica"));
+  ASSERT_EQ(0, test_mount.mkdir("replica/empty"));
+  ASSERT_EQ(0, test_mount.setxattr("", "ceph.dir.pin", "0"));
+  ASSERT_EQ(0, test_mount.setxattr("primary", "ceph.dir.pin", "0"));
+  ASSERT_EQ(0, test_mount.setxattr("replica", "ceph.dir.pin", "1"));
+  ASSERT_TRUE(test_mount.wait_for_subtree_on_rank("replica", "1"));
+
+  ASSERT_LE(0, test_mount.write_full("primary/file", "before"));
+  ASSERT_EQ(0, test_mount.link("primary/file", "replica/link"));
+
+  struct ceph_statx primary_stx;
+  struct ceph_statx replica_stx;
+  ASSERT_EQ(0, test_mount.statx("primary/file", &primary_stx,
+                                CEPH_STATX_BASIC_STATS, 0));
+  ASSERT_EQ(0, test_mount.statx("replica/link", &replica_stx,
+                                CEPH_STATX_BASIC_STATS, 0));
+  ASSERT_EQ(primary_stx.stx_ino, replica_stx.stx_ino);
+  ASSERT_EQ(2U, primary_stx.stx_nlink);
+
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+  ASSERT_EQ(0, test_mount.chmod("primary/file", 0600));
+  ASSERT_EQ(0, test_mount.sync());
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  uint64_t snapid1;
+  uint64_t snapid2;
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+  ASSERT_LT(snapid1, snapid2);
+
+  vector<pair<string, uint64_t>> primary_diff;
+  ASSERT_EQ(0, test_mount.for_each_readdir_snapdiff(
+    "primary", "snap1", "snap2",
+    [&](const dirent* dire, uint64_t snapid) {
+      primary_diff.emplace_back(dire->d_name, snapid);
+      return true;
+    }));
+  EXPECT_NE(primary_diff.end(),
+            std::find(primary_diff.begin(), primary_diff.end(),
+                      std::make_pair(std::string("file"), snapid2)));
+
+  vector<pair<string, uint64_t>> replica_diff;
+  ASSERT_EQ(0, test_mount.for_each_readdir_snapdiff(
+    "replica", "snap1", "snap2",
+    [&](const dirent* dire, uint64_t snapid) {
+      replica_diff.emplace_back(dire->d_name, snapid);
+      return true;
+    }));
+  EXPECT_NE(replica_diff.end(),
+            std::find(replica_diff.begin(), replica_diff.end(),
+                      std::make_pair(std::string("link"), snapid2)));
+
   ASSERT_EQ(0, test_mount.purge_dir(""));
   ASSERT_EQ(0, test_mount.rmsnap("snap1"));
   ASSERT_EQ(0, test_mount.rmsnap("snap2"));

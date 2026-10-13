@@ -20,6 +20,11 @@
 #include <mutex>
 #include <variant>
 
+#include <boost/asio/detail/config.hpp> // for BOOST_ASIO_HAS_BOOST_CONTEXT_FIBER
+#if defined(BOOST_ASIO_HAS_BOOST_CONTEXT_FIBER)
+#include <boost/context/fiber.hpp>
+#endif
+
 #include "include/function2.hpp"
 
 #include "yield_context.h"
@@ -42,7 +47,8 @@ class once_result {
   /// while waiting. f() may also suspend/resume the same coroutine.
   ///
   /// f() must return a Result when called with no arguments. If it throws,
-  /// that exception is rethrown by all calls.
+  /// that exception is stored and rethrown by all calls, whether or not it
+  /// derives from std::exception.
   ///
   /// This function is thread-safe.
   template <typename Callable>
@@ -79,7 +85,15 @@ class once_result {
     Complete complete;
     try {
       complete.result = f();
-    } catch (const std::exception&) {
+#if defined(BOOST_ASIO_HAS_BOOST_CONTEXT_FIBER)
+    } catch (const boost::context::detail::forced_unwind&) {
+      // f()'s coroutine is being destroyed. boost::context requires this to
+      // propagate, and its fcontext_t must not be stored for other waiters.
+      throw;
+#endif
+    } catch (...) {
+      // catch everything else: an exception escaping here would leave the
+      // state in Wait, and the waiters queued behind us would never be woken
       complete.eptr = std::current_exception();
     }
 

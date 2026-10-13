@@ -9,7 +9,9 @@ state_update_notify = {{ spec.state_update_notify }}
 state_update_interval_sec = {{ spec.state_update_interval_sec }}
 break_update_interval_sec = {{ spec.break_update_interval_sec }}
 enable_spdk_discovery_controller = {{ spec.enable_spdk_discovery_controller }}
-encryption_key = /encryption.key
+{% if encryption_key_path %}
+encryption_key = {{ encryption_key_path }}
+{% endif %}
 rebalance_period_sec = {{ spec.rebalance_period_sec }}
 max_gws_in_grp = {{ spec.max_gws_in_grp }}
 max_ns_to_change_lb_grp = {{ spec.max_ns_to_change_lb_grp }}
@@ -54,6 +56,9 @@ force_tls = {{ spec.force_tls }}
 max_message_length_in_mb = {{ spec.max_message_length_in_mb }}
 io_stats_enabled = {{ spec.io_stats_enabled }}
 degrade_namespace_on_kmip_error = {{ spec.degrade_namespace_on_kmip_error }}
+fail_io_for_degraded_namespace = {{ spec.fail_io_for_degraded_namespace }}
+resize_degraded_namespace = {{ spec.resize_degraded_namespace }}
+verify_image_encryption_settings = {{ spec.verify_image_encryption_settings }}
 
 [gateway-logs]
 log_level = {{ spec.log_level }}

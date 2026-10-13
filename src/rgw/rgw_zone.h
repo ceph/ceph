@@ -34,6 +34,7 @@ struct RGWZoneParams {
   rgw_pool group_pool;
   rgw_pool dedup_pool;
   rgw_pool bucket_logging_pool;
+  rgw_pool vector_pool;
 
   RGWAccessKey system_key;
 
@@ -63,7 +64,7 @@ struct RGWZoneParams {
   const std::string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
   void encode(bufferlist& bl) const {
-    ENCODE_START(18, 1, bl);
+    ENCODE_START(19, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
     encode(gc_pool, bl);
@@ -102,11 +103,12 @@ struct RGWZoneParams {
     encode(restore_pool, bl);
     encode(dedup_pool, bl);
     encode(bucket_logging_pool, bl);
+    encode(vector_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(18, bl);
+    DECODE_START(19, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
     decode(gc_pool, bl);
@@ -205,6 +207,11 @@ struct RGWZoneParams {
       decode(bucket_logging_pool, bl);
     } else {
       bucket_logging_pool = log_pool.name + ":logging";
+    }
+    if (struct_v >= 19) {
+      decode(vector_pool, bl);
+    } else {
+      vector_pool = name + ".rgw.meta:vector";
     }
     DECODE_FINISH(bl);
   }
@@ -800,6 +807,13 @@ int set_default_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
 
 /// Return an endpoint from the zonegroup or its master zone.
 std::string get_zonegroup_endpoint(const RGWZoneGroup& info);
+
+/// Return the zonegroup with the given id, which may be the local zonegroup or
+/// any other zonegroup of the given period. Returns null if the id matches
+/// neither.
+const RGWZoneGroup* find_zonegroup_by_id(const RGWZoneGroup& local_zonegroup,
+                                         const std::optional<RGWPeriod>& period,
+                                         const std::string& zonegroup_id);
 
 /// Add a zone to the zonegroup, or update an existing zone entry.
 int add_zone_to_group(const DoutPrefixProvider* dpp,

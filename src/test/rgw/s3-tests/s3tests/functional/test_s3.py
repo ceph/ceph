@@ -1093,6 +1093,7 @@ def parseXmlToJson(xml):
   return response
 
 @pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
 def test_account_usage():
     # boto3.set_stream_logger(name='botocore')
     client = get_client()
@@ -1270,6 +1271,73 @@ def test_bucket_listv2_unordered():
     assert status == 400
     assert error_code == 'InvalidArgument'
 
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_bucket_list_unordered_policy_reject():
+    client = get_client()
+    bucket_name = get_new_bucket(client)
+
+    policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Deny',
+            'Principal': '*',
+            'Action': 's3:ListBucket',
+            'Resource': f'arn:aws:s3:::{bucket_name}',
+            'Condition': {
+                'Bool': {
+                    'rgw:allow-unordered': 'true'
+                }
+            }
+        }]
+    })
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy)
+
+    # expect success when allow-unordered is not specified
+    client.list_objects(Bucket=bucket_name)
+
+    # adds the unordered query parameter
+    def add_unordered(**kwargs):
+        kwargs['params']['url'] += "&allow-unordered=true"
+    client.meta.events.register('before-call.s3.ListObjects', add_unordered)
+
+    # expect AccessDenied when specified
+    e = assert_raises(ClientError, client.list_objects, Bucket=bucket_name)
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
+
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_bucket_list_unordered_policy_require():
+    client = get_client()
+    bucket_name = get_new_bucket(client)
+
+    policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Deny',
+            'Principal': '*',
+            'Action': 's3:ListBucket',
+            'Resource': f'arn:aws:s3:::{bucket_name}',
+            'Condition': {
+                'Bool': {
+                    'rgw:allow-unordered': 'false'
+                }
+            }
+        }]
+    })
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy)
+
+    # expect AccessDenied when allow-unordered is not specified
+    e = assert_raises(ClientError, client.list_objects, Bucket=bucket_name)
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
+
+    # adds the unordered query parameter
+    def add_unordered(**kwargs):
+        kwargs['params']['url'] += "&allow-unordered=true"
+    client.meta.events.register('before-call.s3.ListObjects', add_unordered)
+
+    # expect success when specified
+    client.list_objects(Bucket=bucket_name)
 
 def test_bucket_list_maxkeys_invalid():
     key_names = ['bar', 'baz', 'foo', 'quxx']
@@ -6822,7 +6890,7 @@ def test_multipart_sse_c_get_part():
     assert status == 404
     assert error_code == 'NoSuchKey'
 
-    res = client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts}, **get_args)
+    res = client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts})
     assert len(parts) == part_count
 
     for part, size in zip(parts, part_sizes):
@@ -6844,6 +6912,40 @@ def test_multipart_sse_c_get_part():
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 400
     assert error_code == 'InvalidPart'
+
+@pytest.mark.encryption
+@pytest.mark.checksum
+@pytest.mark.fails_on_dbstore
+def test_multipart_sse_c_checksum_complete():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    key = "mymultipart"
+    sse_args = {
+        'SSECustomerAlgorithm': 'AES256',
+        'SSECustomerKey': 'pO3upElrwuEXSoFwCfnZPdSsmt/xWeFa0N9KgDijwVs=',
+        'SSECustomerKeyMD5': 'DWygnHRtgiJ77HCm+1rvHw==',
+    }
+
+    response = client.create_multipart_upload(Bucket=bucket_name, Key=key, ChecksumAlgorithm='SHA256', **sse_args)
+    upload_id = response['UploadId']
+
+    body = FakeWriteFile(1024, 'A')
+    part_sha256sum = 'arcu6553sHVAiX4MjW0j7I7vD4w6R+Gz9Ok0Q9lTa+0='
+    response = client.upload_part(UploadId=upload_id, Bucket=bucket_name, Key=key, PartNumber=1, Body=body,
+                                  ChecksumAlgorithm='SHA256', ChecksumSHA256=part_sha256sum, **sse_args)
+    parts = [{'ETag': response['ETag'].strip('"'), 'ChecksumSHA256': response['ChecksumSHA256'], 'PartNumber': 1}]
+
+    # the key headers are required to complete a checksummed sse-c upload
+    e = assert_raises(ClientError, client.complete_multipart_upload,
+                      Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts})
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidArgument'
+
+    composite_sha256sum = 'Ok6Cs5b96ux6+MWQkJO7UBT5sKPBeXBLwvj/hK89smg=-1'
+    response = client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id,
+                                                MultipartUpload={'Parts': parts}, **sse_args)
+    assert composite_sha256sum == response['ChecksumSHA256']
 
 @pytest.mark.fails_on_dbstore
 def test_multipart_single_get_part():
@@ -7058,15 +7160,15 @@ def test_cors_origin_response():
 
     _cors_request_and_check(requests.get, url, None, 200, None, None)
     _cors_request_and_check(requests.get, url, {'Origin': 'foo.suffix'}, 200, 'foo.suffix', 'GET')
-    _cors_request_and_check(requests.get, url, {'Origin': 'foo.bar'}, 200, None, None)
-    _cors_request_and_check(requests.get, url, {'Origin': 'foo.suffix.get'}, 200, None, None)
+    _cors_request_and_check(requests.get, url, {'Origin': 'foo.bar'}, 403, None, None)
+    _cors_request_and_check(requests.get, url, {'Origin': 'foo.get.suffix'}, 200, 'foo.get.suffix', 'GET')
     _cors_request_and_check(requests.get, url, {'Origin': 'startend'}, 200, 'startend', 'GET')
     _cors_request_and_check(requests.get, url, {'Origin': 'start1end'}, 200, 'start1end', 'GET')
     _cors_request_and_check(requests.get, url, {'Origin': 'start12end'}, 200, 'start12end', 'GET')
-    _cors_request_and_check(requests.get, url, {'Origin': '0start12end'}, 200, None, None)
+    _cors_request_and_check(requests.get, url, {'Origin': '0start12end'}, 403, None, None)
     _cors_request_and_check(requests.get, url, {'Origin': 'prefix'}, 200, 'prefix', 'GET')
     _cors_request_and_check(requests.get, url, {'Origin': 'prefix.suffix'}, 200, 'prefix.suffix', 'GET')
-    _cors_request_and_check(requests.get, url, {'Origin': 'bla.prefix'}, 200, None, None)
+    _cors_request_and_check(requests.get, url, {'Origin': 'bla.prefix'}, 403, None, None)
 
     obj_url = '{u}/{o}'.format(u=url, o='bar')
     _cors_request_and_check(requests.get, obj_url, {'Origin': 'foo.suffix'}, 404, 'foo.suffix', 'GET')
@@ -8360,6 +8462,68 @@ def test_versioning_multi_object_delete_with_marker():
     response = client.list_object_versions(Bucket=bucket_name)
     assert not 'Versions' in response
     assert not 'DeleteMarkers' in response
+
+@pytest.mark.versioning
+def test_versioning_multi_object_delete_last_missing():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+
+    key = 'key'
+    num_versions = 2
+
+    (version_ids, contents) = create_multiple_versions(client, bucket_name, key, num_versions)
+    assert len(version_ids) == num_versions
+
+    # delete the current version, then a version that does not exist
+    objects = [{'Key': key, 'VersionId': version_ids[1]},
+               {'Key': key, 'VersionId': 'doesnotexist'}]
+    client.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+
+    # check the deleted version before any read of the current version
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key, VersionId=version_ids[1])
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert [v['VersionId'] for v in response['Versions']] == [version_ids[0]]
+
+    response = client.get_object(Bucket=bucket_name, Key=key)
+    assert _get_body(response) == contents[0]
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+def test_versioning_multi_object_delete_last_precondition_failed():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    check_configure_versioning_retry(bucket_name, "Enabled", "Enabled")
+
+    key = 'key'
+    num_versions = 2
+
+    (version_ids, contents) = create_multiple_versions(client, bucket_name, key, num_versions)
+    assert len(version_ids) == num_versions
+
+    # delete the current version, then fail the older one on its etag
+    objects = [{'Key': key, 'VersionId': version_ids[1]},
+               {'Key': key, 'VersionId': version_ids[0], 'ETag': 'badetag'}]
+    response = client.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    # check the deleted version before any read of the current version
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key, VersionId=version_ids[1])
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 404
+
+    response = client.list_object_versions(Bucket=bucket_name)
+    assert [v['VersionId'] for v in response['Versions']] == [version_ids[0]]
+
+    response = client.get_object(Bucket=bucket_name, Key=key)
+    assert _get_body(response) == contents[0]
 
 @pytest.mark.fails_on_dbstore
 @pytest.mark.versioning
@@ -10074,7 +10238,7 @@ def test_lifecycle_cloud_multiple_transition():
     assert len(expire1_keys[sc[2]]) == 0
 
     # Wait for next expiration cycle
-    time.sleep(7*lc_interval)
+    time.sleep(5*lc_interval)
     expire1_keys = list_bucket_storage_class(client, bucket_name)
     assert len(expire1_keys['STANDARD']) == 2
     assert len(expire1_keys[sc[1]]) == 0
@@ -10085,7 +10249,7 @@ def test_lifecycle_cloud_multiple_transition():
         assert len(expire1_keys[sc[2]]) == 0
 
     # Wait for final expiration cycle
-    time.sleep(12*lc_interval)
+    time.sleep(6*lc_interval)
     expire3_keys = list_bucket_storage_class(client, bucket_name)
     assert len(expire3_keys['STANDARD']) == 2
     assert len(expire3_keys[sc[1]]) == 0
@@ -11909,6 +12073,24 @@ def test_sse_kms_not_declared():
     e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key=key, Body=data)
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 400
+
+@pytest.mark.encryption
+def test_sse_empty_algorithm():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    sse_client_headers = {
+        'x-amz-server-side-encryption': ''
+    }
+    data = 'A'*100
+    key = 'testobj'
+
+    lf = (lambda **kwargs: kwargs['params']['headers'].update(sse_client_headers))
+    client.meta.events.register('before-call.s3.PutObject', lf)
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key=key, Body=data)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidArgument'
 
 @pytest.mark.encryption
 @pytest.mark.fails_on_dbstore
@@ -15227,6 +15409,148 @@ def test_delete_bucket_encryption_kms():
 
     assert response_code == 'ServerSideEncryptionConfigurationNotFoundError'
 
+def _put_bucket_blocked_encryption_types(client, bucket_name, types):
+    """
+    block the given encryption types on the bucket. 'NONE' unblocks
+    """
+    server_side_encryption_conf = {
+        'Rules': [
+            {
+                'BlockedEncryptionTypes': {
+                    'EncryptionType': types
+                }
+            },
+        ]
+    }
+    response = client.put_bucket_encryption(Bucket=bucket_name, ServerSideEncryptionConfiguration=server_side_encryption_conf)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+_sse_c_args = {
+    'SSECustomerAlgorithm': 'AES256',
+    'SSECustomerKey': 'pO3upElrwuEXSoFwCfnZPdSsmt/xWeFa0N9KgDijwVs=',
+    'SSECustomerKeyMD5': 'DWygnHRtgiJ77HCm+1rvHw==',
+}
+
+@pytest.mark.encryption
+@pytest.mark.sse_c_block_by_default
+def test_bucket_blocks_sse_c_by_default():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    response = client.get_bucket_encryption(Bucket=bucket_name)
+    assert response['ServerSideEncryptionConfiguration']['Rules'][0]['BlockedEncryptionTypes']['EncryptionType'] == ['SSE-C']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name,
+                      Key='blocked', Body='A'*100, **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['NONE'])
+    client.put_object(Bucket=bucket_name, Key='unblocked', Body='A'*100,
+                      **_sse_c_args)
+
+@pytest.mark.encryption
+def test_bucket_block_sse_c():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    # sse-c is allowed until the bucket blocks it
+    client.put_object(Bucket=bucket_name, Key='testobj', Body='A'*100, **_sse_c_args)
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['SSE-C'])
+
+    response = client.get_bucket_encryption(Bucket=bucket_name)
+    assert response['ServerSideEncryptionConfiguration']['Rules'][0]['BlockedEncryptionTypes']['EncryptionType'] == ['SSE-C']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name,
+                      Key='blocked', Body='A'*100, **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    e = assert_raises(ClientError, client.create_multipart_upload,
+                      Bucket=bucket_name, Key='blocked', **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    # writes that don't ask for sse-c are unaffected
+    client.put_object(Bucket=bucket_name, Key='plain', Body='A'*100)
+
+    # objects encrypted before the block are still readable
+    response = client.get_object(Bucket=bucket_name, Key='testobj', **_sse_c_args)
+    assert response['Body'].read() == b'A'*100
+
+@pytest.mark.encryption
+@pytest.mark.fails_on_dbstore
+def test_bucket_block_sse_c_copy():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    client.put_object(Bucket=bucket_name, Key='testobj', Body='A'*100, **_sse_c_args)
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['SSE-C'])
+
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket_name,
+                      Key='blocked', CopySource={'Bucket': bucket_name, 'Key': 'testobj'},
+                      CopySourceSSECustomerAlgorithm='AES256',
+                      CopySourceSSECustomerKey=_sse_c_args['SSECustomerKey'],
+                      CopySourceSSECustomerKeyMD5=_sse_c_args['SSECustomerKeyMD5'],
+                      **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+@pytest.mark.encryption
+def test_bucket_unblock_sse_c():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['SSE-C'])
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name,
+                      Key='testobj', Body='A'*100, **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['NONE'])
+
+    client.put_object(Bucket=bucket_name, Key='testobj', Body='A'*100, **_sse_c_args)
+
+@pytest.mark.encryption
+def test_bucket_block_sse_c_multipart():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    # an sse-c multipart upload started before the block
+    response = client.create_multipart_upload(Bucket=bucket_name, Key='mpobj', **_sse_c_args)
+    upload_id = response['UploadId']
+    response = client.upload_part(Bucket=bucket_name, Key='mpobj', UploadId=upload_id,
+                                  PartNumber=1, Body='A'*100, **_sse_c_args)
+    part_etag = response['ETag']
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['SSE-C'])
+
+    # further parts are rejected
+    e = assert_raises(ClientError, client.upload_part, Bucket=bucket_name, Key='mpobj',
+                      UploadId=upload_id, PartNumber=2, Body='A'*100, **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    # and so is completing the upload
+    e = assert_raises(ClientError, client.complete_multipart_upload, Bucket=bucket_name,
+                      Key='mpobj', UploadId=upload_id,
+                      MultipartUpload={'Parts': [{'ETag': part_etag, 'PartNumber': 1}]})
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    # the upload can still be aborted
+    client.abort_multipart_upload(Bucket=bucket_name, Key='mpobj', UploadId=upload_id)
+
 def _test_sse_s3_default_upload(file_size):
     """
     Test enables bucket encryption.
@@ -15574,6 +15898,116 @@ def test_object_checksum_sha256():
     assert sha256sum == response['ChecksumSHA256']
 
     e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='SHA256', ChecksumSHA256='bad')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'BadDigest'
+
+@pytest.mark.checksum
+def test_object_checksum_sha512():
+    bucket = get_new_bucket()
+    client = get_client()
+
+    key = "myobj"
+    size = 1024
+    body = FakeWriteFile(size, 'A')
+    sha512sum = 'bO7Eq5ubilg55mUGSAieJjtmRdS+PhkSv4Z8Dj4XT5dqOfVEbEvR1X2DfWMZsSMQP+L+4vWQOAqD/k0O2YCZ7w=='
+    response = client.put_object(Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='SHA512', ChecksumSHA512=sha512sum)
+    assert sha512sum == response['ChecksumSHA512']
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert 'ChecksumSHA512' not in response
+    response = client.head_object(Bucket=bucket, Key=key, ChecksumMode='ENABLED')
+    assert sha512sum == response['ChecksumSHA512']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='SHA512', ChecksumSHA512='bad')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'BadDigest'
+
+@pytest.mark.checksum
+def test_object_checksum_xxhash3():
+    bucket = get_new_bucket()
+    client = get_client()
+
+    key = "myobj"
+    size = 1024
+    body = FakeWriteFile(size, 'A')
+    xxhash3sum = 'TTWtCOnXfA0='
+    response = client.put_object(Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH3', ChecksumXXHASH3=xxhash3sum)
+    assert xxhash3sum == response['ChecksumXXHASH3']
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert 'ChecksumXXHASH3' not in response
+    response = client.head_object(Bucket=bucket, Key=key, ChecksumMode='ENABLED')
+    assert xxhash3sum == response['ChecksumXXHASH3']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH3', ChecksumXXHASH3='bad')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'BadDigest'
+
+@pytest.mark.checksum
+def test_object_checksum_xxhash64():
+    bucket = get_new_bucket()
+    client = get_client()
+
+    key = "myobj"
+    size = 1024
+    body = FakeWriteFile(size, 'A')
+    xxhash64sum = 'Np5GGlTsOCc='
+    response = client.put_object(Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH64', ChecksumXXHASH64=xxhash64sum)
+    assert xxhash64sum == response['ChecksumXXHASH64']
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert 'ChecksumXXHASH64' not in response
+    response = client.head_object(Bucket=bucket, Key=key, ChecksumMode='ENABLED')
+    assert xxhash64sum == response['ChecksumXXHASH64']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH64', ChecksumXXHASH64='bad')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'BadDigest'
+
+@pytest.mark.checksum
+def test_object_checksum_xxhash128():
+    bucket = get_new_bucket()
+    client = get_client()
+
+    key = "myobj"
+    size = 1024
+    body = FakeWriteFile(size, 'A')
+    xxhash128sum = 'kZHSD0DXTkZNNa0I6dd8DQ=='
+    response = client.put_object(Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH128', ChecksumXXHASH128=xxhash128sum)
+    assert xxhash128sum == response['ChecksumXXHASH128']
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert 'ChecksumXXHASH128' not in response
+    response = client.head_object(Bucket=bucket, Key=key, ChecksumMode='ENABLED')
+    assert xxhash128sum == response['ChecksumXXHASH128']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH128', ChecksumXXHASH128='bad')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'BadDigest'
+
+@pytest.mark.checksum
+def test_object_checksum_md5():
+    bucket = get_new_bucket()
+    client = get_client()
+
+    key = "myobj"
+    size = 1024
+    body = FakeWriteFile(size, 'A')
+    md5sum = '1HsSe8LeLWh93ILaw1TEFQ=='
+    response = client.put_object(Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='MD5', ChecksumMD5=md5sum)
+    assert md5sum == response['ChecksumMD5']
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert 'ChecksumMD5' not in response
+    response = client.head_object(Bucket=bucket, Key=key, ChecksumMode='ENABLED')
+    assert md5sum == response['ChecksumMD5']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='MD5', ChecksumMD5='bad')
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 400
     assert error_code == 'BadDigest'
@@ -17231,6 +17665,31 @@ def test_put_bucket_logging_errors():
             assert e.response['Error']['Code'] == 'MalformedXML'
 
 
+@pytest.mark.bucket_logging
+def test_put_bucket_logging_blocked_encryption_target():
+    src_bucket_name = get_new_bucket_name()
+    src_bucket = get_new_bucket_resource(name=src_bucket_name)
+    log_bucket_name = get_new_bucket_name()
+    log_bucket = get_new_bucket_resource(name=log_bucket_name)
+    client = get_client()
+    prefix = 'log/'
+    _set_log_bucket_policy(client, log_bucket_name, [src_bucket_name], [prefix])
+
+    # blocking sse-c is not default encryption, so the target stays valid
+    _put_bucket_blocked_encryption_types(client, log_bucket_name, ['SSE-C'])
+    response = client.put_bucket_logging(Bucket=src_bucket_name, BucketLoggingStatus={
+        'LoggingEnabled': {'TargetBucket': log_bucket_name, 'TargetPrefix': prefix},
+    })
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # and when the block is explicitly cleared
+    _put_bucket_blocked_encryption_types(client, log_bucket_name, ['NONE'])
+    response = client.put_bucket_logging(Bucket=src_bucket_name, BucketLoggingStatus={
+        'LoggingEnabled': {'TargetBucket': log_bucket_name, 'TargetPrefix': prefix},
+    })
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+
 def _verify_access_denied(client, src_bucket_name, log_bucket_name, prefix):
     try:
         response = client.put_bucket_logging(Bucket=src_bucket_name, BucketLoggingStatus={
@@ -18011,6 +18470,51 @@ def test_bucket_logging_put_concurrency():
         body += _get_body(response)
     assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', src_keys, record_type, num_keys)
 
+
+@pytest.mark.bucket_logging
+@pytest.mark.fails_on_aws
+def test_bucket_logging_put_failure():
+    src_bucket_name = get_new_bucket()
+    log_bucket_name = get_new_bucket_name()
+    log_bucket = get_new_bucket_resource(name=log_bucket_name)
+    client = get_client()
+    alt_client = get_alt_client()
+    has_extensions = _has_bucket_logging_extension()
+    prefix = 'log/'
+    _set_log_bucket_policy(client, log_bucket_name, [src_bucket_name], [prefix])
+    key = 'test-put'
+
+    # minimal configuration
+    logging_enabled = {'TargetBucket': log_bucket_name, 'TargetPrefix': prefix}
+    if has_extensions:
+        logging_enabled['LoggingType'] = 'Standard'
+    response = client.put_bucket_logging(Bucket=src_bucket_name, BucketLoggingStatus={
+        'LoggingEnabled': logging_enabled,
+    })
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    e = assert_raises(ClientError, alt_client.put_object, Bucket=src_bucket_name, Key=key, Body=randcontent())
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
+
+    response = client.list_objects_v2(Bucket=src_bucket_name)
+    src_keys = _get_keys(response)
+
+    flushed_obj = _flush_logs(client, src_bucket_name)
+
+    response = client.list_objects_v2(Bucket=log_bucket_name)
+    keys = _get_keys(response)
+    assert len(keys) == 1
+
+    record_type = 'Standard' if not has_extensions else 'Journal'
+
+    if flushed_obj is not None:
+      assert keys[0] == flushed_obj
+
+    assert keys[0].startswith('log/')
+    response = client.get_object(Bucket=log_bucket_name, Key=keys[0])
+    body = _get_body(response)
+    assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', key, "Standard", 1)
+    assert _verify_record_field(body, src_bucket_name, 'REST.PUT.OBJECT', key, "Standard", "ErrorCode", "AccessDenied")
 
 def _bucket_logging_delete_objects(versioned):
     src_bucket_name = get_new_bucket()
@@ -18972,6 +19476,9 @@ def _bucket_logging_cleanup(cleanup_type, logging_type, single_prefix, concurren
     else:
         if single_prefix and logging_type == 'Journal' and cleanup_type not in ['target', 'updating']:
             assert len(keys) == 1
+        elif single_prefix and logging_type == 'Standard' and cleanup_type == 'disabling':
+            # A single shared log record is committed but the PutLogging op is not logged
+            assert len(keys) == 1
         else:
             assert len(keys) == num_buckets
 
@@ -19230,7 +19737,7 @@ def _bucket_logging_partial_cleanup(cleanup_type, logging_type, concurrency):
     log_bucket = get_new_bucket_resource(name=log_bucket_name)
     client = get_client()
 
-    num_buckets = 3
+    num_buckets = 5
     buckets = []
     log_prefixes = []
     longer_time = expected_object_roll_time*10
@@ -19327,11 +19834,10 @@ def _bucket_logging_partial_cleanup(cleanup_type, logging_type, concurrency):
         assert len(keys) >= 1 and len(keys) <= num_buckets
     elif cleanup_type == 'updating':
         assert len(keys) == num_buckets
-    elif logging_type == 'Standard':
-        # 1st deleted/disabled source write the bucket_deletion/put_bucket_logging record
+    elif logging_type == 'Standard' and cleanup_type == 'deletion':
         assert len(keys) == num_buckets
     else:
-        assert len(keys) == num_buckets - 1
+        assert len(keys) == 2
 
 
     prefixes = []
@@ -19575,6 +20081,82 @@ def _bucket_logging_conf_update(logging_type, update_value, concurrency):
         body += _get_body(response)
 
     assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', src_names, logging_type, num_keys, exact_match)
+
+
+@pytest.mark.bucket_logging
+@pytest.mark.bucket_logging_cleanup
+@pytest.mark.fails_on_aws
+def test_bucket_logging_target_change_flushes_old_target():
+    if not _has_bucket_logging_extension():
+        pytest.skip('ceph extension to bucket logging not supported at client')
+
+    client = get_client()
+    src_bucket_name = get_new_bucket_name()
+    get_new_bucket_resource(name=src_bucket_name)
+    old_log_bucket_name = get_new_bucket_name()
+    get_new_bucket_resource(name=old_log_bucket_name)
+    new_log_bucket_name = get_new_bucket_name()
+    get_new_bucket_resource(name=new_log_bucket_name)
+
+    old_prefix = 'old-log/'
+    new_prefix = 'new-log/'
+    _set_log_bucket_policy(client, old_log_bucket_name,
+                           [src_bucket_name], [old_prefix])
+    _set_log_bucket_policy(client, new_log_bucket_name,
+                           [src_bucket_name], [new_prefix])
+
+    logging_enabled = {'TargetBucket': old_log_bucket_name,
+                       'ObjectRollTime': expected_object_roll_time*10,
+                       'LoggingType': 'Journal',
+                       'TargetPrefix': old_prefix}
+    response = client.put_bucket_logging(Bucket=src_bucket_name,
+                                         BucketLoggingStatus={
+                                             'LoggingEnabled': logging_enabled,
+                                         })
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    old_src_names = ['old-target-object' + str(j) for j in range(3)]
+    for name in old_src_names:
+        client.put_object(Bucket=src_bucket_name, Key=name, Body=randcontent())
+
+    response = client.list_objects_v2(Bucket=old_log_bucket_name)
+    assert _get_keys(response) == []
+
+    logging_enabled['TargetBucket'] = new_log_bucket_name
+    logging_enabled['TargetPrefix'] = new_prefix
+    result = client.put_bucket_logging(Bucket=src_bucket_name,
+                                       BucketLoggingStatus={
+                                           'LoggingEnabled': logging_enabled,
+                                       })
+    flushed_obj = _verify_flushed_on_put(result)
+    assert flushed_obj.startswith(old_prefix)
+
+    response = client.list_objects_v2(Bucket=old_log_bucket_name)
+    keys = _get_keys(response)
+    assert keys == [flushed_obj]
+
+    response = client.get_object(Bucket=old_log_bucket_name, Key=flushed_obj)
+    body = _get_body(response)
+    assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', old_src_names,
+                           'Journal', len(old_src_names), exact_match=True)
+
+    response = client.list_objects_v2(Bucket=new_log_bucket_name)
+    assert _get_keys(response) == []
+
+    new_src_names = ['new-target-object']
+    for name in new_src_names:
+        client.put_object(Bucket=src_bucket_name, Key=name, Body=randcontent())
+
+    flushed_obj = _flush_logs(client, src_bucket_name)
+    response = client.list_objects_v2(Bucket=new_log_bucket_name)
+    keys = _get_keys(response)
+    assert keys == [flushed_obj]
+    assert flushed_obj.startswith(new_prefix)
+
+    response = client.get_object(Bucket=new_log_bucket_name, Key=flushed_obj)
+    body = _get_body(response)
+    assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', new_src_names,
+                           'Journal', len(new_src_names), exact_match=True)
 
 
 @pytest.mark.bucket_logging
@@ -20309,6 +20891,57 @@ def test_put_object_current_if_match():
     assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
 
     client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
+
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+def test_put_object_suspended_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    check_configure_versioning_retry(bucket, "Suspended", "Suspended")
+    key = 'obj'
+
+    etag = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='*')['ETag']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    client.put_object(Bucket=bucket, Key=key, IfMatch=etag)
+
+    response = client.delete_object(Bucket=bucket, Key=key)
+    assert response['DeleteMarker']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    response = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+@pytest.mark.versioning
+def test_multipart_put_object_suspended_if_none_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    check_configure_versioning_retry(bucket, "Suspended", "Suspended")
+    key = 'obj'
+
+    successful_conditional_multipart_upload(client, bucket, key, IfNoneMatch='*')
+
+    failing_conditional_multipart_upload((412, 'PreconditionFailed'), client, bucket, key, IfNoneMatch='*')
+
+    response = client.delete_object(Bucket=bucket, Key=key)
+    assert response['DeleteMarker']
+
+    response = successful_conditional_multipart_upload(client, bucket, key, IfNoneMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
 
 @pytest.mark.fails_on_aws # only supported for directory buckets
 @pytest.mark.conditional_write
@@ -21250,14 +21883,6 @@ def _test_copy_part_enc(file_size, source_mode_key, dest_mode_key, source_sc=Non
     })
 
     if dest_mode_key == 'sse-c':
-        # make sure api is verifying the SSE-C headers
-        e = assert_raises(ClientError, client.complete_multipart_upload,
-                          Bucket=dest_bucket_name, Key='testobj2',
-                          UploadId=upload_id, MultipartUpload={'Parts': parts})
-        status, _ = _get_status_and_error_code(e.response)
-        assert status == 400
-
-        # and the key would be the same as the one used in upload part
         # use the source key to complete the upload
         # this is not allowed, so we expect an error
         source_sse_c_args = _copy_enc_source_modes['sse-c']['args']
@@ -21444,3 +22069,42 @@ def test_lifecycle_transition_encrypted(source_mode_key, source_storage_class, d
         f"Testing lifecycle transition of {source_mode_key} with storage class {source_storage_class} -> {dest_storage_class}"
     )
     _test_lifecycle_transition(source_mode_key, source_storage_class, dest_storage_class)
+
+
+def test_cors_presigned_url_non_preflight():
+    client = get_client()
+    bucket_name = _setup_bucket_acl(bucket_acl='public-read')
+    key = 'foo'
+    response = client.put_object(Bucket=bucket_name, Key=key, Body='str')
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # Generate the presigned URL
+    presigned_url = client.generate_presigned_url(
+        ClientMethod='get_object',
+        HttpMethod='GET',
+        Params={'Bucket': bucket_name, 'Key': key},
+    )
+
+    _cors_request_and_check(requests.get, presigned_url,
+                            {'Origin':'example1.com'},
+                            200, None, None)
+
+    cors_config ={
+        'CORSRules': [
+            {'AllowedMethods': ['GET'],
+             'AllowedOrigins': ['*'],
+            },
+        ]
+    }
+    client.put_bucket_cors(Bucket=bucket_name, CORSConfiguration=cors_config)
+
+    # Generate the presigned URL
+    presigned_url = client.generate_presigned_url(
+        ClientMethod='create_multipart_upload',
+        HttpMethod='POST',
+        Params={'Bucket': bucket_name, 'Key': key},
+    )
+
+    _cors_request_and_check(requests.post, presigned_url,
+                            {'Origin':'example1.com'},
+                            403, None, None)

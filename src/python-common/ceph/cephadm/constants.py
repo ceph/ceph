@@ -1,0 +1,2 @@
+NVMEOF_ENCRYPTION_KEY_CONTAINER_PATH = '/encryption.key'
+NVMEOF_ENCRYPTION_KEY_PATH_FILE = 'encryption_key_path'

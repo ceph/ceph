@@ -14,6 +14,7 @@
  */
  
 #include "common/Continuation.h"
+#include "mds/MDSContext.h" // for MDSIOContextWrapper
 #include "mds/Mutation.h"
 #include "mds/Server.h"
 

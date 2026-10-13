@@ -432,15 +432,17 @@ void CircularBoundedJournal::register_metrics()
       sm::make_gauge(
 	"submit_record_latency_average",
 	[this] {
-	  return stats.submit_record_latency_total.count() /
-	    stats.submit_record_count;
+	  return stats.submit_record_count > 0 ?
+	    stats.submit_record_latency_total.count() /
+	    stats.submit_record_count : 0.0;
 	}
       ),
       sm::make_gauge(
 	"submit_record_size_average",
 	[this] {
-	  return stats.submit_record_size /
-	    stats.submit_record_count;
+	  return stats.submit_record_count > 0 ?
+	    stats.submit_record_size /
+	    stats.submit_record_count : 0;
 	}
       ),
       sm::make_gauge(
@@ -458,8 +460,9 @@ void CircularBoundedJournal::register_metrics()
       sm::make_gauge(
 	"submit_record_roll_latency_average",
 	[this] {
-	  return stats.submit_record_roll_latency_total.count() /
-	    stats.submit_record_roll_count;
+	  return stats.submit_record_roll_count > 0 ?
+	    stats.submit_record_roll_latency_total.count() /
+	    stats.submit_record_roll_count : 0.0;
 	}
       ),
       sm::make_gauge(
@@ -477,8 +480,9 @@ void CircularBoundedJournal::register_metrics()
       sm::make_gauge(
 	"submit_record_wait_latency_average",
 	[this] {
-	  return stats.submit_record_wait_latency_total.count() /
-	    stats.submit_record_wait_count;
+	  return stats.submit_record_wait_count > 0 ?
+	    stats.submit_record_wait_latency_total.count() /
+	    stats.submit_record_wait_count : 0.0;
 	}
       )
     }

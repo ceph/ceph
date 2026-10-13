@@ -542,9 +542,20 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                 args.extend([workunit_path])
                 watched = None
                 if watchdog:
-                    watched = WorkunitProcess(remote, role, workunit,
-                                              workunit_path)
-                    ctx.ceph[cluster].watched_processes.append(watched)
+                    # Only a cluster task sets up the watchdog. Workunits that
+                    # bring up their own cluster (qa/standalone) or run without
+                    # one at all have no ctx.ceph, and a suite-wide
+                    # 'overrides: workunit: watchdog: true' reaches them too.
+                    # Skip rather than fail the job.
+                    cluster_ctx = getattr(ctx, 'ceph', {}).get(cluster)
+                    if hasattr(cluster_ctx, 'watched_processes'):
+                        watched = WorkunitProcess(remote, role, workunit,
+                                                  workunit_path)
+                        cluster_ctx.watched_processes.append(watched)
+                    else:
+                        log.warning('no watchdog for cluster %s: '
+                                    'not watching workunit %s',
+                                    cluster, workunit)
                 try:
                     if 'unit_test_scan' in optional_args:
                         optional_args.remove('unit_test_scan')

@@ -14,8 +14,8 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
-from ..services.cephfs import get_subvolumegroup_path, \
-    is_unmanaged_volume_entry, unmanaged_volume_info
+from ..services.cephfs import ensure_mirroring_client_caps, \
+    get_subvolumegroup_path, is_unmanaged_volume_entry, unmanaged_volume_info
 from ..services.exception import handle_cephfs_error
 from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
@@ -1247,20 +1247,22 @@ class CephFSSnapshotSchedule(RESTController):
 
         snapshot_schedule_list = out.split('\n')
         output: List[Any] = []
+        seen_paths = set()
 
         for snap in snapshot_schedule_list:
             current_path = snap.strip().split(' ')[0]
+            if not current_path or current_path in seen_paths:
+                continue
+            seen_paths.add(current_path)
             error_code, status_out, err = mgr.remote('snap_schedule', 'snap_schedule_get',
                                                      current_path, fs, None, None, 'json')
             output = output + json.loads(status_out)
-
-        output_json = json.dumps(output)
 
         if error_code != 0:
             raise DashboardException(
                 f'Failed to get list of snapshot schedules for path {path}: {err}'
             )
-        return json.loads(output_json)
+        return output
 
     def create(self, fs: str, path: str, snap_schedule: str, start: str, retention_policy=None,
                subvol=None, group=None):
@@ -1470,6 +1472,7 @@ class CephFSMirror(RESTController):
     @Endpoint('POST')
     @CreatePermission
     def token(self, fs_name: str, client_name: str, site_name: str):
+        ensure_mirroring_client_caps(client_name, fs_name)
         error_code, out, err = mgr.remote(
             'mirroring', 'snapshot_mirror_peer_bootstrap_create', fs_name, client_name, site_name)
         if error_code != 0:

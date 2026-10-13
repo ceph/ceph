@@ -365,6 +365,146 @@ The cephadm shell sets up the environment in a way that is suitable for
 extended daemon maintenance and for the interactive running of daemons.
 
 
+.. _cephadm-encrypted-osd-store-tools:
+
+Running Store Tools on Encrypted OSDs
+-------------------------------------
+
+``ceph-objectstore-tool`` and ``ceph-bluestore-tool`` operate on the
+BlueStore block device. They do not unlock LUKS and they do not open a
+dm-crypt mapping. That step belongs to the Linux block layer and is
+handled at OSD activation by ``ceph-volume``.
+
+Running these tools by hand against OSD devices is already a manual,
+expert procedure. On an OSD deployed with ``encrypted: true``, there is
+one additional manual step: reopen the mapping without starting
+``ceph-osd``.
+
+On an encrypted LVM OSD, BlueStore sits beneath LUKS.
+``ceph-volume lvm activate`` opens the mapping and points the OSD
+``block`` symlink at ``/dev/mapper/<lv_uuid>``. On cephadm, stopping the
+OSD runs ``ceph-volume lvm deactivate`` as a post-stop action, which
+closes that mapping. Leaving the mapping closed is intentional: the
+store is not left decrypted in the kernel while the OSD is down.
+
+As a result, this sequence works on a non-encrypted OSD and fails on an
+encrypted one:
+
+.. prompt:: bash #
+
+  cephadm unit --name osd.5 stop
+  cephadm shell --name osd.5 -- ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-5 --op list
+
+Typical failure::
+
+  Mount failed with '(1) Operation not permitted'
+
+``(11) Resource temporarily unavailable`` or ``OSD has the store
+locked`` means ``ceph-osd`` is still running. Stop the daemon before
+using the tool. That is independent of encryption.
+
+.. note::
+   Think of the OSD as a house and LUKS as the lock. While
+   ``ceph-osd`` is running, the door is unlocked. When you stop the OSD
+   with cephadm, you lock the door on the way out. The store tools are
+   the plumber: they can work inside the house, they do not carry your
+   keys. Unlock the door without moving back in, then run the tool.
+
+The daemon must be down, and the dm-crypt mapping must be open.
+
+On the OSD host, stop the OSD:
+
+.. prompt:: bash #
+
+  cephadm unit --name osd.<id> stop
+
+If ``cephadm`` is not installed on the host, stop the systemd unit
+directly:
+
+.. prompt:: bash #
+
+  systemctl stop ceph-<fsid>@osd.<id>
+
+Find the OSD UUID (also called the OSD fsid) from the cluster:
+
+.. prompt:: bash #
+
+  ceph osd metadata osd.<id> | grep osd_fsid
+
+Or inspect LVM tags on the OSD host with ``ceph-volume lvm list``.
+If ``ceph-volume`` is installed on the host, run it directly. When
+cephadm is installed:
+
+.. prompt:: bash #
+
+  cephadm ceph-volume -- lvm list
+
+Otherwise use a one-shot privileged container. ``IMAGE`` is the same
+Ceph image the OSDs use (``podman`` and ``docker`` are equivalent):
+
+.. prompt:: bash #
+
+  podman run --rm --privileged --net=host --pid=host --ipc=host \
+    -v /dev:/dev -v /run/udev:/run/udev \
+    -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm \
+    -v /etc/ceph:/etc/ceph:z -v /var/lib/ceph:/var/lib/ceph:z \
+    --entrypoint ceph-volume IMAGE lvm list
+
+Reopen the mapping without starting ``ceph-osd``. With cephadm:
+
+.. prompt:: bash #
+
+  cephadm ceph-volume -- lvm activate --no-systemd <id> <osd-uuid>
+
+Or the same one-shot container:
+
+.. prompt:: bash #
+
+  podman run --rm --privileged --net=host --pid=host --ipc=host \
+    -v /dev:/dev -v /run/udev:/run/udev \
+    -v /run/lvm:/run/lvm -v /run/lock/lvm:/run/lock/lvm \
+    -v /etc/ceph:/etc/ceph:z -v /var/lib/ceph:/var/lib/ceph:z \
+    --entrypoint ceph-volume IMAGE lvm activate --no-systemd <id> <osd-uuid>
+
+``lvm activate`` talks to the monitors to fetch the LUKS key, so the
+container needs the cluster config and a keyring (``/etc/ceph`` on a
+typical install). If those files live only under
+``/var/lib/ceph/<fsid>/``, bind-mount them to ``/etc/ceph`` inside the
+container.
+
+Run the store tool. With cephadm:
+
+.. prompt:: bash #
+
+  cephadm shell --name osd.<id> -- ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-<id> --op list
+
+Or a one-shot container. Bind-mount the OSD data dir and ``/dev`` so
+the ``block`` symlink can reach the mapper:
+
+.. prompt:: bash #
+
+  podman run --rm --privileged --pid=host --ipc=host \
+    -v /dev:/dev \
+    -v /var/lib/ceph/<fsid>/osd.<id>:/var/lib/ceph/osd/ceph-<id> \
+    --entrypoint ceph-objectstore-tool IMAGE \
+    --data-path /var/lib/ceph/osd/ceph-<id> --op list
+
+``ceph-bluestore-tool`` has the same requirement. Pass
+``--path /var/lib/ceph/osd/ceph-<id>`` only after the mapping is open.
+
+When finished, start the OSD again. Activation is part of unit start:
+
+.. prompt:: bash #
+
+  cephadm unit --name osd.<id> start
+
+Without cephadm:
+
+.. prompt:: bash #
+
+  systemctl start ceph-<fsid>@osd.<id>
+
+
 .. _cephadm-restore-quorum:
 
 Restoring the Monitor Quorum

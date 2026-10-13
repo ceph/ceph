@@ -9,7 +9,7 @@
 #include "gtest/gtest.h"
 #include "include/rados/librados.hpp"
 #include "common/json/OSDStructures.h"
-#include "include/types.h"
+#include "include/shard_id.h"
 
 using namespace std::literals::string_view_literals;
 
@@ -205,6 +205,7 @@ protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
   void set_allow_ec_overwrites();
+  uint64_t get_ec_stripe_unit();
   static std::string pool_name_default;
   static std::string pool_name_fast;
   void inject_ec_read_error(const std::string &objname);

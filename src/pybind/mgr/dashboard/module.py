@@ -338,14 +338,14 @@ class Module(MgrModule, CherryPyConfig):
     @classmethod
     def get_frontend_path(cls):
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(current_dir, 'frontend/dist')
+        path = os.path.join(current_dir, 'frontend/dist/browser')
         if os.path.exists(path):
             return path
         else:
             path = os.path.join(current_dir,
                                 '../../../../build',
                                 'src/pybind/mgr/dashboard',
-                                'frontend/dist')
+                                'frontend/dist/browser')
             return os.path.abspath(path)
 
     def serve(self):

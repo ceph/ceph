@@ -94,7 +94,7 @@ the ``mgmt-gateway``. For example:
     service_id: ingress-mgmt-gw
     placement:
       label: mgmt
-    virtual_ip: 192.168.100.220
+    virtual_ip: 192.168.100.220/22
     backend_service: mgmt-gateway
     keepalive_only: true
 
@@ -104,7 +104,9 @@ the ``mgmt-gateway`` daemons are replicated to the corresponding keepalived inst
 
 .. note::
 
-    The ``virtual_ip`` parameter must be identical in both the ingress and ``mgmt-gateway`` specifications.
+   The ``mgmt-gateway`` ``virtual_ip`` must be specified as a plain IP address, for example
+   ``192.168.100.220``. The ingress ``virtual_ip`` must use the same IP address together with
+   the appropriate network prefix, for example ``192.168.100.220/22``.
 
 Accessing services with mgmt-gateway
 ====================================

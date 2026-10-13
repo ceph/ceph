@@ -86,6 +86,7 @@ Current Members
  * Afreen Misbah <afreen@ibm.com>
  * Anthony D'Atri <anthony.datri@gmail.com>
  * Aviv Caro <Aviv.Caro@ibm.com>
+ * Bill Scales <bill_scales@uk.ibm.com>
  * Casey Bodley <cbodley@redhat.com>
  * Dan van der Ster <dan.vanderster@clyso.com>
  * David Orman <ormandj@1111systems.com>
@@ -106,11 +107,11 @@ Current Members
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
  * Myoungwon Oh <ohmyoungwon@gmail.com>
- * Sage McTaggart <sagemct@ibm.com>
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@ibm.com>
  * Radoslaw Zarzynski <rzarzyns@redhat.com>
  * Redouane Kachach <rkachach@redhat.com>
+ * Sage McTaggart <sagemct@ibm.com>
  * Venky Shankar <vshankar@redhat.com>
  * Vikhyat Umrao <vikhyat@ibm.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>

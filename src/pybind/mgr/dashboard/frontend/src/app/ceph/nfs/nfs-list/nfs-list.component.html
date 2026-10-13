@@ -31,46 +31,49 @@
   #nfsFsal
   let-value="data.value"
 >
-  <ng-container
-    *ngIf="value.name === 'CEPH'"
-    i18n
-    >CephFS</ng-container
-  >
-  <ng-container
-    *ngIf="value.name === 'RGW'"
-    i18n
-    >Object Gateway</ng-container
-  >
+  @if (value.name === 'CEPH') {
+    <ng-container i18n>CephFS</ng-container>
+  }
+  @if (value.name === 'RGW') {
+    <ng-container i18n>Object Gateway</ng-container>
+  }
 </ng-template>
 
 <ng-template
   #protocolTpl
   let-protocols="data.value"
 >
-  <span *ngFor="let protocol of protocols">
-    <cds-tag size="md">NFSv{{ protocol }}</cds-tag>
-  </span>
+  @for (protocol of protocols; track protocol) {
+    <span>
+      <cds-tag size="md">NFSv{{ protocol }}</cds-tag>
+    </span>
+  }
 </ng-template>
 
 <ng-template
   #transportTpl
   let-transports="data.value"
 >
-  <span *ngFor="let transport of transports">
-    <cds-tag size="md">{{ transport }}</cds-tag>
-  </span>
+  @for (transport of transports; track transport) {
+    <span>
+      <cds-tag size="md">{{ transport }}</cds-tag>
+    </span>
+  }
 </ng-template>
 
 <ng-template
   #pathTmpl
   let-value="data.value"
 >
-  <span
-    *ngIf="value === ''"
-    i18n
-    i18n-ngbTooltip
-    ngbTooltip="All buckets owned by user"
-    >*</span
-  >
-  <span *ngIf="value !== ''">{{ value }}</span>
+  @if (value === '') {
+    <span
+      i18n
+      i18n-ngbTooltip
+      ngbTooltip="All buckets owned by user"
+      >*</span
+    >
+  }
+  @if (value !== '') {
+    <span>{{ value }}</span>
+  }
 </ng-template>

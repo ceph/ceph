@@ -114,7 +114,7 @@ export class OverviewHealthCardComponent {
     this.viewPGStates.emit();
   }
 
-  private readonly permissions = this.authStorageService.getPermissions();
+  readonly permissions = this.authStorageService.getPermissions();
 
   readonly data$: Observable<OverviewHealthData> = combineLatest([
     this.summaryService.summaryData$.pipe(filter((summary): summary is Summary => !!summary)),

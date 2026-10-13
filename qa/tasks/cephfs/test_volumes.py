@@ -115,6 +115,19 @@ class TestVolumesHelper(CephFSTestCase):
     def _check_clone_canceled(self, clone, clone_group=None):
         self.__check_clone_state("canceled", clone, clone_group, timo=1)
 
+    def _wait_for_clone_to_finish_if_exists(self, clone, clone_group=None, timo=120):
+        """
+        Wait for a clone to reach a terminal state before filesystem teardown.
+        Ensures mgr cloner threads release their cephfs connections.
+        """
+        try:
+            self.__check_clone_state(('complete', 'failed', 'canceled'), clone,
+                                     clone_group, timo)
+        except CommandFailedError as ce:
+            if ce.exitstatus == errno.ENOENT:
+                return
+            raise
+
     def _get_subvolume_snapshot_path(self, subvol_name, snap_name, group_name):
         cmd = (f'fs subvolume snapshot getpath {self.volname} {subvol_name} '
                f'{snap_name}')
@@ -5328,6 +5341,10 @@ class TestPauseCloning(TestVolumesHelper):
         # test.
         self.config_set('mgr', self.CONF_OPT, False)
 
+        # ensure cloner threads finish any in-flight work before the
+        # filesystem is destroyed in CephFSTestCase.tearDown().
+        self._wait_for_clone_to_finish_if_exists('ss1c1')
+
         # ensure purge threads have no jobs left from previous test so that
         # next test doesn't have to face unnecessary complications.
         self._wait_for_trash_empty()
@@ -8323,7 +8340,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
-        self._do_subvolume_io(subvolume, number_of_files=200)
+        self._do_subvolume_io(subvolume, number_of_files=1000)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
@@ -8335,7 +8352,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
 
         # wait for clone1 to be in-progress
-        self._wait_for_clone_to_be_in_progress(clone1)
+        # Poll faster so a short in-progress window is not missed; keep ~120s
+        # wall-clock timeout (timo is try count, not seconds).
+        self._wait_for_clone_to_be_in_progress(clone1, timo=600, sleep=0.2)
 
         # cancel in-progess clone1
         self._fs_cmd("clone", "cancel", self.volname, clone1)

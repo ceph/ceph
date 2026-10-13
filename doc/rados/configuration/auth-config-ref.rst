@@ -242,6 +242,12 @@ Time to Live
 .. confval:: auth_mon_ticket_ttl
 .. confval:: auth_service_ticket_ttl
 
+After decrypting a service ticket, the server checks its fields for signs
+of corruption. It rejects unexpected auid values, allow_all, malformed
+capability data, and invalid timestamps.
+
+Ticket creation must be within five minutes of session-key creation,
+since the monitor creates both together.
 
 
 .. _cephx-upgrade:
@@ -653,7 +659,7 @@ Emergency Allowed Ciphers
 
 The Monitors maintain the set of allowed ciphers for credential keys in the ``MonMap``. This is normally set live on the cluster using:
 
-.. prompt: bash
+.. code:: bash
 
    ceph mon set auth_allowed_ciphers <cipher1,cipher2,...>
 
@@ -663,7 +669,9 @@ startup configuration:
 
 .. confval:: mon_auth_emergency_allowed_ciphers
 
-This will allow your existing ``client.admin`` or other administrative key to authenticate as normal.
+Setting this config to include ``aes,aes256k`` or whatever the missing ciphers
+are will allow your existing ``client.admin`` or other administrative keys to
+authenticate as normal.
 
 When this configuration is set, the Monitors will raise the
 :ref:`auth-emergency-ciphers-set` health warning. It should only be set on a

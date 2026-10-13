@@ -2082,6 +2082,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   bufferlist bl;
   encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
 
+  dout(1) << "encode_pending e" << pending_inc.epoch
+          << " inc " << bl.length() << " bytes" << dendl;
+
   dout(20) << __func__ << " mon is running version: "
     << ceph_version_to_str() << dendl;
   dout(20) << " full_crc " << tmp.get_crc()
@@ -5887,6 +5890,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->dump_string("host", p->second);
     }
     for (auto& k : {
+	"devices",                   // set by get_device_metadata()
 	"pod_name", "pod_namespace", // set by rook
 	"container_name"             // set by cephadm, ceph-ansible
 	}) {
@@ -6162,20 +6166,24 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     rdata.append(ds);
   } else if (prefix == "osd blocklist ls" ||
-	     prefix == "osd blacklist ls") {
-    if (f)
+             prefix == "osd blacklist ls") {
+    bool new_format = op->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_UMBRELLA);
+    if (f) {
+      if (new_format) {
+        f->open_object_section("blocklist_info");
+      }
       f->open_array_section("blocklist");
-
-    for (auto p = osdmap.blocklist.begin(); p != osdmap.blocklist.end(); ++p) {
+    }
+    for (auto & p : osdmap.blocklist) {
       if (f) {
 	f->open_object_section("entry");
-	f->dump_string("addr", p->first.get_legacy_str());
-	f->dump_stream("until") << p->second;
+	f->dump_string("addr", p.first.get_legacy_str());
+	f->dump_stream("until") << p.second;
 	f->close_section();
       } else {
 	stringstream ss;
 	string s;
-	ss << p->first << " " << p->second;
+	ss << p.first << " " << p.second;
 	getline(ss, s);
 	s += "\n";
 	rdata.append(s);
@@ -6183,40 +6191,49 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     if (f) {
       f->close_section();
-      f->flush(rdata);
+      if (!new_format) {
+        f->flush(rdata);
+      }
     }
     if (f)
       f->open_array_section("range_blocklist");
 
-    for (auto p = osdmap.range_blocklist.begin();
-	 p != osdmap.range_blocklist.end();
-	 ++p) {
+    for (auto & p : osdmap.range_blocklist) {
       if (f) {
-	f->open_object_section("entry");
-	f->dump_string("range", p->first.get_legacy_str());
-	f->dump_stream("until") << p->second;
-	f->close_section();
+        f->open_object_section("entry");
+        f->dump_string("range", p.first.get_legacy_str());
+        f->dump_stream("until") << p.second;
+        f->close_section();
       } else {
-	stringstream ss;
-	string s;
-	ss << p->first << " " << p->second;
-	getline(ss, s);
-	s += "\n";
-	rdata.append(s);
+        stringstream ss;
+        string s;
+        ss << p.first << " " << p.second;
+        getline(ss, s);
+        s += "\n";
+        rdata.append(s);
       }
     }
     if (f) {
       f->close_section();
-      f->flush(rdata);
+      if (new_format) {
+        f->close_section();
+        f->flush(ds);
+        rdata.append(ds);
+      } else {
+        f->flush(rdata);
+      }
     }
-    ss << "listed " << osdmap.blocklist.size() + osdmap.range_blocklist.size() << " entries";
-
+    if (!new_format || !f) {
+      ss << "listed " << osdmap.blocklist.size() + osdmap.range_blocklist.size() << " entries";
+    }
   } else if (prefix == "osd pool ls") {
     string detail;
     cmd_getval(cmdmap, "detail", detail);
+    bool show_rule_names = false;
+    cmd_getval(cmdmap, "show_rule_names", show_rule_names);
     if (!f && detail == "detail") {
       ostringstream ss;
-      osdmap.print_pools(cct, ss);
+      osdmap.print_pools(cct, ss, show_rule_names);
       rdata.append(ss.str());
     } else {
       if (f)
@@ -6227,7 +6244,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    f->open_object_section("pool");
 	    f->dump_int("pool_id", pid);
 	    f->dump_string("pool_name", osdmap.get_pool_name(pid));
-	    pdata.dump(f.get());
+	    pdata.dump(f.get(), osdmap.crush.get(), show_rule_names);
 	    osdmap.dump_read_balance_score(cct, pid, pdata, f.get());
 	    f->close_section();
 	  } else {
@@ -8550,7 +8567,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   // For Crimson - only EC-optimized pools are supported.
   if (pi->is_erasure()) {
     if (crimson) {
-      if (auto r = enable_pool_ec_optimizations(*pi, true); !r) {
+      if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
         // for Crimson - failure is not an option
         *ss << r.error().message;
         return r.error().error;
@@ -8558,7 +8575,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     } else {
       if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
         // Silently fail if the pool cannot support ec optimizations.
-        std::ignore = enable_pool_ec_optimizations(*pi, true);
+        std::ignore = enable_pool_ec_optimizations(*pi, true, false);
       }
     }
   }
@@ -8604,7 +8621,8 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
 }
 
 tl::expected<void, ErrorNMessage>
-OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable)
+OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable,
+                                         bool yes_i_really_mean_it)
 {
   if (!p.is_erasure()) {
     return tl::unexpected(ErrorNMessage{
@@ -8635,6 +8653,12 @@ OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable)
       return tl::unexpected(ErrorNMessage{
 	  -EINVAL,
 	  "ec optimizations not currently supported for pool profile."});
+    } else if (!yes_i_really_mean_it && (erasure_code->get_supported_optimizations() &
+        ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_EXPERIMENTAL) != 0) {
+        return tl::unexpected(ErrorNMessage{
+	  -EINVAL,
+	  "This is experimental for use in test and development and is not a "
+                  "supported configuration."});
     }
 
     if ((chunk_size % 4096) != 0) {
@@ -9244,7 +9268,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     bool was_enabled = p.allows_ecoptimizations();
-    if (auto r = enable_pool_ec_optimizations(p, enable); !r) {
+    bool force = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", force);
+    if (auto r = enable_pool_ec_optimizations(p, enable, force); !r) {
       ss << r.error().message;
       return r.error().error;
     }
@@ -15947,7 +15973,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     ss << "the 2 " << dividing_bucket
        << "instances in the cluster have differing weights "
        << weight1 << " and " << weight2
-       << " but stretch mode currently" 
+       << " but stretch mode currently"
        <<" requires the difference to be no greater than "
        << stretch_max_weight_delta * 100 << "%";
     *errcode = -EINVAL;

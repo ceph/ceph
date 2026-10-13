@@ -17,6 +17,7 @@
 #include "Capability.h"
 #include "CDentry.h" // for struct ClientLease
 #include "CInode.h"
+#include "MDSContext.h" // for MDSIOContextBase
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "Mutation.h"
@@ -45,6 +46,20 @@
 #define dout_prefix *_dout << "mds." << rank << ".sessionmap "
 
 using namespace std;
+
+Session::Session(ConnectionRef con) :
+  item_session_list(this),
+  requests(member_offset(MDRequestImpl, item_session_request)),
+  recall_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
+  release_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
+  recall_caps_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate")),
+  recall_caps_throttle2o(0.5),
+  session_cache_liveness(g_conf().get_val<double>("mds_session_cache_liveness_decay_rate")),
+  cap_acquisition(g_conf().get_val<double>("mds_session_cap_acquisition_decay_rate")),
+  birth_time(clock::now())
+{
+  set_connection(std::move(con));
+}
 
 void Session::touch_cap(Capability *cap) {
   session_cache_liveness.hit(1.0);
@@ -1094,7 +1109,8 @@ void Session::decode(bufferlist::const_iterator &p)
 int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
 			  int caller_uid, int caller_gid,
 			  const vector<uint64_t> *caller_gid_list,
-			  int new_uid, int new_gid)
+			  int new_uid, int new_gid,
+                          bool check_quarantine_access)
 {
   dout(20) << __func__ << ": " << *in
            << " caller_uid=" << caller_uid
@@ -1147,7 +1163,8 @@ int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
 
   if (!auth_caps.is_capable(fs_name, path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
-			    new_uid, new_gid, info.inst.addr, trimmed_path)) {
+			    new_uid, new_gid, info.inst.addr, trimmed_path,
+                            check_quarantine_access)) {
     return -EACCES;
   }
   return 0;

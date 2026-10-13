@@ -53,6 +53,16 @@ vector<string> parse_good = {
   "allow r network 1.2.3.4/8",
   "allow rw path=/foo uid=1 gids=1,2,3 network 2.3.4.5/16",
 
+  // Quarantine caps (q = specific path, Q = all quarantined dirs)
+  "allow rq",
+  "allow rwq",
+  "allow rwQ",
+  "allow rwfpQqs",
+  "allow rwq path=/volumes/subvol1",
+  "allow rwQ path=/volumes",
+  "allow rq fsname=a",
+  "allow r, allow rwq path=/quarantined",
+
   // Following are all types of MDS caps, or in other words, all
   // (mathematical) combinations of fsnamecap, pathcap, rscap, uidcap, and
   // gidscaps.
@@ -185,7 +195,7 @@ TEST(MDSAuthCaps, AllowAll) {
 
   ASSERT_TRUE(cap.parse("allow *", NULL));
   ASSERT_TRUE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable(fsname, "foo/bar", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo/bar"));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo/bar", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo/bar", false));
 }
 
 TEST(MDSAuthCaps, AllowUid) {
@@ -194,11 +204,11 @@ TEST(MDSAuthCaps, AllowUid) {
   ASSERT_FALSE(cap.allow_all());
 
   // uid/gid must be valid
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 0, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 12, 12, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 13, NULL, MAY_READ, 0, 0, addr, "foo"));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 0, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 12, 12, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 13, NULL, MAY_READ, 0, 0, addr, "foo", false));
 }
 
 TEST(MDSAuthCaps, AllowUidGid) {
@@ -207,24 +217,24 @@ TEST(MDSAuthCaps, AllowUidGid) {
   ASSERT_FALSE(cap.allow_all());
 
   // uid/gid must be valid
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 0, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 9, 10, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 12, 12, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 13, NULL, MAY_READ, 0, 0, addr, "foo"));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 0, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 9, 10, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 12, 12, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 13, NULL, MAY_READ, 0, 0, addr, "foo", false));
 
   // user
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0500, 10, 11, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0500, 10, 11, NULL, MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0500, 10, 11, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0700, 10, 11, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0700, 10, 11, NULL, MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 0, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 12, 0, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 12, 0, 0700, 12, 12, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0500, 10, 11, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0500, 10, 11, NULL, MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0500, 10, 11, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0700, 10, 11, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0700, 10, 11, NULL, MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 0, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 12, 0, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 12, 0, 0700, 12, 12, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
 
   // group
   vector<uint64_t> glist10;
@@ -236,59 +246,59 @@ TEST(MDSAuthCaps, AllowUidGid) {
   glist11.push_back(11);
   vector<uint64_t> glist12;
   glist12.push_back(12);
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 10, 0750, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 10, 0750, 10, 10, NULL, MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 10, 0770, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 10, 0770, 10, 11, &glist10, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 11, 0770, 10, 10, &glist11, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 11, 0770, 10, 11, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 12, 0770, 12, 12, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 10, 0770, 12, 12, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 10, 0770, 12, 12, &glist10, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 10, 0770, 12, 12, &dglist10, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 11, 0770, 12, 12, &glist11, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 12, 0770, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 12, 0770, 10, 10, &glist12, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 10, 0750, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 10, 0750, 10, 10, NULL, MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 10, 0770, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 10, 0770, 10, 11, &glist10, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 11, 0770, 10, 10, &glist11, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 11, 0770, 10, 11, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 12, 0770, 12, 12, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 10, 0770, 12, 12, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 10, 0770, 12, 12, &glist10, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 10, 0770, 12, 12, &dglist10, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 11, 0770, 12, 12, &glist11, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 12, 0770, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 12, 0770, 10, 10, &glist12, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
 
   // user > group
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0570, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0570, 10, 10, NULL, MAY_WRITE, 0, 0, addr, "foo"));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 10, 10, 0570, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 10, 0570, 10, 10, NULL, MAY_WRITE, 0, 0, addr, "foo", false));
 
   // other
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0775, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0770, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0775, 10, 10, NULL, MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0775, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0773, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo"));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0775, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0770, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0775, 10, 10, NULL, MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0775, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0773, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo", false));
 
   // group > other
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0557, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 10, 0557, 10, 10, NULL, MAY_WRITE, 0, 0, addr, "foo"));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0557, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 10, 0557, 10, 10, NULL, MAY_WRITE, 0, 0, addr, "foo", false));
 
   // user > other
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0557, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 0, 0557, 10, 10, NULL, MAY_WRITE, 0, 0, addr, "foo"));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0557, 10, 10, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 10, 0, 0557, 10, 10, NULL, MAY_WRITE, 0, 0, addr, "foo", false));
 }
 
 TEST(MDSAuthCaps, AllowPath) {
   MDSAuthCaps cap;
   ASSERT_TRUE(cap.parse("allow * path=/sandbox", NULL));
   ASSERT_FALSE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable(fsname, "sandbox/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "sandboxed", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
+  ASSERT_TRUE(cap.is_capable(fsname, "sandbox/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "sandboxed", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
 }
 
 TEST(MDSAuthCaps, AllowPathChars) {
   MDSAuthCaps unquo_cap;
   ASSERT_TRUE(unquo_cap.parse("allow * path=/sandbox-._foo", NULL));
   ASSERT_FALSE(unquo_cap.allow_all());
-  ASSERT_TRUE(unquo_cap.is_capable(fsname, "sandbox-._foo/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(unquo_cap.is_capable(fsname, "sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(unquo_cap.is_capable(fsname, "sandbox-._food", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(unquo_cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
+  ASSERT_TRUE(unquo_cap.is_capable(fsname, "sandbox-._foo/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(unquo_cap.is_capable(fsname, "sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(unquo_cap.is_capable(fsname, "sandbox-._food", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(unquo_cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
 }
 
 
@@ -296,21 +306,21 @@ TEST(MDSAuthCaps, AllowPathCharsQuoted) {
   MDSAuthCaps quo_cap;
   ASSERT_TRUE(quo_cap.parse("allow * path=\"/sandbox-._foo\"", NULL));
   ASSERT_FALSE(quo_cap.allow_all());
-  ASSERT_TRUE(quo_cap.is_capable(fsname, "sandbox-._foo/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(quo_cap.is_capable(fsname, "sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(quo_cap.is_capable(fsname, "sandbox-._food", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(quo_cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
+  ASSERT_TRUE(quo_cap.is_capable(fsname, "sandbox-._foo/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(quo_cap.is_capable(fsname, "sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(quo_cap.is_capable(fsname, "sandbox-._food", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(quo_cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
 }
 
 TEST(MDSAuthCaps, RootSquash) {
   MDSAuthCaps rs_cap;
   ASSERT_TRUE(rs_cap.parse("allow rw root_squash, allow rw path=/sandbox", NULL));
-  ASSERT_TRUE(rs_cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, addr, "foo"));
-  ASSERT_TRUE(rs_cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_FALSE(rs_cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(rs_cap.is_capable(fsname, "sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(rs_cap.is_capable(fsname, "sandbox/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
-  ASSERT_TRUE(rs_cap.is_capable(fsname, "sandbox/foo", 0, 0, 0777, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo"));
+  ASSERT_TRUE(rs_cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(rs_cap.is_capable(fsname, "foo", 0, 0, 0777, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_FALSE(rs_cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(rs_cap.is_capable(fsname, "sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(rs_cap.is_capable(fsname, "sandbox/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
+  ASSERT_TRUE(rs_cap.is_capable(fsname, "sandbox/foo", 0, 0, 0777, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0, addr, "foo", false));
 }
 
 TEST(MDSAuthCaps, OutputParsed) {
@@ -372,7 +382,145 @@ TEST(MDSAuthCaps, network) {
   MDSAuthCaps cap;
   ASSERT_TRUE(cap.parse("allow * network 192.168.0.0/16, allow * network 10.0.0.0/8", NULL));
 
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, a, "foo"));
-  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, b, "foo"));
-  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, c, "foo"));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, a, "foo", false));
+  ASSERT_TRUE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, b, "foo", false));
+  ASSERT_FALSE(cap.is_capable(fsname, "foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, c, "foo", false));
+}
+
+// Quarantine caps tests
+
+TEST(MDSAuthCaps, QuarantineParseGood) {
+  // Test that quarantine flags parse correctly
+  vector<string> quarantine_parse_good = {
+    "allow rq",
+    "allow rwq",
+    "allow rwQ",
+    "allow rwfpQqs",
+    "allow rwq path=/volumes/subvol1",
+    "allow rwQ path=/volumes",
+    "allow rq fsname=a path=/volumes/subvol1",
+    "allow r, allow rwq path=/quarantined",
+  };
+
+  for (auto str : quarantine_parse_good) {
+    MDSAuthCaps cap;
+    std::cout << "Testing quarantine good input: '" << str << "'" << std::endl;
+    ASSERT_TRUE(cap.parse(str, &cout));
+  }
+}
+
+TEST(MDSAuthCaps, QuarantineAllowStarExcludesQPrime) {
+  // 'allow *' must NOT grant quarantine access — quarantine access
+  // must be explicitly granted via q or Q flags to limit who can
+  // access compromised data after a security incident.
+  MDSAuthCaps cap;
+  ASSERT_TRUE(cap.parse("allow *", NULL));
+  
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "volumes/subvol1"));
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "any/path/here"));
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "/"));
+}
+
+TEST(MDSAuthCaps, QuarantineQPrimeFlag) {
+  // Test Q (Q_PRIME) flag - grants access to ALL quarantined directories
+  MDSAuthCaps cap;
+  ASSERT_TRUE(cap.parse("allow rwQ", NULL));
+  
+  // Q flag should grant quarantine access to any path
+  ASSERT_TRUE(cap.quarantine_access_in_caps(fsname, "volumes/subvol1"));
+  ASSERT_TRUE(cap.quarantine_access_in_caps(fsname, "volumes/subvol2"));
+  ASSERT_TRUE(cap.quarantine_access_in_caps(fsname, "other/path"));
+}
+
+TEST(MDSAuthCaps, QuarantineQFlagWithPath) {
+  // Test q flag with path restriction - grants access to SPECIFIC quarantined directory
+  MDSAuthCaps cap;
+  ASSERT_TRUE(cap.parse("allow rwq path=/volumes/subvol1", NULL));
+  
+  // q flag with path should grant quarantine access only to that path and children
+  ASSERT_TRUE(cap.quarantine_access_in_caps(fsname, "volumes/subvol1"));
+  ASSERT_TRUE(cap.quarantine_access_in_caps(fsname, "volumes/subvol1/dir/file"));
+  
+  // Should NOT grant access to other paths
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "volumes/subvol2"));
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "other/path"));
+}
+
+TEST(MDSAuthCaps, QuarantineNoQFlag) {
+  // Test that without q/Q flag, quarantine access is not granted
+  MDSAuthCaps cap;
+  ASSERT_TRUE(cap.parse("allow rw path=/volumes/subvol1", NULL));
+  
+  // Without q flag, should not grant quarantine access
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "volumes/subvol1"));
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "volumes/subvol2"));
+}
+
+TEST(MDSAuthCaps, QuarantineIsCapableWithQuarantineCheck) {
+  // Test is_capable with check_quarantine_access=true
+  MDSAuthCaps cap_no_q;
+  ASSERT_TRUE(cap_no_q.parse("allow rw path=/volumes/subvol1", NULL));
+  
+  MDSAuthCaps cap_with_q;
+  ASSERT_TRUE(cap_with_q.parse("allow rwq path=/volumes/subvol1", NULL));
+  
+  MDSAuthCaps cap_with_Q;
+  ASSERT_TRUE(cap_with_Q.parse("allow rwQ", NULL));
+  
+  // Without q flag: normal access OK, but quarantine access denied
+  ASSERT_TRUE(cap_no_q.is_capable(fsname, "volumes/subvol1/file", 0, 0, 0777, 0, 0, NULL, 
+                                   MAY_READ, 0, 0, addr, "volumes/subvol1/file", false));
+  ASSERT_FALSE(cap_no_q.is_capable(fsname, "volumes/subvol1/file", 0, 0, 0777, 0, 0, NULL, 
+                                    MAY_READ, 0, 0, addr, "volumes/subvol1/file", true));
+  
+  // With q flag and matching path: both normal and quarantine access OK
+  ASSERT_TRUE(cap_with_q.is_capable(fsname, "volumes/subvol1/file", 0, 0, 0777, 0, 0, NULL, 
+                                     MAY_READ, 0, 0, addr, "volumes/subvol1/file", false));
+  ASSERT_TRUE(cap_with_q.is_capable(fsname, "volumes/subvol1/file", 0, 0, 0777, 0, 0, NULL, 
+                                     MAY_READ, 0, 0, addr, "volumes/subvol1/file", true));
+  
+  // With Q flag: quarantine access to any path
+  ASSERT_TRUE(cap_with_Q.is_capable(fsname, "any/path/file", 0, 0, 0777, 0, 0, NULL, 
+                                     MAY_READ, 0, 0, addr, "any/path/file", true));
+}
+
+TEST(MDSAuthCaps, QuarantineMultipleGrants) {
+  // Test multiple grants with mixed quarantine flags
+  MDSAuthCaps cap;
+  ASSERT_TRUE(cap.parse("allow rw path=/normal, allow rwq path=/quarantined", NULL));
+  
+  // Normal path: no quarantine access
+  ASSERT_FALSE(cap.quarantine_access_in_caps(fsname, "normal/file"));
+  
+  // Quarantined path: has quarantine access
+  ASSERT_TRUE(cap.quarantine_access_in_caps(fsname, "quarantined/file"));
+}
+
+TEST(MDSAuthCaps, QuarantineOutputParsed) {
+  // Test that quarantine flags are correctly output when stringified
+  struct CapsTest {
+    const char *input;
+    const char *output;
+  };
+  CapsTest test_values[] = {
+    {"allow rq",
+     "MDSAuthCaps[allow rq]"},
+    {"allow rwq",
+     "MDSAuthCaps[allow rwq]"},
+    {"allow rwQ",
+     "MDSAuthCaps[allow rwQ]"},
+    {"allow rwfpQq",
+     "MDSAuthCaps[allow rwfpQq]"},
+    {"allow rwfpQqs",
+     "MDSAuthCaps[allow rwfpQqs]"},
+    {"allow rwq path=/volumes/subvol1",
+     "MDSAuthCaps[allow rwq path=\"/volumes/subvol1\"]"},
+  };
+  size_t num_tests = sizeof(test_values) / sizeof(*test_values);
+  for (size_t i = 0; i < num_tests; ++i) {
+    MDSAuthCaps cap;
+    std::cout << "Testing quarantine output '" << test_values[i].input << "'" << std::endl;
+    ASSERT_TRUE(cap.parse(test_values[i].input, &cout));
+    ASSERT_EQ(test_values[i].output, stringify(cap));
+  }
 }

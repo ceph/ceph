@@ -50,22 +50,27 @@ protected:
     pg_shard_t pg_shard,
     const crimson::osd::subsets_t& subsets,
     const SnapSet push_info_ss,
-    RecoveryCloneLockManager&& clone_lock_manager = {});
+    std::vector<ObjectContextLoader::Manager>&& clone_locks = {});
   void prepare_pull(
     const crimson::osd::ObjectContextRef &head_obc,
     PullOp& pull_op,
     pull_info_t& pull_info,
     const hobject_t& soid,
     eversion_t need);
-  ObjectRecoveryInfo set_recovery_info(
+  struct pull_recovery_info_t {
+    ObjectRecoveryInfo recovery_info;
+    std::vector<ObjectContextLoader::Manager> clone_locks;
+  };
+  pull_recovery_info_t set_recovery_info(
     const hobject_t& soid,
-    const crimson::osd::SnapSetContextRef ssc,
-    RecoveryCloneLockManager& clone_lock_manager);
+    const crimson::osd::SnapSetContextRef ssc);
+  struct clone_overlap_commit_t {
+    subsets_t subsets;
+    std::vector<ObjectContextLoader::Manager> clone_locks;
+  };
   /// Lock the first usable candidate from each preference list and
   /// build final recovery subsets.  Lock policy stays in the backend.
-  subsets_t commit_clone_overlap_plan(
-    clone_overlap_plan_t plan,
-    RecoveryCloneLockManager& clone_lock_manager);
+  clone_overlap_commit_t commit_clone_overlap_plan(clone_overlap_plan_t plan);
   std::vector<pg_shard_t> get_shards_to_push(
     const hobject_t& soid) const;
   interruptible_future<PushOp> build_push_op(
@@ -79,9 +84,8 @@ protected:
     PushOp& push_op,
     PullOp* response);
   void recalc_subsets(
-    ObjectRecoveryInfo& recovery_info,
-    crimson::osd::SnapSetContextRef ssc,
-    RecoveryCloneLockManager& clone_lock_manager);
+    pull_info_t& pull_info,
+    crimson::osd::SnapSetContextRef ssc);
   std::pair<interval_set<uint64_t>, ceph::bufferlist> trim_pushed_data(
     const interval_set<uint64_t> &copy_subset,
     const interval_set<uint64_t> &intervals_received,

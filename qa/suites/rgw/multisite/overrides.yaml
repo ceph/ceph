@@ -18,8 +18,6 @@ overrides:
         rgw data sync poll interval: 5
         rgw meta sync poll interval: 5
         rgw sync obj etag verify: true
-        rgw sync meta inject err probability: 0
-        rgw sync data inject err probability: 0
         rgw s3 auth use sts: true
         rgw sts key: abcdefghijklmnoq
   rgw:

@@ -16,6 +16,7 @@ CACHE=""
 FLAVOR="default"
 SUDO=""
 PRIVILEGED=""
+ARCHIVE_DIR="/teuthology"
 
 function run {
     printf "%s\n" "$*"
@@ -23,12 +24,12 @@ function run {
 }
 
 function main {
-    eval set -- $(getopt --name "$0" --options 'h' --longoptions 'help,no-cache,flavor:,sudo,privileged' -- "$@")
+    eval set -- $(getopt --name "$0" --options 'h' --longoptions 'help,no-cache,flavor:,sudo,privileged,archive-dir:' -- "$@")
 
     while [ "$#" -gt 0 ]; do
         case "$1" in
             -h|--help)
-                printf '%s: [--no-cache] <branch>[:sha1] <environment>\n' "$0"
+                printf '%s: [--no-cache] [--flavor FLAVOR] [--sudo] [--privileged] [--archive-dir DIR] <branch>[:sha1] <environment>\n' "$0"
                 exit 0
                 ;;
             --no-cache)
@@ -46,6 +47,10 @@ function main {
             --sudo)
                 SUDO=sudo
                 shift 1
+                ;;
+            --archive-dir)
+                ARCHIVE_DIR=$2
+                shift 2
                 ;;
             --)
                 shift
@@ -98,6 +103,10 @@ function main {
         centos:stream|centos:stream9)
             env=quay.io/centos/centos:stream9
             distro="centos/9"
+            ;;
+        rocky:10)
+            env=rockylinux/rockylinux:10
+            distro="rocky/10"
             ;;
         centos:stream8)
             distro="centos/8"
@@ -160,6 +169,12 @@ EOF
                     ceph_debuginfo="ceph-base-debuginfo"
                     debuginfo=/etc/yum.repos.d/centos.repo
                     ;;
+                rockylinux/rockylinux:10)
+                    python_bindings="python3-rados python3-cephfs"
+                    base_debuginfo="glibc-debuginfo"
+                    ceph_debuginfo="ceph-base-debuginfo"
+                    debuginfo=/etc/yum.repos.d/rocky.repo
+                    ;;
             esac
             if [ "${FLAVOR}" = "crimson" ]; then
                 ceph_debuginfo+=" ceph-crimson-osd-debuginfo ceph-crimson-osd"
@@ -182,7 +197,7 @@ EOF
 
     printf "built image %s\n" "$tag"
 
-    run $SUDO docker run $PRIVILEGED -ti -v /teuthology:/teuthology:ro "$tag"
+    run $SUDO docker run $PRIVILEGED -ti -v "${ARCHIVE_DIR}:/teuthology:ro" "$tag"
     return 0
 }
 

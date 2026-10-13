@@ -82,6 +82,49 @@ is met, the default binding will happen on all available network interfaces.
 By default, only the NFSv4 protocol is enabled. NFSv3 can be enabled by setting
 ``enable_nfsv3`` to ``true`` in the service specification.
 
+CephFS client logging
+---------------------
+
+When an NFS export uses the CephFS backend, Ganesha acts as a libcephfs client.
+To troubleshoot CephFS client issues, cephadm can mount a host log directory into
+the Ganesha container and add a ``[client]`` section to the daemon ``ceph.conf``.
+
+This is disabled by default. To enable it, set ``enable_cephfs_client_log: true``
+in the NFS service spec.
+
+Example:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+    spec:
+      enable_cephfs_client_log: true
+
+The following optional parameters are also available:
+
+* ``cephfs_client_log_level`` (integer): libcephfs client debug level. Default is
+  ``10`` when logging is enabled.
+* ``cephfs_client_log_dir`` (string): host path to mount into the container at
+  ``/var/log/ceph``. When unset, defaults to ``/var/log/ceph/<cluster-fsid>``.
+
+Example with custom log level and directory:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+    spec:
+      enable_cephfs_client_log: true
+      cephfs_client_log_level: 20
+      cephfs_client_log_dir: /var/log/ceph/<fsid>
+
+Client log files appear under the mounted host log directory.
+
 NFS over RDMA
 -------------
 
@@ -114,6 +157,12 @@ Example with RDMA enabled:
    ``networks``) with ``enable_rdma``, ensure the network interface for that
    address is RDMA-capable. On the host, run ``rdma link show`` and confirm the
    netdev for the interface with the bind IP is listed.
+
+   If the bind IP is on a bond, the RDMA netdevs are usually the bond's member
+   devices rather than the bond itself, so cephadm checks the members instead.
+   Deployment fails if none of them are RDMA-capable, and a warning is logged
+   if only some of them are, since RDMA traffic can then fail whenever it is
+   sent over a member that is not RDMA-capable.
 
 Ceph Client Object Cache
 ------------------------

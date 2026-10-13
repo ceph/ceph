@@ -1739,7 +1739,18 @@ if [ "$PR_PHASE" ] ; then
     
     debug "Generating backport PR title"
     if [ "$original_pr" ] ; then
-        backport_pr_title="${milestone}: $(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
+        remote_api_output=$(curl -u ${github_user}:${github_token} --silent "https://api.github.com/repos/ceph/ceph/pulls/${original_pr}")
+        original_pr_title=$(echo "$remote_api_output" | jq -r '.title')
+        if [ -z "$original_pr_title" ] || [ "$original_pr_title" = "null" ] ; then
+            if [ "$FORCE" ] ; then
+                warning "could not determine title of ${original_pr_url}: check the backport PR title"
+            else
+                error "could not determine title of ${original_pr_url}"
+                info "(hint) run with --force to open the backport PR anyway"
+                false
+            fi
+        fi
+        backport_pr_title="${milestone}: ${original_pr_title}"
     else
         if [[ $tracker_title =~ ^${milestone}: ]] ; then
             backport_pr_title="${tracker_title}"
@@ -1781,13 +1792,13 @@ fi
 
 if [ "$TRACKER_PHASE" ] ; then
     debug "Considering Backport tracker issue ${redmine_url}"
-    status_should_be=2 # In Progress
+    status_should_be=13 # Fix Under Review
     desc_should_be="${backport_pr_url}"
     assignee_should_be="${redmine_user_id}"
     if [ "$EXISTING_PR" ] ; then
-        data_binary="{\"issue\":{\"description\":\"${desc_should_be}\",\"status_id\":${status_should_be},\"custom_fields\":[{\"id\":21,\"value\":\"${backport_pr_number}\"}]}}"
+        data_binary="{\"issue\":{\"status_id\":${status_should_be},\"custom_fields\":[{\"id\":21,\"value\":\"${backport_pr_number}\"}]}}"
     else
-        data_binary="{\"issue\":{\"description\":\"${desc_should_be}\",\"status_id\":${status_should_be},\"assigned_to_id\":${assignee_should_be},\"custom_fields\":[{\"id\":21,\"value\":\"${backport_pr_number}\"}]}}"
+        data_binary="{\"issue\":{\"status_id\":${status_should_be},\"assigned_to_id\":${assignee_should_be},\"custom_fields\":[{\"id\":21,\"value\":\"${backport_pr_number}\"}]}}"
     fi
     remote_api_status_code="$(curl --write-out '%{http_code}' --output /dev/null --silent -X PUT --header "Content-type: application/json" --data-binary "${data_binary}" "${redmine_url}.json?key=$redmine_key")"
     if [ "$FORCE" ] || [ "$EXISTING_PR" ] ; then 

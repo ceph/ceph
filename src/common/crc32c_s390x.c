@@ -25,7 +25,6 @@
  */
 
 #include <sys/types.h>
-#include <endian.h>
 #include "crc32c_s390x.h"
 
 #define VX_MIN_LEN		64
@@ -562,14 +561,17 @@ unsigned int crc32c_le_vgfm_16(uint32_t crc, unsigned char const*buf, unsigned s
 
 /* Pure C implementations of CRC, one byte at a time */
 unsigned int crc32c_le(uint32_t crc, unsigned char const *buf, unsigned len){
-	crc = htole32(crc);
+	// It is only built when HAVE_S390X is set, and s390x is always big
+	// endian, so both calls swap the bytes. Call __builtin_bswap32() directly
+	// instead.
+	crc = __builtin_bswap32(crc);
 	if(buf != 0)
 		while (len--)
 			crc = crc32ctable_le[0][((crc >> 24) ^ *buf++) & 0xFF] ^ (crc << 8);
 	else
 		while (len--)
 			crc = crc32ctable_le[0][((crc >> 24)) & 0xFF] ^ (crc << 8);
-	crc = le32toh(crc);
+	crc = __builtin_bswap32(crc);
 	return crc;
 }
 

@@ -45,7 +45,7 @@ cloud solutions like OpenStack, OpenNebula or CloudStack. The cloud solution use
 ``libvirt`` to  interact with QEMU/KVM, and QEMU/KVM interacts with Ceph block
 devices via  ``librbd``. See `Block Devices and OpenStack`_,
 `Block Devices and OpenNebula`_ and `Block Devices and CloudStack`_ for details.
-See :ref:`install-overview` for installation details.
+See :doc:`/install/install-vm-cloud` for installation details.
 
 You can also use Ceph block devices with ``libvirt``, ``virsh`` and the
 ``libvirt`` API. See `libvirt Virtualization API`_ for details.

@@ -193,7 +193,7 @@ private:
     NvmeGwId& min_loaded_gw_id, bool ignore_locations);
   bool get_location_in_disaster_cleanup(const NvmeGroupKey& group_key,
              NvmeLocation& returned_location);
-  void disaster_map_remove_location(const NvmeGroupKey& group_key,
+  bool disaster_map_remove_location(const NvmeGroupKey& group_key,
              NvmeLocation& location);
   bool validate_number_locations(int num_gws, int num_locations);
   void check_relocate_ana_groups(const NvmeGroupKey& group_key,

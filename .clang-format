@@ -54,8 +54,8 @@ IndentCaseLabels: false
 EmptyLineBeforeAccessModifier: Always
 ConstructorInitializerIndentWidth: 2
 
-#Always break after an open bracket, if the parameters don’t fit on a single line
-AlignAfterOpenBracket: AlwaysBreak
+# Don't force initial arguments to a new line, break them at ColumnLimit
+AlignAfterOpenBracket: Align
 
 # Newline escapes should be aligned and located at the leftmost alignment
 AlignEscapedNewlines: Left
@@ -84,16 +84,8 @@ AllowShortIfStatementsOnASingleLine: false
 # If true, "while (true) continue;" can be put on a single line
 AllowShortLoopsOnASingleLine: false
 
-# Always break after the return type of function definitions.
-AlwaysBreakAfterReturnType: AllDefinitions
-
 # Always break after template declaration.
 AlwaysBreakTemplateDeclarations: Yes
-
-# If false, a function declaration’s or function definition’s parameters
-# will either all be on the same line or will have one line each.
-BinPackArguments: true
-BinPackParameters: false
 
 # The break should always be after the binary and ternary operands.
 BreakBeforeBinaryOperators: None
@@ -143,7 +135,7 @@ BreakStringLiterals: true
 # initializer list is short enough to fit on one line after the wrap, do not break
 # into individual lines.
 # Note NextLineOnly requires clang-format >= 15
-PackConstructorInitializers: NextLineOnly
+PackConstructorInitializers: BinPack
 
 # includes are sorted based on the other suboptions below
 SortIncludes:    true

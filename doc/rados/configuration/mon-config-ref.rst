@@ -258,6 +258,8 @@ online.
 
 .. index:: Ceph Monitor; data path
 
+.. _mon-config-ref-data:
+
 Data
 ----
 

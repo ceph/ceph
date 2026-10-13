@@ -8,6 +8,7 @@
 
 #include "crimson/os/seastore/logging.h"
 
+#include "common/ceph_time_fmt.h"
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/lba_manager.h"
@@ -1156,9 +1157,9 @@ void SegmentCleaner::maybe_adjust_thresholds()
 
   // Architectural floor: named writers (journal + hot/cold gens + metadata).
   auto hot = crimson::common::get_conf<uint64_t>(
-      "seastore_hot_tier_generations");
+      "seastore_cache_device_generations");
   auto cold = crimson::common::get_conf<uint64_t>(
-      "seastore_cold_tier_generations");
+      "seastore_data_device_generations");
   std::size_t named_writers = hot + cold + 2;
   std::size_t seg_size = segments.get_segment_size();
   std::size_t total_bytes = segments.get_total_bytes();

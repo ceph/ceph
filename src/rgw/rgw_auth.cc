@@ -800,8 +800,16 @@ void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvide
 
 bool rgw::auth::WebIdentityApplier::is_identity(const Principal& p) const
 {
-  return p.is_oidc_provider()
-      && p.get_idp_url() == get_idp_url();
+  if (!p.is_oidc_provider())
+    return false;
+  if (p.get_idp_url() != get_idp_url())
+    return false;
+
+  if (is_global_oidc) {
+    return p.get_account() == ".global";
+  }
+  const std::string& acct = account ? account->id : role_tenant;
+  return p.get_account() == acct;
 }
 
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
@@ -1275,7 +1283,8 @@ bool rgw::auth::RoleApplier::is_identity(const Principal& p) const {
     string role_session = role.name + "/" + token_attrs.role_session_name; //role/role-session
     return p.get_account() == role.tenant
         && p.get_role_session() == role_session;
-  } else {
+  } else if (!role.account) {
+    // non-account roles can match the assuming user principal
     string oidc_id;
     if (token_attrs.user_id.ns.empty()) {
       oidc_id = token_attrs.user_id.id;

@@ -4,6 +4,8 @@
 #include <errno.h>
 #include <fnmatch.h>
 
+#include <algorithm>
+
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string.hpp>
 #include <fstream>
@@ -289,23 +291,42 @@ int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
  * Maybe one day we'll have the parser find this in Keystone replies.
  * But for now, we use the confguration to augment the list of roles.
  */
-void TokenEnvelope::update_roles(const std::vector<std::string> & admin,
-                                 const std::vector<std::string> & reader)
+void TokenEnvelope::update_roles(const std::vector<std::string> & plain,
+                                 const std::vector<std::string> & admin,
+                                 const std::vector<std::string> & system_reader,
+                                 const std::vector<std::string> & project_reader,
+                                 const std::vector<std::string> & implicit_deny)
 {
-  for (auto& iter: roles) {
-    for (const auto& r : admin) {
-      if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
-        iter.is_admin = true;
-        break;
+  auto contains = [](const std::vector<std::string>& list, const std::string& name) {
+    for (const auto& r: list) {
+      if (fnmatch(r.c_str(), name.c_str(), 0) == 0) {
+        return true;
       }
     }
-    for (const auto& r : reader) {
-      if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
-        iter.is_reader = true;
-        break;
-      }
+    return false;
+  };
+
+  // nullopt = no accepted role yet
+  perm_tier.reset();
+  for (auto& role: roles) {
+    role.is_admin = contains(admin, role.name);
+    role.is_system_reader = contains(system_reader, role.name);
+
+    std::optional<uint32_t> tier;
+    if      (role.is_admin)                       tier = RGW_PERM_FULL_CONTROL;
+    else if (contains(project_reader, role.name)) tier = RGW_PERM_READ | RGW_PERM_READ_ACP;
+    else if (contains(implicit_deny, role.name))  tier = RGW_PERM_NONE;
+    else if (contains(plain, role.name))          tier = RGW_PERM_FULL_CONTROL;
+
+    if(tier){
+      perm_tier = std::max(perm_tier.value_or(RGW_PERM_NONE), *tier);
     }
   }
+}
+
+uint32_t TokenEnvelope::effective_perm_mask() const
+{
+  return perm_tier.value_or(RGW_PERM_NONE);
 }
 
 bool TokenCache::find(const std::string& token_id,

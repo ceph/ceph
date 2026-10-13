@@ -1,7 +1,6 @@
 import Close from '@carbon/icons/es/close/32';
 import { SmbClusterListComponent } from './smb-cluster-list/smb-cluster-list.component';
 import { SmbClusterFormComponent } from './smb-cluster-form/smb-cluster-form.component';
-import { AppRoutingModule } from '~/app/app-routing.module';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { SmbDomainSettingModalComponent } from './smb-domain-setting-modal/smb-domain-setting-modal.component';
 import { SmbClusterResourcePageComponent } from './smb-cluster-resource-page/smb-cluster-resource-page.component';
@@ -46,8 +45,6 @@ import { SmbUsersgroupsResourcePageComponent } from './smb-usersgroups-resource-
     RouterModule,
     CommonModule,
     SharedModule,
-    AppRoutingModule,
-    CommonModule,
     FormsModule,
     ReactiveFormsModule,
     DataTableModule,

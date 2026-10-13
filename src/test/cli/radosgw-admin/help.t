@@ -166,7 +166,7 @@
     mdlog trim                       trim metadata log (use marker)
     mdlog status                     read metadata log status
     bilog list                       list bucket index log
-    bilog trim                       trim bucket index log (use start-marker, end-marker)
+    bilog trim                       trim bucket index log (use end-marker); without end-marker, requires --yes-i-really-mean-it
     bilog status                     read bucket index log status
     bilog autotrim                   auto trim bucket index log
     datalog list                     list data log
@@ -192,6 +192,11 @@
     role policy detach               detach a managed policy
     role policy list attached        list attached managed policies
     role update                      update max_session_duration of a role
+    oidc-provider create             create an OIDC provider (global if no --account-id)
+    oidc-provider modify             update thumbprints and/or client-ids of an OIDC provider
+    oidc-provider get                get an OIDC provider
+    oidc-provider delete             delete an OIDC provider
+    oidc-provider list               list OIDC providers
     reshard add                      schedule a resharding of a bucket
     reshard list                     list all bucket resharding or scheduled to be resharded
     reshard status                   read bucket resharding status
@@ -408,6 +413,11 @@
      --description                 Role description
      --policy-arn                  ARN of a managed policy
   
+  OIDC Provider options:
+     --provider-url                URL of the OIDC provider
+     --client-ids                  comma-separated list of client IDs
+     --thumbprints                 comma-separated list of thumbprints
+  
   MFA options:
      --totp-serial                 a string that represents the ID of a TOTP token
      --totp-seed                   the secret seed that is used to calculate the TOTP
@@ -430,8 +440,7 @@
      --hide-progress               when specified, per-shard progress details are not printed to stderr
   
   radoslist options:
-     --rgw-obj-fs                  the field separator that will separate the rados object name from the rgw object name;
-                                   additionally rados objects for incomplete multipart uploads will not be output
+     --rgw-obj-fs                  the field separator that will separate the rados object name from the rgw object name
   
   Bucket list objects options:
      --max-entries                 max number of entries listed (default 1000)
@@ -450,3 +459,4 @@
     --setgroup GROUP  set gid to group or gid
     --version         show version and quit
   
+

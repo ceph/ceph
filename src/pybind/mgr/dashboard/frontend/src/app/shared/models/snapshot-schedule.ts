@@ -4,6 +4,7 @@ import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 export interface SnapshotSchedule {
   fs?: string;
   subvol?: string;
+  group?: string;
   path: string;
   rel_path?: string;
   schedule: string;

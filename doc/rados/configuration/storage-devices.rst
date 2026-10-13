@@ -72,22 +72,18 @@ For more information, see :doc:`bluestore-config-ref` and :doc:`/rados/operation
 
 FileStore
 ---------
-.. warning:: Filestore has been deprecated in the Reef release and is no longer supported.
 
+FileStore was the original approach to storing objects in Ceph. It
+relied on a standard file system (normally XFS) in combination with a
+key/value database (traditionally LevelDB, later RocksDB) for
+metadata. FileStore was deprecated in the Reef release and is no
+longer supported: FileStore OSDs cannot run on Reef or later
+releases.
 
-FileStore is the legacy approach to storing objects in Ceph. It
-relies on a standard file system (normally XFS) in combination with a
-key/value database (traditionally LevelDB, now RocksDB) for some
-metadata.
-
-FileStore is well-tested and widely used in production. However, it
-suffers from many performance deficiencies due to its overall design
-and its reliance on a traditional file system for object data storage.
-
-Although FileStore is capable of functioning on most POSIX-compatible
-file systems (including btrfs and ext4), we recommend that only the
-XFS file system be used with Ceph. Both btrfs and ext4 have known bugs and
-deficiencies and their use may lead to data loss. By default, all Ceph
-provisioning tools use XFS.
-
-For more information, see :doc:`filestore-config-ref`.
+Clusters that still have FileStore OSDs must migrate them to
+BlueStore before upgrading to Reef or later. See
+:doc:`/rados/operations/bluestore-migration`. The FileStore
+configuration reference is available in the documentation of the
+releases that supported it, for example
+`the Quincy documentation
+<https://docs.ceph.com/en/quincy/rados/configuration/filestore-config-ref/>`_.

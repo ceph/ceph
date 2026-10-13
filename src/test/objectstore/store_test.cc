@@ -1887,6 +1887,148 @@ TEST_P(StoreTestSpecificAUSize, ReproBug41901Test) {
   }
 }
 
+TEST_P(StoreTest, InterfacePerfCounters) {
+  if (string(GetParam()) != "bluestore")
+    GTEST_SKIP() << "bluestore-only perf counters";
+
+  const PerfCounters* logger = store->get_perf_counters();
+  auto cnt    = [logger](int idx){ return logger->get_tavg_ns(idx).second; };  // # calls
+  auto sum_ns = [logger](int idx){ return logger->get_tavg_ns(idx).first;  };  // total ns
+
+  // pg, not meta: split/merge_collection assert is_pg() on src and dest.
+  const int bits = 2;
+  coll_t cid(spg_t(pg_t(0, 4373), shard_id_t::NO_SHARD));
+  // hash 0 so get_onode's oid.match() passes; one shared hash keeps _clone valid.
+  ghobject_t oid (hobject_t(sobject_t("obj",  CEPH_NOSNAP), "key", 0, 4373, ""));
+  ghobject_t coid(hobject_t(sobject_t("obj2", CEPH_NOSNAP), "key", 0, 4373, ""));
+  ghobject_t roid(hobject_t(sobject_t("obj3", CEPH_NOSNAP), "key", 0, 4373, ""));
+  ghobject_t miss(hobject_t(sobject_t("missing", CEPH_NOSNAP), "key", 0, 4373, ""));
+  auto ch = store->create_new_collection(cid);
+
+  auto submit = [&](auto&& fn) {
+    ObjectStore::Transaction t; fn(t);
+    ASSERT_EQ(0, queue_transaction(store, ch, std::move(t)));
+  };
+  // run fn, assert the counter advanced by `want`, print avg latency
+  auto check = [&](const char* name, int idx, uint64_t want, auto&& fn) {
+    uint64_t before = cnt(idx);
+    fn();
+    uint64_t after = cnt(idx);
+    double avg_us = after ? (double)sum_ns(idx) / after / 1000.0 : 0.0;
+    std::cout << "  " << name << ": +" << (after - before)
+              << " (expected +" << want << "), avg " << avg_us << " us\n";
+    EXPECT_EQ(before + want, after) << name;
+  };
+
+  // setup: a populated object (data + attr + omap)
+  submit([&](auto& t){
+    t.create_collection(cid, bits);
+    t.touch(cid, oid);
+    bufferlist bl; bl.append(string(4096, 'a'));
+    t.write(cid, oid, 0, bl.length(), bl);
+    bufferlist av; av.append("v");
+    t.setattr(cid, oid, "a", av);
+    map<string,bufferlist> om{{"k", av}};
+    t.omap_setkeys(cid, oid, om);
+  });
+
+  // ---- read side ----
+  check("exists_lat", l_bluestore_exists_lat, 2, [&]{
+    store->exists(ch, miss); store->exists(ch, oid); });
+
+  check("stat_lat", l_bluestore_stat_lat, 2, [&]{
+    struct stat st;
+    store->stat(ch, miss, &st);            // -ENOENT still counts
+    store->stat(ch, oid, &st); });
+
+  check("getattr_lat (getattr+getattrs)", l_bluestore_getattr_lat, 2, [&]{
+    bufferptr bp; store->getattr(ch, oid, "a", bp);
+    std::map<std::string, bufferptr, std::less<>> aset;
+    store->getattrs(ch, oid, aset); });
+
+  check("fiemap_lat", l_bluestore_fiemap_lat, 1, [&]{
+    bufferlist bl; store->fiemap(ch, oid, 0, 4096, bl); });
+
+  check("omap_get_lat (get+header+check_keys)", l_bluestore_omap_get_lat, 3, [&]{
+    bufferlist header; map<string,bufferlist> out;
+    store->omap_get(ch, oid, &header, &out);
+    store->omap_get_header(ch, oid, &header);
+    set<string> keys{"k"}, got;
+    store->omap_check_keys(ch, oid, keys, &got); });
+
+  check("collection_lat (list+exists+bits)", l_bluestore_collection_lat, 3, [&]{
+    vector<coll_t> ls; store->list_collections(ls);
+    store->collection_exists(cid);
+    store->collection_bits(ch); });
+
+  // collection_empty delegates to collection_list (counted as clist_lat), so it
+  // must not bump collection_lat -- guards against double counting.
+  check("collection_empty stays uncounted", l_bluestore_collection_lat, 0, [&]{
+    bool empty; store->collection_empty(ch, &empty); });
+
+  // ---- write side ----
+  check("touch_lat", l_bluestore_touch_lat, 1, [&]{
+    submit([&](auto& t){ t.touch(cid, oid); }); });
+
+  check("zero_lat", l_bluestore_zero_lat, 1, [&]{
+    submit([&](auto& t){ t.zero(cid, oid, 0, 4096); }); });
+
+  check("clone_lat (clone+clone_range)", l_bluestore_clone_lat, 2, [&]{
+    submit([&](auto& t){
+      t.clone(cid, oid, coid);
+      t.clone_range(cid, oid, coid, 0, 4096, 0); }); });
+
+  check("chgattr_lat (setattr+setattrs+rmattr+rmattrs)", l_bluestore_change_attr_lat, 4, [&]{
+    bufferlist v; v.append("x");
+    std::map<std::string, bufferptr, std::less<>> aset{{"b", bufferptr("y", 1)}};
+    submit([&](auto& t){
+      t.setattr(cid, oid, "a", v);
+      t.setattrs(cid, oid, aset);
+      t.rmattr(cid, oid, "a");
+      t.rmattrs(cid, oid); }); });
+
+  check("omap_set_lat (setkeys+setheader+rmkeys+rmkeyrange)", l_bluestore_omap_set_lat, 4, [&]{
+    bufferlist v; v.append("x");
+    map<string,bufferlist> om{{"k1", v}, {"k2", v}};
+    set<string> rm{"k1"};
+    submit([&](auto& t){
+      t.omap_setkeys(cid, oid, om);
+      t.omap_setheader(cid, oid, v);
+      t.omap_rmkeys(cid, oid, rm);
+      t.omap_rmkeyrange(cid, oid, "k2", "k9"); }); });
+
+  check("rename_lat", l_bluestore_rename_lat, 1, [&]{
+    submit([&](auto& t){ t.collection_move_rename(cid, coid, cid, roid); }); });
+
+  check("other_ops_lat (set_alloc_hint)", l_bluestore_other_ops_lat, 1, [&]{
+    submit([&](auto& t){ t.set_alloc_hint(cid, oid, 4096, 4096, 0); }); });
+
+  // ---- collection ops ----
+  // split dest must be fresh, empty, and created at bits+1.
+  coll_t pb(spg_t(pg_t(1 << bits, 4373), shard_id_t::NO_SHARD));
+  store->create_new_collection(pb);
+
+  check("split_collection_lat", l_bluestore_split_collection_lat, 1, [&]{
+    submit([&](auto& t){
+      t.create_collection(pb, bits + 1);
+      t.split_collection(cid, bits + 1, 1 << bits, pb); }); });
+
+  check("merge_collection_lat", l_bluestore_merge_collection_lat, 1, [&]{
+    submit([&](auto& t){ t.merge_collection(pb, cid, bits); }); });
+
+  // merge consumed pb; recreate it empty. _remove_collection calls
+  // flush_all_but_last() on pb's own sequencer, so queue on chb, not ch.
+  check("remove_collection_lat", l_bluestore_remove_collection_lat, 1, [&]{
+    auto chb = store->create_new_collection(pb);
+    {
+      ObjectStore::Transaction t; t.create_collection(pb, bits);
+      ASSERT_EQ(0, queue_transaction(store, chb, std::move(t)));
+    }
+    {
+      ObjectStore::Transaction t; t.remove_collection(pb);
+      ASSERT_EQ(0, queue_transaction(store, chb, std::move(t)));
+    } });
+}
 
 TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
@@ -8188,7 +8330,7 @@ TEST_P(StoreTestSpecificAUSize, OnodeSizeTracking) {
   }
   get_mempool_stats(&total_bytes, &total_onodes);
   ASSERT_GT(total_bytes - total_bytes_prev, 0u);
-  ASSERT_EQ(total_onodes, 6u);
+  ASSERT_EQ(total_onodes, 6u); // +1 - onode itself
 
   {
     ObjectStore::Transaction t;
@@ -12631,6 +12773,107 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixedPartialTest) {
     << std::endl;
 }
 
+TEST_P(StoreTestSpecificAUSize, BluestoreNoDBShardingAlertTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // create a store with a non-sharded RocksDB database, as created by
+  // OSDs deployed prior to Pacific
+  SetVal(g_conf(), "bluestore_rocksdb_cf", "false");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(4096);
+
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_NO_DB_SHARDING"), 1);
+  std::cout << "no_db_sharding_alert:"
+	    << alerts.find("BLUESTORE_NO_DB_SHARDING")->second
+	    << std::endl;
+
+  // the alert can be disabled at runtime
+  SetVal(g_conf(), "bluestore_warn_on_no_db_sharding", "false");
+  g_conf().apply_changes(nullptr);
+
+  alerts.clear();
+  r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_NO_DB_SHARDING"), 0);
+}
+
+TEST_P(StoreTestSpecificAUSize, BluestoreDBShardingNoAlertTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // RocksDB column family sharding is enabled by default at mkfs
+  StartDeferred(4096);
+
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_NO_DB_SHARDING"), 0);
+}
+
+TEST_P(StoreTestSpecificAUSize, BluestoreLegacyMinAllocSizeAlertTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // make the expected default allocation unit deterministic
+  // (bluestore_min_alloc_size_ssd = 4 KiB)
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  g_conf().apply_changes(nullptr);
+
+  // deploy an OSD with a 64 KiB allocation unit, as mkfs would have
+  // done on an HDD prior to Pacific
+  StartDeferred(65536);
+
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  // no alert yet: the on-disk value matches the explicitly configured
+  // bluestore_min_alloc_size, hence it is considered deliberate
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 0);
+
+  // drop the explicit setting: the on-disk 64 KiB allocation unit is
+  // now larger than the 4 KiB unit a redeployed OSD would get
+  SetVal(g_conf(), "bluestore_min_alloc_size", "0");
+  g_conf().apply_changes(nullptr);
+
+  alerts.clear();
+  r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 1);
+  std::cout << "legacy_min_alloc_size_alert:"
+	    << alerts.find("BLUESTORE_LEGACY_MIN_ALLOC_SIZE")->second
+	    << std::endl;
+
+  // the alert can be disabled at runtime
+  SetVal(g_conf(), "bluestore_warn_on_legacy_min_alloc_size", "false");
+  g_conf().apply_changes(nullptr);
+
+  alerts.clear();
+  r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 0);
+}
+
+TEST_P(StoreTest, BluestoreDefaultMinAllocSizeNoAlertTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // an OSD deployed with the default configuration matches the
+  // allocation unit a newly deployed OSD would use
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 0);
+}
+
 TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -13026,6 +13269,223 @@ TEST_P(StoreTest, BlueFS_truncate_remove_race) {
   EXPECT_EQ(store->mount(), 0);
 }
 
+// This test case checks:
+//  * if full onode overwrite triggers non-deferred write
+//  * if full small tail overwrite trigger deferred write
+//  * if partial small tail overwrite trigger deferred write
+//
+void doOverwriteDeferredTest(ObjectStore* store, bool v2) {
+  size_t basic_size = 0x11000; // be that large to avoid deferring for big blob
+  size_t extra = 4;
+
+  int r;
+  coll_t cid;
+  ghobject_t obj(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t obj_clone = obj;
+  obj_clone.hobj.snap = 1;
+
+  auto ch = store->create_new_collection(cid);
+  const PerfCounters* logger = store->get_perf_counters();
+
+  cerr << "Creating collection " << cid << std::endl;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  cerr << "Making object " << cid << " " << obj << std::endl;
+  bufferlist bl;
+  bufferlist expected_bl;
+  uint64_t len = basic_size + extra;
+  bl.append(std::string(len, 'a'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  ASSERT_EQ(0, logger->get(l_bluestore_issued_deferred_writes));
+
+  cerr << "Overwriting object (exact size match) " << cid << " " << obj << std::endl;
+  bl.clear();
+  bl.append(std::string(len, 'b'));
+  expected_bl.clear();
+  expected_bl.append(std::string(len, 'b'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    EXPECT_EQ(0, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, len, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+  cerr << "Overwriting tail only (size match)" << cid << " " << obj << std::endl;
+  bl.clear();
+  bl.append(std::string(extra, '0'));
+  expected_bl.clear();
+  expected_bl.append(std::string(basic_size, 'b'));
+  expected_bl.append(std::string(extra, '0'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, basic_size, extra, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    EXPECT_EQ(1, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, len, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+  cerr << "Overwriting object (overwrite size is greater) " << cid << " " << obj << std::endl;
+  bl.clear();
+  len = basic_size + extra + 1;
+  bl.append(std::string(len, 'c'));
+  expected_bl.clear();
+  expected_bl.append(std::string(len, 'c'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    EXPECT_EQ(1, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, basic_size + extra + 1, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+  cerr << "Overwriting tail only (size is greater)" << cid << " " << obj << std::endl;
+  bl.clear();
+  len = extra + 2;
+  bl.append(std::string(len, '2'));
+  expected_bl.clear();
+  expected_bl.append(std::string(basic_size, 'c'));
+  expected_bl.append(std::string(len, '2'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, basic_size, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    EXPECT_EQ(2, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, basic_size + extra + 2, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+  cerr << "Overwriting tail only (size is less)" << cid << " " << obj << std::endl;
+  bl.clear();
+  len = extra - 1;
+  bl.append(std::string(len, '1'));
+  expected_bl.clear();
+  expected_bl.append(std::string(basic_size, 'c'));
+  expected_bl.append(std::string(len, '1'));
+  expected_bl.append(std::string(1, '2'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, basic_size, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    EXPECT_EQ(3, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, basic_size + extra, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+  cerr << "Overwriting object (overwrite size is less) " << cid << " " << obj << std::endl;
+  bl.clear();
+  len = basic_size + extra - 1;
+  bl.append(std::string(len, 'd'));
+  expected_bl.clear();
+  expected_bl.append(std::string(len, 'd'));
+  expected_bl.append(std::string(1, '2'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    // Write v2 behaves differently for now and omits deferred write even
+    // when it's not a full overwrite
+    EXPECT_EQ(v2 ? 3 : 4, logger->get(l_bluestore_issued_deferred_writes));
+  }
+  {
+    bl.clear();
+    int r = store->read(ch, obj, 0, basic_size + extra, bl, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(r, (int)expected_bl.length());
+    ASSERT_TRUE(bl_eq(expected_bl, bl));
+  }
+
+}
+
+TEST_P(StoreTestSpecificAUSize, OverwriteDeferredTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // enforce 'hddd' settings to enable deferred writes
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hybrid");
+  SetVal(g_conf(), "bluestore_write_v2", "false");
+
+  g_conf().apply_changes(nullptr);
+
+  size_t min_alloc_size = 0x1000;
+  StartDeferred(min_alloc_size);
+
+  doOverwriteDeferredTest(store.get(), false);
+}
+
+TEST_P(StoreTestSpecificAUSize, OverwriteDeferredV2Test) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // enforce 'hddd' settings to enable deferred writes
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hybrid");
+  SetVal(g_conf(), "bluestore_write_v2", "true");
+
+  g_conf().apply_changes(nullptr);
+
+  size_t min_alloc_size = 0x1000;
+  StartDeferred(min_alloc_size);
+
+  doOverwriteDeferredTest(store.get(), true);
+}
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {

@@ -86,7 +86,10 @@ public:
  * explanation).
  */
 tl::expected<early_config_t, int>
-get_early_config(int argc, const char *argv[]);
+get_early_config(
+  int argc,
+  const char *argv[],
+  std::vector<const char*> extra_args = {});
 
 }
 

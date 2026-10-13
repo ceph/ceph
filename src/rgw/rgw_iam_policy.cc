@@ -19,7 +19,9 @@
 
 #include "rgw_auth.h"
 #include "rgw_iam_policy.h"
+#include "rgw_oidc_provider.h"
 
+#include "common/ceph_time_fmt.h"
 
 inline constexpr int dout_subsys = ceph_subsys_rgw;
 
@@ -234,6 +236,22 @@ static const actpair actpairs[] =
  { "organizations:ListRoots", organizationsListRoots},
  { "organizations:ListPolicies", organizationsListPolicies},
  { "organizations:ListTargetsForPolicy", organizationsListTargetsForPolicy},
+ { "s3vectors:CreateIndex", s3vectorsCreateIndex},
+ { "s3vectors:CreateVectorBucket", s3vectorsCreateVectorBucket},
+ { "s3vectors:DeleteIndex", s3vectorsDeleteIndex},
+ { "s3vectors:DeleteVectorBucket", s3vectorsDeleteVectorBucket},
+ { "s3vectors:DeleteVectorBucketPolicy", s3vectorsDeleteVectorBucketPolicy},
+ { "s3vectors:DeleteVectors", s3vectorsDeleteVectors},
+ { "s3vectors:GetIndex", s3vectorsGetIndex},
+ { "s3vectors:GetVectorBucket", s3vectorsGetVectorBucket},
+ { "s3vectors:GetVectorBucketPolicy", s3vectorsGetVectorBucketPolicy},
+ { "s3vectors:GetVectors", s3vectorsGetVectors},
+ { "s3vectors:ListIndexes", s3vectorsListIndexes},
+ { "s3vectors:ListVectorBuckets", s3vectorsListVectorBuckets},
+ { "s3vectors:ListVectors", s3vectorsListVectors},
+ { "s3vectors:PutVectorBucketPolicy", s3vectorsPutVectorBucketPolicy},
+ { "s3vectors:PutVectors", s3vectorsPutVectors},
+ { "s3vectors:QueryVectors", s3vectorsQueryVectors},
 };
 
 namespace {
@@ -381,16 +399,23 @@ parse_principal_(const struct Keyword* w, std::string&& s,
 	}
 
         if (match[1] == "oidc-provider") {
-                return Principal::oidc_provider(std::move(match[2]));
+                return Principal::oidc_provider(std::move(a->account), std::move(match[2]));
         }
 	if (match[1] == "assumed-role") {
 	  return Principal::assumed_role(std::move(a->account), match[2]);
 	}
       }
+    } else if (w->id == TokenID::Federated &&
+               (s.find('/') != string::npos || s.find('.') != string::npos)) {
+      // bare URL like "example.com" or "localhost:8080/auth/realms/myrealm"
+      // used for global OIDC providers in trust policies. Restricted to
+      // Principal.Federated so bare account/tenant names under Principal.AWS
+      // (which may contain a '.') keep matching as accounts.
+      return Principal::oidc_provider(std::string{global_oidc_id}, std::string{s});
     } else if (std::none_of(s.begin(), s.end(),
-		       [](const char& c) {
-			 return (c == ':') || (c == '/');
-		       })) {
+           [](const char& c) {
+       return (c == ':') || (c == '/');
+           })) {
       // Since tenants are simply prefixes, there's no really good
       // way to see if one exists or not. So we return the thing and
       // let them try to match against it.
@@ -809,6 +834,12 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         }
         if ((t->notaction & organizationsAllValue) == organizationsAllValue) {
           t->notaction[organizationsAll] = 1;
+        }
+        if ((t->action & s3vectorsAllValue) == s3vectorsAllValue) {
+          t->action[s3vectorsAll] = 1;
+        }
+        if ((t->notaction & s3vectorsAllValue) == s3vectorsAllValue) {
+          t->notaction[s3vectorsAll] = 1;
         }
       }
     }
@@ -1256,9 +1287,9 @@ Statement::eval(
     uint64_t act,
     boost::optional<const ARN&> res,
     const LogOut& eval_log,
-    boost::optional<PolicyPrincipal&> princ_type) const {
+    boost::optional<rgw::auth::Principal>& principal) const {
 
-  if (eval_principal(e, ida, eval_log, princ_type) == Effect::Deny) {
+  if (eval_principal(e, ida, eval_log, principal) == Effect::Deny) {
     eval_log.format("Passing.");
     return Effect::Pass;
   }
@@ -1328,64 +1359,31 @@ Statement::eval(
   return Effect::Pass;
 }
 
-static bool is_identity(const auth::Identity& ida,
-                        const flat_set<auth::Principal>& princ)
-{
-  return std::any_of(princ.begin(), princ.end(),
-      [&ida] (const auth::Principal& p) {
-        return ida.is_identity(p);
-      });
-}
-
 Effect
 Statement::eval_principal(
     const Environment& e,
     boost::optional<const rgw::auth::Identity&> ida,
     const LogOut& eval_log,
-    boost::optional<PolicyPrincipal&> princ_type) const {
-  if (princ_type) {
-    *princ_type = PolicyPrincipal::Other;
-  }
+    boost::optional<rgw::auth::Principal>& principal) const {
   eval_log.format("Evaluating identity `{}`:", ida);
   if (ida) {
-    if (princ.empty() && noprinc.empty()) {
-      eval_log.format("Principal empty and NotPrincipal empty: Denying.");
-      return Effect::Deny;
-    }
-    if (ida->get_identity_type() != TYPE_ROLE &&
-        !princ.empty() && !is_identity(*ida, princ)) {
-      eval_log.format("Identity is not role, Principal is not empty, and "
-                      "the identity is not in Principal.");
-      return Effect::Deny;
-    }
-    eval_log.format("Checking type of Principal match.");
-    if (ida->get_identity_type() == TYPE_ROLE && !princ.empty()) {
-      bool princ_matched = false;
-      // Check each principal to determine the type of the one that has matched
-      for (auto p : princ) {
-        if (ida->is_identity(p)) {
-          if (p.is_assumed_role() || p.is_user()) {
-            if (princ_type) {
-              eval_log.format("Setting principal type to Session.");
-              *princ_type = PolicyPrincipal::Session;
-            }
-          } else {
-            if (princ_type) {
-              eval_log.format("Setting principal type to Role.");
-              *princ_type = PolicyPrincipal::Role;
-            }
-          }
-          princ_matched = true;
-        }
-      }
-      if (!princ_matched) {
-        eval_log.format("No match in Principal, Denying.");
-        return Effect::Deny;
-      }
-    } else if (!noprinc.empty() && is_identity(*ida, noprinc)) {
+    auto is_identity = [&ida] (const auth::Principal& p) {
+        return ida->is_identity(p);
+      };
+
+    auto p = std::find_if(noprinc.begin(), noprinc.end(), is_identity);
+    if (p != noprinc.end()) { // NotPrincipal matched
       eval_log.format("Match in NotPrincipal, Denying.");
       return Effect::Deny;
     }
+
+    p = std::find_if(princ.begin(), princ.end(), is_identity);
+    if (p == princ.end()) { // no Principal matched
+      eval_log.format("No match in Principal, Denying.");
+      return Effect::Deny;
+    }
+
+    principal = *p; // return first match
   }
   return Effect::Allow;
 }
@@ -1897,6 +1895,54 @@ std::string_view action_bit_string(action_t action) {
   case organizationsListTargetsForPolicy:
     return "organizations:ListTargetsForPolicy";
 
+  case s3vectorsCreateIndex:
+    return "s3vectors:CreateIndex";
+
+  case s3vectorsCreateVectorBucket:
+    return "s3vectors:CreateVectorBucket";
+
+  case s3vectorsDeleteIndex:
+    return "s3vectors:DeleteIndex";
+
+  case s3vectorsDeleteVectorBucket:
+    return "s3vectors:DeleteVectorBucket";
+
+  case s3vectorsDeleteVectorBucketPolicy:
+    return "s3vectors:DeleteVectorBucketPolicy";
+
+  case s3vectorsDeleteVectors:
+    return "s3vectors:DeleteVectors";
+
+  case s3vectorsGetIndex:
+    return "s3vectors:GetIndex";
+
+  case s3vectorsGetVectorBucket:
+    return "s3vectors:GetVectorBucket";
+
+  case s3vectorsGetVectorBucketPolicy:
+    return "s3vectors:GetVectorBucketPolicy";
+
+  case s3vectorsGetVectors:
+    return "s3vectors:GetVectors";
+
+  case s3vectorsListIndexes:
+    return "s3vectors:ListIndexes";
+
+  case s3vectorsListVectorBuckets:
+    return "s3vectors:ListVectorBuckets";
+
+  case s3vectorsListVectors:
+    return "s3vectors:ListVectors";
+
+  case s3vectorsPutVectorBucketPolicy:
+    return "s3vectors:PutVectorBucketPolicy";
+
+  case s3vectorsPutVectors:
+    return "s3vectors:PutVectors";
+
+  case s3vectorsQueryVectors:
+    return "s3vectors:QueryVectors";
+
   case s3All:
     return "s3:*";
 
@@ -1914,6 +1960,9 @@ std::string_view action_bit_string(action_t action) {
 
   case organizationsAll:
     return "organizations:*";
+
+  case s3vectorsAll:
+    return "s3vectors:*";
 
   case allCount:
     return "{invalidSentinel}";
@@ -2034,7 +2083,7 @@ Effect Policy::eval(const Environment& e,
                     std::uint64_t action,
                     boost::optional<const ARN&> resource,
                     const LogOut& eval_log,
-                    boost::optional<PolicyPrincipal&> princ_type) const
+                    boost::optional<rgw::auth::Principal>& principal) const
 {
   auto allowed = false;
   eval_log.format("Evaluating policy:\n```\n{}\n```\n"
@@ -2047,12 +2096,15 @@ Effect Policy::eval(const Environment& e,
 
   for (auto& s : statements) {
     eval_log.format("Evaluating statement `{}`:", s);
-    auto g = s.eval(e, ida, action, resource, eval_log, princ_type);
+    boost::optional<rgw::auth::Principal> princ_tmp;
+    auto g = s.eval(e, ida, action, resource, eval_log, princ_tmp);
     if (g == Effect::Deny) {
       eval_log.format("Denying.");
       return g;
     } else if (g == Effect::Allow) {
       allowed = true;
+      // only overwrite output principal for matching statements
+      principal = std::move(princ_tmp);
     }
   }
   eval_log.format("{}", allowed ? "Allowing." : "Passing.");
@@ -2064,11 +2116,11 @@ Policy::eval_principal(
     const Environment& e,
     boost::optional<const rgw::auth::Identity&> ida,
     const LogOut& eval_log,
-    boost::optional<PolicyPrincipal&> princ_type) const {
+    boost::optional<rgw::auth::Principal>& principal) const {
   auto allowed = false;
   for (auto& s : statements) {
     eval_log.format("Evaluating identity `{}` in statement `{}`:", ida, s);
-    auto g = s.eval_principal(e, ida, eval_log, princ_type);
+    auto g = s.eval_principal(e, ida, eval_log, principal);
     if (g == Effect::Deny) {
       eval_log.format("Denying.");
       return g;

@@ -17,6 +17,8 @@
 #ifndef CEPH_FSMAP_H
 #define CEPH_FSMAP_H
 
+#include <boost/optional.hpp>
+
 #include <map>
 #include <memory>
 #include <set>
@@ -26,6 +28,7 @@
 
 #include <errno.h>
 
+#include "include/container_ios.h"
 #include "include/types.h"
 #include "common/ceph_time.h"
 #include "common/Clock.h"

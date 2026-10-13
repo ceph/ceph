@@ -57,6 +57,7 @@ public:
   void set_ec_direct_read() { return op_info.set_ec_direct_read(); }
   bool ec_sync_read() const { return op_info.ec_sync_read(); }
   void set_ec_sync_read() { return op_info.set_ec_sync_read(); }
+  bool is_primary_only() const { return op_info.is_primary_only(); }
 
   std::vector<OpInfo::ClassInfo> classes() const {
     return op_info.get_classes();

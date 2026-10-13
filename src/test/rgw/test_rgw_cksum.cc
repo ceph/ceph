@@ -51,7 +51,10 @@ namespace {
   cksum::Type t4 = cksum::Type::sha512;
   cksum::Type t5 = cksum::Type::crc32;
   cksum::Type t6 = cksum::Type::crc32c;
-  cksum::Type t7 = cksum::Type::xxh3;
+  cksum::Type t7 = cksum::Type::xxhash3;
+  cksum::Type t8 = cksum::Type::md5;
+  cksum::Type t9 = cksum::Type::xxhash64;
+  cksum::Type t10 = cksum::Type::xxhash128;
 
   std::string lorem =
     "Lorem ipsum dolor sit amet";
@@ -140,9 +143,9 @@ TEST(RGWCksum, DigestCRC32c)
   ASSERT_EQ(cksum.to_armor(), "ldwuSw==");
 }
 
-TEST(RGWCksum, DigestXXH3)
+TEST(RGWCksum, DigestXXHash3)
 {
-  auto t = cksum::Type::xxh3;
+  auto t = cksum::Type::xxhash3;
   DigestVariant dv = rgw::cksum::digest_factory(t);
   Digest* digest = get_digest(dv);
 
@@ -155,6 +158,57 @@ TEST(RGWCksum, DigestXXH3)
   ASSERT_EQ(cksum.hex(), "5a164e0145351d01");
   /* compare w/known value https://www.base64encode.org/ */
   ASSERT_EQ(cksum.to_base64(), "NWExNjRlMDE0NTM1MWQwMQ==");
+}
+
+TEST(RGWCksum, DigestMD5)
+{
+  auto t = cksum::Type::md5;
+  DigestVariant dv = rgw::cksum::digest_factory(t);
+  Digest* digest = get_digest(dv);
+
+  ASSERT_NE(digest, nullptr);
+
+  digest->Update((const unsigned char *)dolor.c_str(), dolor.length());
+
+  auto cksum = rgw::cksum::finalize_digest(digest, t);
+  /* compare w/known value openssl md5 */
+  ASSERT_EQ(cksum.hex(), "db89bb5ceab87f9c0fcc2ab36c189c2c");
+  /* compare w/known value https://www.base64encode.org/ */
+  ASSERT_EQ(cksum.to_base64(), "ZGI4OWJiNWNlYWI4N2Y5YzBmY2MyYWIzNmMxODljMmM=");
+}
+
+TEST(RGWCksum, DigestXXHash64)
+{
+  auto t = cksum::Type::xxhash64;
+  DigestVariant dv = rgw::cksum::digest_factory(t);
+  Digest* digest = get_digest(dv);
+
+  ASSERT_NE(digest, nullptr);
+
+  digest->Update((const unsigned char *)dolor.c_str(), dolor.length());
+
+  auto cksum = rgw::cksum::finalize_digest(digest, t);
+  /* compare w/known value xxhsum -H64 */
+  ASSERT_EQ(cksum.hex(), "c5a8b11443765630");
+  /* compare w/known value https://www.base64encode.org/ */
+  ASSERT_EQ(cksum.to_base64(), "YzVhOGIxMTQ0Mzc2NTYzMA==");
+}
+
+TEST(RGWCksum, DigestXXHash128)
+{
+  auto t = cksum::Type::xxhash128;
+  DigestVariant dv = rgw::cksum::digest_factory(t);
+  Digest* digest = get_digest(dv);
+
+  ASSERT_NE(digest, nullptr);
+
+  digest->Update((const unsigned char *)dolor.c_str(), dolor.length());
+
+  auto cksum = rgw::cksum::finalize_digest(digest, t);
+  /* compare w/known value xxhsum -H128 */
+  ASSERT_EQ(cksum.hex(), "0b7155cf20619db85a164e0145351d01");
+  /* compare w/known value https://www.base64encode.org/ */
+  ASSERT_EQ(cksum.to_base64(), "MGI3MTU1Y2YyMDYxOWRiODVhMTY0ZTAxNDUzNTFkMDE=");
 }
 
 TEST(RGWCksum, DigestSha1)
@@ -304,7 +358,7 @@ TEST(RGWCksum, DigestBlake3)
 
 TEST(RGWCksum, DigestSTR)
 {
-  for (auto t : {t1, t2, t3, t4, t5, t6, t7}) {
+  for (auto t : {t1, t2, t3, t4, t5, t6, t7, t8, t9, t10}) {
     DigestVariant dv = rgw::cksum::digest_factory(t);
     Digest* digest = get_digest(dv);
 
@@ -329,7 +383,7 @@ TEST(RGWCksum, DigestBL)
 			    const_cast<char*>(dolor.data())));
   }
 
-  for (auto t : {t1, t2, t3, t4, t5, t6, t7}) {
+  for (auto t : {t1, t2, t3, t4, t5, t6, t7, t8, t9, t10}) {
     DigestVariant dv1 = rgw::cksum::digest_factory(t);
     Digest* digest1 = get_digest(dv1);
     ASSERT_NE(digest1, nullptr);
@@ -871,7 +925,7 @@ public:
     }
 
     /* generate check types */
-    for (uint16_t ix = 1; ix <= uint16_t(cksum::Type::crc64nvme); ++ix) {
+    for (uint16_t ix = 1; ix <= uint16_t(cksum::Type::xxhash128); ++ix) {
       cksum_types.push_back(cksum::Type(ix));
     }
   } /* SetUpTestSuite */

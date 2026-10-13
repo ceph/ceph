@@ -265,7 +265,7 @@ The "Standard" record format is based on the `AWS Logging Record Format`_.
   - request URI in the following format: ``"<HTTP method> <URI> <HTTP version>"``
   - HTTP status (or dash if zero). Note that in most cases log is written before the status is known
   - error code (or dash if empty)
-  - bytes sent (or dash if zero)
+  - bytes sent (not supported, always a dash)
   - object size (or dash if zero)
   - total time (not supported, always a dash)
   - turnaround time in milliseconds

@@ -29,6 +29,7 @@
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
 #include "crimson/os/seastore/collection_manager.h"
+#include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/object_data_handler.h"
 
 namespace crimson::os::seastore {
@@ -116,6 +117,8 @@ public:
     Shard(
       std::string root,
       Device* device,
+      std::vector<Device*> &cache_devices,
+      std::vector<Device*> &data_devices,
       bool is_test,
       uint32_t store_shard_nums,
       store_index_t store_index = 0);
@@ -220,10 +223,6 @@ public:
     // init managers and mount transaction_manager
     seastar::future<> mount_managers();
 
-    void set_secondaries(Device& sec_dev) {
-      secondaries.emplace_back(&sec_dev);
-    }
-
     seastar::future<std::vector<coll_core_t>> list_collections();
 
     seastar::future<> write_meta(const std::string& key,
@@ -255,6 +254,7 @@ public:
       return store_active;
     }
   private:
+    void validate_devices();
     struct internal_context_t {
       CollectionRef ch;
       ceph::os::Transaction ext_transaction;
@@ -321,7 +321,7 @@ public:
             LOG_PREFIX(SeaStoreS::repeat_with_onode);
             SUBDEBUGT(seastore, "{} cid={} oid={} ...",
                       t, tname, ch->get_cid(), oid);
-            return onode_manager->get_onode(t, oid
+            return onode_manager->get_onode(t, ch->get_cid(), oid
             ).si_then([&](auto onode) {
               return seastar::do_with(std::move(onode), [&](auto& onode) {
                 return f(t, *onode);
@@ -404,6 +404,11 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       OnodeRef &d_onode);
+    tm_ret _migrate_onode(
+      internal_context_t &ctx,
+      coll_t src_cid,
+      OnodeRef &onode,
+      OnodeRef &d_onode);
     tm_ret _clone_range(
       internal_context_t &ctx,
       OnodeRef &src_onode,
@@ -441,12 +446,15 @@ public:
       const coll_t& cid, int bits);
     tm_ret _split_collection(
       internal_context_t &ctx,
-      const coll_t& cid, int bits);
+      const coll_t cid, int bits, int rem, const coll_t dest_cid);
     tm_ret _merge_collection(
       internal_context_t &ctx,
       coll_t cid,
       coll_t dest_cid,
       int bits);
+    tm_ret _collection_set_bits(
+      internal_context_t &ctx,
+      const coll_t cid, int bits);
     tm_ret _remove_collection(
       internal_context_t &ctx,
       const coll_t& cid);
@@ -495,6 +503,8 @@ public:
       uint64_t onode_updates = 0;
       uint64_t onode_erases = 0;
       int64_t  onode_extents_delta = 0;
+      uint64_t oi_inline = 0;          // OI stored in the onode's inline slot
+      uint64_t oi_overflow = 0;        // OI too large, stored in the xattr omap tree
 
       // same metrics collected two more times for high tail txns.
       std::array<seastar::metrics::histogram, STAGE_MAX> stage_lat_slow;
@@ -582,7 +592,7 @@ public:
 
     omap_root_t get_omap_root(omap_type_t type, Onode& onode) const {
       return onode.get_root(type).get(
-        onode.get_metadata_hint(device->get_block_size()));
+        onode.get_metadata_hint(primary_device->get_block_size()));
     }
 
     omaptree_get_value_ret omaptree_get_value(
@@ -665,13 +675,14 @@ public:
 
   private:
     std::string root;
-    Device* device;
     const uint32_t max_object_size;
     bool is_test;
 
-    std::vector<Device*> secondaries;
+    Device* primary_device = nullptr;
+    std::vector<Device*> cache_devices;
+    std::vector<Device*> data_devices;
     TransactionManagerRef transaction_manager;
-    CollectionManagerRef collection_manager;
+    collection_manager::FlatCollectionManagerRef collection_manager;
     OnodeManagerRef onode_manager;
 
     common::Throttle throttler;
@@ -697,6 +708,7 @@ public:
   seastar::future<> stop() override;
 
   Device::access_ertr::future<> _mount();
+
 
   // FuturizedStore::mount_ertr/mkfs_ertr only supports a stateful_ec
   // to keep the interface intact, convert to stateful_ec.
@@ -741,6 +753,10 @@ public:
 
   seastar::future<std::string> get_default_device_class() final;
 
+  seastar::future<std::string> get_data_backend_type_name() final;
+
+  seastar::future<std::string> get_cache_backend_type_name() final;
+
   seastar::future<> do_gc() override;
 
   BackendStore get_backend_store(store_index_t store_index) override {
@@ -773,39 +789,57 @@ public:
   mount_ertr::future<> test_mount();
   mkfs_ertr::future<> test_mkfs(uuid_d new_osd_fsid);
 
-  DeviceRef get_primary_device_ref() {
-    return std::move(device);
-  }
+  seastar::future<> test_start(
+    Device* dev,
+    std::vector<DeviceRef> &&cache_devices,
+    std::vector<DeviceRef> &&data_devices);
 
-  seastar::future<> test_start(DeviceRef dev);
+  Device* get_primary_device() {
+    return primary_device;
+  }
+  std::vector<DeviceRef> take_cache_devices() {
+    return std::move(cache_devices);
+  }
+  std::vector<DeviceRef> take_data_devices() {
+    return std::move(data_devices);
+  }
 
 private:
   seastar::future<> write_fsid(uuid_d new_osd_fsid);
 
   seastar::future<> prepare_meta(uuid_d new_osd_fsid);
 
-  seastar::future<> set_secondaries();
-
-  seastar::future<> get_shard_nums();
+  seastar::future<> get_shard_nums(Device&);
   seastar::future<> shard_stores_start(bool is_test);
   seastar::future<> shard_stores_stop();
 
+  seastar::future<> start_data_devices();
+  seastar::future<> create_data_device(device_type_t dtype, backend_type_t btype);
+  seastar::future<> start_cache_devices();
+  seastar::future<> create_cache_device(
+    std::string &cache_dev_path,
+    device_type_t dtype,
+    backend_type_t btype);
+
 private:
-class MultiShardStores {
+  class MultiShardStores {
   public:
     std::vector<std::unique_ptr<SeaStore::Shard>> mshard_stores;
 
   public:
     MultiShardStores(size_t count,
                      const std::string& root,
-                     Device* dev,
+                     Device* device,
+                     std::vector<Device*> &cache_devs,
+                     std::vector<Device*> &data_devs,
                      bool is_test,
                      uint32_t store_shard_nums)
     : mshard_stores() {
       mshard_stores.reserve(count); // Reserve space for the shards
       for (size_t store_index = 0; store_index < count; ++store_index) {
         mshard_stores.emplace_back(std::make_unique<SeaStore::Shard>(
-          root, dev, is_test, store_shard_nums, store_index));
+          root, device, cache_devs, data_devs, is_test,
+          store_shard_nums, store_index));
       }
     }
     ~MultiShardStores() {
@@ -814,8 +848,11 @@ class MultiShardStores {
   };
   std::string root;
   MDStoreRef mdstore;
-  DeviceRef device;
-  std::vector<DeviceRef> secondaries;
+  Device* primary_device = nullptr; // the lowest-id device in
+                                    // cache_devices or data_devices
+                                    // if cache_devices is empty.
+  std::vector<DeviceRef> cache_devices;
+  std::vector<DeviceRef> data_devices;
   seastar::sharded<SeaStore::MultiShardStores> shard_stores;
   uint32_t store_shard_nums = 0;
 

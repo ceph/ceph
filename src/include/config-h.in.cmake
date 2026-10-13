@@ -331,6 +331,9 @@
 /* Support POWER8 instructions */
 #cmakedefine HAVE_POWER8
 
+/* Support PPC64LE */
+#cmakedefine HAVE_PPC64LE
+
 /* Define if endian type is big endian */
 #cmakedefine CEPH_BIG_ENDIAN
 
@@ -362,9 +365,6 @@
 
 /* Backend dbstore for Rados Gateway */
 #cmakedefine WITH_RADOSGW_DBSTORE
-
-/* Backend CORTX-Motr for Rados Gateway */
-#cmakedefine WITH_RADOSGW_MOTR
 
 /* Backend CORTX-DAOS for Rados Gateway */
 #cmakedefine WITH_RADOSGW_DAOS

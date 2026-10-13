@@ -155,6 +155,21 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.export_mgr.apply_export(cluster_id, export_config=inbuf,
                                             earmark_resolver=earmark_resolver)
 
+    @NFSCLICommand('nfs cluster rotate-key', perm='rw')
+    @object_format.Responder()
+    def _cmd_nfs_cluster_rotate_key(self,
+                                    cluster_id: str,
+                                    all_daemon_and_export_keys: bool = False,
+                                    auth_entities: Optional[List[str]] = None,
+                                    key_type: Optional[str] = None) -> Dict[str, Any]:
+        """Rotate NFS cluster/daemon and export auth keys; redeploy service if daemon keys change"""
+        return self.nfs.rotate_keys(
+            cluster_id=cluster_id,
+            all_daemon_and_export_keys=all_daemon_and_export_keys,
+            auth_entities=auth_entities,
+            key_type=key_type
+        )
+
     @NFSCLICommand('nfs cluster create', perm='rw')
     @object_format.EmptyResponder()
     def _cmd_nfs_cluster_create(self,
@@ -170,6 +185,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 enable_rdma: bool = False,
                                 rdma_port: Optional[int] = None,
                                 enable_nfsv3: bool = False,
+                                enable_nfs_metrics: bool = False,
                                 ingress_placement: Optional[str] = None,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
@@ -210,6 +226,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            ingress_mode=ingress_mode, port=port,
                                            cluster_qos_config=cluster_qos_config,
                                            enable_nfsv3=enable_nfsv3,
+                                           enable_nfs_metrics=enable_nfs_metrics,
                                            ip_addrs=ip_addrs,
                                            monitoring_ip_addrs=monitoring_ip_addrs,
                                            monitoring_port=monitoring_port,

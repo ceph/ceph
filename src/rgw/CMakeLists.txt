@@ -1,3 +1,5 @@
+set(CMAKE_JOB_POOL_LINK heavy_link_job_pool)
+
 find_program(GPERF gperf
   REQUIRED)
 
@@ -160,6 +162,17 @@ list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
   driver/json_config/store.cc)
 
+# the s3vectors API is implemented on top of lancedb, and is compiled out
+# together with it
+if(WITH_RADOSGW_LANCEDB)
+  list(APPEND librgw_common_srcs
+    rgw_sal_wrapper.cc
+    rgw_rest_s3vector.cc
+    rgw_s3vector.cc
+    rgw_s3vector_filter.cc
+    rgw_s3vector_background.cc)
+endif()
+
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
@@ -203,6 +216,7 @@ list(APPEND librgw_rados_srcs
   driver/rados/rgw_bl_rados.cc
   driver/rados/rgw_cr_rados.cc
   driver/rados/rgw_cr_tools.cc
+  driver/rados/rgw_bilog.cc
   driver/rados/rgw_d3n_datacache.cc
   driver/rados/rgw_datalog.cc
   driver/rados/rgw_datalog_notify.cc
@@ -281,11 +295,8 @@ list(APPEND librgw_dbstore_srcs
   driver/dbstore/sqlite/sqliteDB.h
   driver/dbstore/sqlite/sqliteDB.cc
 )
-list(APPEND librgw_motr_srcs
-  driver/motr/rgw_sal_motr.cc
-)
 list(APPEND librgw_daos_srcs
-  driver/motr/rgw_sal_daos.cc
+  driver/daos/rgw_sal_daos.cc
 )
 list(APPEND librgw_posix_srcs
   driver/posix/rgw_sal_posix.cc
@@ -310,9 +321,6 @@ if(WITH_RADOSGW_DBSTORE OR WITH_RADOSGW_STANDALONE)
   list(APPEND librgw_driver_standalone_srcs ${librgw_dbstore_srcs})
   list(APPEND rgw_common_libs sqlite3)
 set(SQLITE_COMPILE_FLAGS "-DSQLITE_THREADSAFE=1")
-endif()
-if(WITH_RADOSGW_MOTR)
-  list(APPEND librgw_driver_srcs ${librgw_motr_srcs})
 endif()
 if(WITH_RADOSGW_DAOS)
   list(APPEND librgw_driver_srcs ${librgw_daos_srcs})
@@ -361,7 +369,7 @@ target_link_libraries(rgw_common
     global
     cls_rgw_client
     keyring
-    rt
+    ${RT_LIBRARY}
     ICU::uc
     OATH::OATH
     dmclock::dmclock
@@ -417,10 +425,6 @@ if(WITH_OPENLDAP)
     PRIVATE
       OpenLDAP::OpenLDAP)
 endif()
-if(WITH_RADOSGW_LUA_PACKAGES)
-  target_link_libraries(rgw_common
-    PRIVATE Boost::filesystem StdFilesystem::filesystem)
-endif()
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -448,11 +452,6 @@ if(WITH_RADOSGW_RADOS)
 	  librados
 	  libneorados
   )
-endif()
-
-if(WITH_RADOSGW_MOTR)
-  find_package(motr REQUIRED)
-  list(APPEND rgw_libs motr::motr)
 endif()
 
 if(WITH_RADOSGW_DAOS)
@@ -483,7 +482,7 @@ if(WITH_RADOSGW_STANDALONE)
     global
     cls_rgw_client
     keyring
-    rt
+    ${RT_LIBRARY}
     ICU::uc
     OATH::OATH
     dmclock::dmclock
@@ -515,7 +514,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS"
     PUBLIC "-UWITH_RADOSGW_AMQP_ENDPOINT")
 
@@ -530,10 +528,6 @@ if(WITH_RADOSGW_STANDALONE)
       PRIVATE
       OpenLDAP::OpenLDAP)
   endif()
-  if(WITH_RADOSGW_LUA_PACKAGES)
-    target_link_libraries(rgw_common_standalone
-      PRIVATE Boost::filesystem StdFilesystem::filesystem)
-  endif()
 
   if(WITH_JAEGER)
     add_dependencies(rgw_common_standalone jaeger_base)
@@ -543,6 +537,138 @@ endif()
 
 if(WITH_RADOSGW_D4N AND WITH_LIBURING)
   target_link_libraries(rgw_common PUBLIC uring::uring)
+endif()
+
+if(WITH_RADOSGW_LANCEDB)
+  include(ExternalProject)
+
+  # lancedb-c (upstream LanceDB C FFI bindings, git submodule) and
+  # lancedb-rgw-store (the SAL backend for LanceDB) are combined by the
+  # rgw-lancedb umbrella crate into a single Rust librgw_lancedb.a,
+  # which is linked statically into the executables.
+  # A single static library is required because two independent static libraries
+  # cannot be linked into one binary (duplicate Rust runtime symbols).
+  # All three crates share a Cargo workspace (src/rgw/Cargo.toml) with a
+  # single Cargo.lock, guaranteeing identical dependency versions.
+  set(LANCEDB_C_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c")
+  set(LANCEDB_RGW_STORE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-rgw-store")
+  set(RGW_LANCEDB_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/rgw-lancedb")
+  set(RGW_LANCEDB_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/rgw-lancedb-prefix/src/rgw-lancedb-build")
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(RGW_LANCEDB_TARGET_DIR "${RGW_LANCEDB_BUILD_DIR}/target/debug")
+    set(RGW_LANCEDB_CARGO_FLAG "")
+  else()
+    set(RGW_LANCEDB_TARGET_DIR "${RGW_LANCEDB_BUILD_DIR}/target/release")
+    set(RGW_LANCEDB_CARGO_FLAG "--release")
+  endif()
+  set(RGW_LANCEDB_STATIC_LIB "${RGW_LANCEDB_TARGET_DIR}/librgw_lancedb.a")
+
+  ExternalProject_Add(rgw-lancedb
+    SOURCE_DIR ${RGW_LANCEDB_SOURCE_DIR}
+    BINARY_DIR ${RGW_LANCEDB_BUILD_DIR}
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ${CMAKE_COMMAND} -E env
+          CARGO_TARGET_DIR=${RGW_LANCEDB_BUILD_DIR}/target
+          ${CARGO_EXECUTABLE} build ${RGW_LANCEDB_CARGO_FLAG}
+          --manifest-path ${RGW_LANCEDB_SOURCE_DIR}/Cargo.toml
+    BUILD_ALWAYS OFF
+    BUILD_BYPRODUCTS ${RGW_LANCEDB_STATIC_LIB}
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${LANCEDB_C_SOURCE_DIR}/include/lancedb.h
+                    ${CMAKE_BINARY_DIR}/src/include/lancedb.h
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${LANCEDB_RGW_STORE_SOURCE_DIR}/include/lancedb_rgw_store.h
+                    ${CMAKE_BINARY_DIR}/src/include/lancedb_rgw_store.h
+  )
+
+  # Re-run cargo when the Rust sources, the manifests or the lock file change.
+  # The sources are collected once, at configure time, so a new file needs a
+  # cmake re-run like any other source. Cargo does the incremental work itself.
+  file(GLOB_RECURSE RGW_LANCEDB_RUST_SOURCES
+    ${LANCEDB_C_SOURCE_DIR}/src/*.rs
+    ${LANCEDB_RGW_STORE_SOURCE_DIR}/src/*.rs
+    ${RGW_LANCEDB_SOURCE_DIR}/src/*.rs)
+  ExternalProject_Add_StepDependencies(rgw-lancedb build
+    ${RGW_LANCEDB_RUST_SOURCES}
+    ${LANCEDB_RGW_STORE_SOURCE_DIR}/build.rs
+    ${LANCEDB_C_SOURCE_DIR}/Cargo.toml
+    ${LANCEDB_RGW_STORE_SOURCE_DIR}/Cargo.toml
+    ${RGW_LANCEDB_SOURCE_DIR}/Cargo.toml
+    ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
+    ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.lock)
+
+  # Native system libraries required when linking a Rust staticlib,
+  # probed with lancedb-c's own cmake module -- the same source of truth
+  # used to fill Libs.private in the lancedb.pc that standalone lancedb-c
+  # builds install.  The probe only runs when BUILD_SHARED_LIBS is false,
+  # so force it off for the duration of the include.
+  set(_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
+  set(BUILD_SHARED_LIBS OFF)
+  include(${LANCEDB_C_SOURCE_DIR}/cmake/ProbeRustNativeLibs.cmake)
+  set(BUILD_SHARED_LIBS "${_saved_build_shared_libs}")
+  unset(_saved_build_shared_libs)
+
+  # Create imported library target for librgw_lancedb.a
+  add_library(rgw_lancedb STATIC IMPORTED)
+  set_target_properties(rgw_lancedb PROPERTIES
+    IMPORTED_LOCATION ${RGW_LANCEDB_STATIC_LIB}
+    INTERFACE_LINK_LIBRARIES "${LANCEDB_NATIVE_STATIC_LIBS}"
+  )
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64" AND NOT USING_MOLD_LINKER)
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "-fuse-ld=lld" HAVE_FUSE_LD_LLD)
+    if(HAVE_FUSE_LD_LLD)
+      set(RGW_LANCEDB_LINKER_OPTIONS "-fuse-ld=lld")
+    else()
+      message(WARNING "aarch64: lld not usable, linking librgw_lancedb.a with "
+        "the default linker is likely to fail with R_AARCH64_CALL26 relocation "
+        "overflows -- install lld or build with -DWITH_RADOSGW_LANCEDB=OFF")
+    endif()
+  endif()
+  # librgw_lancedb.a references the rgw_sal_wrapper_* symbols defined in
+  # rgw_common (rgw_sal_wrapper.cc) while rgw_common calls the C API
+  # exported by the archive.  Nothing in the C++ code references the
+  # wrapper symbols directly, so force the linker to pull in the wrapper
+  # object before the archive is scanned, letting both directions of the
+  # cycle resolve in a single pass.
+  target_link_options(rgw_common PUBLIC
+    "LINKER:--undefined=rgw_sal_wrapper_version"
+  )
+  # Keep the archive's Rust runtime symbols (std, tokio, ...) out of the
+  # dynamic symbol table of the linked executables and shared libraries.
+  target_link_options(rgw_common PUBLIC
+    "LINKER:--exclude-libs,librgw_lancedb.a"
+  )
+  if(RGW_LANCEDB_LINKER_OPTIONS)
+    target_link_options(rgw_common PUBLIC ${RGW_LANCEDB_LINKER_OPTIONS})
+  endif()
+  target_link_libraries(rgw_common PUBLIC rgw_lancedb)
+  target_include_directories(rgw_common PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/rgw
+    ${CMAKE_SOURCE_DIR}/src/rgw/lancedb-rgw-store/include
+  )
+  add_dependencies(rgw_common rgw-lancedb)
+
+  if(WITH_RADOSGW_STANDALONE)
+    # rgw_s3vector.cc and rgw_sal_wrapper.cc are part of librgw_common_srcs,
+    # so rgw_common_standalone needs the same archive, link options and
+    # include paths as rgw_common.
+    target_link_options(rgw_common_standalone PUBLIC
+      "LINKER:--undefined=rgw_sal_wrapper_version"
+    )
+    target_link_options(rgw_common_standalone PUBLIC
+      "LINKER:--exclude-libs,librgw_lancedb.a"
+    )
+    if(RGW_LANCEDB_LINKER_OPTIONS)
+      target_link_options(rgw_common_standalone PUBLIC ${RGW_LANCEDB_LINKER_OPTIONS})
+    endif()
+    target_link_libraries(rgw_common_standalone PUBLIC rgw_lancedb)
+    target_include_directories(rgw_common_standalone PRIVATE
+      ${CMAKE_SOURCE_DIR}/src/rgw
+      ${CMAKE_SOURCE_DIR}/src/rgw/lancedb-rgw-store/include
+    )
+    add_dependencies(rgw_common_standalone rgw-lancedb)
+  endif()
 endif()
 
 set(rgw_a_srcs
@@ -648,8 +774,10 @@ target_link_libraries(rgw_a
   PRIVATE
     rgw_schedulers
     kmip
+    heap_profiler
     legacy-option-headers
     common_utf8 global
+    heap_profiler
     ${CRYPTO_LIBS}
     ${ARROW_LIBRARIES}
     ${ARROW_FLIGHT_LIBRARIES}
@@ -674,7 +802,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS")
 
   target_include_directories(rgw_a_standalone
@@ -735,6 +862,10 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   # target_include_directories(radosgw PUBLIC Arrow::Arrow)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+if(WITH_RADOSGW_LANCEDB)
+  target_compile_definitions(rgw_common PUBLIC WITH_RADOSGW_LANCEDB)
+endif()
+
 target_compile_definitions(radosgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(radosgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
@@ -746,7 +877,6 @@ target_include_directories(radosgw
 target_link_libraries(radosgw PRIVATE
   legacy-option-headers
   ${rgw_libs}
-  heap_profiler
   ${ALLOC_LIBS})
 
 if(WITH_RADOSGW_FDB)
@@ -799,7 +929,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS")
 
   target_include_directories(rgw-standalone
@@ -879,7 +1008,6 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-DWITH_RADOSGW_DBSTORE"
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
-    PUBLIC "-UWITH_RADOSGW_MOTR"
     PUBLIC "-UWITH_RADOSGW_DAOS")
 
   install(TARGETS rgw-standalone-admin DESTINATION bin)
@@ -959,7 +1087,6 @@ target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
   rgw_common
-  heap_profiler
   librados
   cls_rgw_client
   cls_otp_client
@@ -991,6 +1118,13 @@ install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 if(WITH_RADOSGW_RADOS)
   target_compile_OPTIONS(rgw PUBLIC "-DWITH_RADOSGW_RADOS")
+endif()
+
+# AppMain (rgw_main.h) has members guarded by this macro, and RGWLib embeds
+# it by value, so anything that links librgw and includes rgw_lib.h must see
+# the same definition or its view of the class layout will not match.
+if(WITH_RADOSGW_LANCEDB)
+  target_compile_definitions(rgw PUBLIC WITH_RADOSGW_LANCEDB)
 endif()
 
 if(WITH_TESTS)
