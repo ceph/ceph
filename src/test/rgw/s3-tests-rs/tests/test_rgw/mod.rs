@@ -15,6 +15,7 @@ mod features;
 mod identity;
 mod impersonation;
 mod key_limit;
+mod key_separators;
 mod quota;
 mod reserved_names;
 mod root_object;
