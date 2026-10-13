@@ -7,14 +7,18 @@ taking it over part-built.  Stage letters like C2b are
 This is the sequence and nothing else;  each step names the document
 that owns its detail rather than restating it.
 
-Four steps.  **The first three run today.  The fourth is not built** —
-step 4 says what is missing.
+Four steps, all built.  **`standup.rs conversion` runs every one of
+them, in order, stopping at the first failure** -- the conversion
+profile.  It runs only on a fresh work directory:  it chains the steps,
+and chaining past a failure is how a tree gets destroyed, so it refuses
+one that already holds a tree.
 
 ```
   1. stand NooBaa up        standup.rs up && standup.rs serve && standup.rs iam-user
-  2. generate and ingest    standup.rs capture
-  3. hand off to RGW        standup.rs stop, then adopt and capture twice (§3)
-  4. verify                 not built -- C2b
+                            && standup.rs store-tests
+  2. generate and ingest    standup.rs capture noobaa
+  3. hand off to RGW        standup.rs stop, then import and adopt, capturing after each (§3)
+  4. verify                 standup.rs compare
 ```
 
 Everything is driven from `src/test/rgw/adoption/standup.rs`.
@@ -151,45 +155,26 @@ its own and runs as its account's (`ACCOUNT_IMPORT.md` §2.8).  Its
 capture conf carries the IAM user as `[s3 alt]` and the Admin Ops key
 as `[iam]` for that.
 
-## 4.  Verify — **not built**
+## 4.  Verify
 
-This is C2b of `docs/NSFS_ADOPTION_WORK_PLAN.md`, and it is the one
-step with no procedure yet.  Two things are missing, and they are
-separate:
-
-**An observe-only corpus mode.**  Every axis today *writes* its
-artifacts and then records what S3 says.  The fourth step needs the
-second half without the first:  re-read the artifacts NooBaa created,
-now through RGW, and capture what RGW says about them.  Running the
-corpus again as it stands would rewrite them in our format and destroy
-the thing under test.
-
-**The comparison.**  C2b is a *three-way* diff, because RGW makes two
-passes:
-
-```
-capture/noobaa   what their gateway said      (step 2, exists)
-capture/rgw      what RGW says, adopted       (needs observe-only)
-capture/rgw-conv what RGW says, converted     (needs observe-only + C7)
+```sh
+./standup.rs compare
 ```
 
-The formats are built for this:  both captures are line-oriented, one
-fact per line, sorted bytewise, so the comparison is `diff` and a
-difference names the *fact* rather than the object
-(`docs/NSFS_CORPUS.md` §7).  What does not exist is the statement of
-which differences are **expected** — an ETag that cannot survive a
-migration is not a defect, and a lost ACL is.  Without that list a
-diff is noise.
+The comparison is C2b of `docs/NSFS_ADOPTION_WORK_PLAN.md`:  a
+three-way judgement over the captures, `capture/noobaa`,
+`capture/rgw-unconverted` and `capture/rgw-converted`, by
+`corpus-compare` (s3-tests-rs, `src/bin/corpus-compare.rs`).  Two pairs
+are compared.  In `noobaa:unconverted` a difference is an adoption
+defect;  in `unconverted:converted` it is a conversion defect.  Every
+difference must be accounted for by a row of `expected-differences.tsv`
+beside this driver, whose header says what a row claims.  The step uses
+the modality the tree was written with.  It fails on a difference no
+row accounts for, and on one that breaks its row's class.
 
-**Until it exists**, the first three steps are worth running on their
-own.  Step 2's capture is a measurement of their on-disk format that
-nothing else produces, and step 3 either serves the tree or reports why
-it cannot.  The first full run found that NooBaa's completed-multipart
-ETag is `mtime-<base36>-ino-<base36>` rather than a digest with a part
-count, that they answer `501 NotImplemented` to
-PutObjectLockConfiguration at the pinned commit, and that our own
-bucket-configuration axis was looking for configuration only where
-*this* driver stores it.
+The RGW sides are captured in observe mode, which writes nothing and
+records what RGW says about the objects NooBaa wrote
+(`docs/NSFS_CORPUS.md`).
 
 ---
 

@@ -292,6 +292,8 @@ const STEPS: &[(&str, &str)] = &[
     ("stop",     "stop the endpoint, leaving the tree"),
     ("import",   "RGW over the same tree;  import the identities and each bucket's record"),
     ("adopt",    "adopt every bucket:  import its record and convert its tree"),
+    ("compare",  "judge the three captures against the expected-difference list"),
+    ("conversion", "the conversion profile:  every step above, in order, on a fresh work directory"),
 ];
 
 fn main() {
@@ -318,6 +320,8 @@ fn main() {
         "stop" => stop(&env),
         "import" => adopt(&env, "import"),
         "adopt" => adopt(&env, "adopt"),
+        "compare" => compare(&env),
+        "conversion" => conversion(&env),
         "up" => ["pin", "worktree", "patch", "build", "config"]
             .iter()
             .try_for_each(|s| match *s {
@@ -1540,6 +1544,96 @@ fn store_tests(env: &Env) -> Result<(), String> {
     Ok(())
 }
 
+/// Judge the three captures against the expected-difference list.
+///
+/// `corpus-compare` (s3-tests-rs, `src/bin/corpus-compare.rs`) over
+/// `capture/`, with `expected-differences.tsv` beside this driver and the
+/// tree's own modality -- the one it was written with, not the setting,
+/// for the reason `tree_modality` gives.  It fails on a difference no row
+/// accounts for and on one that breaks its row's class.
+fn compare(env: &Env) -> Result<(), String> {
+    let root = env.work.join("capture");
+    for side in ["noobaa", "rgw-unconverted", "rgw-converted"] {
+        if !env.capture_dir(side).is_dir() {
+            return Err(format!("no `{side}` capture under {};  run its \
+                                `capture` step first", root.display()));
+        }
+    }
+    let Some(modality) = tree_modality(env) else {
+        return Err("the tree's modality is not recorded;  was `config` run?".into());
+    };
+    let list = adoption_home().join("expected-differences.tsv");
+    println!("compare  {} against {} ({modality})", root.display(), list.display());
+    let st = Command::new("cargo")
+        .args(["run", "-q", "--bin", "corpus-compare", "--"])
+        .arg(&root)
+        .arg(&list)
+        .arg(&modality)
+        .current_dir(&env.suite)
+        .status()
+        .map_err(|e| format!("cannot run cargo in {}: {e}", env.suite.display()))?;
+    match st.code() {
+        Some(0) => {
+            println!("compare  every difference is accounted for");
+            Ok(())
+        }
+        Some(1) => Err("the captures differ in ways the list does not account for;  \
+                        see the lines above".into()),
+        _ => Err("corpus-compare could not read its inputs;  see above".into()),
+    }
+}
+
+/// The conversion profile:  every step, in order, stopping at the first
+/// failure.
+///
+/// Stand NooBaa up, write a tree through it and capture it, hand the
+/// tree to RGW, capture it after import and again after adoption, and
+/// judge the three captures.  `store-tests` runs inside it, and fails if
+/// the store tests skip, so under this profile they always run.
+///
+/// **A fresh work directory only.**  The steps are run one at a time
+/// elsewhere because chaining them past a failure is how a tree gets
+/// destroyed.  This chains them, so it refuses a work directory that
+/// already holds a tree:  a failed run can then only have damaged a tree
+/// it made itself.
+fn conversion(env: &Env) -> Result<(), String> {
+    if env.tree().exists() {
+        return Err(format!(
+            "{} already holds a tree.  The conversion profile chains every step \
+             and so runs only on a fresh work directory:  point ADOPTION_WORK at \
+             a new one.",
+            env.tree().display()
+        ));
+    }
+    if env.ceph_build.is_none() {
+        return Err("`ceph_build` is not set;  the profile hands the tree to RGW \
+                    and runs the nsfs unit binary".into());
+    }
+    let steps: [(&str, &dyn Fn(&Env) -> Result<(), String>); 15] = [
+        ("pin", &pin),
+        ("worktree", &worktree),
+        ("patch", &patch),
+        ("build", &build),
+        ("config", &config),
+        ("serve", &serve),
+        ("iam-user", &iam_user),
+        ("store-tests", &store_tests),
+        ("capture noobaa", &|e| capture(e, "noobaa")),
+        ("stop", &stop),
+        ("import", &|e| adopt(e, "import")),
+        ("capture rgw-unconverted", &|e| capture(e, "rgw-unconverted")),
+        ("adopt", &|e| adopt(e, "adopt")),
+        ("capture rgw-converted", &|e| capture(e, "rgw-converted")),
+        ("compare", &compare),
+    ];
+    for (i, (name, step)) in steps.iter().enumerate() {
+        println!("\n==> conversion {}/{}:  {name}", i + 1, steps.len());
+        step(env).map_err(|e| format!("the conversion profile stopped at `{name}`:  {e}"))?;
+    }
+    println!("\n==> conversion:  every step passed");
+    Ok(())
+}
+
 /// Stop the endpoint, leaving the tree.
 ///
 /// The tree is the artifact and must survive:  RGW opens it next.
@@ -1890,8 +1984,18 @@ fn running(env: &Env) -> Option<u32> {
 /// Whether a pid is alive, without a libc dependency and without
 /// matching on a command line -- which is how three wait loops in this
 /// driver\'s own development ended up waiting on themselves.
+/// A process that has exited and not been reaped -- a zombie -- is not
+/// alive, though `/proc/<pid>` still exists.  In the conversion profile
+/// `serve` and `stop` run in one process, so NooBaa is this process's
+/// child and stays a zombie until it exits;  run step by step, `serve`
+/// has exited by then and init has reaped it.
 fn alive(pid: u32) -> bool {
-    Path::new(&format!("/proc/{pid}")).exists()
+    match std::fs::read_to_string(format!("/proc/{pid}/status")) {
+        Ok(status) => !status
+            .lines()
+            .any(|l| l.starts_with("State:") && l.contains('Z')),
+        Err(_) => false,
+    }
 }
 
 /// NooBaa's CLI.  Quiet unless it fails, because `status` is used as a
