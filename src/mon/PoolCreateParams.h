@@ -127,6 +127,11 @@ int check_pool_defaults(const PoolCreateParams& p,
 // code profile's, else the default.
 std::string effective_zone_failure_domain(const PoolCreateParams& p);
 
+// For an error of building or checking the CRUSH rule of a pool over zones:
+// the options that gave the values it was built or checked with, as
+// " (<option>, ...)", or "" when the command line gave them all.
+std::string rule_from_defaults(const PoolCreateParams& p);
+
 // The option that ceph osd pool default set writes for each parameter.
 const std::map<std::string, std::string>& pool_default_options();
 

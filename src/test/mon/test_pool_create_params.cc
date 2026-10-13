@@ -802,6 +802,32 @@ TEST_F(PoolParamsTest, StretchFailureNamesDefault) {
             "(osd_pool_default_num_zones)", ss.str());
 }
 
+// Test an error of building or checking the rule of a pool over zones names
+// the defaults that gave its values: those the command line did not give
+TEST_F(PoolParamsTest, RuleErrorsNameDefaults) {
+  EXPECT_EQ(" (osd_pool_default_replica, osd_pool_default_zone_failure_domain, "
+            "osd_pool_default_osd_failure_domain, osd_pool_default_root)",
+            rule_from_defaults(with({{"num_zones", int64_t(2)}})));
+  EXPECT_EQ("", rule_from_defaults(with({})));
+  set("osd_pool_default_class", "ssd");
+  set("osd_pool_default_num_zones", "2");
+  EXPECT_EQ(" (osd_pool_default_num_zones, osd_pool_default_class)",
+            rule_from_defaults(with({{"replica", int64_t(2)},
+                                     {"zone_failure_domain", string("zone")},
+                                     {"osd_failure_domain", string("host")},
+                                     {"root", string("default")}})));
+  // a named rule is built by no default
+  EXPECT_EQ("", rule_from_defaults(with({{"num_zones", int64_t(2)},
+                                         {"replica", int64_t(2)},
+                                         {"zone_failure_domain", string("zone")},
+                                         {"rule", string("r")}})));
+  // an erasure coded pool's rule comes from the default profile
+  EXPECT_EQ(" (osd_pool_default_zone_failure_domain, "
+            "osd_pool_default_osd_failure_domain, osd_pool_default_root, "
+            "osd_pool_default_class, erasure code profile 'default')",
+            rule_from_defaults(with({{"num_zones", int64_t(2)}}, ERASURE)));
+}
+
 // Test one zone does not validate stretch mode
 TEST_F(PoolParamsTest, OneZoneDoesNotValidateStretch) {
   EXPECT_EQ(0, check(with({})));

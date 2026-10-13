@@ -1215,6 +1215,7 @@ int ConfigMonitor::prepare_pool_default_set(const cmdmap_t& cmdmap,
   }
   return 0;
 }
+
 int ConfigMonitor::check_pool_default_overrides(
   const map<string,string>& values, ostream& ss)
 {
@@ -1236,4 +1237,28 @@ int ConfigMonitor::check_pool_default_overrides(
     }
   }
   return 0;
+}
+
+void ConfigMonitor::propose_global_options(const map<string,string>& values,
+                                           const string& description)
+{
+  ceph_assert(is_writeable());
+  ceph_assert(mon.kvmon()->is_writeable());
+  for (const auto& [name, value] : values) {
+    const string key = "global/" + name;
+    auto q = current.find(key);
+    if (q != current.end() && q->second.to_str() == value) {
+      continue;
+    }
+    bufferlist bl;
+    bl.append(value);
+    pending[key] = bl;
+  }
+  if (pending.empty()) {
+    return;
+  }
+  pending_description = description;
+  encode_pending_to_kvmon();
+  mon.kvmon()->propose_pending();
+  propose_pending();
 }
