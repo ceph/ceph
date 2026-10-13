@@ -150,6 +150,15 @@ function TEST_pool_replica_crush_rule_name() {
     ceph osd pool set "$poolname" replica 2 || return 1
     assert_pool_rule "$poolname" "$poolname-replica-2" 2 1 || return 1
 
+    # a generated rule goes with its pool, whatever the pool is called now
+    ceph osd pool create renamed 8 8 replicated || return 1
+    ceph osd pool set renamed num_zones 2 \
+        --replica 2 --zone_failure_domain zone --osd_failure_domain host || return 1
+    ceph osd crush rule ls | grep -qx renamed || return 1
+    ceph osd pool rename renamed renamed2 || return 1
+    ceph osd pool delete renamed2 renamed2 --yes-i-really-really-mean-it || return 1
+    ! ceph osd crush rule ls | grep -qx renamed || return 1
+
     ceph osd pool set "$poolname" num_zones 2 || return 1
     assert_pool_rule "$poolname" "$poolname-replica-2" 2 1 || return 1
 

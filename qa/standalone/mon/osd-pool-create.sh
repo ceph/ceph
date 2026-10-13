@@ -46,6 +46,33 @@ function TEST_pool_get_unset_option() {
     ceph osd pool get p num_zones | grep 'num_zones: 1' || return 1
 }
 
+function TEST_pool_rule_removed_when_unused() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated op_rule default host || return 1
+    ceph osd pool create p 8 8 replicated op_rule || return 1
+    ceph osd pool create p2 8 8 replicated op_rule || return 1
+    # kept while another pool uses it
+    ceph osd pool delete p p --yes-i-really-really-mean-it || return 1
+    ceph osd crush rule ls | grep -qx op_rule || return 1
+    # removed with its last pool, whoever created it
+    ceph osd pool delete p2 p2 --yes-i-really-really-mean-it || return 1
+    ! ceph osd crush rule ls | grep -qx op_rule || return 1
+    # and when its last pool is given another rule
+    ceph osd crush rule create-replicated r-ssd default host || return 1
+    ceph osd pool create r 8 8 replicated r-ssd || return 1
+    ceph osd pool set r crush_rule replicated_rule || return 1
+    ! ceph osd crush rule ls | grep -qx r-ssd || return 1
+    # the default rule stays
+    ceph osd pool delete r r --yes-i-really-really-mean-it || return 1
+    ceph osd crush rule ls | grep -qx replicated_rule || return 1
+    # a rule generated for an erasure coded pool goes with the pool
+    ceph osd pool create e 8 8 erasure || return 1
+    local rule=$(ceph osd pool get e crush_rule | awk '{print $2}')
+    ceph osd pool delete e e --yes-i-really-really-mean-it || return 1
+    ! ceph osd crush rule ls | grep -qx "$rule" || return 1
+}
+
 function TEST_erasure_invalid_profile() {
     local dir=$1
     run_mon $dir a || return 1
@@ -360,6 +387,33 @@ function TEST_pool_both_prio_no_pos() {
    check_pool_priority $dir 20 "2 - 36" "-10 -9 -8 -8 -7 -7 -6 -6 -5 -5 -4 -3 -3 -2 -2 -1 -1 0 0 2 4" || return 1
 }
 
+
+# A pool given a rule in the same update that removes the rule must not get
+# it: the pool would have a rule that is gone
+function TEST_pool_set_rule_racing_its_removal() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush rule create-replicated race_rule default host || return 1
+    ceph osd pool create a 8 8 replicated race_rule || return 1
+    ceph osd pool create b 8 8 replicated || return 1
+    ceph tell mon.\* config set paxos_propose_interval 5 || return 1
+    # an OSDMap change just committed delays the next proposal
+    ceph osd set noout || return 1
+
+    timeout 60 ceph osd pool set a crush_rule replicated_rule &
+    local pid=$!
+    sleep 1
+    timeout 60 ceph osd pool set b crush_rule race_rule > $dir/out 2>&1
+    wait $pid || return 1
+    cat $dir/out
+    timeout 60 ceph osd pool get b crush_rule > $dir/rule || return 1
+    local rule=$(awk '{print $2}' $dir/rule)
+    ceph osd crush rule ls | grep -qx "$rule" || return 1
+    if [ "$rule" = replicated_rule ]; then
+        grep "does not exist" $dir/out || return 1
+    fi
+}
 
 main osd-pool-create "$@"
 
