@@ -816,7 +816,7 @@ function TEST_stretch_unstretch_clean() {
     # ==========================================
     # 1. Test Unstretching from Healthy Stretch Mode
     # ==========================================
-    ceph osd pool create data_healthy --num-zones 2 || return 1
+    ceph osd pool create data_healthy --num-zones 2 --replica 2 || return 1
 
     # Verify we are in healthy stretch mode (meaning force_healthy should fail on active stretched cluster)
     ceph osd force_healthy_stretch_mode --yes-i-really-mean-it 2>&1 | grep "the cluster is not in recovery stretch mode" || return 1
@@ -830,7 +830,7 @@ function TEST_stretch_unstretch_clean() {
     # ==========================================
     # 2. Test Unstretching from Degraded Stretch Mode
     # ==========================================
-    ceph osd pool create data_degraded --num-zones 2 || return 1
+    ceph osd pool create data_degraded --num-zones 2 --replica 2 || return 1
 
     # Simulate zone failure by killing monitor b and OSDs in dc2
     kill_daemons $dir TERM mon.b
@@ -861,7 +861,7 @@ function TEST_stretch_unstretch_clean() {
     # ==========================================
     # 3. Test Unstretching from Recovery Stretch Mode
     # ==========================================
-    ceph osd pool create data_recovery --num-zones 2 || return 1
+    ceph osd pool create data_recovery --num-zones 2 --replica 2 || return 1
 
     # To reach recovery stretch mode the cluster must first enter degraded stretch
     # mode (go_recovery_stretch_mode() is a no-op unless is_degraded_stretch_mode()).
