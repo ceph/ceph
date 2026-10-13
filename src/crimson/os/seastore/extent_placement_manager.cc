@@ -200,7 +200,7 @@ SegmentedOolWriter::alloc_write_ool_extents(
       auto throttle_start = std::chrono::steady_clock::now();
       co_await trans_intr::make_interruptible(
         token_bucket.get(size));
-      t.get_phase_durations().ool_throttle +=
+      t.get_phase_durations().attempt_ool_throttle +=
         std::chrono::steady_clock::now() - throttle_start;
       co_await do_write(t, extents);
     } catch (...) {
@@ -1294,7 +1294,7 @@ RandomBlockOolWriter::alloc_write_ool_extents(
       auto throttle_start = std::chrono::steady_clock::now();
       co_await trans_intr::make_interruptible(
         token_bucket.get(size));
-      t.get_phase_durations().ool_throttle +=
+      t.get_phase_durations().attempt_ool_throttle +=
         std::chrono::steady_clock::now() - throttle_start;
       // Backpressure on accumulated deferred frees of conflicted OOL writes.
       co_await trans_intr::make_interruptible(
@@ -1417,7 +1417,7 @@ RandomBlockOolWriter::do_write(
       w.mergeable_bps.clear();
     }
   }
-  t.get_phase_durations().ool_prepare +=
+  t.get_phase_durations().attempt_ool_prepare +=
     std::chrono::steady_clock::now() - prepare_start;
 
   return trans_intr::make_interruptible(
@@ -1427,6 +1427,7 @@ RandomBlockOolWriter::do_write(
       stats.num_records += writes.size();
       auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
       trans_stats.num_records += writes.size();
+      auto disk_write_start = std::chrono::steady_clock::now();
       return alloc_write_ertr::parallel_for_each(writes,
         [](auto& info) {
         return info.rbm->write(info.offset, std::move(info.bp)
@@ -1435,6 +1436,9 @@ RandomBlockOolWriter::do_write(
           crimson::ct_error::assert_all(
             "Invalid error when writing record")
         );
+      }).safe_then([&t, disk_write_start] {
+        t.get_phase_durations().attempt_ool_disk_write +=
+          std::chrono::steady_clock::now() - disk_write_start;
       });
     })
   );

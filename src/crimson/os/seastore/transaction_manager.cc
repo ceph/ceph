@@ -829,12 +829,15 @@ TransactionManager::do_submit_transaction(
   );
 
   SUBTRACET(seastore_t, "write delayed ool extents", tref);
+  // drop ool_* time left over from an attempt that was interrupted
+  tref.get_phase_durations().reset_ool_attempt();
   auto ool_start = std::chrono::steady_clock::now();
   co_await epm->write_delayed_ool_extents(
     tref, dispatch_result.alloc_map
   );
   tref.get_phase_durations().ool_write +=
     std::chrono::steady_clock::now() - ool_start;
+  tref.get_phase_durations().commit_ool_attempt();
 
   auto allocated_extents = tref.get_valid_pre_alloc_list();
   auto lba_start = std::chrono::steady_clock::now();
@@ -860,6 +863,7 @@ TransactionManager::do_submit_transaction(
   co_await epm->write_preallocated_ool_extents(tref, allocated_extents);
   tref.get_phase_durations().ool_write +=
     std::chrono::steady_clock::now() - ool_start;
+  tref.get_phase_durations().commit_ool_attempt();
 
   SUBTRACET(seastore_t, "entering prepare", tref);
   auto prepare_enter_start = std::chrono::steady_clock::now();
