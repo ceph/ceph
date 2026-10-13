@@ -731,6 +731,13 @@ void ECBackend::handle_sub_write_reply(
       get_parent()->update_peer_last_complete_ondisk(
         from, ec_write_reply_op.last_complete);
     }
+
+    if (op->cross_zone_write_dispatch_time.contains(from)) {
+      utime_t lat = ceph_clock_now() - op->cross_zone_write_dispatch_time.at(from);
+      get_parent()->get_logger()->tinc(l_osd_stretch_cross_zone_write_lat, lat);
+      get_parent()->get_logger()->hinc(l_osd_stretch_cross_zone_write_lat_hist,
+                                       lat.to_nsec(), 0);
+    }
   }
 
   if (cct->_conf->bluestore_debug_inject_read_err &&
@@ -803,6 +810,22 @@ void ECBackend::handle_sub_read_reply(
     // zero length reads may need to be zero padded during recovery
     if (!buffers_read.contains_shard(from_rel_shard)) {
       rop.complete.at(hoid).zero_length_reads.insert(from_rel_shard);
+    }
+  }
+  // only cross zone reads in tracked
+  if (rop.cross_zone_read_dispatch_time.contains(from)) {
+    uint64_t recv_bytes = 0;
+    for (auto &[hoid, bufs] : op.buffers_read)
+      for (auto &[offset, bl] : bufs)
+        recv_bytes += bl.length();
+
+    if (recv_bytes > 0) {
+      utime_t lat = ceph_clock_now() - rop.cross_zone_read_dispatch_time.at(from);
+      get_parent()->get_logger()->inc(l_osd_stretch_cross_zone_read_recv_bytes,
+                                      recv_bytes);
+      get_parent()->get_logger()->tinc(l_osd_stretch_cross_zone_read_lat, lat);
+      get_parent()->get_logger()->hinc(l_osd_stretch_cross_zone_read_lat_hist,
+                                       lat.to_nsec(), recv_bytes);
     }
   }
   for (auto &&[hoid, req]: rop.to_read) {
