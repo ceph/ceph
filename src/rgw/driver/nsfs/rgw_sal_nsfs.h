@@ -411,6 +411,14 @@ public:
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "") override;
 
   int get_ent(const DoutPrefixProvider *dpp, optional_yield y, const std::string& name, const std::string& version, std::unique_ptr<FSEnt>& ent);
+
+  /* Is this directory itself an object, in a format that marks the
+   * directory rather than relying on its sentinel?  Asks the bucket's
+   * own path strategy and then the fallback.  The nsfs strategy returns
+   * false without a syscall and the fallback is null except mid-
+   * conversion, so a bucket in the nsfs format pays nothing here. */
+  bool directory_object(const DoutPrefixProvider* dpp,
+			PathStrategy::DirectoryObject& out);
 };
 
 class MPDirectory : public Directory {
@@ -447,6 +455,61 @@ public:
     return std::make_unique<MPDirectory>(*this);
   }
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags, const ACLOwner& bucket_owner, const std::string& path_prefix = "") override;
+};
+
+/* A directory object in NooBaa's format.
+ *
+ * NooBaa marks the directory itself:  user.noobaa.dir_content holds the
+ * object's size, the object's attributes are the directory's, and the
+ * bytes are in the sentinel only when there are any
+ * (PathStrategy::directory_object()).  So one object is spread over two
+ * entries, and this keeps that rule in one place behind the interface
+ * every caller already uses (DECISIONS.md 2026-10-13).
+ *
+ * It reports what conversion will leave, because a client must not see
+ * a bucket being converted differ from the bucket it becomes
+ * (DECISIONS.md 2026-10-13):
+ *
+ *   - stat is the sentinel's when the object has content, and the
+ *     directory's when it is empty, with the size from the marker
+ *   - attributes are read from the directory, without the `user.nsfs.`
+ *     names:  on the bucket root those are the bucket's own state, and
+ *     nothing else in NooBaa's format carries them
+ *   - data is the sentinel's, or nothing
+ *
+ * `parent` is the directory, and `fname` the sentinel's name.  Read
+ * only:  a write to such an object has to convert it, which this does
+ * not do, so the mutators refuse. */
+class NooBaaDirectoryObject : public FSEnt {
+  PathStrategy::DirectoryObject dobj;
+  /* the sentinel, present only when the object has content */
+  std::unique_ptr<File> content;
+
+public:
+  NooBaaDirectoryObject(const std::string& sentinel, Directory* dir,
+			const PathStrategy::DirectoryObject& _dobj,
+			CephContext* _ctx);
+  NooBaaDirectoryObject(const NooBaaDirectoryObject& o);
+  virtual ~NooBaaDirectoryObject() { close(); }
+
+  virtual ObjectType get_type() override { return ObjectType::FILE; };
+
+  virtual int create(const DoutPrefixProvider *dpp, bool* existed = nullptr, bool temp_file = false) override;
+  virtual int open(const DoutPrefixProvider *dpp) override;
+  virtual int close() override;
+  virtual int stat(const DoutPrefixProvider *dpp, bool force = false) override;
+  virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children) override;
+  virtual int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int write_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs, Attrs* extra_attrs,
+			  AttrWriteMode mode = AttrWriteMode::REPLACE_ALL,
+			  const std::vector<std::string>* rmattrs = nullptr) override;
+  virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y, Attrs& attrs) override;
+  virtual int copy(const DoutPrefixProvider *dpp, optional_yield y, Directory* dst_dir, const std::string& name) override;
+  virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname, bool excl = false) override;
+  virtual std::unique_ptr<FSEnt> clone_base() override {
+    return std::make_unique<NooBaaDirectoryObject>(*this);
+  }
 };
 
 

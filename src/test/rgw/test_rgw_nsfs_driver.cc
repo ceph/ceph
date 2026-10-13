@@ -5000,6 +5000,197 @@ public:
   sf::path bucket_path() const { return bp / "root" / testname; }
 };
 
+/* A directory object as NooBaa lays it down:  the marker and the
+ * object's attributes on the directory, and the bytes in `.folder` only
+ * when there are any (`namespace_fs.js`, _create_empty_dir_content). */
+static void lay_noobaa_directory_object(const sf::path& dir,
+					const std::string& body,
+					const std::string& content_type,
+					const std::string& probe)
+{
+  sf::create_directories(dir);
+  if (!body.empty()) {
+    write_file(dir / ".folder", body);
+  }
+  set_u64_xattr(dir, "user.noobaa.dir_content", body.size());
+  ASSERT_EQ(::setxattr(dir.c_str(), "user.noobaa.content_type",
+		       content_type.data(), content_type.size(), 0), 0);
+  ASSERT_EQ(::setxattr(dir.c_str(), "user.probe",
+		       probe.data(), probe.size(), 0), 0);
+}
+
+/* An attribute value as the S3 front end puts it in a header:
+ * rgw_bl_str() for the content type and rgw_sanitized_hdrval() for
+ * metadata both drop the trailing NUL, which the nsfs format stores and
+ * NooBaa's does not. */
+static std::string as_sent(const bufferlist& bl)
+{
+  std::string v = bl.to_str();
+  while (!v.empty() && v.back() == '\0') {
+    v.pop_back();
+  }
+  return v;
+}
+
+/* What a client sees of one object:  HEAD, GET and its listing row. */
+
+struct ClientView {
+  bool exists{false};
+  uint64_t size{0};
+  std::string content_type;
+  std::string probe;
+  std::string etag;
+  ceph::real_time mtime;
+  std::string body;
+  bool listed{false};
+  uint64_t listed_size{0};
+  std::string listed_etag;
+  ceph::real_time listed_mtime;
+};
+
+static ClientView client_view(rgw::sal::Bucket* bucket,
+			      const DoutPrefixProvider* dpp,
+			      const std::string& key)
+{
+  ClientView v;
+  auto obj = bucket->get_object(rgw_obj_key(key));
+  std::unique_ptr<rgw::sal::Object::ReadOp> rop(obj->get_read_op());
+  if (rop->prepare(null_yield, dpp) == 0) {
+    v.exists = true;
+    v.size = obj->get_size();
+    v.mtime = obj->get_mtime();
+    auto& attrs = obj->get_attrs();
+    if (auto a = attrs.find(RGW_ATTR_CONTENT_TYPE); a != attrs.end()) {
+      v.content_type = as_sent(a->second);
+    }
+    if (auto a = attrs.find(RGW_ATTR_META_PREFIX "probe"); a != attrs.end()) {
+      v.probe = as_sent(a->second);
+    }
+    if (auto a = attrs.find(RGW_ATTR_ETAG); a != attrs.end()) {
+      v.etag = as_sent(a->second);
+    }
+    if (v.size > 0) {
+      bufferlist bl;
+      Read_CB cb(&bl);
+      EXPECT_EQ(rop->iterate(dpp, 0, v.size - 1, &cb, null_yield), 0) << key;
+      v.body = bl.to_str();
+    }
+  }
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  EXPECT_EQ(bucket->list(dpp, params, 1000, results, null_yield), 0);
+  for (auto& e : results.objs) {
+    if (e.key.name == key) {
+      EXPECT_FALSE(v.listed) << key << " listed twice";
+      v.listed = true;
+      v.listed_size = e.meta.size;
+      v.listed_etag = e.meta.etag;
+      v.listed_mtime = e.meta.mtime;
+    }
+  }
+  return v;
+}
+
+/* A bucket being converted is, to a client, the bucket it becomes
+ * (DECISIONS.md 2026-10-13).  Directory objects in NooBaa's format,
+ * read before conversion and again after, must look the same.
+ *
+ * Before this, `e/` was 404 and unlisted, and `c/` lost its content type
+ * and metadata, because the reader took `.folder` for the whole object.
+ *
+ * An empty one's ETag and Last-Modified are not compared:  conversion
+ * still gives it a new sentinel, so both move.  That is the conversion
+ * to fix, not this reader. */
+TEST_F(NSFSNooBaaBucketTest, ADirectoryObjectReadsTheSameBeforeAndAfterConversion)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+  const ClientView e0 = client_view(bucket.get(), env->dpp, "e/");
+  const ClientView c0 = client_view(bucket.get(), env->dpp, "c/");
+
+  ASSERT_TRUE(e0.exists) << "an empty directory object was not found";
+  EXPECT_EQ(e0.size, 0u);
+  EXPECT_EQ(e0.content_type, "text/x-e");
+  EXPECT_EQ(e0.probe, "e");
+  EXPECT_TRUE(e0.listed);
+  ASSERT_TRUE(c0.exists);
+  EXPECT_EQ(c0.size, 9u);
+  EXPECT_EQ(c0.content_type, "text/x-c")
+      << "attributes were read from .folder rather than the directory";
+  EXPECT_EQ(c0.probe, "c");
+  EXPECT_EQ(c0.body, "dir bytes");
+  EXPECT_TRUE(c0.listed);
+  EXPECT_EQ(c0.listed_size, 9u);
+  EXPECT_EQ(c0.listed_etag, c0.etag);
+
+  ASSERT_EQ(b->set_profile(env->dpp, null_yield, nsfs::EXTENSIONS_SHARED), 0);
+
+  const ClientView e1 = client_view(bucket.get(), env->dpp, "e/");
+  const ClientView c1 = client_view(bucket.get(), env->dpp, "c/");
+
+  EXPECT_EQ(e1.exists, e0.exists);
+  EXPECT_EQ(e1.size, e0.size);
+  EXPECT_EQ(e1.content_type, e0.content_type);
+  EXPECT_EQ(e1.probe, e0.probe);
+  EXPECT_EQ(e1.listed, e0.listed);
+  EXPECT_EQ(e1.listed_size, e0.listed_size);
+
+  EXPECT_EQ(c1.exists, c0.exists);
+  EXPECT_EQ(c1.size, c0.size);
+  EXPECT_EQ(c1.content_type, c0.content_type);
+  EXPECT_EQ(c1.probe, c0.probe);
+  EXPECT_EQ(c1.etag, c0.etag);
+  EXPECT_EQ(c1.mtime, c0.mtime);
+  EXPECT_EQ(c1.body, c0.body);
+  EXPECT_EQ(c1.listed, c0.listed);
+  EXPECT_EQ(c1.listed_size, c0.listed_size);
+  EXPECT_EQ(c1.listed_etag, c0.listed_etag);
+  EXPECT_EQ(c1.listed_mtime, c0.listed_mtime);
+}
+
+/* The root object in NooBaa's format:  the marker and its attributes on
+ * the bucket's own directory, which also carries the bucket's state
+ * under `user.nsfs.`.  Only the object's are its attributes. */
+TEST_F(NSFSNooBaaBucketTest, TheRootObjectReadsWithoutTheBucketsState)
+{
+  lay_noobaa_directory_object(bucket_path(), "root bytes", "text/x-root", "root");
+  ASSERT_EQ(::getxattr(bucket_path().c_str(), "user.nsfs.bucket_info",
+		       nullptr, 0) > 0, true)
+      << "the bucket directory carries no state;  nothing here would be "
+	 "proving the exclusion";
+
+  const ClientView r = client_view(bucket.get(), env->dpp, "/");
+  ASSERT_TRUE(r.exists);
+  EXPECT_EQ(r.size, 10u);
+  EXPECT_EQ(r.content_type, "text/x-root");
+  EXPECT_EQ(r.probe, "root");
+  EXPECT_EQ(r.body, "root bytes");
+  EXPECT_FALSE(r.listed);
+
+  auto obj = bucket->get_object(rgw_obj_key("/"));
+  ASSERT_EQ(obj->load_obj_state(env->dpp, null_yield), 0);
+  EXPECT_EQ(obj->get_attrs().count("bucket_info"), 0u)
+      << "the bucket's state was read as the root object's";
+}
+
+/* A `.folder` without the marker is not a directory object to NooBaa,
+ * whose reader returns NoSuchKey for a directory that lacks it.  It is
+ * the control for the marker:  the same layout with the marker is. */
+TEST_F(NSFSNooBaaBucketTest, ADirectoryWithoutTheMarkerIsNotItsObject)
+{
+  lay_noobaa_directory_object(bucket_path() / "m", "marked", "text/x-m", "m");
+  sf::create_directories(bucket_path() / "u");
+  write_file(bucket_path() / "u" / "x", "x");
+
+  EXPECT_TRUE(client_view(bucket.get(), env->dpp, "m/").exists);
+  const ClientView u = client_view(bucket.get(), env->dpp, "u/");
+  EXPECT_FALSE(u.exists) << "a plain directory read as an object";
+  EXPECT_FALSE(u.listed);
+}
+
 /* A base bucket whose state is where NooBaa keeps it.
  *
  * The config root is set before the driver is built, because that is
@@ -6853,6 +7044,31 @@ TEST_F(NSFSConvertingBucketTest, ListsTheirEmptyDirectoryObject)
   EXPECT_TRUE(keys.contains("photos/")) << "their folder was invisible";
   EXPECT_TRUE(keys.contains("plain/a.txt"));
   EXPECT_FALSE(keys.contains("plain/")) << "a prefix was emitted as an object";
+}
+
+/* NooBaa's directory objects on a bucket mid-conversion, before the
+ * sweep reaches them:  read through the fallback, with the directory's
+ * attributes. */
+TEST_F(NSFSConvertingBucketTest, ReadsTheirDirectoryObjects)
+{
+  lay_noobaa_directory_object(bucket_path() / "e", "", "text/x-e", "e");
+  lay_noobaa_directory_object(bucket_path() / "c", "dir bytes", "text/x-c", "c");
+
+  const ClientView e = client_view(bucket.get(), env->dpp, "e/");
+  ASSERT_TRUE(e.exists);
+  EXPECT_EQ(e.size, 0u);
+  EXPECT_EQ(e.content_type, "text/x-e");
+  EXPECT_EQ(e.probe, "e");
+  EXPECT_TRUE(e.listed);
+
+  const ClientView c = client_view(bucket.get(), env->dpp, "c/");
+  ASSERT_TRUE(c.exists);
+  EXPECT_EQ(c.size, 9u);
+  EXPECT_EQ(c.content_type, "text/x-c");
+  EXPECT_EQ(c.probe, "c");
+  EXPECT_EQ(c.body, "dir bytes");
+  EXPECT_TRUE(c.listed);
+  EXPECT_EQ(c.listed_size, 9u);
 }
 
 TEST_F(NSFSBucketTest, DoesNotListTheirDirectoryObjectWithoutTheMarker)

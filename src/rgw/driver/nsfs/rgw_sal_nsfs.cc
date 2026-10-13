@@ -1569,12 +1569,16 @@ static inline int copy_dir_fd(int old_fd)
  *
  * The nsfs format first.  An object rewritten during the conversion
  * carries nsfs names and must be read as nsfs's even while the bucket
- * still holds objects that are not. */
+ * still holds objects that are not.
+ *
+ * Names starting with `skip` are not read at all:  NooBaaDirectoryObject
+ * reads a directory that may also carry the bucket's own state. */
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display,
 		       const nsfs::XattrStrategy* xs,
 		       const nsfs::XattrStrategy* alt = nullptr,
-		       const nsfs::FSIdentity& id = {})
+		       const nsfs::FSIdentity& id = {},
+		       std::string_view skip = {})
 {
   /* The whole read as the identity:  the attribute names come
    * from a listing the gateway may not be permitted to see in
@@ -1607,6 +1611,12 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
     keylen = strlen(keyptr) + 1;
     std::string xattr_name(keyptr);
     std::string key;
+
+    if (!skip.empty() && xattr_name.starts_with(skip)) {
+      buflen -= keylen;
+      keyptr += keylen;
+      continue;
+    }
 
     const nsfs::XattrStrategy* owner = xs;
     if (!xs->parse_disk_name(xattr_name, key)) {
@@ -2217,8 +2227,9 @@ int FSEnt::make_dir_entry(const DoutPrefixProvider *dpp, optional_yield y,
   if (ret < 0)
     return ret;
 
-  ret = get_x_attrs(y, dpp, get_fd(), attrs, get_name(), xattr_strategy,
-		    xattr_fallback);
+  /* through the entry, which knows where its attributes are:  a
+   * NooBaaDirectoryObject's are on its directory */
+  ret = read_attrs(dpp, y, attrs);
   if (ret < 0)
     return ret;
 
@@ -3057,6 +3068,187 @@ int Directory::get_ent(const DoutPrefixProvider *dpp, optional_yield y, const st
   return 0;
 }
 
+bool Directory::directory_object(const DoutPrefixProvider* dpp,
+				 PathStrategy::DirectoryObject& out)
+{
+  if (open(dpp) < 0) {
+    return false;
+  }
+  if (path_strategy && path_strategy->directory_object(dpp, get_fd(), out)) {
+    return true;
+  }
+  return path_fallback &&
+	 path_fallback->directory_object(dpp, get_fd(), out);
+}
+
+NooBaaDirectoryObject::NooBaaDirectoryObject(
+    const std::string& sentinel, Directory* dir,
+    const PathStrategy::DirectoryObject& _dobj, CephContext* _ctx)
+  : FSEnt(sentinel, dir, _ctx), dobj(_dobj)
+{
+  if (dobj.content_in_sentinel) {
+    content = std::make_unique<File>(sentinel, dir, _ctx);
+  }
+}
+
+NooBaaDirectoryObject::NooBaaDirectoryObject(const NooBaaDirectoryObject& o)
+  : FSEnt(o), dobj(o.dobj)
+{
+  if (o.content) {
+    content = o.content->clone();
+  }
+}
+
+int NooBaaDirectoryObject::open(const DoutPrefixProvider* dpp)
+{
+  int ret = parent->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!content) {
+    return 0;
+  }
+  /* the access this entry was given, which the caller set on it and not
+   * on the sentinel */
+  content->set_identity(personality, identity.cred);
+  content->set_read_only(read_only);
+  ret = content->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  fd = content->get_fd();
+  return 0;
+}
+
+int NooBaaDirectoryObject::close()
+{
+  if (content) {
+    content->close();
+  }
+  fd = -1;
+  return 0;
+}
+
+/* NooBaa's own choice of stat (`namespace_fs.js` read_object_md):  the
+ * sentinel's when the object has content, the directory's when it is
+ * empty, with the size from the marker either way.  Reported as a
+ * regular file, which is what the object is to every caller. */
+int NooBaaDirectoryObject::stat(const DoutPrefixProvider* dpp, bool force)
+{
+  if (force) {
+    stat_done = false;
+  }
+  if (stat_done) {
+    return 0;
+  }
+
+  int ret = content ? content->stat(dpp, force) : parent->stat(dpp, force);
+  if (ret < 0) {
+    exist = false;
+    return ret;
+  }
+  stx = content ? content->get_stx() : parent->get_stx();
+  stx.stx_mode = (stx.stx_mode & ~S_IFMT) | S_IFREG;
+  stx.stx_size = dobj.size;
+  exist = true;
+  stat_done = true;
+  return 0;
+}
+
+int NooBaaDirectoryObject::read(int64_t ofs, int64_t left, bufferlist& bl,
+				const DoutPrefixProvider* dpp, optional_yield y)
+{
+  if (!content) {
+    return 0;
+  }
+  if (content->get_fd() < 0) {
+    int ret = open(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  return content->read(ofs, left, bl, dpp, y);
+}
+
+int NooBaaDirectoryObject::read_attrs(const DoutPrefixProvider* dpp,
+				      optional_yield y, Attrs& attrs)
+{
+  int ret = parent->open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  return get_x_attrs(y, dpp, parent->get_fd(), attrs, parent->get_name(),
+		     xattr_strategy, xattr_fallback, identity, "user.nsfs.");
+}
+
+int NooBaaDirectoryObject::copy(const DoutPrefixProvider* dpp, optional_yield y,
+				Directory* dst_dir, const std::string& name)
+{
+  if (content) {
+    return content->copy(dpp, y, dst_dir, name);
+  }
+
+  /* An empty object copies to an empty file.  The destination's
+   * attributes are written by the caller, as for any copy. */
+  std::unique_ptr<FSEnt> del;
+  int ret = dst_dir->get_ent(dpp, y, name, std::string(), del);
+  if (ret >= 0) {
+    ret = del->remove(dpp, y, /*delete_children=*/true);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not remove dest " << name << dendl;
+      return ret;
+    }
+  }
+  File dst(name, dst_dir, ctx);
+  return dst.create(dpp);
+}
+
+/* Changing such an object has to convert it -- move it into the nsfs
+ * format and clear NooBaa's marker -- or the change is read back
+ * through the marker as if it had not happened.  Not built yet, so a
+ * change is refused rather than half made. */
+static int refuse_noobaa_directory_object_change(const DoutPrefixProvider* dpp,
+						 const std::string& dir)
+{
+  ldpp_dout(dpp, 1) << "nsfs: refusing to change the directory object at "
+    << dir << ":  it is in NooBaa's format, and converting it on write "
+    << "is not built" << dendl;
+  return -EOPNOTSUPP;
+}
+
+int NooBaaDirectoryObject::create(const DoutPrefixProvider* dpp,
+				  bool* existed, bool temp_file)
+{
+  return refuse_noobaa_directory_object_change(dpp, parent->get_name());
+}
+
+int NooBaaDirectoryObject::remove(const DoutPrefixProvider* dpp,
+				  optional_yield y, bool delete_children)
+{
+  return refuse_noobaa_directory_object_change(dpp, parent->get_name());
+}
+
+int NooBaaDirectoryObject::write(int64_t ofs, bufferlist& bl,
+				 const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return refuse_noobaa_directory_object_change(dpp, parent->get_name());
+}
+
+int NooBaaDirectoryObject::write_attrs(const DoutPrefixProvider* dpp,
+				       optional_yield y, Attrs& attrs,
+				       Attrs* extra_attrs, AttrWriteMode mode,
+				       const std::vector<std::string>* rmattrs)
+{
+  return refuse_noobaa_directory_object_change(dpp, parent->get_name());
+}
+
+int NooBaaDirectoryObject::link_temp_file(const DoutPrefixProvider* dpp,
+					  optional_yield y,
+					  std::string target_fname, bool excl)
+{
+  return refuse_noobaa_directory_object_change(dpp, parent->get_name());
+}
+
 int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                           fill_cache_cb_t &cb, uint32_t flags,
                           const ACLOwner& bucket_owner,
@@ -3074,6 +3266,16 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
     if (is_reserved_name(name, rn) &&
 	(!path_strategy->names_directory_object(name) || path_prefix.empty())) {
       return 0;
+    }
+
+    /* The sentinel of a directory NooBaa's format marks is that
+     * object's data and not the object:  the walk one level up emitted
+     * it, from the directory. */
+    if (path_strategy->names_directory_object(name)) {
+      PathStrategy::DirectoryObject dobj{};
+      if (directory_object(dpp, dobj)) {
+	return 0;
+      }
     }
 
     int ret = get_ent(dpp, y, name, std::string(), ent);
@@ -3127,58 +3329,32 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
       if (ret < 0)
         return ret;
 
-      /* A directory object written in the other format.
+      /* A directory object in NooBaa's format, empty or not:  the
+       * directory carries the marker and the object's attributes, so it
+       * is emitted here, from the directory, and its sentinel is skipped
+       * on the way in.
        *
-       * NooBaa's empty one has no sentinel inside it -- the fact is
-       * user.noobaa.dir_content on the directory -- so nothing in the
-       * walk reveals it and the directory has to be asked.  Only on a
-       * bucket mid-upgrade:  path_fallback is null everywhere else,
-       * and a bucket we wrote holds no foreign directory objects.
-       *
-       * One fgetxattr, on the descriptor just opened for the
-       * recursion.  The sentinel case above costs nothing because the
-       * walk sees the entry anyway, and this is what the other format
-       * costs instead.
-       *
-       * Emitted here and not skipped when it also has a sentinel:
-       * they write `.folder` whenever the object has content, and the
-       * branch above catches that on the way in.  What this adds is
-       * the empty one. */
-      if (path_fallback) {
-	PathStrategy::DirectoryObject dobj{};
-	if (path_fallback->directory_object(dpp, subdir->get_fd(), dobj) &&
-	    !dobj.content_in_sentinel) {
-	  rgw_bucket_dir_entry bde{};
-	  const std::string dkey = path_prefix + name + "/";
-	  rgw_obj_key key = path_strategy->key_from_name(dkey);
-	  key.get_index_key(&bde.key);
-	  bde.ver.pool = 1;
-	  bde.ver.epoch = 1;
-	  bde.exists = true;
-	  bde.meta.category = RGWObjCategory::Main;
-	  bde.meta.size = dobj.size;
-	  bde.meta.accounted_size = dobj.size;
-	  bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-
-	  subdir->stat(dpp);
-	  Attrs dattrs;
-	  if (get_x_attrs(y, dpp, subdir->get_fd(), dattrs, name,
-			  xattr_strategy, xattr_fallback) == 0) {
-	    ACLOwner acl_owner;
-	    set_dir_entry_owner(bde,
-				xattr_strategy->object_owner(dattrs, acl_owner),
-				acl_owner, bucket_owner);
-	    bufferlist etag_bl;
-	    if (rgw::sal::get_attr(dattrs, RGW_ATTR_ETAG, etag_bl)) {
-	      bde.meta.etag = etag_bl.to_str();
-	    }
-	  }
-	  subdir->stat(dpp);
-	  bde.meta.mtime = from_statx_timestamp(subdir->get_stx().stx_mtime);
-	  if (bde.meta.etag.empty()) {
-	    bde.meta.etag = synthesize_etag(subdir->get_stx());
-	  }
-
+       * One fgetxattr, on the descriptor just opened for the recursion,
+       * and only where a strategy marks directories -- a base bucket, or
+       * one mid-conversion.  The nsfs strategy answers without a
+       * syscall. */
+      PathStrategy::DirectoryObject dobj{};
+      if (subdir->directory_object(dpp, dobj)) {
+	NooBaaDirectoryObject dent(path_strategy->folder_object_name(),
+				   subdir, dobj, ctx);
+	rgw_bucket_dir_entry bde{};
+	ret = dent.stat(dpp);
+	if (ret == 0) {
+	  ret = dent.make_dir_entry(
+	      dpp, y, path_strategy->key_from_name(path_prefix + name + "/"),
+	      flags, bucket_owner, bde);
+	}
+	if (ret < 0) {
+	  /* marked as holding content with no sentinel to hold it:
+	   * NooBaa cannot read it either */
+	  ldpp_dout(dpp, 1) << "nsfs: not listing the directory object "
+	    << path_prefix << name << "/:  " << cpp_strerror(-ret) << dendl;
+	} else {
 	  ret = cb(dpp, bde);
 	  if (ret < 0) {
 	    return ret;
@@ -10381,7 +10557,23 @@ int NSFSObject::stat(const DoutPrefixProvider* dpp)
     NSFSBucket* b = static_cast<NSFSBucket*>(bucket);
     bool versioned = b && b->get_info().versioned();
 
-    if (versioned && !req_ver.empty()) {
+    /* A directory object in NooBaa's format:  the directory is marked,
+     * and may hold no sentinel at all.  Unversioned buckets only, for
+     * now;  NooBaa keeps a versioned directory object's history
+     * differently. */
+    nsfs::PathStrategy::DirectoryObject dobj{};
+    const std::string& kname = state.obj.key.name;
+    if (!versioned && !kname.empty() && (kname.back() == '/') &&
+	leaf_dir->directory_object(dpp, dobj)) {
+      ent = std::make_unique<NooBaaDirectoryObject>(leaf_name, leaf_dir, dobj,
+						    driver->ctx());
+      apply_pending_access();
+      ret = ent->stat(dpp);
+      if (ret < 0) {
+	state.exists = false;
+	return ret;
+      }
+    } else if (versioned && !req_ver.empty()) {
       /* version-aware stat: check current first, fall back to .versions/ */
       ret = leaf_dir->get_ent(dpp, null_yield, leaf_name, req_ver, ent);
       apply_pending_access();
