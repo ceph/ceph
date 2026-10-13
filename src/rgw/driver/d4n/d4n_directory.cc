@@ -260,9 +260,8 @@ int BucketDirectory::zscan(const DoutPrefixProvider* dpp, const std::string& buc
       return -ec.value();
     }
 
-    std::vector<boost::redis::resp3::basic_node<std::__cxx11::basic_string<char> > > root_array;
     if (resp.has_value()) {
-      root_array = resp.value();
+      const auto root_array = resp.value();
       ldpp_dout(dpp, 20) << "BucketDirectory::" << __func__ << "() aggregate size is: " << root_array.size() << dendl;
       auto size = root_array.size();
       if (size >= 2) {
