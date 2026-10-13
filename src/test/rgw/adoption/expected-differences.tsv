@@ -52,12 +52,12 @@
 # that names the string breaks on their next release instead of
 # failing honestly.  Key on the field.
 #
-# Rows marked PROVISIONAL were derived from the NooBaa capture plus the
-# mapping in docs/NOOBAA_WRITE_SURFACE.md.  `capture/rgw` does not
-# exist yet (C2b), so **no row here has been confirmed by an actual
-# diff** and the first real run is expected to move some of them.  Four
-# of twenty carry the mark;  the rest rest on a measurement or on code
-# that was read for the purpose.
+# Every row here was checked against a full run of the conversion
+# profile (`standup.rs conversion`, 2026-10-13):  each matched a
+# difference in that run, or is a guard that should match none -- an
+# `equal` or `filtered` row.  corpus-compare lists the rows that matched
+# nothing after each run;  a row that is not a guard and turns up there
+# is stale.
 
 # ---- named objects, first because the first matching row judges -----
 # `.noobaa-nsfs-k-under-temp` is a client's object whose name starts
@@ -117,7 +117,6 @@ noobaa:unconverted	md5-off	manifest	object k-dirobj/	etag	differs	a directory ob
 noobaa:unconverted	md5-off	manifest		etag	recognize:synthetic-identity	both report a file-instance token, and the values differ:  their mtime component loses its low 8 bits to a double in fs_napi.cpp:360, which we do not reproduce.  Recognized rather than tolerated, so a side that started reporting a digest fails
 noobaa:unconverted	md5-off	manifest		listed-etag	recognize:synthetic-identity	same value by the same path, through ListObjects
 noobaa:unconverted	md5-off	manifest		head-etag	recognize:synthetic-identity	same value by the same path, through HeadObject
-noobaa:unconverted	md5-off	manifest		copy.reported-etag	recognize:synthetic-identity	same value by the same path, through CopyObject's result
 noobaa:unconverted	md5-on	manifest		etag	equal	NooBaa stored user.content_md5 and we forward it unchanged -- xattr_strategy.cc:128 -- so the two agree by construction rather than by recomputation
 unconverted:converted	md5-on	manifest		etag	equal	conversion renames the attribute into our layout and must preserve its value
 
@@ -126,8 +125,8 @@ unconverted:converted	md5-on	manifest		etag	equal	conversion renames the attribu
 # be *identical* here apart from what adoption itself writes.  An
 # inventory difference in this pair that no row names is a defect.
 
-noobaa:unconverted		manifest		listed-owner	differs	PROVISIONAL _get_object_owner() returns undefined always, so NooBaa objects have no owner;  answering from the inode uid is an RGW addition
-noobaa:unconverted		manifest		version.*.owner	differs	PROVISIONAL same cause as listed-owner, per version
+noobaa:unconverted		manifest		listed-owner	differs	_get_object_owner() returns undefined always, so NooBaa objects have no owner;  answering from the inode uid is an RGW addition
+noobaa:unconverted		manifest		version.*.owner	differs	same cause as listed-owner, per version
 noobaa:unconverted		manifest		ownership-controls	differs	import writes BucketOwnerEnforced on every bucket it imports, because RGW records the bucket's owner on every object (DECISIONS.md 2026-10-11, the object-owner plan);  NooBaa has no setting and the axis reads Unknown
 noobaa:unconverted		manifest		in-flight-initiator	differs	NooBaa records no initiator for an upload and reports a placeholder;  RGW reports the bucket's owner, deduced (DECISIONS.md 2026-10-11, step 3b)
 noobaa:unconverted		manifest		in-flight-owner	differs	same as in-flight-initiator
@@ -137,7 +136,6 @@ noobaa:unconverted		manifest	object sc-configured	refused	absent	NooBaa refuses 
 noobaa:unconverted		manifest	object sc-configured	declared-class	absent	same object:  the observing pass derives the class it would have asked for (storage.rs), and NooBaa's pass, refused, recorded none
 noobaa:unconverted		manifest		observed	absent	an observing pass's finding that an object it derived was never written;  the generating pass knows that from its own refusal, recorded as `refused`
 noobaa:unconverted		inventory		xattr:security.selinux	filtered	not written by either gateway;  the host's policy put it there and it differs per machine.  The inventory writer drops it rather than listing it here
-noobaa:unconverted		inventory		xattr:user.nsfs.extensions	vanishes	PROVISIONAL the marker adoption writes -- EXTENSIONS_XATTR, bucket_profile.h:85 -- deliberately not routed through disk_name() because choosing the strategy is what it is for
 noobaa:unconverted		manifest		put-*	absent	the outcome of a write, and only the capture that wrote has one.  An observing pass -- how capture/rgw is taken, since it must not create objects in the tree it is describing -- records no put-status, put-refused or put-message.  Keyed on the prefix because a refused key has three of them.  `capture-mode` on the bucket says which kind of capture a manifest is
 noobaa:unconverted		manifest		capture-mode	differs	it says which kind of capture this is, so it differs by construction -- and the rows above are conditioned on it.  Listed rather than filtered, because a reader comparing two manifests needs to see which is which before trusting anything else
 noobaa:unconverted		manifest		*-failed	absent	head-failed, tagging-failed and their kind are recorded when an operation *this pass* performed failed.  An observing pass performs none, so it has neither the failure nor the key it failed on -- the gateway refused to create it
@@ -152,13 +150,11 @@ noobaa:unconverted		manifest		*.gained	absent	which stored names changed when th
 noobaa:unconverted		manifest		*.present	absent	the observing pass's counterpart to `.gained`:  which stored names are there, absolutely rather than differentially.  Present only in an observed capture, which is the same kind of row in the other direction
 noobaa:unconverted		manifest		parts-listed	absent	from ListParts, which needs an upload id -- an outcome only the pass that created the upload has.  An observing capture does not ask
 noobaa:unconverted		manifest		part.*.size	absent	same:  the per-part facts come from ListParts on an upload still in flight
-noobaa:unconverted		run		coverage-lock	absent	NooBaa answers 501 NotImplemented to PutObjectLockConfiguration, so the axis cannot create its bucket and writes no artifact -- lock.rs:78 ignores it under fails_on_noobaa
 
 # ---- conversion:  the layout changes wholesale ----------------------
 # These rows are the definition of conversion being complete:  nothing
 # on the left may survive on the right.
 
-unconverted:converted		inventory		xattr:user.nsfs.converting	vanishes	PROVISIONAL CONVERTING_XATTR, bucket_profile.h:107, records adoption underway and is gone when the walk completes
 unconverted:converted		inventory	.noobaa-nsfs_*/multipart-uploads/*	*	vanishes	conversion re-stages an upload still in flight out of NooBaa's temp directory (NSFSBucket::convert_uploads);  its record, parts and directory go
 unconverted:converted		inventory	.multipart_*	*	appears	and into nsfs's staging directory, `.multipart_<key>.<upload id>`, one file per part with a `.meta` record
 unconverted:converted		inventory		xattr:user.nsfs.*	appears	conversion writes each object's attributes in the nsfs spelling and marks the bucket (`user.nsfs.extensions`).  Appears, not absent:  an nsfs name that vanished would be a loss, since a bucket's own state is in the nsfs spelling before conversion too (DECISIONS.md 2026-10-13)
@@ -166,7 +162,6 @@ unconverted:converted		inventory		xattr:user.noobaa.*	vanishes	their internal na
 unconverted:converted		inventory		xattr:user.storage_class	vanishes	NB_KEYS maps it;  it is the one name their own reader hides from user metadata, via XATTR_METADATA_IGNORE_LIST
 unconverted:converted		inventory		xattr:user.content_md5	vanishes	maps to RGW_ATTR_ETAG alone, so a converted object stops carrying the key -- a decision, not a defect, recorded in docs/NOOBAA_WRITE_SURFACE.md
 unconverted:converted		inventory		xattr:user.*	vanishes	user metadata is plain user.<k> in their layout and user.nsfs.rgw.x-amz-meta-<k> in ours.  Ordered after the rows above, which are narrower
-unconverted:converted		manifest		meta.content_md5	vanishes	their reader re-exposes user.content_md5 as a user-metadata key because it is not in their ignore list;  ours does not, so the fact disappears
 
 # ---- not yet classifiable ------------------------------------------
 # One item, with no class asserted because it needs a measurement
