@@ -1,7 +1,7 @@
 import { HostStatus } from '../enum/host-status.enum';
 import { ICON_TYPE } from '../enum/icons.enum';
 
-export type OverviewStatusIcon = 'danger' | 'info-circle' | 'success' | 'warning';
+export type OverviewStatusIcon = 'danger' | 'info' | 'success' | 'warning';
 export interface Host {
   ceph_version: string;
   services: Array<{ type: string; id: string }>;
