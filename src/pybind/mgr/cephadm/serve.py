@@ -1095,7 +1095,8 @@ class CephadmServe:
                 dd.hostname, dd.name())
             if last_deps is None:
                 last_deps = []
-            action = self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name())
+            action = scheduled_action = self.mgr.cache.get_scheduled_daemon_action(
+                dd.hostname, dd.name())
             if not last_config:
                 self.log.info('Reconfiguring %s (unknown last config time)...' % (
                     dd.name()))
@@ -1154,6 +1155,8 @@ class CephadmServe:
                     and action in ('redeploy', 'reconfig')
                     and not scheduled_action
                 ):
+                    svc_obj = self.mgr.cephadm_services[
+                        daemon_type_to_service(dd.daemon_type)]
                     r = svc_obj.ok_to_stop([dd.daemon_id])
                     if r.retval:
                         self.log.info(
