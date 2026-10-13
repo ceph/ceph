@@ -1002,7 +1002,21 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       }
       auto size = sal_obj->get_size();
 
+      // take the completion's lock, as AbortMultipartUpload does. a
+      // completion that holds it may have written a head over these parts
+      auto meta_obj = mpu->get_meta_obj();
+      meta_obj->set_in_extra_data(true);
+      const ceph::timespan dur = std::chrono::seconds(
+        cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time"));
+      auto serializer = meta_obj->get_serializer(this, y, "RGWCompleteMultipart");
+      ret = serializer->try_lock(this, dur, y);
+      if (ret < 0) {
+        ldpp_dout(this, 5) << "not aborting multipart upload " << obj.key
+            << " now, its lock is held or gone, ret=" << ret << dendl;
+        return ret;
+      }
       ret = mpu->abort(this, cct, y);
+      serializer->unlock(this, y);
       if (ret == 0) {
         const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
         send_notification(this, y, driver, sal_obj.get(), target, etag, size,
