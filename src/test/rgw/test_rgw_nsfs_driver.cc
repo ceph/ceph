@@ -3331,6 +3331,117 @@ TEST_F(NSFSBucketTest, DirectoryObjectPut)
   EXPECT_TRUE(sf::is_regular_file(folder_path));
 }
 
+/* A key of slashes alone names the root object, the bucket root's
+ * directory object, as it does in NooBaa (DECISIONS.md 2026-10-13):
+ * written, read, overwritten and deleted through the root's `.folder`.
+ * `//` is the same object as `/`, because an empty component is not a
+ * name.  `.folder` stays reserved, so the control is that the key
+ * `.folder` cannot reach the same file. */
+TEST_F(NSFSBucketTest, ASlashOnlyKeyIsTheRootObject)
+{
+  auto put = [&](const char* k, const std::string& body) {
+    auto obj = bucket->get_object(rgw_obj_key(k));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    ASSERT_EQ(writer->prepare(null_yield), 0) << k;
+    bufferlist bl;
+    bl.append(body);
+    ASSERT_EQ(writer->process(std::move(bl), 0), 0);
+    ASSERT_EQ(writer->process({}, body.size()), 0);
+    ceph::real_time mtime;
+    Attrs attrs;
+    std::string etag;
+    req_context rctx{env->dpp, null_yield, nullptr};
+    ASSERT_EQ(writer->complete(body.size(), etag, &mtime, real_time(), attrs,
+                               std::nullopt, real_time(), nullptr, nullptr,
+                               nullptr, nullptr, nullptr, rctx, 0), 0) << k;
+  };
+  auto get = [&](const char* k) -> std::string {
+    auto obj = bucket->get_object(rgw_obj_key(k));
+    std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+    if (read_op->prepare(null_yield, env->dpp) < 0) {
+      return "<absent>";
+    }
+    bufferlist bl;
+    Read_CB cb(&bl);
+    EXPECT_EQ(read_op->iterate(env->dpp, 0, obj->get_size(), &cb,
+                               null_yield), 0);
+    return std::string(bl.c_str(), bl.length());
+  };
+
+  put("/", "root");
+  EXPECT_TRUE(sf::is_regular_file(bucket_path() / ".folder"));
+  EXPECT_EQ(get("/"), "root");
+  EXPECT_EQ(get("//"), "root") << "`//` is not the same object as `/`";
+
+  put("//", "again");
+  EXPECT_EQ(get("/"), "again");
+
+  EXPECT_EQ(get(".folder"), "<absent>") << "`.folder` reached the root object";
+  {
+    auto obj = bucket->get_object(rgw_obj_key(".folder"));
+    auto writer = driver->get_atomic_writer(
+        env->dpp, null_yield, obj.get(), acl_owner, nullptr, 0, testname);
+    EXPECT_EQ(writer->prepare(null_yield), -ERR_INVALID_OBJECT_NAME);
+  }
+  EXPECT_EQ(get("/"), "again");
+
+  auto obj = bucket->get_object(rgw_obj_key("/"));
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
+  EXPECT_EQ(del_op->delete_obj(env->dpp, null_yield, 0), 0);
+  EXPECT_FALSE(sf::exists(bucket_path() / ".folder"));
+  EXPECT_EQ(get("/"), "<absent>");
+  EXPECT_TRUE(sf::is_directory(bucket_path())) << "deleting `/` took the bucket";
+}
+
+/* The root object is never listed, as in NooBaa (DECISIONS.md
+ * 2026-10-13):  a listing cannot show it without a key, and the empty
+ * key is not one.  Laid down by hand, as a NooBaa-written tree holds it.
+ * The control is `sub/.folder`, which must still list as the directory
+ * object `sub/`. */
+TEST_F(NSFSBucketTest, TheRootObjectIsNotListed)
+{
+  sf::create_directories(bucket_path() / "sub");
+  std::ofstream{bucket_path() / ".folder"} << "root";
+  std::ofstream{bucket_path() / "sub" / ".folder"} << "sub";
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 100, results, null_yield), 0);
+  std::set<std::string> names;
+  for (auto& e : results.objs) {
+    names.insert(e.key.name);
+  }
+  EXPECT_FALSE(names.count("")) << "the root object listed as the empty key";
+  EXPECT_FALSE(names.count("/"));
+  EXPECT_FALSE(names.count(".folder"));
+  EXPECT_TRUE(names.count("sub/")) << "a directory object stopped listing";
+}
+
+/* The root object does not keep its bucket alive, because NooBaa judges
+ * a bucket empty by listing it (DECISIONS.md 2026-10-13).  A bucket that
+ * owns its storage is removed with the root object.  The control is a
+ * bucket holding the directory object `x/`, stored as `x/.folder`,
+ * which is not empty and keeps everything. */
+TEST_F(NSFSBucketTest, TheRootObjectDoesNotKeepABucket)
+{
+  auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
+
+  sf::create_directories(bucket_path() / "x");
+  std::ofstream{bucket_path() / "x" / ".folder"} << "x";
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), -ENOTEMPTY)
+      << "a directory object did not count as content";
+  EXPECT_LT(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_TRUE(sf::exists(bucket_path() / "x" / ".folder"));
+
+  sf::remove_all(bucket_path() / "x");
+  std::ofstream{bucket_path() / ".folder"} << "root";
+  EXPECT_EQ(b->check_empty(env->dpp, null_yield), 0)
+      << "the root object counted as content";
+  EXPECT_EQ(bucket->remove(env->dpp, false, null_yield), 0);
+  EXPECT_FALSE(sf::exists(bucket_path()));
+}
+
 TEST_F(NSFSBucketTest, DirectoryObjectGet)
 {
   // PUT

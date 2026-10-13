@@ -464,7 +464,9 @@ int resolve_path(const DoutPrefixProvider* dpp,
  *
  * A key with a component the driver reserves -- `.folder`, `.versions`
  * -- is refused here, for every operation:  such a name is schema, not
- * an object (DECISIONS.md 2026-10-12).  A lookup
+ * an object (DECISIONS.md 2026-10-12).  A key of slashes alone is not
+ * refused:  it is the root object, stored in the root's `.folder`
+ * (DECISIONS.md 2026-10-13).  A lookup
  * (`create_dirs` false) returns -ENOENT, so a read is NoSuchKey and a
  * delete deletes nothing;  a create returns -ERR_INVALID_OBJECT_NAME.
  * Keys in a namespace of RGW's own are not clients' names and pass, as

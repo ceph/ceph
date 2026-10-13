@@ -3067,8 +3067,12 @@ int Directory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 			   &bucket_owner, &rn](const char *name) {
     std::unique_ptr<FSEnt> ent;
 
+    /* A directory-object sentinel is reserved but listed, as the
+     * directory's object -- except at the bucket root.  The root's is
+     * the root object, the key `/`, and NooBaa never lists it
+     * (DECISIONS.md 2026-10-13). */
     if (is_reserved_name(name, rn) &&
-	!path_strategy->names_directory_object(name)) {
+	(!path_strategy->names_directory_object(name) || path_prefix.empty())) {
       return 0;
     }
 
@@ -5726,6 +5730,30 @@ int NSFSBucket::remove(const DoutPrefixProvider* dpp,
   if (mg.result() < 0) {
     return mg.result();
   }
+  /* The root object does not keep a bucket alive:  NooBaa judges a
+   * bucket empty by listing it, and the root object is never listed
+   * (DECISIONS.md 2026-10-13).  delete_directory() counts any `.folder`
+   * as content, because in a directory it is that directory's object,
+   * so once the bucket is known to be empty the root's is removed here,
+   * before the directory.  A bucket that does not own its storage keeps
+   * it, with the directory. */
+  if (owns_storage(dpp) && !delete_children) {
+    int r = check_empty(dpp, y);
+    if (r < 0) {
+      return r;
+    }
+    if (const auto* ps = path_strategy(); ps) {
+      const std::string root_folder = ps->folder_object_name();
+      if ((::unlinkat(dir->get_fd(), root_folder.c_str(), 0) < 0) &&
+	  (errno != ENOENT)) {
+	r = -errno;
+	ldpp_dout(dpp, 0) << "ERROR: removing " << root_folder
+	  << " from bucket " << get_name() << ": " << cpp_strerror(-r)
+	  << dendl;
+	return r;
+      }
+    }
+  }
   int ret = owns_storage(dpp) ? dir->remove(dpp, y, delete_children)
 			      : unadopt(dpp);
   if (ret < 0) {
@@ -7859,8 +7887,17 @@ int NSFSBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int bucket_fd = dir->get_fd();
   const auto& rn = driver->get_reserved_names();
-  return dir->for_each(dpp, [bucket_fd, &rn](const char* name) {
+  const auto* ps = path_strategy();
+  return dir->for_each(dpp, [bucket_fd, &rn, ps](const char* name) {
     /* for_each filters out "." and ".." */
+    /* The root object, the root's `.folder`, is not content:  it is
+     * never listed, and NooBaa judges emptiness by listing (DECISIONS.md
+     * 2026-10-13).  entry_is_content() counts any `.folder` as content,
+     * because in a directory it is that directory's object;  this is the
+     * one place it meets the root's. */
+    if (ps && ps->names_directory_object(name)) {
+      return 0;
+    }
     if (entry_is_content(bucket_fd, name, rn)) {
       return -ENOTEMPTY;
     }
