@@ -156,7 +156,17 @@ set(librgw_common_srcs
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
   rgw_bucket_sync.cc
-  rgw_rest_restore.cc)
+  rgw_rest_restore.cc
+  rgw_inventory_s3.cc
+  rgw_rest_inventory.cc
+  rgw_inventory_manifest.cc)
+
+# S3 Inventory: Parquet writer and LC-hosted runner need Arrow
+if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
+  list(APPEND librgw_common_srcs
+    rgw_inventory_parquet.cc
+    rgw_inventory.cc)
+endif()
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
