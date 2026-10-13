@@ -39,7 +39,13 @@ pub enum Class {
     Recognize(String),
     Differs,
     Vanishes,
+    /// the reverse of Vanishes:  absent on the left, present on the right
+    Appears,
     Absent,
+    /// a known defect, not yet fixed:  any difference matches, and the
+    /// comparison still fails, reporting it under its own heading so a
+    /// new failure is not lost among the known ones
+    Known,
     Filtered,
 }
 
@@ -81,7 +87,9 @@ pub fn parse_rows(text: &str) -> Result<Vec<Row>, String> {
             "equal" => Class::Equal,
             "differs" => Class::Differs,
             "vanishes" => Class::Vanishes,
+            "appears" => Class::Appears,
             "absent" => Class::Absent,
+            "known" => Class::Known,
             "filtered" => Class::Filtered,
             c => match c.strip_prefix("recognize:") {
                 Some(r) if normalizer(r).is_some() => Class::Recognize(r.to_string()),
@@ -273,6 +281,8 @@ pub enum Verdict {
     Violates { row: usize, why: String },
     /// no row matched
     Unexpected,
+    /// a `known` row matched:  a known defect, which still fails
+    Known { row: usize },
 }
 
 /// Every difference between `left` and `right`.
@@ -327,12 +337,15 @@ pub fn judge(d: &Difference, rows: &[Row], pair: &str, modality: &str) -> Verdic
     };
     let violates = |why: &str| Verdict::Violates { row: row.line, why: why.to_string() };
     match (&row.class, &d.left, &d.right) {
+        (Class::Known, _, _) => Verdict::Known { row: row.line },
         (Class::Equal, _, _) => violates("must be identical"),
         (Class::Filtered, _, _) => violates("should have been dropped by the writer"),
         (Class::Differs, Some(_), Some(_)) => Verdict::Expected { row: row.line },
         (Class::Differs, _, _) => violates("may differ, but must be present on both sides"),
         (Class::Vanishes, Some(_), None) => Verdict::Expected { row: row.line },
         (Class::Vanishes, _, _) => violates("must be present on the left and absent on the right"),
+        (Class::Appears, None, Some(_)) => Verdict::Expected { row: row.line },
+        (Class::Appears, _, _) => violates("must be absent on the left and present on the right"),
         (Class::Absent, Some(_), None) | (Class::Absent, None, Some(_)) => {
             Verdict::Expected { row: row.line }
         }
@@ -429,6 +442,14 @@ mod tests {
         assert!(exp(j(Class::Vanishes, diff("manifest", "f", Some("1"), None))));
         assert!(bad(j(Class::Vanishes, diff("manifest", "f", None, Some("1")))));
         assert!(bad(j(Class::Vanishes, diff("manifest", "f", Some("1"), Some("2")))));
+
+        let known = |v: Verdict| matches!(v, Verdict::Known { .. });
+        assert!(known(j(Class::Known, diff("manifest", "f", Some("1"), None))));
+        assert!(known(j(Class::Known, diff("manifest", "f", Some("1"), Some("2")))));
+
+        assert!(exp(j(Class::Appears, diff("manifest", "f", None, Some("1")))));
+        assert!(bad(j(Class::Appears, diff("manifest", "f", Some("1"), None))));
+        assert!(bad(j(Class::Appears, diff("manifest", "f", Some("1"), Some("2")))));
 
         assert!(exp(j(Class::Absent, diff("manifest", "f", Some("1"), None))));
         assert!(exp(j(Class::Absent, diff("manifest", "f", None, Some("1")))));

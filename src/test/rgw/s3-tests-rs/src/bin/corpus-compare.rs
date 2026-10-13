@@ -10,8 +10,10 @@
 //! for is an adoption defect, and `unconverted:converted`, where it is a
 //! conversion defect.  The rules are `s3_tests_rs::corpus::compare`.
 //!
-//! Exits 1 if any difference is unexpected or breaks its row's class,
-//! 2 if the inputs cannot be read.
+//! Exits 1 if any difference is unexpected, breaks its row's class, or
+//! is a known defect (a `known` row), 2 if the inputs cannot be read.
+//! Known defects are reported under their own heading, with the row's
+//! reason, so that a new failure stands out from them.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -69,6 +71,7 @@ fn main() -> ExitCode {
         let diffs = differences(&left, &right);
         let mut unexpected = Vec::new();
         let mut violations = Vec::new();
+        let mut known: BTreeMap<usize, Vec<String>> = BTreeMap::new();
         let mut expected = 0usize;
         for d in &diffs {
             match judge(d, &rows, pair, modality) {
@@ -81,10 +84,15 @@ fn main() -> ExitCode {
                     violations.push(format!("line {row}, {why}:  {}", describe(d)));
                 }
                 Verdict::Unexpected => unexpected.push(describe(d)),
+                Verdict::Known { row } => {
+                    *used.entry(row).or_default() += 1;
+                    known.entry(row).or_default().push(describe(d));
+                }
             }
         }
+        let nknown: usize = known.values().map(Vec::len).sum();
         println!("== {kind} ({pair}):  {} differences, {expected} expected, {} \
-                  breaking their row, {} unexpected",
+                  breaking their row, {} unexpected, {nknown} known defects",
                  diffs.len(), violations.len(), unexpected.len());
         for v in &violations {
             println!("  BREAKS      {v}");
@@ -92,7 +100,15 @@ fn main() -> ExitCode {
         for u in &unexpected {
             println!("  UNEXPECTED  {u}");
         }
-        failed |= !violations.is_empty() || !unexpected.is_empty();
+        for (line, facts) in &known {
+            let reason = rows.iter().find(|r| r.line == *line)
+                .map(|r| r.reason.as_str()).unwrap_or("");
+            println!("  KNOWN       line {line}, {} facts:  {reason}", facts.len());
+            for f in facts {
+                println!("                {f}");
+            }
+        }
+        failed |= !violations.is_empty() || !unexpected.is_empty() || nknown > 0;
     }
 
     let unused: Vec<_> = rows

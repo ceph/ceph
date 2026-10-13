@@ -149,6 +149,16 @@ async fn corpus_coverage_bucket_config() {
                 m.bucket(&b, concat!($name, ".reads-back"),
                          &read_back.to_string());
                 for (n, _) in bucket_state(&b) {
+                    /* Not configuration:  the host's security label,
+                     * and the markers recording which format the bucket
+                     * is in, which load_bucket() keeps out of its state
+                     * too.  Conversion adds the mark, so listing it
+                     * would report every converted bucket as changed. */
+                    if matches!(n.as_str(), "xattr:security.selinux"
+                                | "xattr:user.nsfs.extensions"
+                                | "xattr:user.nsfs.converting") {
+                        continue;
+                    }
                     m.bucket(&b, concat!($name, ".present"), &n);
                 }
                 steps.push(Step {

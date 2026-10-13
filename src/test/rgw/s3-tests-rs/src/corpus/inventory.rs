@@ -115,6 +115,13 @@ impl Inventory {
             }
 
             for name in list_xattr_names(&path)? {
+                /* Written by neither gateway:  the host's security
+                 * policy puts it there and it differs per machine.
+                 * Dropped here, as the expected-difference list's
+                 * `filtered` row for it says. */
+                if name == "security.selinux" {
+                    continue;
+                }
                 self.lines
                     .insert(format!("{}\txattr\t{}", encode(&rel), encode(&name)));
             }
