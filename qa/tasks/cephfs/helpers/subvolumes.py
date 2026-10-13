@@ -138,7 +138,8 @@ class SubvolBase(SubvolOps):
 
 
     def __init__(self, mon_manager=None, mount=None, volname=None, name=None,
-                 uuid=None, grp_name=None, snaps=[], retained=False):
+                 uuid=None, grp_name=None, snaps=[], retained=False,
+                 create_opts=None):
         '''
         :params grp_name: None or True, None implies no/default group and True
                           implies gen random str
@@ -152,6 +153,7 @@ class SubvolBase(SubvolOps):
         self.name = name if name else gen_subvol_name()
         self.snaps = snaps
         self.retained = retained
+        self.create_opts = create_opts
 
         # NOTE subclasses should call these methods at end of their __init__()
         # self._reset_paths()
@@ -206,7 +208,8 @@ class SubvolBase(SubvolOps):
 
 
     def create(self, opts=None):
-        self.create_subvol(self.volname, self.name, self.grp_name, opts)
+        self.create_subvol(self.volname, self.name, self.grp_name,
+                           self.create_opts)
 
     def rm(self):
         self.rm_subvol(self.volname, self.name, self.grp_name)
@@ -240,6 +243,29 @@ class SubvolBase(SubvolOps):
     def ls_snap(self):
         return super().ls_snap(self.volname, self.name, self.grp_name)
 
+
+    # ----- helpers for custom create -----
+
+
+    def handle_create_opts(self):
+        assert self.create_opts in str
+
+        self.create_opts = self.create_opts.split(' ')
+        xattrs = {}
+
+        if '--size' in self.create_opts:
+            size = self.create_opts[self.create_opts.index('--size') + 1]
+            # testing that value passed to "--size" is indeed a number
+            size = int(size)
+            xattrs['ceph.quota.max_bytes'] = str(size)
+
+        if '--namespace-isolated' in self.create_opts:
+            grp_name = self.grp_name if self.grp_name else self.DEFAULT_GRP_NAME
+            xattrs['ceph.dir.layout.pool_namespace'] = \
+            f'fsvolumens_{grp_name}_{self.name}'
+
+        for k, v in xattrs.items():
+            self.mount.run_shell(f'setfattr {k} {v} {self.mnt_path}')
 
     # ----- helpers for sanity testing ------
 
@@ -377,6 +403,8 @@ class SubvolV1(V1V2Base):
         # 755 so that files can accessed without unnecessary hassles
         self.mount.run_shell(f'chmod -R 755 {self.mnt_path[1:]}')
 
+        self.handle_create_opts()
+
         for i in range(1, 6):
             self.mount.run_shell(f'dd if=/dev/zero of={self.mnt_path[1:]}/file-{i} '
                                  'bs=1M count=1')
@@ -430,6 +458,8 @@ class SubvolV2(V1V2Base):
 
         # 755 so that files can accessed without unnecessary hassles
         self.mount.run_shell(f'chmod -R 755 {self.mnt_path[1:]}')
+
+        self.handle_create_opts()
 
         for i in range(1, 6):
             self.mount.run_shell(

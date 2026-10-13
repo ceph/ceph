@@ -20,6 +20,9 @@ from teuthology import contextutil
 
 from tasks.ceph_manager import write_conf
 from tasks.ceph_manager import CephManager, RunCephCmd
+from tasks.cephfs.fuse_mount import FuseMount
+from tasks.cephfs.kernel_mount import KernelMount
+from tasks.cephfs.helpers.subvolumes import SubvolV3, SubvolV2, SubvolV1
 
 
 log = logging.getLogger(__name__)
@@ -867,43 +870,9 @@ class FilesystemBase(MDSClusterBase):
             if session_timeout != 60:
                 self.set_session_timeout(session_timeout)
 
-            if self.fs_config.get('subvols', None) is not None:
-                log.debug(f"Creating {self.fs_config.get('subvols')} subvols "
-                          f"for filesystem '{self.name}'")
-                if not hasattr(self._ctx, "created_subvols"):
-                    self._ctx.created_subvols = dict()
-
-                subvols = self.fs_config.get('subvols')
-                assert(isinstance(subvols, dict))
-                assert(isinstance(subvols['create'], int))
-                assert(subvols['create'] > 0)
-
-                self.run_ceph_cmd('fs', 'subvolumegroup', 'create', self.name, 'qa')
-                subvol_options = self.fs_config.get('subvol_options', '')
-
-                for sv in range(0, subvols['create']):
-                    sv_name = f'sv_{sv}'
-                    cmd = [
-                      'fs',
-                      'subvolume',
-                      'create',
-                      self.name,
-                      sv_name,
-                      '--group_name', 'qa',
-                    ]
-                    if subvol_options:
-                        cmd.append(subvol_options)
-                    self.run_ceph_cmd(*cmd)
-
-                    if self.name not in self._ctx.created_subvols:
-                        self._ctx.created_subvols[self.name] = []
-                    
-                    subvol_path = self.get_ceph_cmd_stdout(
-                        'fs', 'subvolume', 'getpath', self.name,
-                        '--group_name', 'qa',
-                        sv_name)
-                    subvol_path = subvol_path.strip()
-                    self._ctx.created_subvols[self.name].append(subvol_path)
+            subvols_config = self.fs_config.get('subvols', None)
+            if subvols_config is not None:
+                self._create_subvols(subvols_config)
             else:
                 log.debug(f"Not Creating any subvols for filesystem '{self.name}'")
 
@@ -912,6 +881,87 @@ class FilesystemBase(MDSClusterBase):
 
         # wait pgs to be clean
         self.mon_manager.wait_for_clean()
+
+    def _get_mount(self, config):
+        testdir = misc.get_testdir(self.ctx)
+        mount_type = config.get('mount_type', None)
+        client_id = config.get('client_id', None)
+        assert mount_type in ('fuse', 'kernel')
+        assert client_id in str
+
+        mount_class = None
+        if mount_type == 'fuse':
+            mount_class = FuseMount
+        elif mount_type == 'kernel':
+            mount_class = KernelMount
+
+        self.run_ceph_cmd(f'fs authorize {self.fs.name} {self.client_id} / rw')
+        mount_obj = mount_class(ctx=self.ctx, test_dir=testdir,
+                                client_id=client_id,
+                                client_remote=self.client_remote,
+                                cephfs_name=self.fs.name)
+        return mount_obj
+
+    def _create_subvol(self, subvol_name):
+        if version == 3:
+            subvol = SubvolV3(self.mon_manager, mount, self.name, subvol_name,
+                              grp_name=grp_name)
+            subvol.create(create_opts)
+        elif version == 2:
+            subvol = SubvolV2(self.mon_manager, mount, self.name, subvol_name,
+                              grp_name=grp_name)
+            subvol.custom_create(create_opts)
+        elif version == 1:
+            subvol = SubvolV1(self.mon_manager, mount, self.name, subvol_name,
+                              grp_name=grp_name)
+            subvol.custom_create(create_opts)
+        else:
+            assert False
+
+    def _create_subvols(self, config):
+        assert isinstance(config, dict)
+        version = config.get('version', 3)
+        subvol_create_num = config.get('create', 1)
+        create_opts = config.get('create_options', None)
+        snaps = config.get('snaps', None)
+        if snaps:
+            snap_create_num = snaps.get('create', 1)
+            # ensuring string containing only digits are allowed
+            snap_create_num = int(snap_create_num)
+
+        assert type(subvol_create_num), int and subvol_create_num > 0
+        assert type(version), int and version in (3, 2, 1)
+        assert type(create_opts) in (type(None), str)
+        assert snaps in (dict, None)
+        if snaps:
+            assert snap_create is int
+
+        log.debug(f'For FS {self.name}, creating {subvol_create_num} subvols '
+                  f'of verison v{version}')
+
+        if hasattr(self._ctx, "created_subvols"):
+            if self.name not in self._ctx.created_subvols:
+                self._ctx.created_subvols[self.name] = []
+        else:
+            self._ctx.created_subvols = {self.name: []}
+
+        grp_name = 'qa'
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.name} {grp_name}')
+
+        for i in range(subvol_create_num):
+            mount = self._get_mount(config)
+
+            subvol_name = f'subvol_v{version}_{i}'
+            subvol = self._create_subvol(mount, subvol_name)
+            for i in range(snap_create_num):
+                subvol.custom_snap_create(f'snap{i}')
+
+            self.run_ceph_cmd(f'auth rm {self.client_id}')
+            self.run_ceph_cmd(f'fs authorize {self.fs.name} {self.client_id} '
+                              f'{subvol.mnt_path} rw')
+            mount.remount(cephfs_mnt_path=subvol.mnt_path)
+
+            self._ctx.created_subvols[self.name].append(subvol.mnt_path)
 
     def run_client_payload(self, cmd):
         # avoid circular dep by importing here:
