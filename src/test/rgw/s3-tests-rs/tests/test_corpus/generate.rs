@@ -178,6 +178,18 @@ pub async fn ensure_bucket(client: &aws_sdk_s3::Client, name: &str) {
            ignore = "posix: dot-prefixed key accepted, then not listed")]
 #[tokio::test]
 async fn corpus_coverage_keys() {
+    keys_axis("keys", KeyClass::COVERAGE).await;
+}
+
+/// The maximum-length keys, in their own bucket:  see
+/// `KeyClass::MAX_LENGTH`.
+#[tokio::test]
+async fn corpus_coverage_keys_maxlen() {
+    keys_axis("keys-maxlen", KeyClass::MAX_LENGTH).await;
+}
+
+/// One key-naming bucket, `name`, holding `classes`.
+async fn keys_axis(name: &str, classes: &[KeyClass]) {
     let tier = env_or(crate::env::TIER, "coverage");
     if tier != "coverage" {
         eprintln!("CORPUS_TIER={tier};  not this tier");
@@ -185,7 +197,7 @@ async fn corpus_coverage_keys() {
     }
 
     let client = get_client();
-    let b = bucket(&tier, "keys");
+    let b = bucket(&tier, name);
     ensure_bucket(&client, &b).await;
 
     let mut m = Manifest::new();
@@ -200,7 +212,7 @@ async fn corpus_coverage_keys() {
     let mut wrote_digest: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
 
-    for class in KeyClass::COVERAGE {
+    for class in classes {
         let key = class.key();
         let body = format!("{:?}", class);
 
@@ -309,16 +321,28 @@ async fn corpus_coverage_keys() {
 
     let dir = out_dir();
     std::fs::create_dir_all(&dir).expect("manifest directory");
-    let path = dir.join(format!("{tier}-keys.manifest"));
+    let path = dir.join(format!("{tier}-{name}.manifest"));
     std::fs::write(&path, m.render()).expect("write manifest");
 
     let mode_problems =
-        crate::inventory::capture(&b, &dir, &format!("{tier}-keys"));
+        crate::inventory::capture(&b, &dir, &format!("{tier}-{name}"));
     assert!(
         mode_problems.is_empty(),
         "an object on disk does not carry the published mode:\n  {}",
         mode_problems.join("\n  ")
     );
+
+    /* A client's object whose name starts with NooBaa's temp prefix is
+     * an ordinary object under RGW (DECISIONS.md 2026-10-12), though
+     * NooBaa's listing hides it.  Asserted in observe mode, where the
+     * tree is adopted:  it must list, and listing it puts it through
+     * the content check below. */
+    if observing() && classes.contains(&KeyClass::ReservedTemp) {
+        let key = KeyClass::ReservedTemp.key();
+        assert!(listed.contains(&key),
+            "{key:?} is not listed:  an object NooBaa masked by its temp \
+             prefix must be an ordinary object after adoption");
+    }
 
     assert!(
         integrity.is_empty(),
@@ -326,10 +350,11 @@ async fn corpus_coverage_keys() {
         integrity.join("\n  ")
     );
 
+
     eprintln!(
-        "corpus {tier}/keys: {} of {} keys written, {} refused, {} facts -> {}",
+        "corpus {tier}/{name}: {} of {} keys written, {} refused, {} facts -> {}",
         written.len(),
-        KeyClass::COVERAGE.len(),
+        classes.len(),
         refused.len(),
         m.len(),
         path.display()
@@ -385,15 +410,18 @@ fn check_listing_invariants(written: &[String], listed: &[String]) {
 
     /* Everything written is listed:  catches silent loss.
      *
-     * NooBaa hides its own scaffolding by prefix match, so three keys
-     * this axis deliberately generates are accepted and then never
-     * listed:  `.folder`, anything under `.versions/`, and anything
-     * under their `.noobaa-nsfs` temp prefix.  The KeyClass variants
-     * are named for exactly that -- ReservedFolder, ReservedVersions,
-     * ReservedTemp -- so the behaviour is the expectation rather than
-     * a surprise, and the gate records it instead of asserting against
-     * it.  The other eleven keys still have to list, which is what
-     * makes the gate worth having over ignoring the axis. */
+     * NooBaa accepts three keys this axis deliberately generates and
+     * then never lists them:  `.folder`, anything under `.versions/`,
+     * and anything starting with `.noobaa-nsfs`.  The last is a NooBaa
+     * defect:  its temp directory is `.noobaa-nsfs_<bucket id>`, but
+     * its listing hides the whole prefix, so a client's object named
+     * that way is stored and lost from listings.  RGW lists it, which is
+     * correct (DECISIONS.md 2026-10-12).  This gate, under
+     * `fails_on_noobaa` only, tolerates NooBaa's behaviour so a NooBaa
+     * capture still runs;  it is not a requirement, and no run against
+     * RGW may require those keys hidden.  The other keys still have to
+     * list, which is what makes the gate worth having over ignoring the
+     * axis. */
     for w in written {
         if !seen.contains_key(w.as_str()) {
             #[cfg(feature = "fails_on_noobaa")]
