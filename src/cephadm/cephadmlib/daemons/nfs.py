@@ -5,7 +5,7 @@ import re
 from typing import Dict, List, Optional, Tuple, Union
 
 from ..call_wrappers import call, CallVerbosity
-from ..constants import DEFAULT_IMAGE, CEPH_DEFAULT_CONF, LOG_DIR_MODE
+from ..constants import DEFAULT_IMAGE, CEPH_DEFAULT_CONF, LOG_DIR, LOG_DIR_MODE
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_types import CephContainer, extract_uid_gid
 from ..context import CephadmContext
@@ -70,6 +70,7 @@ class NFSGanesha(ContainerDaemonForm):
         self.cephfs_client_log_dir = dict_get(
             config_json, 'cephfs_client_log_dir', None
         )
+        self.log_to_file = dict_get(config_json, 'log_to_file', False)
 
         # validate the supplied args
         self.validate()
@@ -126,7 +127,18 @@ class NFSGanesha(ContainerDaemonForm):
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
         mounts.update(self._get_container_mounts(data_dir))
-        if self.enable_cephfs_client_log:
+        # Both log_to_file (Ganesha server logs) and enable_cephfs_client_log
+        # (CephFS client debug logs) bind-mount a host directory to
+        # /var/log/ceph inside the container.  When log_to_file is active a
+        # per-daemon subdirectory is used so each NFS daemon on the same host
+        # has its own log directory; otherwise the cephfs_client_log path is
+        # used.
+        if self.log_to_file:
+            log_dir = os.path.join(
+                ctx.log_dir, self.fsid, self.get_daemon_name()
+            )
+            mounts[log_dir] = '/var/log/ceph:z'
+        elif self.enable_cephfs_client_log:
             host_log_dir = self._get_host_log_dir(ctx)
             mounts[host_log_dir] = '/var/log/ceph:z'
 
@@ -194,7 +206,16 @@ class NFSGanesha(ContainerDaemonForm):
 
     def get_daemon_args(self):
         # type: () -> List[str]
-        return self.daemon_args + self.extra_args
+        if self.log_to_file:
+            # The log destination MUST be under /var/log/ceph because
+            # cephadm bind-mounts the host log directory to /var/log/ceph
+            # inside the container.  Logs written to any other path stay
+            # inside the container and are not visible on the host.
+            log_file = '/var/log/ceph/ganesha.log'
+            args = ['-F', '-L', log_file]
+        else:
+            args = list(self.daemon_args)
+        return args + self.extra_args
 
     @staticmethod
     def ganesha_conf_text(conf: Union[str, List[str]]) -> str:
@@ -239,6 +260,15 @@ set -e
             raise OSError('data_dir is not a directory: %s' % (data_dir))
 
         logger.info('Creating ganesha config...')
+
+        # create the per-daemon log directory when log_to_file is enabled;
+        # each daemon gets its own subdirectory to avoid mount conflicts
+        # when multiple NFS daemons run on the same host.
+        if self.log_to_file:
+            log_dir = os.path.join(
+                LOG_DIR, self.fsid, self.get_daemon_name()
+            )
+            makedirs(log_dir, uid, gid, LOG_DIR_MODE)
 
         # create the ganesha conf dir
         config_dir = os.path.join(data_dir, 'etc/ganesha')
