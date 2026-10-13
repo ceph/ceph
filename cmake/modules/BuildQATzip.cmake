@@ -20,11 +20,14 @@ function(build_qatzip)
     list(APPEND CFLAGS -I${QAT_INCLUDE_DIR})
   endif()
   if(QAT_LIBRARY_DIR)
-    list(APPEND configure_cmd LDFLAGS=-L${QAT_LIBRARY_DIR})
+    list(APPEND LDFLAGS -L${QAT_LIBRARY_DIR})
   endif()
+  list(APPEND CFLAGS "-I$<TARGET_PROPERTY:Zstd::Zstd,INTERFACE_INCLUDE_DIRECTORIES>")
+  list(APPEND LDFLAGS "-L$<TARGET_FILE_DIR:Zstd::Zstd>")
 
   list(JOIN CFLAGS " " CFLAGS)
-  list(APPEND configure_cmd CFLAGS=${CFLAGS})
+  list(JOIN LDFLAGS " " LDFLAGS)
+  list(APPEND configure_cmd CFLAGS=${CFLAGS} LDFLAGS=${LDFLAGS})
 
   # clear the DESTDIR environment variable from debian/rules,
   # because it messes with the internal install paths of arrow's bundled deps
@@ -49,4 +52,6 @@ function(build_qatzip)
   set(QATzip_LIBRARIES ${QATzip_LIBRARY} PARENT_SCOPE)
   set(QATzip_INCLUDE_DIR ${QATzip_INCLUDE_DIR} PARENT_SCOPE)
   set(QATzip_INTERFACE_LINK_LIBRARIES QAT::qat QAT::usdm LZ4::LZ4 PARENT_SCOPE)
+
+  add_dependencies(qatzip_ext Zstd::Zstd)
 endfunction()
