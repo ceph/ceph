@@ -26,6 +26,12 @@ ACCESS_KEY = 'LTA662PVVDTDWX6M2AB0'
 SECRET_KEY = 'pvtchqajgzqx5581t6qbddbkj0bgf3a69qdkjcea'
 BUCKET_NAME = 'versioning-bucket'
 DATA_POOL = 'default.rgw.buckets.data'
+CEPH_CFG_PROPAGATION_WAIT = 5  # seconds for 'ceph config set/rm' to reach radosgw
+
+def head_objects(key):
+    """ the key's head object in the data pool, if any (not its version instances) """
+    out = exec_cmd(f'rados -p {DATA_POOL} ls')
+    return [o for o in out.decode().split() if o.endswith(f'_{key}') and '__:' not in o]
 
 def main():
     """
@@ -120,6 +126,61 @@ def main():
     null_version = [v for v in list_resp['Versions'] if v['VersionId'] == 'null'][0]
     assert head_resp['LastModified'] == null_version['LastModified'], \
       'null version mtime changed after failed olh upgrade'
+
+    # TESTCASE 'verify that null object version mtime matches its index entry after a failed olh upgrade races with an overwrite'
+    log.debug('TEST: verify that null object version mtime matches its index entry after a failed olh upgrade races with an overwrite\n')
+    connection.BucketVersioning(BUCKET_NAME).suspend()
+    key = str(uuid.uuid4())
+    bucket.put_object(Key=key, Body=b"data")  # "null" version
+    connection.BucketVersioning(BUCKET_NAME).enable()
+
+    put_errors = []
+    def failed_put():
+        try:
+            bucket.put_object(Key=key, Body=b"versioned data")
+        except Exception as e:
+            log.debug(e)
+            put_errors.append(e)
+
+    try:
+        exec_cmd('ceph config set client rgw_debug_inject_set_olh_err 2')
+        # hold the rollback longer than the two waits and the overwrite below
+        exec_cmd(f'ceph config set client rgw_inject_delay_sec {6 * CEPH_CFG_PROPAGATION_WAIT}')
+        exec_cmd('ceph config set client rgw_inject_delay_pattern delay_olh_cancel_modification')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+
+        # trigger rollback by failed put; the put doesn't return until its delayed
+        # rollback is done
+        t = threading.Thread(target=failed_put)
+        t.start()
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+
+        # overwrite the null version while the rollback is delayed
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+        connection.BucketVersioning(BUCKET_NAME).suspend()
+        put_resp = connection.meta.client.put_object(Bucket=BUCKET_NAME, Key=key, Body=b"new data")
+        assert t.is_alive(), 'rollback was not held during the overwrite'
+        t.join()
+        assert put_errors, 'versioned put did not fail as expected'
+    finally:
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
+        exec_cmd('ceph config rm client rgw_inject_delay_sec')
+        exec_cmd('ceph config rm client rgw_inject_delay_pattern')
+        time.sleep(CEPH_CFG_PROPAGATION_WAIT)
+
+    # the rollback must not leave its pending olh entry on the head
+    xattrs = exec_cmd(f'rados -p {DATA_POOL} listxattr {head_objects(key)[0]}')
+    assert b'user.rgw.olh.pending.' not in xattrs, 'pending olh entry left on the head after the rollback'
+    # the overwrite's mtime must survive the delayed rollback
+    # (without the fix, the rollback rewrote the head object with the time of the rollback)
+    get_resp = bucket.Object(key).get()
+    assert put_resp['ETag'] == get_resp['ETag'], 'get did not return the overwritten null version'
+    head_resp = connection.meta.client.head_object(Bucket=BUCKET_NAME, Key=key, VersionId='null')
+    list_resp = connection.meta.client.list_object_versions(Bucket=BUCKET_NAME, Prefix=key)
+    null_version = [v for v in list_resp['Versions'] if v['VersionId'] == 'null'][0]
+    assert head_resp['LastModified'] == null_version['LastModified'], \
+      'null version mtime changed after failed olh upgrade raced with an overwrite'
 
     # TESTCASE 'verify that concurrent delete requests do not leave behind olh entries'
     log.debug('TEST: verify that concurrent delete requests do not leave behind olh entries\n')
