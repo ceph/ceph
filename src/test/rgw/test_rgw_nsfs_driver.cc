@@ -7443,6 +7443,53 @@ TEST_F(NSFSConvertingBucketTest, AnUnreachedVersionKeepsItsRecordedId)
   EXPECT_EQ(read_version(bucket.get(), env->dpp, "w", recorded), "their bytes");
 }
 
+/* One over-long name in a tree another gateway wrote must not hide its
+ * bucket (PUNCHLIST.md, OPEN:  "one over-long name in a foreign tree
+ * empties the whole listing").
+ *
+ * The listing is served from the LMDB cache, which holds at most
+ * max_key_size() - 1 bytes of name.  A PUT of a longer key is refused,
+ * but NooBaa accepts S3's 1024 bytes, so an adopted tree can hold one.
+ * Today the cache fill fails on it and the listing comes back empty --
+ * every object in the bucket, not only the long one.
+ *
+ * DISABLED until that is fixed, so that every run reports it ("YOU HAVE
+ * 1 DISABLED TEST") without failing;  --gtest_also_run_disabled_tests
+ * runs it.  What it asserts is the property any fix must give:  the
+ * ordinary objects beside the long name are listed.  Whether the long
+ * name is listed too depends on the fix chosen, so it is not asserted. */
+TEST_F(NSFSBucketTest, DISABLED_AnOverLongNameDoesNotHideItsBucket)
+{
+  const int cap = driver->get_bucket_cache()->max_key_size();
+  ASSERT_GT(cap, 0) << "the cache reports no key size";
+
+  /* a key over the ceiling, each component well under NAME_MAX */
+  sf::path dir = bucket_path() / "long";
+  std::string key = "long";
+  while (key.size() < static_cast<size_t>(cap) + 16) {
+    const std::string comp(200, 'y');
+    dir /= comp;
+    key += "/" + comp;
+  }
+  sf::create_directories(dir);
+  write_file(dir / "end", "over the ceiling");
+  key += "/end";
+  ASSERT_GT(key.size() + 1, static_cast<size_t>(cap));
+
+  write_file(bucket_path() / "a", "a");
+  write_file(bucket_path() / "b", "b");
+
+  rgw::sal::Bucket::ListParams params;
+  rgw::sal::Bucket::ListResults results;
+  ASSERT_EQ(bucket->list(env->dpp, params, 1000, results, null_yield), 0);
+  std::set<std::string> names;
+  for (auto& e : results.objs) {
+    names.insert(e.key.name);
+  }
+  EXPECT_TRUE(names.contains("a")) << "an over-long name hid its bucket";
+  EXPECT_TRUE(names.contains("b")) << "an over-long name hid its bucket";
+}
+
 TEST_F(NSFSBucketTest, DoesNotListTheirDirectoryObjectWithoutTheMarker)
 {
   auto* b = static_cast<rgw::sal::NSFSBucket*>(bucket.get());
