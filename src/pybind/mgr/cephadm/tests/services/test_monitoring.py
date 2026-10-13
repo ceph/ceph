@@ -1,6 +1,7 @@
-from typing import Dict, List
+from typing import Dict, List, Pattern, Tuple
 from textwrap import dedent
 import json
+import re
 import urllib.parse
 import yaml
 import pytest
@@ -1201,19 +1202,42 @@ class TestMonitoring:
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, MonitoringSpec('alloy')):
+                daemon_spec = CephadmDaemonDeploySpec('test', 'daemon', 'alloy')
                 config, _ = service_registry.get_service('alloy').generate_config(
-                    CephadmDaemonDeploySpec('test', 'daemon', 'alloy'))
+                    DaemonDeployContext(daemon_spec, MonitoringSpec('alloy')))
                 alloy_cfg = config['files']['config.alloy']
 
                 assert 'loki.relabel "ceph_component"' in alloy_cfg
                 assert 'forward_to = [loki.process.remove_timestamp.receiver]' in alloy_cfg
-                # ceph-client.<id>.log - rgw, rbd-mirror, nfs, ceph-exporter
-                assert r'.*/ceph-client\\.(rgw|rbd-mirror|nfs|ceph-exporter)\\.[^/]+\\.log' in alloy_cfg
+                # ceph-client.<id>.log - rgw, rbd-mirror, cephfs-mirror, nfs, ceph-exporter
+                assert (
+                    r'.*/ceph-client\\.(rgw|rbd-mirror|cephfs-mirror|nfs|ceph-exporter)\\.[^/]+\\.log'
+                    in alloy_cfg
+                )
                 # ceph-<type>.<id>.log - osd, mon, mgr, mds
                 assert r'.*/ceph-(osd|mon|mgr|mds)\\.[^/]+\\.log' in alloy_cfg
                 # ceph.log (cluster log)
                 assert r'.*/ceph\\.log$' in alloy_cfg
                 assert 'replacement   = "cluster"' in alloy_cfg
+
+    @staticmethod
+    def _alloy_timestamp_regexes(alloy_cfg: str) -> Tuple[Pattern, Pattern]:
+        """Extract and compile stage.regex / stage.replace timestamp expressions.
+
+        Alloy config stores River string escapes (e.g. ``\\\\d``); unescape once so
+        Python ``re`` sees the same pattern Alloy's regex engine would.
+        """
+        expressions = re.findall(r'expression\s*=\s*"([^"]+)"', alloy_cfg)
+        capture = next((e for e in expressions if '(?P<ts>' in e), None)
+        replace = next(
+            (e for e in expressions if '(?P<ts>' not in e and e.startswith('^(')),
+            None,
+        )
+        assert capture is not None, 'stage.regex timestamp capture expression not found'
+        assert replace is not None, 'stage.replace timestamp strip expression not found'
+        capture_pat = capture.encode('utf-8').decode('unicode_escape')
+        replace_pat = replace.encode('utf-8').decode('unicode_escape')
+        return re.compile(capture_pat), re.compile(replace_pat)
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_alloy_remove_timestamp_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -1221,29 +1245,20 @@ class TestMonitoring:
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, MonitoringSpec('alloy')):
+                daemon_spec = CephadmDaemonDeploySpec('test', 'daemon', 'alloy')
                 config, _ = service_registry.get_service('alloy').generate_config(
-                    CephadmDaemonDeploySpec('test', 'daemon', 'alloy'))
+                    DaemonDeployContext(daemon_spec, MonitoringSpec('alloy')))
                 alloy_cfg = config['files']['config.alloy']
 
                 assert 'loki.process "remove_timestamp"' in alloy_cfg
                 assert 'forward_to = [loki.write.default.receiver]' in alloy_cfg
-                # Capture and apply Ceph timestamp to Loki entry before stripping
                 assert 'stage.regex' in alloy_cfg
                 assert 'stage.timestamp' in alloy_cfg
                 assert 'source            = "ts"' in alloy_cfg
                 assert 'format            = "2006-01-02T15:04:05.999999-0700"' in alloy_cfg
                 assert 'action_on_failure = "skip"' in alloy_cfg
                 assert 'stage.replace' in alloy_cfg
-                # Ceph daemon timestamp format: 2024-03-15T12:34:56.789012+0530
-                assert (
-                    r'^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3,6}[+-]\\d{4})\\s+'
-                    in alloy_cfg
-                )
-                assert (
-                    r'^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3,6}[+-]\\d{4})\\s+'
-                    in alloy_cfg
-                )
-                # Fallback for other ISO-like timestamps
+                # Capture (named group) + strip expressions for Ceph / ISO-like timestamps
                 assert (
                     r'^(?P<ts>\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{4})?)\\s+'
                     in alloy_cfg
@@ -1252,6 +1267,224 @@ class TestMonitoring:
                     r'^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{4})?)\\s+'
                     in alloy_cfg
                 )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_alloy_timestamp_capture_regex(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """stage.regex must extract the leading timestamp into the 'ts' group."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, MonitoringSpec('alloy')):
+                daemon_spec = CephadmDaemonDeploySpec('test', 'daemon', 'alloy')
+                config, _ = service_registry.get_service('alloy').generate_config(
+                    DaemonDeployContext(daemon_spec, MonitoringSpec('alloy')))
+                capture_re, _ = self._alloy_timestamp_regexes(config['files']['config.alloy'])
+
+                positive_cases = [
+                    # Ceph daemon format
+                    (
+                        '2024-03-15T12:34:56.789012+0530 7f8a osd.0 some message',
+                        '2024-03-15T12:34:56.789012+0530',
+                    ),
+                    (
+                        '2024-03-15T12:34:56.789+0530 mon.a hello',
+                        '2024-03-15T12:34:56.789+0530',
+                    ),
+                    # Negative / western offsets
+                    (
+                        '2024-03-15T12:34:56.789012-0700 osd.0 west coast',
+                        '2024-03-15T12:34:56.789012-0700',
+                    ),
+                    (
+                        '2024-03-15T00:00:00.000000+0000 midnight utc',
+                        '2024-03-15T00:00:00.000000+0000',
+                    ),
+                    # ISO-like with T and Z
+                    (
+                        '2024-03-15T12:34:56.789012Z mgr.x started',
+                        '2024-03-15T12:34:56.789012Z',
+                    ),
+                    (
+                        '2024-03-15T12:34:56Z mgr.x started',
+                        '2024-03-15T12:34:56Z',
+                    ),
+                    # No timezone (optional offset group)
+                    (
+                        '2024-03-15T12:34:56.123456 plain ts msg',
+                        '2024-03-15T12:34:56.123456',
+                    ),
+                    # ISO-like with space separator
+                    (
+                        '2024-03-15 12:34:56.789012+0530 cluster msg',
+                        '2024-03-15 12:34:56.789012+0530',
+                    ),
+                    (
+                        '2024-03-15 12:34:56 cluster msg',
+                        '2024-03-15 12:34:56',
+                    ),
+                    # Whitespace after timestamp may be a tab
+                    (
+                        '2024-03-15T12:34:56Z\ttab-separated msg',
+                        '2024-03-15T12:34:56Z',
+                    ),
+                    # Multiple spaces after timestamp
+                    (
+                        '2024-03-15T12:34:56Z   multi space msg',
+                        '2024-03-15T12:34:56Z',
+                    ),
+                ]
+                for line, expected_ts in positive_cases:
+                    match = capture_re.match(line)
+                    assert match is not None, f'expected capture for: {line!r}'
+                    assert match.group('ts') == expected_ts
+
+                negative_cases = [
+                    '',  # empty
+                    'osd.0 no timestamp here',
+                    'debug not a timestamp line',
+                    # timestamp not at start
+                    'prefix 2024-03-15T12:34:56Z mid-line timestamp',
+                    # date only / incomplete time
+                    '2024-03-15 only-date',
+                    '2024-03-15T12:34 missing-seconds msg',
+                    # no whitespace after timestamp (\\s+ required)
+                    '2024-03-15T12:34:56Zno-space-after',
+                    '2024-03-15T12:34:56+0530no-space',
+                    # unsupported layouts
+                    '15/03/2024 12:34:56 slash-date msg',
+                    '2024-03-15T12:34:56+05:30 colon-offset msg',  # needs \\d{4}, not HH:MM
+                    '[2024-03-15T12:34:56Z] bracketed syslog msg',
+                    '1710502496 epoch seconds msg',
+                    # partial / malformed
+                    '2024-3-15T12:34:56Z unpadded-month',
+                    '24-03-15T12:34:56Z two-digit-year',
+                ]
+                for line in negative_cases:
+                    assert capture_re.match(line) is None, f'unexpected capture for: {line!r}'
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_alloy_timestamp_replace_regex(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        """stage.replace must strip the leading timestamp from the message body."""
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, MonitoringSpec('alloy')):
+                daemon_spec = CephadmDaemonDeploySpec('test', 'daemon', 'alloy')
+                config, _ = service_registry.get_service('alloy').generate_config(
+                    DaemonDeployContext(daemon_spec, MonitoringSpec('alloy')))
+                _, replace_re = self._alloy_timestamp_regexes(config['files']['config.alloy'])
+
+                cases = [
+                    # Ceph daemon format
+                    (
+                        '2024-03-15T12:34:56.789012+0530 7f8a osd.0 some message',
+                        '7f8a osd.0 some message',
+                    ),
+                    (
+                        '2024-03-15T12:34:56.789+0530 mon.a hello',
+                        'mon.a hello',
+                    ),
+                    (
+                        '2024-03-15T12:34:56.789012-0700 osd.0 west coast',
+                        'osd.0 west coast',
+                    ),
+                    (
+                        '2024-03-15T00:00:00.000000+0000 midnight utc',
+                        'midnight utc',
+                    ),
+                    # ISO-like with T and Z
+                    (
+                        '2024-03-15T12:34:56.789012Z mgr.x started',
+                        'mgr.x started',
+                    ),
+                    (
+                        '2024-03-15T12:34:56Z mgr.x started',
+                        'mgr.x started',
+                    ),
+                    (
+                        '2024-03-15T12:34:56.123456 plain ts msg',
+                        'plain ts msg',
+                    ),
+                    # ISO-like with space separator
+                    (
+                        '2024-03-15 12:34:56.789012+0530 cluster msg',
+                        'cluster msg',
+                    ),
+                    (
+                        '2024-03-15 12:34:56 cluster msg',
+                        'cluster msg',
+                    ),
+                    # Whitespace edge cases
+                    (
+                        '2024-03-15T12:34:56Z\ttab-separated msg',
+                        'tab-separated msg',
+                    ),
+                    (
+                        '2024-03-15T12:34:56Z   multi space msg',
+                        'multi space msg',
+                    ),
+                    # Negative / non-matching → unchanged
+                    (
+                        '',
+                        '',
+                    ),
+                    (
+                        'osd.0 no timestamp here',
+                        'osd.0 no timestamp here',
+                    ),
+                    (
+                        'debug not a timestamp line',
+                        'debug not a timestamp line',
+                    ),
+                    (
+                        'prefix 2024-03-15T12:34:56Z mid-line timestamp',
+                        'prefix 2024-03-15T12:34:56Z mid-line timestamp',
+                    ),
+                    (
+                        '2024-03-15 only-date',
+                        '2024-03-15 only-date',
+                    ),
+                    (
+                        '2024-03-15T12:34 missing-seconds msg',
+                        '2024-03-15T12:34 missing-seconds msg',
+                    ),
+                    (
+                        '2024-03-15T12:34:56Zno-space-after',
+                        '2024-03-15T12:34:56Zno-space-after',
+                    ),
+                    (
+                        '2024-03-15T12:34:56+0530no-space',
+                        '2024-03-15T12:34:56+0530no-space',
+                    ),
+                    (
+                        '15/03/2024 12:34:56 slash-date msg',
+                        '15/03/2024 12:34:56 slash-date msg',
+                    ),
+                    (
+                        '2024-03-15T12:34:56+05:30 colon-offset msg',
+                        '2024-03-15T12:34:56+05:30 colon-offset msg',
+                    ),
+                    (
+                        '[2024-03-15T12:34:56Z] bracketed syslog msg',
+                        '[2024-03-15T12:34:56Z] bracketed syslog msg',
+                    ),
+                    (
+                        '1710502496 epoch seconds msg',
+                        '1710502496 epoch seconds msg',
+                    ),
+                    (
+                        '2024-3-15T12:34:56Z unpadded-month',
+                        '2024-3-15T12:34:56Z unpadded-month',
+                    ),
+                    (
+                        '24-03-15T12:34:56Z two-digit-year',
+                        '24-03-15T12:34:56Z two-digit-year',
+                    ),
+                ]
+                for line, expected in cases:
+                    assert replace_re.sub('', line, count=1) == expected, (
+                        f'line={line!r} expected={expected!r}'
+                    )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_post_remove_no_op_when_other_daemons_remain_on_same_host_host_scope(

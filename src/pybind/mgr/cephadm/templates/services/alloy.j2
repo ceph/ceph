@@ -3,7 +3,7 @@ local.file_match "system" {
 		__address__ = "localhost",
 		__path__    = "/var/log/ceph/**/*.log",
 		job         = "Cluster Logs",
-		host        = constants.hostname
+		host        = constants.hostname,
 	}]
 }
 
@@ -16,10 +16,17 @@ loki.source.file "system" {
 loki.relabel "ceph_component" {
 	forward_to = [loki.process.remove_timestamp.receiver]
 
+	// ensure host is a stream label
+	rule {
+		source_labels = ["host"]
+		target_label  = "host"
+		action        = "replace"
+	}
+
 	// ceph-client.<id>.log - rgw, rbd-mirror, nfs, ceph-exporter
 	rule {
 		source_labels = ["filename"]
-		regex         = ".*/ceph-client\\.(rgw|rbd-mirror|nfs|ceph-exporter)\\.[^/]+\\.log"
+		regex         = ".*/ceph-client\\.(rgw|rbd-mirror|cephfs-mirror|nfs|ceph-exporter)\\.[^/]+\\.log"
 		target_label  = "component"
 		replacement   = "$1"
 	}
@@ -44,24 +51,8 @@ loki.relabel "ceph_component" {
 loki.process "remove_timestamp" {
 	forward_to = [loki.write.default.receiver]
 
-	// Ceph daemon format: 2024-03-15T12:34:56.789012+0530
-	// Apply as Loki entry timestamp before stripping from the message.
-	stage.regex {
-		expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3,6}[+-]\\d{4})\\s+"
-	}
-
-	stage.timestamp {
-		source            = "ts"
-		format            = "2006-01-02T15:04:05.999999-0700"
-		action_on_failure = "skip"
-	}
-
-	stage.replace {
-		expression = "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3,6}[+-]\\d{4})\\s+"
-		replace    = ""
-	}
-
-	// Fallback for other ISO-like timestamps if present
+	// Extract leading timestamp (Ceph + other ISO-like forms), apply as Loki
+	// entry timestamp, then strip it from the message body.
 	stage.regex {
 		expression = "^(?P<ts>\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{4})?)\\s+"
 	}
