@@ -12497,13 +12497,11 @@ void Server::_readdir_diff(
     diff_mask,
     dnbl,
     [&](CDentry* dn, CInode* in, bool exists) {
-      string name;
       snapid_t effective_snapid;
-      const auto& dn_name = dn->get_name();
+      const auto name = dn->get_name();
       // provide the first snapid for removed entries and
       // the last one for existent ones
       effective_snapid = exists ? snapid : snapid_prev;
-      name.append(dn_name);
       if ((int)(dnbl.length() + name.length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
 	dout(10) << " ran out of room for name, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
         if (name == last_name) {
@@ -12518,12 +12516,11 @@ void Server::_readdir_diff(
 	return false;
       }
 
-      auto diri = dir->get_inode();
-      auto hash = ceph_frag_value(diri->hash_dentry_name(dn_name));
       unsigned start_len = dnbl.length();
       dout(10) << "inc dn " << *dn << " as " << name
-               << std::hex << " hash 0x" << hash << std::dec
-               << " " << effective_snapid
+               << std::hex << " hash 0x"
+               << ceph_frag_value(dir->get_inode()->hash_dentry_name(name))
+               << std::dec << " " << effective_snapid
                << dendl;
       encode(name, dnbl);
       mds->locker->issue_client_lease(dn, in, mdr, now, dnbl);
