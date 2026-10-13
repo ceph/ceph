@@ -583,6 +583,9 @@ def _restore_backend():
 def test_create_vector_bucket_backend_failure():
     """A vector bucket should not be created when its backend cannot be used, and
     should be created once the backend is usable again"""
+    if get_s3vector_backend() == "rgw":
+        pytest.skip("backend failure test not applicable to RGW backend")
+
     conn = connection()
     bucket_name = gen_bucket_name()
     _ensure_s3_bucket_for_vector_bucket(bucket_name)
@@ -5163,6 +5166,9 @@ def gen_tenant_name():
 def test_tenant_vector_buckets_isolated():
     """ two tenants may hold a vector bucket with the same name, and each of them
     sees only its own. they also dont collide with an user without a tenant """
+    if get_s3vector_backend() == "rgw":
+        pytest.skip("tenant isolation test not applicable to RGW backend")
+
     bucket_name = gen_bucket_name()
     conn0 = connection()
     conn0.tenant = None
@@ -5191,6 +5197,9 @@ def test_tenant_vector_buckets_isolated():
 def test_tenant_indexes_isolated():
     """ the indexes of a vector bucket of one tenant are not visible in the
     vector bucket of another tenant that has the same name """
+    if get_s3vector_backend() == "rgw":
+        pytest.skip("tenant isolation test not applicable to RGW backend")
+
     dimension = 8
     bucket_name = gen_bucket_name()
     index_name1 = 'index-of-tenant-one'
@@ -5229,6 +5238,9 @@ def test_tenant_indexes_isolated():
 def test_tenant_vectors_isolated():
     """ the vectors of two tenants that use the same vector bucket name and the
     same index name are not mixed """
+    if get_s3vector_backend() == "rgw":
+        pytest.skip("tenant isolation test not applicable to RGW backend")
+
     dimension = 8
     num_vectors = 10
     bucket_name = gen_bucket_name()
@@ -5283,6 +5295,9 @@ def test_tenant_vectors_isolated():
 def test_tenant_delete_vector_bucket_isolated():
     """ an empty vector bucket may be deleted even when another tenant holds
     indexes in a vector bucket with the same name """
+    if get_s3vector_backend() == "rgw":
+        pytest.skip("tenant isolation test not applicable to RGW backend")
+
     dimension = 8
     bucket_name = gen_bucket_name()
     index_name = 'index-of-tenant-one'
