@@ -378,6 +378,72 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc='Automatically convert image tags to image digest to ensure that all daemons use the same image'
         ),
         Option(
+            'upgrade_fs_one_at_a_time',
+            type='bool',
+            default=True,
+            desc='During upgrade, prepare (fail or scale down) and restore one '
+                 'CephFS filesystem at a time when upgrading its MDS, instead of '
+                 'disrupting every filesystem simultaneously. MDS are upgraded '
+                 'serially regardless, so this only narrows the disruption window.'
+        ),
+        Option(
+            'upgrade_staged_switch',
+            type='bool',
+            default=False,
+            desc='During upgrade, for the daemon types listed in '
+                 'upgrade_staged_switch_types, stage the new deployment on every '
+                 'host while the daemons still serve, then take the group down, '
+                 'switch every daemon to the staged deployment in parallel, '
+                 'verify with the monitors and bring the group back. The outage '
+                 'is one container restart instead of one serial redeploy per '
+                 'daemon. MDS require mgr/orchestrator/fail_fs.'
+        ),
+        Option(
+            'upgrade_staged_switch_types',
+            type='str',
+            default='mds',
+            desc='Comma-separated daemon types the staged switch applies to. '
+                 'Only types with a staged switch policy are honoured.'
+        ),
+        Option(
+            'upgrade_staged_switch_timeout',
+            type='int',
+            default=120,
+            desc='Seconds to wait, after switching a group of daemons to the '
+                 'staged deployment, for the monitors to report every one of them '
+                 'back on the target version. On timeout the daemons are switched '
+                 'back to the previous deployment, the group is restored and the '
+                 'upgrade is paused.'
+        ),
+        Option(
+            'upgrade_staged_switch_max_parallel',
+            type='int',
+            default=16,
+            desc='Maximum number of hosts staged or switched concurrently by the '
+                 'staged switch.'
+        ),
+        Option(
+            'upgrade_staged_switch_stage_ahead',
+            type='bool',
+            default=True,
+            desc='With the staged switch, stage every daemon a policy can tell '
+                 'in advance it will switch (OSDs) once, at the start of its '
+                 'phase - hosts in parallel, while the daemons still serve - '
+                 'instead of group by group. A group then only re-stages the '
+                 'daemons whose generated configuration or target image changed '
+                 'since. Set to false to stage each group only when it is picked.'
+        ),
+        Option(
+            'upgrade_staged_switch_flush_mds_journal',
+            type='bool',
+            default=True,
+            desc='With the staged switch, flush the journal of every active MDS '
+                 'rank (one rank at a time) before failing the filesystem, so '
+                 'the replay after the switch is shorter. Adds metadata pool '
+                 'I/O and time before the outage window, never inside it. '
+                 'Set to false to skip it on a busy metadata pool.'
+        ),
+        Option(
             'config_checks_enabled',
             type='bool',
             default=False,
@@ -665,6 +731,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.registry_password: Optional[str] = None
             self.registry_insecure: bool = False
             self.use_repo_digest = True
+            self.upgrade_fs_one_at_a_time = True
+            self.upgrade_staged_switch = False
+            self.upgrade_staged_switch_types = 'mds'
+            self.upgrade_staged_switch_timeout = 120
+            self.upgrade_staged_switch_max_parallel = 16
+            self.upgrade_staged_switch_stage_ahead = True
+            self.upgrade_staged_switch_flush_mds_journal = True
             self.config_checks_enabled = False
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
