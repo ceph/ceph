@@ -14,6 +14,7 @@ mod driver_hint;
 mod features;
 mod identity;
 mod impersonation;
+mod key_limit;
 mod quota;
 mod reserved_names;
 mod root_object;

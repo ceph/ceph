@@ -2836,3 +2836,44 @@ async fn test_object_standard_storage_class_not_reported() {
     assert_eq!(head.storage_class().map(|c| c.as_str()), Some(other.as_str()),
         "HEAD did not report the non-default storage class {other}");
 }
+
+/* S3's longest key, 1024 bytes, is stored and listed.  Split into
+ * components well under NAME_MAX, so a filesystem backend's path limit
+ * is not what is tested.
+ *
+ * nsfs serves listings from an LMDB cache whose maximum key size is
+ * about half that, and refuses such a key with KeyTooLongError rather
+ * than store one it could not list (PUNCHLIST.md, OPEN:  "one over-long
+ * name in a foreign tree empties the whole listing").  The gate goes
+ * when LMDB is built with a larger key size;
+ * test_rgw::key_limit pins the refusal until then. */
+#[cfg_attr(feature = "fails_on_nsfs", ignore = "nsfs: the LMDB listing cache holds about 510 bytes of key")]
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: such a PUT returns 500")]
+#[tokio::test]
+async fn test_object_key_at_the_s3_maximum_is_stored_and_listed() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+
+    let mut key = String::from("long");
+    while key.len() < 1024 - 201 {
+        key.push('/');
+        key.push_str(&"y".repeat(200));
+    }
+    key.push('/');
+    key.push_str(&"z".repeat(1024 - key.len()));
+    assert_eq!(key.len(), 1024);
+
+    client.put_object().bucket(&bucket_name).key(&key)
+        .body(ByteStream::from_static(b"at the maximum"))
+        .send().await.expect("a 1024-byte key should be stored");
+
+    let got = client.get_object().bucket(&bucket_name).key(&key)
+        .send().await.expect("the 1024-byte key should read back");
+    assert_eq!(get_body(got).await, "at the maximum");
+
+    let listed: Vec<String> = client.list_objects_v2().bucket(&bucket_name)
+        .send().await.expect("listing").contents().iter()
+        .filter_map(|o| o.key().map(str::to_string)).collect();
+    assert_eq!(listed, vec![key], "the 1024-byte key is not listed");
+}
