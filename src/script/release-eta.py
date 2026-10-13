@@ -466,10 +466,11 @@ def estimate_planned(data, announced, models, dev):
     if dev:
         d = dev["eta"]
         windows.append({"earliest": d["earliest"] + dt.timedelta(gap["p25"]),
-                        "likely": mid(d) + dt.timedelta(gap["p50"]),
+                        "likely": ga_date(d) + dt.timedelta(gap["p50"]),
                         "latest": d["latest"] + dt.timedelta(gap["p75"])})
         ev.append(f"Major releases come {gap['p50']} days apart (middle half "
-                  f"{gap['p25']}–{gap['p75']}); {dev['name'].title()} GA is expected around {mid(d)}")
+                  f"{gap['p25']}–{gap['p75']}); {dev['name'].title()} GA is "
+                  + ("overdue" if d.get("overdue") else f"expected around {mid(d)}"))
     if not windows:
         return None
     likely = min(w["likely"] for w in windows) + (
@@ -489,6 +490,12 @@ def estimate_planned(data, announced, models, dev):
 def mid(w):
     """A single representative date for a window whose 'likely' may be unknown."""
     return w["likely"] or w["earliest"] + (w["latest"] - w["earliest"]) / 2
+
+
+def ga_date(w):
+    """Like mid(), but an overdue release counts as landing today: the middle
+    of its remaining window would be a date nothing else on the page shows."""
+    return TODAY if w.get("overdue") else mid(w)
 
 
 def first_slot(start, ga):
@@ -515,7 +522,7 @@ def eol_policy(results, models, announced):
             g = announced[f"{successor}.2.0"]
             ga = {"earliest": g, "likely": g, "latest": g}
         elif succ:
-            ga = dict(succ["eta"], likely=mid(succ["eta"]))
+            ga = dict(succ["eta"], likely=ga_date(succ["eta"]))
         else:
             if dev:
                 base, n = dev["eta"], successor - dev["major"]
@@ -525,7 +532,7 @@ def eol_policy(results, models, announced):
             if n < 0:
                 continue
             ga = {"earliest": base["earliest"] + dt.timedelta(n * gap["p25"]),
-                  "likely": mid(base) + dt.timedelta(n * gap["p50"]),
+                  "likely": ga_date(base) + dt.timedelta(n * gap["p50"]),
                   "latest": base["latest"] + dt.timedelta(n * gap["p75"])}
         ga_known = f"{successor}.2.0" in announced
 
@@ -563,8 +570,9 @@ def eol_policy(results, models, announced):
                              f"so {final} is expected to be the last {r['name']} release and "
                              f"{r['name'].title()} goes EOL with it.")
         else:
-            r["summary"] += (f" Not the last one: {succ_name} isn't GA yet (expected around "
-                             f"{ga['likely']}), and {r['name']} gets one more point release after "
+            ga_when = ("overdue, could land any day" if ga.get("overdue")
+                       else f"expected around {ga['likely']}")
+            r["summary"] += (f" Not the last one: {succ_name} isn't GA yet ({ga_when}), and {r['name']} gets one more point release after "
                              f"that. Expect the final release ({final}) and EOL around {fin_l} "
                              f"(range {r['eol']['earliest']} – {r['eol']['latest']}).")
 
