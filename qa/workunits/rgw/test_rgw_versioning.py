@@ -126,6 +126,57 @@ def main():
     assert head_resp['LastModified'] == null_version['LastModified'], \
       'null version mtime changed after failed olh upgrade'
 
+    # TESTCASE 'verify that null object version mtime matches its index entry after a failed olh upgrade races with an overwrite'
+    log.debug('TEST: verify that null object version mtime matches its index entry after a failed olh upgrade races with an overwrite\n')
+    connection.BucketVersioning(BUCKET_NAME).suspend()
+    key = str(uuid.uuid4())
+    bucket.put_object(Key=key, Body=b"data")  # "null" version
+    connection.BucketVersioning(BUCKET_NAME).enable()
+
+    put_errors = []
+    def failed_put():
+        try:
+            bucket.put_object(Key=key, Body=b"versioned data")
+        except Exception as e:
+            log.debug(e)
+            put_errors.append(e)
+
+    try:
+        exec_cmd('ceph config set client rgw_debug_inject_set_olh_err 2')
+        exec_cmd('ceph config set client rgw_inject_delay_sec 20')
+        exec_cmd('ceph config set client rgw_inject_delay_pattern delay_olh_cancel_modification')
+        time.sleep(5)
+
+        # trigger rollback by failed put; the put doesn't return until its delayed
+        # rollback is done
+        t = threading.Thread(target=failed_put)
+        t.start()
+        time.sleep(1)
+
+        # overwrite the null version while the rollback is delayed
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
+        time.sleep(5)
+        connection.BucketVersioning(BUCKET_NAME).suspend()
+        put_resp = bucket.put_object(Key=key, Body=b"new data")
+        t.join()
+        assert put_errors, 'versioned put did not fail as expected'
+    finally:
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
+        exec_cmd('ceph config rm client rgw_inject_delay_sec')
+        exec_cmd('ceph config rm client rgw_inject_delay_pattern')
+        time.sleep(10)
+
+    # now with the successful put that overwrote the null version
+    # the overwrite's mtime must survive the delayed rollback
+    # so HEAD and the bucket index entry still agree
+    get_resp = bucket.Object(key).get()
+    assert put_resp.e_tag == get_resp['ETag'], 'get did not return the overwritten null version'
+    head_resp = connection.meta.client.head_object(Bucket=BUCKET_NAME, Key=key, VersionId='null')
+    list_resp = connection.meta.client.list_object_versions(Bucket=BUCKET_NAME, Prefix=key)
+    null_version = [v for v in list_resp['Versions'] if v['VersionId'] == 'null'][0]
+    assert head_resp['LastModified'] == null_version['LastModified'], \
+      'null version mtime changed after failed olh upgrade raced with an overwrite'
+
     # TESTCASE 'verify that concurrent delete requests do not leave behind olh entries'
     log.debug('TEST: verify that concurrent delete requests do not leave behind olh entries\n')
     bucket.object_versions.all().delete()
