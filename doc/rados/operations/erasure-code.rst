@@ -62,11 +62,17 @@ profile can be displayed with this command:
    
 ::
 
+   crush-device-class=
+   crush-failure-domain=host
+   crush-root=default
+   crush-zone-failure-domain=datacenter
    k=2
    m=2
    plugin=isa
-   crush-failure-domain=host
    technique=reed_sol_van
+
+The ``crush-*`` keys are where erasure-coded pools that name no profile are
+placed (see :ref:`pool-creation-defaults`).
 
 .. note::
   The profile just displayed is for the *default* erasure-coded pool, not the

@@ -307,12 +307,14 @@ new pool is stretched without extra options, including pools that Rook or
 other tools create.
 
 Change the defaults with ``ceph osd pool default set``. The defaults apply to
-every pool created afterwards, not only the next one, and there is one set of
-them for all pools: after ``ceph osd pool default set --pool_type erasure``,
-for example, every pool created without ``--pool_type`` is erasure-coded. The
-command takes the same parameters as ``ceph osd pool create``, and it checks
-that a pool created with the resulting defaults would be a valid
-configuration, refusing defaults that fail.
+every pool created afterwards, not only the next one: after ``ceph osd pool
+default set --pool_type erasure``, for example, every pool created without
+``--pool_type`` is erasure-coded. Erasure-coded pools take K, M and their
+placement from the ``default`` erasure code profile, which the command
+changes, instead of the options, while the default pool type is ``erasure``. The command takes the same
+parameters as ``ceph osd pool create``, and it checks that a pool created with
+the resulting defaults would be a valid configuration, refusing defaults that
+fail.
 
 For erasure-coded pools:
 
@@ -364,12 +366,11 @@ To stretch an existing pool, set its ``num_zones`` to 2:
   ``ceph osd pool set {pool-name} allow_ec_optimizations true``.
 * ``--replica {count}`` sets the number of replicas in each zone; without it,
   the pool creation default applies.
-* The pool gets a new CRUSH rule. It is built from ``--zone_failure_domain``,
-  ``--osd_failure_domain``, ``--root`` and ``--class`` when they are given,
-  and otherwise from the pool creation defaults set with
-  ``ceph osd pool default set`` (see :ref:`pool-creation-defaults`), not from
-  the pool's previous rule. An erasure-coded pool takes its root, OSD failure
-  domain and device class from its erasure code profile instead. The previous
+* The pool gets a new CRUSH rule with the CRUSH root, the bucket type for the
+  copies within a zone, and the device class of its previous rule.
+  ``--root``, ``--osd_failure_domain`` and ``--class`` (or ``--no-class``)
+  change them, and ``--zone_failure_domain`` gives the zone bucket type,
+  otherwise :confval:`osd_pool_default_zone_failure_domain`. The previous
   rule is removed if no other pool uses it, even if it was written by hand. To
   use a custom rule, give it with ``--crush_rule``.
 * Setting the pool's current ``num_zones`` again leaves the pool unchanged.
@@ -508,25 +509,55 @@ The upgrade has three stages:
 
 #. **The commit:** ``ceph osd require-osd-release vampire``. It is refused
    until every Monitor, and every OSD that is up, runs the new release. In
-   this one OSDMap update the Monitors give each pool in stretch mode two
-   zones, with half its copies in each, and ``min_size`` becomes a count in
-   each zone: 2 of 4 becomes 1 of 2 in each zone. An odd value rounds up, so
-   3 of 4 becomes 2 of 2 in each zone: stricter, never weaker. If a zone is
-   down at the commit, the value is worked out from
-   ``mon_stretch_pool_min_size``, so it is right once the zone returns. Every
-   PG of a stretch pool re-peers once. The Monitors also set the pool creation
-   defaults for stretched pools, in the ``global`` section of the
-   configuration database: :confval:`osd_pool_default_num_zones` to ``2``,
-   :confval:`osd_pool_default_zone_failure_domain` to the dividing bucket
-   type, and :confval:`osd_pool_default_size` to half of
-   ``mon_stretch_pool_size``.
+   this one OSDMap update the Monitors convert each pool in stretch mode as
+   follows, and every PG of a stretch pool re-peers once:
+
+   .. list-table::
+      :header-rows: 1
+      :widths: 16 36 48
+
+      * - Pool field
+        - Before the commit
+        - After the commit
+      * - ``num_zones``
+        - 1
+        - 2
+      * - ``replica``
+        - Not set
+        - Half of ``size``: the copies in each zone
+      * - ``size``
+        - The copies in all, for example 4
+        - Unchanged
+      * - ``min_size``
+        - The copies in all, for example 2 of 4. The Monitors halve it
+          while a zone is down.
+        - The copies in each zone: half the old value, rounded up, so 2 of
+          4 becomes 1 of 2 in each zone and 3 of 4 becomes 2 of 2, never
+          weaker. If a zone is down at the commit, half of
+          ``mon_stretch_pool_min_size``, rounded up, so that it is right
+          once the zone returns. The Monitors no longer halve it.
+      * - CRUSH rule
+        - The stretch rule
+        - Unchanged
+
+   The Monitors also set the pool creation defaults for stretched pools, in the
+   ``global`` section of the configuration database:
+   :confval:`osd_pool_default_num_zones` to ``2``,
+   :confval:`osd_pool_default_zone_failure_domain` to the dividing bucket type,
+   and :confval:`osd_pool_default_size` to half of ``mon_stretch_pool_size``.
+   Each erasure-coded pool that used the ``default`` erasure code profile gets
+   a copy of its own, and ``default`` gets the placement keys it lacks from
+   these options, so new erasure-coded pools are placed as before.
 
    Only a replicated pool whose CRUSH rule places half of an even number of
    copies in each zone can be split this way. Any other pool, for example one
    whose ``size`` was set to 3, keeps one zone and the rules of earlier
-   releases, and ``ceph mon disable_stretch_mode`` leaves it stretched.
-   ``STRETCH_MODE_POOL_NOT_CONVERTED`` names such pools before the commit,
-   while they can still be changed, and after it.
+   releases. ``STRETCH_MODE_POOL_NOT_CONVERTED`` names such pools before the
+   commit, while they can still be changed, and after it. After the commit,
+   ``ceph mon disable_stretch_mode`` is refused until each of them is given
+   two zones with ``ceph osd pool set {pool-name} num_zones 2``, or made an
+   ordinary pool in one zone with ``ceph osd pool set {pool-name} num_zones
+   1``.
 
 #. **After the commit,** everything on this page applies. OSDs of the earlier
    release can no longer start, on any cluster, stretched or not: upgrade any
@@ -534,6 +565,14 @@ The upgrade has three stages:
    returns. With ``--yes-i-really-mean-it`` the commit goes ahead while older
    OSDs are up; they are marked down and cannot rejoin until they are
    upgraded.
+
+Erasure code profiles and their CRUSH rules change in two ways, on every
+cluster. A profile is deleted with the last pool that uses it: in earlier
+releases a profile created with ``ceph osd erasure-code-profile set`` remained
+until it was removed, so scripts that create a profile once and reuse it after
+deleting its pools must now set it again before each reuse. And from the
+commit, each new erasure-coded pool gets a CRUSH rule of its own instead of
+sharing the ``erasure-code`` rule.
 
 Required actions by deployment type:
 
@@ -558,7 +597,8 @@ Required actions by deployment type:
      - Nothing, unless ``STRETCH_MODE_POOL_NOT_CONVERTED`` names a pool:
        change it before the commit, for example with
        ``ceph osd pool set {pool-name} size 4`` if its rule places two copies
-       in each zone. If a Monitor's ``ceph.conf`` or a ``mon`` section sets
+       in each zone, or after it as ``STRETCH_MODE_POOL_NOT_CONVERTED``
+       describes. If a Monitor's ``ceph.conf`` or a ``mon`` section sets
        :confval:`osd_pool_default_size`, remove it after the commit:
        ``POOL_DEFAULT_CONFIG_OVERRIDE`` says so.
      - Mix stretched and one-zone pools; stretch erasure-coded pools
@@ -641,8 +681,9 @@ pool with ``--root``:
    ceph osd pool set mypool num_zones 1 --root dc1
 
 The pool keeps its existing copies, in either zone, while its data moves into
-``dc1``. Without ``--root``, the pool uses the default CRUSH root and stays
-spread over both zones, without the failure handling of stretch mode.
+``dc1``. Without ``--root``, the pool keeps the CRUSH root of its rule,
+normally ``default``, and stays spread over both zones, without the failure
+handling of stretch mode.
 
 For Every Pool
 --------------
@@ -718,6 +759,11 @@ A Command to Stretch a Pool or the Cluster Is Refused
      - Each zone needs at least ``replica`` hosts, one copy per host
      - Add hosts, lower ``--replica``, or choose another
        ``--osd_failure_domain``
+   * - The placement of the pool's CRUSH rule
+     - Ceph cannot read the CRUSH root, failure domain and device class from
+       the pool's rule, for example a rule written by hand
+     - Give ``--crush_rule``, or ``--root``, ``--osd_failure_domain`` and
+       ``--class`` or ``--no-class``
    * - EC optimizations
      - The erasure-coded pool does not have FastEC enabled
      - ``ceph osd pool set {pool-name} allow_ec_optimizations true``
@@ -727,11 +773,6 @@ A Command to Stretch a Pool or the Cluster Is Refused
    * - The number of zones
      - The CRUSH map does not have exactly two zones that hold OSDs
      - Give OSDs to two zones only; the tiebreaker's site holds none
-   * - The upgrade commit
-     - Until the upgrade is committed, pools keep one zone, pool creation
-       defaults cannot be set, and in stretch mode erasure-coded pools cannot
-       be created
-     - Finish the upgrade and run ``ceph osd require-osd-release vampire``
 
 PGs Stop Serving I/O
 --------------------
@@ -754,10 +795,6 @@ PGs Stop Serving I/O
      - Fewer than ``min_size`` copies are left in the surviving zone
      - Check ``ceph osd pool get {pool-name} min_size`` (a count per zone)
        and bring the surviving zone's OSDs back; see `How min_size Works`_
-   * - Before the upgrade is committed, a pool with a device-class CRUSH
-       rule stops while a zone is down
-     - The earlier release's behaviour, kept until the commit
-     - Bring the zone back, or commit the upgrade
    * - Writes stop although one zone has free space
      - The lighter zone's OSDs are full; a stretched pool needs room in both
        zones
@@ -950,15 +987,19 @@ optional:
 * ``--zone_failure_domain``, ``--osd_failure_domain``, ``--root`` and
   ``--class`` on ``ceph osd pool create`` or
   ``ceph osd pool set {pool-name} num_zones 2`` change the generated rule: the
-  zone bucket type, the bucket type for the copies within a zone (default
-  ``host``), the CRUSH root, and the device class.
+  zone bucket type, the bucket type for the copies within a zone, the CRUSH
+  root, and the device class. A new pool otherwise takes them from the pool
+  creation defaults, and ``num_zones`` from the pool's previous rule.
 * Changing ``replica`` on a two-zone pool assigns a rule named
-  ``{pool-name}-replica-{count}``.
-* Setting a pool to one zone assigns the default replicated rule, or a
-  one-zone rule for an erasure-coded pool. Replaced rules are removed when no
-  other pool references them.
+  ``{pool-name}-replica-{count}``, with the placement of the previous rule.
+  The new rule chooses the zones, so a rule with one ``take`` step per zone
+  must be written again for the new count to keep the primaries in one zone.
+* Setting a pool to one zone assigns a one-zone rule with the placement of
+  the previous rule, or the default replicated rule for a replicated pool on
+  the ``default`` root with the ``host`` failure domain and no device class.
+  Replaced rules are removed when no other pool references them.
 * ``ceph mon disable_stretch_mode {rule} --yes-i-really-mean-it`` moves every
-  replicated pool to ``{rule}`` instead of the default rule.
+  replicated pool to ``{rule}`` instead.
 
 To use a custom rule:
 
@@ -1024,13 +1065,15 @@ By default, zones are CRUSH buckets of type ``datacenter``, as set by
 for example ``room`` or ``rack``:
 
 * For all new pools, set the pool creation default with
-  ``ceph osd pool default set --zone_failure_domain {type}``.
+  ``ceph osd pool default set --zone_failure_domain {type}``. For
+  erasure-coded pools this changes the ``default`` erasure code profile, so
+  set it while the default pool type is ``erasure``.
 * For one pool, pass ``--zone_failure_domain {type}`` to
   ``ceph osd pool create`` or to
   ``ceph osd pool set {pool-name} num_zones 2``.
 * For an erasure-coded pool, ``--zone_failure_domain`` takes precedence, then
-  the erasure code profile's ``crush-zone-failure-domain``, then the pool
-  creation default.
+  the erasure code profile's ``crush-zone-failure-domain``, which the
+  ``default`` profile always has, then the pool creation default.
 
 The Monitors' CRUSH locations must use the same bucket type. Changing the
 failure domain of a pool that is already stretched requires a hand-written

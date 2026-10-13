@@ -769,7 +769,7 @@ Replicated CRUSH rules over zones
 Ceph generates a CRUSH rule for each replicated pool that is stretched over
 zones without being given one: by ``ceph osd pool create {pool-name}
 --num_zones 2``, by ``ceph osd pool set {pool-name} num_zones 2``, and by
-``ceph mon enable_stretch_mode`` once the upgrade is committed. The generated
+``ceph mon enable_stretch_mode``. The generated
 rule has this form, from the pool's ``replica`` and the
 :confval:`osd_pool_default_root`, :confval:`osd_pool_default_zone_failure_domain`,
 :confval:`osd_pool_default_osd_failure_domain` and

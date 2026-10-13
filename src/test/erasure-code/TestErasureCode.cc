@@ -188,7 +188,80 @@ TEST(ErasureCodeTest, zone_failure_domain_comes_from_the_caller)
 
   CrushWrapper crush;
   crush.create();
-  EXPECT_EQ(-EINVAL, erasure_code.create_rule("r", 2, "", "", "", "", crush, &ss));
+  EXPECT_EQ(-EINVAL, erasure_code.create_rule("r", 2, "", "", "", std::nullopt, crush, &ss));
+}
+
+// A pool going to one zone must honour the root (and OSD failure domain and
+// device class) the caller gives create_rule, not the profile's. Here the
+// caller's root "myroot" exists but the profile's default root ("default")
+// does not, so a rule can be built only if create_rule uses the given root.
+TEST(ErasureCodeTest, one_zone_rule_honours_the_given_root)
+{
+  ErasureCodeTest erasure_code(2, 1, 4096);
+  ErasureCodeProfile profile;
+  ostringstream ss;
+  ASSERT_EQ(0, erasure_code.ErasureCode::init(profile, &ss));
+
+  CrushWrapper crush;
+  crush.create();
+  crush.set_type_name(0, "osd");
+  crush.set_type_name(1, "host");
+  crush.set_type_name(2, "root");
+  int rootno;
+  crush.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1, 2, 0,
+                   NULL, NULL, &rootno);
+  crush.set_item_name(rootno, "myroot");
+
+  const int rule =
+    erasure_code.create_rule("r", 1, "myroot", "", "host", std::nullopt, crush, &ss);
+  ASSERT_LE(0, rule) << ss.str();
+  // the TAKE step (indep mode: steps 0 and 1 set the tries, step 2 is TAKE)
+  // targets the given root, not the profile's default root
+  EXPECT_EQ(CRUSH_RULE_TAKE, crush.get_rule_op(rule, 2));
+  EXPECT_EQ(crush.get_item_id("myroot"), crush.get_rule_arg1(rule, 2));
+}
+
+// create_rule's device_class is tri-state. std::nullopt inherits the
+// profile's crush-device-class; an explicit value is used verbatim, and an
+// empty string forces a rule with no device class. Before that distinction a
+// pool could not drop a class its profile set without editing the profile.
+// The profile here names a class the crushmap lacks, so the inherit path
+// fails to resolve it while the explicit-no-class path builds the rule.
+TEST(ErasureCodeTest, one_zone_rule_device_class_is_tristate)
+{
+  ErasureCodeTest erasure_code(2, 1, 4096);
+  ErasureCodeProfile profile;
+  profile["crush-device-class"] = "ssd";
+  ostringstream ss;
+  ASSERT_EQ(0, erasure_code.ErasureCode::init(profile, &ss));
+
+  auto fresh_crush = [] {
+    auto c = std::make_unique<CrushWrapper>();
+    c->create();
+    c->set_type_name(0, "osd");
+    c->set_type_name(1, "host");
+    c->set_type_name(2, "root");
+    int rootno;
+    c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1, 2, 0,
+                  NULL, NULL, &rootno);
+    c->set_item_name(rootno, "myroot");
+    return c;
+  };
+
+  // std::nullopt inherits the profile's 'ssd' class, which the crushmap has
+  // no devices of, so the rule cannot be built.
+  {
+    auto crush = fresh_crush();
+    EXPECT_GT(0, erasure_code.create_rule("inherit", 1, "myroot", "", "host",
+                                          std::nullopt, *crush, &ss));
+  }
+  // an explicit empty class forces no device class, so the same rule builds.
+  {
+    auto crush = fresh_crush();
+    EXPECT_LE(0, erasure_code.create_rule("noclass", 1, "myroot", "", "host",
+                                          std::string(), *crush, &ss))
+      << ss.str();
+  }
 }
 
 /*
