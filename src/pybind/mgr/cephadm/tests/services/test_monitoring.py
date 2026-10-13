@@ -1195,8 +1195,9 @@ class TestMonitoring:
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, MonitoringSpec('alloy')):
+                daemon_spec = CephadmDaemonDeploySpec('test', 'daemon', 'alloy')
                 config, _ = service_registry.get_service('alloy').generate_config(
-                    CephadmDaemonDeploySpec('test', 'daemon', 'alloy'))
+                    DaemonDeployContext(daemon_spec, MonitoringSpec('alloy')))
                 alloy_cfg = config['files']['config.alloy']
 
                 assert 'loki.relabel "ceph_component"' in alloy_cfg
@@ -1215,8 +1216,9 @@ class TestMonitoring:
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, MonitoringSpec('alloy')):
+                daemon_spec = CephadmDaemonDeploySpec('test', 'daemon', 'alloy')
                 config, _ = service_registry.get_service('alloy').generate_config(
-                    CephadmDaemonDeploySpec('test', 'daemon', 'alloy'))
+                    DaemonDeployContext(daemon_spec, MonitoringSpec('alloy')))
                 alloy_cfg = config['files']['config.alloy']
 
                 assert 'loki.process "remove_timestamp"' in alloy_cfg

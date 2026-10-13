@@ -3,7 +3,7 @@ local.file_match "system" {
 		__address__ = "localhost",
 		__path__    = "/var/log/ceph/**/*.log",
 		job         = "Cluster Logs",
-		host        = constants.hostname
+		host        = constants.hostname,
 	}]
 }
 
@@ -15,6 +15,13 @@ loki.source.file "system" {
 
 loki.relabel "ceph_component" {
 	forward_to = [loki.process.remove_timestamp.receiver]
+
+	// ensure host is a stream label
+	rule {
+		source_labels = ["host"]
+		target_label  = "host"
+		action        = "replace"
+	}
 
 	// ceph-client.<id>.log - rgw, rbd-mirror, nfs, ceph-exporter
 	rule {
