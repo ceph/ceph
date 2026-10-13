@@ -449,6 +449,8 @@ protected:
   bool range_parsed;
   bool skip_manifest;
   bool skip_decrypt{false};
+  std::string skip_decompress_types; // compression types to send as stored
+  bool decompress_skipped{false};
   bool sync_cloudtiered{false};
   utime_t gc_invalidate_time;
   bool is_slo;

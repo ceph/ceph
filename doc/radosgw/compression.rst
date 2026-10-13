@@ -120,11 +120,11 @@ lifecycle transitions, and objects replicated by multisite sync. Multipart
 uploads, uploads without a known size, POST uploads, Swift bulk uploads,
 writes through librgw and ``radosgw-admin object put`` ignore the minimum size.
 
-Copies, lifecycle transitions and multisite sync store an object that is below
-the minimum size uncompressed even if its source is compressed, unless the
-object is encrypted and is copied without being decrypted. Multisite sync
-applies the destination zone's setting to the whole object, so a small object
-that was uploaded in parts can be stored uncompressed in another zone.
+Copies and lifecycle transitions store an object that is below the minimum
+size uncompressed even if its source is compressed, unless the object is
+encrypted and is copied without being decrypted. Multisite sync applies the
+destination zone's setting only to objects that it compresses itself (see
+`Multisite Sync`_).
 
 .. note:: ``radosgw-admin`` from a release without this option drops the
    setting, for every storage class, whenever it writes the zone.
@@ -148,6 +148,28 @@ initiated afterwards use the new ``type``.
    :ref:`feature_compress_encrypted` zonegroup feature while an upload is in
    progress can still cause CompleteMultipartUpload to fail with
    ``InvalidPart``.
+
+Multisite Sync
+--------------
+
+Replicated objects follow the destination zone's compression settings for
+their storage class. If an object is already compressed with the ``type`` that
+the destination zone uses for its storage class, multisite sync transfers it as
+stored, so the source zone doesn't decompress it and the destination zone
+doesn't recompress it. Otherwise the source zone decompresses the object, and
+the destination zone compresses it according to its settings.
+
+An object that is transferred as stored keeps its compression even if it is
+smaller than the destination zone's minimum size. When the destination zone
+compresses an object itself, its minimum size applies to the whole object, so
+a small object that was uploaded in parts can be stored uncompressed.
+
+Objects are transferred decompressed if the source zone runs an older release,
+if the gateway that syncs the object cannot load the plugin for the type, or
+if ``rgw_sync_obj_skip_decompress`` is disabled on the gateways that run sync
+in the destination zone. Unencrypted objects copied from another
+zonegroup are always transferred decompressed. ``rgw_sync_obj_etag_verify``
+does not verify objects that are transferred compressed.
 
 
 Statistics

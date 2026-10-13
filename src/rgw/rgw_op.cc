@@ -2888,13 +2888,42 @@ void RGWGetObj::execute(optional_yield y)
   }
   /* end gettorrent */
 
-  // run lua script on decompressed and decrypted data - first filter runs last
-  op_ret = get_lua_filter(&run_lua, filter);
-  if (run_lua != nullptr) {
-    filter = run_lua.get();
-  }
+  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
   if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
     goto done_err;
+  }
+
+  // where encryption and compression are combined, compression was applied to
+  // the data before encryption. if the system header rgwx-skip-decrypt is
+  // present, we have to skip the decompression filter too. multisite sync also
+  // fetches a whole compressed object as stored if the destination would
+  // compress it with the same type, so it doesn't have to recompress it
+  encrypted = attrs.count(RGW_ATTR_CRYPT_MODE);
+  if (need_decompress && encrypted) {
+    decompress_skipped = skip_decrypt;
+  } else if (need_decompress && skip_manifest && !range_str &&
+             !multipart_part_num && !skip_decompress_types.empty() &&
+             // only the prepended metadata says the data is compressed
+             s->info.args.exists(RGW_SYS_PARAM_PREFIX "prepend-metadata")) {
+    std::string storage_class;
+    if (auto i = attrs.find(RGW_ATTR_STORAGE_CLASS); i != attrs.end()) {
+      storage_class = i->second.to_str();
+    }
+    decompress_skipped = rgw_sync_compression_type_matches(
+        skip_decompress_types, storage_class, cs_info.compression_type);
+  }
+
+  // run lua script on decompressed and decrypted data - first filter runs last.
+  // there's no decompressed data when sync fetches a compressed object as stored
+  if (!decompress_skipped || encrypted) {
+    op_ret = get_lua_filter(&run_lua, filter);
+    if (run_lua != nullptr) {
+      filter = run_lua.get();
+    }
+    if (op_ret < 0) {
+      goto done_err;
+    }
   }
 
 #ifdef WITH_ARROW_FLIGHT
@@ -2910,18 +2939,7 @@ void RGWGetObj::execute(optional_yield y)
 #endif
 
 
-  op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
-    goto done_err;
-  }
-
-  // where encryption and compression are combined, compression was applied to
-  // the data before encryption. if the system header rgwx-skip-decrypt is
-  // present, we have to skip the decompression filter too
-  encrypted = attrs.count(RGW_ATTR_CRYPT_MODE);
-
-  if (need_decompress && (!encrypted || !skip_decrypt)) {
+  if (need_decompress && !decompress_skipped) {
     s->obj_size = cs_info.orig_size;
     s->object->set_obj_size(cs_info.orig_size);
     decompress.emplace(s->cct, &cs_info, partial_content, filter);

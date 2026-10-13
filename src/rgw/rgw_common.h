@@ -379,6 +379,10 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_RESTORE_ALREADY_IN_PROGRESS 2500
 #define ERR_EXPIRED_TOKEN 2501
 
+// internal: a sync fetch got an object as stored with a compression type that
+// differs from its destination storage class's, so fetch it decompressed
+#define ERR_SYNC_COMPRESSION_MISMATCH 2502
+
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
 #endif
