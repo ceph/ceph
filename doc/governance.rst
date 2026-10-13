@@ -93,6 +93,20 @@ alternative to Maintainer-based membership allowed by Charter section 2.b.
  * The list below is the authoritative membership; the CSC email list and
    the Ceph website follow it
  * Members may resign at any time by email to the Co-Chairs
+ * Each member's role is to preserve the health and growth of the project,
+   and to serve the community and users
+
+When a member is added, the Co-Chairs (or someone they ask) give them access
+to:
+
+ * the CSC mailing list
+ * the CSC group on Slack
+ * the CSC team on GitHub
+ * the CSC group on the tracker (Redmine)
+
+and add them to the list below.  The voter list for CSC elections and
+motions is generated from that list, so it needs no separate step.  When a
+member leaves, the same access is removed and they are taken off the list.
 
 .. note:: A "supermajority" is a 2/3 majority of votes on a particular item
           in an election. Abstaining does not bias a vote.
@@ -164,10 +178,6 @@ Responsibilities
  * Bug triage, scrubs
  * etc.
 
-Team leads are selected by the executive council, generally based on
-the recommendation by team members and outgoing lead.  Periodic
-rotation of lead responsibility among team members is encouraged.
-
 The Ceph Foundation
 -------------------
 
@@ -177,6 +187,88 @@ and ecosystem.  It has no direct control over the technical direction
 of the Ceph open source project beyond offering feedback and input
 into the collaborative development process.
 
+The Foundation also funds staff who work with the project.  They are not
+project roles and are not chosen by the CSC:
+
+ * a Community Manager, for events, the newsletter, the website and other
+   community outreach
+ * a Technical Writer, who works on the documentation with the
+   Documentation Lead
+
 For more information, see :ref:`foundation`.
+
+Release Manager
+===============
+
+Responsibilities
+----------------
+
+ * Maintain the release schedule for the development branch and the
+   supported stable releases (see :ref:`ceph-releases-general`)
+ * Coordinate feature freeze, release candidates and point releases with
+   the component team leads and QA
+ * Make sure the backports and tracker state for a release are complete,
+   and that the release notes are prepared
+ * Coordinate security releases with the Security Lead (see
+   :doc:`security/process`)
+ * Announce releases and end-of-life dates
+
+The Release Manager approves the publication of a release.  The role may
+rotate, and the Release Manager may name an acting Release Manager while
+away.
+
+Current Release Manager: Patrick Donnelly <pdonnell@ibm.com>
+
+Documentation Lead
+==================
+
+Responsibilities
+----------------
+
+ * Maintain the documentation in the ``doc/`` tree, the man pages and the
+   configuration option descriptions (``src/common/options/*.yaml.in``),
+   and the tools that build them
+ * Make sure that every pull request labelled ``documentation`` is
+   reviewed by a qualified contributor
+ * Merge approved documentation pull requests when their contributors
+   cannot merge them themselves
+ * Maintain the documentation style guide (see :ref:`documenting_ceph`)
+ * Cultivate new contributors: thank new submitters and help them with
+   the checklist, the pull request description and the other expectations
+ * Address tracker items, or assign them to contributors when feasible
+ * Work with the component team leads and the Release Manager so that
+   user-visible changes and release notes are documented
+
+The Ceph Foundation's Technical Writer works on the documentation with the
+Documentation Lead.
+
+Current Documentation Lead: Anthony D'Atri <anthony.datri@gmail.com>
+
+Security Lead
+=============
+
+Responsibilities
+----------------
+
+ * Coordinate Ceph's security posture, and drive the resolution of critical
+   vulnerabilities
+ * Make sure security reports are taken in, triaged and assigned, and
+   coordinate disclosure once fixes are ready (see :doc:`security/process`)
+ * Maintain the security@ceph.io list
+ * Report to the CSC monthly on vulnerabilities, new security concerns and
+   process changes
+ * Lead the :doc:`security/workinggroup`
+
+The role is described in full in :doc:`security/securitylead`.
+
+Current Security Lead: Sage McTaggart <sagemct@ibm.com>
+
+Appointing Leads
+================
+
+The executive council appoints all leads (component team leads, the Release
+Manager, the Documentation Lead and the Security Lead) on the recommendation
+of the CSC.  For a team lead, the CSC normally follows the recommendation of
+the team and the outgoing lead.  Periodic rotation is encouraged.
 
 .. _component team: https://ceph.io/en/community/team/
