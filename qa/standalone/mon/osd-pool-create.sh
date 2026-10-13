@@ -35,6 +35,17 @@ function run() {
 }
 
 # Before http://tracker.ceph.com/issues/8307 the invalid profile was created
+function TEST_pool_get_unset_option() {
+    local dir=$1
+    run_mon $dir a || return 1
+    ceph osd pool create p 8 || return 1
+    ! ceph osd pool get p compression_mode > $dir/out 2>&1 || return 1
+    grep "option 'compression_mode' is not set on pool 'p'" $dir/out || return 1
+    ceph osd pool set p compression_mode aggressive || return 1
+    ceph osd pool get p compression_mode | grep aggressive || return 1
+    ceph osd pool get p num_zones | grep 'num_zones: 1' || return 1
+}
+
 function TEST_erasure_invalid_profile() {
     local dir=$1
     run_mon $dir a || return 1
