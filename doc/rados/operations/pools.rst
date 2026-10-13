@@ -124,12 +124,11 @@ or:
     ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]] erasure \
              [erasure-code-profile] [crush-rule-name] [expected_num_objects] [options]
 
-``[options]`` are named options such as ``--autoscale_mode=<on,off,warn>`` and
-the options described below. Most parameters that are not given take their
-values from an ``osd_pool_default_*`` option, and ``--k`` and ``--m`` from the
-``default`` erasure code profile (see :ref:`pool-creation-defaults`). Until an
-upgrade to this release is committed with ``ceph osd require-osd-release``,
-``ceph osd pool create`` is refused.
+``[options]`` are named options such as
+``--pg_autoscale_mode=<on,off,warn>`` and the options described below. Most
+parameters that are not given take their values from an ``osd_pool_default_*``
+option; for an ``erasure`` pool, ``--k``, ``--m`` and the placement come from
+the ``default`` erasure code profile (see :ref:`pool-creation-defaults`).
 
 For a brief description of the elements of the above commands, consult the
 following:
@@ -183,7 +182,9 @@ following:
 
   :Type: String
   :Required: No.
-  :Default: replicated
+  :Default: :confval:`osd_pool_default_type`, which is ``replicated`` unless
+            it is changed, for example with
+            ``ceph osd pool default set --pool_type``.
 
 .. describe:: [crush-rule-name]
 
@@ -195,19 +196,12 @@ following:
 
    :Type: String
    :Required: No.
-   :Default: For ``replicated`` pools, it is by default the rule specified by
-             the :confval:`osd_pool_default_crush_rule` configuration option.
-             This rule must exist. A replicated pool with ``num_zones`` greater
-             than 1 gets the ``{pool-name}`` rule instead, unless
-             :confval:`osd_pool_default_crush_rule` names a rule, for example
-             one set with ``ceph osd pool default set --rule``, that places
-             the pool in its zones as described above. For ``erasure`` pools,
-             it is the ``erasure-code`` rule if neither an :ref:`erasure code
-             profile <erasure-code-profiles>` nor ``--k``, ``--m`` or a CRUSH
-             option (``--root``, ``--zone_failure_domain``,
-             ``--osd_failure_domain`` or ``--class``) is given and
-             ``num_zones`` is 1, or the ``{pool-name}`` rule if not. This rule
-             will be created implicitly if it doesn't already exist.
+   :Default: The first of these:
+
+             1. For a ``replicated`` pool, the rule that
+                :confval:`osd_pool_default_crush_rule` names, if the pool
+                needs no other placement (for example a device class).
+             2. A generated rule that meets the placement requirements.
 
 .. describe:: [erasure-code-profile=profile]
 
@@ -215,7 +209,7 @@ following:
    code profile <erasure-code-profiles>`. This profile must be an existing profile as defined via
    the dashboard or invoking ``osd erasure-code-profile set``. Without a
    profile, or with ``default``, a per-pool profile is created from
-   the ``default`` profile and ``--k`` and ``--m``, if given (see
+   the ``default`` profile, ``--k``, ``--m`` and the CRUSH options given (see
    :ref:`erasure-code-profile-lifecycle`). A profile whose ``stripe_unit``
    is not a multiple of 4096 bytes is refused unless ``--yes-i-really-mean-it``
    is given, and always for a pool over zones, which is a FastEC pool.  Note that
@@ -307,18 +301,32 @@ following:
    Where the CRUSH rule that is generated for the pool places it: the bucket
    that the rule starts from, the bucket type of the zones, the bucket type
    from which each replica or shard in a zone is chosen, and the device class.
-   They cannot be given with a CRUSH rule or an erasure code profile, and a
-   ``replicated`` pool accepts them only with ``num_zones`` greater than 1.
+   They cannot be given with a CRUSH rule or an erasure code profile. A
+   ``replicated`` pool accepts ``--root``, ``--osd_failure_domain`` and
+   ``--class`` with any ``num_zones`` (a one-zone pool gets a rule of its own,
+   unless the default rule already places it so);
+   ``--zone_failure_domain`` applies only with ``num_zones`` greater than 1.
 
    :Type: String
    :Required: No.
    :Default: For a ``replicated`` pool, :confval:`osd_pool_default_root`,
              :confval:`osd_pool_default_zone_failure_domain`,
              :confval:`osd_pool_default_osd_failure_domain` and
-             :confval:`osd_pool_default_class`. An ``erasure`` pool takes
-             the bucket, the bucket type within a zone and the device class
-             from the ``default`` erasure code profile, and the zone type
-             from :confval:`osd_pool_default_zone_failure_domain`.
+             :confval:`osd_pool_default_class`.
+
+             For an ``erasure`` pool, the value in its erasure code profile
+             if the profile sets it, else the same options. The ``default``
+             profile always sets them. See ``[erasure-code-profile=profile]``
+             above for the profile that a pool uses.
+
+.. describe:: --no-class
+
+   Gives the pool no device class, overriding a class it would otherwise take
+   from :confval:`osd_pool_default_class` or an erasure code profile. It cannot
+   be given with ``--class``.
+
+   :Type: Boolean
+   :Required: No.
 
 .. describe:: --yes-i-really-mean-it
 
@@ -478,11 +486,14 @@ Pool Creation Defaults
 ======================
 
 ``ceph osd pool create`` takes every parameter that it is not given from a pool
-creation default, an ``osd_pool_default_*`` configuration option. Together the
-defaults are one template that every pool created afterwards starts from: one
-pool type and one set of parameters, not separate defaults for each pool type.
-``ceph osd pool default get`` shows the defaults, and
-``ceph osd pool default set`` changes them after checking them.
+creation default. Together the defaults are one template that every pool
+created afterwards starts from. Most are ``osd_pool_default_*`` configuration
+options; ``erasure`` pools take K, M, the plugin and their placement (root,
+zone and OSD failure domains, and device class) from the ``default`` erasure
+code profile. ``ceph osd pool default get`` shows the defaults, and
+``ceph osd pool default set`` changes them after checking them. While the
+default pool type is ``erasure``, it writes the placement into the ``default``
+profile instead of the options.
 
 Showing the Defaults
 --------------------
@@ -543,8 +554,6 @@ two copies in each:
   zones a generated rule.
 * ``--replica 1`` also needs ``mon_allow_pool_size_one`` and
   ``--yes-i-really-mean-it``.
-* On an upgraded cluster, the command is refused until the upgrade is
-  committed with ``ceph osd require-osd-release``.
 
 Parameters and Options
 ----------------------
@@ -567,16 +576,24 @@ Parameters and Options
      -
    * - ``--zone_failure_domain``
      - :confval:`osd_pool_default_zone_failure_domain`
-     -
+     - With an ``erasure`` default type, written to the ``default``
+       erasure code profile instead
    * - ``--osd_failure_domain``
      - :confval:`osd_pool_default_osd_failure_domain`
-     -
+     - With an ``erasure`` default type, written to the ``default``
+       erasure code profile instead
    * - ``--root``
      - :confval:`osd_pool_default_root`
-     -
+     - With an ``erasure`` default type, written to the ``default``
+       erasure code profile instead
    * - ``--class``
      - :confval:`osd_pool_default_class`
-     -
+     - With an ``erasure`` default type, written to the ``default``
+       erasure code profile instead
+   * - ``--no-class``
+     - clears :confval:`osd_pool_default_class`
+     - With an ``erasure`` default type, empties ``crush-device-class``
+       in the ``default`` erasure code profile instead
    * - ``--replica``
      - :confval:`osd_pool_default_size`
      - Copies in each zone; the option keeps its name for backward
@@ -711,19 +728,22 @@ You may set values for the following keys:
    :Description: Sets the number of zones that the pool spans, each holding a
                  full copy of the pool. Setting the current value again changes
                  nothing. ``--crush_rule`` names the pool's new CRUSH rule.
-                 ``--replica``, ``--zone_failure_domain``,
-                 ``--osd_failure_domain``, ``--root`` and ``--class`` give the
-                 replicas in each zone of a replicated pool and the CRUSH rule
-                 that is generated for the pool; those not given come from the
-                 pool creation defaults, or from the profile of an
-                 erasure-coded pool. Only a FastEC pool can be stretched, so a
+                 ``--replica`` gives the replicas in each zone of a replicated
+                 pool, else the pool creation default.
+                 ``--zone_failure_domain``, ``--osd_failure_domain``,
+                 ``--root`` and ``--class`` or ``--no-class`` give the CRUSH
+                 rule that is generated for the pool; those not given are those
+                 of the pool's current rule, or, for the zone failure domain of
+                 a rule over one zone,
+                 :confval:`osd_pool_default_zone_failure_domain`. If Ceph
+                 cannot read the current rule, give ``--crush_rule``, or
+                 ``--root``, ``--osd_failure_domain`` and ``--class`` or
+                 ``--no-class``. Only a FastEC pool can be stretched, so a
                  legacy erasure-coded pool must first be converted with
                  ``allow_ec_optimizations``. Setting an erasure-coded pool's
                  ``num_zones`` to ``1``
                  needs ``--yes-i-really-mean-it``, because it can make PGs
-                 unavailable. ``num_zones`` cannot be changed until an upgrade
-                 to this release is committed with
-                 ``ceph osd require-osd-release``. See
+                 unavailable. See
                  :ref:`creating_stretch_pools` and :ref:`reducing_num_zones`.
    :Type: Integer
    :Valid Range: ``1`` to ``2``
@@ -739,7 +759,8 @@ You may set values for the following keys:
                  needs ``mon_allow_pool_size_one`` and
                  ``--yes-i-really-mean-it``. For a pool with ``num_zones``
                  greater than 1, it also gives the pool a CRUSH rule named
-                 ``{pool-name}-replica-{count}``. As setting ``size`` does,
+                 ``{pool-name}-replica-{count}``, with the placement of its
+                 current rule. As setting ``size`` does,
                  it resets ``min_size`` to its default for the new number of
                  replicas. See :ref:`creating_stretch_pools`.
    :Type: Integer
@@ -1195,8 +1216,7 @@ Here are the breakdowns of the arguments:
 
 .. describe:: {size}
          
-   The number of replicas for RADOS objects (and thus PGs) in the pool. It
-   must divide by the number of zones that the CRUSH rule spans.
+   The number of replicas for RADOS objects (and thus PGs) in the pool.
    
    :Type: Integer
    :Required: Yes, unless ``--replica`` is given.
@@ -1212,9 +1232,8 @@ Here are the breakdowns of the arguments:
 .. describe:: {min_size}
             
    The minimum number of replicas that must be active for I/O operations to be
-   serviced, counted over all zones, from 1 to ``{size}``. The pool keeps it
-   per zone, divided by the number of zones and rounded up, so ``{size}`` 4
-   with ``{min_size}`` 3 needs 2 replicas in each zone.
+   serviced, counted over all zones, from 1 to ``{size}``, as in earlier
+   releases.
 
    :Type: Integer
    :Required: Yes.

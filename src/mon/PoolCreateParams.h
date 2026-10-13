@@ -40,6 +40,12 @@ struct PoolCreateParams {
   std::string zone_failure_domain;
   std::string osd_failure_domain;
   std::string device_class;
+  // --no-class: the pool takes no device class, overriding any inherited
+  // default or profile class. Forces device_class empty and marks "class"
+  // given so it counts as an explicit placement choice.
+  bool no_class = false;
+  // both --class and --no-class were given, which is contradictory
+  bool no_class_conflict = false;
   int64_t pg_num = 0;
   int64_t pgp_num = 0;  // 0: pg_num
   std::string pg_autoscale_mode;
@@ -139,6 +145,11 @@ int check_pool_defaults(const PoolCreateParams& p,
 // code profile's, else the default.
 std::string effective_zone_failure_domain(const PoolCreateParams& p);
 
+// For an error of building or checking the CRUSH rule of a pool over zones:
+// the options that gave the values it was built or checked with, as
+// " (<option>, ...)", or "" when the command line gave them all.
+std::string rule_from_defaults(const PoolCreateParams& p);
+
 // The option that ceph osd pool default set writes for each parameter.
 const std::map<std::string, std::string>& pool_default_options();
 
@@ -166,6 +177,24 @@ int check_pool_replica_copies(int64_t n, std::string_view what,
 // holds it: the rule as its id, and k and m as the whole profile.
 std::string pool_default_value(const PoolCreateParams& p,
                                const std::string& param);
+
+// The options that ceph osd pool default set writes, with their values: the
+// given parameters except k and m, and except the placement for an erasure
+// default type, which go to the default profile.
+std::map<std::string, std::string> pool_default_values(
+    const PoolCreateParams& p);
+
+// The default profile is the template of erasure coded pools, so it always
+// has their placement: add the CRUSH keys it lacks from the defaults d.
+void fill_default_profile(std::map<std::string, std::string>* profile,
+                          const PoolCreateParams& d);
+
+// The default profile that ceph osd pool default set leaves, or std::nullopt
+// if it leaves it unchanged: --k and --m, and for an erasure default type
+// --root, --zone_failure_domain, --osd_failure_domain, --class and
+// --no-class.
+std::optional<std::map<std::string, std::string>> default_profile_after_set(
+    const PoolCreateParams& p);
 
 // The pool default options that the configuration database sets for
 // monitors other than by an unmasked global value, with the section that
