@@ -45,6 +45,7 @@
 #include "common/errno.h"
 #include "global/global_context.h"
 #include "include/denc.h"
+#include "include/denc_contiguous.h"
 #include "include/ceph_assert.h"
 #include "include/cephfs/json.h"
 #include "include/int_types.h"
@@ -63,6 +64,8 @@
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << ino() << ") "
 
 using namespace std;
+using ceph::encode_contiguous;
+using ceph::raw_bytes;
 
 void CInodeCommitOperation::update(ObjectOperation &op, inode_backtrace_t &bt) {
   using ceph::encode;
@@ -3959,57 +3962,6 @@ void CInode::clear_clientwriteable()
 }
 
 // =============================================
-
-namespace {
-/* A C struct the wire format carries as its raw bytes, the way
- * WRITE_RAW_ENCODER() encodes it, wrapped so that denc can place it in a
- * contiguous append alongside its neighbours. */
-template<typename T>
-struct raw_bytes_t {
-  const T& v;
-};
-
-template<typename T>
-raw_bytes_t<T> raw_bytes(const T& v)
-{
-  static_assert(std::is_trivially_copyable_v<T>);
-  return raw_bytes_t<T>{v};
-}
-}
-
-template<typename T>
-struct denc_traits<raw_bytes_t<T>> {
-  static constexpr bool supported = true;
-  static constexpr bool featured = false;
-  static constexpr bool bounded = true;
-  static constexpr bool need_contiguous = false;
-  static void bound_encode(const raw_bytes_t<T>&, size_t& p) {
-    p += sizeof(T);
-  }
-  static void encode(const raw_bytes_t<T>& o,
-		     ceph::buffer::list::contiguous_appender& p) {
-    p.append(reinterpret_cast<const char*>(&o.v), sizeof(T));
-  }
-};
-
-namespace {
-/* Append several values back to back, bounds-checking the buffer once rather
- * than once per value.  Each is encoded exactly as encode() would encode it
- * on its own.  This is encode(std::tuple{...}) without the tuple, which would
- * copy every string, map and vector it holds.
- *
- * encode_inodestat() below is called for every inode a readdir returns, and
- * a bufferlist append of a few bytes costs about as much as encoding the
- * field did. */
-template<typename... Ts>
-void encode_contiguous(ceph::buffer::list& bl, const Ts&... vs)
-{
-  size_t len = 0;
-  (denc(vs, len), ...);
-  auto app = bl.get_contiguous_appender(len);
-  (denc(vs, app), ...);
-}
-}
 
 int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			     SnapRealm *dir_realm,
