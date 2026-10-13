@@ -99,6 +99,18 @@
               >
                 {{ field.value }}
               </a>
+            } @else if (field.tooltip) {
+              <cds-tooltip-definition
+                class="cd-overview-value"
+                [autoAlign]="true"
+                [highContrast]="true"
+                [openOnHover]="true"
+                [dropShadow]="true"
+                [caret]="true"
+                [description]="field.tooltip"
+              >
+                {{ field.value | empty: field.emptyText }}
+              </cds-tooltip-definition>
             } @else {
               <span class="cds--type-body-compact-01 cd-overview-value">
                 {{ field.value | empty: field.emptyText }}
@@ -109,4 +121,10 @@
       }
     </div>
   </section>
+
+  @if (showFooter) {
+    <div class="cd-overview-footer">
+      <ng-content select="[footer]"></ng-content>
+    </div>
+  }
 </cds-tile>

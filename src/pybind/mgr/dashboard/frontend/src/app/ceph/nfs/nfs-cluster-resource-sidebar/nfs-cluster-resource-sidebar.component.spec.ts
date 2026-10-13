@@ -5,7 +5,7 @@ import { BehaviorSubject, of } from 'rxjs';
 
 import { NfsClusterResourceSidebarComponent } from './nfs-cluster-resource-sidebar.component';
 import { NfsClusterResourceStateService } from '~/app/shared/services/nfs-cluster-resource-state.service';
-import { NFSCluster } from '../models/nfs-cluster-config';
+import { NFSCluster } from '../models/nfs.model';
 
 describe('NfsClusterResourceSidebarComponent', () => {
   let component: NfsClusterResourceSidebarComponent;
@@ -17,7 +17,8 @@ describe('NfsClusterResourceSidebarComponent', () => {
     clusterSubject = new BehaviorSubject<NFSCluster | null>({
       name: 'demo-nfs-cluster',
       virtual_ip: null,
-      backend: [{ hostname: 'host1', ip: '1.2.3.4', status: 'running' }]
+      backend: [{ hostname: 'host1', ip: '1.2.3.4', status: 'running' }],
+      placement: {}
     });
 
     mockStateService = {

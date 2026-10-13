@@ -1,0 +1,444 @@
+@if (allowQoS || allowIops) {
+  <form
+    name="rateLimitForm"
+    #formDir="ngForm"
+    [formGroup]="rateLimitForm"
+    novalidate
+  >
+    <!-- Apply limit to - dropdown at top (only for cluster type) -->
+    @if (type === nfsType?.cluster) {
+      <div class="form-item">
+        <cds-select
+          formControlName="qos_type"
+          label="Apply limit to"
+          i18n-label
+          id="qos_type"
+          (change)="registerQoSChange($event.target.value)"
+        >
+          @for (t of qosType; track t.value) {
+            <option [value]="t.value">{{ t.key }}</option>
+          }
+        </cds-select>
+      </div>
+    }
+
+    <!-- Bandwidth limit -->
+    @if (
+      type === nfsType?.cluster ||
+      (type === nfsType?.export && nfsClusterData?.qos_type !== qosTypeValue?.PerClient && allowQoS)
+    ) {
+      <div class="form-item">
+        <div
+          class="cds--type-heading-compact-01"
+          i18n
+        >
+          Bandwidth limit
+        </div>
+        <p
+          class="cds--type-body-compact-01 cds-mt-3"
+          i18n
+        >
+          Limit the amount of data transferred each second.
+        </p>
+        <cds-toggle
+          [checked]="bwEnabled"
+          (checkedChange)="onBandwidthToggle()"
+          size="sm"
+          onText="On"
+          offText="Off"
+          ariaLabel="Bandwidth limit"
+          i18n-ariaLabel
+        ></cds-toggle>
+      </div>
+
+      <!-- Bandwidth Settings: Shares -->
+      @if (
+        bwEnabled &&
+        (qosTypeVal === qosTypeValue?.PerShare || qosTypeVal === qosTypeValue?.PerSharePerClient)
+      ) {
+        <div
+          class="cds--type-heading-compact-01 cds-mt-5"
+          i18n
+        >
+          Shares
+        </div>
+        <div class="form-item cds-mt-3">
+          <div class="form-item-append">
+            <div class="form-col">
+              <cds-number
+                formControlName="max_export_write_bw"
+                cdValidate
+                #exportWriteBwRef="cdValidate"
+                label="Maximum write bandwidth"
+                i18n-label
+                [min]="1"
+                [invalid]="exportWriteBwRef.isInvalid"
+              ></cds-number>
+            </div>
+            <div class="form-col-unit">
+              <cds-select
+                formControlName="max_export_write_bw_unit"
+                label=" "
+                id="max_export_write_bw_unit"
+                (change)="rateLimitForm.get('max_export_write_bw').updateValueAndValidity()"
+              >
+                @for (unit of bwUnits; track unit) {
+                  <option [value]="unit">{{ unit }}</option>
+                }
+              </cds-select>
+            </div>
+          </div>
+          @if (rateLimitForm.showError('max_export_write_bw', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (rateLimitForm.get('max_export_write_bw').hasError('bwMinSize')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Minimum bandwidth is 32 KiB/s.</span
+            >
+          }
+          @if (rateLimitForm.get('max_export_write_bw').hasError('bwMaxSize')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Maximum bandwidth is 100 GiB/s.</span
+            >
+          }
+        </div>
+        <div class="form-item">
+          <div class="form-item-append">
+            <div class="form-col">
+              <cds-number
+                formControlName="max_export_read_bw"
+                cdValidate
+                #exportReadBwRef="cdValidate"
+                label="Maximum read bandwidth"
+                i18n-label
+                [min]="1"
+                [invalid]="exportReadBwRef.isInvalid"
+              ></cds-number>
+            </div>
+            <div class="form-col-unit">
+              <cds-select
+                formControlName="max_export_read_bw_unit"
+                label=" "
+                id="max_export_read_bw_unit"
+                (change)="rateLimitForm.get('max_export_read_bw').updateValueAndValidity()"
+              >
+                @for (unit of bwUnits; track unit) {
+                  <option [value]="unit">{{ unit }}</option>
+                }
+              </cds-select>
+            </div>
+          </div>
+          @if (rateLimitForm.showError('max_export_read_bw', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (rateLimitForm.get('max_export_read_bw').hasError('bwMinSize')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Minimum bandwidth is 32 KiB/s.</span
+            >
+          }
+          @if (rateLimitForm.get('max_export_read_bw').hasError('bwMaxSize')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Maximum bandwidth is 100 GiB/s.</span
+            >
+          }
+        </div>
+      }
+
+      <!-- Bandwidth Settings: Clients -->
+      @if (
+        bwEnabled &&
+        ((type === nfsType?.cluster &&
+          (qosTypeVal === qosTypeValue?.PerClient ||
+            qosTypeVal === qosTypeValue?.PerSharePerClient)) ||
+          (type === nfsType?.export &&
+            qosTypeVal !== qosTypeValue?.PerClient &&
+            qosTypeVal !== qosTypeValue?.PerShare))
+      ) {
+        <div
+          class="cds--type-heading-compact-01 cds-mt-5 cds-mb-3"
+          i18n
+        >
+          Clients
+        </div>
+        <div class="form-item">
+          <div class="form-item-append">
+            <div class="form-col">
+              <cds-number
+                formControlName="max_client_write_bw"
+                cdValidate
+                #clientWriteBwRef="cdValidate"
+                label="Maximum write bandwidth"
+                i18n-label
+                [min]="1"
+                [invalid]="clientWriteBwRef.isInvalid"
+              ></cds-number>
+            </div>
+            <div class="form-col-unit">
+              <cds-select
+                formControlName="max_client_write_bw_unit"
+                label=" "
+                id="max_client_write_bw_unit"
+                (change)="rateLimitForm.get('max_client_write_bw').updateValueAndValidity()"
+              >
+                @for (unit of bwUnits; track unit) {
+                  <option [value]="unit">{{ unit }}</option>
+                }
+              </cds-select>
+            </div>
+          </div>
+          @if (rateLimitForm.showError('max_client_write_bw', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (rateLimitForm.get('max_client_write_bw').hasError('bwMinSize')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Minimum bandwidth is 32 KiB/s.</span
+            >
+          }
+          @if (rateLimitForm.get('max_client_write_bw').hasError('bwMaxSize')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Maximum bandwidth is 100 GiB/s.</span
+            >
+          }
+        </div>
+        <div class="form-item">
+          <div class="form-item-append">
+            <div class="form-col">
+              <cds-number
+                formControlName="max_client_read_bw"
+                cdValidate
+                #clientReadBwRef="cdValidate"
+                label="Maximum read bandwidth"
+                i18n-label
+                [min]="1"
+                [invalid]="clientReadBwRef.isInvalid"
+              ></cds-number>
+            </div>
+            <div class="form-col-unit">
+              <cds-select
+                formControlName="max_client_read_bw_unit"
+                label=" "
+                id="max_client_read_bw_unit"
+                (change)="rateLimitForm.get('max_client_read_bw').updateValueAndValidity()"
+              >
+                @for (unit of bwUnits; track unit) {
+                  <option [value]="unit">{{ unit }}</option>
+                }
+              </cds-select>
+            </div>
+          </div>
+          @if (rateLimitForm.showError('max_client_read_bw', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (rateLimitForm.get('max_client_read_bw').hasError('bwMinSize')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Minimum bandwidth is 32 KiB/s.</span
+            >
+          }
+          @if (rateLimitForm.get('max_client_read_bw').hasError('bwMaxSize')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Maximum bandwidth is 100 GiB/s.</span
+            >
+          }
+        </div>
+      }
+    }
+
+    <!-- IOPS limit -->
+    @if (
+      type === nfsType?.cluster ||
+      (type === nfsType?.export &&
+        nfsClusterData?.qos_type !== qosTypeValue?.PerClient &&
+        allowIops)
+    ) {
+      <div class="form-item cds-mt-5">
+        <div
+          class="cds--type-heading-compact-01"
+          i18n
+        >
+          IOPS limit
+        </div>
+        <p
+          class="cds--type-body-compact-01 cds-mt-3"
+          i18n
+        >
+          Set the maximum number of I/O operations allowed per second.
+        </p>
+        <cds-toggle
+          [checked]="iopsEnabled"
+          (checkedChange)="onIopsToggle()"
+          size="sm"
+          onText="On"
+          offText="Off"
+          ariaLabel="IOPS limit"
+          i18n-ariaLabel
+        ></cds-toggle>
+      </div>
+
+      <!-- IOPS Settings: Shares -->
+      @if (
+        iopsEnabled &&
+        (qosTypeVal === qosTypeValue?.PerShare || qosTypeVal === qosTypeValue?.PerSharePerClient)
+      ) {
+        <div
+          class="cds--type-heading-compact-01 cds-mt-5"
+          i18n
+        >
+          Shares
+        </div>
+        <div class="form-item cds-mt-3">
+          <cds-text-label
+            for="max_export_iops"
+            i18n
+            i18n-helperText
+            helperText="Enter a value from 10 to 1,638,400."
+            cdRequiredField="Maximum IOPS per share"
+            [invalid]="
+              rateLimitForm.controls.max_export_iops.invalid &&
+              rateLimitForm.controls.max_export_iops.dirty
+            "
+            [invalidText]="Export_iops_Error"
+            >Maximum IOPS per share
+            <input
+              cdsText
+              type="number"
+              placeholder="Maximum IOPS per share"
+              i18n-placeholder
+              id="max_export_iops"
+              name="max_export_iops"
+              formControlName="max_export_iops"
+              [invalid]="
+                rateLimitForm.controls.max_export_iops.invalid &&
+                rateLimitForm.controls.max_export_iops.dirty
+              "
+              [invalidText]="Export_iops_Error"
+            />
+          </cds-text-label>
+          <ng-template #Export_iops_Error>
+            @if (rateLimitForm.showError('max_export_iops', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (rateLimitForm.get('max_export_iops').hasError('min')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Minimum value is 10 IOPS.</span
+              >
+            }
+            @if (rateLimitForm.get('max_export_iops').hasError('max')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Maximum value is 1,638,400 IOPS.</span
+              >
+            }
+          </ng-template>
+        </div>
+      }
+
+      <!-- IOPS Settings: Clients -->
+      @if (
+        iopsEnabled &&
+        ((type === nfsType?.cluster &&
+          (qosTypeVal === qosTypeValue?.PerClient ||
+            qosTypeVal === qosTypeValue?.PerSharePerClient)) ||
+          (type === nfsType?.export &&
+            qosTypeVal !== qosTypeValue?.PerClient &&
+            qosTypeVal !== qosTypeValue?.PerShare))
+      ) {
+        <div
+          class="cds--type-heading-compact-01 cds-mt-5 cds-mb-3"
+          i18n
+        >
+          Clients
+        </div>
+        <div class="form-item cds-mt-3">
+          <cds-text-label
+            for="max_client_iops"
+            i18n
+            i18n-helperText
+            helperText="Enter a value from 10 to 1,638,400."
+            cdRequiredField="Maximum IOPS per client"
+            [invalid]="
+              rateLimitForm.controls.max_client_iops.invalid &&
+              rateLimitForm.controls.max_client_iops.dirty
+            "
+            [invalidText]="Client_iops_Error"
+          >
+            Maximum IOPS per client
+            <input
+              cdsText
+              type="number"
+              placeholder="Maximum IOPS per client"
+              i18n-placeholder
+              name="max_client_iops"
+              formControlName="max_client_iops"
+              [invalid]="
+                rateLimitForm.controls.max_client_iops.invalid &&
+                rateLimitForm.controls.max_client_iops.dirty
+              "
+            />
+          </cds-text-label>
+          <ng-template #Client_iops_Error>
+            @if (rateLimitForm.showError('max_client_iops', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (rateLimitForm.get('max_client_iops').hasError('min')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Minimum value is 10 IOPS.</span
+              >
+            }
+            @if (rateLimitForm.get('max_client_iops').hasError('max')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Maximum value is 1,638,400 IOPS.</span
+              >
+            }
+          </ng-template>
+        </div>
+      }
+    }
+  </form>
+}

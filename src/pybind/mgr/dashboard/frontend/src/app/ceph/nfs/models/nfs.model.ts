@@ -7,24 +7,26 @@ export interface NFSBackend {
   status?: string;
 }
 
+export type NFSHostPattern = string | { pattern: string; pattern_type?: string };
+
 export interface NFSClusterPlacement {
   hosts?: string[];
   count?: number;
   label?: string;
-  host_pattern?: string;
+  host_pattern?: NFSHostPattern;
 }
 
 export interface NFSCluster {
   name: string;
   virtual_ip: string | null;
   port?: number;
+  monitor_port?: number;
   backend: NFSBackend[];
   enable_nfsv3?: boolean;
   placement: NFSClusterPlacement;
   enable_rdma?: boolean;
   deployment_type?: string;
   ingress_mode?: IngressMode;
-  monitor_port?: number;
   error?: string;
 }
 

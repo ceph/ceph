@@ -4,7 +4,7 @@ import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 
 import { SidebarItem } from '~/app/shared/components/sidebar-layout/sidebar-layout.component';
 import { NfsClusterResourceStateService } from '~/app/shared/services/nfs-cluster-resource-state.service';
-import { NFSCluster } from '../models/nfs-cluster-config';
+import { NFSCluster } from '../models/nfs.model';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
 
 @Component({

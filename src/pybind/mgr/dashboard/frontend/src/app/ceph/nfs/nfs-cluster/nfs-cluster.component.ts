@@ -21,7 +21,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
-import { NFSBackend, NFSCluster, NFSShare } from '../models/nfs.model';
+import { formatNfsProtocol, getClusterStatus } from '../models/nfs-cluster-config';
+import { NFSCluster, NFSShare } from '../models/nfs.model';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
 
 interface NFSClusterRow extends NFSCluster {
@@ -188,26 +189,11 @@ export class NfsClusterComponent implements OnInit {
 
     return (clusters || []).map((cluster) => ({
       ...cluster,
-      status: this.getClusterStatus(cluster.backend),
+      status: getClusterStatus(cluster.backend),
       eventsLink: ['/services', `nfs.${cluster.name}`, 'events'],
       shares: shareCounts[cluster.name] || 0,
-      protocol: cluster.enable_nfsv3 ? $localize`NFSv3, NFSv4` : $localize`NFSv4`
+      protocol: formatNfsProtocol(cluster.enable_nfsv3)
     }));
-  }
-
-  private getClusterStatus(backends: NFSBackend[] = []): string {
-    if (!backends?.length) {
-      return '-';
-    }
-    const statuses = backends.map((backend) => (backend.status || '').toLowerCase());
-    const running = statuses.filter((status) => status === 'running').length;
-    if (running === statuses.length) {
-      return 'Running';
-    }
-    if (running > 0) {
-      return 'Degraded';
-    }
-    return '-';
   }
 
   loadData() {

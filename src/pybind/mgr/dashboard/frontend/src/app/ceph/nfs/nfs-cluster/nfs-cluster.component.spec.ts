@@ -7,6 +7,7 @@ import { take } from 'rxjs/operators';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 
@@ -153,7 +154,7 @@ describe('NfsClusterComponent', () => {
       );
     });
 
-    it('should show a dash when no backends are running', async () => {
+    it('should mark status Stopped when no backends are running', async () => {
       await expectClusterRows(
         [
           {
@@ -165,11 +166,11 @@ describe('NfsClusterComponent', () => {
           } as NFSCluster
         ],
         [],
-        [{ name: 'cluster1', status: '-' }]
+        [{ name: 'cluster1', status: 'Stopped' }]
       );
     });
 
-    it('should show a dash when backends are missing', async () => {
+    it('should mark status Unknown when backends are missing', async () => {
       await expectClusterRows(
         [
           {
@@ -182,8 +183,16 @@ describe('NfsClusterComponent', () => {
         ],
         [],
         [
-          { name: 'cluster1', status: '-', eventsLink: ['/services', 'nfs.cluster1', 'events'] },
-          { name: 'cluster2', status: '-', eventsLink: ['/services', 'nfs.cluster2', 'events'] }
+          {
+            name: 'cluster1',
+            status: 'Unknown',
+            eventsLink: ['/services', 'nfs.cluster1', 'events']
+          },
+          {
+            name: 'cluster2',
+            status: 'Unknown',
+            eventsLink: ['/services', 'nfs.cluster2', 'events']
+          }
         ]
       );
     });
