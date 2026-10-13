@@ -66,4 +66,17 @@ function TEST_pool_create_checks() {
     ceph osd pool create p 8 2>&1 | grep "already exists" || return 1
 }
 
+function TEST_pool_create_min_size() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+
+    ceph osd pool create r --replica 3 --min_size 1 || return 1
+    test "$(ceph osd pool get r min_size | awk '{print $2}')" = 1 || return 1
+    ceph osd pool create e erasure --k 2 --m 1 --min_size 3 || return 1
+    test "$(ceph osd pool get e min_size | awk '{print $2}')" = 3 || return 1
+    expect_refused $dir "pool min_size must be between 1 and replica" \
+        ceph osd pool create p --replica 2 --min_size 3 || return 1
+}
+
 main mon-stretch-pool-create-checks "$@"

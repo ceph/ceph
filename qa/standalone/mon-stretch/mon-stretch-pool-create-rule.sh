@@ -36,4 +36,19 @@ function TEST_pool_create_rule_must_span_zones() {
     test "$(pool_field good num_zones)" = 2 || return 1
 }
 
+# min_size of a pool over two zones counts the copies in each zone
+function TEST_pool_create_min_size_per_zone() {
+    local dir=$1
+
+    two_zone_cluster $dir 2 || return 1
+
+    ceph osd pool create s --num_zones 2 --replica 2 --min_size 2 || return 1
+    test "$(pool_field s min_size)" = 2 || return 1
+    test "$(pool_field s size)" = 4 || return 1
+    ! ceph osd pool create s2 --num_zones 2 --replica 2 --min_size 3 \
+        > $dir/out 2>&1 || return 1
+    grep "pool min_size must be between 1 and replica" $dir/out || return 1
+    ! ceph osd pool ls | grep -qx s2 || return 1
+}
+
 main mon-stretch-pool-create-rule "$@"
