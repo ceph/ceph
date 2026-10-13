@@ -1405,6 +1405,11 @@ class ExportMgr:
                 export_dict_qos_bw_ops_checks(
                     cluster_id, self.mgr,
                     dict(new_export_dict.get('qos_block', {})), old_qos)
+            elif old_export.qos_block:
+                # Dashboard and CLI export updates often omit qos_block. Keep the
+                # existing limits so a later failed QoS PATCH cannot leave the
+                # export without its previously working configuration.
+                new_export_dict['qos_block'] = old_export.qos_block.to_dict()
 
         new_export = self.create_export_from_dict(
             cluster_id,
@@ -1576,6 +1581,7 @@ class ExportMgr:
     def disable_export_qos_bw(self, cluster_id: str, pseudo_path: str) -> None:
         try:
             export_obj = self.get_export_obj(cluster_id, pseudo_path)
+            status = False
             if export_obj.qos_block:
                 status = export_obj.qos_block.get_enable_qos_val(disable_bw=True)
             self.update_export_qos(cluster_id, pseudo_path, export_obj, status, bw_obj=QOSBandwidthControl())
@@ -1597,8 +1603,7 @@ class ExportMgr:
     def disable_export_qos_ops(self, cluster_id: str, pseudo_path: str) -> None:
         try:
             export_obj = self.get_export_obj(cluster_id, pseudo_path)
-            if not export_obj:
-                raise NFSObjectNotFound(f"Export {pseudo_path} not found in NFS cluster {cluster_id}")
+            status = False
             if export_obj.qos_block:
                 status = export_obj.qos_block.get_enable_qos_val(disable_ops=True)
             self.update_export_qos(cluster_id, pseudo_path, export_obj, status, ops_obj=QOSOpsControl())

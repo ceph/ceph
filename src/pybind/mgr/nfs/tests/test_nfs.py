@@ -905,6 +905,33 @@ NFS_CORE_PARAM {
         assert export.qos_block.bw_obj.export_writebw == 2000000
         assert export.qos_block.bw_obj.export_readbw == 3000000
 
+        # Update again without qos_block — existing limits must be preserved.
+        r = conf.apply_export(self.cluster_id, json.dumps({
+            'path': 'preservedqosbucket',
+            'pseudo': '/rgw/bucket',
+            'cluster_id': self.cluster_id,
+            'access_type': 'RO',
+            'squash': 'root',
+            'security_label': False,
+            'protocols': [4],
+            'transports': ['TCP'],
+            'clients': [],
+            'fsal': {
+                'name': 'RGW',
+                'user_id': 'nfs.foo.preservedqosbucket',
+                'access_key_id': 'the_access_key',
+                'secret_access_key': 'the_secret_key',
+            }
+        }))
+        assert len(r.changes) == 1
+        export = conf._fetch_export(self.cluster_id, '/rgw/bucket')
+        assert export.path == "preservedqosbucket"
+        assert export.qos_block is not None
+        assert export.qos_block.enable_qos == True
+        assert export.qos_block.bw_obj.enable_bw_ctrl == True
+        assert export.qos_block.bw_obj.export_writebw == 2000000
+        assert export.qos_block.bw_obj.export_readbw == 3000000
+
     def test_update_export_sectype(self):
         self._do_mock_test(self._test_update_export_sectype)
 
