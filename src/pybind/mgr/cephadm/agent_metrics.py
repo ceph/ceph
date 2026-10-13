@@ -14,7 +14,9 @@ _LATENCY_BUCKETS_MS = (
     (100.0, '50-100ms'),
     (500.0, '100-500ms'),
     (1000.0, '500ms-1s'),
-    (5000.0, '1-5s'),
+    (2000.0, '1-2s'),
+    (3000.0, '2-3s'),
+    (5000.0, '3-5s'),
     (10000.0, '5-10s'),
     (float('inf'), '>10s'),
 )
@@ -82,6 +84,24 @@ def _record_latency(stats: Dict[str, Any], duration_s: float, error: bool = Fals
             break
 
 
+def _latency_p99_upper_ms(stats: Dict[str, Any]) -> Optional[float]:
+    """Approximate p99 as the upper bound of the histogram bucket holding it.
+
+    Returns None when there are no samples. When p99 falls into the open-ended
+    last bucket the observed maximum is returned instead.
+    """
+    count = stats['count']
+    if not count:
+        return None
+    target = count * 0.99
+    seen = 0
+    for upper_ms, label in _LATENCY_BUCKETS_MS:
+        seen += stats['histogram'][label]
+        if seen >= target:
+            return stats['max_ms'] if upper_ms == float('inf') else upper_ms
+    return stats['max_ms']
+
+
 def _new_agent_to_worker_delay_stats() -> Dict[str, Any]:
     return {
         'count': 0,
@@ -124,6 +144,10 @@ def _record_interval(stats: Dict[str, Any], duration_s: float) -> None:
             break
 
 
+def _fmt_ms(value: Optional[float]) -> str:
+    return 'n/a' if value is None else f'{value:.3f} ms'
+
+
 class AgentMetadataStats:
     """Small in-memory diagnostics for cephadm agent request scalability.
 
@@ -144,6 +168,9 @@ class AgentMetadataStats:
             self._since = _utcnow()
             self._since_monotonic = time.monotonic()
             self._requests = _new_latency_stats()
+            # Start time (UTC) of the slowest request, so it can be correlated
+            # with the HTTP queue peak and mgr logs.
+            self._request_max_started_at: Optional[str] = None
             self._reports_total = 0
             self._valid_reports = 0
             self._unique_reporting_hosts: Set[str] = set()
@@ -179,6 +206,7 @@ class AgentMetadataStats:
             self._pool_idle_min: Optional[int] = None
             self._pool_queue_current: Optional[int] = None
             self._pool_queue_max = 0
+            self._pool_queue_max_at: Optional[str] = None
             self._ack_fanouts = 0
             self._last_ack_fanout_at: Optional[str] = None
             self._last_ack_fanout_hosts = 0
@@ -224,6 +252,7 @@ class AgentMetadataStats:
         self._local.agent_delta_outcome = None
         self._local.agent_pool_idle_start = None
         self._local.agent_pool_queue_start = None
+        self._local.agent_request_error = False
         with self._lock:
             self._reports_total += 1
 
@@ -233,15 +262,21 @@ class AgentMetadataStats:
         self._local.agent_pool_idle_start = idle
         self._local.agent_pool_queue_start = queued
 
-    def finish_agent_request(self) -> None:
+    def finish_agent_request(self, error: bool = False) -> None:
         start = getattr(self._local, 'agent_request_start', None)
         if start is None:
             return
         duration = time.monotonic() - start
         cpu_start = getattr(self._local, 'agent_request_cpu_start', None)
         cpu = time.thread_time() - cpu_start if cpu_start is not None else 0.0
+        error = error or getattr(self._local, 'agent_request_error', False)
+        start_wall = getattr(self._local, 'agent_request_start_wall', None)
         with self._lock:
-            _record_latency(self._requests, duration)
+            new_max = duration * 1000.0 > self._requests['max_ms']
+            _record_latency(self._requests, duration, error)
+            if new_max and start_wall is not None:
+                self._request_max_started_at = datetime.datetime.fromtimestamp(
+                    start_wall, tz=datetime.timezone.utc).isoformat()
             self._record_processed_request(duration, cpu)
 
         if duration >= _SLOW_REQUEST_DEBUG_THRESHOLD_S and self._logger is not None:
@@ -282,6 +317,7 @@ class AgentMetadataStats:
         self._local.agent_body_bytes = 0
         self._local.agent_phases = {}
         self._local.agent_delta_outcome = None
+        self._local.agent_request_error = False
 
     def _record_processed_request(self, duration_s: float, cpu_s: float) -> None:
         """Aggregate the delta and phase measurements of one processed report.
@@ -389,6 +425,10 @@ class AgentMetadataStats:
             item[0] += max(0.0, wall)
             item[1] += max(0.0, cpu)
 
+    def _mark_agent_request_error(self) -> None:
+        if getattr(self._local, 'in_agent_request', False):
+            self._local.agent_request_error = True
+
     @staticmethod
     def _record_rate_bucket(buckets: Dict[int, int], timestamp: float) -> None:
         second = int(timestamp)
@@ -450,10 +490,12 @@ class AgentMetadataStats:
                 self._stale_ack_reports += 1
 
     def record_bad_metadata(self) -> None:
+        self._mark_agent_request_error()
         with self._lock:
             self._bad_metadata += 1
 
     def record_handler_error(self) -> None:
+        self._mark_agent_request_error()
         with self._lock:
             self._handler_errors += 1
 
@@ -488,7 +530,9 @@ class AgentMetadataStats:
             else:
                 self._pool_idle_min = min(self._pool_idle_min, idle)
             self._pool_queue_current = queued
-            self._pool_queue_max = max(self._pool_queue_max, queued)
+            if queued > self._pool_queue_max:
+                self._pool_queue_max = queued
+                self._pool_queue_max_at = _utcnow().isoformat()
 
     def record_node_proxy_request(self) -> None:
         with self._lock:
@@ -555,6 +599,8 @@ class AgentMetadataStats:
         with self._lock:
             now = time.monotonic()
             requests = self._latency_snapshot(self._requests)
+            requests['p99_bucket_upper_ms'] = _latency_p99_upper_ms(self._requests)
+            requests['max_started_at'] = self._request_max_started_at
             processed_rate = self._rate_snapshot(self._processed_rate_buckets, now)
             store_rate = self._rate_snapshot(self._store_rate_buckets, now)
             agent_store_rate = self._rate_snapshot(self._agent_store_rate_buckets, now)
@@ -627,6 +673,7 @@ class AgentMetadataStats:
                     'idle_min': self._pool_idle_min,
                     'queue_current': self._pool_queue_current,
                     'queue_max_observed': self._pool_queue_max,
+                    'queue_max_observed_at': self._pool_queue_max_at,
                     'node_proxy_requests': self._node_proxy_requests,
                 },
                 'ack_fanout': {
@@ -732,9 +779,15 @@ class AgentMetadataStats:
 
         lines.extend([
             '',
-            'Request latency:',
+            # Timed from on_start_resource (Cheroot worker start) to
+            # on_end_request, so time spent queued in Cheroot is excluded.
+            'Request service time (excludes HTTP queue wait):',
+            f"  requests:           {req['count']}",
+            f"  errors:             {req['errors']}",
             f"  avg:                {req['avg_ms']:.3f} ms",
+            f"  p99 bucket upper:   {_fmt_ms(req['p99_bucket_upper_ms'])}",
             f"  max:                {req['max_ms']:.3f} ms",
+            f"  max started at:     {req['max_started_at']}",
         ])
         for bucket, count in req['histogram'].items():
             lines.append(f'  {bucket:<18} {count}')
@@ -775,7 +828,8 @@ class AgentMetadataStats:
             f"  idle now:           {pool['idle_current']}",
             f"  minimum idle:       {pool['idle_min']}",
             f"  queued now:         {pool['queue_current']}",
-            f"  max queued observed:{pool['queue_max_observed']:>7}",
+            f"  max queued observed:{pool['queue_max_observed']:>7} (sampled)",
+            f"  max queued at:      {pool['queue_max_observed_at']}",
             f"  node-proxy requests:{pool['node_proxy_requests']:>7}",
             '',
             'Agent ACK fanout:',

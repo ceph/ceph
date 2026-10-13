@@ -114,7 +114,15 @@ def _agent_stats_request_end(mgr: "CephadmOrchestrator", endpoint: str) -> None:
         return
     stats = getattr(mgr, 'agent_metadata_stats', None)
     if stats:
-        stats.finish_agent_request()
+        stats.finish_agent_request(error=_response_is_error())
+
+
+def _response_is_error() -> bool:
+    """True when the /data response is not a 2xx (e.g. 413/415/500)."""
+    try:
+        return not 200 <= int(str(cherrypy.response.status).split()[0]) < 300
+    except Exception:
+        return False
 
 
 # These tools are enabled only on the /data and /node-proxy mounts below.
@@ -878,11 +886,15 @@ class HostData:
     @cherrypy.tools.json_out()
     @cherrypy.expose
     def index(self) -> Dict[str, Any]:
+        stats = getattr(self.mgr, 'agent_metadata_stats', None)
         data: Optional[Dict[str, Any]] = self.get_data()
         if data is None:
+            # Unreadable body / invalid JSON. Keep the existing response but
+            # account for it as a failed request.
+            if stats:
+                stats.record_bad_metadata()
             return {}
         results: Dict[str, Any] = {}
-        stats = getattr(self.mgr, 'agent_metadata_stats', None)
         if stats:
             stats.record_report_shape(data)
         try:
