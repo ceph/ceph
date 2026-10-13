@@ -189,8 +189,13 @@ Building from source
 
 See instructions at :doc:`/install/build-ceph`.
 
-Using ccache to speed up local builds
--------------------------------------
+Speeding up local builds
+------------------------
+
+The following options shorten local builds and can be combined.
+
+Using ccache
+~~~~~~~~~~~~
 `ccache`_ can make the process of rebuilding the ceph source tree faster. 
 
 Before you use `ccache`_ to speed up your rebuilds of the ceph source tree,
@@ -204,7 +209,7 @@ build errors when you attempt a local build, follow the procedure below to
 clean your source tree.
 
 Cleaning the Source Tree
-~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. prompt:: bash $
 
@@ -219,7 +224,7 @@ Cleaning the Source Tree
    git clean -fdx; git submodule foreach git clean -fdx
 
 Building Ceph with ccache
-~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``ccache`` is available as a package in most distros. To build ceph with
 ccache, run the following command.
@@ -229,7 +234,7 @@ ccache, run the following command.
   cmake -DWITH_CCACHE=ON ..
 
 Using ccache to Speed Up Build Times
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``ccache`` can be used for speeding up all builds of the system. For more
 details, refer to the `run modes`_ section of the ccache manual. The default
