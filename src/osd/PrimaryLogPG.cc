@@ -2250,6 +2250,18 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
     return;
   }
 
+  // Older clients send a whole op to one shard when each read is within a
+  // chunk, even when the chunks belong to different shards.
+  if (m->has_flag(CEPH_OSD_FLAG_EC_DIRECT_READ)) {
+    int r = pgbackend->check_direct_read(m->ops);
+    if (r < 0) {
+      dout(4) << __func__ << ": direct read of data that is not this shard's "
+              << *m << dendl;
+      osd->reply_op_error(op, r);
+      return;
+    }
+  }
+
   if (write_ordered) {
     // degraded object?
     if (is_degraded_or_backfilling_object(head)) {
