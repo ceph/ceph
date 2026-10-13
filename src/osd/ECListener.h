@@ -163,6 +163,7 @@ struct ECListener {
   virtual const std::map<pg_shard_t, pg_info_t> &get_shard_info() const = 0;
   virtual spg_t primary_spg_t() const = 0;
   virtual const PGLog &get_log() const = 0;
+  virtual PerfCounters *get_logger() = 0;
   virtual DoutPrefixProvider *get_dpp() = 0;
   // XXX
   virtual void apply_stats(

@@ -737,6 +737,10 @@ public:
   PerfCounters &get_perf_logger() final {
     return shard_services.get_perf_logger();
   }
+  // ECListener
+  PerfCounters *get_logger() final {
+    return &shard_services.get_perf_logger();
+  }
 
   void log_state_enter(const char *state) final;
   void log_state_exit(
