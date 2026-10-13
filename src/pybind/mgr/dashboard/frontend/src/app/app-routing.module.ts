@@ -67,6 +67,9 @@ import { MultiClusterComponent } from './ceph/cluster/multi-cluster/multi-cluste
 import { MultiClusterListComponent } from './ceph/cluster/multi-cluster/multi-cluster-list/multi-cluster-list.component';
 import { NfsClusterComponent } from './ceph/nfs/nfs-cluster/nfs-cluster.component';
 import { smbParentRoute } from './ceph/smb/smb.routes';
+import { NfsClusterResourceSidebarComponent } from './ceph/nfs/nfs-cluster-resource-sidebar/nfs-cluster-resource-sidebar.component';
+import { NfsClusterResourcePageComponent } from './ceph/nfs/nfs-cluster-resource-page/nfs-cluster-resource-page.component';
+import { NfsClusterResourceBreadcrumbResolver } from './ceph/nfs/nfs-cluster-resource-page/nfs-cluster-resource-breadcrumb.resolver';
 import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component';
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { CephfsAddMirroringPathComponent } from './ceph/cephfs/cephfs-add-mirroring-path/cephfs-add-mirroring-path.component';
@@ -77,6 +80,7 @@ import { CephfsMirroringFsBreadcrumbResolver } from './ceph/cephfs/cephfs-mirror
 import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
 import { CephfsMirroringErrorComponent } from './ceph/cephfs/cephfs-mirroring-error/cephfs-mirroring-error.component';
 import { OverviewComponent } from './ceph/overview/overview.component';
+import { NfsClusterFormComponent } from './ceph/nfs/nfs-cluster-form/nfs-cluster-form.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -618,14 +622,42 @@ const routes: Routes = [
               breadcrumbs: 'File/NFS'
             },
             children: [
-              { path: '', component: NfsClusterComponent },
+              { path: '', redirectTo: 'cluster', pathMatch: 'full' },
+              {
+                path: 'cluster',
+                data: { breadcrumbs: 'Service clusters' },
+                children: [
+                  { path: '', component: NfsClusterComponent },
+                  {
+                    path: ':cluster_id',
+                    component: NfsClusterResourceSidebarComponent,
+                    data: {
+                      breadcrumbs: NfsClusterResourceBreadcrumbResolver,
+                      showBreadcrumbsLayout: false
+                    },
+                    children: [
+                      { path: '', redirectTo: 'overview', pathMatch: 'full' },
+                      {
+                        path: 'overview',
+                        component: NfsClusterResourcePageComponent,
+                        data: { breadcrumbs: 'Overview', section: 'overview' }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                path: `${URLVerbs.EDIT}/:cluster_id`,
+                component: NfsClusterFormComponent,
+                data: { breadcrumbs: ActionLabels.EDIT }
+              },
               {
                 path: `${URLVerbs.CREATE}/:fs_name/:subvolume_group`,
                 component: NfsFormComponent,
                 data: { breadcrumbs: ActionLabels.CREATE }
               },
               {
-                path: `${URLVerbs.CREATE}`,
+                path: `${URLVerbs.CREATE}/:cluster_id`,
                 component: NfsFormComponent,
                 data: { breadcrumbs: ActionLabels.CREATE }
               },
