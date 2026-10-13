@@ -91,6 +91,7 @@ noobaa:unconverted		manifest		body-len	equal	same, and it localises a truncation
 # digest and we forward it.
 
 noobaa:unconverted	md5-off	manifest		etag	recognize:synthetic-identity	both report a file-instance token, and the values differ:  their mtime component loses its low 8 bits to a double in fs_napi.cpp:360, which we do not reproduce.  Recognized rather than tolerated, so a side that started reporting a digest fails
+noobaa:unconverted	md5-off	manifest	object k-dirobj/	listed-etag	differs	a directory object with content:  NooBaa's listing reports the directory's stat (namespace_fs.js:762, their own "GAP" comment) where its HEAD reports .folder's (:1008), so its listed ETag carries the directory's inode;  RGW reports .folder's from both, as S3 requires one ETag per object.  NooBaa's defect, before the general row so it judges only this object (NOOBAA_WRITE_SURFACE.md)
 noobaa:unconverted	md5-off	manifest		listed-etag	recognize:synthetic-identity	same value by the same path, through ListObjects
 noobaa:unconverted	md5-off	manifest		head-etag	recognize:synthetic-identity	same value by the same path, through HeadObject
 noobaa:unconverted	md5-off	manifest		copy.reported-etag	recognize:synthetic-identity	same value by the same path, through CopyObject's result
