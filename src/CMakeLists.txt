@@ -196,6 +196,16 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
+# ld.bfd only; lld and mold reject it. Checked after the FreeBSD -fuse-ld above,
+# with try_compile as it reruns on each configure, unlike check_linker_flag.
+try_compile(HAVE_LINK_COPY_DT_NEEDED_ENTRIES
+  ${CMAKE_CURRENT_BINARY_DIR}
+  SOURCES ${CMAKE_SOURCE_DIR}/cmake/modules/CephCheck_link.c
+  LINK_OPTIONS "LINKER:--copy-dt-needed-entries")
+if(HAVE_LINK_COPY_DT_NEEDED_ENTRIES)
+  set(LINK_COPY_DT_NEEDED_ENTRIES "LINKER:--copy-dt-needed-entries")
+endif()
+
 if(WITH_CEPH_DEBUG_MUTEX)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DCEPH_DEBUG_MUTEX>)
 endif()
