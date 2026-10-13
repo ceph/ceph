@@ -199,3 +199,12 @@ try_compile(HAVE_LINK_EXCLUDE_LIBS
   ${CMAKE_CURRENT_BINARY_DIR}
   SOURCES ${CMAKE_CURRENT_LIST_DIR}/CephCheck_link.c
   LINK_LIBRARIES "-Wl,--exclude-libs,ALL")
+
+# ld.bfd only; lld and mold reject it
+try_compile(HAVE_LINK_COPY_DT_NEEDED_ENTRIES
+  ${CMAKE_CURRENT_BINARY_DIR}
+  SOURCES ${CMAKE_CURRENT_LIST_DIR}/CephCheck_link.c
+  LINK_LIBRARIES "-Wl,--copy-dt-needed-entries")
+if(HAVE_LINK_COPY_DT_NEEDED_ENTRIES)
+  set(LINK_COPY_DT_NEEDED_ENTRIES "LINKER:--copy-dt-needed-entries")
+endif()
