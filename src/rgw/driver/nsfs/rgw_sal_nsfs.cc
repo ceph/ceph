@@ -2850,8 +2850,12 @@ int Directory::stat(const DoutPrefixProvider* dpp, bool force)
 
 int Directory::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children)
 {
-  return delete_directory(parent->get_fd(), fname.c_str(), delete_children,
-			  dpp, reserved_or_none(reserved_names));
+  /* AT_FDCWD with no parent, as FSEnt::stat() has it:  a parentless
+   * directory's name is an absolute path, which is how a bucket served
+   * from a stored path is built. */
+  return delete_directory(parent ? parent->get_fd() : AT_FDCWD,
+			  fname.c_str(), delete_children, dpp,
+			  reserved_or_none(reserved_names));
 }
 
 int Directory::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,

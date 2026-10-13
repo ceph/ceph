@@ -12886,6 +12886,31 @@ TEST_F(NSFSPlacedBucketTest, ARowServesTheBucketFromItsStoredPath)
       << "a placed bucket also appeared under the data root";
 }
 
+/* A placed bucket that owns its directory is deleted with it.
+ *
+ * A placed bucket's directory has no parent entry:  its name is the
+ * whole path, as the data root's is.  Directory::remove() took the
+ * parent's descriptor regardless, and dereferenced the null -- a
+ * DeleteBucket on any placed bucket killed the gateway. */
+TEST_F(NSFSPlacedBucketTest, AnOwnedPlacedBucketIsDeletedWithItsDirectory)
+{
+  const sf::path at = elsewhere() / "placed-and-owned";
+  sf::create_directories(at);
+  place("placed-and-owned", at);
+
+  std::unique_ptr<rgw::sal::Bucket> loaded;
+  ASSERT_EQ(driver->load_bucket(env->dpp,
+				rgw_bucket{"", "placed-and-owned"},
+				&loaded, null_yield), 0);
+  ASSERT_TRUE(static_cast<rgw::sal::NSFSBucket*>(loaded.get())
+		->owns_storage(env->dpp));
+
+  EXPECT_EQ(loaded->remove(env->dpp, false, null_yield), 0);
+  EXPECT_FALSE(sf::exists(at)) << "the owned directory was left";
+  EXPECT_TRUE(sf::is_directory(elsewhere()))
+      << "the delete reached past the bucket's own directory";
+}
+
 /* The path is read on every lookup, not bound once.
  *
  * NooBaa's is read per lookup, and storage is attachable to a running
