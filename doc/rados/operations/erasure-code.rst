@@ -252,6 +252,8 @@ unsupported combination of plugin and technique, such as CLAY, LRC, or
 SHEC, is blocked with an error message.
 
 The default stripe unit is 4K which works well for standard EC pools.
+A pool over several zones (``num_zones`` greater than 1) is always
+optimized, and its default stripe unit is 16K.
 The stripe unit must be a multiple of 4 KiB for optimizations to be
 enabled; enabling the flag on a pool with any other stripe unit is
 rejected.
